@@ -144,7 +144,7 @@ namespace NHyperscan {
         const TDatabase& db,
         const TScratch& scratch,
         const TStringBuf& text,
-        TCallback& callback // applied to index of matched regex 
+        TCallback& callback // applied to index of matched regex
     ) {
         NPrivate::Scan<TCallback>(db, scratch, text, callback, *Singleton<NPrivate::TImpl>());
     }
@@ -152,7 +152,7 @@ namespace NHyperscan {
     bool Matches(
         const TDatabase& db,
         const TScratch& scratch,
-        const TStringBuf& text); 
+        const TStringBuf& text);
 
     TString Serialize(const TDatabase& db);
 

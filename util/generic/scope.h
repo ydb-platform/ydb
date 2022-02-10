@@ -10,14 +10,14 @@ namespace NPrivate {
     class TScopeGuard {
     public:
         TScopeGuard(const F& function)
-            : Function_{function} 
-        { 
-        } 
+            : Function_{function}
+        {
+        }
 
         TScopeGuard(F&& function)
-            : Function_{std::move(function)} 
-        { 
-        } 
+            : Function_{std::move(function)}
+        {
+        }
 
         TScopeGuard(TScopeGuard&&) = default;
         TScopeGuard(const TScopeGuard&) = default;
@@ -26,17 +26,17 @@ namespace NPrivate {
             Function_();
         }
 
-    private: 
-        F Function_; 
-    }; 
- 
+    private:
+        F Function_;
+    };
+
     struct TMakeGuardHelper {
         template <class F>
-        TScopeGuard<F> operator|(F&& function) const { 
+        TScopeGuard<F> operator|(F&& function) const {
             return std::forward<F>(function);
         }
-    }; 
-} 
+    };
+}
 
 // \brief `Y_SCOPE_EXIT(captures) { body };`
 //
@@ -46,7 +46,7 @@ namespace NPrivate {
 // @note expects `body` to provide no-throw guarantee, otherwise whenever an exception
 // is thrown and leaves the outermost block of `body`, the function `std::terminate` is called.
 // @see http://drdobbs.com/184403758 for detailed motivation.
-#define Y_SCOPE_EXIT(...) const auto Y_GENERATE_UNIQUE_ID(scopeGuard) Y_DECLARE_UNUSED = ::NPrivate::TMakeGuardHelper{} | [__VA_ARGS__]() mutable -> void 
+#define Y_SCOPE_EXIT(...) const auto Y_GENERATE_UNIQUE_ID(scopeGuard) Y_DECLARE_UNUSED = ::NPrivate::TMakeGuardHelper{} | [__VA_ARGS__]() mutable -> void
 
 // \brief `Y_DEFER { body };`
 //
@@ -62,4 +62,4 @@ namespace NPrivate {
 // ... try handle `item` ...
 // ok = true;
 // \endcode
-#define Y_DEFER Y_SCOPE_EXIT(&) 
+#define Y_DEFER Y_SCOPE_EXIT(&)

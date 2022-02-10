@@ -42,7 +42,7 @@ private:
 
 public:
     THyperLogLogWithAlloc(THyperLogLogWithAlloc&&) = default;
- 
+
     THyperLogLogWithAlloc& operator=(THyperLogLogWithAlloc&&) = default;
 
     static THyperLogLogWithAlloc Create(unsigned precision) {

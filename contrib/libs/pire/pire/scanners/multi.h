@@ -82,7 +82,7 @@ namespace Impl {
 	};
 
 
-// Scanner implementation parametrized by 
+// Scanner implementation parametrized by
 //      - transition table representation strategy
 //      - strategy for fast forwarding through memory ranges
 template<class Relocation, class Shortcutting>
@@ -120,7 +120,7 @@ public:
 	typedef typename Shortcutting::template ExtendedRowHeader<Scanner> ScannerRowHeader;
 
 	Scanner() { Alias(Null()); }
- 
+
 	explicit Scanner(Fsm& fsm, size_t distance = 0)
 	{
 		if (distance) {
@@ -257,14 +257,14 @@ public:
 			throw Error("Type mismatch while mmapping Pire::Scanner");
 		Impl::AdvancePtr(p, size, sizeof(s.m));
 		Impl::AlignPtr(p, size);
- 
+
 		if (Shortcutting::Signature != s.m.shortcuttingSignature)
 			throw Error("This scanner has different shortcutting type");
- 
+
 		bool empty = *((const bool*) p);
 		Impl::AdvancePtr(p, size, sizeof(empty));
 		Impl::AlignPtr(p, size);
- 
+
 		if (empty)
 			s.Alias(Null());
 		else {
@@ -335,8 +335,8 @@ protected:
 	inline static const Scanner& Null()
 	{
 		static const Scanner n = Fsm::MakeFalse().Compile< Scanner<Relocation, Shortcutting> >();
- 
-		return n; 
+
+		return n;
 	}
 
 	// Returns transition row size in Transition's. Row size_in bytes should be a multiple of sizeof(MaxSizeWord)
@@ -394,7 +394,7 @@ protected:
 		m_finalIndex = s.m_finalIndex;
 		m_transitions = s.m_transitions;
 	}
- 
+
 	template<class AnotherRelocation>
 	void DeepCopy(const Scanner<AnotherRelocation, Shortcutting>& s)
 	{
@@ -582,7 +582,7 @@ struct ScannerSaver {
 		bool empty;
 		LoadPodType(s, empty);
 		Impl::AlignLoad(s, sizeof(empty));
- 
+
 		if (empty) {
 			sc.Alias(ScannerType::Null());
 		} else {
@@ -596,13 +596,13 @@ struct ScannerSaver {
 
 	// TODO: implement more effective serialization
 	// of nonrelocatable scanner if necessary
- 
+
 	template<class Shortcutting>
 	static void SaveScanner(const Scanner<Nonrelocatable, Shortcutting>& scanner, yostream* s)
 	{
 		Scanner<Relocatable, Shortcutting>(scanner).Save(s);
 	}
- 
+
 	template<class Shortcutting>
 	static void LoadScanner(Scanner<Nonrelocatable, Shortcutting>& scanner, yistream* s)
 	{
@@ -633,7 +633,7 @@ private:
 		NO_SHORTCUT_MASK = 1, // the state doesn't have shortcuts
 		NO_EXIT_MASK  =    2  // the state has only transtions to itself (we can stop the scan)
 	};
- 
+
 	template<class ScannerRowHeader, unsigned N>
 	struct MaskCheckerBase {
 		static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
@@ -645,7 +645,7 @@ private:
 			}
 			return !IsAnySet(mask);
 		}
- 
+
 		static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
 		const Word* DoRun(const ScannerRowHeader& hdr, size_t alignOffset, const Word* begin, const Word* end)
 		{
@@ -653,12 +653,12 @@ private:
 			return begin;
 		}
 	};
- 
+
 	template<class ScannerRowHeader, unsigned N, unsigned Nmax>
 	struct MaskChecker : MaskCheckerBase<ScannerRowHeader, N>  {
 		typedef MaskCheckerBase<ScannerRowHeader, N> Base;
 		typedef MaskChecker<ScannerRowHeader, N+1, Nmax> Next;
- 
+
 		static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
 		const Word* Run(const ScannerRowHeader& hdr, size_t alignOffset, const Word* begin, const Word* end)
 		{
@@ -668,17 +668,17 @@ private:
 				return Next::Run(hdr, alignOffset, begin, end);
 		}
 	};
- 
+
 	template<class ScannerRowHeader, unsigned N>
 	struct MaskChecker<ScannerRowHeader, N, N> : MaskCheckerBase<ScannerRowHeader, N>  {
 		typedef MaskCheckerBase<ScannerRowHeader, N> Base;
- 
+
 		static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
 		const Word* Run(const ScannerRowHeader& hdr, size_t alignOffset, const Word* begin, const Word* end)
 		{
 			return Base::DoRun(hdr, alignOffset, begin, end);
 		}
-	}; 
+	};
 
 	// Compares the ExitMask[0] value without SSE reads which seems to be more optimal
 	template <class Relocation>
@@ -704,7 +704,7 @@ public:
 			MaskSizeInSizeT = 2 * SizeTInMaxSizeWord,
 		};
 
-	public: 
+	public:
 		static const size_t ExitMaskCount = MaskCount;
 
 		inline
@@ -716,14 +716,14 @@ public:
 			Y_ASSERT(IsAligned(p, sizeof(Word)));
 			return *p;
 		}
- 
+
 		PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
 		size_t Mask(size_t i) const
 		{
 			Y_ASSERT(i < ExitMaskCount);
 			return ExitMasksArray[MaskSizeInSizeT*i];
 		}
- 
+
 		void SetMask(size_t i, size_t val)
 		{
 			for (size_t j = 0; j < MaskSizeInSizeT; ++j)
@@ -735,7 +735,7 @@ public:
 			for (size_t i = 0; i < ExitMaskCount; ++i)
 				SetMask(i, NO_SHORTCUT_MASK);
 		}
- 
+
 		template <class OtherScanner>
 		ExtendedRowHeader& operator =(const ExtendedRowHeader<OtherScanner>& other)
 		{
@@ -932,7 +932,7 @@ public:
 	static inline PIRE_HOT_FUNCTION
 	Action RunAligned(const ScannerType& scanner, typename ScannerType::State& st, const size_t* begin, const size_t* end , Pred pred)
 	{
-		typename ScannerType::State state = st; 
+		typename ScannerType::State state = st;
 		const Word* head = AlignUp((const Word*) begin, sizeof(Word));
 		const Word* tail = AlignDown((const Word*) end, sizeof(Word));
 		for (; begin != (const size_t*) head && begin != end; ++begin)
@@ -940,7 +940,7 @@ public:
 				st = state;
 				return Stop;
 			}
- 
+
 		if (begin == end) {
 			st = state;
 			return Continue;
@@ -949,7 +949,7 @@ public:
 			st = state;
 			return pred(scanner, state, ((const char*) end));
 		}
- 
+
 		// Row size should be a multiple of MaxSizeWord size. Then alignOffset is the same for any state
 		Y_ASSERT((scanner.RowSize()*sizeof(typename ScannerType::Transition)) % sizeof(MaxSizeWord) == 0);
 		size_t alignOffset = (AlignUp((size_t)scanner.m_transitions, sizeof(Word)) - (size_t)scanner.m_transitions) / sizeof(size_t);
@@ -980,14 +980,14 @@ public:
 			head = skipEnd;
 			noShortcut = true;
 		}
- 
+
 		for (size_t* p = (size_t*) tail; p != end; ++p) {
 			if (RunChunk(scanner, state, p, 0, sizeof(void*), pred) == Stop) {
 				st = state;
 				return Stop;
 			}
 		}
- 
+
 		st = state;
 		return Continue;
 	}
@@ -1004,36 +1004,36 @@ public:
 	using Base::Rhs;
 	using Base::Sc;
 	using Base::Letters;
- 
+
 	typedef GluedStateLookupTable<256*1024, typename Scanner::State> InvStates;
- 
+
 	ScannerGlueTask(const Scanner& lhs, const Scanner& rhs)
 		: ScannerGlueCommon<Scanner>(lhs, rhs, LettersEquality<Scanner>(lhs.m_letters, rhs.m_letters))
 	{
 	}
- 
+
 	void AcceptStates(const TVector<State>& states)
 	{
 		// Make up a new scanner and fill in the final table
- 
+
 		size_t finalTableSize = 0;
 		for (auto&& i : states)
 			finalTableSize += RangeLen(Lhs().AcceptedRegexps(i.first)) + RangeLen(Rhs().AcceptedRegexps(i.second));
 		this->SetSc(THolder<Scanner>(new Scanner));
 		Sc().Init(states.size(), Letters(), finalTableSize, size_t(0), Lhs().RegexpsCount() + Rhs().RegexpsCount());
- 
+
 		auto finalWriter = Sc().m_final;
 		for (size_t state = 0; state != states.size(); ++state) {
 			Sc().m_finalIndex[state] = finalWriter - Sc().m_final;
 			finalWriter = Shift(Lhs().AcceptedRegexps(states[state].first), 0, finalWriter);
 			finalWriter = Shift(Rhs().AcceptedRegexps(states[state].second), Lhs().RegexpsCount(), finalWriter);
 			*finalWriter++ = static_cast<size_t>(-1);
- 
+
 			Sc().SetTag(state, ((Lhs().Final(states[state].first) || Rhs().Final(states[state].second)) ? Scanner::FinalFlag : 0)
 				| ((Lhs().Dead(states[state].first) && Rhs().Dead(states[state].second)) ? Scanner::DeadFlag : 0));
 		}
 	}
- 
+
 	void Connect(size_t from, size_t to, Char letter) { Sc().SetJump(from, letter, to); }
 
 	const Scanner& Success()
@@ -1041,8 +1041,8 @@ public:
 		Sc().BuildShortcuts();
 		return Sc();
 	}
- 
-private: 
+
+private:
 	template<class Iter>
 	size_t RangeLen(ypair<Iter, Iter> range) const
 	{
@@ -1089,7 +1089,7 @@ Impl::Scanner<Relocation, Shortcutting> Impl::Scanner<Relocation, Shortcutting>:
 		return rhs;
 	if (rhs.Empty())
 		return lhs;
- 
+
 	static const size_t DefMaxSize = 80000;
 	Impl::ScannerGlueTask< Impl::Scanner<Relocation, Shortcutting> > task(lhs, rhs);
 	return Impl::Determine(task, maxSize ? maxSize : DefMaxSize);

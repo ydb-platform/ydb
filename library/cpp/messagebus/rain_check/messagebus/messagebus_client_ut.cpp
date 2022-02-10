@@ -28,8 +28,8 @@ struct TMessageBusClientEnv: public TTestEnvTemplate<TMessageBusClientEnv> {
     TMessageBusClientEnv()
         : Queue(CreateMessageQueue(GetExecutor()))
         , BusClientService(TBusSessionConfig(), &Proto, Queue.Get())
-    { 
-    } 
+    {
+    }
 };
 
 Y_UNIT_TEST_SUITE(RainCheckMessageBusClient) {
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(RainCheckMessageBusClient) {
         {
         }
 
-        TVector<TSimpleSharedPtr<TBusFuture>> Requests; 
+        TVector<TSimpleSharedPtr<TBusFuture>> Requests;
 
         TContinueFunc Start() override {
             for (unsigned i = 0; i < 3; ++i) {
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(RainCheckMessageBusClient) {
         {
         }
 
-        TVector<TSimpleSharedPtr<TBusFuture>> Requests; 
+        TVector<TSimpleSharedPtr<TBusFuture>> Requests;
 
         TContinueFunc Start() override {
             Env->TestSync.CheckAndIncrement(0);

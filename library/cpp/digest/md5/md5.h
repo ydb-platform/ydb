@@ -5,30 +5,30 @@
 
 class IInputStream;
 
-class MD5 { 
+class MD5 {
 public:
     MD5() {
         Init();
     }
- 
-    void Init(); 
- 
+
+    void Init();
+
     inline MD5& Update(const void* data, size_t len) {
         return Update(MakeArrayRef(static_cast<const ui8*>(data), len));
     }
- 
+
     inline MD5& Update(TStringBuf data) {
         return Update(data.data(), data.size());
     }
- 
+
     inline MD5& Update(const TArrayRef<const ui8> data) {
         UpdatePart(data);
         return *this;
-    } 
- 
-    void Pad(); 
+    }
+
+    void Pad();
     ui8* Final(ui8[16]);
- 
+
     // buf must be char[33];
     char* End(char* buf);
 
@@ -39,7 +39,7 @@ public:
     ui64 EndHalfMix();
 
     MD5& Update(IInputStream* in);
- 
+
     /*
      * Return hex-encoded md5 checksum for given file.
      *
@@ -53,7 +53,7 @@ public:
     static TString Data(const TArrayRef<const ui8>& data);
     static TString Data(TStringBuf data);
     static char* Stream(IInputStream* in, char* buf);
- 
+
     static TString Calc(TStringBuf data);                     // 32-byte hex-encoded
     static TString Calc(const TArrayRef<const ui8>& data);    // 32-byte hex-encoded
     static TString CalcRaw(TStringBuf data);                  // 16-byte raw

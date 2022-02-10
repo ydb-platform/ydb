@@ -1,7 +1,7 @@
 PY23_LIBRARY()
 
 LICENSE(BSD-3-Clause)
- 
+
 OWNER(g:python-contrib)
 
 VERSION(2.10)

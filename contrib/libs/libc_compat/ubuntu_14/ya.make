@@ -2,8 +2,8 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-LICENSE(BSD-3-Clause) 
- 
+LICENSE(BSD-3-Clause)
+
 OWNER(
     somov
     g:contrib

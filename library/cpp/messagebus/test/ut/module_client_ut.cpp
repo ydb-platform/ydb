@@ -20,34 +20,34 @@ using namespace NBus::NTest;
 // helper class that cleans TBusJob instance, so job's destructor can
 // be completed without assertion fail.
 struct TJobGuard {
-public: 
-    TJobGuard(NBus::TBusJob* job) 
-        : Job(job) 
-    { 
-    } 
+public:
+    TJobGuard(NBus::TBusJob* job)
+        : Job(job)
+    {
+    }
 
-    ~TJobGuard() { 
-        Job->ClearAllMessageStates(); 
-    } 
+    ~TJobGuard() {
+        Job->ClearAllMessageStates();
+    }
 
-private: 
-    NBus::TBusJob* Job; 
+private:
+    NBus::TBusJob* Job;
 };
 
-class TMessageOk: public NBus::TBusMessage { 
-public: 
-    TMessageOk() 
-        : NBus::TBusMessage(1) 
-    { 
-    } 
+class TMessageOk: public NBus::TBusMessage {
+public:
+    TMessageOk()
+        : NBus::TBusMessage(1)
+    {
+    }
 };
 
-class TMessageError: public NBus::TBusMessage { 
-public: 
-    TMessageError() 
-        : NBus::TBusMessage(2) 
-    { 
-    } 
+class TMessageError: public NBus::TBusMessage {
+public:
+    TMessageError()
+        : NBus::TBusMessage(2)
+    {
+    }
 };
 
 Y_UNIT_TEST_SUITE(BusJobTest) {
@@ -108,8 +108,8 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         TParallelOnReplyModule(const TNetAddr& serverAddr)
             : ServerAddr(serverAddr)
             , RepliesLatch(2)
-        { 
-        } 
+        {
+        }
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
             Y_UNUSED(mess);
@@ -166,8 +166,8 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
             : ServerAddr("localhost", 17)
             , GotReplyLatch(2)
             , SentMessage()
-        { 
-        } 
+        {
+        }
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
             Y_UNUSED(mess);
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         module.Shutdown();
     }
 
-    struct TSlowReplyServer: public TBusServerHandlerError { 
+    struct TSlowReplyServer: public TBusServerHandlerError {
         TTestSync* const TestSync;
         TBusMessageQueuePtr Bus;
         TBusServerSessionPtr ServerSession;
@@ -248,7 +248,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         }
     };
 
-    struct TModuleThatSendsReplyEarly: public TExampleClientModule { 
+    struct TModuleThatSendsReplyEarly: public TExampleClientModule {
         TTestSync* const TestSync;
         const unsigned ServerPort;
 
@@ -260,8 +260,8 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
             , ServerPort(serverPort)
             , ServerSession(nullptr)
             , ReplyCount(0)
-        { 
-        } 
+        {
+        }
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
             Y_UNUSED(mess);
@@ -318,22 +318,22 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         module.Shutdown();
     }
 
-    struct TShutdownCalledBeforeReplyReceivedModule: public TExampleClientModule { 
+    struct TShutdownCalledBeforeReplyReceivedModule: public TExampleClientModule {
         unsigned ServerPort;
 
         TTestSync TestSync;
 
         TShutdownCalledBeforeReplyReceivedModule(unsigned serverPort)
             : ServerPort(serverPort)
-        { 
-        } 
+        {
+        }
 
         TJobHandler Start(TBusJob* job, TBusMessage*) override {
             TestSync.CheckAndIncrement(0);
 
             job->Send(new TExampleRequest(&Proto.RequestCount), Source,
-                      TReplyHandler(&TShutdownCalledBeforeReplyReceivedModule::HandleReply), 
-                      0, TNetAddr("localhost", ServerPort)); 
+                      TReplyHandler(&TShutdownCalledBeforeReplyReceivedModule::HandleReply),
+                      0, TNetAddr("localhost", ServerPort));
             return &TShutdownCalledBeforeReplyReceivedModule::End;
         }
 

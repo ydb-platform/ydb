@@ -1,5 +1,5 @@
-#include "url.h" 
- 
+#include "url.h"
+
 #include <util/string/cast.h>
 #include <util/string/util.h>
 #include <util/string/cstriter.h>
@@ -11,7 +11,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
-#include <util/generic/singleton.h> 
+#include <util/generic/singleton.h>
 
 #include <cstdlib>
 
@@ -26,8 +26,8 @@ namespace {
         size_t MySize;
         explicit TKnownSize(size_t sz)
             : MySize(sz)
-        { 
-        } 
+        {
+        }
         bool Has(size_t sz) const {
             return sz <= MySize;
         }
@@ -43,9 +43,9 @@ namespace {
     }
 
     template <typename TChar, typename TBounds>
-    inline size_t GetHttpPrefixSizeImpl(const TChar* url, const TBounds& urlSize, bool ignorehttps) { 
-        const TChar httpPrefix[] = {'h', 't', 't', 'p', ':', '/', '/', 0}; 
-        const TChar httpsPrefix[] = {'h', 't', 't', 'p', 's', ':', '/', '/', 0}; 
+    inline size_t GetHttpPrefixSizeImpl(const TChar* url, const TBounds& urlSize, bool ignorehttps) {
+        const TChar httpPrefix[] = {'h', 't', 't', 'p', ':', '/', '/', 0};
+        const TChar httpsPrefix[] = {'h', 't', 't', 'p', 's', ':', '/', '/', 0};
         if (urlSize.Has(7) && Compare1Case2(url, httpPrefix, 7) == 0)
             return 7;
         if (!ignorehttps && urlSize.Has(8) && Compare1Case2(url, httpsPrefix, 8) == 0)
@@ -98,20 +98,20 @@ TWtringBuf CutHttpPrefix(const TWtringBuf url, bool ignorehttps) noexcept {
 }
 
 size_t GetSchemePrefixSize(const TStringBuf url) noexcept {
-    struct TDelim: public str_spn { 
-        inline TDelim() 
-            : str_spn("!-/:-@[-`{|}", true) 
-        { 
-        } 
-    }; 
- 
-    const auto& delim = *Singleton<TDelim>(); 
+    struct TDelim: public str_spn {
+        inline TDelim()
+            : str_spn("!-/:-@[-`{|}", true)
+        {
+        }
+    };
+
+    const auto& delim = *Singleton<TDelim>();
     const char* n = delim.brk(url.data(), url.end());
- 
-    if (n + 2 >= url.end() || *n != ':' || n[1] != '/' || n[2] != '/') { 
+
+    if (n + 2 >= url.end() || *n != ':' || n[1] != '/' || n[2] != '/') {
         return 0;
-    } 
- 
+    }
+
     return n + 3 - url.begin();
 }
 
@@ -123,27 +123,27 @@ TStringBuf CutSchemePrefix(const TStringBuf url) noexcept {
     return url.Tail(GetSchemePrefixSize(url));
 }
 
-template <bool KeepPort> 
+template <bool KeepPort>
 static inline TStringBuf GetHostAndPortImpl(const TStringBuf url) {
     TStringBuf urlNoScheme = url;
- 
+
     urlNoScheme.Skip(GetHttpPrefixSize(url));
 
-    struct TDelim: public str_spn { 
-        inline TDelim() 
-            : str_spn(KeepPort ? "/;?#" : "/:;?#") 
-        { 
-        } 
-    }; 
- 
-    const auto& nonHostCharacters = *Singleton<TDelim>(); 
+    struct TDelim: public str_spn {
+        inline TDelim()
+            : str_spn(KeepPort ? "/;?#" : "/:;?#")
+        {
+        }
+    };
+
+    const auto& nonHostCharacters = *Singleton<TDelim>();
     const char* firstNonHostCharacter = nonHostCharacters.brk(urlNoScheme.begin(), urlNoScheme.end());
- 
-    if (firstNonHostCharacter != urlNoScheme.end()) { 
+
+    if (firstNonHostCharacter != urlNoScheme.end()) {
         return urlNoScheme.substr(0, firstNonHostCharacter - urlNoScheme.data());
-    } 
- 
-    return urlNoScheme; 
+    }
+
+    return urlNoScheme;
 }
 
 TStringBuf GetHost(const TStringBuf url) noexcept {
@@ -337,27 +337,27 @@ TString AddSchemePrefix(const TString& url, TStringBuf scheme) {
 #define X(c) (c >= 'A' ? ((c & 0xdf) - 'A') + 10 : (c - '0'))
 
 static inline int x2c(unsigned char* x) {
-    if (!IsAsciiHex(x[0]) || !IsAsciiHex(x[1])) 
+    if (!IsAsciiHex(x[0]) || !IsAsciiHex(x[1]))
         return -1;
     return X(x[0]) * 16 + X(x[1]);
 }
 
 #undef X
 
-static inline int Unescape(char* str) { 
-    char *to, *from; 
+static inline int Unescape(char* str) {
+    char *to, *from;
     int dlen = 0;
     if ((str = strchr(str, '%')) == nullptr)
         return dlen;
     for (to = str, from = str; *from; from++, to++) {
         if ((*to = *from) == '%') {
-            int c = x2c((unsigned char*)from + 1); 
+            int c = x2c((unsigned char*)from + 1);
             *to = char((c > 0) ? c : '0');
             from += 2;
             dlen += 2;
         }
     }
-    *to = 0; /* terminate it at the new length */ 
+    *to = 0; /* terminate it at the new length */
     return dlen;
 }
 
@@ -379,8 +379,8 @@ size_t NormalizeHostName(char* dest, const TStringBuf source, size_t dest_size, 
     char buf[8] = ":";
     size_t buflen = 1 + ToString(defport, buf + 1, sizeof(buf) - 2);
     buf[buflen] = '\0';
-    char* ptr = strstr(dest, buf); 
-    if (ptr && ptr[buflen] == 0) { 
+    char* ptr = strstr(dest, buf);
+    if (ptr && ptr[buflen] == 0) {
         len -= buflen;
         *ptr = 0;
     }

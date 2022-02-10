@@ -5,13 +5,13 @@
 #include <util/generic/vector.h>
 #include <util/system/yassert.h>
 
-template <typename T, typename TTag = void, template <typename, class> class TVectorType = TVector> 
+template <typename T, typename TTag = void, template <typename, class> class TVectorType = TVector>
 class TTempTlsVector {
 private:
     struct TTagForTls {};
 
     TVectorType<T, std::allocator<T>>* Vector;
- 
+
 public:
     TVectorType<T, std::allocator<T>>* GetVector() {
         return Vector;

@@ -6,16 +6,16 @@
 #include <util/generic/map.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
- 
+
 #include <initializer_list>
- 
-struct TStringLess { 
-    template <class T1, class T2> 
+
+struct TStringLess {
+    template <class T1, class T2>
     inline bool operator()(const T1& t1, const T2& t2) const noexcept {
-        return TStringBuf(t1) < TStringBuf(t2); 
-    } 
-}; 
- 
+        return TStringBuf(t1) < TStringBuf(t2);
+    }
+};
+
 class TCgiParameters: public TMultiMap<TString, TString> {
 public:
     TCgiParameters() = default;
@@ -45,7 +45,7 @@ public:
     void ScanAddUnescaped(const TStringBuf cgiParStr);
     void ScanAddAllUnescaped(const TStringBuf cgiParStr);
     void ScanAddAll(const TStringBuf cgiParStr);
- 
+
     /// Returns the string representation of all the stored parameters
     /**
      * @note The returned string has format <name1>=<value1>&<name2>=<value2>&...
@@ -84,9 +84,9 @@ public:
      */
     Y_PURE_FUNCTION
     const TString& Get(const TStringBuf name, size_t numOfValue = 0) const noexcept;
- 
+
     void InsertEscaped(const TStringBuf name, const TStringBuf value);
- 
+
 #if !defined(__GLIBCXX__)
     template <typename TName, typename TValue>
     inline void InsertUnescaped(TName&& name, TValue&& value) {
@@ -102,7 +102,7 @@ public:
         emplace(TString(name), TString(value));
     }
 #endif
- 
+
     // replace all values for a given key with new values
     template <typename TIter>
     void ReplaceUnescaped(const TStringBuf key, TIter valuesBegin, const TIter valuesEnd);
@@ -112,7 +112,7 @@ public:
     }
 
     void ReplaceUnescaped(const TStringBuf key, const TStringBuf value) {
-        ReplaceUnescaped(key, {value}); 
+        ReplaceUnescaped(key, {value});
     }
 
     // join multiple values into a single one using a separator
@@ -121,13 +121,13 @@ public:
 
     bool Erase(const TStringBuf name, size_t numOfValue = 0);
     bool Erase(const TStringBuf name, const TStringBuf val);
- 
+
     inline const char* FormField(const TStringBuf name, size_t numOfValue = 0) const {
         const_iterator it = Find(name, numOfValue);
- 
+
         if (it == end()) {
             return nullptr;
-        } 
+        }
 
         return it->second.data();
     }
@@ -139,18 +139,18 @@ void TCgiParameters::ReplaceUnescaped(const TStringBuf key, TIter valuesBegin, c
     auto current = oldRange.first;
 
     // reuse as many existing nodes as possible (probably none)
-    for (; valuesBegin != valuesEnd && current != oldRange.second; ++valuesBegin, ++current) { 
+    for (; valuesBegin != valuesEnd && current != oldRange.second; ++valuesBegin, ++current) {
         current->second = *valuesBegin;
     }
 
     // if there were more nodes than we need to insert then erase remaining ones
-    for (; current != oldRange.second; erase(current++)) { 
+    for (; current != oldRange.second; erase(current++)) {
     }
 
     // if there were less nodes than we need to insert then emplace the rest of the range
     if (valuesBegin != valuesEnd) {
         const TString keyStr = TString(key);
-        for (; valuesBegin != valuesEnd; ++valuesBegin) { 
+        for (; valuesBegin != valuesEnd; ++valuesBegin) {
             emplace_hint(oldRange.second, keyStr, TString(*valuesBegin));
         }
     }

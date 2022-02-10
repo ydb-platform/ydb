@@ -7,10 +7,10 @@ Y_UNIT_TEST_SUITE(TYStackTest) {
         TStack<int> s;
 
         UNIT_ASSERT(!s);
-        UNIT_ASSERT(s.empty()); 
+        UNIT_ASSERT(s.empty());
         s.push(100);
         s.push(200);
-        UNIT_ASSERT(s); 
+        UNIT_ASSERT(s);
         UNIT_ASSERT(!s.empty());
     }
 }

@@ -8,38 +8,38 @@
 #include <library/cpp/cgiparam/cgiparam.h>
 
 namespace NBus {
-    class TBusWww: public TAtomicRefCount<TBusWww> { 
-    public: 
-        struct TLink { 
-            TString Title; 
-            TString Href; 
-        }; 
+    class TBusWww: public TAtomicRefCount<TBusWww> {
+    public:
+        struct TLink {
+            TString Title;
+            TString Href;
+        };
 
-        struct TOptionalParams { 
-            TVector<TLink> ParentLinks; 
-        }; 
+        struct TOptionalParams {
+            TVector<TLink> ParentLinks;
+        };
 
-        TBusWww(); 
-        ~TBusWww(); 
+        TBusWww();
+        ~TBusWww();
 
-        void RegisterClientSession(TBusClientSessionPtr); 
-        void RegisterServerSession(TBusServerSessionPtr); 
-        void RegisterQueue(TBusMessageQueuePtr); 
-        void RegisterModule(TBusModule*); 
+        void RegisterClientSession(TBusClientSessionPtr);
+        void RegisterServerSession(TBusServerSessionPtr);
+        void RegisterQueue(TBusMessageQueuePtr);
+        void RegisterModule(TBusModule*);
 
-        void ServeHttp(IOutputStream& httpOutputStream, const TCgiParameters& queryArgs, const TOptionalParams& params = TOptionalParams()); 
+        void ServeHttp(IOutputStream& httpOutputStream, const TCgiParameters& queryArgs, const TOptionalParams& params = TOptionalParams());
 
-        struct TImpl; 
-        THolder<TImpl> Impl; 
-    }; 
+        struct TImpl;
+        THolder<TImpl> Impl;
+    };
 
-    class TBusWwwHttpServer { 
-    public: 
-        TBusWwwHttpServer(TIntrusivePtr<TBusWww> www, unsigned port); 
-        ~TBusWwwHttpServer(); 
+    class TBusWwwHttpServer {
+    public:
+        TBusWwwHttpServer(TIntrusivePtr<TBusWww> www, unsigned port);
+        ~TBusWwwHttpServer();
 
-        struct TImpl; 
-        THolder<TImpl> Impl; 
-    }; 
+        struct TImpl;
+        THolder<TImpl> Impl;
+    };
 
-} 
+}

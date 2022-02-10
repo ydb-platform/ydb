@@ -5,27 +5,27 @@
 
 Y_UNIT_TEST_SUITE(TestXmlDocument) {
     Y_UNIT_TEST(Iteration) {
-        NXml::TDocument xml( 
-            "<?xml version=\"1.0\"?>\n" 
-            "<root>qq<a><b></b></a>ww<c></c></root>", 
-            NXml::TDocument::String); 
- 
-        NXml::TConstNode root = xml.Root(); 
-        UNIT_ASSERT_EQUAL(root.Name(), "root"); 
-        NXml::TConstNode n = root.FirstChild().NextSibling(); 
-        UNIT_ASSERT_EQUAL(n.Name(), "a"); 
-        n = n.NextSibling().NextSibling(); 
-        UNIT_ASSERT_EQUAL(n.Name(), "c"); 
-    } 
- 
+        NXml::TDocument xml(
+            "<?xml version=\"1.0\"?>\n"
+            "<root>qq<a><b></b></a>ww<c></c></root>",
+            NXml::TDocument::String);
+
+        NXml::TConstNode root = xml.Root();
+        UNIT_ASSERT_EQUAL(root.Name(), "root");
+        NXml::TConstNode n = root.FirstChild().NextSibling();
+        UNIT_ASSERT_EQUAL(n.Name(), "a");
+        n = n.NextSibling().NextSibling();
+        UNIT_ASSERT_EQUAL(n.Name(), "c");
+    }
+
     Y_UNIT_TEST(ParseString) {
         NXml::TDocument xml(
-            "<?xml version=\"1.0\"?>\n" 
-            "<root>\n" 
-            "<a><b len=\"15\" correct=\"1\">hello world</b></a>\n" 
-            "<text>Некоторый текст</text>\n" 
-            "</root>", 
-            NXml::TDocument::String); 
+            "<?xml version=\"1.0\"?>\n"
+            "<root>\n"
+            "<a><b len=\"15\" correct=\"1\">hello world</b></a>\n"
+            "<text>Некоторый текст</text>\n"
+            "</root>",
+            NXml::TDocument::String);
 
         NXml::TConstNode root = xml.Root();
         NXml::TConstNode b = root.Node("a/b");
@@ -49,29 +49,29 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         TString data = xml.ToString("utf-8");
         UNIT_ASSERT_EQUAL(data, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                 "<frob xyzzy=\"Frobozz\" kulness=\"0.3\" timelimit=\"3\">\n"
-                                "  <authors>\n" 
-                                "    <graham name=\"Nelson\"/>\n" 
-                                "    <zarf>Andrew Plotkin</zarf>\n" 
+                                "  <authors>\n"
+                                "    <graham name=\"Nelson\"/>\n"
+                                "    <zarf>Andrew Plotkin</zarf>\n"
                                 "    <emshort>Emily Short</emshort>\n"
-                                "  </authors>\n" 
-                                "</frob>\n"); 
+                                "  </authors>\n"
+                                "</frob>\n");
         // check default utf8 output with ru
         {
             NXml::TDocument xml2("frob", NXml::TDocument::RootName);
             xml2.Root().SetAttr("xyzzy", "привет =)");
             UNIT_ASSERT_VALUES_EQUAL(xml2.ToString(), "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-                                                      "<frob xyzzy=\"привет =)\"/>\n"); 
+                                                      "<frob xyzzy=\"привет =)\"/>\n");
         }
     }
     Y_UNIT_TEST(XPathNs) {
         using namespace NXml;
         TDocument xml(
-            "<?xml version=\"1.0\"?>\n" 
-            "<root xmlns='http://hello.com/hello'>\n" 
-            "<a><b len=\"15\" correct=\"1\">hello world</b></a>\n" 
-            "<text>Некоторый текст</text>\n" 
-            "</root>", 
-            TDocument::String); 
+            "<?xml version=\"1.0\"?>\n"
+            "<root xmlns='http://hello.com/hello'>\n"
+            "<a><b len=\"15\" correct=\"1\">hello world</b></a>\n"
+            "<text>Некоторый текст</text>\n"
+            "</root>",
+            TDocument::String);
 
         TNamespacesForXPath nss;
         TNamespaceForXPath ns = {"h", "http://hello.com/hello"};
@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         node = node.NextSibling();
         UNIT_ASSERT_EQUAL(node.IsNull(), true);
         TStringStream iterLog;
-        for (const auto& node2 : root.Nodes("/root/*")) { 
+        for (const auto& node2 : root.Nodes("/root/*")) {
             iterLog << node2.Name() << ';';
         }
         UNIT_ASSERT_STRINGS_EQUAL(iterLog.Str(), "a;c;");
@@ -154,15 +154,15 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
     Y_UNIT_TEST(DefVal) {
         using namespace NXml;
         TDocument xml("<?xml version=\"1.0\"?>\n"
-                      "<root><a></a></root>", 
-                      NXml::TDocument::String); 
+                      "<root><a></a></root>",
+                      NXml::TDocument::String);
         UNIT_ASSERT_EQUAL(xml.Root().Node("a", true).Node("b", true).Value<int>(3), 3);
     }
     Y_UNIT_TEST(NodesVsXPath) {
         using namespace NXml;
         TDocument xml("<?xml version=\"1.0\"?>\n"
-                      "<root><a x=\"y\"></a></root>", 
-                      NXml::TDocument::String); 
+                      "<root><a x=\"y\"></a></root>",
+                      NXml::TDocument::String);
         UNIT_ASSERT_EXCEPTION(xml.Root().Nodes("/root/a/@x"), yexception);
         UNIT_ASSERT_VALUES_EQUAL(xml.Root().XPath("/root/a/@x").Size(), 1);
     }
@@ -170,8 +170,8 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         using namespace NXml;
         TDocument xml("<?xml version=\"1.0\"?>\n"
                       "<root><a x=\"y\">first</a>"
-                      "<a>second</a></root>", 
-                      NXml::TDocument::String); 
+                      "<a>second</a></root>",
+                      NXml::TDocument::String);
         UNIT_ASSERT_EXCEPTION(xml.Root().Node("/root/a/@x"), yexception);
         UNIT_ASSERT_STRINGS_EQUAL(xml.Root().Node("/root/a").Value<TString>(), "first");
     }
@@ -185,12 +185,12 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
 
         // do copy
         TDocument xml("<?xml version=\"1.0\"?>\n"
-                      "<root><a></a></root>", 
-                      TDocument::String); 
+                      "<root><a></a></root>",
+                      TDocument::String);
 
         TDocument xml2("<?xml version=\"1.0\"?>\n"
-                       "<root><node><b>bold</b><i>ita</i></node></root>", 
-                       TDocument::String); 
+                       "<root><node><b>bold</b><i>ita</i></node></root>",
+                       TDocument::String);
 
         TNode node = xml2.Root().Node("//node");
         TNode place = xml.Root().Node("//a");
@@ -200,8 +200,8 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         TStringStream s;
         xml.Save(s, "", false);
         UNIT_ASSERT_VALUES_EQUAL(s.Str(),
-                                 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" 
-                                 "<root><a><node><b>bold</b><i>ita</i></node></a></root>\n"); 
+                                 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                                 "<root><a><node><b>bold</b><i>ita</i></node></a></root>\n");
     }
 
     Y_UNIT_TEST(RenderNode) {
@@ -213,8 +213,8 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
                 "<root>\n"
                 "<a><b len=\"15\" correct=\"1\">hello world</b></a>\n"
                 "<text>Некоторый текст</text>\n"
-                "</root>", 
-                TDocument::String); 
+                "</root>",
+                TDocument::String);
             TNode n = xml.Root().Node("//a");
             UNIT_ASSERT_VALUES_EQUAL(n.ToString(), "<a><b len=\"15\" correct=\"1\">hello world</b></a>");
         }
@@ -225,8 +225,8 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
                 "<root xmlns='http://hello.com/hello'>\n"
                 "<a><b len=\"15\" correct=\"1\">hello world</b></a>\n"
                 "<text>Некоторый текст</text>\n"
-                "</root>", 
-                TDocument::String); 
+                "</root>",
+                TDocument::String);
             TNamespacesForXPath nss;
             TNamespaceForXPath ns = {"h", "http://hello.com/hello"};
             nss.push_back(ns);

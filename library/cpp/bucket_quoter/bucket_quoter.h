@@ -52,7 +52,7 @@ struct TInstantTimerMs {
 
 struct THPTimerUs {
     using TTime = NHPTimer::STime;
-    static constexpr ui64 Resolution = 1000000ull; // microseconds 
+    static constexpr ui64 Resolution = 1000000ull; // microseconds
     static TTime Now() {
         NHPTimer::STime ret;
         NHPTimer::GetTime(&ret);
@@ -88,7 +88,7 @@ public:
         , TokensUsed(tokensUsed)
         , UsecWaited(usecWaited)
         , AggregateInflow(aggregateInflow)
-        , Bucket(fill ? capacity : 0) 
+        , Bucket(fill ? capacity : 0)
         , LastAdd(Timer::Now())
         , InflowTokensPerSecond(&FixedInflow)
         , BucketTokensCapacity(&FixedCapacity)
@@ -107,7 +107,7 @@ public:
         , TokensUsed(tokensUsed)
         , UsecWaited(usecWaited)
         , AggregateInflow(aggregateInflow)
-        , Bucket(fill ? AtomicGet(*capacity) : 0) 
+        , Bucket(fill ? AtomicGet(*capacity) : 0)
         , LastAdd(Timer::Now())
         , InflowTokensPerSecond(inflow)
         , BucketTokensCapacity(capacity)
@@ -214,7 +214,7 @@ public:
     }
 
     void Sleep() {
-        while (!IsAvail()) { 
+        while (!IsAvail()) {
             ui32 delay = GetWaitTime();
             if (delay != 0) {
                 usleep(delay);
@@ -263,9 +263,9 @@ private:
         }
     }
 
-    StatCounter* MsgPassed; 
-    StatCounter* BucketUnderflows; 
-    StatCounter* TokensUsed; 
+    StatCounter* MsgPassed;
+    StatCounter* BucketUnderflows;
+    StatCounter* TokensUsed;
     StatCounter* UsecWaited;
     StatCounter* AggregateInflow;
 
@@ -274,8 +274,8 @@ private:
     Lock BucketMutex;
     ui64 Seqno = 0;
 
-    TAtomic* InflowTokensPerSecond; 
-    TAtomic* BucketTokensCapacity; 
+    TAtomic* InflowTokensPerSecond;
+    TAtomic* BucketTokensCapacity;
     TAtomic FixedInflow;
     TAtomic FixedCapacity;
 };

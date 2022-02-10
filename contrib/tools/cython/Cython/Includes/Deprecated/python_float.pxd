@@ -1,2 +1,2 @@
 # Present for backwards compatibility
-from cpython.float cimport * 
+from cpython.float cimport *

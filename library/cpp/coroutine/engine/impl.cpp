@@ -1,15 +1,15 @@
 #include "impl.h"
- 
+
 #include "stack/stack_allocator.h"
 #include "stack/stack_guards.h"
 
 #include <util/generic/scope.h>
 #include <util/thread/singleton.h>
 #include <util/stream/format.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/system/yassert.h>
- 
- 
+
+
 TCont::TJoinWait::TJoinWait(TCont& c) noexcept
     : Cont_(c)
 {}
@@ -35,12 +35,12 @@ TCont::TCont(NCoro::NStack::IAllocator& allocator,
 
 
 void TCont::PrintMe(IOutputStream& out) const noexcept {
-    out << "cont(" 
+    out << "cont("
         << "name = " << Name_ << ", "
         << "addr = " << Hex((size_t)this)
-        << ")"; 
-} 
- 
+        << ")";
+}
+
 bool TCont::Join(TCont* c, TInstant deadLine) noexcept {
     TJoinWait ev(*this);
     c->Waiters_.PushBack(&ev);
@@ -148,8 +148,8 @@ void TContExecutor::Execute(TContFunc func, void* arg) noexcept {
         func(cont, arg);
     }, "sys_main");
     RunScheduler();
-} 
- 
+}
+
 void TContExecutor::WaitForIO() {
     while (Ready_.Empty() && !WaitQueue_.Empty()) {
         const auto now = Now();
@@ -190,8 +190,8 @@ void TContExecutor::WaitForIO() {
 
         Ready_.Append(ReadyNext_);
     }
-} 
- 
+}
+
 void TContExecutor::Poll(TInstant deadline) {
     Poller_.Wait(PollerEvents_, deadline);
     LastPoll_ = Now();
@@ -217,8 +217,8 @@ void TContExecutor::Poll(TInstant deadline) {
             }
         }
     }
-} 
- 
+}
+
 void TContExecutor::Abort() noexcept {
     WaitQueue_.Abort();
     auto visitor = [](TCont* c) {
@@ -324,7 +324,7 @@ void TContExecutor::RunScheduler() noexcept {
             }
 
             TCont* cont = Ready_.PopFront();
- 
+
             if (ScheduleCallback_) {
                 ScheduleCallback_->OnSchedule(*this, *cont);
             }
@@ -347,9 +347,9 @@ void TContExecutor::RunScheduler() noexcept {
     } catch (...) {
         TBackTrace::FromCurrentException().PrintTo(Cerr);
         Y_FAIL("Uncaught exception in the scheduler: %s", CurrentExceptionMessage().c_str());
-    } 
+    }
 }
- 
+
 void TContExecutor::Pause() {
     if (auto cont = Running()) {
         Paused_ = true;
@@ -371,4 +371,4 @@ TInstant TContExecutor::Now() {
 template <>
 void Out<TCont>(IOutputStream& out, const TCont& c) {
     c.PrintMe(out);
-} 
+}

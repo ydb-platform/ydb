@@ -1,25 +1,25 @@
 /* Copyright 2013 Google Inc. All Rights Reserved.
- 
+
    Distributed under MIT license.
    See file LICENSE for detail or copy at https://opensource.org/licenses/MIT
 */
 
 /* Sliding window over the input data. */
 
-#ifndef BROTLI_ENC_RINGBUFFER_H_ 
-#define BROTLI_ENC_RINGBUFFER_H_ 
- 
+#ifndef BROTLI_ENC_RINGBUFFER_H_
+#define BROTLI_ENC_RINGBUFFER_H_
+
 #include <string.h>  /* memcpy */
- 
+
 #include "../common/platform.h"
 #include <brotli/types.h>
 #include "./memory.h"
 #include "./quality.h"
- 
+
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
 #endif
- 
+
 /* A RingBuffer(window_bits, tail_bits) contains `1 << window_bits' bytes of
    data in a circular manner: writing a byte writes it to:
      `position() % (1 << window_bits)'.
@@ -80,16 +80,16 @@ static BROTLI_INLINE void RingBufferInitBuffer(
     memcpy(new_data, rb->data_,
         2 + rb->cur_size_ + kSlackForEightByteHashingEverywhere);
     BROTLI_FREE(m, rb->data_);
-  } 
+  }
   rb->data_ = new_data;
   rb->cur_size_ = buflen;
   rb->buffer_ = rb->data_ + 2;
   rb->buffer_[-2] = rb->buffer_[-1] = 0;
   for (i = 0; i < kSlackForEightByteHashingEverywhere; ++i) {
     rb->buffer_[rb->cur_size_ + i] = 0;
-  } 
+  }
 }
- 
+
 static BROTLI_INLINE void RingBufferWriteTail(
     const uint8_t* bytes, size_t n, RingBuffer* rb) {
   const size_t masked_pos = rb->pos_ & rb->mask_;
@@ -98,9 +98,9 @@ static BROTLI_INLINE void RingBufferWriteTail(
     const size_t p = rb->size_ + masked_pos;
     memcpy(&rb->buffer_[p], bytes,
         BROTLI_MIN(size_t, n, rb->tail_size_ - masked_pos));
-  } 
+  }
 }
- 
+
 /* Push bytes into the ring buffer. */
 static BROTLI_INLINE void RingBufferWrite(
     MemoryManager* m, const uint8_t* bytes, size_t n, RingBuffer* rb) {
@@ -116,7 +116,7 @@ static BROTLI_INLINE void RingBufferWrite(
     if (BROTLI_IS_OOM(m)) return;
     memcpy(rb->buffer_, bytes, n);
     return;
-  } 
+  }
   if (rb->cur_size_ < rb->total_size_) {
     /* Lazily allocate the full buffer. */
     RingBufferInitBuffer(m, rb->total_size_, rb);
@@ -142,8 +142,8 @@ static BROTLI_INLINE void RingBufferWrite(
       /* Copy into the beginning of the buffer */
       memcpy(&rb->buffer_[0], bytes + (rb->size_ - masked_pos),
              n - (rb->size_ - masked_pos));
-    } 
-  } 
+    }
+  }
   {
     BROTLI_BOOL not_first_lap = (rb->pos_ & (1u << 31)) != 0;
     uint32_t rb_pos_mask = (1u << 31) - 1;
@@ -156,9 +156,9 @@ static BROTLI_INLINE void RingBufferWrite(
     }
   }
 }
- 
+
 #if defined(__cplusplus) || defined(c_plusplus)
 }  /* extern "C" */
 #endif
- 
+
 #endif  /* BROTLI_ENC_RINGBUFFER_H_ */

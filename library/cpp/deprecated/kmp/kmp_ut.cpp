@@ -1,8 +1,8 @@
-#include "kmp.h" 
- 
+#include "kmp.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 
 static TVector<int> FindAll(const TString& pattern, const TString& string) {
     TVector<int> result;
@@ -17,12 +17,12 @@ static TVector<int> FindAll(const TString& pattern, const TString& string) {
     return result;
 }
 
-class TTestKMP: public TTestBase { 
+class TTestKMP: public TTestBase {
     UNIT_TEST_SUITE(TTestKMP);
-    UNIT_TEST(Test); 
-    UNIT_TEST(TestStream); 
+    UNIT_TEST(Test);
+    UNIT_TEST(TestStream);
     UNIT_TEST_SUITE_END();
- 
+
 public:
     void Test() {
         TVector<int> ans = {0, 2};
@@ -35,12 +35,12 @@ public:
         UNIT_ASSERT_EQUAL(FindAll("ab", "abab"), ans);
     }
 
-    class TKMPSimpleCallback: public TKMPStreamMatcher<int>::ICallback { 
+    class TKMPSimpleCallback: public TKMPStreamMatcher<int>::ICallback {
     private:
         int* Begin;
         int* End;
         int Count;
- 
+
     public:
         TKMPSimpleCallback(int* begin, int* end)
             : Begin(begin)

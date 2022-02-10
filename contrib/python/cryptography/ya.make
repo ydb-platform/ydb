@@ -1,18 +1,18 @@
-PY23_LIBRARY() 
+PY23_LIBRARY()
 
-LICENSE(BSD-3-Clause) 
- 
+LICENSE(BSD-3-Clause)
+
 OWNER(g:python-contrib)
 
 VERSION(3.3.2)
 
-IF (PYTHON2) 
-    PEERDIR( 
-        contrib/python/enum34 
-        contrib/python/ipaddress 
-    ) 
-ENDIF() 
- 
+IF (PYTHON2)
+    PEERDIR(
+        contrib/python/enum34
+        contrib/python/ipaddress
+    )
+ENDIF()
+
 PEERDIR(
     contrib/libs/openssl
     contrib/python/cffi

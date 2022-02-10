@@ -9,7 +9,7 @@
  * @{
  */
 
-class TBrotliCompress: public IOutputStream { 
+class TBrotliCompress: public IOutputStream {
 public:
     static constexpr int BEST_QUALITY = 11;
 
@@ -32,7 +32,7 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBrotliDecompress: public IInputStream { 
+class TBrotliDecompress: public IInputStream {
 public:
     /**
       @param slave stream to read compressed data from

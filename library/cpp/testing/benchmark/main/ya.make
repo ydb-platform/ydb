@@ -6,7 +6,7 @@ OWNER(
 )
 
 SRCS(
-    GLOBAL main.cpp 
+    GLOBAL main.cpp
 )
 
 PEERDIR(

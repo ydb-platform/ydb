@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #ifdef _unix_
-    #include <sys/resource.h> 
+    #include <sys/resource.h>
 #endif
 
 #include "filemap.h"
@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
     void BasicTest(TMemoryMapCommon::EOpenMode mode) {
         char data[] = "abcdefgh";
 
-        TFile file(FileName_, CreateAlways | WrOnly); 
+        TFile file(FileName_, CreateAlways | WrOnly);
         file.Write(static_cast<void*>(data), sizeof(data));
         file.Close();
 
@@ -31,18 +31,18 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
                 static_cast<char*>(mappedFile.Ptr())[i] = data[i] + 1;
             }
             mappedFile.Flush();
- 
+
             TFileMap::TMapResult mapResult = mappedFile.Map(2, 2);
             UNIT_ASSERT(mapResult.MappedSize() == 2);
             UNIT_ASSERT(mapResult.MappedData() == mappedFile.Ptr());
             UNIT_ASSERT(mappedFile.MappedSize() == 2);
             UNIT_ASSERT(static_cast<char*>(mappedFile.Ptr())[0] == 'd' && static_cast<char*>(mappedFile.Ptr())[1] == 'e');
- 
+
             mappedFile.Unmap();
-            UNIT_ASSERT(mappedFile.MappedSize() == 0); 
- 
-            FILE* f = fopen(FileName_, "rb"); 
-            TFileMap mappedFile2(f); 
+            UNIT_ASSERT(mappedFile.MappedSize() == 0);
+
+            FILE* f = fopen(FileName_, "rb");
+            TFileMap mappedFile2(f);
             mappedFile2.Map(0, mappedFile2.Length());
             UNIT_ASSERT(mappedFile2.MappedSize() == sizeof(data));
             UNIT_ASSERT(static_cast<char*>(mappedFile2.Ptr())[0] == data[0] + 1);
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         }
         NFs::Remove(FileName_);
     }
- 
+
     Y_UNIT_TEST(TestFileMap) {
         BasicTest(TMemoryMapCommon::oRdWr);
     }
@@ -126,46 +126,46 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         NFs::Remove(FileName_);
     }
 
-#if defined(_asan_enabled_) || defined(_msan_enabled_) 
-//setrlimit incompatible with asan runtime 
-#elif defined(_cygwin_) 
-//cygwin is not real unix :( 
-#else 
+#if defined(_asan_enabled_) || defined(_msan_enabled_)
+//setrlimit incompatible with asan runtime
+#elif defined(_cygwin_)
+//cygwin is not real unix :(
+#else
     Y_UNIT_TEST(TestNotGreedy) {
         unsigned page[4096 / sizeof(unsigned)];
- 
-    #if defined(_unix_) 
+
+    #if defined(_unix_)
         // Temporary limit allowed virtual memory size to 1Gb
         struct rlimit rlim;
- 
-        if (getrlimit(RLIMIT_AS, &rlim)) { 
+
+        if (getrlimit(RLIMIT_AS, &rlim)) {
             throw TSystemError() << "Cannot get rlimit for virtual memory";
-        } 
- 
-        rlim_t Limit = 1 * 1024 * 1024 * 1024; 
- 
+        }
+
+        rlim_t Limit = 1 * 1024 * 1024 * 1024;
+
         if (rlim.rlim_cur > Limit) {
             rlim.rlim_cur = Limit;
- 
-            if (setrlimit(RLIMIT_AS, &rlim)) { 
+
+            if (setrlimit(RLIMIT_AS, &rlim)) {
                 throw TSystemError() << "Cannot set rlimit for virtual memory to 1Gb";
-            } 
+            }
         }
-    #endif 
+    #endif
         // Make a 128M test file
         try {
             TFile file(FileName_, CreateAlways | WrOnly);
- 
-            for (unsigned pages = 128 * 1024 * 1024 / sizeof(page), i = 0; pages--; i++) { 
-                std::fill(page, page + sizeof(page) / sizeof(*page), i); 
+
+            for (unsigned pages = 128 * 1024 * 1024 / sizeof(page), i = 0; pages--; i++) {
+                std::fill(page, page + sizeof(page) / sizeof(*page), i);
                 file.Write(page, sizeof(page));
             }
- 
+
             file.Close();
- 
+
             // Make 16 maps of our file, which would require 16*128M = 2Gb and exceed our 1Gb limit
             TVector<THolder<TFileMap>> maps;
- 
+
             for (int i = 0; i < 16; ++i) {
                 maps.emplace_back(MakeHolder<TFileMap>(FileName_, TMemoryMapCommon::oRdOnly | TMemoryMapCommon::oNotGreedy));
                 maps.back()->Map(i * sizeof(page), sizeof(page));
@@ -174,59 +174,59 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             // Oh, good, we're not dead yet
             for (int i = 0; i < 16; ++i) {
                 TFileMap& map = *maps[i];
- 
-                UNIT_ASSERT_EQUAL(map.Length(), 128 * 1024 * 1024); 
+
+                UNIT_ASSERT_EQUAL(map.Length(), 128 * 1024 * 1024);
                 UNIT_ASSERT_EQUAL(map.MappedSize(), sizeof(page));
- 
-                const int* mappedPage = (const int*)map.Ptr(); 
- 
-                for (size_t j = 0; j < sizeof(page) / sizeof(*page); ++j) { 
+
+                const int* mappedPage = (const int*)map.Ptr();
+
+                for (size_t j = 0; j < sizeof(page) / sizeof(*page); ++j) {
                     UNIT_ASSERT_EQUAL(mappedPage[j], i);
-                } 
+                }
             }
- 
-    #if defined(_unix_) 
+
+    #if defined(_unix_)
             // Restore limits and cleanup
             rlim.rlim_cur = rlim.rlim_max;
- 
-            if (setrlimit(RLIMIT_AS, &rlim)) { 
+
+            if (setrlimit(RLIMIT_AS, &rlim)) {
                 throw TSystemError() << "Cannot restore rlimit for virtual memory";
-            } 
-    #endif 
+            }
+    #endif
             maps.clear();
             NFs::Remove(FileName_);
-        } catch (...) { 
-    // TODO: RAII'ize all this stuff 
-    #if defined(_unix_) 
+        } catch (...) {
+    // TODO: RAII'ize all this stuff
+    #if defined(_unix_)
             rlim.rlim_cur = rlim.rlim_max;
- 
-            if (setrlimit(RLIMIT_AS, &rlim)) { 
+
+            if (setrlimit(RLIMIT_AS, &rlim)) {
                 throw TSystemError() << "Cannot restore rlimit for virtual memory";
-            } 
-    #endif 
+            }
+    #endif
             NFs::Remove(FileName_);
- 
+
             throw;
         }
     }
-#endif 
+#endif
 
     Y_UNIT_TEST(TestFileMappedArray) {
         {
-            TFileMappedArray<ui32> mappedArray; 
+            TFileMappedArray<ui32> mappedArray;
             ui32 data[] = {123, 456, 789, 10};
             size_t sz = sizeof(data) / sizeof(data[0]);
- 
-            TFile file(FileName_, CreateAlways | WrOnly); 
+
+            TFile file(FileName_, CreateAlways | WrOnly);
             file.Write(static_cast<void*>(data), sizeof(data));
             file.Close();
 
             mappedArray.Init(FileName_);
             // actual test begin
             UNIT_ASSERT(mappedArray.Size() == sz);
-            for (size_t i = 0; i < sz; ++i) { 
+            for (size_t i = 0; i < sz; ++i) {
                 UNIT_ASSERT(mappedArray[i] == data[i]);
-            } 
+            }
 
             UNIT_ASSERT(mappedArray.GetAt(mappedArray.Size()) == 0);
             UNIT_ASSERT(*mappedArray.Begin() == data[0]);
@@ -242,9 +242,9 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
 
             // actual test begin
             UNIT_ASSERT(mappedArray.Size() == sz);
-            for (size_t i = 0; i < sz; ++i) { 
+            for (size_t i = 0; i < sz; ++i) {
                 UNIT_ASSERT(mappedArray[i] == data[i]);
-            } 
+            }
 
             UNIT_ASSERT(mappedArray.GetAt(mappedArray.Size()) == 0);
             UNIT_ASSERT(*mappedArray.Begin() == data[0]);
@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             UNIT_ASSERT(!mappedArray.Empty());
             // actual test end
 
-            file = TFile(FileName_, WrOnly); 
+            file = TFile(FileName_, WrOnly);
             file.Seek(0, sEnd);
             file.Write("x", 1);
             file.Close();
@@ -270,9 +270,9 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
 
     Y_UNIT_TEST(TestMappedArray) {
         ui32 sz = 10;
- 
-        TMappedArray<ui32> mappedArray; 
- 
+
+        TMappedArray<ui32> mappedArray;
+
         ui32* ptr = mappedArray.Create(sz);
         UNIT_ASSERT(ptr != nullptr);
         UNIT_ASSERT(mappedArray.size() == sz);
@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             UNIT_ASSERT(mappedArray[i] == i);
         }
 
-        TMappedArray<ui32> mappedArray2(1000); 
+        TMappedArray<ui32> mappedArray2(1000);
         mappedArray.swap(mappedArray2);
         UNIT_ASSERT(mappedArray.size() == 1000 && mappedArray2.size() == sz);
     }
@@ -299,10 +299,10 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         try {
             TMemoryMap mappedMem(f);
             mappedMem.Map(mappedMem.Length() / 2, mappedMem.Length() + 100); // overflow
-            UNIT_ASSERT(0);                                                  // should not go here 
-        } catch (yexception& exc) { 
+            UNIT_ASSERT(0);                                                  // should not go here
+        } catch (yexception& exc) {
             TString text = exc.what(); // exception should contain failed file name
-            UNIT_ASSERT(text.find(TMemoryMapCommon::UnknownFileName()) != TString::npos); 
+            UNIT_ASSERT(text.find(TMemoryMapCommon::UnknownFileName()) != TString::npos);
             fclose(f);
         }
 
@@ -310,8 +310,8 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         try {
             TMemoryMap mappedMem(fileForMap);
             mappedMem.Map(mappedMem.Length() / 2, mappedMem.Length() + 100); // overflow
-            UNIT_ASSERT(0);                                                  // should not go here 
-        } catch (yexception& exc) { 
+            UNIT_ASSERT(0);                                                  // should not go here
+        } catch (yexception& exc) {
             TString text = exc.what(); // exception should contain failed file name
             UNIT_ASSERT(text.find(FileName_) != TString::npos);
         }

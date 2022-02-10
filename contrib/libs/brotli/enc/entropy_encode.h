@@ -1,57 +1,57 @@
 /* Copyright 2010 Google Inc. All Rights Reserved.
- 
+
    Distributed under MIT license.
    See file LICENSE for detail or copy at https://opensource.org/licenses/MIT
 */
 
 /* Entropy encoding (Huffman) utilities. */
 
-#ifndef BROTLI_ENC_ENTROPY_ENCODE_H_ 
-#define BROTLI_ENC_ENTROPY_ENCODE_H_ 
- 
+#ifndef BROTLI_ENC_ENTROPY_ENCODE_H_
+#define BROTLI_ENC_ENTROPY_ENCODE_H_
+
 #include "../common/platform.h"
 #include <brotli/types.h>
- 
+
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
 #endif
- 
+
 /* A node of a Huffman tree. */
 typedef struct HuffmanTree {
   uint32_t total_count_;
   int16_t index_left_;
   int16_t index_right_or_value_;
 } HuffmanTree;
- 
+
 static BROTLI_INLINE void InitHuffmanTree(HuffmanTree* self, uint32_t count,
     int16_t left, int16_t right) {
   self->total_count_ = count;
   self->index_left_ = left;
   self->index_right_or_value_ = right;
 }
- 
+
 /* Returns 1 is assignment of depths succeeded, otherwise 0. */
 BROTLI_INTERNAL BROTLI_BOOL BrotliSetDepth(
     int p, HuffmanTree* pool, uint8_t* depth, int max_depth);
- 
+
 /* This function will create a Huffman tree.
- 
+
    The (data,length) contains the population counts.
    The tree_limit is the maximum bit depth of the Huffman codes.
- 
+
    The depth contains the tree, i.e., how many bits are used for
    the symbol.
- 
+
    The actual Huffman tree is constructed in the tree[] array, which has to
    be at least 2 * length + 1 long.
- 
+
    See http://en.wikipedia.org/wiki/Huffman_coding */
 BROTLI_INTERNAL void BrotliCreateHuffmanTree(const uint32_t* data,
                                              const size_t length,
                                              const int tree_limit,
                                              HuffmanTree* tree,
                                              uint8_t* depth);
- 
+
 /* Change the population counts in a way that the consequent
    Huffman tree compression, especially its RLE-part will be more
    likely to compress this data more efficiently.

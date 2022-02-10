@@ -1,15 +1,15 @@
-#include "random.h" 
- 
+#include "random.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/ylimits.h>
 
-template <class T> 
-static inline void AssertRange(T v, T r1, T r2) { 
-    UNIT_ASSERT(v >= r1); 
-    UNIT_ASSERT(v < r2); 
-} 
- 
+template <class T>
+static inline void AssertRange(T v, T r1, T r2) {
+    UNIT_ASSERT(v >= r1);
+    UNIT_ASSERT(v < r2);
+}
+
 Y_UNIT_TEST_SUITE(TRandomNumberTest) {
     template <typename T>
     void TestAll(T n) {
@@ -55,24 +55,24 @@ Y_UNIT_TEST_SUITE(TRandomNumberTest) {
         TestType<unsigned long>();
         TestType<unsigned long long>();
     }
- 
+
     Y_UNIT_TEST(TestRandomNumberFloat) {
-        for (size_t i = 0; i < 1000; ++i) { 
-            AssertRange<float>(RandomNumber<float>(), 0.0, 1.0); 
-        } 
-    } 
- 
+        for (size_t i = 0; i < 1000; ++i) {
+            AssertRange<float>(RandomNumber<float>(), 0.0, 1.0);
+        }
+    }
+
     Y_UNIT_TEST(TestRandomNumberDouble) {
-        for (size_t i = 0; i < 1000; ++i) { 
-            AssertRange<double>(RandomNumber<double>(), 0.0, 1.0); 
-        } 
-    } 
- 
+        for (size_t i = 0; i < 1000; ++i) {
+            AssertRange<double>(RandomNumber<double>(), 0.0, 1.0);
+        }
+    }
+
     Y_UNIT_TEST(TestRandomNumberLongDouble) {
-        for (size_t i = 0; i < 1000; ++i) { 
-            AssertRange<long double>(RandomNumber<long double>(), 0.0, 1.0); 
-        } 
-    } 
+        for (size_t i = 0; i < 1000; ++i) {
+            AssertRange<long double>(RandomNumber<long double>(), 0.0, 1.0);
+        }
+    }
 
     Y_UNIT_TEST(TestBoolean) {
         while (RandomNumber<bool>()) {
@@ -84,71 +84,71 @@ Y_UNIT_TEST_SUITE(TRandomNumberTest) {
     Y_UNIT_TEST(TestResetSeed) {
         SetRandomSeed(42);
         for (const ui32 el : {
-                 102, 
-                 179, 
-                 92, 
-                 14, 
-                 106, 
-                 71, 
-                 188, 
-                 20, 
-                 102, 
-                 121, 
-                 210, 
-                 214, 
-                 74, 
-                 202, 
-                 87, 
-                 116, 
-                 99, 
-                 103, 
-                 151, 
-                 130, 
-                 149, 
-                 52, 
-                 1, 
-                 87, 
-                 235, 
-                 157, 
-                 37, 
-                 129, 
-                 191, 
-                 187, 
-                 20, 
-                 160, 
-                 203, 
-                 57, 
-                 21, 
-                 252, 
-                 235, 
-                 88, 
-                 48, 
-                 218, 
-                 58, 
-                 254, 
-                 169, 
-                 255, 
-                 219, 
-                 187, 
-                 207, 
-                 14, 
-                 189, 
-                 189, 
-                 174, 
-                 189, 
-                 50, 
-                 107, 
-                 54, 
-                 243, 
-                 63, 
-                 248, 
-                 130, 
-                 228, 
-                 50, 
-                 134, 
-                 20, 
-                 72, 
-             }) { 
+                 102,
+                 179,
+                 92,
+                 14,
+                 106,
+                 71,
+                 188,
+                 20,
+                 102,
+                 121,
+                 210,
+                 214,
+                 74,
+                 202,
+                 87,
+                 116,
+                 99,
+                 103,
+                 151,
+                 130,
+                 149,
+                 52,
+                 1,
+                 87,
+                 235,
+                 157,
+                 37,
+                 129,
+                 191,
+                 187,
+                 20,
+                 160,
+                 203,
+                 57,
+                 21,
+                 252,
+                 235,
+                 88,
+                 48,
+                 218,
+                 58,
+                 254,
+                 169,
+                 255,
+                 219,
+                 187,
+                 207,
+                 14,
+                 189,
+                 189,
+                 174,
+                 189,
+                 50,
+                 107,
+                 54,
+                 243,
+                 63,
+                 248,
+                 130,
+                 228,
+                 50,
+                 134,
+                 20,
+                 72,
+             }) {
             UNIT_ASSERT_EQUAL(RandomNumber<ui32>(1 << 8), el);
         }
     }

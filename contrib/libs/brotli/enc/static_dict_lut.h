@@ -1,30 +1,30 @@
 /* Copyright 2015 Google Inc. All Rights Reserved.
- 
+
    Distributed under MIT license.
    See file LICENSE for detail or copy at https://opensource.org/licenses/MIT
 */
- 
+
 /* Lookup table for static dictionary and transforms. */
- 
+
 #ifndef BROTLI_ENC_STATIC_DICT_LUT_H_
 #define BROTLI_ENC_STATIC_DICT_LUT_H_
- 
+
 #include <brotli/types.h>
- 
+
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
 #endif
 
 typedef struct DictWord {
   /* Highest bit is used to indicate end of bucket. */
-  uint8_t len; 
-  uint8_t transform; 
-  uint16_t idx; 
+  uint8_t len;
+  uint8_t transform;
+  uint16_t idx;
 } DictWord;
- 
+
 static const int kDictNumBits = 15;
 static const uint32_t kDictHashMul32 = 0x1E35A7BD;
- 
+
 static const uint16_t kStaticDictionaryBuckets[32768] = {
 1,0,0,0,0,0,0,0,0,3,6,0,0,0,0,0,20,0,0,0,21,0,22,0,0,0,0,0,0,0,0,23,0,0,25,0,29,
 0,53,0,0,0,0,0,0,55,0,0,0,0,0,0,61,76,0,0,0,94,0,0,0,0,0,0,96,0,97,0,98,0,0,0,0,
@@ -5855,10 +5855,10 @@ static const DictWord kStaticDictionaryWords[31705] = {
 458},{12,0,756},{132,10,420},{134,0,1504},{6,0,757},{133,11,383},{6,0,1266},{135
 ,0,1735},{5,0,598},{7,0,791},{8,0,108},{9,0,123},{7,10,1570},{140,10,542},{142,
 11,410},{9,11,660},{138,11,347}
-}; 
- 
+};
+
 #if defined(__cplusplus) || defined(c_plusplus)
 }  /* extern "C" */
 #endif
- 
+
 #endif  /* BROTLI_ENC_STATIC_DICT_LUT_H_ */

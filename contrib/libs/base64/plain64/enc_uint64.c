@@ -3,11 +3,11 @@
 while (srclen >= 8)
 {
 	// Load string:
-	//uint64_t str = *(uint64_t *)c; 
-    uint64_t str; 
+	//uint64_t str = *(uint64_t *)c;
+    uint64_t str;
 
-    memcpy(&str, c, sizeof(str)); 
- 
+    memcpy(&str, c, sizeof(str));
+
 	// Reorder to 64-bit big-endian, if not already in that format. The
 	// workset must be in big-endian, otherwise the shifted bits do not
 	// carry over properly among adjacent bytes:

@@ -14,7 +14,7 @@ struct TInstance {
     static TInstance FromFeaturesString(const TString& featuresString);
 };
 
-struct TPool: public TVector<TInstance> { 
+struct TPool: public TVector<TInstance> {
     enum EIteratorType {
         LearnIterator,
         TestIterator,
@@ -33,7 +33,7 @@ struct TPool: public TVector<TInstance> {
         const size_t* Current;
 
         TMersenne<ui64> RandomGenerator;
- 
+
     public:
         TCVIterator(const TPool& parentPool,
                     const size_t foldsCount,
@@ -45,10 +45,10 @@ struct TPool: public TVector<TInstance> {
 
         bool IsValid() const;
 
-        const TInstance& operator*() const; 
-        const TInstance* operator->() const; 
+        const TInstance& operator*() const;
+        const TInstance* operator->() const;
         TPool::TCVIterator& operator++();
- 
+
     private:
         void Advance();
         bool TakeCurrent() const;

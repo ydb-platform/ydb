@@ -1,4 +1,4 @@
-#include <util/random/shuffle.h> 
+#include <util/random/shuffle.h>
 #include <ydb/core/ymq/client/cpp/client.h>
 
 #include <library/cpp/getopt/opt.h>
@@ -380,7 +380,7 @@ static int HandleRead(int argc, const char* argv[]) {
         }
 
         if (!keep) {
-            Shuffle(receipts.begin(), receipts.end()); 
+            Shuffle(receipts.begin(), receipts.end());
 
             for (auto ri = receipts.begin(); ri != receipts.end(); ++ri) {
                 TDeleteMessageRequest d;

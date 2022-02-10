@@ -8,7 +8,7 @@
 using namespace NRainCheck;
 
 Y_UNIT_TEST_SUITE(RainCheckCoro) {
-    struct TSimpleCoroTask : ICoroTask { 
+    struct TSimpleCoroTask : ICoroTask {
         TTestSync* const TestSync;
 
         TSimpleCoroTask(TTestEnv*, TTestSync* testSync)
@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(RainCheckCoro) {
         testSync.WaitForAndIncrement(1);
     }
 
-    struct TSleepCoroTask : ICoroTask { 
+    struct TSleepCoroTask : ICoroTask {
         TTestEnv* const Env;
         TTestSync* const TestSync;
 
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(RainCheckCoro) {
         testSync.WaitForAndIncrement(1);
     }
 
-    struct TSubtask : ICoroTask { 
+    struct TSubtask : ICoroTask {
         TTestEnv* const Env;
         TTestSync* const TestSync;
 
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(RainCheckCoro) {
         }
     };
 
-    struct TSpawnCoroTask : ICoroTask { 
+    struct TSpawnCoroTask : ICoroTask {
         TTestEnv* const Env;
         TTestSync* const TestSync;
 

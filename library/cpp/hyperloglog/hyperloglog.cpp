@@ -40,7 +40,7 @@ namespace {
 
     double EstimateBias(double e, unsigned precision) {
         static const TCorrection CORRECTIONS[1 + THyperLogLog::PRECISION_MAX - THyperLogLog::PRECISION_MIN] = {
-#include "hyperloglog_corrections.inc" 
+#include "hyperloglog_corrections.inc"
         };
         if (precision < THyperLogLog::PRECISION_MIN || precision > THyperLogLog::PRECISION_MAX) {
             return 0.;
@@ -51,21 +51,21 @@ namespace {
 
     double GetThreshold(unsigned precision) {
         static const double THRESHOLD_DATA[1 + THyperLogLog::PRECISION_MAX - THyperLogLog::PRECISION_MIN] = {
-            10,     // Precision  4 
-            20,     // Precision  5 
-            40,     // Precision  6 
-            80,     // Precision  7 
-            220,    // Precision  8 
-            400,    // Precision  9 
-            900,    // Precision 10 
-            1800,   // Precision 11 
-            3100,   // Precision 12 
-            6500,   // Precision 13 
-            11500,  // Precision 14 
-            20000,  // Precision 15 
-            50000,  // Precision 16 
-            120000, // Precision 17 
-            350000  // Precision 18 
+            10,     // Precision  4
+            20,     // Precision  5
+            40,     // Precision  6
+            80,     // Precision  7
+            220,    // Precision  8
+            400,    // Precision  9
+            900,    // Precision 10
+            1800,   // Precision 11
+            3100,   // Precision 12
+            6500,   // Precision 13
+            11500,  // Precision 14
+            20000,  // Precision 15
+            50000,  // Precision 16
+            120000, // Precision 17
+            350000  // Precision 18
         };
         if (precision < THyperLogLog::PRECISION_MIN || precision > THyperLogLog::PRECISION_MAX) {
             return 0.;
@@ -76,14 +76,14 @@ namespace {
 
     double EmpiricAlpha(size_t m) {
         switch (m) {
-            case 16: 
-                return 0.673; 
-            case 32: 
-                return 0.697; 
-            case 64: 
-                return 0.709; 
-            default: 
-                return 0.7213 / (1.0 + 1.079 / m); 
+            case 16:
+                return 0.673;
+            case 32:
+                return 0.697;
+            case 64:
+                return 0.709;
+            default:
+                return 0.7213 / (1.0 + 1.079 / m);
         }
     }
 
@@ -109,7 +109,7 @@ void THyperLogLogBase::Update(ui64 hash) {
     const unsigned subHashBits = 8 * sizeof(hash) - Precision;
     const auto subHash = hash & MaskLowerBits(subHashBits);
     const auto leadingZeroes = subHash ? (subHashBits - GetValueBitCount(subHash)) : subHashBits;
-    const ui8 weight = static_cast<ui8>(leadingZeroes + 1); 
+    const ui8 weight = static_cast<ui8>(leadingZeroes + 1);
 
     const size_t reg = static_cast<size_t>(hash >> subHashBits);
     RegistersRef[reg] = std::max(RegistersRef[reg], weight);

@@ -3,41 +3,41 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NThreading {
-    namespace { 
-        struct TTestObject { 
-            static size_t Count; 
-            int Tag; 
+    namespace {
+        struct TTestObject {
+            static size_t Count;
+            int Tag;
 
-            TTestObject(int tag) 
-                : Tag(tag) 
-            { 
-                ++Count; 
-            } 
+            TTestObject(int tag)
+                : Tag(tag)
+            {
+                ++Count;
+            }
 
-            TTestObject(const TTestObject& other) 
-                : Tag(other.Tag) 
-            { 
-                ++Count; 
-            } 
+            TTestObject(const TTestObject& other)
+                : Tag(other.Tag)
+            {
+                ++Count;
+            }
 
-            ~TTestObject() { 
-                --Count; 
-            } 
+            ~TTestObject() {
+                --Count;
+            }
 
-            bool operator<(const TTestObject& other) const { 
-                return Tag < other.Tag; 
-            } 
-        }; 
+            bool operator<(const TTestObject& other) const {
+                return Tag < other.Tag;
+            }
+        };
 
-        size_t TTestObject::Count = 0; 
+        size_t TTestObject::Count = 0;
 
     }
 
-    //////////////////////////////////////////////////////////////////////////////// 
+    ////////////////////////////////////////////////////////////////////////////////
 
     Y_UNIT_TEST_SUITE(TSkipListTest) {
         Y_UNIT_TEST(ShouldBeEmptyAfterCreation) {
-            TMemoryPool pool(1024); 
+            TMemoryPool pool(1024);
             TSkipList<int> list(pool);
 
             UNIT_ASSERT_EQUAL(list.GetSize(), 0);
@@ -182,4 +182,4 @@ namespace NThreading {
         }
     }
 
-} 
+}

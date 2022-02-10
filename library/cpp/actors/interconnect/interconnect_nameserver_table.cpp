@@ -10,57 +10,57 @@
 namespace NActors {
 
     class TInterconnectNameserverTable: public TInterconnectNameserverBase<TInterconnectNameserverTable> {
-        TIntrusivePtr<TTableNameserverSetup> Config; 
+        TIntrusivePtr<TTableNameserverSetup> Config;
 
-    public: 
-        static constexpr EActivityType ActorActivityType() { 
+    public:
+        static constexpr EActivityType ActorActivityType() {
             return NAMESERVICE;
-        } 
+        }
 
         TInterconnectNameserverTable(const TIntrusivePtr<TTableNameserverSetup>& setup, ui32 /*resolvePoolId*/)
             : TInterconnectNameserverBase<TInterconnectNameserverTable>(&TInterconnectNameserverTable::StateFunc, setup->StaticNodeTable)
-            , Config(setup) 
-        { 
-            Y_VERIFY(Config->IsEntriesUnique()); 
-        } 
+            , Config(setup)
+        {
+            Y_VERIFY(Config->IsEntriesUnique());
+        }
 
-        STFUNC(StateFunc) { 
-            try { 
+        STFUNC(StateFunc) {
+            try {
                 switch (ev->GetTypeRewrite()) {
                     HFunc(TEvInterconnect::TEvResolveNode, Handle);
                     HFunc(TEvResolveAddress, Handle);
                     HFunc(TEvInterconnect::TEvListNodes, Handle);
                     HFunc(TEvInterconnect::TEvGetNode, Handle);
-                } 
-            } catch (...) { 
-                // on error - do nothing 
+                }
+            } catch (...) {
+                // on error - do nothing
             }
         }
-    }; 
+    };
 
     IActor* CreateNameserverTable(const TIntrusivePtr<TTableNameserverSetup>& setup, ui32 poolId) {
-        return new TInterconnectNameserverTable(setup, poolId); 
+        return new TInterconnectNameserverTable(setup, poolId);
     }
 
-    bool TTableNameserverSetup::IsEntriesUnique() const { 
-        TVector<const TNodeInfo*> infos; 
-        infos.reserve(StaticNodeTable.size()); 
-        for (const auto& x : StaticNodeTable) 
-            infos.push_back(&x.second); 
+    bool TTableNameserverSetup::IsEntriesUnique() const {
+        TVector<const TNodeInfo*> infos;
+        infos.reserve(StaticNodeTable.size());
+        for (const auto& x : StaticNodeTable)
+            infos.push_back(&x.second);
 
         auto CompareAddressLambda =
-            [](const TNodeInfo* left, const TNodeInfo* right) { 
-                return left->Port == right->Port ? left->Address < right->Address : left->Port < right->Port; 
-            }; 
+            [](const TNodeInfo* left, const TNodeInfo* right) {
+                return left->Port == right->Port ? left->Address < right->Address : left->Port < right->Port;
+            };
 
         Sort(infos, CompareAddressLambda);
 
-        for (ui32 idx = 1, end = StaticNodeTable.size(); idx < end; ++idx) { 
-            const TNodeInfo* left = infos[idx - 1]; 
-            const TNodeInfo* right = infos[idx]; 
+        for (ui32 idx = 1, end = StaticNodeTable.size(); idx < end; ++idx) {
+            const TNodeInfo* left = infos[idx - 1];
+            const TNodeInfo* right = infos[idx];
             if (left->Address && left->Address == right->Address && left->Port == right->Port)
-                return false; 
-        } 
+                return false;
+        }
 
         auto CompareHostLambda =
             [](const TNodeInfo* left, const TNodeInfo* right) {
@@ -76,8 +76,8 @@ namespace NActors {
                 return false;
         }
 
-        return true; 
-    } 
+        return true;
+    }
 
     TActorId GetNameserviceActorId() {
         return TActorId(0, "namesvc");

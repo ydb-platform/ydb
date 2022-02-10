@@ -45,9 +45,9 @@ IF (OS_ANDROID)
     CFLAGS(
         -DLIBCXX_BUILDING_LIBCXXABI
     )
-ELSEIF (OS_IOS) 
+ELSEIF (OS_IOS)
     # Take cxxabi implementation from system.
-    LDFLAGS(-lc++abi) 
+    LDFLAGS(-lc++abi)
     CFLAGS(
         -DLIBCXX_BUILDING_LIBCXXABI
     )

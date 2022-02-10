@@ -39,7 +39,7 @@ namespace NJsonWriter {
         TVector<EJsonEntity> Stack;
     };
 
-    class TBuf : TNonCopyable { 
+    class TBuf : TNonCopyable {
     public:
         TBuf(EHtmlEscapeMode mode = HEM_DONT_ESCAPE_HTML, IOutputStream* stream = nullptr);
 
@@ -183,8 +183,8 @@ namespace NJsonWriter {
     protected:
         TValueWriter(TBuf& buf)
             : Buf(buf)
-        { 
-        } 
+        {
+        }
         friend class TBuf;
 
     protected:
@@ -196,25 +196,25 @@ namespace NJsonWriter {
         TBuf& EndList() {
             return Buf.EndList();
         }
-        TString Str() const { 
-            return Buf.Str(); 
-        } 
- 
+        TString Str() const {
+            return Buf.Str();
+        }
+
     private:
         TValueContext(TBuf& buf)
             : TValueWriter<TValueContext>(buf)
-        { 
-        } 
+        {
+        }
         friend class TBuf;
         friend class TValueWriter<TValueContext>;
     };
 
     class TAfterColonContext: public TValueWriter<TPairContext> {
     private:
-        TAfterColonContext(TBuf& iBuf) 
-            : TValueWriter<TPairContext>(iBuf) 
-        { 
-        } 
+        TAfterColonContext(TBuf& iBuf)
+            : TValueWriter<TPairContext>(iBuf)
+        {
+        }
         friend class TBuf;
         friend class TPairContext;
     };
@@ -275,15 +275,15 @@ namespace NJsonWriter {
     JSON_VALUE_WRITER_WRAP(UnsafeWriteValue, (const TStringBuf& arg), (arg))
 #undef JSON_VALUE_WRITER_WRAP
 
-    template <typename TOutContext> 
-    TValueContext TValueWriter<TOutContext>::BeginList() { 
+    template <typename TOutContext>
+    TValueContext TValueWriter<TOutContext>::BeginList() {
         return Buf.BeginList();
     }
 
-    template <typename TOutContext> 
-    TPairContext TValueWriter<TOutContext>::BeginObject() { 
+    template <typename TOutContext>
+    TPairContext TValueWriter<TOutContext>::BeginObject() {
         return Buf.BeginObject();
     }
 
-    TString WrapJsonToCallback(const TBuf& buf, TStringBuf callback); 
+    TString WrapJsonToCallback(const TBuf& buf, TStringBuf callback);
 }

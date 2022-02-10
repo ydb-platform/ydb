@@ -1,23 +1,23 @@
 #include "cputimer.h"
- 
+
 #include <util/system/defaults.h>
 #include <util/system/hp_timer.h>
 #include <util/string/printf.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/generic/singleton.h>
 
 #if defined(_unix_)
-    #include <unistd.h> 
-    #include <sched.h> 
-    #include <sys/types.h> 
-    #include <sys/resource.h> 
-    #include <sys/param.h> 
+    #include <unistd.h>
+    #include <sched.h>
+    #include <sys/types.h>
+    #include <sys/resource.h>
+    #include <sys/param.h>
 #elif defined(_win_)
-    #include <util/system/winint.h> 
+    #include <util/system/winint.h>
 #endif
 
 TTimer::TTimer(const TStringBuf message) {
-    static const int SMALL_DURATION_CHAR_LENGTH = 9;                     // strlen("0.123456s") 
+    static const int SMALL_DURATION_CHAR_LENGTH = 9;                     // strlen("0.123456s")
     Message_.Reserve(message.length() + SMALL_DURATION_CHAR_LENGTH + 1); // +"\n"
     Message_ << message;
     // Do not measure the allocations above.
@@ -33,11 +33,11 @@ TTimer::~TTimer() {
 static ui64 ManuallySetCyclesPerSecond = 0;
 
 static ui64 GetCyclesPerSecond() {
-    if (ManuallySetCyclesPerSecond != 0) { 
+    if (ManuallySetCyclesPerSecond != 0) {
         return ManuallySetCyclesPerSecond;
-    } else { 
+    } else {
         return NHPTimer::GetCyclesPerSecond();
-    } 
+    }
 }
 
 void SetCyclesPerSecond(ui64 cycles) {
@@ -78,17 +78,17 @@ TString FormatCycles(ui64 cycles) {
 }
 
 TFormattedPrecisionTimer::TFormattedPrecisionTimer(const char* message, IOutputStream* out)
-    : Message(message) 
-    , Out(out) 
+    : Message(message)
+    , Out(out)
 {
     Start = GetCycleCount();
 }
 
-TFormattedPrecisionTimer::~TFormattedPrecisionTimer() { 
-    const ui64 end = GetCycleCount(); 
-    const ui64 diff = end - Start; 
- 
-    *Out << Message << ": " << diff << " ticks " << FormatCycles(diff) << Endl; 
+TFormattedPrecisionTimer::~TFormattedPrecisionTimer() {
+    const ui64 end = GetCycleCount();
+    const ui64 diff = end - Start;
+
+    *Out << Message << ": " << diff << " ticks " << FormatCycles(diff) << Endl;
 }
 
 TFuncTimer::TFuncTimer(const char* func)
@@ -119,11 +119,11 @@ double TTimeLogger::ElapsedTime() const {
     return time(nullptr) - Begin;
 }
 
-void TTimeLogger::SetOK() { 
+void TTimeLogger::SetOK() {
     OK = true;
 }
 
-TTimeLogger::~TTimeLogger() { 
+TTimeLogger::~TTimeLogger() {
     time_t tim = time(nullptr);
     ui64 endCycles = GetCycleCount();
     if (Verbose) {

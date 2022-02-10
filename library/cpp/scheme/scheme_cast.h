@@ -8,28 +8,28 @@
 #include <util/string/cast.h>
 #include <util/generic/yexception.h>
 
-#include "scheme.h" 
+#include "scheme.h"
 
 namespace NJsonConverters {
     class IJsonSerializable {
-    public: 
-        virtual NSc::TValue ToTValue() const = 0; 
-        virtual void FromTValue(const NSc::TValue&, const bool validate) = 0; 
+    public:
+        virtual NSc::TValue ToTValue() const = 0;
+        virtual void FromTValue(const NSc::TValue&, const bool validate) = 0;
 
-        const TString ToJson(const bool sort = false) const { 
-            return ToTValue().ToJson(sort); 
-        }; 
+        const TString ToJson(const bool sort = false) const {
+            return ToTValue().ToJson(sort);
+        };
 
-        void FromJson(const TStringBuf& json, const bool validate = false) { 
-            NSc::TValue v = NSc::TValue::FromJson(json); 
-            FromTValue(v, validate); 
-        } 
+        void FromJson(const TStringBuf& json, const bool validate = false) {
+            NSc::TValue v = NSc::TValue::FromJson(json);
+            FromTValue(v, validate);
+        }
 
-        virtual ~IJsonSerializable(){}; 
+        virtual ~IJsonSerializable(){};
     };
-    ////////////////////////////////////////////////////////////////////// 
-    // fwd declarations 
-    ////////////////////////////////////////////////////////////////////// 
+    //////////////////////////////////////////////////////////////////////
+    // fwd declarations
+    //////////////////////////////////////////////////////////////////////
 
     //TVector
     template <typename T, typename A>
@@ -67,13 +67,13 @@ namespace NJsonConverters {
     template <class T1, class T2>
     void FromTValue(const NSc::TValue& x, std::pair<T1, T2>& out, const bool validate);
 
-    ////////////////////////////////////////////////////////////////////// 
-    // simple From, To helpers 
-    ////////////////////////////////////////////////////////////////////// 
-    template <typename T, bool HasSerializer> 
+    //////////////////////////////////////////////////////////////////////
+    // simple From, To helpers
+    //////////////////////////////////////////////////////////////////////
+    template <typename T, bool HasSerializer>
     struct TValueAndStrokaConv {};
 
-    template <typename T> 
+    template <typename T>
     struct TValueAndStrokaConv<T, 0> {
         static NSc::TValue ToTValue(const T& x) {
             return NSc::TValue(x);
@@ -92,8 +92,8 @@ namespace NJsonConverters {
         }
     };
 
-    template <typename T> 
-    struct TValueAndStrokaConv<T, 1> { 
+    template <typename T>
+    struct TValueAndStrokaConv<T, 1> {
         static NSc::TValue ToTValue(const T& x) {
             return x.ToTValue();
         }
@@ -113,12 +113,12 @@ namespace NJsonConverters {
 
     template <typename T>
     NSc::TValue ToTValue(const T& x) {
-        return TValueAndStrokaConv<T, std::is_base_of<IJsonSerializable, T>::value>::ToTValue(x); 
+        return TValueAndStrokaConv<T, std::is_base_of<IJsonSerializable, T>::value>::ToTValue(x);
     }
 
     template <typename T>
     void FromTValue(const NSc::TValue& x, T& out, const bool validate) {
-        return TValueAndStrokaConv<T, std::is_base_of<IJsonSerializable, T>::value>::FromTValue(x, out, validate); 
+        return TValueAndStrokaConv<T, std::is_base_of<IJsonSerializable, T>::value>::FromTValue(x, out, validate);
     }
 
     template <typename T>
@@ -130,12 +130,12 @@ namespace NJsonConverters {
 
     template <typename T>
     TString ToString(const T& x) {
-        return TValueAndStrokaConv<T, std::is_base_of<IJsonSerializable, T>::value>::ToString(x); 
+        return TValueAndStrokaConv<T, std::is_base_of<IJsonSerializable, T>::value>::ToString(x);
     }
 
     template <typename T>
     void FromString(const TStringBuf& str, T& res, const bool validate) {
-        return TValueAndStrokaConv<T, std::is_base_of<IJsonSerializable, T>::value>::FromString(str, res, validate); 
+        return TValueAndStrokaConv<T, std::is_base_of<IJsonSerializable, T>::value>::FromString(str, res, validate);
     }
 
     template <typename T>
@@ -200,9 +200,9 @@ namespace NJsonConverters {
         }
     }
 
-    ////////////////////////////////////////////////////////////////////// 
-    // TVector 
-    ////////////////////////////////////////////////////////////////////// 
+    //////////////////////////////////////////////////////////////////////
+    // TVector
+    //////////////////////////////////////////////////////////////////////
     template <typename T, typename A>
     NSc::TValue ToTValue(const TVector<T, A>& x) {
         NSc::TValue out;
@@ -228,9 +228,9 @@ namespace NJsonConverters {
         }
     }
 
-    ////////////////////////////////////////////////////////////////////// 
-    // THashMap & TMap 
-    ////////////////////////////////////////////////////////////////////// 
+    //////////////////////////////////////////////////////////////////////
+    // THashMap & TMap
+    //////////////////////////////////////////////////////////////////////
     template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
     NSc::TValue ToTValue(const THashMap<Key, T, HashFcn, EqualKey, Alloc>& x) {
         return NPrivate::ToTValueDict(x);
@@ -251,9 +251,9 @@ namespace NJsonConverters {
         NPrivate::FromTValueDict(x, out, validate);
     }
 
-    ////////////////////////////////////////////////////////////////////// 
-    // THashSet & TSet 
-    ////////////////////////////////////////////////////////////////////// 
+    //////////////////////////////////////////////////////////////////////
+    // THashSet & TSet
+    //////////////////////////////////////////////////////////////////////
     template <class V, class H, class E, class A>
     NSc::TValue ToTValue(const THashSet<V, H, E, A>& x) {
         return NPrivate::ToTValueSet(x);
@@ -274,9 +274,9 @@ namespace NJsonConverters {
         NPrivate::FromTValueSet(x, out, validate);
     }
 
-    ////////////////////////////////////////////////////////////////////// 
-    // std::pair 
-    ////////////////////////////////////////////////////////////////////// 
+    //////////////////////////////////////////////////////////////////////
+    // std::pair
+    //////////////////////////////////////////////////////////////////////
     template <class T1, class T2>
     NSc::TValue ToTValue(const std::pair<T1, T2>& x) {
         NSc::TValue out;
@@ -303,9 +303,9 @@ namespace NJsonConverters {
         }
     }
 
-    ////////////////////////////////////////////////////////////////////// 
-    // global user functions 
-    ////////////////////////////////////////////////////////////////////// 
+    //////////////////////////////////////////////////////////////////////
+    // global user functions
+    //////////////////////////////////////////////////////////////////////
     template <typename T>
     TString ToJson(const T& val, const bool sort = false) {
         return NJsonConverters::ToTValue(val).ToJson(sort);

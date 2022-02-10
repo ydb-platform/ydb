@@ -1,5 +1,5 @@
-#include "pipe.h" 
- 
+#include "pipe.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
 Y_UNIT_TEST_SUITE(TPipeTest) {

@@ -33,8 +33,8 @@ namespace NPrivate {
         TThreadSafeCache(const ICallbacks& callbacks, size_t maxSize = Max<size_t>())
             : Callbacks(callbacks)
             , Cache(maxSize)
-        { 
-        } 
+        {
+        }
 
         bool Insert(const Key& key, const TPtr& value) {
             if (!Contains(key)) {
@@ -81,12 +81,12 @@ namespace NPrivate {
             return iter != Cache.End();
         }
 
-        template <class TCallbacks> 
+        template <class TCallbacks>
         static const TPtr Get(TArgs... args) {
             return TThreadSafeCacheSingleton<TCallbacks>::Get(args...);
         }
 
-        template <class TCallbacks> 
+        template <class TCallbacks>
         static const TPtr Erase(TArgs... args) {
             return TThreadSafeCacheSingleton<TCallbacks>::Erase(args...);
         }
@@ -154,8 +154,8 @@ namespace NPrivate {
 
             TThreadSafeCacheSingleton()
                 : Cache(Callbacks)
-            { 
-            } 
+            {
+            }
 
         private:
             TCallbacks Callbacks;
@@ -177,7 +177,7 @@ namespace NPrivate {
         };
 
         template <class TKey, class TValue>
-        using TListType = TLWList<TKey, TValue, int, TConstWeighter<TValue>>; 
+        using TListType = TLWList<TKey, TValue, int, TConstWeighter<TValue>>;
 
         template <class TKey, class TValue, class... TArgs>
         using TCache = TThreadSafeCache<TKey, TValue, TListType, EGettersPromotionPolicy::Unpromoted, TArgs...>;

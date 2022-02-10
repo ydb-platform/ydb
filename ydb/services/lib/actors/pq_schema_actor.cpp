@@ -284,7 +284,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         config->SetLocalDC(local);
         config->SetDC(NPersQueue::GetDC(name));
         config->SetProducer(NPersQueue::GetProducer(name));
-        config->SetTopic(LegacySubstr(NPersQueue::GetRealTopic(name), config->GetProducer().size() + 2)); 
+        config->SetTopic(LegacySubstr(NPersQueue::GetRealTopic(name), config->GetProducer().size() + 2));
         config->SetIdent(config->GetProducer());
         auto partConfig = config->MutablePartitionConfig();
 
@@ -376,7 +376,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return Ydb::StatusIds::BAD_REQUEST;
             }
             ct->AddIds(codec - 1);
-            ct->AddCodecs(LegacySubstr(to_lower(Ydb::PersQueue::V1::Codec_Name((Ydb::PersQueue::V1::Codec)codec)), 6)); 
+            ct->AddCodecs(LegacySubstr(to_lower(Ydb::PersQueue::V1::Codec_Name((Ydb::PersQueue::V1::Codec)codec)), 6));
         }
 
         //TODO: check all values with defaults

@@ -1,9 +1,9 @@
 #pragma once
 
-#include "typetraits.h" 
+#include "typetraits.h"
 #include "utility.h"
 #include <util/system/yassert.h>
-#include <iterator> 
+#include <iterator>
 
 /** @file
  * Some similar for python xrange(): https://docs.python.org/2/library/functions.html#xrange
@@ -25,9 +25,9 @@ namespace NPrivate {
 
     public:
         constexpr TSimpleXRange(T start, T finish) noexcept
-            : Start(start) 
-            , Finish(Max(start, finish)) 
-        { 
+            : Start(start)
+            , Finish(Max(start, finish))
+        {
         }
 
         class TIterator {
@@ -59,7 +59,7 @@ namespace NPrivate {
                 ++Value;
                 return *this;
             }
- 
+
             TIterator& operator--() noexcept {
                 --Value;
                 return *this;
@@ -69,18 +69,18 @@ namespace NPrivate {
                 return Value - b.Value;
             }
 
-            template <typename IntType> 
+            template <typename IntType>
             constexpr TIterator operator+(const IntType& b) const noexcept {
                 return TIterator(Value + b);
             }
 
-            template <typename IntType> 
+            template <typename IntType>
             TIterator& operator+=(const IntType& b) noexcept {
                 Value += b;
                 return *this;
             }
 
-            template <typename IntType> 
+            template <typename IntType>
             constexpr TIterator operator-(const IntType& b) const noexcept {
                 return TIterator(Value - b);
             }
@@ -110,13 +110,13 @@ namespace NPrivate {
         constexpr TIterator end() const noexcept {
             return TIterator(Finish);
         }
- 
+
         constexpr T size() const noexcept {
             return Finish - Start;
         }
 
         template <class Container>
-        operator Container() const { 
+        operator Container() const {
             return Container(begin(), end());
         }
 
@@ -128,13 +128,13 @@ namespace NPrivate {
     template <typename T>
     class TSteppedXRange {
         using TDiff = decltype(T() - T());
- 
+
     public:
         constexpr TSteppedXRange(T start, T finish, TDiff step) noexcept
-            : Start_(start) 
-            , Step_(step) 
-            , Finish_(CalcRealFinish(Start_, finish, Step_)) 
-        { 
+            : Start_(start)
+            , Step_(step)
+            , Finish_(CalcRealFinish(Start_, finish, Step_))
+        {
             static_assert(std::is_integral<T>::value || std::is_pointer<T>::value, "T should be integral type or pointer");
         }
 
@@ -147,9 +147,9 @@ namespace NPrivate {
             using iterator_category = std::random_access_iterator_tag;
 
             constexpr TIterator(T value, const TSteppedXRange& parent) noexcept
-                : Value_(value) 
+                : Value_(value)
                 , Parent_(&parent)
-            { 
+            {
             }
 
             constexpr T operator*() const noexcept {
@@ -178,22 +178,22 @@ namespace NPrivate {
                 return (Value_ - b.Value_) / Parent_->Step_;
             }
 
-            template <typename IntType> 
+            template <typename IntType>
             constexpr TIterator operator+(const IntType& b) const noexcept {
                 return TIterator(*this) += b;
             }
 
-            template <typename IntType> 
+            template <typename IntType>
             TIterator& operator+=(const IntType& b) noexcept {
                 Value_ += b * Parent_->Step_;
                 return *this;
             }
 
-            template <typename IntType> 
+            template <typename IntType>
             constexpr TIterator operator-(const IntType& b) const noexcept {
                 return TIterator(*this) -= b;
             }
- 
+
             template <typename IntType>
             TIterator& operator-=(const IntType& b) noexcept {
                 Value_ -= b * Parent_->Step_;
@@ -233,7 +233,7 @@ namespace NPrivate {
         }
 
         template <class Container>
-        operator Container() const { 
+        operator Container() const {
             return Container(begin(), end());
         }
 
@@ -243,7 +243,7 @@ namespace NPrivate {
         const T Finish_;
     };
 
-} 
+}
 
 /**
  * generate arithmetic progression that starts at start with certain step and stop at finish (not including)
@@ -252,13 +252,13 @@ namespace NPrivate {
  */
 template <typename T>
 constexpr ::NPrivate::TSteppedXRange<T> xrange(T start, T finish, decltype(T() - T()) step) noexcept {
-    return {start, finish, step}; 
+    return {start, finish, step};
 }
 
 /// generate sequence [start; finish)
 template <typename T>
 constexpr ::NPrivate::TSimpleXRange<T> xrange(T start, T finish) noexcept {
-    return {start, finish}; 
+    return {start, finish};
 }
 
 /// generate sequence [0; finish)

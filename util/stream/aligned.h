@@ -22,7 +22,7 @@ public:
         , Position_(0)
     {
     }
- 
+
     /**
      * Ensures alignment of the position in the input stream by skipping
      * some input.
@@ -34,7 +34,7 @@ public:
 
         if (Position_ & (alignment - 1)) {
             size_t len = alignment - (Position_ & (alignment - 1));
- 
+
             do {
                 len -= DoSkip(len);
             } while (len);
@@ -63,7 +63,7 @@ public:
         , Position_(0)
     {
     }
- 
+
     TAlignedOutput(TAlignedOutput&&) noexcept = default;
     TAlignedOutput& operator=(TAlignedOutput&&) noexcept = default;
 
@@ -80,12 +80,12 @@ public:
     void Align(size_t alignment = sizeof(void*)) {
         Y_ASSERT(IsPowerOf2(alignment));
 
-        static char unused[sizeof(void*) * 2]; 
+        static char unused[sizeof(void*) * 2];
         Y_ASSERT(alignment <= sizeof(unused));
 
-        if (Position_ & (alignment - 1)) { 
+        if (Position_ & (alignment - 1)) {
             DoWrite(unused, alignment - (Position_ & (alignment - 1)));
-        } 
+        }
     }
 
 private:

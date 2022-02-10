@@ -5,18 +5,18 @@ using namespace NYsonPull;
 
 TReader::TReader(
     THolder<NInput::IStream> stream,
-    EStreamType mode) 
+    EStreamType mode)
     : Stream_{std::move(stream)}
     , Impl_{MakeHolder<NDetail::reader_impl>(*Stream_, mode)} {
-} 
+}
 
-TReader::TReader(TReader&& other) noexcept 
+TReader::TReader(TReader&& other) noexcept
     : Stream_{std::move(other.Stream_)}
     , Impl_{std::move(other.Impl_)} {
-} 
+}
 
-TReader::~TReader() { 
-} 
+TReader::~TReader() {
+}
 
 const TEvent& TReader::NextEvent() {
     return Impl_->next_event();

@@ -10,58 +10,58 @@
 #include <unordered_map>
 
 namespace NInterconnect {
-    using NActors::TFDDelegate; 
-    using NActors::TSharedDescriptor; 
+    using NActors::TFDDelegate;
+    using NActors::TSharedDescriptor;
 
-    class TPollerUnit { 
-    public: 
-        typedef std::unique_ptr<TPollerUnit> TPtr; 
+    class TPollerUnit {
+    public:
+        typedef std::unique_ptr<TPollerUnit> TPtr;
 
-        static TPtr Make(bool useSelect); 
+        static TPtr Make(bool useSelect);
 
-        void Start(); 
-        void Stop(); 
+        void Start();
+        void Stop();
 
-        virtual void StartReadOperation( 
-            const TIntrusivePtr<TSharedDescriptor>& stream, 
-            TFDDelegate&& operation); 
+        virtual void StartReadOperation(
+            const TIntrusivePtr<TSharedDescriptor>& stream,
+            TFDDelegate&& operation);
 
-        virtual void StartWriteOperation( 
-            const TIntrusivePtr<TSharedDescriptor>& stream, 
-            TFDDelegate&& operation); 
+        virtual void StartWriteOperation(
+            const TIntrusivePtr<TSharedDescriptor>& stream,
+            TFDDelegate&& operation);
 
-        virtual ~TPollerUnit(); 
+        virtual ~TPollerUnit();
 
-    private: 
-        virtual void ProcessRead() = 0; 
-        virtual void ProcessWrite() = 0; 
+    private:
+        virtual void ProcessRead() = 0;
+        virtual void ProcessWrite() = 0;
 
-        template <bool IsWrite> 
-        static void* IdleThread(void* param); 
+        template <bool IsWrite>
+        static void* IdleThread(void* param);
 
-        template <bool IsWrite> 
-        void RunLoop(); 
+        template <bool IsWrite>
+        void RunLoop();
 
-        volatile bool StopFlag; 
-        TThread ReadLoop, WriteLoop; 
+        volatile bool StopFlag;
+        TThread ReadLoop, WriteLoop;
 
-    protected: 
-        TPollerUnit(); 
+    protected:
+        TPollerUnit();
 
-        struct TSide { 
-            using TOperations = 
-                std::unordered_map<SOCKET, 
-                                   std::pair<TIntrusivePtr<TSharedDescriptor>, TFDDelegate>>; 
+        struct TSide {
+            using TOperations =
+                std::unordered_map<SOCKET,
+                                   std::pair<TIntrusivePtr<TSharedDescriptor>, TFDDelegate>>;
 
-            TOperations Operations; 
-            using TItem = TOperations::mapped_type; 
-            TFunnelQueue<TItem> InputQueue; 
+            TOperations Operations;
+            using TItem = TOperations::mapped_type;
+            TFunnelQueue<TItem> InputQueue;
 
-            void ProcessInput(); 
-        } Read, Write; 
+            void ProcessInput();
+        } Read, Write;
 
-        template <bool IsWrite> 
-        TSide& GetSide(); 
-    }; 
+        template <bool IsWrite>
+        TSide& GetSide();
+    };
 
 }

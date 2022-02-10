@@ -34,21 +34,21 @@ Y_UNIT_TEST_SUITE(TSchemePathTest) {
         UNIT_ASSERT(v.PathExists("//"));
 
         UNIT_ASSERT(NSc::TValue::Same(v, *v.TrySelectOrAdd("//")));
-        NSc::NUt::AssertSchemeJson("null", v); 
+        NSc::NUt::AssertSchemeJson("null", v);
         UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete("//"), NSc::Null()));
-        NSc::NUt::AssertSchemeJson("null", v); 
+        NSc::NUt::AssertSchemeJson("null", v);
 
         v.SetDict();
         UNIT_ASSERT(NSc::TValue::Same(v, *v.TrySelectOrAdd("//")));
-        NSc::NUt::AssertSchemeJson("{}", v); 
+        NSc::NUt::AssertSchemeJson("{}", v);
         UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete("//"), NSc::Null()));
-        NSc::NUt::AssertSchemeJson("{}", v); 
+        NSc::NUt::AssertSchemeJson("{}", v);
 
         v.SetArray();
         UNIT_ASSERT(NSc::TValue::Same(v, *v.TrySelectOrAdd("//")));
-        NSc::NUt::AssertSchemeJson("[]", v); 
+        NSc::NUt::AssertSchemeJson("[]", v);
         UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete("//"), NSc::Null()));
-        NSc::NUt::AssertSchemeJson("[]", v); 
+        NSc::NUt::AssertSchemeJson("[]", v);
 
         DoTestSelect("[]", "{'':1}", "{}");
         DoTestSelect("[ ]", "{' ':1}", "{}");
@@ -69,27 +69,27 @@ Y_UNIT_TEST_SUITE(TSchemePathTest) {
     }
 
     Y_UNIT_TEST(TestPathEscapes) {
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("a"), "a"); 
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath(""), R"=("")="); 
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("[]"), R"=("[]")="); 
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("a"), "a");
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath(""), R"=("")=");
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("[]"), R"=("[]")=");
         UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("[]ab"), R"=("[]ab")=");
         UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("a[]b"), R"=("a[]b")=");
         UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("ab[]"), R"=("ab[]")=");
         UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("[ab]"), R"=("[ab]")=");
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("[ab"), R"=("[ab")="); 
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("a[b"), R"=("a[b")="); 
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("ab["), R"=("ab[")="); 
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("]ab"), R"=("]ab")="); 
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("a]b"), R"=("a]b")="); 
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("ab]"), R"=("ab]")="); 
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath(R"=(\)="), R"=("\\")="); 
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("[ab"), R"=("[ab")=");
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("a[b"), R"=("a[b")=");
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("ab["), R"=("ab[")=");
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("]ab"), R"=("]ab")=");
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("a]b"), R"=("a]b")=");
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("ab]"), R"=("ab]")=");
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath(R"=(\)="), R"=("\\")=");
         UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath(R"=(\\)="), R"=("\\\\")=");
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("/"), R"=("/")="); 
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("//"), R"=("//")="); 
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("///"), R"=("///")="); 
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("/ab"), R"=("/ab")="); 
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("a/b"), R"=("a/b")="); 
-        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("ab/"), R"=("ab/")="); 
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("/"), R"=("/")=");
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("//"), R"=("//")=");
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("///"), R"=("///")=");
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("/ab"), R"=("/ab")=");
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("a/b"), R"=("a/b")=");
+        UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("ab/"), R"=("ab/")=");
         UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("//ab"), R"=("//ab")=");
         UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("a//b"), R"=("a//b")=");
         UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::EscapeForPath("ab//"), R"=("ab//")=");

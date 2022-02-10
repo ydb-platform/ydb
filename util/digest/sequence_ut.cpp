@@ -44,11 +44,11 @@ private:
     }
 };
 
-class TSequenceHashTest: public TTestBase { 
+class TSequenceHashTest: public TTestBase {
     UNIT_TEST_SUITE(TSequenceHashTest);
     UNIT_TEST(TestSimpleBuffer)
     UNIT_TEST_SUITE_END();
- 
+
 private:
     inline void TestSimpleBuffer() {
         int arr[] = {1, 2, 3};

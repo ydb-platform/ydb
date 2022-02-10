@@ -14,15 +14,15 @@ TString NBus::NPrivate::LocalFlagSetToString(ui32 flags0) {
     ui32 flags = flags0;
 
     TStringStream ss;
-#define P(name, value, ...)          \ 
-    do                               \ 
-        if (flags & value) {         \ 
-            if (!ss.Str().empty()) { \ 
-                ss << "|";           \ 
-            }                        \ 
-            ss << #name;             \ 
-            flags &= ~name;          \ 
-        }                            \ 
+#define P(name, value, ...)          \
+    do                               \
+        if (flags & value) {         \
+            if (!ss.Str().empty()) { \
+                ss << "|";           \
+            }                        \
+            ss << #name;             \
+            flags &= ~name;          \
+        }                            \
     while (false);
     MESSAGE_LOCAL_FLAGS_MAP(P)
     if (flags != 0) {

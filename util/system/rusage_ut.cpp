@@ -1,5 +1,5 @@
-#include "rusage.h" 
- 
+#include "rusage.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
 Y_UNIT_TEST_SUITE(TRusageTest) {

@@ -4,34 +4,34 @@
 
 #include <library/cpp/messagebus/oldmodule/module.h>
 
-namespace NBus { 
-    namespace NTest { 
-        struct TExampleModule: public TBusModule { 
-            TExampleProtocol Proto; 
-            TBusMessageQueuePtr Queue; 
+namespace NBus {
+    namespace NTest {
+        struct TExampleModule: public TBusModule {
+            TExampleProtocol Proto;
+            TBusMessageQueuePtr Queue;
 
-            TExampleModule(); 
+            TExampleModule();
 
-            void StartModule(); 
+            void StartModule();
 
-            bool Shutdown() override; 
+            bool Shutdown() override;
 
-            // nop by default 
-            TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override; 
-        }; 
+            // nop by default
+            TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override;
+        };
 
-        struct TExampleServerModule: public TExampleModule { 
-            TNetAddr ServerAddr; 
-            TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override; 
-        }; 
+        struct TExampleServerModule: public TExampleModule {
+            TNetAddr ServerAddr;
+            TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override;
+        };
 
-        struct TExampleClientModule: public TExampleModule { 
-            TBusClientSessionPtr Source; 
+        struct TExampleClientModule: public TExampleModule {
+            TBusClientSessionPtr Source;
 
-            TExampleClientModule(); 
+            TExampleClientModule();
 
-            TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override; 
-        }; 
+            TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override;
+        };
 
-    } 
-} 
+    }
+}

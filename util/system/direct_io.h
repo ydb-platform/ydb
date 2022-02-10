@@ -1,8 +1,8 @@
 #pragma once
 
-#include "align.h" 
- 
-#include "file.h" 
+#include "align.h"
+
+#include "file.h"
 #include <util/generic/buffer.h>
 
 // Supports Linux Direct-IO:
@@ -13,7 +13,7 @@ class TDirectIOBufferedFile {
 public:
     TDirectIOBufferedFile(const TString& path, EOpenMode oMode, size_t buflen = 1 << 17);
     ~TDirectIOBufferedFile();
- 
+
     void FlushData();
     void Finish();
     size_t Read(void* buffer, size_t byteCount);
@@ -49,7 +49,7 @@ private:
     inline bool IsAligned(i64 value) {
         return Alignment ? value == AlignDown<i64>(value, Alignment) : true;
     }
- 
+
     inline bool IsAligned(const void* value) {
         return Alignment ? value == AlignDown(value, Alignment) : true;
     }
@@ -60,7 +60,7 @@ private:
     void WriteToBuffer(const void* buf, size_t len, ui64 position);
     void SetDirectIO(bool value);
 
-private: 
+private:
     TFile File;
     size_t Alignment;
     size_t BufLen;

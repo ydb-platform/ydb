@@ -7,5 +7,5 @@ namespace NDetail {
 }
 
 constexpr ::NDetail::TReserveTag Reserve(size_t capacity) {
-    return ::NDetail::TReserveTag{capacity}; 
+    return ::NDetail::TReserveTag{capacity};
 }

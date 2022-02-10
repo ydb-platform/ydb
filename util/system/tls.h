@@ -1,22 +1,22 @@
 #pragma once
 
-#include "defaults.h" 
- 
+#include "defaults.h"
+
 #include <util/generic/ptr.h>
 #include <util/generic/noncopyable.h>
 
-#include <new> 
- 
+#include <new>
+
 #if defined(_darwin_)
-    #define Y_DISABLE_THRKEY_OPTIMIZATION 
+    #define Y_DISABLE_THRKEY_OPTIMIZATION
 #endif
- 
-#if defined(_arm_) && defined(_linux_) 
-    #define Y_DISABLE_THRKEY_OPTIMIZATION 
-#endif 
- 
+
+#if defined(_arm_) && defined(_linux_)
+    #define Y_DISABLE_THRKEY_OPTIMIZATION
+#endif
+
 #if defined(__GNUC__) && defined(__ANDROID__) && defined(__i686__) // https://st.yandex-team.ru/DEVTOOLS-3352
-    #define Y_DISABLE_THRKEY_OPTIMIZATION 
+    #define Y_DISABLE_THRKEY_OPTIMIZATION
 #endif
 
 /**
@@ -127,53 +127,53 @@
 
 // gcc and msvc support automatic tls for POD types
 #if defined(Y_DISABLE_THRKEY_OPTIMIZATION)
-// nothing to do 
-#elif defined(__clang__) 
-    #define Y_POD_THREAD(T) thread_local T 
-    #define Y_POD_STATIC_THREAD(T) static thread_local T 
-#elif defined(__GNUC__) && !defined(_cygwin_) && !defined(_arm_) && !defined(__IOS_SIMULATOR__) 
-    #define Y_POD_THREAD(T) __thread T 
-    #define Y_POD_STATIC_THREAD(T) static __thread T 
-// msvc doesn't support __declspec(thread) in dlls, loaded manually (via LoadLibrary) 
-#elif (defined(_MSC_VER) && !defined(_WINDLL)) || defined(_arm_) 
-    #define Y_POD_THREAD(T) __declspec(thread) T 
-    #define Y_POD_STATIC_THREAD(T) __declspec(thread) static T 
-#endif 
+// nothing to do
+#elif defined(__clang__)
+    #define Y_POD_THREAD(T) thread_local T
+    #define Y_POD_STATIC_THREAD(T) static thread_local T
+#elif defined(__GNUC__) && !defined(_cygwin_) && !defined(_arm_) && !defined(__IOS_SIMULATOR__)
+    #define Y_POD_THREAD(T) __thread T
+    #define Y_POD_STATIC_THREAD(T) static __thread T
+// msvc doesn't support __declspec(thread) in dlls, loaded manually (via LoadLibrary)
+#elif (defined(_MSC_VER) && !defined(_WINDLL)) || defined(_arm_)
+    #define Y_POD_THREAD(T) __declspec(thread) T
+    #define Y_POD_STATIC_THREAD(T) __declspec(thread) static T
+#endif
 
 #if !defined(Y_POD_THREAD) || !defined(Y_POD_STATIC_THREAD)
-    #define Y_POD_THREAD(T) Y_THREAD(T) 
-    #define Y_POD_STATIC_THREAD(T) Y_STATIC_THREAD(T) 
-#else 
-    #define Y_HAVE_FAST_POD_TLS 
+    #define Y_POD_THREAD(T) Y_THREAD(T)
+    #define Y_POD_STATIC_THREAD(T) Y_STATIC_THREAD(T)
+#else
+    #define Y_HAVE_FAST_POD_TLS
 #endif
- 
-namespace NPrivate { 
-    void FillWithTrash(void* ptr, size_t len); 
-} 
- 
-namespace NTls { 
+
+namespace NPrivate {
+    void FillWithTrash(void* ptr, size_t len);
+}
+
+namespace NTls {
     using TDtor = void (*)(void*);
- 
-    class TKey { 
+
+    class TKey {
     public:
-        TKey(TDtor dtor); 
+        TKey(TDtor dtor);
         TKey(TKey&&) noexcept;
         ~TKey();
- 
-        void* Get() const; 
-        void Set(void* ptr) const; 
+
+        void* Get() const;
+        void Set(void* ptr) const;
 
         static void Cleanup() noexcept;
 
     private:
-        class TImpl; 
-        THolder<TImpl> Impl_; 
+        class TImpl;
+        THolder<TImpl> Impl_;
     };
 
     struct TCleaner {
         inline ~TCleaner() {
-            TKey::Cleanup(); 
-        } 
+            TKey::Cleanup();
+        }
     };
 
     template <class T>
@@ -181,22 +181,22 @@ namespace NTls {
         class TConstructor {
         public:
             TConstructor() noexcept = default;
- 
+
             virtual ~TConstructor() = default;
- 
+
             virtual T* Construct(void* ptr) const = 0;
         };
- 
+
         class TDefaultConstructor: public TConstructor {
         public:
             ~TDefaultConstructor() override = default;
- 
+
             T* Construct(void* ptr) const override {
-                //memset(ptr, 0, sizeof(T)); 
+                //memset(ptr, 0, sizeof(T));
                 return ::new (ptr) T();
             }
         };
- 
+
         template <class T1>
         class TCopyConstructor: public TConstructor {
         public:
@@ -204,48 +204,48 @@ namespace NTls {
                 : Value(value)
             {
             }
- 
+
             ~TCopyConstructor() override = default;
- 
+
             T* Construct(void* ptr) const override {
                 return ::new (ptr) T(Value);
             }
- 
+
         private:
             T1 Value;
         };
- 
+
     public:
-        inline TValue() 
-            : Constructor_(new TDefaultConstructor()) 
-            , Key_(Dtor) 
-        { 
+        inline TValue()
+            : Constructor_(new TDefaultConstructor())
+            , Key_(Dtor)
+        {
         }
- 
-        template <class T1> 
-        inline TValue(const T1& value) 
-            : Constructor_(new TCopyConstructor<T1>(value)) 
-            , Key_(Dtor) 
-        { 
+
+        template <class T1>
+        inline TValue(const T1& value)
+            : Constructor_(new TCopyConstructor<T1>(value))
+            , Key_(Dtor)
+        {
         }
- 
-        template <class T1> 
-        inline T& operator=(const T1& val) { 
+
+        template <class T1>
+        inline T& operator=(const T1& val) {
             return Get() = val;
         }
- 
-        inline operator const T&() const { 
-            return Get();
-        }
- 
-        inline operator T&() { 
+
+        inline operator const T&() const {
             return Get();
         }
 
-        inline const T& operator->() const { 
+        inline operator T&() {
             return Get();
         }
- 
+
+        inline const T& operator->() const {
+            return Get();
+        }
+
         inline T& operator->() {
             return Get();
         }
@@ -258,50 +258,50 @@ namespace NTls {
             return GetPtr();
         }
 
-        inline T& Get() const { 
+        inline T& Get() const {
             return *GetPtr();
         }
 
         inline T* GetPtr() const {
-            T* val = static_cast<T*>(Key_.Get()); 
- 
+            T* val = static_cast<T*>(Key_.Get());
+
             if (!val) {
-                THolder<void> mem(::operator new(sizeof(T))); 
-                THolder<T> newval(Constructor_->Construct(mem.Get())); 
- 
+                THolder<void> mem(::operator new(sizeof(T)));
+                THolder<T> newval(Constructor_->Construct(mem.Get()));
+
                 Y_UNUSED(mem.Release());
-                Key_.Set((void*)newval.Get()); 
-                val = newval.Release(); 
+                Key_.Set((void*)newval.Get());
+                val = newval.Release();
             }
- 
+
             return val;
         }
- 
+
     private:
         static void Dtor(void* ptr) {
-            THolder<void> mem(ptr); 
- 
-            ((T*)ptr)->~T(); 
-            ::NPrivate::FillWithTrash(ptr, sizeof(T)); 
+            THolder<void> mem(ptr);
+
+            ((T*)ptr)->~T();
+            ::NPrivate::FillWithTrash(ptr, sizeof(T));
         }
- 
+
     private:
-        THolder<TConstructor> Constructor_; 
-        TKey Key_; 
+        THolder<TConstructor> Constructor_;
+        TKey Key_;
     };
 }
- 
-template <class T> 
+
+template <class T>
 static inline T& TlsRef(NTls::TValue<T>& v) noexcept {
-    return v; 
-} 
- 
-template <class T> 
+    return v;
+}
+
+template <class T>
 static inline const T& TlsRef(const NTls::TValue<T>& v) noexcept {
-    return v; 
-} 
- 
-template <class T> 
+    return v;
+}
+
+template <class T>
 static inline T& TlsRef(T& v) noexcept {
-    return v; 
-} 
+    return v;
+}

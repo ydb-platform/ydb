@@ -2,10 +2,10 @@ OWNER(velavokr)
 
 UNITTEST_FOR(library/cpp/json)
 
-PEERDIR( 
+PEERDIR(
     library/cpp/string_utils/relaxed_escaper
-) 
- 
+)
+
 SRCS(
     json_reader_fast_ut.cpp
     json_reader_ut.cpp

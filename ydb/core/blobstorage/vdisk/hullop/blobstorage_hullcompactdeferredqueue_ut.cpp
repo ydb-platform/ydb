@@ -1,6 +1,6 @@
 #include "blobstorage_hullcompactdeferredqueue.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_arena.h>
-#include <util/random/shuffle.h> 
+#include <util/random/shuffle.h>
 #include <util/random/fast.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
         Cerr << "STEP 2 StringToId# " << StringToId.size() << " numItems# " << items.size() << Endl;
 
         // shuffle items
-        Shuffle(items.begin(), items.end()); 
+        Shuffle(items.begin(), items.end());
 
         // generate read queue
         TTestDeferredQueue q(arena);

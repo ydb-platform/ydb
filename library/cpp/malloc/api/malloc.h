@@ -6,10 +6,10 @@
 namespace NMalloc {
     struct TMallocInfo {
         TMallocInfo();
- 
+
         const char* Name;
 
-        bool (*SetParam)(const char* param, const char* value); 
+        bool (*SetParam)(const char* param, const char* value);
         const char* (*GetParam)(const char* param);
 
         bool (*CheckParam)(const char* param, bool defaultValue);

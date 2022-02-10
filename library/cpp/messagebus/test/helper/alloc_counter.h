@@ -4,14 +4,14 @@
 #include <util/system/atomic.h>
 #include <util/system/yassert.h>
 
-class TAllocCounter : TNonCopyable { 
+class TAllocCounter : TNonCopyable {
 private:
     TAtomic* CountPtr;
- 
+
 public:
-    TAllocCounter(TAtomic* countPtr) 
-        : CountPtr(countPtr) 
-    { 
+    TAllocCounter(TAtomic* countPtr)
+        : CountPtr(countPtr)
+    {
         AtomicIncrement(*CountPtr);
     }
 

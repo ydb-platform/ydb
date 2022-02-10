@@ -1,8 +1,8 @@
 #pragma once
- 
+
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/http/io/stream.h>
- 
+
 #include <util/generic/strbuf.h>
 #include <util/string/cast.h>
 
@@ -12,23 +12,23 @@ class IOutputStream;
 class THttpResponse {
 public:
     THttpResponse() noexcept
-        : Code(HTTP_OK) 
-    { 
-    } 
- 
+        : Code(HTTP_OK)
+    {
+    }
+
     explicit THttpResponse(HttpCodes code) noexcept
         : Code(code)
     {
     }
 
-    template <typename ValueType> 
+    template <typename ValueType>
     THttpResponse& AddHeader(const TString& name, const ValueType& value) {
         return AddHeader(THttpInputHeader(name, ToString(value)));
     }
 
     THttpResponse& AddHeader(const THttpInputHeader& header) {
         Headers.AddHeader(header);
- 
+
         return *this;
     }
 
@@ -38,8 +38,8 @@ public:
         return Headers;
     }
 
-    THttpResponse& SetContentType(const TStringBuf& contentType); 
- 
+    THttpResponse& SetContentType(const TStringBuf& contentType);
+
     /**
      * @note If @arg content isn't empty its size is automatically added as a
      * "Content-Length" header during output to IOutputStream.
@@ -47,7 +47,7 @@ public:
      */
     THttpResponse& SetContent(const TString& content) {
         Content = content;
- 
+
         return *this;
     }
 
@@ -61,8 +61,8 @@ public:
      * @see IOutputStream& operator << (IOutputStream&, const THttpResponse&)
      */
     THttpResponse& SetContent(const TString& content, const TStringBuf& contentType) {
-        return SetContent(content).SetContentType(contentType); 
-    } 
+        return SetContent(content).SetContentType(contentType);
+    }
 
     HttpCodes HttpCode() const {
         return Code;

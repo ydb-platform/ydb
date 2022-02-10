@@ -1,5 +1,5 @@
-#include "format.h" 
- 
+#include "format.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/charset/wide.h>
 
@@ -25,11 +25,11 @@ Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
     }
 
     Y_UNIT_TEST(TestTime) {
-        TStringStream ss; 
- 
-        ss << "[" << Time << "] " 
-           << "qwqw" << TimeHumanReadable << Endl; 
-    } 
+        TStringStream ss;
+
+        ss << "[" << Time << "] "
+           << "qwqw" << TimeHumanReadable << Endl;
+    }
 
     Y_UNIT_TEST(TestHexReference) {
         /*

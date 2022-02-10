@@ -3,7 +3,7 @@
 
 template <ui64 N>
 ui64 Fact() {
-    ui64 result = N * Fact<N - 1>(); 
+    ui64 result = N * Fact<N - 1>();
 
 #ifndef LWTRACE_DISABLE
     // Note that probe is create on the first pass
@@ -23,8 +23,8 @@ ui64 Fact<0>() {
 }
 
 int main() {
-    Fact<6>();                       // First run is required to create probes we can use later in trace query 
+    Fact<6>();                       // First run is required to create probes we can use later in trace query
     NLWTrace::StartLwtraceFromEnv(); // parse trace query and create trace session
-    Cout << Fact<6>() << Endl;       // actually trigger probes 
+    Cout << Fact<6>() << Endl;       // actually trigger probes
     return 0;
 }

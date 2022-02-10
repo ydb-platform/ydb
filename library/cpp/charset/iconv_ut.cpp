@@ -1,7 +1,7 @@
-#include "wide.h" 
-#include "recyr.hh" 
-#include "codepage.h" 
- 
+#include "wide.h"
+#include "recyr.hh"
+#include "codepage.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
 static void TestIconv(const TString& utf8, const TString& other, ECharset enc) {
@@ -38,30 +38,30 @@ static void TestIconv(const TString& utf8, const TString& other, ECharset enc) {
     UNIT_ASSERT(temp == other);
 }
 
-class TIconvTest: public TTestBase { 
-    static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize) { 
-        size_t sSize = strlen(str); 
-        size_t wSize = sSize * 2; 
-        TArrayHolder<wchar16> w(new wchar16[wSize]); 
+class TIconvTest: public TTestBase {
+    static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize) {
+        size_t sSize = strlen(str);
+        size_t wSize = sSize * 2;
+        TArrayHolder<wchar16> w(new wchar16[wSize]);
 
-        size_t read = 0; 
-        size_t written = 0; 
-        NICONVPrivate::RecodeToUnicode(CODES_UTF8, str, w.Get(), sSize, wSize, read, written); 
-        UNIT_ASSERT(read == sSize); 
-        UNIT_ASSERT(written == wideSize); 
-        UNIT_ASSERT(!memcmp(w.Get(), wide, wideSize)); 
+        size_t read = 0;
+        size_t written = 0;
+        NICONVPrivate::RecodeToUnicode(CODES_UTF8, str, w.Get(), sSize, wSize, read, written);
+        UNIT_ASSERT(read == sSize);
+        UNIT_ASSERT(written == wideSize);
+        UNIT_ASSERT(!memcmp(w.Get(), wide, wideSize));
 
-        TArrayHolder<char> s(new char[sSize]); 
-        NICONVPrivate::RecodeFromUnicode(CODES_UTF8, w.Get(), s.Get(), wideSize, sSize, read, written); 
-        UNIT_ASSERT(read == wideSize); 
-        UNIT_ASSERT(written == sSize); 
-        UNIT_ASSERT(!memcmp(s.Get(), str, sSize)); 
-    } 
+        TArrayHolder<char> s(new char[sSize]);
+        NICONVPrivate::RecodeFromUnicode(CODES_UTF8, w.Get(), s.Get(), wideSize, sSize, read, written);
+        UNIT_ASSERT(read == wideSize);
+        UNIT_ASSERT(written == sSize);
+        UNIT_ASSERT(!memcmp(s.Get(), str, sSize));
+    }
 
 private:
     UNIT_TEST_SUITE(TIconvTest);
-    UNIT_TEST(TestBig5); 
-    UNIT_TEST(TestSurrogatePairs); 
+    UNIT_TEST(TestBig5);
+    UNIT_TEST(TestSurrogatePairs);
     UNIT_TEST_SUITE_END();
 
 public:
@@ -75,11 +75,11 @@ public:
 
     void TestSurrogatePairs() {
         const char* utf8NonBMP = "\xf4\x80\x89\x84\xf4\x80\x89\x87\xf4\x80\x88\xba";
-        wchar16 wNonBMPDummy[] = {0xDBC0, 0xDE44, 0xDBC0, 0xDE47, 0xDBC0, 0xDE3A}; 
+        wchar16 wNonBMPDummy[] = {0xDBC0, 0xDE44, 0xDBC0, 0xDE47, 0xDBC0, 0xDE3A};
         TestSurrogates(utf8NonBMP, wNonBMPDummy, Y_ARRAY_SIZE(wNonBMPDummy));
 
         const char* utf8NonBMP2 = "ab\xf4\x80\x89\x87n";
-        wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'}; 
+        wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'};
         TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2));
     }
 };

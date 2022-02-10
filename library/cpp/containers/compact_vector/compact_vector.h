@@ -24,11 +24,11 @@ private:
     T* Ptr;
 
     THeader* Header() {
-        return ((THeader*)Ptr) - 1; 
+        return ((THeader*)Ptr) - 1;
     }
 
     const THeader* Header() const {
-        return ((THeader*)Ptr) - 1; 
+        return ((THeader*)Ptr) - 1;
     }
 
 public:
@@ -40,8 +40,8 @@ public:
 
     TCompactVector()
         : Ptr(nullptr)
-    { 
-    } 
+    {
+    }
 
     TCompactVector(const TThis& that)
         : Ptr(nullptr)
@@ -105,7 +105,7 @@ public:
             void* mem = ::malloc(sizeof(THeader) + newCapacity * sizeof(T));
             if (mem == nullptr)
                 ythrow yexception() << "out of memory";
-            Ptr = (T*)(((THeader*)mem) + 1); 
+            Ptr = (T*)(((THeader*)mem) + 1);
             Header()->Size = 0;
             Header()->Capacity = newCapacity;
         } else {
@@ -197,12 +197,12 @@ public:
         Clear();
     }
 
-    T& operator[](size_t index) { 
+    T& operator[](size_t index) {
         Y_ASSERT(index < Size());
         return Ptr[index];
     }
 
-    const T& operator[](size_t index) const { 
+    const T& operator[](size_t index) const {
         Y_ASSERT(index < Size());
         return Ptr[index];
     }

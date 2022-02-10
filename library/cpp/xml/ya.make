@@ -1,8 +1,8 @@
-RECURSE( 
+RECURSE(
     doc
     document/ut
-    encode 
-    encode/ut 
+    encode
+    encode/ut
     init
     parslib
     parslib/ut
@@ -10,4 +10,4 @@ RECURSE(
     sax/ut
     validator
     validator/ut
-) 
+)

@@ -8,9 +8,9 @@
 #include <functional>
 
 namespace NProtoBuf {
-    // Apply @onField processor to each field in @msg (even empty) 
+    // Apply @onField processor to each field in @msg (even empty)
     // Do not walk deeper the field if the field is an empty message
-    // Returned bool defines if we should walk down deeper to current node children (true), or not (false) 
+    // Returned bool defines if we should walk down deeper to current node children (true), or not (false)
     void WalkReflection(Message& msg,
                         std::function<bool(Message&, const FieldDescriptor*)> onField);
     void WalkReflection(const Message& msg,

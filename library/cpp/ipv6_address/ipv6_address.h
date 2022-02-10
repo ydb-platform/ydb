@@ -28,9 +28,9 @@ struct sockaddr_in6;
 // TODO (dimanne): rename to something like TIntInetAddress or THostAddress
 class TIpv6Address {
 public:
-    enum TIpType { Ipv6, 
-                   Ipv4, 
-                   LAST }; 
+    enum TIpType { Ipv6,
+                   Ipv4,
+                   LAST };
 
     constexpr TIpv6Address() noexcept = default;
     constexpr TIpv6Address(const TIpv6Address&) noexcept = default;
@@ -54,11 +54,11 @@ public:
         Ip = {hi, lo};
     }
 
-    explicit TIpv6Address(const NAddr::IRemoteAddr& addr); 
-    explicit TIpv6Address(const sockaddr_in6& Addr); 
-    explicit TIpv6Address(const sockaddr_in& Addr); 
-    explicit TIpv6Address(const in6_addr& addr, ui32 Scope); 
-    explicit TIpv6Address(const in_addr& addr); 
+    explicit TIpv6Address(const NAddr::IRemoteAddr& addr);
+    explicit TIpv6Address(const sockaddr_in6& Addr);
+    explicit TIpv6Address(const sockaddr_in& Addr);
+    explicit TIpv6Address(const in6_addr& addr, ui32 Scope);
+    explicit TIpv6Address(const in_addr& addr);
 
     static TIpv6Address FromString(TStringBuf srcStr, bool& ok) noexcept;
 
@@ -78,31 +78,31 @@ public:
         return !IsValid();
     }
 
-    bool Isv4MappedTov6() const noexcept; 
+    bool Isv4MappedTov6() const noexcept;
     TIpv6Address TryToExtractIpv4From6() const noexcept;
     TIpv6Address Normalized() const noexcept;
 
-    TString ToString(bool* ok = nullptr) const noexcept; 
-    TString ToString(bool PrintScopeId, bool* ok = nullptr) const noexcept; 
+    TString ToString(bool* ok = nullptr) const noexcept;
+    TString ToString(bool PrintScopeId, bool* ok = nullptr) const noexcept;
 
-    void ToSockaddrAndSocklen(sockaddr_in& sockAddrIPv4, 
-                              sockaddr_in6& sockAddrIPv6, // in 
-                              const sockaddr*& sockAddrPtr, 
-                              socklen_t& sockAddrSize, 
-                              ui16 Port) const; // out 
+    void ToSockaddrAndSocklen(sockaddr_in& sockAddrIPv4,
+                              sockaddr_in6& sockAddrIPv6, // in
+                              const sockaddr*& sockAddrPtr,
+                              socklen_t& sockAddrSize,
+                              ui16 Port) const; // out
 
-    void ToInAddr(in_addr& Addr4) const; 
-    void ToIn6Addr(in6_addr& Addr6) const; 
+    void ToInAddr(in_addr& Addr4) const;
+    void ToIn6Addr(in6_addr& Addr6) const;
     // int SocketFamily() const;
 
     constexpr bool operator<(const TIpv6Address& other) const noexcept {
-        if (Type_ != other.Type_) 
+        if (Type_ != other.Type_)
             return Type_ > other.Type_;
         else
             return Ip < other.Ip;
     }
     constexpr bool operator>(const TIpv6Address& other) const noexcept {
-        if (Type_ != other.Type_) 
+        if (Type_ != other.Type_)
             return Type_ < other.Type_;
         else
             return Ip > other.Ip;
@@ -137,22 +137,22 @@ public:
         return ScopeId_;
     }
 
-    void Save(IOutputStream* out) const; 
-    void Load(IInputStream* in); 
+    void Save(IOutputStream* out) const;
+    void Load(IInputStream* in);
 
 private:
-    void InitFrom(const in6_addr& addr); 
-    void InitFrom(const in_addr& addr); 
+    void InitFrom(const in6_addr& addr);
+    void InitFrom(const in_addr& addr);
 
-    void InitFrom(const sockaddr_in6& Addr); 
-    void InitFrom(const sockaddr_in& Addr); 
+    void InitFrom(const sockaddr_in6& Addr);
+    void InitFrom(const sockaddr_in& Addr);
 
     ui128 Ip{};
-    TIpType Type_ = LAST; 
-    ui32 ScopeId_ = 0; 
+    TIpType Type_ = LAST;
+    ui32 ScopeId_ = 0;
 };
-IOutputStream& operator<<(IOutputStream& Out, const TIpv6Address::TIpType Type) noexcept; 
-IOutputStream& operator<<(IOutputStream& Out, const TIpv6Address& ipv6Address) noexcept; 
+IOutputStream& operator<<(IOutputStream& Out, const TIpv6Address::TIpType Type) noexcept;
+IOutputStream& operator<<(IOutputStream& Out, const TIpv6Address& ipv6Address) noexcept;
 
 constexpr TIpv6Address Get127001() noexcept {
     return {127, 0, 0, 1};
@@ -184,7 +184,7 @@ struct THostAddressAndPort {
     TIpv6Address Ip {};
     TIpPort Port {0};
 };
-IOutputStream& operator<<(IOutputStream& Out, const THostAddressAndPort& HostAddressAndPort) noexcept; 
+IOutputStream& operator<<(IOutputStream& Out, const THostAddressAndPort& HostAddressAndPort) noexcept;
 
 ///
 /// Returns
@@ -199,22 +199,22 @@ IOutputStream& operator<<(IOutputStream& Out, const THostAddressAndPort& HostAdd
 ///   2001::7348       // port wil be equal to DefaultPort
 ///   [2001::7348]:80
 ///
-std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromString(const TString& RawStr, 
-                                                                                  TIpPort DefaultPort, 
-                                                                                  bool& Ok) noexcept; 
+std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromString(const TString& RawStr,
+                                                                                  TIpPort DefaultPort,
+                                                                                  bool& Ok) noexcept;
 
 using TIpv6AddressesSet = THashSet<TIpv6Address>;
 
 template <>
 struct THash<TIpv6Address> {
-    inline size_t operator()(const TIpv6Address& ip) const { 
+    inline size_t operator()(const TIpv6Address& ip) const {
         const ui128& Tmp = static_cast<ui128>(ip);
         return CombineHashes(THash<ui128>()(Tmp), THash<ui8>()(static_cast<ui8>(ip.Type())));
     }
 };
 template <>
 struct THash<THostAddressAndPort> {
-    inline size_t operator()(const THostAddressAndPort& IpAndPort) const { 
+    inline size_t operator()(const THostAddressAndPort& IpAndPort) const {
         return CombineHashes(THash<TIpv6Address>()(IpAndPort.Ip), THash<TIpPort>()(IpAndPort.Port));
     }
 };
@@ -222,13 +222,13 @@ struct THash<THostAddressAndPort> {
 namespace std {
     template <>
     struct hash<TIpv6Address> {
-        std::size_t operator()(const TIpv6Address& Ip) const noexcept { 
+        std::size_t operator()(const TIpv6Address& Ip) const noexcept {
             return THash<TIpv6Address>()(Ip);
         }
     };
 }
 
-NAddr::IRemoteAddr* ToIRemoteAddr(const TIpv6Address& Address, TIpPort Port); 
+NAddr::IRemoteAddr* ToIRemoteAddr(const TIpv6Address& Address, TIpPort Port);
 
 // template <>
 // class TSerializer<TIpv6Address> {

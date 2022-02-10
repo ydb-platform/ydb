@@ -3,7 +3,7 @@
 #include <utility>
 
 namespace NKiwiAggr {
-    using TWeightedValue = std::pair<double, double>; // value, weight 
+    using TWeightedValue = std::pair<double, double>; // value, weight
     using TQualityFunction = TWeightedValue (*)(const TWeightedValue&, const TWeightedValue&);
 
     TWeightedValue CalcDistanceQuality(const TWeightedValue& left, const TWeightedValue& right);

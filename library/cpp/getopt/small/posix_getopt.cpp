@@ -1,7 +1,7 @@
-#include "posix_getopt.h" 
- 
-#include <util/generic/ptr.h> 
- 
+#include "posix_getopt.h"
+
+#include <util/generic/ptr.h>
+
 #include <ctype.h>
 
 namespace NLastGetopt {
@@ -14,8 +14,8 @@ namespace NLastGetopt {
     static THolder<TOpts> Opts;
     static THolder<TOptsParser> OptsParser;
 
-    int getopt_long_impl(int argc, char* const* argv, const char* optstring, 
-                         const struct option* longopts, int* longindex, bool long_only) { 
+    int getopt_long_impl(int argc, char* const* argv, const char* optstring,
+                         const struct option* longopts, int* longindex, bool long_only) {
         if (!Opts || optreset == 1) {
             optarg = nullptr;
             optind = 1;
@@ -38,7 +38,7 @@ namespace NLastGetopt {
                 opt->UserValue(o->flag);
             }
 
-            OptsParser.Reset(new TOptsParser(&*Opts, argc, (const char**)argv)); 
+            OptsParser.Reset(new TOptsParser(&*Opts, argc, (const char**)argv));
         }
 
         optarg = nullptr;
@@ -47,10 +47,10 @@ namespace NLastGetopt {
             if (!OptsParser->Next()) {
                 return -1;
             } else {
-                optarg = (char*)OptsParser->CurVal(); 
+                optarg = (char*)OptsParser->CurVal();
                 optind = (int)OptsParser->Pos_;
                 if (longindex && OptsParser->CurOpt())
-                    *longindex = (int)Opts->IndexOf(OptsParser->CurOpt()); 
+                    *longindex = (int)Opts->IndexOf(OptsParser->CurOpt());
                 return OptsParser->CurOpt() ? OptsParser->CurOpt()->GetCharOr0() : 1;
             }
         } catch (const NLastGetopt::TException&) {
@@ -58,13 +58,13 @@ namespace NLastGetopt {
         }
     }
 
-    int getopt_long(int argc, char* const* argv, const char* optstring, 
-                    const struct option* longopts, int* longindex) { 
+    int getopt_long(int argc, char* const* argv, const char* optstring,
+                    const struct option* longopts, int* longindex) {
         return getopt_long_impl(argc, argv, optstring, longopts, longindex, false);
     }
 
     int getopt_long_only(int argc, char* const* argv, const char* optstring,
-                         const struct option* longopts, int* longindex) { 
+                         const struct option* longopts, int* longindex) {
         return getopt_long_impl(argc, argv, optstring, longopts, longindex, true);
     }
 

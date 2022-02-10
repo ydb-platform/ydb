@@ -8,7 +8,7 @@
 #include <stdlib.h>
 
 template <typename T, class A = std::allocator<T>>
-class TVectorSwaps : TNonCopyable { 
+class TVectorSwaps : TNonCopyable {
 private:
     T* Start;
     T* Finish;
@@ -23,15 +23,15 @@ public:
     typedef T* iterator;
     typedef const T* const_iterator;
 
-    typedef std::reverse_iterator<iterator> reverse_iterator; 
-    typedef std::reverse_iterator<const_iterator> const_reverse_iterator; 
+    typedef std::reverse_iterator<iterator> reverse_iterator;
+    typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
 
-    TVectorSwaps() 
-        : Start() 
-        , Finish() 
-        , EndOfStorage() 
-    { 
-    } 
+    TVectorSwaps()
+        : Start()
+        , Finish()
+        , EndOfStorage()
+    {
+    }
 
     ~TVectorSwaps() {
         for (size_t i = 0; i < size(); ++i) {
@@ -94,19 +94,19 @@ public:
         return Finish;
     }
 
-    reverse_iterator rbegin() { 
-        return reverse_iterator(end()); 
-    } 
-    reverse_iterator rend() { 
-        return reverse_iterator(begin()); 
-    } 
+    reverse_iterator rbegin() {
+        return reverse_iterator(end());
+    }
+    reverse_iterator rend() {
+        return reverse_iterator(begin());
+    }
 
-    const_reverse_iterator rbegin() const { 
-        return reverse_iterator(end()); 
-    } 
-    const_reverse_iterator rend() const { 
-        return reverse_iterator(begin()); 
-    } 
+    const_reverse_iterator rbegin() const {
+        return reverse_iterator(end());
+    }
+    const_reverse_iterator rend() const {
+        return reverse_iterator(begin());
+    }
 
     void swap(TVectorSwaps<T>& that) {
         DoSwap(Start, that.Start);
@@ -121,7 +121,7 @@ public:
 
         size_t newCapacity = FastClp2(n);
         TVectorSwaps<T> tmp;
-        tmp.Start = (T*)malloc(sizeof(T) * newCapacity); 
+        tmp.Start = (T*)malloc(sizeof(T) * newCapacity);
         Y_VERIFY(!!tmp.Start);
 
         tmp.EndOfStorage = tmp.Start + newCapacity;

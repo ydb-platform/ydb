@@ -1,10 +1,10 @@
 #include <util/system/defaults.h>
 
 #ifdef _win_
-    #include <util/system/winint.h> 
-    #include "lstat_win.h" 
+    #include <util/system/winint.h>
+    #include "lstat_win.h"
 
-int lstat(const char* fileName, stat_struct* fileStat) { 
+int lstat(const char* fileName, stat_struct* fileStat) {
     int len = strlen(fileName);
     int convRes = MultiByteToWideChar(CP_UTF8, 0, fileName, len, 0, 0);
     if (convRes == 0) {
@@ -23,7 +23,7 @@ int lstat(const char* fileName, stat_struct* fileStat) {
         findHandle = FindFirstFileW(buf, &findBuf);
         if (findBuf.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT &&
             (findBuf.dwReserved0 == IO_REPARSE_TAG_MOUNT_POINT || findBuf.dwReserved0 == IO_REPARSE_TAG_SYMLINK))
-        { 
+        {
             fileStat->st_mode = fileStat->st_mode & ~_S_IFMT | _S_IFLNK;
         }
         FindClose(findHandle);

@@ -10,29 +10,29 @@ if (T* value = MapFindPtr(myMap, someKey) {
 
 */
 
-template <class Map, class K> 
+template <class Map, class K>
 inline auto MapFindPtr(Map& map, const K& key) {
-    auto i = map.find(key); 
- 
+    auto i = map.find(key);
+
     return (i == map.end() ? nullptr : &i->second);
 }
 
-template <class Map, class K> 
+template <class Map, class K>
 inline auto MapFindPtr(const Map& map, const K& key) {
-    auto i = map.find(key); 
- 
+    auto i = map.find(key);
+
     return (i == map.end() ? nullptr : &i->second);
 }
 
 /** helper for THashMap/TMap */
 template <class Derived>
 struct TMapOps {
-    template <class K> 
+    template <class K>
     inline auto FindPtr(const K& key) {
         return MapFindPtr(static_cast<Derived&>(*this), key);
     }
- 
-    template <class K> 
+
+    template <class K>
     inline auto FindPtr(const K& key) const {
         return MapFindPtr(static_cast<const Derived&>(*this), key);
     }

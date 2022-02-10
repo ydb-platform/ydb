@@ -7,8 +7,8 @@
 namespace NAddr {
     struct TNetworkInterface {
         TString Name;
-        IRemoteAddrRef Address; 
-        IRemoteAddrRef Mask; 
+        IRemoteAddrRef Address;
+        IRemoteAddrRef Mask;
     };
 
     using TNetworkInterfaceList = TVector<TNetworkInterface>;

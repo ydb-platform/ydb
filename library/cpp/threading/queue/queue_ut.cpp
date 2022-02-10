@@ -12,7 +12,7 @@ private:
     UNIT_TEST(Threads2_Push1M_Threads1_Pop2M)
     UNIT_TEST(Threads4_Push1M_Threads1_Pop4M)
     UNIT_TEST(Threads8_RndPush100K_Threads8_Queues)
-    /* 
+    /*
     UNIT_TEST(Threads24_RndPush100K_Threads24_Queues)
     UNIT_TEST(Threads24_RndPush100K_Threads8_Queues)
     UNIT_TEST(Threads24_RndPush100K_Threads4_Queues)

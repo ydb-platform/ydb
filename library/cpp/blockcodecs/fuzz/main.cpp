@@ -4,17 +4,17 @@
 #include <library/cpp/blockcodecs/codecs.h>
 #include <library/cpp/blockcodecs/fuzz/proto/case.pb.h>
 #include <library/cpp/blockcodecs/stream.h>
- 
+
 #include <util/stream/input.h>
 #include <util/stream/length.h>
-#include <util/stream/mem.h> 
+#include <util/stream/mem.h>
 #include <util/stream/null.h>
 #include <util/stream/str.h>
- 
+
 using NBlockCodecs::NFuzz::TPackUnpackCase;
 using NBlockCodecs::TCodedOutput;
 using NBlockCodecs::TDecodedInput;
- 
+
 static void ValidateBufferSize(const ui32 size) {
     Y_ENSURE(size > 0 && size <= 16ULL * 1024);
 }
@@ -22,14 +22,14 @@ static void ValidateBufferSize(const ui32 size) {
 static void DoOnlyDecode(const TPackUnpackCase& case_) {
     if (!case_.GetPacked()) {
         return;
-    } 
- 
+    }
+
     TMemoryInput mi(case_.GetData().data(), case_.GetData().size());
     TDecodedInput di(&mi);
     TNullOutput no;
     TCountingOutput cno(&no);
     TransferData(&di, &cno);
-} 
+}
 
 static void DoDecodeEncode(const TPackUnpackCase& case_) {
     auto* const codec = NBlockCodecs::Codec(case_.GetCodecName());

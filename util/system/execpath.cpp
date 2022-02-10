@@ -1,41 +1,41 @@
-#include "platform.h" 
- 
-#include <stdlib.h> 
- 
+#include "platform.h"
+
+#include <stdlib.h>
+
 #if defined(_solaris_)
-    #include <stdlib.h> 
+    #include <stdlib.h>
 #elif defined(_darwin_)
-    #include <mach-o/dyld.h> 
+    #include <mach-o/dyld.h>
 #elif defined(_win_)
-    #include "winint.h" 
-    #include <io.h> 
+    #include "winint.h"
+    #include <io.h>
 #elif defined(_linux_)
-    #include <unistd.h> 
+    #include <unistd.h>
 #elif defined(_freebsd_)
-    #include <string.h> 
-    #include <sys/types.h> // for u_int not defined in sysctl.h 
-    #include <sys/sysctl.h> 
-    #include <unistd.h> 
+    #include <string.h>
+    #include <sys/types.h> // for u_int not defined in sysctl.h
+    #include <sys/sysctl.h>
+    #include <unistd.h>
 #endif
 
 #include <util/folder/dirut.h>
 #include <util/generic/singleton.h>
-#include <util/generic/function.h> 
+#include <util/generic/function.h>
 #include <util/generic/yexception.h>
 #include <util/memory/tempbuf.h>
-#include <util/stream/file.h> 
-#include <util/stream/pipe.h> 
-#include <util/string/cast.h> 
- 
-#include "filemap.h" 
+#include <util/stream/file.h>
+#include <util/stream/pipe.h>
+#include <util/string/cast.h>
+
+#include "filemap.h"
 #include "execpath.h"
 #include "fs.h"
 
-#if defined(_freebsd_) 
+#if defined(_freebsd_)
 static inline bool GoodPath(const TString& path) {
     return path.find('/') != TString::npos;
-} 
- 
+}
+
 static inline int FreeBSDSysCtl(int* mib, size_t mibSize, TTempBuf& res) {
     for (size_t i = 0; i < 2; ++i) {
         size_t cb = res.Size();
@@ -47,12 +47,12 @@ static inline int FreeBSDSysCtl(int* mib, size_t mibSize, TTempBuf& res) {
         } else {
             return errno;
         }
-    } 
+    }
     return errno;
-} 
- 
+}
+
 static inline TString FreeBSDGetExecPath() {
-    int mib[] = {CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1}; 
+    int mib[] = {CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1};
     TTempBuf buf;
     int r = FreeBSDSysCtl(mib, Y_ARRAY_SIZE(mib), buf);
     if (r == 0) {
@@ -67,12 +67,12 @@ static inline TString FreeBSDGetExecPath() {
         return NFs::ReadLink(path);
     } else {
         return TString();
-    } 
-} 
- 
+    }
+}
+
 static inline TString FreeBSDGetArgv0() {
-    int mib[] = {CTL_KERN, KERN_PROC, KERN_PROC_ARGS, getpid()}; 
-    TTempBuf buf; 
+    int mib[] = {CTL_KERN, KERN_PROC, KERN_PROC_ARGS, getpid()};
+    TTempBuf buf;
     int r = FreeBSDSysCtl(mib, Y_ARRAY_SIZE(mib), buf);
     if (r == 0) {
         return TString(buf.Data());
@@ -81,8 +81,8 @@ static inline TString FreeBSDGetArgv0() {
     } else {
         ythrow yexception() << "FreeBSDGetArgv0() failed: " << LastSystemErrorText();
     }
-} 
- 
+}
+
 static inline bool FreeBSDGuessExecPath(const TString& guessPath, TString& execPath) {
     if (NFs::Exists(guessPath)) {
         // now it should work for real
@@ -98,15 +98,15 @@ static inline bool FreeBSDGuessExecBasePath(const TString& guessBasePath, TStrin
     return FreeBSDGuessExecPath(TString(guessBasePath) + "/" + getprogname(), execPath);
 }
 
-#endif 
- 
+#endif
+
 static TString GetExecPathImpl() {
 #if defined(_solaris_)
     return execname();
 #elif defined(_darwin_)
     TTempBuf execNameBuf;
     for (size_t i = 0; i < 2; ++i) {
-        std::remove_pointer_t<TFunctionArg<decltype(_NSGetExecutablePath), 1>> bufsize = execNameBuf.Size(); 
+        std::remove_pointer_t<TFunctionArg<decltype(_NSGetExecutablePath), 1>> bufsize = execNameBuf.Size();
         int r = _NSGetExecutablePath(execNameBuf.Data(), &bufsize);
         if (r == 0) {
             return execNameBuf.Data();
@@ -127,10 +127,10 @@ static TString GetExecPathImpl() {
             return execNameBuf.Data();
         }
     }
-#elif defined(_linux_) || defined(_cygwin_) 
+#elif defined(_linux_) || defined(_cygwin_)
     TString path("/proc/self/exe");
     return NFs::ReadLink(path);
-// TODO(yoda): check if the filename ends with " (deleted)" 
+// TODO(yoda): check if the filename ends with " (deleted)"
 #elif defined(_freebsd_)
     TString execPath = FreeBSDGetExecPath();
     if (GoodPath(execPath)) {
@@ -151,49 +151,49 @@ static TString GetExecPathImpl() {
 
     ythrow yexception() << "can not resolve exec path";
 #else
-    #error dont know how to implement GetExecPath on this platform 
+    #error dont know how to implement GetExecPath on this platform
 #endif
 }
 
-static bool GetPersistentExecPathImpl(TString& to) { 
+static bool GetPersistentExecPathImpl(TString& to) {
 #if defined(_solaris_)
-    to = TString("/proc/self/object/a.out"); 
+    to = TString("/proc/self/object/a.out");
     return true;
 #elif defined(_linux_) || defined(_cygwin_)
-    to = TString("/proc/self/exe"); 
+    to = TString("/proc/self/exe");
     return true;
 #elif defined(_freebsd_)
-    to = TString("/proc/curproc/file"); 
+    to = TString("/proc/curproc/file");
     return true;
 #else // defined(_win_) || defined(_darwin_)  or unknown
     Y_UNUSED(to);
-    return false; 
+    return false;
 #endif
 }
 
-namespace { 
+namespace {
     struct TExecPathsHolder {
         inline TExecPathsHolder() {
-            ExecPath = GetExecPathImpl(); 
- 
-            if (!GetPersistentExecPathImpl(PersistentExecPath)) { 
-                PersistentExecPath = ExecPath; 
-            } 
-        } 
- 
-        static inline auto Instance() { 
-            return SingletonWithPriority<TExecPathsHolder, 1>(); 
-        } 
- 
+            ExecPath = GetExecPathImpl();
+
+            if (!GetPersistentExecPathImpl(PersistentExecPath)) {
+                PersistentExecPath = ExecPath;
+            }
+        }
+
+        static inline auto Instance() {
+            return SingletonWithPriority<TExecPathsHolder, 1>();
+        }
+
         TString ExecPath;
         TString PersistentExecPath;
-    }; 
-} 
+    };
+}
 
 const TString& GetExecPath() {
-    return TExecPathsHolder::Instance()->ExecPath; 
+    return TExecPathsHolder::Instance()->ExecPath;
 }
 
 const TString& GetPersistentExecPath() {
-    return TExecPathsHolder::Instance()->PersistentExecPath; 
+    return TExecPathsHolder::Instance()->PersistentExecPath;
 }

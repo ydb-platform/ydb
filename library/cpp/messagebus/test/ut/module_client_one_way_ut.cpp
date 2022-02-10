@@ -43,8 +43,8 @@ Y_UNIT_TEST_SUITE(ModuleClientOneWay) {
             : TBusModule("m")
             , TestSync(testSync)
             , Port(port)
-        { 
-        } 
+        {
+        }
 
         TJobHandler Start(TBusJob* job, TBusMessage*) override {
             TestSync->WaitForAndIncrement(0);
@@ -94,8 +94,8 @@ Y_UNIT_TEST_SUITE(ModuleClientOneWay) {
         TSendErrorModule(TTestSync* testSync)
             : TBusModule("m")
             , TestSync(testSync)
-        { 
-        } 
+        {
+        }
 
         TJobHandler Start(TBusJob* job, TBusMessage*) override {
             TestSync->WaitForAndIncrement(0);

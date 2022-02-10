@@ -1,9 +1,9 @@
 #pragma once
- 
+
 #include <util/generic/fwd.h>
 #include <util/generic/noncopyable.h>
-#include <util/system/defaults.h> 
- 
+#include <util/system/defaults.h>
+
 class IOutputStream;
 
 /**
@@ -15,16 +15,16 @@ class IOutputStream;
  * Abstract input stream.
  */
 class IInputStream: public TNonCopyable {
-public: 
+public:
     IInputStream() noexcept;
     virtual ~IInputStream();
- 
+
     IInputStream(IInputStream&&) noexcept {
-    } 
+    }
 
     IInputStream& operator=(IInputStream&&) noexcept {
         return *this;
-    } 
+    }
 
     /**
      * Reads some data from the stream. Note that this function might read less
@@ -36,13 +36,13 @@ public:
      * @returns                         Number of bytes that were actually read.
      *                                  A return value of zero signals end of stream.
      */
-    inline size_t Read(void* buf, size_t len) { 
-        if (len == 0) { 
-            return 0; 
-        } 
- 
-        return DoRead(buf, len); 
-    } 
+    inline size_t Read(void* buf, size_t len) {
+        if (len == 0) {
+            return 0;
+        }
+
+        return DoRead(buf, len);
+    }
 
     /**
      * Reads one character from the stream.
@@ -52,10 +52,10 @@ public:
      *                                  A return value of false signals the end
      *                                  of stream.
      */
-    inline bool ReadChar(char& c) { 
-        return DoRead(&c, 1) > 0; 
-    } 
- 
+    inline bool ReadChar(char& c) {
+        return DoRead(&c, 1) > 0;
+    }
+
     /**
      * Reads all characters from the stream until the given character is
      * encountered, and stores them into the given string. The character itself
@@ -67,8 +67,8 @@ public:
      *                                  A return value of zero signals end of stream.
      */
     inline size_t ReadTo(TString& st, char ch) {
-        return DoReadTo(st, ch); 
-    } 
+        return DoReadTo(st, ch);
+    }
 
     /**
      * Reads the requested amount of data from the stream. Unlike `Read`, this
@@ -81,7 +81,7 @@ public:
      *                                  A return value different from `len`
      *                                  signals end of stream.
      */
-    size_t Load(void* buf, size_t len); 
+    size_t Load(void* buf, size_t len);
 
     /**
      * Reads the requested amount of data from the stream, or fails with an
@@ -91,7 +91,7 @@ public:
      * @param len                       Number of bytes to read.
      * @see Load
      */
-    void LoadOrFail(void* buf, size_t len); 
+    void LoadOrFail(void* buf, size_t len);
 
     /**
      * Reads all data from this stream and returns it as a string.
@@ -144,7 +144,7 @@ public:
      *                                  A return value of zero signals end of stream.
      */
     size_t ReadLine(TString& st);
- 
+
     /**
      * Reads UTF8 encoded characters from the stream the first occurrence of '\n',
      * converts them into wide ones, and stores into provided string. Also handles
@@ -156,7 +156,7 @@ public:
      *                                  A return value of zero signals end of stream.
      */
     size_t ReadLine(TUtf16String& w);
- 
+
     /**
      * Skips some data from the stream without reading / copying it. Note that
      * this function might skip less data than what was requested.
@@ -165,10 +165,10 @@ public:
      * @returns                         Number of bytes that were actually skipped.
      *                                  A return value of zero signals end of stream.
      */
-    size_t Skip(size_t len); 
- 
-protected: 
-    /** 
+    size_t Skip(size_t len);
+
+protected:
+    /**
      * Reads some data from the stream. Might read less data than what was
      * requested.
      *
@@ -178,9 +178,9 @@ protected:
      *                                  A return value of zero signals end of stream.
      * @throws yexception               If IO error occurs.
      */
-    virtual size_t DoRead(void* buf, size_t len) = 0; 
+    virtual size_t DoRead(void* buf, size_t len) = 0;
 
-    /** 
+    /**
      * Skips some data from the stream. Might skip less data than what was
      * requested.
      *
@@ -189,9 +189,9 @@ protected:
      *                                  A return value of zero signals end of stream.
      * @throws yexception               If IO error occurs.
      */
-    virtual size_t DoSkip(size_t len); 
+    virtual size_t DoSkip(size_t len);
 
-    /** 
+    /**
      * Reads all characters from the stream until the given character is
      * encountered, and stores them into the given string. The character itself
      * is read from the stream, but not stored in the string.
@@ -216,8 +216,8 @@ protected:
      * @throws yexception               If IO error occurs.
      */
     virtual ui64 DoReadAll(IOutputStream& out);
-}; 
- 
+};
+
 /**
  * Transfers all data from the given input stream into the given output stream.
  *
@@ -269,5 +269,5 @@ namespace NPrivate {
  * Standard input stream.
  */
 #define Cin (::NPrivate::StdInStream())
- 
+
 /** @} */

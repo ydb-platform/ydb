@@ -8,15 +8,15 @@
 
 namespace NActors {
     TInterconnectListenerTCP::TInterconnectListenerTCP(const TString& address, ui16 port, TInterconnectProxyCommon::TPtr common, const TMaybe<SOCKET>& socket)
-        : TActor(&TThis::Initial) 
+        : TActor(&TThis::Initial)
         , TInterconnectLoggingBase(Sprintf("ICListener: %s", SelfId().ToString().data()))
-        , Address(address.c_str(), port) 
+        , Address(address.c_str(), port)
         , Listener(
             socket
             ? new NInterconnect::TStreamSocket(*socket)
             : nullptr)
         , ExternalSocket(!!Listener)
-        , ProxyCommonCtx(std::move(common)) 
+        , ProxyCommonCtx(std::move(common))
     {
         if (ExternalSocket) {
             SetNonBlock(*Listener);
@@ -24,13 +24,13 @@ namespace NActors {
     }
 
     TAutoPtr<IEventHandle> TInterconnectListenerTCP::AfterRegister(const TActorId& self, const TActorId& parentId) {
-        return new IEventHandle(self, parentId, new TEvents::TEvBootstrap, 0); 
-    } 
+        return new IEventHandle(self, parentId, new TEvents::TEvBootstrap, 0);
+    }
 
-    void TInterconnectListenerTCP::Die(const TActorContext& ctx) { 
+    void TInterconnectListenerTCP::Die(const TActorContext& ctx) {
         LOG_DEBUG_IC("ICL08", "Dying");
-        TActor::Die(ctx); 
-    } 
+        TActor::Die(ctx);
+    }
 
     int TInterconnectListenerTCP::Bind() {
         NInterconnect::TAddress addr = Address;
@@ -57,7 +57,7 @@ namespace NActors {
         Listener = NInterconnect::TStreamSocket::Make(addr.GetFamily());
         if (*Listener == -1) {
             return errno;
-        } 
+        }
         SetNonBlock(*Listener);
         Listener->SetSendBufferSize(ProxyCommonCtx->Settings.GetSendBufferSize()); // TODO(alexvru): WTF?
         SetSockOpt(*Listener, SOL_SOCKET, SO_REUSEADDR, 1);
@@ -67,7 +67,7 @@ namespace NActors {
             return e;
         } else {
             return 0;
-        } 
+        }
     }
 
     void TInterconnectListenerTCP::Bootstrap(const TActorContext& ctx) {
@@ -78,7 +78,7 @@ namespace NActors {
                 Become(&TThis::Initial, TDuration::Seconds(1), new TEvents::TEvBootstrap);
                 return;
             }
-        } 
+        }
         if (const auto& callback = ProxyCommonCtx->InitWhiteboard) {
             callback(Address.GetPort(), TlsActivationContext->ExecutorThread.ActorSystem);
         }
@@ -112,6 +112,6 @@ namespace NActors {
             }
             break;
         }
-    } 
+    }
 
 }

@@ -78,7 +78,7 @@
    # define _FORTIFY_SOURCE 2
    #endif
 
- 
+
 /* Define to 1 if the system's ftello function has the Solaris bug. */
 /* #undef FTELLO_BROKEN_AFTER_SWITCHING_FROM_READ_TO_WRITE */
 
@@ -475,19 +475,19 @@
    */
 #define HAVE_DECL_ALARM 1
 
-#if defined(__linux__) 
-    #define HAVE_UNLOCKED_IO 1 
-#else 
-    #define HAVE_UNLOCKED_IO 0 
-#endif 
- 
+#if defined(__linux__)
+    #define HAVE_UNLOCKED_IO 1
+#else
+    #define HAVE_UNLOCKED_IO 0
+#endif
+
 /* Define to 1 if you have the declaration of `clearerr_unlocked', and to 0 if
    you don't. */
-#if HAVE_UNLOCKED_IO 
-    #define HAVE_DECL_CLEARERR_UNLOCKED 1 
-#else 
-    #define HAVE_DECL_CLEARERR_UNLOCKED 0 
-#endif 
+#if HAVE_UNLOCKED_IO
+    #define HAVE_DECL_CLEARERR_UNLOCKED 1
+#else
+    #define HAVE_DECL_CLEARERR_UNLOCKED 0
+#endif
 
 /* Define to 1 if you have the declaration of `copysign', and to 0 if you
    don't. */
@@ -503,35 +503,35 @@
 
 /* Define to 1 if you have the declaration of `feof_unlocked', and to 0 if you
    don't. */
-#if HAVE_UNLOCKED_IO 
-    #define HAVE_DECL_FEOF_UNLOCKED 1 
-#else 
-    #define HAVE_DECL_FEOF_UNLOCKED 0 
-#endif 
+#if HAVE_UNLOCKED_IO
+    #define HAVE_DECL_FEOF_UNLOCKED 1
+#else
+    #define HAVE_DECL_FEOF_UNLOCKED 0
+#endif
 
 /* Define to 1 if you have the declaration of `ferror_unlocked', and to 0 if
    you don't. */
-#if HAVE_UNLOCKED_IO 
-    #define HAVE_DECL_FERROR_UNLOCKED 1 
-#else 
-    #define HAVE_DECL_FERROR_UNLOCKED 0 
-#endif 
+#if HAVE_UNLOCKED_IO
+    #define HAVE_DECL_FERROR_UNLOCKED 1
+#else
+    #define HAVE_DECL_FERROR_UNLOCKED 0
+#endif
 
 /* Define to 1 if you have the declaration of `fflush_unlocked', and to 0 if
    you don't. */
-#if HAVE_UNLOCKED_IO 
-    #define HAVE_DECL_FFLUSH_UNLOCKED 1 
-#else 
-    #define HAVE_DECL_FFLUSH_UNLOCKED 0 
-#endif 
+#if HAVE_UNLOCKED_IO
+    #define HAVE_DECL_FFLUSH_UNLOCKED 1
+#else
+    #define HAVE_DECL_FFLUSH_UNLOCKED 0
+#endif
 
 /* Define to 1 if you have the declaration of `fgets_unlocked', and to 0 if
    you don't. */
-#if HAVE_UNLOCKED_IO 
-    #define HAVE_DECL_FGETS_UNLOCKED 1 
-#else 
-    #define HAVE_DECL_FGETS_UNLOCKED 0 
-#endif 
+#if HAVE_UNLOCKED_IO
+    #define HAVE_DECL_FGETS_UNLOCKED 1
+#else
+    #define HAVE_DECL_FGETS_UNLOCKED 0
+#endif
 
 /* Define to 1 if you have the declaration of `fpurge', and to 0 if you don't.
    */
@@ -539,27 +539,27 @@
 
 /* Define to 1 if you have the declaration of `fputc_unlocked', and to 0 if
    you don't. */
-#if HAVE_UNLOCKED_IO 
-    #define HAVE_DECL_FPUTC_UNLOCKED 1 
-#else 
-    #define HAVE_DECL_FPUTC_UNLOCKED 0 
-#endif 
+#if HAVE_UNLOCKED_IO
+    #define HAVE_DECL_FPUTC_UNLOCKED 1
+#else
+    #define HAVE_DECL_FPUTC_UNLOCKED 0
+#endif
 
 /* Define to 1 if you have the declaration of `fputs_unlocked', and to 0 if
    you don't. */
-#if HAVE_UNLOCKED_IO 
-    #define HAVE_DECL_FPUTS_UNLOCKED 1 
-#else 
-    #define HAVE_DECL_FPUTS_UNLOCKED 0 
-#endif 
+#if HAVE_UNLOCKED_IO
+    #define HAVE_DECL_FPUTS_UNLOCKED 1
+#else
+    #define HAVE_DECL_FPUTS_UNLOCKED 0
+#endif
 
 /* Define to 1 if you have the declaration of `fread_unlocked', and to 0 if
    you don't. */
-#if HAVE_UNLOCKED_IO 
-    #define HAVE_DECL_FREAD_UNLOCKED 1 
-#else 
-    #define HAVE_DECL_FREAD_UNLOCKED 0 
-#endif 
+#if HAVE_UNLOCKED_IO
+    #define HAVE_DECL_FREAD_UNLOCKED 1
+#else
+    #define HAVE_DECL_FREAD_UNLOCKED 0
+#endif
 
 /* Define to 1 if you have the declaration of `fseeko', and to 0 if you don't.
    */
@@ -571,27 +571,27 @@
 
 /* Define to 1 if you have the declaration of `fwrite_unlocked', and to 0 if
    you don't. */
-#if HAVE_UNLOCKED_IO 
-    #define HAVE_DECL_FWRITE_UNLOCKED 1 
-#else 
-    #define HAVE_DECL_FWRITE_UNLOCKED 0 
-#endif 
+#if HAVE_UNLOCKED_IO
+    #define HAVE_DECL_FWRITE_UNLOCKED 1
+#else
+    #define HAVE_DECL_FWRITE_UNLOCKED 0
+#endif
 
 /* Define to 1 if you have the declaration of `getchar_unlocked', and to 0 if
    you don't. */
-#if HAVE_UNLOCKED_IO 
-    #define HAVE_DECL_GETCHAR_UNLOCKED 1 
-#else 
-    #define HAVE_DECL_GETCHAR_UNLOCKED 0 
-#endif 
+#if HAVE_UNLOCKED_IO
+    #define HAVE_DECL_GETCHAR_UNLOCKED 1
+#else
+    #define HAVE_DECL_GETCHAR_UNLOCKED 0
+#endif
 
 /* Define to 1 if you have the declaration of `getc_unlocked', and to 0 if you
    don't. */
-#if HAVE_UNLOCKED_IO 
-    #define HAVE_DECL_GETC_UNLOCKED 1 
-#else 
-    #define HAVE_DECL_GETC_UNLOCKED 0 
-#endif 
+#if HAVE_UNLOCKED_IO
+    #define HAVE_DECL_GETC_UNLOCKED 1
+#else
+    #define HAVE_DECL_GETC_UNLOCKED 0
+#endif
 
 /* Define to 1 if you have the declaration of `getenv', and to 0 if you don't.
    */
@@ -609,7 +609,7 @@
    don't. */
 /* #undef HAVE_DECL_MBSINIT */
 
-#if defined(__linux__) 
+#if defined(__linux__)
 /* Define to 1 if you have the declaration of `program_invocation_name', and
    to 0 if you don't. */
 #define HAVE_DECL_PROGRAM_INVOCATION_NAME 1
@@ -617,31 +617,31 @@
 /* Define to 1 if you have the declaration of `program_invocation_short_name',
    and to 0 if you don't. */
 #define HAVE_DECL_PROGRAM_INVOCATION_SHORT_NAME 1
-#else 
-/* Define to 1 if you have the declaration of `program_invocation_name', and 
-   to 0 if you don't. */ 
-#define HAVE_DECL_PROGRAM_INVOCATION_NAME 0 
+#else
+/* Define to 1 if you have the declaration of `program_invocation_name', and
+   to 0 if you don't. */
+#define HAVE_DECL_PROGRAM_INVOCATION_NAME 0
 
-/* Define to 1 if you have the declaration of `program_invocation_short_name', 
-   and to 0 if you don't. */ 
-#define HAVE_DECL_PROGRAM_INVOCATION_SHORT_NAME 0 
-#endif 
- 
+/* Define to 1 if you have the declaration of `program_invocation_short_name',
+   and to 0 if you don't. */
+#define HAVE_DECL_PROGRAM_INVOCATION_SHORT_NAME 0
+#endif
+
 /* Define to 1 if you have the declaration of `putchar_unlocked', and to 0 if
    you don't. */
-#if HAVE_UNLOCKED_IO 
-    #define HAVE_DECL_PUTCHAR_UNLOCKED 1 
-#else 
-    #define HAVE_DECL_PUTCHAR_UNLOCKED 0 
-#endif 
+#if HAVE_UNLOCKED_IO
+    #define HAVE_DECL_PUTCHAR_UNLOCKED 1
+#else
+    #define HAVE_DECL_PUTCHAR_UNLOCKED 0
+#endif
 
 /* Define to 1 if you have the declaration of `putc_unlocked', and to 0 if you
    don't. */
-#if HAVE_UNLOCKED_IO 
-    #define HAVE_DECL_PUTC_UNLOCKED 1 
-#else 
-    #define HAVE_DECL_PUTC_UNLOCKED 0 
-#endif 
+#if HAVE_UNLOCKED_IO
+    #define HAVE_DECL_PUTC_UNLOCKED 1
+#else
+    #define HAVE_DECL_PUTC_UNLOCKED 0
+#endif
 
 /* Define to 1 if you have the declaration of `setenv', and to 0 if you don't.
    */
@@ -681,11 +681,11 @@
 
 /* Define to 1 if you have the declaration of `sys_siglist', and to 0 if you
    don't. */
-#if defined(_musl_) 
-    #define HAVE_DECL_SYS_SIGLIST 0 
-#else 
-    #define HAVE_DECL_SYS_SIGLIST 1 
-#endif 
+#if defined(_musl_)
+    #define HAVE_DECL_SYS_SIGLIST 0
+#else
+    #define HAVE_DECL_SYS_SIGLIST 1
+#endif
 
 /* Define to 1 if you have the declaration of `towlower', and to 0 if you
    don't. */
@@ -728,11 +728,11 @@
 #define HAVE_FCNTL 1
 
 /* Define to 1 if you have the <features.h> header file. */
-#if defined(__linux__) 
-    #define HAVE_FEATURES_H 1 
-#else 
-    #define HAVE_FEATURES_H 0 
-#endif 
+#if defined(__linux__)
+    #define HAVE_FEATURES_H 1
+#else
+    #define HAVE_FEATURES_H 0
+#endif
 
 /* Define to 1 if you have the `fpurge' function. */
 /* #undef HAVE_FPURGE */
@@ -777,16 +777,16 @@
 /* Define to 1 if you have the `isblank' function. */
 #define HAVE_ISBLANK 1
 
-#if defined(_musl_) 
-#define HAVE_ISNAND_IN_LIBC 0 
-#define HAVE_ISNANF_IN_LIBC 0 
-#else 
+#if defined(_musl_)
+#define HAVE_ISNAND_IN_LIBC 0
+#define HAVE_ISNANF_IN_LIBC 0
+#else
 /* Define if the isnan(double) function is available in libc. */
 #define HAVE_ISNAND_IN_LIBC 1
 
 /* Define if the isnan(float) function is available in libc. */
 #define HAVE_ISNANF_IN_LIBC 1
-#endif 
+#endif
 
 /* Define if the isnan(long double) function is available in libc. */
 /* #undef HAVE_ISNANL_IN_LIBC */
@@ -857,9 +857,9 @@
 #define HAVE_MEMORY_H 1
 
 /* Define to 1 if you have the `mempcpy' function. */
-#if defined(__linux__) 
+#if defined(__linux__)
 #define HAVE_MEMPCPY 1
-#endif 
+#endif
 
 /* Define to 1 if you have the `mkdtemp' function. */
 #define HAVE_MKDTEMP 1
@@ -881,9 +881,9 @@
 #define HAVE_NL_LANGINFO 1
 
 /* Define to 1 if libc includes obstacks. */
-#if !defined(_musl_) 
+#if !defined(_musl_)
 #define HAVE_OBSTACK 1
-#endif 
+#endif
 
 /* Define to 1 if you have the `opendir' function. */
 #define HAVE_OPENDIR 1
@@ -1020,10 +1020,10 @@
 
 /* Define to 1 if you have the <stdio_ext.h> header file. */
 #if defined(__FreeBSD__) || defined(__MACH__)
-#define HAVE_STDIO_EXT_H 0 
-#else 
+#define HAVE_STDIO_EXT_H 0
+#else
 #define HAVE_STDIO_EXT_H 1
-#endif 
+#endif
 
 /* Define to 1 if you have the <stdlib.h> header file. */
 #define HAVE_STDLIB_H 1
@@ -1194,26 +1194,26 @@
 /* #undef HAVE__SET_INVALID_PARAMETER_HANDLER */
 
 /* Define to 1 if you have the `__fpurge' function. */
-#if HAVE_STDIO_EXT_H 
-    #define HAVE___FPURGE 1 
-#else 
-    #define HAVE___FPURGE 0 
-#endif 
+#if HAVE_STDIO_EXT_H
+    #define HAVE___FPURGE 1
+#else
+    #define HAVE___FPURGE 0
+#endif
 
-#if defined(_musl_) 
-    /* Define to 1 if you have the `__freadahead' function. */ 
-    #define HAVE___FREADAHEAD 1 
-#endif 
+#if defined(_musl_)
+    /* Define to 1 if you have the `__freadahead' function. */
+    #define HAVE___FREADAHEAD 1
+#endif
 
 /* Define to 1 if you have the `__freading' function. */
-#if HAVE_STDIO_EXT_H 
-    #define HAVE___FREADING 1 
-#else 
-    #define HAVE___FREADING 0 
-#endif 
+#if HAVE_STDIO_EXT_H
+    #define HAVE___FREADING 1
+#else
+    #define HAVE___FREADING 0
+#endif
 
 /* Define to 1 if you have the `__secure_getenv' function. */
-//#define HAVE___SECURE_GETENV 1 
+//#define HAVE___SECURE_GETENV 1
 
 /* Define as the bit index in the word where to find bit 0 of the exponent of
    'long double'. */
@@ -1438,7 +1438,7 @@
 
 /* Define to the prefix of C symbols at the assembler and linker level, either
    an underscore or empty. */
-#define USER_LABEL_PREFIX 
+#define USER_LABEL_PREFIX
 
 /* Define if the POSIX multithreading library can be used. */
 /* #undef USE_POSIX_THREADS */

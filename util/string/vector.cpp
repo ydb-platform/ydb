@@ -1,9 +1,9 @@
 #include "util.h"
 #include "split.h"
-#include "vector.h" 
- 
-#include <util/system/defaults.h> 
- 
+#include "vector.h"
+
+#include <util/system/defaults.h>
+
 template <class TConsumer, class TDelim, typename TChr>
 static inline void DoSplit2(TConsumer& c, TDelim& d, const TBasicStringBuf<TChr> str, int) {
     SplitString(str.data(), str.data() + str.size(), d, c);
@@ -47,7 +47,7 @@ static inline void DoSplit0(C* res, const TBasicStringBuf<TChr> str, TDelim& d, 
 
 template <typename TChr>
 static void SplitStringImplT(TVector<std::conditional_t<std::is_same<TChr, wchar16>::value, TUtf16String, TString>>* res,
-                             const TBasicStringBuf<TChr> str, const TChr* delim, size_t maxFields, int options) { 
+                             const TBasicStringBuf<TChr> str, const TChr* delim, size_t maxFields, int options) {
     if (!*delim) {
         return;
     }
@@ -86,6 +86,6 @@ TUtf16String JoinStrings(const TVector<TUtf16String>& v, const TWtringBuf delim)
 TUtf16String JoinStrings(const TVector<TUtf16String>& v, size_t index, size_t count, const TWtringBuf delim) {
     const size_t f = Min(index, v.size());
     const size_t l = f + Min(count, v.size() - f);
- 
+
     return JoinStrings(v.begin() + f, v.begin() + l, delim);
 }

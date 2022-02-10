@@ -72,12 +72,12 @@ void FormatPDiskRandomKeys(TString path, ui32 diskSize, ui32 chunkSize, ui64 gui
     NPDisk::TKey chunkKey;
     NPDisk::TKey logKey;
     NPDisk::TKey sysLogKey;
-    EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey)); 
-    EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey)); 
-    EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey)); 
+    EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
+    EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
+    EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
     if (!isGuidValid) {
-        EntropyPool().Read(&guid, sizeof(guid)); 
+        EntropyPool().Read(&guid, sizeof(guid));
     }
 
     NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize,
@@ -655,7 +655,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         VERBOSE_COUT(" Creating PDisk");
         ui64 guid = 1;
         ui64 pDiskCategory = 0;
-        EntropyPool().Read(&guid, sizeof(guid)); 
+        EntropyPool().Read(&guid, sizeof(guid));
 //        TODO: look why doesn't sernder 1 work
         ui32 pDiskId = CreatePDisk(runtime, 0, tempDir() + "/new_pdisk.dat", guid, 1001, pDiskCategory);
 
@@ -664,7 +664,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TVDiskID vDiskId;
         ui64 guid2 = guid;
         while (guid2 == guid) {
-            EntropyPool().Read(&guid2, sizeof(guid2)); 
+            EntropyPool().Read(&guid2, sizeof(guid2));
         }
         ui32 nodeId = runtime.GetNodeId(0);
         TActorId pDiskActorId = MakeBlobStoragePDiskID(nodeId, pDiskId);

@@ -1,7 +1,7 @@
 #include "direct_io.h"
 
-#include <util/generic/utility.h> 
- 
+#include <util/generic/utility.h>
+
 size_t TRandomAccessFileInput::DoRead(void* buf, size_t len) {
     const size_t result = File.Pread(buf, len, Position);
     Position += result;
@@ -15,7 +15,7 @@ TRandomAccessFileInput::TRandomAccessFileInput(TDirectIOBufferedFile& file, ui64
 }
 
 size_t TRandomAccessFileInput::DoSkip(size_t len) {
-    size_t skiped = Min(len, (size_t)Min((ui64)Max<size_t>(), File.GetLength() - Position)); 
+    size_t skiped = Min(len, (size_t)Min((ui64)Max<size_t>(), File.GetLength() - Position));
     Position += skiped;
     return skiped;
 }

@@ -27,7 +27,7 @@ def main():
 
     assert (int(tools[0]) == len(tools[1:])), "tools quantity != tools number!"
 
-    cmd_object = pickle.loads(base64.b64decode(encoded_cmd)) 
+    cmd_object = pickle.loads(base64.b64decode(encoded_cmd))
 
     cmd_object.set_source_root(src_root)
     cmd_object.set_build_root(build_root)

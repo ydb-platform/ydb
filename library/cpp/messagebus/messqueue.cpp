@@ -59,7 +59,7 @@ TBusMessageQueue::~TBusMessageQueue() {
     Stop();
 }
 
-void TBusMessageQueue::Stop() { 
+void TBusMessageQueue::Stop() {
     if (!AtomicCas(&Running, 0, 1)) {
         ShutdownComplete.WaitI();
         return;
@@ -98,14 +98,14 @@ TString TBusMessageQueue::GetStatus(ui16 flags) const {
 
     ss << GetStatusSelf();
 
-    TList<TIntrusivePtr<TBusSessionImpl>> sessions; 
+    TList<TIntrusivePtr<TBusSessionImpl>> sessions;
     {
         TGuard<TMutex> scope(Lock);
         sessions = Sessions;
     }
 
-    for (TList<TIntrusivePtr<TBusSessionImpl>>::const_iterator session = sessions.begin(); 
-         session != sessions.end(); ++session) { 
+    for (TList<TIntrusivePtr<TBusSessionImpl>>::const_iterator session = sessions.begin();
+         session != sessions.end(); ++session) {
         ss << Endl;
         ss << (*session)->GetStatus(flags);
     }
@@ -124,13 +124,13 @@ TString TBusMessageQueue::GetStatus(ui16 flags) const {
     return ss.Str();
 }
 
-TBusClientSessionPtr TBusMessageQueue::CreateSource(TBusProtocol* proto, IBusClientHandler* handler, const TBusClientSessionConfig& config, const TString& name) { 
+TBusClientSessionPtr TBusMessageQueue::CreateSource(TBusProtocol* proto, IBusClientHandler* handler, const TBusClientSessionConfig& config, const TString& name) {
     TRemoteClientSessionPtr session(new TRemoteClientSession(this, proto, handler, config, name));
     Add(session.Get());
     return session.Get();
 }
 
-TBusServerSessionPtr TBusMessageQueue::CreateDestination(TBusProtocol* proto, IBusServerHandler* handler, const TBusClientSessionConfig& config, const TString& name) { 
+TBusServerSessionPtr TBusMessageQueue::CreateDestination(TBusProtocol* proto, IBusServerHandler* handler, const TBusClientSessionConfig& config, const TString& name) {
     TRemoteServerSessionPtr session(new TRemoteServerSession(this, proto, handler, config, name));
     try {
         int port = config.ListenPort;
@@ -150,7 +150,7 @@ TBusServerSessionPtr TBusMessageQueue::CreateDestination(TBusProtocol* proto, IB
     }
 }
 
-TBusServerSessionPtr TBusMessageQueue::CreateDestination(TBusProtocol* proto, IBusServerHandler* handler, const TBusServerSessionConfig& config, const TVector<TBindResult>& bindTo, const TString& name) { 
+TBusServerSessionPtr TBusMessageQueue::CreateDestination(TBusProtocol* proto, IBusServerHandler* handler, const TBusServerSessionConfig& config, const TVector<TBindResult>& bindTo, const TString& name) {
     TRemoteServerSessionPtr session(new TRemoteServerSession(this, proto, handler, config, name));
     try {
         session->Listen(bindTo, this);
@@ -162,23 +162,23 @@ TBusServerSessionPtr TBusMessageQueue::CreateDestination(TBusProtocol* proto, IB
 }
 
 void TBusMessageQueue::Add(TIntrusivePtr<TBusSessionImpl> session) {
-    TGuard<TMutex> scope(Lock); 
-    Sessions.push_back(session); 
+    TGuard<TMutex> scope(Lock);
+    Sessions.push_back(session);
 }
 
 void TBusMessageQueue::Remove(TBusSession* session) {
     TGuard<TMutex> scope(Lock);
-    TList<TIntrusivePtr<TBusSessionImpl>>::iterator it = std::find(Sessions.begin(), Sessions.end(), session); 
+    TList<TIntrusivePtr<TBusSessionImpl>>::iterator it = std::find(Sessions.begin(), Sessions.end(), session);
     Y_VERIFY(it != Sessions.end(), "do not destroy session twice");
     Sessions.erase(it);
 }
 
-void TBusMessageQueue::Destroy(TBusSession* session) { 
+void TBusMessageQueue::Destroy(TBusSession* session) {
     session->Shutdown();
 }
 
 void TBusMessageQueue::DestroyAllSessions() {
-    TList<TIntrusivePtr<TBusSessionImpl>> sessions; 
+    TList<TIntrusivePtr<TBusSessionImpl>> sessions;
     {
         TGuard<TMutex> scope(Lock);
         sessions = Sessions;

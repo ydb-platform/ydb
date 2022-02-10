@@ -1,33 +1,33 @@
 #pragma once
- 
-#include "ylimits.h" 
+
+#include "ylimits.h"
 #include "typelist.h"
- 
+
 #include <util/system/compiler.h>
 #include <util/system/yassert.h>
- 
+
 #ifdef _MSC_VER
-    #include <intrin.h> 
+    #include <intrin.h>
 #endif
 
 namespace NBitOps {
-    namespace NPrivate { 
+    namespace NPrivate {
         template <unsigned N, typename T>
-        struct TClp2Helper { 
+        struct TClp2Helper {
             static Y_FORCE_INLINE T Calc(T t) noexcept {
-                const T prev = TClp2Helper<N / 2, T>::Calc(t); 
- 
-                return prev | (prev >> N); 
-            } 
-        }; 
- 
+                const T prev = TClp2Helper<N / 2, T>::Calc(t);
+
+                return prev | (prev >> N);
+            }
+        };
+
         template <typename T>
-        struct TClp2Helper<0u, T> { 
+        struct TClp2Helper<0u, T> {
             static Y_FORCE_INLINE T Calc(T t) noexcept {
-                return t - 1; 
-            } 
-        }; 
- 
+                return t - 1;
+            }
+        };
+
         extern const ui64 WORD_MASK[];
         extern const ui64 INVERSE_WORD_MASK[];
 
@@ -67,7 +67,7 @@ namespace NBitOps {
             Y_ASSERT(value); // because __builtin_clz* have undefined result for zero.
             return std::numeric_limits<unsigned long>::digits - __builtin_clzl(value);
         }
- 
+
         inline unsigned GetValueBitCountImpl(unsigned long long value) noexcept {
             Y_ASSERT(value); // because __builtin_clz* have undefined result for zero.
             return std::numeric_limits<unsigned long long>::digits - __builtin_clzll(value);
@@ -87,7 +87,7 @@ namespace NBitOps {
             return result;
         }
 #endif
- 
+
 #if defined(__GNUC__)
         inline unsigned CountTrailingZeroBitsImpl(unsigned int value) noexcept {
             Y_ASSERT(value); // because __builtin_ctz* have undefined result for zero.
@@ -181,7 +181,7 @@ namespace NBitOps {
             return value;
         }
 
-    #if defined(_x86_64_) 
+    #if defined(_x86_64_)
         Y_FORCE_INLINE ui64 RotateBitsRightImpl(ui64 value, ui8 shift) noexcept {
             __asm__("rorq   %%cl, %0"
                     : "=r"(value)
@@ -195,17 +195,17 @@ namespace NBitOps {
                     : "0"(value), "c"(shift));
             return value;
         }
-    #endif 
+    #endif
 #endif
-    } 
-} 
+    }
+}
 
 /**
  * Computes the next power of 2 higher or equal to the integer parameter `t`.
  * If `t` is a power of 2 will return `t`.
  * Result is undefined for `t == 0`.
  */
-template <typename T> 
+template <typename T>
 static inline T FastClp2(T t) noexcept {
     Y_ASSERT(t > 0);
     using TCvt = typename ::TUnsignedInts::template TSelectBy<TSizeOfPredicate<sizeof(T)>::template TResult>::type;
@@ -219,17 +219,17 @@ template <typename T>
 Y_CONST_FUNCTION constexpr bool IsPowerOf2(T v) noexcept {
     return v > 0 && (v & (v - 1)) == 0;
 }
- 
+
 /**
  * Returns the number of leading 0-bits in `value`, starting at the most significant bit position.
  */
-template <typename T> 
+template <typename T>
 static inline unsigned GetValueBitCount(T value) noexcept {
     Y_ASSERT(value > 0);
     using TCvt = typename ::TUnsignedInts::template TSelectBy<TSizeOfPredicate<sizeof(T)>::template TResult>::type;
     return ::NBitOps::NPrivate::GetValueBitCountImpl(static_cast<TCvt>(value));
-} 
- 
+}
+
 /**
  * Returns the number of trailing 0-bits in `value`, starting at the least significant bit position
  */
@@ -238,7 +238,7 @@ static inline unsigned CountTrailingZeroBits(T value) noexcept {
     Y_ASSERT(value > 0);
     using TCvt = typename ::TUnsignedInts::template TSelectBy<TSizeOfPredicate<sizeof(T)>::template TResult>::type;
     return ::NBitOps::NPrivate::CountTrailingZeroBitsImpl(static_cast<TCvt>(value));
-} 
+}
 
 /*
  * Returns 64-bit mask with `bits` lower bits set.
@@ -377,7 +377,7 @@ Y_FORCE_INLINE ui64 ReverseBits(ui64 t) {
  */
 template <typename T>
 Y_FORCE_INLINE T ReverseBits(T v, ui64 bits) {
-    return bits ? (T(v & ::InverseMaskLowerBits(bits)) | T(ReverseBits(T(v & ::MaskLowerBits(bits)))) >> ((ui64{sizeof(T)} << ui64{3}) - bits)) : v; 
+    return bits ? (T(v & ::InverseMaskLowerBits(bits)) | T(ReverseBits(T(v & ::MaskLowerBits(bits)))) >> ((ui64{sizeof(T)} << ui64{3}) - bits)) : v;
 }
 
 /*
@@ -428,7 +428,7 @@ constexpr T RotateBitsRightCT(T value, const ui8 shift) noexcept {
 /* Remain `size` bits to current `offset` of `value`
    size, offset are less than number of bits in size_type
  */
-template <size_t Offset, size_t Size, class T> 
+template <size_t Offset, size_t Size, class T>
 Y_FORCE_INLINE T SelectBits(T value) {
     static_assert(Size < sizeof(T) * 8, "violated: Size < sizeof(T) * 8");
     static_assert(Offset < sizeof(T) * 8, "violated: Offset < sizeof(T) * 8");
@@ -439,7 +439,7 @@ Y_FORCE_INLINE T SelectBits(T value) {
 /* Set `size` bits of `bits` to current offset of `value`. Requires that bits <= (1 << size) - 1
    size, offset are less than number of bits in size_type
  */
-template <size_t Offset, size_t Size, class T> 
+template <size_t Offset, size_t Size, class T>
 void SetBits(T& value, T bits) {
     static_assert(Size < sizeof(T) * 8, "violated: Size < sizeof(T) * 8");
     static_assert(Offset < sizeof(T) * 8, "violated: Offset < sizeof(T) * 8");

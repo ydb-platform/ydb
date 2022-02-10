@@ -1,4 +1,4 @@
-LIBRARY() 
+LIBRARY()
 
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
@@ -9,13 +9,13 @@ IF (TSTRING_IS_STD_STRING)
     CFLAGS(GLOBAL -DTSTRING_IS_STD_STRING)
 ENDIF()
 
-JOIN_SRCS( 
-    all_charset.cpp 
-    generated/unidata.cpp 
-    recode_result.cpp 
-    unicode_table.cpp 
-    unidata.cpp 
-    utf8.cpp 
+JOIN_SRCS(
+    all_charset.cpp
+    generated/unidata.cpp
+    recode_result.cpp
+    unicode_table.cpp
+    unidata.cpp
+    utf8.cpp
     wide.cpp
 )
 

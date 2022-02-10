@@ -12,29 +12,29 @@ namespace NBus {
         TGranUp(TDuration gran)
             : Gran(gran)
             , Next(TInstant::MicroSeconds(0))
-        { 
-        } 
+        {
+        }
 
-        template <typename TFunctor> 
-        void Update(TFunctor functor, TInstant now, bool force = false) { 
-            if (force || now > Next) 
+        template <typename TFunctor>
+        void Update(TFunctor functor, TInstant now, bool force = false) {
+            if (force || now > Next)
                 Set(functor(), now);
         }
 
-        void Update(const TItem& item, TInstant now, bool force = false) { 
-            if (force || now > Next) 
+        void Update(const TItem& item, TInstant now, bool force = false) {
+            if (force || now > Next)
                 Set(item, now);
         }
 
-        TItem Get() const noexcept { 
-            TGuard<TLocker> guard(Lock); 
+        TItem Get() const noexcept {
+            TGuard<TLocker> guard(Lock);
 
             return Item;
         }
 
     protected:
-        void Set(const TItem& item, TInstant now) { 
-            TGuard<TLocker> guard(Lock); 
+        void Set(const TItem& item, TInstant now) {
+            TGuard<TLocker> guard(Lock);
 
             Item = item;
 
@@ -43,8 +43,8 @@ namespace NBus {
 
     private:
         const TDuration Gran;
-        TLocker Lock; 
-        TItem Item; 
-        TInstant Next; 
+        TLocker Lock;
+        TItem Item;
+        TInstant Next;
     };
 }

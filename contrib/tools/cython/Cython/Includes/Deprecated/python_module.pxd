@@ -1,2 +1,2 @@
 # Present for backwards compatibility
-from cpython.module cimport * 
+from cpython.module cimport *

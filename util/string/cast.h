@@ -1,31 +1,31 @@
 #pragma once
- 
+
 #include <util/system/defaults.h>
-#include <util/stream/str.h> 
+#include <util/stream/str.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/typetraits.h> 
+#include <util/generic/typetraits.h>
 #include <util/generic/yexception.h>
- 
-/* 
- * specialized for all arithmetic types 
- */ 
- 
-template <class T> 
-size_t ToStringImpl(T t, char* buf, size_t len); 
- 
+
+/*
+ * specialized for all arithmetic types
+ */
+
+template <class T>
+size_t ToStringImpl(T t, char* buf, size_t len);
+
 /**
  * Converts @c t to string writing not more than @c len bytes to output buffer @c buf.
  * No NULL terminator appended! Throws exception on buffer overflow.
  * @return number of bytes written
  */
-template <class T> 
-inline size_t ToString(const T& t, char* buf, size_t len) { 
+template <class T>
+inline size_t ToString(const T& t, char* buf, size_t len) {
     using TParam = typename TTypeTraits<T>::TFuncParam;
- 
-    return ToStringImpl<TParam>(t, buf, len); 
-} 
- 
+
+    return ToStringImpl<TParam>(t, buf, len);
+}
+
 /**
  * Floating point to string conversion mode, values are enforced by `dtoa_impl.cpp`.
  */
@@ -49,108 +49,108 @@ enum EFloatToStringMode {
 size_t FloatToString(float t, char* buf, size_t len, EFloatToStringMode mode = PREC_AUTO, int ndigits = 0);
 size_t FloatToString(double t, char* buf, size_t len, EFloatToStringMode mode = PREC_AUTO, int ndigits = 0);
 
-template <typename T> 
+template <typename T>
 inline TString FloatToString(const T& t, EFloatToStringMode mode = PREC_AUTO, int ndigits = 0) {
     char buf[512]; // Max<double>() with mode = PREC_POINT_DIGITS has 309 digits before the decimal point
     size_t count = FloatToString(t, buf, sizeof(buf), mode, ndigits);
     return TString(buf, count);
 }
 
-namespace NPrivate { 
-    template <class T, bool isSimple> 
-    struct TToString { 
+namespace NPrivate {
+    template <class T, bool isSimple>
+    struct TToString {
         static inline TString Cvt(const T& t) {
-            char buf[512]; 
- 
+            char buf[512];
+
             return TString(buf, ToString<T>(t, buf, sizeof(buf)));
-        } 
-    }; 
- 
-    template <class T> 
-    struct TToString<T, false> { 
+        }
+    };
+
+    template <class T>
+    struct TToString<T, false> {
         static inline TString Cvt(const T& t) {
             TString s;
             TStringOutput o(s);
             o << t;
             return s;
-        } 
-    }; 
-} 
- 
-/* 
- * some clever implementations... 
- */ 
-template <class T> 
+        }
+    };
+}
+
+/*
+ * some clever implementations...
+ */
+template <class T>
 inline TString ToString(const T& t) {
     using TR = std::remove_cv_t<T>;
- 
+
     return ::NPrivate::TToString<TR, std::is_arithmetic<TR>::value>::Cvt((const TR&)t);
-} 
- 
+}
+
 inline const TString& ToString(const TString& s) noexcept {
-    return s; 
-} 
- 
+    return s;
+}
+
 inline const TString& ToString(TString& s) noexcept {
-    return s; 
-} 
- 
+    return s;
+}
+
 inline TString ToString(const char* s) {
-    return s; 
-} 
- 
+    return s;
+}
+
 inline TString ToString(char* s) {
-    return s; 
-} 
- 
-/* 
+    return s;
+}
+
+/*
  * Wrapper for wide strings.
  */
-template <class T> 
+template <class T>
 inline TUtf16String ToWtring(const T& t) {
     return TUtf16String::FromAscii(ToString(t));
 }
 
 inline const TUtf16String& ToWtring(const TUtf16String& w) {
-    return w; 
-} 
- 
+    return w;
+}
+
 inline const TUtf16String& ToWtring(TUtf16String& w) {
-    return w; 
-} 
- 
+    return w;
+}
+
 struct TFromStringException: public TBadCastException {
 };
 
 /*
- * specialized for: 
+ * specialized for:
  *  bool
- *  short 
- *  unsigned short 
- *  int 
- *  unsigned int 
- *  long 
- *  unsigned long 
- *  long long 
- *  unsigned long long 
- *  float 
- *  double 
- *  long double 
- */ 
+ *  short
+ *  unsigned short
+ *  int
+ *  unsigned int
+ *  long
+ *  unsigned long
+ *  long long
+ *  unsigned long long
+ *  float
+ *  double
+ *  long double
+ */
 template <typename T, typename TChar>
 T FromStringImpl(const TChar* data, size_t len);
- 
+
 template <typename T, typename TChar>
 inline T FromString(const TChar* data, size_t len) {
-    return ::FromStringImpl<T>(data, len); 
-} 
- 
+    return ::FromStringImpl<T>(data, len);
+}
+
 template <typename T, typename TChar>
 inline T FromString(const TChar* data) {
     return ::FromString<T>(data, std::char_traits<TChar>::length(data));
-} 
- 
-template <class T> 
+}
+
+template <class T>
 inline T FromString(const TStringBuf& s) {
     return ::FromString<T>(s.data(), s.size());
 }
@@ -158,13 +158,13 @@ inline T FromString(const TStringBuf& s) {
 template <class T>
 inline T FromString(const TString& s) {
     return ::FromString<T>(s.data(), s.size());
-} 
- 
-template <class T> 
-inline T FromString(const std::string& s) { 
-    return ::FromString<T>(s.data(), s.size()); 
-} 
- 
+}
+
+template <class T>
+inline T FromString(const std::string& s) {
+    return ::FromString<T>(s.data(), s.size());
+}
+
 template <>
 inline TString FromString<TString>(const TString& s) {
     return s;
@@ -256,11 +256,11 @@ inline bool TryFromString(const TString& s, T& result) {
 }
 
 template <class T>
-inline bool TryFromString(const std::string& s, T& result) { 
-    return TryFromString<T>(s.data(), s.size(), result); 
-} 
- 
-template <class T> 
+inline bool TryFromString(const std::string& s, T& result) {
+    return TryFromString<T>(s.data(), s.size(), result);
+}
+
+template <class T>
 inline bool TryFromString(const TWtringBuf& s, T& result) {
     return TryFromString<T>(s.data(), s.size(), result);
 }
@@ -308,9 +308,9 @@ inline T FromStringWithDefault(const TStringType& s) {
     return FromStringWithDefault<T>(s, T());
 }
 
-double StrToD(const char* b, char** se); 
-double StrToD(const char* b, const char* e, char** se); 
- 
+double StrToD(const char* b, char** se);
+double StrToD(const char* b, const char* e, char** se);
+
 template <int base, class T>
 size_t IntToString(T t, char* buf, size_t len);
 

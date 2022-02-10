@@ -1,29 +1,29 @@
-#pragma once 
- 
+#pragma once
+
 #include <util/system/compiler.h>
-#include <util/system/types.h> 
- 
+#include <util/system/types.h>
+
 #include <utility>
 
-namespace NBench { 
-    namespace NCpu { 
-        struct TParams { 
-            inline size_t Iterations() const noexcept { 
-                return Iterations_; 
-            } 
- 
-            const size_t Iterations_; 
-        }; 
- 
-        using TUserFunc = void(TParams&); 
- 
-        struct TRegistar { 
-            TRegistar(const char* name, TUserFunc func); 
- 
-            char Buf[128]; 
-        }; 
-    } 
- 
+namespace NBench {
+    namespace NCpu {
+        struct TParams {
+            inline size_t Iterations() const noexcept {
+                return Iterations_;
+            }
+
+            const size_t Iterations_;
+        };
+
+        using TUserFunc = void(TParams&);
+
+        struct TRegistar {
+            TRegistar(const char* name, TUserFunc func);
+
+            char Buf[128];
+        };
+    }
+
     /**
      * Functions that states "I can read and write everywhere in memory".
      *
@@ -42,10 +42,10 @@ namespace NBench {
 
 #if defined(__GNUC__)
     Y_FORCE_INLINE void Clobber() {
-        asm volatile("" 
-                     : 
-                     : 
-                     : "memory"); 
+        asm volatile(""
+                     :
+                     :
+                     : "memory");
     }
 #elif defined(_MSC_VER)
     Y_FORCE_INLINE void Clobber() {
@@ -60,10 +60,10 @@ namespace NBench {
 #if defined(__GNUC__)
     template <typename T>
     Y_FORCE_INLINE void Escape(T* p) {
-        asm volatile("" 
-                     : 
-                     : "g"(p) 
-                     : "memory"); 
+        asm volatile(""
+                     :
+                     : "g"(p)
+                     : "memory");
     }
 #else
     template <typename T>
@@ -77,16 +77,16 @@ namespace NBench {
      * @param       Unused variable (e.g. return value of benchmarked function).
      */
     template <typename T>
-    Y_FORCE_INLINE void DoNotOptimize(T&& datum) { 
+    Y_FORCE_INLINE void DoNotOptimize(T&& datum) {
         ::DoNotOptimizeAway(std::forward<T>(datum));
-    } 
+    }
 
     int Main(int argc, char** argv);
-} 
- 
+}
+
 #define Y_CPU_BENCHMARK(name, cnt)                              \
     namespace N_bench_##name {                                  \
         static void Run(::NBench::NCpu::TParams&);              \
         const ::NBench::NCpu::TRegistar benchmark(#name, &Run); \
     }                                                           \
-    static void N_bench_##name::Run(::NBench::NCpu::TParams& cnt) 
+    static void N_bench_##name::Run(::NBench::NCpu::TParams& cnt)

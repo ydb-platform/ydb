@@ -11,7 +11,7 @@ PEERDIR(
 
 SRCS(
     fixed_point.h
-    longs.cpp 
+    longs.cpp
     packed.h
     packedfloat.cpp
     packedfloat.h

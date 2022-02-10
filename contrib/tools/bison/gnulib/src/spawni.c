@@ -21,7 +21,7 @@
 #include <spawn.h>
 #include "spawn_int.h"
 
-#include "palloca.h" 
+#include "palloca.h"
 #include <errno.h>
 
 #include <fcntl.h>

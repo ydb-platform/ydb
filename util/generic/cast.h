@@ -1,15 +1,15 @@
 #pragma once
- 
-#include "typetraits.h" 
+
+#include "typetraits.h"
 #include "yexception.h"
- 
-#include <util/system/compat.h> 
+
+#include <util/system/compat.h>
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
-#include <util/system/yassert.h> 
- 
+#include <util/system/yassert.h>
+
 #include <cstdlib>
- 
+
 template <class T, class F>
 static inline T VerifyDynamicCast(F f) {
     if (!f) {
@@ -23,10 +23,10 @@ static inline T VerifyDynamicCast(F f) {
     return ret;
 }
 
-#if !defined(NDEBUG) 
-    #define USE_DEBUG_CHECKED_CAST 
-#endif 
- 
+#if !defined(NDEBUG)
+    #define USE_DEBUG_CHECKED_CAST
+#endif
+
 namespace NPrivate {
     template <typename T, typename F>
     static T DynamicCast(F f) {
@@ -34,59 +34,59 @@ namespace NPrivate {
     }
 }
 
-/* 
- * replacement for dynamic_cast(dynamic_cast in debug mode, else static_cast) 
- */ 
-template <class T, class F> 
-static inline T CheckedCast(F f) { 
-#if defined(USE_DEBUG_CHECKED_CAST) 
+/*
+ * replacement for dynamic_cast(dynamic_cast in debug mode, else static_cast)
+ */
+template <class T, class F>
+static inline T CheckedCast(F f) {
+#if defined(USE_DEBUG_CHECKED_CAST)
     return VerifyDynamicCast<T>(f);
-#else 
-    /* Make sure F is polymorphic. 
-     * Without this cast, CheckedCast with non-polymorphic F 
-     * incorrectly compiled without error in release mode. 
-     */ 
-    { 
-        auto&& x = &::NPrivate::DynamicCast<T, F>; 
- 
-        (void)x; 
-    } 
- 
-    return static_cast<T>(f); 
+#else
+    /* Make sure F is polymorphic.
+     * Without this cast, CheckedCast with non-polymorphic F
+     * incorrectly compiled without error in release mode.
+     */
+    {
+        auto&& x = &::NPrivate::DynamicCast<T, F>;
+
+        (void)x;
+    }
+
+    return static_cast<T>(f);
 #endif // USE_DEBUG_CHECKED_CAST
-} 
- 
-/* 
- * be polite 
- */ 
-#undef USE_DEBUG_CHECKED_CAST 
- 
-template <bool isUnsigned> 
-class TInteger; 
- 
-template <> 
-class TInteger<true> { 
-public: 
-    template <class TUnsigned> 
+}
+
+/*
+ * be polite
+ */
+#undef USE_DEBUG_CHECKED_CAST
+
+template <bool isUnsigned>
+class TInteger;
+
+template <>
+class TInteger<true> {
+public:
+    template <class TUnsigned>
     static constexpr bool IsNegative(TUnsigned) noexcept {
-        return false; 
-    } 
-}; 
- 
-template <> 
-class TInteger<false> { 
-public: 
-    template <class TSigned> 
+        return false;
+    }
+};
+
+template <>
+class TInteger<false> {
+public:
+    template <class TSigned>
     static constexpr bool IsNegative(const TSigned value) noexcept {
-        return value < 0; 
-    } 
-}; 
- 
-template <class TType> 
+        return value < 0;
+    }
+};
+
+template <class TType>
 constexpr bool IsNegative(const TType value) noexcept {
     return TInteger<std::is_unsigned<TType>::value>::IsNegative(value);
-} 
- 
+}
+
 namespace NPrivate {
     template <class T>
     using TUnderlyingTypeOrSelf = typename std::conditional<
@@ -106,8 +106,8 @@ namespace NPrivate {
     };
 }
 
-template <class TSmallInt, class TLargeInt> 
-constexpr std::enable_if_t<::NPrivate::TSafelyConvertible<TSmallInt, TLargeInt>::Result, TSmallInt> SafeIntegerCast(TLargeInt largeInt) noexcept { 
+template <class TSmallInt, class TLargeInt>
+constexpr std::enable_if_t<::NPrivate::TSafelyConvertible<TSmallInt, TLargeInt>::Result, TSmallInt> SafeIntegerCast(TLargeInt largeInt) noexcept {
     return static_cast<TSmallInt>(largeInt);
 }
 
@@ -125,22 +125,22 @@ inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result,
     }
 
     TSmallInt smallInt = TSmallInt(largeInt);
- 
+
     if (std::is_signed<TSmallInt>::value && std::is_unsigned<TLargeInt>::value) {
         if (IsNegative(smallInt)) {
             ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '"
                                        << TypeName<TSmallInt>()
                                        << "', positive value converted to negative";
-        } 
-    } 
- 
+        }
+    }
+
     if (TLargeInt(smallInt) != largeInt) {
         ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '"
                                    << TypeName<TSmallInt>() << "', loss of data";
-    } 
- 
+    }
+
     return static_cast<TSmall>(smallInt);
-} 
+}
 
 template <class TSmallInt, class TLargeInt>
 inline TSmallInt IntegerCast(TLargeInt largeInt) noexcept {

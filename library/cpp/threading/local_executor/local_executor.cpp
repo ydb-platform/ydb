@@ -40,7 +40,7 @@ namespace {
         NPar::TLocallyExecutableFunction Exec;
         int FirstId, LastId;
         TVector<NThreading::TPromise<void>> Promises;
- 
+
     public:
         TFunctionWrapperWithPromise(NPar::TLocallyExecutableFunction exec, int firstId, int lastId)
             : Exec(std::move(exec))

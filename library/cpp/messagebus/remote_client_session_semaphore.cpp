@@ -16,7 +16,7 @@ TRemoteClientSessionSemaphore::TRemoteClientSessionSemaphore(TAtomicBase limit, 
     Y_UNUSED(Name);
 }
 
-TRemoteClientSessionSemaphore::~TRemoteClientSessionSemaphore() { 
+TRemoteClientSessionSemaphore::~TRemoteClientSessionSemaphore() {
     Y_VERIFY(AtomicGet(Current) == 0);
 }
 

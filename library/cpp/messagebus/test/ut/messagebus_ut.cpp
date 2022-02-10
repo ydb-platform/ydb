@@ -10,8 +10,8 @@
 
 #include <util/network/sock.h>
 
-#include <utility> 
- 
+#include <utility>
+
 using namespace NBus;
 using namespace NBus::NTest;
 
@@ -23,10 +23,10 @@ namespace {
 
         TExampleClientSlowOnMessageSent()
             : SentCompleted(0)
-        { 
-        } 
+        {
+        }
 
-        ~TExampleClientSlowOnMessageSent() override { 
+        ~TExampleClientSlowOnMessageSent() override {
             Session->Shutdown();
         }
 
@@ -48,7 +48,7 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TMessageBusTests) {
     void TestDestinationTemplate(bool useCompression, bool ackMessageBeforeReply,
-                                 const TBusServerSessionConfig& sessionConfig) { 
+                                 const TBusServerSessionConfig& sessionConfig) {
         TObjectCountCheck objectCountCheck;
 
         TExampleServer server;
@@ -121,17 +121,17 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.SendMessagesWaitReplies(19, serverAddr);
     }
 
-    struct TestNoServerImplClient: public TExampleClient { 
+    struct TestNoServerImplClient: public TExampleClient {
         TTestSync TestSync;
         int failures = 0;
 
-        template <typename... Args> 
-        TestNoServerImplClient(Args&&... args) 
-            : TExampleClient(std::forward<Args>(args)...) 
-        { 
-        } 
+        template <typename... Args>
+        TestNoServerImplClient(Args&&... args)
+            : TExampleClient(std::forward<Args>(args)...)
+        {
+        }
 
-        ~TestNoServerImplClient() override { 
+        ~TestNoServerImplClient() override {
             Session->Shutdown();
         }
 
@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             if (oneWay) {
                 status = client.Session->SendMessageOneWay(new TExampleRequest(&client.Proto.RequestCount), &noServerAddr);
             } else {
-                TAutoPtr<TBusMessage> message(new TExampleRequest(&client.Proto.RequestCount)); 
+                TAutoPtr<TBusMessage> message(new TExampleRequest(&client.Proto.RequestCount));
                 status = client.Session->SendMessageAutoPtr(message, &noServerAddr);
             }
 
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             client.TestSync.WaitForAndIncrement(count * 2 + 1);
         }
 
-        client.TestSync.WaitForAndIncrement(count * 2); 
+        client.TestSync.WaitForAndIncrement(count * 2);
     }
 
     void HangingServerImpl(unsigned port) {
@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.WaitReplies();
     }
 
-    struct TSendTimeoutCheckerExampleClient: public TExampleClient { 
+    struct TSendTimeoutCheckerExampleClient: public TExampleClient {
         static TBusClientSessionConfig SessionConfig(bool periodLessThanConnectTimeout) {
             TBusClientSessionConfig sessionConfig;
             if (periodLessThanConnectTimeout) {
@@ -256,8 +256,8 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
         TSendTimeoutCheckerExampleClient(bool periodLessThanConnectTimeout)
             : TExampleClient(SessionConfig(periodLessThanConnectTimeout))
-        { 
-        } 
+        {
+        }
 
         ~TSendTimeoutCheckerExampleClient() override {
             Session->Shutdown();
@@ -470,7 +470,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.WaitForError(MESSAGE_MESSAGE_TOO_LARGE);
     }
 
-    struct TServerForResponseTooLarge: public TExampleServer { 
+    struct TServerForResponseTooLarge: public TExampleServer {
         TTestSync TestSync;
 
         static TBusServerSessionConfig Config() {
@@ -481,10 +481,10 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
         TServerForResponseTooLarge()
             : TExampleServer("TServerForResponseTooLarge", Config())
-        { 
-        } 
+        {
+        }
 
-        ~TServerForResponseTooLarge() override { 
+        ~TServerForResponseTooLarge() override {
             Session->Shutdown();
         }
 
@@ -530,7 +530,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         UNIT_ASSERT_VALUES_EQUAL(1, client.Session->GetInFlight());
     }
 
-    struct TServerForRequestTooLarge: public TExampleServer { 
+    struct TServerForRequestTooLarge: public TExampleServer {
         TTestSync TestSync;
 
         static TBusServerSessionConfig Config() {
@@ -541,10 +541,10 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
         TServerForRequestTooLarge()
             : TExampleServer("TServerForRequestTooLarge", Config())
-        { 
-        } 
+        {
+        }
 
-        ~TServerForRequestTooLarge() override { 
+        ~TServerForRequestTooLarge() override {
             Session->Shutdown();
         }
 
@@ -674,7 +674,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.WaitReplies();
     }
 
-    struct TResetAfterSendOneWayErrorInCallbackClient: public TExampleClient { 
+    struct TResetAfterSendOneWayErrorInCallbackClient: public TExampleClient {
         TTestSync TestSync;
 
         static TBusClientSessionConfig SessionConfig() {
@@ -691,7 +691,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         {
         }
 
-        ~TResetAfterSendOneWayErrorInCallbackClient() override { 
+        ~TResetAfterSendOneWayErrorInCallbackClient() override {
             Session->Shutdown();
         }
 
@@ -716,10 +716,10 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.TestSync.WaitForAndIncrement(2);
     }
 
-    struct TResetAfterSendMessageOneWayDuringShutdown: public TExampleClient { 
+    struct TResetAfterSendMessageOneWayDuringShutdown: public TExampleClient {
         TTestSync TestSync;
 
-        ~TResetAfterSendMessageOneWayDuringShutdown() override { 
+        ~TResetAfterSendMessageOneWayDuringShutdown() override {
             Session->Shutdown();
         }
 
@@ -770,10 +770,10 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         TestNoServerImpl(17, true);
     }
 
-    struct TResetAfterSendOneWaySuccessClient: public TExampleClient { 
+    struct TResetAfterSendOneWaySuccessClient: public TExampleClient {
         TTestSync TestSync;
 
-        ~TResetAfterSendOneWaySuccessClient() override { 
+        ~TResetAfterSendOneWaySuccessClient() override {
             Session->Shutdown();
         }
 
@@ -835,7 +835,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         TExampleProtocol proto;
         TBusServerHandlerError handler;
         TBusServerSessionPtr session = TBusServerSession::Create(
-            &proto, &handler, TBusServerSessionConfig(), queue); 
+            &proto, &handler, TBusServerSessionConfig(), queue);
 
         unsigned port = session->GetActualListenPort();
         UNIT_ASSERT(port > 0);
@@ -873,7 +873,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         size_t pos = 0;
 
         while (pos < sizeof(response)) {
-            size_t count = input.Read(((char*)&response) + pos, sizeof(response) - pos); 
+            size_t count = input.Read(((char*)&response) + pos, sizeof(response) - pos);
             pos += count;
         }
 
@@ -882,10 +882,10 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         UNIT_ASSERT_VALUES_EQUAL(YBUS_VERSION, response.GetVersionInternal());
     }
 
-    struct TOnConnectionEventClient: public TExampleClient { 
+    struct TOnConnectionEventClient: public TExampleClient {
         TTestSync Sync;
 
-        ~TOnConnectionEventClient() override { 
+        ~TOnConnectionEventClient() override {
             Session->Shutdown();
         }
 
@@ -913,13 +913,13 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         }
     };
 
-    struct TOnConnectionEventServer: public TExampleServer { 
+    struct TOnConnectionEventServer: public TExampleServer {
         TOnConnectionEventServer()
-            : TExampleServer("TOnConnectionEventServer") 
-        { 
-        } 
+            : TExampleServer("TOnConnectionEventServer")
+        {
+        }
 
-        ~TOnConnectionEventServer() override { 
+        ~TOnConnectionEventServer() override {
             Session->Shutdown();
         }
 
@@ -963,9 +963,9 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.Sync.WaitForAndIncrement(3);
     }
 
-    struct TServerForQuotaWake: public TExampleServer { 
+    struct TServerForQuotaWake: public TExampleServer {
         TSystemEvent GoOn;
-        TMutex OneLock; 
+        TMutex OneLock;
 
         TOnMessageContext OneMessage;
 
@@ -981,16 +981,16 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
         TServerForQuotaWake()
             : TExampleServer("TServerForQuotaWake", Config())
-        { 
-        } 
+        {
+        }
 
-        ~TServerForQuotaWake() override { 
+        ~TServerForQuotaWake() override {
             Session->Shutdown();
         }
 
         void OnMessage(TOnMessageContext& req) override {
             if (!GoOn.Wait(0)) {
-                TGuard<TMutex> guard(OneLock); 
+                TGuard<TMutex> guard(OneLock);
 
                 UNIT_ASSERT(!OneMessage);
 
@@ -1000,7 +1000,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         }
 
         void WakeOne() {
-            TGuard<TMutex> guard(OneLock); 
+            TGuard<TMutex> guard(OneLock);
 
             UNIT_ASSERT(!!OneMessage);
 
@@ -1035,13 +1035,13 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
                 count++;
 
             } else if (status == MESSAGE_BUSY) {
-                if (count == test_msg_count) { 
+                if (count == test_msg_count) {
                     TInstant now = TInstant::Now();
 
-                    if (start.GetValue() == 0) { 
+                    if (start.GetValue() == 0) {
                         start = now;
 
-                        // TODO: properly check that server is blocked 
+                        // TODO: properly check that server is blocked
                     } else if (start + TDuration::MilliSeconds(100) < now) {
                         break;
                     }

@@ -1,10 +1,10 @@
-LIBRARY() 
+LIBRARY()
 
 OWNER(
     mvel
     g:base
 )
- 
+
 SRCS(
     assign.cpp
     common.cpp
@@ -15,8 +15,8 @@ SRCS(
     parse.cpp
     qargs.cpp
     uri.cpp
-    encodefsm.rl6 
-    parsefsm.rl6 
+    encodefsm.rl6
+    parsefsm.rl6
 )
 
 PEERDIR(

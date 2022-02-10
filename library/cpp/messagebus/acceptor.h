@@ -11,50 +11,50 @@
 
 #include <util/system/event.h>
 
-namespace NBus { 
-    namespace NPrivate { 
-        class TAcceptor 
-           : public NEventLoop::IEventHandler, 
-              private ::NActor::TActor<TAcceptor> { 
-            friend struct TBusSessionImpl; 
-            friend class ::NActor::TActor<TAcceptor>; 
+namespace NBus {
+    namespace NPrivate {
+        class TAcceptor
+           : public NEventLoop::IEventHandler,
+              private ::NActor::TActor<TAcceptor> {
+            friend struct TBusSessionImpl;
+            friend class ::NActor::TActor<TAcceptor>;
 
-        public: 
-            TAcceptor(TBusSessionImpl* session, ui64 acceptorId, SOCKET socket, const TNetAddr& addr); 
+        public:
+            TAcceptor(TBusSessionImpl* session, ui64 acceptorId, SOCKET socket, const TNetAddr& addr);
 
-            void HandleEvent(SOCKET socket, void* cookie) override; 
+            void HandleEvent(SOCKET socket, void* cookie) override;
 
-            void Shutdown(); 
+            void Shutdown();
 
-            inline ::NActor::TActor<TAcceptor>* GetActor() { 
-                return this; 
-            } 
+            inline ::NActor::TActor<TAcceptor>* GetActor() {
+                return this;
+            }
 
-        private: 
-            void SendStatus(TInstant now); 
-            void Act(::NActor::TDefaultTag); 
+        private:
+            void SendStatus(TInstant now);
+            void Act(::NActor::TDefaultTag);
 
-        private: 
-            const ui64 AcceptorId; 
+        private:
+            const ui64 AcceptorId;
 
-            TBusSessionImpl* const Session; 
-            NEventLoop::TChannelPtr Channel; 
+            TBusSessionImpl* const Session;
+            NEventLoop::TChannelPtr Channel;
 
-            TAcceptorStatus Stats; 
+            TAcceptorStatus Stats;
 
-            TAtomicShutdownState ShutdownState; 
+            TAtomicShutdownState ShutdownState;
 
-            struct TGranStatus { 
-                TGranStatus(TDuration gran) 
-                    : Listen(gran) 
-                { 
-                } 
+            struct TGranStatus {
+                TGranStatus(TDuration gran)
+                    : Listen(gran)
+                {
+                }
 
-                TGranUp<TAcceptorStatus> Listen; 
-            }; 
+                TGranUp<TAcceptorStatus> Listen;
+            };
 
-            TGranStatus GranStatus; 
+            TGranStatus GranStatus;
         };
 
-    } 
-} 
+    }
+}

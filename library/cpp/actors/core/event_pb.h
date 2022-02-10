@@ -141,14 +141,14 @@ namespace NActors {
         TEventPBBase() = default;
 
         explicit TEventPBBase(const TRecord& rec)
-        { 
+        {
             Record = rec;
-        } 
+        }
 
         explicit TEventPBBase(TRecord&& rec)
-        { 
+        {
             Record = std::move(rec);
-        } 
+        }
 
         TString ToStringHeader() const override {
             return Record.GetTypeName();
@@ -394,7 +394,7 @@ namespace NActors {
         {}
     };
 
-    template <typename TEv, typename TRecord, ui32 TEventType> 
+    template <typename TEv, typename TRecord, ui32 TEventType>
     class TEventPB : public TEventPBBase<TEv, TRecord, TEventType, TRecordHolder<TRecord> > {
         typedef TEventPBBase<TEv, TRecord, TEventType, TRecordHolder<TRecord> > TPbBase;
         // NOTE: No extra fields allowed: TEventPB must be a "template typedef"
@@ -406,25 +406,25 @@ namespace NActors {
     using TEventPBWithArena = TEventPBBase<TEv, TRecord, TEventType, TArenaRecordHolder<TRecord, InitialBlockSize, MaxBlockSize> >;
 
     template <typename TEv, typename TRecord, ui32 TEventType>
-    class TEventShortDebugPB: public TEventPB<TEv, TRecord, TEventType> { 
-    public: 
-        using TBase = TEventPB<TEv, TRecord, TEventType>; 
-        TEventShortDebugPB() = default; 
-        explicit TEventShortDebugPB(const TRecord& rec) 
-            : TBase(rec) 
-        { 
-        } 
-        explicit TEventShortDebugPB(TRecord&& rec) 
-            : TBase(std::move(rec)) 
-        { 
-        } 
-        TString ToString() const override { 
-            return TypeName<TEv>() + " { " + TBase::Record.ShortDebugString() + " }"; 
-        } 
-    }; 
+    class TEventShortDebugPB: public TEventPB<TEv, TRecord, TEventType> {
+    public:
+        using TBase = TEventPB<TEv, TRecord, TEventType>;
+        TEventShortDebugPB() = default;
+        explicit TEventShortDebugPB(const TRecord& rec)
+            : TBase(rec)
+        {
+        }
+        explicit TEventShortDebugPB(TRecord&& rec)
+            : TBase(std::move(rec))
+        {
+        }
+        TString ToString() const override {
+            return TypeName<TEv>() + " { " + TBase::Record.ShortDebugString() + " }";
+        }
+    };
 
     template <typename TEv, typename TRecord, ui32 TEventType>
-    class TEventPreSerializedPB: public TEventPB<TEv, TRecord, TEventType> { 
+    class TEventPreSerializedPB: public TEventPB<TEv, TRecord, TEventType> {
     protected:
         using TBase = TEventPB<TEv, TRecord, TEventType>;
         using TSelf = TEventPreSerializedPB<TEv, TRecord, TEventType>;
@@ -437,13 +437,13 @@ namespace NActors {
 
         explicit TEventPreSerializedPB(const TRecord& rec)
             : TBase(rec)
-        { 
-        } 
+        {
+        }
 
         explicit TEventPreSerializedPB(TRecord&& rec)
             : TBase(std::move(rec))
-        { 
-        } 
+        {
+        }
 
         // when remote event received locally this method will merge preserialized data
         const TRecord& GetRecord() {

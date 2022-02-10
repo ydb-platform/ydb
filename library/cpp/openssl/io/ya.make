@@ -1,16 +1,16 @@
-LIBRARY() 
- 
-OWNER(pg) 
- 
-PEERDIR( 
+LIBRARY()
+
+OWNER(pg)
+
+PEERDIR(
     certs
-    contrib/libs/openssl 
+    contrib/libs/openssl
     library/cpp/openssl/init
     library/cpp/openssl/method
-) 
- 
-SRCS( 
-    stream.cpp 
-) 
- 
-END() 
+)
+
+SRCS(
+    stream.cpp
+)
+
+END()

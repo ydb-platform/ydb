@@ -5,17 +5,17 @@
 #include <util/generic/noncopyable.h>
 
 #include <cstddef>
- 
-struct TLogRecord; 
+
+struct TLogRecord;
 
 // NOTE: be aware that all `TLogBackend`s are registred in singleton.
-class TLogBackend: public TNonCopyable { 
-public: 
-    TLogBackend() noexcept; 
-    virtual ~TLogBackend(); 
- 
-    virtual void WriteData(const TLogRecord& rec) = 0; 
-    virtual void ReopenLog() = 0; 
+class TLogBackend: public TNonCopyable {
+public:
+    TLogBackend() noexcept;
+    virtual ~TLogBackend();
+
+    virtual void WriteData(const TLogRecord& rec) = 0;
+    virtual void ReopenLog() = 0;
 
     // Does not guarantee consistency with previous WriteData() calls:
     // log entries could be written to the new (reopened) log file due to
@@ -27,4 +27,4 @@ public:
     static void ReopenAllBackends(bool flush = true);
 
     virtual size_t QueueSize() const;
-}; 
+};

@@ -1,7 +1,7 @@
 PY23_LIBRARY()
 
-LICENSE(ISC) 
- 
+LICENSE(ISC)
+
 OWNER(g:python-contrib borman)
 
 VERSION(4.8.0)

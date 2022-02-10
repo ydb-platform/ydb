@@ -1,15 +1,15 @@
 #pragma once
 
 #include "codepage.h"
-#include "iconv.h" 
- 
+#include "iconv.h"
+
 #include <util/charset/recode_result.h>
 #include <util/charset/unidata.h>
 #include <util/charset/utf8.h>
 #include <util/charset/wide.h>
 #include <util/generic/string.h>
 #include <util/generic/algorithm.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include <util/memory/tempbuf.h>
 #include <util/system/yassert.h>
 
@@ -19,7 +19,7 @@
 template <typename TCharType>
 inline size_t WideToChar(const TCharType* text, size_t len, char* dest, ECharset enc) {
     Y_ASSERT(SingleByteCodepage(enc));
- 
+
     const char* start = dest;
 
     const Encoder* const encoder = &EncoderByCharset(enc);
@@ -114,7 +114,7 @@ namespace NDetail {
                 return RecodeMultiByteChar(src, dst, encoding);
         }
 
-    } 
+    }
 
     template <typename TCharFrom>
     struct TRecodeTraits;
@@ -124,8 +124,8 @@ namespace NDetail {
         using TCharTo = wchar16;
         using TStringBufTo = TWtringBuf;
         using TStringTo = TUtf16String;
-        enum { ReserveSize = 4 }; // How many TCharFrom characters we should reserve for one TCharTo character in worst case 
-                                  // Here an unicode character can be converted up to 4 bytes of UTF8 
+        enum { ReserveSize = 4 }; // How many TCharFrom characters we should reserve for one TCharTo character in worst case
+                                  // Here an unicode character can be converted up to 4 bytes of UTF8
     };
 
     template <>
@@ -133,7 +133,7 @@ namespace NDetail {
         using TCharTo = char;
         using TStringBufTo = TStringBuf;
         using TStringTo = TString;
-        enum { ReserveSize = 2 }; // possible surrogate pairs ? 
+        enum { ReserveSize = 2 }; // possible surrogate pairs ?
     };
 
     // Operations with destination buffer where recoded string will be written
@@ -203,7 +203,7 @@ namespace NDetail {
         Recode<TCharFrom>(src, res, encoding);
         return res;
     }
-} 
+}
 
 // Write result into @dst. Return string-buffer pointing to re-coded content of @dst.
 
@@ -291,7 +291,7 @@ inline TString WideToChar(const TWtringBuf w, ECharset enc) {
 inline TUtf16String CharToWide(const TStringBuf s, ECharset enc) {
     return CharToWide<false>(s.data(), s.size(), enc);
 }
- 
+
 template <bool robust>
 inline TUtf16String CharToWide(const TStringBuf s, ECharset enc) {
     return CharToWide<robust>(s.data(), s.size(), enc);

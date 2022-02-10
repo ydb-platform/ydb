@@ -54,7 +54,7 @@ struct TRWSpinLock {
             SpinLockPause();
         }
 
-        while (!AtomicCas(&State, TAtomicBase(-1), 1)) { 
+        while (!AtomicCas(&State, TAtomicBase(-1), 1)) {
             SpinLockPause();
         }
     }

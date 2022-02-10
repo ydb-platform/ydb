@@ -134,11 +134,11 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(i64(t), NSc::TValue(i64(t)).ForceIntNumber(), ToString(t));
         UNIT_ASSERT_VALUES_EQUAL_C(double(t), NSc::TValue(double(t)).ForceNumber(), ToString(t));
 
-        UNIT_ASSERT_VALUES_EQUAL_C(i64(t), NSc::TValue(TStringBuf(ToString(i64(t)))).ForceIntNumber(), ToString(t)); 
-        UNIT_ASSERT_VALUES_EQUAL_C(ToString(double(t)), ToString(NSc::TValue(TStringBuf(ToString(double(t)))).ForceNumber()), ToString(t)); 
+        UNIT_ASSERT_VALUES_EQUAL_C(i64(t), NSc::TValue(TStringBuf(ToString(i64(t)))).ForceIntNumber(), ToString(t));
+        UNIT_ASSERT_VALUES_EQUAL_C(ToString(double(t)), ToString(NSc::TValue(TStringBuf(ToString(double(t)))).ForceNumber()), ToString(t));
 
-        UNIT_ASSERT_VALUES_EQUAL_C(ToString(i64(t)), NSc::TValue(TStringBuf(ToString(i64(t)))).ForceString(), ToString(t)); 
-        UNIT_ASSERT_VALUES_EQUAL_C(ToString(double(t)), NSc::TValue(TStringBuf(ToString(double(t)))).ForceString(), ToString(t)); 
+        UNIT_ASSERT_VALUES_EQUAL_C(ToString(i64(t)), NSc::TValue(TStringBuf(ToString(i64(t)))).ForceString(), ToString(t));
+        UNIT_ASSERT_VALUES_EQUAL_C(ToString(double(t)), NSc::TValue(TStringBuf(ToString(double(t)))).ForceString(), ToString(t));
     }
 
     Y_UNIT_TEST(TestForce) {
@@ -258,8 +258,8 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
             DoCheckAssignmentNum<double>(i, iless, imore, ii, "double");
         }
 
-        //        DoCheckAssignment<bool>(true, true, true, "true", "bool"); 
-        //        DoCheckAssignment<bool>(false, false, false, "false", "bool"); 
+        //        DoCheckAssignment<bool>(true, true, true, "true", "bool");
+        //        DoCheckAssignment<bool>(false, false, false, "false", "bool");
 
         for (int i = 1; i < 3; ++i) {
             TString ii = ToString(i);
@@ -299,12 +299,12 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         DoCheckAssignment<const char*>("www", "wwa", "wwz", "\"www\"", "const char*");
         DoCheckAssignmentArr("xxx", "xxa", "xxz", "\"xxx\"", "const char[]");
         DoCheckAssignment<TStringBuf>("yyy", "yya", "yyz", "\"yyy\"", "TStringBuf");
- 
-#if defined(_MSC_VER) 
-        //TODO 
-#else 
+
+#if defined(_MSC_VER)
+        //TODO
+#else
         DoCheckAssignment<TString>("ttt", "tta", "ttz", "\"ttt\"", "TString");
-#endif 
+#endif
 
         NSc::TValue v;
         v.SetDict();
@@ -351,10 +351,10 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         v.Insert(2, "c");
         UNIT_ASSERT_VALUES_EQUAL(v.ToJson(), R"(["a","b","c","d"])");
 
-        v.AppendAll({1, 2, 3}); 
+        v.AppendAll({1, 2, 3});
         UNIT_ASSERT_VALUES_EQUAL(v.ToJson(), R"(["a","b","c","d",1,2,3])");
 
-        TVector<int> d{4, 5, 6}; 
+        TVector<int> d{4, 5, 6};
         v.AppendAll(d);
         UNIT_ASSERT_VALUES_EQUAL(v.ToJson(), R"(["a","b","c","d",1,2,3,4,5,6])");
         UNIT_ASSERT_VALUES_EQUAL(d.size(), 3u);
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         UNIT_ASSERT_VALUES_EQUAL(v.Clone().Clear().AppendAll(s).ToJson(), R"(["x","y","z"])");
         UNIT_ASSERT_VALUES_EQUAL(v.Clone().Clear().AppendAll(TVector<TStringBuf>()).ToJson(), R"([])");
 
-        v.AddAll({{"a", "b"}, {"c", "d"}}); 
+        v.AddAll({{"a", "b"}, {"c", "d"}});
         UNIT_ASSERT_VALUES_EQUAL(v.ToJson(), R"({"a":"b","c":"d"})");
     }
 

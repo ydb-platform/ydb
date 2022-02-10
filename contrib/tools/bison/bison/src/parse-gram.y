@@ -779,7 +779,7 @@ translate_code_braceless (char *code, location loc)
 static void
 add_param (param_type type, char *decl, location loc)
 {
-  static char const alphanum[26 + 26 + 1 + 10 + 1] = 
+  static char const alphanum[26 + 26 + 1 + 10 + 1] =
     "abcdefghijklmnopqrstuvwxyz"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "_"

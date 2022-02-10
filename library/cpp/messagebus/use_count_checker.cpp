@@ -8,7 +8,7 @@ TUseCountChecker::TUseCountChecker() {
 
 TUseCountChecker::~TUseCountChecker() {
     TAtomicBase count = Counter.Val();
-    Y_VERIFY(count == 0, "must not release when count is not zero: %ld", (long)count); 
+    Y_VERIFY(count == 0, "must not release when count is not zero: %ld", (long)count);
 }
 
 void TUseCountChecker::Inc() {
@@ -21,8 +21,8 @@ void TUseCountChecker::Dec() {
 
 TUseCountHolder::TUseCountHolder()
     : CurrentChecker(nullptr)
-{ 
-} 
+{
+}
 
 TUseCountHolder::TUseCountHolder(TUseCountChecker* currentChecker)
     : CurrentChecker(currentChecker)
@@ -32,7 +32,7 @@ TUseCountHolder::TUseCountHolder(TUseCountChecker* currentChecker)
     }
 }
 
-TUseCountHolder::~TUseCountHolder() { 
+TUseCountHolder::~TUseCountHolder() {
     if (!!CurrentChecker) {
         CurrentChecker->Dec();
     }

@@ -1,8 +1,8 @@
 #pragma once
- 
+
 #include <util/generic/fwd.h>
- 
-const char* GetHostName(); 
+
+const char* GetHostName();
 const TString& HostName();
 
 const char* GetFQDNHostName();

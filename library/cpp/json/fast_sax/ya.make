@@ -1,17 +1,17 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     pg
     velavokr
 )
- 
-PEERDIR( 
+
+PEERDIR(
     library/cpp/json/common
-) 
- 
-SRCS( 
-    parser.rl6 
-    unescape.cpp 
-) 
- 
-END() 
+)
+
+SRCS(
+    parser.rl6
+    unescape.cpp
+)
+
+END()

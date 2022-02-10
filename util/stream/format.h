@@ -1,13 +1,13 @@
 #pragma once
 
-#include "mem.h" 
-#include "output.h" 
- 
+#include "mem.h"
+#include "output.h"
+
 #include <util/datetime/base.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/flags.h>
 #include <util/memory/tempbuf.h>
-#include <util/string/cast.h> 
+#include <util/string/cast.h>
 
 enum ENumberFormatFlag {
     HF_FULL = 0x01, /**< Output number with leading zeros. */
@@ -17,16 +17,16 @@ Y_DECLARE_FLAGS(ENumberFormat, ENumberFormatFlag)
 Y_DECLARE_OPERATORS_FOR_FLAGS(ENumberFormat)
 
 enum ESizeFormat {
-    SF_QUANTITY, /**< Base 1000, usual suffixes. 1100 gets turned into "1.1K". */ 
-    SF_BYTES,    /**< Base 1024, byte suffix. 1100 gets turned into "1.07KiB". */ 
+    SF_QUANTITY, /**< Base 1000, usual suffixes. 1100 gets turned into "1.1K". */
+    SF_BYTES,    /**< Base 1024, byte suffix. 1100 gets turned into "1.07KiB". */
 };
 
 namespace NFormatPrivate {
     template <size_t Value>
-    struct TLog2: std::integral_constant<size_t, TLog2<Value / 2>::value + 1> {}; 
+    struct TLog2: std::integral_constant<size_t, TLog2<Value / 2>::value + 1> {};
 
     template <>
-    struct TLog2<1>: std::integral_constant<size_t, 0> {}; 
+    struct TLog2<1>: std::integral_constant<size_t, 0> {};
 
     static inline void WriteChars(IOutputStream& os, char c, size_t count) {
         if (count == 0)
@@ -105,29 +105,29 @@ namespace NFormatPrivate {
 
     template <typename T, size_t Base>
     using TUnsignedBaseNumber = TBaseNumber<std::make_unsigned_t<std::remove_cv_t<T>>, Base>;
- 
+
     template <typename T, size_t Base>
     IOutputStream& operator<<(IOutputStream& stream, const TBaseNumber<T, Base>& value) {
         char buf[8 * sizeof(T) + 1]; /* Add 1 for sign. */
         TStringBuf str(buf, IntToString<Base>(value.Value, buf, sizeof(buf)));
- 
+
         if (str[0] == '-') {
             stream << '-';
             str.Skip(1);
         }
- 
+
         if (value.Flags & HF_ADDX) {
             if (Base == 16) {
                 stream << TStringBuf("0x");
             } else if (Base == 2) {
                 stream << TStringBuf("0b");
             }
-        } 
- 
+        }
+
         if (value.Flags & HF_FULL) {
             WriteChars(stream, '0', (8 * sizeof(T) + TLog2<Base>::value - 1) / TLog2<Base>::value - str.size());
-        } 
- 
+        }
+
         stream << str;
         return stream;
     }
@@ -138,8 +138,8 @@ namespace NFormatPrivate {
 
         inline TBaseText(const TBasicStringBuf<Char> text)
             : Text(text)
-        { 
-        } 
+        {
+        }
     };
 
     template <typename Char, size_t Base>
@@ -153,7 +153,7 @@ namespace NFormatPrivate {
         return os;
     }
 
-    template <typename T> 
+    template <typename T>
     struct TFloatPrecision {
         using TdVal = std::remove_cv_t<T>;
         static_assert(std::is_floating_point<TdVal>::value, "expect std::is_floating_point<TdVal>::value");
@@ -163,7 +163,7 @@ namespace NFormatPrivate {
         int NDigits;
     };
 
-    template <typename T> 
+    template <typename T>
     IOutputStream& operator<<(IOutputStream& o, const TFloatPrecision<T>& prec) {
         char buf[512];
         size_t count = FloatToString(prec.Value, buf, sizeof(buf), prec.Mode, prec.NDigits);
@@ -176,8 +176,8 @@ namespace NFormatPrivate {
 
         constexpr THumanReadableDuration(const TDuration& value)
             : Value(value)
-        { 
-        } 
+        {
+        }
     };
 
     struct THumanReadableSize {
@@ -208,8 +208,8 @@ static constexpr ::NFormatPrivate::TLeftPad<T> LeftPad(const T& value, const siz
     return ::NFormatPrivate::TLeftPad<T>(value, width, padc);
 }
 
-template <typename T, int N> 
-static constexpr ::NFormatPrivate::TLeftPad<const T*> LeftPad(const T (&value)[N], const size_t width, const char padc = ' ') noexcept { 
+template <typename T, int N>
+static constexpr ::NFormatPrivate::TLeftPad<const T*> LeftPad(const T (&value)[N], const size_t width, const char padc = ' ') noexcept {
     return ::NFormatPrivate::TLeftPad<const T*>(value, width, padc);
 }
 
@@ -234,8 +234,8 @@ static constexpr ::NFormatPrivate::TRightPad<T> RightPad(const T& value, const s
     return ::NFormatPrivate::TRightPad<T>(value, width, padc);
 }
 
-template <typename T, int N> 
-static constexpr ::NFormatPrivate::TRightPad<const T*> RightPad(const T (&value)[N], const size_t width, const char padc = ' ') noexcept { 
+template <typename T, int N>
+static constexpr ::NFormatPrivate::TRightPad<const T*> RightPad(const T (&value)[N], const size_t width, const char padc = ' ') noexcept {
     return ::NFormatPrivate::TRightPad<const T*>(value, width, padc);
 }
 
@@ -397,7 +397,7 @@ static constexpr ::NFormatPrivate::THumanReadableDuration HumanReadable(const TD
  * @param format                        Format to use.
  */
 static constexpr ::NFormatPrivate::THumanReadableSize HumanReadableSize(const double size, ESizeFormat format) noexcept {
-    return {size, format}; 
+    return {size, format};
 }
 
 void Time(IOutputStream& l);
@@ -438,7 +438,7 @@ static constexpr ::NFormatPrivate::TFloatPrecision<T> Prec(const T& value, const
  * @param value                         float or double to output.
  * @param ndigits                       Number of significant digits.
  */
-template <typename T> 
+template <typename T>
 static constexpr ::NFormatPrivate::TFloatPrecision<T> Prec(const T& value, const int ndigits) noexcept {
     return {value, PREC_NDIGITS, ndigits};
 }

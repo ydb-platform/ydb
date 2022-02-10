@@ -1,4 +1,4 @@
-#include "dirut.h" 
+#include "dirut.h"
 #include "filelist.h"
 #include "tempdir.h"
 
@@ -8,13 +8,13 @@
 #include <util/generic/string.h>
 
 class TFileListTest: public TTestBase {
-    UNIT_TEST_SUITE(TFileListTest); 
-    UNIT_TEST(TestSimple); 
+    UNIT_TEST_SUITE(TFileListTest);
+    UNIT_TEST(TestSimple);
     UNIT_TEST(TestPrefix);
-    UNIT_TEST_SUITE_END(); 
- 
-public: 
-    void TestSimple(); 
+    UNIT_TEST_SUITE_END();
+
+public:
+    void TestSimple();
     void TestPrefix();
 };
 
@@ -26,7 +26,7 @@ void TFileListTest::TestSimple() {
     TFileList fileList;
     fileList.Fill(tempDir().data(), "", "", 1000);
     TString fileName(fileList.Next());
-    UNIT_ASSERT_EQUAL(fileName, "subdir" LOCSLASH_S "file"); 
+    UNIT_ASSERT_EQUAL(fileName, "subdir" LOCSLASH_S "file");
     UNIT_ASSERT_EQUAL(fileList.Next(), nullptr);
 }
 

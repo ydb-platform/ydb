@@ -16,17 +16,17 @@ struct TRainCheckPerftestEnv: public TSimpleEnvTemplate<TRainCheckPerftestEnv> {
     TRainCheckPerftestEnv()
         : TSimpleEnvTemplate<TRainCheckPerftestEnv>(4)
         , SubtasksPerTask(1000)
-    { 
-    } 
+    {
+    }
 };
 
 struct TCoroOuter: public ICoroTask {
     TRainCheckPerftestEnv* const Env;
 
-    TCoroOuter(TRainCheckPerftestEnv* env) 
-        : Env(env) 
-    { 
-    } 
+    TCoroOuter(TRainCheckPerftestEnv* env)
+        : Env(env)
+    {
+    }
 
     void Run() override {
         for (;;) {
@@ -63,10 +63,10 @@ struct TCoroOuter: public ICoroTask {
 struct TSimpleOuter: public ISimpleTask {
     TRainCheckPerftestEnv* const Env;
 
-    TSimpleOuter(TRainCheckPerftestEnv* env, const void*) 
-        : Env(env) 
-    { 
-    } 
+    TSimpleOuter(TRainCheckPerftestEnv* env, const void*)
+        : Env(env)
+    {
+    }
 
     TInstant StartInstant;
     unsigned Count;
@@ -119,10 +119,10 @@ struct TSimpleOuter: public ISimpleTask {
 struct TReproduceCrashTask: public ISimpleTask {
     TRainCheckPerftestEnv* const Env;
 
-    TReproduceCrashTask(TRainCheckPerftestEnv* env) 
-        : Env(env) 
-    { 
-    } 
+    TReproduceCrashTask(TRainCheckPerftestEnv* env)
+        : Env(env)
+    {
+    }
 
     std::array<TSubtaskCompletion, SUBTASKS> Completion;
 

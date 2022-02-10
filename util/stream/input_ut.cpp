@@ -7,15 +7,15 @@
 #include <util/system/yassert.h>
 
 #ifdef _win_
-    #include <io.h> 
+    #include <io.h>
 #endif
 
 class TMockStdIn {
 public:
     TMockStdIn()
         : StdInCopy_(dup(0))
-    { 
-    } 
+    {
+    }
     ~TMockStdIn() {
         close(StdInCopy_);
     }
@@ -34,19 +34,19 @@ public:
         func();
         Cin.ReadAll();
         dup2(StdInCopy_, 0);
-        clearerr(stdin); 
+        clearerr(stdin);
     }
- 
+
 private:
     int StdInCopy_;
 };
 
 class TNoInput: public IInputStream {
 public:
-    TNoInput(ui64 size) 
-        : Size_(size) 
-    { 
-    } 
+    TNoInput(ui64 size)
+        : Size_(size)
+    {
+    }
 
 protected:
     size_t DoRead(void*, size_t len) override {
@@ -65,23 +65,23 @@ public:
 
 protected:
     void DoWrite(const void*, size_t) override {
-    } 
+    }
 };
 
 class TSimpleStringInput: public IInputStream {
 public:
     TSimpleStringInput(const TString& string)
-        : String_(string) 
-    { 
-    } 
+        : String_(string)
+    {
+    }
 
 protected:
     size_t DoRead(void* buf, size_t len) override {
         Y_ASSERT(len != 0);
 
-        if (String_.empty()) { 
+        if (String_.empty()) {
             return 0;
-        } 
+        }
 
         *static_cast<char*>(buf) = String_[0];
         String_.remove(0, 1);
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TInputTest) {
             {{"\n", '\n'}, ""},
             {{"\n\t", '\t'}, "\n"},
             {{"\t\n", '\n'}, "\t"},
-            {{"a\tb\n", '\t'}, "a"}}; 
+            {{"a\tb\n", '\t'}, "a"}};
 
         TMockStdIn stdIn;
 
@@ -147,11 +147,11 @@ Y_UNIT_TEST_SUITE(TInputTest) {
             const TStringBuf expectedValue = testPair.second;
 
             stdIn.ForInput(text,
-                           [=] { 
+                           [=] {
                                TString value;
-                               Cin.ReadTo(value, delim); 
-                               UNIT_ASSERT_VALUES_EQUAL(value, expectedValue); 
-                           }); 
+                               Cin.ReadTo(value, delim);
+                               UNIT_ASSERT_VALUES_EQUAL(value, expectedValue);
+                           });
         }
     }
 }

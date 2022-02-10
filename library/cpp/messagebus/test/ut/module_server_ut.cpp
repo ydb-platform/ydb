@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(ModuleServerTests) {
 
         /// create or get instance of message queue, need one per application
         TBusMessageQueuePtr bus(CreateMessageQueue());
-        THostInfoHandler hostHandler(bus.Get()); 
+        THostInfoHandler hostHandler(bus.Get());
         TDupDetectModule module(hostHandler.GetActualListenAddr());
         bool success;
         success = module.Init(bus.Get());
@@ -39,13 +39,13 @@ Y_UNIT_TEST_SUITE(ModuleServerTests) {
         dupHandler.DupDetect->Shutdown();
     }
 
-    struct TParallelOnMessageModule: public TExampleServerModule { 
+    struct TParallelOnMessageModule: public TExampleServerModule {
         TCountDownLatch WaitTwoRequestsLatch;
 
         TParallelOnMessageModule()
             : WaitTwoRequestsLatch(2)
-        { 
-        } 
+        {
+        }
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
             WaitTwoRequestsLatch.CountDown();

@@ -1,5 +1,5 @@
-#include "codepage.h" 
- 
+#include "codepage.h"
+
 #include <util/stream/output.h>
 
 void Encoder::Tr(const wchar32* in, char* out, size_t len) const {
@@ -13,14 +13,14 @@ void Encoder::Tr(const wchar32* in, char* out) const {
     } while (*in++);
 }
 
-void Recoder::Create(const CodePage& source, const Encoder* wideTarget) { 
-    for (size_t i = 0; i != 256; ++i) { 
+void Recoder::Create(const CodePage& source, const Encoder* wideTarget) {
+    for (size_t i = 0; i != 256; ++i) {
         Table[i] = wideTarget->Tr(source.unicode[i]);
         Y_ASSERT(Table[i] != 0 || i == 0);
     }
 }
 
-void Recoder::Create(const CodePage& page, const Encoder* widePage, wchar32 (*mapfunc)(wchar32)) { 
+void Recoder::Create(const CodePage& page, const Encoder* widePage, wchar32 (*mapfunc)(wchar32)) {
     for (size_t i = 0; i != 256; ++i) {
         char c = widePage->Code((*mapfunc)(page.unicode[i]));
         Table[i] = (c == 0 && i != 0) ? (unsigned char)i : (unsigned char)c;

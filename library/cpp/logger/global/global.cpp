@@ -26,12 +26,12 @@ bool GlobalLogInitialized() {
     return TLoggerOperator<TGlobalLog>::Usage();
 }
 
-template <> 
+template <>
 TGlobalLog* CreateDefaultLogger<TGlobalLog>() {
     return new TGlobalLog("console", TLOG_INFO);
 }
 
-template <> 
+template <>
 TNullLog* CreateDefaultLogger<TNullLog>() {
     return new TNullLog("null");
 }

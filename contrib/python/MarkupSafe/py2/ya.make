@@ -2,8 +2,8 @@ OWNER(g:python-contrib)
 
 PY2_LIBRARY()
 
-LICENSE(BSD-3-Clause) 
- 
+LICENSE(BSD-3-Clause)
+
 VERSION(1.1.1)
 
 PY_SRCS(

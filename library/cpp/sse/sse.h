@@ -9,7 +9,7 @@
 /* Author: Vitaliy Manushkin <agri@yandex-team.ru>, Danila Kutenin <danlark@yandex-team.ru> */
 
 #include <util/system/platform.h>
- 
+
 #if (defined(_i386_) || defined(_x86_64_)) && defined(_sse_)
 #include <xmmintrin.h>
 #include <emmintrin.h>

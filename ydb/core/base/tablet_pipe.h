@@ -36,7 +36,7 @@ namespace NKikimr {
             EvEnd
         };
 
-        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLET_PIPE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLET_PIPE)"); 
+        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLET_PIPE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLET_PIPE)");
 
         struct TEvConnect : public TEventPB<TEvConnect, NKikimrTabletPipe::TEvConnect, EvConnect> {
             TEvConnect() {}

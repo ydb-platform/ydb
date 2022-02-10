@@ -17,8 +17,8 @@ private:
 public:
     TFutexLike()
         : Value(0)
-    { 
-    } 
+    {
+    }
 
     int AddAndGet(int add) {
 #ifdef _linux_

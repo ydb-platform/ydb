@@ -1,13 +1,13 @@
-UNITTEST() 
- 
-OWNER(velavokr) 
- 
-PEERDIR( 
+UNITTEST()
+
+OWNER(velavokr)
+
+PEERDIR(
     library/cpp/containers/paged_vector
-) 
- 
-SRCS( 
-    paged_vector_ut.cpp 
-) 
- 
-END() 
+)
+
+SRCS(
+    paged_vector_ut.cpp
+)
+
+END()

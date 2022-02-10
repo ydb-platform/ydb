@@ -1,20 +1,20 @@
 #pragma once
- 
-#include <limits> 
- 
+
+#include <limits>
+
 #if defined(max) || defined(min)
-    #error "stop defining 'min' and 'max' macros, evil people" 
+    #error "stop defining 'min' and 'max' macros, evil people"
 #endif
 
-template <class T> 
+template <class T>
 static constexpr T Max() noexcept {
     return std::numeric_limits<T>::max();
-} 
- 
-template <class T> 
+}
+
+template <class T>
 static constexpr T Min() noexcept {
     return std::numeric_limits<T>::min();
-} 
+}
 
 namespace NPrivate {
     struct TMax {
@@ -33,11 +33,11 @@ namespace NPrivate {
 }
 
 static constexpr ::NPrivate::TMax Max() noexcept {
-    return {}; 
+    return {};
 }
 
 static constexpr ::NPrivate::TMin Min() noexcept {
-    return {}; 
+    return {};
 }
 
 namespace NPrivate {

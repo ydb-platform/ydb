@@ -8,11 +8,11 @@ TBusQueueConfig::TBusQueueConfig() {
 }
 
 void TBusQueueConfig::ConfigureLastGetopt(
-    NLastGetopt::TOpts& opts, const TString& prefix) { 
+    NLastGetopt::TOpts& opts, const TString& prefix) {
     opts.AddLongOption(prefix + "worker-count")
-        .RequiredArgument("COUNT") 
-        .DefaultValue(ToString(NumWorkers)) 
-        .StoreResult(&NumWorkers); 
+        .RequiredArgument("COUNT")
+        .DefaultValue(ToString(NumWorkers))
+        .StoreResult(&NumWorkers);
 }
 
 TString TBusQueueConfig::PrintToString() const {

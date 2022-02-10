@@ -7,7 +7,7 @@ using namespace NBus;
 using namespace NBus::NPrivate;
 
 TRemoteServerSessionSemaphore::TRemoteServerSessionSemaphore(
-    TAtomicBase limitCount, TAtomicBase limitSize, const char* name) 
+    TAtomicBase limitCount, TAtomicBase limitSize, const char* name)
     : Name(name)
     , LimitCount(limitCount)
     , LimitSize(limitSize)
@@ -20,7 +20,7 @@ TRemoteServerSessionSemaphore::TRemoteServerSessionSemaphore(
     Y_UNUSED(Name);
 }
 
-TRemoteServerSessionSemaphore::~TRemoteServerSessionSemaphore() { 
+TRemoteServerSessionSemaphore::~TRemoteServerSessionSemaphore() {
     Y_VERIFY(AtomicGet(CurrentCount) == 0);
     // TODO: fix spider and enable
     //Y_VERIFY(AtomicGet(CurrentSize) == 0);

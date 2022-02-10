@@ -1,4 +1,4 @@
-#include <util/random/shuffle.h> 
+#include <util/random/shuffle.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>

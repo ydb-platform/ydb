@@ -10,33 +10,33 @@
 #include <util/generic/ylimits.h>
 #include <util/system/maxlen.h>
 
-#include <ctime> 
+#include <ctime>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <algorithm> 
+#include <algorithm>
 
 // This is ugly solution but here a lot of work to do it the right way.
 #define FETCHER_URL_MAX 8192
 
-extern const i64 DEFAULT_RETRY_AFTER;       /// == -1 
+extern const i64 DEFAULT_RETRY_AFTER;       /// == -1
 extern const i64 DEFAULT_IF_MODIFIED_SINCE; /// == -1
-extern const i32 DEFAULT_MAX_AGE;           /// == -1 
-extern const i8 DEFAULT_REQUEST_PRIORITY;   /// == -1 
-extern const i32 DEFAULT_RESPONSE_TIMEOUT;  /// == -1 
+extern const i32 DEFAULT_MAX_AGE;           /// == -1
+extern const i8 DEFAULT_REQUEST_PRIORITY;   /// == -1
+extern const i32 DEFAULT_RESPONSE_TIMEOUT;  /// == -1
 
 #define HTTP_PREFIX "http://"
 #define MAX_LANGREGION_LEN 4
 #define MAXWORD_LEN 55
 
 enum HTTP_COMPRESSION {
-    HTTP_COMPRESSION_UNSET = 0, 
-    HTTP_COMPRESSION_ERROR = 1, 
+    HTTP_COMPRESSION_UNSET = 0,
+    HTTP_COMPRESSION_ERROR = 1,
     HTTP_COMPRESSION_IDENTITY = 2,
-    HTTP_COMPRESSION_GZIP = 3, 
-    HTTP_COMPRESSION_DEFLATE = 4, 
+    HTTP_COMPRESSION_GZIP = 3,
+    HTTP_COMPRESSION_DEFLATE = 4,
     HTTP_COMPRESSION_COMPRESS = 5,
-    HTTP_COMPRESSION_MAX = 6 
+    HTTP_COMPRESSION_MAX = 6
 };
 
 enum HTTP_METHOD {
@@ -61,22 +61,22 @@ enum HTTP_CONNECTION {
 /// Class represents general http header fields.
 struct THttpBaseHeader {
 public:
-    i16 error; 
-    i32 header_size; 
-    i32 entity_size; 
-    i64 content_length; 
-    i64 http_time;                   // seconds since epoch 
-    i64 content_range_start;         // Content-Range: first-byte-pos 
-    i64 content_range_end;           // Content-Range: last-byte-pos 
-    i64 content_range_entity_length; // Content-Range: entity-length 
-    i8 http_minor; 
-    i8 mime_type; 
-    i8 charset; 
-    i8 compression_method; 
-    i8 transfer_chunked; 
-    i8 connection_closed; 
+    i16 error;
+    i32 header_size;
+    i32 entity_size;
+    i64 content_length;
+    i64 http_time;                   // seconds since epoch
+    i64 content_range_start;         // Content-Range: first-byte-pos
+    i64 content_range_end;           // Content-Range: last-byte-pos
+    i64 content_range_entity_length; // Content-Range: entity-length
+    i8 http_minor;
+    i8 mime_type;
+    i8 charset;
+    i8 compression_method;
+    i8 transfer_chunked;
+    i8 connection_closed;
     TString base;
- 
+
 public:
     void Init() {
         error = 0;
@@ -113,8 +113,8 @@ public:
     }
 
     int SetBase(const char* path,
-                const char* hostNamePtr = nullptr, 
-                int hostNameLength = 0) { 
+                const char* hostNamePtr = nullptr,
+                int hostNameLength = 0) {
         if (*path == '/') {
             base = "http://";
             base += TStringBuf(hostNamePtr, hostNameLength);
@@ -130,16 +130,16 @@ enum { HREFLANG_MAX = FETCHER_URL_MAX * 2 };
 /// Class represents Http Response Header.
 struct THttpHeader: public THttpBaseHeader {
 public:
-    i8 accept_ranges; 
-    i8 squid_error; 
+    i8 accept_ranges;
+    i8 squid_error;
     i8 x_robots_tag; // deprecated, use x_robots_state instead
-    i16 http_status; 
+    i16 http_status;
     TString location;
     TString rel_canonical;
-    char hreflangs[HREFLANG_MAX]; 
-    i64 retry_after; 
+    char hreflangs[HREFLANG_MAX];
+    i64 retry_after;
     TString x_robots_state; // 'xxxxx' format, see `library/html/zoneconf/parsefunc.cpp`
- 
+
 public:
     void Init() {
         THttpBaseHeader::Init();
@@ -174,12 +174,12 @@ public:
     char x_yandex_sourcename[MAXWORD_LEN];
     char x_yandex_requesttype[MAXWORD_LEN];
     char x_yandex_fetchoptions[MAXWORD_LEN];
-    i8 http_method; 
-    i8 x_yandex_request_priority; 
-    i32 x_yandex_response_timeout; 
-    i32 max_age; 
-    i64 if_modified_since; 
- 
+    i8 http_method;
+    i8 x_yandex_request_priority;
+    i32 x_yandex_response_timeout;
+    i32 max_age;
+    i64 if_modified_since;
+
 public:
     THttpRequestHeader() {
         Init();
@@ -229,7 +229,7 @@ public:
         return url;
     }
 
-    char* GetUrl(char* buffer, size_t size) { 
+    char* GetUrl(char* buffer, size_t size) {
         if (host[0] == 0 || !strcmp(host, "")) {
             strlcpy(buffer, request_uri.c_str(), size);
         } else {
@@ -244,27 +244,27 @@ public:
     char* realm;
     char* nonce;
     char* opaque;
-    bool stale; 
-    int algorithm; 
-    bool qop_auth; 
-    bool use_auth; 
+    bool stale;
+    int algorithm;
+    bool qop_auth;
+    bool use_auth;
 
     //we do not provide auth-int variant as too heavy
     //bool  qop_auth_int;
 
-    THttpAuthHeader() 
-        : realm(nullptr) 
-        , nonce(nullptr) 
-        , opaque(nullptr) 
-        , stale(false) 
-        , algorithm(0) 
-        , qop_auth(false) 
-        , use_auth(true) 
+    THttpAuthHeader()
+        : realm(nullptr)
+        , nonce(nullptr)
+        , opaque(nullptr)
+        , stale(false)
+        , algorithm(0)
+        , qop_auth(false)
+        , use_auth(true)
     {
         THttpHeader::Init();
     }
 
-    ~THttpAuthHeader() { 
+    ~THttpAuthHeader() {
         free(realm);
         free(nonce);
         free(opaque);
@@ -272,7 +272,7 @@ public:
 
     void Print() {
         THttpHeader::Print();
-        if (use_auth) { 
+        if (use_auth) {
             if (realm)
                 printf("realm: \"%s\"\n", realm);
             if (nonce)

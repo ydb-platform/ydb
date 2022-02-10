@@ -14,141 +14,141 @@
 #include <util/stream/str.h>
 
 namespace NRainCheck {
-    class THttpCallback: public NNeh::IOnRecv { 
-    public: 
-        THttpCallback(NRainCheck::THttpFuture* future) 
-            : Future(future) 
-        { 
-            Y_VERIFY(!!future, "future is NULL"); 
-        } 
+    class THttpCallback: public NNeh::IOnRecv {
+    public:
+        THttpCallback(NRainCheck::THttpFuture* future)
+            : Future(future)
+        {
+            Y_VERIFY(!!future, "future is NULL");
+        }
 
-        void OnRecv(NNeh::THandle& handle) override { 
-            THolder<THttpCallback> self(this); 
-            NNeh::TResponseRef response = handle.Get(); 
-            Future->SetDoneAndSchedule(response); 
-        } 
- 
-    private: 
-        NRainCheck::THttpFuture* const Future; 
-    }; 
- 
-    THttpFuture::THttpFuture() 
-        : Task(nullptr) 
-        , ErrorCode(THttpFuture::NoError) 
+        void OnRecv(NNeh::THandle& handle) override {
+            THolder<THttpCallback> self(this);
+            NNeh::TResponseRef response = handle.Get();
+            Future->SetDoneAndSchedule(response);
+        }
+
+    private:
+        NRainCheck::THttpFuture* const Future;
+    };
+
+    THttpFuture::THttpFuture()
+        : Task(nullptr)
+        , ErrorCode(THttpFuture::NoError)
     {
     }
 
-    THttpFuture::~THttpFuture() { 
+    THttpFuture::~THttpFuture() {
     }
 
-    bool THttpFuture::HasError() const { 
-        return (ErrorCode != THttpFuture::NoError); 
-    } 
+    bool THttpFuture::HasError() const {
+        return (ErrorCode != THttpFuture::NoError);
+    }
 
-    THttpFuture::EError THttpFuture::GetErrorCode() const { 
-        return ErrorCode; 
-    } 
+    THttpFuture::EError THttpFuture::GetErrorCode() const {
+        return ErrorCode;
+    }
 
-    TString THttpFuture::GetErrorDescription() const { 
-        return ErrorDescription; 
-    } 
+    TString THttpFuture::GetErrorDescription() const {
+        return ErrorDescription;
+    }
 
-    THttpClientService::THttpClientService() 
-        : GetProtocol(NNeh::ProtocolFactory()->Protocol("http")) 
-        , FullProtocol(NNeh::ProtocolFactory()->Protocol("full")) 
-    { 
-        Y_VERIFY(!!GetProtocol, "GET protocol is NULL."); 
-        Y_VERIFY(!!FullProtocol, "POST protocol is NULL."); 
-    } 
+    THttpClientService::THttpClientService()
+        : GetProtocol(NNeh::ProtocolFactory()->Protocol("http"))
+        , FullProtocol(NNeh::ProtocolFactory()->Protocol("full"))
+    {
+        Y_VERIFY(!!GetProtocol, "GET protocol is NULL.");
+        Y_VERIFY(!!FullProtocol, "POST protocol is NULL.");
+    }
 
-    THttpClientService::~THttpClientService() { 
-    } 
+    THttpClientService::~THttpClientService() {
+    }
 
-    void THttpClientService::SendPost(TString addr, const TString& data, const THttpHeaders& headers, THttpFuture* future) { 
-        Y_VERIFY(!!future, "future is NULL."); 
+    void THttpClientService::SendPost(TString addr, const TString& data, const THttpHeaders& headers, THttpFuture* future) {
+        Y_VERIFY(!!future, "future is NULL.");
 
-        TTaskRunnerBase* current = TTaskRunnerBase::CurrentTask(); 
-        future->SetRunning(current); 
-        future->Task = current; 
+        TTaskRunnerBase* current = TTaskRunnerBase::CurrentTask();
+        future->SetRunning(current);
+        future->Task = current;
 
-        THolder<THttpCallback> callback(new THttpCallback(future)); 
-        NNeh::TServiceStatRef stat; 
-        try { 
+        THolder<THttpCallback> callback(new THttpCallback(future));
+        NNeh::TServiceStatRef stat;
+        try {
             NNeh::TMessage msg(addr.replace(0, NNeh::TParsedLocation(addr).Scheme.size(), "post"), data);
-            TStringStream headersText; 
-            headers.OutTo(&headersText); 
-            NNeh::NHttp::MakeFullRequest(msg, headersText.Str(), TString()); 
-            FullProtocol->ScheduleRequest(msg, callback.Get(), stat); 
+            TStringStream headersText;
+            headers.OutTo(&headersText);
+            NNeh::NHttp::MakeFullRequest(msg, headersText.Str(), TString());
+            FullProtocol->ScheduleRequest(msg, callback.Get(), stat);
             Y_UNUSED(callback.Release());
-        } catch (const TNetworkResolutionError& err) { 
-            future->SetFail(THttpFuture::CantResolveNameError, err.AsStrBuf()); 
-        } catch (const yexception& err) { 
-            future->SetFail(THttpFuture::OtherError, err.AsStrBuf()); 
-        } 
-    } 
-
-    void THttpClientService::Send(const TString& request, THttpFuture* future) { 
-        Y_VERIFY(!!future, "future is NULL."); 
-
-        TTaskRunnerBase* current = TTaskRunnerBase::CurrentTask(); 
-        future->SetRunning(current); 
-        future->Task = current; 
-
-        THolder<THttpCallback> callback(new THttpCallback(future)); 
-        NNeh::TServiceStatRef stat; 
-        try { 
-            GetProtocol->ScheduleRequest(NNeh::TMessage::FromString(request), 
-                                         callback.Get(), 
-                                         stat); 
-            Y_UNUSED(callback.Release());
-        } catch (const TNetworkResolutionError& err) { 
-            future->SetFail(THttpFuture::CantResolveNameError, err.AsStrBuf()); 
-        } catch (const yexception& err) { 
-            future->SetFail(THttpFuture::OtherError, err.AsStrBuf()); 
-        } 
-    } 
-
-    bool THttpFuture::HasHttpCode() const { 
-        return !!HttpCode; 
+        } catch (const TNetworkResolutionError& err) {
+            future->SetFail(THttpFuture::CantResolveNameError, err.AsStrBuf());
+        } catch (const yexception& err) {
+            future->SetFail(THttpFuture::OtherError, err.AsStrBuf());
+        }
     }
 
-    bool THttpFuture::HasResponseBody() const { 
-        return !!Response; 
-    } 
+    void THttpClientService::Send(const TString& request, THttpFuture* future) {
+        Y_VERIFY(!!future, "future is NULL.");
 
-    ui32 THttpFuture::GetHttpCode() const { 
-        Y_ASSERT(IsDone()); 
-        Y_ASSERT(HasHttpCode()); 
+        TTaskRunnerBase* current = TTaskRunnerBase::CurrentTask();
+        future->SetRunning(current);
+        future->Task = current;
 
-        return static_cast<ui32>(*HttpCode); 
+        THolder<THttpCallback> callback(new THttpCallback(future));
+        NNeh::TServiceStatRef stat;
+        try {
+            GetProtocol->ScheduleRequest(NNeh::TMessage::FromString(request),
+                                         callback.Get(),
+                                         stat);
+            Y_UNUSED(callback.Release());
+        } catch (const TNetworkResolutionError& err) {
+            future->SetFail(THttpFuture::CantResolveNameError, err.AsStrBuf());
+        } catch (const yexception& err) {
+            future->SetFail(THttpFuture::OtherError, err.AsStrBuf());
+        }
     }
 
-    TString THttpFuture::GetResponseBody() const { 
-        Y_ASSERT(IsDone()); 
-        Y_ASSERT(HasResponseBody()); 
+    bool THttpFuture::HasHttpCode() const {
+        return !!HttpCode;
+    }
 
-        return Response->Data; 
-    } 
+    bool THttpFuture::HasResponseBody() const {
+        return !!Response;
+    }
 
-    void THttpFuture::SetDoneAndSchedule(TAutoPtr<NNeh::TResponse> response) { 
-        if (!response->IsError()) { 
-            ErrorCode = THttpFuture::NoError; 
-            HttpCode = HttpCodes::HTTP_OK; 
-        } else { 
-            ErrorCode = THttpFuture::BadHttpCodeError; 
-            ErrorDescription = response->GetErrorText(); 
+    ui32 THttpFuture::GetHttpCode() const {
+        Y_ASSERT(IsDone());
+        Y_ASSERT(HasHttpCode());
 
-            HttpCode = TryGetHttpCodeFromErrorDescription(ErrorDescription); 
-        } 
-        Response.Reset(response); 
-        SetDone(); 
-    } 
+        return static_cast<ui32>(*HttpCode);
+    }
 
-    void THttpFuture::SetFail(THttpFuture::EError errorCode, const TStringBuf& errorDescription) { 
-        ErrorCode = errorCode; 
-        ErrorDescription = errorDescription; 
-        Response.Destroy(); 
-        SetDone(); 
+    TString THttpFuture::GetResponseBody() const {
+        Y_ASSERT(IsDone());
+        Y_ASSERT(HasResponseBody());
+
+        return Response->Data;
+    }
+
+    void THttpFuture::SetDoneAndSchedule(TAutoPtr<NNeh::TResponse> response) {
+        if (!response->IsError()) {
+            ErrorCode = THttpFuture::NoError;
+            HttpCode = HttpCodes::HTTP_OK;
+        } else {
+            ErrorCode = THttpFuture::BadHttpCodeError;
+            ErrorDescription = response->GetErrorText();
+
+            HttpCode = TryGetHttpCodeFromErrorDescription(ErrorDescription);
+        }
+        Response.Reset(response);
+        SetDone();
+    }
+
+    void THttpFuture::SetFail(THttpFuture::EError errorCode, const TStringBuf& errorDescription) {
+        ErrorCode = errorCode;
+        ErrorDescription = errorDescription;
+        Response.Destroy();
+        SetDone();
     }
 
 }

@@ -74,7 +74,7 @@
     PROBE(ActorsystemScheduler, GROUPS("Durations"),                                                                                  \
           TYPES(ui64, ui64, ui32, ui32, ui64, ui64),                                                                                  \
           NAMES("timeUs", "timerfd_expirations", "eventsGottenFromQueues", "eventsSent",                                              \
-                "eventsInSendQueue", "eventSchedulingErrorUs"))                                                                       \ 
+                "eventsInSendQueue", "eventSchedulingErrorUs"))                                                                       \
     PROBE(ForwardEvent, GROUPS("Orbit", "InterconnectSessionTCP"),                                                                    \
           TYPES(ui32, ui32, ui32, LWTYPE_ACTORID, LWTYPE_ACTORID, ui64, ui32),                                                        \
           NAMES("peerId", "type", "flags", LWNAME_ACTORID("r"), LWNAME_ACTORID("s"),                                                  \
@@ -166,7 +166,7 @@
     PROBE(MoveCpu, GROUPS("PoolCpuBalancer"),                                                                                         \
           TYPES(ui32, ui64, TString, TString, ui32),                                                                                  \
           NAMES("fromPoolId", "toPoolId", "fromPool", "toPool", "cpu"))                                                               \
-    /**/ 
+    /**/
 
 LWTRACE_DECLARE_PROVIDER(ACTORLIB_PROVIDER)
 

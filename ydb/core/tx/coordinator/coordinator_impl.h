@@ -175,7 +175,7 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
             EvEnd
         };
 
-        static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)"); 
+        static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
         struct TEvPlanTick : public TEventLocal<TEvPlanTick, EvPlanTick> {};
 

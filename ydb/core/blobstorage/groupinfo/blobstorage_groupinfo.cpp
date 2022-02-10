@@ -1,4 +1,4 @@
-#include "blobstorage_groupinfo.h" 
+#include "blobstorage_groupinfo.h"
 #include "blobstorage_groupinfo_blobmap.h"
 #include "blobstorage_groupinfo_iter.h"
 #include "blobstorage_groupinfo_sets.h"

@@ -6,7 +6,7 @@ using namespace NBus;
 using namespace NCalculator;
 
 namespace NCalculator {
-    struct TCalculatorClient: public IBusClientHandler { 
+    struct TCalculatorClient: public IBusClientHandler {
         TCalculatorProtocol Proto;
         TBusMessageQueuePtr MessageQueue;
         TBusClientSessionPtr ClientSession;

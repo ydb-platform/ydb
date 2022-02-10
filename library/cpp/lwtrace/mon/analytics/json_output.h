@@ -5,8 +5,8 @@
 #include <util/string/vector.h>
 #include <util/generic/set.h>
 #include <util/generic/hash_set.h>
-#include "data.h" 
-#include "util.h" 
+#include "data.h"
+#include "util.h"
 
 namespace NAnalytics {
 

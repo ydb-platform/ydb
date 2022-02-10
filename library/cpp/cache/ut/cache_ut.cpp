@@ -1,7 +1,7 @@
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/cache/thread_safe_cache.h>
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 struct TStrokaWeighter {
     static size_t Weight(const TString& s) {
         return s.size();
@@ -10,23 +10,23 @@ struct TStrokaWeighter {
 
 Y_UNIT_TEST_SUITE(TCacheTest) {
     Y_UNIT_TEST(LRUListTest) {
-        typedef TLRUList<int, TString> TListType; 
-        TListType list(2); 
+        typedef TLRUList<int, TString> TListType;
+        TListType list(2);
 
-        TListType::TItem x1(1, "ttt"); 
-        list.Insert(&x1); 
-        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1); 
+        TListType::TItem x1(1, "ttt");
+        list.Insert(&x1);
+        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1);
 
-        TListType::TItem x2(2, "yyy"); 
-        list.Insert(&x2); 
-        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1); 
+        TListType::TItem x2(2, "yyy");
+        list.Insert(&x2);
+        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1);
 
-        list.Promote(list.GetOldest()); 
-        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 2); 
+        list.Promote(list.GetOldest());
+        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 2);
 
-        TListType::TItem x3(3, "zzz"); 
-        list.Insert(&x3); 
-        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1); 
+        TListType::TItem x3(3, "zzz");
+        list.Insert(&x3);
+        UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1);
     }
 
     Y_UNIT_TEST(LRUListWeightedTest) {
@@ -66,52 +66,52 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
     }
 
     Y_UNIT_TEST(LFUListTest) {
-        typedef TLFUList<int, TString> TListType; 
-        TListType list(2); 
+        typedef TLFUList<int, TString> TListType;
+        TListType list(2);
 
-        TListType::TItem x1(1, "ttt"); 
-        list.Insert(&x1); 
-        UNIT_ASSERT_EQUAL(list.GetLeastFrequentlyUsed()->Key, 1); 
+        TListType::TItem x1(1, "ttt");
+        list.Insert(&x1);
+        UNIT_ASSERT_EQUAL(list.GetLeastFrequentlyUsed()->Key, 1);
 
-        TListType::TItem x2(2, "yyy"); 
-        list.Insert(&x2); 
-        UNIT_ASSERT_EQUAL(list.GetLeastFrequentlyUsed()->Key, 1); 
+        TListType::TItem x2(2, "yyy");
+        list.Insert(&x2);
+        UNIT_ASSERT_EQUAL(list.GetLeastFrequentlyUsed()->Key, 1);
 
-        list.Promote(list.GetLeastFrequentlyUsed()); 
-        UNIT_ASSERT_EQUAL(list.GetLeastFrequentlyUsed()->Key, 2); 
+        list.Promote(list.GetLeastFrequentlyUsed());
+        UNIT_ASSERT_EQUAL(list.GetLeastFrequentlyUsed()->Key, 2);
 
-        TListType::TItem x3(3, "zzz"); 
-        list.Insert(&x3); 
-        UNIT_ASSERT_EQUAL(list.GetLeastFrequentlyUsed()->Key, 1); 
+        TListType::TItem x3(3, "zzz");
+        list.Insert(&x3);
+        UNIT_ASSERT_EQUAL(list.GetLeastFrequentlyUsed()->Key, 1);
     }
 
     Y_UNIT_TEST(LWListTest) {
-        typedef TLWList<int, TString, size_t, TStrokaWeighter> TListType; 
-        TListType list(2); 
+        typedef TLWList<int, TString, size_t, TStrokaWeighter> TListType;
+        TListType list(2);
 
-        TListType::TItem x1(1, "tt"); 
-        list.Insert(&x1); 
-        UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 1); 
-        UNIT_ASSERT_EQUAL(list.GetSize(), 1); 
+        TListType::TItem x1(1, "tt");
+        list.Insert(&x1);
+        UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 1);
+        UNIT_ASSERT_EQUAL(list.GetSize(), 1);
 
-        TListType::TItem x2(2, "yyyy"); 
-        list.Insert(&x2); 
-        UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 1); 
-        UNIT_ASSERT_EQUAL(list.GetSize(), 2); 
+        TListType::TItem x2(2, "yyyy");
+        list.Insert(&x2);
+        UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 1);
+        UNIT_ASSERT_EQUAL(list.GetSize(), 2);
 
-        TListType::TItem x3(3, "z"); 
-        list.Insert(&x3); 
-        UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 1); 
-        UNIT_ASSERT_EQUAL(list.GetSize(), 2); 
+        TListType::TItem x3(3, "z");
+        list.Insert(&x3);
+        UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 1);
+        UNIT_ASSERT_EQUAL(list.GetSize(), 2);
 
-        TListType::TItem x4(4, "xxxxxx"); 
-        list.Insert(&x4); 
-        UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 2); 
-        UNIT_ASSERT_EQUAL(list.GetSize(), 2); 
+        TListType::TItem x4(4, "xxxxxx");
+        list.Insert(&x4);
+        UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 2);
+        UNIT_ASSERT_EQUAL(list.GetSize(), 2);
 
-        list.Erase(&x2); 
-        UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 4); 
-        UNIT_ASSERT_EQUAL(list.GetSize(), 1); 
+        list.Erase(&x2);
+        UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 4);
+        UNIT_ASSERT_EQUAL(list.GetSize(), 1);
     }
 
     Y_UNIT_TEST(SimpleTest) {
@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         TCache::TIterator it = s.Find(3);
         s.Erase(it);
         UNIT_ASSERT(s.Find(3) == s.End());
-    } 
+    }
 
     Y_UNIT_TEST(LRUWithCustomSizeProviderTest) {
         typedef TLRUCache<int, TString, TNoopDelete, size_t(*)(const TString&)> TCache;
@@ -322,39 +322,39 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT(*s.Find(1) == "bcde");
         // (1, "bcde") will be promoted
         UNIT_ASSERT(*s.FindOldest() == "fghi");
-    } 
+    }
 
-    struct TMyDelete { 
-        static int count; 
-        template <typename T> 
-        static void Destroy(const T&) { 
-            ++count; 
-        } 
-    }; 
-    int TMyDelete::count = 0; 
+    struct TMyDelete {
+        static int count;
+        template <typename T>
+        static void Destroy(const T&) {
+            ++count;
+        }
+    };
+    int TMyDelete::count = 0;
 
     Y_UNIT_TEST(DeleterTest) {
-        typedef TLRUCache<int, TString, TMyDelete> TCache; 
-        TCache s(2); 
-        s.Insert(1, "123"); 
-        s.Insert(2, "456"); 
-        s.Insert(3, "789"); 
-        UNIT_ASSERT(TMyDelete::count == 1); 
-        TCache::TIterator it = s.Find(2); 
-        UNIT_ASSERT(it != s.End()); 
-        s.Erase(it); 
-        UNIT_ASSERT(TMyDelete::count == 2); 
-    } 
+        typedef TLRUCache<int, TString, TMyDelete> TCache;
+        TCache s(2);
+        s.Insert(1, "123");
+        s.Insert(2, "456");
+        s.Insert(3, "789");
+        UNIT_ASSERT(TMyDelete::count == 1);
+        TCache::TIterator it = s.Find(2);
+        UNIT_ASSERT(it != s.End());
+        s.Erase(it);
+        UNIT_ASSERT(TMyDelete::count == 2);
+    }
 
     Y_UNIT_TEST(PromoteOnFind) {
-        typedef TLRUCache<int, TString> TCache; 
-        TCache s(2); 
-        s.Insert(1, "123"); 
-        s.Insert(2, "456"); 
-        UNIT_ASSERT(s.Find(1) != s.End()); 
-        s.Insert(3, "789"); 
-        UNIT_ASSERT(s.Find(1) != s.End()); // Key 2 should have been deleted 
-    } 
+        typedef TLRUCache<int, TString> TCache;
+        TCache s(2);
+        s.Insert(1, "123");
+        s.Insert(2, "456");
+        UNIT_ASSERT(s.Find(1) != s.End());
+        s.Insert(3, "789");
+        UNIT_ASSERT(s.Find(1) != s.End()); // Key 2 should have been deleted
+    }
 }
 
 Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) {
@@ -362,7 +362,7 @@ Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) {
 
     const char* VALS[] = {"abcd", "defg", "hjkl"};
 
-    class TCallbacks: public TCache::ICallbacks { 
+    class TCallbacks: public TCache::ICallbacks {
     public:
         TKey GetKey(ui32 i) const override {
             return i;
@@ -380,7 +380,7 @@ Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) {
             const TString data = *TCache::Get<TCallbacks>(i);
             UNIT_ASSERT(data == VALS[i]);
         }
-    } 
+    }
 
     Y_UNIT_TEST(InsertUpdateTest) {
         TCallbacks callbacks;

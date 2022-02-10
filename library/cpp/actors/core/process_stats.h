@@ -63,4 +63,4 @@ namespace NActors {
 
     IActor* CreateProcStatCollector(ui32 intervalSec, NMonitoring::TDynamicCounterPtr counters);
     IActor* CreateProcStatCollector(TDuration interval, NMonitoring::TMetricRegistry& registry);
-} 
+}

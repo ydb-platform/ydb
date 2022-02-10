@@ -1,12 +1,12 @@
-RECURSE( 
-    module 
-    registry 
+RECURSE(
+    module
+    registry
     tests
 
     crypto
-    libc 
+    libc
     libmagic
     python
-    uuid 
+    uuid
     win_unicode_console
-) 
+)

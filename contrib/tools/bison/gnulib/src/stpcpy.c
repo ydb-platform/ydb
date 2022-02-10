@@ -21,7 +21,7 @@
 #include <config.h>
 
 #include <string.h>
-#include <stdlib.h> 
+#include <stdlib.h>
 
 #undef __stpcpy
 #if defined(_LIBC) || (defined(__MACH__) && defined(stpcpy))

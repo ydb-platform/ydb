@@ -40,20 +40,20 @@ namespace NUnicode {
         public:
             inline TDecompositor(const TDecompositionTable& table)
                 : Table(table)
-            { 
-            } 
+            {
+            }
 
             inline const wchar32* Decomposition(wchar32 ch) const {
                 return NPrivate::Decomposition(Table, ch);
             }
         };
 
-        template <bool IsCompat> 
+        template <bool IsCompat>
         struct TStandartDecompositor: public TDecompositor {
             TStandartDecompositor()
-                : TDecompositor(NPrivate::DecompositionTable<IsCompat>()) 
-            { 
-            } 
+                : TDecompositor(NPrivate::DecompositionTable<IsCompat>())
+            {
+            }
         };
 
         template <ENormalization N>
@@ -92,12 +92,12 @@ namespace NUnicode {
             static const TRawData RawData[];
             static const size_t RawDataSize;
 
-            class TKey: public std::pair<wchar32, wchar32> { 
+            class TKey: public std::pair<wchar32, wchar32> {
             public:
                 inline TKey(wchar32 a, wchar32 b)
                     : std::pair<wchar32, wchar32>(a, b)
-                { 
-                } 
+                {
+                }
 
                 inline size_t Hash() const {
                     return CombineHashes(first, second);
@@ -111,7 +111,7 @@ namespace NUnicode {
                 }
             };
 
-            typedef THashMap<TKey, wchar32, THash<TKey>> TData; 
+            typedef THashMap<TKey, wchar32, THash<TKey>> TData;
             TData Data;
 
         public:
@@ -149,8 +149,8 @@ namespace NUnicode {
         public:
             inline TCompositor()
                 : Composition(Singleton<TComposition>())
-            { 
-            } 
+            {
+            }
 
             inline void DoComposition(TBuffer& buffer) {
                 if (buffer.size() < 2)
@@ -204,7 +204,7 @@ namespace NUnicode {
             }
             return true;
         }
-    } 
+    }
 
     template <bool compat>
     inline const wchar32* Decomposition(wchar32 ch) {
@@ -232,7 +232,7 @@ namespace NUnicode {
         }
 
         struct TComparer {
-            inline bool operator()(const TSymbol& a, const TSymbol& b) { 
+            inline bool operator()(const TSymbol& a, const TSymbol& b) {
                 return Compare(a, b);
             }
         };
@@ -304,14 +304,14 @@ namespace NUnicode {
 
     public:
         TNormalizer()
-            : Decompositor(*Singleton<NPrivate::TStandartDecompositor<IsCompat>>()) 
-        { 
-        } 
+            : Decompositor(*Singleton<NPrivate::TStandartDecompositor<IsCompat>>())
+        {
+        }
 
         TNormalizer(const TDecompositor& decompositor)
             : Decompositor(decompositor)
-        { 
-        } 
+        {
+        }
 
         template <class T, typename TCharType>
         inline void Normalize(const TCharType* begin, const TCharType* end, T& out) {
@@ -353,7 +353,7 @@ namespace NUnicode {
             }
         }
     };
-} 
+}
 
 //! decompose utf16 or utf32 string to any container supporting push_back or to T*
 template <NUnicode::ENormalization Norm, class T, typename TCharType>

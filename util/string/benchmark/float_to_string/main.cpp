@@ -37,8 +37,8 @@ namespace {
         TVector<TExample<T>> Examples;
 
         TExamplesHolder()
-            : Examples(N) 
-        { 
+            : Examples(N)
+        {
             TFastRng<ui64> prng{N * sizeof(T) * 42};
             for (auto& x : Examples) {
                 x.Value = prng.GenRandReal4() + prng.Uniform(Max<ui16>());
@@ -52,8 +52,8 @@ namespace {
         TVector<TExample<T>> Examples;
 
         TNearZeroExamplesHolder()
-            : Examples(N) 
-        { 
+            : Examples(N)
+        {
             TFastRng<ui64> prng{N * sizeof(T) * 42};
             for (auto& x : Examples) {
                 x.Value = prng.GenRandReal4();

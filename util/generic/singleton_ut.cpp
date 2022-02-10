@@ -1,17 +1,17 @@
-#include "singleton.h" 
- 
+#include "singleton.h"
+
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 Y_UNIT_TEST_SUITE(TestSingleton) {
-    struct THuge { 
-        char Buf[1000000]; 
-        int V = 1234; 
-    }; 
- 
+    struct THuge {
+        char Buf[1000000];
+        int V = 1234;
+    };
+
     Y_UNIT_TEST(TestHuge) {
-        UNIT_ASSERT_VALUES_EQUAL(*HugeSingleton<int>(), 0); 
-        UNIT_ASSERT_VALUES_EQUAL(HugeSingleton<THuge>()->V, 1234); 
-    } 
+        UNIT_ASSERT_VALUES_EQUAL(*HugeSingleton<int>(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(HugeSingleton<THuge>()->V, 1234);
+    }
 
     struct TWithParams {
         explicit TWithParams(const ui32 data1 = 0, const TString& data2 = TString())
@@ -43,4 +43,4 @@ Y_UNIT_TEST_SUITE(TestSingleton) {
         }
         UNIT_ASSERT_VALUES_EQUAL(Default<TWithParams>().Data1, 0);
     }
-} 
+}

@@ -2,8 +2,8 @@ OWNER(
     g:contrib
     g:cpp-contrib
 )
- 
-RECURSE( 
+
+RECURSE(
     afl
     antlr4_cpp_runtime
     apache
@@ -22,7 +22,7 @@ RECURSE(
     bento4
     bluez-clean-headers
     breakpad
-    brotli 
+    brotli
     c-ares
     cairo
     cbc
@@ -112,7 +112,7 @@ RECURSE(
     ImageMagick
     inja
     inja/ut
-    intel 
+    intel
     isa-l
     isa-l/ut
     jansson
@@ -222,7 +222,7 @@ RECURSE(
     matrixssl
     mecab
     metrohash
-    mimalloc 
+    mimalloc
     minilzo
     minizip
     mlir11
@@ -282,7 +282,7 @@ RECURSE(
     protoc_std
     psimd
     pthreadpool
-    pugixml 
+    pugixml
     pybind11
     pycxx
     python
@@ -363,12 +363,12 @@ RECURSE(
     yaml-cpp
     zeromq
     zlib
-    zlib-ng-develop 
+    zlib-ng-develop
     zookeeper
     zstd
-    zstd06 
+    zstd06
     zzip
-) 
+)
 
 IF (OS_FREEBSD OR OS_LINUX)
     RECURSE(
@@ -381,7 +381,7 @@ ENDIF()
 
 IF (OS_DARWIN)
     RECURSE(
-        gperftools 
+        gperftools
         osxfuse
         macfuse-headers
         uuid
@@ -421,11 +421,11 @@ ELSE()
         unixodbc
     )
 ENDIF()
- 
+
 IF (OS_LINUX OR OS_WINDOWS)
-    RECURSE( 
+    RECURSE(
         lockless
-    ) 
+    )
 ENDIF()
 
 IF (OS_ANDROID)
@@ -441,6 +441,6 @@ IF (OS_IOS AND ARCH_ARM64 OR OS_DARWIN)
     )
 ENDIF()
 
-IF (MUSL) 
-    RECURSE(musl_extra) 
-ENDIF() 
+IF (MUSL)
+    RECURSE(musl_extra)
+ENDIF()

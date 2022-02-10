@@ -1,4 +1,4 @@
-LIBRARY() 
+LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
@@ -9,7 +9,7 @@ OWNER(
     g:contrib
     g:cpp-contrib
 )
- 
+
 NO_PLATFORM()
 DISABLE(OPENSOURCE_EXPORT)
 
@@ -23,7 +23,7 @@ ELSE()
     )
 ENDIF()
 
-END() 
+END()
 
 RECURSE(
     libcxx

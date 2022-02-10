@@ -45,14 +45,14 @@ private:
     TAddrRef Addr_;
 };
 
-template <> 
+template <>
 struct THash<TEndpoint> {
-    inline size_t operator()(const TEndpoint& ep) const { 
+    inline size_t operator()(const TEndpoint& ep) const {
         return ep.Hash();
     }
 };
 
-inline bool operator==(const TEndpoint& l, const TEndpoint& r) { 
+inline bool operator==(const TEndpoint& l, const TEndpoint& r) {
     try {
         return NAddr::IsSame(*l.Addr(), *r.Addr()) && l.Port() == r.Port();
     } catch (...) {

@@ -1,13 +1,13 @@
-PROGRAM() 
- 
-OWNER(pg) 
- 
-PEERDIR( 
+PROGRAM()
+
+OWNER(pg)
+
+PEERDIR(
     library/cpp/http/io
-) 
- 
-SRCS( 
-    main.cpp 
-) 
- 
-END() 
+)
+
+SRCS(
+    main.cpp
+)
+
+END()

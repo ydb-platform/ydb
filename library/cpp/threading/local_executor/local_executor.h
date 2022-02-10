@@ -5,7 +5,7 @@
 #include <util/generic/cast.h>
 #include <util/generic/fwd.h>
 #include <util/generic/noncopyable.h>
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 #include <util/generic/singleton.h>
 #include <util/generic/ymath.h>
 
@@ -135,9 +135,9 @@ namespace NPar {
         //
         TVector<NThreading::TFuture<void>> ExecRangeWithFutures(TLocallyExecutableFunction exec, int firstId, int lastId, int flags);
 
-        template <typename TBody> 
+        template <typename TBody>
         static inline auto BlockedLoopBody(const TExecRangeParams& params, const TBody& body) {
-            return [=](int blockId) { 
+            return [=](int blockId) {
                 const int blockFirstId = params.FirstId + blockId * params.GetBlockSize();
                 const int blockLastId = Min(params.LastId, blockFirstId + params.GetBlockSize());
                 for (int i = blockFirstId; i < blockLastId; ++i) {

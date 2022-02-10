@@ -1,12 +1,12 @@
 import marshal
-import sys 
+import sys
 from _codecs import utf_8_decode, utf_8_encode
 from _frozen_importlib import _call_with_frames_removed, spec_from_loader, BuiltinImporter
 from _frozen_importlib_external import _os, _path_isfile, _path_isdir, _path_isabs, path_sep, _path_join, _path_split
 from _io import FileIO
 
-import __res as __resource 
- 
+import __res as __resource
+
 _b = lambda x: x if isinstance(x, bytes) else utf_8_encode(x)[0]
 _s = lambda x: x if isinstance(x, str) else utf_8_decode(x)[0]
 env_entry_point = b'Y_PYTHON_ENTRY_POINT'
@@ -16,7 +16,7 @@ env_extended_source_search = b'Y_PYTHON_EXTENDED_SOURCE_SEARCH'
 res_ya_ide_venv = b'YA_IDE_VENV'
 executable = sys.executable or 'Y_PYTHON'
 sys.modules['run_import_hook'] = __resource
- 
+
 # This is the prefix in contrib/tools/python3/src/Lib/ya.make.
 py_prefix = b'py/'
 py_prefix_len = len(py_prefix)
@@ -97,10 +97,10 @@ def file_bytes(path):
 def iter_keys(prefix):
     l = len(prefix)
     for idx in range(__resource.count()):
-        key = __resource.key_by_index(idx) 
+        key = __resource.key_by_index(idx)
         if key.startswith(prefix):
             yield key, key[l:]
- 
+
 
 def iter_py_modules(with_keys=False):
     for key, path in iter_keys(b'resfs/file/' + py_prefix):
@@ -117,8 +117,8 @@ def iter_prefixes(s):
     while i >= 0:
         yield s[:i]
         i = s.find('.', i + 1)
- 
- 
+
+
 def resfs_resolve(path):
     """
     Return the absolute path of a root-relative path if it exists.
@@ -171,12 +171,12 @@ def mod_path(mod):
     return py_prefix + _b(mod).replace(b'.', b'/') + b'.py'
 
 
-class ResourceImporter(object): 
- 
+class ResourceImporter(object):
+
     """ A meta_path importer that loads code from built-in resources.
-    """ 
- 
-    def __init__(self): 
+    """
+
+    def __init__(self):
         self.memory = set(iter_py_modules())  # Set of importable module names.
         self.source_map = {}                  # Map from file names to module names.
         self._source_name = {}                # Map from original to altered module names.
@@ -185,13 +185,13 @@ class ResourceImporter(object):
             self.arcadia_source_finder = ArcadiaSourceFinder(_s(Y_PYTHON_SOURCE_ROOT))
         else:
             self.arcadia_source_finder = None
- 
+
         for p in list(self.memory) + list(sys.builtin_module_names):
-            for pp in iter_prefixes(p): 
-                k = pp + '.__init__' 
-                if k not in self.memory: 
-                    self.memory.add(k) 
- 
+            for pp in iter_prefixes(p):
+                k = pp + '.__init__'
+                if k not in self.memory:
+                    self.memory.add(k)
+
     def for_package(self, name):
         import copy
         importer = copy.copy(self)
@@ -211,7 +211,7 @@ class ResourceImporter(object):
         except ImportError:
             return None
         return spec_from_loader(fullname, self, is_package=is_package)
- 
+
     def find_module(self, fullname, path=None):
         """For backward compatibility."""
         spec = self.find_spec(fullname, path)
@@ -239,7 +239,7 @@ class ResourceImporter(object):
         if data is None:
             raise IOError(path)  # Y_PYTHON_ENTRY_POINT=:resource_files
         return data
- 
+
     # PEP-302 extension 2 of 3: get __file__ without importing.
     def get_filename(self, fullname):
         modname = fullname
@@ -291,13 +291,13 @@ class ResourceImporter(object):
                 # This covers packages with no __init__.py in resources.
                 return compile('', modname, 'exec', dont_inherit=True)
 
-    def is_package(self, fullname): 
-        if fullname in self.memory: 
-            return False 
+    def is_package(self, fullname):
+        if fullname in self.memory:
+            return False
 
         if fullname + '.__init__' in self.memory:
-            return True 
- 
+            return True
+
         if self.arcadia_source_finder:
             return self.arcadia_source_finder.is_package(fullname)
 
@@ -564,7 +564,7 @@ sys.is_standalone_binary = True
 sys.frozen = True
 
 # Set of names of importable modules.
-sys.extra_modules = importer.memory 
+sys.extra_modules = importer.memory
 
 # Use custom implementation of traceback printer.
 # Built-in printer (PyTraceBack_Print) does not support custom module loaders

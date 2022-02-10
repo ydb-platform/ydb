@@ -1,79 +1,79 @@
 #include "defaults.h"
-#include "progname.h" 
-#include "compat.h" 
-#include "error.h" 
+#include "progname.h"
+#include "compat.h"
+#include "error.h"
 
-#include <util/generic/scope.h> 
+#include <util/generic/scope.h>
 
-#include <util/stream/printf.h> 
-#include <util/stream/output.h> 
+#include <util/stream/printf.h>
+#include <util/stream/output.h>
 
-void vwarnx(const char* fmt, va_list args) { 
-    Cerr << GetProgramName() << ": "; 
+void vwarnx(const char* fmt, va_list args) {
+    Cerr << GetProgramName() << ": ";
 
-    if (fmt) { 
-        Printf(Cerr, fmt, args); 
-    } 
+    if (fmt) {
+        Printf(Cerr, fmt, args);
+    }
 
-    Cerr << '\n'; 
-} 
-
-void vwarn(const char* fmt, va_list args) { 
-    int curErrNo = errno; 
-    auto curErrText = LastSystemErrorText(); 
-
-    Y_DEFER { 
-        errno = curErrNo; 
-    }; 
-
-    Cerr << GetProgramName() << ": "; 
-
-    if (fmt) { 
-        Printf(Cerr, fmt, args); 
-        Cerr << ": "; 
-    } 
- 
-    Cerr << curErrText << '\n'; 
+    Cerr << '\n';
 }
 
-void warn(const char* fmt, ...) { 
-    va_list args; 
+void vwarn(const char* fmt, va_list args) {
+    int curErrNo = errno;
+    auto curErrText = LastSystemErrorText();
 
-    va_start(args, fmt); 
-    vwarn(fmt, args); 
-    va_end(args); 
+    Y_DEFER {
+        errno = curErrNo;
+    };
+
+    Cerr << GetProgramName() << ": ";
+
+    if (fmt) {
+        Printf(Cerr, fmt, args);
+        Cerr << ": ";
+    }
+
+    Cerr << curErrText << '\n';
 }
 
-void warnx(const char* fmt, ...) { 
-    va_list args; 
+void warn(const char* fmt, ...) {
+    va_list args;
 
-    va_start(args, fmt); 
-    vwarnx(fmt, args); 
-    va_end(args); 
+    va_start(args, fmt);
+    vwarn(fmt, args);
+    va_end(args);
 }
 
-void verr(int status, const char* fmt, va_list args) { 
-    vwarn(fmt, args); 
-    exit(status); 
+void warnx(const char* fmt, ...) {
+    va_list args;
+
+    va_start(args, fmt);
+    vwarnx(fmt, args);
+    va_end(args);
 }
 
-void err(int status, const char* fmt, ...) { 
-    va_list args; 
- 
-    va_start(args, fmt); 
-    verr(status, fmt, args); 
-    va_end(args); 
+void verr(int status, const char* fmt, va_list args) {
+    vwarn(fmt, args);
+    exit(status);
 }
 
-void verrx(int status, const char* fmt, va_list args) { 
-    vwarnx(fmt, args); 
-    exit(status); 
+void err(int status, const char* fmt, ...) {
+    va_list args;
+
+    va_start(args, fmt);
+    verr(status, fmt, args);
+    va_end(args);
 }
 
-void errx(int status, const char* fmt, ...) { 
-    va_list args; 
- 
-    va_start(args, fmt); 
-    verrx(status, fmt, args); 
-    va_end(args); 
+void verrx(int status, const char* fmt, va_list args) {
+    vwarnx(fmt, args);
+    exit(status);
+}
+
+void errx(int status, const char* fmt, ...) {
+    va_list args;
+
+    va_start(args, fmt);
+    verrx(status, fmt, args);
+    va_end(args);
 }

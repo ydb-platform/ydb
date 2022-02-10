@@ -9,20 +9,20 @@
 
 namespace NSc {
 #ifdef _MSC_VER
-#pragma warning(disable : 4521 4522) 
+#pragma warning(disable : 4521 4522)
 #endif
 
     // todo: try to remove some rarely used methods
     class TValue {
     public:
         enum class EType {
-            Null = 0 /* "Null" */, 
-            Bool /* "Bool" */, 
-            IntNumber /* "Int" */, 
-            FloatNumber /* "Float" */, 
-            String /* "String" */, 
-            Array /* "Array" */, 
-            Dict /* "Dict" */ 
+            Null = 0 /* "Null" */,
+            Bool /* "Bool" */,
+            IntNumber /* "Int" */,
+            FloatNumber /* "Float" */,
+            String /* "String" */,
+            Array /* "Array" */,
+            Dict /* "Dict" */
         };
 
         struct TScCore;
@@ -53,7 +53,7 @@ namespace NSc {
         inline TValue(long long t);
         inline TValue(long t);
         inline TValue(int t);
-        //    inline TValue(bool b); 
+        //    inline TValue(bool b);
 
         inline TValue(TStringBuf t);
         inline TValue(const char*);
@@ -86,7 +86,7 @@ namespace NSc {
         inline TValue& operator=(long long t);
         inline TValue& operator=(long t);
         inline TValue& operator=(int t);
-        //    inline TValue& operator=(bool t); 
+        //    inline TValue& operator=(bool t);
 
         inline TValue& operator=(TStringBuf t);
         inline TValue& operator=(const char* t);
@@ -101,14 +101,14 @@ namespace NSc {
 
     public:
         template <class T> // ui16 or TStringBuf
-        inline TValue& operator[](const T& idx) { 
-            return GetOrAdd(idx); 
-        } 
+        inline TValue& operator[](const T& idx) {
+            return GetOrAdd(idx);
+        }
 
         template <class T> // ui16 or TStringBuf
-        inline const TValue& operator[](const T& idx) const { 
-            return Get(idx); 
-        } 
+        inline const TValue& operator[](const T& idx) const {
+            return Get(idx);
+        }
 
     public: // Data methods ///////////////////////////////////////////////////////////
         inline EType GetType() const;
@@ -117,9 +117,9 @@ namespace NSc {
 
         inline TValue& SetNull(); // returns self, will set type to Null
 
-        TValue& Clear() { 
-            return ClearArray().ClearDict().SetNull(); 
-        } 
+        TValue& Clear() {
+            return ClearArray().ClearDict().SetNull();
+        }
 
     public: // Number methods /////////////////////////////////////////////////////////
             // Bool, IntNumber and FloatNumber are all compatible.
@@ -179,7 +179,7 @@ namespace NSc {
         TString ForceString(const TString& deflt = TString()) const; // Best-effort cast to TString (will do ToString for numeric types)
 
         // todo: remove
-        inline bool StringEmpty() const; 
+        inline bool StringEmpty() const;
         inline size_t StringSize() const;
 
     public: // Array methods //////////////////////////////////////////////////////////
@@ -202,26 +202,26 @@ namespace NSc {
             return Push() = std::forward<T>(t);
         } // returns new child
 
-        TValue& Insert(ui16 idx) { 
-            return InsertUnsafe(idx); 
-        } // creates missing values, returns new child 
+        TValue& Insert(ui16 idx) {
+            return InsertUnsafe(idx);
+        } // creates missing values, returns new child
 
         template <class T>
         TValue& Insert(ui16 idx, T&& v) {
             return InsertUnsafe(idx, std::forward<T>(v));
-        } // creates missing values, returns new child 
+        } // creates missing values, returns new child
 
         template <class TIt>
         inline TValue& AppendAll(TIt begin, TIt end); // Append(vec.begin(), vec.end())
 
         template <class TColl>
-        inline TValue& AppendAll(TColl&& coll); // Append(vec) 
+        inline TValue& AppendAll(TColl&& coll); // Append(vec)
 
         inline TValue& AppendAll(std::initializer_list<TValue> coll);
 
-        TValue& GetOrAdd(ui16 idx) { 
-            return GetOrAddUnsafe(idx); 
-        } // creates missing values, returns new child 
+        TValue& GetOrAdd(ui16 idx) {
+            return GetOrAddUnsafe(idx);
+        } // creates missing values, returns new child
 
         inline TValue& InsertUnsafe(size_t idx); // creates missing values, returns new child
 
@@ -230,17 +230,17 @@ namespace NSc {
             return InsertUnsafe(idx) = std::forward<T>(t);
         } // creates missing values, returns new child
 
-        inline TValue& GetOrAddUnsafe(size_t idx); // creates missing values, returns new child 
+        inline TValue& GetOrAddUnsafe(size_t idx); // creates missing values, returns new child
 
-        inline TValue Pop();              // returns popped value 
+        inline TValue Pop();              // returns popped value
         inline TValue Delete(size_t idx); // returns deleted value if it existed, NSc::Null() otherwise
 
-        inline TValue& Front() { 
-            return GetOrAdd(0); 
-        } // creates missing value, returns child 
-        inline const TValue& Front() const { 
-            return Get(0); 
-        } // returns child or default 
+        inline TValue& Front() {
+            return GetOrAdd(0);
+        } // creates missing value, returns child
+        inline const TValue& Front() const {
+            return Get(0);
+        } // returns child or default
 
         inline TValue& Back();             // creates missing value, returns child
         inline const TValue& Back() const; // returns child or default
@@ -262,14 +262,14 @@ namespace NSc {
         inline const TValue& Get(TStringBuf idx) const;
         inline TValue* GetNoAdd(TStringBuf idx); // returns link to existing child or nullptr
 
-        TValue& Add(TStringBuf idx) { 
-            return GetOrAdd(idx); 
-        } 
+        TValue& Add(TStringBuf idx) {
+            return GetOrAdd(idx);
+        }
 
         template <class T>
         TValue& Add(TStringBuf idx, T&& t) {
             return Add(idx) = std::forward<T>(t);
-        } 
+        }
 
         inline TValue& GetOrAdd(TStringBuf idx); // creates missing value, returns child
 
@@ -291,9 +291,9 @@ namespace NSc {
         static const EJsonOpts JO_SORT_KEYS = TJsonOpts::JO_SORT_KEYS;
         static const EJsonOpts JO_SKIP_UNSAFE = TJsonOpts::JO_SKIP_UNSAFE; // skip non-utf8 strings
         static const EJsonOpts JO_PRETTY = TJsonOpts::JO_PRETTY;
-        static const EJsonOpts JO_SAFE = TJsonOpts::JO_SAFE;                                               // JO_SORT_KEYS | JO_SKIP_UNSAFE 
+        static const EJsonOpts JO_SAFE = TJsonOpts::JO_SAFE;                                               // JO_SORT_KEYS | JO_SKIP_UNSAFE
         static const EJsonOpts JO_PARSER_STRICT_WITH_COMMENTS = TJsonOpts::JO_PARSER_STRICT_WITH_COMMENTS; // strict json + strict utf8
-        static const EJsonOpts JO_PARSER_STRICT = TJsonOpts::JO_PARSER_STRICT;                             // strict json + strict utf8 + comments are disallowed 
+        static const EJsonOpts JO_PARSER_STRICT = TJsonOpts::JO_PARSER_STRICT;                             // strict json + strict utf8 + comments are disallowed
         static const EJsonOpts JO_PARSER_DISALLOW_DUPLICATE_KEYS = TJsonOpts::JO_PARSER_DISALLOW_DUPLICATE_KEYS;
 
         static TValue FromJson(TStringBuf, const TJsonOpts& = TJsonOpts());
@@ -321,7 +321,7 @@ namespace NSc {
         static TJsonOpts MakeOptsPrettyForSerializer(TJsonOpts = TJsonOpts());
 
     public: // Merge methods ////////////////////////////////////////////////
-        /* 
+        /*
      * LHS.MergeUpdate(RHS):
      *     1. Dict <- Dict:
      *            - Copy all nonconflicting key-value pairs from RHS to LHS.
@@ -347,7 +347,7 @@ namespace NSc {
         static bool MergeUpdateJson(TValue&, TStringBuf json);  // returns true unless failed to parse the json
         static bool ReverseMergeJson(TValue&, TStringBuf json); // returns true unless failed to parse the json
 
-        TValue& MergeUpdate(const TValue& delta);  // return self 
+        TValue& MergeUpdate(const TValue& delta);  // return self
         TValue& ReverseMerge(const TValue& delta); // return self
 
     public: // Path methods /////////////////////////////////////////////////////////
@@ -356,9 +356,9 @@ namespace NSc {
 
         static TString EscapeForPath(TStringBuf rawKey); // converts a raw dict key into a valid token for a selector path
 
-        static bool PathValid(TStringBuf path); // returns true if the path is syntactically valid 
+        static bool PathValid(TStringBuf path); // returns true if the path is syntactically valid
 
-        bool PathExists(TStringBuf path) const; // returns true if the path is syntactically valid and the target value exists 
+        bool PathExists(TStringBuf path) const; // returns true if the path is syntactically valid and the target value exists
 
         const TValue& TrySelect(TStringBuf path) const; // returns the target value
                                                         // if the path is syntactically valid and the target value exists
@@ -372,14 +372,14 @@ namespace NSc {
                                                     // if the path is syntactically valid and the target value existed
                                                     // otherwise returns NSc::Null()
 
-    public:                                    // Copy methods ///////////////////////////////////////////////////////// 
-        TValue Clone() const;                  // returns deep copy of self (on the separate pool) 
+    public:                                    // Copy methods /////////////////////////////////////////////////////////
+        TValue Clone() const;                  // returns deep copy of self (on the separate pool)
         TValue& CopyFrom(const TValue& other); // deep copy other value into self, returns self
 
         TValue& Swap(TValue& v);
 
-        static bool Same(const TValue&, const TValue&);     // point to the same core 
-        static bool Equal(const TValue&, const TValue&);    // recursively equal 
+        static bool Same(const TValue&, const TValue&);     // point to the same core
+        static bool Equal(const TValue&, const TValue&);    // recursively equal
         static bool SamePool(const TValue&, const TValue&); // share arena
 
     public:
@@ -394,7 +394,7 @@ namespace NSc {
 
         static const TScCore& DefaultCore();
         static const TArray& DefaultArray();
-        static const TDict& DefaultDict(); 
+        static const TDict& DefaultDict();
         static const TValue& DefaultValue();
         static const TValue& Null() {
             return DefaultValue();
@@ -434,14 +434,14 @@ namespace NSc {
     }
 
 
-    class TArray: public TDeque<TValue, TPoolAllocator>, TNonCopyable { 
-        using TParent = TDeque<TValue, TPoolAllocator>; 
+    class TArray: public TDeque<TValue, TPoolAllocator>, TNonCopyable {
+        using TParent = TDeque<TValue, TPoolAllocator>;
 
     public:
         TArray(TMemoryPool* p)
             : TParent(p)
-        { 
-        } 
+        {
+        }
 
         template <class TIt>
         void AppendAll(TIt begin, TIt end) {
@@ -505,7 +505,7 @@ namespace NSc {
         }
 
         const TValue& EnsureIndex(size_t i) const {
-            return i < size() ? TParent::operator[](i) : TValue::DefaultValue(); 
+            return i < size() ? TParent::operator[](i) : TValue::DefaultValue();
         }
     };
 
@@ -513,14 +513,14 @@ namespace NSc {
     // todo: densehashtable
     // todo: allow insertions
     // todo: make TDict methods safe
-    class TDict: public THashMap<TStringBuf, TValue, THash<TStringBuf>, TEqualTo<TStringBuf>, TPoolAllocator>, TNonCopyable { 
+    class TDict: public THashMap<TStringBuf, TValue, THash<TStringBuf>, TEqualTo<TStringBuf>, TPoolAllocator>, TNonCopyable {
         using TParent = THashMap<TStringBuf, TValue, THash<TStringBuf>, TEqualTo<TStringBuf>, TPoolAllocator>;
- 
+
     public:
         TDict(TMemoryPool* p)
             : TParent(p)
-        { 
-        } 
+        {
+        }
 
         template <class TStr>
         const TValue& Get(const TStr& key) const {
@@ -534,5 +534,5 @@ namespace NSc {
 #include "scheme_cast.h"
 
 #ifdef _MSC_VER
-#pragma warning(default : 4521 4522) 
+#pragma warning(default : 4521 4522)
 #endif

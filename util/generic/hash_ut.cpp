@@ -1,41 +1,41 @@
-#include "hash.h" 
-#include "vector.h" 
-#include "hash_set.h" 
- 
+#include "hash.h"
+#include "vector.h"
+#include "hash_set.h"
+
 #include <library/cpp/testing/common/probe.h>
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <utility>
 #include <util/str_stl.h>
 #include <util/digest/multi.h>
- 
-static const char star = 42; 
- 
-class THashTest: public TTestBase { 
-    UNIT_TEST_SUITE(THashTest); 
-    UNIT_TEST(TestHMapConstructorsAndAssignments); 
-    UNIT_TEST(TestHMap1); 
+
+static const char star = 42;
+
+class THashTest: public TTestBase {
+    UNIT_TEST_SUITE(THashTest);
+    UNIT_TEST(TestHMapConstructorsAndAssignments);
+    UNIT_TEST(TestHMap1);
     UNIT_TEST(TestHMapEqualityOperator);
     UNIT_TEST(TestHMMapEqualityOperator);
-    UNIT_TEST(TestHMMapConstructorsAndAssignments); 
-    UNIT_TEST(TestHMMap1); 
+    UNIT_TEST(TestHMMapConstructorsAndAssignments);
+    UNIT_TEST(TestHMMap1);
     UNIT_TEST(TestHMMapHas);
-    UNIT_TEST(TestHSetConstructorsAndAssignments); 
+    UNIT_TEST(TestHSetConstructorsAndAssignments);
     UNIT_TEST(TestHSetSize);
-    UNIT_TEST(TestHSet2); 
+    UNIT_TEST(TestHSet2);
     UNIT_TEST(TestHSetEqualityOperator);
-    UNIT_TEST(TestHMSetConstructorsAndAssignments); 
+    UNIT_TEST(TestHMSetConstructorsAndAssignments);
     UNIT_TEST(TestHMSetSize);
-    UNIT_TEST(TestHMSet1); 
+    UNIT_TEST(TestHMSet1);
     UNIT_TEST(TestHMSetEqualityOperator);
     UNIT_TEST(TestHMSetEmplace);
-    UNIT_TEST(TestInsertErase); 
-    UNIT_TEST(TestResizeOnInsertSmartPtrBug) 
-    UNIT_TEST(TestEmpty); 
-    UNIT_TEST(TestDefaultConstructor); 
-    UNIT_TEST(TestSizeOf); 
-    UNIT_TEST(TestInvariants); 
-    UNIT_TEST(TestAllocation); 
+    UNIT_TEST(TestInsertErase);
+    UNIT_TEST(TestResizeOnInsertSmartPtrBug)
+    UNIT_TEST(TestEmpty);
+    UNIT_TEST(TestDefaultConstructor);
+    UNIT_TEST(TestSizeOf);
+    UNIT_TEST(TestInvariants);
+    UNIT_TEST(TestAllocation);
     UNIT_TEST(TestInsertCopy);
     UNIT_TEST(TestEmplace);
     UNIT_TEST(TestEmplaceNoresize);
@@ -59,34 +59,34 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestHMSetInitializerList);
     UNIT_TEST(TestHSetInsertInitializerList);
     UNIT_TEST(TestTupleHash);
-    UNIT_TEST_SUITE_END(); 
- 
+    UNIT_TEST_SUITE_END();
+
     using hmset = THashMultiSet<char, hash<char>, TEqualTo<char>>;
- 
-protected: 
-    void TestHMapConstructorsAndAssignments(); 
-    void TestHMap1(); 
+
+protected:
+    void TestHMapConstructorsAndAssignments();
+    void TestHMap1();
     void TestHMapEqualityOperator();
     void TestHMMapEqualityOperator();
-    void TestHMMapConstructorsAndAssignments(); 
-    void TestHMMap1(); 
+    void TestHMMapConstructorsAndAssignments();
+    void TestHMMap1();
     void TestHMMapHas();
-    void TestHSetConstructorsAndAssignments(); 
+    void TestHSetConstructorsAndAssignments();
     void TestHSetSize();
-    void TestHSet2(); 
+    void TestHSet2();
     void TestHSetEqualityOperator();
-    void TestHMSetConstructorsAndAssignments(); 
+    void TestHMSetConstructorsAndAssignments();
     void TestHMSetSize();
-    void TestHMSet1(); 
+    void TestHMSet1();
     void TestHMSetEqualityOperator();
     void TestHMSetEmplace();
-    void TestInsertErase(); 
-    void TestResizeOnInsertSmartPtrBug(); 
-    void TestEmpty(); 
-    void TestDefaultConstructor(); 
-    void TestSizeOf(); 
-    void TestInvariants(); 
-    void TestAllocation(); 
+    void TestInsertErase();
+    void TestResizeOnInsertSmartPtrBug();
+    void TestEmpty();
+    void TestDefaultConstructor();
+    void TestSizeOf();
+    void TestInvariants();
+    void TestAllocation();
     void TestInsertCopy();
     void TestEmplace();
     void TestEmplaceNoresize();
@@ -110,10 +110,10 @@ protected:
     void TestHMSetInitializerList();
     void TestHSetInsertInitializerList();
     void TestTupleHash();
-}; 
- 
-UNIT_TEST_SUITE_REGISTRATION(THashTest); 
- 
+};
+
+UNIT_TEST_SUITE_REGISTRATION(THashTest);
+
 void THashTest::TestHMapConstructorsAndAssignments() {
     using container = THashMap<TString, int>;
 
@@ -125,7 +125,7 @@ void THashTest::TestHMapConstructorsAndAssignments() {
 
     UNIT_ASSERT_VALUES_EQUAL(2, c1.size());
     UNIT_ASSERT_VALUES_EQUAL(2, c2.size());
-    UNIT_ASSERT_VALUES_EQUAL(1, c1.at("one")); /* Note: fails under MSVC since it does not support implicit generation of move constructors. */ 
+    UNIT_ASSERT_VALUES_EQUAL(1, c1.at("one")); /* Note: fails under MSVC since it does not support implicit generation of move constructors. */
     UNIT_ASSERT_VALUES_EQUAL(2, c2.at("two"));
 
     container c3(std::move(c1));
@@ -148,11 +148,11 @@ void THashTest::TestHMapConstructorsAndAssignments() {
     UNIT_ASSERT_VALUES_EQUAL(4, c3.size());
     UNIT_ASSERT_VALUES_EQUAL(4, c3.at("four"));
 
-    const container c4{ 
-        {"one", 1}, 
-        {"two", 2}, 
+    const container c4{
+        {"one", 1},
+        {"two", 2},
         {"three", 3},
-        {"four", 4}, 
+        {"four", 4},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(4, c4.size());
@@ -165,43 +165,43 @@ void THashTest::TestHMapConstructorsAndAssignments() {
     UNIT_ASSERT_VALUES_EQUAL(c1["nonexistent"], 0);
 }
 
-void THashTest::TestHMap1() { 
+void THashTest::TestHMap1() {
     using maptype = THashMap<char, TString, THash<char>, TEqualTo<char>>;
-    maptype m; 
-    // Store mappings between roman numerals and decimals. 
-    m['l'] = "50"; 
-    m['x'] = "20"; // Deliberate mistake. 
-    m['v'] = "5"; 
-    m['i'] = "1"; 
-    UNIT_ASSERT(!strcmp(m['x'].c_str(), "20")); 
-    m['x'] = "10"; // Correct mistake. 
-    UNIT_ASSERT(!strcmp(m['x'].c_str(), "10")); 
- 
+    maptype m;
+    // Store mappings between roman numerals and decimals.
+    m['l'] = "50";
+    m['x'] = "20"; // Deliberate mistake.
+    m['v'] = "5";
+    m['i'] = "1";
+    UNIT_ASSERT(!strcmp(m['x'].c_str(), "20"));
+    m['x'] = "10"; // Correct mistake.
+    UNIT_ASSERT(!strcmp(m['x'].c_str(), "10"));
+
     UNIT_ASSERT(!m.contains('z'));
-    UNIT_ASSERT(!strcmp(m['z'].c_str(), "")); 
+    UNIT_ASSERT(!strcmp(m['z'].c_str(), ""));
     UNIT_ASSERT(m.contains('z'));
- 
-    UNIT_ASSERT(m.count('z') == 1); 
+
+    UNIT_ASSERT(m.count('z') == 1);
     auto p = m.insert(std::pair<const char, TString>('c', TString("100")));
- 
-    UNIT_ASSERT(p.second); 
- 
+
+    UNIT_ASSERT(p.second);
+
     p = m.insert(std::pair<const char, TString>('c', TString("100")));
-    UNIT_ASSERT(!p.second); 
- 
-    //Some iterators compare check, really compile time checks 
-    maptype::iterator ite(m.begin()); 
-    maptype::const_iterator cite(m.begin()); 
-    cite = m.begin(); 
-    maptype const& cm = m; 
-    cite = cm.begin(); 
- 
-    UNIT_ASSERT((maptype::const_iterator)ite == cite); 
-    UNIT_ASSERT(!((maptype::const_iterator)ite != cite)); 
-    UNIT_ASSERT(cite == (maptype::const_iterator)ite); 
-    UNIT_ASSERT(!(cite != (maptype::const_iterator)ite)); 
-} 
- 
+    UNIT_ASSERT(!p.second);
+
+    //Some iterators compare check, really compile time checks
+    maptype::iterator ite(m.begin());
+    maptype::const_iterator cite(m.begin());
+    cite = m.begin();
+    maptype const& cm = m;
+    cite = cm.begin();
+
+    UNIT_ASSERT((maptype::const_iterator)ite == cite);
+    UNIT_ASSERT(!((maptype::const_iterator)ite != cite));
+    UNIT_ASSERT(cite == (maptype::const_iterator)ite);
+    UNIT_ASSERT(!(cite != (maptype::const_iterator)ite));
+}
+
 void THashTest::TestHMapEqualityOperator() {
     using container = THashMap<TString, int>;
 
@@ -290,62 +290,62 @@ void THashTest::TestHMMapConstructorsAndAssignments() {
     UNIT_ASSERT_VALUES_EQUAL(4, c3.size());
 }
 
-void THashTest::TestHMMap1() { 
+void THashTest::TestHMMap1() {
     using mmap = THashMultiMap<char, int, THash<char>, TEqualTo<char>>;
-    mmap m; 
- 
-    UNIT_ASSERT(m.count('X') == 0); 
+    mmap m;
+
+    UNIT_ASSERT(m.count('X') == 0);
     m.insert(std::pair<const char, int>('X', 10)); // Standard way.
-    UNIT_ASSERT(m.count('X') == 1); 
- 
+    UNIT_ASSERT(m.count('X') == 1);
+
     m.insert(std::pair<const char, int>('X', 20)); // jbuck: standard way
-    UNIT_ASSERT(m.count('X') == 2); 
- 
+    UNIT_ASSERT(m.count('X') == 2);
+
     m.insert(std::pair<const char, int>('Y', 32)); // jbuck: standard way
-    mmap::iterator i = m.find('X');                // Find first match. 
- 
-    UNIT_ASSERT((*i).first == 'X'); 
-    UNIT_ASSERT((*i).second == 10); 
+    mmap::iterator i = m.find('X');                // Find first match.
+
+    UNIT_ASSERT((*i).first == 'X');
+    UNIT_ASSERT((*i).second == 10);
     ++i;
-    UNIT_ASSERT((*i).first == 'X'); 
-    UNIT_ASSERT((*i).second == 20); 
- 
-    i = m.find('Y'); 
-    UNIT_ASSERT((*i).first == 'Y'); 
-    UNIT_ASSERT((*i).second == 32); 
- 
-    i = m.find('Z'); 
-    UNIT_ASSERT(i == m.end()); 
- 
-    size_t count = m.erase('X'); 
-    UNIT_ASSERT(count == 2); 
- 
-    //Some iterators compare check, really compile time checks 
-    mmap::iterator ite(m.begin()); 
-    mmap::const_iterator cite(m.begin()); 
- 
-    UNIT_ASSERT((mmap::const_iterator)ite == cite); 
-    UNIT_ASSERT(!((mmap::const_iterator)ite != cite)); 
-    UNIT_ASSERT(cite == (mmap::const_iterator)ite); 
-    UNIT_ASSERT(!(cite != (mmap::const_iterator)ite)); 
- 
+    UNIT_ASSERT((*i).first == 'X');
+    UNIT_ASSERT((*i).second == 20);
+
+    i = m.find('Y');
+    UNIT_ASSERT((*i).first == 'Y');
+    UNIT_ASSERT((*i).second == 32);
+
+    i = m.find('Z');
+    UNIT_ASSERT(i == m.end());
+
+    size_t count = m.erase('X');
+    UNIT_ASSERT(count == 2);
+
+    //Some iterators compare check, really compile time checks
+    mmap::iterator ite(m.begin());
+    mmap::const_iterator cite(m.begin());
+
+    UNIT_ASSERT((mmap::const_iterator)ite == cite);
+    UNIT_ASSERT(!((mmap::const_iterator)ite != cite));
+    UNIT_ASSERT(cite == (mmap::const_iterator)ite);
+    UNIT_ASSERT(!(cite != (mmap::const_iterator)ite));
+
     using HMapType = THashMultiMap<size_t, size_t>;
-    HMapType hmap; 
- 
-    //We fill the map to implicitely start a rehash. 
-    for (size_t counter = 0; counter < 3077; ++counter) { 
-        hmap.insert(HMapType::value_type(1, counter)); 
-    } 
- 
-    hmap.insert(HMapType::value_type(12325, 1)); 
-    hmap.insert(HMapType::value_type(12325, 2)); 
- 
-    UNIT_ASSERT(hmap.count(12325) == 2); 
- 
-    //At this point 23 goes to the same bucket as 12325, it used to reveal a bug. 
-    hmap.insert(HMapType::value_type(23, 0)); 
- 
-    UNIT_ASSERT(hmap.count(12325) == 2); 
+    HMapType hmap;
+
+    //We fill the map to implicitely start a rehash.
+    for (size_t counter = 0; counter < 3077; ++counter) {
+        hmap.insert(HMapType::value_type(1, counter));
+    }
+
+    hmap.insert(HMapType::value_type(12325, 1));
+    hmap.insert(HMapType::value_type(12325, 2));
+
+    UNIT_ASSERT(hmap.count(12325) == 2);
+
+    //At this point 23 goes to the same bucket as 12325, it used to reveal a bug.
+    hmap.insert(HMapType::value_type(23, 0));
+
+    UNIT_ASSERT(hmap.count(12325) == 2);
 
     UNIT_ASSERT(hmap.bucket_count() > 3000);
     for (size_t n = 0; n < 10; n++) {
@@ -353,8 +353,8 @@ void THashTest::TestHMMap1() {
         hmap.insert(HMapType::value_type(1, 2));
     }
     UNIT_ASSERT(hmap.bucket_count() < 30);
-} 
- 
+}
+
 void THashTest::TestHMMapHas() {
     using mmap = THashMultiMap<char, int, THash<char>, TEqualTo<char>>;
     mmap m;
@@ -506,22 +506,22 @@ void THashTest::TestHMSetSize() {
     UNIT_ASSERT_VALUES_EQUAL(3, c.size());
 }
 
-void THashTest::TestHMSet1() { 
-    hmset s; 
-    UNIT_ASSERT(s.count(star) == 0); 
-    s.insert(star); 
-    UNIT_ASSERT(s.count(star) == 1); 
-    s.insert(star); 
-    UNIT_ASSERT(s.count(star) == 2); 
+void THashTest::TestHMSet1() {
+    hmset s;
+    UNIT_ASSERT(s.count(star) == 0);
+    s.insert(star);
+    UNIT_ASSERT(s.count(star) == 1);
+    s.insert(star);
+    UNIT_ASSERT(s.count(star) == 2);
     auto i = s.find(char(40));
-    UNIT_ASSERT(i == s.end()); 
- 
-    i = s.find(star); 
-    UNIT_ASSERT(i != s.end()); 
-    UNIT_ASSERT(*i == '*'); 
-    UNIT_ASSERT(s.erase(star) == 2); 
-} 
- 
+    UNIT_ASSERT(i == s.end());
+
+    i = s.find(star);
+    UNIT_ASSERT(i != s.end());
+    UNIT_ASSERT(*i == '*');
+    UNIT_ASSERT(s.erase(star) == 2);
+}
+
 void THashTest::TestHMSetEqualityOperator() {
     using container = THashMultiSet<int>;
 
@@ -560,8 +560,8 @@ void THashTest::TestHMSetEmplace() {
         TKey(NTesting::TProbeState* state, int key)
             : TProbe(state)
             , Key_(key)
-        { 
-        } 
+        {
+        }
 
         operator size_t() const {
             return THash<int>()(Key_);
@@ -604,45 +604,45 @@ void THashTest::TestHMSetEmplace() {
     UNIT_ASSERT_EQUAL(state.Destructors, 6);
 }
 
-void THashTest::TestInsertErase() { 
+void THashTest::TestInsertErase() {
     using hmap = THashMap<TString, size_t, THash<TString>, TEqualTo<TString>>;
     using val_type = hmap::value_type;
- 
-    { 
-        hmap values; 
- 
-        UNIT_ASSERT(values.insert(val_type("foo", 0)).second); 
-        UNIT_ASSERT(values.insert(val_type("bar", 0)).second); 
-        UNIT_ASSERT(values.insert(val_type("abc", 0)).second); 
- 
-        UNIT_ASSERT(values.erase("foo") == 1); 
-        UNIT_ASSERT(values.erase("bar") == 1); 
-        UNIT_ASSERT(values.erase("abc") == 1); 
-    } 
- 
-    { 
-        hmap values; 
- 
-        UNIT_ASSERT(values.insert(val_type("foo", 0)).second); 
-        UNIT_ASSERT(values.insert(val_type("bar", 0)).second); 
-        UNIT_ASSERT(values.insert(val_type("abc", 0)).second); 
- 
-        UNIT_ASSERT(values.erase("abc") == 1); 
-        UNIT_ASSERT(values.erase("bar") == 1); 
-        UNIT_ASSERT(values.erase("foo") == 1); 
-    } 
-} 
+
+    {
+        hmap values;
+
+        UNIT_ASSERT(values.insert(val_type("foo", 0)).second);
+        UNIT_ASSERT(values.insert(val_type("bar", 0)).second);
+        UNIT_ASSERT(values.insert(val_type("abc", 0)).second);
+
+        UNIT_ASSERT(values.erase("foo") == 1);
+        UNIT_ASSERT(values.erase("bar") == 1);
+        UNIT_ASSERT(values.erase("abc") == 1);
+    }
+
+    {
+        hmap values;
+
+        UNIT_ASSERT(values.insert(val_type("foo", 0)).second);
+        UNIT_ASSERT(values.insert(val_type("bar", 0)).second);
+        UNIT_ASSERT(values.insert(val_type("abc", 0)).second);
+
+        UNIT_ASSERT(values.erase("abc") == 1);
+        UNIT_ASSERT(values.erase("bar") == 1);
+        UNIT_ASSERT(values.erase("foo") == 1);
+    }
+}
 
 namespace {
-    struct TItem: public TSimpleRefCount<TItem> { 
+    struct TItem: public TSimpleRefCount<TItem> {
         const TString Key;
         const TString Value;
 
         TItem(const TString& key, const TString& value)
             : Key(key)
             , Value(value)
-        { 
-        } 
+        {
+        }
     };
 
     using TItemPtr = TIntrusivePtr<TItem>;
@@ -664,8 +664,8 @@ namespace {
     struct TItemMap: public TItemMapBase {
         TItemMap()
             : TItemMapBase(1, THash<TString>(), TEqualTo<TString>())
-        { 
-        } 
+        {
+        }
 
         TItem& Add(const TString& key, const TString& value) {
             insert_ctx ins;
@@ -676,7 +676,7 @@ namespace {
             return **it;
         }
     };
-} 
+}
 
 void THashTest::TestResizeOnInsertSmartPtrBug() {
     TItemMap map;
@@ -729,7 +729,7 @@ void THashTest::TestSizeOf() {
 }
 
 void THashTest::TestInvariants() {
-    std::set<int> reference_set; 
+    std::set<int> reference_set;
     THashSet<int> set;
 
     for (int i = 0; i < 1000; i++) {
@@ -739,21 +739,21 @@ void THashTest::TestInvariants() {
     UNIT_ASSERT_VALUES_EQUAL(set.size(), 1000);
 
     int count0 = 0;
-    for (int i = 0; i < 1000; i++) { 
+    for (int i = 0; i < 1000; i++) {
         count0 += (set.find(i) != set.end()) ? 1 : 0;
-    } 
+    }
     UNIT_ASSERT_VALUES_EQUAL(count0, 1000);
 
     int count1 = 0;
-    for (auto pos = set.begin(); pos != set.end(); pos++) { 
+    for (auto pos = set.begin(); pos != set.end(); pos++) {
         ++count1;
-    } 
+    }
     UNIT_ASSERT_VALUES_EQUAL(count1, 1000);
 
     int count2 = 0;
-    for (const int& value : set) { 
+    for (const int& value : set) {
         count2 += (reference_set.find(value) != reference_set.end()) ? 1 : 0;
-    } 
+    }
     UNIT_ASSERT_VALUES_EQUAL(count2, 1000);
 }
 
@@ -761,16 +761,16 @@ struct TAllocatorCounters {
     TAllocatorCounters()
         : Allocations(0)
         , Deallocations(0)
-    { 
-    } 
+    {
+    }
 
     ~TAllocatorCounters() {
-        std::allocator<char> allocator; 
+        std::allocator<char> allocator;
 
         /* Release whatever was (intentionally) leaked. */
-        for (const auto& chunk : Chunks) { 
+        for (const auto& chunk : Chunks) {
             allocator.deallocate(static_cast<char*>(chunk.first), chunk.second);
-        } 
+        }
     }
 
     size_t Allocations;
@@ -778,34 +778,34 @@ struct TAllocatorCounters {
     TSet<std::pair<void*, size_t>> Chunks;
 };
 
-template <class T> 
-class TCountingAllocator: public std::allocator<T> { 
-    using base_type = std::allocator<T>; 
- 
+template <class T>
+class TCountingAllocator: public std::allocator<T> {
+    using base_type = std::allocator<T>;
+
 public:
     using size_type = typename base_type::size_type;
 
-    template <class Other> 
+    template <class Other>
     struct rebind {
         using other = TCountingAllocator<Other>;
     };
 
     TCountingAllocator()
         : Counters_(nullptr)
-    { 
-    } 
+    {
+    }
 
     TCountingAllocator(TAllocatorCounters* counters)
         : Counters_(counters)
-    { 
+    {
         Y_ASSERT(counters);
     }
 
-    template <class Other> 
+    template <class Other>
     TCountingAllocator(const TCountingAllocator<Other>& other)
         : Counters_(other.Counters)
-    { 
-    } 
+    {
+    }
 
     T* allocate(size_type n) {
         auto result = base_type::allocate(n);
@@ -852,9 +852,9 @@ void THashTest::TestAllocation() {
         int_set set3(set0);
         UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 2); /* Copying from an empty set with allocated buckets should not trigger allocations. */
 
-        for (int i = 0; i < 1000; i++) { 
+        for (int i = 0; i < 1000; i++) {
             set0.insert(i);
-        } 
+        }
         size_t allocations = counters.Allocations;
         set0.clear();
         UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, allocations); /* clear() should not trigger allocations. */
@@ -863,17 +863,17 @@ void THashTest::TestAllocation() {
     UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, counters.Deallocations);
 }
 
-template <int Value> 
+template <int Value>
 class TNonCopyableInt {
 public:
-    explicit TNonCopyableInt(int) { 
-    } 
+    explicit TNonCopyableInt(int) {
+    }
 
     TNonCopyableInt() = delete;
     TNonCopyableInt(const TNonCopyableInt&) = delete;
     TNonCopyableInt(TNonCopyable&&) = delete;
-    TNonCopyableInt& operator=(const TNonCopyable&) = delete; 
-    TNonCopyableInt& operator=(TNonCopyable&&) = delete; 
+    TNonCopyableInt& operator=(const TNonCopyable&) = delete;
+    TNonCopyableInt& operator=(TNonCopyable&&) = delete;
 
     operator int() const {
         return Value;
@@ -918,11 +918,11 @@ void THashTest::TestTryEmplace() {
     static unsigned counter = 0u;
 
     struct TCountConstruct {
-        explicit TCountConstruct(int v) 
-            : value(v) 
-        { 
-            ++counter; 
-        } 
+        explicit TCountConstruct(int v)
+            : value(v)
+        {
+            ++counter;
+        }
         TCountConstruct(const TCountConstruct&) = delete;
         int value;
     };
@@ -947,15 +947,15 @@ void THashTest::TestTryEmplaceCopyKey() {
     static unsigned counter = 0u;
 
     struct TCountCopy {
-        explicit TCountCopy(int i) 
-            : Value(i) 
-        { 
-        } 
-        TCountCopy(const TCountCopy& other) 
-            : Value(other.Value) 
-        { 
-            ++counter; 
-        } 
+        explicit TCountCopy(int i)
+            : Value(i)
+        {
+        }
+        TCountCopy(const TCountCopy& other)
+            : Value(other.Value)
+        {
+            ++counter;
+        }
 
         operator int() const {
             return Value;
@@ -1040,27 +1040,27 @@ void THashTest::TestHSetEmplaceDirect() {
 void THashTest::TestNonCopyable() {
     struct TValue: public TNonCopyable {
         int value;
-        TValue(int _value = 0) 
-            : value(_value) 
-        { 
-        } 
-        operator int() { 
-            return value; 
-        } 
+        TValue(int _value = 0)
+            : value(_value)
+        {
+        }
+        operator int() {
+            return value;
+        }
     };
 
     THashMap<int, TValue> hash;
     hash.emplace(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(5));
-    auto&& value = hash[1]; 
+    auto&& value = hash[1];
     UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(value), 5);
-    auto&& not_inserted = hash[2]; 
+    auto&& not_inserted = hash[2];
     UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(not_inserted), 0);
 }
 
 void THashTest::TestValueInitialization() {
     THashMap<int, int> hash;
 
-    int& value = hash[0]; 
+    int& value = hash[0];
 
     /* Implicitly inserted values should be value-initialized. */
     UNIT_ASSERT_VALUES_EQUAL(value, 0);
@@ -1087,18 +1087,18 @@ void THashTest::TestReleaseNodes() {
     using TIntSet = THashSet<int, THash<int>, TEqualTo<int>, TCountingAllocator<int>>;
 
     TIntSet set(&counters);
-    for (int i = 0; i < 3; i++) { 
+    for (int i = 0; i < 3; i++) {
         set.insert(i);
-    } 
+    }
     UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 4);
 
     set.release_nodes();
     UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 4);
     UNIT_ASSERT_VALUES_EQUAL(set.size(), 0);
 
-    for (int i = 10; i < 13; i++) { 
+    for (int i = 10; i < 13; i++) {
         set.insert(i);
-    } 
+    }
     UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 7);
     UNIT_ASSERT(set.contains(10));
     UNIT_ASSERT(!set.contains(0));
@@ -1113,25 +1113,25 @@ void THashTest::TestReleaseNodes() {
 }
 
 void THashTest::TestAt() {
-#define TEST_AT_THROWN_EXCEPTION(SRC_TYPE, DST_TYPE, KEY_TYPE, KEY, MESSAGE)                                                                               \ 
-    {                                                                                                                                                      \ 
-        THashMap<SRC_TYPE, DST_TYPE> testMap;                                                                                                              \ 
-        try {                                                                                                                                              \ 
-            KEY_TYPE testKey = KEY;                                                                                                                        \ 
-            testMap.at(testKey);                                                                                                                           \ 
-            UNIT_ASSERT_C(false, "THashMap::at(\"" << KEY << "\") should throw");                                                                          \ 
-        } catch (const yexception& e) {                                                                                                                    \ 
+#define TEST_AT_THROWN_EXCEPTION(SRC_TYPE, DST_TYPE, KEY_TYPE, KEY, MESSAGE)                                                                               \
+    {                                                                                                                                                      \
+        THashMap<SRC_TYPE, DST_TYPE> testMap;                                                                                                              \
+        try {                                                                                                                                              \
+            KEY_TYPE testKey = KEY;                                                                                                                        \
+            testMap.at(testKey);                                                                                                                           \
+            UNIT_ASSERT_C(false, "THashMap::at(\"" << KEY << "\") should throw");                                                                          \
+        } catch (const yexception& e) {                                                                                                                    \
             UNIT_ASSERT_C(e.AsStrBuf().Contains(MESSAGE), "Incorrect exception description: got \"" << e.what() << "\", expected: \"" << MESSAGE << "\""); \
-        } catch (...) {                                                                                                                                    \ 
-            UNIT_ASSERT_C(false, "THashMap::at(\"" << KEY << "\") should throw yexception");                                                               \ 
-        }                                                                                                                                                  \ 
+        } catch (...) {                                                                                                                                    \
+            UNIT_ASSERT_C(false, "THashMap::at(\"" << KEY << "\") should throw yexception");                                                               \
+        }                                                                                                                                                  \
     }
 
     TEST_AT_THROWN_EXCEPTION(TString, TString, TString, "111", "111");
     TEST_AT_THROWN_EXCEPTION(TString, TString, const TString, "111", "111");
     TEST_AT_THROWN_EXCEPTION(TString, TString, TStringBuf, "111", "111");
     TEST_AT_THROWN_EXCEPTION(TString, TString, const TStringBuf, "111", "111");
-    TEST_AT_THROWN_EXCEPTION(TStringBuf, TStringBuf, const char*, "111", "111"); 
+    TEST_AT_THROWN_EXCEPTION(TStringBuf, TStringBuf, const char*, "111", "111");
     TEST_AT_THROWN_EXCEPTION(int, int, short, 11, "11");
     TEST_AT_THROWN_EXCEPTION(int, int, int, -1, "-1");
     TEST_AT_THROWN_EXCEPTION(int, int, long, 111, "111");
@@ -1141,7 +1141,7 @@ void THashTest::TestAt() {
     TEST_AT_THROWN_EXCEPTION(int, int, unsigned long, 131, "131");
     TEST_AT_THROWN_EXCEPTION(int, int, unsigned long long, 1000000000000ll, "1000000000000");
 
-    char key[] = {11, 12, 0, 1, 2, 11, 0}; 
+    char key[] = {11, 12, 0, 1, 2, 11, 0};
     TEST_AT_THROWN_EXCEPTION(TString, TString, char*, key, "\\x0B\\x0C");
     TEST_AT_THROWN_EXCEPTION(TString, TString, TStringBuf, TStringBuf(key, sizeof(key) - 1), "\\x0B\\x0C\\0\\1\\2\\x0B");
 
@@ -1193,7 +1193,7 @@ namespace {
         int A;
         int B;
 
-        bool operator==(const TFoo& o) const { 
+        bool operator==(const TFoo& o) const {
             return A == o.A && B == o.B;
         }
     };
@@ -1227,13 +1227,13 @@ void THashTest::TestHSetInsertInitializerList() {
     {
         const THashSet<int> x = {1, 2, 3, 4, 5};
         THashSet<int> y;
-        y.insert({ 
-            1, 
-            2, 
-            3, 
-            4, 
-            5, 
-        }); 
+        y.insert({
+            1,
+            2,
+            3,
+            4,
+            5,
+        });
         UNIT_ASSERT_VALUES_EQUAL(x, y);
     }
     {

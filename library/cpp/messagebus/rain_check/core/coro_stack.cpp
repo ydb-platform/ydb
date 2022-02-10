@@ -22,11 +22,11 @@ TCoroStack::TCoroStack(size_t size)
     *MagicNumberLocation() = MAGIC_NUMBER;
 
 #if defined(WITH_VALGRIND)
-    ValgrindStackId = VALGRIND_STACK_REGISTER(Data(), (char*)Data() + Size()); 
+    ValgrindStackId = VALGRIND_STACK_REGISTER(Data(), (char*)Data() + Size());
 #endif
 }
 
-TCoroStack::~TCoroStack() { 
+TCoroStack::~TCoroStack() {
 #if defined(WITH_VALGRIND)
     VALGRIND_STACK_DEREGISTER(ValgrindStackId);
 #endif

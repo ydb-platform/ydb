@@ -1,2 +1,2 @@
 # Present for backwards compatibility
-from cpython.mem cimport * 
+from cpython.mem cimport *

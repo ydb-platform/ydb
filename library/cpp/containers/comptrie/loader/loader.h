@@ -9,7 +9,7 @@
 template <class TrieType, size_t N>
 TrieType LoadTrieFromArchive(const TString& key,
                              const unsigned char (&data)[N],
-                             bool ignoreErrors = false) { 
+                             bool ignoreErrors = false) {
     TArchiveReader archive(TBlob::NoCopy(data, sizeof(data)));
     if (archive.Has(key)) {
         TAutoPtr<IInputStream> trie = archive.ObjectByKey(key);

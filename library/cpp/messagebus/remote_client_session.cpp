@@ -14,8 +14,8 @@ using namespace NBus;
 using namespace NBus::NPrivate;
 
 TRemoteClientSession::TRemoteClientSession(TBusMessageQueue* queue,
-                                           TBusProtocol* proto, IBusClientHandler* handler, 
-                                           const TBusClientSessionConfig& config, const TString& name) 
+                                           TBusProtocol* proto, IBusClientHandler* handler,
+                                           const TBusClientSessionConfig& config, const TString& name)
     : TBusSessionImpl(true, queue, proto, handler, config, name)
     , ClientRemoteInFlight(config.MaxInFlight, "ClientRemoteInFlight")
     , ClientHandler(handler)
@@ -27,7 +27,7 @@ TRemoteClientSession::~TRemoteClientSession() {
 }
 
 void TRemoteClientSession::OnMessageReceived(TRemoteConnection* c, TVectorSwaps<TBusMessagePtrAndHeader>& newMsg) {
-    TAutoPtr<TVectorSwaps<TBusMessagePtrAndHeader>> temp(new TVectorSwaps<TBusMessagePtrAndHeader>); 
+    TAutoPtr<TVectorSwaps<TBusMessagePtrAndHeader>> temp(new TVectorSwaps<TBusMessagePtrAndHeader>);
     temp->swap(newMsg);
     c->ReplyQueue.EnqueueAll(temp);
     c->ScheduleWrite();
@@ -46,7 +46,7 @@ EMessageStatus TRemoteClientSession::SendMessageImpl(TBusMessage* msg, const TNe
 
     msg->ReplyTo = resolvedAddr;
 
-    TRemoteConnectionPtr c = ((TBusSessionImpl*)this)->GetConnection(resolvedAddr, true); 
+    TRemoteConnectionPtr c = ((TBusSessionImpl*)this)->GetConnection(resolvedAddr, true);
     Y_ASSERT(!!c);
 
     return CheckedCast<TRemoteClientConnection*>(c.Get())->SendMessageImpl(msg, wait, oneWay);
@@ -103,7 +103,7 @@ void TRemoteClientSession::ReleaseInFlightAndCallOnReply(TNonDestroyingAutoPtr<T
     }
 }
 
-EMessageStatus TRemoteClientSession::GetMessageDestination(TBusMessage* mess, const TNetAddr* addrp, TBusSocketAddr* dest) { 
+EMessageStatus TRemoteClientSession::GetMessageDestination(TBusMessage* mess, const TNetAddr* addrp, TBusSocketAddr* dest) {
     if (addrp) {
         *dest = *addrp;
     } else {
@@ -123,5 +123,5 @@ void TRemoteClientSession::OpenConnection(const TNetAddr& addr) {
 
 TBusClientConnectionPtr TRemoteClientSession::GetConnection(const TNetAddr& addr) {
     // TODO: GetConnection should not open
-    return CheckedCast<TRemoteClientConnection*>(((TBusSessionImpl*)this)->GetConnection(addr, true).Get()); 
+    return CheckedCast<TRemoteClientConnection*>(((TBusSessionImpl*)this)->GetConnection(addr, true).Get());
 }

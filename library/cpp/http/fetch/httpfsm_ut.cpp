@@ -1,22 +1,22 @@
-#include "httpfsm.h" 
+#include "httpfsm.h"
 #include "library-htfetch_ut_hreflang_in.h"
 #include "library-htfetch_ut_hreflang_out.h"
- 
+
 #include <util/generic/ptr.h>
 #include <library/cpp/charset/doccodes.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 class THttpHeaderParserTestSuite: public TTestBase {
     UNIT_TEST_SUITE(THttpHeaderParserTestSuite);
-    UNIT_TEST(TestRequestHeader); 
-    UNIT_TEST(TestSplitRequestHeader); 
-    UNIT_TEST(TestTrailingData); 
-    UNIT_TEST(TestProxyRequestHeader); 
-    UNIT_TEST(TestIncorrectRequestHeader); 
-    UNIT_TEST(TestLastModified); 
-    UNIT_TEST(TestLastModifiedCorrupted); 
-    UNIT_TEST(TestResponseHeaderOnRequest); 
-    UNIT_TEST(TestRequestHeaderOnResponse); 
+    UNIT_TEST(TestRequestHeader);
+    UNIT_TEST(TestSplitRequestHeader);
+    UNIT_TEST(TestTrailingData);
+    UNIT_TEST(TestProxyRequestHeader);
+    UNIT_TEST(TestIncorrectRequestHeader);
+    UNIT_TEST(TestLastModified);
+    UNIT_TEST(TestLastModifiedCorrupted);
+    UNIT_TEST(TestResponseHeaderOnRequest);
+    UNIT_TEST(TestRequestHeaderOnResponse);
     UNIT_TEST(TestXRobotsTagUnknownTags);
     UNIT_TEST(TestXRobotsTagMyBot);
     UNIT_TEST(TestXRobotsTagOtherBot);
@@ -25,20 +25,20 @@ class THttpHeaderParserTestSuite: public TTestBase {
     UNIT_TEST(TestXRobotsTagOverridePriority);
     UNIT_TEST(TestXRobotsTagDoesNotBreakCharset);
     UNIT_TEST(TestXRobotsTagAllowsMultiline);
-    UNIT_TEST(TestRelCanonical); 
-    UNIT_TEST(TestHreflang); 
-    UNIT_TEST(TestHreflangOnLongInput); 
-    UNIT_TEST(TestMimeType); 
+    UNIT_TEST(TestRelCanonical);
+    UNIT_TEST(TestHreflang);
+    UNIT_TEST(TestHreflangOnLongInput);
+    UNIT_TEST(TestMimeType);
     UNIT_TEST(TestRepeatedContentEncoding);
     UNIT_TEST_SUITE_END();
- 
+
 private:
     THolder<THttpHeaderParser> httpHeaderParser;
- 
+
 private:
     void TestStart();
     void TestFinish();
- 
+
 public:
     void TestRequestHeader();
     void TestSplitRequestHeader();
@@ -76,8 +76,8 @@ void THttpHeaderParserTestSuite::TestRequestHeader() {
     TestStart();
     THttpRequestHeader httpRequestHeader;
     httpHeaderParser->Init(&httpRequestHeader);
-    const char* request = "GET /search?q=hi HTTP/1.1\r\n" 
-                          "Host: www.google.ru:8080\r\n\r\n"; 
+    const char* request = "GET /search?q=hi HTTP/1.1\r\n"
+                          "Host: www.google.ru:8080\r\n\r\n";
     i32 result = httpHeaderParser->Execute(request, strlen(request));
     UNIT_ASSERT_EQUAL(result, 2);
     UNIT_ASSERT_EQUAL(httpRequestHeader.http_method, HTTP_METHOD_GET);
@@ -85,11 +85,11 @@ void THttpHeaderParserTestSuite::TestRequestHeader() {
     UNIT_ASSERT_EQUAL(httpRequestHeader.request_uri, "/search?q=hi");
     UNIT_ASSERT_EQUAL(httpRequestHeader.GetUrl(), "http://www.google.ru:8080/search?q=hi");
     UNIT_ASSERT_EQUAL(httpHeaderParser->lastchar - request + 1,
-                      (i32)strlen(request)); 
+                      (i32)strlen(request));
     UNIT_ASSERT_EQUAL(httpRequestHeader.x_yandex_response_timeout,
-                      DEFAULT_RESPONSE_TIMEOUT); 
+                      DEFAULT_RESPONSE_TIMEOUT);
     UNIT_ASSERT_EQUAL(httpRequestHeader.x_yandex_request_priority,
-                      DEFAULT_REQUEST_PRIORITY); 
+                      DEFAULT_REQUEST_PRIORITY);
     UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_sourcename, ""), 0);
     UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_requesttype, ""), 0);
     UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_fetchoptions, ""), 0);
@@ -99,7 +99,7 @@ void THttpHeaderParserTestSuite::TestRequestHeader() {
 
 void THttpHeaderParserTestSuite::TestSplitRequestHeader() {
     TestStart();
-    const char* request = 
+    const char* request =
         "GET /search?q=hi HTTP/1.1\r\n"
         "Host:  www.google.ru:8080 \r\n"
         "\r\n";
@@ -108,8 +108,8 @@ void THttpHeaderParserTestSuite::TestSplitRequestHeader() {
     for (size_t n1 = 0; n1 < rlen; n1++) {
         for (size_t n2 = n1; n2 < rlen; n2++) {
             TString s1{request, 0, n1};
-            TString s2{request, n1, n2 - n1}; 
-            TString s3{request, n2, rlen - n2}; 
+            TString s2{request, n1, n2 - n1};
+            TString s3{request, n2, rlen - n2};
             UNIT_ASSERT_EQUAL(s1 + s2 + s3, request);
 
             THttpRequestHeader httpRequestHeader;
@@ -134,7 +134,7 @@ void THttpHeaderParserTestSuite::TestTrailingData() {
     TestStart();
     THttpRequestHeader httpRequestHeader;
     UNIT_ASSERT(0 == httpHeaderParser->Init(&httpRequestHeader));
-    const char* request = 
+    const char* request =
         "GET /search?q=hi HTTP/1.1\r\n"
         "Host: www.google.ru:8080\r\n"
         "\r\n"
@@ -156,7 +156,7 @@ void THttpHeaderParserTestSuite::TestProxyRequestHeader() {
     TestStart();
     THttpRequestHeader httpRequestHeader;
     httpHeaderParser->Init(&httpRequestHeader);
-    const char* request = 
+    const char* request =
         "GET http://www.google.ru:8080/search?q=hi HTTP/1.1\r\n"
         "X-Yandex-Response-Timeout: 1000\r\n"
         "X-Yandex-Request-Priority: 2\r\n"
@@ -179,16 +179,16 @@ void THttpHeaderParserTestSuite::TestProxyRequestHeader() {
     UNIT_ASSERT_VALUES_EQUAL(httpRequestHeader.if_modified_since,
                              TInstant::ParseIso8601Deprecated("1994-10-29 19:43:31Z").TimeT());
     UNIT_ASSERT_EQUAL(httpRequestHeader.request_uri,
-                      "http://www.google.ru:8080/search?q=hi"); 
-    UNIT_ASSERT(httpRequestHeader.GetUrl() == 
+                      "http://www.google.ru:8080/search?q=hi");
+    UNIT_ASSERT(httpRequestHeader.GetUrl() ==
                 "http://www.google.ru:8080/search?q=hi");
     UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.host, ""), 0);
     UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.from, "webadmin@yandex.ru"), 0);
     UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.user_agent,
-                             "Yandex/1.01.001 (compatible; Win16; I)"), 
-                      0); 
+                             "Yandex/1.01.001 (compatible; Win16; I)"),
+                      0);
     UNIT_ASSERT_EQUAL(httpHeaderParser->lastchar - request + 1,
-                      (i32)strlen(request)); 
+                      (i32)strlen(request));
     TestFinish();
 }
 
@@ -196,8 +196,8 @@ void THttpHeaderParserTestSuite::TestIncorrectRequestHeader() {
     TestStart();
     THttpRequestHeader httpRequestHeader;
     httpHeaderParser->Init(&httpRequestHeader);
-    const char* request = "GET /search?q=hi HTP/1.1\r\n" 
-                          "Host: www.google.ru:8080\r\n\r\n"; 
+    const char* request = "GET /search?q=hi HTP/1.1\r\n"
+                          "Host: www.google.ru:8080\r\n\r\n";
     i32 result = httpHeaderParser->Execute(request, strlen(request));
     UNIT_ASSERT(result != 2);
     TestFinish();
@@ -214,7 +214,7 @@ void THttpHeaderParserTestSuite::TestLastModified() {
     UNIT_ASSERT(2 == httpHeaderParser->Execute(headers, strlen(headers)));
     UNIT_ASSERT_VALUES_EQUAL(
         TInstant::ParseIso8601Deprecated("2009-08-13 14:27:08Z").TimeT(),
-        h.http_time); 
+        h.http_time);
     TestFinish();
 }
 
@@ -235,7 +235,7 @@ void THttpHeaderParserTestSuite::TestXRobotsTagUnknownTags() {
     TestStart();
     THttpHeader httpHeader;
     httpHeaderParser->Init(&httpHeader);
-    const char* headers = 
+    const char* headers =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html\r\n"
         "x-robots-tag: asdfasdf asdf asdf,,, , noindex,noodpXXX , NOFOLLOW ,noodpnofollow\r\n\r\n";
@@ -384,7 +384,7 @@ void THttpHeaderParserTestSuite::TestHreflang() {
     TestStart();
     THttpHeader httpHeader;
     httpHeaderParser->Init(&httpHeader);
-    const char* headers = 
+    const char* headers =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html\r\n"
         "link: <http://www.high.ru/>; rel='alternate'; hreflang='x-default'\r\n"
@@ -414,7 +414,7 @@ void THttpHeaderParserTestSuite::TestRelCanonical() {
     TestStart();
     THttpHeader httpHeader;
     httpHeaderParser->Init(&httpHeader);
-    const char* headers = 
+    const char* headers =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html\r\n"
         "Link: <http://yandex.ru>; rel = \"canonical\"\r\n\r\n";
@@ -428,8 +428,8 @@ void THttpHeaderParserTestSuite::TestResponseHeaderOnRequest() {
     TestStart();
     THttpHeader httpHeader;
     httpHeaderParser->Init(&httpHeader);
-    const char* request = "GET /search?q=hi HTP/1.1\r\n" 
-                          "Host: www.google.ru:8080\r\n\r\n"; 
+    const char* request = "GET /search?q=hi HTP/1.1\r\n"
+                          "Host: www.google.ru:8080\r\n\r\n";
     i32 result = httpHeaderParser->Execute(request, strlen(request));
     UNIT_ASSERT_EQUAL(result, -3);
     TestFinish();
@@ -439,9 +439,9 @@ void THttpHeaderParserTestSuite::TestRequestHeaderOnResponse() {
     TestStart();
     THttpRequestHeader httpRequestHeader;
     httpHeaderParser->Init(&httpRequestHeader);
-    const char* response = "HTTP/1.1 200 OK\r\n" 
-                           "Content-Type: text/html\r\n" 
-                           "Last-Modified: Thu, 13 Aug 2009 14:\r\n\r\n"; 
+    const char* response = "HTTP/1.1 200 OK\r\n"
+                           "Content-Type: text/html\r\n"
+                           "Last-Modified: Thu, 13 Aug 2009 14:\r\n\r\n";
     i32 result = httpHeaderParser->Execute(response, strlen(response));
     UNIT_ASSERT_EQUAL(result, -3);
     TestFinish();
@@ -451,13 +451,13 @@ void THttpHeaderParserTestSuite::TestMimeType() {
     TestStart();
     THttpHeader httpHeader;
     httpHeaderParser->Init(&httpHeader);
-    const char* headers = 
+    const char* headers =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: application/json; charset=utf-8\r\n\r\n";
     i32 result = httpHeaderParser->Execute(headers, strlen(headers));
     UNIT_ASSERT_EQUAL(result, 2);
     UNIT_ASSERT_EQUAL(httpHeader.mime_type, static_cast<ui8>(MIME_JSON));
-    UNIT_ASSERT_EQUAL(httpHeader.charset, static_cast<ui8>(CODES_UTF8)); 
+    UNIT_ASSERT_EQUAL(httpHeader.charset, static_cast<ui8>(CODES_UTF8));
     TestFinish();
 }
 
@@ -516,10 +516,10 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
     Y_UNIT_TEST(TestWithoutEolHead) {
         const TStringBuf blob{
             "4\r\n"
-            "____\r\n"}; 
+            "____\r\n"};
         TVector<int> states{
-            -1, /* 1, -1, 
-            1, -1,  1, -1, 1, -1 */}; 
+            -1, /* 1, -1,
+            1, -1,  1, -1, 1, -1 */};
         // as soon as error happens parser state should be considered
         // undefined, state is meaningless after the very first `-1`
         // moreover, testenv produces `states[1] == -1` for this input and
@@ -530,7 +530,7 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
     Y_UNIT_TEST(TestTrivialChunk) {
         const TStringBuf blob{
             "\r\n"
-            "4\r\n"}; 
+            "4\r\n"};
         THttpChunkParser parser(parseBytesWithLastState(blob, 2));
         UNIT_ASSERT_EQUAL(parser.chunk_length, 4);
         UNIT_ASSERT_EQUAL(parser.cnt64, 4);
@@ -539,18 +539,18 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
     Y_UNIT_TEST(TestNegative) {
         const TStringBuf blob{
             "\r\n"
-            "-1"}; 
+            "-1"};
         TVector<int> states{
             1, 1,
-            -1, 
-            /* 1 */}; 
+            -1,
+            /* 1 */};
         parseByteByByte(blob, states);
     }
 
     Y_UNIT_TEST(TestLeadingZero) {
         const TStringBuf blob{
             "\r\n"
-            "042\r\n"}; 
+            "042\r\n"};
         THttpChunkParser parser(parseBytesWithLastState(blob, 2));
         UNIT_ASSERT_EQUAL(parser.chunk_length, 0x42);
     }
@@ -558,7 +558,7 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
     Y_UNIT_TEST(TestIntOverflow) {
         const TStringBuf blob{
             "\r\n"
-            "deadbeef"}; 
+            "deadbeef"};
         THttpChunkParser parser(parseBytesWithLastState(blob, -2));
         UNIT_ASSERT_EQUAL(parser.chunk_length, 0);
         UNIT_ASSERT_EQUAL(parser.cnt64, 0xdeadbeef);
@@ -571,9 +571,9 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
             "_" // first byte of the chunk
         };
         TVector<int> states{
-            1, 1, 
-            1, 1, 2, 
-            -1}; 
+            1, 1,
+            1, 1, 2,
+            -1};
         parseByteByByte(blob, states);
     }
 
@@ -584,7 +584,7 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
             "\r\n"
             "000 ;foo = bar \r\n"
             "Trailer: bar\r\n"
-            "\r\n"}; 
+            "\r\n"};
         THttpChunkParser parser(parseBytesWithLastState(blob, 2));
         UNIT_ASSERT_EQUAL(parser.chunk_length, 0);
     }

@@ -9,12 +9,12 @@ private:
     TAtomic Locked;
     TMutex Mutex;
     TCondVar CondVar;
- 
+
 public:
-    TLatch() 
-        : Locked(0) 
-    { 
-    } 
+    TLatch()
+        : Locked(0)
+    {
+    }
 
     void Wait() {
         // optimistic path

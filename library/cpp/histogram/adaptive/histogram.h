@@ -8,7 +8,7 @@ namespace NKiwiAggr {
     class THistoRec;
 
     class IHistogram;
-    typedef TAtomicSharedPtr<IHistogram> IHistogramPtr; 
+    typedef TAtomicSharedPtr<IHistogram> IHistogramPtr;
 
     class IHistogram {
     public:
@@ -18,7 +18,7 @@ namespace NKiwiAggr {
         // TSomeHistogram(const THistogram& histo);  // histo must be acceptable for TSomeHistogram, for example, only with HT_FIXED_BIN_HISTOGRAM for TFixedBinHistogram
         // TSomeHistogram(IHistogram* histo); // any kind of IHistogram
 
-        virtual ~IHistogram() { 
+        virtual ~IHistogram() {
         }
 
         virtual void Clear() = 0;
@@ -35,7 +35,7 @@ namespace NKiwiAggr {
         // factor should be greater then zero
         virtual void Multiply(double factor) = 0;
 
-        virtual void FromProto(const THistogram& histo) = 0; // throws exception in case of wrong histogram type of histo 
+        virtual void FromProto(const THistogram& histo) = 0; // throws exception in case of wrong histogram type of histo
         virtual void ToProto(THistogram& histo) = 0;
 
         virtual void SetId(ui64 id) = 0;
@@ -59,8 +59,8 @@ namespace NKiwiAggr {
         }
 
         // Histogram implementation is supposed to clear all precomputed values() if Add() is called after PrecomputePartialSums()
-        virtual void PrecomputePartialSums() { 
-        } 
+        virtual void PrecomputePartialSums() {
+        }
     };
 
-} 
+}

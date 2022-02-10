@@ -2,7 +2,7 @@
 
 #include <util/system/yassert.h>
 
-#include <algorithm> 
+#include <algorithm>
 
 TBufferBase::TBufferBase(size_t size) noexcept
     : Size(size)

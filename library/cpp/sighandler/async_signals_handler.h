@@ -4,8 +4,8 @@
 #include <functional>
 
 struct TEventHandler {
-    virtual ~TEventHandler() { 
-    } 
+    virtual ~TEventHandler() {
+    }
     virtual int Handle(int signum) = 0;
 };
 

@@ -1,12 +1,12 @@
-UNITTEST_FOR(util) 
+UNITTEST_FOR(util)
 
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
 
 SRCS(
-    digest/fnv_ut.cpp 
-    digest/murmur_ut.cpp 
-    digest/multi_ut.cpp 
+    digest/fnv_ut.cpp
+    digest/murmur_ut.cpp
+    digest/multi_ut.cpp
     digest/sequence_ut.cpp
 )
 

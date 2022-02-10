@@ -1,5 +1,5 @@
 UNITTEST()
- 
+
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
 

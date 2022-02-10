@@ -6,7 +6,7 @@
 
 using namespace NYsonPull;
 
-template <> 
+template <>
 void Out<TScalar>(IOutputStream& out, const TScalar& value) {
     out << '(' << value.Type();
     if (value.Type() != EScalarType::Entity) {
@@ -28,13 +28,13 @@ void Out<TScalar>(IOutputStream& out, const TScalar& value) {
         case EScalarType::Float64:
             out << value.AsFloat64();
             break;
-        default: 
-            break; 
+        default:
+            break;
     }
     out << ')';
 }
 
-bool NYsonPull::operator==(const TScalar& left, const TScalar& right) noexcept { 
+bool NYsonPull::operator==(const TScalar& left, const TScalar& right) noexcept {
     if (left.Type() != right.Type()) {
         return false;
     }
@@ -51,7 +51,7 @@ bool NYsonPull::operator==(const TScalar& left, const TScalar& right) noexcept {
             return left.AsFloat64() == right.AsFloat64();
         case EScalarType::Entity:
             return true;
-        default: 
+        default:
             Y_UNREACHABLE();
     }
 }

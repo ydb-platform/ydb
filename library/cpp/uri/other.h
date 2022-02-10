@@ -5,12 +5,12 @@
 // Some functions for inverted url representation
 // No scheme cut-off, no 80th port normalization
 
-void TrspChars(char* s); 
-void UnTrspChars(char* s); 
-void TrspChars(char* s, size_t l); 
-void UnTrspChars(char* s, size_t l); 
-void TrspChars(const char* s, char* d); 
-void UnTrspChars(const char* s, char* d); 
+void TrspChars(char* s);
+void UnTrspChars(char* s);
+void TrspChars(char* s, size_t l);
+void UnTrspChars(char* s, size_t l);
+void TrspChars(const char* s, char* d);
+void UnTrspChars(const char* s, char* d);
 
 void InvertDomain(char* begin, char* end);
 

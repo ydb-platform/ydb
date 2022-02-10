@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
             dstOneMsg.MergeFrom(TConstField(src, descr->FindFieldByName("OneMsg")));
             UNIT_ASSERT_VALUES_EQUAL(dst.GetOneMsg().RepIntSize(), src.GetOneMsg().RepIntSize());
             dstOneMsg.MergeFrom(TConstField(src, descr->FindFieldByName("OneMsg")));
-            UNIT_ASSERT_VALUES_EQUAL(dst.GetOneMsg().RepIntSize(), src.GetOneMsg().RepIntSize() * 2); 
+            UNIT_ASSERT_VALUES_EQUAL(dst.GetOneMsg().RepIntSize(), src.GetOneMsg().RepIntSize() * 2);
         }
 
         { // MergeFrom for repeated fields acts like append
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
             dstRepMsg.MergeFrom(TConstField(src, descr->FindFieldByName("RepMsg")));
             UNIT_ASSERT_VALUES_EQUAL(dst.RepMsgSize(), src.RepMsgSize());
             dstRepMsg.MergeFrom(TConstField(src, descr->FindFieldByName("RepMsg")));
-            UNIT_ASSERT_VALUES_EQUAL(dst.RepMsgSize(), src.RepMsgSize() * 2); 
+            UNIT_ASSERT_VALUES_EQUAL(dst.RepMsgSize(), src.RepMsgSize() * 2);
             for (size_t repMsgIndex = 0; repMsgIndex < dst.RepMsgSize(); ++repMsgIndex) {
                 UNIT_ASSERT_VALUES_EQUAL(dst.GetRepMsg(repMsgIndex).RepIntSize(), src.GetRepMsg(0).RepIntSize());
             }
@@ -107,14 +107,14 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
             msg.AddRepMsg()->AddRepInt(3);
 
             UNIT_ASSERT_VALUES_EQUAL(3, msg.RepMsgSize()); // 1, 2, 3
-            fld.Remove(1);                                 // from middle 
+            fld.Remove(1);                                 // from middle
             UNIT_ASSERT_VALUES_EQUAL(2, msg.RepMsgSize());
             UNIT_ASSERT_VALUES_EQUAL(1, msg.GetRepMsg(0).GetRepInt(0));
             UNIT_ASSERT_VALUES_EQUAL(3, msg.GetRepMsg(1).GetRepInt(0));
 
             msg.AddRepMsg()->AddRepInt(5);
             UNIT_ASSERT_VALUES_EQUAL(3, msg.RepMsgSize()); // 1, 3, 5
-            fld.Remove(2);                                 // from end 
+            fld.Remove(2);                                 // from end
             UNIT_ASSERT_VALUES_EQUAL(2, msg.RepMsgSize());
             UNIT_ASSERT_VALUES_EQUAL(1, msg.GetRepMsg(0).GetRepInt(0));
             UNIT_ASSERT_VALUES_EQUAL(3, msg.GetRepMsg(1).GetRepInt(0));
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
             msg.AddRepStr("2");
             msg.AddRepStr("3");
             UNIT_ASSERT_VALUES_EQUAL(3, msg.RepStrSize()); // "1", "2", "3"
-            fld.Remove(0);                                 // from begin 
+            fld.Remove(0);                                 // from begin
             UNIT_ASSERT_VALUES_EQUAL(2, msg.RepStrSize());
             UNIT_ASSERT_VALUES_EQUAL("2", msg.GetRepStr(0));
             UNIT_ASSERT_VALUES_EQUAL("3", msg.GetRepStr(1));
@@ -279,81 +279,81 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
 
         // error
         {
-            {TSample msg; 
-        UNIT_ASSERT(!TConstField::ByPath(msg, "SomeField")); 
-    } 
-
-    { 
-        TSample msg; 
-        UNIT_ASSERT(!TMutableField::ByPath(msg, "SomeField/FieldSome")); 
-    } 
-
-    { 
-        TSample msg; 
-        UNIT_ASSERT(!TMutableField::ByPath(msg, "SomeField/FieldSome", true)); 
-    } 
-} 
-
-// extension 
-{ 
-    TSample msg; 
-    msg.SetExtension(NExt::TTestExt::ExtField, "ext"); 
-    msg.SetExtension(NExt::ExtField, 2); 
-    msg.AddExtension(NExt::Ext2Field, 33); 
-    TInnerSample* subMsg = msg.MutableExtension(NExt::SubMsgExt); 
-    subMsg->AddRepInt(20); 
-    subMsg->SetExtension(NExt::Ext3Field, 54); 
-
-    { 
-        TMaybe<TConstField> field = TConstField::ByPath(msg, "NExt.TTestExt.ExtField"); 
-        UNIT_ASSERT(field); 
-        UNIT_ASSERT(field->HasValue()); 
-        UNIT_ASSERT_VALUES_EQUAL("ext", field->Get<TString>()); 
+            {TSample msg;
+        UNIT_ASSERT(!TConstField::ByPath(msg, "SomeField"));
     }
-    { 
-        TMaybe<TConstField> field = TConstField::ByPath(msg, "NExt.ExtField"); 
-        UNIT_ASSERT(field); 
-        UNIT_ASSERT(field->HasValue()); 
-        UNIT_ASSERT_VALUES_EQUAL(2, field->Get<int>()); 
-    } 
-    { 
-        TMaybe<TConstField> field = TConstField::ByPath(msg, "ExtField"); // ambiguity 
-        UNIT_ASSERT(!field); 
-    } 
-    { 
-        TMaybe<TConstField> field = TConstField::ByPath(msg, "NExt.Ext2Field"); 
-        UNIT_ASSERT(field); 
-        UNIT_ASSERT(field->HasValue()); 
-        UNIT_ASSERT_VALUES_EQUAL(33, field->Get<int>()); 
-    } 
-    { 
-        TMaybe<TConstField> field = TConstField::ByPath(msg, "Ext2Field"); 
-        UNIT_ASSERT(field); 
-        UNIT_ASSERT(field->HasValue()); 
-        UNIT_ASSERT_VALUES_EQUAL(33, field->Get<int>()); 
-    } 
-    { 
-        TMaybe<TConstField> field = TConstField::ByPath(msg, "SubMsgExt"); 
-        UNIT_ASSERT(field); 
-        UNIT_ASSERT(field->HasValue()); 
-        const TInnerSample* subMsg2 = field->GetAs<TInnerSample>(); 
-        UNIT_ASSERT(subMsg2); 
-        UNIT_ASSERT_VALUES_EQUAL(1, subMsg2->RepIntSize()); 
-        UNIT_ASSERT_VALUES_EQUAL(20, subMsg2->GetRepInt(0)); 
-        UNIT_ASSERT_VALUES_EQUAL(54, subMsg2->GetExtension(NExt::Ext3Field)); 
-    } 
-    { 
-        TMaybe<TConstField> field = TConstField::ByPath(msg, "SubMsgExt/Ext3Field"); 
-        UNIT_ASSERT(field); 
-        UNIT_ASSERT(field->HasValue()); 
-        UNIT_ASSERT_VALUES_EQUAL(54, field->Get<int>()); 
-    } 
-    { 
-        TMaybe<TConstField> field = TConstField::ByPath(msg, "SubMsgExt/RepInt"); 
-        UNIT_ASSERT(field); 
-        UNIT_ASSERT(field->HasValue()); 
-        UNIT_ASSERT_VALUES_EQUAL(20, field->Get<int>()); 
-    } 
+
+    {
+        TSample msg;
+        UNIT_ASSERT(!TMutableField::ByPath(msg, "SomeField/FieldSome"));
+    }
+
+    {
+        TSample msg;
+        UNIT_ASSERT(!TMutableField::ByPath(msg, "SomeField/FieldSome", true));
+    }
 }
-} 
-} 
+
+// extension
+{
+    TSample msg;
+    msg.SetExtension(NExt::TTestExt::ExtField, "ext");
+    msg.SetExtension(NExt::ExtField, 2);
+    msg.AddExtension(NExt::Ext2Field, 33);
+    TInnerSample* subMsg = msg.MutableExtension(NExt::SubMsgExt);
+    subMsg->AddRepInt(20);
+    subMsg->SetExtension(NExt::Ext3Field, 54);
+
+    {
+        TMaybe<TConstField> field = TConstField::ByPath(msg, "NExt.TTestExt.ExtField");
+        UNIT_ASSERT(field);
+        UNIT_ASSERT(field->HasValue());
+        UNIT_ASSERT_VALUES_EQUAL("ext", field->Get<TString>());
+    }
+    {
+        TMaybe<TConstField> field = TConstField::ByPath(msg, "NExt.ExtField");
+        UNIT_ASSERT(field);
+        UNIT_ASSERT(field->HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(2, field->Get<int>());
+    }
+    {
+        TMaybe<TConstField> field = TConstField::ByPath(msg, "ExtField"); // ambiguity
+        UNIT_ASSERT(!field);
+    }
+    {
+        TMaybe<TConstField> field = TConstField::ByPath(msg, "NExt.Ext2Field");
+        UNIT_ASSERT(field);
+        UNIT_ASSERT(field->HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(33, field->Get<int>());
+    }
+    {
+        TMaybe<TConstField> field = TConstField::ByPath(msg, "Ext2Field");
+        UNIT_ASSERT(field);
+        UNIT_ASSERT(field->HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(33, field->Get<int>());
+    }
+    {
+        TMaybe<TConstField> field = TConstField::ByPath(msg, "SubMsgExt");
+        UNIT_ASSERT(field);
+        UNIT_ASSERT(field->HasValue());
+        const TInnerSample* subMsg2 = field->GetAs<TInnerSample>();
+        UNIT_ASSERT(subMsg2);
+        UNIT_ASSERT_VALUES_EQUAL(1, subMsg2->RepIntSize());
+        UNIT_ASSERT_VALUES_EQUAL(20, subMsg2->GetRepInt(0));
+        UNIT_ASSERT_VALUES_EQUAL(54, subMsg2->GetExtension(NExt::Ext3Field));
+    }
+    {
+        TMaybe<TConstField> field = TConstField::ByPath(msg, "SubMsgExt/Ext3Field");
+        UNIT_ASSERT(field);
+        UNIT_ASSERT(field->HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(54, field->Get<int>());
+    }
+    {
+        TMaybe<TConstField> field = TConstField::ByPath(msg, "SubMsgExt/RepInt");
+        UNIT_ASSERT(field);
+        UNIT_ASSERT(field->HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(20, field->Get<int>());
+    }
+}
+}
+}

@@ -3,11 +3,11 @@
 #include <library/cpp/codecs/static/static_codec_info.pb.h>
 #include <util/string/vector.h>
 
-class TStaticCodecInfoBuilderTest: public NUnitTest::TTestBase { 
+class TStaticCodecInfoBuilderTest: public NUnitTest::TTestBase {
     UNIT_TEST_SUITE(TStaticCodecInfoBuilderTest)
-    UNIT_TEST(TestBuild) 
+    UNIT_TEST(TestBuild)
     UNIT_TEST_SUITE_END();
- 
+
 private:
     TVector<TString> PrepareData() {
         TVector<TString> data;

@@ -1,9 +1,9 @@
-LIBRARY() 
+LIBRARY()
 
-OWNER(pg orivej) 
+OWNER(pg orivej)
 
 PEERDIR(
-    library/python/symbols/registry 
+    library/python/symbols/registry
 )
 
 IF (GCC OR CLANG)
@@ -13,7 +13,7 @@ IF (GCC OR CLANG)
 ENDIF()
 
 SRCS(
-    GLOBAL syms.cpp 
+    GLOBAL syms.cpp
 )
 
 END()

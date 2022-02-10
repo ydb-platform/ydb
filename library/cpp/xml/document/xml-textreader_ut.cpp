@@ -20,26 +20,26 @@ namespace {
         while (reader.Read()) {
             if (reader.GetNodeType() == NXml::TTextReader::ENodeType::Element &&
                 reader.GetLocalName() == localName &&
-                reader.GetNamespaceUri() == namespaceUri) 
-            { 
+                reader.GetNamespaceUri() == namespaceUri)
+            {
                 const NXml::TConstNode node = reader.Expand();
                 nodeHandlerFunc(node);
             }
         }
     }
-} 
+}
 
 Y_UNIT_TEST_SUITE(TestXmlTextReader) {
     Y_UNIT_TEST(BasicExample) {
         const TString xml = "<?xml version=\"1.0\"?>\n"
-                            "<example toto=\"1\">\n" 
-                            "  <examplechild id=\"1\">\n" 
-                            "    <child_of_child/>\n" 
-                            "  </examplechild>\n" 
-                            "  <examplechild id=\"2\" toto=\"3\">\n" 
-                            "    <child_of_child>Some content : -)</child_of_child>\n" 
-                            "  </examplechild>\n" 
-                            "</example>\n"; 
+                            "<example toto=\"1\">\n"
+                            "  <examplechild id=\"1\">\n"
+                            "    <child_of_child/>\n"
+                            "  </examplechild>\n"
+                            "  <examplechild id=\"2\" toto=\"3\">\n"
+                            "    <child_of_child>Some content : -)</child_of_child>\n"
+                            "  </examplechild>\n"
+                            "</example>\n";
 
         TStringInput input(xml);
         NXml::TTextReader reader(input);
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
             TItem{2, ENT::SignificantWhitespace, "#text", "", "\n  "},
             TItem{1, ENT::EndElement, "examplechild", "id: 2, toto: 3", ""},
             TItem{1, ENT::SignificantWhitespace, "#text", "", "\n"},
-            TItem{0, ENT::EndElement, "example", "toto: 1", ""}}; 
+            TItem{0, ENT::EndElement, "example", "toto: 1", ""}};
 
         UNIT_ASSERT_VALUES_EQUAL(found.size(), expected.size());
 
@@ -108,31 +108,31 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
     }
 
     const TString GEODATA = "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
-                            "<root>" 
-                            "" 
-                            "  <country id=\"225\">" 
-                            "    <name>Россия</name>" 
-                            "    <cities>" 
-                            "      <city>Москва</city>" 
-                            "      <city>Санкт-Петербург</city>" 
-                            "    </cities>" 
-                            "  </country>" 
-                            "" 
-                            "  <country id=\"149\">" 
-                            "    <name>Беларусь</name>" 
-                            "    <cities>" 
-                            "      <city>Минск</city>" 
-                            "    </cities>" 
-                            "  </country>" 
-                            "" 
-                            "  <country id=\"187\">" 
-                            "    <name>Украина</name>" 
-                            "    <cities>" 
-                            "      <city>Киев</city>" 
-                            "    </cities>" 
-                            "  </country>" 
-                            "" 
-                            "</root>"; 
+                            "<root>"
+                            ""
+                            "  <country id=\"225\">"
+                            "    <name>Россия</name>"
+                            "    <cities>"
+                            "      <city>Москва</city>"
+                            "      <city>Санкт-Петербург</city>"
+                            "    </cities>"
+                            "  </country>"
+                            ""
+                            "  <country id=\"149\">"
+                            "    <name>Беларусь</name>"
+                            "    <cities>"
+                            "      <city>Минск</city>"
+                            "    </cities>"
+                            "  </country>"
+                            ""
+                            "  <country id=\"187\">"
+                            "    <name>Украина</name>"
+                            "    <cities>"
+                            "      <city>Киев</city>"
+                            "    </cities>"
+                            "  </country>"
+                            ""
+                            "</root>";
 
     Y_UNIT_TEST(ParseXmlSimple) {
         struct TCountry {
@@ -253,10 +253,10 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
 
     Y_UNIT_TEST(NamespaceHell) {
         using TNS = NXml::TNamespaceForXPath;
-        const NXml::TNamespacesForXPath ns = { 
+        const NXml::TNamespacesForXPath ns = {
             TNS{"b", "http://maps.yandex.ru/backa/1.x"},
             TNS{"gml", "http://www.opengis.net/gml"},
-            TNS{"xal", "urn:oasis:names:tc:ciq:xsdschema:xAL:2.0"}}; 
+            TNS{"xal", "urn:oasis:names:tc:ciq:xsdschema:xAL:2.0"}};
 
         int count = 0;
         THashMap<TString, TString> positions;

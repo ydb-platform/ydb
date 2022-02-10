@@ -8,7 +8,7 @@ using namespace NBus;
 using namespace NBus::NTest;
 
 Y_UNIT_TEST_SUITE(TBusStarterTest) {
-    struct TStartJobTestModule: public TExampleModule { 
+    struct TStartJobTestModule: public TExampleModule {
         using TBusModule::CreateDefaultStarter;
 
         TAtomic StartCount;
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TBusStarterTest) {
         module.Shutdown();
     }
 
-    struct TSleepModule: public TExampleServerModule { 
+    struct TSleepModule: public TExampleServerModule {
         TSystemEvent MessageReceivedEvent;
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TBusStarterTest) {
         module.Shutdown();
     }
 
-    struct TSendReplyModule: public TExampleServerModule { 
+    struct TSendReplyModule: public TExampleServerModule {
         TSystemEvent MessageReceivedEvent;
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {

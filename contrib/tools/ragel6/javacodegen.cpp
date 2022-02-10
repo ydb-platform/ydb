@@ -1681,8 +1681,8 @@ ostream &JavaTabCodeGen::source_error( const InputLoc &loc )
 	return cerr;
 }
 
-#undef _resume 
-#undef _again 
-#undef _eof_trans 
-#undef _test_eof 
-#undef _out 
+#undef _resume
+#undef _again
+#undef _eof_trans
+#undef _test_eof
+#undef _out

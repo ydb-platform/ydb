@@ -1,82 +1,82 @@
-#include "rb_tree.h" 
- 
+#include "rb_tree.h"
+
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include <util/random/fast.h> 
-#include <util/random/easy.h> 
+
+#include <util/random/fast.h>
+#include <util/random/easy.h>
 #include <util/random/shuffle.h>
- 
-class TRedBlackTreeTest: public TTestBase { 
-    struct TCmp { 
-        template <class T> 
-        static inline bool Compare(const T& l, const T& r) { 
-            return l.N < r.N; 
-        } 
- 
-        template <class T> 
-        static inline bool Compare(const T& l, int r) { 
-            return l.N < r; 
-        } 
- 
-        template <class T> 
-        static inline bool Compare(int l, const T& r) { 
-            return l < r.N; 
-        } 
-    }; 
- 
-    class TNode: public TRbTreeItem<TNode, TCmp> { 
-    public: 
+
+class TRedBlackTreeTest: public TTestBase {
+    struct TCmp {
+        template <class T>
+        static inline bool Compare(const T& l, const T& r) {
+            return l.N < r.N;
+        }
+
+        template <class T>
+        static inline bool Compare(const T& l, int r) {
+            return l.N < r;
+        }
+
+        template <class T>
+        static inline bool Compare(int l, const T& r) {
+            return l < r.N;
+        }
+    };
+
+    class TNode: public TRbTreeItem<TNode, TCmp> {
+    public:
         inline TNode(int n) noexcept
-            : N(n) 
-        { 
-        } 
- 
-        int N; 
-    }; 
- 
+            : N(n)
+        {
+        }
+
+        int N;
+    };
+
     using TTree = TRbTree<TNode, TCmp>;
- 
-    UNIT_TEST_SUITE(TRedBlackTreeTest); 
-    UNIT_TEST(TestEmpty) 
-    UNIT_TEST(TestInsert) 
-    UNIT_TEST(TestErase) 
-    UNIT_TEST(TestFind) 
-    UNIT_TEST(TestStress) 
+
+    UNIT_TEST_SUITE(TRedBlackTreeTest);
+    UNIT_TEST(TestEmpty)
+    UNIT_TEST(TestInsert)
+    UNIT_TEST(TestErase)
+    UNIT_TEST(TestFind)
+    UNIT_TEST(TestStress)
     UNIT_TEST(TestGettingIndexWithDifferentValues)
     UNIT_TEST(TestCheckChildrenAfterErase)
     UNIT_TEST(TestGettingIndexWithDifferentValuesAfterErase)
     UNIT_TEST(TestGettingIndexWithEqualValues)
     UNIT_TEST(TestLessCountOnEmptyTree)
-    UNIT_TEST_SUITE_END(); 
- 
-private: 
-    inline void TestStress() { 
+    UNIT_TEST_SUITE_END();
+
+private:
+    inline void TestStress() {
         TVector<TSimpleSharedPtr<TNode>> nodes;
- 
-        for (int i = 0; i < 1000; ++i) { 
-            nodes.push_back(new TNode(i)); 
-        } 
- 
-        TTree tree; 
-        TReallyFastRng32 rnd(Random()); 
- 
-        for (size_t i = 0; i < 1000000; ++i) { 
-            tree.Insert(nodes[rnd.Uniform(nodes.size())].Get()); 
-        } 
- 
-        for (TTree::TConstIterator it = tree.Begin(); it != tree.End();) { 
-            const int v1 = it->N; 
- 
-            if (++it == tree.End()) { 
-                break; 
-            } 
- 
-            const int v2 = it->N; 
- 
-            UNIT_ASSERT(v1 < v2); 
-        } 
-    } 
- 
+
+        for (int i = 0; i < 1000; ++i) {
+            nodes.push_back(new TNode(i));
+        }
+
+        TTree tree;
+        TReallyFastRng32 rnd(Random());
+
+        for (size_t i = 0; i < 1000000; ++i) {
+            tree.Insert(nodes[rnd.Uniform(nodes.size())].Get());
+        }
+
+        for (TTree::TConstIterator it = tree.Begin(); it != tree.End();) {
+            const int v1 = it->N;
+
+            if (++it == tree.End()) {
+                break;
+            }
+
+            const int v2 = it->N;
+
+            UNIT_ASSERT(v1 < v2);
+        }
+    }
+
     inline void TestGettingIndexWithDifferentValues() {
         TVector<TSimpleSharedPtr<TNode>> nodes;
         size_t N = 1000;
@@ -202,97 +202,97 @@ private:
         }
     }
 
-    inline void TestFind() { 
-        TTree tree; 
- 
-        { 
-            TNode n1(1); 
-            TNode n2(2); 
-            TNode n3(3); 
- 
-            tree.Insert(n1); 
-            tree.Insert(n2); 
-            tree.Insert(n3); 
- 
-            UNIT_ASSERT_EQUAL(tree.Find(1)->N, 1); 
-            UNIT_ASSERT_EQUAL(tree.Find(2)->N, 2); 
-            UNIT_ASSERT_EQUAL(tree.Find(3)->N, 3); 
- 
-            UNIT_ASSERT(!tree.Find(0)); 
-            UNIT_ASSERT(!tree.Find(4)); 
-            UNIT_ASSERT(!tree.Find(1234567)); 
-        } 
- 
-        UNIT_ASSERT(tree.Empty()); 
-    } 
- 
-    inline void TestEmpty() { 
-        TTree tree; 
- 
-        UNIT_ASSERT(tree.Empty()); 
-        UNIT_ASSERT_EQUAL(tree.Begin(), tree.End()); 
-    } 
- 
-    inline void TestInsert() { 
-        TTree tree; 
- 
-        { 
-            TNode n1(1); 
-            TNode n2(2); 
-            TNode n3(3); 
- 
-            tree.Insert(n1); 
-            tree.Insert(n2); 
-            tree.Insert(n3); 
- 
-            TTree::TConstIterator it = tree.Begin(); 
- 
-            UNIT_ASSERT_EQUAL((it++)->N, 1); 
-            UNIT_ASSERT_EQUAL((it++)->N, 2); 
-            UNIT_ASSERT_EQUAL((it++)->N, 3); 
-            UNIT_ASSERT_EQUAL(it, tree.End()); 
-        } 
- 
-        UNIT_ASSERT(tree.Empty()); 
-    } 
- 
-    inline void TestErase() { 
-        TTree tree; 
- 
-        { 
-            TNode n1(1); 
-            TNode n2(2); 
-            TNode n3(3); 
- 
-            tree.Insert(n1); 
-            tree.Insert(n2); 
-            tree.Insert(n3); 
- 
-            TTree::TIterator it = tree.Begin(); 
- 
-            tree.Erase(it++); 
- 
-            UNIT_ASSERT_EQUAL(it, tree.Begin()); 
-            UNIT_ASSERT_EQUAL(it->N, 2); 
- 
-            tree.Erase(it++); 
- 
-            UNIT_ASSERT_EQUAL(it, tree.Begin()); 
-            UNIT_ASSERT_EQUAL(it->N, 3); 
- 
-            tree.Erase(it++); 
- 
-            UNIT_ASSERT_EQUAL(it, tree.Begin()); 
-            UNIT_ASSERT_EQUAL(it, tree.End()); 
-        } 
- 
-        UNIT_ASSERT(tree.Empty()); 
-    } 
+    inline void TestFind() {
+        TTree tree;
+
+        {
+            TNode n1(1);
+            TNode n2(2);
+            TNode n3(3);
+
+            tree.Insert(n1);
+            tree.Insert(n2);
+            tree.Insert(n3);
+
+            UNIT_ASSERT_EQUAL(tree.Find(1)->N, 1);
+            UNIT_ASSERT_EQUAL(tree.Find(2)->N, 2);
+            UNIT_ASSERT_EQUAL(tree.Find(3)->N, 3);
+
+            UNIT_ASSERT(!tree.Find(0));
+            UNIT_ASSERT(!tree.Find(4));
+            UNIT_ASSERT(!tree.Find(1234567));
+        }
+
+        UNIT_ASSERT(tree.Empty());
+    }
+
+    inline void TestEmpty() {
+        TTree tree;
+
+        UNIT_ASSERT(tree.Empty());
+        UNIT_ASSERT_EQUAL(tree.Begin(), tree.End());
+    }
+
+    inline void TestInsert() {
+        TTree tree;
+
+        {
+            TNode n1(1);
+            TNode n2(2);
+            TNode n3(3);
+
+            tree.Insert(n1);
+            tree.Insert(n2);
+            tree.Insert(n3);
+
+            TTree::TConstIterator it = tree.Begin();
+
+            UNIT_ASSERT_EQUAL((it++)->N, 1);
+            UNIT_ASSERT_EQUAL((it++)->N, 2);
+            UNIT_ASSERT_EQUAL((it++)->N, 3);
+            UNIT_ASSERT_EQUAL(it, tree.End());
+        }
+
+        UNIT_ASSERT(tree.Empty());
+    }
+
+    inline void TestErase() {
+        TTree tree;
+
+        {
+            TNode n1(1);
+            TNode n2(2);
+            TNode n3(3);
+
+            tree.Insert(n1);
+            tree.Insert(n2);
+            tree.Insert(n3);
+
+            TTree::TIterator it = tree.Begin();
+
+            tree.Erase(it++);
+
+            UNIT_ASSERT_EQUAL(it, tree.Begin());
+            UNIT_ASSERT_EQUAL(it->N, 2);
+
+            tree.Erase(it++);
+
+            UNIT_ASSERT_EQUAL(it, tree.Begin());
+            UNIT_ASSERT_EQUAL(it->N, 3);
+
+            tree.Erase(it++);
+
+            UNIT_ASSERT_EQUAL(it, tree.Begin());
+            UNIT_ASSERT_EQUAL(it, tree.End());
+        }
+
+        UNIT_ASSERT(tree.Empty());
+    }
 
     inline void TestLessCountOnEmptyTree() {
         TTree tree;
         UNIT_ASSERT_VALUES_EQUAL(0, tree.LessCount(TNode(1)));
     }
-}; 
- 
-UNIT_TEST_SUITE_REGISTRATION(TRedBlackTreeTest); 
+};
+
+UNIT_TEST_SUITE_REGISTRATION(TRedBlackTreeTest);

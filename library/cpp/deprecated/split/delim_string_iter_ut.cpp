@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(TDelimStrokaIterTestSuite) {
         TVector<TStringBuf> expected = {"1", "", "3@4", ""};
         TVector<TStringBuf> got;
 
-        for (TStringBuf x : TDelimStroka("1@@@@3@4@@", "@@")) { 
+        for (TStringBuf x : TDelimStroka("1@@@@3@4@@", "@@")) {
             got.push_back(x);
         }
 
@@ -70,30 +70,30 @@ Y_UNIT_TEST_SUITE(TKeyValueDelimStringIterTestSuite) {
     Y_UNIT_TEST(SingleCharacterAsDelimiter) {
         AssertKeyValueStringSplit(
             "abc=123,cde=qwer", ",",
-            {{"abc", "123"}, 
-             {"cde", "qwer"}}); 
+            {{"abc", "123"},
+             {"cde", "qwer"}});
     }
 
     Y_UNIT_TEST(MultipleCharactersAsDelimiter) {
         AssertKeyValueStringSplit(
             "abc=xyz@@qwerty=zxcv", "@@",
-            {{"abc", "xyz"}, 
-             {"qwerty", "zxcv"}}); 
+            {{"abc", "xyz"},
+             {"qwerty", "zxcv"}});
     }
 
     Y_UNIT_TEST(NoDelimiters) {
         AssertKeyValueStringSplit(
             "abc=zz", ",",
-            {{"abc", "zz"}}); 
+            {{"abc", "zz"}});
     }
 
     Y_UNIT_TEST(EmptyElements) {
         AssertKeyValueStringSplit(
             "@@abc=zxy@@@@qwerty=y@@", "@@",
-            {{"", ""}, 
-             {"abc", "zxy"}, 
-             {"", ""}, 
-             {"qwerty", "y"}, 
-             {"", ""}}); 
+            {{"", ""},
+             {"abc", "zxy"},
+             {"", ""},
+             {"qwerty", "y"},
+             {"", ""}});
     }
 }

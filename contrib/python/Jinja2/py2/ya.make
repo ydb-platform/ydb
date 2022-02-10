@@ -3,7 +3,7 @@
 PY2_LIBRARY()
 
 OWNER(floatdrop g:python-contrib)
- 
+
 VERSION(2.11.3)
 
 LICENSE(BSD-3-Clause)

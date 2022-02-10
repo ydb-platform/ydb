@@ -9,7 +9,7 @@ void TCustomEncoder::addToTable(wchar32 ucode, unsigned char code, const CodePag
     unsigned char pos = (unsigned char)(ucode & 255);
     if (Table[plane] == DefaultPlane) {
         Table[plane] = new char[256];
-        memset(Table[plane], 0, 256 * sizeof(char)); 
+        memset(Table[plane], 0, 256 * sizeof(char));
     }
 
     if (Table[plane][pos] == 0) {
@@ -18,18 +18,18 @@ void TCustomEncoder::addToTable(wchar32 ucode, unsigned char code, const CodePag
         Y_ASSERT(target && *target->Names);
         if (static_cast<unsigned char>(Table[plane][pos]) > 127 && code) {
             Cerr << "WARNING: Only lower part of ASCII should have duplicate encodings "
-                 << target->Names[0] 
-                 << " " << IntToString<16>(ucode) 
-                 << " " << IntToString<16>(code) 
-                 << " " << IntToString<16>(static_cast<unsigned char>(Table[plane][pos])) 
-                 << Endl; 
+                 << target->Names[0]
+                 << " " << IntToString<16>(ucode)
+                 << " " << IntToString<16>(code)
+                 << " " << IntToString<16>(static_cast<unsigned char>(Table[plane][pos]))
+                 << Endl;
         }
     }
 }
 
-bool isGoodDecomp(wchar32 rune, wchar32 decomp) { 
+bool isGoodDecomp(wchar32 rune, wchar32 decomp) {
     if (
-        (NUnicode::NPrivate::CharInfo(rune) == NUnicode::NPrivate::CharInfo(decomp)) || (IsAlpha(rune) && IsAlpha(decomp)) || (IsNumeric(rune) && IsNumeric(decomp)) || (IsQuotation(rune) && IsQuotation(decomp))) 
+        (NUnicode::NPrivate::CharInfo(rune) == NUnicode::NPrivate::CharInfo(decomp)) || (IsAlpha(rune) && IsAlpha(decomp)) || (IsNumeric(rune) && IsNumeric(decomp)) || (IsQuotation(rune) && IsQuotation(decomp)))
     {
         return true;
     }
@@ -43,23 +43,23 @@ void TCustomEncoder::Create(const CodePage* target, bool extended) {
 
     DefaultPlane = new char[256];
 
-    memset(DefaultPlane, 0, 256 * sizeof(char)); 
+    memset(DefaultPlane, 0, 256 * sizeof(char));
     for (size_t i = 0; i != 256; ++i)
         Table[i] = DefaultPlane;
 
     for (size_t i = 0; i != 256; ++i) {
         wchar32 ucode = target->unicode[i];
         if (ucode != BROKEN_RUNE) // always UNASSIGNED
-            addToTable(ucode, (unsigned char)i, target); 
+            addToTable(ucode, (unsigned char)i, target);
     }
 
     if (!extended)
         return;
 
-    for (wchar32 w = 1; w < 65535; w++) { 
-        if (Code(w) == 0) { 
+    for (wchar32 w = 1; w < 65535; w++) {
+        if (Code(w) == 0) {
             wchar32 dw = w;
-            while (IsComposed(dw) && Code(dw) == 0) { 
+            while (IsComposed(dw) && Code(dw) == 0) {
                 const wchar32* decomp_p = NUnicode::Decomposition<true>(dw);
                 Y_ASSERT(decomp_p != nullptr);
 
@@ -76,8 +76,8 @@ void TCustomEncoder::Create(const CodePage* target, bool extended) {
 TCustomEncoder::~TCustomEncoder() {
     for (size_t i = 0; i != 256; ++i) {
         if (Table[i] != DefaultPlane) {
-            delete[] Table[i]; 
+            delete[] Table[i];
         }
     }
-    delete[] DefaultPlane; 
+    delete[] DefaultPlane;
 }

@@ -1,16 +1,16 @@
-LIBRARY() 
- 
-OWNER( 
-    pg 
+LIBRARY()
+
+OWNER(
+    pg
     g:util
-) 
- 
-PEERDIR( 
-    contrib/libs/lzmasdk 
-) 
- 
-SRCS( 
-    lzma.cpp 
-) 
- 
-END() 
+)
+
+PEERDIR(
+    contrib/libs/lzmasdk
+)
+
+SRCS(
+    lzma.cpp
+)
+
+END()

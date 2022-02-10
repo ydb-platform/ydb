@@ -1,26 +1,26 @@
 #pragma once
 
-#include "httpheader.h" 
-#include "httpparser.h" 
-#include "exthttpcodes.h" 
+#include "httpheader.h"
+#include "httpparser.h"
+#include "exthttpcodes.h"
 
 #include <util/system/defaults.h>
 #include <util/generic/yexception.h>
 
 #include <contrib/libs/zlib/zlib.h>
 
-#include <errno.h> 
- 
+#include <errno.h>
+
 #ifndef ENOTSUP
-#define ENOTSUP 45 
+#define ENOTSUP 45
 #endif
 
 template <class Reader>
 class TCompressedHttpReader: public THttpReader<Reader> {
     typedef THttpReader<Reader> TBase;
- 
+
 public:
-    using TBase::AssumeConnectionClosed; 
+    using TBase::AssumeConnectionClosed;
     using TBase::Header;
     using TBase::ParseGeneric;
     using TBase::State;
@@ -78,7 +78,7 @@ public:
         return ret;
     }
 
-    long Read(void*& buf) { 
+    long Read(void*& buf) {
         if (!CompressedInput) {
             long res = TBase::Read(buf);
             if (res > 0) {
@@ -93,7 +93,7 @@ public:
 
         while (true) {
             if (Stream.avail_in == 0) {
-                void* tmpin = Stream.next_in; 
+                void* tmpin = Stream.next_in;
                 long res = TBase::Read(tmpin);
                 Stream.next_in = (Bytef*)tmpin;
                 if (res <= 0)
@@ -121,10 +121,10 @@ public:
                         ZErr = E2BIG;
                         return -1;
                     }
-                    if (!IgnoreTrailingGarbage && BufSize == Stream.avail_out && Stream.avail_in > 0) { 
+                    if (!IgnoreTrailingGarbage && BufSize == Stream.avail_out && Stream.avail_in > 0) {
                         Header->error = EXT_HTTP_GZIPERROR;
                         ZErr = EFAULT;
-                        Stream.msg = (char*)"trailing garbage"; 
+                        Stream.msg = (char*)"trailing garbage";
                         return -1;
                     }
                     return long(BufSize - Stream.avail_out);
@@ -148,7 +148,7 @@ public:
         return -1;
     }
 
-    const char* ZMsg() const { 
+    const char* ZMsg() const {
         return Stream.msg;
     }
 
@@ -173,7 +173,7 @@ protected:
                 return 0;
             case HTTP_COMPRESSION_GZIP:
                 CompressedInput = true;
-                winsize += 16; // 16 indicates gzip, see zlib.h 
+                winsize += 16; // 16 indicates gzip, see zlib.h
                 break;
             case HTTP_COMPRESSION_DEFLATE:
                 CompressedInput = true;
@@ -240,21 +240,21 @@ protected:
     bool IgnoreTrailingGarbage;
 };
 
-class zlib_exception: public yexception { 
+class zlib_exception: public yexception {
 };
 
 template <class Reader>
 class SCompressedHttpReader: public TCompressedHttpReader<Reader> {
     typedef TCompressedHttpReader<Reader> TBase;
- 
+
 public:
     using TBase::ZError;
     using TBase::ZMsg;
 
     SCompressedHttpReader()
-        : TBase() 
-    { 
-    } 
+        : TBase()
+    {
+    }
 
     int Init(
         THttpHeader* H,
@@ -268,7 +268,7 @@ public:
         return (int)HandleRetValue((long)ret);
     }
 
-    long Read(void*& buf) { 
+    long Read(void*& buf) {
         long ret = TBase::Read(buf);
         return HandleRetValue(ret);
     }
@@ -281,7 +281,7 @@ protected:
             case ENOMEM:
                 ythrow yexception() << "SCompressedHttpReader: not enough memory";
             case EINVAL:
-                ythrow yexception() << "SCompressedHttpReader: zlib error: " << ZMsg(); 
+                ythrow yexception() << "SCompressedHttpReader: zlib error: " << ZMsg();
             case ENOTSUP:
                 ythrow yexception() << "SCompressedHttpReader: unsupported compression method";
             case EFAULT:

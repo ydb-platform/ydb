@@ -1,4 +1,4 @@
-#include "maybe.h" 
+#include "maybe.h"
 #include <util/system/type_name.h>
 
 [[noreturn]] void NMaybe::TPolicyUndefinedExcept::OnEmpty(const std::type_info& valueTypeInfo) {

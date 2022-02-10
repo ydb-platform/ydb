@@ -1,12 +1,12 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     pg
     g:util
 )
- 
-SRCS( 
-    sfh.cpp 
-) 
- 
-END() 
+
+SRCS(
+    sfh.cpp
+)
+
+END()

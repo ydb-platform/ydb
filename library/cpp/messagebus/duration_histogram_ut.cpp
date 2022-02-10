@@ -4,15 +4,15 @@
 
 Y_UNIT_TEST_SUITE(TDurationHistogramTest) {
     Y_UNIT_TEST(BucketFor) {
-        UNIT_ASSERT_VALUES_EQUAL(0u, TDurationHistogram::BucketFor(TDuration::MicroSeconds(0))); 
-        UNIT_ASSERT_VALUES_EQUAL(0u, TDurationHistogram::BucketFor(TDuration::MicroSeconds(1))); 
-        UNIT_ASSERT_VALUES_EQUAL(0u, TDurationHistogram::BucketFor(TDuration::MicroSeconds(900))); 
+        UNIT_ASSERT_VALUES_EQUAL(0u, TDurationHistogram::BucketFor(TDuration::MicroSeconds(0)));
+        UNIT_ASSERT_VALUES_EQUAL(0u, TDurationHistogram::BucketFor(TDuration::MicroSeconds(1)));
+        UNIT_ASSERT_VALUES_EQUAL(0u, TDurationHistogram::BucketFor(TDuration::MicroSeconds(900)));
         UNIT_ASSERT_VALUES_EQUAL(1u, TDurationHistogram::BucketFor(TDuration::MicroSeconds(1500)));
         UNIT_ASSERT_VALUES_EQUAL(2u, TDurationHistogram::BucketFor(TDuration::MicroSeconds(2500)));
 
         unsigned sb = TDurationHistogram::SecondBoundary;
 
-        UNIT_ASSERT_VALUES_EQUAL(sb - 1, TDurationHistogram::BucketFor(TDuration::MilliSeconds(999))); 
+        UNIT_ASSERT_VALUES_EQUAL(sb - 1, TDurationHistogram::BucketFor(TDuration::MilliSeconds(999)));
         UNIT_ASSERT_VALUES_EQUAL(sb, TDurationHistogram::BucketFor(TDuration::MilliSeconds(1000)));
         UNIT_ASSERT_VALUES_EQUAL(sb, TDurationHistogram::BucketFor(TDuration::MilliSeconds(1001)));
 

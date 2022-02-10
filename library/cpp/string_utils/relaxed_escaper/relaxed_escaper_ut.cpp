@@ -10,19 +10,19 @@ static const TStringBuf CommonTestData[] = {
 
     RESC_FIXED_STR("http://ya.ru/\\0"), RESC_FIXED_STR("http://ya.ru/\0"),
     RESC_FIXED_STR("http://ya.ru/\\0\\0"), RESC_FIXED_STR("http://ya.ru/\0\0"),
-    RESC_FIXED_STR("http://ya.ru/\\0\\0000"), RESC_FIXED_STR("http://ya.ru/\0\0" 
-                                                             "0"), 
-    RESC_FIXED_STR("http://ya.ru/\\0\\0001"), RESC_FIXED_STR("http://ya.ru/\0\x00" 
-                                                             "1"), 
+    RESC_FIXED_STR("http://ya.ru/\\0\\0000"), RESC_FIXED_STR("http://ya.ru/\0\0"
+                                                             "0"),
+    RESC_FIXED_STR("http://ya.ru/\\0\\0001"), RESC_FIXED_STR("http://ya.ru/\0\x00"
+                                                             "1"),
 
-    RESC_FIXED_STR("\\2\\4\\00678"), RESC_FIXED_STR("\2\4\6" 
-                                                    "78"), 
+    RESC_FIXED_STR("\\2\\4\\00678"), RESC_FIXED_STR("\2\4\6"
+                                                    "78"),
     RESC_FIXED_STR("\\2\\4\\689"), RESC_FIXED_STR("\2\4\689"),
 
     RESC_FIXED_STR("\\\"Hello\\\", Alice said."), RESC_FIXED_STR("\"Hello\", Alice said."),
     RESC_FIXED_STR("Slash\\\\dash!"), RESC_FIXED_STR("Slash\\dash!"),
     RESC_FIXED_STR("There\\nare\\r\\nnewlines."), RESC_FIXED_STR("There\nare\r\nnewlines."),
-    RESC_FIXED_STR("There\\tare\\ttabs."), RESC_FIXED_STR("There\tare\ttabs.")}; 
+    RESC_FIXED_STR("There\\tare\\ttabs."), RESC_FIXED_STR("There\tare\ttabs.")};
 #undef RESC_FIXED_STR
 
 Y_UNIT_TEST_SUITE(TRelaxedEscaperTest) {
@@ -52,15 +52,15 @@ Y_UNIT_TEST_SUITE(TRelaxedEscaperTest) {
         UNIT_ASSERT_VALUES_EQUAL("\"\\xFF\"", EscapeJ<true>("\xFF"));
         UNIT_ASSERT_VALUES_EQUAL("\xFF", UnescapeC("\\xFF"));
 
-        UNIT_ASSERT_VALUES_EQUAL("\\377f", EscapeJ<false>("\xff" 
-                                                          "f")); 
-        UNIT_ASSERT_VALUES_EQUAL("\xff" 
-                                 "f", 
-                                 UnescapeC("\\377f")); 
-        UNIT_ASSERT_VALUES_EQUAL("\\xFFg", EscapeJ<false>("\xff" 
-                                                          "g")); 
-        UNIT_ASSERT_VALUES_EQUAL("\xff" 
-                                 "g", 
-                                 UnescapeC("\\xFFg")); 
+        UNIT_ASSERT_VALUES_EQUAL("\\377f", EscapeJ<false>("\xff"
+                                                          "f"));
+        UNIT_ASSERT_VALUES_EQUAL("\xff"
+                                 "f",
+                                 UnescapeC("\\377f"));
+        UNIT_ASSERT_VALUES_EQUAL("\\xFFg", EscapeJ<false>("\xff"
+                                                          "g"));
+        UNIT_ASSERT_VALUES_EQUAL("\xff"
+                                 "g",
+                                 UnescapeC("\\xFFg"));
     }
 }

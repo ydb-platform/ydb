@@ -1,103 +1,103 @@
-/************************************************* 
-*      Perl-Compatible Regular Expressions       * 
-*************************************************/ 
- 
-/* PCRE is a library of functions to support regular expressions whose syntax 
-and semantics are as close as possible to those of the Perl 5 language. 
- 
-                       Written by Philip Hazel 
+/*************************************************
+*      Perl-Compatible Regular Expressions       *
+*************************************************/
+
+/* PCRE is a library of functions to support regular expressions whose syntax
+and semantics are as close as possible to those of the Perl 5 language.
+
+                       Written by Philip Hazel
            Copyright (c) 1997-2017 University of Cambridge
- 
------------------------------------------------------------------------------ 
-Redistribution and use in source and binary forms, with or without 
-modification, are permitted provided that the following conditions are met: 
- 
-    * Redistributions of source code must retain the above copyright notice, 
-      this list of conditions and the following disclaimer. 
- 
-    * Redistributions in binary form must reproduce the above copyright 
-      notice, this list of conditions and the following disclaimer in the 
-      documentation and/or other materials provided with the distribution. 
- 
-    * Neither the name of the University of Cambridge nor the names of its 
-      contributors may be used to endorse or promote products derived from 
-      this software without specific prior written permission. 
- 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
-ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
-POSSIBILITY OF SUCH DAMAGE. 
------------------------------------------------------------------------------ 
-*/ 
- 
+
+-----------------------------------------------------------------------------
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+
+    * Neither the name of the University of Cambridge nor the names of its
+      contributors may be used to endorse or promote products derived from
+      this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+-----------------------------------------------------------------------------
+*/
+
 #ifndef PCRE_INCLUDED
- 
-/* This module contains some fixed tables that are used by more than one of the 
-PCRE code modules. The tables are also #included by the pcretest program, which 
-uses macros to change their names from _pcre_xxx to xxxx, thereby avoiding name 
-clashes with the library. */ 
- 
- 
-#ifdef HAVE_CONFIG_H 
+
+/* This module contains some fixed tables that are used by more than one of the
+PCRE code modules. The tables are also #included by the pcretest program, which
+uses macros to change their names from _pcre_xxx to xxxx, thereby avoiding name
+clashes with the library. */
+
+
+#ifdef HAVE_CONFIG_H
 #include "pcre_config.h"
-#endif 
- 
-#include "pcre_internal.h" 
- 
+#endif
+
+#include "pcre_internal.h"
+
 #endif /* PCRE_INCLUDED */
- 
-/* Table of sizes for the fixed-length opcodes. It's defined in a macro so that 
-the definition is next to the definition of the opcodes in pcre_internal.h. */ 
- 
+
+/* Table of sizes for the fixed-length opcodes. It's defined in a macro so that
+the definition is next to the definition of the opcodes in pcre_internal.h. */
+
 const pcre_uint8 PRIV(OP_lengths)[] = { OP_LENGTHS };
- 
+
 /* Tables of horizontal and vertical whitespace characters, suitable for
 adding to classes. */
- 
+
 const pcre_uint32 PRIV(hspace_list)[] = { HSPACE_LIST };
 const pcre_uint32 PRIV(vspace_list)[] = { VSPACE_LIST };
- 
 
 
-/************************************************* 
-*           Tables for UTF-8 support             * 
-*************************************************/ 
- 
-/* These are the breakpoints for different numbers of bytes in a UTF-8 
-character. */ 
- 
+
+/*************************************************
+*           Tables for UTF-8 support             *
+*************************************************/
+
+/* These are the breakpoints for different numbers of bytes in a UTF-8
+character. */
+
 #if (defined SUPPORT_UTF && defined COMPILE_PCRE8) \
   || (defined PCRE_INCLUDED && (defined SUPPORT_PCRE16 || defined SUPPORT_PCRE32))
- 
+
 /* These tables are also required by pcretest in 16- or 32-bit mode. */
 
 const int PRIV(utf8_table1)[] =
-  { 0x7f, 0x7ff, 0xffff, 0x1fffff, 0x3ffffff, 0x7fffffff}; 
- 
+  { 0x7f, 0x7ff, 0xffff, 0x1fffff, 0x3ffffff, 0x7fffffff};
+
 const int PRIV(utf8_table1_size) = sizeof(PRIV(utf8_table1)) / sizeof(int);
- 
-/* These are the indicator bits and the mask for the data bits to set in the 
-first byte of a character, indexed by the number of additional bytes. */ 
- 
+
+/* These are the indicator bits and the mask for the data bits to set in the
+first byte of a character, indexed by the number of additional bytes. */
+
 const int PRIV(utf8_table2)[] = { 0,    0xc0, 0xe0, 0xf0, 0xf8, 0xfc};
 const int PRIV(utf8_table3)[] = { 0xff, 0x1f, 0x0f, 0x07, 0x03, 0x01};
- 
-/* Table of the number of extra bytes, indexed by the first byte masked with 
-0x3f. The highest number for a valid UTF-8 first byte is in fact 0x3d. */ 
- 
+
+/* Table of the number of extra bytes, indexed by the first byte masked with
+0x3f. The highest number for a valid UTF-8 first byte is in fact 0x3d. */
+
 const pcre_uint8 PRIV(utf8_table4)[] = {
-  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
-  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
-  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, 
-  3,3,3,3,3,3,3,3,4,4,4,4,5,5,5,5 }; 
- 
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+  3,3,3,3,3,3,3,3,4,4,4,4,5,5,5,5 };
+
 #endif /* (SUPPORT_UTF && COMPILE_PCRE8) || (PCRE_INCLUDED && SUPPORT_PCRE[16|32])*/
 
 #ifdef SUPPORT_UTF
@@ -190,18 +190,18 @@ const int PRIV(ucp_typerange)[] = {
 };
 #endif /* SUPPORT_JIT */
 
-/* The pcre_utt[] table below translates Unicode property names into type and 
-code values. It is searched by binary chop, so must be in collating sequence of 
-name. Originally, the table contained pointers to the name strings in the first 
-field of each entry. However, that leads to a large number of relocations when 
-a shared library is dynamically loaded. A significant reduction is made by 
-putting all the names into a single, large string and then using offsets in the 
-table itself. Maintenance is more error-prone, but frequent changes to this 
+/* The pcre_utt[] table below translates Unicode property names into type and
+code values. It is searched by binary chop, so must be in collating sequence of
+name. Originally, the table contained pointers to the name strings in the first
+field of each entry. However, that leads to a large number of relocations when
+a shared library is dynamically loaded. A significant reduction is made by
+putting all the names into a single, large string and then using offsets in the
+table itself. Maintenance is more error-prone, but frequent changes to this
 data are unlikely.
- 
+
 July 2008: There is now a script called maint/GenerateUtt.py that can be used
 to generate this data automatically instead of maintaining it by hand.
- 
+
 The script was updated in March 2009 to generate a new EBCDIC-compliant
 version. Like all other character and string literals that are compared against
 the regular expression pattern, we must use STR_ macros instead of literal
@@ -718,10 +718,10 @@ const ucp_type_table PRIV(utt)[] = {
   { 1277, PT_PC, ucp_Zl },
   { 1280, PT_PC, ucp_Zp },
   { 1283, PT_PC, ucp_Zs }
-}; 
- 
+};
+
 const int PRIV(utt_size) = sizeof(PRIV(utt)) / sizeof(ucp_type_table);
- 
+
 #endif /* SUPPORT_UTF */
- 
-/* End of pcre_tables.c */ 
+
+/* End of pcre_tables.c */

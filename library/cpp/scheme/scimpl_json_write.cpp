@@ -40,7 +40,7 @@ namespace NSc {
 
     template <typename TDictKeys>
     static inline void WriteDict(IOutputStream& out, const TDictKeys& keys, const TDict& dict,
-                                 const TJsonOpts& jopts, NImpl::TKeySortContext& sortCtx, NImpl::TSelfLoopContext& loopCtx) { 
+                                 const TJsonOpts& jopts, NImpl::TKeySortContext& sortCtx, NImpl::TSelfLoopContext& loopCtx) {
         using const_iterator = typename TDictKeys::const_iterator;
         const_iterator begin = keys.begin();
         const_iterator end = keys.end();
@@ -64,7 +64,7 @@ namespace NSc {
     }
 
     void TValue::DoWriteJsonImpl(IOutputStream& out, const TJsonOpts& jopts,
-                                 NImpl::TKeySortContext& sortCtx, NImpl::TSelfLoopContext& loopCtx) const { 
+                                 NImpl::TKeySortContext& sortCtx, NImpl::TSelfLoopContext& loopCtx) const {
         const TScCore& core = Core();
 
         NImpl::TSelfLoopContext::TGuard loopCheck(loopCtx, core);
@@ -75,67 +75,67 @@ namespace NSc {
         }
 
         switch (core.ValueType) {
-            default: { 
-                Y_ASSERT(false); 
+            default: {
+                Y_ASSERT(false);
                 [[fallthrough]]; /* no break */
             }
-            case EType::Null: { 
+            case EType::Null: {
                 out << TStringBuf("null");
-                break; 
+                break;
             }
-            case EType::Bool: { 
+            case EType::Bool: {
                 out << (core.IntNumber ? TStringBuf("true") : TStringBuf("false"));
-                break; 
-            } 
-            case EType::IntNumber: { 
-                out << core.IntNumber; 
-                break; 
-            } 
-            case EType::FloatNumber: { 
-                double d = core.FloatNumber; 
-                if (!jopts.NumberPolicy || jopts.NumberPolicy(d)) { 
-                    out << d; 
-                } else { 
+                break;
+            }
+            case EType::IntNumber: {
+                out << core.IntNumber;
+                break;
+            }
+            case EType::FloatNumber: {
+                double d = core.FloatNumber;
+                if (!jopts.NumberPolicy || jopts.NumberPolicy(d)) {
+                    out << d;
+                } else {
                     out << TStringBuf("null");
                 }
-                break; 
-            } 
-            case EType::String: { 
-                TStringBuf s = core.String; 
-                if (!jopts.StringPolicy || jopts.StringPolicy(s)) { 
-                    WriteString(out, s); 
-                } else { 
-                    out << TStringBuf("null");
-                } 
-                break; 
-            } 
-            case EType::Array: { 
-                out << '['; 
-                const TArray& a = core.GetArray(); 
-                for (TArray::const_iterator it = a.begin(); it != a.end(); ++it) { 
-                    if (it != a.begin()) { 
-                        out << ','; 
-                    } 
-
-                    it->DoWriteJsonImpl(out, jopts, sortCtx, loopCtx); 
-                } 
-                out << ']'; 
-                break; 
+                break;
             }
-            case EType::Dict: { 
-                out << '{'; 
+            case EType::String: {
+                TStringBuf s = core.String;
+                if (!jopts.StringPolicy || jopts.StringPolicy(s)) {
+                    WriteString(out, s);
+                } else {
+                    out << TStringBuf("null");
+                }
+                break;
+            }
+            case EType::Array: {
+                out << '[';
+                const TArray& a = core.GetArray();
+                for (TArray::const_iterator it = a.begin(); it != a.end(); ++it) {
+                    if (it != a.begin()) {
+                        out << ',';
+                    }
 
-                const TDict& dict = core.GetDict(); 
+                    it->DoWriteJsonImpl(out, jopts, sortCtx, loopCtx);
+                }
+                out << ']';
+                break;
+            }
+            case EType::Dict: {
+                out << '{';
 
-                if (jopts.SortKeys) { 
-                    NImpl::TKeySortContext::TGuard keys(sortCtx, dict); 
-                    WriteDict(out, keys, dict, jopts, sortCtx, loopCtx); 
-                } else { 
-                    WriteDict(out, dict, dict, jopts, sortCtx, loopCtx); 
-                } 
- 
-                out << '}'; 
-                break; 
+                const TDict& dict = core.GetDict();
+
+                if (jopts.SortKeys) {
+                    NImpl::TKeySortContext::TGuard keys(sortCtx, dict);
+                    WriteDict(out, keys, dict, jopts, sortCtx, loopCtx);
+                } else {
+                    WriteDict(out, dict, dict, jopts, sortCtx, loopCtx);
+                }
+
+                out << '}';
+                break;
             }
         }
     }

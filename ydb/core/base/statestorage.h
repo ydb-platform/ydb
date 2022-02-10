@@ -64,7 +64,7 @@ struct TEvStateStorage {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_STATESTORAGE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_STATESTORAGE)"); 
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_STATESTORAGE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_STATESTORAGE)");
 
     struct TProxyOptions {
         enum ESigWaitMode {

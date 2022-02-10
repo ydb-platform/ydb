@@ -2,12 +2,12 @@ OWNER(
     pg
     g:util
 )
- 
+
 IF (NOT MSVC)
     FUZZ()
- 
+
     SIZE(MEDIUM)
- 
+
     SRCS(
         main.cpp
     )

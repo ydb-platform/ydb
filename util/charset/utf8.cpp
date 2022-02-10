@@ -1,5 +1,5 @@
 #include "unidata.h"
-#include "utf8.h" 
+#include "utf8.h"
 
 namespace {
     enum class ECaseConversion {

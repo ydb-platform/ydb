@@ -116,4 +116,4 @@ namespace NProfiling {
 #endif
 
     TSetThreadAllocTag* SetThreadAllocTag = SetThreadAllocTagFn();
-} 
+}

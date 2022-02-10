@@ -30,7 +30,7 @@ void IConsumer::OnScalar(const TScalar& value) {
             OnScalarString(value.AsString());
             break;
 
-        default: 
+        default:
             Y_UNREACHABLE();
     }
 }
@@ -77,7 +77,7 @@ void IConsumer::OnEvent(const TEvent& value) {
             OnScalar(value.AsScalar());
             break;
 
-        default: 
+        default:
             Y_UNREACHABLE();
     }
 }

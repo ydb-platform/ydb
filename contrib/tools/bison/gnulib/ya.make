@@ -37,14 +37,14 @@ IF (OS_DARWIN)
 ENDIF()
 
 IF (NOT OS_WINDOWS)
-    CFLAGS( 
-        GLOBAL -Dregcomp=gnu_regcomp 
-        GLOBAL -Dregerror=gnu_regerror 
-        GLOBAL -Dregfree=gnu_regfree 
-        GLOBAL -Dregexec=gnu_regexec 
-    ) 
-ENDIF() 
- 
+    CFLAGS(
+        GLOBAL -Dregcomp=gnu_regcomp
+        GLOBAL -Dregerror=gnu_regerror
+        GLOBAL -Dregfree=gnu_regfree
+        GLOBAL -Dregexec=gnu_regexec
+    )
+ENDIF()
+
 SRCS(
     src/abitset.c
     src/argmatch.c
@@ -168,21 +168,21 @@ SRCS(
     src/xvasprintf.c
 )
 
-IF (NOT MUSL) 
-    SRCS( 
-        src/freadahead.c 
-        src/fseterr.c 
+IF (NOT MUSL)
+    SRCS(
+        src/freadahead.c
+        src/fseterr.c
         #        src/fseek.c
-    ) 
+    )
 ENDIF()
- 
+
 IF (NOT OS_LINUX)
-    SRCS( 
-        src/pipe2.c 
-        src/strverscmp.c 
-    ) 
+    SRCS(
+        src/pipe2.c
+        src/strverscmp.c
+    )
 ENDIF()
- 
+
 IF (NOT OS_WINDOWS)
     SRCS(
         src/stdio-write.c
@@ -191,56 +191,56 @@ ENDIF()
 
 IF (OS_WINDOWS)
     SRCS(
-        src/frexp.c 
-        src/wcrtomb.c 
-        src/perror.c 
-        src/strstr.c 
-        src/mkstemp.c 
-        src/vasprintf.c 
-        src/strsignal.c 
-        src/mkdtemp.c 
-        src/fseeko.c 
-        src/fopen.c 
-        src/ftello.c 
-        src/gettimeofday.c 
-        src/localeconv.c 
-        src/msvc-inval.c 
-        src/msvc-nothrow.c 
-        src/open.c 
-        src/sigaction.c 
-        src/sigprocmask.c 
-        src/snprintf.c 
-        src/spawn_faction_addclose.c 
-        src/spawn_faction_adddup2.c 
-        src/spawn_faction_addopen.c 
-        src/spawn_faction_destroy.c 
-        src/spawn_faction_init.c 
-        src/spawnattr_destroy.c 
-        src/spawnattr_init.c 
-        src/spawnattr_setflags.c 
-        src/spawnattr_setsigmask.c 
-        src/spawni.c 
-        src/spawnp.c 
-        src/strndup.c 
-        src/waitpid.c 
-        src/wcwidth.c 
-        src/uniwidth/width.c 
+        src/frexp.c
+        src/wcrtomb.c
+        src/perror.c
+        src/strstr.c
+        src/mkstemp.c
+        src/vasprintf.c
+        src/strsignal.c
+        src/mkdtemp.c
+        src/fseeko.c
+        src/fopen.c
+        src/ftello.c
+        src/gettimeofday.c
+        src/localeconv.c
+        src/msvc-inval.c
+        src/msvc-nothrow.c
+        src/open.c
+        src/sigaction.c
+        src/sigprocmask.c
+        src/snprintf.c
+        src/spawn_faction_addclose.c
+        src/spawn_faction_adddup2.c
+        src/spawn_faction_addopen.c
+        src/spawn_faction_destroy.c
+        src/spawn_faction_init.c
+        src/spawnattr_destroy.c
+        src/spawnattr_init.c
+        src/spawnattr_setflags.c
+        src/spawnattr_setsigmask.c
+        src/spawni.c
+        src/spawnp.c
+        src/strndup.c
+        src/waitpid.c
+        src/wcwidth.c
+        src/uniwidth/width.c
     )
 ENDIF()
 
 IF (NOT OS_LINUX OR MUSL)
-    SRCS( 
-        src/obstack.c 
-        src/obstack_printf.c 
-    ) 
+    SRCS(
+        src/obstack.c
+        src/obstack_printf.c
+    )
 ENDIF()
- 
+
 IF (OS_CYGWIN OR OS_LINUX)
-    #not need it 
+    #not need it
 ELSE()
-    SRCS( 
-        src/fpending.c 
-    ) 
+    SRCS(
+        src/fpending.c
+    )
 ENDIF()
- 
+
 END()

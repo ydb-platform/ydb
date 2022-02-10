@@ -79,7 +79,7 @@ void TLightRWLock::WaitForUntrappedAndAcquireRead() {
         }
 
     skip_lock_try:
-        if (AtomicLoad(UnshareFutex_) && (AtomicLoad(Counter_) & 0x7FFFFFFF) == 0) { 
+        if (AtomicLoad(UnshareFutex_) && (AtomicLoad(Counter_) & 0x7FFFFFFF) == 0) {
             SequenceStore(UnshareFutex_, 0);
             FutexWake(UnshareFutex_, 1);
         }

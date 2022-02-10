@@ -1,12 +1,12 @@
 #pragma once
- 
+
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
- 
+
 #include <cmath>
 #include <cfloat>
 #include <cstdlib>
- 
+
 #include "typetraits.h"
 #include "utility.h"
 
@@ -19,7 +19,7 @@ constexpr double M_LN2_INV = M_LOG2E;                // 1 / ln(2) == log2(e)
  */
 template <class T>
 constexpr T Abs(T value) {
-    return std::abs(value); 
+    return std::abs(value);
 }
 
 /**
@@ -29,7 +29,7 @@ constexpr T Abs(T value) {
 inline double Log2(double value) {
     return log(value) * M_LN2_INV;
 }
- 
+
 /**
  * @returns                             Base 2 logarithm of the provided
  *                                      floating point value.
@@ -41,7 +41,7 @@ inline float Log2(float value) {
 /**
  * @returns                             Base 2 logarithm of the provided integral value.
  */
-template <class T> 
+template <class T>
 inline std::enable_if_t<std::is_integral<T>::value, double>
 Log2(T value) {
     return Log2(static_cast<double>(value));
@@ -51,11 +51,11 @@ Log2(T value) {
 double Exp2(double);
 float Exp2f(float);
 
-template <class T> 
+template <class T>
 static constexpr T Sqr(const T t) noexcept {
-    return t * t; 
-} 
- 
+    return t * t;
+}
+
 inline double Sigmoid(double x) {
     return 1.0 / (1.0 + std::exp(-x));
 }
@@ -64,33 +64,33 @@ inline float Sigmoid(float x) {
     return 1.0f / (1.0f + std::exp(-x));
 }
 
-static inline bool IsFinite(double f) { 
-#if defined(isfinite) 
-    return isfinite(f); 
-#elif defined(_win_) 
+static inline bool IsFinite(double f) {
+#if defined(isfinite)
+    return isfinite(f);
+#elif defined(_win_)
     return _finite(f) != 0;
-#elif defined(_darwin_) 
-    return isfinite(f); 
-#elif defined(__GNUC__) 
-    return __builtin_isfinite(f); 
-#elif defined(_STLP_VENDOR_STD) 
-    return _STLP_VENDOR_STD::isfinite(f); 
-#else 
-    return std::isfinite(f); 
-#endif 
-} 
- 
-static inline bool IsNan(double f) { 
-#if defined(_win_) 
+#elif defined(_darwin_)
+    return isfinite(f);
+#elif defined(__GNUC__)
+    return __builtin_isfinite(f);
+#elif defined(_STLP_VENDOR_STD)
+    return _STLP_VENDOR_STD::isfinite(f);
+#else
+    return std::isfinite(f);
+#endif
+}
+
+static inline bool IsNan(double f) {
+#if defined(_win_)
     return _isnan(f) != 0;
-#else 
+#else
     return std::isnan(f);
-#endif 
-} 
- 
-inline bool IsValidFloat(double f) { 
-    return IsFinite(f) && !IsNan(f); 
-} 
+#endif
+}
+
+inline bool IsValidFloat(double f) {
+    return IsFinite(f) && !IsNan(f);
+}
 
 #ifdef _MSC_VER
 double Erf(double x);
@@ -104,27 +104,27 @@ inline double Erf(double x) {
  * @returns                             Natural logarithm of the absolute value
  *                                      of the gamma function of provided argument.
  */
-inline double LogGamma(double x) noexcept { 
-#if defined(_glibc_) 
-    int sign; 
- 
-    (void)sign; 
- 
-    return lgamma_r(x, &sign); 
-#elif defined(__GNUC__) 
-    return __builtin_lgamma(x); 
-#elif defined(_unix_) 
+inline double LogGamma(double x) noexcept {
+#if defined(_glibc_)
+    int sign;
+
+    (void)sign;
+
+    return lgamma_r(x, &sign);
+#elif defined(__GNUC__)
+    return __builtin_lgamma(x);
+#elif defined(_unix_)
     return lgamma(x);
 #else
-    extern double LogGammaImpl(double); 
-    return LogGammaImpl(x); 
+    extern double LogGammaImpl(double);
+    return LogGammaImpl(x);
 #endif
-} 
+}
 
 /**
  * @returns                             x^n for integer n, n >= 0.
  */
-template <class T, class Int> 
+template <class T, class Int>
 T Power(T x, Int n) {
     static_assert(std::is_integral<Int>::value, "only integer powers are supported");
     Y_ASSERT(n >= 0);
@@ -179,7 +179,7 @@ namespace NUtilMathPrivate {
 
     template <>
     struct TCeilDivImpl<true> {
-        template <class T> 
+        template <class T>
         static inline T Do(T x, T y) noexcept {
             return x / y + (((x < 0) ^ (y > 0)) && (x % y));
         }
@@ -187,7 +187,7 @@ namespace NUtilMathPrivate {
 
     template <>
     struct TCeilDivImpl<false> {
-        template <class T> 
+        template <class T>
         static inline T Do(T x, T y) noexcept {
             auto quot = x / y;
             return (x % y) ? (quot + 1) : quot;

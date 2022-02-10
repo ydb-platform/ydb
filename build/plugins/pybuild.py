@@ -5,7 +5,7 @@ from hashlib import md5
 import ymake
 from _common import stripext, rootrel_arc_src, tobuilddir, listid, resolve_to_ymake_path, generate_chunks, pathid
 
- 
+
 YA_IDE_VENV_VAR = 'YA_IDE_VENV'
 PY_NAMESPACE_PREFIX = 'py/namespace'
 BUILTIN_PROTO = 'builtin_proto'
@@ -16,7 +16,7 @@ def is_arc_src(src, unit):
         src.startswith('${CURDIR}/') or
         unit.resolve_arc_path(src).startswith('$S/')
     )
- 
+
 def is_extended_source_search_enabled(path, unit):
     if not is_arc_src(path, unit):
         return False
@@ -28,7 +28,7 @@ def to_build_root(path, unit):
     if is_arc_src(path, unit):
         return '${ARCADIA_BUILD_ROOT}/' + rootrel_arc_src(path, unit)
     return path
- 
+
 def uniq_suffix(path, unit):
     upath = unit.path()
     if '/' not in path:
@@ -168,7 +168,7 @@ def py_program(unit, py3):
         unit.onadd_check_py_imports()
 
 
-def onpy_srcs(unit, *args): 
+def onpy_srcs(unit, *args):
     """
         @usage PY_SRCS({| CYTHON_C} { | TOP_LEVEL | NAMESPACE ns} Files...)
 
@@ -201,10 +201,10 @@ def onpy_srcs(unit, *args):
     venv = unit.get(YA_IDE_VENV_VAR)
     need_gazetteer_peerdir = False
     trim = 0
- 
+
     if not upath.startswith('contrib/tools/python') and not upath.startswith('library/python/runtime') and unit.get('NO_PYTHON_INCLS') != 'yes':
         unit.onpeerdir(['contrib/libs/python'])
- 
+
     unit_needs_main = unit.get('MODULE_TYPE') in ('PROGRAM', 'DLL')
     if unit_needs_main:
         py_program(unit, py3)
@@ -222,7 +222,7 @@ def onpy_srcs(unit, *args):
     cython_directives = []
     if cython_coverage:
         cython_directives += ['-X', 'linetrace=True']
- 
+
     pyxs_c = []
     pyxs_c_h = []
     pyxs_c_api_h = []
@@ -236,7 +236,7 @@ def onpy_srcs(unit, *args):
     evs = []
     fbss = []
     py_namespaces = {}
- 
+
     dump_dir = unit.get('PYTHON_BUILD_DUMP_DIR')
     dump_output = None
     if dump_dir:
@@ -324,7 +324,7 @@ def onpy_srcs(unit, *args):
                 ymake.report_configure_error('TOP_LEVEL __main__.py is not allowed in PY3_PROGRAM')
 
             pathmod = (path, mod)
- 
+
             if dump_output is not None:
                 dump_output.write('{path}\t{module}\n'.format(path=rootrel_arc_src(path, unit), module=mod))
 
@@ -493,10 +493,10 @@ def onpy_srcs(unit, *args):
         py_runtime_path = 'contrib/python/protobuf'
         builtin_proto_path = cpp_runtime_path + '/' + BUILTIN_PROTO
 
-    if protos: 
+    if protos:
         if not upath.startswith(py_runtime_path) and not upath.startswith(builtin_proto_path):
             unit.onpeerdir(py_runtime_path)
- 
+
         unit.onpeerdir(unit.get("PY_PROTO_DEPS").split())
 
         proto_paths = [path for path, mod in protos]
@@ -514,7 +514,7 @@ def onpy_srcs(unit, *args):
         unit.onpeerdir([cpp_runtime_path])
         unit.on_generate_py_evs_internal([path for path, mod in evs])
         unit.onpy_srcs([ev_arg(path, mod, unit) for path, mod in evs])
- 
+
     if fbss:
         unit.onpeerdir(unit.get('_PY_FBS_DEPS').split())
         pysrc_base_name = listid(fbss)

@@ -6,7 +6,7 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 
-namespace NFsPrivate { 
+namespace NFsPrivate {
     bool WinRename(const TString& oldPath, const TString& newPath);
 
     bool WinSymLink(const TString& targetName, const TString& linkName);
@@ -26,4 +26,4 @@ namespace NFsPrivate {
     bool WinSetCurrentWorkingDirectory(const TString& path);
 
     bool WinMakeDirectory(const TString path);
-} 
+}

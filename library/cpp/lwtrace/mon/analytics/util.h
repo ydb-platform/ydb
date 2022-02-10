@@ -1,6 +1,6 @@
 #pragma once
 
-#include "data.h" 
+#include "data.h"
 #include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 #include <util/string/vector.h>
@@ -60,9 +60,9 @@ inline double MinValue(const TString& nameAndOpts, const TTable& table)
     if (stack) {
         return 0.0;
     } else {
-        auto zero = 0.0; 
- 
-        return AccumulateIfExist(name, table, 1.0 / zero /*+inf*/, [] (double x, double y) { 
+        auto zero = 0.0;
+
+        return AccumulateIfExist(name, table, 1.0 / zero /*+inf*/, [] (double x, double y) {
             return Min(x, y);
         });
     }
@@ -79,9 +79,9 @@ inline double MaxValue(const TString& nameAndOpts, const TTable& table)
             return x + y;
         });
     } else {
-        auto zero = 0.0; 
- 
-        return AccumulateIfExist(name, table, -1.0 / zero /*-inf*/, [] (double x, double y) { 
+        auto zero = 0.0;
+
+        return AccumulateIfExist(name, table, -1.0 / zero /*-inf*/, [] (double x, double y) {
             return Max(x, y);
         });
     }

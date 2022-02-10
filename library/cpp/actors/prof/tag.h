@@ -70,4 +70,4 @@ namespace NProfiling {
         ui32 RestoreTag = 0;
         bool Released = false;
     };
-} 
+}

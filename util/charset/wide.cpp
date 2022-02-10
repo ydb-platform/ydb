@@ -5,28 +5,28 @@
 
 namespace {
     //! the constants are not zero-terminated
-    const wchar16 LT[] = {'&', 'l', 't', ';'}; 
-    const wchar16 GT[] = {'&', 'g', 't', ';'}; 
-    const wchar16 AMP[] = {'&', 'a', 'm', 'p', ';'}; 
-    const wchar16 BR[] = {'<', 'B', 'R', '>'}; 
-    const wchar16 QUOT[] = {'&', 'q', 'u', 'o', 't', ';'}; 
+    const wchar16 LT[] = {'&', 'l', 't', ';'};
+    const wchar16 GT[] = {'&', 'g', 't', ';'};
+    const wchar16 AMP[] = {'&', 'a', 'm', 'p', ';'};
+    const wchar16 BR[] = {'<', 'B', 'R', '>'};
+    const wchar16 QUOT[] = {'&', 'q', 'u', 'o', 't', ';'};
 
-    template <bool insertBr> 
+    template <bool insertBr>
     inline size_t EscapedLen(wchar16 c) {
         switch (c) {
-            case '<': 
+            case '<':
                 return Y_ARRAY_SIZE(LT);
-            case '>': 
+            case '>':
                 return Y_ARRAY_SIZE(GT);
-            case '&': 
+            case '&':
                 return Y_ARRAY_SIZE(AMP);
-            case '\"': 
+            case '\"':
                 return Y_ARRAY_SIZE(QUOT);
-            default: 
-                if (insertBr && (c == '\r' || c == '\n')) 
+            default:
+                if (insertBr && (c == '\r' || c == '\n'))
                     return Y_ARRAY_SIZE(BR);
-                else 
-                    return 1; 
+                else
+                    return 1;
         }
     }
 }
@@ -156,7 +156,7 @@ static bool ModifySequence(TCharType*& p, const TCharType* const pe, F&& f) {
                 return true;
             }
 
-            WriteSymbol(modified, p); // also moves `p` forward 
+            WriteSymbol(modified, p); // also moves `p` forward
         } else {
             p = SkipSymbol(p, pe);
         }
@@ -185,7 +185,7 @@ static bool ModifySequence(const TCharType*& p, const TCharType* const pe, TChar
     return false;
 }
 
-template <class TStringType> 
+template <class TStringType>
 static void DetachAndFixPointers(TStringType& text, typename TStringType::value_type*& p, const typename TStringType::value_type*& pe) {
     const auto pos = p - text.data();
     const auto count = pe - p;
@@ -226,12 +226,12 @@ bool ToUpper(TUtf16String& text, size_t pos, size_t count) {
 }
 
 bool ToLower(TUtf32String& text, size_t pos, size_t count) {
-    const auto f = [](const wchar32 s) { return ToLower(s); }; 
+    const auto f = [](const wchar32 s) { return ToLower(s); };
     return ModifyStringSymbolwise(text, pos, count, f);
 }
 
 bool ToUpper(TUtf32String& text, size_t pos, size_t count) {
-    const auto f = [](const wchar32 s) { return ToUpper(s); }; 
+    const auto f = [](const wchar32 s) { return ToUpper(s); };
     return ModifyStringSymbolwise(text, pos, count, f);
 }
 
@@ -258,7 +258,7 @@ bool ToTitle(TUtf16String& text, size_t pos, size_t count) {
         }
     } else {
         DetachAndFixPointers(text, p, pe);
-        WriteSymbol(ToTitle(ReadSymbol(p, pe)), p); // also moves `p` forward 
+        WriteSymbol(ToTitle(ReadSymbol(p, pe)), p); // also moves `p` forward
         ModifySequence<false>(p, pe, toLower);
         return true;
     }
@@ -274,7 +274,7 @@ bool ToTitle(TUtf32String& text, size_t pos, size_t count) {
     pos = pos < text.size() ? pos : text.size();
     count = count < text.size() - pos ? count : text.size() - pos;
 
-    const auto toLower = [](const wchar32 s) { return ToLower(s); }; 
+    const auto toLower = [](const wchar32 s) { return ToLower(s); };
 
     auto* p = const_cast<wchar32*>(text.data() + pos);
     const auto* pe = text.data() + pos + count;
@@ -412,7 +412,7 @@ bool ToLower(const wchar32* text, size_t length, wchar32* out) noexcept {
     // TODO(yazevnul): get rid of `text == out` case (it is probably used only in lemmer) and then
     // we can declare text and out as `__restrict__`
     Y_ASSERT(text == out || !(out >= text && out < text + length));
-    const auto f = [](const wchar32 s) { return ToLower(s); }; 
+    const auto f = [](const wchar32 s) { return ToLower(s); };
     const auto* p = text;
     const auto* const pe = text + length;
     if (ModifySequence<true>(p, pe, out, f)) {
@@ -424,7 +424,7 @@ bool ToLower(const wchar32* text, size_t length, wchar32* out) noexcept {
 
 bool ToUpper(const wchar32* text, size_t length, wchar32* out) noexcept {
     Y_ASSERT(text == out || !(out >= text && out < text + length));
-    const auto f = [](const wchar32 s) { return ToUpper(s); }; 
+    const auto f = [](const wchar32 s) { return ToUpper(s); };
     const auto* p = text;
     const auto* const pe = text + length;
     if (ModifySequence<true>(p, pe, out, f)) {
@@ -451,7 +451,7 @@ bool ToTitle(const wchar32* text, size_t length, wchar32* out) noexcept {
 }
 
 bool ToLower(wchar32* text, size_t length) noexcept {
-    const auto f = [](const wchar32 s) { return ToLower(s); }; 
+    const auto f = [](const wchar32 s) { return ToLower(s); };
     const auto* const textEnd = text + length;
     if (ModifySequence<true>(text, textEnd, f)) {
         ModifySequence<false>(text, textEnd, f);
@@ -461,7 +461,7 @@ bool ToLower(wchar32* text, size_t length) noexcept {
 }
 
 bool ToUpper(wchar32* text, size_t length) noexcept {
-    const auto f = [](const wchar32 s) { return ToUpper(s); }; 
+    const auto f = [](const wchar32 s) { return ToUpper(s); };
     const auto* const textEnd = text + length;
     if (ModifySequence<true>(text, textEnd, f)) {
         ModifySequence<false>(text, textEnd, f);
@@ -550,24 +550,24 @@ TUtf16String ToTitleRet(const TWtringBuf text, size_t pos, size_t count) {
 }
 
 TUtf32String ToLowerRet(const TUtf32StringBuf text, size_t pos, size_t count) {
-    return ToSmthRet(text, pos, count, [](const wchar32* theText, size_t length, wchar32* out) { 
+    return ToSmthRet(text, pos, count, [](const wchar32* theText, size_t length, wchar32* out) {
         ToLower(theText, length, out);
     });
 }
 
 TUtf32String ToUpperRet(const TUtf32StringBuf text, size_t pos, size_t count) {
-    return ToSmthRet(text, pos, count, [](const wchar32* theText, size_t length, wchar32* out) { 
+    return ToSmthRet(text, pos, count, [](const wchar32* theText, size_t length, wchar32* out) {
         ToUpper(theText, length, out);
     });
 }
 
 TUtf32String ToTitleRet(const TUtf32StringBuf text, size_t pos, size_t count) {
-    return ToSmthRet(text, pos, count, [](const wchar32* theText, size_t length, wchar32* out) { 
+    return ToSmthRet(text, pos, count, [](const wchar32* theText, size_t length, wchar32* out) {
         ToTitle(theText, length, out);
     });
 }
 
-template <bool insertBr> 
+template <bool insertBr>
 void EscapeHtmlChars(TUtf16String& str) {
     static const TUtf16String lt(LT, Y_ARRAY_SIZE(LT));
     static const TUtf16String gt(GT, Y_ARRAY_SIZE(GT));
@@ -590,9 +590,9 @@ void EscapeHtmlChars(TUtf16String& str) {
 
     size_t start = 0;
 
-    for (size_t i = 0; i < cs.size(); ++i) { 
+    for (size_t i = 0; i < cs.size(); ++i) {
         const TUtf16String* ent = nullptr;
-        switch (cs[i]) { 
+        switch (cs[i]) {
             case '<':
                 ent = &lt;
                 break;

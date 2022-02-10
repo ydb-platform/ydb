@@ -1,9 +1,9 @@
-#include "shellcommand.h" 
+#include "shellcommand.h"
 
 #include "compat.h"
-#include "defaults.h" 
+#include "defaults.h"
 #include "fs.h"
-#include "sigset.h" 
+#include "sigset.h"
 #include "spinlock.h"
 
 #include <library/cpp/testing/unittest/env.h>
@@ -18,13 +18,13 @@
 #include <util/folder/tempdir.h>
 
 #if defined(_win_)
-    #define NL "\r\n" 
-const char catCommand[] = "sort"; // not really cat but ok 
-const size_t textSize = 1; 
+    #define NL "\r\n"
+const char catCommand[] = "sort"; // not really cat but ok
+const size_t textSize = 1;
 #else
-    #define NL "\n" 
-const char catCommand[] = "/bin/cat"; 
-const size_t textSize = 20000; 
+    #define NL "\n"
+const char catCommand[] = "/bin/cat";
+const size_t textSize = 20000;
 #endif
 
 class TGuardedStringStream: public IInputStream, public IOutputStream {
@@ -88,8 +88,8 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         TShellCommandOptions options;
         options.SetQuoteArguments(true);
         TShellCommand cmd("echo");
-        cmd << "hey" 
-            << "hello&world"; 
+        cmd << "hey"
+            << "hello&world";
         cmd.Run();
         UNIT_ASSERT_VALUES_EQUAL(cmd.GetError(), "");
         UNIT_ASSERT_VALUES_EQUAL(cmd.GetOutput(), "hey hello&world" NL);
@@ -125,8 +125,8 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         {
             options.SetUseShell(false);
             TShellCommand cmd(dir, options);
-            cmd << "|" 
-                << "sort"; 
+            cmd << "|"
+                << "sort";
 
             cmd.Run();
             UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus());
@@ -135,8 +135,8 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         {
             options.SetUseShell(true);
             TShellCommand cmd(dir, options);
-            cmd << "|" 
-                << "sort"; 
+            cmd << "|"
+                << "sort";
             cmd.Run();
             UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus());
             UNIT_ASSERT_VALUES_EQUAL(cmd.GetError().size(), 0u);
@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         options.SetQuoteArguments(false);
         {
             TShellCommand cmd("/bin/sleep", options);
-            cmd << " 1300 & wait; /usr/bin/touch " << tmpfile; 
+            cmd << " 1300 & wait; /usr/bin/touch " << tmpfile;
             cmd.Run();
             sleep(1);
             UNIT_ASSERT(TShellCommand::SHELL_RUNNING == cmd.GetStatus());
@@ -337,13 +337,13 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         {
             TShellCommand cmd("/bin/sleep", options);
             // touch file only if sleep not interrupted by SIGTERM
-            cmd << " 10 & wait; [ $? == 0 ] || /usr/bin/touch " << tmpfile; 
+            cmd << " 10 & wait; [ $? == 0 ] || /usr/bin/touch " << tmpfile;
             cmd.Run();
             sleep(1);
             UNIT_ASSERT(TShellCommand::SHELL_RUNNING == cmd.GetStatus());
             cmd.Terminate();
             cmd.Wait();
-            UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus() || TShellCommand::SHELL_FINISHED == cmd.GetStatus()); 
+            UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus() || TShellCommand::SHELL_FINISHED == cmd.GetStatus());
         }
         sleep(1);
         UNIT_ASSERT(!NFs::Exists(tmpfile));
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         {
             TShellCommand cmd("/bin/sleep", options);
             // touch file regardless -- it will be interrupted
-            cmd << " 10 & wait; /usr/bin/touch " << tmpfile; 
+            cmd << " 10 & wait; /usr/bin/touch " << tmpfile;
             cmd.Run();
             sleep(1);
             UNIT_ASSERT(TShellCommand::SHELL_RUNNING == cmd.GetStatus());

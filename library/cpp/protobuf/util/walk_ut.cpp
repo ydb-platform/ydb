@@ -7,7 +7,7 @@
 using namespace NProtoBuf;
 
 Y_UNIT_TEST_SUITE(ProtobufWalk) {
-    static void InitProto(NProtobufUtilUt::TWalkTest & p, int level = 0) { 
+    static void InitProto(NProtobufUtilUt::TWalkTest & p, int level = 0) {
         p.SetOptInt(1);
         p.AddRepInt(2);
         p.AddRepInt(3);
@@ -24,16 +24,16 @@ Y_UNIT_TEST_SUITE(ProtobufWalk) {
         }
     }
 
-    static bool IncreaseInts(Message & msg, const FieldDescriptor* fd) { 
+    static bool IncreaseInts(Message & msg, const FieldDescriptor* fd) {
         TMutableField f(msg, fd);
         if (f.IsInstance<ui32>()) {
             for (size_t i = 0; i < f.Size(); ++i)
-                f.Set(f.Get<ui64>(i) + 1, i); // ui64 should be ok! 
+                f.Set(f.Get<ui64>(i) + 1, i); // ui64 should be ok!
         }
         return true;
     }
 
-    static bool RepeatString1(Message & msg, const FieldDescriptor* fd) { 
+    static bool RepeatString1(Message & msg, const FieldDescriptor* fd) {
         TMutableField f(msg, fd);
         if (f.IsString()) {
             for (size_t i = 0; i < f.Size(); ++i)
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(ProtobufWalk) {
         return true;
     }
 
-    static bool ClearXXX(Message & msg, const FieldDescriptor* fd) { 
+    static bool ClearXXX(Message & msg, const FieldDescriptor* fd) {
         const FieldOptions& opt = fd->options();
         if (opt.HasExtension(NProtobufUtilUt::XXX) && opt.GetExtension(NProtobufUtilUt::XXX))
             TMutableField(msg, fd).Clear();

@@ -15,17 +15,17 @@ namespace NRainCheck {
     public:
         TContinueFunc()
             : Func(nullptr)
-        { 
-        } 
+        {
+        }
 
         TContinueFunc(void*)
             : Func(nullptr)
-        { 
-        } 
+        {
+        }
 
         template <typename TTask>
         TContinueFunc(TContinueFunc (TTask::*func)())
-            : Func((TFunc)func) 
+            : Func((TFunc)func)
         {
             static_assert((std::is_base_of<ISimpleTask, TTask>::value), "expect (std::is_base_of<ISimpleTask, TTask>::value)");
         }
@@ -46,9 +46,9 @@ namespace NRainCheck {
 
         bool ReplyReceived() override /* override */;
 
-        ISimpleTask* GetImpl() { 
-            return (ISimpleTask*)GetImplBase(); 
-        } 
+        ISimpleTask* GetImpl() {
+            return (ISimpleTask*)GetImplBase();
+        }
     };
 
     class ISimpleTask: public ITaskBase {

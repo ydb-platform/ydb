@@ -2,10 +2,10 @@
 
 #if !defined(INCLUDE_FUTURE_INL_H)
 #error "you should never include wait-inl.h directly"
-#endif // INCLUDE_FUTURE_INL_H 
+#endif // INCLUDE_FUTURE_INL_H
 
 namespace NThreading {
-    namespace NImpl { 
+    namespace NImpl {
         template <typename TContainer>
         TVector<TFuture<void>> ToVoidFutures(const TContainer& futures) {
             TVector<TFuture<void>> voidFutures;
@@ -17,19 +17,19 @@ namespace NThreading {
 
             return voidFutures;
         }
-    } 
+    }
 
     template <typename TContainer>
     [[nodiscard]] NImpl::EnableGenericWait<TContainer> WaitAll(const TContainer& futures) {
         return WaitAll(NImpl::ToVoidFutures(futures));
     }
 
-    template <typename TContainer> 
+    template <typename TContainer>
     [[nodiscard]] NImpl::EnableGenericWait<TContainer> WaitExceptionOrAll(const TContainer& futures) {
         return WaitExceptionOrAll(NImpl::ToVoidFutures(futures));
     }
 
-    template <typename TContainer> 
+    template <typename TContainer>
     [[nodiscard]] NImpl::EnableGenericWait<TContainer> WaitAny(const TContainer& futures) {
         return WaitAny(NImpl::ToVoidFutures(futures));
     }

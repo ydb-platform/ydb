@@ -4,13 +4,13 @@
 #include <util/string/cast.h>
 
 namespace NCodecs {
-    struct TNoCodecException : TCodecException { 
-        TNoCodecException(TStringBuf name) { 
+    struct TNoCodecException : TCodecException {
+        TNoCodecException(TStringBuf name) {
             (*this) << "unknown codec: " << name;
         }
     };
 
-    struct ICodecFactory : TAtomicRefCount<ICodecFactory> { 
+    struct ICodecFactory : TAtomicRefCount<ICodecFactory> {
         virtual ~ICodecFactory() = default;
         virtual TCodecPtr MakeCodec(TStringBuf name) const = 0;
         virtual TVector<TString> ListNames() const = 0;
@@ -19,8 +19,8 @@ namespace NCodecs {
     typedef TIntrusivePtr<ICodecFactory> TCodecFactoryPtr;
 
     namespace NPrivate {
-        template <typename TCodec> 
-        struct TInstanceFactory : ICodecFactory { 
+        template <typename TCodec>
+        struct TInstanceFactory : ICodecFactory {
             TCodecPtr MakeCodec(TStringBuf) const override {
                 return new TCodec;
             }
@@ -52,7 +52,7 @@ namespace NCodecs {
 
     void RegisterCodecFactory(TCodecFactoryPtr fact);
 
-    template <typename TCodec> 
+    template <typename TCodec>
     void RegisterCodec() {
         RegisterCodecFactory(new NPrivate::TInstanceFactory<TCodec>());
     }

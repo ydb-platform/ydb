@@ -1,17 +1,17 @@
-#include "guard.h" 
+#include "guard.h"
 #include "rwlock.h"
- 
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/thread/pool.h>
 
-struct TTestGuard: public TTestBase { 
+struct TTestGuard: public TTestBase {
     UNIT_TEST_SUITE(TTestGuard);
-    UNIT_TEST(TestGuard) 
-    UNIT_TEST(TestTryGuard) 
-    UNIT_TEST(TestMove) 
-    UNIT_TEST(TestSync) 
-    UNIT_TEST(TestUnguard) 
+    UNIT_TEST(TestGuard)
+    UNIT_TEST(TestTryGuard)
+    UNIT_TEST(TestMove)
+    UNIT_TEST(TestSync)
+    UNIT_TEST(TestUnguard)
     UNIT_TEST(TestTryReadGuard)
     UNIT_TEST(TestWithLock)
     UNIT_TEST(TestWithLockScope);
@@ -41,66 +41,66 @@ struct TTestGuard: public TTestBase {
         bool guarded;
     };
 
-    void TestUnguard() { 
-        TGuardChecker m; 
- 
-        { 
-            auto guard = Guard(m); 
- 
-            UNIT_ASSERT(m.guarded); 
- 
-            { 
-                auto unguard = Unguard(guard); 
- 
-                UNIT_ASSERT(!m.guarded); 
-            } 
- 
-            UNIT_ASSERT(m.guarded); 
-        } 
- 
-        { 
-            auto guard = Guard(m); 
- 
-            UNIT_ASSERT(m.guarded); 
- 
-            { 
-                auto unguard = Unguard(m); 
- 
-                UNIT_ASSERT(!m.guarded); 
-            } 
- 
-            UNIT_ASSERT(m.guarded); 
-        } 
-    } 
- 
-    void TestMove() { 
-        TGuardChecker m; 
-        size_t n = 0; 
- 
-        { 
-            auto guard = Guard(m); 
- 
-            UNIT_ASSERT(m.guarded); 
-            ++n; 
-        } 
- 
-        UNIT_ASSERT(!m.guarded); 
-        UNIT_ASSERT_VALUES_EQUAL(n, 1); 
-    } 
- 
-    void TestSync() { 
-        TGuardChecker m; 
-        size_t n = 0; 
- 
-        with_lock (m) { 
-            UNIT_ASSERT(m.guarded); 
-            ++n; 
-        } 
- 
-        UNIT_ASSERT(!m.guarded); 
-        UNIT_ASSERT_VALUES_EQUAL(n, 1); 
-    } 
- 
+    void TestUnguard() {
+        TGuardChecker m;
+
+        {
+            auto guard = Guard(m);
+
+            UNIT_ASSERT(m.guarded);
+
+            {
+                auto unguard = Unguard(guard);
+
+                UNIT_ASSERT(!m.guarded);
+            }
+
+            UNIT_ASSERT(m.guarded);
+        }
+
+        {
+            auto guard = Guard(m);
+
+            UNIT_ASSERT(m.guarded);
+
+            {
+                auto unguard = Unguard(m);
+
+                UNIT_ASSERT(!m.guarded);
+            }
+
+            UNIT_ASSERT(m.guarded);
+        }
+    }
+
+    void TestMove() {
+        TGuardChecker m;
+        size_t n = 0;
+
+        {
+            auto guard = Guard(m);
+
+            UNIT_ASSERT(m.guarded);
+            ++n;
+        }
+
+        UNIT_ASSERT(!m.guarded);
+        UNIT_ASSERT_VALUES_EQUAL(n, 1);
+    }
+
+    void TestSync() {
+        TGuardChecker m;
+        size_t n = 0;
+
+        with_lock (m) {
+            UNIT_ASSERT(m.guarded);
+            ++n;
+        }
+
+        UNIT_ASSERT(!m.guarded);
+        UNIT_ASSERT_VALUES_EQUAL(n, 1);
+    }
+
     void TestGuard() {
         TGuardChecker checker;
 
@@ -154,7 +154,7 @@ struct TTestGuard: public TTestBase {
     }
 
     int WithLockIncrement(TGuardChecker& m, int n) {
-        with_lock (m) { 
+        with_lock (m) {
             UNIT_ASSERT(m.guarded);
             return n + 1;
         }
@@ -171,7 +171,7 @@ struct TTestGuard: public TTestBase {
     void TestWithLockScope() {
         auto Guard = [](auto) { UNIT_FAIL("Non global Guard used"); return 0; };
         TGuardChecker m;
-        with_lock (m) { 
+        with_lock (m) {
             Y_UNUSED(Guard);
         }
     }

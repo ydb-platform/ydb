@@ -15,7 +15,7 @@ private:
 
     TVector<double> LinearizedOLSMatrix;
     TVector<double> OLSVector;
- 
+
 public:
     bool Add(const TVector<double>& features, const double goal, const double weight = 1.);
     TLinearModel Solve() const;
@@ -35,7 +35,7 @@ private:
     TVector<double> OLSVector;
 
     TKahanAccumulator<double> SumWeights;
- 
+
 public:
     bool Add(const TVector<double>& features, const double goal, const double weight = 1.);
     TLinearModel Solve() const;
@@ -54,7 +54,7 @@ private:
     TStoreType SumProducts = TStoreType();
 
     TStoreType SumWeights = TStoreType();
- 
+
 public:
     bool Add(const double feature, const double goal, const double weight = 1.) {
         SumFeatures += feature * weight;
@@ -72,7 +72,7 @@ public:
 
     template <typename TFloatType>
     void Solve(TFloatType& factor, TFloatType& intercept, const double regularizationParameter = 0.1) const {
-        if (!(double)SumGoals) { 
+        if (!(double)SumGoals) {
             factor = intercept = TFloatType();
             return;
         }
@@ -82,20 +82,20 @@ public:
 
         if (!featuresDeviation) {
             factor = TFloatType();
-            intercept = (double)SumGoals / (double)SumWeights; 
+            intercept = (double)SumGoals / (double)SumWeights;
             return;
         }
 
         factor = productsDeviation / (featuresDeviation + regularizationParameter);
-        intercept = (double)SumGoals / (double)SumWeights - factor * (double)SumFeatures / (double)SumWeights; 
+        intercept = (double)SumGoals / (double)SumWeights - factor * (double)SumFeatures / (double)SumWeights;
     }
 
     double SumSquaredErrors(const double regularizationParameter = 0.1) const {
-        if (!(double)SumWeights) { 
+        if (!(double)SumWeights) {
             return 0.;
         }
 
-        const double sumGoalSquaredDeviations = (double)SumSquaredGoals - (double)SumGoals / (double)SumWeights * (double)SumGoals; 
+        const double sumGoalSquaredDeviations = (double)SumSquaredGoals - (double)SumGoals / (double)SumWeights * (double)SumGoals;
 
         double productsDeviation, featuresDeviation;
         SetupSolutionFactors(productsDeviation, featuresDeviation);
@@ -108,24 +108,24 @@ public:
         const double sumSquaredErrors = factor * factor * featuresDeviation - 2 * factor * productsDeviation + sumGoalSquaredDeviations;
         return Max(0., sumSquaredErrors);
     }
- 
+
 private:
     void SetupSolutionFactors(double& productsDeviation, double& featuresDeviation) const {
-        if (!(double)SumWeights) { 
+        if (!(double)SumWeights) {
             productsDeviation = featuresDeviation = 0.;
             return;
         }
 
-        featuresDeviation = (double)SumSquaredFeatures - (double)SumFeatures / (double)SumWeights * (double)SumFeatures; 
+        featuresDeviation = (double)SumSquaredFeatures - (double)SumFeatures / (double)SumWeights * (double)SumFeatures;
         if (!featuresDeviation) {
             return;
         }
-        productsDeviation = (double)SumProducts - (double)SumFeatures / (double)SumWeights * (double)SumGoals; 
+        productsDeviation = (double)SumProducts - (double)SumFeatures / (double)SumWeights * (double)SumGoals;
     }
 };
 
 using TFastSLRSolver = TTypedFastSLRSolver<double>;
-using TKahanSLRSolver = TTypedFastSLRSolver<TKahanAccumulator<double>>; 
+using TKahanSLRSolver = TTypedFastSLRSolver<TKahanAccumulator<double>>;
 
 class TSLRSolver {
 private:
@@ -138,7 +138,7 @@ private:
     TKahanAccumulator<double> SumWeights;
 
     double Covariation = 0.;
- 
+
 public:
     bool Add(const double feature, const double goal, const double weight = 1.);
 
@@ -178,7 +178,7 @@ template <typename TSLRSolverType>
 class TTypedBestSLRSolver {
 private:
     TVector<TSLRSolverType> SLRSolvers;
- 
+
 public:
     bool Add(const TVector<double>& features, const double goal, const double weight = 1.) {
         if (SLRSolvers.empty()) {
@@ -240,16 +240,16 @@ struct TTransformationParameters {
     double FeatureNormalizer = 1.;
 
     Y_SAVELOAD_DEFINE(RegressionFactor,
-                      RegressionIntercept, 
-                      FeatureOffset, 
-                      FeatureNormalizer); 
+                      RegressionIntercept,
+                      FeatureOffset,
+                      FeatureNormalizer);
 };
 
 class TFeaturesTransformer {
 private:
     ETransformationType TransformationType;
     TTransformationParameters TransformationParameters;
- 
+
 public:
     Y_SAVELOAD_DEFINE(TransformationType, TransformationParameters);
 
@@ -264,10 +264,10 @@ public:
 
     double Transformation(const double value) const {
         switch (TransformationType) {
-            case ETransformationType::TT_IDENTITY: { 
+            case ETransformationType::TT_IDENTITY: {
                 return value;
             }
-            case ETransformationType::TT_SIGMA: { 
+            case ETransformationType::TT_SIGMA: {
                 const double valueWithoutOffset = value - TransformationParameters.FeatureOffset;
                 const double transformedValue = valueWithoutOffset / (fabs(valueWithoutOffset) + TransformationParameters.FeatureNormalizer);
                 return TransformationParameters.RegressionIntercept + TransformationParameters.RegressionFactor * transformedValue;
@@ -290,7 +290,7 @@ private:
 
     ETransformationType TransformationType;
     TVector<TPoint> Points;
- 
+
 public:
     TFeaturesTransformerLearner(const ETransformationType transformationType)
         : TransformationType(transformationType)
@@ -317,7 +317,7 @@ private:
 
     THashMap<double, TBucket> Buckets;
     double Step;
- 
+
 public:
     TFastFeaturesTransformerLearner(const ETransformationType transformationType, const double step = 0.1)
         : TransformationType(transformationType)

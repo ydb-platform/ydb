@@ -1,48 +1,48 @@
-#pragma once 
- 
-#include <util/generic/utility.h> 
+#pragma once
+
+#include <util/generic/utility.h>
 #include <util/generic/strbuf.h>
- 
+
 #include <utility>
- 
+
 // NOTE: These functions provide CityHash 1.0 implementation whose results are *different* from
 // the mainline version of CityHash.
 
 using uint128 = std::pair<ui64, ui64>;
 
 constexpr ui64 Uint128Low64(const uint128& x) {
-    return x.first; 
-} 
- 
+    return x.first;
+}
+
 constexpr ui64 Uint128High64(const uint128& x) {
-    return x.second; 
-} 
- 
+    return x.second;
+}
+
 // Hash functions for a byte array.
 // http://en.wikipedia.org/wiki/CityHash
 
-Y_PURE_FUNCTION ui64 CityHash64(const char* buf, size_t len) noexcept; 
- 
-Y_PURE_FUNCTION ui64 CityHash64WithSeed(const char* buf, size_t len, ui64 seed) noexcept; 
- 
-Y_PURE_FUNCTION ui64 CityHash64WithSeeds(const char* buf, size_t len, ui64 seed0, ui64 seed1) noexcept; 
- 
-Y_PURE_FUNCTION uint128 CityHash128(const char* s, size_t len) noexcept; 
- 
-Y_PURE_FUNCTION uint128 CityHash128WithSeed(const char* s, size_t len, uint128 seed) noexcept; 
- 
-// Hash 128 input bits down to 64 bits of output. 
-// This is intended to be a reasonably good hash function. 
+Y_PURE_FUNCTION ui64 CityHash64(const char* buf, size_t len) noexcept;
+
+Y_PURE_FUNCTION ui64 CityHash64WithSeed(const char* buf, size_t len, ui64 seed) noexcept;
+
+Y_PURE_FUNCTION ui64 CityHash64WithSeeds(const char* buf, size_t len, ui64 seed0, ui64 seed1) noexcept;
+
+Y_PURE_FUNCTION uint128 CityHash128(const char* s, size_t len) noexcept;
+
+Y_PURE_FUNCTION uint128 CityHash128WithSeed(const char* s, size_t len, uint128 seed) noexcept;
+
+// Hash 128 input bits down to 64 bits of output.
+// This is intended to be a reasonably good hash function.
 inline ui64 Hash128to64(const uint128& x) {
-    // Murmur-inspired hashing. 
-    const ui64 kMul = 0x9ddfea08eb382d69ULL; 
-    ui64 a = (Uint128Low64(x) ^ Uint128High64(x)) * kMul; 
-    a ^= (a >> 47); 
-    ui64 b = (Uint128High64(x) ^ a) * kMul; 
-    b ^= (b >> 47); 
-    b *= kMul; 
-    return b; 
-} 
+    // Murmur-inspired hashing.
+    const ui64 kMul = 0x9ddfea08eb382d69ULL;
+    ui64 a = (Uint128Low64(x) ^ Uint128High64(x)) * kMul;
+    a ^= (a >> 47);
+    ui64 b = (Uint128High64(x) ^ a) * kMul;
+    b ^= (b >> 47);
+    b *= kMul;
+    return b;
+}
 
 namespace NPrivateCityHash {
     template <class TStringType>

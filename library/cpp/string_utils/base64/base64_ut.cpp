@@ -1,5 +1,5 @@
-#include "base64.h" 
- 
+#include "base64.h"
+
 #include <contrib/libs/base64/avx2/libbase64.h>
 #include <contrib/libs/base64/neon32/libbase64.h>
 #include <contrib/libs/base64/neon64/libbase64.h>
@@ -197,11 +197,11 @@ static void TestEncodeStrictDecodeIntoString(const TString& plain, const TString
 
 Y_UNIT_TEST_SUITE(TBase64) {
     Y_UNIT_TEST(TestEncode) {
-        UNIT_ASSERT_VALUES_EQUAL(Base64Encode("12z"), "MTJ6"); 
-        UNIT_ASSERT_VALUES_EQUAL(Base64Encode("123"), "MTIz"); 
-        UNIT_ASSERT_VALUES_EQUAL(Base64Encode("12"), "MTI="); 
-        UNIT_ASSERT_VALUES_EQUAL(Base64Encode("1"), "MQ=="); 
-    } 
+        UNIT_ASSERT_VALUES_EQUAL(Base64Encode("12z"), "MTJ6");
+        UNIT_ASSERT_VALUES_EQUAL(Base64Encode("123"), "MTIz");
+        UNIT_ASSERT_VALUES_EQUAL(Base64Encode("12"), "MTI=");
+        UNIT_ASSERT_VALUES_EQUAL(Base64Encode("1"), "MQ==");
+    }
 
     Y_UNIT_TEST(TestIntoString) {
         {
@@ -248,7 +248,7 @@ Y_UNIT_TEST_SUITE(TBase64) {
         UNIT_ASSERT_VALUES_EQUAL(Base64Decode(""), "");
         UNIT_ASSERT_VALUES_EQUAL(Base64StrictDecode(""), "");
 
-        UNIT_ASSERT_VALUES_EQUAL(Base64Decode("MTI="), "12"); 
+        UNIT_ASSERT_VALUES_EQUAL(Base64Decode("MTI="), "12");
         UNIT_ASSERT_VALUES_EQUAL(Base64StrictDecode("MTI="), "12");
 
         UNIT_ASSERT_VALUES_EQUAL(Base64Decode("QQ=="), "A");
@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(TBase64) {
 
         UNIT_ASSERT_EXCEPTION(Base64StrictDecode("aHh=="), yexception);
         UNIT_ASSERT_EXCEPTION(Base64StrictDecode("\1\1\1\2"), yexception);
-    } 
+    }
 
     Y_UNIT_TEST(TestDecodeUneven) {
         UNIT_ASSERT_VALUES_EQUAL(Base64DecodeUneven(""), "");
@@ -494,4 +494,4 @@ Y_UNIT_TEST_SUITE(TBase64) {
         const auto xDec = Base64Decode("SG93IGRvIEkgY29udmVydCBiZXR3ZWVuIGJpZy1lbmRpYW4gYW5kIGxpdHRsZS1lbmRpYW4gdmFsdWVzIGluIEMrKz9hYQ,,");
         UNIT_ASSERT_VALUES_EQUAL(x, xDec);
     }
-} 
+}

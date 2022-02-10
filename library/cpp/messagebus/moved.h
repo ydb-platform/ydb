@@ -6,10 +6,10 @@ template <typename T>
 class TMoved {
 private:
     mutable T Value;
- 
+
 public:
-    TMoved() { 
-    } 
+    TMoved() {
+    }
     TMoved(const TMoved<T>& that) {
         DoSwap(Value, that.Value);
     }

@@ -7,24 +7,24 @@
 namespace NRainCheck {
     class TBusFuture: public TSubtaskCompletion {
         friend class TBusClientService;
- 
+
     private:
         THolder<NBus::TBusMessage> Request;
         THolder<NBus::TBusMessage> Response;
         NBus::EMessageStatus Status;
- 
+
     private:
         TTaskRunnerBase* Task;
 
         void SetDoneAndSchedule(NBus::EMessageStatus, TAutoPtr<NBus::TBusMessage>);
- 
+
     public:
         // TODO: add MESSAGE_UNDEFINED
-        TBusFuture() 
-            : Status(NBus::MESSAGE_DONT_ASK) 
-            , Task(nullptr) 
-        { 
-        } 
+        TBusFuture()
+            : Status(NBus::MESSAGE_DONT_ASK)
+            , Task(nullptr)
+        {
+        }
 
         NBus::TBusMessage* GetRequest() const {
             return Request.Get();
@@ -44,7 +44,7 @@ namespace NRainCheck {
     class TBusClientService: private NBus::IBusClientHandler {
     private:
         NBus::TBusClientSessionPtr Session;
- 
+
     public:
         TBusClientService(const NBus::TBusSessionConfig&, NBus::TBusProtocol*, NBus::TBusMessageQueue*);
         ~TBusClientService() override;

@@ -1,20 +1,20 @@
-/* ===-- assembly.h - libUnwind assembler support macros -------------------=== 
- * 
+/* ===-- assembly.h - libUnwind assembler support macros -------------------===
+ *
  * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
  * See https://llvm.org/LICENSE.txt for license information.
  * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
- * 
- * ===----------------------------------------------------------------------=== 
- * 
- * This file defines macros for use in libUnwind assembler source. 
- * This file is not part of the interface of this library. 
- * 
- * ===----------------------------------------------------------------------=== 
- */ 
- 
-#ifndef UNWIND_ASSEMBLY_H 
-#define UNWIND_ASSEMBLY_H 
- 
+ *
+ * ===----------------------------------------------------------------------===
+ *
+ * This file defines macros for use in libUnwind assembler source.
+ * This file is not part of the interface of this library.
+ *
+ * ===----------------------------------------------------------------------===
+ */
+
+#ifndef UNWIND_ASSEMBLY_H
+#define UNWIND_ASSEMBLY_H
+
 #if (defined(__i386__) || defined(__x86_64__)) && defined(__linux__)
 #include <cet.h>
 #define _LIBUNWIND_CET_ENDBR _CET_ENDBR
@@ -33,7 +33,7 @@
 #define PPC64_OFFS_FP     312
 #define PPC64_OFFS_V      824
 #elif defined(__APPLE__) && defined(__aarch64__)
-#define SEPARATOR %% 
+#define SEPARATOR %%
 #elif defined(__riscv)
 # define RISCV_ISIZE (__riscv_xlen / 8)
 # define RISCV_FOFFSET (RISCV_ISIZE * 32)
@@ -63,10 +63,10 @@
 #  endif
 # endif
 # define SEPARATOR ;
-#else 
-#define SEPARATOR ; 
-#endif 
- 
+#else
+#define SEPARATOR ;
+#endif
+
 #if defined(__powerpc64__) && (!defined(_CALL_ELF) || _CALL_ELF == 1)
 #define PPC64_OPD1 .section .opd,"aw",@progbits SEPARATOR
 #define PPC64_OPD2 SEPARATOR \
@@ -76,11 +76,11 @@
   .quad 0 SEPARATOR \
   .text SEPARATOR \
 .Lfunc_begin0:
-#else 
+#else
 #define PPC64_OPD1
 #define PPC64_OPD2
-#endif 
- 
+#endif
+
 #if defined(__aarch64__) && defined(__ARM_FEATURE_BTI_DEFAULT)
   .pushsection ".note.gnu.property", "a" SEPARATOR                             \
   .balign 8 SEPARATOR                                                          \
@@ -110,13 +110,13 @@
 #endif
 #endif
 
-#define GLUE2(a, b) a ## b 
-#define GLUE(a, b) GLUE2(a, b) 
-#define SYMBOL_NAME(name) GLUE(__USER_LABEL_PREFIX__, name) 
- 
-#if defined(__APPLE__) 
+#define GLUE2(a, b) a ## b
+#define GLUE(a, b) GLUE2(a, b)
+#define SYMBOL_NAME(name) GLUE(__USER_LABEL_PREFIX__, name)
 
-#define SYMBOL_IS_FUNC(name) 
+#if defined(__APPLE__)
+
+#define SYMBOL_IS_FUNC(name)
 #define HIDDEN_SYMBOL(name) .private_extern name
 #if defined(_LIBUNWIND_HIDE_SYMBOLS)
 #define EXPORT_SYMBOL(name) HIDDEN_SYMBOL(name)
@@ -130,13 +130,13 @@
 
 #define NO_EXEC_STACK_DIRECTIVE
 
-#elif defined(__ELF__) 
+#elif defined(__ELF__)
 
-#if defined(__arm__) 
-#define SYMBOL_IS_FUNC(name) .type name,%function 
-#else 
-#define SYMBOL_IS_FUNC(name) .type name,@function 
-#endif 
+#if defined(__arm__)
+#define SYMBOL_IS_FUNC(name) .type name,%function
+#else
+#define SYMBOL_IS_FUNC(name) .type name,@function
+#endif
 #define HIDDEN_SYMBOL(name) .hidden name
 #if defined(_LIBUNWIND_HIDE_SYMBOLS)
 #define EXPORT_SYMBOL(name) HIDDEN_SYMBOL(name)
@@ -160,17 +160,17 @@
 #if defined(__GNU__) || defined(__FreeBSD__) || defined(__Fuchsia__) || \
     defined(__linux__)
 #define NO_EXEC_STACK_DIRECTIVE .section .note.GNU-stack,"",%progbits
-#else 
+#else
 #define NO_EXEC_STACK_DIRECTIVE
 #endif
 
 #elif defined(_WIN32)
 
-#define SYMBOL_IS_FUNC(name)                                                   \ 
-  .def name SEPARATOR                                                          \ 
-    .scl 2 SEPARATOR                                                           \ 
-    .type 32 SEPARATOR                                                         \ 
-  .endef 
+#define SYMBOL_IS_FUNC(name)                                                   \
+  .def name SEPARATOR                                                          \
+    .scl 2 SEPARATOR                                                           \
+    .type 32 SEPARATOR                                                         \
+  .endef
 #define EXPORT_SYMBOL2(name)                                                   \
   .section .drectve,"yn" SEPARATOR                                             \
   .ascii "-export:", #name, "\0" SEPARATOR                                     \
@@ -179,9 +179,9 @@
 #define EXPORT_SYMBOL(name)
 #else
 #define EXPORT_SYMBOL(name) EXPORT_SYMBOL2(name)
-#endif 
+#endif
 #define HIDDEN_SYMBOL(name)
- 
+
 #if defined(__MINGW32__)
 #define WEAK_ALIAS(name, aliasname)                                            \
   .globl SYMBOL_NAME(aliasname) SEPARATOR                                      \
@@ -198,9 +198,9 @@
   EXPORT_SYMBOL(SYMBOL_NAME(aliasname)) SEPARATOR                              \
   WEAK_ALIAS2(SYMBOL_NAME(name), SYMBOL_NAME(aliasname))
 #endif
- 
+
 #define NO_EXEC_STACK_DIRECTIVE
- 
+
 #elif defined(__sparc__)
 
 #else
@@ -218,24 +218,24 @@
   PPC64_OPD2                                                                   \
   AARCH64_BTI
 
-#if defined(__arm__) 
-#if !defined(__ARM_ARCH) 
-#define __ARM_ARCH 4 
-#endif 
- 
-#if defined(__ARM_ARCH_4T__) || __ARM_ARCH >= 5 
-#define ARM_HAS_BX 
-#endif 
- 
-#ifdef ARM_HAS_BX 
-#define JMP(r) bx r 
-#else 
-#define JMP(r) mov pc, r 
-#endif 
-#endif /* __arm__ */ 
- 
+#if defined(__arm__)
+#if !defined(__ARM_ARCH)
+#define __ARM_ARCH 4
+#endif
+
+#if defined(__ARM_ARCH_4T__) || __ARM_ARCH >= 5
+#define ARM_HAS_BX
+#endif
+
+#ifdef ARM_HAS_BX
+#define JMP(r) bx r
+#else
+#define JMP(r) mov pc, r
+#endif
+#endif /* __arm__ */
+
 #if defined(__powerpc__)
 #define PPC_LEFT_SHIFT(index) << (index)
 #endif
 
-#endif /* UNWIND_ASSEMBLY_H */ 
+#endif /* UNWIND_ASSEMBLY_H */

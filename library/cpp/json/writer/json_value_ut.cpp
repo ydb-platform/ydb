@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
         TJsonValue emptyMap(JSON_MAP);
 
         UNIT_ASSERT(!undef.IsDefined());
-        UNIT_ASSERT(!null.IsDefined()); // json NULL is undefined too! 
+        UNIT_ASSERT(!null.IsDefined()); // json NULL is undefined too!
         UNIT_ASSERT(_false.IsDefined());
         UNIT_ASSERT(zeroInt.IsDefined());
         UNIT_ASSERT(zeroDouble.IsDefined());
@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
             UNIT_ASSERT_EQUAL(lhs.GetValueByPath("l/a/c/e/x", '/'), NULL);
             UNIT_ASSERT_EQUAL(lhs.GetValueByPath("a/c/e/x", '/'), NULL);
             UNIT_ASSERT_EQUAL(lhs.GetValueByPath("nokey", '/'), NULL);
-            UNIT_ASSERT_EQUAL(*lhs.GetValueByPath("", '/'), lhs); // itself 
+            UNIT_ASSERT_EQUAL(*lhs.GetValueByPath("", '/'), lhs); // itself
 
             TJsonValue array;
             TJsonValue third;
@@ -325,7 +325,7 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
         }
         {
             const TJsonValue* result = lhs.GetValueByPath("", '/');
-            UNIT_ASSERT_EQUAL(*result, lhs); // itself 
+            UNIT_ASSERT_EQUAL(*result, lhs); // itself
         }
 
         TJsonValue array;
@@ -335,8 +335,8 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
         third["t"] = array;
 
         UNIT_ASSERT(array.GetValueByPath("[0].e", '.')->GetStringRobust() == "f");
-        UNIT_ASSERT(third.GetValueByPath("t.[0].e", '.')->GetStringRobust() == "f"); 
-        UNIT_ASSERT(third.GetValueByPath("t.[1].c.e", '.')->GetStringRobust() == "f"); 
+        UNIT_ASSERT(third.GetValueByPath("t.[0].e", '.')->GetStringRobust() == "f");
+        UNIT_ASSERT(third.GetValueByPath("t.[1].c.e", '.')->GetStringRobust() == "f");
     }
 
     Y_UNIT_TEST(EraseValueFromArray) {
@@ -385,7 +385,7 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
             value1.AppendValue(1);
             value1.AppendValue(2);
             src.InsertValue("key", value1);
-            src.InsertValue("key1", "HI!"); 
+            src.InsertValue("key1", "HI!");
 
             TJsonValue dst;
             TJsonValue value2;
@@ -426,7 +426,7 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
             dst.InsertValue("arr", arr2);
 
             src["arr"].AppendValue(value1);
-            for (auto& node : src["arr"].GetArraySafe()) { 
+            for (auto& node : src["arr"].GetArraySafe()) {
                 node.InsertValue("yek", "eulav");
             }
             UNIT_ASSERT(src == dst);
@@ -550,7 +550,7 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
 
             outer.AppendValue(json);
         }
-        const TJsonValue::TArray* array = nullptr; 
+        const TJsonValue::TArray* array = nullptr;
         GetArrayPointer(outer, 0, &array);
         UNIT_ASSERT_VALUES_EQUAL((*array)[1], 2);
     }
@@ -565,7 +565,7 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
 
             outer.InsertValue("x", json);
         }
-        const TJsonValue::TArray* array = nullptr; 
+        const TJsonValue::TArray* array = nullptr;
         GetArrayPointer(outer, "x", &array);
         UNIT_ASSERT_VALUES_EQUAL((*array)[1], 2);
     }
@@ -580,7 +580,7 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
 
             outer.AppendValue(json);
         }
-        const TJsonValue::TMapType* map = nullptr; 
+        const TJsonValue::TMapType* map = nullptr;
         GetMapPointer(outer, 0, &map);
         UNIT_ASSERT_VALUES_EQUAL((*map).at("b"), 2);
     }
@@ -595,7 +595,7 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
 
             outer.InsertValue("x", json);
         }
-        const TJsonValue::TMapType* map = nullptr; 
+        const TJsonValue::TMapType* map = nullptr;
         GetMapPointer(outer, "x", &map);
         UNIT_ASSERT_VALUES_EQUAL((*map).at("b"), 2);
     }
@@ -617,7 +617,7 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
 
         const char* longTestString =
             "Testing TJsonValue& operator=(TJsonValue&&) subpart self moving "
-            "after TJsonValue was constrcuted from TString&&."; 
+            "after TJsonValue was constrcuted from TString&&.";
 
         json["hello"] = TString{longTestString};
         json = std::move(json["hello"]);

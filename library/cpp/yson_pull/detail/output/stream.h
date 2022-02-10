@@ -27,12 +27,12 @@ namespace NYsonPull {
                 }
             };
 
-            template <typename TOutput> 
+            template <typename TOutput>
             class TOwned: public TBuffered<TOwned<TOutput>> {
                 TOutput Output;
 
             public:
-                template <typename... Args> 
+                template <typename... Args>
                 TOwned(size_t buffer_size, Args&&... args)
                     : TBuffered<TOwned>(buffer_size)
                     , Output(std::forward<Args>(args)...)
@@ -52,5 +52,5 @@ namespace NYsonPull {
                 }
             };
         }
-    }     // namespace NDetail 
-} 
+    }     // namespace NDetail
+}

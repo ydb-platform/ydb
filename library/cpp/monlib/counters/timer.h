@@ -2,8 +2,8 @@
 
 #include "histogram.h"
 
-#include <util/generic/scope.h> 
- 
+#include <util/generic/scope.h>
+
 #include <chrono>
 
 namespace NMonitoring {
@@ -113,8 +113,8 @@ namespace NMonitoring {
             using TClock = std::chrono::high_resolution_clock;
 
             auto start = TClock::now();
- 
-            Y_SCOPE_EXIT(this, start) { 
+
+            Y_SCOPE_EXIT(this, start) {
                 RecordValue(TClock::now() - start);
             };
 

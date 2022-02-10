@@ -24,16 +24,16 @@ namespace NSc {
             return AssertFromJson(val).ToJson(true);
         }
 
-#define UNIT_ASSERT_JSON_EQ_JSON_C(A, B, c)                                                                                           \ 
-    do {                                                                                                                              \ 
-        const TString _a = NSc::NUt::NormalizeJson(A);                                                                                \ 
-        const TString _b = NSc::NUt::NormalizeJson(B);                                                                                \ 
-        if (_a != _b) {                                                                                                               \ 
-            UNIT_FAIL_IMPL(                                                                                                           \ 
-                "json values are different (" #A " != " #B ")",                                                                       \ 
+#define UNIT_ASSERT_JSON_EQ_JSON_C(A, B, c)                                                                                           \
+    do {                                                                                                                              \
+        const TString _a = NSc::NUt::NormalizeJson(A);                                                                                \
+        const TString _b = NSc::NUt::NormalizeJson(B);                                                                                \
+        if (_a != _b) {                                                                                                               \
+            UNIT_FAIL_IMPL(                                                                                                           \
+                "json values are different (" #A " != " #B ")",                                                                       \
                 Sprintf("%s\n!=\n%s\n%s\n%s", _a.data(), _b.data(),                                                                               \
                         ::NUnitTest::ColoredDiff(NJson::PrettifyJson(_a), NJson::PrettifyJson(_b), " \t\n,:\"{}[]").data(), ToString(c).data())); \
-        }                                                                                                                             \ 
+        }                                                                                                                             \
     } while (false)
 
 #define UNIT_ASSERT_JSON_EQ_JSON(A, B) UNIT_ASSERT_JSON_EQ_JSON_C(A, B, "")

@@ -5,8 +5,8 @@ OWNER(
 SUBSCRIBER(g:util-subscribers)
 
 RECURSE(
-    ascii 
-    cast 
+    ascii
+    cast
     float_to_string
     float_to_string/metrics
     join

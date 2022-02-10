@@ -23,17 +23,17 @@ namespace NActors {
     };
 
     struct TInterconnectSettings {
-        TDuration Handshake; 
-        TDuration DeadPeer; 
-        TDuration CloseOnIdle; 
-        ui32 SendBufferDieLimitInMB = 0; 
-        ui64 OutputBuffersTotalSizeLimitInMB = 0; 
-        ui32 TotalInflightAmountOfData = 0; 
-        bool MergePerPeerCounters = false; 
+        TDuration Handshake;
+        TDuration DeadPeer;
+        TDuration CloseOnIdle;
+        ui32 SendBufferDieLimitInMB = 0;
+        ui64 OutputBuffersTotalSizeLimitInMB = 0;
+        ui32 TotalInflightAmountOfData = 0;
+        bool MergePerPeerCounters = false;
         bool MergePerDataCenterCounters = false;
-        ui32 TCPSocketBufferSize = 0; 
-        TDuration PingPeriod = TDuration::Seconds(3); 
-        TDuration ForceConfirmPeriod = TDuration::Seconds(1); 
+        ui32 TCPSocketBufferSize = 0;
+        TDuration PingPeriod = TDuration::Seconds(3);
+        TDuration ForceConfirmPeriod = TDuration::Seconds(1);
         TDuration LostConnection;
         TDuration BatchPeriod;
         bool BindOnAllAddresses = true;
@@ -54,40 +54,40 @@ namespace NActors {
             }
             return res;
         }
-    }; 
+    };
 
-    struct TChannelSettings { 
-        ui16 Weight; 
-    }; 
+    struct TChannelSettings {
+        ui16 Weight;
+    };
 
-    typedef TMap<ui16, TChannelSettings> TChannelsConfig; 
+    typedef TMap<ui16, TChannelSettings> TChannelsConfig;
 
-    using TRegisterMonPageCallback = std::function<void(const TString& path, const TString& title, 
+    using TRegisterMonPageCallback = std::function<void(const TString& path, const TString& title,
                                                         TActorSystem* actorSystem, const TActorId& actorId)>;
 
     using TInitWhiteboardCallback = std::function<void(ui16 icPort, TActorSystem* actorSystem)>;
 
     using TUpdateWhiteboardCallback = std::function<void(const TString& peer, bool connected, bool green, bool yellow,
-                                                         bool orange, bool red, TActorSystem* actorSystem)>; 
+                                                         bool orange, bool red, TActorSystem* actorSystem)>;
 
-    struct TInterconnectProxyCommon : TAtomicRefCount<TInterconnectProxyCommon> { 
+    struct TInterconnectProxyCommon : TAtomicRefCount<TInterconnectProxyCommon> {
         TActorId NameserviceId;
-        NMonitoring::TDynamicCounterPtr MonCounters; 
+        NMonitoring::TDynamicCounterPtr MonCounters;
         std::shared_ptr<NMonitoring::IMetricRegistry> Metrics;
         TChannelsConfig ChannelsConfig;
         TInterconnectSettings Settings;
-        TRegisterMonPageCallback RegisterMonPage; 
+        TRegisterMonPageCallback RegisterMonPage;
         TActorId DestructorId;
         std::shared_ptr<std::atomic<TAtomicBase>> DestructorQueueSize;
         TAtomicBase MaxDestructorQueueSize = 1024 * 1024 * 1024;
-        TString ClusterUUID; 
-        TVector<TString> AcceptUUID; 
+        TString ClusterUUID;
+        TVector<TString> AcceptUUID;
         ui64 StartTime = GetCycleCountFast();
-        TString TechnicalSelfHostName; 
+        TString TechnicalSelfHostName;
         TInitWhiteboardCallback InitWhiteboard;
-        TUpdateWhiteboardCallback UpdateWhiteboard; 
-        ui32 HandshakeBallastSize = 0; 
-        TAtomic StartedSessionKiller = 0; 
+        TUpdateWhiteboardCallback UpdateWhiteboard;
+        ui32 HandshakeBallastSize = 0;
+        TAtomic StartedSessionKiller = 0;
         TScopeId LocalScopeId;
         std::shared_ptr<TEventFilter> EventFilter;
         TString Cookie; // unique random identifier of a node instance (generated randomly at every start)
@@ -101,6 +101,6 @@ namespace NActors {
         TMaybe<TVersionInfo> VersionInfo;
 
         using TPtr = TIntrusivePtr<TInterconnectProxyCommon>;
-    }; 
+    };
 
-} 
+}

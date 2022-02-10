@@ -1,11 +1,11 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/codecs/static/example/example.h>
 
-class TStaticCodecUsageTest: public NUnitTest::TTestBase { 
+class TStaticCodecUsageTest: public NUnitTest::TTestBase {
     UNIT_TEST_SUITE(TStaticCodecUsageTest)
-    UNIT_TEST(TestUsage) 
+    UNIT_TEST(TestUsage)
     UNIT_TEST_SUITE_END();
- 
+
 private:
     void DoTestUsage(NStaticCodecExample::EDictVersion dv, size_t expectedSize) {
         const TStringBuf letov = "Всё идёт по плану";

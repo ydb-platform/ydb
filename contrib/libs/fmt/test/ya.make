@@ -9,8 +9,8 @@ OWNER(
     g:cpp-contrib
 )
 
-LICENSE(MIT) 
- 
+LICENSE(MIT)
+
 PEERDIR(
     contrib/libs/fmt
     contrib/restricted/googletest/googlemock

@@ -1,7 +1,7 @@
-#pragma once 
- 
-#include <util/system/defaults.h> 
- 
+#pragma once
+
+#include <util/system/defaults.h>
+
 #include <stlfwd>
 
 template <typename TCharType, typename TTraits = std::char_traits<TCharType>>
@@ -18,9 +18,9 @@ using TStringBuf = TBasicStringBuf<char>;
 using TWtringBuf = TBasicStringBuf<wchar16>;
 using TUtf32StringBuf = TBasicStringBuf<wchar32>;
 
-//misc 
-class TBuffer; 
- 
+//misc
+class TBuffer;
+
 //functors
 template <class T = void>
 struct TLess;
@@ -34,23 +34,23 @@ struct TEqualTo;
 template <class T>
 struct THash;
 
-//intrusive containers 
+//intrusive containers
 struct TIntrusiveListDefaultTag;
 template <class T, class Tag = TIntrusiveListDefaultTag>
-class TIntrusiveList; 
- 
+class TIntrusiveList;
+
 template <class T, class D, class Tag = TIntrusiveListDefaultTag>
-class TIntrusiveListWithAutoDelete; 
- 
+class TIntrusiveListWithAutoDelete;
+
 template <class T, class Tag = TIntrusiveListDefaultTag>
-class TIntrusiveSList; 
- 
-template <class T, class C> 
-class TAvlTree; 
- 
-template <class TValue, class TCmp> 
-class TRbTree; 
- 
+class TIntrusiveSList;
+
+template <class T, class C>
+class TAvlTree;
+
+template <class TValue, class TCmp>
+class TRbTree;
+
 //containers
 template <class T, class A = std::allocator<T>>
 class TVector;
@@ -72,7 +72,7 @@ class THashMultiMap;
 
 template <class Value, class HashFcn = THash<Value>, class EqualKey = TEqualTo<Value>, class Alloc = std::allocator<Value>>
 class THashSet;
- 
+
 template <class Value, class HashFcn = THash<Value>, class EqualKey = TEqualTo<Value>, class Alloc = std::allocator<Value>>
 class THashMultiSet;
 
@@ -95,32 +95,32 @@ template <class T, class S = TDeque<T>>
 class TStack;
 
 template <size_t BitCount, typename TChunkType = ui64>
-class TBitMap; 
- 
-//autopointers 
+class TBitMap;
+
+//autopointers
 class TDelete;
 class TDeleteArray;
 class TFree;
 class TCopyNew;
 
 template <class T, class D = TDelete>
-class TAutoPtr; 
- 
+class TAutoPtr;
+
 template <class T, class D = TDelete>
-class THolder; 
- 
+class THolder;
+
 template <class T, class C, class D = TDelete>
-class TRefCounted; 
- 
+class TRefCounted;
+
 template <class T>
 class TDefaultIntrusivePtrOps;
 
-template <class T, class Ops> 
+template <class T, class Ops>
 class TSimpleIntrusiveOps;
 
 template <class T, class Ops = TDefaultIntrusivePtrOps<T>>
-class TIntrusivePtr; 
- 
+class TIntrusivePtr;
+
 template <class T, class Ops = TDefaultIntrusivePtrOps<T>>
 class TIntrusiveConstPtr;
 
@@ -128,10 +128,10 @@ template <class T, class Ops = TDefaultIntrusivePtrOps<T>>
 using TSimpleIntrusivePtr = TIntrusivePtr<T, TSimpleIntrusiveOps<T, Ops>>;
 
 template <class T, class C, class D = TDelete>
-class TSharedPtr; 
- 
+class TSharedPtr;
+
 template <class T, class C = TCopyNew, class D = TDelete>
-class TCopyPtr; 
+class TCopyPtr;
 
 template <class TPtr, class TCopy = TCopyNew>
 class TCowPtr;

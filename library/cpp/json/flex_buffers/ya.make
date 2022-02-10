@@ -1,16 +1,16 @@
-LIBRARY() 
- 
-OWNER(pg) 
- 
+LIBRARY()
+
+OWNER(pg)
+
 ADDINCL(contrib/libs/flatbuffers/include)
- 
-PEERDIR( 
+
+PEERDIR(
     library/cpp/json
-    contrib/libs/flatbuffers 
-) 
- 
-SRCS( 
-    cvt.cpp 
-) 
- 
-END() 
+    contrib/libs/flatbuffers
+)
+
+SRCS(
+    cvt.cpp
+)
+
+END()

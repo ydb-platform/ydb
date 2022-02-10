@@ -2,9 +2,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "file.h" 
-#include "sysstat.h" 
-#include "fstat.h" 
+#include "file.h"
+#include "sysstat.h"
+#include "fstat.h"
 #include <util/folder/dirut.h>
 #include <util/folder/path.h>
 
@@ -14,16 +14,16 @@ class TFsTest: public TTestBase {
     UNIT_TEST_SUITE(TFsTest);
     UNIT_TEST(TestCreateRemove);
     UNIT_TEST(TestRename);
-    UNIT_TEST(TestSymlink); 
+    UNIT_TEST(TestSymlink);
     UNIT_TEST(TestHardlink);
     UNIT_TEST(TestCwdOpts);
     UNIT_TEST(TestEnsureExists);
     UNIT_TEST_SUITE_END();
- 
-public: 
+
+public:
     void TestCreateRemove();
     void TestRename();
-    void TestSymlink(); 
+    void TestSymlink();
     void TestHardlink();
     void TestCwdOpts();
     void TestEnsureExists();
@@ -96,7 +96,7 @@ void TFsTest::TestCreateRemove() {
     UNIT_ASSERT(!NFs::Exists(dir1));
 }
 
-void RunRenameTest(TFsPath src, TFsPath dst) { 
+void RunRenameTest(TFsPath src, TFsPath dst) {
     // if previous running was failed
     TFsPath dir1 = "dir";
     TFsPath dir2 = "dst_dir";
@@ -144,7 +144,7 @@ void RunRenameTest(TFsPath src, TFsPath dst) {
     UNIT_ASSERT(NFs::Remove(dir2));
 }
 
-void TFsTest::TestRename() { 
+void TFsTest::TestRename() {
     RunRenameTest("src.txt", "dst.txt");
     RunRenameTest("src_абвг.txt", "dst_абвг.txt");
 }
@@ -276,7 +276,7 @@ static void RunSymLinkTest(TString fileLocalName, TString symLinkName) {
     UNIT_ASSERT(NFs::Remove(subDir));
 }
 
-void TFsTest::TestSymlink() { 
+void TFsTest::TestSymlink() {
     // if previous running was failed
     RunSymLinkTest("f.txt", "fl.txt");
     RunSymLinkTest("f_абвг.txt", "fl_абвг.txt"); //utf-8 names

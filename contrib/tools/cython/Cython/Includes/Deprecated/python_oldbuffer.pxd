@@ -1,2 +1,2 @@
 # Present for backwards compatibility
-from cpython.oldbuffer cimport * 
+from cpython.oldbuffer cimport *

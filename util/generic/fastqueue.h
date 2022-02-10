@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/memory/smallobj.h>
-#include "ptr.h" 
+#include "ptr.h"
 
 template <class T>
 class TFastQueue {
@@ -39,14 +39,14 @@ public:
         return Size_;
     }
 
-    Y_PURE_FUNCTION inline bool Empty() const noexcept { 
+    Y_PURE_FUNCTION inline bool Empty() const noexcept {
         return !this->Size();
     }
 
     inline explicit operator bool() const noexcept {
-        return !this->Empty(); 
-    } 
- 
+        return !this->Empty();
+    }
+
 private:
     typename THelper::TPool Pool_;
     TIntrusiveListWithAutoDelete<THelper, TDelete> Queue_;

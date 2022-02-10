@@ -1,7 +1,7 @@
 OWNER(g:messagebus)
 
-RECURSE( 
+RECURSE(
     example
     perftest
     ut
-) 
+)

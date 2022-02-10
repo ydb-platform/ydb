@@ -69,8 +69,8 @@ namespace NCodecs {
         s << "sample mult:     " << ci.GetDebugInfo().GetSampleSizeMultiplier() << Endl;
         s << "orig.compress:   " << ci.GetDebugInfo().GetCompression() * 100 << " %" << Endl;
         s << "timestamp:       " << ci.GetDebugInfo().GetTimestamp() << " ("
-          << NDatetime::TSimpleTM::NewLocal(ci.GetDebugInfo().GetTimestamp()).ToString() 
-          << ")" << Endl; 
+          << NDatetime::TSimpleTM::NewLocal(ci.GetDebugInfo().GetTimestamp()).ToString()
+          << ")" << Endl;
         s << "revision:        " << ci.GetDebugInfo().GetRevisionInfo() << Endl;
         s << "training set comment: " << ci.GetDebugInfo().GetTrainingSetComment() << Endl;
         s << "training set resId:   " << ci.GetDebugInfo().GetTrainingSetResId() << Endl;

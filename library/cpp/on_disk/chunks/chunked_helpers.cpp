@@ -12,7 +12,7 @@ TBlob GetBlock(const TBlob& blob, size_t index) {
 
 /*************************** TNamedChunkedDataReader ***************************/
 
-static const char* NamedChunkedDataMagic = "NamedChunkedData"; 
+static const char* NamedChunkedDataMagic = "NamedChunkedData";
 
 TNamedChunkedDataReader::TNamedChunkedDataReader(const TBlob& blob)
     : TChunkedDataReader(blob)
@@ -25,7 +25,7 @@ TNamedChunkedDataReader::TNamedChunkedDataReader(const TBlob& blob)
     if (GetBlockLen(block) < magicLen || memcmp(GetBlock(block), NamedChunkedDataMagic, magicLen) != 0)
         throw yexception() << "Not a valid named chunked data file";
 
-    TMemoryInput input(static_cast<const char*>(GetBlock(block)) + magicLen, GetBlockLen(block) - magicLen); 
+    TMemoryInput input(static_cast<const char*>(GetBlock(block)) + magicLen, GetBlockLen(block) - magicLen);
     Load(&input, Names);
 
     size_t index = 0;

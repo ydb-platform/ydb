@@ -1,4 +1,4 @@
-#include <util/random/shuffle.h> 
+#include <util/random/shuffle.h>
 #include "test_load_actor.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
@@ -302,7 +302,7 @@ public:
             slots.push_back(i);
         }
         if (!Sequential) {
-            Shuffle(slots.begin(), slots.end()); 
+            Shuffle(slots.begin(), slots.end());
         }
         for (ui32 slot : slots) {
             chunkInfo.WriteQueue.emplace_back(chunkIdx, slot);

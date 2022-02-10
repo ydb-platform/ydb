@@ -1,23 +1,23 @@
 /* Copyright 2010 Google Inc. All Rights Reserved.
- 
+
    Distributed under MIT license.
    See file LICENSE for detail or copy at https://opensource.org/licenses/MIT
 */
 
 /* Write bits into a byte array. */
 
-#ifndef BROTLI_ENC_WRITE_BITS_H_ 
-#define BROTLI_ENC_WRITE_BITS_H_ 
- 
+#ifndef BROTLI_ENC_WRITE_BITS_H_
+#define BROTLI_ENC_WRITE_BITS_H_
+
 #include "../common/platform.h"
 #include <brotli/types.h>
- 
+
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
 #endif
- 
+
 /*#define BIT_WRITER_DEBUG */
- 
+
 /* This function writes bits into bytes in increasing addresses, and within
    a byte least-significant-bit first.
 
@@ -50,36 +50,36 @@ static BROTLI_INLINE void BrotliWriteBits(size_t n_bits,
       (int)*pos));
   BROTLI_DCHECK((bits >> n_bits) == 0);
   BROTLI_DCHECK(n_bits <= 56);
-  v |= bits << (*pos & 7); 
+  v |= bits << (*pos & 7);
   BROTLI_UNALIGNED_STORE64LE(p, v);  /* Set some bits. */
-  *pos += n_bits; 
-#else 
+  *pos += n_bits;
+#else
   /* implicit & 0xFF is assumed for uint8_t arithmetics */
   uint8_t* array_pos = &array[*pos >> 3];
   const size_t bits_reserved_in_first_byte = (*pos & 7);
   size_t bits_left_to_write;
-  bits <<= bits_reserved_in_first_byte; 
+  bits <<= bits_reserved_in_first_byte;
   *array_pos++ |= (uint8_t)bits;
   for (bits_left_to_write = n_bits + bits_reserved_in_first_byte;
        bits_left_to_write >= 9;
-       bits_left_to_write -= 8) { 
-    bits >>= 8; 
+       bits_left_to_write -= 8) {
+    bits >>= 8;
     *array_pos++ = (uint8_t)bits;
-  } 
-  *array_pos = 0; 
-  *pos += n_bits; 
-#endif 
-} 
- 
+  }
+  *array_pos = 0;
+  *pos += n_bits;
+#endif
+}
+
 static BROTLI_INLINE void BrotliWriteBitsPrepareStorage(
     size_t pos, uint8_t* array) {
   BROTLI_LOG(("WriteBitsPrepareStorage            %10d\n", (int)pos));
   BROTLI_DCHECK((pos & 7) == 0);
-  array[pos >> 3] = 0; 
-} 
- 
+  array[pos >> 3] = 0;
+}
+
 #if defined(__cplusplus) || defined(c_plusplus)
 }  /* extern "C" */
 #endif
- 
+
 #endif  /* BROTLI_ENC_WRITE_BITS_H_ */

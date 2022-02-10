@@ -33,7 +33,7 @@ struct TRetryOptions {
     {
     }
 
-    TRetryOptions& WithCount(ui32 retryCount) { 
+    TRetryOptions& WithCount(ui32 retryCount) {
         RetryCount = retryCount;
         return *this;
     }
@@ -65,7 +65,7 @@ struct TRetryOptions {
 
     // for compatibility attempt == 0 by default
     TDuration GetTimeToSleep(ui32 attempt = 0) const {
-        return SleepDuration + NRetryPrivate::AddRandomDelta(SleepRandomDelta) + NRetryPrivate::AddIncrement(attempt, SleepIncrement) + NRetryPrivate::AddExponentialMultiplier(attempt, SleepExponentialMultiplier); 
+        return SleepDuration + NRetryPrivate::AddRandomDelta(SleepRandomDelta) + NRetryPrivate::AddIncrement(attempt, SleepIncrement) + NRetryPrivate::AddExponentialMultiplier(attempt, SleepExponentialMultiplier);
     }
 
     static TRetryOptions Count(ui32 retryCount) {

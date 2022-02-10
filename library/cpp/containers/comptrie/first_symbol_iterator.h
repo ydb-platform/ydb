@@ -6,7 +6,7 @@
 namespace NCompactTrie {
     // Iterates over possible first symbols in a trie.
     // Allows one to get the symbol and the subtrie starting from it.
-    template <class TTrie> 
+    template <class TTrie>
     class TFirstSymbolIterator {
     public:
         using TSymbol = typename TTrie::TSymbol;
@@ -58,4 +58,4 @@ namespace NCompactTrie {
         TCopyPtr<TOpaqueTrieIterator> Impl;
     };
 
-} 
+}

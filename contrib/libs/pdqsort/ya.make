@@ -7,8 +7,8 @@ OWNER(
 
 LIBRARY()
 
-LICENSE(Zlib) 
- 
+LICENSE(Zlib)
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 VERSION(978bc36a9bd4143a54b2551cfd9ce8a6afd6d04c)

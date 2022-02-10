@@ -1,15 +1,15 @@
-#include "packed.h" 
- 
+#include "packed.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/defaults.h>
 #include <util/generic/ylimits.h>
 #include <util/generic/buffer.h>
 #include <util/stream/mem.h>
-#include <util/stream/buffer.h> 
+#include <util/stream/buffer.h>
 
 namespace NPrivate {
-#if 0 
+#if 0
 static ui64 gSeed = 42;
 
 template<typename T>
@@ -21,8 +21,8 @@ static T PseudoRandom(T max = Max<T>()) {
     gSeed = gSeed ^ (ui64(max) << 17u);
     return gSeed % max;
 };
-#endif 
-} 
+#endif
+}
 
 Y_UNIT_TEST_SUITE(TPackedTest) {
     void TestPackUi32Sub(ui32 v, const TVector<char>& p) {
@@ -54,38 +54,38 @@ Y_UNIT_TEST_SUITE(TPackedTest) {
         v = 0;
         pv.resize(1);
         pv[0] = 0x0;
-        TestPackUi32Sub(v, pv); 
+        TestPackUi32Sub(v, pv);
 
         v = 0x1600;
         pv.resize(2);
         pv[0] = 0x96;
         pv[1] = 0x00;
-        TestPackUi32Sub(v, pv); 
+        TestPackUi32Sub(v, pv);
 
         v = 0xEF98;
         pv.resize(3);
         pv[0] = 0xC0;
-#if defined(_big_endian_) 
+#if defined(_big_endian_)
         pv[1] = 0xEF;
         pv[2] = 0x98;
 #elif defined(_little_endian_)
         pv[1] = 0x98;
         pv[2] = 0xEF;
 #endif
-        TestPackUi32Sub(v, pv); 
+        TestPackUi32Sub(v, pv);
 
         v = 0xF567FE4;
         pv.resize(4);
         pv[0] = 0xEF;
         pv[1] = 0x56;
-#if defined(_big_endian_) 
+#if defined(_big_endian_)
         pv[2] = 0x7F;
         pv[3] = 0xE4;
 #elif defined(_little_endian_)
         pv[2] = 0xE4;
         pv[3] = 0x7F;
 #endif
-        TestPackUi32Sub(v, pv); 
+        TestPackUi32Sub(v, pv);
     }
 
 #if 0

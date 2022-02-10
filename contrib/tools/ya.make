@@ -1,6 +1,6 @@
 OWNER(g:contrib)
 
-RECURSE( 
+RECURSE(
     bdb
     bison
     chromaprinter
@@ -10,7 +10,7 @@ RECURSE(
     flatc64
     flex
     flex-old
-    flex-old/fl 
+    flex-old/fl
     fluent-bit
     fusermount
     gperf
@@ -54,7 +54,7 @@ RECURSE(
     jdk
     jdk/test
     xmllint
-) 
+)
 
 IF (NOT OS_WINDOWS)
     RECURSE(

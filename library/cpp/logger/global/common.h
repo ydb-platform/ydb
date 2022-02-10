@@ -36,7 +36,7 @@ namespace NLoggingImpl {
     public:
         inline static bool Usage() {
             return SingletonWithPriority<TPtr, SingletonPriority>()->Instance.Get();
-        } 
+        }
 
         inline static T* Get() {
             return SingletonWithPriority<TPtr, SingletonPriority>()->Instance.Get();
@@ -139,11 +139,11 @@ namespace NPrivateGlobalLogger {
             return true;
         }
     };
-} 
+}
 
 #define LOGGER_GENERIC_LOG_CHECKED(logger, preprocessor, level, message) (*GetLoggerForce<preprocessor>(logger, TLogRecordContext(__LOCATION__, message, level)))
-#define LOGGER_CHECKED_GENERIC_LOG(logger, preprocessor, level, message) \ 
-    (preprocessor::CheckLoggingContext(logger, TLogRecordContext(__LOCATION__, message, level))) && NPrivateGlobalLogger::TEatStream() | (*(preprocessor::StartRecord(logger, TLogRecordContext(__LOCATION__, message, level), nullptr))) 
+#define LOGGER_CHECKED_GENERIC_LOG(logger, preprocessor, level, message) \
+    (preprocessor::CheckLoggingContext(logger, TLogRecordContext(__LOCATION__, message, level))) && NPrivateGlobalLogger::TEatStream() | (*(preprocessor::StartRecord(logger, TLogRecordContext(__LOCATION__, message, level), nullptr)))
 
 #define SINGLETON_GENERIC_LOG_CHECKED(type, preprocessor, level, message) LOGGER_GENERIC_LOG_CHECKED(TLoggerOperator<type>::Log(), preprocessor, level, message)
 #define SINGLETON_CHECKED_GENERIC_LOG(type, preprocessor, level, message) LOGGER_CHECKED_GENERIC_LOG(TLoggerOperator<type>::Log(), preprocessor, level, message)

@@ -8,7 +8,7 @@ using namespace NJson;
 Y_UNIT_TEST_SUITE(TJsonWriterTest) {
     Y_UNIT_TEST(SimpleWriteTest) {
         TString expected1 = "{\"key1\":1,\"key2\":2,\"key3\":3";
-        TString expected2 = expected1 + ",\"array\":[\"stroka\",false]"; 
+        TString expected2 = expected1 + ",\"array\":[\"stroka\",false]";
         TString expected3 = expected2 + "}";
 
         TStringStream out;
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
             WriteJson(&out, &v);
             UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected);
         } // 18446744073709551615
-    }     // SimpleUnsignedIntegerWriteTest 
+    }     // SimpleUnsignedIntegerWriteTest
 
     Y_UNIT_TEST(WriteOptionalTest) {
         {

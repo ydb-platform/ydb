@@ -24,47 +24,47 @@ public:
     TString GetHostByAddr(const NAddr::IRemoteAddr&);
 
     // ip in network byte order
-    TIpHost Get(const TString& host); 
+    TIpHost Get(const TString& host);
 
     /* use with AF_INET, AF_INET6 or AF_UNSPEC */
-    NAddr::IRemoteAddrPtr GetAddr(const TString& host, 
+    NAddr::IRemoteAddrPtr GetAddr(const TString& host,
                                   int family,
                                   TIpPort port = 0,
                                   bool cacheOnly = false);
 
-    void GetAllAddresses(const TString& host, TVector<NAddr::IRemoteAddrPtr>&); 
+    void GetAllAddresses(const TString& host, TVector<NAddr::IRemoteAddrPtr>&);
 
-    void GetStats(ui64& a_cache_hits, ui64& a_cache_misses, 
-                  ui64& ptr_cache_hits, ui64& ptr_cache_misses); 
+    void GetStats(ui64& a_cache_hits, ui64& a_cache_misses,
+                  ui64& ptr_cache_hits, ui64& ptr_cache_misses);
 
 protected:
-    bool ValidateHName(const TString& host) const noexcept; 
+    bool ValidateHName(const TString& host) const noexcept;
 
 private:
     struct TGHBNContext {
-        TDnsCache* Owner; 
+        TDnsCache* Owner;
         TString Hostname;
         int Family;
     };
 
     struct TGHBAContext {
-        TDnsCache* Owner; 
+        TDnsCache* Owner;
         in6_addr Addr;
     };
 
     struct THost {
-        THost() noexcept { 
-        } 
+        THost() noexcept {
+        }
 
         TVector<TIpHost> AddrsV4;
-        time_t ResolvedV4 = 0; 
-        time_t NotFoundV4 = 0; 
-        TAtomic InProgressV4 = 0; 
+        time_t ResolvedV4 = 0;
+        time_t NotFoundV4 = 0;
+        TAtomic InProgressV4 = 0;
 
         TVector<in6_addr> AddrsV6;
-        time_t ResolvedV6 = 0; 
-        time_t NotFoundV6 = 0; 
-        TAtomic InProgressV6 = 0; 
+        time_t ResolvedV6 = 0;
+        time_t NotFoundV6 = 0;
+        TAtomic InProgressV6 = 0;
 
         TString AddrsV4ToString() const;
         TString AddrsV6ToString() const;
@@ -75,16 +75,16 @@ private:
     typedef TMap<TString, THost> THostCache;
 
     struct TAddr {
-        TString Hostname; 
-        time_t Resolved = 0; 
-        time_t NotFound = 0; 
-        TAtomic InProgress = 0; 
+        TString Hostname;
+        time_t Resolved = 0;
+        time_t NotFound = 0;
+        TAtomic InProgress = 0;
     };
     /* IRemoteAddr is annoingly hard to use, so I'll use in6_addr as key
      * and put v4 addrs in it.
      */
     struct TAddrCmp {
-        bool operator()(const in6_addr& left, const in6_addr& right) const { 
+        bool operator()(const in6_addr& left, const in6_addr& right) const {
             for (size_t i = 0; i < sizeof(left); i++) {
                 if (left.s6_addr[i] < right.s6_addr[i]) {
                     return true;
@@ -98,17 +98,17 @@ private:
     };
     typedef TMap<in6_addr, TAddr, TAddrCmp> TAddrCache;
 
-    const THost& Resolve(const TString&, int family, bool cacheOnly = false); 
+    const THost& Resolve(const TString&, int family, bool cacheOnly = false);
 
-    const TAddr& ResolveAddr(const in6_addr&, int family); 
+    const TAddr& ResolveAddr(const in6_addr&, int family);
 
-    void WaitTask(TAtomic&); 
+    void WaitTask(TAtomic&);
 
-    static void GHBNCallback(void* arg, int status, int timeouts, 
-                             struct hostent* info); 
+    static void GHBNCallback(void* arg, int status, int timeouts,
+                             struct hostent* info);
 
-    static void GHBACallback(void* arg, int status, int timeouts, 
-                             struct hostent* info); 
+    static void GHBACallback(void* arg, int status, int timeouts,
+                             struct hostent* info);
 
     const time_t EntryLifetime;
     const time_t NegativeLifetime;
@@ -127,7 +127,7 @@ private:
     const static THost NullHost;
 
     TMutex AresMtx;
-    void* Channel; 
+    void* Channel;
 
     struct TAresLibInit {
         TAresLibInit() {

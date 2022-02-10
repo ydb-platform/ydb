@@ -13,11 +13,11 @@ struct TBasicReadAsFilled: public NThreading::TReadAsFilledQueue<> {
 };
 
 struct TBasicObstructiveConsumer
-   : public NThreading::TObstructiveConsumerQueue<> { 
+   : public NThreading::TObstructiveConsumerQueue<> {
 };
 
 struct TBasicMPSCIntrusiveUnordered
-   : public NThreading::TMPSCIntrusiveUnordered { 
+   : public NThreading::TMPSCIntrusiveUnordered {
 };
 
 struct TIntrusiveLink: public NThreading::TIntrusiveNode {
@@ -30,11 +30,11 @@ struct TMPMCUnorderedRing: public NThreading::TMPMCUnorderedRing {
     }
 };
 
-#define REGISTER_TESTS_FOR_ALL_ORDERED_QUEUES(TestTemplate)         \ 
-    UNIT_TEST_SUITE_REGISTRATION(TestTemplate<TBasicHTSwap>);       \ 
-    UNIT_TEST_SUITE_REGISTRATION(TestTemplate<TBasicReadAsFilled>); \ 
+#define REGISTER_TESTS_FOR_ALL_ORDERED_QUEUES(TestTemplate)         \
+    UNIT_TEST_SUITE_REGISTRATION(TestTemplate<TBasicHTSwap>);       \
+    UNIT_TEST_SUITE_REGISTRATION(TestTemplate<TBasicReadAsFilled>); \
     UNIT_TEST_SUITE_REGISTRATION(TestTemplate<TBasicObstructiveConsumer>)
 
-#define REGISTER_TESTS_FOR_ALL_UNORDERED_QUEUES(TestTemplate)                 \ 
+#define REGISTER_TESTS_FOR_ALL_UNORDERED_QUEUES(TestTemplate)                 \
     UNIT_TEST_SUITE_REGISTRATION(TestTemplate<TBasicMPSCIntrusiveUnordered>); \
     UNIT_TEST_SUITE_REGISTRATION(TestTemplate<TMPMCUnorderedRing>);

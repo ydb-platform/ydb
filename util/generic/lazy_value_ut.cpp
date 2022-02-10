@@ -4,7 +4,7 @@
 
 Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
     Y_UNIT_TEST(TestLazyValue) {
-        TLazyValue<int> value([]() { 
+        TLazyValue<int> value([]() {
             return 5;
         });
         UNIT_ASSERT(!value);
@@ -13,9 +13,9 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
     }
 
     Y_UNIT_TEST(TestLazyValueInitialization) {
-        TLazyValue<int> value1([]() { return 5; }); 
+        TLazyValue<int> value1([]() { return 5; });
 
-        TLazyValue<int> value2 = []() { return 5; }; 
+        TLazyValue<int> value2 = []() { return 5; };
 
         TLazyValue<int> notInitialized{};
 
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
     }
 
     Y_UNIT_TEST(TestLazyValueCopy) {
-        TLazyValue<int> value([]() { return 5; }); 
+        TLazyValue<int> value([]() { return 5; });
         UNIT_ASSERT(!value);
 
         TLazyValue<int> emptyCopy = value;
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
     Y_UNIT_TEST(TestLazyValueMoveValueInitialization) {
         size_t numCopies = 0;
         TCopyCounter counter{numCopies};
-        TLazyValue<TCopyCounter> value{[v = std::move(counter)]() mutable { return std::move(v); }}; 
+        TLazyValue<TCopyCounter> value{[v = std::move(counter)]() mutable { return std::move(v); }};
         value.InitDefault();
         UNIT_ASSERT_EQUAL(numCopies, 0);
     }
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
     Y_UNIT_TEST(TestLazyValueCopyValueInitialization) {
         size_t numCopies = 0;
         TCopyCounter counter{numCopies};
-        TLazyValue<TCopyCounter> value{[&counter]() { return counter; }}; 
+        TLazyValue<TCopyCounter> value{[&counter]() { return counter; }};
         UNIT_ASSERT_EQUAL(numCopies, 0);
         value.InitDefault();
         UNIT_ASSERT_EQUAL(numCopies, 1);

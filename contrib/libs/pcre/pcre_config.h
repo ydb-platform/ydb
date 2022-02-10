@@ -53,8 +53,8 @@ sure both macros are undefined; an emulation function will then be used. */
 /* #undef EBCDIC_NL25 */
 
 /* Define to 1 if you have the `bcopy' function. */
-#define HAVE_BCOPY 1 
- 
+#define HAVE_BCOPY 1
+
 /* Define to 1 if you have the <bits/type_traits.h> header file. */
 /* #undef HAVE_BITS_TYPE_TRAITS_H */
 
@@ -76,15 +76,15 @@ sure both macros are undefined; an emulation function will then be used. */
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
 
-/* Define to 1 if you have the <limits.h> header file. */ 
-#define HAVE_LIMITS_H 1 
- 
-/* Define to 1 if the system has the type `long long'. */ 
+/* Define to 1 if you have the <limits.h> header file. */
+#define HAVE_LIMITS_H 1
+
+/* Define to 1 if the system has the type `long long'. */
 #define HAVE_LONG_LONG 1
- 
-/* Define to 1 if you have the `memmove' function. */ 
-#define HAVE_MEMMOVE 1 
- 
+
+/* Define to 1 if you have the `memmove' function. */
+#define HAVE_MEMMOVE 1
+
 /* Define to 1 if you have the <memory.h> header file. */
 #define HAVE_MEMORY_H 1
 
@@ -100,27 +100,27 @@ sure both macros are undefined; an emulation function will then be used. */
 /* Define to 1 if you have the <readline/readline.h> header file. */
 /* #undef HAVE_READLINE_READLINE_H */
 
-/* Define to 1 if you have the <stdint.h> header file. */ 
-#define HAVE_STDINT_H 1 
- 
-/* Define to 1 if you have the <stdlib.h> header file. */ 
-#define HAVE_STDLIB_H 1 
- 
-/* Define to 1 if you have the `strerror' function. */ 
-#define HAVE_STRERROR 1 
- 
+/* Define to 1 if you have the <stdint.h> header file. */
+#define HAVE_STDINT_H 1
+
+/* Define to 1 if you have the <stdlib.h> header file. */
+#define HAVE_STDLIB_H 1
+
+/* Define to 1 if you have the `strerror' function. */
+#define HAVE_STRERROR 1
+
 /* Define to 1 if you have the <string> header file. */
 #define HAVE_STRING 1
 
-/* Define to 1 if you have the <strings.h> header file. */ 
-#define HAVE_STRINGS_H 1 
- 
+/* Define to 1 if you have the <strings.h> header file. */
+#define HAVE_STRINGS_H 1
+
 /* Define to 1 if you have the <string.h> header file. */
 #define HAVE_STRING_H 1
- 
+
 /* Define to 1 if you have `strtoimax'. */
 /* #undef HAVE_STRTOIMAX */
- 
+
 /* Define to 1 if you have `strtoll'. */
 /* #undef HAVE_STRTOLL */
 
@@ -139,9 +139,9 @@ sure both macros are undefined; an emulation function will then be used. */
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
 
-/* Define to 1 if the system has the type `unsigned long long'. */ 
+/* Define to 1 if the system has the type `unsigned long long'. */
 #define HAVE_UNSIGNED_LONG_LONG 1
- 
+
 /* Define to 1 if the compiler supports simple visibility declarations. */
 #define HAVE_VISIBILITY 1
 
@@ -154,44 +154,44 @@ sure both macros are undefined; an emulation function will then be used. */
 /* Define to 1 if you have `_strtoi64'. */
 /* #undef HAVE__STRTOI64 */
 
-/* The value of LINK_SIZE determines the number of bytes used to store links 
-   as offsets within the compiled regex. The default is 2, which allows for 
-   compiled patterns up to 64K long. This covers the vast majority of cases. 
-   However, PCRE can also be compiled to use 3 or 4 bytes instead. This allows 
+/* The value of LINK_SIZE determines the number of bytes used to store links
+   as offsets within the compiled regex. The default is 2, which allows for
+   compiled patterns up to 64K long. This covers the vast majority of cases.
+   However, PCRE can also be compiled to use 3 or 4 bytes instead. This allows
    for longer patterns in extreme cases. */
-#define LINK_SIZE 2 
- 
+#define LINK_SIZE 2
+
 /* Define to the sub-directory where libtool stores uninstalled libraries. */
 #define LT_OBJDIR ".libs/"
 
-/* The value of MATCH_LIMIT determines the default number of times the 
-   internal match() function can be called during a single execution of 
-   pcre_exec(). There is a runtime interface for setting a different limit. 
-   The limit exists in order to catch runaway regular expressions that take 
-   for ever to determine that they do not match. The default is set very large 
+/* The value of MATCH_LIMIT determines the default number of times the
+   internal match() function can be called during a single execution of
+   pcre_exec(). There is a runtime interface for setting a different limit.
+   The limit exists in order to catch runaway regular expressions that take
+   for ever to determine that they do not match. The default is set very large
    so that it does not accidentally catch legitimate cases. */
-#define MATCH_LIMIT 10000000 
- 
-/* The above limit applies to all calls of match(), whether or not they 
-   increase the recursion depth. In some environments it is desirable to limit 
-   the depth of recursive calls of match() more strictly, in order to restrict 
-   the maximum amount of stack (or heap, if NO_RECURSE is defined) that is 
-   used. The value of MATCH_LIMIT_RECURSION applies only to recursive calls of 
-   match(). To have any useful effect, it must be less than the value of 
-   MATCH_LIMIT. The default is to use the same value as MATCH_LIMIT. There is 
+#define MATCH_LIMIT 10000000
+
+/* The above limit applies to all calls of match(), whether or not they
+   increase the recursion depth. In some environments it is desirable to limit
+   the depth of recursive calls of match() more strictly, in order to restrict
+   the maximum amount of stack (or heap, if NO_RECURSE is defined) that is
+   used. The value of MATCH_LIMIT_RECURSION applies only to recursive calls of
+   match(). To have any useful effect, it must be less than the value of
+   MATCH_LIMIT. The default is to use the same value as MATCH_LIMIT. There is
    a runtime method for setting a different limit. */
-#define MATCH_LIMIT_RECURSION MATCH_LIMIT 
- 
-/* This limit is parameterized just in case anybody ever wants to change it. 
-   Care must be taken if it is increased, because it guards against integer 
-   overflow caused by enormously large patterns. */ 
-#define MAX_NAME_COUNT 10000 
- 
-/* This limit is parameterized just in case anybody ever wants to change it. 
-   Care must be taken if it is increased, because it guards against integer 
-   overflow caused by enormously large patterns. */ 
-#define MAX_NAME_SIZE 32 
- 
+#define MATCH_LIMIT_RECURSION MATCH_LIMIT
+
+/* This limit is parameterized just in case anybody ever wants to change it.
+   Care must be taken if it is increased, because it guards against integer
+   overflow caused by enormously large patterns. */
+#define MAX_NAME_COUNT 10000
+
+/* This limit is parameterized just in case anybody ever wants to change it.
+   Care must be taken if it is increased, because it guards against integer
+   overflow caused by enormously large patterns. */
+#define MAX_NAME_SIZE 32
+
 /* The value of NEWLINE determines the default newline character sequence.
    PCRE client programs can override this by selecting other values at run
    time. In ASCII environments, the value can be 10 (LF), 13 (CR), or 3338
@@ -200,38 +200,38 @@ sure both macros are undefined; an emulation function will then be used. */
    0x25) that are used as the NL line terminator that is equivalent to ASCII
    LF. In both ASCII and EBCDIC environments the value can also be -1 (ANY),
    or -2 (ANYCRLF). */
-#define NEWLINE 10 
- 
-/* PCRE uses recursive function calls to handle backtracking while matching. 
-   This can sometimes be a problem on systems that have stacks of limited 
+#define NEWLINE 10
+
+/* PCRE uses recursive function calls to handle backtracking while matching.
+   This can sometimes be a problem on systems that have stacks of limited
    size. Define NO_RECURSE to any value to get a version that doesn't use
    recursion in the match() function; instead it creates its own stack by
    steam using pcre_recurse_malloc() to obtain memory from the heap. For more
    detail, see the comments and other stuff just above the match() function.
    */
-/* #undef NO_RECURSE */ 
- 
-/* Name of package */ 
-#define PACKAGE "pcre" 
- 
-/* Define to the address where bug reports for this package should be sent. */ 
-#define PACKAGE_BUGREPORT "" 
- 
-/* Define to the full name of this package. */ 
-#define PACKAGE_NAME "PCRE" 
- 
-/* Define to the full name and version of this package. */ 
+/* #undef NO_RECURSE */
+
+/* Name of package */
+#define PACKAGE "pcre"
+
+/* Define to the address where bug reports for this package should be sent. */
+#define PACKAGE_BUGREPORT ""
+
+/* Define to the full name of this package. */
+#define PACKAGE_NAME "PCRE"
+
+/* Define to the full name and version of this package. */
 #define PACKAGE_STRING "PCRE 8.44"
- 
-/* Define to the one symbol short name of this package. */ 
-#define PACKAGE_TARNAME "pcre" 
- 
+
+/* Define to the one symbol short name of this package. */
+#define PACKAGE_TARNAME "pcre"
+
 /* Define to the home page for this package. */
 #define PACKAGE_URL ""
 
-/* Define to the version of this package. */ 
+/* Define to the version of this package. */
 #define PACKAGE_VERSION "8.44"
- 
+
 /* The value of PARENS_NEST_LIMIT specifies the maximum depth of nested
    parentheses (of any kind) in a pattern. This limits the amount of system
    stack that is used while compiling a pattern. */
@@ -277,27 +277,27 @@ sure both macros are undefined; an emulation function will then be used. */
 /* Define to any value if linking statically (TODO: make nice with Libtool) */
 /* #undef PCRE_STATIC */
 
-/* When calling PCRE via the POSIX interface, additional working storage is 
-   required for holding the pointers to capturing substrings because PCRE 
-   requires three integers per substring, whereas the POSIX interface provides 
-   only two. If the number of expected substrings is small, the wrapper 
-   function uses space on the stack, because this is faster than using 
-   malloc() for each call. The threshold above which the stack is no longer 
+/* When calling PCRE via the POSIX interface, additional working storage is
+   required for holding the pointers to capturing substrings because PCRE
+   requires three integers per substring, whereas the POSIX interface provides
+   only two. If the number of expected substrings is small, the wrapper
+   function uses space on the stack, because this is faster than using
+   malloc() for each call. The threshold above which the stack is no longer
    used is defined by POSIX_MALLOC_THRESHOLD. */
-#define POSIX_MALLOC_THRESHOLD 10 
- 
+#define POSIX_MALLOC_THRESHOLD 10
+
 /* Define to necessary symbol if this constant uses a non-standard name on
    your system. */
 /* #undef PTHREAD_CREATE_JOINABLE */
 
-/* Define to 1 if you have the ANSI C header files. */ 
-#define STDC_HEADERS 1 
- 
+/* Define to 1 if you have the ANSI C header files. */
+#define STDC_HEADERS 1
+
 #ifdef ARCADIA_PCRE_ENABLE_JIT
 /* Define to any value to enable support for Just-In-Time compiling. */
 #define SUPPORT_JIT /**/
 #endif
- 
+
 /* Define to any value to allow pcregrep to be linked with libbz2, so that it
    is able to handle .bz2 files. */
 /* #undef SUPPORT_LIBBZ2 */
@@ -338,7 +338,7 @@ sure both macros are undefined; an emulation function will then be used. */
 /* Define to any value for valgrind support to find invalid memory reads. */
 /* #undef SUPPORT_VALGRIND */
 
-/* Version number of package */ 
+/* Version number of package */
 #define VERSION "8.44"
 
 /* Define to empty if `const' does not conform to ANSI C. */

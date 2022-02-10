@@ -315,4 +315,4 @@ namespace NXml {
             xmlFreeTextReader(handle);
         }
     };
-} 
+}

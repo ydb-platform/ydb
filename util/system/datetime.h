@@ -1,15 +1,15 @@
 #pragma once
 
-#include "defaults.h" 
-#include "platform.h" 
+#include "defaults.h"
+#include "platform.h"
 
-#if defined(_win_) 
-    #include <intrin.h> 
-    #pragma intrinsic(__rdtsc) 
+#if defined(_win_)
+    #include <intrin.h>
+    #pragma intrinsic(__rdtsc)
 #endif // _win_
 
 #if defined(_darwin_) && !defined(_x86_)
-    #include <mach/mach_time.h> 
+    #include <mach/mach_time.h>
 #endif
 
 /// util/system/datetime.h contains only system time providers
@@ -42,7 +42,7 @@ void NanoSleep(ui64 ns) noexcept;
 // PERFORMANCE: rdtsc - 15 cycles per call , rdtscp - 19 cycles per call
 // WARNING: following instruction can be executed out-of-order
 Y_FORCE_INLINE ui64 GetCycleCount() noexcept {
-#if defined(_MSC_VER) 
+#if defined(_MSC_VER)
     // Generates the rdtscp instruction, which returns the processor time stamp.
     // The processor time stamp records the number of clock cycles since the last reset.
     extern const bool HaveRdtscp;
@@ -53,24 +53,24 @@ Y_FORCE_INLINE ui64 GetCycleCount() noexcept {
     } else {
         return __rdtsc();
     }
-#elif defined(_x86_64_) 
-    extern const bool HaveRdtscp; 
- 
-    unsigned hi, lo; 
- 
-    if (HaveRdtscp) { 
-        __asm__ __volatile__("rdtscp" 
-                             : "=a"(lo), "=d"(hi)::"%rcx"); 
-    } else { 
-        __asm__ __volatile__("rdtsc" 
-                             : "=a"(lo), "=d"(hi)); 
-    } 
- 
-    return ((unsigned long long)lo) | (((unsigned long long)hi) << 32); 
-#elif defined(_i386_) 
+#elif defined(_x86_64_)
     extern const bool HaveRdtscp;
 
-    ui64 x; 
+    unsigned hi, lo;
+
+    if (HaveRdtscp) {
+        __asm__ __volatile__("rdtscp"
+                             : "=a"(lo), "=d"(hi)::"%rcx");
+    } else {
+        __asm__ __volatile__("rdtsc"
+                             : "=a"(lo), "=d"(hi));
+    }
+
+    return ((unsigned long long)lo) | (((unsigned long long)hi) << 32);
+#elif defined(_i386_)
+    extern const bool HaveRdtscp;
+
+    ui64 x;
     if (HaveRdtscp) {
         __asm__ volatile("rdtscp\n\t"
                          : "=A"(x)::"%ecx");
@@ -78,21 +78,21 @@ Y_FORCE_INLINE ui64 GetCycleCount() noexcept {
         __asm__ volatile("rdtsc\n\t"
                          : "=A"(x));
     }
-    return x; 
+    return x;
 #elif defined(_darwin_)
     return mach_absolute_time();
 #elif defined(__clang__) && !defined(_arm_)
     return __builtin_readcyclecounter();
-#elif defined(_arm32_) 
-    return MicroSeconds(); 
-#elif defined(_arm64_) 
-    ui64 x; 
- 
-    __asm__ __volatile__("isb; mrs %0, cntvct_el0" 
-                         : "=r"(x)); 
- 
-    return x; 
-#else 
-    #error "unsupported arch" 
+#elif defined(_arm32_)
+    return MicroSeconds();
+#elif defined(_arm64_)
+    ui64 x;
+
+    __asm__ __volatile__("isb; mrs %0, cntvct_el0"
+                         : "=r"(x));
+
+    return x;
+#else
+    #error "unsupported arch"
 #endif
 }

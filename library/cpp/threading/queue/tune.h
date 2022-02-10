@@ -96,14 +96,14 @@
         };                                                          \
     }
 
-#define DeclareTuneContainer(TParamName, InternalName)              \ 
-    template <template <typename, typename...> class TNewContainer> \ 
-    struct TParamName {                                             \ 
-        template <typename TBase>                                   \ 
-        struct TApply: public TBase {                               \ 
-            template <typename TElem, typename... TRest>            \ 
-            using InternalName = TNewContainer<TElem, TRest...>;    \ 
-        };                                                          \ 
+#define DeclareTuneContainer(TParamName, InternalName)              \
+    template <template <typename, typename...> class TNewContainer> \
+    struct TParamName {                                             \
+        template <typename TBase>                                   \
+        struct TApply: public TBase {                               \
+            template <typename TElem, typename... TRest>            \
+            using InternalName = TNewContainer<TElem, TRest...>;    \
+        };                                                          \
     }
 
 namespace NTunePrivate {

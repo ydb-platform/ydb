@@ -4,7 +4,7 @@
 
 using namespace NRainCheck;
 
-void TSpawnNopTasksCoroTask::Run() { 
+void TSpawnNopTasksCoroTask::Run() {
     Y_VERIFY(Count <= Completion.size());
     for (unsigned i = 0; i < Count; ++i) {
         SpawnSubtask<TNopCoroTask>(Env, &Completion[i], "");
@@ -13,7 +13,7 @@ void TSpawnNopTasksCoroTask::Run() {
     WaitForSubtasks();
 }
 
-TContinueFunc TSpawnNopTasksSimpleTask::Start() { 
+TContinueFunc TSpawnNopTasksSimpleTask::Start() {
     Y_VERIFY(Count <= Completion.size());
     for (unsigned i = 0; i < Count; ++i) {
         SpawnSubtask<TNopSimpleTask>(Env, &Completion[i], "");
@@ -22,6 +22,6 @@ TContinueFunc TSpawnNopTasksSimpleTask::Start() {
     return &TSpawnNopTasksSimpleTask::Join;
 }
 
-TContinueFunc TSpawnNopTasksSimpleTask::Join() { 
+TContinueFunc TSpawnNopTasksSimpleTask::Join() {
     return nullptr;
 }

@@ -44,7 +44,7 @@ namespace NActors {
     void EnableActorCallstack();
     void DisableActorCallstack();
 
-} 
+}
 
 #else
 
@@ -53,6 +53,6 @@ namespace NActors {
 
     inline void DisableActorCallstack(){};
 
-} 
+}
 
 #endif

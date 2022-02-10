@@ -1,14 +1,14 @@
-LIBRARY() 
- 
-OWNER( 
-    pg 
+LIBRARY()
+
+OWNER(
+    pg
     g:util
-) 
- 
-SRCS( 
-    lciter.cpp 
-    lchash.cpp 
-    hash_ops.cpp 
-) 
- 
-END() 
+)
+
+SRCS(
+    lciter.cpp
+    lchash.cpp
+    hash_ops.cpp
+)
+
+END()

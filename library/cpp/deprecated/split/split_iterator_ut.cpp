@@ -1,15 +1,15 @@
-#include "split_iterator.h" 
+#include "split_iterator.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
-class TSplitIteratorTest: public TTestBase { 
+class TSplitIteratorTest: public TTestBase {
     UNIT_TEST_SUITE(TSplitIteratorTest);
-    UNIT_TEST(TestDelimiters); 
-    UNIT_TEST(TestDelimitersSplit); 
-    UNIT_TEST(TestDelimitersStrictSplit); 
-    UNIT_TEST(TestTail); 
-    UNIT_TEST(TestScreenedDelimitersSplit); 
-    UNIT_TEST(TestSubstringDelimiter); 
+    UNIT_TEST(TestDelimiters);
+    UNIT_TEST(TestDelimitersSplit);
+    UNIT_TEST(TestDelimitersStrictSplit);
+    UNIT_TEST(TestTail);
+    UNIT_TEST(TestScreenedDelimitersSplit);
+    UNIT_TEST(TestSubstringDelimiter);
     UNIT_TEST_SUITE_END();
 
 public:
@@ -21,17 +21,17 @@ public:
     void TestSubstringDelimiter();
 };
 
-void TSplitIteratorTest::TestDelimiters() { 
+void TSplitIteratorTest::TestDelimiters() {
     TSplitDelimiters delims("@");
     for (int i = 0; i < 256; ++i)
-        if ('@' != i) { 
+        if ('@' != i) {
             UNIT_ASSERT(!delims.IsDelimiter((ui8)i));
-        } else { 
+        } else {
             UNIT_ASSERT(delims.IsDelimiter((ui8)i));
         }
 }
 
-void TSplitIteratorTest::TestDelimitersSplit() { 
+void TSplitIteratorTest::TestDelimitersSplit() {
     {
         TString s = "1a3b45cd";
         TSplitDelimiters delims("abcd");
@@ -52,7 +52,7 @@ void TSplitIteratorTest::TestDelimitersSplit() {
     }
 }
 
-void TSplitIteratorTest::TestDelimitersStrictSplit() { 
+void TSplitIteratorTest::TestDelimitersStrictSplit() {
     {
         TString s = "grp@2";
         TSplitDelimiters delims("@");
@@ -74,7 +74,7 @@ void TSplitIteratorTest::TestDelimitersStrictSplit() {
     }
 }
 
-void TSplitIteratorTest::TestTail() { 
+void TSplitIteratorTest::TestTail() {
     TString s = "grp@2@4";
     TSplitDelimiters delims("@");
     TDelimitersSplit split(s, delims);
@@ -88,7 +88,7 @@ void TSplitIteratorTest::TestTail() {
     UNIT_ASSERT_EQUAL(it.GetTail(), "");
 }
 
-void TSplitIteratorTest::TestScreenedDelimitersSplit() { 
+void TSplitIteratorTest::TestScreenedDelimitersSplit() {
     {
         const TString s = "77.88.58.91 - - [28/Aug/2008:00:08:07 +0400] \"GET /export/mordashka.tgz HTTP/1.1\" 304 - \"-\" \"libwww-perl/5.805\" \"news.yandex.ru,80\" \"-\" \"-\" 1219867687 \"0\" 3283 2";
         const TSplitDelimiters delims(" ");
@@ -137,7 +137,7 @@ void TSplitIteratorTest::TestScreenedDelimitersSplit() {
     }
 }
 
-void TSplitIteratorTest::TestSubstringDelimiter() { 
+void TSplitIteratorTest::TestSubstringDelimiter() {
     const TString s = "a@@bb@@cc@c.d@@r";
     static const TSubstringSplitDelimiter delimiter("@@");
     const TSubstringSplit splitter(s, delimiter);

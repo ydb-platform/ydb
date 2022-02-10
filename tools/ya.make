@@ -1,10 +1,10 @@
-RECURSE( 
+RECURSE(
     acceleo
     arcdocidstrip
     archiver
     archiver/alignment_test
     archiver/tests
-    base64 
+    base64
     bigram_compiler
     blender
     bmdump
@@ -37,7 +37,7 @@ RECURSE(
     enforce_fsync
     enum_parser
     event2cpp
-    fast_diff 
+    fast_diff
     fastcksum
     filter_nonucs2
     fix_elf
@@ -60,7 +60,7 @@ RECURSE(
     idx_relemmatizer
     inflector
     is_holiday
-    jsv8 
+    jsv8
     json_to_jsonlines
     langdiscr-test
     lemmas_merger_builder
@@ -77,7 +77,7 @@ RECURSE(
     mkdocs_builder/theme
     mstand
     mtime0
-    mx_bin2info 
+    mx_bin2info
     nehc
     nlp_test
     nodeiter_test
@@ -178,7 +178,7 @@ RECURSE(
     ygetparam
     ylzocat
     yson_pp
-    zk_client 
+    zk_client
     idx_print
 )
 

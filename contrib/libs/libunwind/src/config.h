@@ -1,39 +1,39 @@
 //===----------------------------------------------------------------------===//
-// 
+//
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-// 
-// 
+//
+//
 //  Defines macros used within libunwind project.
-// 
-//===----------------------------------------------------------------------===// 
- 
- 
-#ifndef LIBUNWIND_CONFIG_H 
-#define LIBUNWIND_CONFIG_H 
- 
-#include <assert.h> 
-#include <stdio.h> 
+//
+//===----------------------------------------------------------------------===//
+
+
+#ifndef LIBUNWIND_CONFIG_H
+#define LIBUNWIND_CONFIG_H
+
+#include <assert.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
- 
+
 #include <__libunwind_config.h>
- 
-// Platform specific configuration defines. 
-#ifdef __APPLE__ 
+
+// Platform specific configuration defines.
+#ifdef __APPLE__
   #if defined(FOR_DYLD)
     #define _LIBUNWIND_SUPPORT_COMPACT_UNWIND 1
   #else
     #define _LIBUNWIND_SUPPORT_COMPACT_UNWIND 1
     #define _LIBUNWIND_SUPPORT_DWARF_UNWIND 1
-  #endif 
+  #endif
 #elif defined(_WIN32)
   #ifdef __SEH__
     #define _LIBUNWIND_SUPPORT_SEH_UNWIND 1
   #else
     #define _LIBUNWIND_SUPPORT_DWARF_UNWIND 1
-  #endif 
+  #endif
 #elif defined(_LIBUNWIND_IS_BAREMETAL)
   #if !defined(_LIBUNWIND_ARM_EHABI)
     #define _LIBUNWIND_SUPPORT_DWARF_UNWIND 1
@@ -51,7 +51,7 @@
     #define _LIBUNWIND_SUPPORT_DWARF_INDEX 1
   #endif
 #endif
- 
+
 #if defined(_LIBUNWIND_HIDE_SYMBOLS)
   // The CMake file passes -fvisibility=hidden to control ELF/Mach-O visibility.
   #define _LIBUNWIND_EXPORT
@@ -60,12 +60,12 @@
   #if !defined(__ELF__) && !defined(__MACH__)
     #define _LIBUNWIND_EXPORT __declspec(dllexport)
     #define _LIBUNWIND_HIDDEN
-  #else 
+  #else
     #define _LIBUNWIND_EXPORT __attribute__((visibility("default")))
     #define _LIBUNWIND_HIDDEN __attribute__((visibility("hidden")))
-  #endif 
+  #endif
 #endif
- 
+
 #define STR(a) #a
 #define XSTR(a) STR(a)
 #define SYMBOL_NAME(name) XSTR(__USER_LABEL_PREFIX__) #name
@@ -89,7 +89,7 @@
 #define _LIBUNWIND_WEAK_ALIAS(name, aliasname)                                 \
   extern "C" _LIBUNWIND_EXPORT __typeof(name) aliasname                        \
       __attribute__((alias(#name)));
-#else 
+#else
 #define _LIBUNWIND_WEAK_ALIAS(name, aliasname)                                 \
   __pragma(comment(linker, "/alternatename:" SYMBOL_NAME(aliasname) "="        \
                                              SYMBOL_NAME(name)))               \
@@ -98,17 +98,17 @@
 #else
 #error Unsupported target
 #endif
- 
+
 // Apple/armv7k defaults to DWARF/Compact unwinding, but its libunwind also
 // needs to include the SJLJ APIs.
 #if (defined(__APPLE__) && defined(__arm__)) || defined(__USING_SJLJ_EXCEPTIONS__)
 #define _LIBUNWIND_BUILD_SJLJ_APIS
 #endif
- 
+
 #if defined(__i386__) || defined(__x86_64__) || defined(__powerpc__)
 #define _LIBUNWIND_SUPPORT_FRAME_APIS
 #endif
- 
+
 #if defined(__i386__) || defined(__x86_64__) ||                                \
     defined(__ppc__) || defined(__ppc64__) || defined(__powerpc64__) ||        \
     (!defined(__APPLE__) && defined(__arm__)) ||                               \
@@ -118,9 +118,9 @@
     defined(__hexagon__)
 #if !defined(_LIBUNWIND_BUILD_SJLJ_APIS)
 #define _LIBUNWIND_BUILD_ZERO_COST_APIS
-#endif 
 #endif
- 
+#endif
+
 #ifndef _LIBUNWIND_REMEMBER_HEAP_ALLOC
 #if defined(_LIBUNWIND_REMEMBER_STACK_ALLOC) || defined(__APPLE__) ||          \
     defined(__linux__) || defined(__ANDROID__) || defined(__MINGW32__) ||      \
@@ -143,7 +143,7 @@
 #define _LIBUNWIND_REMEMBER_FREE(_ptr) free(_ptr)
 #define _LIBUNWIND_REMEMBER_CLEANUP_NEEDED
 #endif
- 
+
 #if defined(NDEBUG) && defined(_LIBUNWIND_IS_BAREMETAL)
 #define _LIBUNWIND_ABORT(msg)                                                  \
   do {                                                                         \
@@ -179,31 +179,31 @@
     } while (0)
 #endif
 
-// Macros that define away in non-Debug builds 
-#ifdef NDEBUG 
-  #define _LIBUNWIND_DEBUG_LOG(msg, ...) 
-  #define _LIBUNWIND_TRACE_API(msg, ...) 
+// Macros that define away in non-Debug builds
+#ifdef NDEBUG
+  #define _LIBUNWIND_DEBUG_LOG(msg, ...)
+  #define _LIBUNWIND_TRACE_API(msg, ...)
   #define _LIBUNWIND_TRACING_UNWINDING (0)
   #define _LIBUNWIND_TRACING_DWARF (0)
-  #define _LIBUNWIND_TRACE_UNWINDING(msg, ...) 
+  #define _LIBUNWIND_TRACE_UNWINDING(msg, ...)
   #define _LIBUNWIND_TRACE_DWARF(...)
-#else 
-  #ifdef __cplusplus 
-    extern "C" { 
-  #endif 
-    extern  bool logAPIs(); 
-    extern  bool logUnwinding(); 
+#else
+  #ifdef __cplusplus
+    extern "C" {
+  #endif
+    extern  bool logAPIs();
+    extern  bool logUnwinding();
     extern  bool logDWARF();
-  #ifdef __cplusplus 
-    } 
-  #endif 
-  #define _LIBUNWIND_DEBUG_LOG(msg, ...)  _LIBUNWIND_LOG(msg, __VA_ARGS__) 
+  #ifdef __cplusplus
+    }
+  #endif
+  #define _LIBUNWIND_DEBUG_LOG(msg, ...)  _LIBUNWIND_LOG(msg, __VA_ARGS__)
   #define _LIBUNWIND_TRACE_API(msg, ...)                                       \
     do {                                                                       \
       if (logAPIs())                                                           \
         _LIBUNWIND_LOG(msg, __VA_ARGS__);                                      \
     } while (0)
-  #define _LIBUNWIND_TRACING_UNWINDING logUnwinding() 
+  #define _LIBUNWIND_TRACING_UNWINDING logUnwinding()
   #define _LIBUNWIND_TRACING_DWARF logDWARF()
   #define _LIBUNWIND_TRACE_UNWINDING(msg, ...)                                 \
     do {                                                                       \
@@ -215,8 +215,8 @@
       if (logDWARF())                                                          \
         fprintf(stderr, __VA_ARGS__);                                          \
     } while (0)
-#endif 
- 
+#endif
+
 #ifdef __cplusplus
 // Used to fit UnwindCursor and Registers_xxx types against unw_context_t /
 // unw_cursor_t sized memory blocks.
@@ -237,5 +237,5 @@ struct check_fit {
 };
 #undef COMP_OP
 #endif // __cplusplus
- 
-#endif // LIBUNWIND_CONFIG_H 
+
+#endif // LIBUNWIND_CONFIG_H

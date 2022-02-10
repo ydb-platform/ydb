@@ -1,16 +1,16 @@
-#include "buffer.h" 
-#include <util/generic/buffer.h> 
+#include "buffer.h"
+#include <util/generic/buffer.h>
 #include <util/generic/yexception.h>
- 
-class TBufferOutput::TImpl { 
-public: 
-    inline TImpl(TBuffer& buf) 
-        : Data_(buf) 
-    { 
-    } 
- 
+
+class TBufferOutput::TImpl {
+public:
+    inline TImpl(TBuffer& buf)
+        : Data_(buf)
+    {
+    }
+
     virtual ~TImpl() = default;
- 
+
     inline size_t DoNext(void** ptr) {
         if (Data_.Avail() == 0) {
             Data_.Reserve(FastClp2(Data_.Capacity() + MinBufferGrowSize));
@@ -26,51 +26,51 @@ public:
         Data_.Resize(Data_.size() - len);
     }
 
-    inline void DoWrite(const void* buf, size_t len) { 
-        Data_.Append((const char*)buf, len); 
-    } 
- 
+    inline void DoWrite(const void* buf, size_t len) {
+        Data_.Append((const char*)buf, len);
+    }
+
     inline void DoWriteC(char c) {
         Data_.Append(c);
     }
 
     inline TBuffer& Buffer() const noexcept {
-        return Data_; 
-    } 
- 
-private: 
-    TBuffer& Data_; 
+        return Data_;
+    }
+
+private:
+    TBuffer& Data_;
     static constexpr size_t MinBufferGrowSize = 16;
 };
 
-namespace { 
+namespace {
     using TImpl = TBufferOutput::TImpl;
- 
-    class TOwnedImpl: private TBuffer, public TImpl { 
-    public: 
-        inline TOwnedImpl(size_t buflen) 
-            : TBuffer(buflen) 
-            , TImpl(static_cast<TBuffer&>(*this)) 
-        { 
-        } 
-    }; 
-} 
- 
-TBufferOutput::TBufferOutput(size_t buflen) 
-    : Impl_(new TOwnedImpl(buflen)) 
+
+    class TOwnedImpl: private TBuffer, public TImpl {
+    public:
+        inline TOwnedImpl(size_t buflen)
+            : TBuffer(buflen)
+            , TImpl(static_cast<TBuffer&>(*this))
+        {
+        }
+    };
+}
+
+TBufferOutput::TBufferOutput(size_t buflen)
+    : Impl_(new TOwnedImpl(buflen))
 {
 }
 
-TBufferOutput::TBufferOutput(TBuffer& buffer) 
-    : Impl_(new TImpl(buffer)) 
-{ 
+TBufferOutput::TBufferOutput(TBuffer& buffer)
+    : Impl_(new TImpl(buffer))
+{
 }
 
 TBufferOutput::TBufferOutput(TBufferOutput&&) noexcept = default;
 TBufferOutput& TBufferOutput::operator=(TBufferOutput&&) noexcept = default;
 
 TBufferOutput::~TBufferOutput() = default;
- 
+
 TBuffer& TBufferOutput::Buffer() const noexcept {
     return Impl_->Buffer();
 }
@@ -83,8 +83,8 @@ void TBufferOutput::DoUndo(size_t len) {
     Impl_->DoUndo(len);
 }
 
-void TBufferOutput::DoWrite(const void* buf, size_t len) { 
-    Impl_->DoWrite(buf, len); 
+void TBufferOutput::DoWrite(const void* buf, size_t len) {
+    Impl_->DoWrite(buf, len);
 }
 
 void TBufferOutput::DoWriteC(char c) {

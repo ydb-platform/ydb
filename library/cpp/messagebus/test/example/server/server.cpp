@@ -4,7 +4,7 @@ using namespace NBus;
 using namespace NCalculator;
 
 namespace NCalculator {
-    struct TCalculatorServer: public IBusServerHandler { 
+    struct TCalculatorServer: public IBusServerHandler {
         TCalculatorProtocol Proto;
         TBusMessageQueuePtr MessageQueue;
         TBusServerSessionPtr ServerSession;
@@ -43,7 +43,7 @@ namespace NCalculator {
             }
         }
     };
-} 
+}
 
 int main(int, char**) {
     TCalculatorServer server;

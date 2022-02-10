@@ -1,27 +1,27 @@
-#include "datetime.h" 
-#include "yassert.h" 
-#include "platform.h" 
-#include "cpu_id.h" 
- 
-#include <util/datetime/systime.h> 
- 
+#include "datetime.h"
+#include "yassert.h"
+#include "platform.h"
+#include "cpu_id.h"
+
+#include <util/datetime/systime.h>
+
 #include <ctime>
 #include <cerrno>
 
 #ifdef _darwin_
-    #include <AvailabilityMacros.h> 
-    #if defined(MAC_OS_X_VERSION_10_12) && MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_12 
-        #define Y_HAS_CLOCK_GETTIME 
-    #endif 
+    #include <AvailabilityMacros.h>
+    #if defined(MAC_OS_X_VERSION_10_12) && MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_12
+        #define Y_HAS_CLOCK_GETTIME
+    #endif
 #elif defined(_linux_) || defined(_freebsd_) || defined(_cygwin_)
-    #define Y_HAS_CLOCK_GETTIME 
+    #define Y_HAS_CLOCK_GETTIME
 #endif
 
 static ui64 ToMicroSeconds(const struct timeval& tv) {
-    return (ui64)tv.tv_sec * 1000000 + (ui64)tv.tv_usec; 
+    return (ui64)tv.tv_sec * 1000000 + (ui64)tv.tv_usec;
 }
 
-#if defined(_win_) 
+#if defined(_win_)
 static ui64 ToMicroSeconds(const FILETIME& ft) {
     return (((ui64)ft.dwHighDateTime << 32) + (ui64)ft.dwLowDateTime) / (ui64)10;
 }
@@ -38,8 +38,8 @@ ui64 MicroSeconds() noexcept {
     return ToMicroSeconds(tv);
 }
 
-ui64 ThreadCPUUserTime() noexcept { 
-#if defined(_win_) 
+ui64 ThreadCPUUserTime() noexcept {
+#if defined(_win_)
     FILETIME creationTime, exitTime, kernelTime, userTime;
     GetThreadTimes(GetCurrentThread(), &creationTime, &exitTime, &kernelTime, &userTime);
     return ToMicroSeconds(userTime);
@@ -49,7 +49,7 @@ ui64 ThreadCPUUserTime() noexcept {
 }
 
 ui64 ThreadCPUSystemTime() noexcept {
-#if defined(_win_) 
+#if defined(_win_)
     FILETIME creationTime, exitTime, kernelTime, userTime;
     GetThreadTimes(GetCurrentThread(), &creationTime, &exitTime, &kernelTime, &userTime);
     return ToMicroSeconds(kernelTime);
@@ -59,7 +59,7 @@ ui64 ThreadCPUSystemTime() noexcept {
 }
 
 ui64 ThreadCPUTime() noexcept {
-#if defined(_win_) 
+#if defined(_win_)
     FILETIME creationTime, exitTime, kernelTime, userTime;
     GetThreadTimes(GetCurrentThread(), &creationTime, &exitTime, &kernelTime, &userTime);
     return ToMicroSeconds(userTime) + ToMicroSeconds(kernelTime);
@@ -79,7 +79,7 @@ ui32 Seconds() noexcept {
 }
 
 void NanoSleep(ui64 ns) noexcept {
-#if defined(_win_) 
+#if defined(_win_)
     Sleep(ns / 1000000);
 #else
     const ui64 NS = 1000 * 1000 * 1000;
@@ -93,11 +93,11 @@ void NanoSleep(ui64 ns) noexcept {
     }
 #endif
 }
- 
+
 #if defined(_x86_)
-extern const bool HaveRdtscp = NX86::HaveRDTSCP(); 
-#endif 
+extern const bool HaveRdtscp = NX86::HaveRDTSCP();
+#endif
 
 #ifdef Y_HAS_CLOCK_GETTIME
-    #undef Y_HAS_CLOCK_GETTIME 
+    #undef Y_HAS_CLOCK_GETTIME
 #endif

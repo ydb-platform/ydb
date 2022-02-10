@@ -26,13 +26,13 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
 
         TVI y(FromJson<TVI>(ToJson(v)));
         UNIT_ASSERT_VALUES_EQUAL(v.size(), y.size());
-        UNIT_ASSERT(std::equal(v.begin(), v.end(), y.begin())); 
+        UNIT_ASSERT(std::equal(v.begin(), v.end(), y.begin()));
     }
 
     Y_UNIT_TEST(TestYHash) {
         THI h;
         for (int i = 0; i < 3; ++i)
-            h[i] = i * i; 
+            h[i] = i * i;
 
         const TString etalon = "{\"0\":0,\"1\":1,\"2\":4}";
         UNIT_ASSERT_VALUES_EQUAL(etalon, ToJson(h, true));
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
     Y_UNIT_TEST(TestYMap) {
         TMI h;
         for (int i = 0; i < 3; ++i)
-            h[i] = i * i; 
+            h[i] = i * i;
 
         const TString etalon = "{\"0\":0,\"1\":1,\"2\":4}";
         UNIT_ASSERT_VALUES_EQUAL(etalon, ToJson(h, true));
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
     Y_UNIT_TEST(TestYHashSet) {
         THSI h;
         for (int i = 0; i < 3; ++i)
-            h.insert(i * i); 
+            h.insert(i * i);
 
         const TString etalon = "{\"0\":null,\"1\":null,\"4\":null}";
         UNIT_ASSERT_VALUES_EQUAL(etalon, ToJson(h, true));
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
     Y_UNIT_TEST(TestYSet) {
         TSI h;
         for (int i = 0; i < 3; ++i)
-            h.insert(i * i); 
+            h.insert(i * i);
 
         const TString etalon = "{\"0\":null,\"1\":null,\"4\":null}";
         UNIT_ASSERT_VALUES_EQUAL(etalon, ToJson(h, true));
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
     }
 
     Y_UNIT_TEST(TestTPair) {
-        TPI p(1, 1); 
+        TPI p(1, 1);
 
         const TString etalon = "[1,1]";
         UNIT_ASSERT_VALUES_EQUAL(etalon, ToJson(p, true));
@@ -89,14 +89,14 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
 
     struct TCustom: public IJsonSerializable {
         int A, B;
-        TCustom() 
-            : A(0) 
-            , B(0){}; 
-        TCustom(int a, int b) 
-            : A(a) 
-            , B(b) 
-        { 
-        } 
+        TCustom()
+            : A(0)
+            , B(0){};
+        TCustom(int a, int b)
+            : A(a)
+            , B(b)
+        {
+        }
         NSc::TValue ToTValue() const override {
             NSc::TValue res;
             res["a"] = A;
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
             B = v["b"].GetNumber();
         }
 
-        bool operator<(const TCustom& rhs) const { 
+        bool operator<(const TCustom& rhs) const {
             return A < rhs.A;
         }
     };
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
         TVPI v;
 
         for (int i = 0; i < 3; ++i)
-            v.push_back(TPI(i, i * i)); 
+            v.push_back(TPI(i, i * i));
 
         const TString etalon = "[[0,0],[1,1],[2,4]]";
         UNIT_ASSERT_VALUES_EQUAL(etalon, ToJson(v, true));
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
     Y_UNIT_TEST(TestSetOfCustom) {
         typedef TSet<TCustom> TSC;
         TSC s;
-        s.insert(TCustom(2, 3)); 
+        s.insert(TCustom(2, 3));
 
         const TString etalon = "{\"{\\\"a\\\":2,\\\"b\\\":3}\":null}";
         UNIT_ASSERT_VALUES_EQUAL(etalon, ToJson(s, true));

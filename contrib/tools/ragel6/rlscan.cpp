@@ -159,7 +159,7 @@ tr8:
 	{ tok_te = p;p--;}
 	goto st2;
 st2:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{ tok_ts = 0;}
 	if ( ++p == pe )
 		goto _test_eof2;
@@ -871,7 +871,7 @@ char **Scanner::makeIncludePathChecks( const char *thisFileName,
 ifstream *Scanner::tryOpenInclude( char **pathChecks, long &found )
 {
 	char **check = pathChecks;
-	ifstream *inFile = new ifstream; 
+	ifstream *inFile = new ifstream;
 	
 	while ( *check != 0 ) {
 		inFile->open( *check );
@@ -893,7 +893,7 @@ ifstream *Scanner::tryOpenInclude( char **pathChecks, long &found )
 	}
 
 	found = -1;
-	delete inFile; 
+	delete inFile;
 	return 0;
 }
 
@@ -1269,7 +1269,7 @@ _again:
 
 	if ( ++p == pe )
 		goto _test_eof;
-_resume: 
+_resume:
 	switch ( cs )
 	{
 tr0:
@@ -1333,11 +1333,11 @@ tr87:
 	{te = p;p--;{ pass( IMP_UInt, ts, te ); }}
 	goto st38;
 tr88:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{	switch( act ) {
 	case 176:
 	{{p = ((te))-1;} pass( IMP_Define, 0, 0 ); }
-	break; 
+	break;
 	case 177:
 	{{p = ((te))-1;} pass( IMP_Word, ts, te ); }
 	break;
@@ -1398,7 +1398,7 @@ case 39:
 	}
 	goto tr82;
 tr75:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 	goto st40;
 st40:
@@ -1668,7 +1668,7 @@ tr14:
 	goto st52;
 tr17:
 #line 716 "rlscan.rl"
-	{te = p+1;{ token( IL_Literal, ts, te ); }} 
+	{te = p+1;{ token( IL_Literal, ts, te ); }}
 	goto st52;
 tr20:
 #line 641 "rlscan.rl"
@@ -1760,7 +1760,7 @@ tr118:
 	{te = p+1;{ token( TK_NameSep, ts, te ); }}
 	goto st52;
 tr119:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{	switch( act ) {
 	case 1:
 	{{p = ((te))-1;} token( KW_PChar ); }
@@ -2829,7 +2829,7 @@ tr186:
 	{te = p+1;{ token( TK_NameSep, ts, te ); }}
 	goto st95;
 tr187:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{	switch( act ) {
 	case 27:
 	{{p = ((te))-1;} token( KW_PChar ); }
@@ -3840,11 +3840,11 @@ tr245:
 	goto st137;
 tr246:
 #line 881 "rlscan.rl"
-	{te = p+1;{ token( RE_Char, '\t' ); }} 
+	{te = p+1;{ token( RE_Char, '\t' ); }}
 	goto st137;
 tr247:
 #line 883 "rlscan.rl"
-	{te = p+1;{ token( RE_Char, '\v' ); }} 
+	{te = p+1;{ token( RE_Char, '\v' ); }}
 	goto st137;
 st137:
 #line 1 "NONE"
@@ -4026,7 +4026,7 @@ tr275:
 	goto st143;
 tr276:
 #line 940 "rlscan.rl"
-	{te = p;p--;{ token( TK_Word, ts, te ); }} 
+	{te = p;p--;{ token( TK_Word, ts, te ); }}
 	goto st143;
 st143:
 #line 1 "NONE"
@@ -4281,7 +4281,7 @@ tr348:
 	goto st146;
 tr349:
 #line 1063 "rlscan.rl"
-	{te = p;p--;{ token( TK_Middle ); }} 
+	{te = p;p--;{ token( TK_Middle ); }}
 	goto st146;
 tr350:
 #line 1052 "rlscan.rl"
@@ -4352,7 +4352,7 @@ tr366:
 	{te = p+1;{ token( TK_NotFinalToState ); }}
 	goto st146;
 tr367:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{	switch( act ) {
 	case 88:
 	{{p = ((te))-1;} token( KW_Machine ); }
@@ -4461,7 +4461,7 @@ tr461:
 	{te = p+1;{ token( TK_BarStar ); }}
 	goto st146;
 st146:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{ts = 0;}
 	if ( ++p == pe )
 		goto _test_eof146;
@@ -4685,7 +4685,7 @@ case 156:
 		goto tr333;
 	goto tr315;
 tr290:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 	goto st157;
 st157:
@@ -4807,127 +4807,127 @@ case 166:
 	}
 	goto tr315;
 tr297:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 1002 "rlscan.rl"
 	{act = 108;}
 	goto st167;
 tr377:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 975 "rlscan.rl"
 	{act = 97;}
 	goto st167;
 tr380:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 959 "rlscan.rl"
 	{act = 92;}
 	goto st167;
 tr386:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 960 "rlscan.rl"
 	{act = 93;}
 	goto st167;
 tr390:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 994 "rlscan.rl"
 	{act = 102;}
 	goto st167;
 tr391:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 995 "rlscan.rl"
 	{act = 103;}
 	goto st167;
 tr395:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 999 "rlscan.rl"
 	{act = 107;}
 	goto st167;
 tr398:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 998 "rlscan.rl"
 	{act = 106;}
 	goto st167;
 tr403:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 967 "rlscan.rl"
 	{act = 96;}
 	goto st167;
 tr409:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 954 "rlscan.rl"
 	{act = 90;}
 	goto st167;
 tr415:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 953 "rlscan.rl"
 	{act = 89;}
 	goto st167;
 tr418:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 992 "rlscan.rl"
 	{act = 100;}
 	goto st167;
 tr421:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 996 "rlscan.rl"
 	{act = 104;}
 	goto st167;
 tr427:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 952 "rlscan.rl"
 	{act = 88;}
 	goto st167;
 tr433:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 993 "rlscan.rl"
 	{act = 101;}
 	goto st167;
 tr440:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 962 "rlscan.rl"
 	{act = 95;}
 	goto st167;
 tr445:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 961 "rlscan.rl"
 	{act = 94;}
 	goto st167;
 tr446:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 997 "rlscan.rl"
 	{act = 105;}
 	goto st167;
 tr453:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 983 "rlscan.rl"
 	{act = 98;}
 	goto st167;
 tr457:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 991 "rlscan.rl"
 	{act = 99;}
 	goto st167;
 tr460:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 #line 955 "rlscan.rl"
 	{act = 91;}
@@ -6365,7 +6365,7 @@ case 251:
 		goto tr461;
 	goto tr315;
 tr313:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 	goto st252;
 st252:
@@ -6444,12 +6444,12 @@ tr480:
 	{te = p;p--;{ pass( IMP_Word, ts, te ); }}
 	goto st253;
 st253:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{ts = 0;}
 	if ( ++p == pe )
 		goto _test_eof253;
 case 253:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{ts = p;}
 #line 6453 "rlscan.cpp"
 	switch( (*p) ) {
@@ -6493,7 +6493,7 @@ case 254:
 	}
 	goto tr474;
 tr467:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 	goto st255;
 st255:
@@ -6534,7 +6534,7 @@ case 32:
 		goto tr60;
 	goto st31;
 tr468:
-#line 1 "NONE" 
+#line 1 "NONE"
 	{te = p+1;}
 	goto st256;
 st256:
@@ -6567,8 +6567,8 @@ case 258:
 		goto tr478;
 	goto tr477;
 tr470:
-#line 1 "NONE" 
-	{te = p+1;} 
+#line 1 "NONE"
+	{te = p+1;}
 	goto st259;
 st259:
 	if ( ++p == pe )
@@ -6608,8 +6608,8 @@ case 35:
 		goto tr66;
 	goto st34;
 tr471:
-#line 1 "NONE" 
-	{te = p+1;} 
+#line 1 "NONE"
+	{te = p+1;}
 	goto st260;
 st260:
 	if ( ++p == pe )

@@ -1,14 +1,14 @@
-RECURSE( 
-    glob 
+RECURSE(
+    glob
     hyperscan
     hyperscan/ut
-    libregex 
-    pcre 
-    pire 
-    pire/inline 
-    pire/ut 
+    libregex
+    pcre
+    pire
+    pire/inline
+    pire/ut
     pire2hyperscan
     pire2hyperscan/ut
     regexp_classifier
     regexp_classifier/ut
-) 
+)

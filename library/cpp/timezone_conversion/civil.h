@@ -58,7 +58,7 @@ namespace NDatetime {
 
         template <ECivilUnit Unit>
         struct TGetCivilTime;
-    } 
+    }
 
     template <typename T>
     CONSTEXPR_M ECivilUnit GetCivilUnit(const T& = {}) {

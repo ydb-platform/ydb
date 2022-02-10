@@ -59,9 +59,9 @@ public:
         class TWorker: public ISimpleThread {
         public:
             TWorker(
-                TQueueType* queues_, 
-                ui16 mine, 
-                TAtomic* pushDone) 
+                TQueueType* queues_,
+                ui16 mine,
+                TAtomic* pushDone)
                 : Queues(queues_)
                 , MineQueue(mine)
                 , PushDone(pushDone)
@@ -132,7 +132,7 @@ public:
         for (ui32 i = 0; i < COUNT; ++i) {
             workers[i]->Join();
             all.insert(all.begin(),
-                       workers[i]->Received.begin(), workers[i]->Received.end()); 
+                       workers[i]->Received.begin(), workers[i]->Received.end());
         }
 
         std::sort(all.begin(), all.end());

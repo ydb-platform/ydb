@@ -63,7 +63,7 @@ public:
             TMailboxType::ReadAsFilled, 0));
 
         const TActorId loggerActorId(0, "logger");
-        constexpr ui32 LoggerComponentId = 410; // NKikimrServices::LOGGER 
+        constexpr ui32 LoggerComponentId = 410; // NKikimrServices::LOGGER
 
         auto loggerSettings = MakeIntrusive<NLog::TSettings>(
             loggerActorId,
@@ -78,7 +78,7 @@ public:
             NActorsServices::EServiceCommon_Name
         );
 
-        constexpr ui32 WilsonComponentId = 430; // NKikimrServices::WILSON 
+        constexpr ui32 WilsonComponentId = 430; // NKikimrServices::WILSON
         static const TString WilsonComponentName = "WILSON";
 
         loggerSettings->Append(

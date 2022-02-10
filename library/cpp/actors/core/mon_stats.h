@@ -89,8 +89,8 @@ namespace NActors {
 
         TExecutorThreadStats(size_t activityVecSize = 1) // must be not empty as 0 used as default
             : ElapsedTicksByActivity(activityVecSize)
-            , ReceivedEventsByActivity(activityVecSize) 
-            , ActorsAliveByActivity(activityVecSize) 
+            , ReceivedEventsByActivity(activityVecSize)
+            , ActorsAliveByActivity(activityVecSize)
             , ScheduledEventsByActivity(activityVecSize)
         {}
 
@@ -144,4 +144,4 @@ namespace NActors {
         }
     };
 
-} 
+}

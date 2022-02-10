@@ -228,7 +228,7 @@ namespace NKikimr {
         };
     };
 
-    static_assert(sizeof(TLogoBlobID) == 24, "expect sizeof(TLogoBlobID) == 24"); 
+    static_assert(sizeof(TLogoBlobID) == 24, "expect sizeof(TLogoBlobID) == 24");
 
     struct TLogoBlob {
         TLogoBlobID Id;

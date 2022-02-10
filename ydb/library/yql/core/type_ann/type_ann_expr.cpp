@@ -7,7 +7,7 @@
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <util/datetime/cputimer.h>
-#include <util/generic/scope.h> 
+#include <util/generic/scope.h>
 
 namespace NYql {
 
@@ -215,14 +215,14 @@ private:
             if (input->Type() == TExprNode::Callable) {
                 CurrentFunctions.push(std::make_pair(input->Content(), false));
             }
-            Y_SCOPE_EXIT(this, input) { 
+            Y_SCOPE_EXIT(this, input) {
                 if (input->Type() == TExprNode::Callable) {
                     CurrentFunctions.pop();
                     if (!CurrentFunctions.empty() && CurrentFunctions.top().first.EndsWith('!')) {
                         CurrentFunctions.top().second = true;
                     }
                 }
-            }; 
+            };
 
             TStatus retStatus = TStatus::Error;
             switch (input->GetState()) {

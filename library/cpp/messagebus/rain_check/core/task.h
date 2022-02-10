@@ -14,8 +14,8 @@
 namespace NRainCheck {
     struct ISubtaskListener {
         virtual void SetDone() = 0;
-        virtual ~ISubtaskListener() { 
-        } 
+        virtual ~ISubtaskListener() {
+        }
     };
 
     struct TNopSubtaskListener: public ISubtaskListener {
@@ -33,17 +33,17 @@ namespace NRainCheck {
     public:
         TSubtaskCompletionFunc()
             : Func(nullptr)
-        { 
-        } 
+        {
+        }
 
         TSubtaskCompletionFunc(void*)
             : Func(nullptr)
-        { 
-        } 
+        {
+        }
 
         template <typename TTask>
         TSubtaskCompletionFunc(void (TTask::*func)(TSubtaskCompletion*))
-            : Func((TFunc)func) 
+            : Func((TFunc)func)
         {
             static_assert((std::is_base_of<ITaskBase, TTask>::value), "expect (std::is_base_of<ITaskBase, TTask>::value)");
         }
@@ -56,13 +56,13 @@ namespace NRainCheck {
     template <typename T>
     class TTaskFuture;
 
-#define SUBTASK_STATE_MAP(XX)                                     \ 
-    XX(CREATED, "Initial")                                        \ 
-    XX(RUNNING, "Running")                                        \ 
-    XX(DONE, "Completed")                                         \ 
-    XX(CANCEL_REQUESTED, "Cancel requested, but still executing") \ 
-    XX(CANCELED, "Canceled")                                      \ 
-    /**/ 
+#define SUBTASK_STATE_MAP(XX)                                     \
+    XX(CREATED, "Initial")                                        \
+    XX(RUNNING, "Running")                                        \
+    XX(DONE, "Completed")                                         \
+    XX(CANCEL_REQUESTED, "Cancel requested, but still executing") \
+    XX(CANCELED, "Canceled")                                      \
+    /**/
 
     enum ESubtaskState {
         SUBTASK_STATE_MAP(ENUM_VALUE_GEN_NO_VALUE)
@@ -70,38 +70,38 @@ namespace NRainCheck {
 
     ENUM_TO_STRING(ESubtaskState, SUBTASK_STATE_MAP)
 
-    class TSubtaskCompletion : TNonCopyable, public ISubtaskListener { 
+    class TSubtaskCompletion : TNonCopyable, public ISubtaskListener {
         friend struct TTaskAccessor;
- 
+
     private:
         TAtomicBox<ESubtaskState> State;
         TTaskRunnerBase* volatile TaskRunner;
         TSubtaskCompletionFunc CompletionFunc;
- 
+
     public:
-        TSubtaskCompletion() 
-            : State(CREATED) 
-            , TaskRunner() 
-        { 
-        } 
+        TSubtaskCompletion()
+            : State(CREATED)
+            , TaskRunner()
+        {
+        }
         ~TSubtaskCompletion() override;
 
         // Either done or cancel requested or cancelled
         bool IsComplete() const {
             ESubtaskState state = State.Get();
             switch (state) {
-                case RUNNING: 
-                    return false; 
-                case DONE: 
-                    return true; 
-                case CANCEL_REQUESTED: 
-                    return false; 
-                case CANCELED: 
-                    return true; 
-                case CREATED: 
-                    Y_FAIL("not started"); 
-                default: 
-                    Y_FAIL("unknown value: %u", (unsigned)state); 
+                case RUNNING:
+                    return false;
+                case DONE:
+                    return true;
+                case CANCEL_REQUESTED:
+                    return false;
+                case CANCELED:
+                    return true;
+                case CREATED:
+                    Y_FAIL("not started");
+                default:
+                    Y_FAIL("unknown value: %u", (unsigned)state);
             }
         }
 
@@ -128,7 +128,7 @@ namespace NRainCheck {
     };
 
     // See ISimpleTask, ICoroTask
-    class TTaskRunnerBase: public TAtomicRefCount<TTaskRunnerBase>, public NActor::TActor<TTaskRunnerBase> { 
+    class TTaskRunnerBase: public TAtomicRefCount<TTaskRunnerBase>, public NActor::TActor<TTaskRunnerBase> {
         friend class NActor::TActor<TTaskRunnerBase>;
         friend class TContinueFunc;
         friend struct TTaskAccessor;
@@ -163,9 +163,9 @@ namespace NRainCheck {
     protected:
         //void RetainRef();
         //void ReleaseRef();
-        ITaskBase* GetImplBase() { 
-            return Impl.Get(); 
-        } 
+        ITaskBase* GetImplBase() {
+            return Impl.Get();
+        }
 
     private:
         // true if need to call again
@@ -174,11 +174,11 @@ namespace NRainCheck {
 
     class ITaskBase {
     public:
-        virtual ~ITaskBase() { 
-        } 
+        virtual ~ITaskBase() {
+        }
     };
 
     // Check that current method executed inside some task.
     bool AreWeInsideTask();
 
-} 
+}

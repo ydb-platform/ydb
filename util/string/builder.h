@@ -6,11 +6,11 @@
 
 namespace NPrivateStringBuilder {
     class TStringBuilder: public TString {
-    public: 
-        inline TStringBuilder() 
-            : Out(*this) 
-        { 
-        } 
+    public:
+        inline TStringBuilder()
+            : Out(*this)
+        {
+        }
 
         TStringBuilder(TStringBuilder&& rhs)
             : TString(std::move(rhs))
@@ -18,22 +18,22 @@ namespace NPrivateStringBuilder {
         {
         }
 
-        TStringOutput Out; 
-    }; 
+        TStringOutput Out;
+    };
 
-    template <class T> 
-    static inline TStringBuilder& operator<<(TStringBuilder& builder, const T& t) { 
-        builder.Out << t; 
+    template <class T>
+    static inline TStringBuilder& operator<<(TStringBuilder& builder, const T& t) {
+        builder.Out << t;
 
-        return builder; 
-    } 
+        return builder;
+    }
 
-    template <class T> 
-    static inline TStringBuilder&& operator<<(TStringBuilder&& builder, const T& t) { 
-        builder.Out << t; 
+    template <class T>
+    static inline TStringBuilder&& operator<<(TStringBuilder&& builder, const T& t) {
+        builder.Out << t;
 
         return std::move(builder);
-    } 
+    }
 }
 
 using TStringBuilder = NPrivateStringBuilder::TStringBuilder;

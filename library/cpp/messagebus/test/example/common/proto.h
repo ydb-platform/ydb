@@ -10,7 +10,7 @@ namespace NCalculator {
     typedef ::NBus::TBusBufferMessage<TRequestMulRecord, 2> TRequestMul;
     typedef ::NBus::TBusBufferMessage<TResponseRecord, 3> TResponse;
 
-    struct TCalculatorProtocol: public ::NBus::TBusBufferProtocol { 
+    struct TCalculatorProtocol: public ::NBus::TBusBufferProtocol {
         TCalculatorProtocol();
     };
 

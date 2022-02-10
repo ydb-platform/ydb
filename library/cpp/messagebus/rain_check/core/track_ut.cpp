@@ -11,10 +11,10 @@ Y_UNIT_TEST_SUITE(TaskTracker) {
     struct TTaskForTracker: public ISimpleTask {
         TTestSync* const TestSync;
 
-        TTaskForTracker(TTestEnv*, TTestSync* testSync) 
-            : TestSync(testSync) 
-        { 
-        } 
+        TTaskForTracker(TTestEnv*, TTestSync* testSync)
+            : TestSync(testSync)
+        {
+        }
 
         TContinueFunc Start() override {
             TestSync->WaitForAndIncrement(0);

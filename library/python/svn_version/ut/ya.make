@@ -1,5 +1,5 @@
-RECURSE( 
-    lib 
-    py2 
-    py3 
-) 
+RECURSE(
+    lib
+    py2
+    py3
+)

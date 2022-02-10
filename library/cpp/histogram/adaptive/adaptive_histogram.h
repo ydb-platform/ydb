@@ -10,7 +10,7 @@
 #include <util/generic/vector.h>
 
 namespace NKiwiAggr {
-    class TAdaptiveHistogram: private TNonCopyable, public IHistogram { 
+    class TAdaptiveHistogram: private TNonCopyable, public IHistogram {
     protected:
         static const size_t DEFAULT_INTERVALS = 100;
 
@@ -25,7 +25,7 @@ namespace NKiwiAggr {
             double SumBelow;
             double SumAbove;
 
-            TFastBin(double first_, double second_, double sumBelow = 0, double sumAbove = 0) 
+            TFastBin(double first_, double second_, double sumBelow = 0, double sumAbove = 0)
                 : first(first_)
                 , second(second_)
                 , SumBelow(sumBelow)
@@ -33,7 +33,7 @@ namespace NKiwiAggr {
             {
             }
 
-            bool operator<(const TFastBin& rhs) const { 
+            bool operator<(const TFastBin& rhs) const {
                 return first < rhs.first;
             }
         };
@@ -102,7 +102,7 @@ namespace NKiwiAggr {
         double GetSumBelowBoundImpl(double bound, const TBins& bins, typename TBins::const_iterator rightBin, const TGetSumBelow& getSumBelow) const;
     };
 
-    template <TQualityFunction QualityFunction> 
+    template <TQualityFunction QualityFunction>
     class TDefinedAdaptiveHistogram: public TAdaptiveHistogram {
     public:
         TDefinedAdaptiveHistogram(size_t intervals, ui64 id = 0)
@@ -128,4 +128,4 @@ namespace NKiwiAggr {
     typedef TDefinedAdaptiveHistogram<CalcWeightQuality> TAdaptiveWeightHistogram;
     typedef TDefinedAdaptiveHistogram<CalcWardQuality> TAdaptiveWardHistogram;
 
-} 
+}

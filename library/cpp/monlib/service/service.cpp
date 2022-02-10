@@ -94,7 +94,7 @@ namespace NMonitoring {
         THttpRequestHeader Header;
         const THttpHeaders* Headers = nullptr;
         THttpURL Url;
-        TCgiParameters CgiParams; 
+        TCgiParameters CgiParams;
         TCgiParameters PostParams;
         TBufferOutput PostContent;
         const NAddr::IRemoteAddr* RemoteAddr = nullptr;
@@ -223,8 +223,8 @@ namespace NMonitoring {
         if (!Start()) {
             const auto& opts = THttpServer::Options();
             TNetworkAddress addr = opts.Host
-                                       ? TNetworkAddress(opts.Host, opts.Port) 
-                                       : TNetworkAddress(opts.Port); 
+                                       ? TNetworkAddress(opts.Host, opts.Port)
+                                       : TNetworkAddress(opts.Port);
             ythrow TSystemError(GetErrorCode()) << addr;
         }
     }

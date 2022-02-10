@@ -15,7 +15,7 @@ TRemoteServerConnection::TRemoteServerConnection(TRemoteServerSessionPtr session
 {
 }
 
-void TRemoteServerConnection::Init(SOCKET socket, TInstant now) { 
+void TRemoteServerConnection::Init(SOCKET socket, TInstant now) {
     WriterData.Status.ConnectTime = now;
     WriterData.Status.Connected = true;
 

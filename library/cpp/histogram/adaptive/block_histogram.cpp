@@ -52,7 +52,7 @@ namespace {
 
     private:
         void SwapPositions(ui32 x, ui32 y) {
-            std::swap(A[x], A[y]); 
+            std::swap(A[x], A[y]);
             Pos[A[x]] = x;
             Pos[A[y]] = y;
         }
@@ -147,8 +147,8 @@ namespace NKiwiAggr {
         if (histo.GetType() == HT_ADAPTIVE_DISTANCE_HISTOGRAM ||
             histo.GetType() == HT_ADAPTIVE_WEIGHT_HISTOGRAM ||
             histo.GetType() == HT_ADAPTIVE_WARD_HISTOGRAM ||
-            histo.GetType() == HT_ADAPTIVE_HISTOGRAM) 
-        { 
+            histo.GetType() == HT_ADAPTIVE_HISTOGRAM)
+        {
             Y_VERIFY(histo.FreqSize() == histo.PositionSize(), "Corrupted histo");
             for (size_t j = 0; j < histo.FreqSize(); ++j) {
                 double value = histo.GetPosition(j);
@@ -188,7 +188,7 @@ namespace NKiwiAggr {
         }
     }
 
-    void TBlockHistogram::Merge(TVector<IHistogramPtr> histogramsToMerge) { 
+    void TBlockHistogram::Merge(TVector<IHistogramPtr> histogramsToMerge) {
         Y_UNUSED(histogramsToMerge);
         ythrow yexception() << "IHistogram::Merge(TVector<IHistogramPtr>) is not defined for TBlockHistogram";
     }
@@ -204,15 +204,15 @@ namespace NKiwiAggr {
     }
 
     void TBlockHistogram::FromProto(const THistogram& histo) {
-        Y_VERIFY(histo.HasType(), "Attempt to parse TBlockHistogram from THistogram protobuf with no Type field set"); 
-        ; 
+        Y_VERIFY(histo.HasType(), "Attempt to parse TBlockHistogram from THistogram protobuf with no Type field set");
+        ;
         switch (histo.GetType()) { // check that histogram type is correct
             case HT_ADAPTIVE_DISTANCE_HISTOGRAM:
             case HT_ADAPTIVE_WEIGHT_HISTOGRAM:
             case HT_ADAPTIVE_WARD_HISTOGRAM:
             case HT_ADAPTIVE_HISTOGRAM:
                 break; // ok
-            default:   // not ok 
+            default:   // not ok
                 ythrow yexception() << "Attempt to parse TBlockHistogram from THistogram protobuf record of type = " << (ui32)histo.GetType();
         }
 
@@ -312,7 +312,7 @@ namespace NKiwiAggr {
         Sort(Bins.begin() + PrevSize, Bins.end());
         if (PrevSize != 0) {
             TVector<TWeightedValue> temp(Bins.begin(), Bins.begin() + PrevSize);
-            std::merge(temp.begin(), temp.end(), Bins.begin() + PrevSize, Bins.end(), Bins.begin()); 
+            std::merge(temp.begin(), temp.end(), Bins.begin() + PrevSize, Bins.end(), Bins.begin());
         }
     }
 
@@ -496,13 +496,13 @@ namespace NKiwiAggr {
 
     TBlockWardHistogram::TBlockWardHistogram(size_t intervals, ui64 id, size_t shrinkSize)
         : TBlockHistogram(HT_ADAPTIVE_WARD_HISTOGRAM, CalcWardQuality, intervals, id, shrinkSize)
-    { 
-    } 
+    {
+    }
 
     bool TBlockWardHistogram::CalcSplitInfo(
         const TCumulatives::const_iterator beg,
         const TCumulatives::const_iterator end, // (!) points to the final element
-        TSplitInfo& splitInfo                   // out 
+        TSplitInfo& splitInfo                   // out
     ) {
         if (end - beg < 2) {
             return false;
@@ -543,7 +543,7 @@ namespace NKiwiAggr {
         TCumulative cumulative = {0., 0.};
         cumulatives.push_back(cumulative);
         for (size_t i = 0; i < Bins.size(); i++) {
-            cumulative.first += Bins[i].second; 
+            cumulative.first += Bins[i].second;
             cumulative.second += Bins[i].second * Bins[i].first;
             cumulatives.push_back(cumulative);
         }
@@ -584,10 +584,10 @@ namespace NKiwiAggr {
             auto splitBeg = *it;
             auto splitEnd = *(it + 1);
             double cnt = (splitEnd->first - splitBeg->first);
-            double mu = (splitEnd->second - splitBeg->second) / cnt; 
+            double mu = (splitEnd->second - splitBeg->second) / cnt;
 
             Bins.push_back(TWeightedValue(mu, cnt));
         }
     }
 
-} 
+}

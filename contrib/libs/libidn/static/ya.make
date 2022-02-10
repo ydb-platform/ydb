@@ -3,8 +3,8 @@ OWNER(
     g:cpp-contrib
 )
 
-LIBRARY() 
- 
+LIBRARY()
+
 LICENSE(
     Custom-Punycode AND
     Ietf AND
@@ -12,15 +12,15 @@ LICENSE(
     LGPL-2.1-only AND
     LGPL-2.1-or-later
 )
- 
+
 LICENSE_TEXTS(../.yandex_meta/licenses.list.txt)
 
-VERSION(1.9) 
- 
+VERSION(1.9)
+
 PROVIDES(libidn)
 
-NO_RUNTIME() 
- 
+NO_RUNTIME()
+
 NO_COMPILER_WARNINGS()
 
 ADDINCL(
@@ -34,14 +34,14 @@ CFLAGS(
 IF (OS_WINDOWS)
     CFLAGS(
         -DLIBIDN_EXPORTS
-    ) 
+    )
 ENDIF()
 
 IF (OS_ANDROID)
     CFLAGS(
         -DHAVE_LOCALE_H=1
     )
-ENDIF() 
+ENDIF()
 
 SRCDIR(contrib/libs/libidn)
 
@@ -68,5 +68,5 @@ SRCS(
     c-strcasecmp.c
     c-ctype.c
 )
- 
-END() 
+
+END()

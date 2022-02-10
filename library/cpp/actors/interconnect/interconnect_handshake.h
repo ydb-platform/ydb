@@ -10,10 +10,10 @@
 #include "events_local.h"
 
 namespace NActors {
-    static constexpr TDuration DEFAULT_HANDSHAKE_TIMEOUT = TDuration::Seconds(1); 
-    static constexpr ui64 INTERCONNECT_PROTOCOL_VERSION = 2; 
+    static constexpr TDuration DEFAULT_HANDSHAKE_TIMEOUT = TDuration::Seconds(1);
+    static constexpr ui64 INTERCONNECT_PROTOCOL_VERSION = 2;
 
-    using TSocketPtr = TIntrusivePtr<NInterconnect::TStreamSocket>; 
+    using TSocketPtr = TIntrusivePtr<NInterconnect::TStreamSocket>;
 
     IActor* CreateOutgoingHandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self,
                                          const TActorId& peer, ui32 nodeId, ui64 nextPacket, TString peerHostName,

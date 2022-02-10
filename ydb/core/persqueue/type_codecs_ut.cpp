@@ -3,9 +3,9 @@
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/generic/vector.h>
-#include <util/random/fast.h> 
+#include <util/random/fast.h>
 #include <util/datetime/base.h>
 
 namespace NKikimr {
@@ -131,13 +131,13 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     Y_UNIT_TEST(TestVarLenCodec) {
         THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
 
-        TReallyFastRng32 rand(100500); 
+        TReallyFastRng32 rand(100500);
 
         TVector<TDataRef> values;
         for (int i = 0; i < 1000; ++i) {
             TVector<char> value(rand.Uniform(10));
             for (char& c : value)
-                c = 'a' + rand.Uniform(26); 
+                c = 'a' + rand.Uniform(26);
             values.push_back(TDataRef(value.data(), value.size(), true));
         }
 
@@ -155,11 +155,11 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     Y_UNIT_TEST(TestVarIntCodec) {
         THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
 
-        TReallyFastRng32 rand(100500); 
+        TReallyFastRng32 rand(100500);
 
         TVector<TDataRef> values;
         for (int i = 0; i < 1000; ++i) {
-            ui32 value = rand.Uniform(100500); 
+            ui32 value = rand.Uniform(100500);
             values.push_back(TDataRef((const char*)&value, sizeof(value), true));
         }
 
@@ -177,11 +177,11 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     Y_UNIT_TEST(TestZigZagCodec) {
         THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
 
-        TReallyFastRng32 rand(100500); 
+        TReallyFastRng32 rand(100500);
 
         TVector<TDataRef> values;
         for (int i = 0; i < 1000; ++i) {
-            i32 value = rand.Uniform(100500); 
+            i32 value = rand.Uniform(100500);
             if (i & 1)
                 value = -value;
             values.push_back(TDataRef((const char*)&value, sizeof(value), true));
@@ -201,15 +201,15 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     void TestDeltaVarIntCodecImpl(TCodecType type, bool rev) {
         THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
 
-        TReallyFastRng32 rand(100500); 
+        TReallyFastRng32 rand(100500);
 
         TVector<TDataRef> values;
         ui32 value = 2000000;
         for (int i = 0; i < 1000; ++i) {
             if (rev)
-                value -= rand.Uniform(1000); 
+                value -= rand.Uniform(1000);
             else
-                value += rand.Uniform(1000); 
+                value += rand.Uniform(1000);
             values.push_back(TDataRef((const char*)&value, sizeof(value), true));
         }
 
@@ -232,12 +232,12 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     Y_UNIT_TEST(TestDeltaZigZagCodec) {
         THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TInt32::TypeId));
 
-        TReallyFastRng32 rand(100500); 
+        TReallyFastRng32 rand(100500);
 
         TVector<TDataRef> values;
         ui32 value = -17;
         for (int i = 0; i < 1000; ++i) {
-            value += rand.Uniform(1000); 
+            value += rand.Uniform(1000);
             if (rand.GenRand() & 1)
                 value = -value;
             values.push_back(TDataRef((const char*)&value, sizeof(value), true));

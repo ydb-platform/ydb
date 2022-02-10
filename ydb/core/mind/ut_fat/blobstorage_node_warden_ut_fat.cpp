@@ -74,12 +74,12 @@ void FormatPDisk(TString path, ui64 diskSize, ui32 chunkSize, ui64 guid, bool is
     NPDisk::TKey chunkKey;
     NPDisk::TKey logKey;
     NPDisk::TKey sysLogKey;
-    EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey)); 
-    EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey)); 
-    EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey)); 
+    EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
+    EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
+    EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
     if (!isGuidValid) {
-        EntropyPool().Read(&guid, sizeof(guid)); 
+        EntropyPool().Read(&guid, sizeof(guid));
     }
 
     NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid,

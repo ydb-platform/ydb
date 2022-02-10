@@ -62,7 +62,7 @@ namespace NSc {
                     break;
                 case EMode::Stderr:
                     Cerr << "REFERENCE LOOP DETECTED: " << JoinStrings(Vector.begin(), Vector.end(), ", ")
-                         << " AND " << ToString((const void*)&self) << Endl; 
+                         << " AND " << ToString((const void*)&self) << Endl;
                     break;
                 }
             }

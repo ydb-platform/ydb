@@ -4,7 +4,7 @@
 
 Y_UNIT_TEST_SUITE(TVectorSwapsTest) {
     Y_UNIT_TEST(Simple) {
-        TVectorSwaps<THolder<unsigned>> v; 
+        TVectorSwaps<THolder<unsigned>> v;
         for (unsigned i = 0; i < 100; ++i) {
             THolder<unsigned> tmp(new unsigned(i));
             v.push_back(tmp);

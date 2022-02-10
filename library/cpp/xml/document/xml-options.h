@@ -64,4 +64,4 @@ namespace NXml {
         int Mask;
     };
 
-} 
+}

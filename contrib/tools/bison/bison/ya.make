@@ -14,7 +14,7 @@ IF (NOT MUSL)
 ENDIF()
 
 NO_COMPILER_WARNINGS()
- 
+
 ADDINCLSELF()
 
 SRCS(
@@ -57,13 +57,13 @@ SRCS(
     arcadia_root.cpp.in
 )
 
-CFLAGS( 
-    -Daccept=bison_accept 
+CFLAGS(
+    -Daccept=bison_accept
     -DBISON_DATA_DIR="contrib/tools/bison/bison/data"
-) 
+)
 
-PEERDIR( 
-    contrib/tools/bison/gnulib 
-) 
+PEERDIR(
+    contrib/tools/bison/gnulib
+)
 
 END()

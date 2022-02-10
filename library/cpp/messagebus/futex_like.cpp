@@ -3,11 +3,11 @@
 #ifdef _linux_
 #include <sys/syscall.h>
 #include <linux/futex.h>
- 
-#if !defined(SYS_futex) 
-#define SYS_futex __NR_futex 
+
+#if !defined(SYS_futex)
+#define SYS_futex __NR_futex
 #endif
-#endif 
+#endif
 
 #include <errno.h>
 
@@ -17,8 +17,8 @@
 
 #ifdef _linux_
 namespace {
-    int futex(int* uaddr, int op, int val, const struct timespec* timeout, 
-              int* uaddr2, int val3) { 
+    int futex(int* uaddr, int op, int val, const struct timespec* timeout,
+              int* uaddr2, int val3) {
         return syscall(SYS_futex, uaddr, op, val, timeout, uaddr2, val3);
     }
 }

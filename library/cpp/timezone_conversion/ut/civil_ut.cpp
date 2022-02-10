@@ -5,10 +5,10 @@
 #include <util/stream/str.h>
 
 namespace NDatetime {
-    inline bool operator==(const NDatetime::TCivilDiff& x, const NDatetime::TCivilDiff& y) { 
+    inline bool operator==(const NDatetime::TCivilDiff& x, const NDatetime::TCivilDiff& y) {
         return x.Unit == y.Unit && x.Value == y.Value;
     }
-} 
+}
 
 template <>
 inline void Out<NDatetime::TCivilDiff>(IOutputStream& out, const NDatetime::TCivilDiff& diff) {

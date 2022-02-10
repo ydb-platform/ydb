@@ -1,23 +1,23 @@
 #include <util/system/compiler.h>
 
 extern "C" void je_zone_register();
- 
+
 static volatile bool initialized = false;
 
-namespace { 
+namespace {
     struct TInit {
-        inline TInit() { 
+        inline TInit() {
             if (!initialized) {
                 je_zone_register();
                 initialized = true;
             }
-        } 
+        }
     };
 
     void zone_register() {
         static TInit init;
     }
-} 
+}
 
 extern "C" {
     void je_assure_zone_register() {

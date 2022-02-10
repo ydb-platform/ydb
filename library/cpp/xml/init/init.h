@@ -1,5 +1,5 @@
-#pragma once 
- 
-namespace NXml { 
-    void InitEngine(); 
-} 
+#pragma once
+
+namespace NXml {
+    void InitEngine();
+}

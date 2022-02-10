@@ -16,18 +16,18 @@ namespace NRainCheck {
     namespace NPrivate {
         struct ITaskFactory {
             virtual TIntrusivePtr<TTaskRunnerBase> NewTask(ISubtaskListener*) = 0;
-            virtual ~ITaskFactory() { 
-            } 
+            virtual ~ITaskFactory() {
+            }
         };
 
         struct TTaskTrackerReceipt: public ISubtaskListener, public TIntrusiveListItem<TTaskTrackerReceipt> {
             TTaskTracker* const TaskTracker;
             TIntrusivePtr<TTaskRunnerBase> Task;
 
-            TTaskTrackerReceipt(TTaskTracker* taskTracker) 
-                : TaskTracker(taskTracker) 
-            { 
-            } 
+            TTaskTrackerReceipt(TTaskTracker* taskTracker)
+                : TaskTracker(taskTracker)
+            {
+            }
 
             void SetDone() override;
 
@@ -41,11 +41,11 @@ namespace NRainCheck {
     }
 
     class TTaskTracker
-       : public TAtomicRefCount<TTaskTracker>, 
-          public NActor::TActor<TTaskTracker>, 
-          public NActor::TQueueInActor<TTaskTracker, NPrivate::ITaskFactory*>, 
-          public NActor::TQueueInActor<TTaskTracker, NPrivate::TTaskTrackerReceipt*>, 
-          public NActor::TQueueInActor<TTaskTracker, TAsyncResult<NPrivate::TTaskTrackerStatus>*> { 
+       : public TAtomicRefCount<TTaskTracker>,
+          public NActor::TActor<TTaskTracker>,
+          public NActor::TQueueInActor<TTaskTracker, NPrivate::ITaskFactory*>,
+          public NActor::TQueueInActor<TTaskTracker, NPrivate::TTaskTrackerReceipt*>,
+          public NActor::TQueueInActor<TTaskTracker, TAsyncResult<NPrivate::TTaskTrackerStatus>*> {
         friend struct NPrivate::TTaskTrackerReceipt;
 
     private:
@@ -77,11 +77,11 @@ namespace NRainCheck {
                 TEnv* const Env;
                 TParam Param;
 
-                TTaskFactory(TEnv* env, TParam param) 
-                    : Env(env) 
-                    , Param(param) 
-                { 
-                } 
+                TTaskFactory(TEnv* env, TParam param)
+                    : Env(env)
+                    , Param(param)
+                {
+                }
 
                 TIntrusivePtr<TTaskRunnerBase> NewTask(ISubtaskListener* subtaskListener) override {
                     return NRainCheck::SpawnTask<TTask>(Env, Param, subtaskListener).Get();

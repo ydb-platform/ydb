@@ -1,7 +1,7 @@
 #pragma once
 
 #ifdef _MSC_VER
-#include <io.h> 
+#include <io.h>
 #endif
 
 #include <library/cpp/http/misc/httpdate.h>
@@ -10,27 +10,27 @@
 #include "httpparser.h"
 
 struct TFakeBackup {
-    int Write(void* /*buf*/, size_t /*size*/) { 
-        return 0; 
-    } 
+    int Write(void* /*buf*/, size_t /*size*/) {
+        return 0;
+    }
 };
 
 template <size_t bufsize = 5000>
 struct TFakeAlloc {
-    void Shrink(void* /*buf*/, size_t /*size*/) { 
-    } 
-    void* Grab(size_t /*min*/, size_t* real) { 
-        *real = bufsize; 
-        return buf; 
-    } 
-    char buf[bufsize]; 
+    void Shrink(void* /*buf*/, size_t /*size*/) {
+    }
+    void* Grab(size_t /*min*/, size_t* real) {
+        *real = bufsize;
+        return buf;
+    }
+    char buf[bufsize];
 };
 
-template <typename TAlloc = TFakeAlloc<>, 
-          typename TCheck = TFakeCheck<>, 
+template <typename TAlloc = TFakeAlloc<>,
+          typename TCheck = TFakeCheck<>,
           typename TWriter = TFakeBackup,
-          typename TAgent = THttpAgent<>> 
-class THttpFetcher: public THttpParser<TCheck>, public TAlloc, public TWriter, public TAgent { 
+          typename TAgent = THttpAgent<>>
+class THttpFetcher: public THttpParser<TCheck>, public TAlloc, public TWriter, public TAgent {
 public:
     static const size_t TCP_MIN = 1500;
     static int TerminateNow;
@@ -40,21 +40,21 @@ public:
         , TAlloc()
         , TWriter()
         , TAgent()
-    { 
-    } 
+    {
+    }
 
-    virtual ~THttpFetcher() { 
-    } 
+    virtual ~THttpFetcher() {
+    }
 
-    int Fetch(THttpHeader* header, const char* path, const char* const* headers, int persistent, bool head_request = false) { 
+    int Fetch(THttpHeader* header, const char* path, const char* const* headers, int persistent, bool head_request = false) {
         int ret = 0;
         int fetcherr = 0;
 
         THttpParser<TCheck>::Init(header, head_request);
-        const char* scheme = HttpUrlSchemeKindToString((THttpURL::TSchemeKind)TAgent::GetScheme()); 
+        const char* scheme = HttpUrlSchemeKindToString((THttpURL::TSchemeKind)TAgent::GetScheme());
         size_t schemelen = strlen(scheme);
         if (*path == '/') {
-            header->base = TStringBuf(scheme, schemelen); 
+            header->base = TStringBuf(scheme, schemelen);
             header->base += TStringBuf("://", 3);
             header->base += TStringBuf(TAgent::pHostBeg, TAgent::pHostEnd - TAgent::pHostBeg);
             header->base += path;
@@ -95,9 +95,9 @@ public:
             }
             if ((got = TAgent::read(bufptr, buffree)) < 0) {
                 fetcherr = errno;
-                if (errno == EINTR) 
+                if (errno == EINTR)
                     header->error = HTTP_INTERRUPTED;
-                else if (errno == ETIMEDOUT) 
+                else if (errno == ETIMEDOUT)
                     header->error = HTTP_TIMEDOUT_WHILE_BYTES_RECEIVING;
                 else
                     header->error = HTTP_CONNECTION_LOST;
@@ -113,7 +113,7 @@ public:
             THttpParser<TCheck>::Parse(parsebuf, got);
 
             if (header->error)
-                break; //if ANY error ocurred we will stop download that file or will have unprognosed stream position until MAX size reached 
+                break; //if ANY error ocurred we will stop download that file or will have unprognosed stream position until MAX size reached
 
             if (inheader && THttpParser<TCheck>::GetState() != THttpParser<TCheck>::hp_in_header) {
                 inheader = 0;
@@ -141,12 +141,12 @@ public:
 
         i64 Adjustment = 0;
         if (!header->error) {
-            if (header->transfer_chunked) { 
+            if (header->transfer_chunked) {
                 Adjustment = header->header_size + header->entity_size - bufsize - 1;
-            } else if (header->content_length >= 0) { 
+            } else if (header->content_length >= 0) {
                 Adjustment = header->header_size + header->content_length - bufsize;
             }
-            if (Adjustment > 0) 
+            if (Adjustment > 0)
                 Adjustment = 0;
         }
 

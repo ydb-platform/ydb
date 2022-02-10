@@ -36,9 +36,9 @@ namespace NActors {
         TEventSerializedData(const TEventSerializedData& original, TString extraBuffer)
             : Rope(original.Rope)
             , ExtendedFormat(original.ExtendedFormat)
-        { 
+        {
             Append(std::move(extraBuffer));
-        } 
+        }
 
         TEventSerializedData(TString buffer, bool extendedFormat)
             : ExtendedFormat(extendedFormat)

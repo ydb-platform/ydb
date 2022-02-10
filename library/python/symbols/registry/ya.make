@@ -1,9 +1,9 @@
-LIBRARY() 
- 
-OWNER(pg orivej) 
- 
-SRCS( 
-    syms.cpp 
-) 
- 
-END() 
+LIBRARY()
+
+OWNER(pg orivej)
+
+SRCS(
+    syms.cpp
+)
+
+END()

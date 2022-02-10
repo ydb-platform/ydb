@@ -1,57 +1,57 @@
-#include "socket.h" 
- 
+#include "socket.h"
+
 #include "pair.h"
 
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include <util/string/builder.h> 
+
+#include <util/string/builder.h>
 #include <util/generic/vector.h>
- 
-#include <ctime> 
- 
+
+#include <ctime>
+
 #ifdef _linux_
-    #include <linux/version.h> 
-    #include <sys/utsname.h> 
+    #include <linux/version.h>
+    #include <sys/utsname.h>
 #endif
 
-class TSockTest: public TTestBase { 
+class TSockTest: public TTestBase {
     UNIT_TEST_SUITE(TSockTest);
-    UNIT_TEST(TestSock); 
-    UNIT_TEST(TestTimeout); 
+    UNIT_TEST(TestSock);
+    UNIT_TEST(TestTimeout);
 #ifndef _win_ // Test hangs on Windows
-    UNIT_TEST_EXCEPTION(TestConnectionRefused, yexception); 
+    UNIT_TEST_EXCEPTION(TestConnectionRefused, yexception);
 #endif
-    UNIT_TEST(TestNetworkResolutionError); 
+    UNIT_TEST(TestNetworkResolutionError);
     UNIT_TEST(TestNetworkResolutionErrorMessage);
     UNIT_TEST(TestBrokenPipe);
     UNIT_TEST(TestClose);
     UNIT_TEST(TestReusePortAvailCheck);
     UNIT_TEST_SUITE_END();
- 
-public: 
-    void TestSock(); 
-    void TestTimeout(); 
-    void TestConnectionRefused(); 
-    void TestNetworkResolutionError(); 
+
+public:
+    void TestSock();
+    void TestTimeout();
+    void TestConnectionRefused();
+    void TestNetworkResolutionError();
     void TestNetworkResolutionErrorMessage();
     void TestBrokenPipe();
     void TestClose();
     void TestReusePortAvailCheck();
-}; 
- 
-UNIT_TEST_SUITE_REGISTRATION(TSockTest); 
- 
-void TSockTest::TestSock() { 
-    TNetworkAddress addr("yandex.ru", 80); 
-    TSocket s(addr); 
-    TSocketOutput so(s); 
-    TSocketInput si(s); 
+};
+
+UNIT_TEST_SUITE_REGISTRATION(TSockTest);
+
+void TSockTest::TestSock() {
+    TNetworkAddress addr("yandex.ru", 80);
+    TSocket s(addr);
+    TSocketOutput so(s);
+    TSocketInput si(s);
     const TStringBuf req = "GET / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n";
- 
+
     so.Write(req.data(), req.size());
- 
-    UNIT_ASSERT(!si.ReadLine().empty()); 
-} 
+
+    UNIT_ASSERT(!si.ReadLine().empty());
+}
 
 void TSockTest::TestTimeout() {
     static const int timeout = 1000;
@@ -59,7 +59,7 @@ void TSockTest::TestTimeout() {
     try {
         TNetworkAddress addr("localhost", 1313);
         TSocket s(addr, TDuration::MilliSeconds(timeout));
-    } catch (const yexception&) { 
+    } catch (const yexception&) {
     }
     int realTimeout = (int)(millisec() - startTime);
     if (realTimeout > timeout + 2000) {
@@ -77,18 +77,18 @@ void TSockTest::TestNetworkResolutionError() {
     TString errMsg;
     try {
         TNetworkAddress addr("", 0);
-    } catch (const TNetworkResolutionError& e) { 
+    } catch (const TNetworkResolutionError& e) {
         errMsg = e.what();
     }
 
-    if (errMsg.empty()) { 
+    if (errMsg.empty()) {
         return; // on Windows getaddrinfo("", 0, ...) returns "OK"
-    } 
+    }
 
     int expectedErr = EAI_NONAME;
     TString expectedErrMsg = gai_strerror(expectedErr);
     if (errMsg.find(expectedErrMsg) == TString::npos) {
-        UNIT_FAIL("TNetworkResolutionError contains\nInvalid msg: " + errMsg + "\nExpected msg: " + expectedErrMsg + "\n"); 
+        UNIT_FAIL("TNetworkResolutionError contains\nInvalid msg: " + errMsg + "\nExpected msg: " + expectedErrMsg + "\n");
     }
 }
 
@@ -128,7 +128,7 @@ void TSockTest::TestNetworkResolutionErrorMessage() {
 #endif
 }
 
-class TTempEnableSigPipe { 
+class TTempEnableSigPipe {
 public:
     TTempEnableSigPipe() {
         OriginalSigHandler_ = signal(SIGPIPE, SIG_DFL);
@@ -144,7 +144,7 @@ private:
     void (*OriginalSigHandler_)(int);
 };
 
-void TSockTest::TestBrokenPipe() { 
+void TSockTest::TestBrokenPipe() {
     TTempEnableSigPipe guard;
 
     SOCKET socks[2];
@@ -185,7 +185,7 @@ void TSockTest::TestClose() {
     UNIT_ASSERT_EQUAL(static_cast<SOCKET>(receiver), INVALID_SOCKET);
 }
 
-void TSockTest::TestReusePortAvailCheck() { 
+void TSockTest::TestReusePortAvailCheck() {
 #if defined _linux_
     utsname sysInfo;
     Y_VERIFY(!uname(&sysInfo), "Error while call uname: %s", LastSystemErrorText());
@@ -212,27 +212,27 @@ void TSockTest::TestReusePortAvailCheck() {
 #endif
 }
 
-class TPollTest: public TTestBase { 
-    UNIT_TEST_SUITE(TPollTest); 
-    UNIT_TEST(TestPollInOut); 
-    UNIT_TEST_SUITE_END(); 
- 
-public: 
-    inline TPollTest() { 
+class TPollTest: public TTestBase {
+    UNIT_TEST_SUITE(TPollTest);
+    UNIT_TEST(TestPollInOut);
+    UNIT_TEST_SUITE_END();
+
+public:
+    inline TPollTest() {
         srand(static_cast<unsigned int>(time(nullptr)));
-    } 
- 
-    void TestPollInOut(); 
- 
-private: 
-    sockaddr_in GetAddress(ui32 ip, ui16 port); 
-    SOCKET CreateSocket(); 
-    SOCKET StartServerSocket(ui16 port, int backlog); 
-    SOCKET StartClientSocket(ui32 ip, ui16 port); 
-    SOCKET AcceptConnection(SOCKET serverSocket); 
+    }
+
+    void TestPollInOut();
+
+private:
+    sockaddr_in GetAddress(ui32 ip, ui16 port);
+    SOCKET CreateSocket();
+    SOCKET StartServerSocket(ui16 port, int backlog);
+    SOCKET StartClientSocket(ui32 ip, ui16 port);
+    SOCKET AcceptConnection(SOCKET serverSocket);
 };
 
-UNIT_TEST_SUITE_REGISTRATION(TPollTest); 
+UNIT_TEST_SUITE_REGISTRATION(TPollTest);
 
 sockaddr_in TPollTest::GetAddress(ui32 ip, ui16 port) {
     struct sockaddr_in addr;
@@ -245,38 +245,38 @@ sockaddr_in TPollTest::GetAddress(ui32 ip, ui16 port) {
 
 SOCKET TPollTest::CreateSocket() {
     SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
-    if (s == INVALID_SOCKET) { 
+    if (s == INVALID_SOCKET) {
         ythrow yexception() << "Can not create socket (" << LastSystemErrorText() << ")";
-    } 
+    }
     return s;
 }
 
 SOCKET TPollTest::StartServerSocket(ui16 port, int backlog) {
     TSocketHolder s(CreateSocket());
     sockaddr_in addr = GetAddress(ntohl(INADDR_ANY), port);
-    if (bind(s, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) { 
+    if (bind(s, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
         ythrow yexception() << "Can not bind server socket (" << LastSystemErrorText() << ")";
-    } 
-    if (listen(s, backlog) == SOCKET_ERROR) { 
+    }
+    if (listen(s, backlog) == SOCKET_ERROR) {
         ythrow yexception() << "Can not listen on server socket (" << LastSystemErrorText() << ")";
-    } 
+    }
     return s.Release();
 }
 
 SOCKET TPollTest::StartClientSocket(ui32 ip, ui16 port) {
     TSocketHolder s(CreateSocket());
     sockaddr_in addr = GetAddress(ip, port);
-    if (connect(s, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) { 
+    if (connect(s, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
         ythrow yexception() << "Can not connect client socket (" << LastSystemErrorText() << ")";
-    } 
+    }
     return s.Release();
 }
 
 SOCKET TPollTest::AcceptConnection(SOCKET serverSocket) {
     SOCKET connectedSocket = accept(serverSocket, nullptr, nullptr);
-    if (connectedSocket == INVALID_SOCKET) { 
+    if (connectedSocket == INVALID_SOCKET) {
         ythrow yexception() << "Can not accept connection on server socket (" << LastSystemErrorText() << ")";
-    } 
+    }
     return connectedSocket;
 }
 
@@ -294,7 +294,7 @@ void TPollTest::TestPollInOut() {
     TVector<pollfd> fds;
 
     for (size_t i = 0; i < socketCount; ++i) {
-        TSimpleSharedPtr<TSocketHolder> clientSocket(new TSocketHolder(StartClientSocket(localIp, port))); 
+        TSimpleSharedPtr<TSocketHolder> clientSocket(new TSocketHolder(StartClientSocket(localIp, port)));
         clientSockets.push_back(clientSocket);
 
         if (i % 5 == 0 || i % 5 == 2) {
@@ -303,7 +303,7 @@ void TPollTest::TestPollInOut() {
                 ythrow yexception() << "Can not send (" << LastSystemErrorText() << ")";
         }
 
-        TSimpleSharedPtr<TSocketHolder> connectedSocket(new TSocketHolder(AcceptConnection(serverSocket))); 
+        TSimpleSharedPtr<TSocketHolder> connectedSocket(new TSocketHolder(AcceptConnection(serverSocket)));
         connectedSockets.push_back(connectedSocket);
 
         if (i % 5 == 2 || i % 5 == 3) {
@@ -313,7 +313,7 @@ void TPollTest::TestPollInOut() {
     }
 
     int expectedCount = 0;
-    for (size_t i = 0; i < connectedSockets.size(); ++i) { 
+    for (size_t i = 0; i < connectedSockets.size(); ++i) {
         pollfd fd = {(i % 5 == 4) ? INVALID_SOCKET : static_cast<SOCKET>(*connectedSockets[i]), POLLIN | POLLOUT, 0};
         fds.push_back(fd);
         if (i % 5 != 4)
@@ -338,4 +338,4 @@ void TPollTest::TestPollInOut() {
         }
     }
 #endif
-} 
+}

@@ -1,10 +1,10 @@
 #include "pool.h"
- 
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/output.h>
-#include <util/random/fast.h> 
-#include <util/system/spinlock.h> 
+#include <util/random/fast.h>
+#include <util/system/spinlock.h>
 #include <util/system/thread.h>
 #include <util/system/mutex.h>
 #include <util/system/condvar.h>
@@ -12,26 +12,26 @@
 struct TThreadPoolTest {
     TSpinLock Lock;
     long R = -1;
- 
-    struct TTask: public IObjectInQueue { 
+
+    struct TTask: public IObjectInQueue {
         TThreadPoolTest* Test = nullptr;
         long Value = 0;
- 
+
         TTask(TThreadPoolTest* test, int value)
-            : Test(test) 
-            , Value(value) 
-        { 
-        } 
- 
+            : Test(test)
+            , Value(value)
+        {
+        }
+
         void Process(void*) override {
             THolder<TTask> This(this);
- 
+
             TGuard<TSpinLock> guard(Test->Lock);
             Test->R ^= Value;
-        } 
-    }; 
- 
-    struct TOwnedTask: public IObjectInQueue { 
+        }
+    };
+
+    struct TOwnedTask: public IObjectInQueue {
         bool& Processed;
         bool& Destructed;
 
@@ -51,40 +51,40 @@ struct TThreadPoolTest {
     };
 
     inline void TestAnyQueue(IThreadPool* queue, size_t queueSize = 1000) {
-        TReallyFastRng32 rand(17); 
-        const size_t cnt = 1000; 
- 
+        TReallyFastRng32 rand(17);
+        const size_t cnt = 1000;
+
         R = 0;
- 
-        for (size_t i = 0; i < cnt; ++i) { 
-            R ^= (long)rand.GenRand(); 
-        } 
- 
-        queue->Start(10, queueSize); 
-        rand = TReallyFastRng32(17); 
- 
-        for (size_t i = 0; i < cnt; ++i) { 
-            UNIT_ASSERT(queue->Add(new TTask(this, (long)rand.GenRand()))); 
+
+        for (size_t i = 0; i < cnt; ++i) {
+            R ^= (long)rand.GenRand();
         }
- 
-        queue->Stop(); 
- 
+
+        queue->Start(10, queueSize);
+        rand = TReallyFastRng32(17);
+
+        for (size_t i = 0; i < cnt; ++i) {
+            UNIT_ASSERT(queue->Add(new TTask(this, (long)rand.GenRand())));
+        }
+
+        queue->Stop();
+
         UNIT_ASSERT_EQUAL(0, R);
-    } 
+    }
 };
 
 class TFailAddQueue: public IThreadPool {
 public:
     bool Add(IObjectInQueue* /*obj*/) override Y_WARN_UNUSED_RESULT {
         return false;
-    } 
+    }
 
     void Start(size_t, size_t) override {
     }
- 
+
     void Stop() noexcept override {
-    } 
- 
+    }
+
     size_t Size() const noexcept override {
         return 0;
     }
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
             TAdaptiveThreadPool q;
             t.TestAnyQueue(&q);
         }
-    } 
+    }
 
     Y_UNIT_TEST(TestAddAndOwn) {
         TThreadPool q;
@@ -128,8 +128,8 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
     Y_UNIT_TEST(TestAddFunc) {
         TFailAddQueue queue;
         bool added = queue.AddFunc(
-            []() {} // Lambda, I call him 'Lambda'! 
-        ); 
+            []() {} // Lambda, I call him 'Lambda'!
+        );
         UNIT_ASSERT_VALUES_EQUAL(added, false);
     }
 
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
         TThreadPool queue(TThreadPool::TParams().SetBlocking(false).SetCatching(true));
         queue.Start(2);
 
-        queue.SafeAddFunc([data = TFailOnCopy()]() {}); 
+        queue.SafeAddFunc([data = TFailOnCopy()]() {});
 
         queue.Stop();
     }
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
         queue.Stop();
     }
 
-    void TestFixedThreadName(IThreadPool& pool, const TString& expectedName) { 
+    void TestFixedThreadName(IThreadPool& pool, const TString& expectedName) {
         pool.Start(1);
         TString name;
         pool.SafeAddFunc([&name]() {
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
         }
     }
 
-    void TestEnumeratedThreadName(IThreadPool& pool, const THashSet<TString>& expectedNames) { 
+    void TestEnumeratedThreadName(IThreadPool& pool, const THashSet<TString>& expectedNames) {
         pool.Start(expectedNames.size());
         TMutex lock;
         TCondVar allReady;
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
         THashSet<TString> names;
         for (size_t i = 0; i < expectedNames.size(); ++i) {
             pool.SafeAddFunc([&]() {
-                with_lock (lock) { 
+                with_lock (lock) {
                     if (++readyCount == expectedNames.size()) {
                         allReady.BroadCast();
                     } else {

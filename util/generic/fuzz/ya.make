@@ -1,3 +1,3 @@
-RECURSE( 
-    vector 
-) 
+RECURSE(
+    vector
+)

@@ -1,7 +1,7 @@
 #pragma once
 
 namespace NActors {
-    template <typename TEvent> 
+    template <typename TEvent>
     class TWatchdogTimer {
         using TCallback = std::function<void()>;
 
@@ -9,7 +9,7 @@ namespace NActors {
         const TCallback Callback;
 
         TInstant LastResetTimestamp;
-        TEvent* ExpectedEvent = nullptr; 
+        TEvent* ExpectedEvent = nullptr;
         ui32 Iteration = 0;
 
         static constexpr ui32 NumIterationsBeforeFiring = 2;
@@ -18,8 +18,8 @@ namespace NActors {
         TWatchdogTimer(TDuration timeout, TCallback callback)
             : Timeout(timeout)
             , Callback(std::move(callback))
-        { 
-        } 
+        {
+        }
 
         void Arm(const TActorIdentity& actor) {
             if (Timeout != TDuration::Zero() && Timeout != TDuration::Max()) {
@@ -65,4 +65,4 @@ namespace NActors {
         }
     };
 
-} 
+}

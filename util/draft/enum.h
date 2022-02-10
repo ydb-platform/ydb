@@ -8,7 +8,7 @@
 #include <util/string/split.h>
 #include <utility>
 
-class TEnumNotFoundException: public yexception { 
+class TEnumNotFoundException: public yexception {
 };
 
 #define EnumFromString(key, entries) EnumFromStringImpl(key, entries, Y_ARRAY_SIZE(entries))
@@ -19,7 +19,7 @@ class TEnumNotFoundException: public yexception {
 #define EnumToStringWithSize(key, entries, size) EnumToStringImpl(key, entries, size)
 #define PrintEnumItems(entries) PrintEnumItemsImpl(entries, Y_ARRAY_SIZE(entries))
 
-template <class K1, class K2, class V> 
+template <class K1, class K2, class V>
 const V* FindEnumFromStringImpl(K1 key, const std::pair<K2, V>* entries, size_t arraySize) {
     for (size_t i = 0; i < arraySize; i++)
         if (entries[i].first == key)
@@ -28,7 +28,7 @@ const V* FindEnumFromStringImpl(K1 key, const std::pair<K2, V>* entries, size_t 
 }
 
 // special version for const char*
-template <class V> 
+template <class V>
 const V* FindEnumFromStringImpl(const char* key, const std::pair<const char*, V>* entries, size_t arraySize) {
     for (size_t i = 0; i < arraySize; i++)
         if (entries[i].first && key && !strcmp(entries[i].first, key))
@@ -36,7 +36,7 @@ const V* FindEnumFromStringImpl(const char* key, const std::pair<const char*, V>
     return nullptr;
 }
 
-template <class K, class V> 
+template <class K, class V>
 TString PrintEnumItemsImpl(const std::pair<K, V>* entries, size_t arraySize) {
     TString result;
     TStringOutput out(result);
@@ -46,25 +46,25 @@ TString PrintEnumItemsImpl(const std::pair<K, V>* entries, size_t arraySize) {
 }
 
 // special version for const char*
-template <class V> 
+template <class V>
 TString PrintEnumItemsImpl(const std::pair<const char*, V>* entries, size_t arraySize) {
     TString result;
     TStringOutput out(result);
     for (size_t i = 0; i < arraySize; i++)
-        out << (i ? ", " : "") << "'" << (entries[i].first ? entries[i].first : "<null>") << "'"; 
+        out << (i ? ", " : "") << "'" << (entries[i].first ? entries[i].first : "<null>") << "'";
     return result;
 }
 
-template <class K1, class K2, class V> 
+template <class K1, class K2, class V>
 const V* EnumFromStringImpl(K1 key, const std::pair<K2, V>* entries, size_t arraySize) {
     const V* res = FindEnumFromStringImpl(key, entries, arraySize);
     if (res)
         return res;
 
-    ythrow TEnumNotFoundException() << "Key '" << key << "' not found in enum. Valid options are: " << PrintEnumItemsImpl(entries, arraySize) << ". "; 
+    ythrow TEnumNotFoundException() << "Key '" << key << "' not found in enum. Valid options are: " << PrintEnumItemsImpl(entries, arraySize) << ". ";
 }
 
-template <class K, class V> 
+template <class K, class V>
 const K* EnumToStringImpl(V value, const std::pair<K, V>* entries, size_t arraySize) {
     for (size_t i = 0; i < arraySize; i++)
         if (entries[i].second == value)
@@ -90,9 +90,9 @@ inline void SetEnumFlagsForEmptySpec(B& flags, bool allIfEmpty) {
 }
 
 // all set by default
-template <class E, size_t N, size_t B> 
-inline void SetEnumFlags(const std::pair<const char*, E> (&str2Enum)[N], TStringBuf optSpec, 
-                         std::bitset<B>& flags, bool allIfEmpty = true) { 
+template <class E, size_t N, size_t B>
+inline void SetEnumFlags(const std::pair<const char*, E> (&str2Enum)[N], TStringBuf optSpec,
+                         std::bitset<B>& flags, bool allIfEmpty = true) {
     if (optSpec.empty()) {
         SetEnumFlagsForEmptySpec(flags, allIfEmpty);
     } else {
@@ -107,7 +107,7 @@ inline void SetEnumFlags(const std::pair<const char*, E> (&str2Enum)[N], TString
 template <class E, size_t B>
 inline void SetEnumFlags(const std::pair<const char*, E>* str2Enum, TStringBuf optSpec,
                          std::bitset<B>& flags, const size_t size,
-                         bool allIfEmpty = true) { 
+                         bool allIfEmpty = true) {
     if (optSpec.empty()) {
         SetEnumFlagsForEmptySpec(flags, allIfEmpty);
     } else {

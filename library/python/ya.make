@@ -1,6 +1,6 @@
 OWNER(g:python-contrib)
- 
-RECURSE( 
+
+RECURSE(
     aho_corasick
     aho_corasick/ut
     archive
@@ -12,7 +12,7 @@ RECURSE(
     auth_client_parser
     awssdk-extensions
     awssdk_async_extensions
-    base64 
+    base64
     base64/test
     bclclient
     blackbox
@@ -35,17 +35,17 @@ RECURSE(
     clickhouse_client
     cmain
     codecs
-    codecs/gen_corpus 
-    codecs/test 
-    compress 
-    compress/tests 
+    codecs/gen_corpus
+    codecs/test
+    compress
+    compress/tests
     cookiemy
     coredump_filter
     cores
     coverage
-    cpp_test 
+    cpp_test
     cppdemangle
-    cqueue 
+    cqueue
     crowd-kit
     cyson
     cyson/pymodule
@@ -65,7 +65,7 @@ RECURSE(
     django_template_common
     django_tools_log_context
     dssclient
-    dump_dict 
+    dump_dict
     edit_distance
     errorboosterclient
     filelock
@@ -89,22 +89,22 @@ RECURSE(
     golovan_stats_aggregator
     granular_settings
     granular_settings/tests
-    guid 
-    guid/test 
-    guid/at_fork_test 
+    guid
+    guid/test
+    guid/at_fork_test
     gunicorn
     hnsw
     ids
     import_test
     infected_masks
     infected_masks/ut
-    init_log 
+    init_log
     init_log/example
     intrasearch_fetcher
-    json 
+    json
     json/compare
-    json/perf 
-    json/test 
+    json/perf
+    json/test
     json/test/py2
     json/test/py3
     langdetect
@@ -130,11 +130,11 @@ RECURSE(
     nstools
     nyt
     oauth
-    oauth/example 
+    oauth/example
     ok_client
     openssl
-    par_apply 
-    par_apply/test 
+    par_apply
+    par_apply/test
     path
     path/tests
     protobuf
@@ -153,7 +153,7 @@ RECURSE(
     redis_utils
     reservoir_sampling
     refsclient
-    resource 
+    resource
     retry
     retry/tests
     runtime
@@ -162,7 +162,7 @@ RECURSE(
     runtime_py3
     runtime_py3/main
     runtime_py3/test
-    runtime_test 
+    runtime_test
     sanitizers
     sdms_api
     sfx
@@ -173,7 +173,7 @@ RECURSE(
     spack
     spyt
     ssh_client
-    ssh_sign 
+    ssh_sign
     startrek_python_client
     startrek_python_client/tests_int
     statface_client
@@ -181,8 +181,8 @@ RECURSE(
     strings
     strings/ut
     svn_ssh
-    svn_version 
-    svn_version/ut 
+    svn_version
+    svn_version/ut
     symbols
     testing
     tmp
@@ -208,12 +208,12 @@ RECURSE(
     windows/ut
     yandex_tracker_client
     yenv
-    yt 
+    yt
     yt/test
     ylock
     ylock/tests
     zipatch
-) 
+)
 
 IF (NOT MUSL)
     RECURSE(

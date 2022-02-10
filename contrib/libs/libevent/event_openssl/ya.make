@@ -11,8 +11,8 @@ OWNER(
     g:cpp-contrib
 )
 
-LICENSE(BSD-3-Clause) 
- 
+LICENSE(BSD-3-Clause)
+
 PEERDIR(
     contrib/libs/libc_compat
     contrib/libs/openssl

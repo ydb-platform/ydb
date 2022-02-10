@@ -3,8 +3,8 @@
 #include <util/system/yassert.h>
 
 namespace {
-    const ui64 VALID = (ui64)0xAABBCCDDEEFF0011LL; 
-    const ui64 INVALID = (ui64)0x1122334455667788LL; 
+    const ui64 VALID = (ui64)0xAABBCCDDEEFF0011LL;
+    const ui64 INVALID = (ui64)0x1122334455667788LL;
 }
 
 TUseAfterFreeChecker::TUseAfterFreeChecker()
@@ -12,7 +12,7 @@ TUseAfterFreeChecker::TUseAfterFreeChecker()
 {
 }
 
-TUseAfterFreeChecker::~TUseAfterFreeChecker() { 
+TUseAfterFreeChecker::~TUseAfterFreeChecker() {
     Y_VERIFY(Magic == VALID, "Corrupted");
     Magic = INVALID;
 }

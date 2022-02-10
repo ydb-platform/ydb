@@ -119,7 +119,7 @@ namespace NActors {
         enum EEv {
             EvForward = EventSpaceBegin(TEvents::ES_INTERCONNECT),
             EvResolveNode, // resolve info about node (internal)
-            EvNodeAddress, // node info (internal) 
+            EvNodeAddress, // node info (internal)
             EvConnectNode, // request proxy to establish connection (like: we would send something there soon)
             EvAcceptIncoming,
             EvNodeConnected,    // node connected notify
@@ -244,9 +244,9 @@ namespace NActors {
             THolder<TNodeInfo> Node;
         };
 
-        struct TEvClosePeerSocket : TEventLocal<TEvClosePeerSocket, EvClosePeerSocket> {}; 
+        struct TEvClosePeerSocket : TEventLocal<TEvClosePeerSocket, EvClosePeerSocket> {};
 
-        struct TEvCloseInputSession : TEventLocal<TEvCloseInputSession, EvCloseInputSession> {}; 
+        struct TEvCloseInputSession : TEventLocal<TEvCloseInputSession, EvCloseInputSession> {};
 
         struct TEvPoisonSession : TEventLocal<TEvPoisonSession, EvPoisonSession> {};
 

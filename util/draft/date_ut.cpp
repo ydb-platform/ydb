@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(TDateTest) {
             UNIT_ASSERT_EQUAL(d.GetStartUTC(), 1297728000);
         }
         {
-            TDate d(2005, 6, 3); 
+            TDate d(2005, 6, 3);
             UNIT_ASSERT_EQUAL(d.GetYear(), 2005);
             UNIT_ASSERT_EQUAL(d.GetMonth(), 6);
             UNIT_ASSERT_EQUAL(d.GetMonthDay(), 3);

@@ -1,7 +1,7 @@
 import subprocess
 import sys
-import os 
- 
+import os
+
 import _common as common
 
 
@@ -25,29 +25,29 @@ class CustomCommand(object):
     def call(self, args, **kwargs):
         cwd = self._get_call_specs('cwd', kwargs)
         stdout_path = self._get_call_specs('stdout', kwargs)
- 
+
         resolved_args = []
- 
+
         for arg in args:
-            resolved_args.append(self.resolve_path(arg)) 
+            resolved_args.append(self.resolve_path(arg))
 
         if stdout_path:
             stdout = open(stdout_path, 'wb')
         else:
             stdout = None
 
-        env = os.environ.copy() 
-        env['ASAN_OPTIONS'] = 'detect_leaks=0' 
+        env = os.environ.copy()
+        env['ASAN_OPTIONS'] = 'detect_leaks=0'
 
-        rc = subprocess.call(resolved_args, cwd=cwd, stdout=stdout, env=env) 
- 
+        rc = subprocess.call(resolved_args, cwd=cwd, stdout=stdout, env=env)
+
         if stdout:
             stdout.close()
         if rc:
             sys.exit(rc)
 
-    def resolve_path(self, path): 
-        return common.resolve_to_abs_path(path, self._source_root, self._build_root) 
+    def resolve_path(self, path):
+        return common.resolve_to_abs_path(path, self._source_root, self._build_root)
 
     def _get_call_specs(self, name, kwargs):
         if isinstance(kwargs, dict):
@@ -55,7 +55,7 @@ class CustomCommand(object):
             if param:
                 return self.resolve_path(param)
         return None
- 
+
 
 def addrule(*unused):
     pass

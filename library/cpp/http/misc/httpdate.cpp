@@ -43,7 +43,7 @@
 static const char *wkdays[] = {
     "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
 };
- 
+
 static const char *months[] = {
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
     "Nov", "Dec"
@@ -64,15 +64,15 @@ int format_http_date(char buf[], size_t size, time_t when) {
 #endif
 }
 
-char* format_http_date(time_t when, char* buf, size_t buflen) { 
-    const int len = format_http_date(buf, buflen, when); 
- 
-    if (len == 0) { 
+char* format_http_date(time_t when, char* buf, size_t buflen) {
+    const int len = format_http_date(buf, buflen, when);
+
+    if (len == 0) {
         return nullptr;
-    } 
- 
+    }
+
     Y_ASSERT(len > 0 && size_t(len) < buflen);
- 
+
     return buf;
 }
 

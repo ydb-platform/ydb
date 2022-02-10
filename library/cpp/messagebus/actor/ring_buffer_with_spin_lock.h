@@ -14,8 +14,8 @@ private:
 public:
     TRingBufferWithSpinLock()
         : CachedSize(0)
-    { 
-    } 
+    {
+    }
 
     void Push(const T& t) {
         PushAll(t);

@@ -27,7 +27,7 @@ struct TEvTxProcessing {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROCESSING), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROCESSING)"); 
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROCESSING), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROCESSING)");
 
     struct TEvPlanStep : public TEventPB<TEvPlanStep, NKikimrTx::TEvMediatorPlanStep, EvPlanStep> {
         TEvPlanStep()

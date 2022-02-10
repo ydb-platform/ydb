@@ -1,8 +1,8 @@
 #pragma once
 
-#include "defaults.h" 
+#include "defaults.h"
 
-namespace NHPTimer { 
+namespace NHPTimer {
     using STime = i64;
     // May delay for ~50ms to compute frequency
     double GetSeconds(const STime& a) noexcept;
@@ -17,7 +17,7 @@ namespace NHPTimer {
 }
 
 struct THPTimer {
-    THPTimer() noexcept { 
+    THPTimer() noexcept {
         Reset();
     }
     void Reset() noexcept {
@@ -30,7 +30,7 @@ struct THPTimer {
     double PassedReset() noexcept {
         return NHPTimer::GetTimePassed(&Start);
     }
- 
+
 private:
     NHPTimer::STime Start;
 };

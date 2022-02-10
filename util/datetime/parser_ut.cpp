@@ -1,5 +1,5 @@
-#include "parser.h" 
- 
+#include "parser.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
 static const time_t SECONDS_PER_HOUR = 3600;
@@ -11,10 +11,10 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         time_t t = 0;
 
         // predefined time zones
- 
+
         r = ParseRFC822DateTime("Fri, 4 Mar 2005 19:34:45 UT", t);
-        UNIT_ASSERT(r); 
-        UNIT_ASSERT_EQUAL(t, (time_t)1109964885); 
+        UNIT_ASSERT(r);
+        UNIT_ASSERT_EQUAL(t, (time_t)1109964885);
 
         r = ParseRFC822DateTime("Fri, 4 Mar 2005 19:34:45 GMT", t);
         UNIT_ASSERT(r);
@@ -50,57 +50,57 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
 
         // optinal century
         r = ParseRFC822DateTime("Fri, 4 Mar 05 19:34:45 UT", t);
-        UNIT_ASSERT(r); 
-        UNIT_ASSERT_EQUAL(t, (time_t)1109964885); 
- 
+        UNIT_ASSERT(r);
+        UNIT_ASSERT_EQUAL(t, (time_t)1109964885);
+
         // + optional day of week
         r = ParseRFC822DateTime("4 Mar 05 19:34:45 UT", t);
         UNIT_ASSERT(r);
         UNIT_ASSERT_EQUAL(t, (time_t)1109964885);
- 
+
         // + optional seconds
         r = ParseRFC822DateTime("4 Mar 05 19:34 UT", t);
         UNIT_ASSERT(r);
         UNIT_ASSERT_EQUAL(t, (time_t)1109964840);
 
         // local differential hour+min
- 
+
         r = ParseRFC822DateTime("Fri, 4 Mar 2005 19:34:45 +0300", t);
-        UNIT_ASSERT(r); 
-        UNIT_ASSERT_EQUAL(t, (time_t)1109954085); 
+        UNIT_ASSERT(r);
+        UNIT_ASSERT_EQUAL(t, (time_t)1109954085);
 
         r = ParseRFC822DateTime("Fri, 4 Mar 05 19:34:45 +0300", t);
-        UNIT_ASSERT(r); 
-        UNIT_ASSERT_EQUAL(t, (time_t)1109954085); 
- 
+        UNIT_ASSERT(r);
+        UNIT_ASSERT_EQUAL(t, (time_t)1109954085);
+
         r = ParseRFC822DateTime("21 Apr 1999 23:40:00 +0400", t);
-        UNIT_ASSERT(r); 
-        UNIT_ASSERT_EQUAL(t, (time_t)924723600); 
- 
+        UNIT_ASSERT(r);
+        UNIT_ASSERT_EQUAL(t, (time_t)924723600);
+
         r = ParseRFC822DateTime("21 Apr 99 23:40 +0400", t);
-        UNIT_ASSERT(r); 
-        UNIT_ASSERT_EQUAL(t, (time_t)924723600); 
+        UNIT_ASSERT(r);
+        UNIT_ASSERT_EQUAL(t, (time_t)924723600);
 
         r = ParseRFC822DateTime("Fri, 4 Mar 2005 19:34:45 -0300", t);
         UNIT_ASSERT(r);
         UNIT_ASSERT_EQUAL(t, (time_t)1109964885 + 3 * SECONDS_PER_HOUR);
- 
+
         r = ParseRFC822DateTime("Fri, 4 Mar 2005 19:34 -0300", t);
         UNIT_ASSERT(r);
         UNIT_ASSERT_EQUAL(t, (time_t)1109964840 + 3 * SECONDS_PER_HOUR);
- 
+
         r = ParseRFC822DateTime("Fri, 4 Mar 05 19:34:45 -0330", t);
         UNIT_ASSERT(r);
         UNIT_ASSERT_EQUAL(t, (time_t)1109964885 + 3 * SECONDS_PER_HOUR + 30 * SECONDS_PER_MINUTE);
- 
+
         r = ParseRFC822DateTime("Fri, 4 Mar 05 19:34 -0330", t);
         UNIT_ASSERT(r);
         UNIT_ASSERT_EQUAL(t, (time_t)1109964840 + 3 * SECONDS_PER_HOUR + 30 * SECONDS_PER_MINUTE);
- 
+
         r = ParseRFC822DateTime("4 Mar 2005 19:34:45 -1030", t);
         UNIT_ASSERT(r);
         UNIT_ASSERT_EQUAL(t, (time_t)1109964885 + 10 * SECONDS_PER_HOUR + 30 * SECONDS_PER_MINUTE);
- 
+
         r = ParseRFC822DateTime("4 Mar 2005 19:34 -1030", t);
         UNIT_ASSERT(r);
         UNIT_ASSERT_EQUAL(t, (time_t)1109964840 + 10 * SECONDS_PER_HOUR + 30 * SECONDS_PER_MINUTE);
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         UNIT_ASSERT_EQUAL(t, (time_t)1234567890);
     }
 
-    time_t GetOffset(char militaryZone) { 
+    time_t GetOffset(char militaryZone) {
         char ch = (char)toupper(militaryZone);
         if (ch == 'Z') {
             return 0;
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         char text[] = "Fri, 4 Mar 2005 19:34:45 A";
         const size_t zoneCharIndex = strlen(text) - 1;
 
-        for (char militaryZone = firstChar; militaryZone <= lastChar; ++militaryZone) { 
+        for (char militaryZone = firstChar; militaryZone <= lastChar; ++militaryZone) {
             time_t t = 0;
             const time_t offset = GetOffset(militaryZone);
             // the last character is replaced with next zone symbol
@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
     Y_UNIT_TEST(TestRfc822IncorrectDates) {
         bool r = true;
         time_t t = 0;
- 
+
         t = 12345;
         r = ParseRFC822DateTime("", t);
         UNIT_ASSERT(!r);
@@ -182,19 +182,19 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
 
         t = 54321;
         r = ParseRFC822DateTime("Fri, 4 Mar 2005 19:34:45 UTC", t);
-        UNIT_ASSERT(!r); 
+        UNIT_ASSERT(!r);
         UNIT_ASSERT_EQUAL(t, (time_t)54321);
 
         // TODO: check semantic validity of parsed date (30 Feb, 88:90 etc.).
         // The following tests MUST fail (they don't now)
         // r = ParseRFC822DateTime("45 Mar 2005 19:34:45 UT", t);
-        // UNIT_ASSERT_EQUAL(r, false); 
+        // UNIT_ASSERT_EQUAL(r, false);
 
         // r = ParseRFC822DateTime("29 Feb 2005 19:34:45 +0300", t);
-        // UNIT_ASSERT_EQUAL(r, false); 
+        // UNIT_ASSERT_EQUAL(r, false);
 
         // r = ParseRFC822DateTime("31 Apr 2004 19:34:45 +0300", t);
-        // UNIT_ASSERT_EQUAL(r, false); 
+        // UNIT_ASSERT_EQUAL(r, false);
 
         r = ParseRFC822DateTime("17 Nov 2008 19:34:45", t); // no specified time zone
         UNIT_ASSERT(!r);
@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         p = TRfc822DateTimeParser();
         const char* part3 = "Fri, 4 Mar 05 19:34:46 +0300";
         UNIT_ASSERT(p.ParsePart(part3, strlen(part3)));
-        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(1109954086), p.GetResult(TInstant::Zero())); 
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(1109954086), p.GetResult(TInstant::Zero()));
     }
 
     Y_UNIT_TEST(TestIso8601Partial) {
@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         p = TIso8601DateTimeParser();
         const char* part3 = "1990-03-15T15:16:18+0732";
         UNIT_ASSERT(p.ParsePart(part3, strlen(part3)));
-        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(637487058), p.GetResult(TInstant::Zero())); 
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(637487058), p.GetResult(TInstant::Zero()));
     }
 
     Y_UNIT_TEST(TestIso8601Correct) {
@@ -355,7 +355,7 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         ret = ParseISO8601DateTime("2009-02-14 02:31:30+03:00", t);
         UNIT_ASSERT(ret);
         UNIT_ASSERT_VALUES_EQUAL(t, 1234567890);
- 
+
         ret = ParseISO8601DateTime("2010-03-28T04:27:00.000-07:00", t);
         UNIT_ASSERT(ret);
         UNIT_ASSERT_VALUES_EQUAL(t, 1269775620);
@@ -409,16 +409,16 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
     Y_UNIT_TEST(TestIso8601Fractions) {
         UNIT_ASSERT_VALUES_EQUAL(
             TInstant::ParseIso8601("2009-09-19 03:37:08.1+04:00"),
-            TInstant::Seconds(1253317028) + TDuration::MilliSeconds(100)); 
+            TInstant::Seconds(1253317028) + TDuration::MilliSeconds(100));
         UNIT_ASSERT_VALUES_EQUAL(
             TInstant::ParseIso8601("2009-09-19 03:37:03.926+04:00"),
-            TInstant::Seconds(1253317023) + TDuration::MilliSeconds(926)); 
+            TInstant::Seconds(1253317023) + TDuration::MilliSeconds(926));
         UNIT_ASSERT_VALUES_EQUAL(
             TInstant::ParseIso8601("2009-09-19 03:37:03.92622+04:00"),
-            TInstant::Seconds(1253317023) + TDuration::MicroSeconds(926220)); 
+            TInstant::Seconds(1253317023) + TDuration::MicroSeconds(926220));
         UNIT_ASSERT_VALUES_EQUAL(
             TInstant::ParseIso8601("2009-09-19 03:37:03.012331+04:00"),
-            TInstant::Seconds(1253317023) + TDuration::MicroSeconds(12331)); 
+            TInstant::Seconds(1253317023) + TDuration::MicroSeconds(12331));
     }
 
     Y_UNIT_TEST(TestIso8601FractionsBelowMicro) {
@@ -572,7 +572,7 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
 
 Y_UNIT_TEST_SUITE(TDurationParseTest) {
     Y_UNIT_TEST(TestParse) {
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(60 * 60 * 24 * 7), TDuration::Parse("1w")); 
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(60 * 60 * 24 * 7), TDuration::Parse("1w"));
         UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(60), TDuration::Parse("1m"));
         UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(90), TDuration::Parse("1.5m"));
         UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(102), TDuration::Parse("1.7m"));

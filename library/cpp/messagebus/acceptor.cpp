@@ -100,7 +100,7 @@ void TAcceptor::Act(TDefaultTag) {
             ++Stats.AcceptSuccessCount;
         }
 
-    skipAccept:; 
+    skipAccept:;
     }
 
     Channel->EnableRead();

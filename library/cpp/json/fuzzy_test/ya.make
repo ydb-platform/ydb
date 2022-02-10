@@ -1,13 +1,13 @@
 FUZZ()
- 
-OWNER(pg) 
- 
-PEERDIR( 
+
+OWNER(pg)
+
+PEERDIR(
     library/cpp/json
-) 
- 
-SRCS( 
-    main.cpp 
-) 
- 
-END() 
+)
+
+SRCS(
+    main.cpp
+)
+
+END()

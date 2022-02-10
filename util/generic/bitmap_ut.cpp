@@ -1,47 +1,47 @@
-#include "bitmap.h" 
- 
+#include "bitmap.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
-#define INIT_BITMAP(bitmap, bits)                                \ 
+#define INIT_BITMAP(bitmap, bits)                                \
     for (size_t i = 0; i < sizeof(bits) / sizeof(size_t); ++i) { \
-        bitmap.Set(bits[i]);                                     \ 
+        bitmap.Set(bits[i]);                                     \
     }
 
-#define CHECK_BITMAP(bitmap, bits)                                      \ 
-    {                                                                   \ 
-        size_t cur = 0, end = sizeof(bits) / sizeof(size_t);            \ 
-        for (size_t i = 0; i < bitmap.Size(); ++i) {                    \ 
-            if (cur < end && bits[cur] == i) {                          \ 
-                UNIT_ASSERT_EQUAL_C(bitmap.Get(i), true, "pos=" << i);  \ 
-                ++cur;                                                  \ 
-            } else {                                                    \ 
+#define CHECK_BITMAP(bitmap, bits)                                      \
+    {                                                                   \
+        size_t cur = 0, end = sizeof(bits) / sizeof(size_t);            \
+        for (size_t i = 0; i < bitmap.Size(); ++i) {                    \
+            if (cur < end && bits[cur] == i) {                          \
+                UNIT_ASSERT_EQUAL_C(bitmap.Get(i), true, "pos=" << i);  \
+                ++cur;                                                  \
+            } else {                                                    \
                 UNIT_ASSERT_EQUAL_C(bitmap.Get(i), false, "pos=" << i); \
-            }                                                           \ 
-        }                                                               \ 
+            }                                                           \
+        }                                                               \
     }
 
-#define CHECK_BITMAP_WITH_TAIL(bitmap, bits)                                \ 
-    {                                                                       \ 
-        size_t cur = 0, end = sizeof(bits) / sizeof(size_t);                \ 
-        for (size_t i = 0; i < bitmap.Size(); ++i) {                        \ 
-            if (cur < end) {                                                \ 
-                if (bits[cur] == i) {                                       \ 
-                    UNIT_ASSERT_EQUAL_C(bitmap.Get(i), true, "pos=" << i);  \ 
-                    ++cur;                                                  \ 
-                } else {                                                    \ 
+#define CHECK_BITMAP_WITH_TAIL(bitmap, bits)                                \
+    {                                                                       \
+        size_t cur = 0, end = sizeof(bits) / sizeof(size_t);                \
+        for (size_t i = 0; i < bitmap.Size(); ++i) {                        \
+            if (cur < end) {                                                \
+                if (bits[cur] == i) {                                       \
+                    UNIT_ASSERT_EQUAL_C(bitmap.Get(i), true, "pos=" << i);  \
+                    ++cur;                                                  \
+                } else {                                                    \
                     UNIT_ASSERT_EQUAL_C(bitmap.Get(i), false, "pos=" << i); \
-                }                                                           \ 
-            } else {                                                        \ 
-                UNIT_ASSERT_EQUAL_C(bitmap.Get(i), true, "pos=" << i);      \ 
-            }                                                               \ 
-        }                                                                   \ 
+                }                                                           \
+            } else {                                                        \
+                UNIT_ASSERT_EQUAL_C(bitmap.Get(i), true, "pos=" << i);      \
+            }                                                               \
+        }                                                                   \
     }
 
 Y_UNIT_TEST_SUITE(TBitMapTest) {
     Y_UNIT_TEST(TestBitMap) {
-        TBitMap<101> bitmap; 
+        TBitMap<101> bitmap;
 
-        UNIT_ASSERT_EQUAL(bitmap.Size(), 101); 
+        UNIT_ASSERT_EQUAL(bitmap.Size(), 101);
         UNIT_ASSERT_EQUAL(bitmap.Count(), 0);
         UNIT_ASSERT_EQUAL(bitmap.FirstNonZeroBit(), 101);
 
@@ -53,9 +53,9 @@ Y_UNIT_TEST_SUITE(TBitMapTest) {
         size_t setBits[] = {0, 50, 100};
         CHECK_BITMAP(bitmap, setBits);
 
-        for (size_t i = 0; i < bitmap.Size(); ++i) { 
+        for (size_t i = 0; i < bitmap.Size(); ++i) {
             UNIT_ASSERT_EQUAL(bitmap.Get(i), bitmap.Test(i));
-        } 
+        }
 
         UNIT_ASSERT_EQUAL(bitmap.Count(), 3);
 
@@ -86,9 +86,9 @@ Y_UNIT_TEST_SUITE(TBitMapTest) {
         size_t setBits[] = {0, 50, 100};
         CHECK_BITMAP(bitmap, setBits);
 
-        for (size_t i = 0; i < bitmap.Size(); ++i) { 
+        for (size_t i = 0; i < bitmap.Size(); ++i) {
             UNIT_ASSERT_EQUAL(bitmap.Get(i), bitmap.Test(i));
-        } 
+        }
 
         UNIT_ASSERT_EQUAL(bitmap.Count(), 3);
 
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TBitMapTest) {
     }
 
     Y_UNIT_TEST(TestAndFixed) {
-        TestAndImpl<TBitMap<101>>(); 
+        TestAndImpl<TBitMap<101>>();
     }
 
     Y_UNIT_TEST(TestAndDyn) {
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TBitMapTest) {
     }
 
     Y_UNIT_TEST(TestOrFixed) {
-        TestOrImpl<TBitMap<145>>(); 
+        TestOrImpl<TBitMap<145>>();
     }
 
     Y_UNIT_TEST(TestOrDyn) {
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TBitMapTest) {
         bitmap3.Clear();
         INIT_BITMAP(bitmap3, initBits1);
 
-        TDynBitMap bitmap4 = ~((bitmap3 | 3) & bitmap2); 
+        TDynBitMap bitmap4 = ~((bitmap3 | 3) & bitmap2);
         CHECK_BITMAP_WITH_TAIL(bitmap4, resBits);
 
         TBitMap<128, ui32> expmap;
@@ -272,18 +272,18 @@ Y_UNIT_TEST_SUITE(TBitMapTest) {
         ui32 tst2 = 0;
         ui16 tst3 = 0;
         expmap.Export(32, tst1);
-        UNIT_ASSERT_EQUAL(tst1, (1 << 15) | (((ui64)1) << 58)); 
+        UNIT_ASSERT_EQUAL(tst1, (1 << 15) | (((ui64)1) << 58));
         expmap.Export(32, tst2);
-        UNIT_ASSERT_EQUAL(tst2, (1 << 15)); 
+        UNIT_ASSERT_EQUAL(tst2, (1 << 15));
         expmap.Export(32, tst3);
-        UNIT_ASSERT_EQUAL(tst3, (1 << 15)); 
+        UNIT_ASSERT_EQUAL(tst3, (1 << 15));
 
         expmap.Export(33, tst1);
-        UNIT_ASSERT_EQUAL(tst1, (1 << 14) | (((ui64)1) << 57)); 
+        UNIT_ASSERT_EQUAL(tst1, (1 << 14) | (((ui64)1) << 57));
         expmap.Export(33, tst2);
-        UNIT_ASSERT_EQUAL(tst2, (1 << 14)); 
+        UNIT_ASSERT_EQUAL(tst2, (1 << 14));
         expmap.Export(33, tst3);
-        UNIT_ASSERT_EQUAL(tst3, (1 << 14)); 
+        UNIT_ASSERT_EQUAL(tst3, (1 << 14));
     }
 
     Y_UNIT_TEST(TestShiftFixed) {

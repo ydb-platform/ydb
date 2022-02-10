@@ -53,13 +53,13 @@ TString TAcceptorStatus::PrintToString() const {
 
     if (AcceptErrorCount > 0) {
         p.AddRow("last accept error",
-                 TString() + LastSystemErrorText(LastAcceptErrorErrno) + " at " + LastAcceptErrorInstant.ToString()); 
+                 TString() + LastSystemErrorText(LastAcceptErrorErrno) + " at " + LastAcceptErrorInstant.ToString());
     }
 
     p.AddRow("accept success count", LeftPad(AcceptSuccessCount, 4));
     if (AcceptSuccessCount > 0) {
         p.AddRow("last accept success",
-                 TString() + "at " + LastAcceptSuccessInstant.ToString()); 
+                 TString() + "at " + LastAcceptSuccessInstant.ToString());
     }
 
     ss << p.PrintToString();

@@ -3,9 +3,9 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 
-template <typename T> 
+template <typename T>
 void ComputePrefixFunction(const T* begin, const T* end, ssize_t** result) {
     Y_ENSURE(begin != end, TStringBuf("empty pattern"));
     ssize_t len = end - begin;
@@ -58,7 +58,7 @@ public:
     }
 };
 
-template <typename T> 
+template <typename T>
 class TKMPStreamMatcher {
 public:
     class ICallback {

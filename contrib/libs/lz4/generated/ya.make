@@ -2,8 +2,8 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-LICENSE(BSD-2-Clause) 
- 
+LICENSE(BSD-2-Clause)
+
 OWNER(
     orivej
     g:contrib

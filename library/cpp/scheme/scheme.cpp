@@ -156,7 +156,7 @@ namespace NSc {
 
     TValue& TValue::DoCopyFromImpl(const TValue& other,
                                    NImpl::TSelfLoopContext& otherLoopCtx,
-                                   NImpl::TSelfOverrideContext& selfOverrideCtx) { 
+                                   NImpl::TSelfOverrideContext& selfOverrideCtx) {
         if (Same(*this, other)) {
             return *this;
         }
@@ -176,44 +176,44 @@ namespace NSc {
         }
 
         switch (otherCore.ValueType) {
-            default: 
-                Y_ASSERT(false); 
+            default:
+                Y_ASSERT(false);
                 [[fallthrough]];
-            case EType::Null: 
-                break; 
-            case EType::Bool: 
-                selfCore.SetBool(otherCore.IntNumber); 
-                break; 
-            case EType::IntNumber: 
-                selfCore.SetIntNumber(otherCore.IntNumber); 
-                break; 
-            case EType::FloatNumber: 
-                selfCore.SetNumber(otherCore.FloatNumber); 
-                break; 
-            case EType::String: 
+            case EType::Null:
+                break;
+            case EType::Bool:
+                selfCore.SetBool(otherCore.IntNumber);
+                break;
+            case EType::IntNumber:
+                selfCore.SetIntNumber(otherCore.IntNumber);
+                break;
+            case EType::FloatNumber:
+                selfCore.SetNumber(otherCore.FloatNumber);
+                break;
+            case EType::String:
                 if (selfCore.Pool.Get() == otherCore.Pool.Get()) {
                     selfCore.SetOwnedString(otherCore.String);
                 } else {
                     selfCore.SetString(otherCore.String);
                 }
-                break; 
-            case EType::Array: 
-                selfCore.SetArray(); 
-                for (const TValue& e : otherCore.GetArray()) { 
+                break;
+            case EType::Array:
+                selfCore.SetArray();
+                for (const TValue& e : otherCore.GetArray()) {
                     selfCore.Push().DoCopyFromImpl(e, otherLoopCtx, selfOverrideCtx);
-                } 
-                break; 
-            case EType::Dict: { 
+                }
+                break;
+            case EType::Dict: {
                 TCorePtr tmp = NewCore(selfCore.Pool);
                 auto& tmpCore = *tmp;
                 tmpCore.SetDict();
-                const TDict& d = otherCore.GetDict(); 
+                const TDict& d = otherCore.GetDict();
                 tmpCore.Dict.reserve(d.size());
-                for (const TDict::value_type& e : d) { 
+                for (const TDict::value_type& e : d) {
                     tmpCore.Add(e.first).DoCopyFromImpl(e.second, otherLoopCtx, selfOverrideCtx);
-                } 
+                }
                 TheCore = std::move(tmp);
-                break; 
+                break;
             }
         }
 
@@ -283,7 +283,7 @@ namespace NSc {
 
                 if (itb == dictB.end() || !Equal(ita.second, itb->second)) {
                     return false;
-                } 
+                }
             }
         }
 
@@ -301,7 +301,7 @@ namespace NSc {
 
     TValue& TValue::DoMergeImpl(const TValue& delta, bool lowPriorityDelta,
                                 NImpl::TSelfLoopContext& otherLoopCtx,
-                                NImpl::TSelfOverrideContext& selfOverrideGuard) { 
+                                NImpl::TSelfOverrideContext& selfOverrideGuard) {
         if (Same(*this, delta)) {
             return *this;
         }
@@ -341,48 +341,48 @@ namespace NSc {
         const TScCore& core = Core();
 
         switch (core.ValueType) {
-            default: 
-            case EType::Null: 
+            default:
+            case EType::Null:
                 return NJson::TJsonValue(NJson::JSON_NULL);
-            case EType::Bool: 
-                return NJson::TJsonValue(core.GetBool()); 
-            case EType::IntNumber: 
-                return NJson::TJsonValue(core.GetIntNumber()); 
-            case EType::FloatNumber: 
-                return NJson::TJsonValue(core.GetNumber()); 
-            case EType::String: 
-                return NJson::TJsonValue(core.String); 
-            case EType::Array: { 
-                NImpl::TSelfLoopContext::TGuard loopGuard(loopCtx, core); 
+            case EType::Bool:
+                return NJson::TJsonValue(core.GetBool());
+            case EType::IntNumber:
+                return NJson::TJsonValue(core.GetIntNumber());
+            case EType::FloatNumber:
+                return NJson::TJsonValue(core.GetNumber());
+            case EType::String:
+                return NJson::TJsonValue(core.String);
+            case EType::Array: {
+                NImpl::TSelfLoopContext::TGuard loopGuard(loopCtx, core);
 
-                if (!loopGuard.Ok) { 
-                    return NJson::TJsonValue(NJson::JSON_NULL); 
-                } 
+                if (!loopGuard.Ok) {
+                    return NJson::TJsonValue(NJson::JSON_NULL);
+                }
 
-                NJson::TJsonValue result(NJson::JSON_ARRAY); 
-                const TArray& arr = core.Array; 
+                NJson::TJsonValue result(NJson::JSON_ARRAY);
+                const TArray& arr = core.Array;
 
-                for (const auto& item : arr) { 
-                    result.AppendValue(NJson::TJsonValue::UNDEFINED) = item.ToJsonValueImpl(loopCtx); 
-                } 
+                for (const auto& item : arr) {
+                    result.AppendValue(NJson::TJsonValue::UNDEFINED) = item.ToJsonValueImpl(loopCtx);
+                }
 
-                return result; 
+                return result;
             }
-            case EType::Dict: { 
-                NImpl::TSelfLoopContext::TGuard loopGuard(loopCtx, core); 
+            case EType::Dict: {
+                NImpl::TSelfLoopContext::TGuard loopGuard(loopCtx, core);
 
-                if (!loopGuard.Ok) { 
-                    return NJson::TJsonValue(NJson::JSON_NULL); 
-                } 
+                if (!loopGuard.Ok) {
+                    return NJson::TJsonValue(NJson::JSON_NULL);
+                }
 
-                NJson::TJsonValue result(NJson::JSON_MAP); 
-                const TDict& dict = core.Dict; 
- 
-                for (const auto& item : dict) { 
-                    result.InsertValue(item.first, NJson::TJsonValue::UNDEFINED) = item.second.ToJsonValueImpl(loopCtx); 
-                } 
- 
-                return result; 
+                NJson::TJsonValue result(NJson::JSON_MAP);
+                const TDict& dict = core.Dict;
+
+                for (const auto& item : dict) {
+                    result.InsertValue(item.first, NJson::TJsonValue::UNDEFINED) = item.second.ToJsonValueImpl(loopCtx);
+                }
+
+                return result;
             }
         }
     }
@@ -398,38 +398,38 @@ namespace NSc {
         core.SetNull();
 
         switch (val.GetType()) {
-            default: 
-            case NJson::JSON_UNDEFINED: 
-            case NJson::JSON_NULL: 
-                break; 
-            case NJson::JSON_BOOLEAN: 
-                core.SetBool(val.GetBoolean()); 
-                break; 
-            case NJson::JSON_INTEGER: 
-                core.SetIntNumber(val.GetInteger()); 
-                break; 
-            case NJson::JSON_UINTEGER: 
-                core.SetIntNumber(val.GetUInteger()); 
-                break; 
-            case NJson::JSON_DOUBLE: 
-                core.SetNumber(val.GetDouble()); 
-                break; 
-            case NJson::JSON_STRING: 
+            default:
+            case NJson::JSON_UNDEFINED:
+            case NJson::JSON_NULL:
+                break;
+            case NJson::JSON_BOOLEAN:
+                core.SetBool(val.GetBoolean());
+                break;
+            case NJson::JSON_INTEGER:
+                core.SetIntNumber(val.GetInteger());
+                break;
+            case NJson::JSON_UINTEGER:
+                core.SetIntNumber(val.GetUInteger());
+                break;
+            case NJson::JSON_DOUBLE:
+                core.SetNumber(val.GetDouble());
+                break;
+            case NJson::JSON_STRING:
                 core.SetString(val.GetString());
-                break; 
-            case NJson::JSON_ARRAY: { 
+                break;
+            case NJson::JSON_ARRAY: {
                 core.SetArray();
-                for (const auto& item : val.GetArray()) { 
+                for (const auto& item : val.GetArray()) {
                     FromJsonValue(core.Push(), item);
-                } 
-                break; 
+                }
+                break;
             }
-            case NJson::JSON_MAP: { 
+            case NJson::JSON_MAP: {
                 core.SetDict();
-                for (const auto& item : val.GetMap()) { 
+                for (const auto& item : val.GetMap()) {
                     FromJsonValue(core.Add(item.first), item.second);
-                } 
-                break; 
+                }
+                break;
             }
         }
 
@@ -449,7 +449,7 @@ namespace NSc {
         return Default<TDefaults>().Core.Array;
     }
 
-    const TDict& TValue::DefaultDict() { 
+    const TDict& TValue::DefaultDict() {
         return Default<TDefaults>().Core.Dict;
     }
 
@@ -506,69 +506,69 @@ namespace NSc {
     }
 
     namespace NPrivate {
-        int CompareStr(const NSc::TValue& a, TStringBuf b) { 
+        int CompareStr(const NSc::TValue& a, TStringBuf b) {
             return a.GetString().compare(b);
-        } 
+        }
 
-        int CompareInt(const NSc::TValue& a, i64 r) { 
-            i64 l = a.GetIntNumber(); 
-            return l < r ? -1 : l > r ? 1 : 0; 
-        } 
+        int CompareInt(const NSc::TValue& a, i64 r) {
+            i64 l = a.GetIntNumber();
+            return l < r ? -1 : l > r ? 1 : 0;
+        }
 
-        int CompareFloat(const NSc::TValue& a, double r) { 
-            double l = a.GetNumber(); 
-            return l < r ? -1 : l > r ? 1 : 0; 
-        } 
+        int CompareFloat(const NSc::TValue& a, double r) {
+            double l = a.GetNumber();
+            return l < r ? -1 : l > r ? 1 : 0;
+        }
 
     }
 
-    bool operator==(const NSc::TValue& a, const NSc::TValue& b) { 
+    bool operator==(const NSc::TValue& a, const NSc::TValue& b) {
         return NSc::TValue::Equal(a, b);
     }
 
-    bool operator!=(const NSc::TValue& a, const NSc::TValue& b) { 
+    bool operator!=(const NSc::TValue& a, const NSc::TValue& b) {
         return !NSc::TValue::Equal(a, b);
     }
 
 #define LIBRARY_SCHEME_DECLARE_TVALUE_OPS_IMPL(T, Impl) \
-    bool operator==(const NSc::TValue& a, T b) {        \ 
-        return NPrivate::Impl(a, b) == 0;               \ 
-    }                                                   \ 
-    bool operator==(T b, const NSc::TValue& a) {        \ 
-        return NPrivate::Impl(a, b) == 0;               \ 
-    }                                                   \ 
-    bool operator!=(const NSc::TValue& a, T b) {        \ 
-        return NPrivate::Impl(a, b) != 0;               \ 
-    }                                                   \ 
-    bool operator!=(T b, const NSc::TValue& a) {        \ 
-        return NPrivate::Impl(a, b) != 0;               \ 
-    }                                                   \ 
-    bool operator<=(const NSc::TValue& a, T b) {        \ 
-        return NPrivate::Impl(a, b) <= 0;               \ 
-    }                                                   \ 
-    bool operator<=(T b, const NSc::TValue& a) {        \ 
-        return NPrivate::Impl(a, b) >= 0;               \ 
-    }                                                   \ 
-    bool operator>=(const NSc::TValue& a, T b) {        \ 
-        return NPrivate::Impl(a, b) >= 0;               \ 
-    }                                                   \ 
-    bool operator>=(T b, const NSc::TValue& a) {        \ 
-        return NPrivate::Impl(a, b) <= 0;               \ 
-    }                                                   \ 
-    bool operator<(const NSc::TValue& a, T b) {         \ 
-        return NPrivate::Impl(a, b) < 0;                \ 
-    }                                                   \ 
-    bool operator<(T b, const NSc::TValue& a) {         \ 
-        return NPrivate::Impl(a, b) > 0;                \ 
-    }                                                   \ 
-    bool operator>(const NSc::TValue& a, T b) {         \ 
-        return NPrivate::Impl(a, b) > 0;                \ 
-    }                                                   \ 
-    bool operator>(T b, const NSc::TValue& a) {         \ 
-        return NPrivate::Impl(a, b) < 0;                \ 
-    } 
+    bool operator==(const NSc::TValue& a, T b) {        \
+        return NPrivate::Impl(a, b) == 0;               \
+    }                                                   \
+    bool operator==(T b, const NSc::TValue& a) {        \
+        return NPrivate::Impl(a, b) == 0;               \
+    }                                                   \
+    bool operator!=(const NSc::TValue& a, T b) {        \
+        return NPrivate::Impl(a, b) != 0;               \
+    }                                                   \
+    bool operator!=(T b, const NSc::TValue& a) {        \
+        return NPrivate::Impl(a, b) != 0;               \
+    }                                                   \
+    bool operator<=(const NSc::TValue& a, T b) {        \
+        return NPrivate::Impl(a, b) <= 0;               \
+    }                                                   \
+    bool operator<=(T b, const NSc::TValue& a) {        \
+        return NPrivate::Impl(a, b) >= 0;               \
+    }                                                   \
+    bool operator>=(const NSc::TValue& a, T b) {        \
+        return NPrivate::Impl(a, b) >= 0;               \
+    }                                                   \
+    bool operator>=(T b, const NSc::TValue& a) {        \
+        return NPrivate::Impl(a, b) <= 0;               \
+    }                                                   \
+    bool operator<(const NSc::TValue& a, T b) {         \
+        return NPrivate::Impl(a, b) < 0;                \
+    }                                                   \
+    bool operator<(T b, const NSc::TValue& a) {         \
+        return NPrivate::Impl(a, b) > 0;                \
+    }                                                   \
+    bool operator>(const NSc::TValue& a, T b) {         \
+        return NPrivate::Impl(a, b) > 0;                \
+    }                                                   \
+    bool operator>(T b, const NSc::TValue& a) {         \
+        return NPrivate::Impl(a, b) < 0;                \
+    }
 
-#define LIBRARY_SCHEME_DECLARE_TVALUE_INT_OPS_IMPL(T)            \ 
+#define LIBRARY_SCHEME_DECLARE_TVALUE_INT_OPS_IMPL(T)            \
     LIBRARY_SCHEME_DECLARE_TVALUE_OPS_IMPL(signed T, CompareInt) \
     LIBRARY_SCHEME_DECLARE_TVALUE_OPS_IMPL(unsigned T, CompareInt)
 

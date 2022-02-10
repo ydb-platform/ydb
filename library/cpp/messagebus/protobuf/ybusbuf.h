@@ -12,222 +12,222 @@
 #include <array>
 
 namespace NBus {
-    using TBusBufferRecord = ::google::protobuf::Message; 
+    using TBusBufferRecord = ::google::protobuf::Message;
 
-    template <class TBufferMessage> 
-    class TBusBufferMessagePtr; 
-    template <class TBufferMessage> 
-    class TBusBufferMessageAutoPtr; 
+    template <class TBufferMessage>
+    class TBusBufferMessagePtr;
+    template <class TBufferMessage>
+    class TBusBufferMessageAutoPtr;
 
-    class TBusBufferBase: public TBusMessage { 
-    public: 
-        TBusBufferBase(int type) 
-            : TBusMessage((ui16)type) 
-        { 
-        } 
-        TBusBufferBase(ECreateUninitialized) 
-            : TBusMessage(MESSAGE_CREATE_UNINITIALIZED) 
-        { 
-        } 
+    class TBusBufferBase: public TBusMessage {
+    public:
+        TBusBufferBase(int type)
+            : TBusMessage((ui16)type)
+        {
+        }
+        TBusBufferBase(ECreateUninitialized)
+            : TBusMessage(MESSAGE_CREATE_UNINITIALIZED)
+        {
+        }
 
-        ui16 GetType() const { 
-            return GetHeader()->Type; 
-        } 
+        ui16 GetType() const {
+            return GetHeader()->Type;
+        }
 
-        virtual TBusBufferRecord* GetRecord() const = 0; 
-        virtual TBusBufferBase* New() = 0; 
-    }; 
+        virtual TBusBufferRecord* GetRecord() const = 0;
+        virtual TBusBufferBase* New() = 0;
+    };
 
-    /////////////////////////////////////////////////////////////////// 
-    /// \brief Template for all messages that have protobuf description 
+    ///////////////////////////////////////////////////////////////////
+    /// \brief Template for all messages that have protobuf description
 
-    /// @param TBufferRecord is record described in .proto file with namespace 
-    /// @param MessageFile is offset for .proto file message ids 
+    /// @param TBufferRecord is record described in .proto file with namespace
+    /// @param MessageFile is offset for .proto file message ids
 
-    /// \attention If you want one protocol NBus::TBusBufferProtocol to handle 
-    /// messageges described in different .proto files, make sure that they have 
-    /// unique values for MessageFile 
+    /// \attention If you want one protocol NBus::TBusBufferProtocol to handle
+    /// messageges described in different .proto files, make sure that they have
+    /// unique values for MessageFile
 
-    template <class TBufferRecord, int MType> 
-    class TBusBufferMessage: public TBusBufferBase { 
-    public: 
-        static const int MessageType = MType; 
+    template <class TBufferRecord, int MType>
+    class TBusBufferMessage: public TBusBufferBase {
+    public:
+        static const int MessageType = MType;
 
-        typedef TBusBufferMessagePtr<TBusBufferMessage<TBufferRecord, MType>> TPtr; 
-        typedef TBusBufferMessageAutoPtr<TBusBufferMessage<TBufferRecord, MType>> TAutoPtr; 
- 
-    public: 
-        typedef TBufferRecord RecordType; 
-        TBufferRecord Record; 
- 
-    public: 
-        TBusBufferMessage() 
-            : TBusBufferBase(MessageType) 
-        { 
-        } 
-        TBusBufferMessage(ECreateUninitialized) 
-            : TBusBufferBase(MESSAGE_CREATE_UNINITIALIZED) 
-        { 
-        } 
-        explicit TBusBufferMessage(const TBufferRecord& record) 
-            : TBusBufferBase(MessageType) 
-            , Record(record) 
-        { 
-        } 
-        explicit TBusBufferMessage(TBufferRecord&& record) 
-            : TBusBufferBase(MessageType) 
-            , Record(std::move(record)) 
-        { 
-        } 
- 
-    public: 
-        TBusBufferRecord* GetRecord() const override { 
-            return (TBusBufferRecord*)&Record; 
-        } 
-        TBusBufferBase* New() override { 
-            return new TBusBufferMessage<TBufferRecord, MessageType>(); 
-        } 
-    }; 
+        typedef TBusBufferMessagePtr<TBusBufferMessage<TBufferRecord, MType>> TPtr;
+        typedef TBusBufferMessageAutoPtr<TBusBufferMessage<TBufferRecord, MType>> TAutoPtr;
 
-    template <class TSelf, class TBufferMessage> 
-    class TBusBufferMessagePtrBase { 
-    public: 
-        typedef typename TBufferMessage::RecordType RecordType; 
+    public:
+        typedef TBufferRecord RecordType;
+        TBufferRecord Record;
 
-    private: 
-        TSelf* GetSelf() { 
-            return static_cast<TSelf*>(this); 
-        } 
-        const TSelf* GetSelf() const { 
-            return static_cast<const TSelf*>(this); 
-        } 
+    public:
+        TBusBufferMessage()
+            : TBusBufferBase(MessageType)
+        {
+        }
+        TBusBufferMessage(ECreateUninitialized)
+            : TBusBufferBase(MESSAGE_CREATE_UNINITIALIZED)
+        {
+        }
+        explicit TBusBufferMessage(const TBufferRecord& record)
+            : TBusBufferBase(MessageType)
+            , Record(record)
+        {
+        }
+        explicit TBusBufferMessage(TBufferRecord&& record)
+            : TBusBufferBase(MessageType)
+            , Record(std::move(record))
+        {
+        }
 
-    public: 
-        RecordType* operator->() { 
-            Y_ASSERT(GetSelf()->Get()); 
-            return &(GetSelf()->Get()->Record); 
-        } 
-        const RecordType* operator->() const { 
-            Y_ASSERT(GetSelf()->Get()); 
-            return &(GetSelf()->Get()->Record); 
-        } 
-        RecordType& operator*() { 
-            Y_ASSERT(GetSelf()->Get()); 
-            return GetSelf()->Get()->Record; 
-        } 
-        const RecordType& operator*() const { 
-            Y_ASSERT(GetSelf()->Get()); 
-            return GetSelf()->Get()->Record; 
-        } 
+    public:
+        TBusBufferRecord* GetRecord() const override {
+            return (TBusBufferRecord*)&Record;
+        }
+        TBusBufferBase* New() override {
+            return new TBusBufferMessage<TBufferRecord, MessageType>();
+        }
+    };
 
-        TBusHeader* GetHeader() { 
-            return GetSelf()->Get()->GetHeader(); 
-        } 
-        const TBusHeader* GetHeader() const { 
-            return GetSelf()->Get()->GetHeader(); 
-        } 
-    }; 
+    template <class TSelf, class TBufferMessage>
+    class TBusBufferMessagePtrBase {
+    public:
+        typedef typename TBufferMessage::RecordType RecordType;
 
-    template <class TBufferMessage> 
-    class TBusBufferMessagePtr: public TBusBufferMessagePtrBase<TBusBufferMessagePtr<TBufferMessage>, TBufferMessage> { 
-    protected: 
-        TBufferMessage* Holder; 
+    private:
+        TSelf* GetSelf() {
+            return static_cast<TSelf*>(this);
+        }
+        const TSelf* GetSelf() const {
+            return static_cast<const TSelf*>(this);
+        }
 
-    public: 
-        TBusBufferMessagePtr(TBufferMessage* mess) 
-            : Holder(mess) 
-        { 
-        } 
-        static TBusBufferMessagePtr<TBufferMessage> DynamicCast(TBusMessage* message) { 
-            return dynamic_cast<TBufferMessage*>(message); 
-        } 
-        TBufferMessage* Get() { 
-            return Holder; 
-        } 
-        const TBufferMessage* Get() const { 
-            return Holder; 
-        } 
+    public:
+        RecordType* operator->() {
+            Y_ASSERT(GetSelf()->Get());
+            return &(GetSelf()->Get()->Record);
+        }
+        const RecordType* operator->() const {
+            Y_ASSERT(GetSelf()->Get());
+            return &(GetSelf()->Get()->Record);
+        }
+        RecordType& operator*() {
+            Y_ASSERT(GetSelf()->Get());
+            return GetSelf()->Get()->Record;
+        }
+        const RecordType& operator*() const {
+            Y_ASSERT(GetSelf()->Get());
+            return GetSelf()->Get()->Record;
+        }
 
-        operator TBufferMessage*() { 
-            return Holder; 
-        } 
-        operator const TBufferMessage*() const { 
-            return Holder; 
-        } 
+        TBusHeader* GetHeader() {
+            return GetSelf()->Get()->GetHeader();
+        }
+        const TBusHeader* GetHeader() const {
+            return GetSelf()->Get()->GetHeader();
+        }
+    };
 
-        operator TAutoPtr<TBusMessage>() { 
-            TAutoPtr<TBusMessage> r(Holder); 
-            Holder = 0; 
-            return r; 
-        } 
-        operator TBusMessageAutoPtr() { 
-            TBusMessageAutoPtr r(Holder); 
-            Holder = nullptr; 
-            return r; 
-        } 
-    }; 
+    template <class TBufferMessage>
+    class TBusBufferMessagePtr: public TBusBufferMessagePtrBase<TBusBufferMessagePtr<TBufferMessage>, TBufferMessage> {
+    protected:
+        TBufferMessage* Holder;
 
-    template <class TBufferMessage> 
-    class TBusBufferMessageAutoPtr: public TBusBufferMessagePtrBase<TBusBufferMessageAutoPtr<TBufferMessage>, TBufferMessage> { 
-    public: 
-        TAutoPtr<TBufferMessage> AutoPtr; 
+    public:
+        TBusBufferMessagePtr(TBufferMessage* mess)
+            : Holder(mess)
+        {
+        }
+        static TBusBufferMessagePtr<TBufferMessage> DynamicCast(TBusMessage* message) {
+            return dynamic_cast<TBufferMessage*>(message);
+        }
+        TBufferMessage* Get() {
+            return Holder;
+        }
+        const TBufferMessage* Get() const {
+            return Holder;
+        }
 
-    public: 
-        TBusBufferMessageAutoPtr() { 
-        } 
-        TBusBufferMessageAutoPtr(TBufferMessage* message) 
-            : AutoPtr(message) 
-        { 
-        } 
+        operator TBufferMessage*() {
+            return Holder;
+        }
+        operator const TBufferMessage*() const {
+            return Holder;
+        }
 
-        TBufferMessage* Get() { 
-            return AutoPtr.Get(); 
-        } 
-        const TBufferMessage* Get() const { 
-            return AutoPtr.Get(); 
-        } 
+        operator TAutoPtr<TBusMessage>() {
+            TAutoPtr<TBusMessage> r(Holder);
+            Holder = 0;
+            return r;
+        }
+        operator TBusMessageAutoPtr() {
+            TBusMessageAutoPtr r(Holder);
+            Holder = nullptr;
+            return r;
+        }
+    };
 
-        TBufferMessage* Release() const { 
-            return AutoPtr.Release(); 
-        } 
+    template <class TBufferMessage>
+    class TBusBufferMessageAutoPtr: public TBusBufferMessagePtrBase<TBusBufferMessageAutoPtr<TBufferMessage>, TBufferMessage> {
+    public:
+        TAutoPtr<TBufferMessage> AutoPtr;
 
-        operator TAutoPtr<TBusMessage>() { 
-            return AutoPtr.Release(); 
-        } 
-        operator TBusMessageAutoPtr() { 
-            return AutoPtr.Release(); 
-        } 
-    }; 
+    public:
+        TBusBufferMessageAutoPtr() {
+        }
+        TBusBufferMessageAutoPtr(TBufferMessage* message)
+            : AutoPtr(message)
+        {
+        }
 
-    ///////////////////////////////////////////// 
-    /// \brief Generic protocol object for messages descibed with protobuf 
+        TBufferMessage* Get() {
+            return AutoPtr.Get();
+        }
+        const TBufferMessage* Get() const {
+            return AutoPtr.Get();
+        }
 
-    /// \attention If you mix messages in the same protocol from more than 
-    /// .proto file make sure that they have different MessageFile parameter 
-    ///  in the NBus::TBusBufferMessage template 
+        TBufferMessage* Release() const {
+            return AutoPtr.Release();
+        }
 
-    class TBusBufferProtocol: public TBusProtocol { 
-    private: 
-        TVector<TBusBufferBase*> Types; 
-        std::array<ui32, ((1 << 16) >> 5)> TypeMask; 
+        operator TAutoPtr<TBusMessage>() {
+            return AutoPtr.Release();
+        }
+        operator TBusMessageAutoPtr() {
+            return AutoPtr.Release();
+        }
+    };
 
-        TBusBufferBase* FindType(int type); 
-        bool IsRegisteredType(unsigned type); 
+    /////////////////////////////////////////////
+    /// \brief Generic protocol object for messages descibed with protobuf
 
-    public: 
-        TBusBufferProtocol(TBusService name, int port); 
+    /// \attention If you mix messages in the same protocol from more than
+    /// .proto file make sure that they have different MessageFile parameter
+    ///  in the NBus::TBusBufferMessage template
 
-        ~TBusBufferProtocol() override; 
- 
-        /// register all the message that this protocol should handle 
-        void RegisterType(TAutoPtr<TBusBufferBase> mess); 
- 
-        TArrayRef<TBusBufferBase* const> GetTypes() const; 
+    class TBusBufferProtocol: public TBusProtocol {
+    private:
+        TVector<TBusBufferBase*> Types;
+        std::array<ui32, ((1 << 16) >> 5)> TypeMask;
 
-        /// serialized protocol specific data into TBusData 
-        void Serialize(const TBusMessage* mess, TBuffer& data) override; 
+        TBusBufferBase* FindType(int type);
+        bool IsRegisteredType(unsigned type);
 
-        TAutoPtr<TBusMessage> Deserialize(ui16 messageType, TArrayRef<const char> payload) override; 
-    }; 
+    public:
+        TBusBufferProtocol(TBusService name, int port);
 
-} 
+        ~TBusBufferProtocol() override;
+
+        /// register all the message that this protocol should handle
+        void RegisterType(TAutoPtr<TBusBufferBase> mess);
+
+        TArrayRef<TBusBufferBase* const> GetTypes() const;
+
+        /// serialized protocol specific data into TBusData
+        void Serialize(const TBusMessage* mess, TBuffer& data) override;
+
+        TAutoPtr<TBusMessage> Deserialize(ui16 messageType, TArrayRef<const char> payload) override;
+    };
+
+}

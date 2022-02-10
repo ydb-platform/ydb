@@ -1,72 +1,72 @@
-#include "base.h" 
+#include "base.h"
 
 #include <util/string/cast.h>
-#include <util/stream/output.h> 
-#include <util/stream/mem.h> 
+#include <util/stream/output.h>
+#include <util/stream/mem.h>
 #include <util/system/compat.h>
-#include <util/memory/tempbuf.h> 
+#include <util/memory/tempbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 
 TString Strftime(const char* format, const struct tm* tm) {
-    size_t size = Max<size_t>(strlen(format) * 2 + 1, 107); 
+    size_t size = Max<size_t>(strlen(format) * 2 + 1, 107);
     for (;;) {
-        TTempBuf buf(size); 
+        TTempBuf buf(size);
         int r = strftime(buf.Data(), buf.Size(), format, tm);
-        if (r != 0) { 
+        if (r != 0) {
             return TString(buf.Data(), r);
-        } 
+        }
         size *= 2;
     }
 }
 
-template <> 
-TDuration FromStringImpl<TDuration, char>(const char* s, size_t len) { 
+template <>
+TDuration FromStringImpl<TDuration, char>(const char* s, size_t len) {
     return TDuration::Parse(TStringBuf(s, len));
-} 
- 
-template <> 
+}
+
+template <>
 bool TryFromStringImpl<TDuration, char>(const char* s, size_t len, TDuration& result) {
     return TDuration::TryParse(TStringBuf(s, len), result);
 }
 
-namespace { 
-    template <size_t N> 
-    struct TPad { 
-        int I; 
-    }; 
- 
-    template <size_t N> 
-    inline TPad<N> Pad(int i) { 
-        return {i}; 
-    } 
- 
+namespace {
+    template <size_t N>
+    struct TPad {
+        int I;
+    };
+
+    template <size_t N>
+    inline TPad<N> Pad(int i) {
+        return {i};
+    }
+
     inline IOutputStream& operator<<(IOutputStream& o, const TPad<2>& p) {
-        if (p.I < 10) { 
-            if (p.I >= 0) { 
-                o << '0'; 
-            } 
-        } 
- 
-        return o << p.I; 
-    } 
- 
+        if (p.I < 10) {
+            if (p.I >= 0) {
+                o << '0';
+            }
+        }
+
+        return o << p.I;
+    }
+
     inline IOutputStream& operator<<(IOutputStream& o, const TPad<4>& p) {
-        if (p.I < 1000) { 
-            if (p.I >= 0) { 
-                if (p.I < 10) { 
-                    o << '0' << '0' << '0'; 
-                } else if (p.I < 100) { 
-                    o << '0' << '0'; 
-                } else { 
-                    o << '0'; 
-                } 
-            } 
-        } 
- 
-        return o << p.I; 
-    } 
+        if (p.I < 1000) {
+            if (p.I >= 0) {
+                if (p.I < 10) {
+                    o << '0' << '0' << '0';
+                } else if (p.I < 100) {
+                    o << '0' << '0';
+                } else {
+                    o << '0';
+                }
+            }
+        }
+
+        return o << p.I;
+    }
 
     inline IOutputStream& operator<<(IOutputStream& o, const TPad<6>& p) {
         if (p.I < 100000) {
@@ -94,7 +94,7 @@ namespace {
 
     void WriteTmToStream(IOutputStream& os, const struct tm& theTm) {
         os << Pad<4>(theTm.tm_year + 1900) << '-' << Pad<2>(theTm.tm_mon + 1) << '-' << Pad<2>(theTm.tm_mday) << 'T'
-           << Pad<2>(theTm.tm_hour) << ':' << Pad<2>(theTm.tm_min) << ':' << Pad<2>(theTm.tm_sec); 
+           << Pad<2>(theTm.tm_hour) << ':' << Pad<2>(theTm.tm_min) << ':' << Pad<2>(theTm.tm_sec);
     }
 
     template <bool PrintUpToSeconds, bool iso>
@@ -131,8 +131,8 @@ namespace {
             os << Pad<2>(utcOffsetInMinutes % 60);
         }
     }
-} 
- 
+}
+
 template <>
 void Out<TDuration>(IOutputStream& os, TTypeTraits<TDuration>::TFuncParam duration) {
     os << duration.Seconds();
@@ -154,22 +154,22 @@ void Out<TInstant>(IOutputStream& os, TTypeTraits<TInstant>::TFuncParam instant)
 }
 
 template <>
-void Out<::NPrivate::TPrintableLocalTime<false, false>>(IOutputStream& os, TTypeTraits<::NPrivate::TPrintableLocalTime<false, false>>::TFuncParam localTime) { 
+void Out<::NPrivate::TPrintableLocalTime<false, false>>(IOutputStream& os, TTypeTraits<::NPrivate::TPrintableLocalTime<false, false>>::TFuncParam localTime) {
     WritePrintableLocalTimeToStream(os, localTime);
 }
 
 template <>
-void Out<::NPrivate::TPrintableLocalTime<false, true>>(IOutputStream& os, TTypeTraits<::NPrivate::TPrintableLocalTime<false, true>>::TFuncParam localTime) { 
+void Out<::NPrivate::TPrintableLocalTime<false, true>>(IOutputStream& os, TTypeTraits<::NPrivate::TPrintableLocalTime<false, true>>::TFuncParam localTime) {
     WritePrintableLocalTimeToStream(os, localTime);
 }
 
 template <>
-void Out<::NPrivate::TPrintableLocalTime<true, false>>(IOutputStream& os, TTypeTraits<::NPrivate::TPrintableLocalTime<true, false>>::TFuncParam localTime) { 
+void Out<::NPrivate::TPrintableLocalTime<true, false>>(IOutputStream& os, TTypeTraits<::NPrivate::TPrintableLocalTime<true, false>>::TFuncParam localTime) {
     WritePrintableLocalTimeToStream(os, localTime);
 }
 
 template <>
-void Out<::NPrivate::TPrintableLocalTime<true, true>>(IOutputStream& os, TTypeTraits<::NPrivate::TPrintableLocalTime<true, true>>::TFuncParam localTime) { 
+void Out<::NPrivate::TPrintableLocalTime<true, true>>(IOutputStream& os, TTypeTraits<::NPrivate::TPrintableLocalTime<true, true>>::TFuncParam localTime) {
     WritePrintableLocalTimeToStream(os, localTime);
 }
 
@@ -188,9 +188,9 @@ TString TInstant::ToRfc822String() const {
 TString TInstant::ToStringUpToSeconds() const {
     char buf[64];
     auto len = FormatDate8601(buf, sizeof(buf), TimeT());
-    if (!len) { 
+    if (!len) {
         ythrow yexception() << "TInstant::ToStringUpToSeconds: year does not fit into an integer";
-    } 
+    }
     return TString(buf, len);
 }
 
@@ -246,16 +246,16 @@ void Sleep(TDuration duration) {
     NanoSleep(duration.NanoSeconds());
 }
 
-void sprint_gm_date(char* buf, time_t when, long* sec) { 
-    struct tm theTm; 
-    ::Zero(theTm); 
-    GmTimeR(&when, &theTm); 
+void sprint_gm_date(char* buf, time_t when, long* sec) {
+    struct tm theTm;
+    ::Zero(theTm);
+    GmTimeR(&when, &theTm);
     DateToString(buf, theTm);
-    if (sec) { 
-        *sec = seconds(theTm); 
-    } 
-} 
- 
+    if (sec) {
+        *sec = seconds(theTm);
+    }
+}
+
 void DateToString(char* buf, const struct tm& theTm) {
     Y_ENSURE(0 <= theTm.tm_year + 1900 && theTm.tm_year + 1900 <= 9999, "invalid year " + ToString(theTm.tm_year + 1900) + ", year should be in range [0, 9999]");
 
@@ -299,38 +299,38 @@ TString YearToString(time_t when) {
     return YearToString(theTm);
 }
 
-bool sscan_date(const char* date, struct tm& theTm) { 
-    int year, mon, mday; 
-    if (sscanf(date, "%4d%2d%2d", &year, &mon, &mday) != 3) { 
-        return false; 
-    } 
-    theTm.tm_year = year - 1900; 
-    theTm.tm_mon = mon - 1; 
-    theTm.tm_mday = mday; 
-    return true; 
-} 
- 
-size_t FormatDate8601(char* buf, size_t len, time_t when) { 
-    struct tm theTm; 
-    struct tm* ret = GmTimeR(&when, &theTm); 
- 
-    if (ret) { 
-        TMemoryOutput out(buf, len); 
- 
+bool sscan_date(const char* date, struct tm& theTm) {
+    int year, mon, mday;
+    if (sscanf(date, "%4d%2d%2d", &year, &mon, &mday) != 3) {
+        return false;
+    }
+    theTm.tm_year = year - 1900;
+    theTm.tm_mon = mon - 1;
+    theTm.tm_mday = mday;
+    return true;
+}
+
+size_t FormatDate8601(char* buf, size_t len, time_t when) {
+    struct tm theTm;
+    struct tm* ret = GmTimeR(&when, &theTm);
+
+    if (ret) {
+        TMemoryOutput out(buf, len);
+
         WriteTmToStream(out, theTm);
         out << 'Z';
- 
-        return out.Buf() - buf; 
-    } 
- 
-    return 0; 
-} 
- 
-void SleepUntil(TInstant instant) { 
-    TInstant now = TInstant::Now(); 
-    if (instant <= now) { 
-        return; 
-    } 
-    TDuration duration = instant - now; 
-    Sleep(duration); 
-} 
+
+        return out.Buf() - buf;
+    }
+
+    return 0;
+}
+
+void SleepUntil(TInstant instant) {
+    TInstant now = TInstant::Now();
+    if (instant <= now) {
+        return;
+    }
+    TDuration duration = instant - now;
+    Sleep(duration);
+}

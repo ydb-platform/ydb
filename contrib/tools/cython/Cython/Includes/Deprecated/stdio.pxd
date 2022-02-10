@@ -1,2 +1,2 @@
 # Present for backwards compatibility
-from libc.stdio cimport * 
+from libc.stdio cimport *

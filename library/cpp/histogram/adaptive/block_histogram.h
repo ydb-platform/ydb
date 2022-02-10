@@ -27,12 +27,12 @@ namespace NKiwiAggr {
      */
     class TBlockHistogram: private TNonCopyable, public IHistogram {
     protected:
-        static const size_t SHRINK_MULTIPLIER = 2; 
+        static const size_t SHRINK_MULTIPLIER = 2;
         static const size_t GREEDY_SHRINK_MULTIPLIER = 4;
-        static const size_t DEFAULT_INTERVALS = 100; 
+        static const size_t DEFAULT_INTERVALS = 100;
         static const size_t DEFAULT_SHRINK_SIZE = DEFAULT_INTERVALS * (SHRINK_MULTIPLIER + GREEDY_SHRINK_MULTIPLIER);
 
-        const EHistogramType Type; 
+        const EHistogramType Type;
         const TQualityFunction CalcQuality;
 
         size_t Intervals;
@@ -51,7 +51,7 @@ namespace NKiwiAggr {
         TBlockHistogram(EHistogramType type, TQualityFunction calcQuality,
                         size_t intervals, ui64 id = 0, size_t shrinkSize = DEFAULT_SHRINK_SIZE);
 
-        virtual ~TBlockHistogram() { 
+        virtual ~TBlockHistogram() {
         }
 
         virtual void Clear();
@@ -61,7 +61,7 @@ namespace NKiwiAggr {
 
         virtual void Merge(const THistogram& histo, double multiplier);
         virtual void Merge(const TVector<THistogram>& histogramsToMerge);
-        virtual void Merge(TVector<IHistogramPtr> histogramsToMerge); // not implemented 
+        virtual void Merge(TVector<IHistogramPtr> histogramsToMerge); // not implemented
 
         virtual void Multiply(double factor);
 
@@ -99,12 +99,12 @@ namespace NKiwiAggr {
     // TBlockWeightHistogram
     /////////////////////////
 
-    class TBlockWeightHistogram: public TBlockHistogram { 
+    class TBlockWeightHistogram: public TBlockHistogram {
     public:
         TBlockWeightHistogram(size_t intervals, ui64 id = 0, size_t shrinkSize = DEFAULT_SHRINK_SIZE);
 
-        virtual ~TBlockWeightHistogram() { 
-        } 
+        virtual ~TBlockWeightHistogram() {
+        }
 
     private:
         virtual void FastGreedyShrink(size_t intervals) final;
@@ -114,15 +114,15 @@ namespace NKiwiAggr {
     // TBlockWardHistogram
     ///////////////////////
 
-    class TBlockWardHistogram: public TBlockHistogram { 
+    class TBlockWardHistogram: public TBlockHistogram {
     public:
         TBlockWardHistogram(size_t intervals, ui64 id = 0, size_t shrinkSize = DEFAULT_SHRINK_SIZE);
 
-        virtual ~TBlockWardHistogram() { 
-        } 
+        virtual ~TBlockWardHistogram() {
+        }
 
     private:
-        using TCumulative = std::pair<double, double>; // cumulative sum of (weights, weighted centers) 
+        using TCumulative = std::pair<double, double>; // cumulative sum of (weights, weighted centers)
         using TCumulatives = TVector<TCumulative>;
 
         struct TSplitInfo {
@@ -145,4 +145,4 @@ namespace NKiwiAggr {
                                   TSplitInfo& splitInfo);
     };
 
-} 
+}

@@ -61,17 +61,17 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
     Y_UNIT_TEST(Write) {
         TBuffer buffer;
         TBufferOutput output(buffer);
-        output << "1" 
-               << "22" 
-               << "333" 
-               << "4444" 
-               << "55555"; 
+        output << "1"
+               << "22"
+               << "333"
+               << "4444"
+               << "55555";
 
         UNIT_ASSERT(0 == memcmp(buffer.data(), "1"
-                                               "22" 
-                                               "333" 
-                                               "4444" 
-                                               "55555", 
+                                               "22"
+                                               "333"
+                                               "4444"
+                                               "55555",
                                 buffer.size()));
     }
 

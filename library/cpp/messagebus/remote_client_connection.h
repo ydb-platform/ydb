@@ -7,59 +7,59 @@
 
 #include <util/generic/object_counter.h>
 
-namespace NBus { 
-    namespace NPrivate { 
-        class TRemoteClientConnection: public TRemoteConnection, public TBusClientConnection { 
-            friend class TRemoteConnection; 
-            friend struct TBusSessionImpl; 
-            friend class TRemoteClientSession; 
+namespace NBus {
+    namespace NPrivate {
+        class TRemoteClientConnection: public TRemoteConnection, public TBusClientConnection {
+            friend class TRemoteConnection;
+            friend struct TBusSessionImpl;
+            friend class TRemoteClientSession;
 
-        private: 
-            TObjectCounter<TRemoteClientConnection> ObjectCounter; 
+        private:
+            TObjectCounter<TRemoteClientConnection> ObjectCounter;
 
-            TSyncAckMessages AckMessages; 
+            TSyncAckMessages AckMessages;
 
-            TLocalTasks TimeToTimeoutMessages; 
+            TLocalTasks TimeToTimeoutMessages;
 
-            IBusClientHandler* const ClientHandler; 
+            IBusClientHandler* const ClientHandler;
 
-        public: 
-            TRemoteClientConnection(TRemoteClientSessionPtr session, ui64 id, TNetAddr addr); 
+        public:
+            TRemoteClientConnection(TRemoteClientSessionPtr session, ui64 id, TNetAddr addr);
 
-            inline TRemoteClientSession* GetSession(); 
+            inline TRemoteClientSession* GetSession();
 
-            SOCKET CreateSocket(const TNetAddr& addr); 
+            SOCKET CreateSocket(const TNetAddr& addr);
 
-            void TryConnect() override; 
+            void TryConnect() override;
 
-            void HandleEvent(SOCKET socket, void* cookie) override; 
+            void HandleEvent(SOCKET socket, void* cookie) override;
 
-            TBusMessage* PopAck(TBusKey id); 
+            TBusMessage* PopAck(TBusKey id);
 
-            void WriterFillStatus() override; 
+            void WriterFillStatus() override;
 
-            void ClearOutgoingQueue(TMessagesPtrs& result, bool reconnect) override; 
+            void ClearOutgoingQueue(TMessagesPtrs& result, bool reconnect) override;
 
-            void BeforeTryWrite() override; 
+            void BeforeTryWrite() override;
 
-            void ProcessReplyQueue(); 
+            void ProcessReplyQueue();
 
-            void MessageSent(TArrayRef<TBusMessagePtrAndHeader> messages) override; 
+            void MessageSent(TArrayRef<TBusMessagePtrAndHeader> messages) override;
 
-            void TimeoutMessages(); 
+            void TimeoutMessages();
 
-            void ScheduleTimeoutMessages(); 
+            void ScheduleTimeoutMessages();
 
-            void ReaderProcessMessageUnknownVersion(TArrayRef<const char> dataRef) override; 
+            void ReaderProcessMessageUnknownVersion(TArrayRef<const char> dataRef) override;
 
-            EMessageStatus SendMessage(TBusMessage* pMes, bool wait) override; 
+            EMessageStatus SendMessage(TBusMessage* pMes, bool wait) override;
 
-            EMessageStatus SendMessageOneWay(TBusMessage* pMes, bool wait) override; 
+            EMessageStatus SendMessageOneWay(TBusMessage* pMes, bool wait) override;
 
-            EMessageStatus SendMessageImpl(TBusMessage*, bool wait, bool oneWay); 
+            EMessageStatus SendMessageImpl(TBusMessage*, bool wait, bool oneWay);
 
-            void OpenConnection() override; 
-        }; 
+            void OpenConnection() override;
+        };
 
-    } 
-} 
+    }
+}

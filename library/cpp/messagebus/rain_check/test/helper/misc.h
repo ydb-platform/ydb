@@ -6,8 +6,8 @@
 
 namespace NRainCheck {
     struct TNopSimpleTask: public ISimpleTask {
-        TNopSimpleTask(IEnv*, const void*) { 
-        } 
+        TNopSimpleTask(IEnv*, const void*) {
+        }
 
         TContinueFunc Start() override {
             return nullptr;
@@ -15,11 +15,11 @@ namespace NRainCheck {
     };
 
     struct TNopCoroTask: public ICoroTask {
-        TNopCoroTask(IEnv*, const void*) { 
-        } 
+        TNopCoroTask(IEnv*, const void*) {
+        }
 
-        void Run() override { 
-        } 
+        void Run() override {
+        }
     };
 
     struct TSpawnNopTasksCoroTask: public ICoroTask {
@@ -29,8 +29,8 @@ namespace NRainCheck {
         TSpawnNopTasksCoroTask(IEnv* env, unsigned count)
             : Env(env)
             , Count(count)
-        { 
-        } 
+        {
+        }
 
         std::array<TSubtaskCompletion, 2> Completion;
 
@@ -44,8 +44,8 @@ namespace NRainCheck {
         TSpawnNopTasksSimpleTask(IEnv* env, unsigned count)
             : Env(env)
             , Count(count)
-        { 
-        } 
+        {
+        }
 
         std::array<TSubtaskCompletion, 2> Completion;
 

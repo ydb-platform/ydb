@@ -1,4 +1,4 @@
-#include "lcg_engine.h" 
+#include "lcg_engine.h"
 
 namespace NPrivate {
     template <typename T>
@@ -27,4 +27,4 @@ namespace NPrivate {
 
     template ui32 LcgAdvance<ui32>(ui32, ui32, ui32, ui32) noexcept;
     template ui64 LcgAdvance<ui64>(ui64, ui64, ui64, ui64) noexcept;
-} 
+}

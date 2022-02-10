@@ -78,8 +78,8 @@ namespace NKiwiAggr {
         if (histo.GetType() == HT_ADAPTIVE_DISTANCE_HISTOGRAM ||
             histo.GetType() == HT_ADAPTIVE_WEIGHT_HISTOGRAM ||
             histo.GetType() == HT_ADAPTIVE_WARD_HISTOGRAM ||
-            histo.GetType() == HT_ADAPTIVE_HISTOGRAM) 
-        { 
+            histo.GetType() == HT_ADAPTIVE_HISTOGRAM)
+        {
             Y_VERIFY(histo.FreqSize() == histo.PositionSize(), "Corrupted histo");
             for (size_t j = 0; j < histo.FreqSize(); ++j) {
                 double value = histo.GetPosition(j);
@@ -130,7 +130,7 @@ namespace NKiwiAggr {
             if (adaptiveHisto) {
                 histogramsToMergeRepacked.push_back(histogramsToMerge[i]);
             } else {
-                histogramsToMergeRepacked.push_back(IHistogramPtr(new TAdaptiveHistogram(histogramsToMerge[i].Get(), Intervals, Id, CalcQuality))); // Convert histograms that are not of TFixedBinHistogram type 
+                histogramsToMergeRepacked.push_back(IHistogramPtr(new TAdaptiveHistogram(histogramsToMerge[i].Get(), Intervals, Id, CalcQuality))); // Convert histograms that are not of TFixedBinHistogram type
             }
             if (histogramsToMergeRepacked.back()->Empty()) {
                 continue;
@@ -180,8 +180,8 @@ namespace NKiwiAggr {
     }
 
     void TAdaptiveHistogram::FromProto(const THistogram& histo) {
-        Y_VERIFY(histo.HasType(), "Attempt to parse TAdaptiveHistogram from THistogram protobuf with no Type field set"); 
-        ; 
+        Y_VERIFY(histo.HasType(), "Attempt to parse TAdaptiveHistogram from THistogram protobuf with no Type field set");
+        ;
         switch (histo.GetType()) { // check that histogram type could be deduced
             case HT_ADAPTIVE_DISTANCE_HISTOGRAM:
             case HT_ADAPTIVE_WEIGHT_HISTOGRAM:
@@ -191,7 +191,7 @@ namespace NKiwiAggr {
                 if (CalcQuality != nullptr)
                     break; // ok
                 [[fallthrough]];
-            default:       // not ok 
+            default:       // not ok
                 ythrow yexception() << "Attempt to parse TAdaptiveHistogram from THistogram protobuf record of type = " << (ui32)histo.GetType();
         }
 
@@ -300,7 +300,7 @@ namespace NKiwiAggr {
                 bound,
                 PrecomputedBins,
                 LowerBound(PrecomputedBins.begin(), PrecomputedBins.end(), TFastBin{bound, -1.0, 0, 0}),
-                [](const auto& it) { return it->SumAbove; }); 
+                [](const auto& it) { return it->SumAbove; });
         } else {
             return GetSumAboveBoundImpl(
                 bound,
@@ -313,7 +313,7 @@ namespace NKiwiAggr {
                         sum += it->second;
                     }
                     return sum;
-                }); 
+                });
         }
     }
 
@@ -333,7 +333,7 @@ namespace NKiwiAggr {
                 bound,
                 PrecomputedBins,
                 LowerBound(PrecomputedBins.begin(), PrecomputedBins.end(), TFastBin{bound, -1.0, 0, 0}),
-                [](const auto& it) { return it->SumBelow; }); 
+                [](const auto& it) { return it->SumBelow; });
         } else {
             return GetSumBelowBoundImpl(
                 bound,
@@ -345,7 +345,7 @@ namespace NKiwiAggr {
                         sum += it->second;
                     }
                     return sum;
-                }); 
+                });
         }
     }
 
@@ -634,4 +634,4 @@ namespace NKiwiAggr {
         return sum;
     }
 
-} 
+}

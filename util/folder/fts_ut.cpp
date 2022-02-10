@@ -1,61 +1,61 @@
-#include "fts.h" 
-#include "dirut.h" 
+#include "fts.h"
+#include "dirut.h"
 #include "tempdir.h"
- 
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
 
-#include <util/system/file.h> 
+#include <util/system/file.h>
 #include <util/system/tempfile.h>
 #include <util/generic/string.h>
 
 class TFtsTest: public TTestBase {
-    UNIT_TEST_SUITE(TFtsTest); 
-    UNIT_TEST(TestSimple); 
+    UNIT_TEST_SUITE(TFtsTest);
+    UNIT_TEST(TestSimple);
     UNIT_TEST(TestNoLeakChangingAccessToFolder);
-    UNIT_TEST_SUITE_END(); 
+    UNIT_TEST_SUITE_END();
 
-public: 
-    void TestSimple(); 
+public:
+    void TestSimple();
     void TestNoLeakChangingAccessToFolder();
 };
 
-void MakeFile(const char* path) { 
-    TFile(path, CreateAlways); 
+void MakeFile(const char* path) {
+    TFile(path, CreateAlways);
 }
 
 //There potentially could be problems in listing order on different platforms
-int FtsCmp(const FTSENT** ent1, const FTSENT** ent2) { 
+int FtsCmp(const FTSENT** ent1, const FTSENT** ent2) {
     return strcmp((*ent1)->fts_accpath, (*ent2)->fts_accpath);
 }
 
-void CheckEnt(FTSENT* ent, const char* name, int type) { 
+void CheckEnt(FTSENT* ent, const char* name, int type) {
     UNIT_ASSERT(ent);
     UNIT_ASSERT_STRINGS_EQUAL(ent->fts_path, name);
     UNIT_ASSERT_EQUAL(ent->fts_info, type);
 }
 
-class TFileTree { 
+class TFileTree {
 public:
-    TFileTree(char* const* argv, int options, int (*compar)(const FTSENT**, const FTSENT**)) { 
-        Fts_ = yfts_open(argv, options, compar); 
+    TFileTree(char* const* argv, int options, int (*compar)(const FTSENT**, const FTSENT**)) {
+        Fts_ = yfts_open(argv, options, compar);
     }
 
-    ~TFileTree() { 
-        yfts_close(Fts_); 
+    ~TFileTree() {
+        yfts_close(Fts_);
     }
 
     FTS* operator()() {
-        return Fts_; 
+        return Fts_;
     }
- 
+
 private:
-    FTS* Fts_; 
+    FTS* Fts_;
 };
 
-void TFtsTest::TestSimple() { 
+void TFtsTest::TestSimple() {
     const char* dotPath[2] = {"." LOCSLASH_S, nullptr};
-    TFileTree currentDirTree((char* const*)dotPath, 0, FtsCmp); 
+    TFileTree currentDirTree((char* const*)dotPath, 0, FtsCmp);
     UNIT_ASSERT(currentDirTree());
     TTempDir tempDir = MakeTempName(yfts_read(currentDirTree())->fts_path);
     MakeDirIfNotExist(tempDir().data());
@@ -67,7 +67,7 @@ void TFtsTest::TestSimple() {
     MakeFile((tempDir() + LOCSLASH_S "dir2" LOCSLASH_S "file4").data());
 
     const char* path[2] = {tempDir().data(), nullptr};
-    TFileTree fileTree((char* const*)path, 0, FtsCmp); 
+    TFileTree fileTree((char* const*)path, 0, FtsCmp);
     UNIT_ASSERT(fileTree());
     CheckEnt(yfts_read(fileTree()), tempDir().data(), FTS_D);
     CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir1").data(), FTS_D);
@@ -120,4 +120,4 @@ void TFtsTest::TestNoLeakChangingAccessToFolder() {
     chmodFuture.Wait();
 }
 
-UNIT_TEST_SUITE_REGISTRATION(TFtsTest); 
+UNIT_TEST_SUITE_REGISTRATION(TFtsTest);

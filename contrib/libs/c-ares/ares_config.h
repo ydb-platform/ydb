@@ -46,11 +46,11 @@
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #define HAVE_ARPA_INET_H 1
 
-#if defined(__ANDROID__) 
-#else 
+#if defined(__ANDROID__)
+#else
 /* Define to 1 if you have the <arpa/nameser_compat.h> header file. */
 #define HAVE_ARPA_NAMESER_COMPAT_H 1
-#endif 
+#endif
 
 /* Define to 1 if you have the <arpa/nameser.h> header file. */
 #define HAVE_ARPA_NAMESER_H 1
@@ -118,10 +118,10 @@
 /* Define to 1 if you have the getservbyport_r function. */
 #define HAVE_GETSERVBYPORT_R 1
 
-#if defined(__APPLE__) 
-#undef HAVE_GETSERVBYPORT_R 
-#endif 
- 
+#if defined(__APPLE__)
+#undef HAVE_GETSERVBYPORT_R
+#endif
+
 #if defined(__ANDROID__)
 #undef HAVE_GETSERVBYPORT_R
 #endif
@@ -385,7 +385,7 @@
 #define RANDOM_FILE "/dev/urandom"
 
 /* Define to the type qualifier pointed by arg 5 for recvfrom. */
-#define RECVFROM_QUAL_ARG5 
+#define RECVFROM_QUAL_ARG5
 
 /* Define to the type of arg 1 for recvfrom. */
 #define RECVFROM_TYPE_ARG1 int
@@ -456,24 +456,24 @@
 /* The size of `int', as computed by sizeof. */
 #define SIZEOF_INT 4
 
-#if defined(_MSC_VER) 
-#define SIZEOF_LONG 4 
-#elif defined(__SIZEOF_LONG__) 
-#define SIZEOF_LONG __SIZEOF_LONG__ 
-#else 
+#if defined(_MSC_VER)
+#define SIZEOF_LONG 4
+#elif defined(__SIZEOF_LONG__)
+#define SIZEOF_LONG __SIZEOF_LONG__
+#else
 /* The size of `long', as computed by sizeof. */
 #define SIZEOF_LONG 8
-#endif 
+#endif
 
 /* The size of `short', as computed by sizeof. */
 #define SIZEOF_SHORT 2
 
-#if defined(__SIZEOF_SIZE_T__) 
-#define SIZEOF_SIZE_T __SIZEOF_SIZE_T__ 
-#else 
+#if defined(__SIZEOF_SIZE_T__)
+#define SIZEOF_SIZE_T __SIZEOF_SIZE_T__
+#else
 /* The size of `size_t', as computed by sizeof. */
 #define SIZEOF_SIZE_T 8
-#endif 
+#endif
 
 /* The size of `struct in6_addr', as computed by sizeof. */
 #define SIZEOF_STRUCT_IN6_ADDR 16

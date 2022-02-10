@@ -7,7 +7,7 @@ PYTHON(
     IN tlds-alpha-by-domain.txt
     STDOUT tld.inc
 )
- 
+
 SRCS(
     tld.cpp
 )

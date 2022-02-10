@@ -1,22 +1,22 @@
 #pragma once
 
-#include "guard.h" 
-#include "defaults.h" 
- 
+#include "guard.h"
+#include "defaults.h"
+
 #include <util/generic/ptr.h>
 #include <util/generic/noncopyable.h>
 
-class TFakeMutex: public TNonCopyable { 
-public: 
+class TFakeMutex: public TNonCopyable {
+public:
     inline void Acquire() noexcept {
-    } 
+    }
 
     inline bool TryAcquire() noexcept {
-        return true; 
-    } 
+        return true;
+    }
 
     inline void Release() noexcept {
-    } 
+    }
 
     inline void lock() noexcept {
         Acquire();
@@ -31,18 +31,18 @@ public:
     }
 
     ~TFakeMutex() = default;
-}; 
+};
 
 class TMutex {
-public: 
+public:
     TMutex();
     TMutex(TMutex&&);
     ~TMutex();
- 
+
     void Acquire() noexcept;
     bool TryAcquire() noexcept;
     void Release() noexcept;
- 
+
     inline void lock() noexcept {
         Acquire();
     }
@@ -55,10 +55,10 @@ public:
         Release();
     }
 
-    //return opaque pointer to real handler 
+    //return opaque pointer to real handler
     void* Handle() const noexcept;
- 
-private: 
-    class TImpl; 
-    THolder<TImpl> Impl_; 
-}; 
+
+private:
+    class TImpl;
+    THolder<TImpl> Impl_;
+};

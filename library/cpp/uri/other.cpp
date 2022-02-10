@@ -1,35 +1,35 @@
 #include "other.h"
- 
+
 #include <util/string/util.h>
 #include <util/system/yassert.h>
- 
+
 /********************************************************/
 /********************************************************/
 
 static const Tr InvertTr(".:/?#", "\005\004\003\002\001");
 static const Tr RevertTr("\005\004\003\002\001", ".:/?#");
 
-void TrspChars(char* s) { 
+void TrspChars(char* s) {
     InvertTr.Do(s);
 }
 
-void UnTrspChars(char* s) { 
+void UnTrspChars(char* s) {
     RevertTr.Do(s);
 }
 
-void TrspChars(char* s, size_t l) { 
+void TrspChars(char* s, size_t l) {
     InvertTr.Do(s, l);
 }
 
-void UnTrspChars(char* s, size_t l) { 
+void UnTrspChars(char* s, size_t l) {
     RevertTr.Do(s, l);
 }
 
-void TrspChars(const char* s, char* d) { 
+void TrspChars(const char* s, char* d) {
     InvertTr.Do(s, d);
 }
 
-void UnTrspChars(const char* s, char* d) { 
+void UnTrspChars(const char* s, char* d) {
     RevertTr.Do(s, d);
 }
 
@@ -57,14 +57,14 @@ void InvertDomain(char* begin, char* end) {
             e = end;
         for (size_t i = 0, n = e - b; i < n / 2; ++i)
             DoSwap(b[i], b[n - i - 1]);
-        if (e == end) 
+        if (e == end)
             break;
         b = e + 1;
     }
 }
 
 void InvertUrl(char* begin, char* end) {
-    char* slash = strchr(begin, '/'); 
+    char* slash = strchr(begin, '/');
     if (slash) {
         *slash = 0;
     }

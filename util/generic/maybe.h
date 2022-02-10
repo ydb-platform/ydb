@@ -3,12 +3,12 @@
 #include <utility>
 
 #include "maybe_traits.h"
-#include "yexception.h" 
- 
-#include <util/system/align.h> 
+#include "yexception.h"
+
+#include <util/system/align.h>
 #include <util/stream/output.h>
 #include <util/ysaveload.h>
- 
+
 namespace NMaybe {
     struct TPolicyUndefinedExcept {
         [[noreturn]] static void OnEmpty(const std::type_info& valueTypeInfo);
@@ -20,8 +20,8 @@ namespace NMaybe {
 }
 
 struct TNothing {
-    explicit constexpr TNothing(int) noexcept { 
-    } 
+    explicit constexpr TNothing(int) noexcept {
+    }
 };
 
 constexpr TNothing NothingObject{0};
@@ -35,7 +35,7 @@ constexpr bool operator==(TNothing, TNothing) noexcept {
 }
 
 template <class T, class Policy /*= ::NMaybe::TPolicyUndefinedExcept*/>
-class TMaybe: private TMaybeBase<T> { 
+class TMaybe: private TMaybeBase<T> {
 public:
     using TInPlace = NMaybe::TInPlace;
 
@@ -115,9 +115,9 @@ private:
     template <class U>
     struct TMoveAssignable {
     public:
-        static constexpr bool value = std::is_constructible<T, U&&>::value && 
-                                      std::is_assignable<T&, U&&>::value && 
-                                      !TAssignableFromMaybeSomehow<U>::value; 
+        static constexpr bool value = std::is_constructible<T, U&&>::value &&
+                                      std::is_assignable<T&, U&&>::value &&
+                                      !TAssignableFromMaybeSomehow<U>::value;
     };
 
     template <class U>
@@ -164,18 +164,18 @@ public:
 
     template <class... Args>
     constexpr explicit TMaybe(TInPlace, Args&&... args)
-        : TBase(TInPlace{}, std::forward<Args>(args)...) 
-    { 
-    } 
+        : TBase(TInPlace{}, std::forward<Args>(args)...)
+    {
+    }
 
     template <class U, class... TArgs>
     constexpr explicit TMaybe(TInPlace, std::initializer_list<U> il, TArgs&&... args)
-        : TBase(TInPlace{}, il, std::forward<TArgs>(args)...) 
-    { 
-    } 
+        : TBase(TInPlace{}, il, std::forward<TArgs>(args)...)
+    {
+    }
 
-    constexpr TMaybe(TNothing) noexcept { 
-    } 
+    constexpr TMaybe(TNothing) noexcept {
+    }
 
     template <class U, class = std::enable_if_t<TImplicitCopyCtor<U>::value>>
     TMaybe(const TMaybe<U, Policy>& right) {
@@ -211,21 +211,21 @@ public:
 
     template <class U = T, class = std::enable_if_t<TImplicitAnyCtor<U>::value>>
     constexpr TMaybe(U&& right)
-        : TBase(TInPlace{}, std::forward<U>(right)) 
-    { 
-    } 
+        : TBase(TInPlace{}, std::forward<U>(right))
+    {
+    }
 
     template <class U = T, std::enable_if_t<TExplicitAnyCtor<U>::value, bool> = false>
     constexpr explicit TMaybe(U&& right)
-        : TBase(TInPlace{}, std::forward<U>(right)) 
-    { 
-    } 
+        : TBase(TInPlace{}, std::forward<U>(right))
+    {
+    }
 
     ~TMaybe() = default;
 
     constexpr TMaybe& operator=(const TMaybe&) = default;
     constexpr TMaybe& operator=(TMaybe&&) = default;
- 
+
     TMaybe& operator=(TNothing) noexcept {
         Clear();
         return *this;
@@ -243,8 +243,8 @@ public:
 
     template <class U>
     std::enable_if_t<TCopyAssignable<U>::value,
-                     TMaybe&> 
-    operator=(const TMaybe<U, Policy>& right) { 
+                     TMaybe&>
+    operator=(const TMaybe<U, Policy>& right) {
         if (right.Defined()) {
             if (Defined()) {
                 *Data() = right.GetRef();
@@ -260,9 +260,9 @@ public:
 
     template <class U>
     std::enable_if_t<TMoveAssignable<U>::value,
-                     TMaybe&> 
-    operator=(TMaybe<U, Policy>&& right) noexcept( 
-        std::is_nothrow_assignable<T&, U&&>::value&& std::is_nothrow_constructible<T, U&&>::value) 
+                     TMaybe&>
+    operator=(TMaybe<U, Policy>&& right) noexcept(
+        std::is_nothrow_assignable<T&, U&&>::value&& std::is_nothrow_constructible<T, U&&>::value)
     {
         if (right.Defined()) {
             if (Defined()) {
@@ -295,7 +295,7 @@ public:
         return this->Defined_;
     }
 
-    Y_PURE_FUNCTION constexpr bool Empty() const noexcept { 
+    Y_PURE_FUNCTION constexpr bool Empty() const noexcept {
         return !Defined();
     }
 
@@ -315,13 +315,13 @@ public:
 
     constexpr const T& GetRef() const& {
         CheckDefined();
- 
+
         return *Data();
     }
 
     constexpr T& GetRef() & {
         CheckDefined();
- 
+
         return *Data();
     }
 
@@ -388,9 +388,9 @@ public:
 
     void Save(IOutputStream* out) const {
         const bool defined = Defined();
- 
+
         ::Save<bool>(out, defined);
- 
+
         if (defined) {
             ::Save(out, *Data());
         }
@@ -398,14 +398,14 @@ public:
 
     void Load(IInputStream* in) {
         bool defined;
- 
+
         ::Load(in, defined);
- 
+
         if (defined) {
             if (!Defined()) {
                 ConstructInPlace();
             }
- 
+
             ::Load(in, *Data());
         } else {
             Clear();
@@ -441,7 +441,7 @@ private:
         return std::addressof(this->Data_);
     }
 
-    template <typename... Args> 
+    template <typename... Args>
     void Init(Args&&... args) {
         new (Data()) T(std::forward<Args>(args)...);
         this->Defined_ = true;
@@ -486,12 +486,12 @@ struct THash<TMaybe<T, TPolicy>> {
 // Comparisons between TMaybe
 template <class T, class TPolicy>
 constexpr bool operator==(const ::TMaybe<T, TPolicy>& left, const ::TMaybe<T, TPolicy>& right) {
-    return (static_cast<bool>(left) != static_cast<bool>(right)) 
-               ? false 
-               : ( 
-                     !static_cast<bool>(left) 
-                         ? true 
-                         : *left == *right); 
+    return (static_cast<bool>(left) != static_cast<bool>(right))
+               ? false
+               : (
+                     !static_cast<bool>(left)
+                         ? true
+                         : *left == *right);
 }
 
 template <class T, class TPolicy>
@@ -502,11 +502,11 @@ constexpr bool operator!=(const TMaybe<T, TPolicy>& left, const TMaybe<T, TPolic
 template <class T, class TPolicy>
 constexpr bool operator<(const TMaybe<T, TPolicy>& left, const TMaybe<T, TPolicy>& right) {
     return (!static_cast<bool>(right))
-               ? false 
-               : ( 
-                     !static_cast<bool>(left) 
-                         ? true 
-                         : (*left < *right)); 
+               ? false
+               : (
+                     !static_cast<bool>(left)
+                         ? true
+                         : (*left < *right));
 }
 
 template <class T, class TPolicy>

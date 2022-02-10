@@ -1,44 +1,44 @@
-#include "md5.h" 
- 
+#include "md5.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/system/fs.h> 
-#include <util/stream/file.h> 
- 
+#include <util/system/fs.h>
+#include <util/stream/file.h>
+
 Y_UNIT_TEST_SUITE(TMD5Test) {
     Y_UNIT_TEST(TestMD5) {
         // echo -n 'qwertyuiopqwertyuiopasdfghjklasdfghjkl' | md5sum
         constexpr const char* b = "qwertyuiopqwertyuiopasdfghjklasdfghjkl";
- 
+
         MD5 r;
         r.Update((const unsigned char*)b, 15);
         r.Update((const unsigned char*)b + 15, strlen(b) - 15);
- 
+
         char rs[33];
         TString s(r.End(rs));
         s.to_lower();
- 
+
         UNIT_ASSERT_NO_DIFF(s, TStringBuf("3ac00dd696b966fd74deee3c35a59d8f"));
- 
+
         TString result = r.Calc(TStringBuf(b));
         result.to_lower();
         UNIT_ASSERT_NO_DIFF(result, TStringBuf("3ac00dd696b966fd74deee3c35a59d8f"));
     }
- 
+
     Y_UNIT_TEST(TestFile) {
         TString s = NUnitTest::RandomString(1000000, 1);
         const TString tmpFile = "tmp";
- 
+
         {
             TFixedBufferFileOutput fo(tmpFile);
             fo.Write(s.data(), s.size());
         }
- 
+
         char fileBuf[100];
         char memBuf[100];
         TString fileHash = MD5::File(tmpFile.data(), fileBuf);
         TString memoryHash = MD5::Data((const unsigned char*)s.data(), s.size(), memBuf);
- 
+
         UNIT_ASSERT_NO_DIFF(fileHash, memoryHash);
 
         fileHash = MD5::File(tmpFile);

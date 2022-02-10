@@ -1,6 +1,6 @@
 from _common import iterpair, listid, pathid, rootrel_arc_src, tobuilddir, filter_out_by_keyword
 
- 
+
 def split(lst, limit):
     # paths are specified with replaceable prefix
     # real length is unknown at the moment, that why we use root_lenght

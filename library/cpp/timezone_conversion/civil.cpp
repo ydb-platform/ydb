@@ -177,7 +177,7 @@ namespace NDatetime {
 
 template <>
 void Out<NDatetime::TCivilYear>(IOutputStream& out, const NDatetime::TCivilYear& y) {
-    out << y.year(); 
+    out << y.year();
 }
 
 template <>
@@ -209,26 +209,26 @@ template <>
 void Out<NDatetime::TWeekday>(IOutputStream& out, NDatetime::TWeekday wd) {
     using namespace cctz;
     switch (wd) {
-        case weekday::monday: 
+        case weekday::monday:
             out << TStringBuf("Monday");
-            break; 
-        case weekday::tuesday: 
+            break;
+        case weekday::tuesday:
             out << TStringBuf("Tuesday");
-            break; 
-        case weekday::wednesday: 
+            break;
+        case weekday::wednesday:
             out << TStringBuf("Wednesday");
-            break; 
-        case weekday::thursday: 
+            break;
+        case weekday::thursday:
             out << TStringBuf("Thursday");
-            break; 
-        case weekday::friday: 
+            break;
+        case weekday::friday:
             out << TStringBuf("Friday");
-            break; 
-        case weekday::saturday: 
+            break;
+        case weekday::saturday:
             out << TStringBuf("Saturday");
-            break; 
-        case weekday::sunday: 
+            break;
+        case weekday::sunday:
             out << TStringBuf("Sunday");
-            break; 
+            break;
     }
 }

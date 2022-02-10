@@ -1,6 +1,6 @@
 OWNER(g:cpp-contrib)
 
-LIBRARY() 
+LIBRARY()
 
 SRCS(
     profile.cpp

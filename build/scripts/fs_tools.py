@@ -1,11 +1,11 @@
 from __future__ import print_function
 
-import os 
+import os
 import platform
-import sys 
-import shutil 
+import sys
+import shutil
 import errno
- 
+
 import process_command_files as pcf
 
 
@@ -26,7 +26,7 @@ def link_or_copy(src, dst):
 if __name__ == '__main__':
     mode = sys.argv[1]
     args = pcf.get_args(sys.argv[2:])
- 
+
     if mode == 'copy':
         shutil.copy(args[0], args[1])
     elif mode == 'copy_tree_no_link':

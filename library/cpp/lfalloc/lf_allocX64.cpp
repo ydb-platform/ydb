@@ -9,7 +9,7 @@
 #endif
 
 #ifndef _darwin_
-#if !defined(YMAKE) 
+#if !defined(YMAKE)
 void* operator new(size_t size) {
     return LFAlloc(size);
 }
@@ -18,11 +18,11 @@ void* operator new(size_t size, const std::nothrow_t&) OP_THROWNOTHING {
     return LFAlloc(size);
 }
 
-void operator delete(void* p)OP_THROWNOTHING { 
+void operator delete(void* p)OP_THROWNOTHING {
     LFFree(p);
 }
 
-void operator delete(void* p, const std::nothrow_t&)OP_THROWNOTHING { 
+void operator delete(void* p, const std::nothrow_t&)OP_THROWNOTHING {
     LFFree(p);
 }
 
@@ -41,7 +41,7 @@ void operator delete[](void* p) OP_THROWNOTHING {
 void operator delete[](void* p, const std::nothrow_t&) OP_THROWNOTHING {
     LFFree(p);
 }
-#endif 
+#endif
 
 //#ifndef _MSC_VER
 
@@ -53,21 +53,21 @@ extern "C" void* valloc(size_t size) {
     return LFVAlloc(size);
 }
 
-extern "C" int posix_memalign(void** memptr, size_t alignment, size_t size) { 
+extern "C" int posix_memalign(void** memptr, size_t alignment, size_t size) {
     return LFPosixMemalign(memptr, alignment, size);
 }
 
 extern "C" void* memalign(size_t alignment, size_t size) {
     void* ptr;
     int res = LFPosixMemalign(&ptr, alignment, size);
-    return res ? nullptr : ptr; 
+    return res ? nullptr : ptr;
 }
 
 extern "C" void* aligned_alloc(size_t alignment, size_t size) {
     return memalign(alignment, size);
 }
 
-#if !defined(_MSC_VER) && !defined(_freebsd_) 
+#if !defined(_MSC_VER) && !defined(_freebsd_)
 // Workaround for pthread_create bug in linux.
 extern "C" void* __libc_memalign(size_t alignment, size_t size) {
     return memalign(alignment, size);
@@ -81,8 +81,8 @@ extern "C" void free(void* ptr) {
 extern "C" void* calloc(size_t n, size_t elem_size) {
     // Overflow check
     const size_t size = n * elem_size;
-    if (elem_size != 0 && size / elem_size != n) 
-        return nullptr; 
+    if (elem_size != 0 && size / elem_size != n)
+        return nullptr;
 
     void* result = LFAlloc(size);
     if (result != nullptr) {

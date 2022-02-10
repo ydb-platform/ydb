@@ -23,14 +23,14 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
             db,
             scratch,
             "abc",
-            callback); 
+            callback);
         UNIT_ASSERT_EQUAL(foundId, 0);
     }
 
     Y_UNIT_TEST(Matches) {
         NHyperscan::TDatabase db = NHyperscan::Compile(
             "a.c",
-            HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH); 
+            HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH);
         NHyperscan::TScratch scratch = NHyperscan::MakeScratch(db);
         UNIT_ASSERT(NHyperscan::Matches(db, scratch, "abc"));
         UNIT_ASSERT(!NHyperscan::Matches(db, scratch, "foo"));
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
             {
                 42,
                 241,
-            }); 
+            });
         NHyperscan::TScratch scratch = NHyperscan::MakeScratch(db);
 
         UNIT_ASSERT(NHyperscan::Matches(db, scratch, "foo"));
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
             db,
             scratch,
             "fooBaR",
-            callback); 
+            callback);
         UNIT_ASSERT_EQUAL(foundIds.size(), 2);
         UNIT_ASSERT(foundIds.contains(42));
         UNIT_ASSERT(foundIds.contains(241));
@@ -82,13 +82,13 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
             },
             {
                 0,
-            }); 
+            });
     }
 
     Y_UNIT_TEST(Serialize) {
         NHyperscan::TDatabase db = NHyperscan::Compile(
             "foo",
-            HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH); 
+            HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH);
         TString serialization = Serialize(db);
         db.Reset();
         TDatabase db2 = Deserialize(serialization);
@@ -101,10 +101,10 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
     Y_UNIT_TEST(GrowScratch) {
         NHyperscan::TDatabase db1 = NHyperscan::Compile(
             "foo",
-            HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH); 
+            HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH);
         NHyperscan::TDatabase db2 = NHyperscan::Compile(
             "longer\\w\\w\\wpattern",
-            HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH | HS_FLAG_UTF8); 
+            HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH | HS_FLAG_UTF8);
         NHyperscan::TScratch scratch = NHyperscan::MakeScratch(db1);
         NHyperscan::GrowScratch(scratch, db2);
         UNIT_ASSERT(NHyperscan::Matches(db1, scratch, "foo"));
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
     Y_UNIT_TEST(CloneScratch) {
         NHyperscan::TDatabase db = NHyperscan::Compile(
             "foo",
-            HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH); 
+            HS_FLAG_DOTALL | HS_FLAG_SINGLEMATCH);
         NHyperscan::TScratch scratch1 = NHyperscan::MakeScratch(db);
         NHyperscan::TScratch scratch2 = NHyperscan::CloneScratch(scratch1);
         scratch1.Reset();

@@ -8,9 +8,9 @@
 int main(int argc, char** argv) {
     try {
         return NBench::Main(argc, argv);
-    } catch (...) { 
+    } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
     }
- 
-    return EXIT_FAILURE; 
+
+    return EXIT_FAILURE;
 }

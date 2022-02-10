@@ -91,7 +91,7 @@ inline RECODE_RESULT GetUTF8CharLen(size_t& n, const unsigned char* p, const uns
         case 3:
             if (p + 3 > e) {
                 return RECODE_EOINPUT;
-            } else if (!IsUTF8ContinuationByte(p[1]) || !IsUTF8ContinuationByte(p[2])) { 
+            } else if (!IsUTF8ContinuationByte(p[1]) || !IsUTF8ContinuationByte(p[2])) {
                 return RECODE_BROKENSYMBOL;
             } else {
                 n = 3;
@@ -100,7 +100,7 @@ inline RECODE_RESULT GetUTF8CharLen(size_t& n, const unsigned char* p, const uns
         default: // actually 4
             if (p + 4 > e) {
                 return RECODE_EOINPUT;
-            } else if (!IsUTF8ContinuationByte(p[1]) || !IsUTF8ContinuationByte(p[2]) || !IsUTF8ContinuationByte(p[3])) { 
+            } else if (!IsUTF8ContinuationByte(p[1]) || !IsUTF8ContinuationByte(p[2]) || !IsUTF8ContinuationByte(p[3])) {
                 return RECODE_BROKENSYMBOL;
             } else {
                 n = 4;
@@ -161,18 +161,18 @@ inline RECODE_RESULT SafeReadUTF8Char(wchar32& rune, size_t& rune_len, const uns
         unsigned char ch = *s++;
         if (!IsUTF8ContinuationByte(ch))
             return RECODE_BROKENSYMBOL; //[BROKENSYMBOL] in second byte
-        PutUTF8SixBits(_rune, ch);      //[00000XXX XXYYYYYY] 
+        PutUTF8SixBits(_rune, ch);      //[00000XXX XXYYYYYY]
         if (_len > 2) {
             ch = *s++;
             if (!IsUTF8ContinuationByte(ch))
                 return RECODE_BROKENSYMBOL; //[BROKENSYMBOL] in third byte
-            PutUTF8SixBits(_rune, ch);      //[XXXXYYYY YYZZZZZZ] 
+            PutUTF8SixBits(_rune, ch);      //[XXXXYYYY YYZZZZZZ]
             if (_len > 3) {
                 ch = *s;
                 if (!IsUTF8ContinuationByte(ch))
                     return RECODE_BROKENSYMBOL; //[BROKENSYMBOL] in fourth byte
-                PutUTF8SixBits(_rune, ch);      //[XXXYY YYYYZZZZ ZZQQQQQQ] 
-                if (_rune > 0x10FFFF)           // it is not a valid Unicode code point 
+                PutUTF8SixBits(_rune, ch);      //[XXXYY YYYYZZZZ ZZQQQQQQ]
+                if (_rune > 0x10FFFF)           // it is not a valid Unicode code point
                     return RECODE_BROKENSYMBOL;
                 if (_rune < 0x10000) // check for overlong encoding
                     return RECODE_BROKENSYMBOL;
@@ -215,7 +215,7 @@ Y_FORCE_INLINE RECODE_RESULT ReadUTF8CharAndAdvance(wchar32& rune, const unsigne
             } else {
                 PutUTF8LeadBits(rune, *p++, 2); //[00000000 000XXXXX]
                 PutUTF8SixBits(rune, *p++);     //[00000XXX XXYYYYYY]
-                if (Y_UNLIKELY(rune < 0x80)) {  // overlong encoding 
+                if (Y_UNLIKELY(rune < 0x80)) {  // overlong encoding
                     p -= 2;
                     rune = BROKEN_RUNE;
                     return RECODE_BROKENSYMBOL;
@@ -225,7 +225,7 @@ Y_FORCE_INLINE RECODE_RESULT ReadUTF8CharAndAdvance(wchar32& rune, const unsigne
         case 3:
             if (p + 3 > e) {
                 return RECODE_EOINPUT;
-            } else if (!IsUTF8ContinuationByte(p[1]) || !IsUTF8ContinuationByte(p[2])) { 
+            } else if (!IsUTF8ContinuationByte(p[1]) || !IsUTF8ContinuationByte(p[2])) {
                 rune = BROKEN_RUNE;
                 return RECODE_BROKENSYMBOL;
             } else {
@@ -242,14 +242,14 @@ Y_FORCE_INLINE RECODE_RESULT ReadUTF8CharAndAdvance(wchar32& rune, const unsigne
         case 4:
             if (p + 4 > e) {
                 return RECODE_EOINPUT;
-            } else if (!IsUTF8ContinuationByte(p[1]) || !IsUTF8ContinuationByte(p[2]) || !IsUTF8ContinuationByte(p[3])) { 
+            } else if (!IsUTF8ContinuationByte(p[1]) || !IsUTF8ContinuationByte(p[2]) || !IsUTF8ContinuationByte(p[3])) {
                 rune = BROKEN_RUNE;
                 return RECODE_BROKENSYMBOL;
             } else {
-                PutUTF8LeadBits(rune, *p++, 4);                      //[00000000 00000000 00000XXX] 
-                PutUTF8SixBits(rune, *p++);                          //[00000000 0000000X XXYYYYYY] 
-                PutUTF8SixBits(rune, *p++);                          //[00000000 0XXXYYYY YYZZZZZZ] 
-                PutUTF8SixBits(rune, *p++);                          //[000XXXYY YYYYZZZZ ZZQQQQQQ] 
+                PutUTF8LeadBits(rune, *p++, 4);                      //[00000000 00000000 00000XXX]
+                PutUTF8SixBits(rune, *p++);                          //[00000000 0000000X XXYYYYYY]
+                PutUTF8SixBits(rune, *p++);                          //[00000000 0XXXYYYY YYZZZZZZ]
+                PutUTF8SixBits(rune, *p++);                          //[000XXXYY YYYYZZZZ ZZQQQQQQ]
                 if (Y_UNLIKELY(rune < 0x10000 || rune > 0x10FFFF)) { // overlong encoding or non-valid code point
                     p -= 4;
                     rune = BROKEN_RUNE;
@@ -375,10 +375,10 @@ TString ToLowerUTF8(const TString& s);
 TString ToLowerUTF8(TStringBuf s);
 TString ToLowerUTF8(const char* s);
 
-inline TString ToLowerUTF8(const std::string& s) { 
-    return ToLowerUTF8(TStringBuf(s)); 
-} 
- 
+inline TString ToLowerUTF8(const std::string& s) {
+    return ToLowerUTF8(TStringBuf(s));
+}
+
 //! returns true, if result is not the same as input, and put it in newString
 //! returns false, if result is unmodified
 bool ToUpperUTF8Impl(const char* beg, size_t n, TString& newString);

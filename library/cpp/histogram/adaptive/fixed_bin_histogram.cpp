@@ -156,7 +156,7 @@ namespace NKiwiAggr {
                 fixedBinHisto->Initialize();
                 histogramsToMergeRepacked.push_back(histogramsToMerge[i]);
             } else {
-                histogramsToMergeRepacked.push_back(IHistogramPtr(new TFixedBinHistogram(histogramsToMerge[i].Get(), Intervals, Id, TrainingSetSize))); // Convert histograms that are not of TFixedBinHistogram type 
+                histogramsToMergeRepacked.push_back(IHistogramPtr(new TFixedBinHistogram(histogramsToMerge[i].Get(), Intervals, Id, TrainingSetSize))); // Convert histograms that are not of TFixedBinHistogram type
             }
             histograms.push_back(dynamic_cast<TFixedBinHistogram*>(histogramsToMergeRepacked.back().Get()));
         }
@@ -213,7 +213,7 @@ namespace NKiwiAggr {
             Initialize();
         }
         Sum *= factor;
-        for (i32 i = FirstUsedBin; i <= LastUsedBin; ++i) { 
+        for (i32 i = FirstUsedBin; i <= LastUsedBin; ++i) {
             Freqs[i] *= factor;
         }
     }
@@ -325,7 +325,7 @@ namespace NKiwiAggr {
         if (IsEmpty) {
             return 0.0;
         }
-        if (BinRange == 0.0) { // special case - all values added to histogram are the same 
+        if (BinRange == 0.0) { // special case - all values added to histogram are the same
             return (bound <= ReferencePoint) ? Sum : 0.0;
         }
         i32 bin = CalcBin(bound);
@@ -337,7 +337,7 @@ namespace NKiwiAggr {
         }
         double binStart = BinStart(bin);
         double binEnd = BinEnd(bin);
-        double result = (bound < binStart) ? Freqs[bin] : Freqs[bin] * (binEnd - bound) / (binEnd - binStart); 
+        double result = (bound < binStart) ? Freqs[bin] : Freqs[bin] * (binEnd - bound) / (binEnd - binStart);
         for (i32 i = bin + 1; i <= LastUsedBin; ++i) {
             result += Freqs[i];
         }
@@ -351,7 +351,7 @@ namespace NKiwiAggr {
         if (IsEmpty) {
             return 0.0;
         }
-        if (BinRange == 0.0) { // special case - all values added to histogram are the same 
+        if (BinRange == 0.0) { // special case - all values added to histogram are the same
             return (bound > ReferencePoint) ? Sum : 0.0;
         }
         i32 bin = CalcBin(bound);
@@ -363,7 +363,7 @@ namespace NKiwiAggr {
         }
         double binStart = BinStart(bin);
         double binEnd = BinEnd(bin);
-        double result = (bound > binEnd) ? Freqs[bin] : Freqs[bin] * (bound - binStart) / (binEnd - binStart); 
+        double result = (bound > binEnd) ? Freqs[bin] : Freqs[bin] * (bound - binStart) / (binEnd - binStart);
         for (i32 i = bin - 1; i >= FirstUsedBin; --i) {
             result += Freqs[i];
         }
@@ -516,7 +516,7 @@ namespace NKiwiAggr {
         memset(&(ReserveFreqs[0]), 0, ReserveFreqs.size() * sizeof(double));
 
         double newBinRange = CalcBinRange(newReferencePoint, newMaxValue);
-        for (i32 i = FirstUsedBin; i <= LastUsedBin; ++i) { 
+        for (i32 i = FirstUsedBin; i <= LastUsedBin; ++i) {
             double binStart = BinStart(i);
             double binEnd = BinEnd(i);
             double freq = Freqs[i];
@@ -535,4 +535,4 @@ namespace NKiwiAggr {
         SetFrame(newReferencePoint, newMaxValue, false);
     }
 
-} 
+}

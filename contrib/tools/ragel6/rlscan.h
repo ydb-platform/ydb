@@ -33,7 +33,7 @@
 using std::istream;
 using std::ostream;
 
-extern const char *Parser_lelNames[]; 
+extern const char *Parser_lelNames[];
 
 struct Scanner
 {

@@ -12,7 +12,7 @@ LICENSE(
     BSL-1.0 AND
     Custom-Punycode
 )
- 
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(

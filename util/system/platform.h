@@ -1,17 +1,17 @@
 #pragma once
- 
+
 // ya style breaks indentation in ifdef's and code becomes unreadable
 // clang-format off
 
-// What OS ? 
-// our definition has the form _{osname}_ 
- 
-#if defined(_WIN64) 
+// What OS ?
+// our definition has the form _{osname}_
+
+#if defined(_WIN64)
     #define _win64_
     #define _win32_
-#elif defined(__WIN32__) || defined(_WIN32) // _WIN32 is also defined by the 64-bit compiler for backward compatibility 
+#elif defined(__WIN32__) || defined(_WIN32) // _WIN32 is also defined by the 64-bit compiler for backward compatibility
     #define _win32_
-#else 
+#else
     #define _unix_
 
     #if defined(__sun__) || defined(sun) || defined(sparc) || defined(__sparc)
@@ -42,13 +42,13 @@
     #if defined(__ANDROID__)
         #define _android_
     #endif
-#endif 
- 
+#endif
+
 #if defined(__IOS__)
     #define _ios_
 #endif
 
-#if defined(_linux_) 
+#if defined(_linux_)
     #if defined(_musl_)
         // nothing to do
     #elif defined(_android_)
@@ -58,17 +58,17 @@
     #else
         #define _glibc_
     #endif
-#endif 
- 
-#if defined(_darwin_) 
+#endif
+
+#if defined(_darwin_)
     #define unix
     #define __unix__
-#endif 
- 
-#if defined(_win32_) || defined(_win64_) 
+#endif
+
+#if defined(_win32_) || defined(_win64_)
     #define _win_
-#endif 
- 
+#endif
+
 #if defined(__arm__) || defined(__ARM__) || defined(__ARM_NEON) || defined(__aarch64__) || defined(_M_ARM)
     #if defined(__arm64) || defined(__arm64__) || defined(__aarch64__)
         #define _arm64_
@@ -77,7 +77,7 @@
     #endif
 #endif
 
-#if defined(_arm64_) || defined(_arm32_) 
+#if defined(_arm64_) || defined(_arm32_)
     #define _arm_
 #endif
 
@@ -89,16 +89,16 @@
  */
 #if defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64)
     #define _x86_64_
-#endif 
- 
+#endif
+
 #if defined(__i386__) || defined(_M_IX86)
     #define _i386_
 #endif
 
 #if defined(__ia64__) || defined(_M_IA64)
     #define _ia64_
-#endif 
- 
+#endif
+
 #if defined(__powerpc__)
     #define _ppc_
 #endif
@@ -111,41 +111,41 @@
     #error "platform not defined, please, define one"
 #endif
 
-#if defined(_x86_64_) || defined(_i386_) 
+#if defined(_x86_64_) || defined(_i386_)
     #define _x86_
-#endif 
- 
+#endif
+
 #if defined(__MIC__)
     #define _mic_
     #define _k1om_
 #endif
 
-// stdio or MessageBox 
-#if defined(__CONSOLE__) || defined(_CONSOLE) 
+// stdio or MessageBox
+#if defined(__CONSOLE__) || defined(_CONSOLE)
     #define _console_
-#endif 
-#if (defined(_win_) && !defined(_console_)) 
+#endif
+#if (defined(_win_) && !defined(_console_))
     #define _windows_
-#elif !defined(_console_) 
+#elif !defined(_console_)
     #define _console_
-#endif 
- 
-#if defined(__SSE__) || defined(SSE_ENABLED) 
+#endif
+
+#if defined(__SSE__) || defined(SSE_ENABLED)
     #define _sse_
-#endif 
- 
-#if defined(__SSE2__) || defined(SSE2_ENABLED) 
+#endif
+
+#if defined(__SSE2__) || defined(SSE2_ENABLED)
     #define _sse2_
-#endif 
- 
+#endif
+
 #if defined(__SSE3__) || defined(SSE3_ENABLED)
     #define _sse3_
 #endif
 
-#if defined(__SSSE3__) || defined(SSSE3_ENABLED) 
+#if defined(__SSSE3__) || defined(SSSE3_ENABLED)
     #define _ssse3_
-#endif 
- 
+#endif
+
 #if defined(__SSE4_1__) || defined(SSE41_ENABLED)
     #define _sse4_1_
 #endif
@@ -178,17 +178,17 @@
     #define _fma_
 #endif
 
-#if defined(__DLL__) || defined(_DLL) 
+#if defined(__DLL__) || defined(_DLL)
     #define _dll_
-#endif 
- 
-// 16, 32 or 64 
+#endif
+
+// 16, 32 or 64
 #if defined(__sparc_v9__) || defined(_x86_64_) || defined(_ia64_) || defined(_arm64_) || defined(_ppc64_)
     #define _64_
-#else 
+#else
     #define _32_
-#endif 
- 
+#endif
+
 /* All modern 64-bit Unix systems use scheme LP64 (long, pointers are 64-bit).
  * Microsoft uses a different scheme: LLP64 (long long, pointers are 64-bit).
  *
@@ -201,29 +201,29 @@
  * pointer          64     64
  */
 
-#if defined(_32_) 
+#if defined(_32_)
     #define SIZEOF_PTR 4
-#elif defined(_64_) 
+#elif defined(_64_)
     #define SIZEOF_PTR 8
-#endif 
- 
-#define PLATFORM_DATA_ALIGN SIZEOF_PTR 
- 
-#if !defined(SIZEOF_PTR) 
+#endif
+
+#define PLATFORM_DATA_ALIGN SIZEOF_PTR
+
+#if !defined(SIZEOF_PTR)
     #error todo
-#endif 
- 
-#define SIZEOF_CHAR 1 
+#endif
+
+#define SIZEOF_CHAR 1
 #define SIZEOF_UNSIGNED_CHAR 1
-#define SIZEOF_SHORT 2 
+#define SIZEOF_SHORT 2
 #define SIZEOF_UNSIGNED_SHORT 2
-#define SIZEOF_INT 4 
+#define SIZEOF_INT 4
 #define SIZEOF_UNSIGNED_INT 4
- 
-#if defined(_32_) 
+
+#if defined(_32_)
     #define SIZEOF_LONG 4
     #define SIZEOF_UNSIGNED_LONG 4
-#elif defined(_64_) 
+#elif defined(_64_)
     #if defined(_win_)
         #define SIZEOF_LONG 4
         #define SIZEOF_UNSIGNED_LONG 4
@@ -232,15 +232,15 @@
         #define SIZEOF_UNSIGNED_LONG 8
     #endif // _win_
 #endif // _32_
- 
-#if !defined(SIZEOF_LONG) 
+
+#if !defined(SIZEOF_LONG)
     #error todo
-#endif 
- 
-#define SIZEOF_LONG_LONG 8 
+#endif
+
+#define SIZEOF_LONG_LONG 8
 #define SIZEOF_UNSIGNED_LONG_LONG 8
- 
+
 #undef SIZEOF_SIZE_T // in case we include <Python.h> which defines it, too
-#define SIZEOF_SIZE_T SIZEOF_PTR 
- 
+#define SIZEOF_SIZE_T SIZEOF_PTR
+
 // clang-format on

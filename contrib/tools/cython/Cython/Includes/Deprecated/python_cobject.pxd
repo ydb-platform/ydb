@@ -1,2 +1,2 @@
 # Present for backwards compatibility
-from cpython.cobject cimport * 
+from cpython.cobject cimport *

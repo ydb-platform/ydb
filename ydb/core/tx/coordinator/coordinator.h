@@ -38,7 +38,7 @@ struct TEvTxCoordinator {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_COORDINATOR), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_COORDINATOR)"); 
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_COORDINATOR), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_COORDINATOR)");
 
 
     struct TEvCoordinatorStep : public TEventPB<TEvCoordinatorStep, NKikimrTx::TEvCoordinatorStep, EvCoordinatorStep> {

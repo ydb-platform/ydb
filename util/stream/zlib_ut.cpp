@@ -1,14 +1,14 @@
-#include "zlib.h" 
- 
+#include "zlib.h"
+
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include "file.h" 
-#include <util/system/tempfile.h> 
+
+#include "file.h"
+#include <util/system/tempfile.h>
 #include <util/random/entropy.h>
 #include <util/random/random.h>
- 
-#define ZDATA "./zdata" 
- 
+
+#define ZDATA "./zdata"
+
 class TThrowingStream: public IOutputStream {
 public:
     TThrowingStream(int limit)
@@ -54,25 +54,25 @@ private:
 Y_UNIT_TEST_SUITE(TZLibTest) {
     static const TString DATA = "8s7d5vc6s5vc67sa4c65ascx6asd4xcv76adsfxv76s";
     static const TString DATA2 = "cn8wk2bd9vb3vdfif83g1ks94bfiovtwv";
- 
+
     Y_UNIT_TEST(Compress) {
         TUnbufferedFileOutput o(ZDATA);
-        TZLibCompress c(&o, ZLib::ZLib); 
- 
+        TZLibCompress c(&o, ZLib::ZLib);
+
         c.Write(DATA.data(), DATA.size());
-        c.Finish(); 
-        o.Finish(); 
-    } 
- 
+        c.Finish();
+        o.Finish();
+    }
+
     Y_UNIT_TEST(Decompress) {
-        TTempFile tmpFile(ZDATA); 
- 
-        { 
+        TTempFile tmpFile(ZDATA);
+
+        {
             TUnbufferedFileInput i(ZDATA);
-            TZLibDecompress d(&i); 
- 
+            TZLibDecompress d(&i);
+
             UNIT_ASSERT_EQUAL(d.ReadAll(), DATA);
-        } 
+        }
     }
 
     Y_UNIT_TEST(Dictionary) {
@@ -227,4 +227,4 @@ Y_UNIT_TEST_SUITE(TZLibTest) {
             }
         }
     }
-} 
+}

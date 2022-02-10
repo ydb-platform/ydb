@@ -1,7 +1,7 @@
 #include "response.h"
- 
+
 #include <util/stream/output.h>
-#include <util/stream/mem.h> 
+#include <util/stream/mem.h>
 #include <util/string/cast.h>
 
 THttpResponse& THttpResponse::AddMultipleHeaders(const THttpHeaders& headers) {
@@ -11,16 +11,16 @@ THttpResponse& THttpResponse::AddMultipleHeaders(const THttpHeaders& headers) {
     return *this;
 }
 
-THttpResponse& THttpResponse::SetContentType(const TStringBuf& contentType) { 
+THttpResponse& THttpResponse::SetContentType(const TStringBuf& contentType) {
     Headers.AddOrReplaceHeader(THttpInputHeader("Content-Type", ToString(contentType)));
- 
-    return *this; 
+
+    return *this;
 }
 
 void THttpResponse::OutTo(IOutputStream& os) const {
     TVector<IOutputStream::TPart> parts;
     const size_t FIRST_LINE_PARTS = 3;
-    const size_t HEADERS_PARTS = Headers.Count() * 4; 
+    const size_t HEADERS_PARTS = Headers.Count() * 4;
     const size_t CONTENT_PARTS = 5;
     parts.reserve(FIRST_LINE_PARTS + HEADERS_PARTS + CONTENT_PARTS);
 
@@ -30,20 +30,20 @@ void THttpResponse::OutTo(IOutputStream& os) const {
     parts.push_back(IOutputStream::TPart::CrLf());
 
     // headers
-    for (THttpHeaders::TConstIterator i = Headers.Begin(); i != Headers.End(); ++i) { 
+    for (THttpHeaders::TConstIterator i = Headers.Begin(); i != Headers.End(); ++i) {
         parts.push_back(IOutputStream::TPart(i->Name()));
         parts.push_back(IOutputStream::TPart(TStringBuf(": ")));
         parts.push_back(IOutputStream::TPart(i->Value()));
         parts.push_back(IOutputStream::TPart::CrLf());
     }
 
-    char buf[50]; 
- 
+    char buf[50];
+
     if (!Content.empty()) {
-        TMemoryOutput mo(buf, sizeof(buf)); 
+        TMemoryOutput mo(buf, sizeof(buf));
 
         mo << Content.size();
- 
+
         parts.push_back(IOutputStream::TPart(TStringBuf("Content-Length: ")));
         parts.push_back(IOutputStream::TPart(buf, mo.Buf() - buf));
         parts.push_back(IOutputStream::TPart::CrLf());
@@ -51,15 +51,15 @@ void THttpResponse::OutTo(IOutputStream& os) const {
 
     // content
     parts.push_back(IOutputStream::TPart::CrLf());
- 
+
     if (!Content.empty()) {
         parts.push_back(IOutputStream::TPart(Content));
     }
 
     os.Write(parts.data(), parts.size());
-} 
- 
-template <> 
+}
+
+template <>
 void Out<THttpResponse>(IOutputStream& os, const THttpResponse& resp) {
-    resp.OutTo(os); 
+    resp.OutTo(os);
 }

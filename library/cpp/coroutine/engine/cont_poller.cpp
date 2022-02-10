@@ -1,6 +1,6 @@
 #include "cont_poller.h"
-#include "impl.h" 
- 
+#include "impl.h"
+
 namespace NCoro {
     namespace {
         template <class T>
@@ -20,8 +20,8 @@ namespace NCoro {
 
             return event->Status();
         }
-    } 
- 
+    }
+
     void TContPollEvent::Wake() noexcept {
         UnLink();
         Cont()->ReSchedule();
@@ -55,7 +55,7 @@ namespace NCoro {
         };
         IoWait_.ForEach(visitor);
     }
-} 
+}
 
 void TFdEvent::RemoveFromIOWait() noexcept {
     this->Cont()->Executor()->Poller()->Remove(this);

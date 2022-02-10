@@ -3,7 +3,7 @@
 #include "traits.h"
 
 #include <library/cpp/pop_count/popcount.h>
- 
+
 #include <util/generic/vector.h>
 #include <util/ysaveload.h>
 
@@ -78,8 +78,8 @@ public:
     }
 
     void Set(ui64 pos, TWord value, ui8 width, TWord mask) {
-        if (!width) 
-            return; 
+        if (!width)
+            return;
         Y_ASSERT((pos + width) <= Size_);
         size_t word = pos >> TTraits::DivShift;
         TWord shift1 = pos & TTraits::ModMask;
@@ -87,8 +87,8 @@ public:
         Data_[word] &= ~(mask << shift1);
         Data_[word] |= (value & mask) << shift1;
         if (shift2 < width) {
-            Data_[word + 1] &= ~(mask >> shift2); 
-            Data_[word + 1] |= (value & mask) >> shift2; 
+            Data_[word + 1] &= ~(mask >> shift2);
+            Data_[word + 1] |= (value & mask) >> shift2;
         }
     }
 
@@ -97,8 +97,8 @@ public:
     }
 
     void Append(TWord value, ui8 width, TWord mask) {
-        if (!width) 
-            return; 
+        if (!width)
+            return;
         if (Data_.size() * TTraits::NumBits < Size_ + width) {
             Data_.push_back(0);
         }
@@ -113,7 +113,7 @@ public:
     size_t Count() const {
         size_t count = 0;
         for (size_t i = 0; i < Data_.size(); ++i) {
-            count += (size_t)PopCount(Data_[i]); 
+            count += (size_t)PopCount(Data_[i]);
         }
         return count;
     }
@@ -142,7 +142,7 @@ public:
 
     ui64 Space() const {
         return CHAR_BIT * (sizeof(Size_) +
-                           Data_.size() * sizeof(TWord)); 
+                           Data_.size() * sizeof(TWord));
     }
 
     void Print(IOutputStream& out, size_t truncate = 128) {

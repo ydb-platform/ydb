@@ -17,26 +17,26 @@ int main(int argc, char** argv) {
     opts.SetCmdLineDescr("-m 'Training set: 100000 qtrees taken from web mmeta logs' -f base64 qtrees.sample.txt");
     opts.SetTitle("Teaches the codec and serializes it as a file named CODECNAME.hash(CODECDATA).bin");
 
-    opts.AddLongOption('m', "message").RequiredArgument("training_set_comment").StoreResult(&info.TrainingSetComment).Required().Help("a human description for the training set"); 
+    opts.AddLongOption('m', "message").RequiredArgument("training_set_comment").StoreResult(&info.TrainingSetComment).Required().Help("a human description for the training set");
 
-    opts.AddLongOption('r', "resource").RequiredArgument("training_set_res_id").StoreResult(&info.TrainingSetResId).Optional().Help("sandbox resource id for the training set"); 
+    opts.AddLongOption('r', "resource").RequiredArgument("training_set_res_id").StoreResult(&info.TrainingSetResId).Optional().Help("sandbox resource id for the training set");
 
-    opts.AddLongOption('c', "codec").RequiredArgument("codec_name").StoreResult(&info.CodecName).Optional().DefaultValue(info.CodecName); 
+    opts.AddLongOption('c', "codec").RequiredArgument("codec_name").StoreResult(&info.CodecName).Optional().DefaultValue(info.CodecName);
 
-    opts.AddLongOption('s', "sample-multiplier").RequiredArgument("multiplier").StoreResult(&info.SampleSizeMultiplier).Optional().DefaultValue(ToString(info.SampleSizeMultiplier)).Help("multiplier for default sample size"); 
+    opts.AddLongOption('s', "sample-multiplier").RequiredArgument("multiplier").StoreResult(&info.SampleSizeMultiplier).Optional().DefaultValue(ToString(info.SampleSizeMultiplier)).Help("multiplier for default sample size");
 
-    opts.AddLongOption('f', "format").RequiredArgument(TStringBuilder() << "(" << NCodecs::DSF_PLAIN_LF << "|" << NCodecs::DSF_BASE64_LF << ")").StoreResult(&fmt).Required().Help("training set input file format"); 
+    opts.AddLongOption('f', "format").RequiredArgument(TStringBuilder() << "(" << NCodecs::DSF_PLAIN_LF << "|" << NCodecs::DSF_BASE64_LF << ")").StoreResult(&fmt).Required().Help("training set input file format");
 
-    opts.AddLongOption("list-codecs").NoArgument().Handler0([]() { 
-                                                      Cout << JoinStrings(NCodecs::ICodec::GetCodecsList(), "\n") << Endl; 
-                                                      exit(0); 
-                                                  }) 
-        .Optional() 
-        .Help("list available codecs"); 
+    opts.AddLongOption("list-codecs").NoArgument().Handler0([]() {
+                                                      Cout << JoinStrings(NCodecs::ICodec::GetCodecsList(), "\n") << Endl;
+                                                      exit(0);
+                                                  })
+        .Optional()
+        .Help("list available codecs");
 
-    opts.AddLongOption("fake-revision").RequiredArgument("revision").StoreResult(&info.RevisionInfo).Optional().Hidden(); // replace static_codec_generator revision in debug info 
+    opts.AddLongOption("fake-revision").RequiredArgument("revision").StoreResult(&info.RevisionInfo).Optional().Hidden(); // replace static_codec_generator revision in debug info
 
-    opts.AddLongOption("fake-timestamp").RequiredArgument("timestamp").StoreResult(&info.Timestamp).Optional().Hidden(); // replace generating timestamp in debug info 
+    opts.AddLongOption("fake-timestamp").RequiredArgument("timestamp").StoreResult(&info.Timestamp).Optional().Hidden(); // replace generating timestamp in debug info
 
     opts.SetFreeArgsMin(0);
     opts.SetFreeArgTitle(0, "training_set_input_file", "training set input files");

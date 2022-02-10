@@ -4,74 +4,74 @@
 #include <util/string/cast.h>
 #include <util/string/util.h>
 #include <util/string/builder.h>
- 
-#include <util/system/yassert.h> 
+
+#include <util/system/yassert.h>
 #include <util/system/defaults.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
-#include <cstdio> 
- 
-template <typename T> 
-struct TNumPair { 
-    T Begin; 
-    T End; 
- 
+#include <cstdio>
+
+template <typename T>
+struct TNumPair {
+    T Begin;
+    T End;
+
     TNumPair() = default;
- 
-    TNumPair(T begin, T end) 
-        : Begin(begin) 
-        , End(end) 
-    { 
+
+    TNumPair(T begin, T end)
+        : Begin(begin)
+        , End(end)
+    {
         Y_ASSERT(begin <= end);
-    } 
- 
-    T Length() const { 
-        return End - Begin + 1; 
-    } 
- 
-    bool operator==(const TNumPair& r) const { 
-        return (Begin == r.Begin) && (End == r.End); 
-    } 
- 
-    bool operator!=(const TNumPair& r) const { 
-        return (Begin != r.Begin) || (End != r.End); 
-    } 
-}; 
- 
+    }
+
+    T Length() const {
+        return End - Begin + 1;
+    }
+
+    bool operator==(const TNumPair& r) const {
+        return (Begin == r.Begin) && (End == r.End);
+    }
+
+    bool operator!=(const TNumPair& r) const {
+        return (Begin != r.Begin) || (End != r.End);
+    }
+};
+
 using TSizeTRegion = TNumPair<size_t>;
 using TUi32Region = TNumPair<ui32>;
- 
-template <> 
+
+template <>
 inline TString ToString(const TUi32Region& r) {
-    return TStringBuilder() << "(" << r.Begin << ", " << r.End << ")"; 
-} 
- 
-template <> 
+    return TStringBuilder() << "(" << r.Begin << ", " << r.End << ")";
+}
+
+template <>
 inline TUi32Region FromString(const TString& s) {
-    TUi32Region result; 
+    TUi32Region result;
     sscanf(s.data(), "(%" PRIu32 ", %" PRIu32 ")", &result.Begin, &result.End);
-    return result; 
-} 
- 
-class TSplitDelimiters { 
+    return result;
+}
+
+class TSplitDelimiters {
 private:
     bool Delims[256];
 
 public:
     explicit TSplitDelimiters(const char* s);
- 
+
     Y_FORCE_INLINE bool IsDelimiter(ui8 ch) const {
         return Delims[ch];
     }
 };
 
-template <class Split> 
+template <class Split>
 class TSplitIterator;
 
-class TSplitBase { 
+class TSplitBase {
 protected:
     const char* Str;
     size_t Len;
@@ -94,11 +94,11 @@ private:
 };
 
 #ifdef _MSC_VER
-#pragma warning(push) 
-#pragma warning(disable : 4512) 
+#pragma warning(push)
+#pragma warning(disable : 4512)
 #endif
 
-class TDelimitersSplit: public TSplitBase { 
+class TDelimitersSplit: public TSplitBase {
 private:
     const TSplitDelimiters& Delimiters;
 
@@ -119,7 +119,7 @@ private:
     TDelimitersSplit(TString&&, const TSplitDelimiters&) = delete;
 };
 
-class TDelimitersStrictSplit: public TSplitBase { 
+class TDelimitersStrictSplit: public TSplitBase {
 private:
     const TSplitDelimiters& Delimiters;
 
@@ -140,7 +140,7 @@ private:
     TDelimitersStrictSplit(TString&&, const TSplitDelimiters&) = delete;
 };
 
-class TScreenedDelimitersSplit: public TSplitBase { 
+class TScreenedDelimitersSplit: public TSplitBase {
 private:
     const TSplitDelimiters& Delimiters;
     const TSplitDelimiters& Screens;
@@ -162,7 +162,7 @@ private:
     TScreenedDelimitersSplit(const TString&, const TSplitDelimiters&, TSplitDelimiters&&) = delete;
 };
 
-class TDelimitersSplitWithoutTags: public TSplitBase { 
+class TDelimitersSplitWithoutTags: public TSplitBase {
 private:
     const TSplitDelimiters& Delimiters;
     size_t SkipTag(size_t pos) const;
@@ -185,7 +185,7 @@ private:
     TDelimitersSplitWithoutTags(TString&&, const TSplitDelimiters&) = delete;
 };
 
-class TCharSplit: public TSplitBase { 
+class TCharSplit: public TSplitBase {
 public:
     using TIterator = TSplitIterator<TCharSplit>;
     friend class TSplitIterator<TCharSplit>;
@@ -202,10 +202,10 @@ private:
 };
 
 #ifdef _MSC_VER
-#pragma warning(pop) 
+#pragma warning(pop)
 #endif
 
-class TCharSplitWithoutTags: public TSplitBase { 
+class TCharSplitWithoutTags: public TSplitBase {
 private:
     size_t SkipTag(size_t pos) const;
     size_t SkipDelimiters(size_t pos) const;
@@ -225,7 +225,7 @@ private:
     TCharSplitWithoutTags(TString&&) = delete;
 };
 
-class TSubstringSplitDelimiter { 
+class TSubstringSplitDelimiter {
 public:
     TKMPMatcher Matcher;
     size_t Len;
@@ -233,7 +233,7 @@ public:
     TSubstringSplitDelimiter(const TString& s);
 };
 
-class TSubstringSplit: public TSplitBase { 
+class TSubstringSplit: public TSplitBase {
 private:
     const TSubstringSplitDelimiter& Delimiter;
 
@@ -253,8 +253,8 @@ private:
     TSubstringSplit(const TString&, TSubstringSplitDelimiter&&) = delete;
 };
 
-template <class TSplit> 
-class TSplitIterator { 
+template <class TSplit>
+class TSplitIterator {
 protected:
     const TSplit& Split;
     size_t Pos;
@@ -271,12 +271,12 @@ public:
     virtual ~TSplitIterator() {
         delete CurrentStroka;
     }
- 
+
     inline TSizeTRegion Next() {
         Y_ENSURE(!Eof(), TStringBuf("eof reached"));
         return Split.Next(Pos);
     }
- 
+
     TStringBuf NextTok() {
         if (Eof())
             return TStringBuf();
@@ -308,8 +308,8 @@ public:
 
 using TSplitTokens = TVector<TString>;
 
-template <typename TSplit> 
-void Split(const TSplit& split, TSplitTokens* words) { 
+template <typename TSplit>
+void Split(const TSplit& split, TSplitTokens* words) {
     words->clear();
     TSplitIterator<TSplit> it(split);
     while (!it.Eof())

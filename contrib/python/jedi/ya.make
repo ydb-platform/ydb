@@ -1,7 +1,7 @@
 PY23_LIBRARY(jedi)
 
-LICENSE(MIT) 
- 
+LICENSE(MIT)
+
 OWNER(g:python-contrib borman)
 
 VERSION(0.13.3)

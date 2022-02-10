@@ -1,14 +1,14 @@
-#include "format.h" 
-#include "output.h" 
- 
+#include "format.h"
+#include "output.h"
+
 #include <util/generic/ymath.h>
-#include <util/string/cast.h> 
- 
+#include <util/string/cast.h>
+
 namespace NFormatPrivate {
     static inline i64 Round(double value) {
         double res1 = floor(value);
         double res2 = ceil(value);
-        return (value - res1 < res2 - value) ? (i64)res1 : (i64)res2; 
+        return (value - res1 < res2 - value) ? (i64)res1 : (i64)res2;
     }
 
     static inline IOutputStream& PrintDoubleShortly(IOutputStream& os, const double& d) {
@@ -34,9 +34,9 @@ namespace NFormatPrivate {
 
         return os << Prec(d, mode, ndigits);
     }
-} 
+}
 
-template <> 
+template <>
 void Out<NFormatPrivate::THumanReadableSize>(IOutputStream& stream, const NFormatPrivate::THumanReadableSize& value) {
     ui64 base = value.Format == SF_BYTES ? 1024 : 1000;
     ui64 base2 = base * base;
@@ -70,7 +70,7 @@ void Out<NFormatPrivate::THumanReadableSize>(IOutputStream& stream, const NForma
     }
 }
 
-template <> 
+template <>
 void Out<NFormatPrivate::THumanReadableDuration>(IOutputStream& os, const NFormatPrivate::THumanReadableDuration& hr) {
     TTempBuf buf;
     TMemoryOutput ss(buf.Data(), buf.Size());
@@ -82,11 +82,11 @@ void Out<NFormatPrivate::THumanReadableDuration>(IOutputStream& os, const NForma
             break;
         }
         if (microSeconds < 1000 * 1000) {
-            NFormatPrivate::PrintDoubleShortly(ss, (double)microSeconds / 1000.0) << "ms"; 
+            NFormatPrivate::PrintDoubleShortly(ss, (double)microSeconds / 1000.0) << "ms";
             break;
         }
 
-        double seconds = (double)(hr.Value.MilliSeconds()) / 1000.0; 
+        double seconds = (double)(hr.Value.MilliSeconds()) / 1000.0;
         if (seconds < 60) {
             NFormatPrivate::PrintDoubleShortly(ss, seconds) << 's';
             break;
@@ -109,9 +109,9 @@ void Out<NFormatPrivate::THumanReadableDuration>(IOutputStream& os, const NForma
 
         for (size_t i = 0; i < Y_ARRAY_SIZE(times); ++i) {
             if (times[i] > 0) {
-                if (!first) { 
+                if (!first) {
                     ss << ' ';
-                } 
+                }
                 ss << times[i] << names[i];
                 first = false;
             }
@@ -123,12 +123,12 @@ void Out<NFormatPrivate::THumanReadableDuration>(IOutputStream& os, const NForma
 }
 
 void Time(IOutputStream& l) {
-    l << millisec(); 
-} 
- 
+    l << millisec();
+}
+
 void TimeHumanReadable(IOutputStream& l) {
-    char timeStr[30]; 
+    char timeStr[30];
     const time_t t = time(nullptr);
- 
-    l << ctime_r(&t, timeStr); 
+
+    l << ctime_r(&t, timeStr);
 }

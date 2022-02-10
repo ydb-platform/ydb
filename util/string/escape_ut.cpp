@@ -1,5 +1,5 @@
-#include "escape.h" 
- 
+#include "escape.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/string.h>
@@ -14,8 +14,8 @@ namespace {
 
         TExample(const TStringBuf expected, const TStringBuf source)
             : Expected{expected}
-            , Source{source} 
-        { 
+            , Source{source}
+        {
         }
     };
 }
@@ -27,15 +27,15 @@ static const TExample CommonTestData[] = {
 
     {"http://ya.ru/\\0", "http://ya.ru/\0"sv},
     {"http://ya.ru/\\0\\0", "http://ya.ru/\0\0"sv},
-    {"http://ya.ru/\\0\\0000", "http://ya.ru/\0\0" 
-                               "0"sv}, 
-    {"http://ya.ru/\\0\\0001", "http://ya.ru/\0\x00" 
-                               "1"sv}, 
+    {"http://ya.ru/\\0\\0000", "http://ya.ru/\0\0"
+                               "0"sv},
+    {"http://ya.ru/\\0\\0001", "http://ya.ru/\0\x00"
+                               "1"sv},
 
-    {R"(\2\4\00678)", "\2\4\6" 
-                      "78"sv}, // \6 -> \006 because next char '7' is "octal" 
-    {R"(\2\4\689)", "\2\4\6" 
-                    "89"sv}, // \6 -> \6 because next char '8' is not "octal" 
+    {R"(\2\4\00678)", "\2\4\6"
+                      "78"sv}, // \6 -> \006 because next char '7' is "octal"
+    {R"(\2\4\689)", "\2\4\6"
+                    "89"sv}, // \6 -> \6 because next char '8' is not "octal"
 
     {R"(\"Hello\", Alice said.)", "\"Hello\", Alice said."},
     {"Slash\\\\dash!", "Slash\\dash!"},
@@ -44,7 +44,7 @@ static const TExample CommonTestData[] = {
 
     {"There are questions \\x3F\\x3F?", "There are questions ???"},
     {"There are questions \\x3F?", "There are questions ??"},
-}; 
+};
 
 Y_UNIT_TEST_SUITE(TEscapeCTest) {
     Y_UNIT_TEST(TestStrokaEscapeC) {
@@ -66,14 +66,14 @@ Y_UNIT_TEST_SUITE(TEscapeCTest) {
         UNIT_ASSERT_VALUES_EQUAL("\xFF", UnescapeC(TString("\\xFF")));
 
         UNIT_ASSERT_VALUES_EQUAL("\\377f", EscapeC(TString("\xff"
-                                                           "f"))); 
-        UNIT_ASSERT_VALUES_EQUAL("\xff" 
-                                 "f", 
+                                                           "f")));
+        UNIT_ASSERT_VALUES_EQUAL("\xff"
+                                 "f",
                                  UnescapeC(TString("\\377f")));
         UNIT_ASSERT_VALUES_EQUAL("\\xFFg", EscapeC(TString("\xff"
-                                                           "g"))); 
-        UNIT_ASSERT_VALUES_EQUAL("\xff" 
-                                 "g", 
+                                                           "g")));
+        UNIT_ASSERT_VALUES_EQUAL("\xff"
+                                 "g",
                                  UnescapeC(TString("\\xFFg")));
         UNIT_ASSERT_VALUES_EQUAL("\xEA\x9A\x96", UnescapeC(TString("\\uA696")));
         UNIT_ASSERT_VALUES_EQUAL("Странный компроматтест", UnescapeC(TString("\\u0421\\u0442\\u0440\\u0430\\u043d\\u043d\\u044b\\u0439 \\u043a\\u043e\\u043c\\u043f\\u0440\\u043e\\u043c\\u0430\\u0442тест")));
@@ -130,16 +130,16 @@ Y_UNIT_TEST_SUITE(TEscapeCTest) {
         test("\\400\\1", 3);
         test("\\4xxx", 2);
     }
- 
+
     Y_UNIT_TEST(TestUnbounded) {
-        char buf[100000]; 
- 
-        for (const auto& x : CommonTestData) { 
+        char buf[100000];
+
+        for (const auto& x : CommonTestData) {
             char* end = UnescapeC(x.Expected.data(), x.Expected.size(), buf);
- 
-            UNIT_ASSERT_VALUES_EQUAL(x.Source, TStringBuf(buf, end)); 
-        } 
-    } 
+
+            UNIT_ASSERT_VALUES_EQUAL(x.Source, TStringBuf(buf, end));
+        }
+    }
 
     Y_UNIT_TEST(TestCapitalUEscapes) {
         UNIT_ASSERT_VALUES_EQUAL(UnescapeC("\\U00000020"), " ");

@@ -5,7 +5,7 @@
 class TUseCountChecker {
 private:
     TAtomicCounter Counter;
- 
+
 public:
     TUseCountChecker();
     ~TUseCountChecker();
@@ -16,7 +16,7 @@ public:
 class TUseCountHolder {
 private:
     TUseCountChecker* CurrentChecker;
- 
+
 public:
     TUseCountHolder();
     explicit TUseCountHolder(TUseCountChecker* currentChecker);

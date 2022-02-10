@@ -55,7 +55,7 @@ namespace NCodecs::NFloatHuff {
             {0x3c000000, 0x12, 5, 24}, // [0.0078125, 0.03125), 29 bits, prefix        [01001]
             {0x3b000000, 0x26, 6, 34}, // [0.001953125, end of range), 40 bits, prefix [011001]
             {0x00000000, 0x16, 5, 32}, // whole range, 37 bits, prefix                 [01101]
-        }; 
+        };
 
         [[noreturn]] Y_NO_INLINE void ThrowInvalidOffset(size_t size, size_t byteOffset) {
             ythrow yexception() <<

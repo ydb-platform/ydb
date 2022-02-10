@@ -1,4 +1,4 @@
-RECURSE( 
+RECURSE(
     folding
     folding/ut
     normalization
@@ -11,4 +11,4 @@ RECURSE(
     utf8_char/ut
     utf8_iter
     utf8_iter/ut
-) 
+)

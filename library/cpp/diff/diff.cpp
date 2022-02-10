@@ -42,7 +42,7 @@ struct TCollection {
 
 template <>
 struct TCollection<char>: public TCollectionImpl<char> {
-    TCollection(const TStringBuf& str, const TString& delims) { 
+    TCollection(const TStringBuf& str, const TString& delims) {
         TSetDelimiter<const char> set(delims.data());
         TKeepDelimiters<TCollection<char>> c(this);
         SplitString(str.begin(), str.end(), set, c);
@@ -51,7 +51,7 @@ struct TCollection<char>: public TCollectionImpl<char> {
 
 template <>
 struct TCollection<wchar16>: public TCollectionImpl<wchar16> {
-    TCollection(const TWtringBuf& str, const TUtf16String& delims) { 
+    TCollection(const TWtringBuf& str, const TUtf16String& delims) {
         TSetDelimiter<const wchar16> set(delims.data());
         TKeepDelimiters<TCollection<wchar16>> c(this);
         SplitString(str.begin(), str.end(), set, c);

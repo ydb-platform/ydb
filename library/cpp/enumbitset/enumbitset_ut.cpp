@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TEnumBitSetTest) {
         UNIT_ASSERT(!mask.Empty());
         UNIT_ASSERT(mask.Count() == 1);
         if (!mask)
-            UNIT_ASSERT(false && "should not be empty"); 
+            UNIT_ASSERT(false && "should not be empty");
     }
 
     Y_UNIT_TEST(TestIter) {

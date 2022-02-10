@@ -1,7 +1,7 @@
 PY2_LIBRARY()
 
-LICENSE(MIT) 
- 
+LICENSE(MIT)
+
 VERSION(5.4.1)
 
 OWNER(g:python-contrib borman g:testenv)

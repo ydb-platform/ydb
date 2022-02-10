@@ -42,7 +42,7 @@
  */
 #ifndef LZ4_HEAPMODE
 #  define LZ4_HEAPMODE 0
-#endif 
+#endif
 
 /*
  * LZ4_ACCELERATION_DEFAULT :

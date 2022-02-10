@@ -1,12 +1,12 @@
 UNITTEST_FOR(library/cpp/streams/lzma)
- 
-OWNER( 
-    pg 
+
+OWNER(
+    pg
     g:util
-) 
- 
-SRCS( 
-    lzma_ut.cpp 
-) 
- 
-END() 
+)
+
+SRCS(
+    lzma_ut.cpp
+)
+
+END()

@@ -9,24 +9,24 @@
 #include <util/system/file.h>
 #include <util/system/filemap.h>
 #include <util/system/yassert.h>
- 
+
 #include <cstdio>
-#include <new> 
- 
+#include <new>
+
 /// Deprecated (by pg@), use TFileMap or TMemoryMap instead
-class TMappedFile { 
+class TMappedFile {
 private:
-    TFileMap* Map_; 
+    TFileMap* Map_;
 
 private:
-    TMappedFile(TFileMap* map, const char* dbgName); 
+    TMappedFile(TFileMap* map, const char* dbgName);
 
 public:
-    TMappedFile() { 
+    TMappedFile() {
         Map_ = nullptr;
     }
 
-    ~TMappedFile() { 
+    ~TMappedFile() {
         term();
     }
 
@@ -47,16 +47,16 @@ public:
 
     void flush();
 
-    void term() { 
-        if (Map_) { 
-            Map_->Unmap(); 
-            delete Map_; 
+    void term() {
+        if (Map_) {
+            Map_->Unmap();
+            delete Map_;
             Map_ = nullptr;
         }
     }
 
-    size_t getSize() const { 
-        return (Map_ ? Map_->MappedSize() : 0); 
+    size_t getSize() const {
+        return (Map_ ? Map_->MappedSize() : 0);
     }
 
     void* getData(size_t pos = 0) const {
@@ -67,6 +67,6 @@ public:
     void precharge(size_t pos = 0, size_t size = (size_t)-1) const;
 
     void swap(TMappedFile& file) noexcept {
-        DoSwap(Map_, file.Map_); 
+        DoSwap(Map_, file.Map_);
     }
 };

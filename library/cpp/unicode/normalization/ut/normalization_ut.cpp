@@ -5,7 +5,7 @@
 #include <library/cpp/unicode/normalization/normalization.h>
 
 Y_UNIT_TEST_SUITE(TUnicodeNormalizationTest) {
-    template <NUnicode::ENormalization NormType> 
+    template <NUnicode::ENormalization NormType>
     void TestInit() {
         NUnicode::TNormalizer<NormType> normalizer;
         TString s("упячка detected");

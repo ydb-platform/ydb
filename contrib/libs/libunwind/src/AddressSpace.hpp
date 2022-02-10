@@ -1,22 +1,22 @@
 //===----------------------------------------------------------------------===//
-// 
+//
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-// 
-// 
-// Abstracts accessing local vs remote address spaces. 
-// 
-//===----------------------------------------------------------------------===// 
- 
-#ifndef __ADDRESSSPACE_HPP__ 
-#define __ADDRESSSPACE_HPP__ 
- 
-#include <stdint.h> 
-#include <stdio.h> 
-#include <stdlib.h> 
-#include <string.h> 
- 
+//
+//
+// Abstracts accessing local vs remote address spaces.
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef __ADDRESSSPACE_HPP__
+#define __ADDRESSSPACE_HPP__
+
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "libunwind.h"
 #include "config.h"
 #include "dwarf2.h"
@@ -32,12 +32,12 @@
 #endif
 
 #if _LIBUNWIND_USE_DLADDR
-#include <dlfcn.h> 
+#include <dlfcn.h>
 #if defined(__ELF__) && defined(_LIBUNWIND_LINK_DL_LIB)
 #pragma comment(lib, "dl")
-#endif 
 #endif
- 
+#endif
+
 #if defined(_LIBUNWIND_ARM_EHABI)
 struct EHABIIndexEntry {
   uint32_t functionOffset;
@@ -45,8 +45,8 @@ struct EHABIIndexEntry {
 };
 #endif
 
-#ifdef __APPLE__ 
- 
+#ifdef __APPLE__
+
   struct dyld_unwind_sections
   {
     const struct mach_header*   mh;
@@ -55,15 +55,15 @@ struct EHABIIndexEntry {
     const void*                 compact_unwind_section;
     uintptr_t                   compact_unwind_section_length;
   };
- 
+
   // In 10.7.0 or later, libSystem.dylib implements this function.
   extern "C" bool _dyld_find_unwind_sections(void *, dyld_unwind_sections *);
- 
+
 #elif defined(_LIBUNWIND_SUPPORT_DWARF_UNWIND) && defined(_LIBUNWIND_IS_BAREMETAL)
 
-// When statically linked on bare-metal, the symbols for the EH table are looked 
-// up without going through the dynamic loader. 
- 
+// When statically linked on bare-metal, the symbols for the EH table are looked
+// up without going through the dynamic loader.
+
 // The following linker script may be used to produce the necessary sections and symbols.
 // Unless the --eh-frame-hdr linker option is provided, the section is not generated
 // and does not take space in the output file.
@@ -108,100 +108,100 @@ extern char __exidx_end;
 
 #include <link.h>
 
-#endif 
- 
-namespace libunwind { 
- 
-/// Used by findUnwindSections() to return info about needed sections. 
-struct UnwindInfoSections { 
+#endif
+
+namespace libunwind {
+
+/// Used by findUnwindSections() to return info about needed sections.
+struct UnwindInfoSections {
 #if defined(_LIBUNWIND_SUPPORT_DWARF_UNWIND) ||                                \
     defined(_LIBUNWIND_SUPPORT_COMPACT_UNWIND) ||                              \
     defined(_LIBUNWIND_USE_DL_ITERATE_PHDR)
   // No dso_base for SEH.
-  uintptr_t       dso_base; 
-#endif 
+  uintptr_t       dso_base;
+#endif
 #if defined(_LIBUNWIND_USE_DL_ITERATE_PHDR)
   size_t          text_segment_length;
 #endif
 #if defined(_LIBUNWIND_SUPPORT_DWARF_UNWIND)
-  uintptr_t       dwarf_section; 
+  uintptr_t       dwarf_section;
   size_t          dwarf_section_length;
-#endif 
+#endif
 #if defined(_LIBUNWIND_SUPPORT_DWARF_INDEX)
-  uintptr_t       dwarf_index_section; 
+  uintptr_t       dwarf_index_section;
   size_t          dwarf_index_section_length;
-#endif 
+#endif
 #if defined(_LIBUNWIND_SUPPORT_COMPACT_UNWIND)
-  uintptr_t       compact_unwind_section; 
+  uintptr_t       compact_unwind_section;
   size_t          compact_unwind_section_length;
-#endif 
+#endif
 #if defined(_LIBUNWIND_ARM_EHABI)
-  uintptr_t       arm_section; 
+  uintptr_t       arm_section;
   size_t          arm_section_length;
-#endif 
-}; 
- 
- 
-/// LocalAddressSpace is used as a template parameter to UnwindCursor when 
-/// unwinding a thread in the same process.  The wrappers compile away, 
-/// making local unwinds fast. 
+#endif
+};
+
+
+/// LocalAddressSpace is used as a template parameter to UnwindCursor when
+/// unwinding a thread in the same process.  The wrappers compile away,
+/// making local unwinds fast.
 class _LIBUNWIND_HIDDEN LocalAddressSpace {
-public: 
+public:
   typedef uintptr_t pint_t;
   typedef intptr_t  sint_t;
-  uint8_t         get8(pint_t addr) { 
-    uint8_t val; 
-    memcpy(&val, (void *)addr, sizeof(val)); 
-    return val; 
-  } 
-  uint16_t         get16(pint_t addr) { 
-    uint16_t val; 
-    memcpy(&val, (void *)addr, sizeof(val)); 
-    return val; 
-  } 
-  uint32_t         get32(pint_t addr) { 
-    uint32_t val; 
-    memcpy(&val, (void *)addr, sizeof(val)); 
-    return val; 
-  } 
-  uint64_t         get64(pint_t addr) { 
-    uint64_t val; 
-    memcpy(&val, (void *)addr, sizeof(val)); 
-    return val; 
-  } 
-  double           getDouble(pint_t addr) { 
-    double val; 
-    memcpy(&val, (void *)addr, sizeof(val)); 
-    return val; 
-  } 
-  v128             getVector(pint_t addr) { 
-    v128 val; 
-    memcpy(&val, (void *)addr, sizeof(val)); 
-    return val; 
-  } 
-  uintptr_t       getP(pint_t addr); 
+  uint8_t         get8(pint_t addr) {
+    uint8_t val;
+    memcpy(&val, (void *)addr, sizeof(val));
+    return val;
+  }
+  uint16_t         get16(pint_t addr) {
+    uint16_t val;
+    memcpy(&val, (void *)addr, sizeof(val));
+    return val;
+  }
+  uint32_t         get32(pint_t addr) {
+    uint32_t val;
+    memcpy(&val, (void *)addr, sizeof(val));
+    return val;
+  }
+  uint64_t         get64(pint_t addr) {
+    uint64_t val;
+    memcpy(&val, (void *)addr, sizeof(val));
+    return val;
+  }
+  double           getDouble(pint_t addr) {
+    double val;
+    memcpy(&val, (void *)addr, sizeof(val));
+    return val;
+  }
+  v128             getVector(pint_t addr) {
+    v128 val;
+    memcpy(&val, (void *)addr, sizeof(val));
+    return val;
+  }
+  uintptr_t       getP(pint_t addr);
   uint64_t        getRegister(pint_t addr);
-  static uint64_t getULEB128(pint_t &addr, pint_t end); 
-  static int64_t  getSLEB128(pint_t &addr, pint_t end); 
- 
-  pint_t getEncodedP(pint_t &addr, pint_t end, uint8_t encoding, 
-                     pint_t datarelBase = 0); 
-  bool findFunctionName(pint_t addr, char *buf, size_t bufLen, 
-                        unw_word_t *offset); 
-  bool findUnwindSections(pint_t targetAddr, UnwindInfoSections &info); 
-  bool findOtherFDE(pint_t targetAddr, pint_t &fde); 
- 
-  static LocalAddressSpace sThisAddressSpace; 
-}; 
- 
-inline uintptr_t LocalAddressSpace::getP(pint_t addr) { 
+  static uint64_t getULEB128(pint_t &addr, pint_t end);
+  static int64_t  getSLEB128(pint_t &addr, pint_t end);
+
+  pint_t getEncodedP(pint_t &addr, pint_t end, uint8_t encoding,
+                     pint_t datarelBase = 0);
+  bool findFunctionName(pint_t addr, char *buf, size_t bufLen,
+                        unw_word_t *offset);
+  bool findUnwindSections(pint_t targetAddr, UnwindInfoSections &info);
+  bool findOtherFDE(pint_t targetAddr, pint_t &fde);
+
+  static LocalAddressSpace sThisAddressSpace;
+};
+
+inline uintptr_t LocalAddressSpace::getP(pint_t addr) {
 #if __SIZEOF_POINTER__ == 8
-  return get64(addr); 
-#else 
-  return get32(addr); 
-#endif 
-} 
- 
+  return get64(addr);
+#else
+  return get32(addr);
+#endif
+}
+
 inline uint64_t LocalAddressSpace::getRegister(pint_t addr) {
 #if __SIZEOF_POINTER__ == 8 || defined(__mips64)
   return get64(addr);
@@ -210,144 +210,144 @@ inline uint64_t LocalAddressSpace::getRegister(pint_t addr) {
 #endif
 }
 
-/// Read a ULEB128 into a 64-bit word. 
-inline uint64_t LocalAddressSpace::getULEB128(pint_t &addr, pint_t end) { 
-  const uint8_t *p = (uint8_t *)addr; 
-  const uint8_t *pend = (uint8_t *)end; 
-  uint64_t result = 0; 
-  int bit = 0; 
-  do { 
-    uint64_t b; 
- 
-    if (p == pend) 
-      _LIBUNWIND_ABORT("truncated uleb128 expression"); 
- 
-    b = *p & 0x7f; 
- 
-    if (bit >= 64 || b << bit >> bit != b) { 
-      _LIBUNWIND_ABORT("malformed uleb128 expression"); 
-    } else { 
-      result |= b << bit; 
-      bit += 7; 
-    } 
-  } while (*p++ >= 0x80); 
-  addr = (pint_t) p; 
-  return result; 
-} 
- 
-/// Read a SLEB128 into a 64-bit word. 
-inline int64_t LocalAddressSpace::getSLEB128(pint_t &addr, pint_t end) { 
-  const uint8_t *p = (uint8_t *)addr; 
-  const uint8_t *pend = (uint8_t *)end; 
-  int64_t result = 0; 
-  int bit = 0; 
-  uint8_t byte; 
-  do { 
-    if (p == pend) 
-      _LIBUNWIND_ABORT("truncated sleb128 expression"); 
-    byte = *p++; 
+/// Read a ULEB128 into a 64-bit word.
+inline uint64_t LocalAddressSpace::getULEB128(pint_t &addr, pint_t end) {
+  const uint8_t *p = (uint8_t *)addr;
+  const uint8_t *pend = (uint8_t *)end;
+  uint64_t result = 0;
+  int bit = 0;
+  do {
+    uint64_t b;
+
+    if (p == pend)
+      _LIBUNWIND_ABORT("truncated uleb128 expression");
+
+    b = *p & 0x7f;
+
+    if (bit >= 64 || b << bit >> bit != b) {
+      _LIBUNWIND_ABORT("malformed uleb128 expression");
+    } else {
+      result |= b << bit;
+      bit += 7;
+    }
+  } while (*p++ >= 0x80);
+  addr = (pint_t) p;
+  return result;
+}
+
+/// Read a SLEB128 into a 64-bit word.
+inline int64_t LocalAddressSpace::getSLEB128(pint_t &addr, pint_t end) {
+  const uint8_t *p = (uint8_t *)addr;
+  const uint8_t *pend = (uint8_t *)end;
+  int64_t result = 0;
+  int bit = 0;
+  uint8_t byte;
+  do {
+    if (p == pend)
+      _LIBUNWIND_ABORT("truncated sleb128 expression");
+    byte = *p++;
     result |= (uint64_t)(byte & 0x7f) << bit;
-    bit += 7; 
-  } while (byte & 0x80); 
-  // sign extend negative numbers 
+    bit += 7;
+  } while (byte & 0x80);
+  // sign extend negative numbers
   if ((byte & 0x40) != 0 && bit < 64)
-    result |= (-1ULL) << bit; 
-  addr = (pint_t) p; 
-  return result; 
-} 
- 
-inline LocalAddressSpace::pint_t 
-LocalAddressSpace::getEncodedP(pint_t &addr, pint_t end, uint8_t encoding, 
-                               pint_t datarelBase) { 
-  pint_t startAddr = addr; 
-  const uint8_t *p = (uint8_t *)addr; 
-  pint_t result; 
- 
-  // first get value 
-  switch (encoding & 0x0F) { 
-  case DW_EH_PE_ptr: 
-    result = getP(addr); 
-    p += sizeof(pint_t); 
-    addr = (pint_t) p; 
-    break; 
-  case DW_EH_PE_uleb128: 
-    result = (pint_t)getULEB128(addr, end); 
-    break; 
-  case DW_EH_PE_udata2: 
-    result = get16(addr); 
-    p += 2; 
-    addr = (pint_t) p; 
-    break; 
-  case DW_EH_PE_udata4: 
-    result = get32(addr); 
-    p += 4; 
-    addr = (pint_t) p; 
-    break; 
-  case DW_EH_PE_udata8: 
-    result = (pint_t)get64(addr); 
-    p += 8; 
-    addr = (pint_t) p; 
-    break; 
-  case DW_EH_PE_sleb128: 
-    result = (pint_t)getSLEB128(addr, end); 
-    break; 
-  case DW_EH_PE_sdata2: 
-    // Sign extend from signed 16-bit value. 
-    result = (pint_t)(int16_t)get16(addr); 
-    p += 2; 
-    addr = (pint_t) p; 
-    break; 
-  case DW_EH_PE_sdata4: 
-    // Sign extend from signed 32-bit value. 
-    result = (pint_t)(int32_t)get32(addr); 
-    p += 4; 
-    addr = (pint_t) p; 
-    break; 
-  case DW_EH_PE_sdata8: 
-    result = (pint_t)get64(addr); 
-    p += 8; 
-    addr = (pint_t) p; 
-    break; 
-  default: 
-    _LIBUNWIND_ABORT("unknown pointer encoding"); 
-  } 
- 
-  // then add relative offset 
-  switch (encoding & 0x70) { 
-  case DW_EH_PE_absptr: 
-    // do nothing 
-    break; 
-  case DW_EH_PE_pcrel: 
-    result += startAddr; 
-    break; 
-  case DW_EH_PE_textrel: 
-    _LIBUNWIND_ABORT("DW_EH_PE_textrel pointer encoding not supported"); 
-    break; 
-  case DW_EH_PE_datarel: 
-    // DW_EH_PE_datarel is only valid in a few places, so the parameter has a 
-    // default value of 0, and we abort in the event that someone calls this 
-    // function with a datarelBase of 0 and DW_EH_PE_datarel encoding. 
-    if (datarelBase == 0) 
-      _LIBUNWIND_ABORT("DW_EH_PE_datarel is invalid with a datarelBase of 0"); 
-    result += datarelBase; 
-    break; 
-  case DW_EH_PE_funcrel: 
-    _LIBUNWIND_ABORT("DW_EH_PE_funcrel pointer encoding not supported"); 
-    break; 
-  case DW_EH_PE_aligned: 
-    _LIBUNWIND_ABORT("DW_EH_PE_aligned pointer encoding not supported"); 
-    break; 
-  default: 
-    _LIBUNWIND_ABORT("unknown pointer encoding"); 
-    break; 
-  } 
- 
-  if (encoding & DW_EH_PE_indirect) 
-    result = getP(result); 
- 
-  return result; 
-} 
- 
+    result |= (-1ULL) << bit;
+  addr = (pint_t) p;
+  return result;
+}
+
+inline LocalAddressSpace::pint_t
+LocalAddressSpace::getEncodedP(pint_t &addr, pint_t end, uint8_t encoding,
+                               pint_t datarelBase) {
+  pint_t startAddr = addr;
+  const uint8_t *p = (uint8_t *)addr;
+  pint_t result;
+
+  // first get value
+  switch (encoding & 0x0F) {
+  case DW_EH_PE_ptr:
+    result = getP(addr);
+    p += sizeof(pint_t);
+    addr = (pint_t) p;
+    break;
+  case DW_EH_PE_uleb128:
+    result = (pint_t)getULEB128(addr, end);
+    break;
+  case DW_EH_PE_udata2:
+    result = get16(addr);
+    p += 2;
+    addr = (pint_t) p;
+    break;
+  case DW_EH_PE_udata4:
+    result = get32(addr);
+    p += 4;
+    addr = (pint_t) p;
+    break;
+  case DW_EH_PE_udata8:
+    result = (pint_t)get64(addr);
+    p += 8;
+    addr = (pint_t) p;
+    break;
+  case DW_EH_PE_sleb128:
+    result = (pint_t)getSLEB128(addr, end);
+    break;
+  case DW_EH_PE_sdata2:
+    // Sign extend from signed 16-bit value.
+    result = (pint_t)(int16_t)get16(addr);
+    p += 2;
+    addr = (pint_t) p;
+    break;
+  case DW_EH_PE_sdata4:
+    // Sign extend from signed 32-bit value.
+    result = (pint_t)(int32_t)get32(addr);
+    p += 4;
+    addr = (pint_t) p;
+    break;
+  case DW_EH_PE_sdata8:
+    result = (pint_t)get64(addr);
+    p += 8;
+    addr = (pint_t) p;
+    break;
+  default:
+    _LIBUNWIND_ABORT("unknown pointer encoding");
+  }
+
+  // then add relative offset
+  switch (encoding & 0x70) {
+  case DW_EH_PE_absptr:
+    // do nothing
+    break;
+  case DW_EH_PE_pcrel:
+    result += startAddr;
+    break;
+  case DW_EH_PE_textrel:
+    _LIBUNWIND_ABORT("DW_EH_PE_textrel pointer encoding not supported");
+    break;
+  case DW_EH_PE_datarel:
+    // DW_EH_PE_datarel is only valid in a few places, so the parameter has a
+    // default value of 0, and we abort in the event that someone calls this
+    // function with a datarelBase of 0 and DW_EH_PE_datarel encoding.
+    if (datarelBase == 0)
+      _LIBUNWIND_ABORT("DW_EH_PE_datarel is invalid with a datarelBase of 0");
+    result += datarelBase;
+    break;
+  case DW_EH_PE_funcrel:
+    _LIBUNWIND_ABORT("DW_EH_PE_funcrel pointer encoding not supported");
+    break;
+  case DW_EH_PE_aligned:
+    _LIBUNWIND_ABORT("DW_EH_PE_aligned pointer encoding not supported");
+    break;
+  default:
+    _LIBUNWIND_ABORT("unknown pointer encoding");
+    break;
+  }
+
+  if (encoding & DW_EH_PE_indirect)
+    result = getP(result);
+
+  return result;
+}
+
 #if defined(_LIBUNWIND_USE_DL_ITERATE_PHDR)
 
 // The ElfW() macro for pointer-size independent ELF header traversal is not
@@ -498,23 +498,23 @@ static int findUnwindSectionsByPhdr(struct dl_phdr_info *pinfo,
 #endif  // defined(_LIBUNWIND_USE_DL_ITERATE_PHDR)
 
 
-inline bool LocalAddressSpace::findUnwindSections(pint_t targetAddr, 
-                                                  UnwindInfoSections &info) { 
-#ifdef __APPLE__ 
-  dyld_unwind_sections dyldInfo; 
-  if (_dyld_find_unwind_sections((void *)targetAddr, &dyldInfo)) { 
-    info.dso_base                      = (uintptr_t)dyldInfo.mh; 
+inline bool LocalAddressSpace::findUnwindSections(pint_t targetAddr,
+                                                  UnwindInfoSections &info) {
+#ifdef __APPLE__
+  dyld_unwind_sections dyldInfo;
+  if (_dyld_find_unwind_sections((void *)targetAddr, &dyldInfo)) {
+    info.dso_base                      = (uintptr_t)dyldInfo.mh;
  #if defined(_LIBUNWIND_SUPPORT_DWARF_UNWIND)
-    info.dwarf_section                 = (uintptr_t)dyldInfo.dwarf_section; 
+    info.dwarf_section                 = (uintptr_t)dyldInfo.dwarf_section;
     info.dwarf_section_length          = (size_t)dyldInfo.dwarf_section_length;
- #endif 
-    info.compact_unwind_section        = (uintptr_t)dyldInfo.compact_unwind_section; 
+ #endif
+    info.compact_unwind_section        = (uintptr_t)dyldInfo.compact_unwind_section;
     info.compact_unwind_section_length = (size_t)dyldInfo.compact_unwind_section_length;
-    return true; 
-  } 
+    return true;
+  }
 #elif defined(_LIBUNWIND_SUPPORT_DWARF_UNWIND) && defined(_LIBUNWIND_IS_BAREMETAL)
   info.dso_base = 0;
-  // Bare metal is statically linked, so no need to ask the dynamic loader 
+  // Bare metal is statically linked, so no need to ask the dynamic loader
   info.dwarf_section_length = (size_t)(&__eh_frame_end - &__eh_frame_start);
   info.dwarf_section =        (uintptr_t)(&__eh_frame_start);
   _LIBUNWIND_TRACE_UNWINDING("findUnwindSections: section %p length %p",
@@ -529,7 +529,7 @@ inline bool LocalAddressSpace::findUnwindSections(pint_t targetAddr,
     return true;
 #elif defined(_LIBUNWIND_ARM_EHABI) && defined(_LIBUNWIND_IS_BAREMETAL)
   // Bare metal is statically linked, so no need to ask the dynamic loader
-  info.arm_section =        (uintptr_t)(&__exidx_start); 
+  info.arm_section =        (uintptr_t)(&__exidx_start);
   info.arm_section_length = (size_t)(&__exidx_end - &__exidx_start);
   _LIBUNWIND_TRACE_UNWINDING("findUnwindSections: section %p length %p",
                              (void *)info.arm_section, (void *)info.arm_section_length);
@@ -581,50 +581,50 @@ inline bool LocalAddressSpace::findUnwindSections(pint_t targetAddr,
   (void)info;
   return true;
 #elif defined(_LIBUNWIND_USE_DL_UNWIND_FIND_EXIDX)
-  int length = 0; 
+  int length = 0;
   info.arm_section =
       (uintptr_t)dl_unwind_find_exidx((_Unwind_Ptr)targetAddr, &length);
   info.arm_section_length = (size_t)length * sizeof(EHABIIndexEntry);
-  if (info.arm_section && info.arm_section_length) 
-    return true; 
+  if (info.arm_section && info.arm_section_length)
+    return true;
 #elif defined(_LIBUNWIND_USE_DL_ITERATE_PHDR)
-  dl_iterate_cb_data cb_data = {this, &info, targetAddr}; 
+  dl_iterate_cb_data cb_data = {this, &info, targetAddr};
   int found = dl_iterate_phdr(findUnwindSectionsByPhdr, &cb_data);
-  return static_cast<bool>(found); 
-#endif 
- 
-  return false; 
-} 
- 
- 
-inline bool LocalAddressSpace::findOtherFDE(pint_t targetAddr, pint_t &fde) { 
-  // TO DO: if OS has way to dynamically register FDEs, check that. 
-  (void)targetAddr; 
-  (void)fde; 
-  return false; 
-} 
- 
-inline bool LocalAddressSpace::findFunctionName(pint_t addr, char *buf, 
-                                                size_t bufLen, 
-                                                unw_word_t *offset) { 
+  return static_cast<bool>(found);
+#endif
+
+  return false;
+}
+
+
+inline bool LocalAddressSpace::findOtherFDE(pint_t targetAddr, pint_t &fde) {
+  // TO DO: if OS has way to dynamically register FDEs, check that.
+  (void)targetAddr;
+  (void)fde;
+  return false;
+}
+
+inline bool LocalAddressSpace::findFunctionName(pint_t addr, char *buf,
+                                                size_t bufLen,
+                                                unw_word_t *offset) {
 #if _LIBUNWIND_USE_DLADDR
-  Dl_info dyldInfo; 
-  if (dladdr((void *)addr, &dyldInfo)) { 
-    if (dyldInfo.dli_sname != NULL) { 
-      snprintf(buf, bufLen, "%s", dyldInfo.dli_sname); 
-      *offset = (addr - (pint_t) dyldInfo.dli_saddr); 
-      return true; 
-    } 
-  } 
+  Dl_info dyldInfo;
+  if (dladdr((void *)addr, &dyldInfo)) {
+    if (dyldInfo.dli_sname != NULL) {
+      snprintf(buf, bufLen, "%s", dyldInfo.dli_sname);
+      *offset = (addr - (pint_t) dyldInfo.dli_saddr);
+      return true;
+    }
+  }
 #else
   (void)addr;
   (void)buf;
   (void)bufLen;
   (void)offset;
-#endif 
-  return false; 
-} 
- 
-} // namespace libunwind 
- 
-#endif // __ADDRESSSPACE_HPP__ 
+#endif
+  return false;
+}
+
+} // namespace libunwind
+
+#endif // __ADDRESSSPACE_HPP__

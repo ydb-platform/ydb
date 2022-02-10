@@ -26,27 +26,27 @@ namespace NDatetime {
         tm.IsLeap = LeapYearAD(cs.year());
 
         switch (cctz::get_weekday(cd)) {
-            case cctz::weekday::monday: 
-                tm.WDay = 1; 
-                break; 
-            case cctz::weekday::tuesday: 
-                tm.WDay = 2; 
-                break; 
-            case cctz::weekday::wednesday: 
-                tm.WDay = 3; 
-                break; 
-            case cctz::weekday::thursday: 
-                tm.WDay = 4; 
-                break; 
-            case cctz::weekday::friday: 
-                tm.WDay = 5; 
-                break; 
-            case cctz::weekday::saturday: 
-                tm.WDay = 6; 
-                break; 
-            case cctz::weekday::sunday: 
-                tm.WDay = 0; 
-                break; 
+            case cctz::weekday::monday:
+                tm.WDay = 1;
+                break;
+            case cctz::weekday::tuesday:
+                tm.WDay = 2;
+                break;
+            case cctz::weekday::wednesday:
+                tm.WDay = 3;
+                break;
+            case cctz::weekday::thursday:
+                tm.WDay = 4;
+                break;
+            case cctz::weekday::friday:
+                tm.WDay = 5;
+                break;
+            case cctz::weekday::saturday:
+                tm.WDay = 6;
+                break;
+            case cctz::weekday::sunday:
+                tm.WDay = 0;
+                break;
         }
 
         return tm;
@@ -87,7 +87,7 @@ namespace NDatetime {
             civilTime.MDay,
             civilTime.Hour,
             civilTime.Min,
-            civilTime.Sec); 
+            civilTime.Sec);
         return TInstant::Seconds(TSystemClock::to_time_t(tz.lookup(cs).pre));
     }
 }

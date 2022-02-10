@@ -2,12 +2,12 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "info.h" 
+#include "info.h"
 
-class TMemInfoTest: public NUnitTest::TTestBase { 
-    UNIT_TEST_SUITE(TMemInfoTest) 
+class TMemInfoTest: public NUnitTest::TTestBase {
+    UNIT_TEST_SUITE(TMemInfoTest)
     UNIT_TEST(TestMemInfo)
-    UNIT_TEST_SUITE_END(); 
+    UNIT_TEST_SUITE_END();
     void TestMemInfo() {
         using namespace NMemInfo;
 

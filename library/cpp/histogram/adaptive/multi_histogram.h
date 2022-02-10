@@ -31,7 +31,7 @@ namespace NKiwiAggr {
             FromProto(histograms);
         }
 
-        virtual ~TMultiHistogram() { 
+        virtual ~TMultiHistogram() {
         }
 
         void Clear() {
@@ -65,7 +65,7 @@ namespace NKiwiAggr {
         TVector<ui64> GetIds() const {
             TVector<ui64> result(0);
             for (THistogramsMap::const_iterator it = Histograms.begin(); it != Histograms.end(); ++it) {
-                result.push_back(it->first); 
+                result.push_back(it->first);
             }
             return result;
         }
@@ -81,7 +81,7 @@ namespace NKiwiAggr {
         double GetMaxHistoSum() const {
             double sum = 0.0;
             for (THistogramsMap::const_iterator it = Histograms.begin(); it != Histograms.end(); ++it) {
-                sum = std::max(sum, it->second->GetSum()); 
+                sum = std::max(sum, it->second->GetSum());
             }
             return sum;
         }
@@ -138,6 +138,6 @@ namespace NKiwiAggr {
 
     // Good for parsing from THistograms protobuf
     typedef TMultiHistogram<TAutoHistogram> TAutoMultiHistogram;
-    typedef TAtomicSharedPtr<TAutoMultiHistogram> TAutoMultiHistogramPtr; 
+    typedef TAtomicSharedPtr<TAutoMultiHistogram> TAutoMultiHistogramPtr;
 
-} 
+}

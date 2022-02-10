@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "comptrie_trie.h"
 
 // Iterates over all prefixes of the given key in the trie.
@@ -39,11 +39,11 @@ public:
         result = Next();
     }
 
-    operator bool() const { 
+    operator bool() const {
         return result;
     }
 
-    TPrefixIterator& operator++() { 
+    TPrefixIterator& operator++() {
         result = Next();
         return *this;
     }

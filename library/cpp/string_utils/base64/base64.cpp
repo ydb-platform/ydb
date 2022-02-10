@@ -1,5 +1,5 @@
-#include "base64.h" 
- 
+#include "base64.h"
+
 #include <contrib/libs/base64/avx2/libbase64.h>
 #include <contrib/libs/base64/ssse3/libbase64.h>
 #include <contrib/libs/base64/neon32/libbase64.h>
@@ -7,10 +7,10 @@
 #include <contrib/libs/base64/plain32/libbase64.h>
 #include <contrib/libs/base64/plain64/libbase64.h>
 
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include <util/system/cpu_id.h>
 #include <util/system/platform.h>
- 
+
 #include <cstdlib>
 
 namespace {
@@ -71,7 +71,7 @@ namespace {
     }
 }
 
-static const char base64_etab_std[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"; 
+static const char base64_etab_std[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 static const char base64_bkw[] = {
     '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',                // 0..15
     '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',                // 16..31
@@ -93,7 +93,7 @@ static const char base64_bkw[] = {
 static_assert(Y_ARRAY_SIZE(base64_bkw) == 256, "wrong size");
 
 // Base64 for url encoding, RFC3548
-static const char base64_etab_url[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"; 
+static const char base64_etab_url[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 static inline unsigned char GetBase64EncodedIndex0(unsigned char octet0) {
     return (octet0 >> 2);
@@ -111,13 +111,13 @@ static inline unsigned char GetBase64EncodedIndex3(unsigned char octet2) {
     return (octet2 & 0x3f);
 }
 
-template <bool urlVersion> 
-static inline char* Base64EncodeImpl(char* outstr, const unsigned char* instr, size_t len) { 
+template <bool urlVersion>
+static inline char* Base64EncodeImpl(char* outstr, const unsigned char* instr, size_t len) {
     const char* const base64_etab = (urlVersion ? base64_etab_url : base64_etab_std);
     const char pad = (urlVersion ? ',' : '=');
 
-    size_t idx = 0; 
- 
+    size_t idx = 0;
+
     while (idx + 2 < len) {
         *outstr++ = base64_etab[GetBase64EncodedIndex0(instr[idx])];
         *outstr++ = base64_etab[GetBase64EncodedIndex1(instr[idx], instr[idx + 1])];
@@ -136,44 +136,44 @@ static inline char* Base64EncodeImpl(char* outstr, const unsigned char* instr, s
         }
         *outstr++ = pad;
     }
-    *outstr = 0; 
- 
+    *outstr = 0;
+
     return outstr;
 }
 
 static char* Base64EncodePlain(char* outstr, const unsigned char* instr, size_t len) {
-    return Base64EncodeImpl<false>(outstr, instr, len); 
+    return Base64EncodeImpl<false>(outstr, instr, len);
 }
 
-char* Base64EncodeUrl(char* outstr, const unsigned char* instr, size_t len) { 
-    return Base64EncodeImpl<true>(outstr, instr, len); 
+char* Base64EncodeUrl(char* outstr, const unsigned char* instr, size_t len) {
+    return Base64EncodeImpl<true>(outstr, instr, len);
 }
 
-inline void uudecode_1(char* dst, unsigned char* src) { 
+inline void uudecode_1(char* dst, unsigned char* src) {
     dst[0] = char((base64_bkw[src[0]] << 2) | (base64_bkw[src[1]] >> 4));
     dst[1] = char((base64_bkw[src[1]] << 4) | (base64_bkw[src[2]] >> 2));
     dst[2] = char((base64_bkw[src[2]] << 6) | base64_bkw[src[3]]);
 }
 
 static size_t Base64DecodePlain(void* dst, const char* b, const char* e) {
-    size_t n = 0; 
-    while (b < e) { 
-        uudecode_1((char*)dst + n, (unsigned char*)b); 
- 
-        b += 4; 
-        n += 3; 
-    } 
- 
+    size_t n = 0;
+    while (b < e) {
+        uudecode_1((char*)dst + n, (unsigned char*)b);
+
+        b += 4;
+        n += 3;
+    }
+
     if (n > 0) {
-        if (b[-1] == ',' || b[-1] == '=') { 
+        if (b[-1] == ',' || b[-1] == '=') {
             n--;
- 
-            if (b[-2] == ',' || b[-2] == '=') { 
+
+            if (b[-2] == ',' || b[-2] == '=') {
                 n--;
-            } 
+            }
         }
     }
- 
+
     return n;
 }
 
@@ -189,9 +189,9 @@ static const char base64_bkw_strict[] =
     "\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100";
 
 size_t Base64StrictDecode(void* out, const char* b, const char* e) {
-    char* dst = (char*)out; 
-    const unsigned char* src = (unsigned char*)b; 
-    const unsigned char* const end = (unsigned char*)e; 
+    char* dst = (char*)out;
+    const unsigned char* src = (unsigned char*)b;
+    const unsigned char* const end = (unsigned char*)e;
 
     Y_ENSURE(!((e - b) % 4), "incorrect input length for base64 decode");
 
@@ -228,7 +228,7 @@ size_t Base64StrictDecode(void* out, const char* b, const char* e) {
         }
     }
 
-    return dst - (char*)out; 
+    return dst - (char*)out;
 }
 
 size_t Base64Decode(void* dst, const char* b, const char* e) {

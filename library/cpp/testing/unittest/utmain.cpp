@@ -1,9 +1,9 @@
 #include "plugin.h"
-#include "registar.h" 
-#include "utmain.h" 
- 
+#include "registar.h"
+#include "utmain.h"
+
 #include <library/cpp/colorizer/colors.h>
- 
+
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/testing/common/env.h>
@@ -11,45 +11,45 @@
 
 #include <util/datetime/base.h>
 
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 
-#include <util/network/init.h> 
+#include <util/network/init.h>
 
 #include <util/stream/file.h>
 #include <util/stream/output.h>
 #include <util/string/join.h>
 #include <util/string/util.h>
- 
+
 #include <util/system/defaults.h>
 #include <util/system/execpath.h>
 #include <util/system/valgrind.h>
 #include <util/system/shellcommand.h>
 
-#if defined(_win_) 
-#include <fcntl.h> 
-#include <io.h> 
-#include <windows.h> 
-#include <crtdbg.h> 
-#endif 
- 
-#if defined(_unix_) 
-#include <unistd.h> 
-#endif 
- 
+#if defined(_win_)
+#include <fcntl.h>
+#include <io.h>
+#include <windows.h>
+#include <crtdbg.h>
+#endif
+
+#if defined(_unix_)
+#include <unistd.h>
+#endif
+
 #ifdef WITH_VALGRIND
 #define NOTE_IN_VALGRIND(test) VALGRIND_PRINTF("%s::%s", test->unit->name.data(), test->name)
 #else
-#define NOTE_IN_VALGRIND(test) 
+#define NOTE_IN_VALGRIND(test)
 #endif
 
 const size_t MAX_COMMENT_MESSAGE_LENGTH = 1024 * 1024; // 1 MB
 
-using namespace NUnitTest; 
- 
+using namespace NUnitTest;
+
 class TNullTraceWriterProcessor: public ITestSuiteProcessor {
 };
 
@@ -107,12 +107,12 @@ private:
 
     virtual TString BuildComment(const char* message, const char* backTrace) {
         return NUnitTest::GetFormatTag("bad") +
-               TString(message).substr(0, MAX_COMMENT_MESSAGE_LENGTH) + 
-               NUnitTest::GetResetTag() + 
-               TString("\n") + 
-               NUnitTest::GetFormatTag("alt1") + 
-               TString(backTrace).substr(0, MAX_COMMENT_MESSAGE_LENGTH) + 
-               NUnitTest::GetResetTag(); 
+               TString(message).substr(0, MAX_COMMENT_MESSAGE_LENGTH) +
+               NUnitTest::GetResetTag() +
+               TString("\n") +
+               NUnitTest::GetFormatTag("alt1") +
+               TString(backTrace).substr(0, MAX_COMMENT_MESSAGE_LENGTH) +
+               NUnitTest::GetResetTag();
     }
 
     void OnBeforeTest(const TTest* test) override {
@@ -164,75 +164,75 @@ private:
     }
 };
 
-class TColoredProcessor: public ITestSuiteProcessor, public NColorizer::TColors { 
-public: 
+class TColoredProcessor: public ITestSuiteProcessor, public NColorizer::TColors {
+public:
     inline TColoredProcessor(const TString& appName)
-        : PrintBeforeSuite_(true) 
-        , PrintBeforeTest_(true) 
+        : PrintBeforeSuite_(true)
+        , PrintBeforeTest_(true)
         , PrintAfterTest_(true)
         , PrintAfterSuite_(true)
-        , PrintTimes_(false) 
+        , PrintTimes_(false)
         , PrintSummary_(true)
-        , PrevTime_(TInstant::Now()) 
+        , PrevTime_(TInstant::Now())
         , ShowFails(true)
-        , Start(0) 
-        , End(Max<size_t>()) 
-        , AppName(appName) 
-        , ForkTests(false) 
-        , IsForked(false) 
-        , Loop(false) 
-        , ForkExitedCorrectly(false) 
+        , Start(0)
+        , End(Max<size_t>())
+        , AppName(appName)
+        , ForkTests(false)
+        , IsForked(false)
+        , Loop(false)
+        , ForkExitedCorrectly(false)
         , TraceProcessor(new TNullTraceWriterProcessor())
-    { 
-    } 
- 
+    {
+    }
+
     ~TColoredProcessor() override {
-    } 
- 
-    inline void Disable(const char* name) { 
+    }
+
+    inline void Disable(const char* name) {
         size_t colon = TString(name).find("::");
         if (colon == TString::npos) {
-            DisabledSuites_.insert(name); 
-        } else { 
+            DisabledSuites_.insert(name);
+        } else {
             TString suite = TString(name).substr(0, colon);
-            DisabledTests_.insert(name); 
-        } 
-    } 
- 
-    inline void Enable(const char* name) { 
+            DisabledTests_.insert(name);
+        }
+    }
+
+    inline void Enable(const char* name) {
         size_t colon = TString(name).rfind("::");
         if (colon == TString::npos) {
-            EnabledSuites_.insert(name); 
-            EnabledTests_.insert(TString() + name + "::*");
-        } else { 
-            TString suite = TString(name).substr(0, colon);
-            EnabledSuites_.insert(suite); 
             EnabledSuites_.insert(name);
-            EnabledTests_.insert(name); 
             EnabledTests_.insert(TString() + name + "::*");
-        } 
-    } 
- 
-    inline void SetPrintBeforeSuite(bool print) { 
-        PrintBeforeSuite_ = print; 
-    } 
+        } else {
+            TString suite = TString(name).substr(0, colon);
+            EnabledSuites_.insert(suite);
+            EnabledSuites_.insert(name);
+            EnabledTests_.insert(name);
+            EnabledTests_.insert(TString() + name + "::*");
+        }
+    }
+
+    inline void SetPrintBeforeSuite(bool print) {
+        PrintBeforeSuite_ = print;
+    }
 
     inline void SetPrintAfterSuite(bool print) {
         PrintAfterSuite_ = print;
     }
 
-    inline void SetPrintBeforeTest(bool print) { 
-        PrintBeforeTest_ = print; 
-    } 
+    inline void SetPrintBeforeTest(bool print) {
+        PrintBeforeTest_ = print;
+    }
 
     inline void SetPrintAfterTest(bool print) {
         PrintAfterTest_ = print;
     }
 
-    inline void SetPrintTimes(bool print) { 
-        PrintTimes_ = print; 
-    } 
- 
+    inline void SetPrintTimes(bool print) {
+        PrintTimes_ = print;
+    }
+
     inline void SetPrintSummary(bool print) {
         PrintSummary_ = print;
     }
@@ -241,15 +241,15 @@ public:
         return PrintSummary_;
     }
 
-    inline void SetShowFails(bool show) { 
-        ShowFails = show; 
-    } 
+    inline void SetShowFails(bool show) {
+        ShowFails = show;
+    }
 
     void SetContinueOnFail(bool val) {
         NUnitTest::ContinueOnFail = val;
     }
 
-    inline void BeQuiet() { 
+    inline void BeQuiet() {
         SetPrintTimes(false);
         SetPrintBeforeSuite(false);
         SetPrintAfterSuite(false);
@@ -258,117 +258,117 @@ public:
         SetPrintSummary(false);
     }
 
-    inline void SetStart(size_t val) { 
-        Start = val; 
-    } 
- 
-    inline void SetEnd(size_t val) { 
-        End = val; 
-    } 
- 
-    inline void SetForkTests(bool val) { 
-        ForkTests = val; 
-    } 
+    inline void SetStart(size_t val) {
+        Start = val;
+    }
+
+    inline void SetEnd(size_t val) {
+        End = val;
+    }
+
+    inline void SetForkTests(bool val) {
+        ForkTests = val;
+    }
 
     inline bool GetForkTests() const override {
-        return ForkTests; 
-    } 
+        return ForkTests;
+    }
 
-    inline void SetIsForked(bool val) { 
-        IsForked = val; 
-        SetIsTTY(IsForked || CalcIsTTY(stderr)); 
-    } 
+    inline void SetIsForked(bool val) {
+        IsForked = val;
+        SetIsTTY(IsForked || CalcIsTTY(stderr));
+    }
 
     inline bool GetIsForked() const override {
-        return IsForked; 
-    } 
+        return IsForked;
+    }
 
-    inline void SetLoop(bool loop) { 
-        Loop = loop; 
-    } 
+    inline void SetLoop(bool loop) {
+        Loop = loop;
+    }
 
-    inline bool IsLoop() const { 
-        return Loop; 
-    } 
- 
+    inline bool IsLoop() const {
+        return Loop;
+    }
+
     inline void SetTraceProcessor(TAutoPtr<ITestSuiteProcessor> traceProcessor) {
         TraceProcessor = traceProcessor;
     }
 
-private: 
+private:
     void OnUnitStart(const TUnit* unit) override {
         TraceProcessor->UnitStart(*unit);
-        if (IsForked) { 
-            return; 
+        if (IsForked) {
+            return;
         }
-        if (PrintBeforeSuite_ || PrintBeforeTest_) { 
+        if (PrintBeforeSuite_ || PrintBeforeTest_) {
             fprintf(stderr, "%s<-----%s %s\n", LightBlueColor().data(), OldColor().data(), unit->name.data());
-        } 
-    } 
+        }
+    }
 
     void OnUnitStop(const TUnit* unit) override {
         TraceProcessor->UnitStop(*unit);
-        if (IsForked) { 
-            return; 
+        if (IsForked) {
+            return;
         }
         if (!PrintAfterSuite_) {
             return;
         }
 
-        fprintf(stderr, "%s----->%s %s -> ok: %s%u%s", 
+        fprintf(stderr, "%s----->%s %s -> ok: %s%u%s",
                 LightBlueColor().data(), OldColor().data(), unit->name.data(),
                 LightGreenColor().data(), GoodTestsInCurrentUnit(), OldColor().data());
-        if (FailTestsInCurrentUnit()) { 
-            fprintf(stderr, ", err: %s%u%s", 
+        if (FailTestsInCurrentUnit()) {
+            fprintf(stderr, ", err: %s%u%s",
                     LightRedColor().data(), FailTestsInCurrentUnit(), OldColor().data());
-        } 
-        fprintf(stderr, "\n"); 
-    } 
- 
+        }
+        fprintf(stderr, "\n");
+    }
+
     void OnBeforeTest(const TTest* test) override {
         TraceProcessor->BeforeTest(*test);
-        if (IsForked) { 
-            return; 
+        if (IsForked) {
+            return;
         }
-        if (PrintBeforeTest_) { 
+        if (PrintBeforeTest_) {
             fprintf(stderr, "[%sexec%s] %s::%s...\n", LightBlueColor().data(), OldColor().data(), test->unit->name.data(), test->name);
-        } 
-    } 
+        }
+    }
 
     void OnError(const TError* descr) override {
         TraceProcessor->Error(*descr);
-        if (!IsForked && ForkExitedCorrectly) { 
-            return; 
-        } 
+        if (!IsForked && ForkExitedCorrectly) {
+            return;
+        }
         if (!PrintAfterTest_) {
             return;
         }
 
         const TString err = Sprintf("[%sFAIL%s] %s::%s -> %s%s%s\n%s%s%s", LightRedColor().data(), OldColor().data(),
                                     descr->test->unit->name.data(),
-                                    descr->test->name, 
+                                    descr->test->name,
                                     LightRedColor().data(), descr->msg, OldColor().data(), LightCyanColor().data(), descr->BackTrace.data(), OldColor().data());
         const TDuration test_duration = SaveTestDuration();
-        if (ShowFails) { 
+        if (ShowFails) {
             if (PrintTimes_) {
                 Fails.push_back(Sprintf("%s %s", test_duration.ToString().data(), err.data()));
             } else {
                 Fails.push_back(err);
             }
-        } 
+        }
         fprintf(stderr, "%s", err.data());
-        NOTE_IN_VALGRIND(descr->test); 
+        NOTE_IN_VALGRIND(descr->test);
         PrintTimes(test_duration);
-        if (IsForked) { 
-            fprintf(stderr, "%s", ForkCorrectExitMsg); 
-        } 
-    } 
- 
+        if (IsForked) {
+            fprintf(stderr, "%s", ForkCorrectExitMsg);
+        }
+    }
+
     void OnFinish(const TFinish* descr) override {
         TraceProcessor->Finish(*descr);
-        if (!IsForked && ForkExitedCorrectly) { 
-            return; 
-        } 
+        if (!IsForked && ForkExitedCorrectly) {
+            return;
+        }
         if (!PrintAfterTest_) {
             return;
         }
@@ -382,9 +382,9 @@ private:
             if (IsForked) {
                 fprintf(stderr, "%s", ForkCorrectExitMsg);
             }
-        } 
-    } 
- 
+        }
+    }
+
     inline TDuration SaveTestDuration() {
         const TInstant now = TInstant::Now();
         TDuration d = now - PrevTime_;
@@ -393,101 +393,101 @@ private:
     }
 
     inline void PrintTimes(TDuration d) {
-        if (!PrintTimes_) { 
-            return; 
-        } 
- 
+        if (!PrintTimes_) {
+            return;
+        }
+
         Cerr << d << "\n";
-    } 
- 
+    }
+
     void OnEnd() override {
         TraceProcessor->End();
-        if (IsForked) { 
-            return; 
-        } 
+        if (IsForked) {
+            return;
+        }
 
         if (!PrintSummary_) {
             return;
         }
 
-        fprintf(stderr, "[%sDONE%s] ok: %s%u%s", 
+        fprintf(stderr, "[%sDONE%s] ok: %s%u%s",
                 YellowColor().data(), OldColor().data(),
                 LightGreenColor().data(), GoodTests(), OldColor().data());
-        if (FailTests()) 
-            fprintf(stderr, ", err: %s%u%s", 
+        if (FailTests())
+            fprintf(stderr, ", err: %s%u%s",
                     LightRedColor().data(), FailTests(), OldColor().data());
-        fprintf(stderr, "\n"); 
+        fprintf(stderr, "\n");
 
-        if (ShowFails) { 
-            for (size_t i = 0; i < Fails.size(); ++i) { 
+        if (ShowFails) {
+            for (size_t i = 0; i < Fails.size(); ++i) {
                 printf("%s", Fails[i].data());
             }
-        } 
-    } 
- 
+        }
+    }
+
     bool CheckAccess(TString name, size_t num) override {
-        if (num < Start) { 
-            return false; 
-        } 
- 
-        if (num >= End) { 
-            return false; 
-        } 
- 
+        if (num < Start) {
+            return false;
+        }
+
+        if (num >= End) {
+            return false;
+        }
+
         if (DisabledSuites_.find(name.data()) != DisabledSuites_.end()) {
-            return false; 
-        } 
- 
-        if (EnabledSuites_.empty()) { 
-            return true; 
-        } 
- 
+            return false;
+        }
+
+        if (EnabledSuites_.empty()) {
+            return true;
+        }
+
         return EnabledSuites_.find(name.data()) != EnabledSuites_.end();
-    } 
- 
+    }
+
     bool CheckAccessTest(TString suite, const char* test) override {
         TString name = suite + "::" + test;
-        if (DisabledTests_.find(name) != DisabledTests_.end()) { 
-            return false; 
-        } 
- 
-        if (EnabledTests_.empty()) { 
-            return true; 
-        } 
+        if (DisabledTests_.find(name) != DisabledTests_.end()) {
+            return false;
+        }
+
+        if (EnabledTests_.empty()) {
+            return true;
+        }
 
         if (EnabledTests_.find(TString() + suite + "::*") != EnabledTests_.end()) {
-            return true; 
-        } 
+            return true;
+        }
 
-        return EnabledTests_.find(name) != EnabledTests_.end(); 
-    } 
+        return EnabledTests_.find(name) != EnabledTests_.end();
+    }
 
     void Run(std::function<void()> f, const TString& suite, const char* name, const bool forceFork) override {
-        if (!(ForkTests || forceFork) || GetIsForked()) { 
-            return f(); 
+        if (!(ForkTests || forceFork) || GetIsForked()) {
+            return f();
         }
 
         TList<TString> args(1, "--is-forked-internal");
         args.push_back(Sprintf("+%s::%s", suite.data(), name));
 
-        // stdin is ignored - unittest should not need them... 
-        TShellCommand cmd(AppName, args, 
-                          TShellCommandOptions().SetUseShell(false).SetCloseAllFdsOnExec(true).SetAsync(false).SetLatency(1)); 
-        cmd.Run(); 
+        // stdin is ignored - unittest should not need them...
+        TShellCommand cmd(AppName, args,
+                          TShellCommandOptions().SetUseShell(false).SetCloseAllFdsOnExec(true).SetAsync(false).SetLatency(1));
+        cmd.Run();
 
         const TString& err = cmd.GetError();
-        const size_t msgIndex = err.find(ForkCorrectExitMsg); 
+        const size_t msgIndex = err.find(ForkCorrectExitMsg);
 
-        // everything is printed by parent process except test's result output ("good" or "fail") 
-        // which is printed by child. If there was no output - parent process prints default message. 
+        // everything is printed by parent process except test's result output ("good" or "fail")
+        // which is printed by child. If there was no output - parent process prints default message.
         ForkExitedCorrectly = msgIndex != TString::npos;
 
-        // TODO: stderr output is always printed after stdout 
-        Cout.Write(cmd.GetOutput()); 
-        Cerr.Write(err.c_str(), Min(msgIndex, err.size())); 
+        // TODO: stderr output is always printed after stdout
+        Cout.Write(cmd.GetOutput());
+        Cerr.Write(err.c_str(), Min(msgIndex, err.size()));
 
-        // do not use default case, so gcc will warn if new element in enum will be added 
-        switch (cmd.GetStatus()) { 
+        // do not use default case, so gcc will warn if new element in enum will be added
+        switch (cmd.GetStatus()) {
             case TShellCommand::SHELL_FINISHED: {
                 // test could fail with zero status if it calls exit(0) in the middle.
                 if (ForkExitedCorrectly)
@@ -508,40 +508,40 @@ private:
                 ythrow yexception() << "Forked test failed with internal error: " << cmd.GetInternalError();
             }
         }
-    } 
+    }
 
-private: 
-    bool PrintBeforeSuite_; 
-    bool PrintBeforeTest_; 
+private:
+    bool PrintBeforeSuite_;
+    bool PrintBeforeTest_;
     bool PrintAfterTest_;
     bool PrintAfterSuite_;
-    bool PrintTimes_; 
+    bool PrintTimes_;
     bool PrintSummary_;
     THashSet<TString> DisabledSuites_;
     THashSet<TString> EnabledSuites_;
     THashSet<TString> DisabledTests_;
     THashSet<TString> EnabledTests_;
-    TInstant PrevTime_; 
-    bool ShowFails; 
+    TInstant PrevTime_;
+    bool ShowFails;
     TVector<TString> Fails;
-    size_t Start; 
-    size_t End; 
+    size_t Start;
+    size_t End;
     TString AppName;
-    bool ForkTests; 
-    bool IsForked; 
-    bool Loop; 
-    static const char* const ForkCorrectExitMsg; 
-    bool ForkExitedCorrectly; 
+    bool ForkTests;
+    bool IsForked;
+    bool Loop;
+    static const char* const ForkCorrectExitMsg;
+    bool ForkExitedCorrectly;
     TAutoPtr<ITestSuiteProcessor> TraceProcessor;
-}; 
- 
-const char* const TColoredProcessor::ForkCorrectExitMsg = "--END--"; 
- 
+};
+
+const char* const TColoredProcessor::ForkCorrectExitMsg = "--END--";
+
 class TEnumeratingProcessor: public ITestSuiteProcessor {
 public:
     TEnumeratingProcessor(bool verbose, IOutputStream& stream) noexcept
-        : Verbose_(verbose) 
-        , Stream_(stream) 
+        : Verbose_(verbose)
+        , Stream_(stream)
     {
     }
 
@@ -571,7 +571,7 @@ private:
 class TWinEnvironment {
 public:
     TWinEnvironment()
-        : OutputCP(GetConsoleOutputCP()) 
+        : OutputCP(GetConsoleOutputCP())
     {
         setmode(fileno(stdout), _O_BINARY);
         SetConsoleOutputCP(CP_UTF8);
@@ -593,7 +593,7 @@ public:
 
         SetConsoleOutputCP(OutputCP); // restore original output CP at program exit
     }
- 
+
 private:
     UINT OutputCP; // original codepage
 };
@@ -648,15 +648,15 @@ int NUnitTest::RunMain(int argc, char** argv) {
     }
 #endif
     NTesting::THook::CallBeforeInit();
-    InitNetworkSubSystem(); 
- 
-    try { 
+    InitNetworkSubSystem();
+
+    try {
         GetExecPath();
-    } catch (...) { 
-    } 
- 
+    } catch (...) {
+    }
+
 #ifndef UT_SKIP_EXCEPTIONS
-    try { 
+    try {
 #endif
         NTesting::THook::CallBeforeRun();
         Y_DEFER { NTesting::THook::CallAfterRun(); };
@@ -667,7 +667,7 @@ int NUnitTest::RunMain(int argc, char** argv) {
         TColoredProcessor processor(GetExecPath());
         IOutputStream* listStream = &Cout;
         THolder<IOutputStream> listFile;
- 
+
         enum EListType {
             DONT_LIST,
             LIST,
@@ -675,17 +675,17 @@ int NUnitTest::RunMain(int argc, char** argv) {
         };
         EListType listTests = DONT_LIST;
 
-        for (size_t i = 1; i < (size_t)argc; ++i) { 
-            const char* name = argv[i]; 
- 
-            if (name && *name) { 
+        for (size_t i = 1; i < (size_t)argc; ++i) {
+            const char* name = argv[i];
+
+            if (name && *name) {
                 if (strcmp(name, "--help") == 0 || strcmp(name, "-h") == 0) {
                     return DoUsage(argv[0]);
                 } else if (strcmp(name, "--list") == 0 || strcmp(name, "-l") == 0) {
                     listTests = LIST;
                 } else if (strcmp(name, "--list-verbose") == 0 || strcmp(name, "-A") == 0) {
                     listTests = LIST_VERBOSE;
-                } else if (strcmp(name, "--print-before-suite=false") == 0) { 
+                } else if (strcmp(name, "--print-before-suite=false") == 0) {
                     processor.SetPrintBeforeSuite(false);
                 } else if (strcmp(name, "--print-before-test=false") == 0) {
                     processor.SetPrintBeforeTest(false);
@@ -699,14 +699,14 @@ int NUnitTest::RunMain(int argc, char** argv) {
                     processor.SetShowFails(false);
                 } else if (strcmp(name, "--continue-on-fail") == 0) {
                     processor.SetContinueOnFail(true);
-                } else if (strcmp(name, "--print-times") == 0) { 
-                    processor.SetPrintTimes(true); 
-                } else if (strcmp(name, "--from") == 0) { 
-                    ++i; 
-                    processor.SetStart(FromString<size_t>(argv[i])); 
-                } else if (strcmp(name, "--to") == 0) { 
-                    ++i; 
-                    processor.SetEnd(FromString<size_t>(argv[i])); 
+                } else if (strcmp(name, "--print-times") == 0) {
+                    processor.SetPrintTimes(true);
+                } else if (strcmp(name, "--from") == 0) {
+                    ++i;
+                    processor.SetStart(FromString<size_t>(argv[i]));
+                } else if (strcmp(name, "--to") == 0) {
+                    ++i;
+                    processor.SetEnd(FromString<size_t>(argv[i]));
                 } else if (strcmp(name, "--fork-tests") == 0) {
                     processor.SetForkTests(true);
                 } else if (strcmp(name, "--is-forked-internal") == 0) {
@@ -735,19 +735,19 @@ int NUnitTest::RunMain(int argc, char** argv) {
                 } else if (TString(name).StartsWith("--")) {
                     return DoUsage(argv[0]), 1;
                 } else if (*name == '-') {
-                    processor.Disable(name + 1); 
-                } else if (*name == '+') { 
-                    processor.Enable(name + 1); 
-                } else { 
-                    processor.Enable(name); 
-                } 
-            } 
+                    processor.Disable(name + 1);
+                } else if (*name == '+') {
+                    processor.Enable(name + 1);
+                } else {
+                    processor.Enable(name);
+                }
+            }
         }
         if (listTests != DONT_LIST) {
             return DoList(listTests == LIST_VERBOSE, *listStream);
         }
- 
-        TTestFactory::Instance().SetProcessor(&processor); 
+
+        TTestFactory::Instance().SetProcessor(&processor);
 
         unsigned ret;
         for (;;) {
@@ -759,13 +759,13 @@ int NUnitTest::RunMain(int argc, char** argv) {
             if (0 != ret || !processor.IsLoop()) {
                 break;
             }
-        } 
+        }
         return ret;
 #ifndef UT_SKIP_EXCEPTIONS
-    } catch (...) { 
-        Cerr << "caught exception in test suite(" << CurrentExceptionMessage() << ")" << Endl; 
-    } 
+    } catch (...) {
+        Cerr << "caught exception in test suite(" << CurrentExceptionMessage() << ")" << Endl;
+    }
 #endif
- 
-    return 1; 
-} 
+
+    return 1;
+}

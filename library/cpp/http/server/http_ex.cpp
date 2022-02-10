@@ -1,32 +1,32 @@
-#include "http_ex.h" 
- 
-#include <util/generic/buffer.h> 
-#include <util/generic/cast.h> 
+#include "http_ex.h"
+
+#include <util/generic/buffer.h>
+#include <util/generic/cast.h>
 #include <util/stream/null.h>
- 
+
 bool THttpClientRequestExtension::Parse(char* req, TBaseServerRequestData& rd) {
     rd.SetSocket(Socket());
- 
+
     if (!rd.Parse(req)) {
-        Output() << "HTTP/1.1 403 Forbidden\r\n" 
-                    "Content-Type: text/plain\r\n" 
-                    "Content-Length: 39\r\n" 
-                    "\r\n" 
-                    "The server cannot be used as a proxy.\r\n"; 
- 
-        return false; 
-    } 
- 
-    return true; 
-} 
- 
+        Output() << "HTTP/1.1 403 Forbidden\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "Content-Length: 39\r\n"
+                    "\r\n"
+                    "The server cannot be used as a proxy.\r\n";
+
+        return false;
+    }
+
+    return true;
+}
+
 bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBlob& postData) {
-    for (const auto& header : ParsedHeaders) { 
+    for (const auto& header : ParsedHeaders) {
         rd.AddHeader(header.first, header.second);
-    } 
- 
+    }
+
     char* s = RequestString.begin();
- 
+
     enum EMethod {
         NotImplemented,
         Get,
@@ -39,7 +39,7 @@ bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBl
     enum EMethod foundMethod;
     char* urlStart;
 
-    if (strnicmp(s, "GET ", 4) == 0) { 
+    if (strnicmp(s, "GET ", 4) == 0) {
         foundMethod = Get;
         urlStart = s + 4;
     } else if (strnicmp(s, "POST ", 5) == 0) {
@@ -59,49 +59,49 @@ bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBl
     }
 
     switch (foundMethod) {
-        case Get: 
-        case Delete: 
-            if (!Parse(urlStart, rd)) { 
-                return false; 
-            } 
-            break; 
+        case Get:
+        case Delete:
+            if (!Parse(urlStart, rd)) {
+                return false;
+            }
+            break;
 
-        case Post: 
-        case Put: 
+        case Post:
+        case Put:
         case Patch:
-            try { 
-                ui64 contentLength = 0; 
-                if (Input().HasExpect100Continue()) { 
-                    Output().SendContinue(); 
-                } 
- 
-                if (!Input().ContentEncoded() && Input().GetContentLength(contentLength)) { 
+            try {
+                ui64 contentLength = 0;
+                if (Input().HasExpect100Continue()) {
+                    Output().SendContinue();
+                }
+
+                if (!Input().ContentEncoded() && Input().GetContentLength(contentLength)) {
                     if (contentLength > HttpServ()->Options().MaxInputContentLength) {
                         Output() << "HTTP/1.1 413 Payload Too Large\r\nContent-Length:0\r\n\r\n";
                         Output().Finish();
                         return false;
                     }
 
-                    TBuffer buf(SafeIntegerCast<size_t>(contentLength)); 
-                    buf.Resize(Input().Load(buf.Data(), (size_t)contentLength)); 
-                    postData = TBlob::FromBuffer(buf); 
-                } else { 
-                    postData = TBlob::FromStream(Input()); 
-                } 
-            } catch (...) { 
-                Output() << "HTTP/1.1 400 Bad request\r\n\r\n"; 
-                return false; 
+                    TBuffer buf(SafeIntegerCast<size_t>(contentLength));
+                    buf.Resize(Input().Load(buf.Data(), (size_t)contentLength));
+                    postData = TBlob::FromBuffer(buf);
+                } else {
+                    postData = TBlob::FromStream(Input());
+                }
+            } catch (...) {
+                Output() << "HTTP/1.1 400 Bad request\r\n\r\n";
+                return false;
             }
 
-            if (!Parse(urlStart, rd)) { 
-                return false; 
-            } 
-            break; 
- 
-        case NotImplemented: 
-            Output() << "HTTP/1.1 501 Not Implemented\r\n\r\n"; 
-            return false; 
-    } 
- 
-    return true; 
-} 
+            if (!Parse(urlStart, rd)) {
+                return false;
+            }
+            break;
+
+        case NotImplemented:
+            Output() << "HTTP/1.1 501 Not Implemented\r\n\r\n";
+            return false;
+    }
+
+    return true;
+}

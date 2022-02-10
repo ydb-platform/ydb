@@ -23,50 +23,50 @@ namespace NProtoBuf {
 
     void ParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven) {
         if (!m.ParseFromString(allowUneven ? Base64DecodeUneven(dataBase64) : Base64StrictDecode(dataBase64))) {
-            ythrow yexception() << "can't parse " << m.GetTypeName() << " from base64-encoded string"; 
-        } 
-    } 
+            ythrow yexception() << "can't parse " << m.GetTypeName() << " from base64-encoded string";
+        }
+    }
 
     bool TryParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven) {
-        try { 
+        try {
             ParseFromBase64String(dataBase64, m, allowUneven);
-            return true; 
-        } catch (const std::exception&) { 
-            return false; 
-        } 
+            return true;
+        } catch (const std::exception&) {
+            return false;
+        }
     }
 
-    void SerializeToBase64String(const Message& m, TString& dataBase64) { 
-        TString rawData; 
-        if (!m.SerializeToString(&rawData)) { 
-            ythrow yexception() << "can't serialize " << m.GetTypeName(); 
-        } 
- 
-        Base64EncodeUrl(rawData, dataBase64); 
-    }
- 
-    TString SerializeToBase64String(const Message& m) { 
-        TString s; 
-        SerializeToBase64String(m, s); 
-        return s; 
+    void SerializeToBase64String(const Message& m, TString& dataBase64) {
+        TString rawData;
+        if (!m.SerializeToString(&rawData)) {
+            ythrow yexception() << "can't serialize " << m.GetTypeName();
+        }
+
+        Base64EncodeUrl(rawData, dataBase64);
     }
 
-    bool TrySerializeToBase64String(const Message& m, TString& dataBase64) { 
-        try { 
-            SerializeToBase64String(m, dataBase64); 
-            return true; 
-        } catch (const std::exception&) { 
-            return false; 
-        } 
+    TString SerializeToBase64String(const Message& m) {
+        TString s;
+        SerializeToBase64String(m, s);
+        return s;
     }
 
-    const TString ShortUtf8DebugString(const Message& message) { 
-        TextFormat::Printer printer; 
-        printer.SetSingleLineMode(true); 
-        printer.SetUseUtf8StringEscaping(true); 
-        TString result; 
-        printer.PrintToString(message, &result); 
-        return result; 
+    bool TrySerializeToBase64String(const Message& m, TString& dataBase64) {
+        try {
+            SerializeToBase64String(m, dataBase64);
+            return true;
+        } catch (const std::exception&) {
+            return false;
+        }
+    }
+
+    const TString ShortUtf8DebugString(const Message& message) {
+        TextFormat::Printer printer;
+        printer.SetSingleLineMode(true);
+        printer.SetUseUtf8StringEscaping(true);
+        TString result;
+        printer.PrintToString(message, &result);
+        return result;
     }
 
     bool MergePartialFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage) {
@@ -81,7 +81,7 @@ namespace NProtoBuf {
     }
 }
 
-int operator&(NProtoBuf::Message& m, IBinSaver& f) { 
+int operator&(NProtoBuf::Message& m, IBinSaver& f) {
     TStringStream ss;
     if (f.IsReading()) {
         f.Add(0, &ss.Str());

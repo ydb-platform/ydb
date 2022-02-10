@@ -26,7 +26,7 @@ class TTrafficInterrupter
         TVector<char> Data;
     };
     struct TCompare {
-        bool operator()(const std::pair<TInstant, TDelayedPacket>& x, const std::pair<TInstant, TDelayedPacket>& y) const { 
+        bool operator()(const std::pair<TInstant, TDelayedPacket>& x, const std::pair<TInstant, TDelayedPacket>& y) const {
             return x.first > y.first;
         };
     };
@@ -160,7 +160,7 @@ private:
                         timeout = Min(timeout, conn.DelayedQueue.top().first - TInstant::Now());
                     }
                 };
-                for (auto& it : Connections) { 
+                for (auto& it : Connections) {
                     updateTimout(it.ForwardConnection);
                     updateTimout(it.BackwardConnection);
                 }
@@ -177,20 +177,20 @@ private:
             }
             if (DelayTraffic) { // process packets from DelayQueues
                 auto processDelayedPackages = [](TDirectedConnection& conn) {
-                    while (!conn.DelayedQueue.empty()) { 
-                        auto& frontPackage = conn.DelayedQueue.top(); 
-                        if (TInstant::Now() >= frontPackage.first) { 
-                            TInet6StreamSocket* sock = frontPackage.second.ForwardSocket; 
-                            if (sock) { 
+                    while (!conn.DelayedQueue.empty()) {
+                        auto& frontPackage = conn.DelayedQueue.top();
+                        if (TInstant::Now() >= frontPackage.first) {
+                            TInet6StreamSocket* sock = frontPackage.second.ForwardSocket;
+                            if (sock) {
                                 sock->Send(frontPackage.second.Data.data(), frontPackage.second.Data.size());
                             }
-                            conn.DelayedQueue.pop(); 
-                        } else { 
-                            break; 
+                            conn.DelayedQueue.pop();
+                        } else {
+                            break;
                         }
-                    } 
-                }; 
-                for (auto& it : Connections) { 
+                    }
+                };
+                for (auto& it : Connections) {
                     processDelayedPackages(it.ForwardConnection);
                     processDelayedPackages(it.BackwardConnection);
                 }
@@ -228,7 +228,7 @@ private:
             if (recvSize > 0) {
                 if (DelayTraffic) {
                     // put packet into DelayQueue
-                    const TDuration baseDelay = TDuration::MicroSeconds(recvSize * 1e6 / Bandwidth); 
+                    const TDuration baseDelay = TDuration::MicroSeconds(recvSize * 1e6 / Bandwidth);
                     const TInstant now = TInstant::Now();
                     directedConnection->Timestamp = Max(now, directedConnection->Timestamp) + baseDelay;
                     TDelayedPacket pkt;

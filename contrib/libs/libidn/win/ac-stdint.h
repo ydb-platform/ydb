@@ -21,7 +21,7 @@
 #ifndef _GENERATED_STDINT_H
 #define _GENERATED_STDINT_H
 
-#include <stdint.h> 
+#include <stdint.h>
 
 #endif
 #endif

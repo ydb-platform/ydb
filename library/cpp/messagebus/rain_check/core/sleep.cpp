@@ -18,7 +18,7 @@ NRainCheck::TSleepService::TSleepService()
 {
 }
 
-NRainCheck::TSleepService::~TSleepService() { 
+NRainCheck::TSleepService::~TSleepService() {
     if (!!SchedulerHolder) {
         Scheduler->Stop();
     }
@@ -40,7 +40,7 @@ namespace {
     };
 }
 
-void TSleepService::Sleep(TSubtaskCompletion* r, TDuration duration) { 
+void TSleepService::Sleep(TSubtaskCompletion* r, TDuration duration) {
     TTaskRunnerBase* current = TTaskRunnerBase::CurrentTask();
     r->SetRunning(current);
     Scheduler->Schedule(new TSleepServiceScheduleItem(r, TInstant::Now() + duration));

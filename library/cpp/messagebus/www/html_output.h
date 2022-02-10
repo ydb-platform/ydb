@@ -32,26 +32,26 @@ struct TChars {
     TString Text;
     bool NeedEscape;
 
-    TChars(TStringBuf text) 
-        : Text(text) 
-        , NeedEscape(true) 
-    { 
-    } 
-    TChars(TStringBuf text, bool escape) 
-        : Text(text) 
-        , NeedEscape(escape) 
-    { 
-    } 
-    TChars(const char* text) 
-        : Text(text) 
-        , NeedEscape(true) 
-    { 
-    } 
-    TChars(const char* text, bool escape) 
-        : Text(text) 
-        , NeedEscape(escape) 
-    { 
-    } 
+    TChars(TStringBuf text)
+        : Text(text)
+        , NeedEscape(true)
+    {
+    }
+    TChars(TStringBuf text, bool escape)
+        : Text(text)
+        , NeedEscape(escape)
+    {
+    }
+    TChars(const char* text)
+        : Text(text)
+        , NeedEscape(true)
+    {
+    }
+    TChars(const char* text, bool escape)
+        : Text(text)
+        , NeedEscape(escape)
+    {
+    }
 
     TString Escape() {
         if (NeedEscape) {
@@ -67,13 +67,13 @@ struct TAttr {
     TString Value;
 
     TAttr(TStringBuf name, TStringBuf value)
-        : Name(name) 
-        , Value(value) 
-    { 
-    } 
+        : Name(name)
+        , Value(value)
+    {
+    }
 
-    TAttr() { 
-    } 
+    TAttr() {
+    }
 
     bool operator!() const {
         return !Name;
@@ -239,9 +239,9 @@ static inline void BootstrapInfo(TStringBuf text) {
 
 static inline void ScriptHref(TStringBuf href) {
     Open("script",
-         TAttr("language", "javascript"), 
-         TAttr("type", "text/javascript"), 
-         TAttr("src", href)); 
+         TAttr("language", "javascript"),
+         TAttr("type", "text/javascript"),
+         TAttr("src", href));
     Close("script");
     Nl();
 }
@@ -290,17 +290,17 @@ struct TTagGuard {
 struct TDivGuard: public TTagGuard {
     TDivGuard(TStringBuf cssClass, TStringBuf id = "")
         : TTagGuard("div", cssClass, id)
-    { 
-    } 
+    {
+    }
 
     TDivGuard(TAttr a1 = TAttr(), TAttr a2 = TAttr(), TAttr a3 = TAttr())
         : TTagGuard("div", a1, a2, a3)
-    { 
-    } 
+    {
+    }
 };
 
 struct TAGuard {
-    TAGuard(TStringBuf href) { 
+    TAGuard(TStringBuf href) {
         OpenA(href);
     }
 
@@ -318,7 +318,7 @@ struct TScriptFunctionGuard {
         Line("$(function() {");
     }
 
-    ~TScriptFunctionGuard() { 
+    ~TScriptFunctionGuard() {
         Line("});");
     }
 };

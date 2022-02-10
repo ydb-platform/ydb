@@ -1,165 +1,165 @@
-#include "ptr.h" 
-#include "vector.h" 
-#include "noncopyable.h" 
- 
+#include "ptr.h"
+#include "vector.h"
+#include "noncopyable.h"
+
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/generic/hash_set.h>
 #include <util/generic/is_in.h>
 #include <util/stream/output.h>
-#include <util/system/thread.h> 
- 
-class TPointerTest: public TTestBase { 
-    UNIT_TEST_SUITE(TPointerTest); 
-    UNIT_TEST(TestTypedefs); 
-    UNIT_TEST(TestSimpleIntrPtr); 
-    UNIT_TEST(TestHolderPtr); 
-    UNIT_TEST(TestHolderPtrMoveConstructor); 
-    UNIT_TEST(TestHolderPtrMoveConstructorInheritance); 
-    UNIT_TEST(TestHolderPtrMoveAssignment); 
-    UNIT_TEST(TestHolderPtrMoveAssignmentInheritance); 
+#include <util/system/thread.h>
+
+class TPointerTest: public TTestBase {
+    UNIT_TEST_SUITE(TPointerTest);
+    UNIT_TEST(TestTypedefs);
+    UNIT_TEST(TestSimpleIntrPtr);
+    UNIT_TEST(TestHolderPtr);
+    UNIT_TEST(TestHolderPtrMoveConstructor);
+    UNIT_TEST(TestHolderPtrMoveConstructorInheritance);
+    UNIT_TEST(TestHolderPtrMoveAssignment);
+    UNIT_TEST(TestHolderPtrMoveAssignmentInheritance);
     UNIT_TEST(TestMakeHolder);
-    UNIT_TEST(TestTrulePtr); 
+    UNIT_TEST(TestTrulePtr);
     UNIT_TEST(TestAutoToHolder);
-    UNIT_TEST(TestCopyPtr); 
-    UNIT_TEST(TestIntrPtr); 
+    UNIT_TEST(TestCopyPtr);
+    UNIT_TEST(TestIntrPtr);
     UNIT_TEST(TestIntrusiveConvertion);
     UNIT_TEST(TestIntrusiveConstConvertion);
     UNIT_TEST(TestIntrusiveConstConstruction);
     UNIT_TEST(TestMakeIntrusive);
-    UNIT_TEST(TestCopyOnWritePtr1); 
-    UNIT_TEST(TestCopyOnWritePtr2); 
-    UNIT_TEST(TestOperatorBool); 
+    UNIT_TEST(TestCopyOnWritePtr1);
+    UNIT_TEST(TestCopyOnWritePtr2);
+    UNIT_TEST(TestOperatorBool);
     UNIT_TEST(TestMakeShared);
     UNIT_TEST(TestComparison);
-    UNIT_TEST(TestSimpleIntrusivePtrCtorTsan); 
+    UNIT_TEST(TestSimpleIntrusivePtrCtorTsan);
     UNIT_TEST(TestRefCountedPtrsInHashSet)
-    UNIT_TEST_SUITE_END(); 
- 
-private: 
-    void TestSimpleIntrusivePtrCtorTsan() { 
-        struct S: public TAtomicRefCount<S> { 
-        }; 
- 
+    UNIT_TEST_SUITE_END();
+
+private:
+    void TestSimpleIntrusivePtrCtorTsan() {
+        struct S: public TAtomicRefCount<S> {
+        };
+
         struct TLocalThread: public ISimpleThread {
             void* ThreadProc() override {
-                TSimpleIntrusivePtr<S> ptr; 
-                return nullptr; 
-            } 
-        }; 
- 
-        // Create TSimpleIntrusivePtr in different threads 
-        // Its constructor should be thread-safe 
- 
-        TLocalThread t1, t2; 
- 
-        t1.Start(); 
-        t2.Start(); 
-        t1.Join(); 
-        t2.Join(); 
-    } 
- 
-    inline void TestTypedefs() { 
-        TAtomicSharedPtr<int>(new int(1)); 
-        TSimpleSharedPtr<int>(new int(1)); 
-    } 
- 
-    void TestSimpleIntrPtr(); 
-    void TestHolderPtr(); 
-    void TestHolderPtrMoveConstructor(); 
-    void TestHolderPtrMoveConstructorInheritance(); 
-    void TestHolderPtrMoveAssignment(); 
-    void TestHolderPtrMoveAssignmentInheritance(); 
+                TSimpleIntrusivePtr<S> ptr;
+                return nullptr;
+            }
+        };
+
+        // Create TSimpleIntrusivePtr in different threads
+        // Its constructor should be thread-safe
+
+        TLocalThread t1, t2;
+
+        t1.Start();
+        t2.Start();
+        t1.Join();
+        t2.Join();
+    }
+
+    inline void TestTypedefs() {
+        TAtomicSharedPtr<int>(new int(1));
+        TSimpleSharedPtr<int>(new int(1));
+    }
+
+    void TestSimpleIntrPtr();
+    void TestHolderPtr();
+    void TestHolderPtrMoveConstructor();
+    void TestHolderPtrMoveConstructorInheritance();
+    void TestHolderPtrMoveAssignment();
+    void TestHolderPtrMoveAssignmentInheritance();
     void TestMakeHolder();
-    void TestTrulePtr(); 
+    void TestTrulePtr();
     void TestAutoToHolder();
-    void TestCopyPtr(); 
-    void TestIntrPtr(); 
+    void TestCopyPtr();
+    void TestIntrPtr();
     void TestIntrusiveConvertion();
     void TestIntrusiveConstConvertion();
     void TestIntrusiveConstConstruction();
     void TestMakeIntrusive();
-    void TestCopyOnWritePtr1(); 
-    void TestCopyOnWritePtr2(); 
-    void TestOperatorBool(); 
+    void TestCopyOnWritePtr1();
+    void TestCopyOnWritePtr2();
+    void TestOperatorBool();
     void TestMakeShared();
     void TestComparison();
     template <class T, class TRefCountedPtr>
     void TestRefCountedPtrsInHashSetImpl();
     void TestRefCountedPtrsInHashSet();
-}; 
- 
-UNIT_TEST_SUITE_REGISTRATION(TPointerTest); 
- 
-static int cnt = 0; 
- 
-class A: public TAtomicRefCount<A> { 
-public: 
-    inline A() { 
-        ++cnt; 
-    } 
- 
-    inline A(const A&) 
-        : TAtomicRefCount<A>(*this) 
-    { 
-        ++cnt; 
-    } 
+};
 
-    inline ~A() { 
-        --cnt; 
-    } 
-}; 
- 
+UNIT_TEST_SUITE_REGISTRATION(TPointerTest);
+
+static int cnt = 0;
+
+class A: public TAtomicRefCount<A> {
+public:
+    inline A() {
+        ++cnt;
+    }
+
+    inline A(const A&)
+        : TAtomicRefCount<A>(*this)
+    {
+        ++cnt;
+    }
+
+    inline ~A() {
+        --cnt;
+    }
+};
+
 static A* MakeA() {
-    return new A(); 
-} 
- 
-/* 
- * test compileability 
- */ 
-class B; 
+    return new A();
+}
+
+/*
+ * test compileability
+ */
+class B;
 static TSimpleIntrusivePtr<B> GetB() {
-    throw 1; 
-} 
- 
+    throw 1;
+}
+
 void Func() {
     TSimpleIntrusivePtr<B> b = GetB();
-} 
- 
-void TPointerTest::TestSimpleIntrPtr() { 
-    { 
+}
+
+void TPointerTest::TestSimpleIntrPtr() {
+    {
         TSimpleIntrusivePtr<A> a1(MakeA());
         TSimpleIntrusivePtr<A> a2(MakeA());
-        TSimpleIntrusivePtr<A> a3 = a2; 
- 
-        a1 = a2; 
-        a2 = a3; 
-    } 
- 
+        TSimpleIntrusivePtr<A> a3 = a2;
+
+        a1 = a2;
+        a2 = a3;
+    }
+
     UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
-} 
- 
-void TPointerTest::TestHolderPtr() { 
-    { 
+}
+
+void TPointerTest::TestHolderPtr() {
+    {
         THolder<A> a1(MakeA());
-        THolder<A> a2(a1.Release()); 
-    } 
- 
+        THolder<A> a2(a1.Release());
+    }
+
     UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
-} 
- 
+}
+
 THolder<int> CreateInt(int value) {
     THolder<int> res(new int);
     *res = value;
     return res;
 }
 
-void TPointerTest::TestHolderPtrMoveConstructor() { 
+void TPointerTest::TestHolderPtrMoveConstructor() {
     THolder<int> h = CreateInt(42);
     UNIT_ASSERT_VALUES_EQUAL(*h, 42);
 }
 
-void TPointerTest::TestHolderPtrMoveAssignment() { 
+void TPointerTest::TestHolderPtrMoveAssignment() {
     THolder<int> h(new int);
     h = CreateInt(42);
     UNIT_ASSERT_VALUES_EQUAL(*h, 42);
@@ -169,21 +169,21 @@ struct TBase {
     virtual ~TBase() = default;
 };
 
-struct TDerived: public TBase { 
+struct TDerived: public TBase {
 };
 
-void TPointerTest::TestHolderPtrMoveConstructorInheritance() { 
+void TPointerTest::TestHolderPtrMoveConstructorInheritance() {
     // compileability test
     THolder<TBase> basePtr(THolder<TDerived>(new TDerived));
 }
 
-void TPointerTest::TestHolderPtrMoveAssignmentInheritance() { 
+void TPointerTest::TestHolderPtrMoveAssignmentInheritance() {
     // compileability test
     THolder<TBase> basePtr;
     basePtr = THolder<TDerived>(new TDerived);
 }
 
-void TPointerTest::TestMakeHolder() { 
+void TPointerTest::TestMakeHolder() {
     {
         auto ptr = MakeHolder<int>(5);
         UNIT_ASSERT_VALUES_EQUAL(*ptr, 5);
@@ -191,10 +191,10 @@ void TPointerTest::TestMakeHolder() {
     {
         struct TRec {
             int X, Y;
-            TRec() 
-                : X(1) 
-                , Y(2) 
-            { 
+            TRec()
+                : X(1)
+                , Y(2)
+            {
             }
         };
         THolder<TRec> ptr = MakeHolder<TRec>();
@@ -207,8 +207,8 @@ void TPointerTest::TestMakeHolder() {
             TRec(int x, int y)
                 : X(x)
                 , Y(y)
-            { 
-            } 
+            {
+            }
         };
         auto ptr = MakeHolder<TRec>(1, 2);
         UNIT_ASSERT_VALUES_EQUAL(ptr->X, 1);
@@ -218,20 +218,20 @@ void TPointerTest::TestMakeHolder() {
         class TRec {
         private:
             int X_, Y_;
- 
+
         public:
-            TRec(int x, int y) 
+            TRec(int x, int y)
                 : X_(x)
                 , Y_(y)
-            { 
+            {
             }
 
-            int GetX() const { 
+            int GetX() const {
                 return X_;
-            } 
-            int GetY() const { 
+            }
+            int GetY() const {
                 return Y_;
-            } 
+            }
         };
         auto ptr = MakeHolder<TRec>(1, 2);
         UNIT_ASSERT_VALUES_EQUAL(ptr->GetX(), 1);
@@ -239,17 +239,17 @@ void TPointerTest::TestMakeHolder() {
     }
 }
 
-void TPointerTest::TestTrulePtr() { 
-    { 
+void TPointerTest::TestTrulePtr() {
+    {
         TAutoPtr<A> a1(MakeA());
-        TAutoPtr<A> a2(a1); 
-        a1 = a2; 
-    } 
- 
-    UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
-} 
+        TAutoPtr<A> a2(a1);
+        a1 = a2;
+    }
 
-void TPointerTest::TestAutoToHolder() { 
+    UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
+}
+
+void TPointerTest::TestAutoToHolder() {
     {
         TAutoPtr<A> a1(MakeA());
         THolder<A> a2(a1);
@@ -278,7 +278,7 @@ void TPointerTest::TestAutoToHolder() {
     UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
 }
 
-void TPointerTest::TestCopyPtr() { 
+void TPointerTest::TestCopyPtr() {
     TCopyPtr<A> a1(MakeA());
     {
         TCopyPtr<A> a2(MakeA());
@@ -294,25 +294,25 @@ void TPointerTest::TestCopyPtr() {
     UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
 }
 
-class TOp: public TSimpleRefCount<TOp>, public TNonCopyable { 
+class TOp: public TSimpleRefCount<TOp>, public TNonCopyable {
 public:
     static int Cnt;
- 
+
 public:
     TOp() {
         ++Cnt;
     }
-    virtual ~TOp() { 
+    virtual ~TOp() {
         --Cnt;
     }
 };
 
 int TOp::Cnt = 0;
 
-class TOp2: public TOp { 
+class TOp2: public TOp {
 public:
     TIntrusivePtr<TOp> Op;
- 
+
 public:
     TOp2(const TIntrusivePtr<TOp>& op)
         : Op(op)
@@ -335,7 +335,7 @@ void Attach(TOp3* op3, TIntrusivePtr<TOp>* op) {
     *op = op2.Get();
 }
 
-void TPointerTest::TestIntrPtr() { 
+void TPointerTest::TestIntrPtr() {
     {
         TIntrusivePtr<TOp> p, p2;
         TOp3 op3;
@@ -365,11 +365,11 @@ void TPointerTest::TestIntrPtr() {
 }
 
 namespace NTestIntrusiveConvertion {
-    struct TA: public TSimpleRefCount<TA> { 
+    struct TA: public TSimpleRefCount<TA> {
     };
-    struct TAA: public TA { 
+    struct TAA: public TA {
     };
-    struct TB: public TSimpleRefCount<TB> { 
+    struct TB: public TSimpleRefCount<TB> {
     };
 
     void Func(TIntrusivePtr<TA>) {
@@ -385,7 +385,7 @@ namespace NTestIntrusiveConvertion {
     }
 }
 
-void TPointerTest::TestIntrusiveConvertion() { 
+void TPointerTest::TestIntrusiveConvertion() {
     using namespace NTestIntrusiveConvertion;
 
     TIntrusivePtr<TAA> aa = new TAA;
@@ -401,7 +401,7 @@ void TPointerTest::TestIntrusiveConvertion() {
     Func(aa);
 }
 
-void TPointerTest::TestIntrusiveConstConvertion() { 
+void TPointerTest::TestIntrusiveConstConvertion() {
     using namespace NTestIntrusiveConvertion;
 
     TIntrusiveConstPtr<TAA> aa = new TAA;
@@ -417,7 +417,7 @@ void TPointerTest::TestIntrusiveConstConvertion() {
     Func(aa);
 }
 
-void TPointerTest::TestMakeIntrusive() { 
+void TPointerTest::TestMakeIntrusive() {
     {
         UNIT_ASSERT_VALUES_EQUAL(0, TOp::Cnt);
         auto p = MakeIntrusive<TOp>();
@@ -427,7 +427,7 @@ void TPointerTest::TestMakeIntrusive() {
     UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 0);
 }
 
-void TPointerTest::TestCopyOnWritePtr1() { 
+void TPointerTest::TestCopyOnWritePtr1() {
     using TPtr = TCowPtr<TSimpleSharedPtr<int>>;
     TPtr p1;
     UNIT_ASSERT(!p1.Shared());
@@ -474,7 +474,7 @@ void TPointerTest::TestCopyOnWritePtr1() {
     UNIT_ASSERT_UNEQUAL(p2.Get(), p3.Get());
 }
 
-struct X: public TSimpleRefCount<X> { 
+struct X: public TSimpleRefCount<X> {
     inline X(int v = 0)
         : V(v)
     {
@@ -483,7 +483,7 @@ struct X: public TSimpleRefCount<X> {
     int V;
 };
 
-void TPointerTest::TestCopyOnWritePtr2() { 
+void TPointerTest::TestCopyOnWritePtr2() {
     using TPtr = TCowPtr<TIntrusivePtr<X>>;
     TPtr p1;
     UNIT_ASSERT(!p1.Shared());
@@ -531,35 +531,35 @@ void TPointerTest::TestCopyOnWritePtr2() {
 }
 
 namespace {
-    template <class TFrom, class TTo> 
-    struct TImplicitlyCastable { 
-        struct RTYes { 
-            char t[2]; 
-        }; 
+    template <class TFrom, class TTo>
+    struct TImplicitlyCastable {
+        struct RTYes {
+            char t[2];
+        };
 
         using RTNo = char;
 
-        static RTYes Func(TTo); 
-        static RTNo Func(...); 
-        static TFrom Get(); 
+        static RTYes Func(TTo);
+        static RTNo Func(...);
+        static TFrom Get();
 
-        /* 
+        /*
      * Result == (TFrom could be converted to TTo implicitly)
      */
-        enum { 
-            Result = (sizeof(Func(Get())) != sizeof(RTNo)) 
-        }; 
+        enum {
+            Result = (sizeof(Func(Get())) != sizeof(RTNo))
+        };
     };
 
-    struct TImplicitlyCastableToBool { 
-        inline operator bool() const { 
-            return true; 
-        } 
-    }; 
+    struct TImplicitlyCastableToBool {
+        inline operator bool() const {
+            return true;
+        }
+    };
 
-} 
+}
 
-void TPointerTest::TestOperatorBool() { 
+void TPointerTest::TestOperatorBool() {
     using TVec = TVector<ui32>;
 
     // to be sure TImplicitlyCastable works as expected
@@ -573,9 +573,9 @@ void TPointerTest::TestOperatorBool() {
     UNIT_ASSERT(!(TImplicitlyCastable<TImplicitlyCastableToBool, void*>::Result));
 
     // pointers
-    UNIT_ASSERT(!(TImplicitlyCastable<TSimpleSharedPtr<TVec>, int>::Result)); 
+    UNIT_ASSERT(!(TImplicitlyCastable<TSimpleSharedPtr<TVec>, int>::Result));
     UNIT_ASSERT(!(TImplicitlyCastable<TAutoPtr<ui64>, ui64>::Result));
-    UNIT_ASSERT(!(TImplicitlyCastable<THolder<TVec>, bool>::Result)); // even this 
+    UNIT_ASSERT(!(TImplicitlyCastable<THolder<TVec>, bool>::Result)); // even this
 
     {
         // mostly a compilability test
@@ -583,45 +583,45 @@ void TPointerTest::TestOperatorBool() {
         THolder<TVec> a;
         UNIT_ASSERT(!a);
         UNIT_ASSERT(!bool(a));
-        if (a) { 
+        if (a) {
             UNIT_ASSERT(false);
-        } 
-        if (!a) { 
+        }
+        if (!a) {
             UNIT_ASSERT(true);
-        } 
+        }
 
         a.Reset(new TVec);
         UNIT_ASSERT(a);
         UNIT_ASSERT(bool(a));
-        if (a) { 
+        if (a) {
             UNIT_ASSERT(true);
-        } 
-        if (!a) { 
+        }
+        if (!a) {
             UNIT_ASSERT(false);
-        } 
+        }
 
         THolder<TVec> b(new TVec);
         UNIT_ASSERT(a.Get() != b.Get());
         UNIT_ASSERT(a != b);
-        if (a == b) { 
+        if (a == b) {
             UNIT_ASSERT(false);
-        } 
-        if (a != b) { 
+        }
+        if (a != b) {
             UNIT_ASSERT(true);
-        } 
-        if (!(a && b)) { 
+        }
+        if (!(a && b)) {
             UNIT_ASSERT(false);
-        } 
-        if (a && b) { 
+        }
+        if (a && b) {
             UNIT_ASSERT(true);
-        } 
+        }
 
         // int i = a;          // does not compile
         // bool c = (a < b);   // does not compile
     }
 }
 
-void TPointerTest::TestMakeShared() { 
+void TPointerTest::TestMakeShared() {
     {
         TSimpleSharedPtr<int> ptr = MakeSimpleShared<int>(5);
         UNIT_ASSERT_VALUES_EQUAL(*ptr, 5);
@@ -629,10 +629,10 @@ void TPointerTest::TestMakeShared() {
     {
         struct TRec {
             int X, Y;
-            TRec() 
-                : X(1) 
-                , Y(2) 
-            { 
+            TRec()
+                : X(1)
+                , Y(2)
+            {
             }
         };
         auto ptr = MakeAtomicShared<TRec>();
@@ -651,20 +651,20 @@ void TPointerTest::TestMakeShared() {
         class TRec {
         private:
             int X_, Y_;
- 
+
         public:
-            TRec(int x, int y) 
+            TRec(int x, int y)
                 : X_(x)
                 , Y_(y)
-            { 
+            {
             }
 
-            int GetX() const { 
+            int GetX() const {
                 return X_;
-            } 
-            int GetY() const { 
+            }
+            int GetY() const {
                 return Y_;
-            } 
+            }
         };
         TSimpleSharedPtr<TRec> ptr = MakeSimpleShared<TRec>(1, 2);
         UNIT_ASSERT_VALUES_EQUAL(ptr->GetX(), 1);
@@ -718,7 +718,7 @@ void TestPtrComparison(const TPtr& ptr) {
 }
 
 void TPointerTest::TestComparison() {
-    THolder<A> ptr1(new A); 
+    THolder<A> ptr1(new A);
     TAutoPtr<A> ptr2;
     TSimpleSharedPtr<int> ptr3(new int(6));
     TIntrusivePtr<A> ptr4;
@@ -754,13 +754,13 @@ void TPointerTest::TestRefCountedPtrsInHashSetImpl() {
     UNIT_ASSERT_VALUES_EQUAL(hashSet.size(), 2);
 }
 
-struct TCustomIntrusivePtrOps: TDefaultIntrusivePtrOps<A> { 
+struct TCustomIntrusivePtrOps: TDefaultIntrusivePtrOps<A> {
 };
 
-struct TCustomDeleter: TDelete { 
+struct TCustomDeleter: TDelete {
 };
 
-struct TCustomCounter: TSimpleCounter { 
+struct TCustomCounter: TSimpleCounter {
     using TSimpleCounterTemplate::TSimpleCounterTemplate;
 };
 

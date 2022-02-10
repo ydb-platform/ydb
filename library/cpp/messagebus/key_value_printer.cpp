@@ -4,11 +4,11 @@
 
 TKeyValuePrinter::TKeyValuePrinter(const TString& sep)
     : Sep(sep)
-{ 
-} 
+{
+}
 
-TKeyValuePrinter::~TKeyValuePrinter() { 
-} 
+TKeyValuePrinter::~TKeyValuePrinter() {
+}
 
 void TKeyValuePrinter::AddRowImpl(const TString& key, const TString& value, bool alignLeft) {
     Keys.push_back(key);

@@ -12,18 +12,18 @@ namespace NSc {
             } catch (const TSchemeParseException& e) {
                 TStringStream s;
                 NColorizer::TColors colors;
-                s << "\n" 
-                  << colors.YellowColor() << "Reason:" << colors.OldColor() << "\n" 
-                  << e.Reason; 
-                s << "\n" 
-                  << colors.YellowColor() << "Where:" << colors.OldColor() << "\n" 
-                  << val.SubStr(0, e.Offset) << colors.RedColor() << val.SubStr(e.Offset) << colors.OldColor() << "\n"; 
+                s << "\n"
+                  << colors.YellowColor() << "Reason:" << colors.OldColor() << "\n"
+                  << e.Reason;
+                s << "\n"
+                  << colors.YellowColor() << "Where:" << colors.OldColor() << "\n"
+                  << val.SubStr(0, e.Offset) << colors.RedColor() << val.SubStr(e.Offset) << colors.OldColor() << "\n";
                 UNIT_FAIL_IMPL("could not parse json", s.Str());
                 return NSc::Null();
             } catch (const yexception& e) {
                 TStringStream s;
-                s << '\n' 
-                  << val; 
+                s << '\n'
+                  << val;
                 UNIT_FAIL_IMPL("could not parse json", s.Str());
                 return NSc::Null();
             }

@@ -2,25 +2,25 @@
 
 #ifdef _win_
 
-    #include <stdio.h> 
-    #include "dirent_win.h" 
+    #include <stdio.h>
+    #include "dirent_win.h"
 
-    #if defined(_MSC_VER) && (_MSC_VER < 1900) 
+    #if defined(_MSC_VER) && (_MSC_VER < 1900)
 void __cdecl _dosmaperr(unsigned long);
 
-static void SetErrno() { 
-    _dosmaperr(GetLastError()); 
-} 
-    #else 
+static void SetErrno() {
+    _dosmaperr(GetLastError());
+}
+    #else
 void __cdecl __acrt_errno_map_os_error(unsigned long const oserrno);
 
 static void SetErrno() {
     __acrt_errno_map_os_error(GetLastError());
-} 
-    #endif 
- 
-struct DIR* opendir(const char* dirname) { 
-    struct DIR* dir = (struct DIR*)malloc(sizeof(struct DIR)); 
+}
+    #endif
+
+struct DIR* opendir(const char* dirname) {
+    struct DIR* dir = (struct DIR*)malloc(sizeof(struct DIR));
     if (!dir) {
         return NULL;
     }
@@ -31,7 +31,7 @@ struct DIR* opendir(const char* dirname) {
 
     int len = strlen(dirname);
     //Remove trailing slashes
-    while (len && (dirname[len - 1] == '\\' || dirname[len - 1] == '/')) { 
+    while (len && (dirname[len - 1] == '\\' || dirname[len - 1] == '/')) {
         --len;
     }
     int len_converted = MultiByteToWideChar(CP_UTF8, 0, dirname, len, 0, 0);
@@ -50,7 +50,7 @@ struct DIR* opendir(const char* dirname) {
     memcpy(dir->fff_templ + len_converted, append, sizeof(append));
     dir->sh = FindFirstFileW(dir->fff_templ, &dir->wfd);
     if (dir->sh == INVALID_HANDLE_VALUE) {
-        SetErrno(); 
+        SetErrno();
         closedir(dir);
         return NULL;
     }
@@ -58,7 +58,7 @@ struct DIR* opendir(const char* dirname) {
     return dir;
 }
 
-int closedir(struct DIR* dir) { 
+int closedir(struct DIR* dir) {
     if (dir->sh != INVALID_HANDLE_VALUE)
         FindClose(dir->sh);
     free(dir->fff_templ);
@@ -67,7 +67,7 @@ int closedir(struct DIR* dir) {
     return 0;
 }
 
-int readdir_r(struct DIR* dir, struct dirent* entry, struct dirent** result) { 
+int readdir_r(struct DIR* dir, struct dirent* entry, struct dirent** result) {
     if (!FindNextFileW(dir->sh, &dir->wfd)) {
         int err = GetLastError();
         *result = 0;
@@ -82,9 +82,9 @@ int readdir_r(struct DIR* dir, struct dirent* entry, struct dirent** result) {
     entry->d_reclen = sizeof(struct dirent);
     if (dir->wfd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT &&
         (dir->wfd.dwReserved0 == IO_REPARSE_TAG_MOUNT_POINT || dir->wfd.dwReserved0 == IO_REPARSE_TAG_SYMLINK))
-    { 
+    {
         entry->d_type = DT_LNK;
-    } else if (dir->wfd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) { 
+    } else if (dir->wfd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
         entry->d_type = DT_DIR;
     } else {
         entry->d_type = DT_REG;
@@ -105,8 +105,8 @@ int readdir_r(struct DIR* dir, struct dirent* entry, struct dirent** result) {
     return 0;
 }
 
-struct dirent* readdir(struct DIR* dir) { 
-    struct dirent* res; 
+struct dirent* readdir(struct DIR* dir) {
+    struct dirent* res;
     if (!dir->readdir_buf) {
         dir->readdir_buf = (struct dirent*)malloc(sizeof(struct dirent));
         if (dir->readdir_buf == 0)
@@ -116,7 +116,7 @@ struct dirent* readdir(struct DIR* dir) {
     return res;
 }
 
-void rewinddir(struct DIR* dir) { 
+void rewinddir(struct DIR* dir) {
     FindClose(dir->sh);
     dir->sh = FindFirstFileW(dir->fff_templ, &dir->wfd);
     dir->file_no = 0;

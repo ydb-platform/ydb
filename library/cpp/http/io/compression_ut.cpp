@@ -1,34 +1,34 @@
-#include "stream.h" 
+#include "stream.h"
 #include "compression.h"
- 
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
- 
-#include <util/stream/zlib.h> 
+
+#include <util/stream/zlib.h>
 #include <util/generic/hash_set.h>
- 
+
 Y_UNIT_TEST_SUITE(THttpCompressionTest) {
     static const TString DATA = "I'm a teapot";
 
     Y_UNIT_TEST(TestGetBestCodecs) {
         UNIT_ASSERT(TCompressionCodecFactory::Instance().GetBestCodecs().size() > 0);
-    } 
+    }
 
     Y_UNIT_TEST(TestEncoder) {
         TStringStream buffer;
 
-        { 
+        {
             auto encoder = TCompressionCodecFactory::Instance().FindEncoder("gzip");
             UNIT_ASSERT(encoder);
- 
+
             auto encodedStream = (*encoder)(&buffer);
             encodedStream->Write(DATA);
-        } 
+        }
 
         TZLibDecompress decompressor(&buffer);
         UNIT_ASSERT_EQUAL(decompressor.ReadAll(), DATA);
     }
- 
+
     Y_UNIT_TEST(TestDecoder) {
         TStringStream buffer;
 

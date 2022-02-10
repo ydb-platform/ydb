@@ -1,5 +1,5 @@
 #include "file_lock.h"
-#include "flock.h" 
+#include "flock.h"
 
 #include <util/generic/yexception.h>
 

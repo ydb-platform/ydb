@@ -3,7 +3,7 @@
 #include <util/stream/mem.h>
 #include <util/ysaveload.h>
 
-template <class Proto> 
+template <class Proto>
 class TProtoPacker {
 public:
     TProtoPacker() = default;

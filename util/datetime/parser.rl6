@@ -1,11 +1,11 @@
-#include <cstdio> 
-#include <cstdlib> 
-#include <cstring> 
-#include <cctype> 
-#include <ctime> 
-#include <numeric> 
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cctype>
+#include <ctime>
+#include <numeric>
 
-#include <util/datetime/parser.h> 
+#include <util/datetime/parser.h>
 #include <util/generic/ymath.h>
 
 
@@ -30,9 +30,9 @@ int = (digit+)
     $update_int;
 
 int1 = digit
-    >clear_int 
+    >clear_int
     $update_int;
- 
+
 int2 = (digit digit)
     >clear_int
     $update_int;
@@ -48,7 +48,7 @@ int4 = (digit digit digit digit)
 int12 = (digit digit?)
     >clear_int
     $update_int;
- 
+
 int24 = ( digit digit ( digit digit )? )
     >clear_int
     $update_int;
@@ -170,7 +170,7 @@ TRfc822DateTimeParserDeprecated::TRfc822DateTimeParserDeprecated() {
 bool TRfc822DateTimeParserDeprecated::ParsePart(const char* input, size_t len) {
     const char* p = input;
     const char* pe = input + len;
- 
+
     %% write exec;
     return cs != %%{ write error; }%%;
 }

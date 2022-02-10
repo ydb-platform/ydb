@@ -1,47 +1,47 @@
 #include "codepage.h"
 #include "recyr.hh"
-#include "wide.h" 
- 
+#include "wide.h"
+
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/charset/utf8.h>
 #include <util/system/yassert.h>
 
-#if defined(_MSC_VER) 
-#pragma warning(disable : 4309) /*truncation of constant value*/ 
+#if defined(_MSC_VER)
+#pragma warning(disable : 4309) /*truncation of constant value*/
 #endif
 
 namespace {
     const char yandexUpperCase[] =
-        "\x81\x82\x83\x84\x85\x86\x87" 
-        "\x8E" 
-        "\xA1\xA2\xA3\xA4\xA5\xA6" 
-        "\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF" 
+        "\x81\x82\x83\x84\x85\x86\x87"
+        "\x8E"
+        "\xA1\xA2\xA3\xA4\xA5\xA6"
+        "\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF"
         "\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF"
         "\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF";
 
     const char yandexLowerCase[] =
-        "\x91\x92\x93\x94\x95\x96\x97" 
-        "\x9E" 
-        "\xB1\xB2\xB3\xB4\xB5\xB6" 
-        "\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF" 
+        "\x91\x92\x93\x94\x95\x96\x97"
+        "\x9E"
+        "\xB1\xB2\xB3\xB4\xB5\xB6"
+        "\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF"
         "\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF"
         "\xF0\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFB\xFC\xFD\xFE\xFF";
 }
 
-class TCodepageTest: public TTestBase { 
+class TCodepageTest: public TTestBase {
 private:
     UNIT_TEST_SUITE(TCodepageTest);
-    UNIT_TEST(TestUTF); 
-    UNIT_TEST(TestUTFFromUnknownPlane); 
-    UNIT_TEST(TestBrokenMultibyte); 
-    UNIT_TEST(TestSurrogatePairs); 
-    UNIT_TEST(TestEncodingHints); 
-    UNIT_TEST(TestToLower); 
-    UNIT_TEST(TestToUpper); 
-    UNIT_TEST(TestUpperLower); 
-    UNIT_TEST(TestBrokenRune); 
-    UNIT_TEST(TestCanEncode); 
+    UNIT_TEST(TestUTF);
+    UNIT_TEST(TestUTFFromUnknownPlane);
+    UNIT_TEST(TestBrokenMultibyte);
+    UNIT_TEST(TestSurrogatePairs);
+    UNIT_TEST(TestEncodingHints);
+    UNIT_TEST(TestToLower);
+    UNIT_TEST(TestToUpper);
+    UNIT_TEST(TestUpperLower);
+    UNIT_TEST(TestBrokenRune);
+    UNIT_TEST(TestCanEncode);
     UNIT_TEST_SUITE_END();
 
 public:
@@ -55,18 +55,18 @@ public:
 
     void TestCanEncode();
 
-    inline void TestUpperLower() { 
+    inline void TestUpperLower() {
         const CodePage* cp = CodePageByCharset(CODES_ASCII);
-        char tmp[100]; 
- 
+        char tmp[100];
+
         TStringBuf s = "abcde";
- 
-        TStringBuf upper(tmp, cp->ToUpper(s.begin(), s.end(), tmp)); 
+
+        TStringBuf upper(tmp, cp->ToUpper(s.begin(), s.end(), tmp));
         UNIT_ASSERT_VALUES_EQUAL(upper, TStringBuf("ABCDE"));
- 
-        TStringBuf lower(tmp, cp->ToLower(upper.begin(), upper.end(), tmp)); 
+
+        TStringBuf lower(tmp, cp->ToLower(upper.begin(), upper.end(), tmp));
         UNIT_ASSERT_VALUES_EQUAL(lower, TStringBuf("abcde"));
-    } 
+    }
 
     void TestBrokenRune() {
         UNIT_ASSERT_VALUES_EQUAL(BROKEN_RUNE, 0xFFFDu);
@@ -78,7 +78,7 @@ UNIT_TEST_SUITE_REGISTRATION(TCodepageTest);
 void TCodepageTest::TestUTF() {
     for (wchar32 i = 0; i <= 0x10FFFF; i++) {
         unsigned char buffer[32];
-        Zero(buffer); 
+        Zero(buffer);
         size_t rune_len;
         size_t ref_len = 0;
 
@@ -120,7 +120,7 @@ void TCodepageTest::TestUTF() {
             UNIT_ASSERT(res == RECODE_BROKENSYMBOL);
         }
     }
-    const char* badStrings[] = { 
+    const char* badStrings[] = {
         "\xfe",
         "\xff",
         "\xcc\xc0",
@@ -153,7 +153,7 @@ void TCodepageTest::TestUTF() {
     };
     for (size_t i = 0; i < Y_ARRAY_SIZE(badStrings); ++i) {
         wchar32 rune;
-        const ui8* p = (const ui8*)badStrings[i]; 
+        const ui8* p = (const ui8*)badStrings[i];
         size_t len;
         RECODE_RESULT res = SafeReadUTF8Char(rune, len, p, p + strlen(badStrings[i]));
         UNIT_ASSERT(res == RECODE_BROKENSYMBOL);
@@ -174,17 +174,17 @@ void TCodepageTest::TestBrokenMultibyte() {
     UNIT_ASSERT(nread == 1);
     UNIT_ASSERT(nwritten == 0);
 
-    const char bigSample[] = {'\xC3', '\x87', '\xC3', '\x8E', '\xC2', '\xB0', '\xC3', '\x85', '\xC3', '\x85', '\xC3', '\xB8'}; 
+    const char bigSample[] = {'\xC3', '\x87', '\xC3', '\x8E', '\xC2', '\xB0', '\xC3', '\x85', '\xC3', '\x85', '\xC3', '\xB8'};
     res = RecodeToUnicode(cp, bigSample, recodeResult, Y_ARRAY_SIZE(bigSample), Y_ARRAY_SIZE(recodeResult), nread, nwritten);
     UNIT_ASSERT(res == RECODE_OK);
     UNIT_ASSERT(nread == Y_ARRAY_SIZE(bigSample));
 }
 
 void TCodepageTest::TestUTFFromUnknownPlane() {
-    static const wchar32 sampletext[] = {0x61, 0x62, 0x63, 0x20, 
-                                         0x430, 0x431, 0x432, 0x20, 
-                                         0x1001, 0x1002, 0x1003, 0x20, 
-                                         0x10001, 0x10002, 0x10003}; 
+    static const wchar32 sampletext[] = {0x61, 0x62, 0x63, 0x20,
+                                         0x430, 0x431, 0x432, 0x20,
+                                         0x1001, 0x1002, 0x1003, 0x20,
+                                         0x10001, 0x10002, 0x10003};
 
     static const size_t BUFFER_SIZE = 1024;
     char bytebuffer[BUFFER_SIZE];
@@ -192,17 +192,17 @@ void TCodepageTest::TestUTFFromUnknownPlane() {
     size_t readchars = 0;
     size_t writtenbytes = 0;
     size_t samplelen = Y_ARRAY_SIZE(sampletext);
- 
-    RECODE_RESULT res = RecodeFromUnicode(CODES_UTF8, sampletext, bytebuffer, samplelen, BUFFER_SIZE, readchars, writtenbytes); 
 
-    UNIT_ASSERT(res == RECODE_OK); 
-    UNIT_ASSERT(samplelen == readchars); 
+    RECODE_RESULT res = RecodeFromUnicode(CODES_UTF8, sampletext, bytebuffer, samplelen, BUFFER_SIZE, readchars, writtenbytes);
+
+    UNIT_ASSERT(res == RECODE_OK);
+    UNIT_ASSERT(samplelen == readchars);
 
     size_t writtenbytes2 = 0;
     char bytebuffer2[BUFFER_SIZE];
     for (size_t i = 0; i != samplelen; ++i) {
         size_t nwr = 0;
-        const int res = RecodeFromUnicode(CODES_UTF8, sampletext[i], bytebuffer2 + writtenbytes2, BUFFER_SIZE - writtenbytes2, nwr); 
+        const int res = RecodeFromUnicode(CODES_UTF8, sampletext[i], bytebuffer2 + writtenbytes2, BUFFER_SIZE - writtenbytes2, nwr);
         UNIT_ASSERT_VALUES_EQUAL(res, int(RECODE_OK));
         writtenbytes2 += nwr;
         UNIT_ASSERT(BUFFER_SIZE > writtenbytes2);
@@ -213,43 +213,43 @@ void TCodepageTest::TestUTFFromUnknownPlane() {
     size_t readbytes = 0;
     size_t writtenchars = 0;
 
-    res = RecodeToUnicode(CODES_UNKNOWNPLANE, bytebuffer, charbuffer, writtenbytes, BUFFER_SIZE, readbytes, writtenchars); 
+    res = RecodeToUnicode(CODES_UNKNOWNPLANE, bytebuffer, charbuffer, writtenbytes, BUFFER_SIZE, readbytes, writtenchars);
 
-    UNIT_ASSERT(res == RECODE_OK); 
-    UNIT_ASSERT(readbytes == writtenbytes); 
+    UNIT_ASSERT(res == RECODE_OK);
+    UNIT_ASSERT(readbytes == writtenbytes);
 
     wchar32* charbufferend = charbuffer + writtenchars;
-    DecodeUnknownPlane(charbuffer, charbufferend, CODES_UTF8); 
+    DecodeUnknownPlane(charbuffer, charbufferend, CODES_UTF8);
 
-    UNIT_ASSERT(charbufferend == charbuffer + samplelen); 
-    for (size_t i = 0; i < samplelen; ++i) 
-        UNIT_ASSERT(sampletext[i] == charbuffer[i]); 
+    UNIT_ASSERT(charbufferend == charbuffer + samplelen);
+    for (size_t i = 0; i < samplelen; ++i)
+        UNIT_ASSERT(sampletext[i] == charbuffer[i]);
 
     // Now, concatenate the thing with an explicit character and retest
-    res = RecodeToUnicode(CODES_UNKNOWNPLANE, bytebuffer, charbuffer, writtenbytes, BUFFER_SIZE, readbytes, writtenchars); 
-    UNIT_ASSERT(res == RECODE_OK); 
-    UNIT_ASSERT(readbytes == writtenbytes); 
+    res = RecodeToUnicode(CODES_UNKNOWNPLANE, bytebuffer, charbuffer, writtenbytes, BUFFER_SIZE, readbytes, writtenchars);
+    UNIT_ASSERT(res == RECODE_OK);
+    UNIT_ASSERT(readbytes == writtenbytes);
 
     charbuffer[writtenchars] = 0x1234;
 
     size_t morewrittenchars = 0;
-    res = RecodeToUnicode(CODES_UNKNOWNPLANE, bytebuffer, charbuffer + writtenchars + 1, writtenbytes, BUFFER_SIZE, readbytes, morewrittenchars); 
-    UNIT_ASSERT(res == RECODE_OK); 
-    UNIT_ASSERT(readbytes == writtenbytes); 
-    UNIT_ASSERT(writtenchars == morewrittenchars); 
+    res = RecodeToUnicode(CODES_UNKNOWNPLANE, bytebuffer, charbuffer + writtenchars + 1, writtenbytes, BUFFER_SIZE, readbytes, morewrittenchars);
+    UNIT_ASSERT(res == RECODE_OK);
+    UNIT_ASSERT(readbytes == writtenbytes);
+    UNIT_ASSERT(writtenchars == morewrittenchars);
 
     charbuffer[2 * writtenchars + 1] = 0x5678;
 
     charbufferend = charbuffer + 2 * writtenchars + 2;
-    DecodeUnknownPlane(charbuffer, charbufferend, CODES_UTF8); 
+    DecodeUnknownPlane(charbuffer, charbufferend, CODES_UTF8);
 
-    UNIT_ASSERT(charbufferend == charbuffer + 2 * samplelen + 2); 
+    UNIT_ASSERT(charbufferend == charbuffer + 2 * samplelen + 2);
     for (size_t i = 0; i < samplelen; ++i) {
-        UNIT_ASSERT(sampletext[i] == charbuffer[i]); 
-        UNIT_ASSERT(sampletext[i] == charbuffer[samplelen + 1 + i]); 
+        UNIT_ASSERT(sampletext[i] == charbuffer[i]);
+        UNIT_ASSERT(sampletext[i] == charbuffer[samplelen + 1 + i]);
     }
-    UNIT_ASSERT(0x1234 == charbuffer[samplelen]); 
-    UNIT_ASSERT(0x5678 == charbuffer[2 * samplelen + 1]); 
+    UNIT_ASSERT(0x1234 == charbuffer[samplelen]);
+    UNIT_ASSERT(0x5678 == charbuffer[2 * samplelen + 1]);
 
     // test TChar version
     // bytebuffer of len writtenbytes contains sampletext of len samplelen chars in utf8
@@ -261,7 +261,7 @@ void TCodepageTest::TestUTFFromUnknownPlane() {
     for (size_t i = 0; i < wtr.size(); ++i) {
         if (sampletext[i] >= 0x10000) {
             UNIT_ASSERT_VALUES_EQUAL(wtr[i], ' ');
-        } else { 
+        } else {
             UNIT_ASSERT_VALUES_EQUAL(wtr[i], sampletext[i]);
         }
     }
@@ -290,11 +290,11 @@ static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize
 
 void TCodepageTest::TestSurrogatePairs() {
     const char* utf8NonBMP = "\xf4\x80\x89\x84\xf4\x80\x89\x87\xf4\x80\x88\xba";
-    wchar16 wNonBMPDummy[] = {0xDBC0, 0xDE44, 0xDBC0, 0xDE47, 0xDBC0, 0xDE3A}; 
+    wchar16 wNonBMPDummy[] = {0xDBC0, 0xDE44, 0xDBC0, 0xDE47, 0xDBC0, 0xDE3A};
     TestSurrogates(utf8NonBMP, wNonBMPDummy, Y_ARRAY_SIZE(wNonBMPDummy));
 
     const char* utf8NonBMP2 = "ab\xf4\x80\x89\x87n";
-    wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'}; 
+    wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'};
     TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2));
 }
 
@@ -356,7 +356,7 @@ static void TestCanEncodeEach(const TWtringBuf& text, ECharset encoding, bool ex
     for (size_t i = 0; i < text.size(); ++i) {
         if (CanBeEncoded(text.SubStr(i, 1), encoding) != expectedResult)
             ythrow yexception() << "assertion failed: encoding " << NameByCharset(encoding)
-                                << " on '" << text.SubStr(i, 1) << "' (expected " << expectedResult << ")"; 
+                                << " on '" << text.SubStr(i, 1) << "' (expected " << expectedResult << ")";
     }
     // whole text
     UNIT_ASSERT_EQUAL(CanBeEncoded(text, encoding), expectedResult);

@@ -1,2 +1,2 @@
 # Present for backwards compatibility
-from cpython.pycapsule cimport * 
+from cpython.pycapsule cimport *

@@ -26,12 +26,12 @@ TCoroTaskRunner::~TCoroTaskRunner() {
     Y_ASSERT(CoroDone);
 }
 
-Y_POD_STATIC_THREAD(TContMachineContext*) 
-CallerContext; 
-Y_POD_STATIC_THREAD(TCoroTaskRunner*) 
-Task; 
+Y_POD_STATIC_THREAD(TContMachineContext*)
+CallerContext;
+Y_POD_STATIC_THREAD(TCoroTaskRunner*)
+Task;
 
-bool TCoroTaskRunner::ReplyReceived() { 
+bool TCoroTaskRunner::ReplyReceived() {
     Y_ASSERT(!CoroDone);
 
     TContMachineContext me;
@@ -49,12 +49,12 @@ bool TCoroTaskRunner::ReplyReceived() {
     return !CoroDone;
 }
 
-void NRainCheck::TCoroTaskRunner::DoRun() { 
+void NRainCheck::TCoroTaskRunner::DoRun() {
     GetImpl()->Run();
     CoroDone = true;
     ContMachineContext.SwitchTo(CallerContext);
 }
 
-void NRainCheck::ICoroTask::WaitForSubtasks() { 
+void NRainCheck::ICoroTask::WaitForSubtasks() {
     Task->ContMachineContext.SwitchTo(CallerContext);
 }

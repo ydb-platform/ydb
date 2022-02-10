@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(RainCheckMessageBusServer) {
     private:
         TMessageBusServerEnv* const Env;
         TOnMessageContext MessageContext;
- 
+
     public:
         TSimpleServerTask(TMessageBusServerEnv* env, TOnMessageContext& messageContext)
             : Env(env)

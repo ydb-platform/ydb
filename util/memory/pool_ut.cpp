@@ -1,55 +1,55 @@
-#include "pool.h" 
- 
+#include "pool.h"
+
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/stream/output.h>
- 
+
 class TCheckedAllocator: public TDefaultAllocator {
 public:
     inline TCheckedAllocator()
         : Alloced_(0)
         , Released_(0)
         , Allocs_(0)
-        , Frees_(0) 
-    { 
+        , Frees_(0)
+    {
     }
- 
+
     TBlock Allocate(size_t len) override {
         Check();
- 
+
         Alloced_ += len;
         ++Allocs_;
- 
+
         return TDefaultAllocator::Allocate(len);
     }
- 
+
     void Release(const TBlock& block) override {
         Released_ += block.Len;
         ++Frees_;
- 
+
         Check();
- 
+
         TDefaultAllocator::Release(block);
     }
- 
+
     inline void CheckAtEnd() {
         UNIT_ASSERT_EQUAL(Alloced_, Released_);
         UNIT_ASSERT_EQUAL(Allocs_, Frees_);
     }
- 
+
 private:
     inline void Check() {
         UNIT_ASSERT(Alloced_ >= Released_);
         UNIT_ASSERT(Allocs_ >= Frees_);
     }
- 
+
 private:
     size_t Alloced_;
     size_t Released_;
     size_t Allocs_;
     size_t Frees_;
 };
- 
+
 class TErrorOnCopy {
 public:
     TErrorOnCopy() = default;
@@ -85,46 +85,46 @@ class TMemPoolTest: public TTestBase {
     UNIT_TEST(TestMoveAlloc)
     UNIT_TEST(TestRoundUpToNextPowerOfTwoOption)
     UNIT_TEST_SUITE_END();
- 
+
 private:
     inline void TestMemPool() {
         TCheckedAllocator alloc;
 
-        { 
-            TMemoryPool pool(123, TMemoryPool::TExpGrow::Instance(), &alloc); 
- 
-            for (size_t i = 0; i < 1000; ++i) { 
-                UNIT_ASSERT(pool.Allocate(i)); 
-            } 
-        } 
- 
-        alloc.CheckAtEnd(); 
+        {
+            TMemoryPool pool(123, TMemoryPool::TExpGrow::Instance(), &alloc);
 
-        { 
-            TMemoryPool pool(150, TMemoryPool::TExpGrow::Instance(), &alloc); 
+            for (size_t i = 0; i < 1000; ++i) {
+                UNIT_ASSERT(pool.Allocate(i));
+            }
+        }
 
-            pool.Allocate(8); 
+        alloc.CheckAtEnd();
 
-            size_t memavail = pool.Available(); 
-            size_t memwaste = pool.MemoryWaste(); 
-            size_t memalloc = pool.MemoryAllocated(); 
+        {
+            TMemoryPool pool(150, TMemoryPool::TExpGrow::Instance(), &alloc);
 
-            for (size_t i = 0; i < 1000; ++i) { 
-                void* m = pool.Allocate(i); 
-                UNIT_ASSERT(m); 
-                memset(m, 0, i); 
-            } 
+            pool.Allocate(8);
 
-            pool.ClearKeepFirstChunk(); 
+            size_t memavail = pool.Available();
+            size_t memwaste = pool.MemoryWaste();
+            size_t memalloc = pool.MemoryAllocated();
 
-            UNIT_ASSERT_VALUES_EQUAL(memalloc - 8, pool.MemoryAllocated()); 
-            UNIT_ASSERT_VALUES_EQUAL(memwaste + 8, pool.MemoryWaste()); 
-            UNIT_ASSERT_VALUES_EQUAL(memavail + 8, pool.Available()); 
+            for (size_t i = 0; i < 1000; ++i) {
+                void* m = pool.Allocate(i);
+                UNIT_ASSERT(m);
+                memset(m, 0, i);
+            }
 
-            for (size_t i = 0; i < 1000; ++i) { 
-                void* m = pool.Allocate(i); 
-                UNIT_ASSERT(m); 
-                memset(m, 0, i); 
+            pool.ClearKeepFirstChunk();
+
+            UNIT_ASSERT_VALUES_EQUAL(memalloc - 8, pool.MemoryAllocated());
+            UNIT_ASSERT_VALUES_EQUAL(memwaste + 8, pool.MemoryWaste());
+            UNIT_ASSERT_VALUES_EQUAL(memavail + 8, pool.Available());
+
+            for (size_t i = 0; i < 1000; ++i) {
+                void* m = pool.Allocate(i);
+                UNIT_ASSERT(m);
+                memset(m, 0, i);
             }
 
             pool.Clear();
@@ -132,28 +132,28 @@ private:
             UNIT_ASSERT_VALUES_EQUAL(0, pool.MemoryAllocated());
             UNIT_ASSERT_VALUES_EQUAL(0, pool.MemoryWaste());
             UNIT_ASSERT_VALUES_EQUAL(0, pool.Available());
-        } 
+        }
 
-        alloc.CheckAtEnd(); 
+        alloc.CheckAtEnd();
 
         struct TConstructorTest {
             int ConstructorType;
-            TConstructorTest() 
-                : ConstructorType(1) 
-            { 
-            } 
-            TConstructorTest(int) 
-                : ConstructorType(2) 
-            { 
-            } 
+            TConstructorTest()
+                : ConstructorType(1)
+            {
+            }
+            TConstructorTest(int)
+                : ConstructorType(2)
+            {
+            }
             TConstructorTest(const TString&, const TString&)
-                : ConstructorType(3) 
-            { 
-            } 
+                : ConstructorType(3)
+            {
+            }
             TConstructorTest(TString&&, TString&&)
-                : ConstructorType(4) 
-            { 
-            } 
+                : ConstructorType(4)
+            {
+            }
         };
 
         {
@@ -167,7 +167,7 @@ private:
         }
 
         alloc.CheckAtEnd();
-    } 
+    }
 
     inline void TestAlign() {
         TMemoryPool pool(1);
@@ -232,7 +232,7 @@ private:
         elems.reserve(1);
         elems.emplace_back();
         elems.resize(100);
-    } 
+    }
 
     void TestMoveAlloc() {
         CheckMoveAlloc<TNoMove>();
@@ -243,7 +243,7 @@ private:
     void TestRoundUpToNextPowerOfTwoOption() {
         const size_t MEMORY_POOL_BLOCK_SIZE = (1024 - 16) * 4096 - 16 - 16 - 32;
 
-        class TFixedBlockSizeMemoryPoolPolicy final: public TMemoryPool::IGrowPolicy { 
+        class TFixedBlockSizeMemoryPoolPolicy final: public TMemoryPool::IGrowPolicy {
         public:
             size_t Next(size_t /*prev*/) const noexcept override {
                 return MEMORY_POOL_BLOCK_SIZE;
@@ -251,7 +251,7 @@ private:
         };
         TFixedBlockSizeMemoryPoolPolicy allocationPolicy;
 
-        class TTestAllocator final: public TDefaultAllocator { 
+        class TTestAllocator final: public TDefaultAllocator {
         public:
             TBlock Allocate(size_t len) override {
                 Size_ += len;
@@ -280,6 +280,6 @@ private:
         pool.Allocate(1);
         UNIT_ASSERT_VALUES_EQUAL(2 * EXPECTED_ALLOCATION_SIZE, allocator.GetSize());
     }
-}; 
- 
-UNIT_TEST_SUITE_REGISTRATION(TMemPoolTest); 
+};
+
+UNIT_TEST_SUITE_REGISTRATION(TMemPoolTest);

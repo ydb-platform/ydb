@@ -9,9 +9,9 @@ using namespace NBus::NTest;
 
 static void FillWithJunk(TArrayRef<char> data) {
     TStringBuf junk =
-        "01234567890123456789012345678901234567890123456789012345678901234567890123456789" 
-        "01234567890123456789012345678901234567890123456789012345678901234567890123456789" 
-        "01234567890123456789012345678901234567890123456789012345678901234567890123456789" 
+        "01234567890123456789012345678901234567890123456789012345678901234567890123456789"
+        "01234567890123456789012345678901234567890123456789012345678901234567890123456789"
+        "01234567890123456789012345678901234567890123456789012345678901234567890123456789"
         "01234567890123456789012345678901234567890123456789012345678901234567890123456789";
 
     for (size_t i = 0; i < data.size(); i += junk.size()) {
@@ -37,8 +37,8 @@ TExampleRequest::TExampleRequest(TAtomic* counterPtr, size_t payloadSize)
 TExampleRequest::TExampleRequest(ECreateUninitialized, TAtomic* counterPtr)
     : TBusMessage(MESSAGE_CREATE_UNINITIALIZED)
     , AllocCounter(counterPtr)
-{ 
-} 
+{
+}
 
 TExampleResponse::TExampleResponse(TAtomic* counterPtr, size_t payloadSize)
     : TBusMessage(79)
@@ -50,8 +50,8 @@ TExampleResponse::TExampleResponse(TAtomic* counterPtr, size_t payloadSize)
 TExampleResponse::TExampleResponse(ECreateUninitialized, TAtomic* counterPtr)
     : TBusMessage(MESSAGE_CREATE_UNINITIALIZED)
     , AllocCounter(counterPtr)
-{ 
-} 
+{
+}
 
 TExampleProtocol::TExampleProtocol(int port)
     : TBusProtocol("Example", port)
@@ -60,8 +60,8 @@ TExampleProtocol::TExampleProtocol(int port)
     , RequestCountDeserialized(0)
     , ResponseCountDeserialized(0)
     , StartCount(0)
-{ 
-} 
+{
+}
 
 TExampleProtocol::~TExampleProtocol() {
     if (UncaughtException()) {
@@ -124,13 +124,13 @@ TExampleClient::TExampleClient(const TBusClientSessionConfig sessionConfig, int 
 TExampleClient::~TExampleClient() {
 }
 
-EMessageStatus TExampleClient::SendMessage(const TNetAddr* addr) { 
+EMessageStatus TExampleClient::SendMessage(const TNetAddr* addr) {
     TAutoPtr<TExampleRequest> message(new TExampleRequest(&Proto.RequestCount, DataSize));
     message->SetCompressed(UseCompression);
     return Session->SendMessageAutoPtr(message, addr);
 }
 
-void TExampleClient::SendMessages(size_t count, const TNetAddr* addr) { 
+void TExampleClient::SendMessages(size_t count, const TNetAddr* addr) {
     UNIT_ASSERT(MessageCount == 0);
     UNIT_ASSERT(RepliesCount == 0);
     UNIT_ASSERT(Errors == 0);
@@ -184,7 +184,7 @@ void TExampleClient::WaitForError(EMessageStatus status) {
     UNIT_ASSERT_VALUES_EQUAL(status, error);
 }
 
-void TExampleClient::SendMessagesWaitReplies(size_t count, const TNetAddr* addr) { 
+void TExampleClient::SendMessagesWaitReplies(size_t count, const TNetAddr* addr) {
     SendMessages(count, addr);
     WaitReplies();
 }
@@ -215,8 +215,8 @@ void TExampleClient::OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) 
 }
 
 TExampleServer::TExampleServer(
-    const char* name, 
-    const TBusServerSessionConfig& sessionConfig) 
+    const char* name,
+    const TBusServerSessionConfig& sessionConfig)
     : UseCompression(false)
     , AckMessageBeforeSendReply(false)
     , ForgetRequest(false)

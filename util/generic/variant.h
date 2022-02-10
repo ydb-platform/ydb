@@ -18,6 +18,6 @@ template <>
 struct THash<std::monostate> {
 public:
     constexpr size_t operator()(std::monostate) const noexcept {
-        return 1; 
-    } 
+        return 1;
+    }
 };

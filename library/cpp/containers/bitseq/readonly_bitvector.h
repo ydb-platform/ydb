@@ -16,8 +16,8 @@ public:
     TReadonlyBitVector()
         : Size_()
         , Data_()
-    { 
-    } 
+    {
+    }
 
     explicit TReadonlyBitVector(const TBitVector<T>& vector)
         : Size_(vector.Size_)

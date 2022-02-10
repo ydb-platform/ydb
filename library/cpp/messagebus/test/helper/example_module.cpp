@@ -31,10 +31,10 @@ TBusServerSessionPtr TExampleServerModule::CreateExtSession(TBusMessageQueue& qu
     return r;
 }
 
-TExampleClientModule::TExampleClientModule() 
-    : Source() 
-{ 
-} 
+TExampleClientModule::TExampleClientModule()
+    : Source()
+{
+}
 
 TBusServerSessionPtr TExampleClientModule::CreateExtSession(TBusMessageQueue& queue) {
     Source = CreateDefaultSource(queue, &Proto, TBusServerSessionConfig());

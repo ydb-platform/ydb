@@ -35,7 +35,7 @@ namespace {
 
     template <typename TValuePtr>
     struct TNamedValues {
-        TVector<std::pair<TString, TValuePtr>> Entries; 
+        TVector<std::pair<TString, TValuePtr>> Entries;
 
         TValuePtr FindByName(TStringBuf name) {
             Y_VERIFY(!!name);
@@ -79,7 +79,7 @@ namespace {
                 }
             }
 
-            for (unsigned i = 1;; ++i) { 
+            for (unsigned i = 1;; ++i) {
                 TString prefix = p->GetNameInternal();
                 if (!prefix) {
                     prefix = "unnamed";
@@ -169,7 +169,7 @@ const unsigned char WWW_STATIC_DATA[] = {
 #include "www_static.inc"
 };
 
-class TWwwStaticLoader: public TArchiveReader { 
+class TWwwStaticLoader: public TArchiveReader {
 public:
     TWwwStaticLoader()
         : TArchiveReader(TBlob::NoCopy(WWW_STATIC_DATA, sizeof(WWW_STATIC_DATA)))
@@ -180,8 +180,8 @@ public:
 struct TBusWww::TImpl {
     // TODO: use weak pointers
     TNamedValues<TBusMessageQueuePtr> Queues;
-    TSessionValues<TIntrusivePtr<TBusClientSession>> ClientSessions; 
-    TSessionValues<TIntrusivePtr<TBusServerSession>> ServerSessions; 
+    TSessionValues<TIntrusivePtr<TBusClientSession>> ClientSessions;
+    TSessionValues<TIntrusivePtr<TBusServerSession>> ServerSessions;
     TSessionValues<TBusModuleInternalPtr> Modules;
 
     TMutex Mutex;
@@ -250,12 +250,12 @@ struct TBusWww::TImpl {
         const TOptionalParams& Params;
 
         TRequest(TImpl* outer, IOutputStream& os, const TCgiParameters& cgiParams, const TOptionalParams& params)
-            : Outer(outer) 
-            , Os(os) 
-            , CgiParams(cgiParams) 
-            , Params(params) 
-        { 
-        } 
+            : Outer(outer)
+            , Os(os)
+            , CgiParams(cgiParams)
+            , Params(params)
+        {
+        }
 
         void CrumbsParentLinks() {
             for (unsigned i = 0; i < Params.ParentLinks.size(); ++i) {
@@ -482,7 +482,7 @@ struct TBusWww::TImpl {
                         if (needTick) {
                             ticks.BeginList();
                             ticks.WriteInt(i);
-                            ticks.WriteString(Sprintf(":%02u:%02u", (unsigned)minuteOfHour, (unsigned)secondOfMinute)); 
+                            ticks.WriteString(Sprintf(":%02u:%02u", (unsigned)minuteOfHour, (unsigned)secondOfMinute));
                             ticks.EndList();
                         }
                     }
@@ -554,10 +554,10 @@ struct TBusWww::TImpl {
             {
                 TDivGuard div;
                 TTagGuard button("button",
-                                 TAttr("type", "button"), 
-                                 TAttr("class", "btn"), 
-                                 TAttr("data-toggle", "collapse"), 
-                                 TAttr("data-target", "#connections")); 
+                                 TAttr("type", "button"),
+                                 TAttr("class", "btn"),
+                                 TAttr("data-toggle", "collapse"),
+                                 TAttr("data-target", "#connections"));
                 Text("Show connection details");
             }
             {
@@ -572,7 +572,7 @@ struct TBusWww::TImpl {
                 H3("Message process time histogram");
 
                 const TDurationHistogram& h =
-                    dumpStatus.ConnectionStatusSummary.WriterStatus.Incremental.ProcessDurationHistogram; 
+                    dumpStatus.ConnectionStatusSummary.WriterStatus.Incremental.ProcessDurationHistogram;
 
                 {
                     TDivGuard div;
@@ -630,7 +630,7 @@ struct TBusWww::TImpl {
         }
 
         void WriteMessageCounterSensors(NMonitoring::TDeprecatedJsonWriter& sj,
-                                        TStringBuf labelName, TStringBuf sessionName, bool read, const TMessageCounter& counter) { 
+                                        TStringBuf labelName, TStringBuf sessionName, bool read, const TMessageCounter& counter) {
             TStringBuf readOrWrite = read ? "read" : "write";
 
             sj.OpenMetric();
@@ -647,7 +647,7 @@ struct TBusWww::TImpl {
         }
 
         void WriteSessionStatus(NMonitoring::TDeprecatedJsonWriter& sj, TStringBuf sessionName, bool client,
-                                TBusSession* session) { 
+                                TBusSession* session) {
             TStringBuf labelName = client ? "mb_client_session" : "mb_server_session";
 
             auto status = session->GetStatusRecordInternal();
@@ -675,9 +675,9 @@ struct TBusWww::TImpl {
             }
 
             WriteMessageCounterSensors(sj, labelName, sessionName, false,
-                                       status.ConnectionStatusSummary.WriterStatus.Incremental.MessageCounter); 
+                                       status.ConnectionStatusSummary.WriterStatus.Incremental.MessageCounter);
             WriteMessageCounterSensors(sj, labelName, sessionName, true,
-                                       status.ConnectionStatusSummary.ReaderStatus.Incremental.MessageCounter); 
+                                       status.ConnectionStatusSummary.ReaderStatus.Incremental.MessageCounter);
         }
 
         void ServeSolomonJson(const TString& q, const TString& cs, const TString& ss) {
@@ -813,14 +813,14 @@ NBus::TBusWww::TBusWww()
 {
 }
 
-NBus::TBusWww::~TBusWww() { 
+NBus::TBusWww::~TBusWww() {
 }
 
-void NBus::TBusWww::RegisterClientSession(TBusClientSessionPtr s) { 
+void NBus::TBusWww::RegisterClientSession(TBusClientSessionPtr s) {
     Impl->RegisterClientSession(s);
 }
 
-void TBusWww::RegisterServerSession(TBusServerSessionPtr s) { 
+void TBusWww::RegisterServerSession(TBusServerSessionPtr s) {
     Impl->RegisterServerSession(s);
 }
 
@@ -833,8 +833,8 @@ void TBusWww::RegisterModule(TBusModule* module) {
 }
 
 void TBusWww::ServeHttp(IOutputStream& httpOutputStream,
-                        const TCgiParameters& queryArgs, 
-                        const TBusWww::TOptionalParams& params) { 
+                        const TCgiParameters& queryArgs,
+                        const TBusWww::TOptionalParams& params) {
     Impl->ServeHttp(httpOutputStream, queryArgs, params);
 }
 
@@ -861,8 +861,8 @@ struct TBusWwwHttpServer::TImpl: public THttpServer::ICallBack {
 
         TClientRequestImpl(TBusWwwHttpServer::TImpl* outer)
             : Outer(outer)
-        { 
-        } 
+        {
+        }
 
         bool Reply(void*) override {
             Outer->ServeRequest(Input(), Output());
@@ -878,8 +878,8 @@ struct TBusWwwHttpServer::TImpl: public THttpServer::ICallBack {
         }
         TStringStream ss;
         ss << "HTTP/1.1 "
-           << code << " " << text << "\r\nConnection: Close\r\n\r\n" 
-           << content; 
+           << code << " " << text << "\r\nConnection: Close\r\n\r\n"
+           << content;
         return ss.Str();
     }
 
@@ -908,7 +908,7 @@ struct TBusWwwHttpServer::TImpl: public THttpServer::ICallBack {
             Www->ServeHttp(output, cgiParams, params);
         } catch (...) {
             output << MakeSimpleResponse(500, "Exception",
-                                         TString() + "Exception: " + CurrentExceptionMessage()); 
+                                         TString() + "Exception: " + CurrentExceptionMessage());
         }
     }
 
@@ -926,5 +926,5 @@ NBus::TBusWwwHttpServer::TBusWwwHttpServer(TIntrusivePtr<TBusWww> www, unsigned 
 {
 }
 
-NBus::TBusWwwHttpServer::~TBusWwwHttpServer() { 
+NBus::TBusWwwHttpServer::~TBusWwwHttpServer() {
 }

@@ -36,7 +36,7 @@ namespace NActors {
         const TActorId WriteActorId;
         std::atomic_uint32_t Flags = 0;
 
-        TSocketRecord(TEvPollerRegister& ev) 
+        TSocketRecord(TEvPollerRegister& ev)
             : Socket(std::move(ev.Socket))
             , ReadActorId(ev.ReadActorId)
             , WriteActorId(ev.WriteActorId)
@@ -287,8 +287,8 @@ namespace NActors {
         Impl->Request(read, write);
     }
 
-    IActor* CreatePollerActor() { 
+    IActor* CreatePollerActor() {
         return new TPollerActor;
     }
 
-} 
+}

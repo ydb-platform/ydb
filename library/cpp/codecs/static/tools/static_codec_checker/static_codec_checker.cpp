@@ -22,17 +22,17 @@ int main(int argc, char** argv) {
     opts.SetCmdLineDescr("-c 9089f3e9b7a0f0d4.codec_info -t -f base64 qtrees.sample.txt");
     NCodecs::TStaticCodecInfo codec;
 
-    opts.AddLongOption('c', "codec-info").RequiredArgument("codec_info").Handler1T<TString>([&codecFile, &codec, &codecPtr](TString name) { 
-                                                                            codecFile = name; 
-                                                                            codec.CopyFrom(NCodecs::LoadCodecInfoFromString(TUnbufferedFileInput(name).ReadAll())); 
-                                                                            codecPtr = NCodecs::ICodec::RestoreFromString(codec.GetStoredCodec()); 
-                                                                        }) 
-        .Required() 
-        .Help(".codec_info file with serialized static data for codec"); 
+    opts.AddLongOption('c', "codec-info").RequiredArgument("codec_info").Handler1T<TString>([&codecFile, &codec, &codecPtr](TString name) {
+                                                                            codecFile = name;
+                                                                            codec.CopyFrom(NCodecs::LoadCodecInfoFromString(TUnbufferedFileInput(name).ReadAll()));
+                                                                            codecPtr = NCodecs::ICodec::RestoreFromString(codec.GetStoredCodec());
+                                                                        })
+        .Required()
+        .Help(".codec_info file with serialized static data for codec");
 
-    opts.AddLongOption('t', "test").NoArgument().StoreValue(&testCompression, true).Optional().Help("test current performance"); 
+    opts.AddLongOption('t', "test").NoArgument().StoreValue(&testCompression, true).Optional().Help("test current performance");
 
-    opts.AddLongOption('f', "format").RequiredArgument(TStringBuilder() << "(" << NCodecs::DSF_PLAIN_LF << "|" << NCodecs::DSF_BASE64_LF << ")").StoreResult(&fmt).Optional().Help("test set input file format"); 
+    opts.AddLongOption('f', "format").RequiredArgument(TStringBuilder() << "(" << NCodecs::DSF_PLAIN_LF << "|" << NCodecs::DSF_BASE64_LF << ")").StoreResult(&fmt).Optional().Help("test set input file format");
 
     opts.SetFreeArgsMin(0);
     opts.SetFreeArgTitle(0, "testing_set_input_file", "testing set input files");

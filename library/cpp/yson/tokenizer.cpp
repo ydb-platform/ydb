@@ -1,37 +1,37 @@
 #include "tokenizer.h"
 
 namespace NYson {
-    //////////////////////////////////////////////////////////////////////////////// 
+    ////////////////////////////////////////////////////////////////////////////////
 
-    TTokenizer::TTokenizer(const TStringBuf& input) 
-        : Input(input) 
-        , Parsed(0) 
-    { 
-    } 
+    TTokenizer::TTokenizer(const TStringBuf& input)
+        : Input(input)
+        , Parsed(0)
+    {
+    }
 
-    bool TTokenizer::ParseNext() { 
-        Input = Input.Tail(Parsed); 
-        Token.Reset(); 
-        Parsed = Lexer.GetToken(Input, &Token); 
-        return !CurrentToken().IsEmpty(); 
-    } 
+    bool TTokenizer::ParseNext() {
+        Input = Input.Tail(Parsed);
+        Token.Reset();
+        Parsed = Lexer.GetToken(Input, &Token);
+        return !CurrentToken().IsEmpty();
+    }
 
-    const TToken& TTokenizer::CurrentToken() const { 
-        return Token; 
-    } 
+    const TToken& TTokenizer::CurrentToken() const {
+        return Token;
+    }
 
-    ETokenType TTokenizer::GetCurrentType() const { 
-        return CurrentToken().GetType(); 
-    } 
+    ETokenType TTokenizer::GetCurrentType() const {
+        return CurrentToken().GetType();
+    }
 
-    TStringBuf TTokenizer::GetCurrentSuffix() const { 
-        return Input.Tail(Parsed); 
-    } 
+    TStringBuf TTokenizer::GetCurrentSuffix() const {
+        return Input.Tail(Parsed);
+    }
 
-    const TStringBuf& TTokenizer::CurrentInput() const { 
-        return Input; 
-    } 
+    const TStringBuf& TTokenizer::CurrentInput() const {
+        return Input;
+    }
 
-    //////////////////////////////////////////////////////////////////////////////// 
- 
+    ////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYson

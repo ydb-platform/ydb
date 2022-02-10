@@ -35,109 +35,109 @@
  *
  */
 
-namespace NYsonPull { 
-    namespace NDetail { 
-        namespace NCEscape { 
+namespace NYsonPull {
+    namespace NDetail {
+        namespace NCEscape {
             inline void encode(TString& dest, TStringBuf data) {
-                NImpl::escape_impl( 
-                    reinterpret_cast<const ui8*>(data.data()), 
-                    data.size(), 
-                    [&](const ui8* str, size_t size) { 
-                        dest.append( 
-                            reinterpret_cast<const char*>(str), 
-                            size); 
-                    }); 
-            } 
+                NImpl::escape_impl(
+                    reinterpret_cast<const ui8*>(data.data()),
+                    data.size(),
+                    [&](const ui8* str, size_t size) {
+                        dest.append(
+                            reinterpret_cast<const char*>(str),
+                            size);
+                    });
+            }
 
-            // dest must have at least 4*data.size() bytes available 
-            inline size_t encode(ui8* dest, TStringBuf data) { 
-                auto* dest_begin = dest; 
-                NImpl::escape_impl( 
-                    reinterpret_cast<const ui8*>(data.data()), 
-                    data.size(), 
-                    [&](const ui8* str, size_t size) { 
-                        ::memcpy(dest, str, size); 
-                        dest += size; 
-                    }); 
-                return dest - dest_begin; 
-            } 
+            // dest must have at least 4*data.size() bytes available
+            inline size_t encode(ui8* dest, TStringBuf data) {
+                auto* dest_begin = dest;
+                NImpl::escape_impl(
+                    reinterpret_cast<const ui8*>(data.data()),
+                    data.size(),
+                    [&](const ui8* str, size_t size) {
+                        ::memcpy(dest, str, size);
+                        dest += size;
+                    });
+                return dest - dest_begin;
+            }
 
-            template <typename U> 
-            void encode(byte_writer<U>& dest, TStringBuf data) { 
-                auto& buffer = dest.stream().buffer(); 
+            template <typename U>
+            void encode(byte_writer<U>& dest, TStringBuf data) {
+                auto& buffer = dest.stream().buffer();
                 if (Y_LIKELY(buffer.available() >= data.size() * 4)) {
-                    auto size = encode(buffer.pos(), data); 
-                    dest.advance(size); 
-                } else { 
-                    NImpl::escape_impl( 
-                        reinterpret_cast<const ui8*>(data.data()), 
-                        data.size(), 
-                        [&](const ui8* str, size_t size) { 
-                            dest.write(str, size); 
-                        }); 
-                } 
-            } 
+                    auto size = encode(buffer.pos(), data);
+                    dest.advance(size);
+                } else {
+                    NImpl::escape_impl(
+                        reinterpret_cast<const ui8*>(data.data()),
+                        data.size(),
+                        [&](const ui8* str, size_t size) {
+                            dest.write(str, size);
+                        });
+                }
+            }
 
             inline TString encode(TStringBuf data) {
                 TString result;
-                result.reserve(data.size()); 
-                encode(result, data); 
-                return result; 
+                result.reserve(data.size());
+                encode(result, data);
+                return result;
             }
 
             inline void decode(TString& dest, TStringBuf data) {
-                NImpl::unescape_impl( 
-                    reinterpret_cast<const ui8*>(data.begin()), 
-                    reinterpret_cast<const ui8*>(data.end()), 
-                    [&](ui8 c) { 
-                        dest += c; 
-                    }, 
-                    [&](const ui8* p, size_t len) { 
-                        dest.append(reinterpret_cast<const char*>(p), len); 
-                    }); 
-            } 
+                NImpl::unescape_impl(
+                    reinterpret_cast<const ui8*>(data.begin()),
+                    reinterpret_cast<const ui8*>(data.end()),
+                    [&](ui8 c) {
+                        dest += c;
+                    },
+                    [&](const ui8* p, size_t len) {
+                        dest.append(reinterpret_cast<const char*>(p), len);
+                    });
+            }
 
             inline void decode_inplace(TVector<ui8>& data) {
-                auto* out = static_cast<ui8*>( 
-                    ::memchr(data.data(), '\\', data.size())); 
-                if (out == nullptr) { 
-                    return; 
-                } 
-                NImpl::unescape_impl( 
-                    out, 
-                    data.data() + data.size(), 
-                    [&](ui8 c) { 
-                        *out++ = c; 
-                    }, 
-                    [&](const ui8* p, size_t len) { 
-                        ::memmove(out, p, len); 
-                        out += len; 
-                    }); 
-                data.resize(out - &data[0]); 
-            } 
+                auto* out = static_cast<ui8*>(
+                    ::memchr(data.data(), '\\', data.size()));
+                if (out == nullptr) {
+                    return;
+                }
+                NImpl::unescape_impl(
+                    out,
+                    data.data() + data.size(),
+                    [&](ui8 c) {
+                        *out++ = c;
+                    },
+                    [&](const ui8* p, size_t len) {
+                        ::memmove(out, p, len);
+                        out += len;
+                    });
+                data.resize(out - &data[0]);
+            }
 
             inline TString decode(TStringBuf data) {
                 TString result;
-                result.reserve(data.size()); 
-                decode(result, data); 
-                return result; 
-            } 
+                result.reserve(data.size());
+                decode(result, data);
+                return result;
+            }
 
-            ATTRIBUTE(noinline, cold) 
+            ATTRIBUTE(noinline, cold)
             inline TString quote(TStringBuf str) {
                 TString result;
-                result.reserve(str.size() + 16); 
-                result += '"'; 
-                encode(result, str); 
-                result += '"'; 
-                return result; 
-            } 
+                result.reserve(str.size() + 16);
+                result += '"';
+                encode(result, str);
+                result += '"';
+                return result;
+            }
 
-            ATTRIBUTE(noinline, cold) 
+            ATTRIBUTE(noinline, cold)
             inline TString quote(ui8 ch) {
-                char c = ch; 
-                return quote(TStringBuf(&c, 1)); 
-            } 
-        } 
-    }     // namespace NDetail 
-} 
+                char c = ch;
+                return quote(TStringBuf(&c, 1));
+            }
+        }
+    }     // namespace NDetail
+}

@@ -1,9 +1,9 @@
-LIBRARY() 
- 
-OWNER(pg) 
- 
-SRCS( 
-    defs.cpp 
-) 
- 
-END() 
+LIBRARY()
+
+OWNER(pg)
+
+SRCS(
+    defs.cpp
+)
+
+END()

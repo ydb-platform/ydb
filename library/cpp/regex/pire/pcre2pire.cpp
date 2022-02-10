@@ -2,7 +2,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
-TString Pcre2Pire(const TString& src) { 
+TString Pcre2Pire(const TString& src) {
     TVector<char> result;
     result.reserve(src.size() + 1);
 

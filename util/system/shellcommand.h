@@ -9,12 +9,12 @@
 #include <util/stream/input.h>
 #include <util/stream/output.h>
 #include "file.h"
-#include "getpid.h" 
-#include "thread.h" 
-#include "mutex.h" 
+#include "getpid.h"
+#include "thread.h"
+#include "mutex.h"
 #include <sys/types.h>
 
-class TShellCommandOptions { 
+class TShellCommandOptions {
 public:
     struct TUserOptions {
         TString Name;
@@ -39,32 +39,32 @@ public:
 
 public:
     inline TShellCommandOptions() noexcept
-        : ClearSignalMask(false) 
-        , CloseAllFdsOnExec(false) 
-        , AsyncMode(false) 
-        , PollDelayMs(DefaultSyncPollDelay) 
-        , UseShell(true) 
-        , QuoteArguments(true) 
-        , DetachSession(true) 
-        , CloseStreams(false) 
-        , ShouldCloseInput(true) 
+        : ClearSignalMask(false)
+        , CloseAllFdsOnExec(false)
+        , AsyncMode(false)
+        , PollDelayMs(DefaultSyncPollDelay)
+        , UseShell(true)
+        , QuoteArguments(true)
+        , DetachSession(true)
+        , CloseStreams(false)
+        , ShouldCloseInput(true)
         , InputMode(HANDLE_INHERIT)
         , OutputMode(HANDLE_STREAM)
         , ErrorMode(HANDLE_STREAM)
-        , InputStream(nullptr) 
-        , OutputStream(nullptr) 
-        , ErrorStream(nullptr) 
-        , Nice(0) 
+        , InputStream(nullptr)
+        , OutputStream(nullptr)
+        , ErrorStream(nullptr)
+        , Nice(0)
         , FuncAfterFork(std::function<void()>())
-    { 
+    {
     }
 
     inline TShellCommandOptions& SetNice(int value) noexcept {
-        Nice = value; 
- 
-        return *this; 
-    } 
- 
+        Nice = value;
+
+        return *this;
+    }
+
     /**
      * @brief clear signal mask from parent process. If true, child process
      * clears the signal mask inherited from the parent process; otherwise
@@ -329,10 +329,10 @@ public:
  * @brief Execute command in shell and provide its results
  * @attention Not thread-safe
  */
-class TShellCommand: public TNonCopyable { 
+class TShellCommand: public TNonCopyable {
 private:
     TShellCommand();
- 
+
 public:
     enum ECommandStatus {
         SHELL_NONE,
@@ -341,7 +341,7 @@ public:
         SHELL_INTERNAL_ERROR,
         SHELL_ERROR
     };
- 
+
 public:
     /**
      * @brief create the command with initial arguments list
@@ -355,7 +355,7 @@ public:
                   const TString& workdir = TString());
     TShellCommand(const TStringBuf cmd, const TShellCommandOptions& options = TShellCommandOptions(), const TString& workdir = TString());
     ~TShellCommand();
- 
+
 public:
     /**
      * @brief append argument to the args list
@@ -406,7 +406,7 @@ public:
      */
     TMaybe<int> GetExitCode() const;
 
-    /** 
+    /**
      * @brief get id of underlying process
      * @note depends on os: pid_t on UNIX, HANDLE on win
      *
@@ -456,7 +456,7 @@ public:
      * @return self
      */
     TShellCommand& Wait();
- 
+
     /**
      * @brief close process' stdin
      *

@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "fwd.h"
 
 #include <util/generic/string.h>
@@ -7,7 +7,7 @@
 
 #include <cstdio>
 
-namespace NColorizer { 
+namespace NColorizer {
     /**
      * List of ECMA-48 colors.
      *
@@ -100,7 +100,7 @@ namespace NColorizer {
      * All color functions return zero-terminated stringbuf.
      */
     class TColors {
-    public: 
+    public:
         static bool CalcIsTTY(FILE* file);
 
     public:
@@ -193,25 +193,25 @@ namespace NColorizer {
         TStringBuf WhiteColor() const noexcept;
 
         inline bool IsTTY() const noexcept {
-            return IsTTY_; 
-        } 
+            return IsTTY_;
+        }
 
         inline void SetIsTTY(bool value) noexcept {
-            IsTTY_ = value; 
-        } 
- 
+            IsTTY_ = value;
+        }
+
         inline void Enable() noexcept {
-            SetIsTTY(true); 
-        } 
- 
+            SetIsTTY(true);
+        }
+
         inline void Disable() noexcept {
-            SetIsTTY(false); 
-        } 
- 
-    private: 
-        bool IsTTY_; 
+            SetIsTTY(false);
+        }
+
+    private:
+        bool IsTTY_;
     };
- 
+
     /// Singletone `TColors` instances for stderr/stdout.
     TColors& StdErr();
     TColors& StdOut();

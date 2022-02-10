@@ -1,6 +1,6 @@
 #include "split.h"
 
-template <class TValue> 
+template <class TValue>
 inline size_t Split(const char* ptr, const char* delim, TVector<TValue>& values) {
     values.erase(values.begin(), values.end());
     while (ptr && *ptr) {

@@ -38,9 +38,9 @@
 /* 1 if CPU_SPINWAIT is defined, 0 otherwise. */
 #define HAVE_CPU_SPINWAIT 1
 #else
-#define CPU_SPINWAIT 
+#define CPU_SPINWAIT
 #define HAVE_CPU_SPINWAIT 0
-#endif 
+#endif
 
 /*
  * Number of significant bits in virtual addresses.  This may be less than the

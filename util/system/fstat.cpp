@@ -1,19 +1,19 @@
 #include "fstat.h"
-#include "file.h" 
- 
-#include <sys/stat.h> 
+#include "file.h"
+
+#include <sys/stat.h>
 
 #include <util/folder/path.h>
- 
+
 #include <cerrno>
 
 #if defined(_win_)
-    #include "fs_win.h" 
+    #include "fs_win.h"
 
-    #ifdef _S_IFLNK 
-        #undef _S_IFLNK 
-    #endif 
-    #define _S_IFLNK 0x80000000 
+    #ifdef _S_IFLNK
+        #undef _S_IFLNK
+    #endif
+    #define _S_IFLNK 0x80000000
 
 ui32 GetFileMode(DWORD fileAttributes) {
     ui32 mode = 0;
@@ -32,9 +32,9 @@ ui32 GetFileMode(DWORD fileAttributes) {
     return mode;
 }
 
-    #define S_ISDIR(st_mode) (st_mode & _S_IFDIR) 
-    #define S_ISREG(st_mode) (st_mode & _S_IFREG) 
-    #define S_ISLNK(st_mode) (st_mode & _S_IFLNK) 
+    #define S_ISDIR(st_mode) (st_mode & _S_IFDIR)
+    #define S_ISREG(st_mode) (st_mode & _S_IFREG)
+    #define S_ISLNK(st_mode) (st_mode & _S_IFLNK)
 
 using TSystemFStat = BY_HANDLE_FILE_INFORMATION;
 
@@ -85,8 +85,8 @@ static bool GetStatByHandle(TSystemFStat& fs, FHANDLE f) {
 static bool GetStatByName(TSystemFStat& fs, const char* fileName, bool nofollow) {
 #ifdef _win_
     TFileHandle h = NFsPrivate::CreateFileWithUtf8Name(fileName, FILE_READ_ATTRIBUTES | FILE_READ_EA, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                                       OPEN_EXISTING, 
-                                                       (nofollow ? FILE_FLAG_OPEN_REPARSE_POINT : 0) | FILE_FLAG_BACKUP_SEMANTICS, true); 
+                                                       OPEN_EXISTING,
+                                                       (nofollow ? FILE_FLAG_OPEN_REPARSE_POINT : 0) | FILE_FLAG_BACKUP_SEMANTICS, true);
     if (!h.IsOpen()) {
         return false;
     }
@@ -98,11 +98,11 @@ static bool GetStatByName(TSystemFStat& fs, const char* fileName, bool nofollow)
 
 TFileStat::TFileStat() = default;
 
-TFileStat::TFileStat(const TFile& f) { 
+TFileStat::TFileStat(const TFile& f) {
     *this = TFileStat(f.GetHandle());
 }
 
-TFileStat::TFileStat(FHANDLE f) { 
+TFileStat::TFileStat(FHANDLE f) {
     TSystemFStat st;
     if (GetStatByHandle(st, f)) {
         MakeStat(*this, st);
@@ -149,14 +149,14 @@ bool TFileStat::IsSymlink() const noexcept {
 }
 
 bool operator==(const TFileStat& l, const TFileStat& r) noexcept {
-    return l.Mode == r.Mode && 
-           l.Uid == r.Uid && 
-           l.Gid == r.Gid && 
-           l.NLinks == r.NLinks && 
-           l.Size == r.Size && 
-           l.ATime == r.ATime && 
-           l.MTime == r.MTime && 
-           l.CTime == r.CTime; 
+    return l.Mode == r.Mode &&
+           l.Uid == r.Uid &&
+           l.Gid == r.Gid &&
+           l.NLinks == r.NLinks &&
+           l.Size == r.Size &&
+           l.ATime == r.ATime &&
+           l.MTime == r.MTime &&
+           l.CTime == r.CTime;
 }
 
 bool operator!=(const TFileStat& l, const TFileStat& r) noexcept {
@@ -164,16 +164,16 @@ bool operator!=(const TFileStat& l, const TFileStat& r) noexcept {
 }
 
 i64 GetFileLength(FHANDLE fd) {
-#if defined(_win_) 
+#if defined(_win_)
     LARGE_INTEGER pos;
     if (!::GetFileSizeEx(fd, &pos))
         return -1L;
     return pos.QuadPart;
-#elif defined(_unix_) 
+#elif defined(_unix_)
     struct stat statbuf;
-    if (::fstat(fd, &statbuf) != 0) { 
+    if (::fstat(fd, &statbuf) != 0) {
         return -1L;
-    } 
+    }
     if (!(statbuf.st_mode & (S_IFREG | S_IFBLK | S_IFCHR))) {
         // st_size only makes sense for regular files or devices
         errno = EINVAL;
@@ -181,7 +181,7 @@ i64 GetFileLength(FHANDLE fd) {
     }
     return statbuf.st_size;
 #else
-    #error unsupported platform 
+    #error unsupported platform
 #endif
 }
 
@@ -196,9 +196,9 @@ i64 GetFileLength(const char* name) {
 #elif defined(_unix_)
     struct stat buf;
     int r = ::stat(name, &buf);
-    if (r == -1) { 
+    if (r == -1) {
         return -1;
-    } 
+    }
     if (!(buf.st_mode & (S_IFREG | S_IFBLK | S_IFCHR))) {
         // st_size only makes sense for regular files or devices
         errno = EINVAL;
@@ -206,7 +206,7 @@ i64 GetFileLength(const char* name) {
     }
     return (i64)buf.st_size;
 #else
-    #error unsupported platform 
+    #error unsupported platform
 #endif
 }
 

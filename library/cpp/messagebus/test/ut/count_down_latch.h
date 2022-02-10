@@ -7,12 +7,12 @@ class TCountDownLatch {
 private:
     TAtomic Current;
     TSystemEvent EventObject;
- 
+
 public:
     TCountDownLatch(unsigned initial)
         : Current(initial)
-    { 
-    } 
+    {
+    }
 
     void CountDown() {
         if (AtomicDecrement(Current) == 0) {

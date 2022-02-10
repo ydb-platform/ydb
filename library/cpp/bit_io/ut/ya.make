@@ -1,12 +1,12 @@
 UNITTEST_FOR(library/cpp/bit_io)
- 
-OWNER( 
+
+OWNER(
     velavokr
     g:util
-) 
- 
-SRCS( 
-    bitinout_ut.cpp 
-) 
- 
-END() 
+)
+
+SRCS(
+    bitinout_ut.cpp
+)
+
+END()

@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
         THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
         setup->NodeId = 0;
         setup->ExecutorsCount = 1;
-        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]); 
+        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
         for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
             setup->Executors[i] = new TBasicExecutorPool(i, 5, 10, "basic");
         }

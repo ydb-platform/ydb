@@ -255,7 +255,7 @@ namespace NHyperscan {
         hs_error_t status = Singleton<NPrivate::TImpl>()->SerializeDatabase(
             db.Get(),
             &databaseBytes,
-            &databaseLength); 
+            &databaseLength);
         TSerializedDatabase serialization(databaseBytes);
         if (status != HS_SUCCESS) {
             ythrow yexception() << "Failed to serialize hyperscan database";
@@ -268,7 +268,7 @@ namespace NHyperscan {
         hs_error_t status = Singleton<NPrivate::TImpl>()->DeserializeDatabase(
             serialization.begin(),
             serialization.size(),
-            &rawDb); 
+            &rawDb);
         TDatabase db(rawDb);
         if (status != HS_SUCCESS) {
             if (status == HS_DB_PLATFORM_ERROR) {

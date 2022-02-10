@@ -15,8 +15,8 @@ Y_UNIT_TEST_SUITE(Sleep) {
         TTestTask(TSimpleEnv* env, TTestSync* testSync)
             : Env(env)
             , TestSync(testSync)
-        { 
-        } 
+        {
+        }
 
         TSubtaskCompletion Sleep;
 

@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////
 /// \file
-/// \brief Example of reply-less communication 
- 
+/// \brief Example of reply-less communication
+
 /// This example demostrates how asynchronous message passing library
 /// can be used to send message and do not wait for reply back.
 /// The usage of reply-less communication should be restricted to
@@ -9,19 +9,19 @@
 /// utility. Removing replies from the communication removes any restriction
 /// on how many message can be send to server and rougue clients may overwelm
 /// server without thoughtput control.
- 
+
 /// 1) To implement reply-less client \n
- 
-/// Call NBus::TBusSession::AckMessage() 
-/// from within NBus::IMessageHandler::OnSent() handler when message has 
-/// gone into wire on client end. See example in NBus::NullClient::OnMessageSent(). 
+
+/// Call NBus::TBusSession::AckMessage()
+/// from within NBus::IMessageHandler::OnSent() handler when message has
+/// gone into wire on client end. See example in NBus::NullClient::OnMessageSent().
 /// Discard identity for reply message.
- 
+
 /// 2) To implement reply-less server \n
- 
+
 /// Call NBus::TBusSession::AckMessage() from within NBus::IMessageHandler::OnMessage()
-/// handler when message has been received on server end. 
-/// See example in NBus::NullServer::OnMessage(). 
+/// handler when message has been received on server end.
+/// See example in NBus::NullServer::OnMessage().
 /// Discard identity for reply message.
 
 #include <library/cpp/messagebus/test/helper/alloc_counter.h>
@@ -41,7 +41,7 @@ using namespace NBus::NTest;
 ////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////
 /// \brief Reply-less client and handler
-struct NullClient : TBusClientHandlerError { 
+struct NullClient : TBusClientHandlerError {
     TNetAddr ServerAddr;
 
     TBusMessageQueuePtr Queue;
@@ -69,11 +69,11 @@ struct NullClient : TBusClientHandlerError {
     }
 
     /// dispatch of requests is done here
-    void Work() { 
+    void Work() {
         int batch = 10;
 
-        for (int i = 0; i < batch; i++) { 
-            TExampleRequest* mess = new TExampleRequest(&Proto.RequestCount); 
+        for (int i = 0; i < batch; i++) {
+            TExampleRequest* mess = new TExampleRequest(&Proto.RequestCount);
             mess->Data = "TADA";
             Session->SendMessageOneWay(mess, &ServerAddr);
         }
@@ -112,7 +112,7 @@ public:
 
     /// when message comes do not send reply, just acknowledge
     void OnMessage(TOnMessageContext& mess) override {
-        TExampleRequest* fmess = static_cast<TExampleRequest*>(mess.GetMessage()); 
+        TExampleRequest* fmess = static_cast<TExampleRequest*>(mess.GetMessage());
 
         Y_ASSERT(fmess->Data == "TADA");
 
@@ -126,7 +126,7 @@ public:
     void OnSent(TAutoPtr<TBusMessage> mess) override {
         Y_UNUSED(mess);
         Y_FAIL("This server does not sent replies");
-    } 
+    }
 };
 
 Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
@@ -158,8 +158,8 @@ Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
 
         TMessageTooLargeClient(unsigned port)
             : NullClient(TNetAddr("localhost", port), Config())
-        { 
-        } 
+        {
+        }
 
         ~TMessageTooLargeClient() override {
             Session->Shutdown();
@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
         client.GotTooLarge.WaitI();
     }
 
-    struct TCheckTimeoutClient: public NullClient { 
+    struct TCheckTimeoutClient: public NullClient {
         ~TCheckTimeoutClient() override {
             Session->Shutdown();
         }
@@ -200,10 +200,10 @@ Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
             return sessionConfig;
         }
 
-        TCheckTimeoutClient(const TNetAddr& serverAddr) 
-            : NullClient(serverAddr, SessionConfig()) 
-        { 
-        } 
+        TCheckTimeoutClient(const TNetAddr& serverAddr)
+            : NullClient(serverAddr, SessionConfig())
+        {
+        }
 
         TSystemEvent GotError;
 

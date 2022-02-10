@@ -10,7 +10,7 @@ OWNER(
 LIBRARY()
 
 LICENSE(Public-Domain)
- 
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 VERSION(5.2.4)

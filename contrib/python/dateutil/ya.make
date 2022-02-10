@@ -3,15 +3,15 @@
 PY23_LIBRARY()
 
 OWNER(g:python-contrib)
- 
+
 VERSION(2.8.2)
 
 LICENSE(BSD-3-Clause)
 
-PEERDIR( 
-    contrib/python/six 
-) 
- 
+PEERDIR(
+    contrib/python/six
+)
+
 NO_LINT()
 
 NO_CHECK_IMPORTS(

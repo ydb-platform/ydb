@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 // Author: smikler@yandex-team.ru
 
 #include <util/generic/string.h>

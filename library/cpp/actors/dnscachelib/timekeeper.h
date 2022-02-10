@@ -21,17 +21,17 @@ public:
         return Singleton<TTimeKeeper>()->CurrentTime.tv_sec;
     }
 
-    static const struct timeval& GetTimeval(void) { 
+    static const struct timeval& GetTimeval(void) {
         return Singleton<TTimeKeeper>()->CurrentTime;
     }
 
     TTimeKeeper()
-        : Thread(&TTimeKeeper::Worker, this) 
+        : Thread(&TTimeKeeper::Worker, this)
     {
         ConstTime = !!GetEnv("TEST_TIME");
         if (ConstTime) {
             try {
-                CurrentTime.tv_sec = FromString<ui32>(GetEnv("TEST_TIME")); 
+                CurrentTime.tv_sec = FromString<ui32>(GetEnv("TEST_TIME"));
             } catch (TFromStringException exc) {
                 ConstTime = false;
             }
@@ -56,8 +56,8 @@ private:
     TSystemEvent Exit;
     TThread Thread;
 
-    static void* Worker(void* arg) { 
-        TTimeKeeper* owner = static_cast<TTimeKeeper*>(arg); 
+    static void* Worker(void* arg) {
+        TTimeKeeper* owner = static_cast<TTimeKeeper*>(arg);
 
         do {
             /* Race condition may occur here but locking looks too expensive */

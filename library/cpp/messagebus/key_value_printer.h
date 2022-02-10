@@ -11,7 +11,7 @@ private:
     TVector<TString> Keys;
     TVector<TString> Values;
     TVector<bool> AlignLefts;
- 
+
 public:
     TKeyValuePrinter(const TString& sep = TString(": "));
     ~TKeyValuePrinter();

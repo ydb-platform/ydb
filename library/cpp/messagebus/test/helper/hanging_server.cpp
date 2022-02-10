@@ -4,7 +4,7 @@
 
 using namespace NBus;
 
-THangingServer::THangingServer(int port) { 
+THangingServer::THangingServer(int port) {
     BindResult = BindOnPort(port, false);
 }
 

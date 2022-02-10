@@ -1,12 +1,12 @@
 OWNER(g:cpp-contrib)
 
-RECURSE( 
+RECURSE(
     c
     cpp
-    python 
+    python
     recipes
-    #lemmer/byk/ut 
-) 
+    #lemmer/byk/ut
+)
 
 IF (NOT SANITIZER_TYPE)
     RECURSE(

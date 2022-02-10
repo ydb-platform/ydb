@@ -469,7 +469,7 @@ namespace NThreading {
     DeclareTuneTypeParam(TObstructiveQueueBunchBase, TBunchBase);
     DeclareTuneTypeParam(TObstructiveQueueAux, TAux);
 
-    template <typename TItem = void, typename... TParams> 
+    template <typename TItem = void, typename... TParams>
     class TObstructiveConsumerAuxQueue {
     private:
         using TTuned =
@@ -522,7 +522,7 @@ namespace NThreading {
 
     template <typename TItem = void, bool DeleteItems = true>
     class TObstructiveConsumerQueue
-       : public TObstructiveConsumerAuxQueue<TItem, 
-                                              TObstructiveQueueDeleteItems<DeleteItems>> { 
+       : public TObstructiveConsumerAuxQueue<TItem,
+                                              TObstructiveQueueDeleteItems<DeleteItems>> {
     };
-} 
+}

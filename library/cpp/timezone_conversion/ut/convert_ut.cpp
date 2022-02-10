@@ -29,11 +29,11 @@ void CompareCivilTimes(const TSimpleTM& expected, const TSimpleTM& actual) {
 }
 
 #define CHECK_ROUND_TRIP(tz, unixTime, civil) \
-    EXPECT_EQ(                                \ 
-        TInstant::Seconds(unixTime),          \ 
-        ToAbsoluteTime(civil, tz));           \ 
+    EXPECT_EQ(                                \
+        TInstant::Seconds(unixTime),          \
+        ToAbsoluteTime(civil, tz));           \
     CompareCivilTimes(                        \
-        civil,                                \ 
+        civil,                                \
         ToCivilTime(TInstant::Seconds(unixTime), tz));
 
 // Tests only unambiguous civil times (i.e., those that occurred exactly once).
@@ -41,35 +41,35 @@ TEST(TimeZoneConversion, Simple) {
     TTimeZone msk = GetTimeZone("Europe/Moscow");
     // Before and after the temporary switch to UTC+3 in 2010.
     CHECK_ROUND_TRIP(
-        msk, 
-        1288475999, 
-        ZonedTm(+4, true, 2010, 10, 31, 1, 59, 59)); 
+        msk,
+        1288475999,
+        ZonedTm(+4, true, 2010, 10, 31, 1, 59, 59));
     CHECK_ROUND_TRIP(
-        msk, 
-        1288475999 + 3 * 60 * 60, 
-        ZonedTm(+3, false, 2010, 10, 31, 3, 59, 59)); 
+        msk,
+        1288475999 + 3 * 60 * 60,
+        ZonedTm(+3, false, 2010, 10, 31, 3, 59, 59));
 
     // Before and after the permanent switch to UTC+4 in 2011.
     CHECK_ROUND_TRIP(
-        msk, 
-        1301180399, 
-        ZonedTm(+3, false, 2011, 3, 27, 1, 59, 59)); 
+        msk,
+        1301180399,
+        ZonedTm(+3, false, 2011, 3, 27, 1, 59, 59));
     CHECK_ROUND_TRIP(
-        msk, 
-        1301180399 + 60 * 60, 
-        ZonedTm(+4, false, 2011, 3, 27, 3, 59, 59)); 
+        msk,
+        1301180399 + 60 * 60,
+        ZonedTm(+4, false, 2011, 3, 27, 3, 59, 59));
 
     // Some random moment between 2011 and 2014 when UTC+4 (no DST) was in place.
     CHECK_ROUND_TRIP(
-        msk, 
-        1378901234, 
-        ZonedTm(+4, false, 2013, 9, 11, 16, 7, 14)); 
+        msk,
+        1378901234,
+        ZonedTm(+4, false, 2013, 9, 11, 16, 7, 14));
 
     // As of right now (i.e., as I'm writing this) Moscow is in UTC+3 (no DST).
     CHECK_ROUND_TRIP(
-        msk, 
-        1458513396, 
-        ZonedTm(+3, false, 2016, 3, 21, 1, 36, 36)); 
+        msk,
+        1458513396,
+        ZonedTm(+3, false, 2016, 3, 21, 1, 36, 36));
 
     // Please add a new test if the current president moves Moscow back to UTC+4
     // or introduces DST again.
@@ -122,9 +122,9 @@ TEST(TimeZoneConversion, TestSkippedDate) {
 
 TEST(TimeZoneConversion, Utc) {
     CHECK_ROUND_TRIP(
-        GetUtcTimeZone(), 
-        1451703845, 
-        ZonedTm(0, false, 2016, 1, 2, 3, 4, 5)); 
+        GetUtcTimeZone(),
+        1451703845,
+        ZonedTm(0, false, 2016, 1, 2, 3, 4, 5));
 }
 
 TEST(TimeZoneConversion, Local) {
@@ -182,7 +182,7 @@ TEST(TimeZoneConversion, TestFutureDstChanges) {
     // 31 days later we're back to UTC+0 again.
     CHECK_ROUND_TRIP(
         london,
-        1760124660 + 31 * 24 * 60 * 60, 
+        1760124660 + 31 * 24 * 60 * 60,
         ZonedTm(+0, false, 2025, 11, 10, 19, 31, 0));
 }
 

@@ -1,12 +1,12 @@
 #pragma once
- 
+
 #include "zerocopy.h"
 #include "zerocopy_output.h"
- 
+
 #include <util/generic/string.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/store_policy.h>
- 
+
 /**
  * @addtogroup Streams_Strings
  * @{
@@ -16,7 +16,7 @@
  * Input stream for reading data from a string.
  */
 class TStringInput: public IZeroCopyInputFastReadTo {
-public: 
+public:
     /**
      * Constructs a string input stream that reads character data from the
      * provided string.
@@ -31,38 +31,38 @@ public:
      */
     inline TStringInput(const TString& s) noexcept
         : S_(&s)
-        , Pos_(0) 
-    { 
-    } 
- 
+        , Pos_(0)
+    {
+    }
+
     TStringInput(const TString&&) = delete;
 
     ~TStringInput() override;
- 
+
     TStringInput(TStringInput&&) noexcept = default;
     TStringInput& operator=(TStringInput&&) noexcept = default;
 
-    inline void Swap(TStringInput& s) noexcept { 
-        DoSwap(S_, s.S_); 
-        DoSwap(Pos_, s.Pos_); 
-    } 
- 
+    inline void Swap(TStringInput& s) noexcept {
+        DoSwap(S_, s.S_);
+        DoSwap(Pos_, s.Pos_);
+    }
+
 protected:
     size_t DoNext(const void** ptr, size_t len) override;
     void DoUndo(size_t len) override;
- 
-private: 
+
+private:
     const TString* S_;
-    size_t Pos_; 
+    size_t Pos_;
 
     friend class TStringStream;
-}; 
- 
+};
+
 /**
  * Stream for writing data into a string.
  */
 class TStringOutput: public IZeroCopyOutput {
-public: 
+public:
     /**
      * Constructs a string output stream that appends character data to the
      * provided string.
@@ -74,74 +74,74 @@ public:
      * @param s                         String to append to.
      */
     inline TStringOutput(TString& s) noexcept
-        : S_(&s) 
-    { 
-    } 
- 
-    TStringOutput(TStringOutput&& s) noexcept = default; 
+        : S_(&s)
+    {
+    }
+
+    TStringOutput(TStringOutput&& s) noexcept = default;
 
     ~TStringOutput() override;
- 
+
     /**
      * @param size                      Number of additional characters to
      *                                  reserve in output string.
      */
     inline void Reserve(size_t size) {
-        S_->reserve(S_->size() + size); 
+        S_->reserve(S_->size() + size);
     }
 
-    inline void Swap(TStringOutput& s) noexcept { 
-        DoSwap(S_, s.S_); 
-    } 
- 
+    inline void Swap(TStringOutput& s) noexcept {
+        DoSwap(S_, s.S_);
+    }
+
 protected:
     size_t DoNext(void** ptr) override;
     void DoUndo(size_t len) override;
     void DoWrite(const void* buf, size_t len) override;
     void DoWriteC(char c) override;
- 
-private: 
-    TString* S_; 
-}; 
- 
+
+private:
+    TString* S_;
+};
+
 /**
  * String input/output stream, similar to `std::stringstream`.
  */
 class TStringStream: private TEmbedPolicy<TString>, public TStringInput, public TStringOutput {
     using TEmbeddedString = TEmbedPolicy<TString>;
 
-public: 
-    inline TStringStream() 
+public:
+    inline TStringStream()
         : TEmbeddedString()
         , TStringInput(*TEmbeddedString::Ptr())
         , TStringOutput(*TEmbeddedString::Ptr())
-    { 
-    } 
- 
+    {
+    }
+
     inline TStringStream(const TString& string)
         : TEmbeddedString(string)
         , TStringInput(*TEmbeddedString::Ptr())
         , TStringOutput(*TEmbeddedString::Ptr())
-    { 
-    } 
+    {
+    }
 
-    inline TStringStream(const TStringStream& other) 
+    inline TStringStream(const TStringStream& other)
         : TEmbeddedString(other.Str())
         , TStringInput(*TEmbeddedString::Ptr())
         , TStringOutput(*TEmbeddedString::Ptr())
-    { 
-    } 
+    {
+    }
 
-    inline TStringStream& operator=(const TStringStream& other) { 
-        // All references remain alive, we need to change position only 
+    inline TStringStream& operator=(const TStringStream& other) {
+        // All references remain alive, we need to change position only
         Str() = other.Str();
-        Pos_ = other.Pos_; 
- 
-        return *this; 
-    } 
+        Pos_ = other.Pos_;
+
+        return *this;
+    }
 
     ~TStringStream() override;
- 
+
     /**
      * @returns                         Whether @c this contains any data
      */
@@ -151,17 +151,17 @@ public:
 
     /**
      * @returns                         String that this stream is writing into.
-     */ 
+     */
     inline TString& Str() noexcept {
         return *Ptr();
-    } 
- 
+    }
+
     /**
      * @returns                         String that this stream is writing into.
      */
     inline const TString& Str() const noexcept {
         return *Ptr();
-    } 
+    }
 
     /**
      * @returns                         Pointer to the character data contained
@@ -186,7 +186,7 @@ public:
      * @returns                         Whether the string that this stream
      *                                  operates on is empty.
      */
-    Y_PURE_FUNCTION inline bool Empty() const noexcept { 
+    Y_PURE_FUNCTION inline bool Empty() const noexcept {
         return Str().empty();
     }
 
@@ -203,13 +203,13 @@ public:
 
     // TODO: compatibility with existing code, remove
 
-    Y_PURE_FUNCTION bool empty() const { 
+    Y_PURE_FUNCTION bool empty() const {
         return Empty();
     }
 
     void clear() {
         Clear();
     }
-}; 
- 
+};
+
 /** @} */

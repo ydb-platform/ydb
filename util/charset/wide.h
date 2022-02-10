@@ -1,13 +1,13 @@
 #pragma once
 
 #include "recode_result.h"
-#include "unidata.h" 
+#include "unidata.h"
 #include "utf8.h"
 #include "wide_specific.h"
- 
+
 #include <util/generic/algorithm.h>
 #include <util/generic/string.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include <util/memory/tempbuf.h>
 #include <util/system/compiler.h>
 #include <util/system/cpu_id.h>
@@ -16,22 +16,22 @@
 #include <cstring>
 
 #ifdef _sse2_
-    #include <emmintrin.h> 
+    #include <emmintrin.h>
 #endif
 
-template <class T> 
-class TTempArray; 
+template <class T>
+class TTempArray;
 using TCharTemp = TTempArray<wchar16>;
- 
+
 namespace NDetail {
     inline TString InStringMsg(const char* s, size_t len) {
         return (len <= 50) ? " in string " + TString(s, len).Quote() : TString();
     }
 
-    template <bool isPointer> 
+    template <bool isPointer>
     struct TSelector;
 
-    template <> 
+    template <>
     struct TSelector<false> {
         template <class T>
         static inline void WriteSymbol(wchar16 s, T& dest) noexcept {
@@ -39,7 +39,7 @@ namespace NDetail {
         }
     };
 
-    template <> 
+    template <>
     struct TSelector<true> {
         template <class T>
         static inline void WriteSymbol(wchar16 s, T& dest) noexcept {
@@ -61,7 +61,7 @@ namespace NDetail {
     template <class T>
     inline void WriteSurrogatePair(wchar32 s, T& dest) noexcept;
 
-} 
+}
 
 inline wchar16* SkipSymbol(wchar16* begin, const wchar16* end) noexcept {
     return begin + W16SymbolSize(begin, end);
@@ -197,20 +197,20 @@ inline bool WriteSymbol(wchar32 s, wchar32*& dest, const wchar32* destEnd) noexc
     return true;
 }
 
-template <class T> 
+template <class T>
 inline void ::NDetail::WriteSurrogatePair(wchar32 s, T& dest) noexcept {
-    const wchar32 LEAD_OFFSET = 0xD800 - (0x10000 >> 10); 
+    const wchar32 LEAD_OFFSET = 0xD800 - (0x10000 >> 10);
     Y_ASSERT(s > 0xFFFF && s < ::NUnicode::UnicodeInstancesLimit());
- 
-    wchar16 lead = LEAD_OFFSET + (static_cast<wchar16>(s >> 10)); 
-    wchar16 tail = 0xDC00 + static_cast<wchar16>(s & 0x3FF); 
+
+    wchar16 lead = LEAD_OFFSET + (static_cast<wchar16>(s >> 10));
+    wchar16 tail = 0xDC00 + static_cast<wchar16>(s & 0x3FF);
     Y_ASSERT(IsW16SurrogateLead(lead));
     Y_ASSERT(IsW16SurrogateTail(tail));
- 
-    WriteSymbol(lead, dest); 
-    WriteSymbol(tail, dest); 
-} 
- 
+
+    WriteSymbol(lead, dest);
+    WriteSymbol(tail, dest);
+}
+
 class TCharIterator {
 private:
     const wchar16* Begin;
@@ -220,36 +220,36 @@ public:
     inline explicit TCharIterator(const wchar16* end)
         : Begin(end)
         , End(end)
-    { 
-    } 
+    {
+    }
 
     inline TCharIterator(const wchar16* begin, const wchar16* end)
         : Begin(begin)
         , End(end)
-    { 
-    } 
- 
-    inline TCharIterator& operator++() { 
+    {
+    }
+
+    inline TCharIterator& operator++() {
         Begin = SkipSymbol(Begin, End);
 
         return *this;
     }
 
-    inline bool operator==(const wchar16* other) const { 
+    inline bool operator==(const wchar16* other) const {
         return Begin == other;
     }
-    inline bool operator!=(const wchar16* other) const { 
+    inline bool operator!=(const wchar16* other) const {
         return !(*this == other);
     }
 
-    inline bool operator==(const TCharIterator& other) const { 
+    inline bool operator==(const TCharIterator& other) const {
         return *this == other.Begin;
     }
-    inline bool operator!=(const TCharIterator& other) const { 
+    inline bool operator!=(const TCharIterator& other) const {
         return *this != other.Begin;
     }
 
-    inline wchar32 operator*() const { 
+    inline wchar32 operator*() const {
         return ReadSymbol(Begin, End);
     }
 
@@ -296,7 +296,7 @@ namespace NDetail {
     void UTF8ToWideImplSSE41(const unsigned char*& cur, const unsigned char* last, wchar16*& dest) noexcept;
 
     void UTF8ToWideImplSSE41(const unsigned char*& cur, const unsigned char* last, wchar32*& dest) noexcept;
-} 
+}
 
 //! @return len if robust and position where encoding stopped if not
 template <bool robust, typename TCharType>
@@ -592,14 +592,14 @@ namespace NDetail {
     }
 #endif //_sse2_
 
-} 
+}
 
 //! returns @c true if character sequence has no symbols with value greater than 0x7F
 template <typename TChar>
 inline bool IsStringASCII(const TChar* first, const TChar* last) {
     return ::NDetail::DoIsStringASCII(first, last);
 }
- 
+
 #ifdef _sse2_
 template <>
 inline bool IsStringASCII<unsigned char>(const unsigned char* first, const unsigned char* last) {
@@ -809,7 +809,7 @@ TUtf32String ToTitleRet(const TUtf32StringBuf text, size_t pos = 0, size_t count
 
 //! replaces the '<', '>' and '&' characters in string with '&lt;', '&gt;' and '&amp;' respectively
 // insertBr=true - replace '\r' and '\n' with "<BR>"
-template <bool insertBr> 
+template <bool insertBr>
 void EscapeHtmlChars(TUtf16String& str);
 
 //! returns number of characters in range. Handle surrogate pairs as one character.

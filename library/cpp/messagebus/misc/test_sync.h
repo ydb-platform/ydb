@@ -9,12 +9,12 @@ private:
 
     TMutex Mutex;
     TCondVar CondVar;
- 
+
 public:
     TTestSync()
         : Current(0)
-    { 
-    } 
+    {
+    }
 
     void Inc() {
         TGuard<TMutex> guard(Mutex);

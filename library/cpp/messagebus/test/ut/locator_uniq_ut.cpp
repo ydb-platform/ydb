@@ -4,12 +4,12 @@
 #include <library/cpp/messagebus/ybus.h>
 
 class TLocatorRegisterUniqTest: public TTestBase {
-    UNIT_TEST_SUITE(TLocatorRegisterUniqTest); 
-    UNIT_TEST(TestRegister); 
-    UNIT_TEST_SUITE_END(); 
+    UNIT_TEST_SUITE(TLocatorRegisterUniqTest);
+    UNIT_TEST(TestRegister);
+    UNIT_TEST_SUITE_END();
 
-protected: 
-    void TestRegister(); 
+protected:
+    void TestRegister();
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TLocatorRegisterUniqTest);

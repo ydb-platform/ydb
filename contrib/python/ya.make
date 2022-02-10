@@ -701,8 +701,8 @@ RECURSE(
     pamela
     pampy
     pamqp
-    panamap
-    panamap_proto
+    panamap 
+    panamap_proto 
     pandas
     pandocfilters
     papermill
@@ -1083,7 +1083,7 @@ RECURSE(
     traceback2
     traitlets
     transfer_manager_client
-    transitions
+    transitions 
     transliterate
     trollius
     trollsift
@@ -1099,7 +1099,7 @@ RECURSE(
     typer
     typing
     typing-extensions
-    typing-inspect
+    typing-inspect 
     tzlocal
     ua-parser
     udatetime

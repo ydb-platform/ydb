@@ -959,7 +959,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                     .Value(TString())
                 .Build()
                 .FormatDetails()
-                    .Value(ToString((ui32)NYson::EYsonFormat::Binary)) 
+                    .Value(ToString((ui32)NYson::EYsonFormat::Binary))
                 .Build()
                 .Settings().Build()
                 .Format()

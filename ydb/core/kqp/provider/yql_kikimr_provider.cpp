@@ -228,7 +228,7 @@ bool TKikimrTableDescription::DoesExist() const {
     return Metadata->DoesExist;
 }
 
-void TKikimrTableDescription::ToYson(NYson::TYsonWriter& writer) const { 
+void TKikimrTableDescription::ToYson(NYson::TYsonWriter& writer) const {
     YQL_ENSURE(Metadata);
 
     auto& meta = *Metadata;

@@ -16,13 +16,13 @@ namespace NYql {
 namespace NCommon {
 
 namespace {
-class TRestrictedYsonFormatter : public NYson::TYsonConsumerBase { 
+class TRestrictedYsonFormatter : public NYson::TYsonConsumerBase {
 public:
     TRestrictedYsonFormatter(TYsonResultWriter& writer)
         : Writer(writer) {
     }
 
-    void OnStringScalar(TStringBuf value) override { 
+    void OnStringScalar(TStringBuf value) override {
         Open();
         Type(TStringBuf("string"));
 
@@ -125,7 +125,7 @@ public:
         AfterAttributes = false;
     }
 
-    void OnKeyedItem(TStringBuf key) override { 
+    void OnKeyedItem(TStringBuf key) override {
         if (key.StartsWith('$')) {
             Writer.OnKeyedItem(TString("$") + key);
         } else {
@@ -197,7 +197,7 @@ TString DecodeRestrictedBinaryString(const TString& data) {
     return res;
 }
 
-void DecodeRestrictedYson(const NYT::TNode& node, NYson::TYsonConsumerBase& writer) { 
+void DecodeRestrictedYson(const NYT::TNode& node, NYson::TYsonConsumerBase& writer) {
     switch (node.GetType()) {
     case NYT::TNode::String:
         writer.OnStringScalar(node.AsString());
@@ -301,12 +301,12 @@ void DecodeRestrictedYson(const NYT::TNode& node, NYson::TYsonConsumerBase& writ
 
 void EncodeRestrictedYson(TYsonResultWriter& writer, const TStringBuf& yson) {
     TRestrictedYsonFormatter formatter(writer);
-    NYson::ParseYsonStringBuffer(yson, &formatter); 
+    NYson::ParseYsonStringBuffer(yson, &formatter);
 }
 
-TString EncodeRestrictedYson(const NYT::TNode& node, NYson::EYsonFormat format) { 
+TString EncodeRestrictedYson(const NYT::TNode& node, NYson::EYsonFormat format) {
     TStringStream stream;
-    NYson::TYsonWriter writer(&stream, format); 
+    NYson::TYsonWriter writer(&stream, format);
     TYsonResultWriter resultWriter(writer);
     TRestrictedYsonFormatter formatter(resultWriter);
     NYT::TNodeVisitor visitor(&formatter);
@@ -314,9 +314,9 @@ TString EncodeRestrictedYson(const NYT::TNode& node, NYson::EYsonFormat format) 
     return stream.Str();
 }
 
-TString DecodeRestrictedYson(const TStringBuf& yson, NYson::EYsonFormat format) { 
+TString DecodeRestrictedYson(const TStringBuf& yson, NYson::EYsonFormat format) {
     TStringStream stream;
-    NYson::TYsonWriter writer(&stream, format); 
+    NYson::TYsonWriter writer(&stream, format);
     auto node = NYT::NodeFromYsonString(yson);
     DecodeRestrictedYson(node, writer);
     return stream.Str();

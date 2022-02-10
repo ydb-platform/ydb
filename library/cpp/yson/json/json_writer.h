@@ -31,7 +31,7 @@ namespace NYT {
     public:
         TJsonWriter(
             IOutputStream* output,
-            ::NYson::EYsonType type = ::NYson::EYsonType::Node, 
+            ::NYson::EYsonType type = ::NYson::EYsonType::Node,
             EJsonFormat format = JF_TEXT,
             EJsonAttributesMode attributesMode = JAM_ON_DEMAND,
             ESerializedBoolFormat booleanFormat = SBF_STRING);
@@ -39,13 +39,13 @@ namespace NYT {
         TJsonWriter(
             IOutputStream* output,
             NJson::TJsonWriterConfig config,
-            ::NYson::EYsonType type = ::NYson::EYsonType::Node, 
+            ::NYson::EYsonType type = ::NYson::EYsonType::Node,
             EJsonAttributesMode attributesMode = JAM_ON_DEMAND,
             ESerializedBoolFormat booleanFormat = SBF_STRING);
 
         void Flush();
 
-        void OnStringScalar(TStringBuf value) override; 
+        void OnStringScalar(TStringBuf value) override;
         void OnInt64Scalar(i64 value) override;
         void OnUint64Scalar(ui64 value) override;
         void OnDoubleScalar(double value) override;
@@ -58,7 +58,7 @@ namespace NYT {
         void OnEndList() override;
 
         void OnBeginMap() override;
-        void OnKeyedItem(TStringBuf key) override; 
+        void OnKeyedItem(TStringBuf key) override;
         void OnEndMap() override;
 
         void OnBeginAttributes() override;
@@ -68,7 +68,7 @@ namespace NYT {
         THolder<NJson::TJsonWriter> UnderlyingJsonWriter;
         NJson::TJsonWriter* JsonWriter;
         IOutputStream* Output;
-        ::NYson::EYsonType Type; 
+        ::NYson::EYsonType Type;
         EJsonAttributesMode AttributesMode;
         ESerializedBoolFormat BooleanFormat;
 

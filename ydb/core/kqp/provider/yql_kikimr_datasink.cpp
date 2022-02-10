@@ -446,7 +446,7 @@ public:
         return false;
     }
 
-    bool CollectDiagnostics(NYson::TYsonWriter& writer) override { 
+    bool CollectDiagnostics(NYson::TYsonWriter& writer) override {
         auto& execResults = SessionCtx->Query().Results;
         if (!std::find_if(execResults.begin(), execResults.end(),
             [] (const auto& pair) { return pair.second.Profile; }))

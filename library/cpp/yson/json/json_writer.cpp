@@ -13,7 +13,7 @@ namespace NYT {
 
     TJsonWriter::TJsonWriter(
         IOutputStream* output,
-        ::NYson::EYsonType type, 
+        ::NYson::EYsonType type,
         EJsonFormat format,
         EJsonAttributesMode attributesMode,
         ESerializedBoolFormat booleanFormat)
@@ -29,7 +29,7 @@ namespace NYT {
     TJsonWriter::TJsonWriter(
         IOutputStream* output,
         NJson::TJsonWriterConfig config,
-        ::NYson::EYsonType type, 
+        ::NYson::EYsonType type,
         EJsonAttributesMode attributesMode,
         ESerializedBoolFormat booleanFormat)
         : Output(output)
@@ -38,8 +38,8 @@ namespace NYT {
         , BooleanFormat(booleanFormat)
         , Depth(0)
     {
-        if (Type == ::NYson::EYsonType::MapFragment) { 
-            ythrow ::NYson::TYsonException() << ("Map fragments are not supported by Json"); 
+        if (Type == ::NYson::EYsonType::MapFragment) {
+            ythrow ::NYson::TYsonException() << ("Map fragments are not supported by Json");
         }
 
         UnderlyingJsonWriter.Reset(new NJson::TJsonWriter(
@@ -84,7 +84,7 @@ namespace NYT {
 
         Depth -= 1;
 
-        if (Depth == 0 && Type == ::NYson::EYsonType::ListFragment && InAttributesBalance == 0) { 
+        if (Depth == 0 && Type == ::NYson::EYsonType::ListFragment && InAttributesBalance == 0) {
             JsonWriter->Flush();
             Output->Write("\n");
         }
@@ -97,7 +97,7 @@ namespace NYT {
         return true;
     }
 
-    void TJsonWriter::OnStringScalar(TStringBuf value) { 
+    void TJsonWriter::OnStringScalar(TStringBuf value) {
         if (IsWriteAllowed()) {
             EnterNode();
             WriteStringScalar(value);
@@ -173,7 +173,7 @@ namespace NYT {
         }
     }
 
-    void TJsonWriter::OnKeyedItem(TStringBuf name) { 
+    void TJsonWriter::OnKeyedItem(TStringBuf name) {
         if (IsWriteAllowed()) {
             if (IsSpecialJsonKey(name)) {
                 WriteStringScalar(TString("$") + name);

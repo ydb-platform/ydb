@@ -42,7 +42,7 @@ public:
                         MKQL_ENSURE(size <= std::numeric_limits<i32>::max(), "TryWeakMemberFromDict: Unable to fit string to i32");
                         TUnboxedValueStream stringStream;
                         stringStream.DoWrite(&NYson::NDetail::StringMarker, 1);
-                        NYson::WriteVarInt32(&stringStream, size); 
+                        NYson::WriteVarInt32(&stringStream, size);
                         stringStream.DoWrite(ref.Data(), size);
                         return stringStream.Value();
                     } else if (SchemeType == NUdf::EDataSlot::String) {

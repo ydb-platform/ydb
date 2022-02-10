@@ -246,8 +246,8 @@ TProgram::TProgram(
     , Modules_(modules)
     , ExprRoot_(nullptr)
     , SessionId_(sessionId)
-    , ResultFormat_(NYson::EYsonFormat::Binary) 
-    , OutputFormat_(NYson::EYsonFormat::Pretty) 
+    , ResultFormat_(NYson::EYsonFormat::Binary)
+    , OutputFormat_(NYson::EYsonFormat::Pretty)
     , EnableRangeComputeFor_(enableRangeComputeFor)
 {
     if (SessionId_.empty()) {
@@ -271,7 +271,7 @@ TProgram::~TProgram() {
     }
 }
 
-void TProgram::ConfigureYsonResultFormat(NYson::EYsonFormat format) { 
+void TProgram::ConfigureYsonResultFormat(NYson::EYsonFormat format) {
     ResultFormat_ = format;
     OutputFormat_ = format;
 }
@@ -1026,7 +1026,7 @@ TMaybe<TString> TProgram::GetQueryPlan() {
         TStringStream planStream;
         planStream.Reserve(DEFAULT_PLAN_BUF_SIZE);
 
-        NYson::TYsonWriter writer(&planStream, OutputFormat_); 
+        NYson::TYsonWriter writer(&planStream, OutputFormat_);
         PlanBuilder_->WritePlan(writer, ExprRoot_);
 
         return planStream.Str();
@@ -1049,7 +1049,7 @@ TMaybe<TString> TProgram::GetDiagnostics() {
     }
 
     TStringStream out;
-    NYson::TYsonWriter writer(&out, DiagnosticFormat_.GetOrElse(ResultFormat_)); 
+    NYson::TYsonWriter writer(&out, DiagnosticFormat_.GetOrElse(ResultFormat_));
 
     writer.OnBeginMap();
     writer.OnKeyedItem("Write");
@@ -1093,7 +1093,7 @@ TMaybe<TString> TProgram::GetTasksInfo() {
     bool hasTasks = false;
 
     TStringStream out;
-    NYson::TYsonWriter writer(&out, ResultFormat_); 
+    NYson::TYsonWriter writer(&out, ResultFormat_);
 
     writer.OnBeginMap();
     writer.OnKeyedItem("Write");
@@ -1125,7 +1125,7 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly) {
     }
 
     TStringStream out;
-    NYson::TYsonWriter writer(&out); 
+    NYson::TYsonWriter writer(&out);
     // Header
     writer.OnBeginMap();
     writer.OnKeyedItem("ExecutionStatistics");
@@ -1135,7 +1135,7 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly) {
     bool hasStatistics = false;
     for (auto& datasink : TypeCtx_->DataSinks) {
         TStringStream providerOut;
-        NYson::TYsonWriter providerWriter(&providerOut); 
+        NYson::TYsonWriter providerWriter(&providerOut);
         if (datasink->CollectStatistics(providerWriter, totalOnly)) {
             writer.OnKeyedItem(datasink->GetName());
             writer.OnRaw(providerOut.Str());
@@ -1175,11 +1175,11 @@ TMaybe<TString> TProgram::GetDiscoveredData() {
     }
 
     TStringStream out;
-    NYson::TYsonWriter writer(&out); 
+    NYson::TYsonWriter writer(&out);
     writer.OnBeginMap();
     for (auto& datasource: TypeCtx_->DataSources) {
         TStringStream providerOut;
-        NYson::TYsonWriter providerWriter(&providerOut); 
+        NYson::TYsonWriter providerWriter(&providerOut);
         if (datasource->CollectDiscoveredData(providerWriter)) {
             writer.OnKeyedItem(datasource->GetName());
             writer.OnRaw(providerOut.Str());
@@ -1234,7 +1234,7 @@ TString TProgram::ResultsAsString() const {
         return "";
 
     TStringStream resultOut;
-    NYson::TYsonWriter yson(&resultOut, OutputFormat_); 
+    NYson::TYsonWriter yson(&resultOut, OutputFormat_);
     yson.OnBeginList();
     for (const auto& result: Results()) {
         yson.OnListItem();

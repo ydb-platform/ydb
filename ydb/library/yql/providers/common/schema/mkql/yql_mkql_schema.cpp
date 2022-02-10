@@ -143,7 +143,7 @@ public:
     }
 };
 
-void WriteTypeToYson(NYson::TYsonConsumerBase& writer, const NKikimr::NMiniKQL::TType* type) { 
+void WriteTypeToYson(NYson::TYsonConsumerBase& writer, const NKikimr::NMiniKQL::TType* type) {
     TRuntimeTypeSaver<TYqlTypeYsonSaverImpl> saver(writer);
     saver.Save(type);
 }
@@ -155,9 +155,9 @@ NYT::TNode TypeToYsonNode(const NKikimr::NMiniKQL::TType* type) {
     return res;
 }
 
-TString WriteTypeToYson(const NKikimr::NMiniKQL::TType* type, NYson::EYsonFormat format) { 
+TString WriteTypeToYson(const NKikimr::NMiniKQL::TType* type, NYson::EYsonFormat format) {
     TStringStream stream;
-    NYson::TYsonWriter writer(&stream, format); 
+    NYson::TYsonWriter writer(&stream, format);
     WriteTypeToYson(writer, type);
     return stream.Str();
 }

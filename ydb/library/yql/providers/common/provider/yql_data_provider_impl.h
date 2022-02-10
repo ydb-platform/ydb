@@ -12,15 +12,15 @@ public:
     TPlanFormatterBase() = default;
     ~TPlanFormatterBase() = default;
 
-    void WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) override; 
+    void WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override;
     void GetResultDependencies(const TExprNode::TPtr& node, TExprNode::TListType& children, bool compact) override;
     void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override;
     void GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) override;
     TString GetProviderPath(const TExprNode& node) override;
-    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override; 
-    void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) override; 
-    void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) override; 
+    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
+    void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
+    void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
     TString GetOperationDisplayName(const TExprNode& node) override;
 };
 
@@ -74,10 +74,10 @@ public:
     void GetRequiredChildren(const TExprNode& node, TExprNode::TListType& children) override;
     IGraphTransformer& GetCallableExecutionTransformer() override;
     IGraphTransformer& GetFinalizingTransformer() override;
-    bool CollectDiagnostics(NYson::TYsonWriter& writer) override; 
-    bool GetTasksInfo(NYson::TYsonWriter& writer) override; 
-    bool CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) override; 
-    bool CollectDiscoveredData(NYson::TYsonWriter& writer) override; 
+    bool CollectDiagnostics(NYson::TYsonWriter& writer) override;
+    bool GetTasksInfo(NYson::TYsonWriter& writer) override;
+    bool CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) override;
+    bool CollectDiscoveredData(NYson::TYsonWriter& writer) override;
     IPlanFormatter& GetPlanFormatter() override;
     ITrackableNodeProcessor& GetTrackableNodeProcessor() override;
     IGraphTransformer& GetPlanInfoTransformer() override;

@@ -10,12 +10,12 @@
 
 namespace NYdb {
 
-void FormatValueYson(const TValue& value, NYson::TYsonWriter& writer); 
+void FormatValueYson(const TValue& value, NYson::TYsonWriter& writer);
 
-TString FormatValueYson(const TValue& value, NYson::EYsonFormat ysonFormat = NYson::EYsonFormat::Text); 
+TString FormatValueYson(const TValue& value, NYson::EYsonFormat ysonFormat = NYson::EYsonFormat::Text);
 
-void FormatResultSetYson(const TResultSet& result, NYson::TYsonWriter& writer); 
+void FormatResultSetYson(const TResultSet& result, NYson::TYsonWriter& writer);
 
-TString FormatResultSetYson(const TResultSet& result, NYson::EYsonFormat ysonFormat = NYson::EYsonFormat::Text); 
+TString FormatResultSetYson(const TResultSet& result, NYson::EYsonFormat ysonFormat = NYson::EYsonFormat::Text);
 
 } // namespace NYdb

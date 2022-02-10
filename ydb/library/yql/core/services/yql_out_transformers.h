@@ -41,7 +41,7 @@ public:
     TPlanOutputTransformer(
         IOutputStream* directOut,
         IPlanBuilder& builder,
-        NYson::EYsonFormat outputFormat) 
+        NYson::EYsonFormat outputFormat)
         : DirectOut_(directOut)
         , Builder_(builder)
         , OutputFormat_(outputFormat)
@@ -53,7 +53,7 @@ public:
     static TAutoPtr <IGraphTransformer> Sync(
             IOutputStream* directOut,
             IPlanBuilder& builder,
-            NYson::EYsonFormat outputFormat) 
+            NYson::EYsonFormat outputFormat)
     {
         return CreateFunctorTransformer(TPlanOutputTransformer(directOut, builder, outputFormat));
     }
@@ -61,7 +61,7 @@ public:
 private:
     IOutputStream* DirectOut_;
     IPlanBuilder& Builder_;
-    NYson::EYsonFormat OutputFormat_; 
+    NYson::EYsonFormat OutputFormat_;
 };
 
 class TExprLogTransformer {

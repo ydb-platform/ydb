@@ -347,7 +347,7 @@ TVector<NKikimrMiniKQL::TResult*> UnpackKikimrRunResult(const NKikimrMiniKQL::TR
     return results;
 }
 
-void KikimrResultToYson(const TStringStream& stream, NYson::TYsonWriter& writer, const NKikimrMiniKQL::TResult& result, 
+void KikimrResultToYson(const TStringStream& stream, NYson::TYsonWriter& writer, const NKikimrMiniKQL::TResult& result,
     const TVector<TString>& columnHints, const IDataProvider::TFillSettings& fillSettings, bool& truncated)
 {
     truncated = false;
@@ -797,7 +797,7 @@ bool CheckKqpResultType(const NKikimrMiniKQL::TResult& kqpResult, const TTypeAnn
     return true;
 }
 
-TMaybe<TString> KqpResultToYson(const NKikimrMiniKQL::TResult& kqpResult, const NYson::EYsonFormat& ysonFormat, 
+TMaybe<TString> KqpResultToYson(const NKikimrMiniKQL::TResult& kqpResult, const NYson::EYsonFormat& ysonFormat,
     TExprContext& ctx)
 {
     YQL_ENSURE(kqpResult.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::Struct);
@@ -810,7 +810,7 @@ TMaybe<TString> KqpResultToYson(const NKikimrMiniKQL::TResult& kqpResult, const 
     dataResult.MutableValue()->CopyFrom(kqpResult.GetValue().GetStruct(0));
 
     TStringStream out;
-    NYson::TYsonWriter writer(&out, ysonFormat, ::NYson::EYsonType::Node, true); 
+    NYson::TYsonWriter writer(&out, ysonFormat, ::NYson::EYsonType::Node, true);
     writer.OnBeginMap();
     writer.OnKeyedItem("Type");
 
@@ -890,7 +890,7 @@ TMaybe<TString> GetTableListResult(const IKikimrGateway::TListPathResult& res,
     std::unique_ptr<NKikimrMiniKQL::TResult> packedResult(KikimrResultToProto(result, {}, fillSettings, nullptr));
 
     if (fillSettings.Format == IDataProvider::EResultFormat::Yson) {
-        NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings); 
+        NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings);
         auto yson = KqpResultToYson(*packedResult, ysonFormat, ctx);
         if (!yson) {
             return Nothing();
@@ -912,7 +912,7 @@ TMaybe<TString> GetTableMetadataResult(const TKikimrTableDescription& table,
     const IDataProvider::TFillSettings& fillSettings, TExprContext& ctx)
 {
     TStringStream out;
-    NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Binary); 
+    NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Binary);
     table.ToYson(writer);
 
     auto metaYson = out.Str();
@@ -927,7 +927,7 @@ TMaybe<TString> GetTableMetadataResult(const TKikimrTableDescription& table,
     std::unique_ptr<NKikimrMiniKQL::TResult> packedResult(KikimrResultToProto(result, {}, fillSettings, nullptr));
 
     if (fillSettings.Format == IDataProvider::EResultFormat::Yson) {
-        NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings); 
+        NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings);
         auto yson = KqpResultToYson(*packedResult, ysonFormat, ctx);
         if (!yson) {
             return Nothing();
@@ -994,7 +994,7 @@ void TransformerStatsFromProto(const NKikimrKqp::TTransformProfile& proto, IGrap
     }
 }
 
-void KikimrReadOpStatsToYson(const NKikimrQueryStats::TReadOpStats& opStats, NYson::TYsonWriter& writer) { 
+void KikimrReadOpStatsToYson(const NKikimrQueryStats::TReadOpStats& opStats, NYson::TYsonWriter& writer) {
     writer.OnBeginMap();
     writer.OnKeyedItem("Count");
     writer.OnUint64Scalar(opStats.GetCount());
@@ -1005,7 +1005,7 @@ void KikimrReadOpStatsToYson(const NKikimrQueryStats::TReadOpStats& opStats, NYs
     writer.OnEndMap();
 }
 
-void KikimrWriteOpStatsToYson(const NKikimrQueryStats::TWriteOpStats& opStats, NYson::TYsonWriter& writer) { 
+void KikimrWriteOpStatsToYson(const NKikimrQueryStats::TWriteOpStats& opStats, NYson::TYsonWriter& writer) {
     writer.OnBeginMap();
     writer.OnKeyedItem("Count");
     writer.OnUint64Scalar(opStats.GetCount());
@@ -1016,7 +1016,7 @@ void KikimrWriteOpStatsToYson(const NKikimrQueryStats::TWriteOpStats& opStats, N
     writer.OnEndMap();
 }
 
-void KikimrTxStatsToYson(const NKikimrQueryStats::TTxStats& txStats, NYson::TYsonWriter& writer) { 
+void KikimrTxStatsToYson(const NKikimrQueryStats::TTxStats& txStats, NYson::TYsonWriter& writer) {
     writer.OnBeginMap();
     writer.OnKeyedItem("TableAccessStats");
 
@@ -1069,7 +1069,7 @@ void KikimrTxStatsToYson(const NKikimrQueryStats::TTxStats& txStats, NYson::TYso
     writer.OnEndMap();
 }
 
-void KikimrProfileToYson(const NKikimrKqp::TKqlProfile& kqlProfile, NYson::TYsonWriter& writer) { 
+void KikimrProfileToYson(const NKikimrKqp::TKqlProfile& kqlProfile, NYson::TYsonWriter& writer) {
     writer.OnBeginMap();
     if (kqlProfile.HasQuery()) {
         writer.OnKeyedItem("Query");
@@ -1110,7 +1110,7 @@ void KikimrProfileToYson(const NKikimrKqp::TKqlProfile& kqlProfile, NYson::TYson
     writer.OnEndMap();
 }
 
-void KikimrProfileToYson(const NKikimrKqp::TQueryProfile& queryProfile, NYson::TYsonWriter& writer) { 
+void KikimrProfileToYson(const NKikimrKqp::TQueryProfile& queryProfile, NYson::TYsonWriter& writer) {
     writer.OnBeginMap();
     writer.OnKeyedItem("TransformStats");
 

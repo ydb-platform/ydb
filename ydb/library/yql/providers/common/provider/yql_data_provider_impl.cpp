@@ -6,7 +6,7 @@
 
 namespace NYql {
 
-void TPlanFormatterBase::WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) { 
+void TPlanFormatterBase::WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) {
     Y_UNUSED(node);
     Y_UNUSED(writer);
 }
@@ -39,17 +39,17 @@ TString TPlanFormatterBase::GetProviderPath(const TExprNode& node) {
     return TString();
 }
 
-void TPlanFormatterBase::WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) { 
+void TPlanFormatterBase::WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) {
     Y_UNUSED(node);
     Y_UNUSED(writer);
 }
 
-void TPlanFormatterBase::WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) { 
+void TPlanFormatterBase::WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) {
     Y_UNUSED(node);
     Y_UNUSED(writer);
 }
 
-void TPlanFormatterBase::WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) { 
+void TPlanFormatterBase::WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) {
     Y_UNUSED(node);
     Y_UNUSED(writer);
 }
@@ -253,23 +253,23 @@ IGraphTransformer& TDataProviderBase::GetFinalizingTransformer() {
     return NullTransformer_;
 }
 
-bool TDataProviderBase::CollectDiagnostics(NYson::TYsonWriter& writer) { 
+bool TDataProviderBase::CollectDiagnostics(NYson::TYsonWriter& writer) {
     Y_UNUSED(writer);
     return false;
 }
 
-bool TDataProviderBase::GetTasksInfo(NYson::TYsonWriter& writer) { 
+bool TDataProviderBase::GetTasksInfo(NYson::TYsonWriter& writer) {
     Y_UNUSED(writer);
     return false;
 }
 
-bool TDataProviderBase::CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) { 
+bool TDataProviderBase::CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) {
     Y_UNUSED(writer);
     Y_UNUSED(totalOnly);
     return false;
 }
 
-bool TDataProviderBase::CollectDiscoveredData(NYson::TYsonWriter& writer) { 
+bool TDataProviderBase::CollectDiscoveredData(NYson::TYsonWriter& writer) {
     Y_UNUSED(writer);
     return false;
 }

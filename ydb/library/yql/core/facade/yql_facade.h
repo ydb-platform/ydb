@@ -208,7 +208,7 @@ public:
     TMaybe<TString> GetQueryAst();
     TMaybe<TString> GetQueryPlan();
 
-    void SetDiagnosticFormat(NYson::EYsonFormat format) { 
+    void SetDiagnosticFormat(NYson::EYsonFormat format) {
         DiagnosticFormat_ = format;
     }
 
@@ -222,13 +222,13 @@ public:
     TMaybe<TString> GetDiscoveredData();
 
     TString ResultsAsString() const;
-    void ConfigureYsonResultFormat(NYson::EYsonFormat format); 
+    void ConfigureYsonResultFormat(NYson::EYsonFormat format);
 
     inline IOutputStream* ExprStream() const { return ExprStream_; }
     inline IOutputStream* PlanStream() const { return PlanStream_; }
 
-    NYson::EYsonFormat GetResultFormat() const { return ResultFormat_; } 
-    NYson::EYsonFormat GetOutputFormat() const { return OutputFormat_; } 
+    NYson::EYsonFormat GetResultFormat() const { return ResultFormat_; }
+    NYson::EYsonFormat GetOutputFormat() const { return OutputFormat_; }
 
     void SetValidateOptions(NUdf::EValidateMode validateMode);
     void SetDisableNativeUdfSupport(bool disable);
@@ -368,9 +368,9 @@ private:
     TAutoPtr<IGraphTransformer> Transformer_;
     TIntrusivePtr<TResultProviderConfig> ResultProviderConfig_;
     bool SupportsResultPosition_ = false;
-    NYson::EYsonFormat ResultFormat_; 
-    NYson::EYsonFormat OutputFormat_; 
-    TMaybe<NYson::EYsonFormat> DiagnosticFormat_; 
+    NYson::EYsonFormat ResultFormat_;
+    NYson::EYsonFormat OutputFormat_;
+    TMaybe<NYson::EYsonFormat> DiagnosticFormat_;
     NUdf::EValidateMode ValidateMode_ = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport_ = false;
     bool UseTableMetaFromGraph_ = false;

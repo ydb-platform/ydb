@@ -188,7 +188,7 @@ public:
     TMaybe<TString> RelativePath;
 
     bool Load(TExprContext& ctx, bool withVirtualColumns = false);
-    void ToYson(NYson::TYsonWriter& writer) const; 
+    void ToYson(NYson::TYsonWriter& writer) const;
 
     TMaybe<ui32> GetKeyColumnIndex(const TString& name) const;
     const TTypeAnnotationNode* GetColumnType(const TString& name) const;

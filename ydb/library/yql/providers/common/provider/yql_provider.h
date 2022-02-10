@@ -94,7 +94,7 @@ TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx);
 TString FullTableName(const TStringBuf& cluster, const TStringBuf& table);
 
 IDataProvider::TFillSettings GetFillSettings(const TExprNode& node);
-NYson::EYsonFormat GetYsonFormat(const IDataProvider::TFillSettings& fillSettings); 
+NYson::EYsonFormat GetYsonFormat(const IDataProvider::TFillSettings& fillSettings);
 
 TVector<TString> GetStructFields(const TTypeAnnotationNode* type);
 

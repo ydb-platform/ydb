@@ -71,7 +71,7 @@ bool TYdbKey::Extract(const TExprNode& key, TExprContext& ctx) {
     return true;
 }
 
-void MetaToYson(const TString& cluster, const TString& table,  TYdbState::TPtr state, NYson::TYsonWriter& writer) { 
+void MetaToYson(const TString& cluster, const TString& table,  TYdbState::TPtr state, NYson::TYsonWriter& writer) {
     const auto& meta = state->Tables[std::make_pair(cluster, table)];
     writer.OnBeginMap();
     writer.OnKeyedItem("Data");

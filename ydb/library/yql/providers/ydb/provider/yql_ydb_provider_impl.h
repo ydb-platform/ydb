@@ -24,7 +24,7 @@ THolder<IGraphTransformer> CreateYdbLogicalOptProposalTransformer(TYdbState::TPt
 THolder<IGraphTransformer> CreateYdbPhysicalOptProposalTransformer(TYdbState::TPtr state);
 THolder<IGraphTransformer> CreateYdbSourceCallableExecutionTransformer(TYdbState::TPtr state);
 
-void MetaToYson(const TString& cluster, const TString& table,  TYdbState::TPtr state, NYson::TYsonWriter& writer); 
+void MetaToYson(const TString& cluster, const TString& table,  TYdbState::TPtr state, NYson::TYsonWriter& writer);
 
 class TYdbKey {
 public:

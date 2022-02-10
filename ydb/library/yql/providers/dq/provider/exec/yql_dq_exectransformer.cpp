@@ -242,7 +242,7 @@ private:
 
         if (NCommon::HasResOrPullOption(resOrPull, "type")) {
             TStringStream typeYson;
-            NYson::TYsonWriter typeWriter(&typeYson); 
+            NYson::TYsonWriter typeWriter(&typeYson);
             NCommon::WriteResOrPullType(typeWriter, resOrPullInput.GetTypeAnn(), *columns);
             *type = typeYson.Str();
         }
@@ -597,7 +597,7 @@ private:
             YQL_ENSURE(state->TypeCtx->AvailablePureResultDataSources.front() != DqProviderName);
 
             TStringStream out;
-            NYson::TYsonWriter writer((IOutputStream*)&out); 
+            NYson::TYsonWriter writer((IOutputStream*)&out);
             writer.OnBeginMap();
             writer.OnKeyedItem("FallbackProvider");
             writer.OnRaw(state->TypeCtx->AvailablePureResultDataSources.front());
@@ -750,7 +750,7 @@ private:
                 input->SetState(TExprNode::EState::ExecutionComplete);
 
                 TStringStream out;
-                NYson::TYsonWriter writer((IOutputStream*)&out); 
+                NYson::TYsonWriter writer((IOutputStream*)&out);
                 writer.OnBeginMap();
                 if (type) {
                     writer.OnKeyedItem("Type");
@@ -1085,7 +1085,7 @@ private:
             input->SetState(TExprNode::EState::ExecutionComplete);
 
             TStringStream out;
-            NYson::TYsonWriter writer((IOutputStream*)&out, NCommon::GetYsonFormat(fillSettings), ::NYson::EYsonType::Node, false); 
+            NYson::TYsonWriter writer((IOutputStream*)&out, NCommon::GetYsonFormat(fillSettings), ::NYson::EYsonType::Node, false);
             writer.OnBeginMap();
             if (type) {
                 writer.OnKeyedItem("Type");

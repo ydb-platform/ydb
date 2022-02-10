@@ -124,7 +124,7 @@ private:
 
 public:
     TYsonFieldChecker(const TString& ysonString, size_t fieldCount) {
-        Root = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node); 
+        Root = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
         UNIT_ASSERT(Root.IsList());
         UNIT_ASSERT_VALUES_EQUAL(Root.AsList().size(), 1);
 
@@ -891,7 +891,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             ysonString = NKqp::StreamResultToYson(it);
 
-            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node); 
+            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
             UNIT_ASSERT(node.IsList());
             rowCount = node.AsList().size();
 
@@ -947,7 +947,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             ysonString = NKqp::StreamResultToYson(it);
 
-            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node); 
+            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
             UNIT_ASSERT(node.IsList());
             rowCount = node.AsList().size();
 
@@ -1000,7 +1000,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             ysonString = NKqp::StreamResultToYson(it);
 
-            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node); 
+            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
             UNIT_ASSERT(node.IsList());
             rowCount = node.AsList().size();
 
@@ -1052,7 +1052,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             ysonString = NKqp::StreamResultToYson(it);
 
-            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node); 
+            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
             UNIT_ASSERT(node.IsList());
             rowCount = node.AsList().size();
 
@@ -1088,7 +1088,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             auto ysonString = NKqp::StreamResultToYson(it);
-            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node); 
+            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
             UNIT_ASSERT(node.IsList());
             rowCount = node.AsList().size();
 
@@ -1728,7 +1728,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             ysonString = NKqp::StreamResultToYson(it);
 
-            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node); 
+            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
             UNIT_ASSERT(node.IsList());
             rowCount = node.AsList().size();
 

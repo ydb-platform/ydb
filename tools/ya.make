@@ -152,8 +152,8 @@ RECURSE(
     testlangmodel
     thresher
     titleseq_index_print
-    tokenize 
-    tokenize/tests 
+    tokenize
+    tokenize/tests
     tomaparsertest
     trans_str
     triecompiler

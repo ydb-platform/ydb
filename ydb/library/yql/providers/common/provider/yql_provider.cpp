@@ -143,9 +143,9 @@ IDataProvider::TFillSettings GetFillSettings(const TExprNode& node) {
     return fillSettings;
 }
 
-NYson::EYsonFormat GetYsonFormat(const IDataProvider::TFillSettings& fillSettings) { 
+NYson::EYsonFormat GetYsonFormat(const IDataProvider::TFillSettings& fillSettings) {
     YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Yson);
-    return (NYson::EYsonFormat)FromString<ui32>(fillSettings.FormatDetails); 
+    return (NYson::EYsonFormat)FromString<ui32>(fillSettings.FormatDetails);
 }
 
 TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
@@ -367,7 +367,7 @@ TVector<TString> GetStructFields(const TTypeAnnotationNode* type) {
 
 
 void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStatistics& stats,
-    NYson::TYsonWriter& writer) 
+    NYson::TYsonWriter& writer)
 {
     writer.OnBeginMap();
 
@@ -678,7 +678,7 @@ bool FreezeUsedFilesSync(const TExprNode& node, TUserDataTable& files, const TTy
     return true;
 }
 
-void WriteColumns(NYson::TYsonWriter& writer, const TExprBase& columns) { 
+void WriteColumns(NYson::TYsonWriter& writer, const TExprBase& columns) {
     if (auto maybeList = columns.Maybe<TCoAtomList>()) {
         writer.OnBeginList();
         for (const auto& column : maybeList.Cast()) {
@@ -719,7 +719,7 @@ bool IsFlowOrStream(const TExprNode* node) {
     return kind == ETypeAnnotationKind::Stream || kind == ETypeAnnotationKind::Flow;
 }
 
-void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprNode* source) { 
+void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprNode* source) {
     if (node == source) {
         return;
     }
@@ -827,7 +827,7 @@ void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprN
     writer.OnEndMap();
 }
 
-void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const NNodes::TCoLambda& lambda) { 
+void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const NNodes::TCoLambda& lambda) {
     writer.OnKeyedItem(name);
     writer.OnBeginList();
     WriteStream(writer, lambda.Body().Raw(), lambda.Args().Size() > 0 ? lambda.Args().Arg(0).Raw() : nullptr);
@@ -939,7 +939,7 @@ double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx) {
     return GetDataReplicationFactor(1.0, lambda.Child(1), lambda.Head().ChildrenSize() > 0 ? lambda.Head().Child(0) : nullptr, ctx);
 }
 
-void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics) { 
+void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics) {
     if (statistics.empty()) {
         return;
     }

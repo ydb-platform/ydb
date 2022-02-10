@@ -5,7 +5,7 @@ RECURSE(
     misc
     string
     system
-    yson 
+    yson
     yson_string
 )
 

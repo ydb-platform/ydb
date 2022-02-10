@@ -7,7 +7,7 @@
 
 namespace NYdb {
 
-static void PrimitiveValueToYson(EPrimitiveType type, TValueParser& parser, NYson::TYsonWriter& writer) 
+static void PrimitiveValueToYson(EPrimitiveType type, TValueParser& parser, NYson::TYsonWriter& writer)
 {
     switch (type) {
         case EPrimitiveType::Bool:
@@ -87,7 +87,7 @@ static void PrimitiveValueToYson(EPrimitiveType type, TValueParser& parser, NYso
     }
 }
 
-static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& writer) 
+static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& writer)
 {
     switch (parser.GetKind()) {
         case TTypeParser::ETypeKind::Primitive:
@@ -184,23 +184,23 @@ static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& wr
     }
 }
 
-void FormatValueYson(const TValue& value, NYson::TYsonWriter& writer) 
+void FormatValueYson(const TValue& value, NYson::TYsonWriter& writer)
 {
     TValueParser parser(value);
     FormatValueYsonInternal(parser, writer);
 }
 
-TString FormatValueYson(const TValue& value, NYson::EYsonFormat ysonFormat) 
+TString FormatValueYson(const TValue& value, NYson::EYsonFormat ysonFormat)
 {
     TStringStream out;
-    NYson::TYsonWriter writer(&out, ysonFormat, ::NYson::EYsonType::Node, true); 
+    NYson::TYsonWriter writer(&out, ysonFormat, ::NYson::EYsonType::Node, true);
 
     FormatValueYson(value, writer);
 
     return out.Str();
 }
 
-void FormatResultSetYson(const TResultSet& result, NYson::TYsonWriter& writer) 
+void FormatResultSetYson(const TResultSet& result, NYson::TYsonWriter& writer)
 {
     auto columns = result.GetColumnsMeta();
 
@@ -220,10 +220,10 @@ void FormatResultSetYson(const TResultSet& result, NYson::TYsonWriter& writer)
     writer.OnEndList();
 }
 
-TString FormatResultSetYson(const TResultSet& result, NYson::EYsonFormat ysonFormat) 
+TString FormatResultSetYson(const TResultSet& result, NYson::EYsonFormat ysonFormat)
 {
     TStringStream out;
-    NYson::TYsonWriter writer(&out, ysonFormat, ::NYson::EYsonType::Node, true); 
+    NYson::TYsonWriter writer(&out, ysonFormat, ::NYson::EYsonType::Node, true);
 
     FormatResultSetYson(result, writer);
 

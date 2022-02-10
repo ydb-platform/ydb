@@ -63,7 +63,7 @@ static inline void SortBy(TContainer& container, const TGetKey& getKey) {
     SortBy(container.begin(), container.end(), getKey);
 }
 
-template <class T>
+template <class T> 
 static inline void StableSort(T f, T l) {
     std::stable_sort(f, l);
 }
@@ -93,7 +93,7 @@ static inline void StableSortBy(TContainer& container, const TGetKey& getKey) {
     StableSortBy(container.begin(), container.end(), getKey);
 }
 
-template <class T>
+template <class T> 
 static inline void PartialSort(T f, T m, T l) {
     std::partial_sort(f, m, l);
 }

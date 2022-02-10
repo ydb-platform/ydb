@@ -244,7 +244,7 @@ public:
     inline void SetShowFails(bool show) {
         ShowFails = show;
     }
-
+ 
     void SetContinueOnFail(bool val) {
         NUnitTest::ContinueOnFail = val;
     }
@@ -421,7 +421,7 @@ private:
         if (ShowFails) {
             for (size_t i = 0; i < Fails.size(); ++i) {
                 printf("%s", Fails[i].data());
-            }
+            } 
         }
     }
 
@@ -693,8 +693,8 @@ int NUnitTest::RunMain(int argc, char** argv) {
                     processor.SetPrintBeforeSuite(true);
                 } else if (strcmp(name, "--print-before-test") == 0) {
                     processor.SetPrintBeforeTest(true);
-                } else if (strcmp(name, "--show-fails") == 0) {
-                    processor.SetShowFails(true);
+                } else if (strcmp(name, "--show-fails") == 0) { 
+                    processor.SetShowFails(true); 
                 } else if (strcmp(name, "--dont-show-fails") == 0) {
                     processor.SetShowFails(false);
                 } else if (strcmp(name, "--continue-on-fail") == 0) {

@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
         TCgiParameters c;
         c.Scan(parsee);
 
-        c.InsertUnescaped("d", "xxx");
+        c.InsertUnescaped("d", "xxx"); 
 
         UNIT_ASSERT_VALUES_EQUAL(c.Print(), parsee + "&d=xxx");
     }
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
     Y_UNIT_TEST(TestJoinUnescaped) {
         TCgiParameters c;
 
-        c.Scan("foo=1&foo=2");
+        c.Scan("foo=1&foo=2"); 
         c.JoinUnescaped("foo", ';', "0");
 
         UNIT_ASSERT_VALUES_EQUAL(c.Print(), "foo=1;2;0");

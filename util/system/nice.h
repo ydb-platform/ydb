@@ -1,3 +1,3 @@
-#pragma once
-
-bool Nice(int prioDelta);
+#pragma once 
+ 
+bool Nice(int prioDelta); 

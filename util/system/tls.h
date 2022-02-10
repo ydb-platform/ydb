@@ -235,7 +235,7 @@ namespace NTls {
         }
 
         inline operator const T&() const {
-            return Get();
+            return Get(); 
         }
 
         inline operator T&() {

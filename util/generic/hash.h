@@ -743,7 +743,7 @@ public:
     template <class ForwardIterator>
     void insert_unique(ForwardIterator f, ForwardIterator l, std::forward_iterator_tag) {
         difference_type n = std::distance(f, l);
-
+ 
         reserve(num_elements + n);
         for (; n > 0; --n, ++f)
             insert_unique_noresize(*f);
@@ -752,7 +752,7 @@ public:
     template <class ForwardIterator>
     void insert_equal(ForwardIterator f, ForwardIterator l, std::forward_iterator_tag) {
         difference_type n = std::distance(f, l);
-
+ 
         reserve(num_elements + n);
         for (; n > 0; --n, ++f)
             emplace_equal_noresize(*f);

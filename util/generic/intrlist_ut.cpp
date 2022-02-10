@@ -246,7 +246,7 @@ static void TestCutFront(int N, int M) {
     }
 
     TMyList::Cut(l.Begin(), it, l2.End());
-    CheckIterationAfterCut(l2, l, N, M);
+    CheckIterationAfterCut(l2, l, N, M); 
 }
 
 static void TestCutBack(int N, int M) {
@@ -259,7 +259,7 @@ static void TestCutBack(int N, int M) {
     }
 
     TMyList::Cut(it, l.End(), l2.End());
-    CheckIterationAfterCut(l, l2, N, M);
+    CheckIterationAfterCut(l, l2, N, M); 
 }
 
 void TListTest::TestCut() {

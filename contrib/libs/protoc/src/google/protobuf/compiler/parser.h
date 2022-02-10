@@ -585,7 +585,7 @@ class PROTOBUF_EXPORT SourceLocationTable {
   void Clear();
 
  private:
-  typedef std::map<
+  typedef std::map< 
       std::pair<const Message*, DescriptorPool::ErrorCollector::ErrorLocation>,
       std::pair<int, int> >
       LocationMap;

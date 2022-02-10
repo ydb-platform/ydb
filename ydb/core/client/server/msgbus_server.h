@@ -188,7 +188,7 @@ void CopyProtobufsByFieldName(TProtoTo& protoTo, const TProtoFrom& protoFrom) {
     const Descriptor& descriptorTo = *protoTo.GetDescriptor();
     const Reflection& reflectionTo = *protoTo.GetReflection();
     const Reflection& reflectionFrom = *protoFrom.GetReflection();
-    std::vector<const FieldDescriptor*> fields;
+    std::vector<const FieldDescriptor*> fields; 
     protoTo.Clear();
     reflectionFrom.ListFields(protoFrom, &fields);
     for (const FieldDescriptor* fieldFrom : fields) {

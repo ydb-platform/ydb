@@ -113,7 +113,7 @@ inline TString JoinVectorIntoString(const TVector<T>& v, const TStringBuf delim)
 
 template <typename T>
 inline TString JoinVectorIntoString(const TVector<T>& v, size_t index, size_t count, const TStringBuf delim) {
-    Y_ASSERT(index + count <= v.size() && "JoinVectorIntoString(): index or count out of range");
+    Y_ASSERT(index + count <= v.size() && "JoinVectorIntoString(): index or count out of range"); 
     return JoinStrings(v.begin() + index, v.begin() + index + count, delim);
 }
 

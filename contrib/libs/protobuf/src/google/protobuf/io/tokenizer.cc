@@ -635,12 +635,12 @@ bool Tokenizer::Next() {
       } else {
         // Check if the high order bit is set.
         // The tokenizer is used to parse tomita grammars with non-ascii utf8 chars
-        // if (current_char_ & 0x80) {
+        // if (current_char_ & 0x80) { 
         //   error_collector_->AddError(
         //       line_, column_,
-        //       StringPrintf("Interpreting non ascii codepoint %d.",
-        //                    static_cast<unsigned char>(current_char_)));
-        // }
+        //       StringPrintf("Interpreting non ascii codepoint %d.", 
+        //                    static_cast<unsigned char>(current_char_))); 
+        // } 
         NextChar();
         current_.type = TYPE_SYMBOL;
       }

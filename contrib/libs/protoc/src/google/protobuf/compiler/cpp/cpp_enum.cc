@@ -286,7 +286,7 @@ void EnumGenerator::GenerateMethods(int idx, io::Printer* printer) {
   // each number once by first constructing a set containing all valid
   // numbers, then printing a case statement for each element.
 
-  std::set<int> numbers;
+  std::set<int> numbers; 
   for (int j = 0; j < descriptor_->value_count(); j++) {
     const EnumValueDescriptor* value = descriptor_->value(j);
     numbers.insert(value->number());

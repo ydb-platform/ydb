@@ -2056,7 +2056,7 @@ static PyObject* WhichOneof(CMessage* self, PyObject* arg) {
 static PyObject* GetExtensionDict(CMessage* self, void *closure);
 
 static PyObject* ListFields(CMessage* self) {
-  std::vector<const FieldDescriptor*> fields;
+  std::vector<const FieldDescriptor*> fields; 
   self->message->GetReflection()->ListFields(*self->message, &fields);
 
   // Normally, the list will be exactly the size of the fields.

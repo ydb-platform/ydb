@@ -382,7 +382,7 @@ class CommandLineInterface::ErrorPrinter
 // them all to disk on demand.
 class CommandLineInterface::GeneratorContextImpl : public GeneratorContext {
  public:
-  GeneratorContextImpl(const std::vector<const FileDescriptor*>& parsed_files);
+  GeneratorContextImpl(const std::vector<const FileDescriptor*>& parsed_files); 
 
   // Write all files in the directory to disk at the given output location,
   // which must end in a '/'.
@@ -407,7 +407,7 @@ class CommandLineInterface::GeneratorContextImpl : public GeneratorContext {
   io::ZeroCopyOutputStream* OpenForInsertWithGeneratedCodeInfo(
       const TProtoStringType& filename, const TProtoStringType& insertion_point,
       const google::protobuf::GeneratedCodeInfo& info);
-  void ListParsedFiles(std::vector<const FileDescriptor*>* output) {
+  void ListParsedFiles(std::vector<const FileDescriptor*>* output) { 
     *output = parsed_files_;
   }
 
@@ -418,7 +418,7 @@ class CommandLineInterface::GeneratorContextImpl : public GeneratorContext {
   // instead of an unordered_map so that files are written in order (good when
   // writing zips).
   std::map<TProtoStringType, TProtoStringType> files_;
-  const std::vector<const FileDescriptor*>& parsed_files_;
+  const std::vector<const FileDescriptor*>& parsed_files_; 
   bool had_error_;
 };
 
@@ -483,7 +483,7 @@ class CommandLineInterface::MemoryOutputStream
 // -------------------------------------------------------------------
 
 CommandLineInterface::GeneratorContextImpl::GeneratorContextImpl(
-    const std::vector<const FileDescriptor*>& parsed_files)
+    const std::vector<const FileDescriptor*>& parsed_files) 
     : parsed_files_(parsed_files), had_error_(false) {}
 
 bool CommandLineInterface::GeneratorContextImpl::WriteAllToDisk(
@@ -2171,7 +2171,7 @@ bool CommandLineInterface::EnforceProto3OptionalSupport(
 }
 
 bool CommandLineInterface::GenerateOutput(
-    const std::vector<const FileDescriptor*>& parsed_files,
+    const std::vector<const FileDescriptor*>& parsed_files, 
     const OutputDirective& output_directive,
     GeneratorContext* generator_context) {
   // Call the generator.
@@ -2222,12 +2222,12 @@ bool CommandLineInterface::GenerateOutput(
 }
 
 bool CommandLineInterface::GenerateDependencyManifestFile(
-    const std::vector<const FileDescriptor*>& parsed_files,
+    const std::vector<const FileDescriptor*>& parsed_files, 
     const GeneratorContextMap& output_directories,
     DiskSourceTree* source_tree) {
   FileDescriptorSet file_set;
 
-  std::set<const FileDescriptor*> already_seen;
+  std::set<const FileDescriptor*> already_seen; 
   for (int i = 0; i < parsed_files.size(); i++) {
     GetTransitiveDependencies(parsed_files[i], false, false, &already_seen,
                               file_set.mutable_file());
@@ -2290,7 +2290,7 @@ bool CommandLineInterface::GenerateDependencyManifestFile(
 }
 
 bool CommandLineInterface::GeneratePluginOutput(
-    const std::vector<const FileDescriptor*>& parsed_files,
+    const std::vector<const FileDescriptor*>& parsed_files, 
     const TProtoStringType& plugin_name, const TProtoStringType& parameter,
     GeneratorContext* generator_context, TProtoStringType* error) {
   CodeGeneratorRequest request;
@@ -2304,7 +2304,7 @@ bool CommandLineInterface::GeneratePluginOutput(
   }
 
 
-  std::set<const FileDescriptor*> already_seen;
+  std::set<const FileDescriptor*> already_seen; 
   for (int i = 0; i < parsed_files.size(); i++) {
     request.add_file_to_generate(parsed_files[i]->name());
     GetTransitiveDependencies(parsed_files[i],
@@ -2541,7 +2541,7 @@ bool CommandLineInterface::WriteDescriptorSet(
 void CommandLineInterface::GetTransitiveDependencies(
     const FileDescriptor* file, bool include_json_name,
     bool include_source_code_info,
-    std::set<const FileDescriptor*>* already_seen,
+    std::set<const FileDescriptor*>* already_seen, 
     RepeatedPtrField<FileDescriptorProto>* output) {
   if (!already_seen->insert(file).second) {
     // Already saw this file.  Skip.
@@ -2598,11 +2598,11 @@ namespace {
 // parameter will contain the direct children (when groups are ignored in the
 // tree) of the given descriptor for the caller to traverse. The declaration
 // order of the nested messages is also preserved.
-typedef std::pair<int, int> FieldRange;
+typedef std::pair<int, int> FieldRange; 
 void GatherOccupiedFieldRanges(
     const Descriptor* descriptor, std::set<FieldRange>* ranges,
     std::vector<const Descriptor*>* nested_messages) {
-  std::set<const Descriptor*> groups;
+  std::set<const Descriptor*> groups; 
   for (int i = 0; i < descriptor->field_count(); ++i) {
     const FieldDescriptor* fd = descriptor->field(i);
     ranges->insert(FieldRange(fd->number(), fd->number() + 1));
@@ -2634,11 +2634,11 @@ void GatherOccupiedFieldRanges(
 // Actually prints the formatted free field numbers for given message name and
 // occupied ranges.
 void FormatFreeFieldNumbers(const TProtoStringType& name,
-                            const std::set<FieldRange>& ranges) {
+                            const std::set<FieldRange>& ranges) { 
   TProtoStringType output;
   StringAppendF(&output, "%-35s free:", name.c_str());
   int next_free_number = 1;
-  for (std::set<FieldRange>::const_iterator i = ranges.begin();
+  for (std::set<FieldRange>::const_iterator i = ranges.begin(); 
        i != ranges.end(); ++i) {
     // This happens when groups re-use parent field numbers, in which
     // case we skip the FieldRange entirely.
@@ -2664,8 +2664,8 @@ void FormatFreeFieldNumbers(const TProtoStringType& name,
 }  // namespace
 
 void CommandLineInterface::PrintFreeFieldNumbers(const Descriptor* descriptor) {
-  std::set<FieldRange> ranges;
-  std::vector<const Descriptor*> nested_messages;
+  std::set<FieldRange> ranges; 
+  std::vector<const Descriptor*> nested_messages; 
   GatherOccupiedFieldRanges(descriptor, &ranges, &nested_messages);
 
   for (int i = 0; i < nested_messages.size(); ++i) {

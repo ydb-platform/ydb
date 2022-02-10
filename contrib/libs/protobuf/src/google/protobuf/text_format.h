@@ -596,7 +596,7 @@ class PROTOBUF_EXPORT TextFormat {
     // if possible.
     void AllowUnknownField(bool allow) { allow_unknown_field_ = allow; }
 
-
+ 
     void AllowFieldNumber(bool allow) { allow_field_number_ = allow; }
 
     // Sets maximum recursion depth which parser can use. This is effectively

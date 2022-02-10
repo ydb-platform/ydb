@@ -92,7 +92,7 @@ io::ZeroCopyOutputStream* GeneratorContext::OpenForInsertWithGeneratedCodeInfo(
 }
 
 void GeneratorContext::ListParsedFiles(
-    std::vector<const FileDescriptor*>* output) {
+    std::vector<const FileDescriptor*>* output) { 
   GOOGLE_LOG(FATAL) << "This GeneratorContext does not support ListParsedFiles";
 }
 

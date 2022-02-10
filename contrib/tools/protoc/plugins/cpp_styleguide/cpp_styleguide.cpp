@@ -18,7 +18,7 @@ namespace NPlugins {
     using namespace google::protobuf::compiler;
     using namespace google::protobuf::compiler::cpp;
 
-    typedef std::map<TProtoStringType, TProtoStringType> TVariables;
+    typedef std::map<TProtoStringType, TProtoStringType> TVariables; 
 
     bool GenerateYaStyle(const FileDescriptor* fileDescriptor) {
         const auto& extension = fileDescriptor->FindExtensionByName("GenerateYaStyle");

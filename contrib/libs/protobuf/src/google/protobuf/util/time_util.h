@@ -251,7 +251,7 @@ inline Duration operator%(const Duration& d1, const Duration& d2) {
   return result %= d2;
 }
 
-inline std::ostream& operator<<(std::ostream& out, const Duration& d) {
+inline std::ostream& operator<<(std::ostream& out, const Duration& d) { 
   out << ::PROTOBUF_NAMESPACE_ID::util::TimeUtil::ToString(d);
   return out;
 }
@@ -300,7 +300,7 @@ inline Timestamp operator-(const Timestamp& t, const Duration& d) {
 }
 PROTOBUF_EXPORT Duration operator-(const Timestamp& t1, const Timestamp& t2);
 
-inline std::ostream& operator<<(std::ostream& out, const Timestamp& t) {
+inline std::ostream& operator<<(std::ostream& out, const Timestamp& t) { 
   out << ::PROTOBUF_NAMESPACE_ID::util::TimeUtil::ToString(t);
   return out;
 }

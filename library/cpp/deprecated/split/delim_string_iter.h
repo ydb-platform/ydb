@@ -8,7 +8,7 @@
 
 #include <iterator>
 
-class TDelimStringIter {
+class TDelimStringIter { 
 public:
     using value_type = TStringBuf;
     using difference_type = ptrdiff_t;
@@ -16,12 +16,12 @@ public:
     using reference = const TStringBuf&;
     using iterator_category = std::forward_iterator_tag;
 
-    inline TDelimStringIter(const char* begin, const char* strEnd, TStringBuf delim)
-        : TDelimStringIter(TStringBuf(begin, strEnd), delim)
+    inline TDelimStringIter(const char* begin, const char* strEnd, TStringBuf delim) 
+        : TDelimStringIter(TStringBuf(begin, strEnd), delim) 
     {
     }
 
-    inline TDelimStringIter(TStringBuf str, TStringBuf delim)
+    inline TDelimStringIter(TStringBuf str, TStringBuf delim) 
         : IsValid(true)
         , Str(str)
         , Delim(delim)
@@ -29,7 +29,7 @@ public:
         UpdateCurrent();
     }
 
-    inline TDelimStringIter()
+    inline TDelimStringIter() 
         : IsValid(false)
     {
     }
@@ -39,7 +39,7 @@ public:
     }
 
     // NOTE: this is a potentially unsafe operation (no overrun check)
-    inline TDelimStringIter& operator++() {
+    inline TDelimStringIter& operator++() { 
         if (Current.end() != Str.end()) {
             Str.Skip(Current.length() + Delim.length());
             UpdateCurrent();
@@ -57,11 +57,11 @@ public:
         }
     }
 
-    inline bool operator==(const TDelimStringIter& rhs) const {
+    inline bool operator==(const TDelimStringIter& rhs) const { 
         return (IsValid == rhs.IsValid) && (!IsValid || (Current.begin() == rhs.Current.begin()));
     }
 
-    inline bool operator!=(const TDelimStringIter& rhs) const {
+    inline bool operator!=(const TDelimStringIter& rhs) const { 
         return !(*this == rhs);
     }
 
@@ -86,7 +86,7 @@ public:
     }
 
     template <class T>
-    inline TDelimStringIter& Next(T& t) // Get & advance
+    inline TDelimStringIter& Next(T& t) // Get & advance 
     {
         if (!TryNext(t))
             ythrow yexception() << "No valid field";
@@ -117,8 +117,8 @@ public:
         return Str.SubStr(Current.length() + Delim.length());
     }
 
-    inline TDelimStringIter IterEnd() const {
-        return TDelimStringIter();
+    inline TDelimStringIter IterEnd() const { 
+        return TDelimStringIter(); 
     }
 
 private:
@@ -147,37 +147,37 @@ struct TDelimStroka {
     {
     }
 
-    inline TDelimStringIter begin() const {
-        return TDelimStringIter(S, Delim);
+    inline TDelimStringIter begin() const { 
+        return TDelimStringIter(S, Delim); 
     }
 
-    inline TDelimStringIter end() const {
-        return TDelimStringIter();
+    inline TDelimStringIter end() const { 
+        return TDelimStringIter(); 
     }
 };
 
-inline TDelimStringIter begin_delim(const TString& str, TStringBuf delim) {
-    return TDelimStringIter(str, delim);
+inline TDelimStringIter begin_delim(const TString& str, TStringBuf delim) { 
+    return TDelimStringIter(str, delim); 
 }
 
-inline TDelimStringIter begin_delim(TStringBuf str, TStringBuf delim) {
-    return TDelimStringIter(str.begin(), str.end(), delim);
+inline TDelimStringIter begin_delim(TStringBuf str, TStringBuf delim) { 
+    return TDelimStringIter(str.begin(), str.end(), delim); 
 }
 
-inline TDelimStringIter end_delim(const TString& /*str*/, TStringBuf /*delim*/) {
-    return TDelimStringIter();
+inline TDelimStringIter end_delim(const TString& /*str*/, TStringBuf /*delim*/) { 
+    return TDelimStringIter(); 
 }
 
-class TKeyValueDelimStringIter {
+class TKeyValueDelimStringIter { 
 public:
-    TKeyValueDelimStringIter(const TStringBuf str, const TStringBuf delim);
+    TKeyValueDelimStringIter(const TStringBuf str, const TStringBuf delim); 
     bool Valid() const;
-    TKeyValueDelimStringIter& operator++();
+    TKeyValueDelimStringIter& operator++(); 
     const TStringBuf& Key() const;
     const TStringBuf& Value() const;
 
 private:
-    TDelimStringIter DelimIter;
+    TDelimStringIter DelimIter; 
     TStringBuf ChunkKey, ChunkValue;
 
 private:

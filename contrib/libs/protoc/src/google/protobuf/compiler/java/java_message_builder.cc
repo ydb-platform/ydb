@@ -206,7 +206,7 @@ void MessageBuilderGenerator::GenerateDescriptorMethods(io::Printer* printer) {
         "fileclass", name_resolver_->GetImmutableClassName(descriptor_->file()),
         "identifier", UniqueFileScopeIdentifier(descriptor_));
   }
-  std::vector<const FieldDescriptor*> map_fields;
+  std::vector<const FieldDescriptor*> map_fields; 
   for (int i = 0; i < descriptor_->field_count(); i++) {
     const FieldDescriptor* field = descriptor_->field(i);
     if (GetJavaType(field) == JAVATYPE_MESSAGE &&

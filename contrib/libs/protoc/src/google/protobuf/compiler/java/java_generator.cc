@@ -116,7 +116,7 @@ bool JavaGenerator::Generate(const FileDescriptor* file,
   std::vector<TProtoStringType> all_annotations;
 
 
-  std::vector<FileGenerator*> file_generators;
+  std::vector<FileGenerator*> file_generators; 
   if (file_options.generate_immutable_code) {
     file_generators.push_back(new FileGenerator(file, file_options,
                                                 /* immutable = */ true));

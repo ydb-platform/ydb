@@ -283,7 +283,7 @@ class PROTOC_EXPORT CommandLineInterface {
 
   // Generate the given output file from the given input.
   struct OutputDirective;  // see below
-  bool GenerateOutput(const std::vector<const FileDescriptor*>& parsed_files,
+  bool GenerateOutput(const std::vector<const FileDescriptor*>& parsed_files, 
                       const OutputDirective& output_directive,
                       GeneratorContext* generator_context);
   bool GeneratePluginOutput(
@@ -300,7 +300,7 @@ class PROTOC_EXPORT CommandLineInterface {
 
   // Implements the --dependency_out option
   bool GenerateDependencyManifestFile(
-      const std::vector<const FileDescriptor*>& parsed_files,
+      const std::vector<const FileDescriptor*>& parsed_files, 
       const GeneratorContextMap& output_directories,
       DiskSourceTree* source_tree);
 
@@ -316,7 +316,7 @@ class PROTOC_EXPORT CommandLineInterface {
   static void GetTransitiveDependencies(
       const FileDescriptor* file, bool include_json_name,
       bool include_source_code_info,
-      std::set<const FileDescriptor*>* already_seen,
+      std::set<const FileDescriptor*>* already_seen, 
       RepeatedPtrField<FileDescriptorProto>* output);
 
   // Implements the --print_free_field_numbers. This function prints free field
@@ -422,7 +422,7 @@ class PROTOC_EXPORT CommandLineInterface {
     TProtoStringType parameter;
     TProtoStringType output_location;
   };
-  std::vector<OutputDirective> output_directives_;
+  std::vector<OutputDirective> output_directives_; 
 
   // When using --encode or --decode, this names the type we are encoding or
   // decoding.  (Empty string indicates --decode_raw.)

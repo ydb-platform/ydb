@@ -97,10 +97,10 @@ int ProtobufMain(int argc, char* argv[]) {
   cli.RegisterGenerator("--objc_out", "--objc_opt", &objc_generator,
                         "Generate Objective-C header and source.");
            
-  // Proto2 Perl/XS
+  // Proto2 Perl/XS 
   perlxs::PerlXSGenerator perlxs_generator;
-  cli.RegisterGenerator("--perlxs_out", &perlxs_generator,
-                        "Generate Perl/XS source files.");
+  cli.RegisterGenerator("--perlxs_out", &perlxs_generator, 
+                        "Generate Perl/XS source files."); 
 
   // JavaScript
   js::Generator js_generator;

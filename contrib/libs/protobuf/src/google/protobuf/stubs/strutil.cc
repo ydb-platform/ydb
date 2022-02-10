@@ -1246,10 +1246,10 @@ char* DoubleToBuffer(double value, char* buffer) {
   // this assert.
   static_assert(DBL_DIG < 20, "DBL_DIG_is_too_big");
 
-  if (value == std::numeric_limits<double>::infinity()) {
+  if (value == std::numeric_limits<double>::infinity()) { 
     strcpy(buffer, "inf");
     return buffer;
-  } else if (value == -std::numeric_limits<double>::infinity()) {
+  } else if (value == -std::numeric_limits<double>::infinity()) { 
     strcpy(buffer, "-inf");
     return buffer;
   } else if (std::isnan(value)) {
@@ -1364,10 +1364,10 @@ char* FloatToBuffer(float value, char* buffer) {
   // this assert.
   static_assert(FLT_DIG < 10, "FLT_DIG_is_too_big");
 
-  if (value == std::numeric_limits<double>::infinity()) {
+  if (value == std::numeric_limits<double>::infinity()) { 
     strcpy(buffer, "inf");
     return buffer;
-  } else if (value == -std::numeric_limits<double>::infinity()) {
+  } else if (value == -std::numeric_limits<double>::infinity()) { 
     strcpy(buffer, "-inf");
     return buffer;
   } else if (std::isnan(value)) {

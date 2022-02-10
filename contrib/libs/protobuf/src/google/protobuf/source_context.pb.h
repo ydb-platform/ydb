@@ -184,12 +184,12 @@ class PROTOBUF_EXPORT SourceContext final :
   };
   // string file_name = 1;
   void clear_file_name();
-  const TProtoStringType& file_name() const;
+  const TProtoStringType& file_name() const; 
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_file_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_file_name();
+  TProtoStringType* mutable_file_name(); 
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_file_name();
-  void set_allocated_file_name(TProtoStringType* file_name);
+  void set_allocated_file_name(TProtoStringType* file_name); 
   private:
   const TProtoStringType& _internal_file_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_file_name(const TProtoStringType& value);
@@ -222,7 +222,7 @@ class PROTOBUF_EXPORT SourceContext final :
 inline void SourceContext::clear_file_name() {
   file_name_.ClearToEmpty();
 }
-inline const TProtoStringType& SourceContext::file_name() const {
+inline const TProtoStringType& SourceContext::file_name() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.SourceContext.file_name)
   return _internal_file_name();
 }
@@ -249,11 +249,11 @@ inline TProtoStringType* SourceContext::_internal_mutable_file_name() {
   
   return file_name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* SourceContext::release_file_name() {
+inline TProtoStringType* SourceContext::release_file_name() { 
   // @@protoc_insertion_point(field_release:google.protobuf.SourceContext.file_name)
   return file_name_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void SourceContext::set_allocated_file_name(TProtoStringType* file_name) {
+inline void SourceContext::set_allocated_file_name(TProtoStringType* file_name) { 
   if (file_name != nullptr) {
     
   } else {

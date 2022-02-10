@@ -73,7 +73,7 @@ Printer::~Printer() {
 }
 
 bool Printer::GetSubstitutionRange(const char* varname,
-                                   std::pair<size_t, size_t>* range) {
+                                   std::pair<size_t, size_t>* range) { 
   std::map<TProtoStringType, std::pair<size_t, size_t> >::const_iterator iter =
       substitutions_.find(varname);
   if (iter == substitutions_.end()) {
@@ -96,7 +96,7 @@ void Printer::Annotate(const char* begin_varname, const char* end_varname,
     // Can't generate signatures with this Printer.
     return;
   }
-  std::pair<size_t, size_t> begin, end;
+  std::pair<size_t, size_t> begin, end; 
   if (!GetSubstitutionRange(begin_varname, &begin) ||
       !GetSubstitutionRange(end_varname, &end)) {
     return;

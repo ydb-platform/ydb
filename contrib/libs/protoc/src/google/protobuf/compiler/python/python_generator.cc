@@ -228,11 +228,11 @@ TProtoStringType StringifyDefaultValue(const FieldDescriptor& field) {
       return StrCat(field.default_value_uint64());
     case FieldDescriptor::CPPTYPE_DOUBLE: {
       double value = field.default_value_double();
-      if (value == std::numeric_limits<double>::infinity()) {
+      if (value == std::numeric_limits<double>::infinity()) { 
         // Python pre-2.6 on Windows does not parse "inf" correctly.  However,
         // a numeric literal that is too big for a double will become infinity.
         return "1e10000";
-      } else if (value == -std::numeric_limits<double>::infinity()) {
+      } else if (value == -std::numeric_limits<double>::infinity()) { 
         // See above.
         return "-1e10000";
       } else if (value != value) {
@@ -244,11 +244,11 @@ TProtoStringType StringifyDefaultValue(const FieldDescriptor& field) {
     }
     case FieldDescriptor::CPPTYPE_FLOAT: {
       float value = field.default_value_float();
-      if (value == std::numeric_limits<float>::infinity()) {
+      if (value == std::numeric_limits<float>::infinity()) { 
         // Python pre-2.6 on Windows does not parse "inf" correctly.  However,
         // a numeric literal that is too big for a double will become infinity.
         return "1e10000";
-      } else if (value == -std::numeric_limits<float>::infinity()) {
+      } else if (value == -std::numeric_limits<float>::infinity()) { 
         // See above.
         return "-1e10000";
       } else if (value != value) {

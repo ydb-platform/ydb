@@ -87,7 +87,7 @@ bool CollectExtensions(const Message& message, FieldDescriptorSet* extensions) {
   // There are unknown fields that could be extensions, thus this call fails.
   if (reflection->GetUnknownFields(message).field_count() > 0) return false;
 
-  std::vector<const FieldDescriptor*> fields;
+  std::vector<const FieldDescriptor*> fields; 
   reflection->ListFields(message, &fields);
 
   for (int i = 0; i < fields.size(); i++) {

@@ -130,7 +130,7 @@ class TypeInfoForTypeResolver : public TypeInfo {
   typedef std::map<StringPiece, StringPiece> CamelCaseNameTable;
 
   template <typename T>
-  static void DeleteCachedTypes(std::map<StringPiece, T>* cached_types) {
+  static void DeleteCachedTypes(std::map<StringPiece, T>* cached_types) { 
     for (typename std::map<StringPiece, T>::iterator it =
              cached_types->begin();
          it != cached_types->end(); ++it) {
@@ -164,8 +164,8 @@ class TypeInfoForTypeResolver : public TypeInfo {
   // cached_types_, cached_enums_.
   mutable std::set<TProtoStringType> string_storage_;
 
-  mutable std::map<StringPiece, StatusOrType> cached_types_;
-  mutable std::map<StringPiece, StatusOrEnum> cached_enums_;
+  mutable std::map<StringPiece, StatusOrType> cached_types_; 
+  mutable std::map<StringPiece, StatusOrEnum> cached_enums_; 
 
   mutable std::map<const google::protobuf::Type*, CamelCaseNameTable>
       indexed_types_;

@@ -311,11 +311,11 @@ bool Parser::ConsumeNumber(double* output, const char* error) {
     input_->Next();
     return true;
   } else if (LookingAt("inf")) {
-    *output = std::numeric_limits<double>::infinity();
+    *output = std::numeric_limits<double>::infinity(); 
     input_->Next();
     return true;
   } else if (LookingAt("nan")) {
-    *output = std::numeric_limits<double>::quiet_NaN();
+    *output = std::numeric_limits<double>::quiet_NaN(); 
     input_->Next();
     return true;
   } else {
@@ -579,7 +579,7 @@ bool Parser::ValidateEnum(const EnumDescriptorProto* proto) {
     return false;
   }
 
-  std::set<int> used_values;
+  std::set<int> used_values; 
   bool has_duplicates = false;
   for (int i = 0; i < proto->value_size(); ++i) {
     const EnumValueDescriptorProto& enum_value = proto->value(i);
@@ -2387,7 +2387,7 @@ bool SourceLocationTable::Find(
     const Message* descriptor,
     DescriptorPool::ErrorCollector::ErrorLocation location, int* line,
     int* column) const {
-  const std::pair<int, int>* result =
+  const std::pair<int, int>* result = 
       FindOrNull(location_map_, std::make_pair(descriptor, location));
   if (result == NULL) {
     *line = -1;

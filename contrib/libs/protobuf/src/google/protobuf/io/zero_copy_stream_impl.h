@@ -209,7 +209,7 @@ class PROTOBUF_EXPORT IstreamInputStream : public ZeroCopyInputStream {
   // If a block_size is given, it specifies the number of bytes that
   // should be read and returned with each call to Next().  Otherwise,
   // a reasonable default is used.
-  explicit IstreamInputStream(std::istream* stream, int block_size = -1);
+  explicit IstreamInputStream(std::istream* stream, int block_size = -1); 
 
   // implements ZeroCopyInputStream ----------------------------------
   bool Next(const void** data, int* size) override;
@@ -220,7 +220,7 @@ class PROTOBUF_EXPORT IstreamInputStream : public ZeroCopyInputStream {
  private:
   class PROTOBUF_EXPORT CopyingIstreamInputStream : public CopyingInputStream {
    public:
-    CopyingIstreamInputStream(std::istream* input);
+    CopyingIstreamInputStream(std::istream* input); 
     ~CopyingIstreamInputStream() override;
 
     // implements CopyingInputStream ---------------------------------
@@ -229,7 +229,7 @@ class PROTOBUF_EXPORT IstreamInputStream : public ZeroCopyInputStream {
 
    private:
     // The stream.
-    std::istream* input_;
+    std::istream* input_; 
 
     GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(CopyingIstreamInputStream);
   };
@@ -252,7 +252,7 @@ class PROTOBUF_EXPORT OstreamOutputStream : public ZeroCopyOutputStream {
   // If a block_size is given, it specifies the size of the buffers
   // that should be returned by Next().  Otherwise, a reasonable default
   // is used.
-  explicit OstreamOutputStream(std::ostream* stream, int block_size = -1);
+  explicit OstreamOutputStream(std::ostream* stream, int block_size = -1); 
   ~OstreamOutputStream() override;
 
   // implements ZeroCopyOutputStream ---------------------------------
@@ -264,7 +264,7 @@ class PROTOBUF_EXPORT OstreamOutputStream : public ZeroCopyOutputStream {
   class PROTOBUF_EXPORT CopyingOstreamOutputStream
       : public CopyingOutputStream {
    public:
-    CopyingOstreamOutputStream(std::ostream* output);
+    CopyingOstreamOutputStream(std::ostream* output); 
     ~CopyingOstreamOutputStream() override;
 
     // implements CopyingOutputStream --------------------------------
@@ -272,7 +272,7 @@ class PROTOBUF_EXPORT OstreamOutputStream : public ZeroCopyOutputStream {
 
    private:
     // The stream.
-    std::ostream* output_;
+    std::ostream* output_; 
 
     GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(CopyingOstreamOutputStream);
   };

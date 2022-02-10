@@ -462,7 +462,7 @@ typedef HASH_MAP<EnumIntPair, const EnumValueDescriptor*,
 // through all the extensions that extend a given Descriptor, and an
 // ordered data structure that implements lower_bound is convenient
 // for that.
-typedef std::map<DescriptorIntPair, const FieldDescriptor*>
+typedef std::map<DescriptorIntPair, const FieldDescriptor*> 
     ExtensionsGroupedByDescriptorMap;
 typedef HASH_MAP<TProtoStringType, const SourceCodeInfo_Location*>
     LocationsByPathMap;
@@ -589,7 +589,7 @@ class DescriptorPool::Tables {
   inline const FieldDescriptor* FindExtension(const Descriptor* extendee,
                                               int number) const;
   inline void FindAllExtensions(const Descriptor* extendee,
-                                std::vector<const FieldDescriptor*>* out) const;
+                                std::vector<const FieldDescriptor*>* out) const; 
 
   // -----------------------------------------------------------------
   // Adding items.
@@ -673,10 +673,10 @@ class DescriptorPool::Tables {
     int pending_files_before_checkpoint;
     int pending_extensions_before_checkpoint;
   };
-  std::vector<CheckPoint> checkpoints_;
+  std::vector<CheckPoint> checkpoints_; 
   std::vector<const char*> symbols_after_checkpoint_;
   std::vector<const char*> files_after_checkpoint_;
-  std::vector<DescriptorIntPair> extensions_after_checkpoint_;
+  std::vector<DescriptorIntPair> extensions_after_checkpoint_; 
 
   // Allocate some bytes which will be reclaimed when the pool is
   // destroyed.
@@ -743,14 +743,14 @@ class FileDescriptorTables {
   // Populates p->first->locations_by_path_ from p->second.
   // Unusual signature dictated by internal::call_once.
   static void BuildLocationsByPath(
-      std::pair<const FileDescriptorTables*, const SourceCodeInfo*>* p);
+      std::pair<const FileDescriptorTables*, const SourceCodeInfo*>* p); 
 
   // Returns the location denoted by the specified path through info,
   // or nullptr if not found.
   // The value of info must be that of the corresponding FileDescriptor.
   // (Conceptually a pure function, but stateful as an optimisation.)
   const SourceCodeInfo_Location* GetSourceLocation(
-      const std::vector<int>& path, const SourceCodeInfo* info) const;
+      const std::vector<int>& path, const SourceCodeInfo* info) const; 
 
   // Must be called after BuildFileImpl(), even if the build failed and
   // we are going to roll back to the last checkpoint.
@@ -1210,7 +1210,7 @@ void* DescriptorPool::Tables::AllocateBytes(int size) {
 }
 
 void FileDescriptorTables::BuildLocationsByPath(
-    std::pair<const FileDescriptorTables*, const SourceCodeInfo*>* p) {
+    std::pair<const FileDescriptorTables*, const SourceCodeInfo*>* p) { 
   for (int i = 0, len = p->second->location_size(); i < len; ++i) {
     const SourceCodeInfo_Location* loc = &p->second->location().Get(i);
     p->first->locations_by_path_[Join(loc->path(), ",")] = loc;
@@ -1218,8 +1218,8 @@ void FileDescriptorTables::BuildLocationsByPath(
 }
 
 const SourceCodeInfo_Location* FileDescriptorTables::GetSourceLocation(
-    const std::vector<int>& path, const SourceCodeInfo* info) const {
-  std::pair<const FileDescriptorTables*, const SourceCodeInfo*> p(
+    const std::vector<int>& path, const SourceCodeInfo* info) const { 
+  std::pair<const FileDescriptorTables*, const SourceCodeInfo*> p( 
       std::make_pair(this, info));
   internal::call_once(locations_by_path_once_,
                       FileDescriptorTables::BuildLocationsByPath, &p);
@@ -1554,7 +1554,7 @@ void DescriptorPool::FindAllExtensions(
   // (but do this only once per descriptor).
   if (fallback_database_ != nullptr &&
       tables_->extensions_loaded_from_db_.count(extendee) == 0) {
-    std::vector<int> numbers;
+    std::vector<int> numbers; 
     if (fallback_database_->FindAllExtensionNumbers(extendee->full_name(),
                                                     &numbers)) {
       for (int number : numbers) {
@@ -2262,7 +2262,7 @@ bool RetrieveOptionsAssumingRightPool(
     std::vector<TProtoStringType>* option_entries) {
   option_entries->clear();
   const Reflection* reflection = options.GetReflection();
-  std::vector<const FieldDescriptor*> fields;
+  std::vector<const FieldDescriptor*> fields; 
   reflection->ListFields(options, &fields);
   for (const FieldDescriptor* field : fields) {
     int count = 1;
@@ -2316,7 +2316,7 @@ bool RetrieveOptions(int depth, const Message& options,
       // descriptor.proto is not in the pool. This means no custom options are
       // used so we are safe to proceed with the compiled options message type.
       return RetrieveOptionsAssumingRightPool(depth, options, option_entries);
-    }
+    } 
     DynamicMessageFactory factory;
     std::unique_ptr<Message> dynamic_options(
         factory.GetPrototype(option_descriptor)->New());
@@ -2328,9 +2328,9 @@ bool RetrieveOptions(int depth, const Message& options,
                  << options.GetDescriptor()->full_name();
       return RetrieveOptionsAssumingRightPool(depth, options, option_entries);
     }
-  }
-}
-
+  } 
+} 
+ 
 // Formats options that all appear together in brackets. Does not include
 // brackets.
 bool FormatBracketedOptions(int depth, const Message& options,
@@ -2367,7 +2367,7 @@ class SourceLocationCommentPrinter {
         options.include_comments && desc->GetSourceLocation(&source_loc_);
   }
   SourceLocationCommentPrinter(const FileDescriptor* file,
-                               const std::vector<int>& path,
+                               const std::vector<int>& path, 
                                const TProtoStringType& prefix,
                                const DebugStringOptions& options)
       : options_(options), prefix_(prefix) {
@@ -2428,7 +2428,7 @@ TProtoStringType FileDescriptor::DebugStringWithOptions(
     const DebugStringOptions& debug_string_options) const {
   TProtoStringType contents;
   {
-    std::vector<int> path;
+    std::vector<int> path; 
     path.push_back(FileDescriptorProto::kSyntaxFieldNumber);
     SourceLocationCommentPrinter syntax_comment(this, path, "",
                                                 debug_string_options);
@@ -2441,8 +2441,8 @@ TProtoStringType FileDescriptor::DebugStringWithOptions(
   SourceLocationCommentPrinter comment_printer(this, "", debug_string_options);
   comment_printer.AddPreComment(&contents);
 
-  std::set<int> public_dependencies;
-  std::set<int> weak_dependencies;
+  std::set<int> public_dependencies; 
+  std::set<int> weak_dependencies; 
   public_dependencies.insert(public_dependencies_,
                              public_dependencies_ + public_dependency_count_);
   weak_dependencies.insert(weak_dependencies_,
@@ -2462,7 +2462,7 @@ TProtoStringType FileDescriptor::DebugStringWithOptions(
   }
 
   if (!package().empty()) {
-    std::vector<int> path;
+    std::vector<int> path; 
     path.push_back(FileDescriptorProto::kPackageFieldNumber);
     SourceLocationCommentPrinter package_comment(this, path, "",
                                                  debug_string_options);
@@ -2471,7 +2471,7 @@ TProtoStringType FileDescriptor::DebugStringWithOptions(
     package_comment.AddPostComment(&contents);
   }
 
-  if (FormatLineOptions(0, options(), pool(), &contents)) {
+  if (FormatLineOptions(0, options(), pool(), &contents)) { 
     contents.append("\n");  // add some space if we had options
   }
 
@@ -2482,7 +2482,7 @@ TProtoStringType FileDescriptor::DebugStringWithOptions(
 
   // Find all the 'group' type extensions; we will not output their nested
   // definitions (those will be done with their group field descriptor).
-  std::set<const Descriptor*> groups;
+  std::set<const Descriptor*> groups; 
   for (int i = 0; i < extension_count(); i++) {
     if (extension(i)->type() == FieldDescriptor::TYPE_GROUP) {
       groups.insert(extension(i)->message_type());
@@ -2550,12 +2550,12 @@ void Descriptor::DebugString(int depth, TProtoStringType* contents,
   }
   contents->append(" {\n");
 
-  FormatLineOptions(depth, options(), file()->pool(), contents);
+  FormatLineOptions(depth, options(), file()->pool(), contents); 
 
   // Find all the 'group' types for fields and extensions; we will not output
   // their nested definitions (those will be done with their group field
   // descriptor).
-  std::set<const Descriptor*> groups;
+  std::set<const Descriptor*> groups; 
   for (int i = 0; i < field_count(); i++) {
     if (field(i)->type() == FieldDescriptor::TYPE_GROUP) {
       groups.insert(field(i)->message_type());
@@ -2805,7 +2805,7 @@ void EnumDescriptor::DebugString(
 
   strings::SubstituteAndAppend(contents, "$0enum $1 {\n", prefix, name());
 
-  FormatLineOptions(depth, options(), file()->pool(), contents);
+  FormatLineOptions(depth, options(), file()->pool(), contents); 
 
   for (int i = 0; i < value_count(); i++) {
     value(i)->DebugString(depth, contents, debug_string_options);
@@ -2895,7 +2895,7 @@ void ServiceDescriptor::DebugString(
 
   strings::SubstituteAndAppend(contents, "service $0 {\n", name());
 
-  FormatLineOptions(1, options(), file()->pool(), contents);
+  FormatLineOptions(1, options(), file()->pool(), contents); 
 
   for (int i = 0; i < method_count(); i++) {
     method(i)->DebugString(1, contents, debug_string_options);
@@ -2948,7 +2948,7 @@ void MethodDescriptor::DebugString(
 
 // Location methods ===============================================
 
-bool FileDescriptor::GetSourceLocation(const std::vector<int>& path,
+bool FileDescriptor::GetSourceLocation(const std::vector<int>& path, 
                                        SourceLocation* out_location) const {
   GOOGLE_CHECK(out_location != nullptr);
   if (source_code_info_) {
@@ -2974,7 +2974,7 @@ bool FileDescriptor::GetSourceLocation(const std::vector<int>& path,
 }
 
 bool FileDescriptor::GetSourceLocation(SourceLocation* out_location) const {
-  std::vector<int> path;  // empty path for root FileDescriptor
+  std::vector<int> path;  // empty path for root FileDescriptor 
   return GetSourceLocation(path, out_location);
 }
 
@@ -2988,49 +2988,49 @@ bool FieldDescriptor::is_packed() const {
 }
 
 bool Descriptor::GetSourceLocation(SourceLocation* out_location) const {
-  std::vector<int> path;
+  std::vector<int> path; 
   GetLocationPath(&path);
   return file()->GetSourceLocation(path, out_location);
 }
 
 bool FieldDescriptor::GetSourceLocation(SourceLocation* out_location) const {
-  std::vector<int> path;
+  std::vector<int> path; 
   GetLocationPath(&path);
   return file()->GetSourceLocation(path, out_location);
 }
 
 bool OneofDescriptor::GetSourceLocation(SourceLocation* out_location) const {
-  std::vector<int> path;
+  std::vector<int> path; 
   GetLocationPath(&path);
   return containing_type()->file()->GetSourceLocation(path, out_location);
 }
 
 bool EnumDescriptor::GetSourceLocation(SourceLocation* out_location) const {
-  std::vector<int> path;
+  std::vector<int> path; 
   GetLocationPath(&path);
   return file()->GetSourceLocation(path, out_location);
 }
 
 bool MethodDescriptor::GetSourceLocation(SourceLocation* out_location) const {
-  std::vector<int> path;
+  std::vector<int> path; 
   GetLocationPath(&path);
   return service()->file()->GetSourceLocation(path, out_location);
 }
 
 bool ServiceDescriptor::GetSourceLocation(SourceLocation* out_location) const {
-  std::vector<int> path;
+  std::vector<int> path; 
   GetLocationPath(&path);
   return file()->GetSourceLocation(path, out_location);
 }
 
 bool EnumValueDescriptor::GetSourceLocation(
     SourceLocation* out_location) const {
-  std::vector<int> path;
+  std::vector<int> path; 
   GetLocationPath(&path);
   return type()->file()->GetSourceLocation(path, out_location);
 }
 
-void Descriptor::GetLocationPath(std::vector<int>* output) const {
+void Descriptor::GetLocationPath(std::vector<int>* output) const { 
   if (containing_type()) {
     containing_type()->GetLocationPath(output);
     output->push_back(DescriptorProto::kNestedTypeFieldNumber);
@@ -3041,7 +3041,7 @@ void Descriptor::GetLocationPath(std::vector<int>* output) const {
   }
 }
 
-void FieldDescriptor::GetLocationPath(std::vector<int>* output) const {
+void FieldDescriptor::GetLocationPath(std::vector<int>* output) const { 
   if (is_extension()) {
     if (extension_scope() == nullptr) {
       output->push_back(FileDescriptorProto::kExtensionFieldNumber);
@@ -3058,13 +3058,13 @@ void FieldDescriptor::GetLocationPath(std::vector<int>* output) const {
   }
 }
 
-void OneofDescriptor::GetLocationPath(std::vector<int>* output) const {
+void OneofDescriptor::GetLocationPath(std::vector<int>* output) const { 
   containing_type()->GetLocationPath(output);
   output->push_back(DescriptorProto::kOneofDeclFieldNumber);
   output->push_back(index());
 }
 
-void EnumDescriptor::GetLocationPath(std::vector<int>* output) const {
+void EnumDescriptor::GetLocationPath(std::vector<int>* output) const { 
   if (containing_type()) {
     containing_type()->GetLocationPath(output);
     output->push_back(DescriptorProto::kEnumTypeFieldNumber);
@@ -3075,18 +3075,18 @@ void EnumDescriptor::GetLocationPath(std::vector<int>* output) const {
   }
 }
 
-void EnumValueDescriptor::GetLocationPath(std::vector<int>* output) const {
+void EnumValueDescriptor::GetLocationPath(std::vector<int>* output) const { 
   type()->GetLocationPath(output);
   output->push_back(EnumDescriptorProto::kValueFieldNumber);
   output->push_back(index());
 }
 
-void ServiceDescriptor::GetLocationPath(std::vector<int>* output) const {
+void ServiceDescriptor::GetLocationPath(std::vector<int>* output) const { 
   output->push_back(FileDescriptorProto::kServiceFieldNumber);
   output->push_back(index());
 }
 
-void MethodDescriptor::GetLocationPath(std::vector<int>* output) const {
+void MethodDescriptor::GetLocationPath(std::vector<int>* output) const { 
   service()->GetLocationPath(output);
   output->push_back(ServiceDescriptorProto::kMethodFieldNumber);
   output->push_back(index());
@@ -3140,17 +3140,17 @@ class DescriptorBuilder {
   // As we build descriptors we store copies of the options messages in
   // them. We put pointers to those copies in this vector, as we build, so we
   // can later (after cross-linking) interpret those options.
-  std::vector<OptionsToInterpret> options_to_interpret_;
+  std::vector<OptionsToInterpret> options_to_interpret_; 
 
   bool had_errors_;
   TProtoStringType filename_;
   FileDescriptor* file_;
   FileDescriptorTables* file_tables_;
-  std::set<const FileDescriptor*> dependencies_;
+  std::set<const FileDescriptor*> dependencies_; 
 
   // unused_dependency_ is used to record the unused imported files.
   // Note: public import is not considered.
-  std::set<const FileDescriptor*> unused_dependency_;
+  std::set<const FileDescriptor*> unused_dependency_; 
 
   // If LookupSymbol() finds a symbol that is in a file which is not a declared
   // dependency of this file, it will fail, but will set
@@ -4408,7 +4408,7 @@ FileDescriptor* DescriptorBuilder::BuildFileImpl(
     result->dependencies_names_ = nullptr;
   }
   unused_dependency_.clear();
-  std::set<int> weak_deps;
+  std::set<int> weak_deps; 
   for (int i = 0; i < proto.weak_dependency_size(); ++i) {
     weak_deps.insert(proto.weak_dependency(i));
   }
@@ -4528,7 +4528,7 @@ FileDescriptor* DescriptorBuilder::BuildFileImpl(
   // extension options known, so all interpretations should now succeed.
   if (!had_errors_) {
     OptionInterpreter option_interpreter(this);
-    for (std::vector<OptionsToInterpret>::iterator iter =
+    for (std::vector<OptionsToInterpret>::iterator iter = 
              options_to_interpret_.begin();
          iter != options_to_interpret_.end(); ++iter) {
       option_interpreter.InterpretOptions(&(*iter));
@@ -6515,7 +6515,7 @@ bool DescriptorBuilder::OptionInterpreter::InterpretSingleOption(
   // name in |debug_msg_name|, for use in error messages.
   const Descriptor* descriptor = options_descriptor;
   const FieldDescriptor* field = nullptr;
-  std::vector<const FieldDescriptor*> intermediate_fields;
+  std::vector<const FieldDescriptor*> intermediate_fields; 
   TProtoStringType debug_msg_name = "";
 
   std::vector<int> dest_path = options_path;
@@ -6633,7 +6633,7 @@ bool DescriptorBuilder::OptionInterpreter::InterpretSingleOption(
 
   // Now wrap the UnknownFieldSet with UnknownFieldSets corresponding to all
   // the intermediate messages.
-  for (std::vector<const FieldDescriptor*>::reverse_iterator iter =
+  for (std::vector<const FieldDescriptor*>::reverse_iterator iter = 
            intermediate_fields.rbegin();
        iter != intermediate_fields.rend(); ++iter) {
     std::unique_ptr<UnknownFieldSet> parent_unknown_fields(
@@ -6786,7 +6786,7 @@ void DescriptorBuilder::OptionInterpreter::AddWithoutInterpreting(
 bool DescriptorBuilder::OptionInterpreter::ExamineIfOptionIsSet(
     std::vector<const FieldDescriptor*>::const_iterator
         intermediate_fields_iter,
-    std::vector<const FieldDescriptor*>::const_iterator intermediate_fields_end,
+    std::vector<const FieldDescriptor*>::const_iterator intermediate_fields_end, 
     const FieldDescriptor* innermost_field, const TProtoStringType& debug_msg_name,
     const UnknownFieldSet& unknown_fields) {
   // We do linear searches of the UnknownFieldSet and its sub-groups.  This

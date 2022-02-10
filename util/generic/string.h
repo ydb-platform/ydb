@@ -251,14 +251,14 @@ public:
     }
 
     inline const_reference operator[](size_t pos) const noexcept {
-        Y_ASSERT(pos <= length());
+        Y_ASSERT(pos <= length()); 
 
         return this->data()[pos];
-    }
-
+    } 
+ 
     inline reference operator[](size_t pos) noexcept {
-        Y_ASSERT(pos <= length());
-
+        Y_ASSERT(pos <= length()); 
+ 
 #ifdef TSTRING_IS_STD_STRING
         return Storage_[pos];
 #else

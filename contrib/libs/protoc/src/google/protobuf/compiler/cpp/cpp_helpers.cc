@@ -688,9 +688,9 @@ TProtoStringType DefaultValue(const Options& options, const FieldDescriptor* fie
       return UInt64ToString(field->default_value_uint64());
     case FieldDescriptor::CPPTYPE_DOUBLE: {
       double value = field->default_value_double();
-      if (value == std::numeric_limits<double>::infinity()) {
+      if (value == std::numeric_limits<double>::infinity()) { 
         return "std::numeric_limits<double>::infinity()";
-      } else if (value == -std::numeric_limits<double>::infinity()) {
+      } else if (value == -std::numeric_limits<double>::infinity()) { 
         return "-std::numeric_limits<double>::infinity()";
       } else if (value != value) {
         return "std::numeric_limits<double>::quiet_NaN()";

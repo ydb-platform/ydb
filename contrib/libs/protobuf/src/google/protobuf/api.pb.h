@@ -268,12 +268,12 @@ class PROTOBUF_EXPORT Api final :
 
   // string version = 4;
   void clear_version();
-  const TProtoStringType& version() const;
+  const TProtoStringType& version() const; 
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_version(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_version();
+  TProtoStringType* mutable_version(); 
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_version();
-  void set_allocated_version(TProtoStringType* version);
+  void set_allocated_version(TProtoStringType* version); 
   private:
   const TProtoStringType& _internal_version() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_version(const TProtoStringType& value);
@@ -469,12 +469,12 @@ class PROTOBUF_EXPORT Method final :
 
   // string name = 1;
   void clear_name();
-  const TProtoStringType& name() const;
+  const TProtoStringType& name() const; 
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_name();
+  TProtoStringType* mutable_name(); 
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_name();
-  void set_allocated_name(TProtoStringType* name);
+  void set_allocated_name(TProtoStringType* name); 
   private:
   const TProtoStringType& _internal_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_name(const TProtoStringType& value);
@@ -483,12 +483,12 @@ class PROTOBUF_EXPORT Method final :
 
   // string request_type_url = 2;
   void clear_request_type_url();
-  const TProtoStringType& request_type_url() const;
+  const TProtoStringType& request_type_url() const; 
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_request_type_url(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_request_type_url();
+  TProtoStringType* mutable_request_type_url(); 
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_request_type_url();
-  void set_allocated_request_type_url(TProtoStringType* request_type_url);
+  void set_allocated_request_type_url(TProtoStringType* request_type_url); 
   private:
   const TProtoStringType& _internal_request_type_url() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_request_type_url(const TProtoStringType& value);
@@ -497,12 +497,12 @@ class PROTOBUF_EXPORT Method final :
 
   // string response_type_url = 4;
   void clear_response_type_url();
-  const TProtoStringType& response_type_url() const;
+  const TProtoStringType& response_type_url() const; 
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_response_type_url(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_response_type_url();
+  TProtoStringType* mutable_response_type_url(); 
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_response_type_url();
-  void set_allocated_response_type_url(TProtoStringType* response_type_url);
+  void set_allocated_response_type_url(TProtoStringType* response_type_url); 
   private:
   const TProtoStringType& _internal_response_type_url() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_response_type_url(const TProtoStringType& value);
@@ -675,12 +675,12 @@ class PROTOBUF_EXPORT Mixin final :
   };
   // string name = 1;
   void clear_name();
-  const TProtoStringType& name() const;
+  const TProtoStringType& name() const; 
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_name();
+  TProtoStringType* mutable_name(); 
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_name();
-  void set_allocated_name(TProtoStringType* name);
+  void set_allocated_name(TProtoStringType* name); 
   private:
   const TProtoStringType& _internal_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_name(const TProtoStringType& value);
@@ -689,12 +689,12 @@ class PROTOBUF_EXPORT Mixin final :
 
   // string root = 2;
   void clear_root();
-  const TProtoStringType& root() const;
+  const TProtoStringType& root() const; 
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_root(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_root();
+  TProtoStringType* mutable_root(); 
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_root();
-  void set_allocated_root(TProtoStringType* root);
+  void set_allocated_root(TProtoStringType* root); 
   private:
   const TProtoStringType& _internal_root() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_root(const TProtoStringType& value);
@@ -728,7 +728,7 @@ class PROTOBUF_EXPORT Mixin final :
 inline void Api::clear_name() {
   name_.ClearToEmpty();
 }
-inline const TProtoStringType& Api::name() const {
+inline const TProtoStringType& Api::name() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Api.name)
   return _internal_name();
 }
@@ -755,11 +755,11 @@ inline TProtoStringType* Api::_internal_mutable_name() {
   
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Api::release_name() {
+inline TProtoStringType* Api::release_name() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Api.name)
   return name_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Api::set_allocated_name(TProtoStringType* name) {
+inline void Api::set_allocated_name(TProtoStringType* name) { 
   if (name != nullptr) {
     
   } else {
@@ -851,7 +851,7 @@ Api::options() const {
 inline void Api::clear_version() {
   version_.ClearToEmpty();
 }
-inline const TProtoStringType& Api::version() const {
+inline const TProtoStringType& Api::version() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Api.version)
   return _internal_version();
 }
@@ -878,11 +878,11 @@ inline TProtoStringType* Api::_internal_mutable_version() {
   
   return version_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Api::release_version() {
+inline TProtoStringType* Api::release_version() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Api.version)
   return version_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Api::set_allocated_version(TProtoStringType* version) {
+inline void Api::set_allocated_version(TProtoStringType* version) { 
   if (version != nullptr) {
     
   } else {
@@ -1047,7 +1047,7 @@ inline void Api::set_syntax(PROTOBUF_NAMESPACE_ID::Syntax value) {
 inline void Method::clear_name() {
   name_.ClearToEmpty();
 }
-inline const TProtoStringType& Method::name() const {
+inline const TProtoStringType& Method::name() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Method.name)
   return _internal_name();
 }
@@ -1074,11 +1074,11 @@ inline TProtoStringType* Method::_internal_mutable_name() {
   
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Method::release_name() {
+inline TProtoStringType* Method::release_name() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Method.name)
   return name_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Method::set_allocated_name(TProtoStringType* name) {
+inline void Method::set_allocated_name(TProtoStringType* name) { 
   if (name != nullptr) {
     
   } else {
@@ -1093,7 +1093,7 @@ inline void Method::set_allocated_name(TProtoStringType* name) {
 inline void Method::clear_request_type_url() {
   request_type_url_.ClearToEmpty();
 }
-inline const TProtoStringType& Method::request_type_url() const {
+inline const TProtoStringType& Method::request_type_url() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Method.request_type_url)
   return _internal_request_type_url();
 }
@@ -1120,11 +1120,11 @@ inline TProtoStringType* Method::_internal_mutable_request_type_url() {
   
   return request_type_url_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Method::release_request_type_url() {
+inline TProtoStringType* Method::release_request_type_url() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Method.request_type_url)
   return request_type_url_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Method::set_allocated_request_type_url(TProtoStringType* request_type_url) {
+inline void Method::set_allocated_request_type_url(TProtoStringType* request_type_url) { 
   if (request_type_url != nullptr) {
     
   } else {
@@ -1159,7 +1159,7 @@ inline void Method::set_request_streaming(bool value) {
 inline void Method::clear_response_type_url() {
   response_type_url_.ClearToEmpty();
 }
-inline const TProtoStringType& Method::response_type_url() const {
+inline const TProtoStringType& Method::response_type_url() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Method.response_type_url)
   return _internal_response_type_url();
 }
@@ -1186,11 +1186,11 @@ inline TProtoStringType* Method::_internal_mutable_response_type_url() {
   
   return response_type_url_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Method::release_response_type_url() {
+inline TProtoStringType* Method::release_response_type_url() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Method.response_type_url)
   return response_type_url_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Method::set_allocated_response_type_url(TProtoStringType* response_type_url) {
+inline void Method::set_allocated_response_type_url(TProtoStringType* response_type_url) { 
   if (response_type_url != nullptr) {
     
   } else {
@@ -1286,7 +1286,7 @@ inline void Method::set_syntax(PROTOBUF_NAMESPACE_ID::Syntax value) {
 inline void Mixin::clear_name() {
   name_.ClearToEmpty();
 }
-inline const TProtoStringType& Mixin::name() const {
+inline const TProtoStringType& Mixin::name() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Mixin.name)
   return _internal_name();
 }
@@ -1313,11 +1313,11 @@ inline TProtoStringType* Mixin::_internal_mutable_name() {
   
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Mixin::release_name() {
+inline TProtoStringType* Mixin::release_name() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Mixin.name)
   return name_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Mixin::set_allocated_name(TProtoStringType* name) {
+inline void Mixin::set_allocated_name(TProtoStringType* name) { 
   if (name != nullptr) {
     
   } else {
@@ -1332,7 +1332,7 @@ inline void Mixin::set_allocated_name(TProtoStringType* name) {
 inline void Mixin::clear_root() {
   root_.ClearToEmpty();
 }
-inline const TProtoStringType& Mixin::root() const {
+inline const TProtoStringType& Mixin::root() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Mixin.root)
   return _internal_root();
 }
@@ -1359,11 +1359,11 @@ inline TProtoStringType* Mixin::_internal_mutable_root() {
   
   return root_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Mixin::release_root() {
+inline TProtoStringType* Mixin::release_root() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Mixin.root)
   return root_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Mixin::set_allocated_root(TProtoStringType* root) {
+inline void Mixin::set_allocated_root(TProtoStringType* root) { 
   if (root != nullptr) {
     
   } else {

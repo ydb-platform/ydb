@@ -188,14 +188,14 @@ class PROTOBUF_EXPORT FieldMask final :
   int _internal_paths_size() const;
   public:
   void clear_paths();
-  const TProtoStringType& paths(int index) const;
-  TProtoStringType* mutable_paths(int index);
-  void set_paths(int index, const TProtoStringType& value);
+  const TProtoStringType& paths(int index) const; 
+  TProtoStringType* mutable_paths(int index); 
+  void set_paths(int index, const TProtoStringType& value); 
   void set_paths(int index, TProtoStringType&& value);
   void set_paths(int index, const char* value);
   void set_paths(int index, const char* value, size_t size);
-  TProtoStringType* add_paths();
-  void add_paths(const TProtoStringType& value);
+  TProtoStringType* add_paths(); 
+  void add_paths(const TProtoStringType& value); 
   void add_paths(TProtoStringType&& value);
   void add_paths(const char* value);
   void add_paths(const char* value, size_t size);
@@ -246,15 +246,15 @@ inline TProtoStringType* FieldMask::add_paths() {
 inline const TProtoStringType& FieldMask::_internal_paths(int index) const {
   return paths_.Get(index);
 }
-inline const TProtoStringType& FieldMask::paths(int index) const {
+inline const TProtoStringType& FieldMask::paths(int index) const { 
   // @@protoc_insertion_point(field_get:google.protobuf.FieldMask.paths)
   return _internal_paths(index);
 }
-inline TProtoStringType* FieldMask::mutable_paths(int index) {
+inline TProtoStringType* FieldMask::mutable_paths(int index) { 
   // @@protoc_insertion_point(field_mutable:google.protobuf.FieldMask.paths)
   return paths_.Mutable(index);
 }
-inline void FieldMask::set_paths(int index, const TProtoStringType& value) {
+inline void FieldMask::set_paths(int index, const TProtoStringType& value) { 
   paths_.Mutable(index)->assign(value);
   // @@protoc_insertion_point(field_set:google.protobuf.FieldMask.paths)
 }
@@ -275,7 +275,7 @@ inline void FieldMask::set_paths(int index, const char* value, size_t size) {
 inline TProtoStringType* FieldMask::_internal_add_paths() {
   return paths_.Add();
 }
-inline void FieldMask::add_paths(const TProtoStringType& value) {
+inline void FieldMask::add_paths(const TProtoStringType& value) { 
   paths_.Add()->assign(value);
   // @@protoc_insertion_point(field_add:google.protobuf.FieldMask.paths)
 }

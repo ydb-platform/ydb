@@ -1,9 +1,9 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:util)
-
-SRCS(
-    mapped_file.cpp
-)
-
-END()
+ 
+SRCS( 
+    mapped_file.cpp 
+) 
+ 
+END() 

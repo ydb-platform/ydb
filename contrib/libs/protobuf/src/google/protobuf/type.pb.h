@@ -324,14 +324,14 @@ class PROTOBUF_EXPORT Type final :
   int _internal_oneofs_size() const;
   public:
   void clear_oneofs();
-  const TProtoStringType& oneofs(int index) const;
-  TProtoStringType* mutable_oneofs(int index);
-  void set_oneofs(int index, const TProtoStringType& value);
+  const TProtoStringType& oneofs(int index) const; 
+  TProtoStringType* mutable_oneofs(int index); 
+  void set_oneofs(int index, const TProtoStringType& value); 
   void set_oneofs(int index, TProtoStringType&& value);
   void set_oneofs(int index, const char* value);
   void set_oneofs(int index, const char* value, size_t size);
-  TProtoStringType* add_oneofs();
-  void add_oneofs(const TProtoStringType& value);
+  TProtoStringType* add_oneofs(); 
+  void add_oneofs(const TProtoStringType& value); 
   void add_oneofs(TProtoStringType&& value);
   void add_oneofs(const char* value);
   void add_oneofs(const char* value, size_t size);
@@ -663,12 +663,12 @@ class PROTOBUF_EXPORT Field final :
 
   // string name = 4;
   void clear_name();
-  const TProtoStringType& name() const;
+  const TProtoStringType& name() const; 
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_name();
+  TProtoStringType* mutable_name(); 
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_name();
-  void set_allocated_name(TProtoStringType* name);
+  void set_allocated_name(TProtoStringType* name); 
   private:
   const TProtoStringType& _internal_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_name(const TProtoStringType& value);
@@ -677,12 +677,12 @@ class PROTOBUF_EXPORT Field final :
 
   // string type_url = 6;
   void clear_type_url();
-  const TProtoStringType& type_url() const;
+  const TProtoStringType& type_url() const; 
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_type_url(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_type_url();
+  TProtoStringType* mutable_type_url(); 
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_type_url();
-  void set_allocated_type_url(TProtoStringType* type_url);
+  void set_allocated_type_url(TProtoStringType* type_url); 
   private:
   const TProtoStringType& _internal_type_url() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_type_url(const TProtoStringType& value);
@@ -691,12 +691,12 @@ class PROTOBUF_EXPORT Field final :
 
   // string json_name = 10;
   void clear_json_name();
-  const TProtoStringType& json_name() const;
+  const TProtoStringType& json_name() const; 
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_json_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_json_name();
+  TProtoStringType* mutable_json_name(); 
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_json_name();
-  void set_allocated_json_name(TProtoStringType* json_name);
+  void set_allocated_json_name(TProtoStringType* json_name); 
   private:
   const TProtoStringType& _internal_json_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_json_name(const TProtoStringType& value);
@@ -705,12 +705,12 @@ class PROTOBUF_EXPORT Field final :
 
   // string default_value = 11;
   void clear_default_value();
-  const TProtoStringType& default_value() const;
+  const TProtoStringType& default_value() const; 
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_default_value(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_default_value();
+  TProtoStringType* mutable_default_value(); 
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_default_value();
-  void set_allocated_default_value(TProtoStringType* default_value);
+  void set_allocated_default_value(TProtoStringType* default_value); 
   private:
   const TProtoStringType& _internal_default_value() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_default_value(const TProtoStringType& value);
@@ -1138,12 +1138,12 @@ class PROTOBUF_EXPORT EnumValue final :
 
   // string name = 1;
   void clear_name();
-  const TProtoStringType& name() const;
+  const TProtoStringType& name() const; 
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_name();
+  TProtoStringType* mutable_name(); 
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_name();
-  void set_allocated_name(TProtoStringType* name);
+  void set_allocated_name(TProtoStringType* name); 
   private:
   const TProtoStringType& _internal_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_name(const TProtoStringType& value);
@@ -1294,12 +1294,12 @@ class PROTOBUF_EXPORT Option final :
   };
   // string name = 1;
   void clear_name();
-  const TProtoStringType& name() const;
+  const TProtoStringType& name() const; 
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_name();
+  TProtoStringType* mutable_name(); 
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_name();
-  void set_allocated_name(TProtoStringType* name);
+  void set_allocated_name(TProtoStringType* name); 
   private:
   const TProtoStringType& _internal_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_name(const TProtoStringType& value);
@@ -1351,7 +1351,7 @@ class PROTOBUF_EXPORT Option final :
 inline void Type::clear_name() {
   name_.ClearToEmpty();
 }
-inline const TProtoStringType& Type::name() const {
+inline const TProtoStringType& Type::name() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Type.name)
   return _internal_name();
 }
@@ -1378,11 +1378,11 @@ inline TProtoStringType* Type::_internal_mutable_name() {
   
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Type::release_name() {
+inline TProtoStringType* Type::release_name() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Type.name)
   return name_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Type::set_allocated_name(TProtoStringType* name) {
+inline void Type::set_allocated_name(TProtoStringType* name) { 
   if (name != nullptr) {
     
   } else {
@@ -1451,15 +1451,15 @@ inline TProtoStringType* Type::add_oneofs() {
 inline const TProtoStringType& Type::_internal_oneofs(int index) const {
   return oneofs_.Get(index);
 }
-inline const TProtoStringType& Type::oneofs(int index) const {
+inline const TProtoStringType& Type::oneofs(int index) const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Type.oneofs)
   return _internal_oneofs(index);
 }
-inline TProtoStringType* Type::mutable_oneofs(int index) {
+inline TProtoStringType* Type::mutable_oneofs(int index) { 
   // @@protoc_insertion_point(field_mutable:google.protobuf.Type.oneofs)
   return oneofs_.Mutable(index);
 }
-inline void Type::set_oneofs(int index, const TProtoStringType& value) {
+inline void Type::set_oneofs(int index, const TProtoStringType& value) { 
   oneofs_.Mutable(index)->assign(value);
   // @@protoc_insertion_point(field_set:google.protobuf.Type.oneofs)
 }
@@ -1480,7 +1480,7 @@ inline void Type::set_oneofs(int index, const char* value, size_t size) {
 inline TProtoStringType* Type::_internal_add_oneofs() {
   return oneofs_.Add();
 }
-inline void Type::add_oneofs(const TProtoStringType& value) {
+inline void Type::add_oneofs(const TProtoStringType& value) { 
   oneofs_.Add()->assign(value);
   // @@protoc_insertion_point(field_add:google.protobuf.Type.oneofs)
 }
@@ -1722,7 +1722,7 @@ inline void Field::set_number(::PROTOBUF_NAMESPACE_ID::int32 value) {
 inline void Field::clear_name() {
   name_.ClearToEmpty();
 }
-inline const TProtoStringType& Field::name() const {
+inline const TProtoStringType& Field::name() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Field.name)
   return _internal_name();
 }
@@ -1749,11 +1749,11 @@ inline TProtoStringType* Field::_internal_mutable_name() {
   
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Field::release_name() {
+inline TProtoStringType* Field::release_name() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Field.name)
   return name_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Field::set_allocated_name(TProtoStringType* name) {
+inline void Field::set_allocated_name(TProtoStringType* name) { 
   if (name != nullptr) {
     
   } else {
@@ -1768,7 +1768,7 @@ inline void Field::set_allocated_name(TProtoStringType* name) {
 inline void Field::clear_type_url() {
   type_url_.ClearToEmpty();
 }
-inline const TProtoStringType& Field::type_url() const {
+inline const TProtoStringType& Field::type_url() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Field.type_url)
   return _internal_type_url();
 }
@@ -1795,11 +1795,11 @@ inline TProtoStringType* Field::_internal_mutable_type_url() {
   
   return type_url_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Field::release_type_url() {
+inline TProtoStringType* Field::release_type_url() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Field.type_url)
   return type_url_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Field::set_allocated_type_url(TProtoStringType* type_url) {
+inline void Field::set_allocated_type_url(TProtoStringType* type_url) { 
   if (type_url != nullptr) {
     
   } else {
@@ -1894,7 +1894,7 @@ Field::options() const {
 inline void Field::clear_json_name() {
   json_name_.ClearToEmpty();
 }
-inline const TProtoStringType& Field::json_name() const {
+inline const TProtoStringType& Field::json_name() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Field.json_name)
   return _internal_json_name();
 }
@@ -1921,11 +1921,11 @@ inline TProtoStringType* Field::_internal_mutable_json_name() {
   
   return json_name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Field::release_json_name() {
+inline TProtoStringType* Field::release_json_name() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Field.json_name)
   return json_name_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Field::set_allocated_json_name(TProtoStringType* json_name) {
+inline void Field::set_allocated_json_name(TProtoStringType* json_name) { 
   if (json_name != nullptr) {
     
   } else {
@@ -1940,7 +1940,7 @@ inline void Field::set_allocated_json_name(TProtoStringType* json_name) {
 inline void Field::clear_default_value() {
   default_value_.ClearToEmpty();
 }
-inline const TProtoStringType& Field::default_value() const {
+inline const TProtoStringType& Field::default_value() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Field.default_value)
   return _internal_default_value();
 }
@@ -1967,11 +1967,11 @@ inline TProtoStringType* Field::_internal_mutable_default_value() {
   
   return default_value_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Field::release_default_value() {
+inline TProtoStringType* Field::release_default_value() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Field.default_value)
   return default_value_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Field::set_allocated_default_value(TProtoStringType* default_value) {
+inline void Field::set_allocated_default_value(TProtoStringType* default_value) { 
   if (default_value != nullptr) {
     
   } else {
@@ -1990,7 +1990,7 @@ inline void Field::set_allocated_default_value(TProtoStringType* default_value) 
 inline void Enum::clear_name() {
   name_.ClearToEmpty();
 }
-inline const TProtoStringType& Enum::name() const {
+inline const TProtoStringType& Enum::name() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Enum.name)
   return _internal_name();
 }
@@ -2017,11 +2017,11 @@ inline TProtoStringType* Enum::_internal_mutable_name() {
   
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Enum::release_name() {
+inline TProtoStringType* Enum::release_name() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Enum.name)
   return name_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Enum::set_allocated_name(TProtoStringType* name) {
+inline void Enum::set_allocated_name(TProtoStringType* name) { 
   if (name != nullptr) {
     
   } else {
@@ -2226,7 +2226,7 @@ inline void Enum::set_syntax(PROTOBUF_NAMESPACE_ID::Syntax value) {
 inline void EnumValue::clear_name() {
   name_.ClearToEmpty();
 }
-inline const TProtoStringType& EnumValue::name() const {
+inline const TProtoStringType& EnumValue::name() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.EnumValue.name)
   return _internal_name();
 }
@@ -2253,11 +2253,11 @@ inline TProtoStringType* EnumValue::_internal_mutable_name() {
   
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* EnumValue::release_name() {
+inline TProtoStringType* EnumValue::release_name() { 
   // @@protoc_insertion_point(field_release:google.protobuf.EnumValue.name)
   return name_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void EnumValue::set_allocated_name(TProtoStringType* name) {
+inline void EnumValue::set_allocated_name(TProtoStringType* name) { 
   if (name != nullptr) {
     
   } else {
@@ -2336,7 +2336,7 @@ EnumValue::options() const {
 inline void Option::clear_name() {
   name_.ClearToEmpty();
 }
-inline const TProtoStringType& Option::name() const {
+inline const TProtoStringType& Option::name() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Option.name)
   return _internal_name();
 }
@@ -2363,11 +2363,11 @@ inline TProtoStringType* Option::_internal_mutable_name() {
   
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Option::release_name() {
+inline TProtoStringType* Option::release_name() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Option.name)
   return name_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Option::set_allocated_name(TProtoStringType* name) {
+inline void Option::set_allocated_name(TProtoStringType* name) { 
   if (name != nullptr) {
     
   } else {

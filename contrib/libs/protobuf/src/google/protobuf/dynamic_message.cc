@@ -567,7 +567,7 @@ DynamicMessage::~DynamicMessage() {
       switch (field->options().ctype()) {
         default:  // TODO(kenton):  Support other string reps.
         case FieldOptions::STRING: {
-          const TProtoStringType* default_value =
+          const TProtoStringType* default_value = 
               reinterpret_cast<const ArenaStringPtr*>(
                   type_info_->prototype->OffsetToPointer(
                       type_info_->offsets[i]))

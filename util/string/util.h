@@ -182,14 +182,14 @@ private:
 };
 
 // Removes all occurrences of given character from string
-template <typename TStringType>
-void RemoveAll(TStringType& str, typename TStringType::char_type ch) {
+template <typename TStringType> 
+void RemoveAll(TStringType& str, typename TStringType::char_type ch) { 
     size_t pos = str.find(ch); // 'find' to avoid cloning of string in 'TString.begin()'
-    if (pos == TStringType::npos)
+    if (pos == TStringType::npos) 
         return;
 
-    typename TStringType::iterator begin = str.begin();
-    typename TStringType::iterator end = begin + str.length();
-    typename TStringType::iterator it = std::remove(begin + pos, end, ch);
+    typename TStringType::iterator begin = str.begin(); 
+    typename TStringType::iterator end = begin + str.length(); 
+    typename TStringType::iterator it = std::remove(begin + pos, end, ch); 
     str.erase(it, end);
 }

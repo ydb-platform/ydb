@@ -94,7 +94,7 @@ class Context {
   void InitializeFieldGeneratorInfo(const FileDescriptor* file);
   void InitializeFieldGeneratorInfoForMessage(const Descriptor* message);
   void InitializeFieldGeneratorInfoForFields(
-      const std::vector<const FieldDescriptor*>& fields);
+      const std::vector<const FieldDescriptor*>& fields); 
 
   std::unique_ptr<ClassNameResolver> name_resolver_;
   std::map<const FieldDescriptor*, FieldGeneratorInfo>

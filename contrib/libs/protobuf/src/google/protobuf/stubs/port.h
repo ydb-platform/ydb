@@ -134,13 +134,13 @@ typedef unsigned int uint;
 
 typedef int8_t int8;
 typedef int16_t int16;
-typedef i32 int32;
-typedef i64 int64;
+typedef i32 int32; 
+typedef i64 int64; 
 
 typedef uint8_t uint8;
 typedef uint16_t uint16;
-typedef ui32 uint32;
-typedef ui64 uint64;
+typedef ui32 uint32; 
+typedef ui64 uint64; 
 
 static const int32 kint32max = 0x7FFFFFFF;
 static const int32 kint32min = -kint32max - 1;

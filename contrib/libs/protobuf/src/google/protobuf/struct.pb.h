@@ -446,12 +446,12 @@ class PROTOBUF_EXPORT Value final :
   bool _internal_has_string_value() const;
   public:
   void clear_string_value();
-  const TProtoStringType& string_value() const;
+  const TProtoStringType& string_value() const; 
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_string_value(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_string_value();
+  TProtoStringType* mutable_string_value(); 
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_string_value();
-  void set_allocated_string_value(TProtoStringType* string_value);
+  void set_allocated_string_value(TProtoStringType* string_value); 
   private:
   const TProtoStringType& _internal_string_value() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_string_value(const TProtoStringType& value);
@@ -826,7 +826,7 @@ inline void Value::clear_string_value() {
     clear_has_kind();
   }
 }
-inline const TProtoStringType& Value::string_value() const {
+inline const TProtoStringType& Value::string_value() const { 
   // @@protoc_insertion_point(field_get:google.protobuf.Value.string_value)
   return _internal_string_value();
 }
@@ -868,7 +868,7 @@ inline TProtoStringType* Value::_internal_mutable_string_value() {
   return kind_.string_value_.Mutable(
       ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Value::release_string_value() {
+inline TProtoStringType* Value::release_string_value() { 
   // @@protoc_insertion_point(field_release:google.protobuf.Value.string_value)
   if (_internal_has_string_value()) {
     clear_has_kind();
@@ -877,7 +877,7 @@ inline TProtoStringType* Value::release_string_value() {
     return nullptr;
   }
 }
-inline void Value::set_allocated_string_value(TProtoStringType* string_value) {
+inline void Value::set_allocated_string_value(TProtoStringType* string_value) { 
   if (has_kind()) {
     clear_kind();
   }

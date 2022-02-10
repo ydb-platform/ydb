@@ -109,8 +109,8 @@ struct TAddEscaped {
 void TCgiParameters::Scan(const TStringBuf query, bool form) {
     Flush();
     form ? ScanAdd(query) : ScanAddAll(query);
-}
-
+} 
+ 
 void TCgiParameters::ScanAdd(const TStringBuf query) {
     TAddEscaped f = {this};
 

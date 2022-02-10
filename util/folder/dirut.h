@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <util/system/defaults.h>
 #include <util/system/sysstat.h>
 #include <util/system/fs.h>
@@ -36,7 +36,7 @@ char* mkdtemp(char* path);
         #include <sys/stat.h>
     #endif
 #endif
-
+ 
 bool IsDir(const TString& path);
 
 int mkpath(char* path, int mode = 0777);

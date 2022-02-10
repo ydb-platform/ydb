@@ -8,7 +8,7 @@
 #include <contrib/libs/base64/ssse3/libbase64.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <util/generic/vector.h>
 #include <util/random/fast.h>
 #include <util/system/cpu_id.h>
@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(TBase64) {
         UNIT_ASSERT_VALUES_EQUAL(Base64Encode("12"), "MTI=");
         UNIT_ASSERT_VALUES_EQUAL(Base64Encode("1"), "MQ==");
     }
-
+ 
     Y_UNIT_TEST(TestIntoString) {
         {
             TString str;

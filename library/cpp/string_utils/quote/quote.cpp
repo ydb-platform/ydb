@@ -72,45 +72,45 @@ static inline const char* FixZero(const char* s) noexcept {
     return s ? s : "";
 }
 
-// we escape:
+// we escape: 
 // '\"', '|', '(', ')',
-// '%',  '&', '+', ',',
+// '%',  '&', '+', ',', 
 // '#',  '<', '=', '>',
-// '[',  '\\',']', '?',
+// '[',  '\\',']', '?', 
 //  ':', '{', '}',
-// all below ' ' (0x20) and above '~' (0x7E).
+// all below ' ' (0x20) and above '~' (0x7E). 
 // ' ' converted to '+'
-static const bool chars_to_url_escape[256] = {
+static const bool chars_to_url_escape[256] = { 
     //  0  1  2  3   4  5  6  7   8  9  A  B   C  D  E  F
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, //0
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, //1
     0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, //2
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, //3
-
+ 
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //4
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, //5
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //6
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, //7
-
+ 
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, //8
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, //9
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, //A
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, //B
-
+ 
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, //C
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, //D
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, //E
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, //F
-};
-
+}; 
+ 
 template <class It1, class It2, class It3>
 static inline It1 Escape(It1 to, It2 from, It3 end, const bool* escape_map = chars_to_url_escape) {
     while (from != end) {
         if (escape_map[(unsigned char)*from]) {
-            *to++ = '%';
+            *to++ = '%'; 
             *to++ = d2x((unsigned char)*from >> 4);
             *to++ = d2x((unsigned char)*from & 0xF);
-        } else {
+        } else { 
             *to++ = (*from == ' ' ? '+' : *from);
         }
 
@@ -121,7 +121,7 @@ static inline It1 Escape(It1 to, It2 from, It3 end, const bool* escape_map = cha
 
     return to;
 }
-
+ 
 template <class It1, class It2, class It3, class FromHex>
 static inline It1 Unescape(It1 to, It2 from, It3 end, FromHex fromHex) {
     (void)fromHex;

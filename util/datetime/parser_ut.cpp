@@ -1,7 +1,7 @@
 #include "parser.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 static const time_t SECONDS_PER_HOUR = 3600;
 static const time_t SECONDS_PER_MINUTE = 60;
 
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         r = ParseRFC822DateTime("Fri, 4 Mar 2005 19:34:45 +0300", t);
         UNIT_ASSERT(r);
         UNIT_ASSERT_EQUAL(t, (time_t)1109954085);
-
+ 
         r = ParseRFC822DateTime("Fri, 4 Mar 05 19:34:45 +0300", t);
         UNIT_ASSERT(r);
         UNIT_ASSERT_EQUAL(t, (time_t)1109954085);
@@ -126,8 +126,8 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         r = ParseRFC822DateTime("Sat, 14 Feb 2009 02:31:30 +0300", t); // spaces with tabs
         UNIT_ASSERT(r);
         UNIT_ASSERT_EQUAL(t, (time_t)1234567890);
-    }
-
+    } 
+ 
     time_t GetOffset(char militaryZone) {
         char ch = (char)toupper(militaryZone);
         if (ch == 'Z') {
@@ -184,15 +184,15 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         r = ParseRFC822DateTime("Fri, 4 Mar 2005 19:34:45 UTC", t);
         UNIT_ASSERT(!r);
         UNIT_ASSERT_EQUAL(t, (time_t)54321);
-
-        // TODO: check semantic validity of parsed date (30 Feb, 88:90 etc.).
-        // The following tests MUST fail (they don't now)
+ 
+        // TODO: check semantic validity of parsed date (30 Feb, 88:90 etc.). 
+        // The following tests MUST fail (they don't now) 
         // r = ParseRFC822DateTime("45 Mar 2005 19:34:45 UT", t);
         // UNIT_ASSERT_EQUAL(r, false);
-
+ 
         // r = ParseRFC822DateTime("29 Feb 2005 19:34:45 +0300", t);
         // UNIT_ASSERT_EQUAL(r, false);
-
+ 
         // r = ParseRFC822DateTime("31 Apr 2004 19:34:45 +0300", t);
         // UNIT_ASSERT_EQUAL(r, false);
 
@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         UNIT_ASSERT(!r);
         r = ParseRFC822DateTime("Mon, 17 Nov 2008 19:34:45 -03030", t);
         UNIT_ASSERT(!r);
-    }
+    } 
 
     Y_UNIT_TEST(TestRfc822Partial) {
         TRfc822DateTimeParser p;
@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         UNIT_ASSERT(p.ParsePart(part3, strlen(part3)));
         UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(1109954086), p.GetResult(TInstant::Zero()));
     }
-
+ 
     Y_UNIT_TEST(TestIso8601Partial) {
         TIso8601DateTimeParser p;
         const char* part1 = "1990-03-15T15:1";

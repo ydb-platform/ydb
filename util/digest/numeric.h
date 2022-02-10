@@ -18,7 +18,7 @@ static constexpr ui8 IntHashImpl(ui8 key8) noexcept {
     key += ~(key << 11);
     key ^= (key >> 16);
 
-    return static_cast<ui8>(key);
+    return static_cast<ui8>(key); 
 }
 
 static constexpr ui16 IntHashImpl(ui16 key16) noexcept {
@@ -31,7 +31,7 @@ static constexpr ui16 IntHashImpl(ui16 key16) noexcept {
     key += ~(key << 11);
     key ^= (key >> 16);
 
-    return static_cast<ui16>(key);
+    return static_cast<ui16>(key); 
 }
 
 static constexpr ui32 IntHashImpl(ui32 key) noexcept {
@@ -55,7 +55,7 @@ static constexpr ui64 IntHashImpl(ui64 key) noexcept {
     key += ~(key << 27);
     key ^= (key >> 31);
 
-    return key;
+    return key; 
 }
 
 template <class T>

@@ -440,11 +440,11 @@ namespace NXml {
         */
         bool IsText() const;
 
-        /** 
-        * unlink node from parent and free 
-        */ 
-        void Remove(); 
- 
+        /**
+        * unlink node from parent and free
+        */
+        void Remove();
+
         /**
         * constructs null node
         */

@@ -300,12 +300,12 @@ namespace NXml {
         return NodePointer->type == XML_TEXT_NODE;
     }
 
-    void TNode::Remove() { 
-        xmlNode* nodePtr = GetPtr(); 
-        xmlUnlinkNode(nodePtr); 
-        xmlFreeNode(nodePtr); 
-    } 
- 
+    void TNode::Remove() {
+        xmlNode* nodePtr = GetPtr();
+        xmlUnlinkNode(nodePtr);
+        xmlFreeNode(nodePtr);
+    }
+
     static int XmlWriteToOstream(void* context, const char* buffer, int len) {
         // possibly use to save doc as well
         IOutputStream* out = (IOutputStream*)context;

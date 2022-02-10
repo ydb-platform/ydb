@@ -16,7 +16,7 @@
 
 #include <windows.h>
 #include <atomic>
-#include "y_absl/base/internal/scheduling_mode.h" 
+#include "y_absl/base/internal/scheduling_mode.h"
 
 extern "C" {
 
@@ -27,7 +27,7 @@ void ABSL_INTERNAL_C_SYMBOL(AbslInternalSpinLockDelay)(
   } else if (loop == 1) {
     Sleep(0);
   } else {
-    Sleep(y_absl::base_internal::SpinLockSuggestedDelayNS(loop) / 1000000); 
+    Sleep(y_absl::base_internal::SpinLockSuggestedDelayNS(loop) / 1000000);
   }
 }
 

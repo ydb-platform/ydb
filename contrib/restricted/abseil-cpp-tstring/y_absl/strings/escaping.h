@@ -27,12 +27,12 @@
 #include <util/generic/string.h>
 #include <vector>
 
-#include "y_absl/base/macros.h" 
-#include "y_absl/strings/ascii.h" 
-#include "y_absl/strings/str_join.h" 
-#include "y_absl/strings/string_view.h" 
+#include "y_absl/base/macros.h"
+#include "y_absl/strings/ascii.h"
+#include "y_absl/strings/str_join.h"
+#include "y_absl/strings/string_view.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // CUnescape()
@@ -63,16 +63,16 @@ ABSL_NAMESPACE_BEGIN
 //
 // Example:
 //
-//   TString s = "foo\\rbar\\nbaz\\t"; 
-//   TString unescaped_s; 
-//   if (!y_absl::CUnescape(s, &unescaped_s) { 
+//   TString s = "foo\\rbar\\nbaz\\t";
+//   TString unescaped_s;
+//   if (!y_absl::CUnescape(s, &unescaped_s) {
 //     ...
 //   }
 //   EXPECT_EQ(unescaped_s, "foo\rbar\nbaz\t");
-bool CUnescape(y_absl::string_view source, TString* dest, TString* error); 
+bool CUnescape(y_absl::string_view source, TString* dest, TString* error);
 
 // Overload of `CUnescape()` with no error reporting.
-inline bool CUnescape(y_absl::string_view source, TString* dest) { 
+inline bool CUnescape(y_absl::string_view source, TString* dest) {
   return CUnescape(source, dest, nullptr);
 }
 
@@ -84,10 +84,10 @@ inline bool CUnescape(y_absl::string_view source, TString* dest) {
 //
 // Example:
 //
-//   TString s = "foo\rbar\tbaz\010\011\012\013\014\x0d\n"; 
-//   TString escaped_s = y_absl::CEscape(s); 
+//   TString s = "foo\rbar\tbaz\010\011\012\013\014\x0d\n";
+//   TString escaped_s = y_absl::CEscape(s);
 //   EXPECT_EQ(escaped_s, "foo\\rbar\\tbaz\\010\\t\\n\\013\\014\\r\\n");
-TString CEscape(y_absl::string_view src); 
+TString CEscape(y_absl::string_view src);
 
 // CHexEscape()
 //
@@ -97,10 +97,10 @@ TString CEscape(y_absl::string_view src);
 //
 // Example:
 //
-//   TString s = "foo\rbar\tbaz\010\011\012\013\014\x0d\n"; 
-//   TString escaped_s = y_absl::CHexEscape(s); 
+//   TString s = "foo\rbar\tbaz\010\011\012\013\014\x0d\n";
+//   TString escaped_s = y_absl::CHexEscape(s);
 //   EXPECT_EQ(escaped_s, "foo\\rbar\\tbaz\\x08\\t\\n\\x0b\\x0c\\r\\n");
-TString CHexEscape(y_absl::string_view src); 
+TString CHexEscape(y_absl::string_view src);
 
 // Utf8SafeCEscape()
 //
@@ -108,57 +108,57 @@ TString CHexEscape(y_absl::string_view src);
 // octal sequences, and passing through UTF-8 characters without conversion.
 // I.e., when encountering any bytes with their high bit set, this function
 // will not escape those values, whether or not they are valid UTF-8.
-TString Utf8SafeCEscape(y_absl::string_view src); 
+TString Utf8SafeCEscape(y_absl::string_view src);
 
 // Utf8SafeCHexEscape()
 //
 // Escapes a 'src' string using C-style escape sequences, escaping bytes as
 // hexadecimal sequences, and passing through UTF-8 characters without
 // conversion.
-TString Utf8SafeCHexEscape(y_absl::string_view src); 
+TString Utf8SafeCHexEscape(y_absl::string_view src);
 
 // Base64Unescape()
 //
 // Converts a `src` string encoded in Base64 to its binary equivalent, writing
 // it to a `dest` buffer, returning `true` on success. If `src` contains invalid
 // characters, `dest` is cleared and returns `false`.
-bool Base64Unescape(y_absl::string_view src, TString* dest); 
+bool Base64Unescape(y_absl::string_view src, TString* dest);
 
 // WebSafeBase64Unescape()
 //
 // Converts a `src` string encoded in Base64 to its binary equivalent, writing
 // it to a `dest` buffer, but using '-' instead of '+', and '_' instead of '/'.
 // If `src` contains invalid characters, `dest` is cleared and returns `false`.
-bool WebSafeBase64Unescape(y_absl::string_view src, TString* dest); 
+bool WebSafeBase64Unescape(y_absl::string_view src, TString* dest);
 
 // Base64Escape()
 //
 // Encodes a `src` string into a base64-encoded string, with padding characters.
 // This function conforms with RFC 4648 section 4 (base64).
-void Base64Escape(y_absl::string_view src, TString* dest); 
-TString Base64Escape(y_absl::string_view src); 
+void Base64Escape(y_absl::string_view src, TString* dest);
+TString Base64Escape(y_absl::string_view src);
 
 // WebSafeBase64Escape()
 //
 // Encodes a `src` string into a base64-like string, using '-' instead of '+'
 // and '_' instead of '/', and without padding. This function conforms with RFC
 // 4648 section 5 (base64url).
-void WebSafeBase64Escape(y_absl::string_view src, TString* dest); 
-TString WebSafeBase64Escape(y_absl::string_view src); 
+void WebSafeBase64Escape(y_absl::string_view src, TString* dest);
+TString WebSafeBase64Escape(y_absl::string_view src);
 
 // HexStringToBytes()
 //
 // Converts an ASCII hex string into bytes, returning binary data of length
 // `from.size()/2`.
-TString HexStringToBytes(y_absl::string_view from); 
+TString HexStringToBytes(y_absl::string_view from);
 
 // BytesToHexString()
 //
 // Converts binary data into an ASCII text string, returning a string of size
 // `2*from.size()`.
-TString BytesToHexString(y_absl::string_view from); 
+TString BytesToHexString(y_absl::string_view from);
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_STRINGS_ESCAPING_H_

@@ -24,7 +24,7 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/hash/internal) 
+SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/hash/internal)
 
 SRCS(
     city.cc

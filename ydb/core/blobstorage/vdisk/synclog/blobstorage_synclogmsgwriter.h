@@ -100,7 +100,7 @@ namespace NKikimr {
                         Records.BlocksV2.emplace_back(*hdr->GetBlockV2(), Counter);
                         break;
                     default:
-                        Y_FAIL("Unexpected RecType# %" PRIu64, (ui64)hdr->RecType); 
+                        Y_FAIL("Unexpected RecType# %" PRIu64, (ui64)hdr->RecType);
                 }
                 DataSize += size;
                 ++Counter;

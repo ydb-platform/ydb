@@ -50,107 +50,107 @@ private:
                   "Instantiation of TMaybe with non-destructible type is ill-formed");
 
     template <class U>
-    struct TConstructibleFromMaybeSomehow { 
-    public: 
-        static constexpr bool value = std::is_constructible<T, TMaybe<U, Policy>&>::value || 
-                                      std::is_constructible<T, const TMaybe<U, Policy>&>::value || 
-                                      std::is_constructible<T, TMaybe<U, Policy>&&>::value || 
-                                      std::is_constructible<T, const TMaybe<U, Policy>&&>::value || 
-                                      std::is_convertible<TMaybe<U, Policy>&, T>::value || 
-                                      std::is_convertible<const TMaybe<U, Policy>&, T>::value || 
-                                      std::is_convertible<TMaybe<U, Policy>&&, T>::value || 
-                                      std::is_convertible<const TMaybe<U, Policy>&&, T>::value; 
-    }; 
+    struct TConstructibleFromMaybeSomehow {
+    public:
+        static constexpr bool value = std::is_constructible<T, TMaybe<U, Policy>&>::value ||
+                                      std::is_constructible<T, const TMaybe<U, Policy>&>::value ||
+                                      std::is_constructible<T, TMaybe<U, Policy>&&>::value ||
+                                      std::is_constructible<T, const TMaybe<U, Policy>&&>::value ||
+                                      std::is_convertible<TMaybe<U, Policy>&, T>::value ||
+                                      std::is_convertible<const TMaybe<U, Policy>&, T>::value ||
+                                      std::is_convertible<TMaybe<U, Policy>&&, T>::value ||
+                                      std::is_convertible<const TMaybe<U, Policy>&&, T>::value;
+    };
 
     template <class U>
-    struct TAssignableFromMaybeSomehow { 
-    public: 
-        static constexpr bool value = TConstructibleFromMaybeSomehow<U>::value || 
-                                      std::is_assignable<T&, TMaybe<U, Policy>&>::value || 
-                                      std::is_assignable<T&, const TMaybe<U, Policy>&>::value || 
-                                      std::is_assignable<T&, TMaybe<U, Policy>&&>::value || 
-                                      std::is_assignable<T&, const TMaybe<U, Policy>&&>::value; 
-    }; 
+    struct TAssignableFromMaybeSomehow {
+    public:
+        static constexpr bool value = TConstructibleFromMaybeSomehow<U>::value ||
+                                      std::is_assignable<T&, TMaybe<U, Policy>&>::value ||
+                                      std::is_assignable<T&, const TMaybe<U, Policy>&>::value ||
+                                      std::is_assignable<T&, TMaybe<U, Policy>&&>::value ||
+                                      std::is_assignable<T&, const TMaybe<U, Policy>&&>::value;
+    };
 
     template <class U>
-    struct TImplicitCopyCtor { 
-    public: 
-        static constexpr bool value = std::is_constructible<T, const U&>::value && 
-                                      std::is_convertible<const U&, T>::value && 
-                                      !TConstructibleFromMaybeSomehow<U>::value; 
-    }; 
+    struct TImplicitCopyCtor {
+    public:
+        static constexpr bool value = std::is_constructible<T, const U&>::value &&
+                                      std::is_convertible<const U&, T>::value &&
+                                      !TConstructibleFromMaybeSomehow<U>::value;
+    };
 
     template <class U>
-    struct TExplicitCopyCtor { 
-    public: 
-        static constexpr bool value = std::is_constructible<T, const U&>::value && 
-                                      !std::is_convertible<const U&, T>::value && 
-                                      !TConstructibleFromMaybeSomehow<U>::value; 
-    }; 
+    struct TExplicitCopyCtor {
+    public:
+        static constexpr bool value = std::is_constructible<T, const U&>::value &&
+                                      !std::is_convertible<const U&, T>::value &&
+                                      !TConstructibleFromMaybeSomehow<U>::value;
+    };
 
     template <class U>
-    struct TImplicitMoveCtor { 
-    public: 
-        static constexpr bool value = std::is_constructible<T, U&&>::value && 
-                                      std::is_convertible<U&&, T>::value && 
-                                      !TConstructibleFromMaybeSomehow<U>::value; 
-    }; 
+    struct TImplicitMoveCtor {
+    public:
+        static constexpr bool value = std::is_constructible<T, U&&>::value &&
+                                      std::is_convertible<U&&, T>::value &&
+                                      !TConstructibleFromMaybeSomehow<U>::value;
+    };
 
     template <class U>
-    struct TExplicitMoveCtor { 
-    public: 
-        static constexpr bool value = std::is_constructible<T, U&&>::value && 
-                                      !std::is_convertible<U&&, T>::value && 
-                                      !TConstructibleFromMaybeSomehow<U>::value; 
-    }; 
+    struct TExplicitMoveCtor {
+    public:
+        static constexpr bool value = std::is_constructible<T, U&&>::value &&
+                                      !std::is_convertible<U&&, T>::value &&
+                                      !TConstructibleFromMaybeSomehow<U>::value;
+    };
 
     template <class U>
-    struct TCopyAssignable { 
-    public: 
-        static constexpr bool value = std::is_constructible<T, const U&>::value && 
-                                      std::is_assignable<T&, const U&>::value && 
-                                      !TAssignableFromMaybeSomehow<U>::value; 
-    }; 
+    struct TCopyAssignable {
+    public:
+        static constexpr bool value = std::is_constructible<T, const U&>::value &&
+                                      std::is_assignable<T&, const U&>::value &&
+                                      !TAssignableFromMaybeSomehow<U>::value;
+    };
 
     template <class U>
-    struct TMoveAssignable { 
-    public: 
+    struct TMoveAssignable {
+    public:
         static constexpr bool value = std::is_constructible<T, U&&>::value &&
                                       std::is_assignable<T&, U&&>::value &&
                                       !TAssignableFromMaybeSomehow<U>::value;
-    }; 
-
-    template <class U> 
-    struct TImplicitAnyCtor { 
-    public: 
-        using UDec = std::decay_t<U>; 
-
-        static constexpr bool value = std::is_constructible<T, U>::value && 
-                                      std::is_convertible<U, T>::value && 
-                                      !std::is_same<UDec, TInPlace>::value && 
-                                      !std::is_same<UDec, TMaybe>::value; 
-    }; 
+    };
 
     template <class U>
-    struct TExplicitAnyCtor { 
-    public: 
-        using UDec = std::decay_t<U>; 
-        static constexpr bool value = std::is_constructible<T, U>::value && 
-                                      !std::is_convertible<U, T>::value && 
-                                      !std::is_same<UDec, TInPlace>::value && 
-                                      !std::is_same<UDec, TMaybe>::value; 
-    }; 
+    struct TImplicitAnyCtor {
+    public:
+        using UDec = std::decay_t<U>;
 
-    template <class U> 
-    struct TAssignableFromAny { 
-    public: 
-        using UDec = std::decay_t<U>; 
-        static constexpr bool value = !std::is_same<UDec, TMaybe>::value && 
-                                      std::is_constructible<T, U>::value && 
-                                      std::is_assignable<T&, U>::value && 
-                                      (!std::is_scalar<T>::value || !std::is_same<UDec, T>::value); 
-    }; 
- 
+        static constexpr bool value = std::is_constructible<T, U>::value &&
+                                      std::is_convertible<U, T>::value &&
+                                      !std::is_same<UDec, TInPlace>::value &&
+                                      !std::is_same<UDec, TMaybe>::value;
+    };
+
+    template <class U>
+    struct TExplicitAnyCtor {
+    public:
+        using UDec = std::decay_t<U>;
+        static constexpr bool value = std::is_constructible<T, U>::value &&
+                                      !std::is_convertible<U, T>::value &&
+                                      !std::is_same<UDec, TInPlace>::value &&
+                                      !std::is_same<UDec, TMaybe>::value;
+    };
+
+    template <class U>
+    struct TAssignableFromAny {
+    public:
+        using UDec = std::decay_t<U>;
+        static constexpr bool value = !std::is_same<UDec, TMaybe>::value &&
+                                      std::is_constructible<T, U>::value &&
+                                      std::is_assignable<T&, U>::value &&
+                                      (!std::is_scalar<T>::value || !std::is_same<UDec, T>::value);
+    };
+
     using TBase = TMaybeBase<T>;
 
 public:

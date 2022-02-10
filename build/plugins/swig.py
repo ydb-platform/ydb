@@ -1,5 +1,5 @@
 import os
-import posixpath 
+import posixpath
 import re
 
 import _import_wrapper as iw
@@ -12,10 +12,10 @@ def init():
 
 class Swig(iw.CustomCommand):
     def __init__(self, path, unit):
-        self._tool = unit.get('SWIG_TOOL') 
-        self._library_dir = unit.get('SWIG_LIBRARY') or 'contrib/tools/swig/Lib' 
-        self._local_swig = unit.get('USE_LOCAL_SWIG') == "yes" 
- 
+        self._tool = unit.get('SWIG_TOOL')
+        self._library_dir = unit.get('SWIG_LIBRARY') or 'contrib/tools/swig/Lib'
+        self._local_swig = unit.get('USE_LOCAL_SWIG') == "yes"
+
         self._path = path
         self._flags = ['-cpperraswarn']
 
@@ -44,17 +44,17 @@ class Swig(iw.CustomCommand):
             lang_specific_incl_dir = 'java'
         incl_dirs = [
             "FOR", "swig",
-            posixpath.join(self._library_dir, lang_specific_incl_dir), 
+            posixpath.join(self._library_dir, lang_specific_incl_dir),
             "FOR", "swig",
-            self._library_dir 
+            self._library_dir
         ]
-        self._incl_dirs = ['$S', '$B'] + [posixpath.join('$S', d) for d in incl_dirs] 
+        self._incl_dirs = ['$S', '$B'] + [posixpath.join('$S', d) for d in incl_dirs]
 
         modname = unit.get('REALPRJNAME')
         self._flags.extend(['-module', modname])
 
-        if not self._local_swig: 
-            unit.onaddincl(incl_dirs) 
+        if not self._local_swig:
+            unit.onaddincl(incl_dirs)
 
         if self._swig_lang == 'python':
             self._out_name = modname + '.py'
@@ -83,7 +83,7 @@ class Swig(iw.CustomCommand):
         return self._flags
 
     def tools(self):
-        return ['contrib/tools/swig'] if not self._tool else [] 
+        return ['contrib/tools/swig'] if not self._tool else []
 
     def input(self):
         return [
@@ -105,8 +105,8 @@ class Swig(iw.CustomCommand):
         return [(self._out_header, [])] if self._swig_lang in ['java', 'jni_cpp'] else []
 
     def run(self, extra_args, binary):
-        if self._local_swig: 
-            binary = self._tool 
+        if self._local_swig:
+            binary = self._tool
         return self.do_run_java(binary, self._path) if self._swig_lang in ['java', 'jni_cpp', 'jni_java'] else self.do_run(binary, self._path)
 
     def _incl_flags(self):

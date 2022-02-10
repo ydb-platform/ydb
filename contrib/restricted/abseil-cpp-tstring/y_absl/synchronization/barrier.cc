@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/synchronization/barrier.h" 
+#include "y_absl/synchronization/barrier.h"
 
-#include "y_absl/base/internal/raw_logging.h" 
-#include "y_absl/synchronization/mutex.h" 
+#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/synchronization/mutex.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // Return whether int *arg is zero.
@@ -49,4 +49,4 @@ bool Barrier::Block() {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

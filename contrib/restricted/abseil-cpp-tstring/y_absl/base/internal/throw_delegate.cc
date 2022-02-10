@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/base/internal/throw_delegate.h" 
+#include "y_absl/base/internal/throw_delegate.h"
 
 #include <cstdlib>
 #include <functional>
 #include <new>
 #include <stdexcept>
 
-#include "y_absl/base/config.h" 
-#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/config.h"
+#include "y_absl/base/internal/raw_logging.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -39,7 +39,7 @@ template <typename T>
 #endif
 }  // namespace
 
-void ThrowStdLogicError(const TString& what_arg) { 
+void ThrowStdLogicError(const TString& what_arg) {
 #ifdef ABSL_HAVE_EXCEPTIONS
   Throw(std::logic_error(what_arg));
 #else
@@ -55,7 +55,7 @@ void ThrowStdLogicError(const char* what_arg) {
   std::abort();
 #endif
 }
-void ThrowStdInvalidArgument(const TString& what_arg) { 
+void ThrowStdInvalidArgument(const TString& what_arg) {
 #ifdef ABSL_HAVE_EXCEPTIONS
   Throw(std::invalid_argument(what_arg));
 #else
@@ -72,7 +72,7 @@ void ThrowStdInvalidArgument(const char* what_arg) {
 #endif
 }
 
-void ThrowStdDomainError(const TString& what_arg) { 
+void ThrowStdDomainError(const TString& what_arg) {
 #ifdef ABSL_HAVE_EXCEPTIONS
   Throw(std::domain_error(what_arg));
 #else
@@ -89,7 +89,7 @@ void ThrowStdDomainError(const char* what_arg) {
 #endif
 }
 
-void ThrowStdLengthError(const TString& what_arg) { 
+void ThrowStdLengthError(const TString& what_arg) {
 #ifdef ABSL_HAVE_EXCEPTIONS
   Throw(std::length_error(what_arg));
 #else
@@ -106,7 +106,7 @@ void ThrowStdLengthError(const char* what_arg) {
 #endif
 }
 
-void ThrowStdOutOfRange(const TString& what_arg) { 
+void ThrowStdOutOfRange(const TString& what_arg) {
 #ifdef ABSL_HAVE_EXCEPTIONS
   Throw(std::out_of_range(what_arg));
 #else
@@ -123,7 +123,7 @@ void ThrowStdOutOfRange(const char* what_arg) {
 #endif
 }
 
-void ThrowStdRuntimeError(const TString& what_arg) { 
+void ThrowStdRuntimeError(const TString& what_arg) {
 #ifdef ABSL_HAVE_EXCEPTIONS
   Throw(std::runtime_error(what_arg));
 #else
@@ -140,7 +140,7 @@ void ThrowStdRuntimeError(const char* what_arg) {
 #endif
 }
 
-void ThrowStdRangeError(const TString& what_arg) { 
+void ThrowStdRangeError(const TString& what_arg) {
 #ifdef ABSL_HAVE_EXCEPTIONS
   Throw(std::range_error(what_arg));
 #else
@@ -157,7 +157,7 @@ void ThrowStdRangeError(const char* what_arg) {
 #endif
 }
 
-void ThrowStdOverflowError(const TString& what_arg) { 
+void ThrowStdOverflowError(const TString& what_arg) {
 #ifdef ABSL_HAVE_EXCEPTIONS
   Throw(std::overflow_error(what_arg));
 #else
@@ -174,7 +174,7 @@ void ThrowStdOverflowError(const char* what_arg) {
 #endif
 }
 
-void ThrowStdUnderflowError(const TString& what_arg) { 
+void ThrowStdUnderflowError(const TString& what_arg) {
 #ifdef ABSL_HAVE_EXCEPTIONS
   Throw(std::underflow_error(what_arg));
 #else
@@ -209,4 +209,4 @@ void ThrowStdBadAlloc() {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

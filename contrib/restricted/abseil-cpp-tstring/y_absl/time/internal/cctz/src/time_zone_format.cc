@@ -25,7 +25,7 @@
 #endif
 
 #include "y_absl/base/config.h"
-#include "y_absl/time/internal/cctz/include/cctz/time_zone.h" 
+#include "y_absl/time/internal/cctz/include/cctz/time_zone.h"
 
 // Include time.h directly since, by C++ standards, ctime doesn't have to
 // declare strptime.
@@ -45,10 +45,10 @@
 #include <sstream>
 #endif
 
-#include "y_absl/time/internal/cctz/include/cctz/civil_time.h" 
+#include "y_absl/time/internal/cctz/include/cctz/civil_time.h"
 #include "time_zone_if.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -212,7 +212,7 @@ char* FormatOffset(char* ep, int offset, const char* mode) {
 }
 
 // Formats a std::tm using strftime(3).
-void FormatTM(TString* out, const TString& fmt, const std::tm& tm) { 
+void FormatTM(TString* out, const TString& fmt, const std::tm& tm) {
   // strftime(3) returns the number of characters placed in the output
   // array (which may be 0 characters).  It also returns 0 to indicate
   // an error, like the array wasn't large enough.  To accommodate this,
@@ -330,9 +330,9 @@ const std::int_fast64_t kExp10[kDigits10_64 + 1] = {
 // not support the tm_gmtoff and tm_zone extensions to std::tm.
 //
 // Requires that zero() <= fs < seconds(1).
-TString format(const TString& format, const time_point<seconds>& tp, 
+TString format(const TString& format, const time_point<seconds>& tp,
                    const detail::femtoseconds& fs, const time_zone& tz) {
-  TString result; 
+  TString result;
   result.reserve(format.size());  // A reasonable guess for the result size.
   const time_zone::absolute_lookup al = tz.lookup(tp);
   const std::tm tm = ToTM(al);
@@ -384,7 +384,7 @@ TString format(const TString& format, const time_point<seconds>& tp,
     // Simple specifiers that we handle ourselves.
     if (strchr("YmdeUuWwHMSzZs%", *cur)) {
       if (cur - 1 != pending) {
-        FormatTM(&result, TString(pending, cur - 1), tm); 
+        FormatTM(&result, TString(pending, cur - 1), tm);
       }
       switch (*cur) {
         case 'Y':
@@ -455,7 +455,7 @@ TString format(const TString& format, const time_point<seconds>& tp,
       if (*(cur + 1) == 'z') {
         // Formats %:z.
         if (cur - 1 != pending) {
-          FormatTM(&result, TString(pending, cur - 1), tm); 
+          FormatTM(&result, TString(pending, cur - 1), tm);
         }
         bp = FormatOffset(ep, al.offset, ":");
         result.append(bp, static_cast<std::size_t>(ep - bp));
@@ -466,7 +466,7 @@ TString format(const TString& format, const time_point<seconds>& tp,
         if (*(cur + 2) == 'z') {
           // Formats %::z.
           if (cur - 1 != pending) {
-            FormatTM(&result, TString(pending, cur - 1), tm); 
+            FormatTM(&result, TString(pending, cur - 1), tm);
           }
           bp = FormatOffset(ep, al.offset, ":*");
           result.append(bp, static_cast<std::size_t>(ep - bp));
@@ -477,7 +477,7 @@ TString format(const TString& format, const time_point<seconds>& tp,
           if (*(cur + 3) == 'z') {
             // Formats %:::z.
             if (cur - 1 != pending) {
-              FormatTM(&result, TString(pending, cur - 1), tm); 
+              FormatTM(&result, TString(pending, cur - 1), tm);
             }
             bp = FormatOffset(ep, al.offset, ":*:");
             result.append(bp, static_cast<std::size_t>(ep - bp));
@@ -502,7 +502,7 @@ TString format(const TString& format, const time_point<seconds>& tp,
     } else if (*cur == 'z') {
       // Formats %Ez.
       if (cur - 2 != pending) {
-        FormatTM(&result, TString(pending, cur - 2), tm); 
+        FormatTM(&result, TString(pending, cur - 2), tm);
       }
       bp = FormatOffset(ep, al.offset, ":");
       result.append(bp, static_cast<std::size_t>(ep - bp));
@@ -510,7 +510,7 @@ TString format(const TString& format, const time_point<seconds>& tp,
     } else if (*cur == '*' && cur + 1 != end && *(cur + 1) == 'z') {
       // Formats %E*z.
       if (cur - 2 != pending) {
-        FormatTM(&result, TString(pending, cur - 2), tm); 
+        FormatTM(&result, TString(pending, cur - 2), tm);
       }
       bp = FormatOffset(ep, al.offset, ":*");
       result.append(bp, static_cast<std::size_t>(ep - bp));
@@ -519,7 +519,7 @@ TString format(const TString& format, const time_point<seconds>& tp,
                (*(cur + 1) == 'S' || *(cur + 1) == 'f')) {
       // Formats %E*S or %E*F.
       if (cur - 2 != pending) {
-        FormatTM(&result, TString(pending, cur - 2), tm); 
+        FormatTM(&result, TString(pending, cur - 2), tm);
       }
       char* cp = ep;
       bp = Format64(cp, 15, fs.count());
@@ -538,7 +538,7 @@ TString format(const TString& format, const time_point<seconds>& tp,
     } else if (*cur == '4' && cur + 1 != end && *(cur + 1) == 'Y') {
       // Formats %E4Y.
       if (cur - 2 != pending) {
-        FormatTM(&result, TString(pending, cur - 2), tm); 
+        FormatTM(&result, TString(pending, cur - 2), tm);
       }
       bp = Format64(ep, 4, al.cs.year());
       result.append(bp, static_cast<std::size_t>(ep - bp));
@@ -550,7 +550,7 @@ TString format(const TString& format, const time_point<seconds>& tp,
         if (*np == 'S' || *np == 'f') {
           // Formats %E#S or %E#f.
           if (cur - 2 != pending) {
-            FormatTM(&result, TString(pending, cur - 2), tm); 
+            FormatTM(&result, TString(pending, cur - 2), tm);
           }
           bp = ep;
           if (n > 0) {
@@ -570,7 +570,7 @@ TString format(const TString& format, const time_point<seconds>& tp,
 
   // Formats any remaining data.
   if (end != pending) {
-    FormatTM(&result, TString(pending, end), tm); 
+    FormatTM(&result, TString(pending, end), tm);
   }
 
   return result;
@@ -611,7 +611,7 @@ const char* ParseOffset(const char* dp, const char* mode, int* offset) {
   return dp;
 }
 
-const char* ParseZone(const char* dp, TString* zone) { 
+const char* ParseZone(const char* dp, TString* zone) {
   zone->clear();
   if (dp != nullptr) {
     while (*dp != '\0' && !std::isspace(*dp)) zone->push_back(*dp++);
@@ -689,9 +689,9 @@ bool FromWeek(int week_num, weekday week_start, year_t* year, std::tm* tm) {
 //
 // We also handle the %z specifier to accommodate platforms that do not
 // support the tm_gmtoff extension to std::tm.  %Z is parsed but ignored.
-bool parse(const TString& format, const TString& input, 
+bool parse(const TString& format, const TString& input,
            const time_zone& tz, time_point<seconds>* sec,
-           detail::femtoseconds* fs, TString* err) { 
+           detail::femtoseconds* fs, TString* err) {
   // The unparsed input.
   const char* data = input.c_str();  // NUL terminated
 
@@ -717,7 +717,7 @@ bool parse(const TString& format, const TString& input,
   auto subseconds = detail::femtoseconds::zero();
   bool saw_offset = false;
   int offset = 0;  // No offset from passed tz.
-  TString zone = "UTC"; 
+  TString zone = "UTC";
 
   const char* fmt = format.c_str();  // NUL terminated
   bool twelve_hour = false;
@@ -908,7 +908,7 @@ bool parse(const TString& format, const TString& input,
 
     // Parses the current specifier.
     const char* orig_data = data;
-    TString spec(percent, static_cast<std::size_t>(fmt - percent)); 
+    TString spec(percent, static_cast<std::size_t>(fmt - percent));
     data = ParseTM(data, spec.c_str(), &tm);
 
     // If we successfully parsed %p we need to remember whether the result
@@ -916,7 +916,7 @@ bool parse(const TString& format, const TString& input,
     // So reparse the input with a known AM hour, and check if it is shifted
     // to a PM hour.
     if (spec == "%p" && data != nullptr) {
-      TString test_input = "1"; 
+      TString test_input = "1";
       test_input.append(orig_data, static_cast<std::size_t>(data - orig_data));
       const char* test_data = test_input.c_str();
       std::tm tmp{};
@@ -1026,4 +1026,4 @@ bool parse(const TString& format, const TString& input,
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

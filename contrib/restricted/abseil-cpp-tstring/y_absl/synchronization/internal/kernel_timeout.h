@@ -14,13 +14,13 @@
 //
 
 // An optional absolute timeout, with nanosecond granularity,
-// compatible with y_absl::Time. Suitable for in-register 
+// compatible with y_absl::Time. Suitable for in-register
 // parameter-passing (e.g. syscalls.)
-// Constructible from a y_absl::Time (for a timeout to be respected) or {} 
+// Constructible from a y_absl::Time (for a timeout to be respected) or {}
 // (for "no timeout".)
 // This is a private low-level API for use by a handful of low-level
 // components that are friends of this class. Higher-level components
-// should build APIs based on y_absl::Time and y_absl::Duration. 
+// should build APIs based on y_absl::Time and y_absl::Duration.
 
 #ifndef ABSL_SYNCHRONIZATION_INTERNAL_KERNEL_TIMEOUT_H_
 #define ABSL_SYNCHRONIZATION_INTERNAL_KERNEL_TIMEOUT_H_
@@ -30,11 +30,11 @@
 #include <algorithm>
 #include <limits>
 
-#include "y_absl/base/internal/raw_logging.h" 
-#include "y_absl/time/clock.h" 
-#include "y_absl/time/time.h" 
+#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/time/clock.h"
+#include "y_absl/time/time.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
@@ -46,7 +46,7 @@ class KernelTimeout {
   // A timeout that should expire at <t>.  Any value, in the full
   // InfinitePast() to InfiniteFuture() range, is valid here and will be
   // respected.
-  explicit KernelTimeout(y_absl::Time t) : ns_(MakeNs(t)) {} 
+  explicit KernelTimeout(y_absl::Time t) : ns_(MakeNs(t)) {}
   // No timeout.
   KernelTimeout() : ns_(0) {}
 
@@ -54,7 +54,7 @@ class KernelTimeout {
   static KernelTimeout Never() { return {}; }
 
   // We explicitly do not support other custom formats: timespec, int64_t nanos.
-  // Unify on this and y_absl::Time, please. 
+  // Unify on this and y_absl::Time, please.
 
   bool has_timeout() const { return ns_ != 0; }
 
@@ -69,10 +69,10 @@ class KernelTimeout {
   // timeout.
   int64_t ns_;
 
-  static int64_t MakeNs(y_absl::Time t) { 
+  static int64_t MakeNs(y_absl::Time t) {
     // optimization--InfiniteFuture is common "no timeout" value
     // and cheaper to compare than convert.
-    if (t == y_absl::InfiniteFuture()) return 0; 
+    if (t == y_absl::InfiniteFuture()) return 0;
     int64_t x = ToUnixNanos(t);
 
     // A timeout that lands exactly on the epoch (x=0) needs to be respected,
@@ -102,10 +102,10 @@ class KernelTimeout {
     if (!has_timeout()) {
       return kInfinite;
     }
-    // The use of y_absl::Now() to convert from absolute time to 
-    // relative time means that y_absl::Now() cannot use anything that 
+    // The use of y_absl::Now() to convert from absolute time to
+    // relative time means that y_absl::Now() cannot use anything that
     // depends on KernelTimeout (for example, Mutex) on Windows.
-    int64_t now = ToUnixNanos(y_absl::Now()); 
+    int64_t now = ToUnixNanos(y_absl::Now());
     if (ns_ >= now) {
       // Round up so that Now() + ms_from_now >= ns_.
       constexpr uint64_t max_nanos =
@@ -151,6 +151,6 @@ inline struct timespec KernelTimeout::MakeAbsTimespec() {
 
 }  // namespace synchronization_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_SYNCHRONIZATION_INTERNAL_KERNEL_TIMEOUT_H_

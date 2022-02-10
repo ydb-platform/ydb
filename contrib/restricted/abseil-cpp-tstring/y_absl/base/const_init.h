@@ -51,19 +51,19 @@
 //
 // For a few core Abseil classes, we make a best effort to allow for safe global
 // instances, even though these classes have non-trivial destructors.  These
-// objects can be created with the y_absl::kConstInit tag.  For example: 
-//   ABSL_CONST_INIT y_absl::Mutex global_mutex(y_absl::kConstInit); 
+// objects can be created with the y_absl::kConstInit tag.  For example:
+//   ABSL_CONST_INIT y_absl::Mutex global_mutex(y_absl::kConstInit);
 //
-// The line above declares a global variable of type y_absl::Mutex which can be 
+// The line above declares a global variable of type y_absl::Mutex which can be
 // accessed at any point during startup or shutdown.  global_mutex's destructor
 // will still run, but will not invalidate the object.  Note that C++ specifies
 // that accessing an object after its destructor has run results in undefined
 // behavior, but this pattern works on the toolchains we support.
 //
-// The y_absl::kConstInit tag should only be used to define objects with static 
+// The y_absl::kConstInit tag should only be used to define objects with static
 // or thread_local storage duration.
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 enum ConstInitType {
@@ -71,6 +71,6 @@ enum ConstInitType {
 };
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_BASE_CONST_INIT_H_

@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/container/internal/raw_hash_set.h" 
+#include "y_absl/container/internal/raw_hash_set.h"
 
 #include <atomic>
 #include <cstddef>
 
-#include "y_absl/base/config.h" 
+#include "y_absl/base/config.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
@@ -64,4 +64,4 @@ template FindInfo find_first_non_full(const ctrl_t*, size_t, size_t);
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

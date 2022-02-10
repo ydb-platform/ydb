@@ -19,12 +19,12 @@
 #include <util/generic/string.h>
 
 #include "y_absl/base/config.h"
-#include "y_absl/time/internal/cctz/include/cctz/civil_time.h" 
-#include "y_absl/time/internal/cctz/include/cctz/time_zone.h" 
+#include "y_absl/time/internal/cctz/include/cctz/civil_time.h"
+#include "y_absl/time/internal/cctz/include/cctz/time_zone.h"
 #include "time_zone_if.h"
 #include "time_zone_info.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -37,14 +37,14 @@ class time_zone::Impl {
 
   // Load a named time zone. Returns false if the name is invalid, or if
   // some other kind of error occurs. Note that loading "UTC" never fails.
-  static bool LoadTimeZone(const TString& name, time_zone* tz); 
+  static bool LoadTimeZone(const TString& name, time_zone* tz);
 
   // Clears the map of cached time zones.  Primarily for use in benchmarks
   // that gauge the performance of loading/parsing the time-zone data.
   static void ClearTimeZoneMapTestOnly();
 
   // The primary key is the time-zone ID (e.g., "America/New_York").
-  const TString& Name() const { 
+  const TString& Name() const {
     // TODO: It would nice if the zoneinfo data included the zone name.
     return name_;
   }
@@ -72,22 +72,22 @@ class time_zone::Impl {
   }
 
   // Returns an implementation-defined version string for this time zone.
-  TString Version() const { return zone_->Version(); } 
+  TString Version() const { return zone_->Version(); }
 
   // Returns an implementation-defined description of this time zone.
-  TString Description() const { return zone_->Description(); } 
+  TString Description() const { return zone_->Description(); }
 
  private:
-  explicit Impl(const TString& name); 
+  explicit Impl(const TString& name);
   static const Impl* UTCImpl();
 
-  const TString name_; 
+  const TString name_;
   std::unique_ptr<TimeZoneIf> zone_;
 };
 
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_IMPL_H_

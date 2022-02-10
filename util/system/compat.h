@@ -62,14 +62,14 @@ extern "C" {
 #endif
 
 #ifdef _win_
- 
+
     #ifdef sleep // may be defined by perl
         #undef sleep
     #endif
- 
-void sleep(i64 len); 
-void usleep(i64 len); 
- 
+
+void sleep(i64 len);
+void usleep(i64 len);
+
 #endif
 
 #ifdef _win_

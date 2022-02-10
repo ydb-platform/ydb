@@ -28,8 +28,8 @@ namespace NSan {
         void BeforeSwitch(TFiberContext* old) noexcept;
         void AfterSwitch() noexcept;
 
-        static void AfterStart() noexcept; 
- 
+        static void AfterStart() noexcept;
+
     private:
         void* Token_;
         const void* Stack_;

@@ -25,17 +25,17 @@
 //
 // Example:
 //
-//   TString s = y_absl::StrFormat( 
+//   TString s = y_absl::StrFormat(
 //                      "%s %s You have $%d!", "Hello", name, dollars);
 //
 // The library consists of the following basic utilities:
 //
-//   * `y_absl::StrFormat()`, a type-safe replacement for `std::sprintf()`, to 
+//   * `y_absl::StrFormat()`, a type-safe replacement for `std::sprintf()`, to
 //     write a format string to a `string` value.
-//   * `y_absl::StrAppendFormat()` to append a format string to a `string` 
-//   * `y_absl::StreamFormat()` to more efficiently write a format string to a 
+//   * `y_absl::StrAppendFormat()` to append a format string to a `string`
+//   * `y_absl::StreamFormat()` to more efficiently write a format string to a
 //     stream, such as`std::cout`.
-//   * `y_absl::PrintF()`, `y_absl::FPrintF()` and `y_absl::SNPrintF()` as 
+//   * `y_absl::PrintF()`, `y_absl::FPrintF()` and `y_absl::SNPrintF()` as
 //     replacements for `std::printf()`, `std::fprintf()` and `std::snprintf()`.
 //
 //     Note: a version of `std::sprintf()` is not supported as it is
@@ -73,13 +73,13 @@
 #include <cstdio>
 #include <util/generic/string.h>
 
-#include "y_absl/strings/internal/str_format/arg.h"  // IWYU pragma: export 
-#include "y_absl/strings/internal/str_format/bind.h"  // IWYU pragma: export 
-#include "y_absl/strings/internal/str_format/checker.h"  // IWYU pragma: export 
-#include "y_absl/strings/internal/str_format/extension.h"  // IWYU pragma: export 
-#include "y_absl/strings/internal/str_format/parser.h"  // IWYU pragma: export 
+#include "y_absl/strings/internal/str_format/arg.h"  // IWYU pragma: export
+#include "y_absl/strings/internal/str_format/bind.h"  // IWYU pragma: export
+#include "y_absl/strings/internal/str_format/checker.h"  // IWYU pragma: export
+#include "y_absl/strings/internal/str_format/extension.h"  // IWYU pragma: export
+#include "y_absl/strings/internal/str_format/parser.h"  // IWYU pragma: export
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // UntypedFormatSpec
@@ -90,9 +90,9 @@ ABSL_NAMESPACE_BEGIN
 //
 // Example:
 //
-//   y_absl::UntypedFormatSpec format("%d"); 
-//   TString out; 
-//   CHECK(y_absl::FormatUntyped(&out, format, {y_absl::FormatArg(1)})); 
+//   y_absl::UntypedFormatSpec format("%d");
+//   TString out;
+//   CHECK(y_absl::FormatUntyped(&out, format, {y_absl::FormatArg(1)}));
 class UntypedFormatSpec {
  public:
   UntypedFormatSpec() = delete;
@@ -118,7 +118,7 @@ class UntypedFormatSpec {
 //
 // Example:
 //
-//   y_absl::StrFormat("%s", y_absl::FormatStreamed(obj)); 
+//   y_absl::StrFormat("%s", y_absl::FormatStreamed(obj));
 template <typename T>
 str_format_internal::StreamedWrapper<T> FormatStreamed(const T& v) {
   return str_format_internal::StreamedWrapper<T>(v);
@@ -137,8 +137,8 @@ str_format_internal::StreamedWrapper<T> FormatStreamed(const T& v) {
 // Example:
 //
 //   int n = 0;
-//   TString s = y_absl::StrFormat("%s%d%n", "hello", 123, 
-//                       y_absl::FormatCountCapture(&n)); 
+//   TString s = y_absl::StrFormat("%s%d%n", "hello", 123,
+//                       y_absl::FormatCountCapture(&n));
 //   EXPECT_EQ(8, n);
 class FormatCountCapture {
  public:
@@ -171,7 +171,7 @@ class FormatCountCapture {
 // For a `FormatSpec` to be valid at compile-time, it must be provided as
 // either:
 //
-// * A `constexpr` literal or `y_absl::string_view`, which is how it most often 
+// * A `constexpr` literal or `y_absl::string_view`, which is how it most often
 //   used.
 // * A `ParsedFormat` instantiation, which ensures the format string is
 //   valid before use. (See below.)
@@ -179,16 +179,16 @@ class FormatCountCapture {
 // Example:
 //
 //   // Provided as a string literal.
-//   y_absl::StrFormat("Welcome to %s, Number %d!", "The Village", 6); 
+//   y_absl::StrFormat("Welcome to %s, Number %d!", "The Village", 6);
 //
-//   // Provided as a constexpr y_absl::string_view. 
-//   constexpr y_absl::string_view formatString = "Welcome to %s, Number %d!"; 
-//   y_absl::StrFormat(formatString, "The Village", 6); 
+//   // Provided as a constexpr y_absl::string_view.
+//   constexpr y_absl::string_view formatString = "Welcome to %s, Number %d!";
+//   y_absl::StrFormat(formatString, "The Village", 6);
 //
 //   // Provided as a pre-compiled ParsedFormat object.
 //   // Note that this example is useful only for illustration purposes.
-//   y_absl::ParsedFormat<'s', 'd'> formatString("Welcome to %s, Number %d!"); 
-//   y_absl::StrFormat(formatString, "TheVillage", 6); 
+//   y_absl::ParsedFormat<'s', 'd'> formatString("Welcome to %s, Number %d!");
+//   y_absl::StrFormat(formatString, "TheVillage", 6);
 //
 // A format string generally follows the POSIX syntax as used within the POSIX
 // `printf` specification.
@@ -210,7 +210,7 @@ class FormatCountCapture {
 //   * `p` for pointer address values
 //   * `n` for the special case of writing out the number of characters
 //     written to this point. The resulting value must be captured within an
-//     `y_absl::FormatCountCapture` type. 
+//     `y_absl::FormatCountCapture` type.
 //
 // Implementation-defined behavior:
 //   * A null pointer provided to "%s" or "%p" is output as "(nil)".
@@ -224,7 +224,7 @@ class FormatCountCapture {
 //     "%c", 'a'                -> "a"
 //     "%c", 32                 -> " "
 //     "%s", "C"                -> "C"
-//     "%s", TString("C++") -> "C++" 
+//     "%s", TString("C++") -> "C++"
 //     "%d", -10                -> "-10"
 //     "%o", 10                 -> "12"
 //     "%x", 16                 -> "10"
@@ -235,8 +235,8 @@ class FormatCountCapture {
 //     "%p", (void*)&value      -> "0x7ffdeb6ad2a4"
 //
 //     int n = 0;
-//     TString s = y_absl::StrFormat( 
-//         "%s%d%n", "hello", 123, y_absl::FormatCountCapture(&n)); 
+//     TString s = y_absl::StrFormat(
+//         "%s%d%n", "hello", 123, y_absl::FormatCountCapture(&n));
 //     EXPECT_EQ(8, n);
 //
 // The `FormatSpec` intrinsically supports all of these fundamental C++ types:
@@ -248,7 +248,7 @@ class FormatCountCapture {
 //
 // However, in the `str_format` library, a format conversion specifies a broader
 // C++ conceptual category instead of an exact type. For example, `%s` binds to
-// any string-like argument, so `TString`, `y_absl::string_view`, and 
+// any string-like argument, so `TString`, `y_absl::string_view`, and
 // `const char*` are all accepted. Likewise, `%d` accepts any integer-like
 // argument, etc.
 
@@ -271,13 +271,13 @@ using FormatSpec = str_format_internal::FormatSpecTemplate<
 // Example:
 //
 //   // Verified at compile time.
-//   y_absl::ParsedFormat<'s', 'd'> formatString("Welcome to %s, Number %d!"); 
-//   y_absl::StrFormat(formatString, "TheVillage", 6); 
+//   y_absl::ParsedFormat<'s', 'd'> formatString("Welcome to %s, Number %d!");
+//   y_absl::StrFormat(formatString, "TheVillage", 6);
 //
 //   // Verified at runtime.
-//   auto format_runtime = y_absl::ParsedFormat<'d'>::New(format_string); 
+//   auto format_runtime = y_absl::ParsedFormat<'d'>::New(format_string);
 //   if (format_runtime) {
-//     value = y_absl::StrFormat(*format_runtime, i); 
+//     value = y_absl::StrFormat(*format_runtime, i);
 //   } else {
 //     ... error case ...
 //   }
@@ -329,13 +329,13 @@ using ParsedFormat = str_format_internal::ExtendedParsedFormat<
 //
 // Example:
 //
-//   TString s = y_absl::StrFormat( 
+//   TString s = y_absl::StrFormat(
 //       "Welcome to %s, Number %d!", "The Village", 6);
 //   EXPECT_EQ("Welcome to The Village, Number 6!", s);
 //
 // Returns an empty string in case of error.
 template <typename... Args>
-ABSL_MUST_USE_RESULT TString StrFormat(const FormatSpec<Args...>& format, 
+ABSL_MUST_USE_RESULT TString StrFormat(const FormatSpec<Args...>& format,
                                            const Args&... args) {
   return str_format_internal::FormatPack(
       str_format_internal::UntypedFormatSpecImpl::Extract(format),
@@ -350,10 +350,10 @@ ABSL_MUST_USE_RESULT TString StrFormat(const FormatSpec<Args...>& format,
 //
 // Example:
 //
-//   TString orig("For example PI is approximately "); 
+//   TString orig("For example PI is approximately ");
 //   std::cout << StrAppendFormat(&orig, "%12.6f", 3.14);
 template <typename... Args>
-TString& StrAppendFormat(TString* dst, 
+TString& StrAppendFormat(TString* dst,
                              const FormatSpec<Args...>& format,
                              const Args&... args) {
   return str_format_internal::AppendPack(
@@ -365,7 +365,7 @@ TString& StrAppendFormat(TString* dst,
 //
 // Writes to an output stream given a format string and zero or more arguments,
 // generally in a manner that is more efficient than streaming the result of
-// `y_absl:: StrFormat()`. The returned object must be streamed before the full 
+// `y_absl:: StrFormat()`. The returned object must be streamed before the full
 // expression ends.
 //
 // Example:
@@ -383,12 +383,12 @@ ABSL_MUST_USE_RESULT str_format_internal::Streamable StreamFormat(
 //
 // Writes to stdout given a format string and zero or more arguments. This
 // function is functionally equivalent to `std::printf()` (and type-safe);
-// prefer `y_absl::PrintF()` over `std::printf()`. 
+// prefer `y_absl::PrintF()` over `std::printf()`.
 //
 // Example:
 //
 //   std::string_view s = "Ulaanbaatar";
-//   y_absl::PrintF("The capital of Mongolia is %s", s); 
+//   y_absl::PrintF("The capital of Mongolia is %s", s);
 //
 //   Outputs: "The capital of Mongolia is Ulaanbaatar"
 //
@@ -403,12 +403,12 @@ int PrintF(const FormatSpec<Args...>& format, const Args&... args) {
 //
 // Writes to a file given a format string and zero or more arguments. This
 // function is functionally equivalent to `std::fprintf()` (and type-safe);
-// prefer `y_absl::FPrintF()` over `std::fprintf()`. 
+// prefer `y_absl::FPrintF()` over `std::fprintf()`.
 //
 // Example:
 //
 //   std::string_view s = "Ulaanbaatar";
-//   y_absl::FPrintF(stdout, "The capital of Mongolia is %s", s); 
+//   y_absl::FPrintF(stdout, "The capital of Mongolia is %s", s);
 //
 //   Outputs: "The capital of Mongolia is Ulaanbaatar"
 //
@@ -424,9 +424,9 @@ int FPrintF(std::FILE* output, const FormatSpec<Args...>& format,
 //
 // Writes to a sized buffer given a format string and zero or more arguments.
 // This function is functionally equivalent to `std::snprintf()` (and
-// type-safe); prefer `y_absl::SNPrintF()` over `std::snprintf()`. 
+// type-safe); prefer `y_absl::SNPrintF()` over `std::snprintf()`.
 //
-// In particular, a successful call to `y_absl::SNPrintF()` writes at most `size` 
+// In particular, a successful call to `y_absl::SNPrintF()` writes at most `size`
 // bytes of the formatted output to `output`, including a NUL-terminator, and
 // returns the number of bytes that would have been written if truncation did
 // not occur. In the event of an error, a negative value is returned and `errno`
@@ -436,7 +436,7 @@ int FPrintF(std::FILE* output, const FormatSpec<Args...>& format,
 //
 //   std::string_view s = "Ulaanbaatar";
 //   char output[128];
-//   y_absl::SNPrintF(output, sizeof(output), 
+//   y_absl::SNPrintF(output, sizeof(output),
 //                  "The capital of Mongolia is %s", s);
 //
 //   Post-condition: output == "The capital of Mongolia is Ulaanbaatar"
@@ -487,7 +487,7 @@ class FormatRawSink {
 // Format()
 //
 // Writes a formatted string to an arbitrary sink object (implementing the
-// `y_absl::FormatRawSink` interface), using a format string and zero or more 
+// `y_absl::FormatRawSink` interface), using a format string and zero or more
 // additional arguments.
 //
 // By default, `TString`, `std::ostream`, and `y_absl::Cord` are supported as
@@ -522,7 +522,7 @@ using FormatArg = str_format_internal::FormatArgImpl;
 // FormatUntyped()
 //
 // Writes a formatted string to an arbitrary sink object (implementing the
-// `y_absl::FormatRawSink` interface), using an `UntypedFormatSpec` and zero or 
+// `y_absl::FormatRawSink` interface), using an `UntypedFormatSpec` and zero or
 // more additional arguments.
 //
 // This function acts as the most generic formatting function in the
@@ -533,26 +533,26 @@ using FormatArg = str_format_internal::FormatArgImpl;
 // On failure, this function returns `false` and the state of the sink is
 // unspecified.
 //
-// The arguments are provided in an `y_absl::Span<const y_absl::FormatArg>`. 
-// Each `y_absl::FormatArg` object binds to a single argument and keeps a 
+// The arguments are provided in an `y_absl::Span<const y_absl::FormatArg>`.
+// Each `y_absl::FormatArg` object binds to a single argument and keeps a
 // reference to it. The values used to create the `FormatArg` objects must
 // outlive this function call.
 //
 // Example:
 //
-//   std::optional<TString> FormatDynamic( 
-//       const TString& in_format, 
-//       const vector<TString>& in_args) { 
-//     TString out; 
-//     std::vector<y_absl::FormatArg> args; 
+//   std::optional<TString> FormatDynamic(
+//       const TString& in_format,
+//       const vector<TString>& in_args) {
+//     TString out;
+//     std::vector<y_absl::FormatArg> args;
 //     for (const auto& v : in_args) {
 //       // It is important that 'v' is a reference to the objects in in_args.
 //       // The values we pass to FormatArg must outlive the call to
 //       // FormatUntyped.
 //       args.emplace_back(v);
 //     }
-//     y_absl::UntypedFormatSpec format(in_format); 
-//     if (!y_absl::FormatUntyped(&out, format, args)) { 
+//     y_absl::UntypedFormatSpec format(in_format);
+//     if (!y_absl::FormatUntyped(&out, format, args)) {
 //       return std::nullopt;
 //     }
 //     return std::move(out);
@@ -560,7 +560,7 @@ using FormatArg = str_format_internal::FormatArgImpl;
 //
 ABSL_MUST_USE_RESULT inline bool FormatUntyped(
     FormatRawSink raw_sink, const UntypedFormatSpec& format,
-    y_absl::Span<const FormatArg> args) { 
+    y_absl::Span<const FormatArg> args) {
   return str_format_internal::FormatUntyped(
       str_format_internal::FormatRawSinkImpl::Extract(raw_sink),
       str_format_internal::UntypedFormatSpecImpl::Extract(format), args);
@@ -807,6 +807,6 @@ struct FormatConvertResult {
 };
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_STRINGS_STR_FORMAT_H_

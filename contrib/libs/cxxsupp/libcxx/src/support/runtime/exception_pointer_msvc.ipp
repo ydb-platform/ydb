@@ -137,8 +137,8 @@ struct ExceptionPtr {
     free(exception_object);
   }
 
-  // _bad_alloc_storage must be initialized before bad_alloc, so we declare and define it first. 
-  static std::bad_alloc _bad_alloc_storage; 
+  // _bad_alloc_storage must be initialized before bad_alloc, so we declare and define it first.
+  static std::bad_alloc _bad_alloc_storage;
   static ExceptionPtr bad_alloc;
   //static ExceptionPtr bad_exception;
 };
@@ -148,11 +148,11 @@ struct ExceptionPtr {
 #pragma clang diagnostic ignored "-Waddress-of-temporary"
 #endif
 
-std::bad_alloc ExceptionPtr::_bad_alloc_storage; 
- 
+std::bad_alloc ExceptionPtr::_bad_alloc_storage;
+
 ExceptionPtr ExceptionPtr::bad_alloc(
-    &ExceptionPtr::_bad_alloc_storage, 
-    reinterpret_cast<const EHThrowInfo*>(__GetExceptionInfo(ExceptionPtr::_bad_alloc_storage))); 
+    &ExceptionPtr::_bad_alloc_storage,
+    reinterpret_cast<const EHThrowInfo*>(__GetExceptionInfo(ExceptionPtr::_bad_alloc_storage)));
 
 /* ExceptionPtr
 ExceptionPtr::bad_exception(&std::bad_exception(),

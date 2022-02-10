@@ -20,7 +20,7 @@
 #include "y_absl/base/config.h"
 #include "time_zone_if.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -30,7 +30,7 @@ namespace cctz {
 // TODO: Add support for fixed offsets from UTC.
 class TimeZoneLibC : public TimeZoneIf {
  public:
-  explicit TimeZoneLibC(const TString& name); 
+  explicit TimeZoneLibC(const TString& name);
 
   // TimeZoneIf implementations.
   time_zone::absolute_lookup BreakTime(
@@ -40,8 +40,8 @@ class TimeZoneLibC : public TimeZoneIf {
                       time_zone::civil_transition* trans) const override;
   bool PrevTransition(const time_point<seconds>& tp,
                       time_zone::civil_transition* trans) const override;
-  TString Version() const override; 
-  TString Description() const override; 
+  TString Version() const override;
+  TString Description() const override;
 
  private:
   const bool local_;  // localtime or UTC
@@ -50,6 +50,6 @@ class TimeZoneLibC : public TimeZoneIf {
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_LIBC_H_

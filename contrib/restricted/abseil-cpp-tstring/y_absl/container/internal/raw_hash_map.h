@@ -19,11 +19,11 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/base/internal/throw_delegate.h" 
-#include "y_absl/container/internal/container_memory.h" 
-#include "y_absl/container/internal/raw_hash_set.h"  // IWYU pragma: export 
+#include "y_absl/base/internal/throw_delegate.h"
+#include "y_absl/container/internal/container_memory.h"
+#include "y_absl/container/internal/raw_hash_set.h"  // IWYU pragma: export
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
@@ -144,7 +144,7 @@ class raw_hash_map : public raw_hash_set<Policy, Hash, Eq, Alloc> {
     auto it = this->find(key);
     if (it == this->end()) {
       base_internal::ThrowStdOutOfRange(
-          "y_absl::container_internal::raw_hash_map<>::at"); 
+          "y_absl::container_internal::raw_hash_map<>::at");
     }
     return Policy::value(&*it);
   }
@@ -154,7 +154,7 @@ class raw_hash_map : public raw_hash_set<Policy, Hash, Eq, Alloc> {
     auto it = this->find(key);
     if (it == this->end()) {
       base_internal::ThrowStdOutOfRange(
-          "y_absl::container_internal::raw_hash_map<>::at"); 
+          "y_absl::container_internal::raw_hash_map<>::at");
     }
     return Policy::value(&*it);
   }
@@ -193,6 +193,6 @@ class raw_hash_map : public raw_hash_set<Policy, Hash, Eq, Alloc> {
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_RAW_HASH_MAP_H_

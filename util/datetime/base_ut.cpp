@@ -2,8 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/utility.h> 
-#include <util/generic/ylimits.h> 
+#include <util/generic/utility.h>
+#include <util/generic/ylimits.h>
 #include <util/generic/ymath.h>
 #include <util/string/cast.h>
 #include <util/stream/output.h>

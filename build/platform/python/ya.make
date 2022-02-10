@@ -7,7 +7,7 @@ OWNER(
 
 INCLUDE(resources.inc)
 
-IF (USE_SYSTEM_PYTHON) 
+IF (USE_SYSTEM_PYTHON)
     IF (OS_LINUX)
         IF (ARCH_ARM64 OR ARCH_AARCH64)
             IF (_SYSTEM_PYTHON27)
@@ -41,7 +41,7 @@ IF (USE_SYSTEM_PYTHON)
         CFLAGS(
             GLOBAL "-isystem$EXTERNAL_PYTHON_RESOURCE_GLOBAL/python/include"
             GLOBAL "-isystem$EXTERNAL_PYTHON_RESOURCE_GLOBAL/python/include/python${PY_VERSION}"
-        ) 
+        )
     ELSEIF (OS_DARWIN)
         IF (PYTHON_DISTR == "macos-brew")
             IF (ARCH_X86_64)
@@ -117,13 +117,13 @@ IF (USE_SYSTEM_PYTHON)
         ENDIF()
         CFLAGS(GLOBAL "/I$EXTERNAL_PYTHON_RESOURCE_GLOBAL/python/include")
         LDFLAGS("/LIBPATH:$EXTERNAL_PYTHON_RESOURCE_GLOBAL/python/libs")
-    ENDIF() 
+    ENDIF()
 
     IF (PYTHON_NOT_FOUND)
         MESSAGE(FATAL_ERROR "No system Python ${USE_SYSTEM_PYTHON} for the selected platform")
     ENDIF()
 ELSEIF (NOT USE_ARCADIA_PYTHON)
-    CFLAGS(GLOBAL $PYTHON_FLAGS) 
+    CFLAGS(GLOBAL $PYTHON_FLAGS)
     IF (OS_WINDOWS)
         LDFLAGS($PYTHON_LDFLAGS $PYTHON_LIBRARIES)
     ENDIF()

@@ -19,10 +19,10 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "y_absl/container/internal/hash_generator_testing.h" 
-#include "y_absl/container/internal/hash_policy_testing.h" 
+#include "y_absl/container/internal/hash_generator_testing.h"
+#include "y_absl/container/internal/hash_policy_testing.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
@@ -346,6 +346,6 @@ REGISTER_TYPED_TEST_SUITE_P(UniquePtrModifiersTest, TryEmplace);
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_UNORDERED_MAP_MODIFIERS_TEST_H_

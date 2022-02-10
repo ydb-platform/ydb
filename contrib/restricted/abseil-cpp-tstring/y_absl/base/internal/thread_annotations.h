@@ -18,7 +18,7 @@
 //
 // WARNING: This is a backwards compatible header and it will be removed after
 // the migration to prefixed thread annotations is finished; please include
-// "y_absl/base/thread_annotations.h". 
+// "y_absl/base/thread_annotations.h".
 //
 // This header file contains macro definitions for thread safety annotations
 // that allow developers to document the locking policies of multi-threaded

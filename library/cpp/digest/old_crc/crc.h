@@ -79,11 +79,11 @@ namespace NCrcPrivate {
 #undef DEF_CRC_FUNC
 }
 
-template <class T> 
+template <class T>
 static inline T Crc(const void* buf, size_t len, T init) {
     return (T)NCrcPrivate::TCrcHelper<8 * sizeof(T)>::Crc(buf, len, init);
-} 
- 
+}
+
 template <class T>
 static inline T Crc(const void* buf, size_t len) {
     return Crc<T>(buf, len, (T)NCrcPrivate::TCrcHelper<8 * sizeof(T)>::Init);

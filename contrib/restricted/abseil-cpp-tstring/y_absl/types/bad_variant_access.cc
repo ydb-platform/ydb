@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/types/bad_variant_access.h" 
+#include "y_absl/types/bad_variant_access.h"
 
 #ifndef ABSL_USES_STD_VARIANT
 
 #include <cstdlib>
 #include <stdexcept>
 
-#include "y_absl/base/config.h" 
-#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/config.h"
+#include "y_absl/base/internal/raw_logging.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 //////////////////////////
@@ -51,7 +51,7 @@ void Rethrow() {
   throw;
 #else
   ABSL_RAW_LOG(FATAL,
-               "Internal error in y_absl::variant implementation. Attempted to " 
+               "Internal error in y_absl::variant implementation. Attempted to "
                "rethrow an exception when building with exceptions disabled.");
   abort();  // TODO(calabrese) Remove once RAW_LOG FATAL is noreturn.
 #endif
@@ -59,6 +59,6 @@ void Rethrow() {
 
 }  // namespace variant_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_USES_STD_VARIANT

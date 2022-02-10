@@ -1,37 +1,37 @@
-#include "scheduler.h" 
- 
-#include <util/datetime/base.h> 
-#include <util/generic/algorithm.h> 
-#include <util/generic/yexception.h> 
- 
+#include "scheduler.h"
+
+#include <util/datetime/base.h>
+#include <util/generic/algorithm.h>
+#include <util/generic/yexception.h>
+
 //#include "dummy_debugger.h"
 
 using namespace NBus;
 using namespace NBus::NPrivate;
- 
-class TScheduleDeadlineCompare { 
-public: 
+
+class TScheduleDeadlineCompare {
+public:
     bool operator()(const IScheduleItemAutoPtr& i1, const IScheduleItemAutoPtr& i2) const noexcept {
         return i1->GetScheduleTime() > i2->GetScheduleTime();
-    } 
-}; 
- 
-TScheduler::TScheduler() 
+    }
+};
+
+TScheduler::TScheduler()
     : StopThread(false)
     , Thread([&] { this->SchedulerThread(); })
-{ 
-} 
- 
-TScheduler::~TScheduler() { 
+{
+}
+
+TScheduler::~TScheduler() {
     Y_VERIFY(StopThread, "state check");
-} 
- 
+}
+
 size_t TScheduler::Size() const {
     TGuard<TLock> guard(Lock);
     return Items.size() + (!!NextItem ? 1 : 0);
 }
 
-void TScheduler::Stop() { 
+void TScheduler::Stop() {
     {
         TGuard<TLock> guard(Lock);
         Y_VERIFY(!StopThread, "Scheduler already stopped");
@@ -46,28 +46,28 @@ void TScheduler::Stop() {
 
     for (auto& item : Items) {
         item.Destroy();
-    } 
-} 
- 
-void TScheduler::Schedule(TAutoPtr<IScheduleItem> i) { 
+    }
+}
+
+void TScheduler::Schedule(TAutoPtr<IScheduleItem> i) {
     TGuard<TLock> lock(Lock);
     if (StopThread)
-        return; 
+        return;
 
     if (!!NextItem) {
         if (i->GetScheduleTime() < NextItem->GetScheduleTime()) {
             DoSwap(i, NextItem);
         }
-    } 
+    }
 
-    Items.push_back(i); 
+    Items.push_back(i);
     PushHeap(Items.begin(), Items.end(), TScheduleDeadlineCompare());
 
     FillNextItem();
 
     CondVar.Signal();
-} 
- 
+}
+
 void TScheduler::FillNextItem() {
     if (!NextItem && !Items.empty()) {
         PopHeap(Items.begin(), Items.end(), TScheduleDeadlineCompare());
@@ -76,22 +76,22 @@ void TScheduler::FillNextItem() {
     }
 }
 
-void TScheduler::SchedulerThread() { 
+void TScheduler::SchedulerThread() {
     for (;;) {
         IScheduleItemAutoPtr current;
 
-        { 
+        {
             TGuard<TLock> guard(Lock);
 
             if (StopThread) {
                 break;
-            } 
+            }
 
             if (!!NextItem) {
                 CondVar.WaitD(Lock, NextItem->GetScheduleTime());
             } else {
                 CondVar.WaitI(Lock);
-            } 
+            }
 
             if (StopThread) {
                 break;
@@ -106,7 +106,7 @@ void TScheduler::SchedulerThread() {
             }
 
             current = NextItem.Release();
-        } 
+        }
 
         current->Do();
         current.Destroy();
@@ -115,5 +115,5 @@ void TScheduler::SchedulerThread() {
             TGuard<TLock> guard(Lock);
             FillNextItem();
         }
-    } 
-} 
+    }
+}

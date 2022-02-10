@@ -74,101 +74,101 @@ const char* inet_ntop(int af, const void* src, char* dst, socklen_t size) {
     }
     return dst;
 }
- 
-struct evpair { 
-    int event; 
-    int winevent; 
-}; 
- 
-static const evpair evpairs_to_win[] = { 
+
+struct evpair {
+    int event;
+    int winevent;
+};
+
+static const evpair evpairs_to_win[] = {
     {POLLIN, FD_READ | FD_CLOSE | FD_ACCEPT},
     {POLLRDNORM, FD_READ | FD_CLOSE | FD_ACCEPT},
-    {POLLRDBAND, -1}, 
-    {POLLPRI, -1}, 
-    {POLLOUT, FD_WRITE | FD_CLOSE}, 
-    {POLLWRNORM, FD_WRITE | FD_CLOSE}, 
-    {POLLWRBAND, -1}, 
-    {POLLERR, 0}, 
-    {POLLHUP, 0}, 
+    {POLLRDBAND, -1},
+    {POLLPRI, -1},
+    {POLLOUT, FD_WRITE | FD_CLOSE},
+    {POLLWRNORM, FD_WRITE | FD_CLOSE},
+    {POLLWRBAND, -1},
+    {POLLERR, 0},
+    {POLLHUP, 0},
     {POLLNVAL, 0}};
- 
-static const size_t nevpairs_to_win = sizeof(evpairs_to_win) / sizeof(evpairs_to_win[0]); 
- 
-static const evpair evpairs_to_unix[] = { 
+
+static const size_t nevpairs_to_win = sizeof(evpairs_to_win) / sizeof(evpairs_to_win[0]);
+
+static const evpair evpairs_to_unix[] = {
     {FD_ACCEPT, POLLIN | POLLRDNORM},
-    {FD_READ, POLLIN | POLLRDNORM}, 
-    {FD_WRITE, POLLOUT | POLLWRNORM}, 
-    {FD_CLOSE, POLLHUP}, 
-}; 
- 
-static const size_t nevpairs_to_unix = sizeof(evpairs_to_unix) / sizeof(evpairs_to_unix[0]); 
- 
+    {FD_READ, POLLIN | POLLRDNORM},
+    {FD_WRITE, POLLOUT | POLLWRNORM},
+    {FD_CLOSE, POLLHUP},
+};
+
+static const size_t nevpairs_to_unix = sizeof(evpairs_to_unix) / sizeof(evpairs_to_unix[0]);
+
 static int convert_events(int events, const evpair* evpairs, size_t nevpairs, bool ignoreUnknown) noexcept {
-    int result = 0; 
-    for (size_t i = 0; i < nevpairs; ++i) { 
-        int event = evpairs[i].event; 
-        if (events & event) { 
-            events ^= event; 
-            long winEvent = evpairs[i].winevent; 
-            if (winEvent == -1) 
-                return -1; 
-            if (winEvent == 0) 
-                continue; 
-            result |= winEvent; 
-        } 
-    } 
+    int result = 0;
+    for (size_t i = 0; i < nevpairs; ++i) {
+        int event = evpairs[i].event;
+        if (events & event) {
+            events ^= event;
+            long winEvent = evpairs[i].winevent;
+            if (winEvent == -1)
+                return -1;
+            if (winEvent == 0)
+                continue;
+            result |= winEvent;
+        }
+    }
     if (events != 0 && !ignoreUnknown)
-        return -1; 
-    return result; 
-} 
- 
-class TWSAEventHolder { 
-private: 
-    HANDLE Event; 
- 
-public: 
+        return -1;
+    return result;
+}
+
+class TWSAEventHolder {
+private:
+    HANDLE Event;
+
+public:
     inline TWSAEventHolder(HANDLE event) noexcept
         : Event(event)
     {
-    } 
- 
+    }
+
     inline ~TWSAEventHolder() {
-        WSACloseEvent(Event); 
-    } 
- 
+        WSACloseEvent(Event);
+    }
+
     inline HANDLE Get() noexcept {
-        return Event; 
-    } 
-}; 
- 
+        return Event;
+    }
+};
+
 int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept {
-    HANDLE rawEvent = WSACreateEvent(); 
-    if (rawEvent == WSA_INVALID_EVENT) { 
-        errno = EIO; 
-        return -1; 
-    } 
- 
-    TWSAEventHolder event(rawEvent); 
- 
+    HANDLE rawEvent = WSACreateEvent();
+    if (rawEvent == WSA_INVALID_EVENT) {
+        errno = EIO;
+        return -1;
+    }
+
+    TWSAEventHolder event(rawEvent);
+
     int checked_sockets = 0;
 
-    for (pollfd* fd = fds; fd < fds + nfds; ++fd) { 
-        int win_events = convert_events(fd->events, evpairs_to_win, nevpairs_to_win, false); 
-        if (win_events == -1) { 
-            errno = EINVAL; 
-            return -1; 
-        } 
-        fd->revents = 0; 
-        if (WSAEventSelect(fd->fd, event.Get(), win_events)) { 
-            int error = WSAGetLastError(); 
+    for (pollfd* fd = fds; fd < fds + nfds; ++fd) {
+        int win_events = convert_events(fd->events, evpairs_to_win, nevpairs_to_win, false);
+        if (win_events == -1) {
+            errno = EINVAL;
+            return -1;
+        }
+        fd->revents = 0;
+        if (WSAEventSelect(fd->fd, event.Get(), win_events)) {
+            int error = WSAGetLastError();
             if (error == WSAEINVAL || error == WSAENOTSOCK) {
-                fd->revents = POLLNVAL; 
+                fd->revents = POLLNVAL;
                 ++checked_sockets;
             } else {
-                errno = EIO; 
-                return -1; 
-            } 
-        } 
+                errno = EIO;
+                return -1;
+            }
+        }
         fd_set readfds;
         fd_set writefds;
         struct timeval timeout = {0, 0};
@@ -190,54 +190,54 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept {
             }
             ++checked_sockets;
         }
-    } 
- 
+    }
+
     if (checked_sockets > 0) {
         // returns without wait since we already have sockets in desired conditions
         return checked_sockets;
     }
 
-    HANDLE events[] = {event.Get()}; 
-    DWORD wait_result = WSAWaitForMultipleEvents(1, events, TRUE, timeout, FALSE); 
-    if (wait_result == WSA_WAIT_TIMEOUT) 
-        return 0; 
+    HANDLE events[] = {event.Get()};
+    DWORD wait_result = WSAWaitForMultipleEvents(1, events, TRUE, timeout, FALSE);
+    if (wait_result == WSA_WAIT_TIMEOUT)
+        return 0;
     else if (wait_result == WSA_WAIT_EVENT_0) {
-        for (pollfd* fd = fds; fd < fds + nfds; ++fd) { 
-            if (fd->revents == POLLNVAL) 
-                continue; 
-            WSANETWORKEVENTS network_events; 
-            if (WSAEnumNetworkEvents(fd->fd, event.Get(), &network_events)) { 
-                errno = EIO; 
-                return -1; 
-            } 
-            fd->revents = 0; 
-            for (int i = 0; i < FD_MAX_EVENTS; ++i) { 
+        for (pollfd* fd = fds; fd < fds + nfds; ++fd) {
+            if (fd->revents == POLLNVAL)
+                continue;
+            WSANETWORKEVENTS network_events;
+            if (WSAEnumNetworkEvents(fd->fd, event.Get(), &network_events)) {
+                errno = EIO;
+                return -1;
+            }
+            fd->revents = 0;
+            for (int i = 0; i < FD_MAX_EVENTS; ++i) {
                 if ((network_events.lNetworkEvents & (1 << i)) != 0 && network_events.iErrorCode[i]) {
-                    fd->revents = POLLERR; 
-                    break; 
-                } 
-            } 
-            if (fd->revents == POLLERR) 
-                continue; 
-            if (network_events.lNetworkEvents) { 
-                fd->revents = static_cast<short>(convert_events(network_events.lNetworkEvents, evpairs_to_unix, nevpairs_to_unix, true)); 
-                if (fd->revents & POLLHUP) { 
-                    fd->revents &= POLLHUP | POLLIN | POLLRDNORM; 
-                } 
-            } 
-        } 
-        int chanded_sockets = 0; 
-        for (pollfd* fd = fds; fd < fds + nfds; ++fd) 
-            if (fd->revents != 0) 
-                ++chanded_sockets; 
-        return chanded_sockets; 
-    } else { 
-        errno = EIO; 
-        return -1; 
-    } 
-} 
+                    fd->revents = POLLERR;
+                    break;
+                }
+            }
+            if (fd->revents == POLLERR)
+                continue;
+            if (network_events.lNetworkEvents) {
+                fd->revents = static_cast<short>(convert_events(network_events.lNetworkEvents, evpairs_to_unix, nevpairs_to_unix, true));
+                if (fd->revents & POLLHUP) {
+                    fd->revents &= POLLHUP | POLLIN | POLLRDNORM;
+                }
+            }
+        }
+        int chanded_sockets = 0;
+        for (pollfd* fd = fds; fd < fds + nfds; ++fd)
+            if (fd->revents != 0)
+                ++chanded_sockets;
+        return chanded_sockets;
+    } else {
+        errno = EIO;
+        return -1;
+    }
+}
     #endif
- 
+
 #endif
 
 bool GetRemoteAddr(SOCKET Socket, char* str, socklen_t size) {

@@ -46,7 +46,7 @@
 
 #include "y_absl/base/config.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -89,6 +89,6 @@ class CycleClockSource {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_BASE_INTERNAL_CYCLECLOCK_H_

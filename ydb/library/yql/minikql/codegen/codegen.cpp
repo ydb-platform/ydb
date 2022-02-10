@@ -71,7 +71,7 @@ private:
     THashMap<TString, __emutls_control> Tls_;
 };
 
-#if !defined(_win_) || defined(__clang__) 
+#if !defined(_win_) || defined(__clang__)
 extern "C" void __divti3();
 extern "C" void __fixdfti();
 extern "C" void __fixsfti();
@@ -410,7 +410,7 @@ public:
 #if defined(_msan_enabled_)
         ReverseGlobalMapping_[(const void*)&__emutls_get_address] = "__emutls_get_address";
 #endif
-#if defined(_win_) && !defined(__clang__) 
+#if defined(_win_) && !defined(__clang__)
         AddGlobalMapping("__security_check_cookie", (const void*)&__security_check_cookie);
         AddGlobalMapping("__security_cookie", (const void*)&__security_cookie);
         AddGlobalMapping("__divti3", (const void*)&__divti3abi);

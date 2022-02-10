@@ -1,8 +1,8 @@
-RESOURCES_LIBRARY() 
- 
+RESOURCES_LIBRARY()
+
 OWNER(g:contrib somov)
- 
+
 INCLUDE(binutils.resource)
- 
-END() 
- 
+
+END()
+

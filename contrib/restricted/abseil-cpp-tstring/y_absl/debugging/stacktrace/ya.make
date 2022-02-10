@@ -12,9 +12,9 @@ OWNER(
 LICENSE(Apache-2.0)
 
 PEERDIR(
-    contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/raw_logging 
-    contrib/restricted/abseil-cpp-tstring/y_absl/base/log_severity 
-    contrib/restricted/abseil-cpp-tstring/y_absl/debugging 
+    contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/raw_logging
+    contrib/restricted/abseil-cpp-tstring/y_absl/base/log_severity
+    contrib/restricted/abseil-cpp-tstring/y_absl/debugging
 )
 
 ADDINCL(
@@ -23,7 +23,7 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/debugging) 
+SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/debugging)
 
 SRCS(
     stacktrace.cc

@@ -2,8 +2,8 @@ PROGRAM(python)
 
 OWNER(g:contrib orivej)
 
-LICENSE(PSF-2.0) 
- 
+LICENSE(PSF-2.0)
+
 VERSION(2.7.16)
 
 ORIGINAL_SOURCE(https://github.com/python/cpython)

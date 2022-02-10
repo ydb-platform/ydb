@@ -16,7 +16,7 @@
 // File: flat_hash_map.h
 // -----------------------------------------------------------------------------
 //
-// An `y_absl::flat_hash_map<K, V>` is an unordered associative container of 
+// An `y_absl::flat_hash_map<K, V>` is an unordered associative container of
 // unique keys and associated values designed to be a more efficient replacement
 // for `std::unordered_map`. Like `unordered_map`, search, insertion, and
 // deletion of map elements can be done as an `O(1)` operation. However,
@@ -35,13 +35,13 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/algorithm/container.h" 
-#include "y_absl/container/internal/container_memory.h" 
-#include "y_absl/container/internal/hash_function_defaults.h"  // IWYU pragma: export 
-#include "y_absl/container/internal/raw_hash_map.h"  // IWYU pragma: export 
-#include "y_absl/memory/memory.h" 
+#include "y_absl/algorithm/container.h"
+#include "y_absl/container/internal/container_memory.h"
+#include "y_absl/container/internal/hash_function_defaults.h"  // IWYU pragma: export
+#include "y_absl/container/internal/raw_hash_map.h"  // IWYU pragma: export
+#include "y_absl/memory/memory.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 template <class K, class V>
@@ -49,10 +49,10 @@ struct FlatHashMapPolicy;
 }  // namespace container_internal
 
 // -----------------------------------------------------------------------------
-// y_absl::flat_hash_map 
+// y_absl::flat_hash_map
 // -----------------------------------------------------------------------------
 //
-// An `y_absl::flat_hash_map<K, V>` is an unordered associative container which 
+// An `y_absl::flat_hash_map<K, V>` is an unordered associative container which
 // has been optimized for both speed and memory footprint in most common use
 // cases. Its interface is similar to that of `std::unordered_map<K, V>` with
 // the following notable differences:
@@ -68,25 +68,25 @@ struct FlatHashMapPolicy;
 //   slots (open, deleted, and empty) within the hash map.
 // * Returns `void` from the `erase(iterator)` overload.
 //
-// By default, `flat_hash_map` uses the `y_absl::Hash` hashing framework. 
-// All fundamental and Abseil types that support the `y_absl::Hash` framework have 
+// By default, `flat_hash_map` uses the `y_absl::Hash` hashing framework.
+// All fundamental and Abseil types that support the `y_absl::Hash` framework have
 // a compatible equality operator for comparing insertions into `flat_hash_map`.
-// If your type is not yet supported by the `y_absl::Hash` framework, see 
-// y_absl/hash/hash.h for information on extending Abseil hashing to user-defined 
+// If your type is not yet supported by the `y_absl::Hash` framework, see
+// y_absl/hash/hash.h for information on extending Abseil hashing to user-defined
 // types.
 //
 // NOTE: A `flat_hash_map` stores its value types directly inside its
 // implementation array to avoid memory indirection. Because a `flat_hash_map`
 // is designed to move data when rehashed, map values will not retain pointer
 // stability. If you require pointer stability, or if your values are large,
-// consider using `y_absl::flat_hash_map<Key, std::unique_ptr<Value>>` instead. 
+// consider using `y_absl::flat_hash_map<Key, std::unique_ptr<Value>>` instead.
 // If your types are not moveable or you require pointer stability for keys,
-// consider `y_absl::node_hash_map`. 
+// consider `y_absl::node_hash_map`.
 //
 // Example:
 //
 //   // Create a flat hash map of three strings (that map to strings)
-//   y_absl::flat_hash_map<TString, TString> ducks = 
+//   y_absl::flat_hash_map<TString, TString> ducks =
 //     {{"a", "huey"}, {"b", "dewey"}, {"c", "louie"}};
 //
 //  // Insert a new element into the flat hash map
@@ -96,17 +96,17 @@ struct FlatHashMapPolicy;
 //  ducks.rehash(0);
 //
 //  // Find the element with the key "b"
-//  TString search_key = "b"; 
+//  TString search_key = "b";
 //  auto result = ducks.find(search_key);
 //  if (result != ducks.end()) {
 //    std::cout << "Result: " << result->second << std::endl;
 //  }
 template <class K, class V,
-          class Hash = y_absl::container_internal::hash_default_hash<K>, 
-          class Eq = y_absl::container_internal::hash_default_eq<K>, 
+          class Hash = y_absl::container_internal::hash_default_hash<K>,
+          class Eq = y_absl::container_internal::hash_default_eq<K>,
           class Allocator = std::allocator<std::pair<const K, V>>>
-class flat_hash_map : public y_absl::container_internal::raw_hash_map< 
-                          y_absl::container_internal::FlatHashMapPolicy<K, V>, 
+class flat_hash_map : public y_absl::container_internal::raw_hash_map<
+                          y_absl::container_internal::FlatHashMapPolicy<K, V>,
                           Hash, Eq, Allocator> {
   using Base = typename flat_hash_map::raw_hash_map;
 
@@ -119,38 +119,38 @@ class flat_hash_map : public y_absl::container_internal::raw_hash_map<
   // *  Default constructor
   //
   //    // No allocation for the table's elements is made.
-  //    y_absl::flat_hash_map<int, TString> map1; 
+  //    y_absl::flat_hash_map<int, TString> map1;
   //
   // * Initializer List constructor
   //
-  //   y_absl::flat_hash_map<int, TString> map2 = 
+  //   y_absl::flat_hash_map<int, TString> map2 =
   //       {{1, "huey"}, {2, "dewey"}, {3, "louie"},};
   //
   // * Copy constructor
   //
-  //   y_absl::flat_hash_map<int, TString> map3(map2); 
+  //   y_absl::flat_hash_map<int, TString> map3(map2);
   //
   // * Copy assignment operator
   //
   //  // Hash functor and Comparator are copied as well
-  //  y_absl::flat_hash_map<int, TString> map4; 
+  //  y_absl::flat_hash_map<int, TString> map4;
   //  map4 = map3;
   //
   // * Move constructor
   //
   //   // Move is guaranteed efficient
-  //   y_absl::flat_hash_map<int, TString> map5(std::move(map4)); 
+  //   y_absl::flat_hash_map<int, TString> map5(std::move(map4));
   //
   // * Move assignment operator
   //
   //   // May be efficient if allocators are compatible
-  //   y_absl::flat_hash_map<int, TString> map6; 
+  //   y_absl::flat_hash_map<int, TString> map6;
   //   map6 = std::move(map5);
   //
   // * Range constructor
   //
-  //   std::vector<std::pair<int, TString>> v = {{1, "a"}, {2, "b"}}; 
-  //   y_absl::flat_hash_map<int, TString> map7(v.begin(), v.end()); 
+  //   std::vector<std::pair<int, TString>> v = {{1, "a"}, {2, "b"}};
+  //   y_absl::flat_hash_map<int, TString> map7(v.begin(), v.end());
   flat_hash_map() {}
   using Base::Base;
 
@@ -179,7 +179,7 @@ class flat_hash_map : public y_absl::container_internal::raw_hash_map<
   // Returns the number of element slots (assigned, deleted, and empty)
   // available within the `flat_hash_map`.
   //
-  // NOTE: this member function is particular to `y_absl::flat_hash_map` and is 
+  // NOTE: this member function is particular to `y_absl::flat_hash_map` and is
   // not provided in the `std::unordered_map` API.
   using Base::capacity;
 
@@ -574,10 +574,10 @@ struct FlatHashMapPolicy {
   }
 
   template <class F, class... Args>
-  static decltype(y_absl::container_internal::DecomposePair( 
+  static decltype(y_absl::container_internal::DecomposePair(
       std::declval<F>(), std::declval<Args>()...))
   apply(F&& f, Args&&... args) {
-    return y_absl::container_internal::DecomposePair(std::forward<F>(f), 
+    return y_absl::container_internal::DecomposePair(std::forward<F>(f),
                                                    std::forward<Args>(args)...);
   }
 
@@ -593,14 +593,14 @@ struct FlatHashMapPolicy {
 
 namespace container_algorithm_internal {
 
-// Specialization of trait in y_absl/algorithm/container.h 
+// Specialization of trait in y_absl/algorithm/container.h
 template <class Key, class T, class Hash, class KeyEqual, class Allocator>
 struct IsUnorderedContainer<
-    y_absl::flat_hash_map<Key, T, Hash, KeyEqual, Allocator>> : std::true_type {}; 
+    y_absl::flat_hash_map<Key, T, Hash, KeyEqual, Allocator>> : std::true_type {};
 
 }  // namespace container_algorithm_internal
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_FLAT_HASH_MAP_H_

@@ -172,10 +172,10 @@
 #include <utility>
 
 #include "y_absl/base/config.h"
-#include "y_absl/meta/type_traits.h" 
-#include "y_absl/strings/str_cat.h" 
-#include "y_absl/types/span.h" 
-#include "y_absl/utility/utility.h" 
+#include "y_absl/meta/type_traits.h"
+#include "y_absl/strings/str_cat.h"
+#include "y_absl/types/span.h"
+#include "y_absl/utility/utility.h"
 
 #ifdef ABSL_HAVE_ADDRESS_SANITIZER
 #include <sanitizer/asan_interface.h>
@@ -189,7 +189,7 @@
 #include <cxxabi.h>
 #endif
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
@@ -250,13 +250,13 @@ struct AlignOf<Aligned<T, N>> {
 
 // Does `Ts...` contain `T`?
 template <class T, class... Ts>
-using Contains = y_absl::disjunction<std::is_same<T, Ts>...>; 
+using Contains = y_absl::disjunction<std::is_same<T, Ts>...>;
 
 template <class From, class To>
 using CopyConst =
     typename std::conditional<std::is_const<From>::value, const To, To>::type;
 
-// Note: We're not qualifying this with y_absl:: because it doesn't compile under 
+// Note: We're not qualifying this with y_absl:: because it doesn't compile under
 // MSVC.
 template <class T>
 using SliceType = Span<T>;
@@ -292,19 +292,19 @@ constexpr size_t Max(size_t a, size_t b, Ts... rest) {
 }
 
 template <class T>
-TString TypeName() { 
-  TString out; 
+TString TypeName() {
+  TString out;
   int status = 0;
   char* demangled = nullptr;
 #ifdef ABSL_INTERNAL_HAS_CXA_DEMANGLE
   demangled = abi::__cxa_demangle(typeid(T).name(), nullptr, nullptr, &status);
 #endif
   if (status == 0 && demangled != nullptr) {  // Demangling succeeded.
-    y_absl::StrAppend(&out, "<", demangled, ">"); 
+    y_absl::StrAppend(&out, "<", demangled, ">");
     free(demangled);
   } else {
 #if defined(__GXX_RTTI) || defined(_CPPRTTI)
-    y_absl::StrAppend(&out, "<", typeid(T).name(), ">"); 
+    y_absl::StrAppend(&out, "<", typeid(T).name(), ">");
 #endif
   }
   return out;
@@ -338,11 +338,11 @@ class LayoutImpl;
 // `Min(sizeof...(Elements), NumSizes + 1)` (the number of arrays for which we
 // can compute offsets).
 template <class... Elements, size_t... SizeSeq, size_t... OffsetSeq>
-class LayoutImpl<std::tuple<Elements...>, y_absl::index_sequence<SizeSeq...>, 
-                 y_absl::index_sequence<OffsetSeq...>> { 
+class LayoutImpl<std::tuple<Elements...>, y_absl::index_sequence<SizeSeq...>,
+                 y_absl::index_sequence<OffsetSeq...>> {
  private:
   static_assert(sizeof...(Elements) > 0, "At least one field is required");
-  static_assert(y_absl::conjunction<IsLegalElementType<Elements>...>::value, 
+  static_assert(y_absl::conjunction<IsLegalElementType<Elements>...>::value,
                 "Invalid element type (see IsLegalElementType)");
 
   enum {
@@ -643,21 +643,21 @@ class LayoutImpl<std::tuple<Elements...>, y_absl::index_sequence<SizeSeq...>,
   // be missing (as in the example above). Only fields with known offsets are
   // described. Type names may differ across platforms: one compiler might
   // produce "unsigned*" where another produces "unsigned int *".
-  TString DebugString() const { 
+  TString DebugString() const {
     const auto offsets = Offsets();
     const size_t sizes[] = {SizeOf<ElementType<OffsetSeq>>::value...};
-    const TString types[] = { 
+    const TString types[] = {
         adl_barrier::TypeName<ElementType<OffsetSeq>>()...};
-    TString res = y_absl::StrCat("@0", types[0], "(", sizes[0], ")"); 
+    TString res = y_absl::StrCat("@0", types[0], "(", sizes[0], ")");
     for (size_t i = 0; i != NumOffsets - 1; ++i) {
-      y_absl::StrAppend(&res, "[", size_[i], "]; @", offsets[i + 1], types[i + 1], 
+      y_absl::StrAppend(&res, "[", size_[i], "]; @", offsets[i + 1], types[i + 1],
                       "(", sizes[i + 1], ")");
     }
     // NumSizes is a constant that may be zero. Some compilers cannot see that
     // inside the if statement "size_[NumSizes - 1]" must be valid.
     int last = static_cast<int>(NumSizes) - 1;
     if (NumTypes == NumSizes && last >= 0) {
-      y_absl::StrAppend(&res, "[", size_[last], "]"); 
+      y_absl::StrAppend(&res, "[", size_[last], "]");
     }
     return res;
   }
@@ -669,8 +669,8 @@ class LayoutImpl<std::tuple<Elements...>, y_absl::index_sequence<SizeSeq...>,
 
 template <size_t NumSizes, class... Ts>
 using LayoutType = LayoutImpl<
-    std::tuple<Ts...>, y_absl::make_index_sequence<NumSizes>, 
-    y_absl::make_index_sequence<adl_barrier::Min(sizeof...(Ts), NumSizes + 1)>>; 
+    std::tuple<Ts...>, y_absl::make_index_sequence<NumSizes>,
+    y_absl::make_index_sequence<adl_barrier::Min(sizeof...(Ts), NumSizes + 1)>>;
 
 }  // namespace internal_layout
 
@@ -685,7 +685,7 @@ class Layout : public internal_layout::LayoutType<sizeof...(Ts), Ts...> {
  public:
   static_assert(sizeof...(Ts) > 0, "At least one field is required");
   static_assert(
-      y_absl::conjunction<internal_layout::IsLegalElementType<Ts>...>::value, 
+      y_absl::conjunction<internal_layout::IsLegalElementType<Ts>...>::value,
       "Invalid element type (see IsLegalElementType)");
 
   // The result type of `Partial()` with `NumSizes` arguments.
@@ -721,7 +721,7 @@ class Layout : public internal_layout::LayoutType<sizeof...(Ts), Ts...> {
   template <class... Sizes>
   static constexpr PartialType<sizeof...(Sizes)> Partial(Sizes&&... sizes) {
     static_assert(sizeof...(Sizes) <= sizeof...(Ts), "");
-    return PartialType<sizeof...(Sizes)>(y_absl::forward<Sizes>(sizes)...); 
+    return PartialType<sizeof...(Sizes)>(y_absl::forward<Sizes>(sizes)...);
   }
 
   // Creates a layout with the sizes of all arrays specified. If you know
@@ -738,6 +738,6 @@ class Layout : public internal_layout::LayoutType<sizeof...(Ts), Ts...> {
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_LAYOUT_H_

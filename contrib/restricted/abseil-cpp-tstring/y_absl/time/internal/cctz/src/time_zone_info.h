@@ -22,13 +22,13 @@
 #include <vector>
 
 #include "y_absl/base/config.h"
-#include "y_absl/time/internal/cctz/include/cctz/civil_time.h" 
-#include "y_absl/time/internal/cctz/include/cctz/time_zone.h" 
-#include "y_absl/time/internal/cctz/include/cctz/zone_info_source.h" 
+#include "y_absl/time/internal/cctz/include/cctz/civil_time.h"
+#include "y_absl/time/internal/cctz/include/cctz/time_zone.h"
+#include "y_absl/time/internal/cctz/include/cctz/zone_info_source.h"
 #include "time_zone_if.h"
 #include "tzfile.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -69,7 +69,7 @@ class TimeZoneInfo : public TimeZoneIf {
   TimeZoneInfo& operator=(const TimeZoneInfo&) = delete;
 
   // Loads the zoneinfo for the given name, returning true if successful.
-  bool Load(const TString& name); 
+  bool Load(const TString& name);
 
   // TimeZoneIf implementations.
   time_zone::absolute_lookup BreakTime(
@@ -79,8 +79,8 @@ class TimeZoneInfo : public TimeZoneIf {
                       time_zone::civil_transition* trans) const override;
   bool PrevTransition(const time_point<seconds>& tp,
                       time_zone::civil_transition* trans) const override;
-  TString Version() const override; 
-  TString Description() const override; 
+  TString Version() const override;
+  TString Description() const override;
 
  private:
   struct Header {            // counts of:
@@ -115,10 +115,10 @@ class TimeZoneInfo : public TimeZoneIf {
   std::vector<Transition> transitions_;  // ordered by unix_time and civil_sec
   std::vector<TransitionType> transition_types_;  // distinct transition types
   std::uint_fast8_t default_transition_type_;     // for before first transition
-  TString abbreviations_;  // all the NUL-terminated abbreviations 
+  TString abbreviations_;  // all the NUL-terminated abbreviations
 
-  TString version_;      // the tzdata version if available 
-  TString future_spec_;  // for after the last zic transition 
+  TString version_;      // the tzdata version if available
+  TString future_spec_;  // for after the last zic transition
   bool extended_;            // future_spec_ was used to generate transitions
   year_t last_year_;         // the final year of the generated transitions
 
@@ -132,6 +132,6 @@ class TimeZoneInfo : public TimeZoneIf {
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_INFO_H_

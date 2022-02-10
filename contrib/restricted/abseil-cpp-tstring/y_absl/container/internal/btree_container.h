@@ -21,13 +21,13 @@
 #include <utility>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/base/internal/throw_delegate.h" 
-#include "y_absl/container/internal/btree.h"  // IWYU pragma: export 
-#include "y_absl/container/internal/common.h" 
+#include "y_absl/base/internal/throw_delegate.h"
+#include "y_absl/container/internal/btree.h"  // IWYU pragma: export
+#include "y_absl/container/internal/common.h"
 #include "y_absl/memory/memory.h"
-#include "y_absl/meta/type_traits.h" 
+#include "y_absl/meta/type_traits.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
@@ -218,7 +218,7 @@ class btree_container {
   key_compare key_comp() const { return key_compare(tree_.key_comp()); }
   value_compare value_comp() const { return tree_.value_comp(); }
 
-  // Support y_absl::Hash. 
+  // Support y_absl::Hash.
   template <typename State>
   friend State AbslHashValue(State h, const btree_container &b) {
     for (const auto &v : b) {
@@ -353,8 +353,8 @@ class btree_set_container : public btree_container<Tree> {
   // `this`, it is left unmodified in `src`.
   template <
       typename T,
-      typename y_absl::enable_if_t< 
-          y_absl::conjunction< 
+      typename y_absl::enable_if_t<
+          y_absl::conjunction<
               std::is_same<value_type, typename T::value_type>,
               std::is_same<allocator_type, typename T::allocator_type>,
               std::is_same<typename params_type::is_map_container,
@@ -372,8 +372,8 @@ class btree_set_container : public btree_container<Tree> {
 
   template <
       typename T,
-      typename y_absl::enable_if_t< 
-          y_absl::conjunction< 
+      typename y_absl::enable_if_t<
+          y_absl::conjunction<
               std::is_same<value_type, typename T::value_type>,
               std::is_same<allocator_type, typename T::allocator_type>,
               std::is_same<typename params_type::is_map_container,
@@ -483,14 +483,14 @@ class btree_map_container : public btree_set_container<Tree> {
   mapped_type &at(const key_arg<K> &key) {
     auto it = this->find(key);
     if (it == this->end())
-      base_internal::ThrowStdOutOfRange("y_absl::btree_map::at"); 
+      base_internal::ThrowStdOutOfRange("y_absl::btree_map::at");
     return it->second;
   }
   template <typename K = key_type>
   const mapped_type &at(const key_arg<K> &key) const {
     auto it = this->find(key);
     if (it == this->end())
-      base_internal::ThrowStdOutOfRange("y_absl::btree_map::at"); 
+      base_internal::ThrowStdOutOfRange("y_absl::btree_map::at");
     return it->second;
   }
 
@@ -634,8 +634,8 @@ class btree_multiset_container : public btree_container<Tree> {
   // Moves all elements from `src` into `this`.
   template <
       typename T,
-      typename y_absl::enable_if_t< 
-          y_absl::conjunction< 
+      typename y_absl::enable_if_t<
+          y_absl::conjunction<
               std::is_same<value_type, typename T::value_type>,
               std::is_same<allocator_type, typename T::allocator_type>,
               std::is_same<typename params_type::is_map_container,
@@ -650,8 +650,8 @@ class btree_multiset_container : public btree_container<Tree> {
 
   template <
       typename T,
-      typename y_absl::enable_if_t< 
-          y_absl::conjunction< 
+      typename y_absl::enable_if_t<
+          y_absl::conjunction<
               std::is_same<value_type, typename T::value_type>,
               std::is_same<allocator_type, typename T::allocator_type>,
               std::is_same<typename params_type::is_map_container,
@@ -678,6 +678,6 @@ class btree_multimap_container : public btree_multiset_container<Tree> {
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_BTREE_CONTAINER_H_

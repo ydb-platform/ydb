@@ -39,12 +39,12 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/meta/type_traits.h" 
+#include "y_absl/meta/type_traits.h"
 
 // The following code is internal implementation detail.  See the comment at the
 // top of this file for the API documentation.
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -73,7 +73,7 @@ struct MemFunAndRef : StrippedAccept<MemFunAndRef> {
   template <typename MemFunType, typename C, typename Obj, typename... Args>
   struct AcceptImpl<MemFunType C::*, Obj, Args...>
       : std::integral_constant<bool, std::is_base_of<C, Obj>::value &&
-                                         y_absl::is_function<MemFunType>::value> { 
+                                         y_absl::is_function<MemFunType>::value> {
   };
 
   template <typename MemFun, typename Obj, typename... Args>
@@ -94,7 +94,7 @@ struct MemFunAndPtr : StrippedAccept<MemFunAndPtr> {
   template <typename MemFunType, typename C, typename Ptr, typename... Args>
   struct AcceptImpl<MemFunType C::*, Ptr, Args...>
       : std::integral_constant<bool, !std::is_base_of<C, Ptr>::value &&
-                                         y_absl::is_function<MemFunType>::value> { 
+                                         y_absl::is_function<MemFunType>::value> {
   };
 
   template <typename MemFun, typename Ptr, typename... Args>
@@ -116,7 +116,7 @@ struct DataMemAndRef : StrippedAccept<DataMemAndRef> {
   template <typename R, typename C, typename Obj>
   struct AcceptImpl<R C::*, Obj>
       : std::integral_constant<bool, std::is_base_of<C, Obj>::value &&
-                                         !y_absl::is_function<R>::value> {}; 
+                                         !y_absl::is_function<R>::value> {};
 
   template <typename DataMem, typename Ref>
   static decltype(std::declval<Ref>().*std::declval<DataMem>()) Invoke(
@@ -134,7 +134,7 @@ struct DataMemAndPtr : StrippedAccept<DataMemAndPtr> {
   template <typename R, typename C, typename Ptr>
   struct AcceptImpl<R C::*, Ptr>
       : std::integral_constant<bool, !std::is_base_of<C, Ptr>::value &&
-                                         !y_absl::is_function<R>::value> {}; 
+                                         !y_absl::is_function<R>::value> {};
 
   template <typename DataMem, typename Ptr>
   static decltype((*std::declval<Ptr>()).*std::declval<DataMem>()) Invoke(
@@ -182,6 +182,6 @@ invoke_result_t<F, Args...> invoke(F&& f, Args&&... args) {
 }
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_BASE_INTERNAL_INVOKE_H_

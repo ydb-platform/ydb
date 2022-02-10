@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/escaping.h" 
+#include "y_absl/strings/escaping.h"
 
 #include <algorithm>
 #include <cassert>
@@ -22,18 +22,18 @@
 #include <limits>
 #include <util/generic/string.h>
 
-#include "y_absl/base/internal/endian.h" 
-#include "y_absl/base/internal/raw_logging.h" 
-#include "y_absl/base/internal/unaligned_access.h" 
-#include "y_absl/strings/internal/char_map.h" 
+#include "y_absl/base/internal/endian.h"
+#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/base/internal/unaligned_access.h"
+#include "y_absl/strings/internal/char_map.h"
 #include "y_absl/strings/internal/escaping.h"
-#include "y_absl/strings/internal/resize_uninitialized.h" 
-#include "y_absl/strings/internal/utf8.h" 
-#include "y_absl/strings/str_cat.h" 
-#include "y_absl/strings/str_join.h" 
-#include "y_absl/strings/string_view.h" 
+#include "y_absl/strings/internal/resize_uninitialized.h"
+#include "y_absl/strings/internal/utf8.h"
+#include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/str_join.h"
+#include "y_absl/strings/string_view.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace {
 
@@ -45,7 +45,7 @@ inline bool is_octal_digit(char c) { return ('0' <= c) && (c <= '7'); }
 inline int hex_digit_to_int(char c) {
   static_assert('0' == 0x30 && 'A' == 0x41 && 'a' == 0x61,
                 "Character set must be ASCII.");
-  assert(y_absl::ascii_isxdigit(c)); 
+  assert(y_absl::ascii_isxdigit(c));
   int x = static_cast<unsigned char>(c);
   if (x > '9') {
     x += 9;
@@ -53,10 +53,10 @@ inline int hex_digit_to_int(char c) {
   return x & 0xf;
 }
 
-inline bool IsSurrogate(char32_t c, y_absl::string_view src, TString* error) { 
+inline bool IsSurrogate(char32_t c, y_absl::string_view src, TString* error) {
   if (c >= 0xD800 && c <= 0xDFFF) {
     if (error) {
-      *error = y_absl::StrCat("invalid surrogate character (0xD800-DFFF): \\", 
+      *error = y_absl::StrCat("invalid surrogate character (0xD800-DFFF): \\",
                             src);
     }
     return true;
@@ -81,8 +81,8 @@ inline bool IsSurrogate(char32_t c, y_absl::string_view src, TString* error) {
 //     NOTE: any changes to this function must also be reflected in the older
 //     UnescapeCEscapeSequences().
 // ----------------------------------------------------------------------
-bool CUnescapeInternal(y_absl::string_view source, bool leave_nulls_escaped, 
-                       char* dest, ptrdiff_t* dest_len, TString* error) { 
+bool CUnescapeInternal(y_absl::string_view source, bool leave_nulls_escaped,
+                       char* dest, ptrdiff_t* dest_len, TString* error) {
   char* d = dest;
   const char* p = source.data();
   const char* end = p + source.size();
@@ -128,7 +128,7 @@ bool CUnescapeInternal(y_absl::string_view source, bool leave_nulls_escaped,
           if (ch > 0xff) {
             if (error) {
               *error = "Value of \\" +
-                       TString(octal_start, p + 1 - octal_start) + 
+                       TString(octal_start, p + 1 - octal_start) +
                        " exceeds 0xff";
             }
             return false;
@@ -149,19 +149,19 @@ bool CUnescapeInternal(y_absl::string_view source, bool leave_nulls_escaped,
           if (p >= last_byte) {
             if (error) *error = "String cannot end with \\x";
             return false;
-          } else if (!y_absl::ascii_isxdigit(p[1])) { 
+          } else if (!y_absl::ascii_isxdigit(p[1])) {
             if (error) *error = "\\x cannot be followed by a non-hex digit";
             return false;
           }
           unsigned int ch = 0;
           const char* hex_start = p;
-          while (p < last_byte && y_absl::ascii_isxdigit(p[1])) 
+          while (p < last_byte && y_absl::ascii_isxdigit(p[1]))
             // Arbitrarily many hex digits
             ch = (ch << 4) + hex_digit_to_int(*++p);
           if (ch > 0xFF) {
             if (error) {
               *error = "Value of \\" +
-                       TString(hex_start, p + 1 - hex_start) + 
+                       TString(hex_start, p + 1 - hex_start) +
                        " exceeds 0xff";
             }
             return false;
@@ -184,18 +184,18 @@ bool CUnescapeInternal(y_absl::string_view source, bool leave_nulls_escaped,
           if (p + 4 >= end) {
             if (error) {
               *error = "\\u must be followed by 4 hex digits: \\" +
-                       TString(hex_start, p + 1 - hex_start); 
+                       TString(hex_start, p + 1 - hex_start);
             }
             return false;
           }
           for (int i = 0; i < 4; ++i) {
             // Look one char ahead.
-            if (y_absl::ascii_isxdigit(p[1])) { 
+            if (y_absl::ascii_isxdigit(p[1])) {
               rune = (rune << 4) + hex_digit_to_int(*++p);  // Advance p.
             } else {
               if (error) {
                 *error = "\\u must be followed by 4 hex digits: \\" +
-                         TString(hex_start, p + 1 - hex_start); 
+                         TString(hex_start, p + 1 - hex_start);
               }
               return false;
             }
@@ -207,7 +207,7 @@ bool CUnescapeInternal(y_absl::string_view source, bool leave_nulls_escaped,
             d += 5;
             break;
           }
-          if (IsSurrogate(rune, y_absl::string_view(hex_start, 5), error)) { 
+          if (IsSurrogate(rune, y_absl::string_view(hex_start, 5), error)) {
             return false;
           }
           d += strings_internal::EncodeUTF8Char(d, rune);
@@ -220,20 +220,20 @@ bool CUnescapeInternal(y_absl::string_view source, bool leave_nulls_escaped,
           if (p + 8 >= end) {
             if (error) {
               *error = "\\U must be followed by 8 hex digits: \\" +
-                       TString(hex_start, p + 1 - hex_start); 
+                       TString(hex_start, p + 1 - hex_start);
             }
             return false;
           }
           for (int i = 0; i < 8; ++i) {
             // Look one char ahead.
-            if (y_absl::ascii_isxdigit(p[1])) { 
+            if (y_absl::ascii_isxdigit(p[1])) {
               // Don't change rune until we're sure this
               // is within the Unicode limit, but do advance p.
               uint32_t newrune = (rune << 4) + hex_digit_to_int(*++p);
               if (newrune > 0x10FFFF) {
                 if (error) {
                   *error = "Value of \\" +
-                           TString(hex_start, p + 1 - hex_start) + 
+                           TString(hex_start, p + 1 - hex_start) +
                            " exceeds Unicode limit (0x10FFFF)";
                 }
                 return false;
@@ -243,7 +243,7 @@ bool CUnescapeInternal(y_absl::string_view source, bool leave_nulls_escaped,
             } else {
               if (error) {
                 *error = "\\U must be followed by 8 hex digits: \\" +
-                         TString(hex_start, p + 1 - hex_start); 
+                         TString(hex_start, p + 1 - hex_start);
               }
               return false;
             }
@@ -255,14 +255,14 @@ bool CUnescapeInternal(y_absl::string_view source, bool leave_nulls_escaped,
             d += 9;
             break;
           }
-          if (IsSurrogate(rune, y_absl::string_view(hex_start, 9), error)) { 
+          if (IsSurrogate(rune, y_absl::string_view(hex_start, 9), error)) {
             return false;
           }
           d += strings_internal::EncodeUTF8Char(d, rune);
           break;
         }
         default: {
-          if (error) *error = TString("Unknown escape sequence: \\") + *p; 
+          if (error) *error = TString("Unknown escape sequence: \\") + *p;
           return false;
         }
       }
@@ -276,11 +276,11 @@ bool CUnescapeInternal(y_absl::string_view source, bool leave_nulls_escaped,
 // ----------------------------------------------------------------------
 // CUnescapeInternal()
 //
-//    Same as above but uses a TString for output. 'source' and 'dest' 
+//    Same as above but uses a TString for output. 'source' and 'dest'
 //    may be the same.
 // ----------------------------------------------------------------------
-bool CUnescapeInternal(y_absl::string_view source, bool leave_nulls_escaped, 
-                       TString* dest, TString* error) { 
+bool CUnescapeInternal(y_absl::string_view source, bool leave_nulls_escaped,
+                       TString* dest, TString* error) {
   strings_internal::STLStringResizeUninitialized(dest, source.size());
 
   ptrdiff_t dest_size;
@@ -304,11 +304,11 @@ bool CUnescapeInternal(y_absl::string_view source, bool leave_nulls_escaped,
 //    preparing query flags.  The 'Hex' version uses hexadecimal rather than
 //    octal sequences.  The 'Utf8Safe' version does not touch UTF-8 bytes.
 //
-//    Escaped chars: \n, \r, \t, ", ', \, and !y_absl::ascii_isprint(). 
+//    Escaped chars: \n, \r, \t, ", ', \, and !y_absl::ascii_isprint().
 // ----------------------------------------------------------------------
-TString CEscapeInternal(y_absl::string_view src, bool use_hex, 
+TString CEscapeInternal(y_absl::string_view src, bool use_hex,
                             bool utf8_safe) {
-  TString dest; 
+  TString dest;
   bool last_hex_escape = false;  // true if last output char was \xNN.
 
   for (unsigned char c : src) {
@@ -325,8 +325,8 @@ TString CEscapeInternal(y_absl::string_view src, bool use_hex,
         // digit then that digit must be escaped too to prevent it being
         // interpreted as part of the character code by C.
         if ((!utf8_safe || c < 0x80) &&
-            (!y_absl::ascii_isprint(c) || 
-             (last_hex_escape && y_absl::ascii_isxdigit(c)))) { 
+            (!y_absl::ascii_isprint(c) ||
+             (last_hex_escape && y_absl::ascii_isxdigit(c)))) {
           if (use_hex) {
             dest.append("\\" "x");
             dest.push_back(numbers_internal::kHexChar[c / 16]);
@@ -373,13 +373,13 @@ constexpr char c_escaped_len[256] = {
 // Calculates the length of the C-style escaped version of 'src'.
 // Assumes that non-printable characters are escaped using octal sequences, and
 // that UTF-8 bytes are not handled specially.
-inline size_t CEscapedLength(y_absl::string_view src) { 
+inline size_t CEscapedLength(y_absl::string_view src) {
   size_t escaped_len = 0;
   for (unsigned char c : src) escaped_len += c_escaped_len[c];
   return escaped_len;
 }
 
-void CEscapeAndAppendInternal(y_absl::string_view src, TString* dest) { 
+void CEscapeAndAppendInternal(y_absl::string_view src, TString* dest) {
   size_t escaped_len = CEscapedLength(src);
   if (escaped_len == src.size()) {
     dest->append(src.data(), src.size());
@@ -460,7 +460,7 @@ bool Base64UnescapeInternal(const char* src_param, size_t szsrc, char* dest,
   ch = *src++;                                                  \
   decode = unbase64[ch];                                        \
   if (decode < 0) {                                             \
-    if (y_absl::ascii_isspace(ch) && szsrc >= remain) goto label; \ 
+    if (y_absl::ascii_isspace(ch) && szsrc >= remain) goto label; \
     state = 4 - remain;                                         \
     break;                                                      \
   }
@@ -550,7 +550,7 @@ bool Base64UnescapeInternal(const char* src_param, size_t szsrc, char* dest,
   // if the loop terminated because we read a bad character, return
   // now.
   if (decode < 0 && ch != kPad64Equals && ch != kPad64Dot &&
-      !y_absl::ascii_isspace(ch)) 
+      !y_absl::ascii_isspace(ch))
     return false;
 
   if (ch == kPad64Equals || ch == kPad64Dot) {
@@ -569,7 +569,7 @@ bool Base64UnescapeInternal(const char* src_param, size_t szsrc, char* dest,
       ch = *src++;
       decode = unbase64[ch];
       if (decode < 0) {
-        if (y_absl::ascii_isspace(ch)) { 
+        if (y_absl::ascii_isspace(ch)) {
           continue;
         } else if (ch == kPad64Equals || ch == kPad64Dot) {
           // back up one character; we'll read it again when we check
@@ -653,7 +653,7 @@ bool Base64UnescapeInternal(const char* src_param, size_t szsrc, char* dest,
   while (szsrc > 0) {
     if (*src == kPad64Equals || *src == kPad64Dot)
       ++equals;
-    else if (!y_absl::ascii_isspace(*src)) 
+    else if (!y_absl::ascii_isspace(*src))
       return false;
     --szsrc;
     ++src;
@@ -829,7 +829,7 @@ void HexStringToBytesInternal(const char* from, T to, ptrdiff_t num) {
 }
 
 // This is a templated function so that T can be either a char* or a
-// TString. 
+// TString.
 template <typename T>
 void BytesToHexStringInternal(const unsigned char* src, T dest, ptrdiff_t num) {
   auto dest_ptr = &dest[0];
@@ -846,26 +846,26 @@ void BytesToHexStringInternal(const unsigned char* src, T dest, ptrdiff_t num) {
 //
 // See CUnescapeInternal() for implementation details.
 // ----------------------------------------------------------------------
-bool CUnescape(y_absl::string_view source, TString* dest, 
-               TString* error) { 
+bool CUnescape(y_absl::string_view source, TString* dest,
+               TString* error) {
   return CUnescapeInternal(source, kUnescapeNulls, dest, error);
 }
 
-TString CEscape(y_absl::string_view src) { 
-  TString dest; 
+TString CEscape(y_absl::string_view src) {
+  TString dest;
   CEscapeAndAppendInternal(src, &dest);
   return dest;
 }
 
-TString CHexEscape(y_absl::string_view src) { 
+TString CHexEscape(y_absl::string_view src) {
   return CEscapeInternal(src, true, false);
 }
 
-TString Utf8SafeCEscape(y_absl::string_view src) { 
+TString Utf8SafeCEscape(y_absl::string_view src) {
   return CEscapeInternal(src, false, true);
 }
 
-TString Utf8SafeCHexEscape(y_absl::string_view src) { 
+TString Utf8SafeCHexEscape(y_absl::string_view src) {
   return CEscapeInternal(src, true, true);
 }
 
@@ -893,57 +893,57 @@ TString Utf8SafeCHexEscape(y_absl::string_view src) {
 //   indicate that the text was not an integer multiple of three bytes long.
 // ----------------------------------------------------------------------
 
-bool Base64Unescape(y_absl::string_view src, TString* dest) { 
+bool Base64Unescape(y_absl::string_view src, TString* dest) {
   return Base64UnescapeInternal(src.data(), src.size(), dest, kUnBase64);
 }
 
-bool WebSafeBase64Unescape(y_absl::string_view src, TString* dest) { 
+bool WebSafeBase64Unescape(y_absl::string_view src, TString* dest) {
   return Base64UnescapeInternal(src.data(), src.size(), dest, kUnWebSafeBase64);
 }
 
-void Base64Escape(y_absl::string_view src, TString* dest) { 
+void Base64Escape(y_absl::string_view src, TString* dest) {
   strings_internal::Base64EscapeInternal(
       reinterpret_cast<const unsigned char*>(src.data()), src.size(), dest,
       true, strings_internal::kBase64Chars);
 }
 
-void WebSafeBase64Escape(y_absl::string_view src, TString* dest) { 
+void WebSafeBase64Escape(y_absl::string_view src, TString* dest) {
   strings_internal::Base64EscapeInternal(
       reinterpret_cast<const unsigned char*>(src.data()), src.size(), dest,
       false, kWebSafeBase64Chars);
 }
 
-TString Base64Escape(y_absl::string_view src) { 
-  TString dest; 
+TString Base64Escape(y_absl::string_view src) {
+  TString dest;
   strings_internal::Base64EscapeInternal(
       reinterpret_cast<const unsigned char*>(src.data()), src.size(), &dest,
       true, strings_internal::kBase64Chars);
   return dest;
 }
 
-TString WebSafeBase64Escape(y_absl::string_view src) { 
-  TString dest; 
+TString WebSafeBase64Escape(y_absl::string_view src) {
+  TString dest;
   strings_internal::Base64EscapeInternal(
       reinterpret_cast<const unsigned char*>(src.data()), src.size(), &dest,
       false, kWebSafeBase64Chars);
   return dest;
 }
 
-TString HexStringToBytes(y_absl::string_view from) { 
-  TString result; 
+TString HexStringToBytes(y_absl::string_view from) {
+  TString result;
   const auto num = from.size() / 2;
   strings_internal::STLStringResizeUninitialized(&result, num);
-  y_absl::HexStringToBytesInternal<TString&>(from.data(), result, num); 
+  y_absl::HexStringToBytesInternal<TString&>(from.data(), result, num);
   return result;
 }
 
-TString BytesToHexString(y_absl::string_view from) { 
-  TString result; 
+TString BytesToHexString(y_absl::string_view from) {
+  TString result;
   strings_internal::STLStringResizeUninitialized(&result, 2 * from.size());
-  y_absl::BytesToHexStringInternal<TString&>( 
+  y_absl::BytesToHexStringInternal<TString&>(
       reinterpret_cast<const unsigned char*>(from.data()), result, from.size());
   return result;
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

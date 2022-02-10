@@ -6,7 +6,7 @@ import signal
 import time
 import json
 import argparse
-import errno 
+import errno
 
 import process_command_files as pcf
 import process_whole_archive_option as pwa
@@ -55,20 +55,20 @@ def subst_path(l):
 def call_wine_cmd_once(wine, cmd, env, mode):
     p = run_subprocess(wine + cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, close_fds=True, shell=False)
 
-    output = find_cmd_out(cmd) 
-    error = None 
-    if output is not None and os.path.exists(output): 
-        try: 
-            os.remove(output) 
-        except OSError as e: 
-            if e.errno != errno.ENOENT: 
-                error = e 
-        except Exception as e: 
-            error = e 
- 
-    if error is not None: 
-        print >> sys.stderr, 'Output {} already exists and we have failed to remove it: {}'.format(output, error) 
- 
+    output = find_cmd_out(cmd)
+    error = None
+    if output is not None and os.path.exists(output):
+        try:
+            os.remove(output)
+        except OSError as e:
+            if e.errno != errno.ENOENT:
+                error = e
+        except Exception as e:
+            error = e
+
+    if error is not None:
+        print >> sys.stderr, 'Output {} already exists and we have failed to remove it: {}'.format(output, error)
+
     # print >>sys.stderr, cmd, env, wine
 
     stdout_and_stderr, _ = p.communicate()
@@ -360,7 +360,7 @@ def make_full_path_arg(arg, bld_root, short_root):
     return arg
 
 def fix_path(p):
-    topdirs = ['/%s/' % d for d in os.listdir('/')] 
+    topdirs = ['/%s/' % d for d in os.listdir('/')]
     def abs_path_start(path, pos):
         if pos < 0:
             return False
@@ -482,7 +482,7 @@ def run_main():
             log = colorize(log)
         print >>sys.stderr, log
 
-    tout = 200 
+    tout = 200
 
     while True:
         rc, out = run_process(0, tout)
@@ -525,12 +525,12 @@ def run_main():
 
 
 def main():
-    prefix_suffix = os.environ.pop('WINEPREFIX_SUFFIX', None) 
-    if prefix_suffix is not None: 
-        prefix = os.environ.pop('WINEPREFIX', None) 
-        if prefix is not None: 
-            os.environ['WINEPREFIX'] = os.path.join(prefix, prefix_suffix) 
- 
+    prefix_suffix = os.environ.pop('WINEPREFIX_SUFFIX', None)
+    if prefix_suffix is not None:
+        prefix = os.environ.pop('WINEPREFIX', None)
+        if prefix is not None:
+            os.environ['WINEPREFIX'] = os.path.join(prefix, prefix_suffix)
+
     # just in case
     signal.alarm(2000)
 

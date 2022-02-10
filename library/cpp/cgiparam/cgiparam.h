@@ -87,21 +87,21 @@ public:
 
     void InsertEscaped(const TStringBuf name, const TStringBuf value);
 
-#if !defined(__GLIBCXX__) 
+#if !defined(__GLIBCXX__)
     template <typename TName, typename TValue>
     inline void InsertUnescaped(TName&& name, TValue&& value) {
-        // TStringBuf use as TName or TValue is C++17 actually. 
-        // There is no pair constructor available in C++14 when required type 
-        // is not implicitly constructible from given type. 
-        // But libc++ pair allows this with C++14. 
+        // TStringBuf use as TName or TValue is C++17 actually.
+        // There is no pair constructor available in C++14 when required type
+        // is not implicitly constructible from given type.
+        // But libc++ pair allows this with C++14.
         emplace(std::forward<TName>(name), std::forward<TValue>(value));
     }
-#else 
-    template <typename TName, typename TValue> 
-    inline void InsertUnescaped(TName&& name, TValue&& value) { 
-        emplace(TString(name), TString(value)); 
-    } 
-#endif 
+#else
+    template <typename TName, typename TValue>
+    inline void InsertUnescaped(TName&& name, TValue&& value) {
+        emplace(TString(name), TString(value));
+    }
+#endif
 
     // replace all values for a given key with new values
     template <typename TIter>

@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/internal/str_format/bind.h" 
+#include "y_absl/strings/internal/str_format/bind.h"
 
 #include <cerrno>
 #include <limits>
 #include <sstream>
 #include <util/generic/string.h>
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
 namespace {
 
 inline bool BindFromPosition(int position, int* value,
-                             y_absl::Span<const FormatArgImpl> pack) { 
+                             y_absl::Span<const FormatArgImpl> pack) {
   assert(position > 0);
   if (static_cast<size_t>(position) > pack.size()) {
     return false;
@@ -37,7 +37,7 @@ inline bool BindFromPosition(int position, int* value,
 
 class ArgContext {
  public:
-  explicit ArgContext(y_absl::Span<const FormatArgImpl> pack) : pack_(pack) {} 
+  explicit ArgContext(y_absl::Span<const FormatArgImpl> pack) : pack_(pack) {}
 
   // Fill 'bound' with the results of applying the context's argument pack
   // to the specified 'unbound'. We synthesize a BoundConversion by
@@ -48,7 +48,7 @@ class ArgContext {
   bool Bind(const UnboundConversion* unbound, BoundConversion* bound);
 
  private:
-  y_absl::Span<const FormatArgImpl> pack_; 
+  y_absl::Span<const FormatArgImpl> pack_;
 };
 
 inline bool ArgContext::Bind(const UnboundConversion* unbound,
@@ -102,7 +102,7 @@ inline bool ArgContext::Bind(const UnboundConversion* unbound,
 template <typename Converter>
 class ConverterConsumer {
  public:
-  ConverterConsumer(Converter converter, y_absl::Span<const FormatArgImpl> pack) 
+  ConverterConsumer(Converter converter, y_absl::Span<const FormatArgImpl> pack)
       : converter_(converter), arg_context_(pack) {}
 
   bool Append(string_view s) {
@@ -122,7 +122,7 @@ class ConverterConsumer {
 
 template <typename Converter>
 bool ConvertAll(const UntypedFormatSpecImpl format,
-                y_absl::Span<const FormatArgImpl> args, Converter converter) { 
+                y_absl::Span<const FormatArgImpl> args, Converter converter) {
   if (format.has_parsed_conversion()) {
     return format.parsed_conversion()->ProcessFormat(
         ConverterConsumer<Converter>(converter, args));
@@ -172,15 +172,15 @@ class SummarizingConverter {
 }  // namespace
 
 bool BindWithPack(const UnboundConversion* props,
-                  y_absl::Span<const FormatArgImpl> pack, 
+                  y_absl::Span<const FormatArgImpl> pack,
                   BoundConversion* bound) {
   return ArgContext(pack).Bind(props, bound);
 }
 
-TString Summarize(const UntypedFormatSpecImpl format, 
-                      y_absl::Span<const FormatArgImpl> args) { 
+TString Summarize(const UntypedFormatSpecImpl format,
+                      y_absl::Span<const FormatArgImpl> args) {
   typedef SummarizingConverter Converter;
-  TString out; 
+  TString out;
   {
     // inner block to destroy sink before returning out. It ensures a last
     // flush.
@@ -194,7 +194,7 @@ TString Summarize(const UntypedFormatSpecImpl format,
 
 bool FormatUntyped(FormatRawSinkImpl raw_sink,
                    const UntypedFormatSpecImpl format,
-                   y_absl::Span<const FormatArgImpl> args) { 
+                   y_absl::Span<const FormatArgImpl> args) {
   FormatSinkImpl sink(raw_sink);
   using Converter = DefaultConverter;
   return ConvertAll(format, args, Converter(&sink));
@@ -205,8 +205,8 @@ std::ostream& Streamable::Print(std::ostream& os) const {
   return os;
 }
 
-TString& AppendPack(TString* out, const UntypedFormatSpecImpl format, 
-                        y_absl::Span<const FormatArgImpl> args) { 
+TString& AppendPack(TString* out, const UntypedFormatSpecImpl format,
+                        y_absl::Span<const FormatArgImpl> args) {
   size_t orig = out->size();
   if (ABSL_PREDICT_FALSE(!FormatUntyped(out, format, args))) {
     out->erase(orig);
@@ -214,9 +214,9 @@ TString& AppendPack(TString* out, const UntypedFormatSpecImpl format,
   return *out;
 }
 
-TString FormatPack(const UntypedFormatSpecImpl format, 
-                       y_absl::Span<const FormatArgImpl> args) { 
-  TString out; 
+TString FormatPack(const UntypedFormatSpecImpl format,
+                       y_absl::Span<const FormatArgImpl> args) {
+  TString out;
   if (ABSL_PREDICT_FALSE(!FormatUntyped(&out, format, args))) {
     out.clear();
   }
@@ -224,7 +224,7 @@ TString FormatPack(const UntypedFormatSpecImpl format,
 }
 
 int FprintF(std::FILE* output, const UntypedFormatSpecImpl format,
-            y_absl::Span<const FormatArgImpl> args) { 
+            y_absl::Span<const FormatArgImpl> args) {
   FILERawSink sink(output);
   if (!FormatUntyped(&sink, format, args)) {
     errno = EINVAL;
@@ -242,7 +242,7 @@ int FprintF(std::FILE* output, const UntypedFormatSpecImpl format,
 }
 
 int SnprintF(char* output, size_t size, const UntypedFormatSpecImpl format,
-             y_absl::Span<const FormatArgImpl> args) { 
+             y_absl::Span<const FormatArgImpl> args) {
   BufferRawSink sink(output, size ? size - 1 : 0);
   if (!FormatUntyped(&sink, format, args)) {
     errno = EINVAL;
@@ -255,4 +255,4 @@ int SnprintF(char* output, size_t size, const UntypedFormatSpecImpl format,
 
 }  // namespace str_format_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

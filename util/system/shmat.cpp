@@ -61,30 +61,30 @@ namespace {
     static int shmdt(const void* addr) {
         return syscall(__NR_shmdt, addr);
     }
- 
+
     #else
         #define IPCOP_shmat 21
         #define IPCOP_shmdt 22
         #define IPCOP_shmget 23
         #define IPCOP_shmctl 24
- 
-    static int shmget(key_t key, size_t size, int flag) { 
-        return syscall(__NR_ipc, IPCOP_shmget, key, size, flag, 0); 
-    } 
- 
-    static void* shmat(int id, const void* addr, int flag) { 
-        void* retval; 
-        long res = syscall(__NR_ipc, IPCOP_shmat, id, flag, (long)&retval, addr); 
+
+    static int shmget(key_t key, size_t size, int flag) {
+        return syscall(__NR_ipc, IPCOP_shmget, key, size, flag, 0);
+    }
+
+    static void* shmat(int id, const void* addr, int flag) {
+        void* retval;
+        long res = syscall(__NR_ipc, IPCOP_shmat, id, flag, (long)&retval, addr);
         return (res >= 0) ? retval : (void*)-1;
-    } 
- 
-    static int shmctl(int id, int cmd, void* buf) { 
-        return syscall(__NR_ipc, IPCOP_shmctl, id, cmd | IPC_64, 0, buf); 
-    } 
- 
-    static int shmdt(const void* addr) { 
-        return syscall(__NR_ipc, IPCOP_shmdt, 0, 0, 0, addr); 
-    } 
+    }
+
+    static int shmctl(int id, int cmd, void* buf) {
+        return syscall(__NR_ipc, IPCOP_shmctl, id, cmd | IPC_64, 0, buf);
+    }
+
+    static int shmdt(const void* addr) {
+        return syscall(__NR_ipc, IPCOP_shmdt, 0, 0, 0, addr);
+    }
     #endif
 }
 #endif

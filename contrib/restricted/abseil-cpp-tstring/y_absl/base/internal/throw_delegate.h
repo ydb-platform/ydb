@@ -17,11 +17,11 @@
 #ifndef ABSL_BASE_INTERNAL_THROW_DELEGATE_H_
 #define ABSL_BASE_INTERNAL_THROW_DELEGATE_H_
 
-#include <util/generic/string.h> 
- 
+#include <util/generic/string.h>
+
 #include "y_absl/base/config.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -39,23 +39,23 @@ namespace base_internal {
 // both with and without exceptions and you need to conform to an interface
 // that uses exceptions.
 
-[[noreturn]] void ThrowStdLogicError(const TString& what_arg); 
+[[noreturn]] void ThrowStdLogicError(const TString& what_arg);
 [[noreturn]] void ThrowStdLogicError(const char* what_arg);
-[[noreturn]] void ThrowStdInvalidArgument(const TString& what_arg); 
+[[noreturn]] void ThrowStdInvalidArgument(const TString& what_arg);
 [[noreturn]] void ThrowStdInvalidArgument(const char* what_arg);
-[[noreturn]] void ThrowStdDomainError(const TString& what_arg); 
+[[noreturn]] void ThrowStdDomainError(const TString& what_arg);
 [[noreturn]] void ThrowStdDomainError(const char* what_arg);
-[[noreturn]] void ThrowStdLengthError(const TString& what_arg); 
+[[noreturn]] void ThrowStdLengthError(const TString& what_arg);
 [[noreturn]] void ThrowStdLengthError(const char* what_arg);
-[[noreturn]] void ThrowStdOutOfRange(const TString& what_arg); 
+[[noreturn]] void ThrowStdOutOfRange(const TString& what_arg);
 [[noreturn]] void ThrowStdOutOfRange(const char* what_arg);
-[[noreturn]] void ThrowStdRuntimeError(const TString& what_arg); 
+[[noreturn]] void ThrowStdRuntimeError(const TString& what_arg);
 [[noreturn]] void ThrowStdRuntimeError(const char* what_arg);
-[[noreturn]] void ThrowStdRangeError(const TString& what_arg); 
+[[noreturn]] void ThrowStdRangeError(const TString& what_arg);
 [[noreturn]] void ThrowStdRangeError(const char* what_arg);
-[[noreturn]] void ThrowStdOverflowError(const TString& what_arg); 
+[[noreturn]] void ThrowStdOverflowError(const TString& what_arg);
 [[noreturn]] void ThrowStdOverflowError(const char* what_arg);
-[[noreturn]] void ThrowStdUnderflowError(const TString& what_arg); 
+[[noreturn]] void ThrowStdUnderflowError(const TString& what_arg);
 [[noreturn]] void ThrowStdUnderflowError(const char* what_arg);
 
 [[noreturn]] void ThrowStdBadFunctionCall();
@@ -70,6 +70,6 @@ namespace base_internal {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_BASE_INTERNAL_THROW_DELEGATE_H_

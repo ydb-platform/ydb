@@ -5,24 +5,24 @@
 /// \brief Definitions for asynchonous connection queue
 
 #include "base.h"
-#include "event_loop.h" 
+#include "event_loop.h"
 #include "netaddr.h"
 
-#include <util/datetime/base.h> 
+#include <util/datetime/base.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/list.h>
-#include <util/generic/map.h> 
-#include <util/generic/set.h> 
+#include <util/generic/map.h>
+#include <util/generic/set.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/network/address.h>
 #include <util/network/ip.h>
-#include <util/network/poller.h> 
-#include <util/string/util.h> 
-#include <util/system/condvar.h> 
+#include <util/network/poller.h>
+#include <util/string/util.h>
+#include <util/system/condvar.h>
 #include <util/system/mutex.h>
 #include <util/system/thread.h>
-#include <util/thread/lfqueue.h> 
+#include <util/thread/lfqueue.h>
 
 #include <deque>
 #include <utility>
@@ -31,9 +31,9 @@
 #undef NO_ERROR
 #endif
 
-#define BUS_WORKER_CONDVAR 
-//#define BUS_WORKER_MIXED 
- 
+#define BUS_WORKER_CONDVAR
+//#define BUS_WORKER_MIXED
+
 namespace NBus {
     class TBusConnection;
     class TBusConnectionFactory;
@@ -64,4 +64,4 @@ namespace NBus {
         POLL_WRITE
     };
 
-} 
+}

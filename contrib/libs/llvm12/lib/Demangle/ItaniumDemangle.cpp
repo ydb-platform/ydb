@@ -323,12 +323,12 @@ public:
 
 using Demangler = itanium_demangle::ManglingParser<DefaultAllocator>;
 
-void llvm::itanium_demangle::demangleAST(const char *MangledName, IASTProcessor *Processor) { 
-  Demangler Parser(MangledName, MangledName + std::strlen(MangledName)); 
-  Node* node = Parser.parse(); 
-  Processor->Process(node); 
-} 
- 
+void llvm::itanium_demangle::demangleAST(const char *MangledName, IASTProcessor *Processor) {
+  Demangler Parser(MangledName, MangledName + std::strlen(MangledName));
+  Node* node = Parser.parse();
+  Processor->Process(node);
+}
+
 char *llvm::itaniumDemangle(const char *MangledName, char *Buf,
                             size_t *N, int *Status) {
   if (MangledName == nullptr || (Buf != nullptr && N == nullptr)) {

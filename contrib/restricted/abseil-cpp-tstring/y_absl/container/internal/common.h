@@ -18,17 +18,17 @@
 #include <cassert>
 #include <type_traits>
 
-#include "y_absl/meta/type_traits.h" 
-#include "y_absl/types/optional.h" 
+#include "y_absl/meta/type_traits.h"
+#include "y_absl/types/optional.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 template <class, class = void>
 struct IsTransparent : std::false_type {};
 template <class T>
-struct IsTransparent<T, y_absl::void_t<typename T::is_transparent>> 
+struct IsTransparent<T, y_absl::void_t<typename T::is_transparent>>
     : std::true_type {};
 
 template <bool is_transparent>
@@ -99,7 +99,7 @@ class node_handle_base {
 
   void reset() {
     assert(alloc_.has_value());
-    alloc_ = y_absl::nullopt; 
+    alloc_ = y_absl::nullopt;
   }
 
   slot_type* slot() const {
@@ -135,7 +135,7 @@ class node_handle : public node_handle_base<PolicyTraits, Alloc> {
 // For maps.
 template <typename Policy, typename PolicyTraits, typename Alloc>
 class node_handle<Policy, PolicyTraits, Alloc,
-                  y_absl::void_t<typename Policy::mapped_type>> 
+                  y_absl::void_t<typename Policy::mapped_type>>
     : public node_handle_base<PolicyTraits, Alloc> {
   using Base = node_handle_base<PolicyTraits, Alloc>;
   using slot_type = typename PolicyTraits::slot_type;
@@ -201,6 +201,6 @@ struct InsertReturnType {
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_CONTAINER_H_

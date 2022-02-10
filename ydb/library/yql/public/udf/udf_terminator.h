@@ -7,6 +7,6 @@ namespace NUdf {
 }
 }
 
-extern "C" [[noreturn]] void UdfTerminate(const char* message); 
+extern "C" [[noreturn]] void UdfTerminate(const char* message);
 extern "C" void UdfRegisterObject(::NYql::NUdf::TBoxedValue* object);
 extern "C" void UdfUnregisterObject(::NYql::NUdf::TBoxedValue* object);

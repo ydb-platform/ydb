@@ -194,8 +194,8 @@ void TFileTest::TestRW() {
     UNIT_ASSERT(!f1.IsOpen());
     UNIT_ASSERT(!f2.IsOpen());
     UNIT_ASSERT(unlink("f1.txt") == 0);
-} 
- 
+}
+
 #ifdef _unix_
     #include <locale.h>
 #endif

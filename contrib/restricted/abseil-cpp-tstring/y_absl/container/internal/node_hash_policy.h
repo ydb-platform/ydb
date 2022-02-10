@@ -41,7 +41,7 @@
 
 #include "y_absl/base/config.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
@@ -87,6 +87,6 @@ struct node_hash_policy {
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_NODE_HASH_POLICY_H_

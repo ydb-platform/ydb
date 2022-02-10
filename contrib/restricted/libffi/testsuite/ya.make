@@ -6,7 +6,7 @@ RECURSE(
     libffi.closures
 )
 
-IF (NOT OS_IOS) 
+IF (NOT OS_IOS)
     RECURSE(
         libffi.go
     )

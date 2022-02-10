@@ -16,44 +16,44 @@
 // bad_any_cast.h
 // -----------------------------------------------------------------------------
 //
-// This header file defines the `y_absl::bad_any_cast` type. 
+// This header file defines the `y_absl::bad_any_cast` type.
 
 #ifndef ABSL_TYPES_BAD_ANY_CAST_H_
 #define ABSL_TYPES_BAD_ANY_CAST_H_
 
 #include <typeinfo>
 
-#include "y_absl/base/config.h" 
+#include "y_absl/base/config.h"
 
 #ifdef ABSL_USES_STD_ANY
 
 #include <any>
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 using std::bad_any_cast;
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #else  // ABSL_USES_STD_ANY
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
 // bad_any_cast
 // -----------------------------------------------------------------------------
 //
-// An `y_absl::bad_any_cast` type is an exception type that is thrown when 
-// failing to successfully cast the return value of an `y_absl::any` object. 
+// An `y_absl::bad_any_cast` type is an exception type that is thrown when
+// failing to successfully cast the return value of an `y_absl::any` object.
 //
 // Example:
 //
-//   auto a = y_absl::any(65); 
-//   y_absl::any_cast<int>(a);         // 65 
+//   auto a = y_absl::any(65);
+//   y_absl::any_cast<int>(a);         // 65
 //   try {
-//     y_absl::any_cast<char>(a); 
-//   } catch(const y_absl::bad_any_cast& e) { 
+//     y_absl::any_cast<char>(a);
+//   } catch(const y_absl::bad_any_cast& e) {
 //     std::cout << "Bad any cast: " << e.what() << '\n';
 //   }
 class bad_any_cast : public std::bad_cast {
@@ -68,7 +68,7 @@ namespace any_internal {
 
 }  // namespace any_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_USES_STD_ANY
 

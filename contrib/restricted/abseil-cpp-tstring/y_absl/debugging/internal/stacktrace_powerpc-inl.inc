@@ -31,12 +31,12 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "y_absl/base/attributes.h" 
-#include "y_absl/base/optimization.h" 
-#include "y_absl/base/port.h" 
-#include "y_absl/debugging/stacktrace.h" 
-#include "y_absl/debugging/internal/address_is_readable.h" 
-#include "y_absl/debugging/internal/vdso_support.h"  // a no-op on non-elf or non-glibc systems 
+#include "y_absl/base/attributes.h"
+#include "y_absl/base/optimization.h"
+#include "y_absl/base/port.h"
+#include "y_absl/debugging/stacktrace.h"
+#include "y_absl/debugging/internal/address_is_readable.h"
+#include "y_absl/debugging/internal/vdso_support.h"  // a no-op on non-elf or non-glibc systems
 
 // Given a stack pointer, return the saved link register value.
 // Note that this is the link register for a callee.
@@ -101,13 +101,13 @@ static void **NextStackFrame(void **old_sp, const void *uc) {
     // possibly be there.
     static const unsigned char *kernel_sigtramp_rt64_address = nullptr;
     if (kernel_symbol_status == kNotInitialized) {
-      y_absl::debugging_internal::VDSOSupport vdso; 
+      y_absl::debugging_internal::VDSOSupport vdso;
       if (vdso.IsPresent()) {
-        y_absl::debugging_internal::VDSOSupport::SymbolInfo 
+        y_absl::debugging_internal::VDSOSupport::SymbolInfo
             sigtramp_rt64_symbol_info;
         if (!vdso.LookupSymbol(
                 "__kernel_sigtramp_rt64", "LINUX_2.6.15",
-                y_absl::debugging_internal::VDSOSupport::kVDSOSymbolType, 
+                y_absl::debugging_internal::VDSOSupport::kVDSOSymbolType,
                 &sigtramp_rt64_symbol_info) ||
             sigtramp_rt64_symbol_info.address == nullptr) {
           // Unexpected: VDSO is present, yet the expected symbol is missing
@@ -144,7 +144,7 @@ static void **NextStackFrame(void **old_sp, const void *uc) {
         // Check that alleged stack pointer is actually readable. This is to
         // prevent a "double fault" in case we hit the first fault due to e.g.
         // a stack corruption.
-        if (y_absl::debugging_internal::AddressIsReadable(sp_before_signal)) { 
+        if (y_absl::debugging_internal::AddressIsReadable(sp_before_signal)) {
           // Alleged stack pointer is readable, use it for further unwinding.
           new_sp = sp_before_signal;
         }
@@ -156,7 +156,7 @@ static void **NextStackFrame(void **old_sp, const void *uc) {
   return new_sp;
 }
 
-// This ensures that y_absl::GetStackTrace sets up the Link Register properly. 
+// This ensures that y_absl::GetStackTrace sets up the Link Register properly.
 ABSL_ATTRIBUTE_NOINLINE static void AbslStacktracePowerPCDummyFunction() {
   ABSL_BLOCK_TAIL_CALL_OPTIMIZATION();
 }
@@ -200,7 +200,7 @@ static int UnwindImpl(void** result, int* sizes, int max_depth, int skip_count,
   // The outermost frame is set up by runtimes and it does not have a
   // caller frame, so it is skipped.
 
-  // The y_absl::GetStackFrames routine is called when we are in some 
+  // The y_absl::GetStackFrames routine is called when we are in some
   // informational context (the failure signal handler for example).
   // Use the non-strict unwinding rules to produce a stack trace
   // that is as complete as possible (even if it contains a few
@@ -240,7 +240,7 @@ static int UnwindImpl(void** result, int* sizes, int max_depth, int skip_count,
   return n;
 }
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 bool StackTraceWorksForTest() {
@@ -248,6 +248,6 @@ bool StackTraceWorksForTest() {
 }
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_DEBUGGING_INTERNAL_STACKTRACE_POWERPC_INL_H_

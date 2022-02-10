@@ -584,16 +584,16 @@ protected:
     void find_last_of() {
         // 21.3.6.4
         TStringType s(Data_.one_two_three_one_two_three());
- 
+
         UNIT_ASSERT(s.find_last_of(Data_.abcde()) == 26);
         UNIT_ASSERT(s.find_last_of(TStringType(Data_.abcde())) == 26);
- 
+
         TStringType test(Data_.aba());
- 
+
         UNIT_ASSERT(test.find_last_of(Data_.a(), 2, 1) == 2);
         UNIT_ASSERT(test.find_last_of(Data_.a(), 1, 1) == 0);
         UNIT_ASSERT(test.find_last_of(Data_.a(), 0, 1) == 0);
- 
+
         UNIT_ASSERT(test.find_last_of(*Data_.a(), 2) == 2);
         UNIT_ASSERT(test.find_last_of(*Data_.a(), 1) == 0);
         UNIT_ASSERT(test.find_last_of(*Data_.a(), 0) == 0);

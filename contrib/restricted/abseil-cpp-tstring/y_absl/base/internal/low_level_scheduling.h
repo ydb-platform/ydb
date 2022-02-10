@@ -19,8 +19,8 @@
 #define ABSL_BASE_INTERNAL_LOW_LEVEL_SCHEDULING_H_
 
 #include "y_absl/base/internal/raw_logging.h"
-#include "y_absl/base/internal/scheduling_mode.h" 
-#include "y_absl/base/macros.h" 
+#include "y_absl/base/internal/scheduling_mode.h"
+#include "y_absl/base/macros.h"
 
 // The following two declarations exist so SchedulingGuard may friend them with
 // the appropriate language linkage.  These callbacks allow libc internals, such
@@ -28,7 +28,7 @@
 extern "C" bool __google_disable_rescheduling(void);
 extern "C" void __google_enable_rescheduling(bool disable_result);
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 class CondVar;
 class Mutex;
@@ -129,6 +129,6 @@ inline SchedulingGuard::ScopedEnable::~ScopedEnable() {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_BASE_INTERNAL_LOW_LEVEL_SCHEDULING_H_

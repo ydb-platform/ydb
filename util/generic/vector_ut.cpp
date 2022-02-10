@@ -27,7 +27,7 @@ class TYVectorTest: public TTestBase {
     UNIT_TEST(TestShrink)
     //UNIT_TEST(TestEbo)
     UNIT_TEST(TestFillInConstructor)
-    UNIT_TEST(TestYResize) 
+    UNIT_TEST(TestYResize)
     UNIT_TEST(TestCrop)
     UNIT_TEST(TestInitializeList)
     UNIT_TEST_SUITE_END();
@@ -470,45 +470,45 @@ private:
             }
         }
     }
- 
-    struct TPod { 
-        int x; 
+
+    struct TPod {
+        int x;
 
         operator int() {
             return x;
         }
-    }; 
- 
-    struct TNonPod { 
-        int x; 
-        TNonPod() { 
-            x = 0; 
-        } 
+    };
+
+    struct TNonPod {
+        int x;
+        TNonPod() {
+            x = 0;
+        }
 
         operator int() {
             return x;
         }
-    }; 
- 
+    };
+
     template <typename T>
     class TDebugAlloc: public std::allocator<T> {
-    public: 
-        using TBase = std::allocator<T>; 
- 
+    public:
+        using TBase = std::allocator<T>;
+
         T* allocate(typename TBase::size_type n) {
             auto p = TBase::allocate(n);
-            for (size_t i = 0; i < n; ++i) { 
-                memset(p + i, 0xab, sizeof(T)); 
-            } 
-            return p; 
-        } 
- 
+            for (size_t i = 0; i < n; ++i) {
+                memset(p + i, 0xab, sizeof(T));
+            }
+            return p;
+        }
+
         template <class TOther>
-        struct rebind { 
+        struct rebind {
             using other = TDebugAlloc<TOther>;
-        }; 
-    }; 
- 
+        };
+    };
+
     template <typename T>
     void TestYResize() {
 #ifdef _YNDX_LIBCXX_ENABLE_VECTOR_POD_RESIZE_UNINITIALIZED
@@ -518,23 +518,23 @@ private:
 #endif
 
         TVector<T, TDebugAlloc<T>> v;
- 
-        v.reserve(5); 
+
+        v.reserve(5);
         auto firstBegin = v.begin();
- 
+
         v.yresize(5); // No realloc, no initialization if allowed
-        UNIT_ASSERT(firstBegin == v.begin()); 
-        for (int i = 0; i < 5; ++i) { 
+        UNIT_ASSERT(firstBegin == v.begin());
+        for (int i = 0; i < 5; ++i) {
             UNIT_ASSERT_VALUES_EQUAL(bool(v[i]), ALLOW_UNINITIALIZED);
-        } 
- 
+        }
+
         v.yresize(20); // Realloc, still no initialization
-        UNIT_ASSERT(firstBegin != v.begin()); 
-        for (int i = 0; i < 20; ++i) { 
+        UNIT_ASSERT(firstBegin != v.begin());
+        for (int i = 0; i < 20; ++i) {
             UNIT_ASSERT_VALUES_EQUAL(bool(v[i]), ALLOW_UNINITIALIZED);
-        } 
-    } 
- 
+        }
+    }
+
     struct TNoDefaultConstructor {
         TNoDefaultConstructor() = delete;
         explicit TNoDefaultConstructor(int val)
@@ -558,11 +558,11 @@ private:
         UNIT_ASSERT(vec[0].Val == 42);
     }
 
-    void TestYResize() { 
+    void TestYResize() {
         TestYResize<int>();
         TestYResize<TPod>();
         TestYResize<TNonPod>();
-    } 
+    }
 
     void CheckInitializeList(const TVector<int>& v) {
         for (size_t i = 0; i < v.size(); ++i) {

@@ -27,11 +27,11 @@
 
 #include <atomic>
 
-#include "y_absl/base/internal/thread_identity.h" 
-#include "y_absl/synchronization/internal/create_thread_identity.h" 
-#include "y_absl/synchronization/internal/kernel_timeout.h" 
+#include "y_absl/base/internal/thread_identity.h"
+#include "y_absl/synchronization/internal/create_thread_identity.h"
+#include "y_absl/synchronization/internal/kernel_timeout.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 class Mutex;
@@ -80,14 +80,14 @@ class PerThreadSem {
 
   // Permitted callers.
   friend class PerThreadSemTest;
-  friend class y_absl::Mutex; 
-  friend y_absl::base_internal::ThreadIdentity* CreateThreadIdentity(); 
+  friend class y_absl::Mutex;
+  friend y_absl::base_internal::ThreadIdentity* CreateThreadIdentity();
   friend void ReclaimThreadIdentity(void* v);
 };
 
 }  // namespace synchronization_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 // In some build configurations we pass --detect-odr-violations to the
 // gold linker.  This causes it to flag weak symbol overrides as ODR
@@ -97,18 +97,18 @@ ABSL_NAMESPACE_END
 // check.
 extern "C" {
 void ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemPost)(
-    y_absl::base_internal::ThreadIdentity* identity); 
+    y_absl::base_internal::ThreadIdentity* identity);
 bool ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)(
-    y_absl::synchronization_internal::KernelTimeout t); 
+    y_absl::synchronization_internal::KernelTimeout t);
 }  // extern "C"
 
-void y_absl::synchronization_internal::PerThreadSem::Post( 
-    y_absl::base_internal::ThreadIdentity* identity) { 
+void y_absl::synchronization_internal::PerThreadSem::Post(
+    y_absl::base_internal::ThreadIdentity* identity) {
   ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemPost)(identity);
 }
 
-bool y_absl::synchronization_internal::PerThreadSem::Wait( 
-    y_absl::synchronization_internal::KernelTimeout t) { 
+bool y_absl::synchronization_internal::PerThreadSem::Wait(
+    y_absl::synchronization_internal::KernelTimeout t) {
   return ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)(t);
 }
 

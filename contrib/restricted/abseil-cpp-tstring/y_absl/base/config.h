@@ -33,7 +33,7 @@
 // selectively include the `mmap.h` header and bracket code using that feature
 // in the macro:
 //
-//   #include "y_absl/base/config.h" 
+//   #include "y_absl/base/config.h"
 //
 //   #ifdef ABSL_HAVE_MMAP
 //   #include "sys/mman.h"
@@ -63,8 +63,8 @@
 #include <TargetConditionals.h>
 #endif
 
-#include "y_absl/base/options.h" 
-#include "y_absl/base/policy_checks.h" 
+#include "y_absl/base/options.h"
+#include "y_absl/base/policy_checks.h"
 
 // Abseil long-term support (LTS) releases will define
 // `ABSL_LTS_RELEASE_VERSION` to the integer representing the date string of the
@@ -261,7 +261,7 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 
 // ABSL_HAVE_SOURCE_LOCATION_CURRENT
 //
-// Indicates whether `y_absl::SourceLocation::current()` will return useful 
+// Indicates whether `y_absl::SourceLocation::current()` will return useful
 // information in some contexts.
 #ifndef ABSL_HAVE_SOURCE_LOCATION_CURRENT
 #if ABSL_INTERNAL_HAS_KEYWORD(__builtin_LINE) && \
@@ -517,7 +517,7 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #elif defined(_WIN32)
 #define ABSL_IS_LITTLE_ENDIAN 1
 #else
-#error "y_absl endian detection needs to be set up for your compiler" 
+#error "y_absl endian detection needs to be set up for your compiler"
 #endif
 
 // macOS 10.13 and iOS 10.11 don't let you use <any>, <optional>, or <variant>
@@ -610,7 +610,7 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 
 // ABSL_USES_STD_ANY
 //
-// Indicates whether y_absl::any is an alias for std::any. 
+// Indicates whether y_absl::any is an alias for std::any.
 #if !defined(ABSL_OPTION_USE_STD_ANY)
 #error options.h is misconfigured.
 #elif ABSL_OPTION_USE_STD_ANY == 0 || \
@@ -625,7 +625,7 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 
 // ABSL_USES_STD_OPTIONAL
 //
-// Indicates whether y_absl::optional is an alias for std::optional. 
+// Indicates whether y_absl::optional is an alias for std::optional.
 #if !defined(ABSL_OPTION_USE_STD_OPTIONAL)
 #error options.h is misconfigured.
 #elif ABSL_OPTION_USE_STD_OPTIONAL == 0 || \
@@ -640,7 +640,7 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 
 // ABSL_USES_STD_VARIANT
 //
-// Indicates whether y_absl::variant is an alias for std::variant. 
+// Indicates whether y_absl::variant is an alias for std::variant.
 #if !defined(ABSL_OPTION_USE_STD_VARIANT)
 #error options.h is misconfigured.
 #elif ABSL_OPTION_USE_STD_VARIANT == 0 || \
@@ -655,7 +655,7 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 
 // ABSL_USES_STD_STRING_VIEW
 //
-// Indicates whether y_absl::string_view is an alias for std::string_view. 
+// Indicates whether y_absl::string_view is an alias for std::string_view.
 #if !defined(ABSL_OPTION_USE_STD_STRING_VIEW)
 #error options.h is misconfigured.
 #elif ABSL_OPTION_USE_STD_STRING_VIEW == 0 || \

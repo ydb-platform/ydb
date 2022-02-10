@@ -42,7 +42,7 @@
 
 #include "y_absl/base/config.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
@@ -136,6 +136,6 @@ class GraphCycles {
 
 }  // namespace synchronization_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif

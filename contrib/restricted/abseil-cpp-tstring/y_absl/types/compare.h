@@ -16,12 +16,12 @@
 // compare.h
 // -----------------------------------------------------------------------------
 //
-// This header file defines the `y_absl::weak_equality`, `y_absl::strong_equality`, 
-// `y_absl::partial_ordering`, `y_absl::weak_ordering`, and `y_absl::strong_ordering` 
+// This header file defines the `y_absl::weak_equality`, `y_absl::strong_equality`,
+// `y_absl::partial_ordering`, `y_absl::weak_ordering`, and `y_absl::strong_ordering`
 // types for storing the results of three way comparisons.
 //
 // Example:
-//   y_absl::weak_ordering compare(const TString& a, const TString& b); 
+//   y_absl::weak_ordering compare(const TString& a, const TString& b);
 //
 // These are C++11 compatible versions of the C++20 corresponding types
 // (`std::weak_equality`, etc.) and are designed to be drop-in replacements
@@ -35,10 +35,10 @@
 #include <cstdlib>
 #include <type_traits>
 
-#include "y_absl/base/attributes.h" 
-#include "y_absl/meta/type_traits.h" 
+#include "y_absl/base/attributes.h"
+#include "y_absl/meta/type_traits.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace compare_internal {
 
@@ -539,15 +539,15 @@ ABSL_COMPARE_INLINE_INIT(strong_ordering, greater,
 #undef ABSL_COMPARE_INLINE_INIT
 
 namespace compare_internal {
-// We also provide these comparator adapter functions for internal y_absl use. 
+// We also provide these comparator adapter functions for internal y_absl use.
 
 // Helper functions to do a boolean comparison of two keys given a boolean
 // or three-way comparator.
 // SFINAE prevents implicit conversions to bool (such as from int).
 template <typename Bool,
-          y_absl::enable_if_t<std::is_same<bool, Bool>::value, int> = 0> 
+          y_absl::enable_if_t<std::is_same<bool, Bool>::value, int> = 0>
 constexpr bool compare_result_as_less_than(const Bool r) { return r; }
-constexpr bool compare_result_as_less_than(const y_absl::weak_ordering r) { 
+constexpr bool compare_result_as_less_than(const y_absl::weak_ordering r) {
   return r < 0;
 }
 
@@ -561,40 +561,40 @@ constexpr bool do_less_than_comparison(const Compare &compare, const K &x,
 // three-way comparator.
 // SFINAE prevents implicit conversions to int (such as from bool).
 template <typename Int,
-          y_absl::enable_if_t<std::is_same<int, Int>::value, int> = 0> 
-constexpr y_absl::weak_ordering compare_result_as_ordering(const Int c) { 
-  return c < 0 ? y_absl::weak_ordering::less 
-               : c == 0 ? y_absl::weak_ordering::equivalent 
-                        : y_absl::weak_ordering::greater; 
+          y_absl::enable_if_t<std::is_same<int, Int>::value, int> = 0>
+constexpr y_absl::weak_ordering compare_result_as_ordering(const Int c) {
+  return c < 0 ? y_absl::weak_ordering::less
+               : c == 0 ? y_absl::weak_ordering::equivalent
+                        : y_absl::weak_ordering::greater;
 }
-constexpr y_absl::weak_ordering compare_result_as_ordering( 
-    const y_absl::weak_ordering c) { 
+constexpr y_absl::weak_ordering compare_result_as_ordering(
+    const y_absl::weak_ordering c) {
   return c;
 }
 
 template <
     typename Compare, typename K, typename LK,
-    y_absl::enable_if_t<!std::is_same<bool, y_absl::result_of_t<Compare( 
+    y_absl::enable_if_t<!std::is_same<bool, y_absl::result_of_t<Compare(
                                               const K &, const LK &)>>::value,
                       int> = 0>
-constexpr y_absl::weak_ordering do_three_way_comparison(const Compare &compare, 
+constexpr y_absl::weak_ordering do_three_way_comparison(const Compare &compare,
                                                       const K &x, const LK &y) {
   return compare_result_as_ordering(compare(x, y));
 }
 template <
     typename Compare, typename K, typename LK,
-    y_absl::enable_if_t<std::is_same<bool, y_absl::result_of_t<Compare( 
+    y_absl::enable_if_t<std::is_same<bool, y_absl::result_of_t<Compare(
                                              const K &, const LK &)>>::value,
                       int> = 0>
-constexpr y_absl::weak_ordering do_three_way_comparison(const Compare &compare, 
+constexpr y_absl::weak_ordering do_three_way_comparison(const Compare &compare,
                                                       const K &x, const LK &y) {
-  return compare(x, y) ? y_absl::weak_ordering::less 
-                       : compare(y, x) ? y_absl::weak_ordering::greater 
-                                       : y_absl::weak_ordering::equivalent; 
+  return compare(x, y) ? y_absl::weak_ordering::less
+                       : compare(y, x) ? y_absl::weak_ordering::greater
+                                       : y_absl::weak_ordering::equivalent;
 }
 
 }  // namespace compare_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_TYPES_COMPARE_H_

@@ -20,10 +20,10 @@ namespace NThreading {
     template <typename Func>
     TFuture<TFutureType<TFunctionResult<Func>>> Async(Func&& func, IThreadPool& queue) {
         auto promise = NewPromise<TFutureType<TFunctionResult<Func>>>();
-        auto lambda = [promise, func = std::forward<Func>(func)]() mutable { 
+        auto lambda = [promise, func = std::forward<Func>(func)]() mutable {
             NImpl::SetValue(promise, func);
-        }; 
-        queue.SafeAddFunc(std::move(lambda)); 
+        };
+        queue.SafeAddFunc(std::move(lambda));
 
         return promise.GetFuture();
     }

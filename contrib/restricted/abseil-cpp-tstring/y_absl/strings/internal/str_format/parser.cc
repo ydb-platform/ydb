@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/internal/str_format/parser.h" 
+#include "y_absl/strings/internal/str_format/parser.h"
 
 #include <assert.h>
 #include <string.h>
@@ -27,7 +27,7 @@
 #include <util/generic/string.h>
 #include <unordered_set>
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
@@ -336,4 +336,4 @@ bool ParsedFormatBase::MatchesConversions(
 
 }  // namespace str_format_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

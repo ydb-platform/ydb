@@ -34,9 +34,9 @@
 #include <limits>
 #include <utility>
 
-#include "y_absl/base/config.h" 
-#include "y_absl/base/macros.h" 
-#include "y_absl/base/port.h" 
+#include "y_absl/base/config.h"
+#include "y_absl/base/macros.h"
+#include "y_absl/base/port.h"
 
 #if defined(_MSC_VER)
 // In very old versions of MSVC and when the /Zc:wchar_t flag is off, wchar_t is
@@ -52,7 +52,7 @@
 #define ABSL_INTERNAL_WCHAR_T wchar_t
 #endif  // defined(_MSC_VER)
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 class int128;
@@ -94,10 +94,10 @@ class int128;
 //
 // Example:
 //
-//     float y = y_absl::Uint128Max();  // Error. uint128 cannot be implicitly 
+//     float y = y_absl::Uint128Max();  // Error. uint128 cannot be implicitly
 //                                    // converted to float.
 //
-//     y_absl::uint128 v; 
+//     y_absl::uint128 v;
 //     uint64_t i = v;                         // Error
 //     uint64_t i = static_cast<uint64_t>(v);  // OK
 //
@@ -203,7 +203,7 @@ class
   //
   // Example:
   //
-  //   y_absl::uint128 big = y_absl::MakeUint128(1, 0); 
+  //   y_absl::uint128 big = y_absl::MakeUint128(1, 0);
   friend constexpr uint128 MakeUint128(uint64_t high, uint64_t low);
 
   // Uint128Max()
@@ -211,7 +211,7 @@ class
   // Returns the highest value for a 128-bit unsigned integer.
   friend constexpr uint128 Uint128Max();
 
-  // Support for y_absl::Hash. 
+  // Support for y_absl::Hash.
   template <typename H>
   friend H AbslHashValue(H h, uint128 v) {
     return H::combine(std::move(h), Uint128High64(v), Uint128Low64(v));
@@ -237,7 +237,7 @@ class
 
 // Prefer to use the constexpr `Uint128Max()`.
 //
-// TODO(y_absl-team) deprecate kuint128max once migration tool is released. 
+// TODO(y_absl-team) deprecate kuint128max once migration tool is released.
 ABSL_DLL extern const uint128 kuint128max;
 
 // allow uint128 to be logged
@@ -251,12 +251,12 @@ constexpr uint128 Uint128Max() {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 // Specialized numeric_limits for uint128.
 namespace std {
 template <>
-class numeric_limits<y_absl::uint128> { 
+class numeric_limits<y_absl::uint128> {
  public:
   static constexpr bool is_specialized = true;
   static constexpr bool is_signed = false;
@@ -286,19 +286,19 @@ class numeric_limits<y_absl::uint128> {
 #endif  // ABSL_HAVE_INTRINSIC_INT128
   static constexpr bool tinyness_before = false;
 
-  static constexpr y_absl::uint128 (min)() { return 0; } 
-  static constexpr y_absl::uint128 lowest() { return 0; } 
-  static constexpr y_absl::uint128 (max)() { return y_absl::Uint128Max(); } 
-  static constexpr y_absl::uint128 epsilon() { return 0; } 
-  static constexpr y_absl::uint128 round_error() { return 0; } 
-  static constexpr y_absl::uint128 infinity() { return 0; } 
-  static constexpr y_absl::uint128 quiet_NaN() { return 0; } 
-  static constexpr y_absl::uint128 signaling_NaN() { return 0; } 
-  static constexpr y_absl::uint128 denorm_min() { return 0; } 
+  static constexpr y_absl::uint128 (min)() { return 0; }
+  static constexpr y_absl::uint128 lowest() { return 0; }
+  static constexpr y_absl::uint128 (max)() { return y_absl::Uint128Max(); }
+  static constexpr y_absl::uint128 epsilon() { return 0; }
+  static constexpr y_absl::uint128 round_error() { return 0; }
+  static constexpr y_absl::uint128 infinity() { return 0; }
+  static constexpr y_absl::uint128 quiet_NaN() { return 0; }
+  static constexpr y_absl::uint128 signaling_NaN() { return 0; }
+  static constexpr y_absl::uint128 denorm_min() { return 0; }
 };
 }  // namespace std
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // int128
@@ -328,10 +328,10 @@ ABSL_NAMESPACE_BEGIN
 //
 // Example:
 //
-//     float y = y_absl::int128(17);  // Error. int128 cannot be implicitly 
+//     float y = y_absl::int128(17);  // Error. int128 cannot be implicitly
 //                                  // converted to float.
 //
-//     y_absl::int128 v; 
+//     y_absl::int128 v;
 //     int64_t i = v;                        // Error
 //     int64_t i = static_cast<int64_t>(v);  // OK
 //
@@ -427,15 +427,15 @@ class int128 {
   // Constructs a `int128` numeric value from two 64-bit integers. Note that
   // signedness is conveyed in the upper `high` value.
   //
-  //   (y_absl::int128(1) << 64) * high + low 
+  //   (y_absl::int128(1) << 64) * high + low
   //
   // Note that this factory function is the only way to construct a `int128`
   // from integer values greater than 2^64 or less than -2^64.
   //
   // Example:
   //
-  //   y_absl::int128 big = y_absl::MakeInt128(1, 0); 
-  //   y_absl::int128 big_n = y_absl::MakeInt128(-1, 0); 
+  //   y_absl::int128 big = y_absl::MakeInt128(1, 0);
+  //   y_absl::int128 big_n = y_absl::MakeInt128(-1, 0);
   friend constexpr int128 MakeInt128(int64_t high, uint64_t low);
 
   // Int128Max()
@@ -448,7 +448,7 @@ class int128 {
   // Returns the minimum value for a 128-bit signed integer.
   friend constexpr int128 Int128Min();
 
-  // Support for y_absl::Hash. 
+  // Support for y_absl::Hash.
   template <typename H>
   friend H AbslHashValue(H h, int128 v) {
     return H::combine(std::move(h), Int128High64(v), Int128Low64(v));
@@ -474,7 +474,7 @@ class int128 {
 
 std::ostream& operator<<(std::ostream& os, int128 v);
 
-// TODO(y_absl-team) add operator>>(std::istream&, int128) 
+// TODO(y_absl-team) add operator>>(std::istream&, int128)
 
 constexpr int128 Int128Max() {
   return int128((std::numeric_limits<int64_t>::max)(),
@@ -486,12 +486,12 @@ constexpr int128 Int128Min() {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 // Specialized numeric_limits for int128.
 namespace std {
 template <>
-class numeric_limits<y_absl::int128> { 
+class numeric_limits<y_absl::int128> {
  public:
   static constexpr bool is_specialized = true;
   static constexpr bool is_signed = true;
@@ -521,22 +521,22 @@ class numeric_limits<y_absl::int128> {
 #endif  // ABSL_HAVE_INTRINSIC_INT128
   static constexpr bool tinyness_before = false;
 
-  static constexpr y_absl::int128 (min)() { return y_absl::Int128Min(); } 
-  static constexpr y_absl::int128 lowest() { return y_absl::Int128Min(); } 
-  static constexpr y_absl::int128 (max)() { return y_absl::Int128Max(); } 
-  static constexpr y_absl::int128 epsilon() { return 0; } 
-  static constexpr y_absl::int128 round_error() { return 0; } 
-  static constexpr y_absl::int128 infinity() { return 0; } 
-  static constexpr y_absl::int128 quiet_NaN() { return 0; } 
-  static constexpr y_absl::int128 signaling_NaN() { return 0; } 
-  static constexpr y_absl::int128 denorm_min() { return 0; } 
+  static constexpr y_absl::int128 (min)() { return y_absl::Int128Min(); }
+  static constexpr y_absl::int128 lowest() { return y_absl::Int128Min(); }
+  static constexpr y_absl::int128 (max)() { return y_absl::Int128Max(); }
+  static constexpr y_absl::int128 epsilon() { return 0; }
+  static constexpr y_absl::int128 round_error() { return 0; }
+  static constexpr y_absl::int128 infinity() { return 0; }
+  static constexpr y_absl::int128 quiet_NaN() { return 0; }
+  static constexpr y_absl::int128 signaling_NaN() { return 0; }
+  static constexpr y_absl::int128 denorm_min() { return 0; }
 };
 }  // namespace std
 
 // --------------------------------------------------------------------------
 //                      Implementation details follow
 // --------------------------------------------------------------------------
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 constexpr uint128 MakeUint128(uint64_t high, uint64_t low) {
@@ -1152,13 +1152,13 @@ constexpr int64_t BitCastToSigned(uint64_t v) {
 }  // namespace int128_internal
 
 #if defined(ABSL_HAVE_INTRINSIC_INT128)
-#include "y_absl/numeric/int128_have_intrinsic.inc"  // IWYU pragma: export 
+#include "y_absl/numeric/int128_have_intrinsic.inc"  // IWYU pragma: export
 #else  // ABSL_HAVE_INTRINSIC_INT128
-#include "y_absl/numeric/int128_no_intrinsic.inc"  // IWYU pragma: export 
+#include "y_absl/numeric/int128_no_intrinsic.inc"  // IWYU pragma: export
 #endif  // ABSL_HAVE_INTRINSIC_INT128
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #undef ABSL_INTERNAL_WCHAR_T
 

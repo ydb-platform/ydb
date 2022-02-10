@@ -119,13 +119,13 @@ public:
     }
 
     TChar* operator&() {
-        return S_.begin() + Pos_; 
-    } 
- 
+        return S_.begin() + Pos_;
+    }
+
     const TChar* operator&() const {
-        return S_.cbegin() + Pos_; 
-    } 
- 
+        return S_.cbegin() + Pos_;
+    }
+
     TBasicCharRef& operator=(TChar c) {
         Y_ASSERT(Pos_ < S_.size() || (Pos_ == S_.size() && !c));
 
@@ -1215,15 +1215,15 @@ TBasicString<TCharType> to_title(const TBasicString<TCharType, TTraits>& s) {
     return ret;
 }
 
-namespace std { 
+namespace std {
     template <>
-    struct hash<TString> { 
-        using argument_type = TString; 
-        using result_type = size_t; 
-        inline result_type operator()(argument_type const& s) const noexcept { 
+    struct hash<TString> {
+        using argument_type = TString;
+        using result_type = size_t;
+        inline result_type operator()(argument_type const& s) const noexcept {
             return NHashPrivate::ComputeStringHash(s.data(), s.size());
-        } 
-    }; 
+        }
+    };
 }
 
 #undef Y_NOEXCEPT

@@ -17,17 +17,17 @@
 
 #include <util/generic/string.h>
 
-#include "y_absl/time/time.h" 
+#include "y_absl/time/time.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 
 // Loads the named timezone, but dies on any failure.
-y_absl::TimeZone LoadTimeZone(const TString& name); 
+y_absl::TimeZone LoadTimeZone(const TString& name);
 
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_TIME_INTERNAL_TEST_UTIL_H_

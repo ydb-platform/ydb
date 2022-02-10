@@ -1,5 +1,5 @@
-LIBRARY() 
- 
+LIBRARY()
+
 WITHOUT_LICENSE_TEXTS()
 
 LICENSE(YandexOpen)
@@ -9,11 +9,11 @@ OWNER(
     g:cpp-contrib
     somov
 )
- 
-NO_PLATFORM() 
- 
-ADDINCL(GLOBAL contrib/libs/cxxsupp/system_stl/include) 
- 
+
+NO_PLATFORM()
+
+ADDINCL(GLOBAL contrib/libs/cxxsupp/system_stl/include)
+
 IF (OS_IOS OR OS_DARWIN)
     LDFLAGS(-lc++)
 ELSEIF (OS_ANDROID)
@@ -35,5 +35,5 @@ ELSE()
         LDFLAGS(-lstdc++)
     ENDIF()
 ENDIF()
- 
-END() 
+
+END()

@@ -19,8 +19,8 @@
 // This header file defines B-tree maps: sorted associative containers mapping
 // keys to values.
 //
-//     * `y_absl::btree_map<>` 
-//     * `y_absl::btree_multimap<>` 
+//     * `y_absl::btree_map<>`
+//     * `y_absl::btree_multimap<>`
 //
 // These B-tree types are similar to the corresponding types in the STL
 // (`std::map` and `std::multimap`) and generally conform to the STL interfaces
@@ -47,26 +47,26 @@
 #ifndef ABSL_CONTAINER_BTREE_MAP_H_
 #define ABSL_CONTAINER_BTREE_MAP_H_
 
-#include "y_absl/container/internal/btree.h"  // IWYU pragma: export 
-#include "y_absl/container/internal/btree_container.h"  // IWYU pragma: export 
+#include "y_absl/container/internal/btree.h"  // IWYU pragma: export
+#include "y_absl/container/internal/btree_container.h"  // IWYU pragma: export
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
-// y_absl::btree_map<> 
+// y_absl::btree_map<>
 //
-// An `y_absl::btree_map<K, V>` is an ordered associative container of 
+// An `y_absl::btree_map<K, V>` is an ordered associative container of
 // unique keys and associated values designed to be a more efficient replacement
 // for `std::map` (in most cases).
 //
 // Keys are sorted using an (optional) comparison function, which defaults to
 // `std::less<K>`.
 //
-// An `y_absl::btree_map<K, V>` uses a default allocator of 
+// An `y_absl::btree_map<K, V>` uses a default allocator of
 // `std::allocator<std::pair<const K, V>>` to allocate (and deallocate)
 // nodes, and construct and destruct values within those nodes. You may
 // instead specify a custom allocator `A` (which in turn requires specifying a
-// custom comparator `C`) as in `y_absl::btree_map<K, V, C, A>`. 
+// custom comparator `C`) as in `y_absl::btree_map<K, V, C, A>`.
 //
 template <typename Key, typename Value, typename Compare = std::less<Key>,
           typename Alloc = std::allocator<std::pair<const Key, Value>>>
@@ -85,37 +85,37 @@ class btree_map
   //
   // * Default constructor
   //
-  //   y_absl::btree_map<int, TString> map1; 
+  //   y_absl::btree_map<int, TString> map1;
   //
   // * Initializer List constructor
   //
-  //   y_absl::btree_map<int, TString> map2 = 
+  //   y_absl::btree_map<int, TString> map2 =
   //       {{1, "huey"}, {2, "dewey"}, {3, "louie"},};
   //
   // * Copy constructor
   //
-  //   y_absl::btree_map<int, TString> map3(map2); 
+  //   y_absl::btree_map<int, TString> map3(map2);
   //
   // * Copy assignment operator
   //
-  //  y_absl::btree_map<int, TString> map4; 
+  //  y_absl::btree_map<int, TString> map4;
   //  map4 = map3;
   //
   // * Move constructor
   //
   //   // Move is guaranteed efficient
-  //   y_absl::btree_map<int, TString> map5(std::move(map4)); 
+  //   y_absl::btree_map<int, TString> map5(std::move(map4));
   //
   // * Move assignment operator
   //
   //   // May be efficient if allocators are compatible
-  //   y_absl::btree_map<int, TString> map6; 
+  //   y_absl::btree_map<int, TString> map6;
   //   map6 = std::move(map5);
   //
   // * Range constructor
   //
-  //   std::vector<std::pair<int, TString>> v = {{1, "a"}, {2, "b"}}; 
-  //   y_absl::btree_map<int, TString> map7(v.begin(), v.end()); 
+  //   std::vector<std::pair<int, TString>> v = {{1, "a"}, {2, "b"}};
+  //   y_absl::btree_map<int, TString> map7(v.begin(), v.end());
   btree_map() {}
   using Base::Base;
 
@@ -456,9 +456,9 @@ class btree_map
   using Base::value_comp;
 };
 
-// y_absl::swap(y_absl::btree_map<>, y_absl::btree_map<>) 
+// y_absl::swap(y_absl::btree_map<>, y_absl::btree_map<>)
 //
-// Swaps the contents of two `y_absl::btree_map` containers. 
+// Swaps the contents of two `y_absl::btree_map` containers.
 template <typename K, typename V, typename C, typename A>
 void swap(btree_map<K, V, C, A> &x, btree_map<K, V, C, A> &y) {
   return x.swap(y);
@@ -478,21 +478,21 @@ void erase_if(btree_map<K, V, C, A> &map, Pred pred) {
   }
 }
 
-// y_absl::btree_multimap 
+// y_absl::btree_multimap
 //
-// An `y_absl::btree_multimap<K, V>` is an ordered associative container of 
+// An `y_absl::btree_multimap<K, V>` is an ordered associative container of
 // keys and associated values designed to be a more efficient replacement for
-// `std::multimap` (in most cases). Unlike `y_absl::btree_map`, a B-tree multimap 
+// `std::multimap` (in most cases). Unlike `y_absl::btree_map`, a B-tree multimap
 // allows multiple elements with equivalent keys.
 //
 // Keys are sorted using an (optional) comparison function, which defaults to
 // `std::less<K>`.
 //
-// An `y_absl::btree_multimap<K, V>` uses a default allocator of 
+// An `y_absl::btree_multimap<K, V>` uses a default allocator of
 // `std::allocator<std::pair<const K, V>>` to allocate (and deallocate)
 // nodes, and construct and destruct values within those nodes. You may
 // instead specify a custom allocator `A` (which in turn requires specifying a
-// custom comparator `C`) as in `y_absl::btree_multimap<K, V, C, A>`. 
+// custom comparator `C`) as in `y_absl::btree_multimap<K, V, C, A>`.
 //
 template <typename Key, typename Value, typename Compare = std::less<Key>,
           typename Alloc = std::allocator<std::pair<const Key, Value>>>
@@ -511,37 +511,37 @@ class btree_multimap
   //
   // * Default constructor
   //
-  //   y_absl::btree_multimap<int, TString> map1; 
+  //   y_absl::btree_multimap<int, TString> map1;
   //
   // * Initializer List constructor
   //
-  //   y_absl::btree_multimap<int, TString> map2 = 
+  //   y_absl::btree_multimap<int, TString> map2 =
   //       {{1, "huey"}, {2, "dewey"}, {3, "louie"},};
   //
   // * Copy constructor
   //
-  //   y_absl::btree_multimap<int, TString> map3(map2); 
+  //   y_absl::btree_multimap<int, TString> map3(map2);
   //
   // * Copy assignment operator
   //
-  //  y_absl::btree_multimap<int, TString> map4; 
+  //  y_absl::btree_multimap<int, TString> map4;
   //  map4 = map3;
   //
   // * Move constructor
   //
   //   // Move is guaranteed efficient
-  //   y_absl::btree_multimap<int, TString> map5(std::move(map4)); 
+  //   y_absl::btree_multimap<int, TString> map5(std::move(map4));
   //
   // * Move assignment operator
   //
   //   // May be efficient if allocators are compatible
-  //   y_absl::btree_multimap<int, TString> map6; 
+  //   y_absl::btree_multimap<int, TString> map6;
   //   map6 = std::move(map5);
   //
   // * Range constructor
   //
-  //   std::vector<std::pair<int, TString>> v = {{1, "a"}, {2, "b"}}; 
-  //   y_absl::btree_multimap<int, TString> map7(v.begin(), v.end()); 
+  //   std::vector<std::pair<int, TString>> v = {{1, "a"}, {2, "b"}};
+  //   y_absl::btree_multimap<int, TString> map7(v.begin(), v.end());
   btree_multimap() {}
   using Base::Base;
 
@@ -787,9 +787,9 @@ class btree_multimap
   using Base::value_comp;
 };
 
-// y_absl::swap(y_absl::btree_multimap<>, y_absl::btree_multimap<>) 
+// y_absl::swap(y_absl::btree_multimap<>, y_absl::btree_multimap<>)
 //
-// Swaps the contents of two `y_absl::btree_multimap` containers. 
+// Swaps the contents of two `y_absl::btree_multimap` containers.
 template <typename K, typename V, typename C, typename A>
 void swap(btree_multimap<K, V, C, A> &x, btree_multimap<K, V, C, A> &y) {
   return x.swap(y);
@@ -810,6 +810,6 @@ void erase_if(btree_multimap<K, V, C, A> &map, Pred pred) {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_BTREE_MAP_H_

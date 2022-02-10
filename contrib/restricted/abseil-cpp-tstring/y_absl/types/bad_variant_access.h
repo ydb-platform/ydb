@@ -16,49 +16,49 @@
 // bad_variant_access.h
 // -----------------------------------------------------------------------------
 //
-// This header file defines the `y_absl::bad_variant_access` type. 
+// This header file defines the `y_absl::bad_variant_access` type.
 
 #ifndef ABSL_TYPES_BAD_VARIANT_ACCESS_H_
 #define ABSL_TYPES_BAD_VARIANT_ACCESS_H_
 
 #include <stdexcept>
 
-#include "y_absl/base/config.h" 
+#include "y_absl/base/config.h"
 
 #ifdef ABSL_USES_STD_VARIANT
 
 #include <variant>
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 using std::bad_variant_access;
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #else  // ABSL_USES_STD_VARIANT
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
 // bad_variant_access
 // -----------------------------------------------------------------------------
 //
-// An `y_absl::bad_variant_access` type is an exception type that is thrown in 
+// An `y_absl::bad_variant_access` type is an exception type that is thrown in
 // the following cases:
 //
-//   * Calling `y_absl::get(y_absl::variant) with an index or type that does not 
+//   * Calling `y_absl::get(y_absl::variant) with an index or type that does not
 //     match the currently selected alternative type
-//   * Calling `y_absl::visit on an `y_absl::variant` that is in the 
+//   * Calling `y_absl::visit on an `y_absl::variant` that is in the
 //     `variant::valueless_by_exception` state.
 //
 // Example:
 //
-//   y_absl::variant<int, TString> v; 
+//   y_absl::variant<int, TString> v;
 //   v = 1;
 //   try {
-//     y_absl::get<TString>(v); 
-//   } catch(const y_absl::bad_variant_access& e) { 
+//     y_absl::get<TString>(v);
+//   } catch(const y_absl::bad_variant_access& e) {
 //     std::cout << "Bad variant access: " << e.what() << '\n';
 //   }
 class bad_variant_access : public std::exception {
@@ -75,7 +75,7 @@ namespace variant_internal {
 
 }  // namespace variant_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_USES_STD_VARIANT
 

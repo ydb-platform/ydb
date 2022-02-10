@@ -27,13 +27,13 @@
 #include <util/stream/str.h>
 #include <type_traits>
 
-#include "y_absl/base/port.h" 
-#include "y_absl/meta/type_traits.h" 
-#include "y_absl/numeric/int128.h" 
-#include "y_absl/strings/internal/str_format/extension.h" 
-#include "y_absl/strings/string_view.h" 
+#include "y_absl/base/port.h"
+#include "y_absl/meta/type_traits.h"
+#include "y_absl/numeric/int128.h"
+#include "y_absl/strings/internal/str_format/extension.h"
+#include "y_absl/strings/string_view.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 class Cord;
@@ -261,7 +261,7 @@ struct FormatCountCaptureHelper {
   static ArgConvertResult<FormatConversionCharSetInternal::n> ConvertHelper(
       const FormatCountCapture& v, FormatConversionSpecImpl conv,
       FormatSinkImpl* sink) {
-    const y_absl::enable_if_t<sizeof(T) != 0, FormatCountCapture>& v2 = v; 
+    const y_absl::enable_if_t<sizeof(T) != 0, FormatCountCapture>& v2 = v;
 
     if (conv.conversion_char() !=
         str_format_internal::FormatConversionCharInternal::n) {
@@ -515,7 +515,7 @@ class FormatArgImpl {
   ABSL_INTERNAL_FORMAT_DISPATCH_INSTANTIATE_(double, __VA_ARGS__);             \
   ABSL_INTERNAL_FORMAT_DISPATCH_INSTANTIATE_(long double, __VA_ARGS__);        \
   ABSL_INTERNAL_FORMAT_DISPATCH_INSTANTIATE_(const char*, __VA_ARGS__);        \
-  ABSL_INTERNAL_FORMAT_DISPATCH_INSTANTIATE_(TString, __VA_ARGS__);        \ 
+  ABSL_INTERNAL_FORMAT_DISPATCH_INSTANTIATE_(TString, __VA_ARGS__);        \
   ABSL_INTERNAL_FORMAT_DISPATCH_INSTANTIATE_(string_view, __VA_ARGS__)
 
 ABSL_INTERNAL_FORMAT_DISPATCH_OVERLOADS_EXPAND_(extern);
@@ -523,6 +523,6 @@ ABSL_INTERNAL_FORMAT_DISPATCH_OVERLOADS_EXPAND_(extern);
 
 }  // namespace str_format_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_ARG_H_

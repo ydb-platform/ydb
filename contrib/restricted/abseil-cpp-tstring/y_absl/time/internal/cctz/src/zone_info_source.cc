@@ -12,25 +12,25 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 
-#include "y_absl/time/internal/cctz/include/cctz/zone_info_source.h" 
+#include "y_absl/time/internal/cctz/include/cctz/zone_info_source.h"
 
 #include "y_absl/base/config.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
 
 // Defined out-of-line to avoid emitting a weak vtable in all TUs.
 ZoneInfoSource::~ZoneInfoSource() {}
-TString ZoneInfoSource::Version() const { return TString(); } 
+TString ZoneInfoSource::Version() const { return TString(); }
 
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz_extension {
@@ -39,8 +39,8 @@ namespace {
 
 // A default for cctz_extension::zone_info_source_factory, which simply
 // defers to the fallback factory.
-std::unique_ptr<y_absl::time_internal::cctz::ZoneInfoSource> DefaultFactory( 
-    const TString& name, 
+std::unique_ptr<y_absl::time_internal::cctz::ZoneInfoSource> DefaultFactory(
+    const TString& name,
     const std::function<
         std::unique_ptr<y_absl::time_internal::cctz::ZoneInfoSource>(
             const TString& name)>& fallback_factory) {
@@ -112,4 +112,4 @@ ZoneInfoSourceFactory zone_info_source_factory = DefaultFactory;
 }  // namespace cctz_extension
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

@@ -11,7 +11,7 @@ static int UnwindImpl(void** /* result */, int* /* sizes */,
   return 0;
 }
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 bool StackTraceWorksForTest() {
@@ -19,6 +19,6 @@ bool StackTraceWorksForTest() {
 }
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_DEBUGGING_INTERNAL_STACKTRACE_UNIMPLEMENTED_INL_H_

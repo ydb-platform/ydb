@@ -15,20 +15,20 @@
 #ifndef ABSL_BASE_ATOMIC_HOOK_TEST_HELPER_H_
 #define ABSL_BASE_ATOMIC_HOOK_TEST_HELPER_H_
 
-#include "y_absl/base/internal/atomic_hook.h" 
+#include "y_absl/base/internal/atomic_hook.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace atomic_hook_internal {
 
 using VoidF = void (*)();
-extern y_absl::base_internal::AtomicHook<VoidF> func; 
+extern y_absl::base_internal::AtomicHook<VoidF> func;
 extern int default_func_calls;
 void DefaultFunc();
 void RegisterFunc(VoidF func);
 
 }  // namespace atomic_hook_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_BASE_ATOMIC_HOOK_TEST_HELPER_H_

@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/substitute.h" 
+#include "y_absl/strings/substitute.h"
 
 #include <algorithm>
 
-#include "y_absl/base/internal/raw_logging.h" 
-#include "y_absl/strings/ascii.h" 
-#include "y_absl/strings/escaping.h" 
-#include "y_absl/strings/internal/resize_uninitialized.h" 
-#include "y_absl/strings/string_view.h" 
+#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/strings/ascii.h"
+#include "y_absl/strings/escaping.h"
+#include "y_absl/strings/internal/resize_uninitialized.h"
+#include "y_absl/strings/string_view.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace substitute_internal {
 
-void SubstituteAndAppendArray(TString* output, y_absl::string_view format, 
-                              const y_absl::string_view* args_array, 
+void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
+                              const y_absl::string_view* args_array,
                               size_t num_args) {
   // Determine total size needed.
   size_t size = 0;
@@ -37,10 +37,10 @@ void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
 #ifndef NDEBUG
         ABSL_RAW_LOG(FATAL,
                      "Invalid y_absl::Substitute() format string: \"%s\".",
-                     y_absl::CEscape(format).c_str()); 
+                     y_absl::CEscape(format).c_str());
 #endif
         return;
-      } else if (y_absl::ascii_isdigit(format[i + 1])) { 
+      } else if (y_absl::ascii_isdigit(format[i + 1])) {
         int index = format[i + 1] - '0';
         if (static_cast<size_t>(index) >= num_args) {
 #ifndef NDEBUG
@@ -49,7 +49,7 @@ void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
               "Invalid y_absl::Substitute() format string: asked for \"$"
               "%d\", but only %d args were given.  Full format string was: "
               "\"%s\".",
-              index, static_cast<int>(num_args), y_absl::CEscape(format).c_str()); 
+              index, static_cast<int>(num_args), y_absl::CEscape(format).c_str());
 #endif
           return;
         }
@@ -62,7 +62,7 @@ void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
 #ifndef NDEBUG
         ABSL_RAW_LOG(FATAL,
                      "Invalid y_absl::Substitute() format string: \"%s\".",
-                     y_absl::CEscape(format).c_str()); 
+                     y_absl::CEscape(format).c_str());
 #endif
         return;
       }
@@ -80,8 +80,8 @@ void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
   char* target = &(*output)[original_size];
   for (size_t i = 0; i < format.size(); i++) {
     if (format[i] == '$') {
-      if (y_absl::ascii_isdigit(format[i + 1])) { 
-        const y_absl::string_view src = args_array[format[i + 1] - '0']; 
+      if (y_absl::ascii_isdigit(format[i + 1])) {
+        const y_absl::string_view src = args_array[format[i + 1] - '0'];
         target = std::copy(src.begin(), src.end(), target);
         ++i;  // Skip next char.
       } else if (format[i + 1] == '$') {
@@ -105,12 +105,12 @@ Arg::Arg(const void* value) {
     char* ptr = scratch_ + sizeof(scratch_);
     uintptr_t num = reinterpret_cast<uintptr_t>(value);
     do {
-      *--ptr = y_absl::numbers_internal::kHexChar[num & 0xf]; 
+      *--ptr = y_absl::numbers_internal::kHexChar[num & 0xf];
       num >>= 4;
     } while (num != 0);
     *--ptr = 'x';
     *--ptr = '0';
-    piece_ = y_absl::string_view(ptr, scratch_ + sizeof(scratch_) - ptr); 
+    piece_ = y_absl::string_view(ptr, scratch_ + sizeof(scratch_) - ptr);
   }
 }
 
@@ -120,7 +120,7 @@ Arg::Arg(Hex hex) {
   char* writer = end;
   uint64_t value = hex.value;
   do {
-    *--writer = y_absl::numbers_internal::kHexChar[value & 0xF]; 
+    *--writer = y_absl::numbers_internal::kHexChar[value & 0xF];
     value >>= 4;
   } while (value != 0);
 
@@ -132,7 +132,7 @@ Arg::Arg(Hex hex) {
     beg = writer;
   }
 
-  piece_ = y_absl::string_view(beg, end - beg); 
+  piece_ = y_absl::string_view(beg, end - beg);
 }
 
 // TODO(jorg): Don't duplicate so much code between here and str_cat.cc
@@ -164,9 +164,9 @@ Arg::Arg(Dec dec) {
     if (add_sign_again) *--writer = '-';
   }
 
-  piece_ = y_absl::string_view(writer, end - writer); 
+  piece_ = y_absl::string_view(writer, end - writer);
 }
 
 }  // namespace substitute_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

@@ -19,7 +19,7 @@
 
 #include "y_absl/base/config.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
@@ -37,6 +37,6 @@ void DumpPCAndFrameSizesAndStackTrace(
 
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_DEBUGGING_INTERNAL_EXAMINE_STACK_H_

@@ -13,18 +13,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/internal/str_format/extension.h" 
+#include "y_absl/strings/internal/str_format/extension.h"
 
 #include <errno.h>
 #include <algorithm>
 #include <util/generic/string.h>
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
 TString FlagsToString(Flags v) {
-  TString s; 
+  TString s;
   s.append(FlagsContains(v, Flags::kLeft) ? "-" : "");
   s.append(FlagsContains(v, Flags::kShowPos) ? "+" : "");
   s.append(FlagsContains(v, Flags::kSignCol) ? " " : "");
@@ -72,4 +72,4 @@ bool FormatSinkImpl::PutPaddedString(string_view value, int width,
 
 }  // namespace str_format_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

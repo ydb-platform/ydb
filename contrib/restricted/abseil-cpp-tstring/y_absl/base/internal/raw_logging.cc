@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/internal/raw_logging.h"
 
 #include <stddef.h>
 #include <cstdarg>
@@ -20,10 +20,10 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "y_absl/base/attributes.h" 
-#include "y_absl/base/config.h" 
-#include "y_absl/base/internal/atomic_hook.h" 
-#include "y_absl/base/log_severity.h" 
+#include "y_absl/base/attributes.h"
+#include "y_absl/base/config.h"
+#include "y_absl/base/internal/atomic_hook.h"
+#include "y_absl/base/log_severity.h"
 
 // We know how to perform low-level writes to stderr in POSIX and Windows.  For
 // these platforms, we define the token ABSL_LOW_LEVEL_WRITE_SUPPORTED.
@@ -130,9 +130,9 @@ bool DoRawLog(char** buf, int* size, const char* format, ...) {
   return true;
 }
 
-void RawLogVA(y_absl::LogSeverity severity, const char* file, int line, 
+void RawLogVA(y_absl::LogSeverity severity, const char* file, int line,
               const char* format, va_list ap) ABSL_PRINTF_ATTRIBUTE(4, 0);
-void RawLogVA(y_absl::LogSeverity severity, const char* file, int line, 
+void RawLogVA(y_absl::LogSeverity severity, const char* file, int line,
               const char* format, va_list ap) {
   char buffer[kLogBufSize];
   char* buf = buffer;
@@ -144,8 +144,8 @@ void RawLogVA(y_absl::LogSeverity severity, const char* file, int line,
 #endif
 
 #ifdef ABSL_MIN_LOG_LEVEL
-  if (severity < static_cast<y_absl::LogSeverity>(ABSL_MIN_LOG_LEVEL) && 
-      severity < y_absl::LogSeverity::kFatal) { 
+  if (severity < static_cast<y_absl::LogSeverity>(ABSL_MIN_LOG_LEVEL) &&
+      severity < y_absl::LogSeverity::kFatal) {
     enabled = false;
   }
 #endif
@@ -177,7 +177,7 @@ void RawLogVA(y_absl::LogSeverity severity, const char* file, int line,
 
   // Abort the process after logging a FATAL message, even if the output itself
   // was suppressed.
-  if (severity == y_absl::LogSeverity::kFatal) { 
+  if (severity == y_absl::LogSeverity::kFatal) {
     abort_hook(file, line, buffer, prefix_end, buffer + kLogBufSize);
     abort();
   }
@@ -209,7 +209,7 @@ void SafeWriteToStderr(const char *s, size_t len) {
 #endif
 }
 
-void RawLog(y_absl::LogSeverity severity, const char* file, int line, 
+void RawLog(y_absl::LogSeverity severity, const char* file, int line,
             const char* format, ...) {
   va_list ap;
   va_start(ap, format);
@@ -239,4 +239,4 @@ void RegisterInternalLogFunction(InternalLogFunction func) {
 
 }  // namespace raw_logging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

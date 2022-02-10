@@ -18,9 +18,9 @@
 // wrappers of STL containers.
 //
 // DO NOT INCLUDE THIS FILE DIRECTLY. Use this file by including
-// y_absl/strings/str_split.h. 
+// y_absl/strings/str_split.h.
 //
-// IWYU pragma: private, include "y_absl/strings/str_split.h" 
+// IWYU pragma: private, include "y_absl/strings/str_split.h"
 
 #ifndef ABSL_STRINGS_INTERNAL_STL_TYPE_TRAITS_H_
 #define ABSL_STRINGS_INTERNAL_STL_TYPE_TRAITS_H_
@@ -37,9 +37,9 @@
 #include <unordered_set>
 #include <vector>
 
-#include "y_absl/meta/type_traits.h" 
+#include "y_absl/meta/type_traits.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
@@ -48,25 +48,25 @@ struct IsSpecializationImpl : std::false_type {};
 template <template <typename...> class T, typename... Args>
 struct IsSpecializationImpl<T<Args...>, T> : std::true_type {};
 template <typename C, template <typename...> class T>
-using IsSpecialization = IsSpecializationImpl<y_absl::decay_t<C>, T>; 
+using IsSpecialization = IsSpecializationImpl<y_absl::decay_t<C>, T>;
 
 template <typename C>
 struct IsArrayImpl : std::false_type {};
 template <template <typename, size_t> class A, typename T, size_t N>
 struct IsArrayImpl<A<T, N>> : std::is_same<A<T, N>, std::array<T, N>> {};
 template <typename C>
-using IsArray = IsArrayImpl<y_absl::decay_t<C>>; 
+using IsArray = IsArrayImpl<y_absl::decay_t<C>>;
 
 template <typename C>
 struct IsBitsetImpl : std::false_type {};
 template <template <size_t> class B, size_t N>
 struct IsBitsetImpl<B<N>> : std::is_same<B<N>, std::bitset<N>> {};
 template <typename C>
-using IsBitset = IsBitsetImpl<y_absl::decay_t<C>>; 
+using IsBitset = IsBitsetImpl<y_absl::decay_t<C>>;
 
 template <typename C>
 struct IsSTLContainer
-    : y_absl::disjunction< 
+    : y_absl::disjunction<
           IsArray<C>, IsBitset<C>, IsSpecialization<C, std::deque>,
           IsSpecialization<C, std::forward_list>,
           IsSpecialization<C, std::list>, IsSpecialization<C, std::map>,
@@ -85,20 +85,20 @@ struct IsBaseOfSpecializationImpl : std::false_type {};
 // template.
 template <typename C, template <typename, typename> class T>
 struct IsBaseOfSpecializationImpl<
-    C, T, y_absl::void_t<typename C::value_type, typename C::allocator_type>> 
+    C, T, y_absl::void_t<typename C::value_type, typename C::allocator_type>>
     : std::is_base_of<C,
                       T<typename C::value_type, typename C::allocator_type>> {};
 template <typename C, template <typename, typename, typename> class T>
 struct IsBaseOfSpecializationImpl<
     C, T,
-    y_absl::void_t<typename C::key_type, typename C::key_compare, 
+    y_absl::void_t<typename C::key_type, typename C::key_compare,
                  typename C::allocator_type>>
     : std::is_base_of<C, T<typename C::key_type, typename C::key_compare,
                            typename C::allocator_type>> {};
 template <typename C, template <typename, typename, typename, typename> class T>
 struct IsBaseOfSpecializationImpl<
     C, T,
-    y_absl::void_t<typename C::key_type, typename C::mapped_type, 
+    y_absl::void_t<typename C::key_type, typename C::mapped_type,
                  typename C::key_compare, typename C::allocator_type>>
     : std::is_base_of<C,
                       T<typename C::key_type, typename C::mapped_type,
@@ -107,7 +107,7 @@ struct IsBaseOfSpecializationImpl<
 template <typename C, template <typename, typename, typename, typename> class T>
 struct IsBaseOfSpecializationImpl<
     C, T,
-    y_absl::void_t<typename C::key_type, typename C::hasher, 
+    y_absl::void_t<typename C::key_type, typename C::hasher,
                  typename C::key_equal, typename C::allocator_type>>
     : std::is_base_of<C, T<typename C::key_type, typename C::hasher,
                            typename C::key_equal, typename C::allocator_type>> {
@@ -116,14 +116,14 @@ template <typename C,
           template <typename, typename, typename, typename, typename> class T>
 struct IsBaseOfSpecializationImpl<
     C, T,
-    y_absl::void_t<typename C::key_type, typename C::mapped_type, 
+    y_absl::void_t<typename C::key_type, typename C::mapped_type,
                  typename C::hasher, typename C::key_equal,
                  typename C::allocator_type>>
     : std::is_base_of<C, T<typename C::key_type, typename C::mapped_type,
                            typename C::hasher, typename C::key_equal,
                            typename C::allocator_type>> {};
 template <typename C, template <typename...> class T>
-using IsBaseOfSpecialization = IsBaseOfSpecializationImpl<y_absl::decay_t<C>, T>; 
+using IsBaseOfSpecialization = IsBaseOfSpecializationImpl<y_absl::decay_t<C>, T>;
 
 template <typename C>
 struct IsBaseOfArrayImpl : std::false_type {};
@@ -131,18 +131,18 @@ template <template <typename, size_t> class A, typename T, size_t N>
 struct IsBaseOfArrayImpl<A<T, N>> : std::is_base_of<A<T, N>, std::array<T, N>> {
 };
 template <typename C>
-using IsBaseOfArray = IsBaseOfArrayImpl<y_absl::decay_t<C>>; 
+using IsBaseOfArray = IsBaseOfArrayImpl<y_absl::decay_t<C>>;
 
 template <typename C>
 struct IsBaseOfBitsetImpl : std::false_type {};
 template <template <size_t> class B, size_t N>
 struct IsBaseOfBitsetImpl<B<N>> : std::is_base_of<B<N>, std::bitset<N>> {};
 template <typename C>
-using IsBaseOfBitset = IsBaseOfBitsetImpl<y_absl::decay_t<C>>; 
+using IsBaseOfBitset = IsBaseOfBitsetImpl<y_absl::decay_t<C>>;
 
 template <typename C>
 struct IsBaseOfSTLContainer
-    : y_absl::disjunction<IsBaseOfArray<C>, IsBaseOfBitset<C>, 
+    : y_absl::disjunction<IsBaseOfArray<C>, IsBaseOfBitset<C>,
                         IsBaseOfSpecialization<C, std::deque>,
                         IsBaseOfSpecialization<C, std::forward_list>,
                         IsBaseOfSpecialization<C, std::list>,
@@ -163,20 +163,20 @@ struct IsConvertibleToSpecializationImpl : std::false_type {};
 // STL template.
 template <typename C, template <typename, typename> class T>
 struct IsConvertibleToSpecializationImpl<
-    C, T, y_absl::void_t<typename C::value_type, typename C::allocator_type>> 
+    C, T, y_absl::void_t<typename C::value_type, typename C::allocator_type>>
     : std::is_convertible<
           C, T<typename C::value_type, typename C::allocator_type>> {};
 template <typename C, template <typename, typename, typename> class T>
 struct IsConvertibleToSpecializationImpl<
     C, T,
-    y_absl::void_t<typename C::key_type, typename C::key_compare, 
+    y_absl::void_t<typename C::key_type, typename C::key_compare,
                  typename C::allocator_type>>
     : std::is_convertible<C, T<typename C::key_type, typename C::key_compare,
                                typename C::allocator_type>> {};
 template <typename C, template <typename, typename, typename, typename> class T>
 struct IsConvertibleToSpecializationImpl<
     C, T,
-    y_absl::void_t<typename C::key_type, typename C::mapped_type, 
+    y_absl::void_t<typename C::key_type, typename C::mapped_type,
                  typename C::key_compare, typename C::allocator_type>>
     : std::is_convertible<
           C, T<typename C::key_type, typename C::mapped_type,
@@ -184,7 +184,7 @@ struct IsConvertibleToSpecializationImpl<
 template <typename C, template <typename, typename, typename, typename> class T>
 struct IsConvertibleToSpecializationImpl<
     C, T,
-    y_absl::void_t<typename C::key_type, typename C::hasher, 
+    y_absl::void_t<typename C::key_type, typename C::hasher,
                  typename C::key_equal, typename C::allocator_type>>
     : std::is_convertible<
           C, T<typename C::key_type, typename C::hasher, typename C::key_equal,
@@ -193,7 +193,7 @@ template <typename C,
           template <typename, typename, typename, typename, typename> class T>
 struct IsConvertibleToSpecializationImpl<
     C, T,
-    y_absl::void_t<typename C::key_type, typename C::mapped_type, 
+    y_absl::void_t<typename C::key_type, typename C::mapped_type,
                  typename C::hasher, typename C::key_equal,
                  typename C::allocator_type>>
     : std::is_convertible<C, T<typename C::key_type, typename C::mapped_type,
@@ -201,7 +201,7 @@ struct IsConvertibleToSpecializationImpl<
                                typename C::allocator_type>> {};
 template <typename C, template <typename...> class T>
 using IsConvertibleToSpecialization =
-    IsConvertibleToSpecializationImpl<y_absl::decay_t<C>, T>; 
+    IsConvertibleToSpecializationImpl<y_absl::decay_t<C>, T>;
 
 template <typename C>
 struct IsConvertibleToArrayImpl : std::false_type {};
@@ -209,7 +209,7 @@ template <template <typename, size_t> class A, typename T, size_t N>
 struct IsConvertibleToArrayImpl<A<T, N>>
     : std::is_convertible<A<T, N>, std::array<T, N>> {};
 template <typename C>
-using IsConvertibleToArray = IsConvertibleToArrayImpl<y_absl::decay_t<C>>; 
+using IsConvertibleToArray = IsConvertibleToArrayImpl<y_absl::decay_t<C>>;
 
 template <typename C>
 struct IsConvertibleToBitsetImpl : std::false_type {};
@@ -217,11 +217,11 @@ template <template <size_t> class B, size_t N>
 struct IsConvertibleToBitsetImpl<B<N>>
     : std::is_convertible<B<N>, std::bitset<N>> {};
 template <typename C>
-using IsConvertibleToBitset = IsConvertibleToBitsetImpl<y_absl::decay_t<C>>; 
+using IsConvertibleToBitset = IsConvertibleToBitsetImpl<y_absl::decay_t<C>>;
 
 template <typename C>
 struct IsConvertibleToSTLContainer
-    : y_absl::disjunction< 
+    : y_absl::disjunction<
           IsConvertibleToArray<C>, IsConvertibleToBitset<C>,
           IsConvertibleToSpecialization<C, std::deque>,
           IsConvertibleToSpecialization<C, std::forward_list>,
@@ -238,11 +238,11 @@ struct IsConvertibleToSTLContainer
 
 template <typename C>
 struct IsStrictlyBaseOfAndConvertibleToSTLContainer
-    : y_absl::conjunction<y_absl::negation<IsSTLContainer<C>>, 
+    : y_absl::conjunction<y_absl::negation<IsSTLContainer<C>>,
                         IsBaseOfSTLContainer<C>,
                         IsConvertibleToSTLContainer<C>> {};
 
 }  // namespace strings_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 #endif  // ABSL_STRINGS_INTERNAL_STL_TYPE_TRAITS_H_

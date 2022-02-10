@@ -41,18 +41,18 @@
 
 #include "y_absl/base/config.h"
 #include "y_absl/base/internal/unaligned_access.h"
-#include "y_absl/base/port.h" 
-#include "y_absl/container/fixed_array.h" 
+#include "y_absl/base/port.h"
+#include "y_absl/container/fixed_array.h"
 #include "y_absl/hash/internal/city.h"
 #include "y_absl/hash/internal/low_level_hash.h"
-#include "y_absl/meta/type_traits.h" 
-#include "y_absl/numeric/int128.h" 
-#include "y_absl/strings/string_view.h" 
-#include "y_absl/types/optional.h" 
-#include "y_absl/types/variant.h" 
-#include "y_absl/utility/utility.h" 
+#include "y_absl/meta/type_traits.h"
+#include "y_absl/numeric/int128.h"
+#include "y_absl/strings/string_view.h"
+#include "y_absl/types/optional.h"
+#include "y_absl/types/variant.h"
+#include "y_absl/utility/utility.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace hash_internal {
 
@@ -120,7 +120,7 @@ class PiecewiseCombiner {
 // A hash state object represents an intermediate state in the computation
 // of an unspecified hash algorithm. `HashStateBase` provides a CRTP style
 // base class for hash state implementations. Developers adding type support
-// for `y_absl::Hash` should not rely on any parts of the state object other than 
+// for `y_absl::Hash` should not rely on any parts of the state object other than
 // the following member functions:
 //
 //   * HashStateBase::combine()
@@ -352,7 +352,7 @@ H AbslHashValue(H hash_state, std::nullptr_t) {
 
 // is_hashable()
 //
-// Trait class which returns true if T is hashable by the y_absl::Hash framework. 
+// Trait class which returns true if T is hashable by the y_absl::Hash framework.
 // Used for the AbslHashValue implementations for composite types below.
 template <typename T>
 struct is_hashable;
@@ -370,7 +370,7 @@ AbslHashValue(H hash_state, const std::pair<T1, T2>& p) {
 // Helper function for hashing a tuple. The third argument should
 // be an index_sequence running from 0 to tuple_size<Tuple> - 1.
 template <typename H, typename Tuple, size_t... Is>
-H hash_tuple(H hash_state, const Tuple& t, y_absl::index_sequence<Is...>) { 
+H hash_tuple(H hash_state, const Tuple& t, y_absl::index_sequence<Is...>) {
   return H::combine(std::move(hash_state), std::get<Is>(t)...);
 }
 
@@ -381,11 +381,11 @@ template <typename H, typename... Ts>
 // for now.
 H
 #else   // _MSC_VER
-typename std::enable_if<y_absl::conjunction<is_hashable<Ts>...>::value, H>::type 
+typename std::enable_if<y_absl::conjunction<is_hashable<Ts>...>::value, H>::type
 #endif  // _MSC_VER
 AbslHashValue(H hash_state, const std::tuple<Ts...>& t) {
   return hash_internal::hash_tuple(std::move(hash_state), t,
-                                   y_absl::make_index_sequence<sizeof...(Ts)>()); 
+                                   y_absl::make_index_sequence<sizeof...(Ts)>());
 }
 
 // -----------------------------------------------------------------------------
@@ -414,16 +414,16 @@ H AbslHashValue(H hash_state, const std::shared_ptr<T>& ptr) {
 // the same character sequence. These types are:
 //
 //  - `y_absl::Cord`
-//  - `TString` (and std::basic_string<char, std::char_traits<char>, A> for 
+//  - `TString` (and std::basic_string<char, std::char_traits<char>, A> for
 //      any allocator A)
-//  - `y_absl::string_view` and `std::string_view` 
+//  - `y_absl::string_view` and `std::string_view`
 //
 // For simplicity, we currently support only `char` strings. This support may
 // be broadened, if necessary, but with some caution - this overload would
 // misbehave in cases where the traits' `eq()` member isn't equivalent to `==`
 // on the underlying character type.
 template <typename H>
-H AbslHashValue(H hash_state, y_absl::string_view str) { 
+H AbslHashValue(H hash_state, y_absl::string_view str) {
   return H::combine(
       H::combine_contiguous(std::move(hash_state), str.data(), str.size()),
       str.size());
@@ -431,7 +431,7 @@ H AbslHashValue(H hash_state, y_absl::string_view str) {
 
 // Support std::wstring, std::u16string and std::u32string.
 template <typename Char, typename Alloc, typename H,
-          typename = y_absl::enable_if_t<std::is_same<Char, wchar_t>::value || 
+          typename = y_absl::enable_if_t<std::is_same<Char, wchar_t>::value ||
                                        std::is_same<Char, char16_t>::value ||
                                        std::is_same<Char, char32_t>::value>>
 H AbslHashValue(
@@ -583,10 +583,10 @@ typename std::enable_if<is_hashable<T>::value, H>::type AbslHashValue(
   return H::combine(std::move(hash_state), opt.get());
 }
 
-// AbslHashValue for hashing y_absl::optional 
+// AbslHashValue for hashing y_absl::optional
 template <typename H, typename T>
 typename std::enable_if<is_hashable<T>::value, H>::type AbslHashValue(
-    H hash_state, const y_absl::optional<T>& opt) { 
+    H hash_state, const y_absl::optional<T>& opt) {
   if (opt) hash_state = H::combine(std::move(hash_state), *opt);
   return H::combine(std::move(hash_state), opt.has_value());
 }
@@ -601,12 +601,12 @@ struct VariantVisitor {
   }
 };
 
-// AbslHashValue for hashing y_absl::variant 
+// AbslHashValue for hashing y_absl::variant
 template <typename H, typename... T>
 typename std::enable_if<conjunction<is_hashable<T>...>::value, H>::type
-AbslHashValue(H hash_state, const y_absl::variant<T...>& v) { 
+AbslHashValue(H hash_state, const y_absl::variant<T...>& v) {
   if (!v.valueless_by_exception()) {
-    hash_state = y_absl::visit(VariantVisitor<H>{std::move(hash_state)}, v); 
+    hash_state = y_absl::visit(VariantVisitor<H>{std::move(hash_state)}, v);
   }
   return H::combine(std::move(hash_state), v.index());
 }
@@ -689,14 +689,14 @@ struct HashSelect {
   struct UniquelyRepresentedProbe {
     template <typename H, typename T>
     static auto Invoke(H state, const T& value)
-        -> y_absl::enable_if_t<is_uniquely_represented<T>::value, H> { 
+        -> y_absl::enable_if_t<is_uniquely_represented<T>::value, H> {
       return hash_internal::hash_bytes(std::move(state), value);
     }
   };
 
   struct HashValueProbe {
     template <typename H, typename T>
-    static auto Invoke(H state, const T& value) -> y_absl::enable_if_t< 
+    static auto Invoke(H state, const T& value) -> y_absl::enable_if_t<
         std::is_same<H,
                      decltype(AbslHashValue(std::move(state), value))>::value,
         H> {
@@ -707,7 +707,7 @@ struct HashSelect {
   struct LegacyHashProbe {
 #if ABSL_HASH_INTERNAL_SUPPORT_LEGACY_HASH_
     template <typename H, typename T>
-    static auto Invoke(H state, const T& value) -> y_absl::enable_if_t< 
+    static auto Invoke(H state, const T& value) -> y_absl::enable_if_t<
         std::is_convertible<
             decltype(ABSL_INTERNAL_LEGACY_HASH_NAMESPACE::hash<T>()(value)),
             size_t>::value,
@@ -722,7 +722,7 @@ struct HashSelect {
   struct StdHashProbe {
     template <typename H, typename T>
     static auto Invoke(H state, const T& value)
-        -> y_absl::enable_if_t<type_traits_internal::IsHashable<T>::value, H> { 
+        -> y_absl::enable_if_t<type_traits_internal::IsHashable<T>::value, H> {
       return hash_internal::hash_bytes(std::move(state), std::hash<T>{}(value));
     }
   };
@@ -744,7 +744,7 @@ struct HashSelect {
   // Probe each implementation in order.
   // disjunction provides short circuiting wrt instantiation.
   template <typename T>
-  using Apply = y_absl::disjunction<         // 
+  using Apply = y_absl::disjunction<         //
       Probe<UniquelyRepresentedProbe, T>,  //
       Probe<HashValueProbe, T>,            //
       Probe<LegacyHashProbe, T>,           //
@@ -758,12 +758,12 @@ struct is_hashable
 
 // MixingHashState
 class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
-  // y_absl::uint128 is not an alias or a thin wrapper around the intrinsic. 
+  // y_absl::uint128 is not an alias or a thin wrapper around the intrinsic.
   // We use the intrinsic when available to improve performance.
 #ifdef ABSL_HAVE_INTRINSIC_INT128
   using uint128 = __uint128_t;
 #else   // ABSL_HAVE_INTRINSIC_INT128
-  using uint128 = y_absl::uint128; 
+  using uint128 = y_absl::uint128;
 #endif  // ABSL_HAVE_INTRINSIC_INT128
 
   static constexpr uint64_t kMul =
@@ -799,13 +799,13 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
   // Otherwise we would be instantiating and calling dozens of functions for
   // something that is just one multiplication and a couple xor's.
   // The result should be the same as running the whole algorithm, but faster.
-  template <typename T, y_absl::enable_if_t<IntegralFastPath<T>::value, int> = 0> 
+  template <typename T, y_absl::enable_if_t<IntegralFastPath<T>::value, int> = 0>
   static size_t hash(T value) {
     return static_cast<size_t>(Mix(Seed(), static_cast<uint64_t>(value)));
   }
 
   // Overload of MixingHashState::hash()
-  template <typename T, y_absl::enable_if_t<!IntegralFastPath<T>::value, int> = 0> 
+  template <typename T, y_absl::enable_if_t<!IntegralFastPath<T>::value, int> = 0>
   static size_t hash(const T& value) {
     return static_cast<size_t>(combine(MixingHashState{}, value).state_);
   }
@@ -905,7 +905,7 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
     using MultType = uint64_t;
 #else
     using MultType =
-        y_absl::conditional_t<sizeof(size_t) == 4, uint64_t, uint128>; 
+        y_absl::conditional_t<sizeof(size_t) == 4, uint64_t, uint128>;
 #endif
     // We do the addition in 64-bit space to make sure the 128-bit
     // multiplication is fast. If we were to do it as MultType the compiler has
@@ -1032,7 +1032,7 @@ struct HashImpl {
 
 template <typename T>
 struct Hash
-    : y_absl::conditional_t<is_hashable<T>::value, HashImpl<T>, PoisonedHash> {}; 
+    : y_absl::conditional_t<is_hashable<T>::value, HashImpl<T>, PoisonedHash> {};
 
 template <typename H>
 template <typename T, typename... Ts>
@@ -1091,6 +1091,6 @@ H PiecewiseCombiner::finalize(H state) {
 
 }  // namespace hash_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_HASH_INTERNAL_HASH_H_

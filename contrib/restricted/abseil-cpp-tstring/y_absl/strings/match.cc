@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/match.h" 
+#include "y_absl/strings/match.h"
 
-#include "y_absl/strings/internal/memutil.h" 
+#include "y_absl/strings/internal/memutil.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 bool EqualsIgnoreCase(y_absl::string_view piece1,
                       y_absl::string_view piece2) noexcept {
   return (piece1.size() == piece2.size() &&
-          0 == y_absl::strings_internal::memcasecmp(piece1.data(), piece2.data(), 
+          0 == y_absl::strings_internal::memcasecmp(piece1.data(), piece2.data(),
                                                   piece1.size()));
-  // memcasecmp uses y_absl::ascii_tolower(). 
+  // memcasecmp uses y_absl::ascii_tolower().
 }
 
 bool StartsWithIgnoreCase(y_absl::string_view text,
@@ -40,4 +40,4 @@ bool EndsWithIgnoreCase(y_absl::string_view text,
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

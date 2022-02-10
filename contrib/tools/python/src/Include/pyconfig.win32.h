@@ -326,8 +326,8 @@ typedef int pid_t;
 #	define PY_ULLONG_MAX _UI64_MAX
 #endif
 
-#define Py_NO_ENABLE_SHARED 1 
- 
+#define Py_NO_ENABLE_SHARED 1
+
 /* For Windows the Python core is in a DLL by default.  Test
 Py_NO_ENABLE_SHARED to find out.  Also support MS_NO_COREDLL for b/w compat */
 #if !defined(MS_NO_COREDLL) && !defined(Py_NO_ENABLE_SHARED)

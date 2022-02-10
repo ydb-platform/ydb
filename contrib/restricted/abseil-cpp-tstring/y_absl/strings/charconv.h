@@ -19,12 +19,12 @@
 
 #include "y_absl/base/config.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // Workalike compatibilty version of std::chars_format from C++17.
 //
-// This is an bitfield enumerator which can be passed to y_absl::from_chars to 
+// This is an bitfield enumerator which can be passed to y_absl::from_chars to
 // configure the string-to-float conversion.
 enum class chars_format {
   scientific = 1,
@@ -76,11 +76,11 @@ struct from_chars_result {
 // format that strtod() accepts, except that a "0x" prefix is NOT matched.
 // (In particular, in `hex` mode, the input "0xff" results in the largest
 // matching pattern "0".)
-y_absl::from_chars_result from_chars(const char* first, const char* last, 
+y_absl::from_chars_result from_chars(const char* first, const char* last,
                                    double& value,  // NOLINT
                                    chars_format fmt = chars_format::general);
 
-y_absl::from_chars_result from_chars(const char* first, const char* last, 
+y_absl::from_chars_result from_chars(const char* first, const char* last,
                                    float& value,  // NOLINT
                                    chars_format fmt = chars_format::general);
 
@@ -115,6 +115,6 @@ inline chars_format& operator^=(chars_format& lhs, chars_format rhs) {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_STRINGS_CHARCONV_H_

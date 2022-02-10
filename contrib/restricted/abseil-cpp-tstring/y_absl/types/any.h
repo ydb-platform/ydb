@@ -17,33 +17,33 @@
 // any.h
 // -----------------------------------------------------------------------------
 //
-// This header file define the `y_absl::any` type for holding a type-safe value 
-// of any type. The 'y_absl::any` type is useful for providing a way to hold 
+// This header file define the `y_absl::any` type for holding a type-safe value
+// of any type. The 'y_absl::any` type is useful for providing a way to hold
 // something that is, as yet, unspecified. Such unspecified types
 // traditionally are passed between API boundaries until they are later cast to
 // their "destination" types. To cast to such a destination type, use
-// `y_absl::any_cast()`. Note that when casting an `y_absl::any`, you must cast it 
+// `y_absl::any_cast()`. Note that when casting an `y_absl::any`, you must cast it
 // to an explicit type; implicit conversions will throw.
 //
 // Example:
 //
-//   auto a = y_absl::any(65); 
-//   y_absl::any_cast<int>(a);         // 65 
-//   y_absl::any_cast<char>(a);        // throws y_absl::bad_any_cast 
-//   y_absl::any_cast<TString>(a); // throws y_absl::bad_any_cast 
+//   auto a = y_absl::any(65);
+//   y_absl::any_cast<int>(a);         // 65
+//   y_absl::any_cast<char>(a);        // throws y_absl::bad_any_cast
+//   y_absl::any_cast<TString>(a); // throws y_absl::bad_any_cast
 //
-// `y_absl::any` is a C++11 compatible version of the C++17 `std::any` abstraction 
+// `y_absl::any` is a C++11 compatible version of the C++17 `std::any` abstraction
 // and is designed to be a drop-in replacement for code compliant with C++17.
 //
 // Traditionally, the behavior of casting to a temporary unspecified type has
 // been accomplished with the `void *` paradigm, where the pointer was to some
-// other unspecified type. `y_absl::any` provides an "owning" version of `void *` 
+// other unspecified type. `y_absl::any` provides an "owning" version of `void *`
 // that avoids issues of pointer management.
 //
-// Note: just as in the case of `void *`, use of `y_absl::any` (and its C++17 
+// Note: just as in the case of `void *`, use of `y_absl::any` (and its C++17
 // version `std::any`) is a code smell indicating that your API might not be
 // constructed correctly. We have seen that most uses of `any` are unwarranted,
-// and `y_absl::any`, like `std::any`, is difficult to use properly. Before using 
+// and `y_absl::any`, like `std::any`, is difficult to use properly. Before using
 // this abstraction, make sure that you should not instead be rewriting your
 // code to be more specific.
 //
@@ -53,21 +53,21 @@
 #ifndef ABSL_TYPES_ANY_H_
 #define ABSL_TYPES_ANY_H_
 
-#include "y_absl/base/config.h" 
-#include "y_absl/utility/utility.h" 
+#include "y_absl/base/config.h"
+#include "y_absl/utility/utility.h"
 
 #ifdef ABSL_USES_STD_ANY
 
 #include <any>  // IWYU pragma: export
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 using std::any;
 using std::any_cast;
 using std::bad_any_cast;
 using std::make_any;
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #else  // ABSL_USES_STD_ANY
 
@@ -81,9 +81,9 @@ ABSL_NAMESPACE_END
 #include <utility>
 
 #include "y_absl/base/internal/fast_type_id.h"
-#include "y_absl/base/macros.h" 
-#include "y_absl/meta/type_traits.h" 
-#include "y_absl/types/bad_any_cast.h" 
+#include "y_absl/base/macros.h"
+#include "y_absl/meta/type_traits.h"
+#include "y_absl/types/bad_any_cast.h"
 
 // NOTE: This macro is an implementation detail that is undefined at the bottom
 // of the file. It is not intended for expansion directly from user code.
@@ -93,107 +93,107 @@ ABSL_NAMESPACE_END
 #define ABSL_ANY_DETAIL_HAS_RTTI 1
 #endif  // !defined(__GNUC__) || defined(__GXX_RTTI)
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 class any;
 
 // swap()
 //
-// Swaps two `y_absl::any` values. Equivalent to `x.swap(y) where `x` and `y` are 
-// `y_absl::any` types. 
+// Swaps two `y_absl::any` values. Equivalent to `x.swap(y) where `x` and `y` are
+// `y_absl::any` types.
 void swap(any& x, any& y) noexcept;
 
 // make_any()
 //
-// Constructs an `y_absl::any` of type `T` with the given arguments. 
+// Constructs an `y_absl::any` of type `T` with the given arguments.
 template <typename T, typename... Args>
 any make_any(Args&&... args);
 
-// Overload of `y_absl::make_any()` for constructing an `y_absl::any` type from an 
+// Overload of `y_absl::make_any()` for constructing an `y_absl::any` type from an
 // initializer list.
 template <typename T, typename U, typename... Args>
 any make_any(std::initializer_list<U> il, Args&&... args);
 
 // any_cast()
 //
-// Statically casts the value of a `const y_absl::any` type to the given type. 
-// This function will throw `y_absl::bad_any_cast` if the stored value type of the 
-// `y_absl::any` does not match the cast. 
+// Statically casts the value of a `const y_absl::any` type to the given type.
+// This function will throw `y_absl::bad_any_cast` if the stored value type of the
+// `y_absl::any` does not match the cast.
 //
 // `any_cast()` can also be used to get a reference to the internal storage iff
 // a reference type is passed as its `ValueType`:
 //
 // Example:
 //
-//   y_absl::any my_any = std::vector<int>(); 
-//   y_absl::any_cast<std::vector<int>&>(my_any).push_back(42); 
+//   y_absl::any my_any = std::vector<int>();
+//   y_absl::any_cast<std::vector<int>&>(my_any).push_back(42);
 template <typename ValueType>
 ValueType any_cast(const any& operand);
 
 // Overload of `any_cast()` to statically cast the value of a non-const
-// `y_absl::any` type to the given type. This function will throw 
-// `y_absl::bad_any_cast` if the stored value type of the `y_absl::any` does not 
+// `y_absl::any` type to the given type. This function will throw
+// `y_absl::bad_any_cast` if the stored value type of the `y_absl::any` does not
 // match the cast.
 template <typename ValueType>
 ValueType any_cast(any& operand);  // NOLINT(runtime/references)
 
-// Overload of `any_cast()` to statically cast the rvalue of an `y_absl::any` 
-// type. This function will throw `y_absl::bad_any_cast` if the stored value type 
-// of the `y_absl::any` does not match the cast. 
+// Overload of `any_cast()` to statically cast the rvalue of an `y_absl::any`
+// type. This function will throw `y_absl::bad_any_cast` if the stored value type
+// of the `y_absl::any` does not match the cast.
 template <typename ValueType>
 ValueType any_cast(any&& operand);
 
 // Overload of `any_cast()` to statically cast the value of a const pointer
-// `y_absl::any` type to the given pointer type, or `nullptr` if the stored value 
-// type of the `y_absl::any` does not match the cast. 
+// `y_absl::any` type to the given pointer type, or `nullptr` if the stored value
+// type of the `y_absl::any` does not match the cast.
 template <typename ValueType>
 const ValueType* any_cast(const any* operand) noexcept;
 
 // Overload of `any_cast()` to statically cast the value of a pointer
-// `y_absl::any` type to the given pointer type, or `nullptr` if the stored value 
-// type of the `y_absl::any` does not match the cast. 
+// `y_absl::any` type to the given pointer type, or `nullptr` if the stored value
+// type of the `y_absl::any` does not match the cast.
 template <typename ValueType>
 ValueType* any_cast(any* operand) noexcept;
 
 // -----------------------------------------------------------------------------
-// y_absl::any 
+// y_absl::any
 // -----------------------------------------------------------------------------
 //
-// An `y_absl::any` object provides the facility to either store an instance of a 
-// type, known as the "contained object", or no value. An `y_absl::any` is used to 
-// store values of types that are unknown at compile time. The `y_absl::any` 
+// An `y_absl::any` object provides the facility to either store an instance of a
+// type, known as the "contained object", or no value. An `y_absl::any` is used to
+// store values of types that are unknown at compile time. The `y_absl::any`
 // object, when containing a value, must contain a value type; storing a
 // reference type is neither desired nor supported.
 //
-// An `y_absl::any` can only store a type that is copy-constructible; move-only 
+// An `y_absl::any` can only store a type that is copy-constructible; move-only
 // types are not allowed within an `any` object.
 //
 // Example:
 //
-//   auto a = y_absl::any(65);                 // Literal, copyable 
-//   auto b = y_absl::any(std::vector<int>()); // Default-initialized, copyable 
+//   auto a = y_absl::any(65);                 // Literal, copyable
+//   auto b = y_absl::any(std::vector<int>()); // Default-initialized, copyable
 //   std::unique_ptr<Foo> my_foo;
-//   auto c = y_absl::any(std::move(my_foo));  // Error, not copy-constructible 
+//   auto c = y_absl::any(std::move(my_foo));  // Error, not copy-constructible
 //
-// Note that `y_absl::any` makes use of decayed types (`y_absl::decay_t` in this 
+// Note that `y_absl::any` makes use of decayed types (`y_absl::decay_t` in this
 // context) to remove const-volatile qualifiers (known as "cv qualifiers"),
 // decay functions to function pointers, etc. We essentially "decay" a given
 // type into its essential type.
 //
-// `y_absl::any` makes use of decayed types when determining the basic type `T` of 
+// `y_absl::any` makes use of decayed types when determining the basic type `T` of
 // the value to store in the any's contained object. In the documentation below,
 // we explicitly denote this by using the phrase "a decayed type of `T`".
 //
 // Example:
 //
 //   const int a = 4;
-//   y_absl::any foo(a);  // Decay ensures we store an "int", not a "const int&". 
+//   y_absl::any foo(a);  // Decay ensures we store an "int", not a "const int&".
 //
 //   void my_function() {}
-//   y_absl::any bar(my_function);  // Decay ensures we store a function pointer. 
+//   y_absl::any bar(my_function);  // Decay ensures we store a function pointer.
 //
-// `y_absl::any` is a C++11 compatible version of the C++17 `std::any` abstraction 
+// `y_absl::any` is a C++11 compatible version of the C++17 `std::any` abstraction
 // and is designed to be a drop-in replacement for code compliant with C++17.
 class any {
  private:
@@ -203,51 +203,51 @@ class any {
  public:
   // Constructors
 
-  // Constructs an empty `y_absl::any` object (`any::has_value()` will return 
+  // Constructs an empty `y_absl::any` object (`any::has_value()` will return
   // `false`).
   constexpr any() noexcept;
 
-  // Copy constructs an `y_absl::any` object with a "contained object" of the 
-  // passed type of `other` (or an empty `y_absl::any` if `other.has_value()` is 
+  // Copy constructs an `y_absl::any` object with a "contained object" of the
+  // passed type of `other` (or an empty `y_absl::any` if `other.has_value()` is
   // `false`.
   any(const any& other)
       : obj_(other.has_value() ? other.obj_->Clone()
                                : std::unique_ptr<ObjInterface>()) {}
 
-  // Move constructs an `y_absl::any` object with a "contained object" of the 
-  // passed type of `other` (or an empty `y_absl::any` if `other.has_value()` is 
+  // Move constructs an `y_absl::any` object with a "contained object" of the
+  // passed type of `other` (or an empty `y_absl::any` if `other.has_value()` is
   // `false`).
   any(any&& other) noexcept = default;
 
-  // Constructs an `y_absl::any` object with a "contained object" of the decayed 
+  // Constructs an `y_absl::any` object with a "contained object" of the decayed
   // type of `T`, which is initialized via `std::forward<T>(value)`.
   //
   // This constructor will not participate in overload resolution if the
   // decayed type of `T` is not copy-constructible.
   template <
-      typename T, typename VT = y_absl::decay_t<T>, 
-      y_absl::enable_if_t<!y_absl::disjunction< 
+      typename T, typename VT = y_absl::decay_t<T>,
+      y_absl::enable_if_t<!y_absl::disjunction<
           std::is_same<any, VT>, IsInPlaceType<VT>,
-          y_absl::negation<std::is_copy_constructible<VT> > >::value>* = nullptr> 
+          y_absl::negation<std::is_copy_constructible<VT> > >::value>* = nullptr>
   any(T&& value) : obj_(new Obj<VT>(in_place, std::forward<T>(value))) {}
 
-  // Constructs an `y_absl::any` object with a "contained object" of the decayed 
+  // Constructs an `y_absl::any` object with a "contained object" of the decayed
   // type of `T`, which is initialized via `std::forward<T>(value)`.
-  template <typename T, typename... Args, typename VT = y_absl::decay_t<T>, 
-            y_absl::enable_if_t<y_absl::conjunction< 
+  template <typename T, typename... Args, typename VT = y_absl::decay_t<T>,
+            y_absl::enable_if_t<y_absl::conjunction<
                 std::is_copy_constructible<VT>,
                 std::is_constructible<VT, Args...>>::value>* = nullptr>
   explicit any(in_place_type_t<T> /*tag*/, Args&&... args)
       : obj_(new Obj<VT>(in_place, std::forward<Args>(args)...)) {}
 
-  // Constructs an `y_absl::any` object with a "contained object" of the passed 
+  // Constructs an `y_absl::any` object with a "contained object" of the passed
   // type `VT` as a decayed type of `T`. `VT` is initialized as if
   // direct-non-list-initializing an object of type `VT` with the arguments
   // `initializer_list, std::forward<Args>(args)...`.
   template <
-      typename T, typename U, typename... Args, typename VT = y_absl::decay_t<T>, 
-      y_absl::enable_if_t< 
-          y_absl::conjunction<std::is_copy_constructible<VT>, 
+      typename T, typename U, typename... Args, typename VT = y_absl::decay_t<T>,
+      y_absl::enable_if_t<
+          y_absl::conjunction<std::is_copy_constructible<VT>,
                             std::is_constructible<VT, std::initializer_list<U>&,
                                                   Args...>>::value>* = nullptr>
   explicit any(in_place_type_t<T> /*tag*/, std::initializer_list<U> ilist,
@@ -256,24 +256,24 @@ class any {
 
   // Assignment operators
 
-  // Copy assigns an `y_absl::any` object with a "contained object" of the 
+  // Copy assigns an `y_absl::any` object with a "contained object" of the
   // passed type.
   any& operator=(const any& rhs) {
     any(rhs).swap(*this);
     return *this;
   }
 
-  // Move assigns an `y_absl::any` object with a "contained object" of the 
+  // Move assigns an `y_absl::any` object with a "contained object" of the
   // passed type. `rhs` is left in a valid but otherwise unspecified state.
   any& operator=(any&& rhs) noexcept {
     any(std::move(rhs)).swap(*this);
     return *this;
   }
 
-  // Assigns an `y_absl::any` object with a "contained object" of the passed type. 
-  template <typename T, typename VT = y_absl::decay_t<T>, 
-            y_absl::enable_if_t<y_absl::conjunction< 
-                y_absl::negation<std::is_same<VT, any>>, 
+  // Assigns an `y_absl::any` object with a "contained object" of the passed type.
+  template <typename T, typename VT = y_absl::decay_t<T>,
+            y_absl::enable_if_t<y_absl::conjunction<
+                y_absl::negation<std::is_same<VT, any>>,
                 std::is_copy_constructible<VT>>::value>* = nullptr>
   any& operator=(T&& rhs) {
     any tmp(in_place_type_t<VT>(), std::forward<T>(rhs));
@@ -285,7 +285,7 @@ class any {
 
   // any::emplace()
   //
-  // Emplaces a value within an `y_absl::any` object by calling `any::reset()`, 
+  // Emplaces a value within an `y_absl::any` object by calling `any::reset()`,
   // initializing the contained value as if direct-non-list-initializing an
   // object of type `VT` with the arguments `std::forward<Args>(args)...`, and
   // returning a reference to the new contained value.
@@ -294,8 +294,8 @@ class any {
   // `*this` does not contain a value, and any previously contained value has
   // been destroyed.
   template <
-      typename T, typename... Args, typename VT = y_absl::decay_t<T>, 
-      y_absl::enable_if_t<std::is_copy_constructible<VT>::value && 
+      typename T, typename... Args, typename VT = y_absl::decay_t<T>,
+      y_absl::enable_if_t<std::is_copy_constructible<VT>::value &&
                         std::is_constructible<VT, Args...>::value>* = nullptr>
   VT& emplace(Args&&... args) {
     reset();  // NOTE: reset() is required here even in the world of exceptions.
@@ -305,7 +305,7 @@ class any {
     return object_ptr->value;
   }
 
-  // Overload of `any::emplace()` to emplace a value within an `y_absl::any` 
+  // Overload of `any::emplace()` to emplace a value within an `y_absl::any`
   // object by calling `any::reset()`, initializing the contained value as if
   // direct-non-list-initializing an object of type `VT` with the arguments
   // `initializer_list, std::forward<Args>(args)...`, and returning a reference
@@ -317,8 +317,8 @@ class any {
   // unless `is_copy_constructible_v<VT>` is `true` and
   // `is_constructible_v<VT, initializer_list<U>&, Args...>` is `true`.
   template <
-      typename T, typename U, typename... Args, typename VT = y_absl::decay_t<T>, 
-      y_absl::enable_if_t<std::is_copy_constructible<VT>::value && 
+      typename T, typename U, typename... Args, typename VT = y_absl::decay_t<T>,
+      y_absl::enable_if_t<std::is_copy_constructible<VT>::value &&
                         std::is_constructible<VT, std::initializer_list<U>&,
                                               Args...>::value>* = nullptr>
   VT& emplace(std::initializer_list<U> ilist, Args&&... args) {
@@ -331,13 +331,13 @@ class any {
 
   // any::reset()
   //
-  // Resets the state of the `y_absl::any` object, destroying the contained object 
+  // Resets the state of the `y_absl::any` object, destroying the contained object
   // if present.
   void reset() noexcept { obj_ = nullptr; }
 
   // any::swap()
   //
-  // Swaps the passed value and the value of this `y_absl::any` object. 
+  // Swaps the passed value and the value of this `y_absl::any` object.
   void swap(any& other) noexcept { obj_.swap(other.obj_); }
 
   // Observers
@@ -411,7 +411,7 @@ class any {
     return obj_ ? obj_->ObjTypeId() : base_internal::FastTypeId<void>();
   }
 
-  // `y_absl::any` nonmember functions // 
+  // `y_absl::any` nonmember functions //
 
   // Description at the declaration site (top of file).
   template <typename ValueType>
@@ -519,7 +519,7 @@ T* any_cast(any* operand) noexcept {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #undef ABSL_ANY_DETAIL_HAS_RTTI
 

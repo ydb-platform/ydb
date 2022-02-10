@@ -25,12 +25,12 @@
 
 #include "y_absl/base/config.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 template <typename IntType>
-inline bool Itoa(IntType value, int base, TString* destination) { 
+inline bool Itoa(IntType value, int base, TString* destination) {
   destination->clear();
   if (base <= 1 || base > 36) {
     return false;
@@ -179,6 +179,6 @@ inline const std::array<uint64_test_case, 34>& strtouint64_test_cases() {
 
 }  // namespace strings_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_STRINGS_INTERNAL_NUMBERS_TEST_COMMON_H_

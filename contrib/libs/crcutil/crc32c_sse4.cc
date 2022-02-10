@@ -322,9 +322,9 @@ bool Crc32cSSE4::IsSSE42Available() {
   uint32 edx;
   __asm__ volatile(
 #if HAVE_I386 && defined(__PIC__)
-    "push %%ebx\n" 
+    "push %%ebx\n"
     "cpuid\n"
-    "pop %%ebx\n" 
+    "pop %%ebx\n"
 #else
     "cpuid\n"
 #endif  // HAVE_I386 && defined(__PIC__)

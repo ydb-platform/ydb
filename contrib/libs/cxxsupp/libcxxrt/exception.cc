@@ -652,14 +652,14 @@ static void free_exception(char *e)
 	}
 }
 
-static constexpr size_t align_to(size_t size, size_t alignment) noexcept { 
-    return (size + alignment - 1) / alignment * alignment; 
-} 
- 
-static_assert(align_to(15, 16) == 16); 
-static_assert(align_to(16, 16) == 16); 
-static_assert(align_to(17, 16) == 32); 
- 
+static constexpr size_t align_to(size_t size, size_t alignment) noexcept {
+    return (size + alignment - 1) / alignment * alignment;
+}
+
+static_assert(align_to(15, 16) == 16);
+static_assert(align_to(16, 16) == 16);
+static_assert(align_to(17, 16) == 32);
+
 static constexpr size_t exception_size = align_to(sizeof(__cxa_exception), 16);
 static constexpr size_t dependent_exception_size = align_to(sizeof(__cxa_dependent_exception), 16);
 #ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE

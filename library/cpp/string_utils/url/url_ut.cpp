@@ -69,14 +69,14 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
         UNIT_ASSERT_VALUES_EQUAL("FHFBN", GetZone("ya.FHFBN"));
         UNIT_ASSERT_VALUES_EQUAL("", GetZone(""));
     }
- 
+
     Y_UNIT_TEST(TestAddSchemePrefix) {
-        UNIT_ASSERT_VALUES_EQUAL("http://yandex.ru", AddSchemePrefix("yandex.ru")); 
-        UNIT_ASSERT_VALUES_EQUAL("http://yandex.ru", AddSchemePrefix("http://yandex.ru")); 
-        UNIT_ASSERT_VALUES_EQUAL("https://yandex.ru", AddSchemePrefix("https://yandex.ru")); 
-        UNIT_ASSERT_VALUES_EQUAL("file://yandex.ru", AddSchemePrefix("file://yandex.ru")); 
-        UNIT_ASSERT_VALUES_EQUAL("ftp://ya.ru", AddSchemePrefix("ya.ru", "ftp")); 
-    } 
+        UNIT_ASSERT_VALUES_EQUAL("http://yandex.ru", AddSchemePrefix("yandex.ru"));
+        UNIT_ASSERT_VALUES_EQUAL("http://yandex.ru", AddSchemePrefix("http://yandex.ru"));
+        UNIT_ASSERT_VALUES_EQUAL("https://yandex.ru", AddSchemePrefix("https://yandex.ru"));
+        UNIT_ASSERT_VALUES_EQUAL("file://yandex.ru", AddSchemePrefix("file://yandex.ru"));
+        UNIT_ASSERT_VALUES_EQUAL("ftp://ya.ru", AddSchemePrefix("ya.ru", "ftp"));
+    }
 
     Y_UNIT_TEST(TestSchemeGet) {
         UNIT_ASSERT_VALUES_EQUAL("http://", GetSchemePrefix("http://ya.ru/bebe"));

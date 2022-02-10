@@ -19,15 +19,15 @@
 // This file configures the Abseil *failure signal handler* to capture and dump
 // useful debugging information (such as a stacktrace) upon program failure.
 //
-// To use the failure signal handler, call `y_absl::InstallFailureSignalHandler()` 
+// To use the failure signal handler, call `y_absl::InstallFailureSignalHandler()`
 // very early in your program, usually in the first few lines of main():
 //
 // int main(int argc, char** argv) {
 //   // Initialize the symbolizer to get a human-readable stack trace
-//   y_absl::InitializeSymbolizer(argv[0]); 
+//   y_absl::InitializeSymbolizer(argv[0]);
 //
-//   y_absl::FailureSignalHandlerOptions options; 
-//   y_absl::InstallFailureSignalHandler(options); 
+//   y_absl::FailureSignalHandlerOptions options;
+//   y_absl::InstallFailureSignalHandler(options);
 //   DoSomethingInteresting();
 //   return 0;
 // }
@@ -46,12 +46,12 @@
 
 #include "y_absl/base/config.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // FailureSignalHandlerOptions
 //
-// Struct for holding `y_absl::InstallFailureSignalHandler()` configuration 
+// Struct for holding `y_absl::InstallFailureSignalHandler()` configuration
 // options.
 struct FailureSignalHandlerOptions {
   // If true, try to symbolize the stacktrace emitted on failure, provided that
@@ -116,6 +116,6 @@ const char* FailureSignalToString(int signo);
 }  // namespace debugging_internal
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_DEBUGGING_FAILURE_SIGNAL_HANDLER_H_

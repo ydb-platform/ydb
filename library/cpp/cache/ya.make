@@ -1,15 +1,15 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     g:util
 )
- 
-SRCS( 
-    cache.cpp 
+
+SRCS(
+    cache.cpp
     thread_safe_cache.cpp
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

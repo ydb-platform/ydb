@@ -16,17 +16,17 @@
 #include <new>
 
 // This file is a no-op if the required LowLevelAlloc support is missing.
-#include "y_absl/base/internal/low_level_alloc.h" 
+#include "y_absl/base/internal/low_level_alloc.h"
 #ifndef ABSL_LOW_LEVEL_ALLOC_MISSING
 
 #include <string.h>
 
-#include "y_absl/base/attributes.h" 
-#include "y_absl/base/internal/spinlock.h" 
-#include "y_absl/base/internal/thread_identity.h" 
-#include "y_absl/synchronization/internal/per_thread_sem.h" 
+#include "y_absl/base/attributes.h"
+#include "y_absl/base/internal/spinlock.h"
+#include "y_absl/base/internal/thread_identity.h"
+#include "y_absl/synchronization/internal/per_thread_sem.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
@@ -135,6 +135,6 @@ base_internal::ThreadIdentity* CreateThreadIdentity() {
 
 }  // namespace synchronization_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_LOW_LEVEL_ALLOC_MISSING

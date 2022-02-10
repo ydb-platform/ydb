@@ -15,11 +15,11 @@
 // base::AddressIsReadable() probes an address to see whether it is readable,
 // without faulting.
 
-#include "y_absl/debugging/internal/address_is_readable.h" 
+#include "y_absl/debugging/internal/address_is_readable.h"
 
 #if !defined(__linux__) || defined(__ANDROID__)
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
@@ -28,7 +28,7 @@ bool AddressIsReadable(const void* /* addr */) { return true; }
 
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #else
 
@@ -41,9 +41,9 @@ ABSL_NAMESPACE_END
 #include <cstdint>
 
 #include "y_absl/base/internal/errno_saver.h"
-#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/internal/raw_logging.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
@@ -134,6 +134,6 @@ bool AddressIsReadable(const void *addr) {
 
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif

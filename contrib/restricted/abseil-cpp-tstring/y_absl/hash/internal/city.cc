@@ -19,23 +19,23 @@
 // possible hash functions, by using SIMD instructions, or by
 // compromising on hash quality.
 
-#include "y_absl/hash/internal/city.h" 
+#include "y_absl/hash/internal/city.h"
 
 #include <string.h>  // for memcpy and memset
 #include <algorithm>
 
-#include "y_absl/base/config.h" 
-#include "y_absl/base/internal/endian.h" 
-#include "y_absl/base/internal/unaligned_access.h" 
-#include "y_absl/base/optimization.h" 
+#include "y_absl/base/config.h"
+#include "y_absl/base/internal/endian.h"
+#include "y_absl/base/internal/unaligned_access.h"
+#include "y_absl/base/optimization.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace hash_internal {
 
 #ifdef ABSL_IS_BIG_ENDIAN
-#define uint32_in_expected_order(x) (y_absl::gbswap_32(x)) 
-#define uint64_in_expected_order(x) (y_absl::gbswap_64(x)) 
+#define uint32_in_expected_order(x) (y_absl::gbswap_32(x))
+#define uint64_in_expected_order(x) (y_absl::gbswap_64(x))
 #else
 #define uint32_in_expected_order(x) (x)
 #define uint64_in_expected_order(x) (x)
@@ -171,9 +171,9 @@ uint32_t CityHash32(const char *s, size_t len) {
     h = Rotate32(h, 19);
     h = h * 5 + 0xe6546b64;
     g ^= b4;
-    g = y_absl::gbswap_32(g) * 5; 
+    g = y_absl::gbswap_32(g) * 5;
     h += b4 * 5;
-    h = y_absl::gbswap_32(h); 
+    h = y_absl::gbswap_32(h);
     f += b0;
     PERMUTE3(f, h, g);
     s += 20;
@@ -286,11 +286,11 @@ static uint64_t HashLen33to64(const char *s, size_t len) {
   uint64_t h = Fetch64(s + len - 16) * mul;
   uint64_t u = Rotate(a + g, 43) + (Rotate(b, 30) + c) * 9;
   uint64_t v = ((a + g) ^ d) + f + 1;
-  uint64_t w = y_absl::gbswap_64((u + v) * mul) + h; 
+  uint64_t w = y_absl::gbswap_64((u + v) * mul) + h;
   uint64_t x = Rotate(e + f, 42) + c;
-  uint64_t y = (y_absl::gbswap_64((v + w) * mul) + g) * mul; 
+  uint64_t y = (y_absl::gbswap_64((v + w) * mul) + g) * mul;
   uint64_t z = e + f + c;
-  a = y_absl::gbswap_64((x + z) * mul + y) + b; 
+  a = y_absl::gbswap_64((x + z) * mul + y) + b;
   b = ShiftMix((z + a) * mul + d + h) * mul;
   return b + x;
 }
@@ -346,4 +346,4 @@ uint64_t CityHash64WithSeeds(const char *s, size_t len, uint64_t seed0,
 
 }  // namespace hash_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

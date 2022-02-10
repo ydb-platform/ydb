@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/digest/numeric.h> 
+#include <util/digest/numeric.h>
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/generic/strbuf.h>
@@ -74,13 +74,13 @@ namespace NBus {
             switch (s->sa_family) {
                 case AF_INET:
                     return CombineHashes<size_t>(ComputeHash(TStringBuf(reinterpret_cast<const char*>(&sa->sin_addr), sizeof(sa->sin_addr))), IntHashImpl(sa->sin_port));
- 
+
                 case AF_INET6:
                     return CombineHashes<size_t>(ComputeHash(TStringBuf(reinterpret_cast<const char*>(&sa6->sin6_addr), sizeof(sa6->sin6_addr))), IntHashImpl(sa6->sin6_port));
             }
- 
+
             return ComputeHash(TStringBuf(reinterpret_cast<const char*>(s), a.Len()));
-        } 
+        }
     };
- 
+
 }

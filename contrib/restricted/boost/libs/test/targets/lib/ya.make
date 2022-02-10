@@ -1,14 +1,14 @@
 LIBRARY(unit_test_framework)
 
-WITHOUT_LICENSE_TEXTS() 
- 
+WITHOUT_LICENSE_TEXTS()
+
 LICENSE(BSL-1.0)
 
-OWNER( 
-    antoshkka 
-    g:cpp-committee 
-    g:cpp-contrib 
-) 
+OWNER(
+    antoshkka
+    g:cpp-committee
+    g:cpp-contrib
+)
 
 INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
 

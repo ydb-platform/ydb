@@ -16,7 +16,7 @@
 //
 // VDSOSupport -- a class representing kernel VDSO (if present).
 
-#include "y_absl/debugging/internal/vdso_support.h" 
+#include "y_absl/debugging/internal/vdso_support.h"
 
 #ifdef ABSL_HAVE_VDSO_SUPPORT     // defined in vdso_support.h
 
@@ -42,9 +42,9 @@
 #include <sys/auxv.h>
 #endif
 
-#include "y_absl/base/dynamic_annotations.h" 
-#include "y_absl/base/internal/raw_logging.h" 
-#include "y_absl/base/port.h" 
+#include "y_absl/base/dynamic_annotations.h"
+#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/base/port.h"
 
 #ifndef AT_SYSINFO_EHDR
 #define AT_SYSINFO_EHDR 33  // for crosstoolv10
@@ -55,7 +55,7 @@ using Elf64_auxv_t = Elf64_Auxinfo;
 using Elf32_auxv_t = Elf32_Auxinfo;
 #endif
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
@@ -186,6 +186,6 @@ int GetCPU() {
 
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_HAVE_VDSO_SUPPORT

@@ -22,7 +22,7 @@
 
 #include "y_absl/base/config.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
@@ -45,6 +45,6 @@ size_t EncodeUTF8Char(char *buffer, char32_t utf8_char);
 
 }  // namespace strings_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_STRINGS_INTERNAL_UTF8_H_

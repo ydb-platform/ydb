@@ -13,18 +13,18 @@
 // limitations under the License.
 
 // This file is a no-op if the required LowLevelAlloc support is missing.
-#include "y_absl/base/internal/low_level_alloc.h" 
+#include "y_absl/base/internal/low_level_alloc.h"
 #ifndef ABSL_LOW_LEVEL_ALLOC_MISSING
 
-#include "y_absl/synchronization/internal/per_thread_sem.h" 
+#include "y_absl/synchronization/internal/per_thread_sem.h"
 
 #include <atomic>
 
-#include "y_absl/base/attributes.h" 
-#include "y_absl/base/internal/thread_identity.h" 
-#include "y_absl/synchronization/internal/waiter.h" 
+#include "y_absl/base/attributes.h"
+#include "y_absl/base/internal/thread_identity.h"
+#include "y_absl/synchronization/internal/waiter.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
@@ -64,20 +64,20 @@ void PerThreadSem::Tick(base_internal::ThreadIdentity *identity) {
 
 }  // namespace synchronization_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 extern "C" {
 
 ABSL_ATTRIBUTE_WEAK void ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemPost)(
-    y_absl::base_internal::ThreadIdentity *identity) { 
-  y_absl::synchronization_internal::Waiter::GetWaiter(identity)->Post(); 
+    y_absl::base_internal::ThreadIdentity *identity) {
+  y_absl::synchronization_internal::Waiter::GetWaiter(identity)->Post();
 }
 
 ABSL_ATTRIBUTE_WEAK bool ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)(
-    y_absl::synchronization_internal::KernelTimeout t) { 
+    y_absl::synchronization_internal::KernelTimeout t) {
   bool timeout = false;
-  y_absl::base_internal::ThreadIdentity *identity; 
-  identity = y_absl::synchronization_internal::GetOrCreateCurrentThreadIdentity(); 
+  y_absl::base_internal::ThreadIdentity *identity;
+  identity = y_absl::synchronization_internal::GetOrCreateCurrentThreadIdentity();
 
   // Ensure wait_start != 0.
   int ticker = identity->ticker.load(std::memory_order_relaxed);
@@ -90,7 +90,7 @@ ABSL_ATTRIBUTE_WEAK bool ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)(
   }
 
   timeout =
-      !y_absl::synchronization_internal::Waiter::GetWaiter(identity)->Wait(t); 
+      !y_absl::synchronization_internal::Waiter::GetWaiter(identity)->Wait(t);
 
   if (identity->blocked_count_ptr != nullptr) {
     identity->blocked_count_ptr->fetch_sub(1, std::memory_order_relaxed);

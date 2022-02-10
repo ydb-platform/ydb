@@ -6,10 +6,10 @@ OWNER(g:cpp-contrib)
 
 VERSION(20211102.0)
 
-LICENSE(Apache-2.0) 
+LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 PEERDIR(
     contrib/restricted/abseil-cpp/absl/algorithm
     contrib/restricted/abseil-cpp/absl/base

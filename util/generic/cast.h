@@ -124,7 +124,7 @@ inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result,
         }
     }
 
-    TSmallInt smallInt = TSmallInt(largeInt); 
+    TSmallInt smallInt = TSmallInt(largeInt);
 
     if (std::is_signed<TSmallInt>::value && std::is_unsigned<TLargeInt>::value) {
         if (IsNegative(smallInt)) {
@@ -134,7 +134,7 @@ inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result,
         }
     }
 
-    if (TLargeInt(smallInt) != largeInt) { 
+    if (TLargeInt(smallInt) != largeInt) {
         ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '"
                                    << TypeName<TSmallInt>() << "', loss of data";
     }

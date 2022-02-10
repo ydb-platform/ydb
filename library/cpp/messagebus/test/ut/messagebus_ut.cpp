@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <library/cpp/messagebus/test/helper/example.h>
 #include <library/cpp/messagebus/test/helper/fixed_port.h>
 #include <library/cpp/messagebus/test/helper/hanging_server.h>
@@ -13,7 +13,7 @@
 #include <utility>
 
 using namespace NBus;
-using namespace NBus::NTest; 
+using namespace NBus::NTest;
 
 namespace {
     struct TExampleClientSlowOnMessageSent: public TExampleClient {

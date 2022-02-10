@@ -14,7 +14,7 @@
 // limitations under the License.
 //
 
-#include "y_absl/debugging/internal/examine_stack.h" 
+#include "y_absl/debugging/internal/examine_stack.h"
 
 #ifndef _WIN32
 #include <unistd.h>
@@ -27,13 +27,13 @@
 #include <csignal>
 #include <cstdio>
 
-#include "y_absl/base/attributes.h" 
-#include "y_absl/base/internal/raw_logging.h" 
-#include "y_absl/base/macros.h" 
-#include "y_absl/debugging/stacktrace.h" 
-#include "y_absl/debugging/symbolize.h" 
+#include "y_absl/base/attributes.h"
+#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/base/macros.h"
+#include "y_absl/debugging/stacktrace.h"
+#include "y_absl/debugging/symbolize.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
@@ -134,7 +134,7 @@ static void DumpPCAndFrameSizeAndSymbol(void (*writerfn)(const char*, void*),
                                         const char* const prefix) {
   char tmp[1024];
   const char* symbol = "(unknown)";
-  if (y_absl::Symbolize(symbolize_pc, tmp, sizeof(tmp))) { 
+  if (y_absl::Symbolize(symbolize_pc, tmp, sizeof(tmp))) {
     symbol = tmp;
   }
   char buf[1024];
@@ -200,4 +200,4 @@ void DumpPCAndFrameSizesAndStackTrace(
 
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

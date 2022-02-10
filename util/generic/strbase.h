@@ -523,7 +523,7 @@ public:
     inline size_t find_first_not_of(const TStringView set, size_t pos) const noexcept {
         return AsStringView().find_first_not_of(set.data(), pos, set.size());
     }
- 
+
     inline size_t find_last_of(TCharType c, size_t pos = npos) const noexcept {
         return find_last_of(&c, pos, 1);
     }

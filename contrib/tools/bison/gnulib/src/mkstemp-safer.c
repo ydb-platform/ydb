@@ -21,10 +21,10 @@
 
 #include "stdlib-safer.h"
 
-#include "stdlib--.h" 
+#include "stdlib--.h"
 #include "unistd-safer.h"
 
- 
+
 /* Like mkstemp, but do not return STDIN_FILENO, STDOUT_FILENO, or
    STDERR_FILENO.  */
 

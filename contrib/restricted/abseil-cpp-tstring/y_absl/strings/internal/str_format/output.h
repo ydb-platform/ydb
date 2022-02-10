@@ -25,8 +25,8 @@
 #include <ostream>
 #include <util/generic/string.h>
 
-#include "y_absl/base/port.h" 
-#include "y_absl/strings/string_view.h" 
+#include "y_absl/base/port.h"
+#include "y_absl/strings/string_view.h"
 
 namespace y_absl {
 ABSL_NAMESPACE_BEGIN
@@ -67,7 +67,7 @@ class FILERawSink {
 };
 
 // Provide RawSink integration with common types from the STL.
-inline void AbslFormatFlush(TString* out, string_view s) { 
+inline void AbslFormatFlush(TString* out, string_view s) {
   out->append(s.data(), s.size());
 }
 inline void AbslFormatFlush(std::ostream* out, string_view s) {
@@ -91,6 +91,6 @@ auto InvokeFlush(T* out, string_view s) -> decltype(AbslFormatFlush(out, s)) {
 
 }  // namespace str_format_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_OUTPUT_H_

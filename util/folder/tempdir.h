@@ -29,8 +29,8 @@ public:
         return TempDir;
     }
 
-    void DoNotRemove(); 
- 
+    void DoNotRemove();
+
 private:
     struct TCreationToken {};
 
@@ -39,5 +39,5 @@ private:
     TTempDir(const char* prefix, TCreationToken);
 
     TFsPath TempDir;
-    bool Remove; 
+    bool Remove;
 };

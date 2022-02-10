@@ -12,24 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/str_replace.h" 
+#include "y_absl/strings/str_replace.h"
 
-#include "y_absl/strings/str_cat.h" 
+#include "y_absl/strings/str_cat.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 using FixedMapping =
-    std::initializer_list<std::pair<y_absl::string_view, y_absl::string_view>>; 
+    std::initializer_list<std::pair<y_absl::string_view, y_absl::string_view>>;
 
-// Applies the ViableSubstitutions in subs_ptr to the y_absl::string_view s, and 
+// Applies the ViableSubstitutions in subs_ptr to the y_absl::string_view s, and
 // stores the result in *result_ptr. Returns the number of substitutions that
 // occurred.
 int ApplySubstitutions(
-    y_absl::string_view s, 
+    y_absl::string_view s,
     std::vector<strings_internal::ViableSubstitution>* subs_ptr,
-    TString* result_ptr) { 
+    TString* result_ptr) {
   auto& subs = *subs_ptr;
   int substitutions = 0;
   size_t pos = 0;
@@ -68,15 +68,15 @@ int ApplySubstitutions(
 // Note that we implement them here, rather than in the header, so that they
 // aren't inlined.
 
-TString StrReplaceAll(y_absl::string_view s, 
+TString StrReplaceAll(y_absl::string_view s,
                           strings_internal::FixedMapping replacements) {
   return StrReplaceAll<strings_internal::FixedMapping>(s, replacements);
 }
 
 int StrReplaceAll(strings_internal::FixedMapping replacements,
-                  TString* target) { 
+                  TString* target) {
   return StrReplaceAll<strings_internal::FixedMapping>(replacements, target);
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

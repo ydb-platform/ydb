@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/internal/str_format/float_conversion.h" 
+#include "y_absl/strings/internal/str_format/float_conversion.h"
 
 #include <string.h>
 
@@ -23,7 +23,7 @@
 #include <util/generic/string.h>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/base/config.h" 
+#include "y_absl/base/config.h"
 #include "y_absl/base/optimization.h"
 #include "y_absl/functional/function_ref.h"
 #include "y_absl/meta/type_traits.h"
@@ -34,7 +34,7 @@
 #include "y_absl/types/optional.h"
 #include "y_absl/types/span.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
@@ -955,7 +955,7 @@ bool FallbackToSnprintf(const Float v, const FormatConversionSpecImpl &conv,
     *fp = 0;
     assert(fp < fmt + sizeof(fmt));
   }
-  TString space(512, '\0'); 
+  TString space(512, '\0');
   y_absl::string_view result;
   while (true) {
     int n = snprintf(&space[0], space.size(), fmt, w, p, v);
@@ -1420,4 +1420,4 @@ bool ConvertFloatImpl(double v, const FormatConversionSpecImpl &conv,
 
 }  // namespace str_format_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

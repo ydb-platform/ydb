@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/internal/charconv_bigint.h" 
+#include "y_absl/strings/internal/charconv_bigint.h"
 
 #include <algorithm>
 #include <cassert>
 #include <util/generic/string.h>
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
@@ -336,9 +336,9 @@ void BigUnsigned<max_words>::MultiplyStep(int original_size,
 }
 
 template <int max_words>
-TString BigUnsigned<max_words>::ToString() const { 
+TString BigUnsigned<max_words>::ToString() const {
   BigUnsigned<max_words> copy = *this;
-  TString result; 
+  TString result;
   // Build result in reverse order
   while (copy.size() > 0) {
     int next_digit = copy.DivMod<10>();
@@ -347,7 +347,7 @@ TString BigUnsigned<max_words>::ToString() const {
   if (result.empty()) {
     result.push_back('0');
   }
-  std::reverse(result.begin(), result.vend()); 
+  std::reverse(result.begin(), result.vend());
   return result;
 }
 
@@ -356,4 +356,4 @@ template class BigUnsigned<84>;
 
 }  // namespace strings_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

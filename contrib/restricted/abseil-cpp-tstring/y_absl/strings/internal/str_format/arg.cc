@@ -16,7 +16,7 @@
 // POSIX spec:
 //   http://pubs.opengroup.org/onlinepubs/009695399/functions/fprintf.html
 //
-#include "y_absl/strings/internal/str_format/arg.h" 
+#include "y_absl/strings/internal/str_format/arg.h"
 
 #include <cassert>
 #include <cerrno>
@@ -24,11 +24,11 @@
 #include <util/generic/string.h>
 #include <type_traits>
 
-#include "y_absl/base/port.h" 
-#include "y_absl/strings/internal/str_format/float_conversion.h" 
+#include "y_absl/base/port.h"
+#include "y_absl/strings/internal/str_format/float_conversion.h"
 #include "y_absl/strings/numbers.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 namespace {
@@ -46,20 +46,20 @@ void ReducePadding(size_t n, size_t *capacity) {
 template <typename T>
 struct MakeUnsigned : std::make_unsigned<T> {};
 template <>
-struct MakeUnsigned<y_absl::int128> { 
-  using type = y_absl::uint128; 
+struct MakeUnsigned<y_absl::int128> {
+  using type = y_absl::uint128;
 };
 template <>
-struct MakeUnsigned<y_absl::uint128> { 
-  using type = y_absl::uint128; 
+struct MakeUnsigned<y_absl::uint128> {
+  using type = y_absl::uint128;
 };
 
 template <typename T>
 struct IsSigned : std::is_signed<T> {};
 template <>
-struct IsSigned<y_absl::int128> : std::true_type {}; 
+struct IsSigned<y_absl::int128> : std::true_type {};
 template <>
-struct IsSigned<y_absl::uint128> : std::false_type {}; 
+struct IsSigned<y_absl::uint128> : std::false_type {};
 
 // Integral digit printer.
 // Call one of the PrintAs* routines after construction once.
@@ -467,12 +467,12 @@ IntegralConvertResult FormatConvertImpl(unsigned long long v,  // NOLINT
                                         FormatSinkImpl *sink) {
   return {ConvertIntArg(v, conv, sink)};
 }
-IntegralConvertResult FormatConvertImpl(y_absl::int128 v, 
+IntegralConvertResult FormatConvertImpl(y_absl::int128 v,
                                         const FormatConversionSpecImpl conv,
                                         FormatSinkImpl *sink) {
   return {ConvertIntArg(v, conv, sink)};
 }
-IntegralConvertResult FormatConvertImpl(y_absl::uint128 v, 
+IntegralConvertResult FormatConvertImpl(y_absl::uint128 v,
                                         const FormatConversionSpecImpl conv,
                                         FormatSinkImpl *sink) {
   return {ConvertIntArg(v, conv, sink)};
@@ -485,4 +485,4 @@ ABSL_INTERNAL_FORMAT_DISPATCH_OVERLOADS_EXPAND_();
 }  // namespace str_format_internal
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

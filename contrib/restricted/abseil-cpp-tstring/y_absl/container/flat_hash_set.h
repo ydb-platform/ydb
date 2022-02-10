@@ -16,7 +16,7 @@
 // File: flat_hash_set.h
 // -----------------------------------------------------------------------------
 //
-// An `y_absl::flat_hash_set<T>` is an unordered associative container designed to 
+// An `y_absl::flat_hash_set<T>` is an unordered associative container designed to
 // be a more efficient replacement for `std::unordered_set`. Like
 // `unordered_set`, search, insertion, and deletion of set elements can be done
 // as an `O(1)` operation. However, `flat_hash_set` (and other unordered
@@ -32,14 +32,14 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/algorithm/container.h" 
-#include "y_absl/base/macros.h" 
-#include "y_absl/container/internal/container_memory.h" 
-#include "y_absl/container/internal/hash_function_defaults.h"  // IWYU pragma: export 
-#include "y_absl/container/internal/raw_hash_set.h"  // IWYU pragma: export 
-#include "y_absl/memory/memory.h" 
+#include "y_absl/algorithm/container.h"
+#include "y_absl/base/macros.h"
+#include "y_absl/container/internal/container_memory.h"
+#include "y_absl/container/internal/hash_function_defaults.h"  // IWYU pragma: export
+#include "y_absl/container/internal/raw_hash_set.h"  // IWYU pragma: export
+#include "y_absl/memory/memory.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 template <typename T>
@@ -47,10 +47,10 @@ struct FlatHashSetPolicy;
 }  // namespace container_internal
 
 // -----------------------------------------------------------------------------
-// y_absl::flat_hash_set 
+// y_absl::flat_hash_set
 // -----------------------------------------------------------------------------
 //
-// An `y_absl::flat_hash_set<T>` is an unordered associative container which has 
+// An `y_absl::flat_hash_set<T>` is an unordered associative container which has
 // been optimized for both speed and memory footprint in most common use cases.
 // Its interface is similar to that of `std::unordered_set<T>` with the
 // following notable differences:
@@ -65,24 +65,24 @@ struct FlatHashSetPolicy;
 //   slots (open, deleted, and empty) within the hash set.
 // * Returns `void` from the `erase(iterator)` overload.
 //
-// By default, `flat_hash_set` uses the `y_absl::Hash` hashing framework. All 
-// fundamental and Abseil types that support the `y_absl::Hash` framework have a 
+// By default, `flat_hash_set` uses the `y_absl::Hash` hashing framework. All
+// fundamental and Abseil types that support the `y_absl::Hash` framework have a
 // compatible equality operator for comparing insertions into `flat_hash_map`.
-// If your type is not yet supported by the `y_absl::Hash` framework, see 
-// y_absl/hash/hash.h for information on extending Abseil hashing to user-defined 
+// If your type is not yet supported by the `y_absl::Hash` framework, see
+// y_absl/hash/hash.h for information on extending Abseil hashing to user-defined
 // types.
 //
 // NOTE: A `flat_hash_set` stores its keys directly inside its implementation
 // array to avoid memory indirection. Because a `flat_hash_set` is designed to
 // move data when rehashed, set keys will not retain pointer stability. If you
 // require pointer stability, consider using
-// `y_absl::flat_hash_set<std::unique_ptr<T>>`. If your type is not moveable and 
-// you require pointer stability, consider `y_absl::node_hash_set` instead. 
+// `y_absl::flat_hash_set<std::unique_ptr<T>>`. If your type is not moveable and
+// you require pointer stability, consider `y_absl::node_hash_set` instead.
 //
 // Example:
 //
 //   // Create a flat hash set of three strings
-//   y_absl::flat_hash_set<TString> ducks = 
+//   y_absl::flat_hash_set<TString> ducks =
 //     {"huey", "dewey", "louie"};
 //
 //  // Insert a new element into the flat hash set
@@ -95,12 +95,12 @@ struct FlatHashSetPolicy;
 //  if (ducks.contains("dewey")) {
 //    std::cout << "We found dewey!" << std::endl;
 //  }
-template <class T, class Hash = y_absl::container_internal::hash_default_hash<T>, 
-          class Eq = y_absl::container_internal::hash_default_eq<T>, 
+template <class T, class Hash = y_absl::container_internal::hash_default_hash<T>,
+          class Eq = y_absl::container_internal::hash_default_eq<T>,
           class Allocator = std::allocator<T>>
 class flat_hash_set
-    : public y_absl::container_internal::raw_hash_set< 
-          y_absl::container_internal::FlatHashSetPolicy<T>, Hash, Eq, Allocator> { 
+    : public y_absl::container_internal::raw_hash_set<
+          y_absl::container_internal::FlatHashSetPolicy<T>, Hash, Eq, Allocator> {
   using Base = typename flat_hash_set::raw_hash_set;
 
  public:
@@ -112,38 +112,38 @@ class flat_hash_set
   // *  Default constructor
   //
   //    // No allocation for the table's elements is made.
-  //    y_absl::flat_hash_set<TString> set1; 
+  //    y_absl::flat_hash_set<TString> set1;
   //
   // * Initializer List constructor
   //
-  //   y_absl::flat_hash_set<TString> set2 = 
+  //   y_absl::flat_hash_set<TString> set2 =
   //       {{"huey"}, {"dewey"}, {"louie"},};
   //
   // * Copy constructor
   //
-  //   y_absl::flat_hash_set<TString> set3(set2); 
+  //   y_absl::flat_hash_set<TString> set3(set2);
   //
   // * Copy assignment operator
   //
   //  // Hash functor and Comparator are copied as well
-  //  y_absl::flat_hash_set<TString> set4; 
+  //  y_absl::flat_hash_set<TString> set4;
   //  set4 = set3;
   //
   // * Move constructor
   //
   //   // Move is guaranteed efficient
-  //   y_absl::flat_hash_set<TString> set5(std::move(set4)); 
+  //   y_absl::flat_hash_set<TString> set5(std::move(set4));
   //
   // * Move assignment operator
   //
   //   // May be efficient if allocators are compatible
-  //   y_absl::flat_hash_set<TString> set6; 
+  //   y_absl::flat_hash_set<TString> set6;
   //   set6 = std::move(set5);
   //
   // * Range constructor
   //
-  //   std::vector<TString> v = {"a", "b"}; 
-  //   y_absl::flat_hash_set<TString> set7(v.begin(), v.end()); 
+  //   std::vector<TString> v = {"a", "b"};
+  //   y_absl::flat_hash_set<TString> set7(v.begin(), v.end());
   flat_hash_set() {}
   using Base::Base;
 
@@ -172,7 +172,7 @@ class flat_hash_set
   // Returns the number of element slots (assigned, deleted, and empty)
   // available within the `flat_hash_set`.
   //
-  // NOTE: this member function is particular to `y_absl::flat_hash_set` and is 
+  // NOTE: this member function is particular to `y_absl::flat_hash_set` and is
   // not provided in the `std::unordered_map` API.
   using Base::capacity;
 
@@ -459,13 +459,13 @@ struct FlatHashSetPolicy {
 
   template <class Allocator, class... Args>
   static void construct(Allocator* alloc, slot_type* slot, Args&&... args) {
-    y_absl::allocator_traits<Allocator>::construct(*alloc, slot, 
+    y_absl::allocator_traits<Allocator>::construct(*alloc, slot,
                                                  std::forward<Args>(args)...);
   }
 
   template <class Allocator>
   static void destroy(Allocator* alloc, slot_type* slot) {
-    y_absl::allocator_traits<Allocator>::destroy(*alloc, slot); 
+    y_absl::allocator_traits<Allocator>::destroy(*alloc, slot);
   }
 
   template <class Allocator>
@@ -478,10 +478,10 @@ struct FlatHashSetPolicy {
   static T& element(slot_type* slot) { return *slot; }
 
   template <class F, class... Args>
-  static decltype(y_absl::container_internal::DecomposeValue( 
+  static decltype(y_absl::container_internal::DecomposeValue(
       std::declval<F>(), std::declval<Args>()...))
   apply(F&& f, Args&&... args) {
-    return y_absl::container_internal::DecomposeValue( 
+    return y_absl::container_internal::DecomposeValue(
         std::forward<F>(f), std::forward<Args>(args)...);
   }
 
@@ -491,14 +491,14 @@ struct FlatHashSetPolicy {
 
 namespace container_algorithm_internal {
 
-// Specialization of trait in y_absl/algorithm/container.h 
+// Specialization of trait in y_absl/algorithm/container.h
 template <class Key, class Hash, class KeyEqual, class Allocator>
-struct IsUnorderedContainer<y_absl::flat_hash_set<Key, Hash, KeyEqual, Allocator>> 
+struct IsUnorderedContainer<y_absl::flat_hash_set<Key, Hash, KeyEqual, Allocator>>
     : std::true_type {};
 
 }  // namespace container_algorithm_internal
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_FLAT_HASH_SET_H_

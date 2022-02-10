@@ -1,9 +1,9 @@
 RESOURCES_LIBRARY()
- 
+
 LICENSE(Service-Prebuilt-Tool)
 
-OWNER(somov) 
- 
+OWNER(somov)
+
 IF (USE_LTO OR USE_THINLTO)
     IF (CLANG7 OR CLANG8)
         # Use LLD 8 for old Clang because its IR code fails LLD 11 validation.
@@ -58,5 +58,5 @@ ELSE()
 
     LDFLAGS("-fuse-ld=$LLD_ROOT_RESOURCE_GLOBAL/ld" "-Wl,--no-rosegment")
 ENDIF()
- 
-END() 
+
+END()

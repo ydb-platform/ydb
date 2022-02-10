@@ -32,9 +32,9 @@ class Opts(object):
             self.objs = auto_input
             self.libs = []
 
-        self.plugin_flags = ['--plugin', self.plugin] if self.plugin != 'None' else [] 
+        self.plugin_flags = ['--plugin', self.plugin] if self.plugin != 'None' else []
 
- 
+
 def get_opts(args):
     return Opts(args)
 
@@ -42,12 +42,12 @@ def get_opts(args):
 if __name__ == "__main__":
     opts = get_opts(sys.argv[1:])
 
-    # There is a bug in llvm-ar. Some files with size slightly greater 2^32 
-    # still have GNU format instead of GNU64 and cause link problems. 
-    # Workaround just lowers llvm-ar's GNU64 threshold to 2^31. 
-    if opts.arch_type == 'LLVM_AR': 
-        os.environ['SYM64_THRESHOLD'] = '31' 
- 
+    # There is a bug in llvm-ar. Some files with size slightly greater 2^32
+    # still have GNU format instead of GNU64 and cause link problems.
+    # Workaround just lowers llvm-ar's GNU64 threshold to 2^31.
+    if opts.arch_type == 'LLVM_AR':
+        os.environ['SYM64_THRESHOLD'] = '31'
+
     def call():
         try:
             p = subprocess.Popen(cmd, stdin=stdin, cwd=opts.build_root)
@@ -62,7 +62,7 @@ if __name__ == "__main__":
         pass
 
     if not opts.libs:
-        cmd = [opts.archiver] + opts.create_flags + opts.plugin_flags + [opts.output] + opts.objs 
+        cmd = [opts.archiver] + opts.create_flags + opts.plugin_flags + [opts.output] + opts.objs
         stdin = None
         exit_code = call()
     else:
@@ -76,7 +76,7 @@ if __name__ == "__main__":
                 tmp.write('ADDMOD {0}\n'.format(obj))
             tmp.write('SAVE\n')
             tmp.write('END\n')
-        cmd = [opts.archiver] + opts.modify_flags + opts.plugin_flags 
+        cmd = [opts.archiver] + opts.modify_flags + opts.plugin_flags
         stdin = open(temp.name)
         exit_code = call()
         os.remove(temp.name)

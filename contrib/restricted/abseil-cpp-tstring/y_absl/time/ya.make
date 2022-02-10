@@ -15,16 +15,16 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/restricted/abseil-cpp-tstring/y_absl/base 
-    contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/raw_logging 
-    contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/spinlock_wait 
-    contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/throw_delegate 
-    contrib/restricted/abseil-cpp-tstring/y_absl/base/log_severity 
-    contrib/restricted/abseil-cpp-tstring/y_absl/numeric 
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings 
+    contrib/restricted/abseil-cpp-tstring/y_absl/base
+    contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/raw_logging
+    contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/spinlock_wait
+    contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/throw_delegate
+    contrib/restricted/abseil-cpp-tstring/y_absl/base/log_severity
+    contrib/restricted/abseil-cpp-tstring/y_absl/numeric
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings
     contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/absl_strings_internal
-    contrib/restricted/abseil-cpp-tstring/y_absl/time/civil_time 
-    contrib/restricted/abseil-cpp-tstring/y_absl/time/time_zone 
+    contrib/restricted/abseil-cpp-tstring/y_absl/time/civil_time
+    contrib/restricted/abseil-cpp-tstring/y_absl/time/time_zone
 )
 
 ADDINCL(

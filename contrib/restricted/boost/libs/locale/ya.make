@@ -2,14 +2,14 @@ LIBRARY()
 
 LICENSE(BSL-1.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-OWNER( 
-    antoshkka 
-    g:cpp-committee 
-    g:cpp-contrib 
-) 
- 
+OWNER(
+    antoshkka
+    g:cpp-committee
+    g:cpp-contrib
+)
+
 INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
 
 PEERDIR(
@@ -27,9 +27,9 @@ IF (OS_ANDROID)
         -DBOOST_LOCALE_NO_POSIX_BACKEND=1
     )
 ELSEIF (OS_WINDOWS)
-    CFLAGS( 
-        -DBOOST_LOCALE_NO_POSIX_BACKEND=1 
-    ) 
+    CFLAGS(
+        -DBOOST_LOCALE_NO_POSIX_BACKEND=1
+    )
 ELSE()
     CFLAGS(
         -DBOOST_LOCALE_NO_WINAPI_BACKEND=1
@@ -44,7 +44,7 @@ IF (OS_WINDOWS)
         src/win32/numeric.cpp
         src/win32/win_backend.cpp
     )
-ELSEIF (NOT OS_ANDROID) 
+ELSEIF (NOT OS_ANDROID)
     SRCS(
         src/posix/codecvt.cpp
         src/posix/collate.cpp

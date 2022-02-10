@@ -18,7 +18,7 @@
 
 #include "y_absl/profiling/internal/exponential_biased.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace profiling_internal {
 
@@ -50,4 +50,4 @@ bool PeriodicSamplerBase::SubtleConfirmSample() noexcept {
 
 }  // namespace profiling_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

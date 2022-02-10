@@ -29,12 +29,12 @@
 #include <utility>
 #include <vector>
 
-#include "y_absl/container/internal/hash_policy_testing.h" 
-#include "y_absl/memory/memory.h" 
-#include "y_absl/meta/type_traits.h" 
-#include "y_absl/strings/string_view.h" 
+#include "y_absl/container/internal/hash_policy_testing.h"
+#include "y_absl/memory/memory.h"
+#include "y_absl/meta/type_traits.h"
+#include "y_absl/strings/string_view.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 namespace hash_internal {
@@ -44,7 +44,7 @@ template <class Container, class = void>
 struct IsMap : std::false_type {};
 
 template <class Map>
-struct IsMap<Map, y_absl::void_t<typename Map::mapped_type>> : std::true_type {}; 
+struct IsMap<Map, y_absl::void_t<typename Map::mapped_type>> : std::true_type {};
 
 }  // namespace generator_internal
 
@@ -103,19 +103,19 @@ struct Generator<EnumClass> {
 };
 
 template <>
-struct Generator<TString> { 
-  TString operator()() const; 
+struct Generator<TString> {
+  TString operator()() const;
 };
 
 template <>
-struct Generator<y_absl::string_view> { 
-  y_absl::string_view operator()() const; 
+struct Generator<y_absl::string_view> {
+  y_absl::string_view operator()() const;
 };
 
 template <>
 struct Generator<NonStandardLayout> {
   NonStandardLayout operator()() const {
-    return NonStandardLayout(Generator<TString>()()); 
+    return NonStandardLayout(Generator<TString>()());
   }
 };
 
@@ -137,12 +137,12 @@ struct Generator<std::tuple<Ts...>> {
 template <class T>
 struct Generator<std::unique_ptr<T>> {
   std::unique_ptr<T> operator()() const {
-    return y_absl::make_unique<T>(Generator<T>()()); 
+    return y_absl::make_unique<T>(Generator<T>()());
   }
 };
 
 template <class U>
-struct Generator<U, y_absl::void_t<decltype(std::declval<U&>().key()), 
+struct Generator<U, y_absl::void_t<decltype(std::declval<U&>().key()),
                                 decltype(std::declval<U&>().value())>>
     : Generator<std::pair<
           typename std::decay<decltype(std::declval<U&>().key())>::type,
@@ -177,6 +177,6 @@ struct UniqueGenerator {
 }  // namespace hash_internal
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_HASH_GENERATOR_TESTING_H_

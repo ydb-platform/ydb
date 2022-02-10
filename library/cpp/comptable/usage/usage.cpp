@@ -3,9 +3,9 @@
 #include <util/random/random.h>
 #include <util/random/fast.h>
 
-#include <time.h> 
-#include <stdlib.h> 
- 
+#include <time.h>
+#include <stdlib.h>
+
 using namespace NCompTable;
 
 template <bool HQ>

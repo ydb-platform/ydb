@@ -17,11 +17,11 @@
 // therefore Abseil code which depends on these functions is conditioned on the
 // definition of LEAK_SANITIZER.
 #include "y_absl/base/attributes.h"
-#include "y_absl/debugging/leak_check.h" 
+#include "y_absl/debugging/leak_check.h"
 
 #ifndef LEAK_SANITIZER
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 bool HaveLeakSanitizer() { return false; }
 bool LeakCheckerIsActive() { return false; }
@@ -31,7 +31,7 @@ void UnRegisterLivePointers(const void*, size_t) { }
 LeakCheckDisabler::LeakCheckDisabler() { }
 LeakCheckDisabler::~LeakCheckDisabler() { }
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #else
 
@@ -41,7 +41,7 @@ ABSL_NAMESPACE_END
 extern "C" ABSL_ATTRIBUTE_WEAK int __lsan_is_turned_off();
 #endif
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 bool HaveLeakSanitizer() { return true; }
 
@@ -64,6 +64,6 @@ void UnRegisterLivePointers(const void* ptr, size_t size) {
 LeakCheckDisabler::LeakCheckDisabler() { __lsan_disable(); }
 LeakCheckDisabler::~LeakCheckDisabler() { __lsan_enable(); }
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // LEAK_SANITIZER

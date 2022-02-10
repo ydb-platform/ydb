@@ -22,10 +22,10 @@
 
 #include <atomic>
 
-#include "y_absl/base/thread_annotations.h" 
-#include "y_absl/synchronization/mutex.h" 
+#include "y_absl/base/thread_annotations.h"
+#include "y_absl/synchronization/mutex.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // BlockingCounter
@@ -96,6 +96,6 @@ class BlockingCounter {
 };
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_SYNCHRONIZATION_BLOCKING_COUNTER_H_

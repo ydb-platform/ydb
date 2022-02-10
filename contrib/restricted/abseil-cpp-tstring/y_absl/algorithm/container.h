@@ -28,7 +28,7 @@
 // within this API operate on containers, though many return iterator ranges.
 //
 // All functions within this API are named with a `c_` prefix. Calls such as
-// `y_absl::c_xx(container, ...) are equivalent to std:: functions such as 
+// `y_absl::c_xx(container, ...) are equivalent to std:: functions such as
 // `std::xx(std::begin(cont), std::end(cont), ...)`. Functions that act on
 // iterators but not conceptually on iterator ranges (e.g. `std::iter_swap`)
 // have no equivalent here.
@@ -50,11 +50,11 @@
 #include <utility>
 #include <vector>
 
-#include "y_absl/algorithm/algorithm.h" 
-#include "y_absl/base/macros.h" 
-#include "y_absl/meta/type_traits.h" 
+#include "y_absl/algorithm/algorithm.h"
+#include "y_absl/base/macros.h"
+#include "y_absl/meta/type_traits.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_algorithm_internal {
 
@@ -135,7 +135,7 @@ constexpr std::size_t c_size(T (&)[N]) {
 
 // c_linear_search()
 //
-// Container-based version of y_absl::linear_search() for performing a linear 
+// Container-based version of y_absl::linear_search() for performing a linear
 // search within a container.
 template <typename C, typename EqualityComparable>
 bool c_linear_search(const C& c, EqualityComparable&& value) {
@@ -785,7 +785,7 @@ OutputIterator c_reverse_copy(const C& sequence, OutputIterator result) {
 template <typename C,
           typename Iterator = container_algorithm_internal::ContainerIter<C>>
 Iterator c_rotate(C& sequence, Iterator middle) {
-  return y_absl::rotate(container_algorithm_internal::c_begin(sequence), middle, 
+  return y_absl::rotate(container_algorithm_internal::c_begin(sequence), middle,
                       container_algorithm_internal::c_end(sequence));
 }
 
@@ -1671,7 +1671,7 @@ void c_iota(Sequence& sequence, T&& value) {
 // accumulation by value.
 //
 // Note: Due to a language technicality this function has return type
-// y_absl::decay_t<T>. As a user of this function you can casually read 
+// y_absl::decay_t<T>. As a user of this function you can casually read
 // this as "returns T by value" and assume it does the right thing.
 template <typename Sequence, typename T>
 decay_t<T> c_accumulate(const Sequence& sequence, T&& init) {
@@ -1697,7 +1697,7 @@ decay_t<T> c_accumulate(const Sequence& sequence, T&& init,
 // to compute the cumulative inner product of container element pairs.
 //
 // Note: Due to a language technicality this function has return type
-// y_absl::decay_t<T>. As a user of this function you can casually read 
+// y_absl::decay_t<T>. As a user of this function you can casually read
 // this as "returns T by value" and assume it does the right thing.
 template <typename Sequence1, typename Sequence2, typename T>
 decay_t<T> c_inner_product(const Sequence1& factors1, const Sequence2& factors2,
@@ -1769,6 +1769,6 @@ OutputIt c_partial_sum(const InputSequence& input, OutputIt output_first,
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_ALGORITHM_CONTAINER_H_

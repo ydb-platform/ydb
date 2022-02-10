@@ -17,9 +17,9 @@ PEERDIR(
     contrib/restricted/uriparser
 )
 
-ADDINCL( 
-    contrib/restricted/uriparser/include 
-) 
+ADDINCL(
+    contrib/restricted/uriparser/include
+)
 
 NO_COMPILER_WARNINGS()
 

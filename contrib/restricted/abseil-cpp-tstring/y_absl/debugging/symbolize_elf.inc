@@ -67,21 +67,21 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "y_absl/base/casts.h" 
-#include "y_absl/base/dynamic_annotations.h" 
-#include "y_absl/base/internal/low_level_alloc.h" 
-#include "y_absl/base/internal/raw_logging.h" 
-#include "y_absl/base/internal/spinlock.h" 
-#include "y_absl/base/port.h" 
-#include "y_absl/debugging/internal/demangle.h" 
-#include "y_absl/debugging/internal/vdso_support.h" 
+#include "y_absl/base/casts.h"
+#include "y_absl/base/dynamic_annotations.h"
+#include "y_absl/base/internal/low_level_alloc.h"
+#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/base/internal/spinlock.h"
+#include "y_absl/base/port.h"
+#include "y_absl/debugging/internal/demangle.h"
+#include "y_absl/debugging/internal/vdso_support.h"
 #include "y_absl/strings/string_view.h"
 
 #if defined(__FreeBSD__) && !defined(ElfW)
 #define ElfW(x) __ElfN(x)
 #endif
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // Value of argv[0]. Used by MaybeInitializeObjFile().
@@ -1564,7 +1564,7 @@ bool Symbolize(const void *pc, char *out, int out_size) {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 extern "C" bool YAbslInternalGetFileMappingHint(const void **start,
                                                const void **end, uint64_t *offset,

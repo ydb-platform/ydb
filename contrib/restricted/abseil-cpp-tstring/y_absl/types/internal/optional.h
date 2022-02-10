@@ -20,10 +20,10 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/base/internal/inline_variable.h" 
-#include "y_absl/memory/memory.h" 
-#include "y_absl/meta/type_traits.h" 
-#include "y_absl/utility/utility.h" 
+#include "y_absl/base/internal/inline_variable.h"
+#include "y_absl/memory/memory.h"
+#include "y_absl/meta/type_traits.h"
+#include "y_absl/utility/utility.h"
 
 // ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS
 //
@@ -53,7 +53,7 @@
 #define ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS 1
 #endif
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // Forward declaration
@@ -101,7 +101,7 @@ class optional_data_dtor_base {
 
   template <typename... Args>
   constexpr explicit optional_data_dtor_base(in_place_t, Args&&... args)
-      : engaged_(true), data_(y_absl::forward<Args>(args)...) {} 
+      : engaged_(true), data_(y_absl::forward<Args>(args)...) {}
 
   ~optional_data_dtor_base() { destruct(); }
 };
@@ -130,7 +130,7 @@ class optional_data_dtor_base<T, true> {
 
   template <typename... Args>
   constexpr explicit optional_data_dtor_base(in_place_t, Args&&... args)
-      : engaged_(true), data_(y_absl::forward<Args>(args)...) {} 
+      : engaged_(true), data_(y_absl::forward<Args>(args)...) {}
 };
 
 template <typename T>
@@ -144,7 +144,7 @@ class optional_data_base : public optional_data_dtor_base<T> {
 
   template <typename... Args>
   constexpr explicit optional_data_base(in_place_t t, Args&&... args)
-      : base(t, y_absl::forward<Args>(args)...) {} 
+      : base(t, y_absl::forward<Args>(args)...) {}
 #endif
 
   template <typename... Args>
@@ -164,15 +164,15 @@ class optional_data_base : public optional_data_dtor_base<T> {
   }
 };
 
-// TODO(y_absl-team): Add another class using 
+// TODO(y_absl-team): Add another class using
 // std::is_trivially_move_constructible trait when available to match
 // http://cplusplus.github.io/LWG/lwg-defects.html#2900, for types that
 // have trivial move but nontrivial copy.
 // Also, we should be checking is_trivially_copyable here, which is not
 // supported now, so we use is_trivially_* traits instead.
 template <typename T,
-          bool unused = y_absl::is_trivially_copy_constructible<T>::value&& 
-              y_absl::is_trivially_copy_assignable<typename std::remove_cv< 
+          bool unused = y_absl::is_trivially_copy_constructible<T>::value&&
+              y_absl::is_trivially_copy_assignable<typename std::remove_cv<
                   T>::type>::value&& std::is_trivially_destructible<T>::value>
 class optional_data;
 
@@ -187,7 +187,7 @@ class optional_data<T, true> : public optional_data_base<T> {
 
   template <typename... Args>
   constexpr explicit optional_data(in_place_t t, Args&&... args)
-      : optional_data_base<T>(t, y_absl::forward<Args>(args)...) {} 
+      : optional_data_base<T>(t, y_absl::forward<Args>(args)...) {}
 #endif
 };
 
@@ -199,7 +199,7 @@ class optional_data<T, false> : public optional_data_base<T> {
 #else
   template <typename... Args>
   constexpr explicit optional_data(in_place_t t, Args&&... args)
-      : optional_data_base<T>(t, y_absl::forward<Args>(args)...) {} 
+      : optional_data_base<T>(t, y_absl::forward<Args>(args)...) {}
 #endif
 
   optional_data() = default;
@@ -211,7 +211,7 @@ class optional_data<T, false> : public optional_data_base<T> {
   }
 
   optional_data(optional_data&& rhs) noexcept(
-      y_absl::default_allocator_is_nothrow::value || 
+      y_absl::default_allocator_is_nothrow::value ||
       std::is_nothrow_move_constructible<T>::value)
       : optional_data_base<T>() {
     if (rhs.engaged_) {
@@ -324,9 +324,9 @@ struct ctor_copy_traits {
 template <typename T>
 struct assign_copy_traits {
   static constexpr copy_traits traits =
-      y_absl::is_copy_assignable<T>::value && std::is_copy_constructible<T>::value 
+      y_absl::is_copy_assignable<T>::value && std::is_copy_constructible<T>::value
           ? copy_traits::copyable
-          : y_absl::is_move_assignable<T>::value && 
+          : y_absl::is_move_assignable<T>::value &&
                     std::is_move_constructible<T>::value
                 ? copy_traits::movable
                 : copy_traits::non_movable;
@@ -359,7 +359,7 @@ struct is_constructible_convertible_assignable_from_optional
 // for checking whether an expression is convertible to bool.
 bool convertible_to_bool(bool);
 
-// Base class for std::hash<y_absl::optional<T>>: 
+// Base class for std::hash<y_absl::optional<T>>:
 // If std::hash<std::remove_const_t<T>> is enabled, it provides operator() to
 // compute the hash; Otherwise, it is disabled.
 // Reference N4659 23.14.15 [unord.hash].
@@ -373,14 +373,14 @@ struct optional_hash_base {
 };
 
 template <typename T>
-struct optional_hash_base<T, decltype(std::hash<y_absl::remove_const_t<T> >()( 
-                                 std::declval<y_absl::remove_const_t<T> >()))> { 
-  using argument_type = y_absl::optional<T>; 
+struct optional_hash_base<T, decltype(std::hash<y_absl::remove_const_t<T> >()(
+                                 std::declval<y_absl::remove_const_t<T> >()))> {
+  using argument_type = y_absl::optional<T>;
   using result_type = size_t;
-  size_t operator()(const y_absl::optional<T>& opt) const { 
-    y_absl::type_traits_internal::AssertHashEnabled<y_absl::remove_const_t<T>>(); 
+  size_t operator()(const y_absl::optional<T>& opt) const {
+    y_absl::type_traits_internal::AssertHashEnabled<y_absl::remove_const_t<T>>();
     if (opt) {
-      return std::hash<y_absl::remove_const_t<T> >()(*opt); 
+      return std::hash<y_absl::remove_const_t<T> >()(*opt);
     } else {
       return static_cast<size_t>(0x297814aaad196e6dULL);
     }
@@ -389,7 +389,7 @@ struct optional_hash_base<T, decltype(std::hash<y_absl::remove_const_t<T> >()(
 
 }  // namespace optional_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #undef ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS
 

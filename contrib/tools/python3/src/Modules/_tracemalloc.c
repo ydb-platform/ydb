@@ -53,7 +53,7 @@ static PyThread_type_lock tables_lock;
 /* Pack the frame_t structure to reduce the memory footprint on 64-bit
    architectures: 12 bytes instead of 16. */
 typedef struct
-#if defined(__GNUC__) || defined(__clang__) 
+#if defined(__GNUC__) || defined(__clang__)
 __attribute__((packed))
 #elif defined(_MSC_VER)
 #pragma pack(push, 4)
@@ -64,7 +64,7 @@ __attribute__((packed))
     PyObject *filename;
     unsigned int lineno;
 } frame_t;
-#if defined(_MSC_VER) && !defined(__clang__) 
+#if defined(_MSC_VER) && !defined(__clang__)
 #pragma pack(pop)
 #endif
 

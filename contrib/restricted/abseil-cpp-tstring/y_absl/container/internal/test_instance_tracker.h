@@ -18,9 +18,9 @@
 #include <cstdlib>
 #include <ostream>
 
-#include "y_absl/types/compare.h" 
+#include "y_absl/types/compare.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace test_internal {
 
@@ -99,12 +99,12 @@ class BaseCountedInstance {
     return value_ >= x.value_;
   }
 
-  y_absl::weak_ordering compare(const BaseCountedInstance& x) const { 
+  y_absl::weak_ordering compare(const BaseCountedInstance& x) const {
     ++num_comparisons_;
     return value_ < x.value_
-               ? y_absl::weak_ordering::less 
-               : value_ == x.value_ ? y_absl::weak_ordering::equivalent 
-                                    : y_absl::weak_ordering::greater; 
+               ? y_absl::weak_ordering::less
+               : value_ == x.value_ ? y_absl::weak_ordering::equivalent
+                                    : y_absl::weak_ordering::greater;
   }
 
   int value() const {
@@ -269,6 +269,6 @@ class MovableOnlyInstance : public BaseCountedInstance {
 
 }  // namespace test_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_TEST_INSTANCE_TRACKER_H_

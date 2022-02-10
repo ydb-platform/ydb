@@ -26,7 +26,7 @@ namespace NYsonPull {
                 size_t Size;
             };
 
-            ui8 AsNothing[1]; 
+            ui8 AsNothing[1];
             bool AsBoolean;
             i64 AsInt64;
             ui64 AsUInt64;

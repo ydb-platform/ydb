@@ -56,10 +56,10 @@ TWtringBuf CutHttpPrefix(const TWtringBuf url, bool ignorehttps = false) noexcep
 Y_PURE_FUNCTION
 TStringBuf CutSchemePrefix(const TStringBuf url) noexcept;
 
-//! adds specified scheme prefix if URL has no scheme 
-//! @note if URL has scheme prefix already the function returns unchanged URL 
+//! adds specified scheme prefix if URL has no scheme
+//! @note if URL has scheme prefix already the function returns unchanged URL
 TString AddSchemePrefix(const TString& url, const TStringBuf scheme);
- 
+
 //! Same as `AddSchemePrefix(url, "http")`.
 TString AddSchemePrefix(const TString& url);
 

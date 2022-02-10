@@ -55,12 +55,12 @@ IF (OS_WINDOWS)
     CFLAGS(
         -DSQLITE_OS_WIN
     )
-ELSE() 
+ELSE()
     CFLAGS(
         -DSQLITE_OS_UNIX
     )
-ENDIF() 
- 
+ENDIF()
+
 SRCS(
     sqlite3.c
     test_multiplex.c

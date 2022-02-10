@@ -28,9 +28,9 @@
 #include <algorithm>
 #include <cstring>
 
-#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/internal/raw_logging.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 static HANDLE process = NULL;
@@ -78,4 +78,4 @@ bool Symbolize(const void* pc, char* out, int out_size) {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

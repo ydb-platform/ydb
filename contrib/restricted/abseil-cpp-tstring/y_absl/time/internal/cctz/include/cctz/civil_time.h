@@ -16,9 +16,9 @@
 #define ABSL_TIME_INTERNAL_CCTZ_CIVIL_TIME_H_
 
 #include "y_absl/base/config.h"
-#include "y_absl/time/internal/cctz/include/cctz/civil_time_detail.h" 
+#include "y_absl/time/internal/cctz/include/cctz/civil_time_detail.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -327,6 +327,6 @@ using detail::get_yearday;
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_TIME_INTERNAL_CCTZ_CIVIL_TIME_H_

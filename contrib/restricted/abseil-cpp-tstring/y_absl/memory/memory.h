@@ -30,10 +30,10 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/base/macros.h" 
-#include "y_absl/meta/type_traits.h" 
+#include "y_absl/base/macros.h"
+#include "y_absl/meta/type_traits.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
@@ -57,15 +57,15 @@ ABSL_NAMESPACE_BEGIN
 //                  - or -
 //   std::unique_ptr<X> x(NewX(1, 2));
 //
-// While `y_absl::WrapUnique` is useful for capturing the output of a raw 
-// pointer factory, prefer 'y_absl::make_unique<T>(args...)' over 
-// 'y_absl::WrapUnique(new T(args...))'. 
+// While `y_absl::WrapUnique` is useful for capturing the output of a raw
+// pointer factory, prefer 'y_absl::make_unique<T>(args...)' over
+// 'y_absl::WrapUnique(new T(args...))'.
 //
 //   auto x = WrapUnique(new X(1, 2));  // works, but nonideal.
 //   auto x = make_unique<X>(1, 2);     // safer, standard, avoids raw 'new'.
 //
-// Note that `y_absl::WrapUnique(p)` is valid only if `delete p` is a valid 
-// expression. In particular, `y_absl::WrapUnique()` cannot wrap pointers to 
+// Note that `y_absl::WrapUnique(p)` is valid only if `delete p` is a valid
+// expression. In particular, `y_absl::WrapUnique()` cannot wrap pointers to
 // arrays, functions or void, and it must not be used to capture pointers
 // obtained from array-new expressions (even though that would compile!).
 template <typename T>
@@ -77,7 +77,7 @@ std::unique_ptr<T> WrapUnique(T* ptr) {
 
 namespace memory_internal {
 
-// Traits to select proper overload and return type for `y_absl::make_unique<>`. 
+// Traits to select proper overload and return type for `y_absl::make_unique<>`.
 template <typename T>
 struct MakeUniqueResult {
   using scalar = std::unique_ptr<T>;
@@ -105,12 +105,12 @@ using std::make_unique;
 // -----------------------------------------------------------------------------
 //
 // Creates a `std::unique_ptr<>`, while avoiding issues creating temporaries
-// during the construction process. `y_absl::make_unique<>` also avoids redundant 
+// during the construction process. `y_absl::make_unique<>` also avoids redundant
 // type declarations, by avoiding the need to explicitly use the `new` operator.
 //
-// This implementation of `y_absl::make_unique<>` is designed for C++11 code and 
+// This implementation of `y_absl::make_unique<>` is designed for C++11 code and
 // will be replaced in C++14 by the equivalent `std::make_unique<>` abstraction.
-// `y_absl::make_unique<>` is designed to be 100% compatible with 
+// `y_absl::make_unique<>` is designed to be 100% compatible with
 // `std::make_unique<>` so that the eventual migration will involve a simple
 // rename operation.
 //
@@ -124,7 +124,7 @@ using std::make_unique;
 //    auto p = make_unique<X>(args...);  // 'p'  is a std::unique_ptr<X>
 //    auto pa = make_unique<X[]>(5);     // 'pa' is a std::unique_ptr<X[]>
 //
-// Three overloads of `y_absl::make_unique` are required: 
+// Three overloads of `y_absl::make_unique` are required:
 //
 //   - For non-array T:
 //
@@ -134,7 +134,7 @@ using std::make_unique;
 //
 //   - For an array of unknown bounds T[]:
 //
-//       `y_absl::make_unique<>` will allocate an array T of type U[] with 
+//       `y_absl::make_unique<>` will allocate an array T of type U[] with
 //       `new U[n]()` and return a `std::unique_ptr<U[]>` owning that array.
 //
 //       Note that 'U[n]()' is different from 'U[n]', and elements will be
@@ -145,40 +145,40 @@ using std::make_unique;
 //       NOTE: an array of unknown bounds T[] may still be (and often will be)
 //       initialized to have a size, and will still use this overload. E.g:
 //
-//         auto my_array = y_absl::make_unique<int[]>(10); 
+//         auto my_array = y_absl::make_unique<int[]>(10);
 //
 //   - For an array of known bounds T[N]:
 //
-//       `y_absl::make_unique<>` is deleted (like with `std::make_unique<>`) as 
+//       `y_absl::make_unique<>` is deleted (like with `std::make_unique<>`) as
 //       this overload is not useful.
 //
 //       NOTE: an array of known bounds T[N] is not considered a useful
 //       construction, and may cause undefined behavior in templates. E.g:
 //
-//         auto my_array = y_absl::make_unique<int[10]>(); 
+//         auto my_array = y_absl::make_unique<int[10]>();
 //
 //       In those cases, of course, you can still use the overload above and
 //       simply initialize it to its desired size:
 //
-//         auto my_array = y_absl::make_unique<int[]>(10); 
+//         auto my_array = y_absl::make_unique<int[]>(10);
 
-// `y_absl::make_unique` overload for non-array types. 
+// `y_absl::make_unique` overload for non-array types.
 template <typename T, typename... Args>
 typename memory_internal::MakeUniqueResult<T>::scalar make_unique(
     Args&&... args) {
   return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
 
-// `y_absl::make_unique` overload for an array T[] of unknown bounds. 
+// `y_absl::make_unique` overload for an array T[] of unknown bounds.
 // The array allocation needs to use the `new T[size]` form and cannot take
 // element constructor arguments. The `std::unique_ptr` will manage destructing
 // these array elements.
 template <typename T>
 typename memory_internal::MakeUniqueResult<T>::array make_unique(size_t n) {
-  return std::unique_ptr<T>(new typename y_absl::remove_extent_t<T>[n]()); 
+  return std::unique_ptr<T>(new typename y_absl::remove_extent_t<T>[n]());
 }
 
-// `y_absl::make_unique` overload for an array T[N] of known bounds. 
+// `y_absl::make_unique` overload for an array T[N] of known bounds.
 // This construction will be rejected.
 template <typename T, typename... Args>
 typename memory_internal::MakeUniqueResult<T>::invalid make_unique(
@@ -189,7 +189,7 @@ typename memory_internal::MakeUniqueResult<T>::invalid make_unique(
 // Function Template: RawPtr()
 // -----------------------------------------------------------------------------
 //
-// Extracts the raw pointer from a pointer-like value `ptr`. `y_absl::RawPtr` is 
+// Extracts the raw pointer from a pointer-like value `ptr`. `y_absl::RawPtr` is
 // useful within templates that need to handle a complement of raw pointers,
 // `std::nullptr_t`, and smart pointers.
 template <typename T>
@@ -209,8 +209,8 @@ inline std::nullptr_t RawPtr(std::nullptr_t) { return nullptr; }
 //
 // Example:
 //
-//     auto up = y_absl::make_unique<int>(10); 
-//     auto sp = y_absl::ShareUniquePtr(std::move(up));  // shared_ptr<int> 
+//     auto up = y_absl::make_unique<int>(10);
+//     auto sp = y_absl::ShareUniquePtr(std::move(up));  // shared_ptr<int>
 //     CHECK_EQ(*sp, 10);
 //     CHECK(up == nullptr);
 //
@@ -237,7 +237,7 @@ std::shared_ptr<T> ShareUniquePtr(std::unique_ptr<T, D>&& ptr) {
 // Example:
 //
 //    auto sp = std::make_shared<int>(10);
-//    auto wp = y_absl::WeakenPtr(sp); 
+//    auto wp = y_absl::WeakenPtr(sp);
 //    CHECK_EQ(sp.get(), wp.lock().get());
 //    sp.reset();
 //    CHECK(wp.lock() == nullptr);
@@ -437,32 +437,32 @@ struct allocator_traits {
 
   // const_pointer:
   // Alloc::const_pointer if present, otherwise
-  // y_absl::pointer_traits<pointer>::rebind<const value_type> 
+  // y_absl::pointer_traits<pointer>::rebind<const value_type>
   using const_pointer =
       memory_internal::ExtractOrT<memory_internal::GetConstPointer, Alloc,
-                                  typename y_absl::pointer_traits<pointer>:: 
+                                  typename y_absl::pointer_traits<pointer>::
                                       template rebind<const value_type>>;
 
   // void_pointer:
   // Alloc::void_pointer if present, otherwise
-  // y_absl::pointer_traits<pointer>::rebind<void> 
+  // y_absl::pointer_traits<pointer>::rebind<void>
   using void_pointer = memory_internal::ExtractOrT<
       memory_internal::GetVoidPointer, Alloc,
-      typename y_absl::pointer_traits<pointer>::template rebind<void>>; 
+      typename y_absl::pointer_traits<pointer>::template rebind<void>>;
 
   // const_void_pointer:
   // Alloc::const_void_pointer if present, otherwise
-  // y_absl::pointer_traits<pointer>::rebind<const void> 
+  // y_absl::pointer_traits<pointer>::rebind<const void>
   using const_void_pointer = memory_internal::ExtractOrT<
       memory_internal::GetConstVoidPointer, Alloc,
-      typename y_absl::pointer_traits<pointer>::template rebind<const void>>; 
+      typename y_absl::pointer_traits<pointer>::template rebind<const void>>;
 
   // difference_type:
   // Alloc::difference_type if present, otherwise
-  // y_absl::pointer_traits<pointer>::difference_type 
+  // y_absl::pointer_traits<pointer>::difference_type
   using difference_type = memory_internal::ExtractOrT<
       memory_internal::GetDifferenceType, Alloc,
-      typename y_absl::pointer_traits<pointer>::difference_type>; 
+      typename y_absl::pointer_traits<pointer>::difference_type>;
 
   // size_type:
   // Alloc::size_type if present, otherwise
@@ -504,9 +504,9 @@ struct allocator_traits {
   using rebind_alloc = typename memory_internal::RebindAlloc<Alloc, T>::type;
 
   // rebind_traits:
-  // y_absl::allocator_traits<rebind_alloc<T>> 
+  // y_absl::allocator_traits<rebind_alloc<T>>
   template <typename T>
-  using rebind_traits = y_absl::allocator_traits<rebind_alloc<T>>; 
+  using rebind_traits = y_absl::allocator_traits<rebind_alloc<T>>;
 
   // allocate(Alloc& a, size_type n):
   // Calls a.allocate(n)
@@ -693,6 +693,6 @@ void CopyRange(Allocator& alloc, Iterator destination, InputIterator first,
 }
 }  // namespace memory_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_MEMORY_MEMORY_H_

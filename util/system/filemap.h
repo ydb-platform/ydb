@@ -265,11 +265,11 @@ public:
     }
     const T* Begin() const noexcept {
         return Ptr_;
-    } 
+    }
     /// for STL compatibility only, End() usage is recommended
     const T* end() const noexcept {
         return End_;
-    } 
+    }
     const T* End() const noexcept {
         return End_;
     }
@@ -367,11 +367,11 @@ public:
         return ((T*)Ptr())[pos];
     }
     T* begin() {
-        return (T*)Ptr(); 
-    } 
+        return (T*)Ptr();
+    }
     T* end() {
-        return (T*)((char*)Ptr() + MappedSize()); 
-    } 
+        return (T*)((char*)Ptr() + MappedSize());
+    }
     size_t size() const {
         return MappedSize() / sizeof(T);
     }

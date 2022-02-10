@@ -28,7 +28,7 @@
 // to your function, your callers will automagically convert bools, integers,
 // and floating point values to strings for you.
 //
-// NOTE: Use of `AlphaNum` outside of the //y_absl/strings package is unsupported 
+// NOTE: Use of `AlphaNum` outside of the //y_absl/strings package is unsupported
 // except for the specific case of function parameters of type `AlphaNum` or
 // `const AlphaNum &`. In particular, instantiating `AlphaNum` directly as a
 // stack variable is not supported.
@@ -59,17 +59,17 @@
 #include <type_traits>
 #include <vector>
 
-#include "y_absl/base/port.h" 
-#include "y_absl/strings/numbers.h" 
-#include "y_absl/strings/string_view.h" 
+#include "y_absl/base/port.h"
+#include "y_absl/strings/numbers.h"
+#include "y_absl/strings/string_view.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 namespace strings_internal {
 // AlphaNumBuffer allows a way to pass a string to StrCat without having to do
 // memory allocation.  It is simply a pair of a fixed-size character array, and
-// a size.  Please don't use outside of y_absl, yet. 
+// a size.  Please don't use outside of y_absl, yet.
 template <size_t max_size>
 struct AlphaNumBuffer {
   std::array<char, max_size> data;
@@ -138,40 +138,40 @@ struct Hex {
 
   template <typename Int>
   explicit Hex(
-      Int v, PadSpec spec = y_absl::kNoPad, 
+      Int v, PadSpec spec = y_absl::kNoPad,
       typename std::enable_if<sizeof(Int) == 1 &&
                               !std::is_pointer<Int>::value>::type* = nullptr)
       : Hex(spec, static_cast<uint8_t>(v)) {}
   template <typename Int>
   explicit Hex(
-      Int v, PadSpec spec = y_absl::kNoPad, 
+      Int v, PadSpec spec = y_absl::kNoPad,
       typename std::enable_if<sizeof(Int) == 2 &&
                               !std::is_pointer<Int>::value>::type* = nullptr)
       : Hex(spec, static_cast<uint16_t>(v)) {}
   template <typename Int>
   explicit Hex(
-      Int v, PadSpec spec = y_absl::kNoPad, 
+      Int v, PadSpec spec = y_absl::kNoPad,
       typename std::enable_if<sizeof(Int) == 4 &&
                               !std::is_pointer<Int>::value>::type* = nullptr)
       : Hex(spec, static_cast<uint32_t>(v)) {}
   template <typename Int>
   explicit Hex(
-      Int v, PadSpec spec = y_absl::kNoPad, 
+      Int v, PadSpec spec = y_absl::kNoPad,
       typename std::enable_if<sizeof(Int) == 8 &&
                               !std::is_pointer<Int>::value>::type* = nullptr)
       : Hex(spec, static_cast<uint64_t>(v)) {}
   template <typename Pointee>
-  explicit Hex(Pointee* v, PadSpec spec = y_absl::kNoPad) 
+  explicit Hex(Pointee* v, PadSpec spec = y_absl::kNoPad)
       : Hex(spec, reinterpret_cast<uintptr_t>(v)) {}
 
  private:
   Hex(PadSpec spec, uint64_t v)
       : value(v),
-        width(spec == y_absl::kNoPad 
+        width(spec == y_absl::kNoPad
                   ? 1
-                  : spec >= y_absl::kSpacePad2 ? spec - y_absl::kSpacePad2 + 2 
-                                             : spec - y_absl::kZeroPad2 + 2), 
-        fill(spec >= y_absl::kSpacePad2 ? ' ' : '0') {} 
+                  : spec >= y_absl::kSpacePad2 ? spec - y_absl::kSpacePad2 + 2
+                                             : spec - y_absl::kZeroPad2 + 2),
+        fill(spec >= y_absl::kSpacePad2 ? ' ' : '0') {}
 };
 
 // -----------------------------------------------------------------------------
@@ -188,15 +188,15 @@ struct Dec {
   bool neg;
 
   template <typename Int>
-  explicit Dec(Int v, PadSpec spec = y_absl::kNoPad, 
+  explicit Dec(Int v, PadSpec spec = y_absl::kNoPad,
                typename std::enable_if<(sizeof(Int) <= 8)>::type* = nullptr)
       : value(v >= 0 ? static_cast<uint64_t>(v)
                      : uint64_t{0} - static_cast<uint64_t>(v)),
-        width(spec == y_absl::kNoPad 
+        width(spec == y_absl::kNoPad
                   ? 1
-                  : spec >= y_absl::kSpacePad2 ? spec - y_absl::kSpacePad2 + 2 
-                                             : spec - y_absl::kZeroPad2 + 2), 
-        fill(spec >= y_absl::kSpacePad2 ? ' ' : '0'), 
+                  : spec >= y_absl::kSpacePad2 ? spec - y_absl::kSpacePad2 + 2
+                                             : spec - y_absl::kZeroPad2 + 2),
+        fill(spec >= y_absl::kSpacePad2 ? ' ' : '0'),
         neg(v < 0) {}
 };
 
@@ -246,25 +246,25 @@ class AlphaNum {
       : piece_(&buf.data[0], buf.size) {}
 
   AlphaNum(const char* c_str) : piece_(c_str) {}  // NOLINT(runtime/explicit)
-  AlphaNum(y_absl::string_view pc) : piece_(pc) {}  // NOLINT(runtime/explicit) 
+  AlphaNum(y_absl::string_view pc) : piece_(pc) {}  // NOLINT(runtime/explicit)
 
   template <typename Allocator>
   AlphaNum(  // NOLINT(runtime/explicit)
       const std::basic_string<char, std::char_traits<char>, Allocator>& str)
       : piece_(str) {}
 
-  AlphaNum(const TString& str) 
-      : piece_(str.data(), str.size()) {} 
- 
+  AlphaNum(const TString& str)
+      : piece_(str.data(), str.size()) {}
+
   // Use string literals ":" instead of character literals ':'.
   AlphaNum(char c) = delete;  // NOLINT(runtime/explicit)
 
   AlphaNum(const AlphaNum&) = delete;
   AlphaNum& operator=(const AlphaNum&) = delete;
 
-  y_absl::string_view::size_type size() const { return piece_.size(); } 
+  y_absl::string_view::size_type size() const { return piece_.size(); }
   const char* data() const { return piece_.data(); }
-  y_absl::string_view Piece() const { return piece_; } 
+  y_absl::string_view Piece() const { return piece_; }
 
   // Normal enums are already handled by the integer formatters.
   // This overload matches only scoped enums.
@@ -286,7 +286,7 @@ class AlphaNum {
   AlphaNum(T e) : AlphaNum(static_cast<bool>(e)) {}  // NOLINT(runtime/explicit)
 
  private:
-  y_absl::string_view piece_; 
+  y_absl::string_view piece_;
   char digits_[numbers_internal::kFastToBufferSize];
 };
 
@@ -321,27 +321,27 @@ class AlphaNum {
 namespace strings_internal {
 
 // Do not call directly - this is not part of the public API.
-TString CatPieces(std::initializer_list<y_absl::string_view> pieces); 
-void AppendPieces(TString* dest, 
-                  std::initializer_list<y_absl::string_view> pieces); 
+TString CatPieces(std::initializer_list<y_absl::string_view> pieces);
+void AppendPieces(TString* dest,
+                  std::initializer_list<y_absl::string_view> pieces);
 
 }  // namespace strings_internal
 
-ABSL_MUST_USE_RESULT inline TString StrCat() { return TString(); } 
+ABSL_MUST_USE_RESULT inline TString StrCat() { return TString(); }
 
-ABSL_MUST_USE_RESULT inline TString StrCat(const AlphaNum& a) { 
-  return TString(a.data(), a.size()); 
+ABSL_MUST_USE_RESULT inline TString StrCat(const AlphaNum& a) {
+  return TString(a.data(), a.size());
 }
 
-ABSL_MUST_USE_RESULT TString StrCat(const AlphaNum& a, const AlphaNum& b); 
-ABSL_MUST_USE_RESULT TString StrCat(const AlphaNum& a, const AlphaNum& b, 
+ABSL_MUST_USE_RESULT TString StrCat(const AlphaNum& a, const AlphaNum& b);
+ABSL_MUST_USE_RESULT TString StrCat(const AlphaNum& a, const AlphaNum& b,
                                         const AlphaNum& c);
-ABSL_MUST_USE_RESULT TString StrCat(const AlphaNum& a, const AlphaNum& b, 
+ABSL_MUST_USE_RESULT TString StrCat(const AlphaNum& a, const AlphaNum& b,
                                         const AlphaNum& c, const AlphaNum& d);
 
 // Support 5 or more arguments
 template <typename... AV>
-ABSL_MUST_USE_RESULT inline TString StrCat( 
+ABSL_MUST_USE_RESULT inline TString StrCat(
     const AlphaNum& a, const AlphaNum& b, const AlphaNum& c, const AlphaNum& d,
     const AlphaNum& e, const AV&... args) {
   return strings_internal::CatPieces(
@@ -361,32 +361,32 @@ ABSL_MUST_USE_RESULT inline TString StrCat(
 // not try to check each of its input arguments to be sure that they are not
 // a subset of the string being appended to. That is, while this will work:
 //
-//   TString s = "foo"; 
+//   TString s = "foo";
 //   s += s;
 //
 // This output is undefined:
 //
-//   TString s = "foo"; 
+//   TString s = "foo";
 //   StrAppend(&s, s);
 //
-// This output is undefined as well, since `y_absl::string_view` does not own its 
+// This output is undefined as well, since `y_absl::string_view` does not own its
 // data:
 //
-//   TString s = "foobar"; 
-//   y_absl::string_view p = s; 
+//   TString s = "foobar";
+//   y_absl::string_view p = s;
 //   StrAppend(&s, p);
 
-inline void StrAppend(TString*) {} 
-void StrAppend(TString* dest, const AlphaNum& a); 
-void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b); 
-void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b, 
+inline void StrAppend(TString*) {}
+void StrAppend(TString* dest, const AlphaNum& a);
+void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b);
+void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b,
                const AlphaNum& c);
-void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b, 
+void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b,
                const AlphaNum& c, const AlphaNum& d);
 
 // Support 5 or more arguments
 template <typename... AV>
-inline void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b, 
+inline void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b,
                       const AlphaNum& c, const AlphaNum& d, const AlphaNum& e,
                       const AV&... args) {
   strings_internal::AppendPieces(
@@ -406,6 +406,6 @@ SixDigits(double d) {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_STRINGS_STR_CAT_H_

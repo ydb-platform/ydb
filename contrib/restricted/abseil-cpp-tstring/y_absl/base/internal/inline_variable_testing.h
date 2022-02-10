@@ -15,9 +15,9 @@
 #ifndef ABSL_BASE_INLINE_VARIABLE_TESTING_H_
 #define ABSL_BASE_INLINE_VARIABLE_TESTING_H_
 
-#include "y_absl/base/internal/inline_variable.h" 
+#include "y_absl/base/internal/inline_variable.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace inline_variable_testing_internal {
 
@@ -41,6 +41,6 @@ const int& get_int_b();
 
 }  // namespace inline_variable_testing_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_BASE_INLINE_VARIABLE_TESTING_H_

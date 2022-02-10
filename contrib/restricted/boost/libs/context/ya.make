@@ -2,19 +2,19 @@ LIBRARY()
 
 LICENSE(BSL-1.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-OWNER( 
-    antoshkka 
-    g:cpp-committee 
-    g:cpp-contrib 
-) 
- 
+OWNER(
+    antoshkka
+    g:cpp-committee
+    g:cpp-contrib
+)
+
 INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
 
-CFLAGS( 
-    -DBOOST_CONTEXT_SOURCE 
-) 
+CFLAGS(
+    -DBOOST_CONTEXT_SOURCE
+)
 
 # https://www.boost.org/doc/libs/1_74_0/libs/context/doc/html/context/stack/sanitizers.html
 IF (SANITIZER_TYPE == "address")
@@ -56,7 +56,7 @@ IF (OS_WINDOWS)
             src/asm/jump_arm_aapcs_pe_armasm.masm
             src/asm/make_arm_aapcs_pe_armasm.masm
             src/asm/ontop_arm_aapcs_pe_armasm.masm
-        ) 
+        )
     ENDIF()
 ELSEIF (OS_DARWIN OR OS_IOS)
     IF (ARCH_ARM7)

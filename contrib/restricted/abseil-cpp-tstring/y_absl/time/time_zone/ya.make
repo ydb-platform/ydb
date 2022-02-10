@@ -21,7 +21,7 @@ ENDIF()
 
 NO_COMPILER_WARNINGS()
 
-SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src) 
+SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src)
 
 SRCS(
     time_zone_fixed.cc

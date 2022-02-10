@@ -12,29 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/time/civil_time.h" 
+#include "y_absl/time/civil_time.h"
 
 #include <cstdlib>
 #include <util/generic/string.h>
 
-#include "y_absl/strings/str_cat.h" 
-#include "y_absl/time/time.h" 
+#include "y_absl/strings/str_cat.h"
+#include "y_absl/time/time.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 namespace {
 
-// Since a civil time has a larger year range than y_absl::Time (64-bit years vs 
+// Since a civil time has a larger year range than y_absl::Time (64-bit years vs
 // 64-bit seconds, respectively) we normalize years to roughly +/- 400 years
 // around the year 2400, which will produce an equivalent year in a range that
-// y_absl::Time can handle. 
+// y_absl::Time can handle.
 inline civil_year_t NormalizeYear(civil_year_t year) {
   return 2400 + year % 400;
 }
 
 // Formats the given CivilSecond according to the given format.
-TString FormatYearAnd(string_view fmt, CivilSecond cs) { 
+TString FormatYearAnd(string_view fmt, CivilSecond cs) {
   const CivilSecond ncs(NormalizeYear(cs.year()), cs.month(), cs.day(),
                         cs.hour(), cs.minute(), cs.second());
   const TimeZone utc = UTCTimeZone();
@@ -43,17 +43,17 @@ TString FormatYearAnd(string_view fmt, CivilSecond cs) {
 
 template <typename CivilT>
 bool ParseYearAnd(string_view fmt, string_view s, CivilT* c) {
-  // Civil times support a larger year range than y_absl::Time, so we need to 
-  // parse the year separately, normalize it, then use y_absl::ParseTime on the 
+  // Civil times support a larger year range than y_absl::Time, so we need to
+  // parse the year separately, normalize it, then use y_absl::ParseTime on the
   // normalized string.
-  const TString ss = TString(s);  // TODO(y_absl-team): Avoid conversion. 
+  const TString ss = TString(s);  // TODO(y_absl-team): Avoid conversion.
   const char* const np = ss.c_str();
   char* endp;
   errno = 0;
   const civil_year_t y =
       std::strtoll(np, &endp, 10);  // NOLINT(runtime/deprecated_fn)
   if (endp == np || errno == ERANGE) return false;
-  const TString norm = StrCat(NormalizeYear(y), endp); 
+  const TString norm = StrCat(NormalizeYear(y), endp);
 
   const TimeZone utc = UTCTimeZone();
   Time t;
@@ -95,18 +95,18 @@ bool ParseLenient(string_view s, CivilT* c) {
 }
 }  // namespace
 
-TString FormatCivilTime(CivilSecond c) { 
+TString FormatCivilTime(CivilSecond c) {
   return FormatYearAnd("-%m-%d%ET%H:%M:%S", c);
 }
-TString FormatCivilTime(CivilMinute c) { 
+TString FormatCivilTime(CivilMinute c) {
   return FormatYearAnd("-%m-%d%ET%H:%M", c);
 }
-TString FormatCivilTime(CivilHour c) { 
+TString FormatCivilTime(CivilHour c) {
   return FormatYearAnd("-%m-%d%ET%H", c);
 }
-TString FormatCivilTime(CivilDay c) { return FormatYearAnd("-%m-%d", c); } 
-TString FormatCivilTime(CivilMonth c) { return FormatYearAnd("-%m", c); } 
-TString FormatCivilTime(CivilYear c) { return FormatYearAnd("", c); } 
+TString FormatCivilTime(CivilDay c) { return FormatYearAnd("-%m-%d", c); }
+TString FormatCivilTime(CivilMonth c) { return FormatYearAnd("-%m", c); }
+TString FormatCivilTime(CivilYear c) { return FormatYearAnd("", c); }
 
 bool ParseCivilTime(string_view s, CivilSecond* c) {
   return ParseYearAnd("-%m-%d%ET%H:%M:%S", s, c);
@@ -170,4 +170,4 @@ std::ostream& operator<<(std::ostream& os, CivilSecond s) {
 }  // namespace time_internal
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

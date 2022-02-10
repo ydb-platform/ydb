@@ -1,8 +1,8 @@
 import subprocess
-import sys 
- 
- 
-def fix(s): 
+import sys
+
+
+def fix(s):
     # disable dbg DEVTOOLS-2744
     if s == '-g':
         return None
@@ -17,14 +17,14 @@ def fix(s):
     if s.startswith('-fabi-version'):
         return None
 
-    # remove arguments unknown to clang-cl 
+    # remove arguments unknown to clang-cl
     if s == '-fcase-insensitive-paths':  # or s == '-fno-lto':  # DEVTOOLSSUPPORT-3966
-        return None 
- 
+        return None
+
     # Paths under .ya/tools/v3/.../msvc/include are divided with '\'
     return s.replace('\\', '/')
- 
- 
+
+
 def fix_path(p):
     try:
         i = p.rfind('/bin/clang')
@@ -34,7 +34,7 @@ def fix_path(p):
     return p
 
 
-if __name__ == '__main__': 
+if __name__ == '__main__':
     is_on_win = sys.argv[1] == 'yes'
     path = sys.argv[2]
     args = filter(None, [fix(s) for s in sys.argv[3:]])
@@ -46,7 +46,7 @@ if __name__ == '__main__':
         except ValueError:
             pass
         args.append('-fms-compatibility-version=19')
- 
+
     cmd = [path] + args
 
     rc = subprocess.call(cmd, shell=False, stderr=sys.stderr, stdout=sys.stdout)

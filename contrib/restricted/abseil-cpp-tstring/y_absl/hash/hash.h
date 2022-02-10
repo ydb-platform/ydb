@@ -19,8 +19,8 @@
 // This header file defines the Abseil `hash` library and the Abseil hashing
 // framework. This framework consists of the following:
 //
-//   * The `y_absl::Hash` functor, which is used to invoke the hasher within the 
-//     Abseil hashing framework. `y_absl::Hash<T>` supports most basic types and 
+//   * The `y_absl::Hash` functor, which is used to invoke the hasher within the
+//     Abseil hashing framework. `y_absl::Hash<T>` supports most basic types and
 //     a number of Abseil types out of the box.
 //   * `AbslHashValue`, an extension point that allows you to extend types to
 //     support Abseil hashing without requiring you to define a hashing
@@ -34,7 +34,7 @@
 // provides most of its utility by abstracting away the hash algorithm (and its
 // implementation) entirely. Instead, a type invokes the Abseil hashing
 // framework by simply combining its state with the state of known, hashable
-// types. Hashing of that combined state is separately done by `y_absl::Hash`. 
+// types. Hashing of that combined state is separately done by `y_absl::Hash`.
 //
 // One should assume that a hash algorithm is chosen randomly at the start of
 // each process.  E.g., `y_absl::Hash<int>{}(9)` in one process and
@@ -68,23 +68,23 @@
 //     ...
 //   };
 //
-// For more information, see Adding Type Support to `y_absl::Hash` below. 
+// For more information, see Adding Type Support to `y_absl::Hash` below.
 //
 #ifndef ABSL_HASH_HASH_H_
 #define ABSL_HASH_HASH_H_
 
 #include <tuple>
 
-#include "y_absl/hash/internal/hash.h" 
+#include "y_absl/hash/internal/hash.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
-// `y_absl::Hash` 
+// `y_absl::Hash`
 // -----------------------------------------------------------------------------
 //
-// `y_absl::Hash<T>` is a convenient general-purpose hash functor for any type `T` 
+// `y_absl::Hash<T>` is a convenient general-purpose hash functor for any type `T`
 // satisfying any of the following conditions (in order):
 //
 //  * T is an arithmetic or pointer type
@@ -92,7 +92,7 @@ ABSL_NAMESPACE_BEGIN
 //    hash state `H`.
 //  - T defines a specialization of `std::hash<T>`
 //
-// `y_absl::Hash` intrinsically supports the following types: 
+// `y_absl::Hash` intrinsically supports the following types:
 //
 //   * All integral types (including bool)
 //   * All enum types
@@ -103,32 +103,32 @@ ABSL_NAMESPACE_BEGIN
 //   * std::unique_ptr and std::shared_ptr
 //   * All string-like types including:
 //     * y_absl::Cord
-//     * TString 
+//     * TString
 //     * std::string_view (as well as any instance of std::basic_string that
 //       uses char and std::char_traits)
 //  * All the standard sequence containers (provided the elements are hashable)
 //  * All the standard ordered associative containers (provided the elements are
 //    hashable)
-//  * y_absl types such as the following: 
-//    * y_absl::string_view 
-//    * y_absl::InlinedVector 
-//    * y_absl::FixedArray 
-//    * y_absl::uint128 
-//    * y_absl::Time, y_absl::Duration, and y_absl::TimeZone 
+//  * y_absl types such as the following:
+//    * y_absl::string_view
+//    * y_absl::InlinedVector
+//    * y_absl::FixedArray
+//    * y_absl::uint128
+//    * y_absl::Time, y_absl::Duration, and y_absl::TimeZone
 //
 // Note: the list above is not meant to be exhaustive. Additional type support
 // may be added, in which case the above list will be updated.
 //
 // -----------------------------------------------------------------------------
-// y_absl::Hash Invocation Evaluation 
+// y_absl::Hash Invocation Evaluation
 // -----------------------------------------------------------------------------
 //
-// When invoked, `y_absl::Hash<T>` searches for supplied hash functions in the 
+// When invoked, `y_absl::Hash<T>` searches for supplied hash functions in the
 // following order:
 //
 //   * Natively supported types out of the box (see above)
 //   * Types for which an `AbslHashValue()` overload is provided (such as
-//     user-defined types). See "Adding Type Support to `y_absl::Hash`" below. 
+//     user-defined types). See "Adding Type Support to `y_absl::Hash`" below.
 //   * Types which define a `std::hash<T>` specialization
 //
 // The fallback to legacy hash functions exists mainly for backwards
@@ -139,17 +139,17 @@ ABSL_NAMESPACE_BEGIN
 // The Hash State Concept, and using `HashState` for Type Erasure
 // -----------------------------------------------------------------------------
 //
-// The `y_absl::Hash` framework relies on the Concept of a "hash state." Such a 
+// The `y_absl::Hash` framework relies on the Concept of a "hash state." Such a
 // hash state is used in several places:
 //
-// * Within existing implementations of `y_absl::Hash<T>` to store the hashed 
+// * Within existing implementations of `y_absl::Hash<T>` to store the hashed
 //   state of an object. Note that it is up to the implementation how it stores
 //   such state. A hash table, for example, may mix the state to produce an
 //   integer value; a testing framework may simply hold a vector of that state.
 // * Within implementations of `AbslHashValue()` used to extend user-defined
-//   types. (See "Adding Type Support to y_absl::Hash" below.) 
+//   types. (See "Adding Type Support to y_absl::Hash" below.)
 // * Inside a `HashState`, providing type erasure for the concept of a hash
-//   state, which you can use to extend the `y_absl::Hash` framework for types 
+//   state, which you can use to extend the `y_absl::Hash` framework for types
 //   that are otherwise difficult to extend using `AbslHashValue()`. (See the
 //   `HashState` class below.)
 //
@@ -188,7 +188,7 @@ ABSL_NAMESPACE_BEGIN
 //    loop instead.
 //
 // -----------------------------------------------------------------------------
-// Adding Type Support to `y_absl::Hash` 
+// Adding Type Support to `y_absl::Hash`
 // -----------------------------------------------------------------------------
 //
 // To add support for your user-defined type, add a proper `AbslHashValue()`
@@ -210,11 +210,11 @@ ABSL_NAMESPACE_BEGIN
 // file and namespace as said type. The proper `AbslHashValue` implementation
 // for a given type will be discovered via ADL.
 //
-// Note: unlike `std::hash', `y_absl::Hash` should never be specialized. It must 
+// Note: unlike `std::hash', `y_absl::Hash` should never be specialized. It must
 // only be extended by adding `AbslHashValue()` overloads.
 //
 template <typename T>
-using Hash = y_absl::hash_internal::Hash<T>; 
+using Hash = y_absl::hash_internal::Hash<T>;
 
 // HashOf
 //
@@ -250,7 +250,7 @@ size_t HashOf(const Types&... values) {
 // provided by the wrapped class.
 //
 // Users of this class should still define a template `AbslHashValue` function,
-// but can use `y_absl::HashState::Create(&state)` to erase the type of the hash 
+// but can use `y_absl::HashState::Create(&state)` to erase the type of the hash
 // state and dispatch to their private hashing logic.
 //
 // This state can be used like any other hash state. In particular, you can call
@@ -263,20 +263,20 @@ size_t HashOf(const Types&... values) {
 //     template <typename H>
 //     friend H AbslHashValue(H state, const Interface& value) {
 //       state = H::combine(std::move(state), std::type_index(typeid(*this)));
-//       value.HashValue(y_absl::HashState::Create(&state)); 
+//       value.HashValue(y_absl::HashState::Create(&state));
 //       return state;
 //     }
 //    private:
-//     virtual void HashValue(y_absl::HashState state) const = 0; 
+//     virtual void HashValue(y_absl::HashState state) const = 0;
 //   };
 //
 //   class Impl : Interface {
 //    private:
-//     void HashValue(y_absl::HashState state) const override { 
-//       y_absl::HashState::combine(std::move(state), v1_, v2_); 
+//     void HashValue(y_absl::HashState state) const override {
+//       y_absl::HashState::combine(std::move(state), v1_, v2_);
 //     }
 //     int v1_;
-//     TString v2_; 
+//     TString v2_;
 //   };
 class HashState : public hash_internal::HashStateBase<HashState> {
  public:
@@ -342,6 +342,6 @@ class HashState : public hash_internal::HashStateBase<HashState> {
 };
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_HASH_HASH_H_

@@ -20,14 +20,14 @@
 // with modifications by m3b.  See also
 //    https://setisvn.ssl.berkeley.edu/svn/lib/fftw-3.0.1/kernel/cycle.h
 
-#include "y_absl/base/internal/cycleclock.h" 
+#include "y_absl/base/internal/cycleclock.h"
 
 #include <atomic>
 #include <chrono>  // NOLINT(build/c++11)
 
-#include "y_absl/base/internal/unscaledcycleclock.h" 
+#include "y_absl/base/internal/unscaledcycleclock.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -104,4 +104,4 @@ double CycleClock::Frequency() {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

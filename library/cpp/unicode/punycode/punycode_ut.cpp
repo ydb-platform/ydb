@@ -3,19 +3,19 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/charset/wide.h>
 
-namespace { 
-        template<typename T1, typename T2> 
-        inline bool HasSameBuffer(const T1& s1, const T2& s2) { 
-                return s1.begin() == s2.begin(); 
-        } 
-} 
- 
+namespace {
+        template<typename T1, typename T2>
+        inline bool HasSameBuffer(const T1& s1, const T2& s2) {
+                return s1.begin() == s2.begin();
+        }
+}
+
 Y_UNIT_TEST_SUITE(TPunycodeTest) {
     static bool TestRaw(const TString& utf8, const TString& punycode) {
         TUtf16String unicode = UTF8ToWide(utf8);
         TString buf1;
         TUtf16String buf2;
-        return HasSameBuffer(WideToPunycode(unicode, buf1), buf1) && buf1 == punycode && HasSameBuffer(PunycodeToWide(punycode, buf2), buf2) && buf2 == unicode && WideToPunycode(unicode) == punycode && PunycodeToWide(punycode) == unicode; 
+        return HasSameBuffer(WideToPunycode(unicode, buf1), buf1) && buf1 == punycode && HasSameBuffer(PunycodeToWide(punycode, buf2), buf2) && buf2 == unicode && WideToPunycode(unicode) == punycode && PunycodeToWide(punycode) == unicode;
     }
 
     Y_UNIT_TEST(RawEncodeDecode) {

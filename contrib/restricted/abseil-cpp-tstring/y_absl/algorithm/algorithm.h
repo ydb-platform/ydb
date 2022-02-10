@@ -28,7 +28,7 @@
 
 #include "y_absl/base/config.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 namespace algorithm_internal {
@@ -114,7 +114,7 @@ bool equal(InputIter1 first1, InputIter1 last1, InputIter2 first2,
 template <typename InputIter1, typename InputIter2>
 bool equal(InputIter1 first1, InputIter1 last1, InputIter2 first2,
            InputIter2 last2) {
-  return y_absl::equal(first1, last1, first2, last2, 
+  return y_absl::equal(first1, last1, first2, last2,
                      algorithm_internal::EqualTo{});
 }
 
@@ -142,7 +142,7 @@ bool linear_search(InputIterator first, InputIterator last,
 // <= 4.9 where `std::rotate` returns `void` instead of an iterator.
 //
 // The complexity of this algorithm is the same as that of `std::rotate`, but if
-// `ForwardIterator` is not a random-access iterator, then `y_absl::rotate` 
+// `ForwardIterator` is not a random-access iterator, then `y_absl::rotate`
 // performs an additional pass over the range to construct the return value.
 template <typename ForwardIterator>
 ForwardIterator rotate(ForwardIterator first, ForwardIterator middle,
@@ -154,6 +154,6 @@ ForwardIterator rotate(ForwardIterator first, ForwardIterator middle,
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_ALGORITHM_ALGORITHM_H_

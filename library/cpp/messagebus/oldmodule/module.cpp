@@ -79,19 +79,19 @@ namespace NBus {
 
             TBusModuleImpl* const Module;
         };
- 
+
         struct TModuleServerHandler
            : public IBusServerHandler {
             TModuleServerHandler(TBusModuleImpl* module)
                 : Module(module)
             {
             }
- 
+
             void OnMessage(TOnMessageContext& msg) override;
- 
+
             TBusModuleImpl* const Module;
         };
- 
+
         struct TBusModuleImpl: public TBusModuleInternal {
             TBusModule* const Module;
 
@@ -677,7 +677,7 @@ namespace NBus {
 
         return true;
     }
- 
+
     bool TBusModule::Shutdown() {
         Impl->Shutdown();
 
@@ -702,7 +702,7 @@ TBusSession* TMyModule::CreateExtSession(TBusMessageQueue& queue) {
         Impl->Queue = queue;
         return true;
     }
- 
+
     int TBusModule::GetModuleSessionInFlight() const {
         return Impl->Size();
     }
@@ -781,11 +781,11 @@ void TBusModuleImpl::DestroyJob(TJobRunner* job) {
             if (jobCount == 0) {
                 ShutdownCondVar.BroadCast();
             }
-        } 
+        }
     }
 
     job->JobStorageIterator = TList<TJobRunner*>::iterator();
-} 
+}
 
 void TBusModuleImpl::OnMessageReceived(TAutoPtr<TBusMessage> msg0, TOnMessageContext& context) {
     TBusMessage* msg = !!msg0 ? msg0.Get() : context.GetMessage();

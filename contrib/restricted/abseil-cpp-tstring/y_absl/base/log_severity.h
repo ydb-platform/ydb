@@ -18,10 +18,10 @@
 #include <array>
 #include <ostream>
 
-#include "y_absl/base/attributes.h" 
+#include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // y_absl::LogSeverity
@@ -64,7 +64,7 @@ ABSL_NAMESPACE_BEGIN
 //   --my_log_level=info
 //   --my_log_level=0
 //
-// Unparsing a flag produces the same result as `y_absl::LogSeverityName()` for 
+// Unparsing a flag produces the same result as `y_absl::LogSeverityName()` for
 // the standard levels and a base-ten integer otherwise.
 enum class LogSeverity : int {
   kInfo = 0,
@@ -75,47 +75,47 @@ enum class LogSeverity : int {
 
 // LogSeverities()
 //
-// Returns an iterable of all standard `y_absl::LogSeverity` values, ordered from 
+// Returns an iterable of all standard `y_absl::LogSeverity` values, ordered from
 // least to most severe.
-constexpr std::array<y_absl::LogSeverity, 4> LogSeverities() { 
-  return {{y_absl::LogSeverity::kInfo, y_absl::LogSeverity::kWarning, 
-           y_absl::LogSeverity::kError, y_absl::LogSeverity::kFatal}}; 
+constexpr std::array<y_absl::LogSeverity, 4> LogSeverities() {
+  return {{y_absl::LogSeverity::kInfo, y_absl::LogSeverity::kWarning,
+           y_absl::LogSeverity::kError, y_absl::LogSeverity::kFatal}};
 }
 
 // LogSeverityName()
 //
 // Returns the all-caps string representation (e.g. "INFO") of the specified
 // severity level if it is one of the standard levels and "UNKNOWN" otherwise.
-constexpr const char* LogSeverityName(y_absl::LogSeverity s) { 
-  return s == y_absl::LogSeverity::kInfo 
+constexpr const char* LogSeverityName(y_absl::LogSeverity s) {
+  return s == y_absl::LogSeverity::kInfo
              ? "INFO"
-             : s == y_absl::LogSeverity::kWarning 
+             : s == y_absl::LogSeverity::kWarning
                    ? "WARNING"
-                   : s == y_absl::LogSeverity::kError 
+                   : s == y_absl::LogSeverity::kError
                          ? "ERROR"
-                         : s == y_absl::LogSeverity::kFatal ? "FATAL" : "UNKNOWN"; 
+                         : s == y_absl::LogSeverity::kFatal ? "FATAL" : "UNKNOWN";
 }
 
 // NormalizeLogSeverity()
 //
 // Values less than `kInfo` normalize to `kInfo`; values greater than `kFatal`
 // normalize to `kError` (**NOT** `kFatal`).
-constexpr y_absl::LogSeverity NormalizeLogSeverity(y_absl::LogSeverity s) { 
-  return s < y_absl::LogSeverity::kInfo 
-             ? y_absl::LogSeverity::kInfo 
-             : s > y_absl::LogSeverity::kFatal ? y_absl::LogSeverity::kError : s; 
+constexpr y_absl::LogSeverity NormalizeLogSeverity(y_absl::LogSeverity s) {
+  return s < y_absl::LogSeverity::kInfo
+             ? y_absl::LogSeverity::kInfo
+             : s > y_absl::LogSeverity::kFatal ? y_absl::LogSeverity::kError : s;
 }
-constexpr y_absl::LogSeverity NormalizeLogSeverity(int s) { 
-  return y_absl::NormalizeLogSeverity(static_cast<y_absl::LogSeverity>(s)); 
+constexpr y_absl::LogSeverity NormalizeLogSeverity(int s) {
+  return y_absl::NormalizeLogSeverity(static_cast<y_absl::LogSeverity>(s));
 }
 
 // operator<<
 //
-// The exact representation of a streamed `y_absl::LogSeverity` is deliberately 
+// The exact representation of a streamed `y_absl::LogSeverity` is deliberately
 // unspecified; do not rely on it.
-std::ostream& operator<<(std::ostream& os, y_absl::LogSeverity s); 
+std::ostream& operator<<(std::ostream& os, y_absl::LogSeverity s);
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_BASE_LOG_SEVERITY_H_

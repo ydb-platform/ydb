@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/numeric/int128.h" 
+#include "y_absl/numeric/int128.h"
 
 #include <stddef.h>
 
@@ -26,7 +26,7 @@
 #include "y_absl/base/optimization.h"
 #include "y_absl/numeric/bits.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 ABSL_DLL const uint128 kuint128max = MakeUint128(
@@ -156,7 +156,7 @@ uint128 operator%(uint128 lhs, uint128 rhs) {
 
 namespace {
 
-TString Uint128ToFormattedString(uint128 v, std::ios_base::fmtflags flags) { 
+TString Uint128ToFormattedString(uint128 v, std::ios_base::fmtflags flags) {
   // Select a divisor which is the largest power of the base < 2^64.
   uint128 div;
   int div_base_log;
@@ -204,7 +204,7 @@ TString Uint128ToFormattedString(uint128 v, std::ios_base::fmtflags flags) {
 
 std::ostream& operator<<(std::ostream& os, uint128 v) {
   std::ios_base::fmtflags flags = os.flags();
-  TString rep = Uint128ToFormattedString(v, flags); 
+  TString rep = Uint128ToFormattedString(v, flags);
 
   // Add the requisite padding.
   std::streamsize width = os.width(0);
@@ -286,7 +286,7 @@ int128 operator%(int128 lhs, int128 rhs) {
 
 std::ostream& operator<<(std::ostream& os, int128 v) {
   std::ios_base::fmtflags flags = os.flags();
-  TString rep; 
+  TString rep;
 
   // Add the sign if needed.
   bool print_as_decimal =
@@ -330,54 +330,54 @@ std::ostream& operator<<(std::ostream& os, int128 v) {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 namespace std {
-constexpr bool numeric_limits<y_absl::uint128>::is_specialized; 
-constexpr bool numeric_limits<y_absl::uint128>::is_signed; 
-constexpr bool numeric_limits<y_absl::uint128>::is_integer; 
-constexpr bool numeric_limits<y_absl::uint128>::is_exact; 
-constexpr bool numeric_limits<y_absl::uint128>::has_infinity; 
-constexpr bool numeric_limits<y_absl::uint128>::has_quiet_NaN; 
-constexpr bool numeric_limits<y_absl::uint128>::has_signaling_NaN; 
-constexpr float_denorm_style numeric_limits<y_absl::uint128>::has_denorm; 
-constexpr bool numeric_limits<y_absl::uint128>::has_denorm_loss; 
-constexpr float_round_style numeric_limits<y_absl::uint128>::round_style; 
-constexpr bool numeric_limits<y_absl::uint128>::is_iec559; 
-constexpr bool numeric_limits<y_absl::uint128>::is_bounded; 
-constexpr bool numeric_limits<y_absl::uint128>::is_modulo; 
-constexpr int numeric_limits<y_absl::uint128>::digits; 
-constexpr int numeric_limits<y_absl::uint128>::digits10; 
-constexpr int numeric_limits<y_absl::uint128>::max_digits10; 
-constexpr int numeric_limits<y_absl::uint128>::radix; 
-constexpr int numeric_limits<y_absl::uint128>::min_exponent; 
-constexpr int numeric_limits<y_absl::uint128>::min_exponent10; 
-constexpr int numeric_limits<y_absl::uint128>::max_exponent; 
-constexpr int numeric_limits<y_absl::uint128>::max_exponent10; 
-constexpr bool numeric_limits<y_absl::uint128>::traps; 
-constexpr bool numeric_limits<y_absl::uint128>::tinyness_before; 
+constexpr bool numeric_limits<y_absl::uint128>::is_specialized;
+constexpr bool numeric_limits<y_absl::uint128>::is_signed;
+constexpr bool numeric_limits<y_absl::uint128>::is_integer;
+constexpr bool numeric_limits<y_absl::uint128>::is_exact;
+constexpr bool numeric_limits<y_absl::uint128>::has_infinity;
+constexpr bool numeric_limits<y_absl::uint128>::has_quiet_NaN;
+constexpr bool numeric_limits<y_absl::uint128>::has_signaling_NaN;
+constexpr float_denorm_style numeric_limits<y_absl::uint128>::has_denorm;
+constexpr bool numeric_limits<y_absl::uint128>::has_denorm_loss;
+constexpr float_round_style numeric_limits<y_absl::uint128>::round_style;
+constexpr bool numeric_limits<y_absl::uint128>::is_iec559;
+constexpr bool numeric_limits<y_absl::uint128>::is_bounded;
+constexpr bool numeric_limits<y_absl::uint128>::is_modulo;
+constexpr int numeric_limits<y_absl::uint128>::digits;
+constexpr int numeric_limits<y_absl::uint128>::digits10;
+constexpr int numeric_limits<y_absl::uint128>::max_digits10;
+constexpr int numeric_limits<y_absl::uint128>::radix;
+constexpr int numeric_limits<y_absl::uint128>::min_exponent;
+constexpr int numeric_limits<y_absl::uint128>::min_exponent10;
+constexpr int numeric_limits<y_absl::uint128>::max_exponent;
+constexpr int numeric_limits<y_absl::uint128>::max_exponent10;
+constexpr bool numeric_limits<y_absl::uint128>::traps;
+constexpr bool numeric_limits<y_absl::uint128>::tinyness_before;
 
-constexpr bool numeric_limits<y_absl::int128>::is_specialized; 
-constexpr bool numeric_limits<y_absl::int128>::is_signed; 
-constexpr bool numeric_limits<y_absl::int128>::is_integer; 
-constexpr bool numeric_limits<y_absl::int128>::is_exact; 
-constexpr bool numeric_limits<y_absl::int128>::has_infinity; 
-constexpr bool numeric_limits<y_absl::int128>::has_quiet_NaN; 
-constexpr bool numeric_limits<y_absl::int128>::has_signaling_NaN; 
-constexpr float_denorm_style numeric_limits<y_absl::int128>::has_denorm; 
-constexpr bool numeric_limits<y_absl::int128>::has_denorm_loss; 
-constexpr float_round_style numeric_limits<y_absl::int128>::round_style; 
-constexpr bool numeric_limits<y_absl::int128>::is_iec559; 
-constexpr bool numeric_limits<y_absl::int128>::is_bounded; 
-constexpr bool numeric_limits<y_absl::int128>::is_modulo; 
-constexpr int numeric_limits<y_absl::int128>::digits; 
-constexpr int numeric_limits<y_absl::int128>::digits10; 
-constexpr int numeric_limits<y_absl::int128>::max_digits10; 
-constexpr int numeric_limits<y_absl::int128>::radix; 
-constexpr int numeric_limits<y_absl::int128>::min_exponent; 
-constexpr int numeric_limits<y_absl::int128>::min_exponent10; 
-constexpr int numeric_limits<y_absl::int128>::max_exponent; 
-constexpr int numeric_limits<y_absl::int128>::max_exponent10; 
-constexpr bool numeric_limits<y_absl::int128>::traps; 
-constexpr bool numeric_limits<y_absl::int128>::tinyness_before; 
+constexpr bool numeric_limits<y_absl::int128>::is_specialized;
+constexpr bool numeric_limits<y_absl::int128>::is_signed;
+constexpr bool numeric_limits<y_absl::int128>::is_integer;
+constexpr bool numeric_limits<y_absl::int128>::is_exact;
+constexpr bool numeric_limits<y_absl::int128>::has_infinity;
+constexpr bool numeric_limits<y_absl::int128>::has_quiet_NaN;
+constexpr bool numeric_limits<y_absl::int128>::has_signaling_NaN;
+constexpr float_denorm_style numeric_limits<y_absl::int128>::has_denorm;
+constexpr bool numeric_limits<y_absl::int128>::has_denorm_loss;
+constexpr float_round_style numeric_limits<y_absl::int128>::round_style;
+constexpr bool numeric_limits<y_absl::int128>::is_iec559;
+constexpr bool numeric_limits<y_absl::int128>::is_bounded;
+constexpr bool numeric_limits<y_absl::int128>::is_modulo;
+constexpr int numeric_limits<y_absl::int128>::digits;
+constexpr int numeric_limits<y_absl::int128>::digits10;
+constexpr int numeric_limits<y_absl::int128>::max_digits10;
+constexpr int numeric_limits<y_absl::int128>::radix;
+constexpr int numeric_limits<y_absl::int128>::min_exponent;
+constexpr int numeric_limits<y_absl::int128>::min_exponent10;
+constexpr int numeric_limits<y_absl::int128>::max_exponent;
+constexpr int numeric_limits<y_absl::int128>::max_exponent10;
+constexpr bool numeric_limits<y_absl::int128>::traps;
+constexpr bool numeric_limits<y_absl::int128>::tinyness_before;
 }  // namespace std

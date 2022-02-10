@@ -6,7 +6,7 @@ OWNER(
     g:cpp-contrib
     g:yandex_io
 )
- 
+
 VERSION(2.9.10)
 
 ORIGINAL_SOURCE(http://xmlsoft.org/sources/libxml2-2.9.10.tar.gz)
@@ -22,7 +22,7 @@ PEERDIR(
     contrib/libs/libiconv
     contrib/libs/zlib
 )
- 
+
 ADDINCL(
     GLOBAL contrib/libs/libxml/include
     contrib/libs/libiconv/include

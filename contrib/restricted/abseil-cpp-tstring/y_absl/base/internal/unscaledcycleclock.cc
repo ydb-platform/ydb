@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/base/internal/unscaledcycleclock.h" 
+#include "y_absl/base/internal/unscaledcycleclock.h"
 
 #if ABSL_USE_UNSCALED_CYCLECLOCK
 
@@ -29,9 +29,9 @@
 #endif
 #endif
 
-#include "y_absl/base/internal/sysinfo.h" 
+#include "y_absl/base/internal/sysinfo.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -149,6 +149,6 @@ double UnscaledCycleClock::Frequency() {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_USE_UNSCALED_CYCLECLOCK

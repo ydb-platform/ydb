@@ -21,9 +21,9 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/meta/type_traits.h" 
+#include "y_absl/meta/type_traits.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
@@ -65,7 +65,7 @@ struct hash_policy_traits {
   struct ConstantIteratorsImpl : std::false_type {};
 
   template <class P>
-  struct ConstantIteratorsImpl<P, y_absl::void_t<typename P::constant_iterators>> 
+  struct ConstantIteratorsImpl<P, y_absl::void_t<typename P::constant_iterators>>
       : P::constant_iterators {};
 
  public:
@@ -203,6 +203,6 @@ struct hash_policy_traits {
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_HASH_POLICY_TRAITS_H_

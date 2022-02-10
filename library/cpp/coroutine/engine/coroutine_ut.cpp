@@ -509,7 +509,7 @@ namespace NCoroWaitWakeLivelockBug {
     struct TSubState {
         TSubState(TState& parent, ui32 self)
             : Parent(parent)
-            , Name(TStringBuilder() << "Sub" << self) 
+            , Name(TStringBuilder() << "Sub" << self)
             , Self(self)
         {
             UNIT_ASSERT(self < 2);

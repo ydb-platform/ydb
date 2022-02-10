@@ -16,7 +16,7 @@
 // File: node_hash_set.h
 // -----------------------------------------------------------------------------
 //
-// An `y_absl::node_hash_set<T>` is an unordered associative container designed to 
+// An `y_absl::node_hash_set<T>` is an unordered associative container designed to
 // be a more efficient replacement for `std::unordered_set`. Like
 // `unordered_set`, search, insertion, and deletion of set elements can be done
 // as an `O(1)` operation. However, `node_hash_set` (and other unordered
@@ -37,13 +37,13 @@
 
 #include <type_traits>
 
-#include "y_absl/algorithm/container.h" 
-#include "y_absl/container/internal/hash_function_defaults.h"  // IWYU pragma: export 
-#include "y_absl/container/internal/node_hash_policy.h" 
-#include "y_absl/container/internal/raw_hash_set.h"  // IWYU pragma: export 
-#include "y_absl/memory/memory.h" 
+#include "y_absl/algorithm/container.h"
+#include "y_absl/container/internal/hash_function_defaults.h"  // IWYU pragma: export
+#include "y_absl/container/internal/node_hash_policy.h"
+#include "y_absl/container/internal/raw_hash_set.h"  // IWYU pragma: export
+#include "y_absl/memory/memory.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 template <typename T>
@@ -51,10 +51,10 @@ struct NodeHashSetPolicy;
 }  // namespace container_internal
 
 // -----------------------------------------------------------------------------
-// y_absl::node_hash_set 
+// y_absl::node_hash_set
 // -----------------------------------------------------------------------------
 //
-// An `y_absl::node_hash_set<T>` is an unordered associative container which 
+// An `y_absl::node_hash_set<T>` is an unordered associative container which
 // has been optimized for both speed and memory footprint in most common use
 // cases. Its interface is similar to that of `std::unordered_set<T>` with the
 // following notable differences:
@@ -66,11 +66,11 @@ struct NodeHashSetPolicy;
 //   slots (open, deleted, and empty) within the hash set.
 // * Returns `void` from the `erase(iterator)` overload.
 //
-// By default, `node_hash_set` uses the `y_absl::Hash` hashing framework. 
-// All fundamental and Abseil types that support the `y_absl::Hash` framework have 
+// By default, `node_hash_set` uses the `y_absl::Hash` hashing framework.
+// All fundamental and Abseil types that support the `y_absl::Hash` framework have
 // a compatible equality operator for comparing insertions into `node_hash_set`.
-// If your type is not yet supported by the `y_absl::Hash` framework, see 
-// y_absl/hash/hash.h for information on extending Abseil hashing to user-defined 
+// If your type is not yet supported by the `y_absl::Hash` framework, see
+// y_absl/hash/hash.h for information on extending Abseil hashing to user-defined
 // types.
 //
 // Example:
@@ -89,12 +89,12 @@ struct NodeHashSetPolicy;
 //  if (ducks.contains("dewey")) {
 //    std::cout << "We found dewey!" << std::endl;
 //  }
-template <class T, class Hash = y_absl::container_internal::hash_default_hash<T>, 
-          class Eq = y_absl::container_internal::hash_default_eq<T>, 
+template <class T, class Hash = y_absl::container_internal::hash_default_hash<T>,
+          class Eq = y_absl::container_internal::hash_default_eq<T>,
           class Alloc = std::allocator<T>>
 class node_hash_set
-    : public y_absl::container_internal::raw_hash_set< 
-          y_absl::container_internal::NodeHashSetPolicy<T>, Hash, Eq, Alloc> { 
+    : public y_absl::container_internal::raw_hash_set<
+          y_absl::container_internal::NodeHashSetPolicy<T>, Hash, Eq, Alloc> {
   using Base = typename node_hash_set::raw_hash_set;
 
  public:
@@ -106,38 +106,38 @@ class node_hash_set
   // *  Default constructor
   //
   //    // No allocation for the table's elements is made.
-  //    y_absl::node_hash_set<TString> set1; 
+  //    y_absl::node_hash_set<TString> set1;
   //
   // * Initializer List constructor
   //
-  //   y_absl::node_hash_set<TString> set2 = 
+  //   y_absl::node_hash_set<TString> set2 =
   //       {{"huey"}, {"dewey"}, {"louie"}};
   //
   // * Copy constructor
   //
-  //   y_absl::node_hash_set<TString> set3(set2); 
+  //   y_absl::node_hash_set<TString> set3(set2);
   //
   // * Copy assignment operator
   //
   //  // Hash functor and Comparator are copied as well
-  //  y_absl::node_hash_set<TString> set4; 
+  //  y_absl::node_hash_set<TString> set4;
   //  set4 = set3;
   //
   // * Move constructor
   //
   //   // Move is guaranteed efficient
-  //   y_absl::node_hash_set<TString> set5(std::move(set4)); 
+  //   y_absl::node_hash_set<TString> set5(std::move(set4));
   //
   // * Move assignment operator
   //
   //   // May be efficient if allocators are compatible
-  //   y_absl::node_hash_set<TString> set6; 
+  //   y_absl::node_hash_set<TString> set6;
   //   set6 = std::move(set5);
   //
   // * Range constructor
   //
-  //   std::vector<TString> v = {"a", "b"}; 
-  //   y_absl::node_hash_set<TString> set7(v.begin(), v.end()); 
+  //   std::vector<TString> v = {"a", "b"};
+  //   y_absl::node_hash_set<TString> set7(v.begin(), v.end());
   node_hash_set() {}
   using Base::Base;
 
@@ -166,7 +166,7 @@ class node_hash_set
   // Returns the number of element slots (assigned, deleted, and empty)
   // available within the `node_hash_set`.
   //
-  // NOTE: this member function is particular to `y_absl::node_hash_set` and is 
+  // NOTE: this member function is particular to `y_absl::node_hash_set` and is
   // not provided in the `std::unordered_set` API.
   using Base::capacity;
 
@@ -442,7 +442,7 @@ namespace container_internal {
 
 template <class T>
 struct NodeHashSetPolicy
-    : y_absl::container_internal::node_hash_policy<T&, NodeHashSetPolicy<T>> { 
+    : y_absl::container_internal::node_hash_policy<T&, NodeHashSetPolicy<T>> {
   using key_type = T;
   using init_type = T;
   using constant_iterators = std::true_type;
@@ -450,10 +450,10 @@ struct NodeHashSetPolicy
   template <class Allocator, class... Args>
   static T* new_element(Allocator* alloc, Args&&... args) {
     using ValueAlloc =
-        typename y_absl::allocator_traits<Allocator>::template rebind_alloc<T>; 
+        typename y_absl::allocator_traits<Allocator>::template rebind_alloc<T>;
     ValueAlloc value_alloc(*alloc);
-    T* res = y_absl::allocator_traits<ValueAlloc>::allocate(value_alloc, 1); 
-    y_absl::allocator_traits<ValueAlloc>::construct(value_alloc, res, 
+    T* res = y_absl::allocator_traits<ValueAlloc>::allocate(value_alloc, 1);
+    y_absl::allocator_traits<ValueAlloc>::construct(value_alloc, res,
                                                   std::forward<Args>(args)...);
     return res;
   }
@@ -461,17 +461,17 @@ struct NodeHashSetPolicy
   template <class Allocator>
   static void delete_element(Allocator* alloc, T* elem) {
     using ValueAlloc =
-        typename y_absl::allocator_traits<Allocator>::template rebind_alloc<T>; 
+        typename y_absl::allocator_traits<Allocator>::template rebind_alloc<T>;
     ValueAlloc value_alloc(*alloc);
-    y_absl::allocator_traits<ValueAlloc>::destroy(value_alloc, elem); 
-    y_absl::allocator_traits<ValueAlloc>::deallocate(value_alloc, elem, 1); 
+    y_absl::allocator_traits<ValueAlloc>::destroy(value_alloc, elem);
+    y_absl::allocator_traits<ValueAlloc>::deallocate(value_alloc, elem, 1);
   }
 
   template <class F, class... Args>
-  static decltype(y_absl::container_internal::DecomposeValue( 
+  static decltype(y_absl::container_internal::DecomposeValue(
       std::declval<F>(), std::declval<Args>()...))
   apply(F&& f, Args&&... args) {
-    return y_absl::container_internal::DecomposeValue( 
+    return y_absl::container_internal::DecomposeValue(
         std::forward<F>(f), std::forward<Args>(args)...);
   }
 
@@ -481,13 +481,13 @@ struct NodeHashSetPolicy
 
 namespace container_algorithm_internal {
 
-// Specialization of trait in y_absl/algorithm/container.h 
+// Specialization of trait in y_absl/algorithm/container.h
 template <class Key, class Hash, class KeyEqual, class Allocator>
-struct IsUnorderedContainer<y_absl::node_hash_set<Key, Hash, KeyEqual, Allocator>> 
+struct IsUnorderedContainer<y_absl::node_hash_set<Key, Hash, KeyEqual, Allocator>>
     : std::true_type {};
 
 }  // namespace container_algorithm_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_NODE_HASH_SET_H_

@@ -58,19 +58,19 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/base/macros.h" 
-#include "y_absl/container/internal/common.h" 
-#include "y_absl/container/internal/compressed_tuple.h" 
-#include "y_absl/container/internal/container_memory.h" 
-#include "y_absl/container/internal/layout.h" 
-#include "y_absl/memory/memory.h" 
-#include "y_absl/meta/type_traits.h" 
+#include "y_absl/base/macros.h"
+#include "y_absl/container/internal/common.h"
+#include "y_absl/container/internal/compressed_tuple.h"
+#include "y_absl/container/internal/container_memory.h"
+#include "y_absl/container/internal/layout.h"
+#include "y_absl/memory/memory.h"
+#include "y_absl/meta/type_traits.h"
 #include "y_absl/strings/cord.h"
-#include "y_absl/strings/string_view.h" 
-#include "y_absl/types/compare.h" 
-#include "y_absl/utility/utility.h" 
+#include "y_absl/strings/string_view.h"
+#include "y_absl/types/compare.h"
+#include "y_absl/utility/utility.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
@@ -78,8 +78,8 @@ namespace container_internal {
 // comparator.
 template <typename Compare, typename T>
 using btree_is_key_compare_to =
-    std::is_convertible<y_absl::result_of_t<Compare(const T &, const T &)>, 
-                        y_absl::weak_ordering>; 
+    std::is_convertible<y_absl::result_of_t<Compare(const T &, const T &)>,
+                        y_absl::weak_ordering>;
 
 struct StringBtreeDefaultLess {
   using is_transparent = void;
@@ -87,7 +87,7 @@ struct StringBtreeDefaultLess {
   StringBtreeDefaultLess() = default;
 
   // Compatibility constructor.
-  StringBtreeDefaultLess(std::less<TString>) {}  // NOLINT 
+  StringBtreeDefaultLess(std::less<TString>) {}  // NOLINT
   StringBtreeDefaultLess(std::less<y_absl::string_view>) {}  // NOLINT
 
   // Allow converting to std::less for use in key_comp()/value_comp().
@@ -95,8 +95,8 @@ struct StringBtreeDefaultLess {
   explicit operator std::less<y_absl::string_view>() const { return {}; }
   explicit operator std::less<y_absl::Cord>() const { return {}; }
 
-  y_absl::weak_ordering operator()(y_absl::string_view lhs, 
-                                 y_absl::string_view rhs) const { 
+  y_absl::weak_ordering operator()(y_absl::string_view lhs,
+                                 y_absl::string_view rhs) const {
     return compare_internal::compare_result_as_ordering(lhs.compare(rhs));
   }
   StringBtreeDefaultLess(std::less<y_absl::Cord>) {}  // NOLINT
@@ -119,7 +119,7 @@ struct StringBtreeDefaultGreater {
 
   StringBtreeDefaultGreater() = default;
 
-  StringBtreeDefaultGreater(std::greater<TString>) {}  // NOLINT 
+  StringBtreeDefaultGreater(std::greater<TString>) {}  // NOLINT
   StringBtreeDefaultGreater(std::greater<y_absl::string_view>) {}  // NOLINT
 
   // Allow converting to std::greater for use in key_comp()/value_comp().
@@ -127,8 +127,8 @@ struct StringBtreeDefaultGreater {
   explicit operator std::greater<y_absl::string_view>() const { return {}; }
   explicit operator std::greater<y_absl::Cord>() const { return {}; }
 
-  y_absl::weak_ordering operator()(y_absl::string_view lhs, 
-                                 y_absl::string_view rhs) const { 
+  y_absl::weak_ordering operator()(y_absl::string_view lhs,
+                                 y_absl::string_view rhs) const {
     return compare_internal::compare_result_as_ordering(rhs.compare(lhs));
   }
   StringBtreeDefaultGreater(std::greater<y_absl::Cord>) {}  // NOLINT
@@ -148,7 +148,7 @@ struct StringBtreeDefaultGreater {
 
 // A helper class to convert a boolean comparison into a three-way "compare-to"
 // comparison that returns an `y_absl::weak_ordering`. This helper
-// class is specialized for less<TString>, greater<TString>, 
+// class is specialized for less<TString>, greater<TString>,
 // less<string_view>, greater<string_view>, less<y_absl::Cord>, and
 // greater<y_absl::Cord>.
 //
@@ -163,22 +163,22 @@ struct key_compare_to_adapter {
 };
 
 template <>
-struct key_compare_to_adapter<std::less<TString>> { 
+struct key_compare_to_adapter<std::less<TString>> {
   using type = StringBtreeDefaultLess;
 };
 
 template <>
-struct key_compare_to_adapter<std::greater<TString>> { 
+struct key_compare_to_adapter<std::greater<TString>> {
   using type = StringBtreeDefaultGreater;
 };
 
 template <>
-struct key_compare_to_adapter<std::less<y_absl::string_view>> { 
+struct key_compare_to_adapter<std::less<y_absl::string_view>> {
   using type = StringBtreeDefaultLess;
 };
 
 template <>
-struct key_compare_to_adapter<std::greater<y_absl::string_view>> { 
+struct key_compare_to_adapter<std::greater<y_absl::string_view>> {
   using type = StringBtreeDefaultGreater;
 };
 
@@ -280,7 +280,7 @@ struct common_params {
   // This is an integral type large enough to hold as many
   // ValueSize-values as will fit a node of TargetNodeSize bytes.
   using node_count_type =
-      y_absl::conditional_t<(kNodeValueSpace / sizeof(value_type) > 
+      y_absl::conditional_t<(kNodeValueSpace / sizeof(value_type) >
                            (std::numeric_limits<uint8_t>::max)()),
                           uint16_t, uint8_t>;  // NOLINT
 
@@ -363,7 +363,7 @@ struct map_params : common_params<Key, Compare, Alloc, TargetNodeSize, Multi,
 };
 
 // This type implements the necessary functions from the
-// y_absl::container_internal::slot_type interface. 
+// y_absl::container_internal::slot_type interface.
 template <typename Key>
 struct set_slot_policy {
   using slot_type = Key;
@@ -375,18 +375,18 @@ struct set_slot_policy {
 
   template <typename Alloc, class... Args>
   static void construct(Alloc *alloc, slot_type *slot, Args &&... args) {
-    y_absl::allocator_traits<Alloc>::construct(*alloc, slot, 
+    y_absl::allocator_traits<Alloc>::construct(*alloc, slot,
                                              std::forward<Args>(args)...);
   }
 
   template <typename Alloc>
   static void construct(Alloc *alloc, slot_type *slot, slot_type *other) {
-    y_absl::allocator_traits<Alloc>::construct(*alloc, slot, std::move(*other)); 
+    y_absl::allocator_traits<Alloc>::construct(*alloc, slot, std::move(*other));
   }
 
   template <typename Alloc>
   static void destroy(Alloc *alloc, slot_type *slot) {
-    y_absl::allocator_traits<Alloc>::destroy(*alloc, slot); 
+    y_absl::allocator_traits<Alloc>::destroy(*alloc, slot);
   }
 
   template <typename Alloc>
@@ -553,7 +553,7 @@ class btree_node {
   btree_node() = default;
 
  private:
-  using layout_type = y_absl::container_internal::Layout<btree_node *, field_type, 
+  using layout_type = y_absl::container_internal::Layout<btree_node *, field_type,
                                                        slot_type, btree_node *>;
   constexpr static size_type SizeWithNSlots(size_type n) {
     return layout_type(/*parent*/ 1,
@@ -695,10 +695,10 @@ class btree_node {
   btree_node *start_child() const { return child(start()); }
   btree_node *&mutable_child(int i) { return GetField<3>()[i]; }
   void clear_child(int i) {
-    y_absl::container_internal::SanitizerPoisonObject(&mutable_child(i)); 
+    y_absl::container_internal::SanitizerPoisonObject(&mutable_child(i));
   }
   void set_child(int i, btree_node *c) {
-    y_absl::container_internal::SanitizerUnpoisonObject(&mutable_child(i)); 
+    y_absl::container_internal::SanitizerUnpoisonObject(&mutable_child(i));
     mutable_child(i) = c;
     c->set_position(i);
   }
@@ -758,7 +758,7 @@ class btree_node {
       const K &k, int s, const int e, const Compare &comp,
       std::true_type /* IsCompareTo */) const {
     while (s < e) {
-      const y_absl::weak_ordering c = comp(key(s), k); 
+      const y_absl::weak_ordering c = comp(key(s), k);
       if (c == 0) {
         return {s, MatchKind::kEq};
       } else if (c > 0) {
@@ -796,7 +796,7 @@ class btree_node {
       MatchKind exact_match = MatchKind::kNe;
       while (s != e) {
         const int mid = (s + e) >> 1;
-        const y_absl::weak_ordering c = comp(key(mid), k); 
+        const y_absl::weak_ordering c = comp(key(mid), k);
         if (c < 0) {
           s = mid + 1;
         } else {
@@ -813,7 +813,7 @@ class btree_node {
     } else {  // Can't have multiple equivalent keys.
       while (s != e) {
         const int mid = (s + e) >> 1;
-        const y_absl::weak_ordering c = comp(key(mid), k); 
+        const y_absl::weak_ordering c = comp(key(mid), k);
         if (c < 0) {
           s = mid + 1;
         } else if (c > 0) {
@@ -856,7 +856,7 @@ class btree_node {
     set_start(0);
     set_finish(0);
     set_max_count(max_count);
-    y_absl::container_internal::SanitizerPoisonMemoryRegion( 
+    y_absl::container_internal::SanitizerPoisonMemoryRegion(
         start_slot(), max_count * sizeof(slot_type));
   }
   void init_internal(btree_node *parent) {
@@ -864,7 +864,7 @@ class btree_node {
     // Set `max_count` to a sentinel value to indicate that this node is
     // internal.
     set_max_count(kInternalNodeMaxCount);
-    y_absl::container_internal::SanitizerPoisonMemoryRegion( 
+    y_absl::container_internal::SanitizerPoisonMemoryRegion(
         &mutable_child(start()), (kNodeSlots + 1) * sizeof(btree_node *));
   }
 
@@ -879,12 +879,12 @@ class btree_node {
  private:
   template <typename... Args>
   void value_init(const field_type i, allocator_type *alloc, Args &&... args) {
-    y_absl::container_internal::SanitizerUnpoisonObject(slot(i)); 
+    y_absl::container_internal::SanitizerUnpoisonObject(slot(i));
     params_type::construct(alloc, slot(i), std::forward<Args>(args)...);
   }
   void value_destroy(const field_type i, allocator_type *alloc) {
     params_type::destroy(alloc, slot(i));
-    y_absl::container_internal::SanitizerPoisonObject(slot(i)); 
+    y_absl::container_internal::SanitizerPoisonObject(slot(i));
   }
   void value_destroy_n(const field_type i, const field_type n,
                        allocator_type *alloc) {
@@ -975,7 +975,7 @@ struct btree_iterator {
   // const_iterator, but it specifically avoids hiding the copy constructor so
   // that the trivial one will be used when possible.
   template <typename N, typename R, typename P,
-            y_absl::enable_if_t< 
+            y_absl::enable_if_t<
                 std::is_same<btree_iterator<N, R, P>, iterator>::value &&
                     std::is_same<btree_iterator, const_iterator>::value,
                 int> = 0>
@@ -988,7 +988,7 @@ struct btree_iterator {
   // NOTE: the const_cast is safe because this constructor is only called by
   // non-const methods and the container owns the nodes.
   template <typename N, typename R, typename P,
-            y_absl::enable_if_t< 
+            y_absl::enable_if_t<
                 std::is_same<btree_iterator<N, R, P>, const_iterator>::value &&
                     std::is_same<btree_iterator, iterator>::value,
                 int> = 0>
@@ -1462,7 +1462,7 @@ class btree {
   // allocator.
   node_type *allocate(const size_type size) {
     return reinterpret_cast<node_type *>(
-        y_absl::container_internal::Allocate<node_type::Alignment()>( 
+        y_absl::container_internal::Allocate<node_type::Alignment()>(
             mutable_allocator(), size));
   }
 
@@ -1566,7 +1566,7 @@ class btree {
 
   // We use compressed tuple in order to save space because key_compare and
   // allocator_type are usually empty.
-  y_absl::container_internal::CompressedTuple<key_compare, allocator_type, 
+  y_absl::container_internal::CompressedTuple<key_compare, allocator_type,
                                             node_type *>
       root_;
 
@@ -1920,13 +1920,13 @@ constexpr bool btree<P>::static_assert_validation() {
       kNodeSlots < (1 << (8 * sizeof(typename node_type::field_type))),
       "target node size too large");
 
-  // Verify that key_compare returns an y_absl::{weak,strong}_ordering or bool. 
+  // Verify that key_compare returns an y_absl::{weak,strong}_ordering or bool.
   using compare_result_type =
-      y_absl::result_of_t<key_compare(key_type, key_type)>; 
+      y_absl::result_of_t<key_compare(key_type, key_type)>;
   static_assert(
       std::is_same<compare_result_type, bool>::value ||
-          std::is_convertible<compare_result_type, y_absl::weak_ordering>::value, 
-      "key comparison function must return y_absl::{weak,strong}_ordering or " 
+          std::is_convertible<compare_result_type, y_absl::weak_ordering>::value,
+      "key comparison function must return y_absl::{weak,strong}_ordering or "
       "bool.");
 
   // Test the assumption made in setting kNodeValueSpace.
@@ -2096,7 +2096,7 @@ auto btree<P>::operator=(const btree &other) -> btree & {
     clear();
 
     *mutable_key_comp() = other.key_comp();
-    if (y_absl::allocator_traits< 
+    if (y_absl::allocator_traits<
             allocator_type>::propagate_on_container_copy_assignment::value) {
       *mutable_allocator() = other.allocator();
     }
@@ -2112,7 +2112,7 @@ auto btree<P>::operator=(btree &&other) noexcept -> btree & {
     clear();
 
     using std::swap;
-    if (y_absl::allocator_traits< 
+    if (y_absl::allocator_traits<
             allocator_type>::propagate_on_container_copy_assignment::value) {
       // Note: `root_` also contains the allocator and the key comparator.
       swap(root_, other.root_);
@@ -2267,7 +2267,7 @@ void btree<P>::clear() {
 template <typename P>
 void btree<P>::swap(btree &other) {
   using std::swap;
-  if (y_absl::allocator_traits< 
+  if (y_absl::allocator_traits<
           allocator_type>::propagate_on_container_swap::value) {
     // Note: `root_` also contains the allocator and the key comparator.
     swap(root_, other.root_);
@@ -2636,6 +2636,6 @@ int btree<P>::internal_verify(const node_type *node, const key_type *lo,
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_BTREE_H_

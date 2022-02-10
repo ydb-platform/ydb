@@ -113,22 +113,22 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/base/internal/endian.h" 
+#include "y_absl/base/internal/endian.h"
 #include "y_absl/base/optimization.h"
-#include "y_absl/base/port.h" 
-#include "y_absl/container/internal/common.h" 
-#include "y_absl/container/internal/compressed_tuple.h" 
-#include "y_absl/container/internal/container_memory.h" 
-#include "y_absl/container/internal/hash_policy_traits.h" 
-#include "y_absl/container/internal/hashtable_debug_hooks.h" 
-#include "y_absl/container/internal/hashtablez_sampler.h" 
-#include "y_absl/container/internal/have_sse.h" 
-#include "y_absl/memory/memory.h" 
-#include "y_absl/meta/type_traits.h" 
+#include "y_absl/base/port.h"
+#include "y_absl/container/internal/common.h"
+#include "y_absl/container/internal/compressed_tuple.h"
+#include "y_absl/container/internal/container_memory.h"
+#include "y_absl/container/internal/hash_policy_traits.h"
+#include "y_absl/container/internal/hashtable_debug_hooks.h"
+#include "y_absl/container/internal/hashtablez_sampler.h"
+#include "y_absl/container/internal/have_sse.h"
+#include "y_absl/memory/memory.h"
+#include "y_absl/meta/type_traits.h"
 #include "y_absl/numeric/bits.h"
-#include "y_absl/utility/utility.h" 
+#include "y_absl/utility/utility.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
@@ -182,7 +182,7 @@ struct IsDecomposable : std::false_type {};
 
 template <class Policy, class Hash, class Eq, class... Ts>
 struct IsDecomposable<
-    y_absl::void_t<decltype( 
+    y_absl::void_t<decltype(
         Policy::apply(RequireUsableKey<typename Policy::key_type, Hash, Eq>(),
                       std::declval<Ts>()...))>,
     Policy, Hash, Eq, Ts...> : std::true_type {};
@@ -694,9 +694,9 @@ class raw_hash_set {
   using value_type = typename PolicyTraits::value_type;
   using reference = value_type&;
   using const_reference = const value_type&;
-  using pointer = typename y_absl::allocator_traits< 
+  using pointer = typename y_absl::allocator_traits<
       allocator_type>::template rebind_traits<value_type>::pointer;
-  using const_pointer = typename y_absl::allocator_traits< 
+  using const_pointer = typename y_absl::allocator_traits<
       allocator_type>::template rebind_traits<value_type>::const_pointer;
 
   // Alias used for heterogeneous lookup functions.
@@ -711,10 +711,10 @@ class raw_hash_set {
   auto KeyTypeCanBeHashed(const Hash& h, const key_type& k) -> decltype(h(k));
   auto KeyTypeCanBeEq(const Eq& eq, const key_type& k) -> decltype(eq(k, k));
 
-  using AllocTraits = y_absl::allocator_traits<allocator_type>; 
-  using SlotAlloc = typename y_absl::allocator_traits< 
+  using AllocTraits = y_absl::allocator_traits<allocator_type>;
+  using SlotAlloc = typename y_absl::allocator_traits<
       allocator_type>::template rebind_alloc<slot_type>;
-  using SlotAllocTraits = typename y_absl::allocator_traits< 
+  using SlotAllocTraits = typename y_absl::allocator_traits<
       allocator_type>::template rebind_traits<slot_type>;
 
   static_assert(std::is_lvalue_reference<reference>::value,
@@ -734,7 +734,7 @@ class raw_hash_set {
   // cases.
   template <class T>
   using RequiresInsertable = typename std::enable_if<
-      y_absl::disjunction<std::is_convertible<T, init_type>, 
+      y_absl::disjunction<std::is_convertible<T, init_type>,
                         SameAsElementReference<T>>::value,
       int>::type;
 
@@ -760,9 +760,9 @@ class raw_hash_set {
     using iterator_category = std::forward_iterator_tag;
     using value_type = typename raw_hash_set::value_type;
     using reference =
-        y_absl::conditional_t<PolicyTraits::constant_iterators::value, 
+        y_absl::conditional_t<PolicyTraits::constant_iterators::value,
                             const value_type&, value_type&>;
-    using pointer = y_absl::remove_reference_t<reference>*; 
+    using pointer = y_absl::remove_reference_t<reference>*;
     using difference_type = typename raw_hash_set::difference_type;
 
     iterator() {}
@@ -918,20 +918,20 @@ class raw_hash_set {
   // that accept std::initializer_list<T> and std::initializer_list<init_type>.
   // This is advantageous for performance.
   //
-  //   // Turns {"abc", "def"} into std::initializer_list<TString>, then 
+  //   // Turns {"abc", "def"} into std::initializer_list<TString>, then
   //   // copies the strings into the set.
-  //   std::unordered_set<TString> s = {"abc", "def"}; 
+  //   std::unordered_set<TString> s = {"abc", "def"};
   //
   //   // Turns {"abc", "def"} into std::initializer_list<const char*>, then
   //   // copies the strings into the set.
-  //   y_absl::flat_hash_set<TString> s = {"abc", "def"}; 
+  //   y_absl::flat_hash_set<TString> s = {"abc", "def"};
   //
   // The same trick is used in insert().
   //
   // The enabler is necessary to prevent this constructor from triggering where
   // the copy constructor is meant to be called.
   //
-  //   y_absl::flat_hash_set<int> a, b{a}; 
+  //   y_absl::flat_hash_set<int> a, b{a};
   //
   // RequiresNotInit<T> is a workaround for gcc prior to 7.1.
   template <class T, RequiresNotInit<T> = 0, RequiresInsertable<T> = 0>
@@ -996,10 +996,10 @@ class raw_hash_set {
       std::is_nothrow_copy_constructible<hasher>::value&&
           std::is_nothrow_copy_constructible<key_equal>::value&&
               std::is_nothrow_copy_constructible<allocator_type>::value)
-      : ctrl_(y_absl::exchange(that.ctrl_, EmptyGroup())), 
-        slots_(y_absl::exchange(that.slots_, nullptr)), 
-        size_(y_absl::exchange(that.size_, 0)), 
-        capacity_(y_absl::exchange(that.capacity_, 0)), 
+      : ctrl_(y_absl::exchange(that.ctrl_, EmptyGroup())),
+        slots_(y_absl::exchange(that.slots_, nullptr)),
+        size_(y_absl::exchange(that.size_, 0)),
+        capacity_(y_absl::exchange(that.capacity_, 0)),
         // Hash, equality and allocator are copied instead of moved because
         // `that` must be left valid. If Hash is std::function<Key>, moving it
         // would create a nullptr functor that cannot be called.
@@ -1039,7 +1039,7 @@ class raw_hash_set {
   }
 
   raw_hash_set& operator=(raw_hash_set&& that) noexcept(
-      y_absl::allocator_traits<allocator_type>::is_always_equal::value&& 
+      y_absl::allocator_traits<allocator_type>::is_always_equal::value&&
           std::is_nothrow_move_assignable<hasher>::value&&
               std::is_nothrow_move_assignable<key_equal>::value) {
     // TODO(sbenza): We should only use the operations from the noexcept clause
@@ -1099,7 +1099,7 @@ class raw_hash_set {
   // This overload kicks in when the argument is an rvalue of insertable and
   // decomposable type other than init_type.
   //
-  //   flat_hash_map<TString, int> m; 
+  //   flat_hash_map<TString, int> m;
   //   m.insert(std::make_pair("abc", 42));
   // TODO(cheshire): A type alias T2 is introduced as a workaround for the nvcc
   // bug.
@@ -1118,7 +1118,7 @@ class raw_hash_set {
   //   flat_hash_set<int> s;
   //   s.insert(n);
   //
-  //   flat_hash_set<TString> s; 
+  //   flat_hash_set<TString> s;
   //   const char* p = "hello";
   //   s.insert(p);
   //
@@ -1135,7 +1135,7 @@ class raw_hash_set {
   // This overload kicks in when the argument is an rvalue of init_type. Its
   // purpose is to handle brace-init-list arguments.
   //
-  //   flat_hash_map<TString, int> s; 
+  //   flat_hash_map<TString, int> s;
   //   s.insert({"abc", 42});
   std::pair<iterator, bool> insert(init_type&& value) {
     return emplace(std::move(value));
@@ -1204,8 +1204,8 @@ class raw_hash_set {
   //
   // For example:
   //
-  //   flat_hash_map<TString, TString> m = {{"abc", "def"}}; 
-  //   // Creates no TString copies and makes no heap allocations. 
+  //   flat_hash_map<TString, TString> m = {{"abc", "def"}};
+  //   // Creates no TString copies and makes no heap allocations.
   //   m.emplace("abc", "xyz");
   template <class... Args, typename std::enable_if<
                                IsDecomposable<Args...>::value, int>::type = 0>
@@ -1291,12 +1291,12 @@ class raw_hash_set {
 
   // Extension API: support for heterogeneous keys.
   //
-  //   std::unordered_set<TString> s; 
-  //   // Turns "abc" into TString. 
+  //   std::unordered_set<TString> s;
+  //   // Turns "abc" into TString.
   //   s.erase("abc");
   //
-  //   flat_hash_set<TString> s; 
-  //   // Uses "abc" directly without copying it into TString. 
+  //   flat_hash_set<TString> s;
+  //   // Uses "abc" directly without copying it into TString.
   //   s.erase("abc");
   template <class K = key_type>
   size_type erase(const key_arg<K>& key) {
@@ -1425,12 +1425,12 @@ class raw_hash_set {
 
   // Extension API: support for heterogeneous keys.
   //
-  //   std::unordered_set<TString> s; 
-  //   // Turns "abc" into TString. 
+  //   std::unordered_set<TString> s;
+  //   // Turns "abc" into TString.
   //   s.count("abc");
   //
-  //   ch_set<TString> s; 
-  //   // Uses "abc" directly without copying it into TString. 
+  //   ch_set<TString> s;
+  //   // Uses "abc" directly without copying it into TString.
   //   s.count("abc");
   template <class K = key_type>
   size_t count(const key_arg<K>& key) const {
@@ -1545,7 +1545,7 @@ class raw_hash_set {
 
  private:
   template <class Container, typename Enabler>
-  friend struct y_absl::container_internal::hashtable_debug_internal:: 
+  friend struct y_absl::container_internal::hashtable_debug_internal::
       HashtableDebugAccess;
 
   struct FindElement {
@@ -1970,7 +1970,7 @@ void EraseIf(Predicate& pred, raw_hash_set<P, H, E, A>* c) {
 
 namespace hashtable_debug_internal {
 template <typename Set>
-struct HashtableDebugAccess<Set, y_absl::void_t<typename Set::raw_hash_set>> { 
+struct HashtableDebugAccess<Set, y_absl::void_t<typename Set::raw_hash_set>> {
   using Traits = typename Set::PolicyTraits;
   using Slot = typename Traits::slot_type;
 
@@ -2029,6 +2029,6 @@ struct HashtableDebugAccess<Set, y_absl::void_t<typename Set::raw_hash_set>> {
 }  // namespace hashtable_debug_internal
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_RAW_HASH_SET_H_

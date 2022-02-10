@@ -1050,14 +1050,14 @@ bool Parse(const char* str, size_t n, std::string* dest) {
   return true;
 }
 
-#if defined(ARCADIA_ROOT) 
+#if defined(ARCADIA_ROOT)
 template <>
 bool Parse(const char* str, size_t n, TString* dest) {
   if (dest == NULL) return true;
   dest->assign(str, n);
   return true;
 }
-#endif 
+#endif
 
 template <>
 bool Parse(const char* str, size_t n, StringPiece* dest) {

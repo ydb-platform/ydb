@@ -186,10 +186,10 @@ size_t TDecodedInput::DoUnboundedNext(const void** ptr) {
         return 0;
     }
 
-    if (Y_UNLIKELY(blockLen > 1024 * 1024 * 1024)) { 
+    if (Y_UNLIKELY(blockLen > 1024 * 1024 * 1024)) {
         ythrow yexception() << "block size exceeds 1 GiB";
-    } 
- 
+    }
+
     TBuffer block;
     block.Resize(blockLen);
 

@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/charconv.h" 
+#include "y_absl/strings/charconv.h"
 
 #include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstring>
 
-#include "y_absl/base/casts.h" 
+#include "y_absl/base/casts.h"
 #include "y_absl/numeric/bits.h"
-#include "y_absl/numeric/int128.h" 
-#include "y_absl/strings/internal/charconv_bigint.h" 
-#include "y_absl/strings/internal/charconv_parse.h" 
+#include "y_absl/numeric/int128.h"
+#include "y_absl/strings/internal/charconv_bigint.h"
+#include "y_absl/strings/internal/charconv_parse.h"
 
 // The macro ABSL_BIT_PACK_FLOATS is defined on x86-64, where IEEE floating
 // point numbers have the same endianness in memory as a bitfield struct
@@ -56,7 +56,7 @@
 // end result normally has the 53rd bit set.  It represents subnormals by using
 // narrower mantissas.
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace {
 
@@ -124,7 +124,7 @@ struct FloatTraits<double> {
       assert(exponent == kMinNormalExponent);
     }
     dbl += mantissa;
-    return y_absl::bit_cast<double>(dbl); 
+    return y_absl::bit_cast<double>(dbl);
 #endif  // ABSL_BIT_PACK_FLOATS
   }
 };
@@ -164,7 +164,7 @@ struct FloatTraits<float> {
       assert(exponent == kMinNormalExponent);
     }
     flt += mantissa;
-    return y_absl::bit_cast<float>(flt); 
+    return y_absl::bit_cast<float>(flt);
 #endif  // ABSL_BIT_PACK_FLOATS
   }
 };
@@ -326,7 +326,7 @@ bool HandleEdgeCase(const strings_internal::ParsedFloat& input, bool negative,
 // number is stored in *value.
 template <typename FloatType>
 void EncodeResult(const CalculatedFloat& calculated, bool negative,
-                  y_absl::from_chars_result* result, FloatType* value) { 
+                  y_absl::from_chars_result* result, FloatType* value) {
   if (calculated.exponent == kOverflow) {
     result->ec = std::errc::result_out_of_range;
     *value = negative ? -std::numeric_limits<FloatType>::max()
@@ -432,7 +432,7 @@ bool MustRoundUp(uint64_t guess_mantissa, int guess_exponent,
   // better limit dynamically based on the value of parsed_decimal.exponent.
   // This would optimize pathological input cases only.  (Sane inputs won't have
   // hundreds of digits of mantissa.)
-  y_absl::strings_internal::BigUnsigned<84> exact_mantissa; 
+  y_absl::strings_internal::BigUnsigned<84> exact_mantissa;
   int exact_exponent = exact_mantissa.ReadFloatMantissa(parsed_decimal, 768);
 
   // Adjust the `guess` arguments to be halfway between A and B.
@@ -446,11 +446,11 @@ bool MustRoundUp(uint64_t guess_mantissa, int guess_exponent,
   //
   // Because we are doing integer math, we can't directly deal with negative
   // exponents.  We instead move these to the other side of the inequality.
-  y_absl::strings_internal::BigUnsigned<84>& lhs = exact_mantissa; 
+  y_absl::strings_internal::BigUnsigned<84>& lhs = exact_mantissa;
   int comparison;
   if (exact_exponent >= 0) {
     lhs.MultiplyByFiveToTheNth(exact_exponent);
-    y_absl::strings_internal::BigUnsigned<84> rhs(guess_mantissa); 
+    y_absl::strings_internal::BigUnsigned<84> rhs(guess_mantissa);
     // There are powers of 2 on both sides of the inequality; reduce this to
     // a single bit-shift.
     if (exact_exponent > guess_exponent) {
@@ -463,8 +463,8 @@ bool MustRoundUp(uint64_t guess_mantissa, int guess_exponent,
     // Move the power of 5 to the other side of the equation, giving us:
     // lhs = exact_mantissa * 2**exact_exponent
     // rhs = guess_mantissa * 5**(-exact_exponent) * 2**guess_exponent
-    y_absl::strings_internal::BigUnsigned<84> rhs = 
-        y_absl::strings_internal::BigUnsigned<84>::FiveToTheNth(-exact_exponent); 
+    y_absl::strings_internal::BigUnsigned<84> rhs =
+        y_absl::strings_internal::BigUnsigned<84>::FiveToTheNth(-exact_exponent);
     rhs.MultiplyBy(guess_mantissa);
     if (exact_exponent > guess_exponent) {
       lhs.ShiftLeft(exact_exponent - guess_exponent);
@@ -981,4 +981,4 @@ const int16_t kPower10ExponentTable[] = {
 
 }  // namespace
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

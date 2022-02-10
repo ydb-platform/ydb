@@ -15,7 +15,7 @@
 // Allow dynamic symbol lookup in an in-memory Elf image.
 //
 
-#include "y_absl/debugging/internal/elf_mem_image.h" 
+#include "y_absl/debugging/internal/elf_mem_image.h"
 
 #ifdef ABSL_HAVE_ELF_MEM_IMAGE  // defined in elf_mem_image.h
 
@@ -23,7 +23,7 @@
 #include <cassert>
 #include <cstddef>
 #include "y_absl/base/config.h"
-#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/internal/raw_logging.h"
 
 // From binutils/include/elf/common.h (this doesn't appear to be documented
 // anywhere else).
@@ -38,7 +38,7 @@
 
 #define VERSYM_VERSION 0x7fff
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
@@ -378,6 +378,6 @@ void ElfMemImage::SymbolIterator::Update(int increment) {
 
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_HAVE_ELF_MEM_IMAGE

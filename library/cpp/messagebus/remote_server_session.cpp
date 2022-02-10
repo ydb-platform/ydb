@@ -21,14 +21,14 @@ TRemoteServerSession::TRemoteServerSession(TBusMessageQueue* queue,
     : TBusSessionImpl(false, queue, proto, handler, config, name)
     , ServerOwnedMessages(config.MaxInFlight, config.MaxInFlightBySize, "ServerOwnedMessages")
     , ServerHandler(handler)
-{ 
+{
     if (config.PerConnectionMaxInFlightBySize > 0) {
         if (config.PerConnectionMaxInFlightBySize < config.MaxMessageSize)
             ythrow yexception()
                 << "too low PerConnectionMaxInFlightBySize value";
     }
-} 
- 
+}
+
 namespace NBus {
     namespace NPrivate {
         class TInvokeOnMessage: public IWorkItem {
@@ -83,7 +83,7 @@ void TRemoteServerSession::OnMessageReceived(TRemoteConnection* c, TVectorSwaps<
         JobCount.Add(workQueueTemp.GetVector()->size());
         Queue->EnqueueWork(*workQueueTemp.GetVector());
     }
-} 
+}
 
 void TRemoteServerSession::InvokeOnMessage(TBusMessagePtrAndHeader& request, TIntrusivePtr<TRemoteServerConnection>& conn) {
     if (Y_UNLIKELY(AtomicGet(Down))) {

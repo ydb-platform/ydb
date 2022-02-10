@@ -2,17 +2,17 @@
 
 LIBRARY()
 
-OWNER( 
-    orivej 
-    g:cpp-contrib 
-) 
+OWNER(
+    orivej
+    g:cpp-contrib
+)
 
 VERSION(0.4.5)
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 PEERDIR(
     contrib/libs/openssl
     contrib/restricted/aws/aws-c-common

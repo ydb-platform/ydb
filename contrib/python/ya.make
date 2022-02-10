@@ -148,7 +148,7 @@ RECURSE(
     CherryPy
     cherrypy-cors
     ciso8601
-    clang 
+    clang
     clang/example
     cli-helpers
     click

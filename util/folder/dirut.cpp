@@ -425,17 +425,17 @@ TString RealLocation(const TString& path) {
 
 int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix) {
     int ret;
- 
+
     TString sysTmp;
- 
+
 #ifdef _win32_
-    if (!prefix || *prefix == '/') { 
+    if (!prefix || *prefix == '/') {
 #else
-    if (!prefix) { 
+    if (!prefix) {
 #endif
-        sysTmp = GetSystemTempDir(); 
+        sysTmp = GetSystemTempDir();
         prefix = sysTmp.data();
-    } 
+    }
 
     if ((ret = ResolvePath(prefix, nullptr, path, 1)) != 0)
         return ret;
@@ -507,19 +507,19 @@ const char* GetFileNameComponent(const char* f) {
 
 TString GetSystemTempDir() {
 #ifdef _win_
-    char buffer[1024]; 
-    DWORD size = GetTempPath(1024, buffer); 
-    if (!size) { 
-        ythrow TSystemError() << "failed to get system temporary directory"; 
-    } 
+    char buffer[1024];
+    DWORD size = GetTempPath(1024, buffer);
+    if (!size) {
+        ythrow TSystemError() << "failed to get system temporary directory";
+    }
     return TString(buffer, size);
 #else
     const char* var = "TMPDIR";
     const char* def = "/tmp";
     const char* r = getenv(var);
     const char* result = r ? r : def;
-    return result[0] == '/' ? result : ResolveDir(result); 
-#endif 
+    return result[0] == '/' ? result : ResolveDir(result);
+#endif
 }
 
 TString ResolveDir(const char* path) {

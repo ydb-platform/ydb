@@ -47,11 +47,11 @@
 #include <utility>
 
 #include "y_absl/base/config.h"
-#include "y_absl/time/internal/cctz/include/cctz/civil_time.h" 
+#include "y_absl/time/internal/cctz/include/cctz/civil_time.h"
 #include "time_zone_fixed.h"
 #include "time_zone_posix.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -595,7 +595,7 @@ inline FilePtr FOpen(const char* path, const char* mode) {
 // A stdio(3)-backed implementation of ZoneInfoSource.
 class FileZoneInfoSource : public ZoneInfoSource {
  public:
-  static std::unique_ptr<ZoneInfoSource> Open(const TString& name); 
+  static std::unique_ptr<ZoneInfoSource> Open(const TString& name);
 
   std::size_t Read(void* ptr, std::size_t size) override {
     size = std::min(size, len_);
@@ -609,9 +609,9 @@ class FileZoneInfoSource : public ZoneInfoSource {
     if (rc == 0) len_ -= offset;
     return rc;
   }
-  TString Version() const override { 
+  TString Version() const override {
     // TODO: It would nice if the zoneinfo data included the tzdb version.
-    return TString(); 
+    return TString();
   }
 
  protected:
@@ -625,12 +625,12 @@ class FileZoneInfoSource : public ZoneInfoSource {
 };
 
 std::unique_ptr<ZoneInfoSource> FileZoneInfoSource::Open(
-    const TString& name) { 
+    const TString& name) {
   // Use of the "file:" prefix is intended for testing purposes only.
   const std::size_t pos = (name.compare(0, 5, "file:") == 0) ? 5 : 0;
 
   // Map the time-zone name to a path name.
-  TString path; 
+  TString path;
   if (pos == name.size() || name[pos] != '/') {
     const char* tzdir = "/usr/share/zoneinfo";
     char* tzdir_env = nullptr;
@@ -646,7 +646,7 @@ std::unique_ptr<ZoneInfoSource> FileZoneInfoSource::Open(
     free(tzdir_env);
 #endif
   }
-  path.append(name, pos, TString::npos); 
+  path.append(name, pos, TString::npos);
 
   // Open the zoneinfo file.
   auto fp = FOpen(path.c_str(), "rb");
@@ -656,18 +656,18 @@ std::unique_ptr<ZoneInfoSource> FileZoneInfoSource::Open(
 
 class AndroidZoneInfoSource : public FileZoneInfoSource {
  public:
-  static std::unique_ptr<ZoneInfoSource> Open(const TString& name); 
-  TString Version() const override { return version_; } 
+  static std::unique_ptr<ZoneInfoSource> Open(const TString& name);
+  TString Version() const override { return version_; }
 
  private:
   explicit AndroidZoneInfoSource(FilePtr fp, std::size_t len,
                                  TString version)
       : FileZoneInfoSource(std::move(fp), len), version_(std::move(version)) {}
-  TString version_; 
+  TString version_;
 };
 
 std::unique_ptr<ZoneInfoSource> AndroidZoneInfoSource::Open(
-    const TString& name) { 
+    const TString& name) {
   // Use of the "file:" prefix is intended for testing purposes only.
   const std::size_t pos = (name.compare(0, 5, "file:") == 0) ? 5 : 0;
 
@@ -774,7 +774,7 @@ std::unique_ptr<ZoneInfoSource> FuchsiaZoneInfoSource::Open(
 
 }  // namespace
 
-bool TimeZoneInfo::Load(const TString& name) { 
+bool TimeZoneInfo::Load(const TString& name) {
   // We can ensure that the loading of UTC or any other fixed-offset
   // zone never fails because the simple, fixed-offset state can be
   // internally generated. Note that this depends on our choice to not
@@ -812,7 +812,7 @@ time_zone::absolute_lookup TimeZoneInfo::LocalTime(std::int_fast64_t unix_time,
   // Note: (unix_time - tr.unix_time) will never overflow as we
   // have ensured that there is always a "nearby" transition.
   return {tr.civil_sec + (unix_time - tr.unix_time),  // TODO: Optimize.
-          tt.utc_offset, tt.is_dst, &*abbreviations_.begin() + tt.abbr_index}; 
+          tt.utc_offset, tt.is_dst, &*abbreviations_.begin() + tt.abbr_index};
 }
 
 // MakeTime() translation with a conversion-preserving +N * 400-year shift.
@@ -952,12 +952,12 @@ time_zone::civil_lookup TimeZoneInfo::MakeTime(const civil_second& cs) const {
 
 TString TimeZoneInfo::Version() const { return version_; }
 
-TString TimeZoneInfo::Description() const { 
+TString TimeZoneInfo::Description() const {
   std::ostringstream oss;
   oss << "#trans=" << transitions_.size();
   oss << " #types=" << transition_types_.size();
   oss << " spec='" << future_spec_ << "'";
-  return oss.str().c_str(); 
+  return oss.str().c_str();
 }
 
 bool TimeZoneInfo::NextTransition(const time_point<seconds>& tp,
@@ -1024,4 +1024,4 @@ bool TimeZoneInfo::PrevTransition(const time_point<seconds>& tp,
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

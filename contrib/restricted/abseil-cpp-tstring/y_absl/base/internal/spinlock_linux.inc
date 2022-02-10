@@ -23,7 +23,7 @@
 #include <cstdint>
 #include <ctime>
 
-#include "y_absl/base/attributes.h" 
+#include "y_absl/base/attributes.h"
 #include "y_absl/base/internal/errno_saver.h"
 
 // The SpinLock lockword is `std::atomic<uint32_t>`. Here we assert that
@@ -58,11 +58,11 @@ extern "C" {
 
 ABSL_ATTRIBUTE_WEAK void ABSL_INTERNAL_C_SYMBOL(AbslInternalSpinLockDelay)(
     std::atomic<uint32_t> *w, uint32_t value, int loop,
-    y_absl::base_internal::SchedulingMode) { 
+    y_absl::base_internal::SchedulingMode) {
   y_absl::base_internal::ErrnoSaver errno_saver;
   struct timespec tm;
   tm.tv_sec = 0;
-  tm.tv_nsec = y_absl::base_internal::SpinLockSuggestedDelayNS(loop); 
+  tm.tv_nsec = y_absl::base_internal::SpinLockSuggestedDelayNS(loop);
   syscall(SYS_futex, w, FUTEX_WAIT | FUTEX_PRIVATE_FLAG, value, &tm);
 }
 

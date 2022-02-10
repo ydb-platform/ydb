@@ -27,11 +27,11 @@
 
 #include <cstdint>
 #include "y_absl/base/casts.h"
-#include "y_absl/base/config.h" 
-#include "y_absl/base/internal/unaligned_access.h" 
-#include "y_absl/base/port.h" 
+#include "y_absl/base/config.h"
+#include "y_absl/base/internal/unaligned_access.h"
+#include "y_absl/base/port.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
 // Use compiler byte-swapping intrinsics if they are available.  32-bit
@@ -322,6 +322,6 @@ inline void Store64(void *p, uint64_t v) {
 }  // namespace big_endian
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_BASE_INTERNAL_ENDIAN_H_

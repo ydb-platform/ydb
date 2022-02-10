@@ -19,10 +19,10 @@
 
 #include <atomic>
 
-#include "y_absl/base/optimization.h" 
+#include "y_absl/base/optimization.h"
 #include "y_absl/profiling/internal/exponential_biased.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace profiling_internal {
 
@@ -206,6 +206,6 @@ std::atomic<int> PeriodicSampler<Tag, default_period>::period_(default_period);
 
 }  // namespace profiling_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_PROFILING_INTERNAL_PERIODIC_SAMPLER_H_

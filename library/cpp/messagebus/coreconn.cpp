@@ -2,10 +2,10 @@
 
 #include "remote_connection.h"
 
-#include <util/datetime/base.h> 
+#include <util/datetime/base.h>
 #include <util/generic/yexception.h>
 #include <util/network/socket.h>
-#include <util/string/util.h> 
+#include <util/string/util.h>
 #include <util/system/thread.h>
 
 namespace NBus {

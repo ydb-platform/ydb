@@ -884,7 +884,7 @@ _Unwind_GetLanguageSpecificData(struct _Unwind_Context *context) {
   return result;
 }
 
-[[maybe_unused]] static uint64_t ValueAsBitPattern(_Unwind_VRS_DataRepresentation representation, 
+[[maybe_unused]] static uint64_t ValueAsBitPattern(_Unwind_VRS_DataRepresentation representation,
                                   void* valuep) {
   uint64_t value = 0;
   switch (representation) {

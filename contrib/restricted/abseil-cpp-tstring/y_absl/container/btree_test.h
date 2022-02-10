@@ -22,13 +22,13 @@
 #include <utility>
 #include <vector>
 
-#include "y_absl/container/btree_map.h" 
-#include "y_absl/container/btree_set.h" 
-#include "y_absl/container/flat_hash_set.h" 
+#include "y_absl/container/btree_map.h"
+#include "y_absl/container/btree_set.h"
+#include "y_absl/container/flat_hash_set.h"
 #include "y_absl/strings/cord.h"
-#include "y_absl/time/time.h" 
+#include "y_absl/time/time.h"
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
@@ -85,17 +85,17 @@ struct Generator {
 };
 
 template <>
-struct Generator<y_absl::Time> { 
+struct Generator<y_absl::Time> {
   int maxval;
   explicit Generator(int m) : maxval(m) {}
-  y_absl::Time operator()(int i) const { return y_absl::FromUnixMillis(i); } 
+  y_absl::Time operator()(int i) const { return y_absl::FromUnixMillis(i); }
 };
 
 template <>
-struct Generator<TString> { 
+struct Generator<TString> {
   int maxval;
   explicit Generator(int m) : maxval(m) {}
-  TString operator()(int i) const { 
+  TString operator()(int i) const {
     char buf[16];
     return GenerateDigits(buf, i, maxval);
   }
@@ -130,7 +130,7 @@ inline std::vector<int> GenerateNumbersWithSeed(int n, int maxval, int seed) {
   std::minstd_rand0 rng(seed);
 
   std::vector<int> values;
-  y_absl::flat_hash_set<int> unique_values; 
+  y_absl::flat_hash_set<int> unique_values;
   if (values.size() < n) {
     for (int i = values.size(); i < n; i++) {
       int value;
@@ -161,6 +161,6 @@ std::vector<V> GenerateValuesWithSeed(int n, int maxval, int seed) {
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_BTREE_TEST_H_

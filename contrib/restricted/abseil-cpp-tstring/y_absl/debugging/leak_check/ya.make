@@ -17,7 +17,7 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/debugging) 
+SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/debugging)
 
 SRCS(
     leak_check.cc

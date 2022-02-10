@@ -19,19 +19,19 @@
 #include <atomic>
 #include <cstdint>
 
-#include "y_absl/base/internal/spinlock_wait.h" 
+#include "y_absl/base/internal/spinlock_wait.h"
 
 #if defined(_WIN32)
-#include "y_absl/base/internal/spinlock_win32.inc" 
+#include "y_absl/base/internal/spinlock_win32.inc"
 #elif defined(__linux__)
-#include "y_absl/base/internal/spinlock_linux.inc" 
+#include "y_absl/base/internal/spinlock_linux.inc"
 #elif defined(__akaros__)
-#include "y_absl/base/internal/spinlock_akaros.inc" 
+#include "y_absl/base/internal/spinlock_akaros.inc"
 #else
-#include "y_absl/base/internal/spinlock_posix.inc" 
+#include "y_absl/base/internal/spinlock_posix.inc"
 #endif
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -78,4 +78,4 @@ int SpinLockSuggestedDelayNS(int loop) {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl

@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/http/server)
 
-OWNER(pg) 
+OWNER(pg)
 
 SIZE(MEDIUM)
 

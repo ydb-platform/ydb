@@ -29,7 +29,7 @@
      defined(__aarch64__) || defined(__riscv))
 #define ABSL_INTERNAL_HAVE_DEBUGGING_STACK_CONSUMPTION 1
 
-namespace y_absl { 
+namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
@@ -43,7 +43,7 @@ int GetSignalHandlerStackConsumption(void (*signal_handler)(int));
 
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl 
+}  // namespace y_absl
 
 #endif  // ABSL_INTERNAL_HAVE_DEBUGGING_STACK_CONSUMPTION
 

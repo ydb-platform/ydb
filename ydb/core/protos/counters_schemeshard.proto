@@ -86,12 +86,12 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxDropLock = 72                 [(CounterOpts) = {Name: "InFlightOps/DropLock"}];
     COUNTER_IN_FLIGHT_OPS_TxDropTableIndexAtMainTable = 73 [(CounterOpts) = {Name: "InFlightOps/DropTableIndexAtMainTable"}];
     COUNTER_SYS_VIEW_PROCESSOR_COUNT = 74                 [(CounterOpts) = {Name: "SysViewProcessors"}];
-
-    COUNTER_FILESTORE_COUNT = 75                          [(CounterOpts) = {Name: "FileStores"}];
-    COUNTER_FILESTORE_SHARD_COUNT = 76                    [(CounterOpts) = {Name: "FileStoreShards"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateFileStore = 77          [(CounterOpts) = {Name: "InFlightOps/CreateFileStore"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterFileStore = 78           [(CounterOpts) = {Name: "InFlightOps/AlterFileStore"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropFileStore = 79            [(CounterOpts) = {Name: "InFlightOps/DropFileStore"}];
+ 
+    COUNTER_FILESTORE_COUNT = 75                          [(CounterOpts) = {Name: "FileStores"}]; 
+    COUNTER_FILESTORE_SHARD_COUNT = 76                    [(CounterOpts) = {Name: "FileStoreShards"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxCreateFileStore = 77          [(CounterOpts) = {Name: "InFlightOps/CreateFileStore"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxAlterFileStore = 78           [(CounterOpts) = {Name: "InFlightOps/AlterFileStore"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxDropFileStore = 79            [(CounterOpts) = {Name: "InFlightOps/DropFileStore"}]; 
 
     COUNTER_TTL_ENABLED_TABLE_COUNT = 80                  [(CounterOpts) = {Name: "TTLEnabledTables"}];
 
@@ -199,10 +199,10 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxAlterSolomonVolume = 43        [(CounterOpts) = {Name: "FinishedOps/AlterSolomonVolume"}];
     COUNTER_FINISHED_OPS_TxDropLock = 44                  [(CounterOpts) = {Name: "FinishedOps/DropLock"}];
     COUNTER_FINISHED_OPS_TxDropTableIndexAtMainTable = 45 [(CounterOpts) = {Name: "FinishedOps/DropTableIndexAtMainTable"}];
-
-    COUNTER_FINISHED_OPS_TxCreateFileStore = 46           [(CounterOpts) = {Name: "FinishedOps/CreateFileStore"}];
-    COUNTER_FINISHED_OPS_TxAlterFileStore = 47            [(CounterOpts) = {Name: "FinishedOps/AlterFileStore"}];
-    COUNTER_FINISHED_OPS_TxDropFileStore = 48             [(CounterOpts) = {Name: "FinishedOps/DropFileStore"}];
+ 
+    COUNTER_FINISHED_OPS_TxCreateFileStore = 46           [(CounterOpts) = {Name: "FinishedOps/CreateFileStore"}]; 
+    COUNTER_FINISHED_OPS_TxAlterFileStore = 47            [(CounterOpts) = {Name: "FinishedOps/AlterFileStore"}]; 
+    COUNTER_FINISHED_OPS_TxDropFileStore = 48             [(CounterOpts) = {Name: "FinishedOps/DropFileStore"}]; 
 
     COUNTER_FINISHED_OPS_TxRestore = 49                   [(CounterOpts) = {Name: "FinishedOps/Restore"}];
 
@@ -328,8 +328,8 @@ enum ETxTypes {
     TXTYPE_RUN_CONDITIONAL_ERASE = 44                     [(TxTypeOpts) = {Name: "TxRunConditionalErase"}];
 
     TXTYPE_STORE_PARTITION_STATS = 45                     [(TxTypeOpts) = {Name: "TxStorePartitionStats"}];
-
-    TXTYPE_FILESTORE_CONFIG_RESULT = 46                   [(TxTypeOpts) = {Name: "TxFileStoreConfigResult"}];
+ 
+    TXTYPE_FILESTORE_CONFIG_RESULT = 46                   [(TxTypeOpts) = {Name: "TxFileStoreConfigResult"}]; 
 
     TXTYPE_MAKEBILL_INDEX_BUILD = 47                      [(TxTypeOpts) = {Name: "TxBillingIndexBuild"}];
 

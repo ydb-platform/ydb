@@ -73,8 +73,8 @@ def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, 
     for log, level in six.iteritems(log_configs):
         yaml_dict["log_config"]["entry"].append({"component": log, "level": int(level)})
     return yaml_dict
-
-
+ 
+ 
 class KikimrConfigGenerator(object):
     def __init__(
             self,

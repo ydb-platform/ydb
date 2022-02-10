@@ -2,8 +2,8 @@
 
 #include <intrin.h>
 
-#define USE_GENERIC_SETGET
-
+#define USE_GENERIC_SETGET 
+ 
 #if defined(_i386_)
 
     #pragma intrinsic(_InterlockedIncrement)
@@ -36,8 +36,8 @@ static inline intptr_t AtomicGetAndAdd(TAtomic& a, intptr_t b) {
     return _InterlockedExchangeAdd((volatile long*)&a, b);
 }
 
-static inline intptr_t AtomicSwap(TAtomic* a, intptr_t b) {
-    return _InterlockedExchange((volatile long*)a, b);
+static inline intptr_t AtomicSwap(TAtomic* a, intptr_t b) { 
+    return _InterlockedExchange((volatile long*)a, b); 
 }
 
 static inline bool AtomicCas(TAtomic* a, intptr_t exchange, intptr_t compare) {
@@ -80,8 +80,8 @@ static inline intptr_t AtomicGetAndAdd(TAtomic& a, intptr_t b) {
     return _InterlockedExchangeAdd64((volatile __int64*)&a, b);
 }
 
-static inline intptr_t AtomicSwap(TAtomic* a, intptr_t b) {
-    return _InterlockedExchange64((volatile __int64*)a, b);
+static inline intptr_t AtomicSwap(TAtomic* a, intptr_t b) { 
+    return _InterlockedExchange64((volatile __int64*)a, b); 
 }
 
 static inline bool AtomicCas(TAtomic* a, intptr_t exchange, intptr_t compare) {
@@ -110,5 +110,5 @@ static inline intptr_t AtomicXor(TAtomic& a, intptr_t b) {
 static inline void AtomicBarrier() {
     TAtomic val = 0;
 
-    AtomicSwap(&val, 0);
+    AtomicSwap(&val, 0); 
 }

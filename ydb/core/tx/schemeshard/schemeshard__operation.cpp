@@ -586,8 +586,8 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         targetName = tx.GetCreateBlockStoreVolume().GetName();
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
-        targetName = tx.GetCreateFileStore().GetName();
-        break;
+        targetName = tx.GetCreateFileStore().GetName(); 
+        break; 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus:
         targetName = tx.GetKesus().GetName();
         break;
@@ -673,8 +673,8 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             create.MutableCreateBlockStoreVolume()->SetName(name);
             break;
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
-            create.MutableCreateFileStore()->SetName(name);
-            break;
+            create.MutableCreateFileStore()->SetName(name); 
+            break; 
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus:
             create.MutableKesus()->SetName(name);
             break;
@@ -854,24 +854,24 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
         case TTxState::ETxType::TxAlterSolomonVolume:
             return CreateAlterSolomon(NextPartId(), txState);
 
-        // BlockStore
-        case TTxState::ETxType::TxCreateBlockStoreVolume:
-            return CreateNewBSV(NextPartId(), txState);
-        case TTxState::ETxType::TxAssignBlockStoreVolume:
-            return CreateAssignBSV(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterBlockStoreVolume:
-            return CreateAlterBSV(NextPartId(), txState);
-        case TTxState::ETxType::TxDropBlockStoreVolume:
-            return CreateDropBSV(NextPartId(), txState);
-
-        // FileStore
-        case TTxState::ETxType::TxCreateFileStore:
-            return CreateNewFileStore(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterFileStore:
-            return CreateAlterFileStore(NextPartId(), txState);
-        case TTxState::ETxType::TxDropFileStore:
-            return CreateDropFileStore(NextPartId(), txState);
-
+        // BlockStore 
+        case TTxState::ETxType::TxCreateBlockStoreVolume: 
+            return CreateNewBSV(NextPartId(), txState); 
+        case TTxState::ETxType::TxAssignBlockStoreVolume: 
+            return CreateAssignBSV(NextPartId(), txState); 
+        case TTxState::ETxType::TxAlterBlockStoreVolume: 
+            return CreateAlterBSV(NextPartId(), txState); 
+        case TTxState::ETxType::TxDropBlockStoreVolume: 
+            return CreateDropBSV(NextPartId(), txState); 
+ 
+        // FileStore 
+        case TTxState::ETxType::TxCreateFileStore: 
+            return CreateNewFileStore(NextPartId(), txState); 
+        case TTxState::ETxType::TxAlterFileStore: 
+            return CreateAlterFileStore(NextPartId(), txState); 
+        case TTxState::ETxType::TxDropFileStore: 
+            return CreateDropFileStore(NextPartId(), txState); 
+ 
         // CDC
         case TTxState::ETxType::TxCreateCdcStream:
             return CreateNewCdcStreamImpl(NextPartId(), txState);
@@ -1006,24 +1006,24 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropLock:
         return DropLock(NextPartId(), tx);
 
-    // BlockStore
+    // BlockStore 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume:
-        return CreateNewBSV(NextPartId(), tx);
+        return CreateNewBSV(NextPartId(), tx); 
     case NKikimrSchemeOp::EOperationType::ESchemeOpAssignBlockStoreVolume:
-        return CreateAssignBSV(NextPartId(), tx);
+        return CreateAssignBSV(NextPartId(), tx); 
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlockStoreVolume:
-        return CreateAlterBSV(NextPartId(), tx);
+        return CreateAlterBSV(NextPartId(), tx); 
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume:
-        return CreateDropBSV(NextPartId(), tx);
-
-    // FileStore
+        return CreateDropBSV(NextPartId(), tx); 
+ 
+    // FileStore 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
-        return CreateNewFileStore(NextPartId(), tx);
+        return CreateNewFileStore(NextPartId(), tx); 
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterFileStore:
-        return CreateAlterFileStore(NextPartId(), tx);
+        return CreateAlterFileStore(NextPartId(), tx); 
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropFileStore:
-        return CreateDropFileStore(NextPartId(), tx);
-
+        return CreateDropFileStore(NextPartId(), tx); 
+ 
     // Login
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin:
         return CreateAlterLogin(NextPartId(), tx);

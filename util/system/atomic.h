@@ -2,8 +2,8 @@
 
 #include "defaults.h"
 
-using TAtomicBase = intptr_t;
-using TAtomic = volatile TAtomicBase;
+using TAtomicBase = intptr_t; 
+using TAtomic = volatile TAtomicBase; 
 
 #if defined(__GNUC__)
     #include "atomic_gcc.h"

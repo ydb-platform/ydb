@@ -1227,7 +1227,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateSubDomain:
     case TTxState::TxCreateExtSubDomain:
     case TTxState::TxCreateBlockStoreVolume:
-    case TTxState::TxCreateFileStore:
+    case TTxState::TxCreateFileStore: 
     case TTxState::TxCreateKesus:
     case TTxState::TxCreateSolomonVolume:
     case TTxState::TxCreateRtmrVolume:
@@ -1241,7 +1241,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
     case TTxState::TxAlterBlockStoreVolume:
-    case TTxState::TxAlterFileStore:
+    case TTxState::TxAlterFileStore: 
     case TTxState::TxAlterKesus:
     case TTxState::TxAlterSubDomain:
     case TTxState::TxAlterExtSubDomain:
@@ -1269,7 +1269,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxForceDropSubDomain:
     case TTxState::TxForceDropExtSubDomain:
     case TTxState::TxDropBlockStoreVolume:
-    case TTxState::TxDropFileStore:
+    case TTxState::TxDropFileStore: 
     case TTxState::TxDropKesus:
     case TTxState::TxDropSolomonVolume:
     case TTxState::TxDropTableIndex:
@@ -2763,42 +2763,42 @@ void TSchemeShard::PersistRemoveBlockStoreVolume(NIceDb::TNiceDb& db, TPathId pa
 }
 
 void TSchemeShard::PersistFileStoreInfo(NIceDb::TNiceDb& db, TPathId pathId, const TFileStoreInfo::TPtr fs)
-{
-    Y_VERIFY(IsLocalId(pathId));
-
-    TString config;
+{ 
+    Y_VERIFY(IsLocalId(pathId)); 
+ 
+    TString config; 
     Y_PROTOBUF_SUPPRESS_NODISCARD fs->Config.SerializeToString(&config);
-
-    db.Table<Schema::FileStoreInfos>()
-        .Key(pathId.LocalPathId)
-        .Update(
-            NIceDb::TUpdate<Schema::FileStoreInfos::Config>(config),
-            NIceDb::TUpdate<Schema::FileStoreInfos::Version>(fs->Version));
-}
-
+ 
+    db.Table<Schema::FileStoreInfos>() 
+        .Key(pathId.LocalPathId) 
+        .Update( 
+            NIceDb::TUpdate<Schema::FileStoreInfos::Config>(config), 
+            NIceDb::TUpdate<Schema::FileStoreInfos::Version>(fs->Version)); 
+} 
+ 
 void TSchemeShard::PersistAddFileStoreAlter(NIceDb::TNiceDb& db, TPathId pathId, const TFileStoreInfo::TPtr fs)
-{
-    Y_VERIFY(IsLocalId(pathId));
-
-    TString config;
+{ 
+    Y_VERIFY(IsLocalId(pathId)); 
+ 
+    TString config; 
     Y_PROTOBUF_SUPPRESS_NODISCARD fs->AlterConfig->SerializeToString(&config);
-
-    db.Table<Schema::FileStoreAlters>()
-        .Key(pathId.LocalPathId)
-        .Update(
-            NIceDb::TUpdate<Schema::FileStoreAlters::Config>(config),
-            NIceDb::TUpdate<Schema::FileStoreAlters::Version>(fs->AlterVersion));
-}
-
+ 
+    db.Table<Schema::FileStoreAlters>() 
+        .Key(pathId.LocalPathId) 
+        .Update( 
+            NIceDb::TUpdate<Schema::FileStoreAlters::Config>(config), 
+            NIceDb::TUpdate<Schema::FileStoreAlters::Version>(fs->AlterVersion)); 
+} 
+ 
 void TSchemeShard::PersistRemoveFileStoreAlter(NIceDb::TNiceDb& db, TPathId pathId)
-{
-    Y_VERIFY(IsLocalId(pathId));
-
-    db.Table<Schema::FileStoreAlters>()
-        .Key(pathId.LocalPathId)
-        .Delete();
-}
-
+{ 
+    Y_VERIFY(IsLocalId(pathId)); 
+ 
+    db.Table<Schema::FileStoreAlters>() 
+        .Key(pathId.LocalPathId) 
+        .Delete(); 
+} 
+ 
 void TSchemeShard::PersistRemoveFileStoreInfo(NIceDb::TNiceDb& db, TPathId pathId)
 {
     Y_VERIFY(IsLocalId(pathId));
@@ -3934,7 +3934,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TSchemeBoardEvents::TEvUpdateAck, Handle);
 
         HFuncTraced(TEvBlockStore::TEvUpdateVolumeConfigResponse, Handle);
-        HFuncTraced(TEvFileStore::TEvUpdateConfigResponse, Handle);
+        HFuncTraced(TEvFileStore::TEvUpdateConfigResponse, Handle); 
         HFuncTraced(NKesus::TEvKesus::TEvSetConfigResult, Handle);
         HFuncTraced(TEvPersQueue::TEvDropTabletReply, Handle);
         HFuncTraced(TEvPersQueue::TEvUpdateConfigResponse, Handle);
@@ -4253,9 +4253,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
     case TPathElement::EPathType::EPathTypeBlockStoreVolume:
         TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_COUNT].Sub(1);
         break;
-    case TPathElement::EPathType::EPathTypeFileStore:
+    case TPathElement::EPathType::EPathTypeFileStore: 
         TabletCounters->Simple()[COUNTER_FILESTORE_COUNT].Sub(1);
-        break;
+        break; 
     case TPathElement::EPathType::EPathTypeKesus:
         TabletCounters->Simple()[COUNTER_KESUS_COUNT].Sub(1);
         break;
@@ -5051,29 +5051,29 @@ void TSchemeShard::Handle(TEvBlockStore::TEvUpdateVolumeConfigResponse::TPtr& ev
 }
 
 void TSchemeShard::Handle(TEvFileStore::TEvUpdateConfigResponse::TPtr& ev, const TActorContext& ctx) {
-    const auto txId = TTxId(ev->Get()->Record.GetTxId());
-    if (!Operations.contains(txId)) {
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Got TEvFileStore::TEvUpdateConfigResponse"
-                << " for unknown txId " << txId
-                << " tabletId " << ev->Get()->Record.GetOrigin());
-        return;
-    }
-
-    auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
-    auto partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
-    if (partId == InvalidSubTxId) {
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Got TEvUpdateVolumeConfigResponse but partId in unknown"
-                << ", for txId: " << txId
-                << ", tabletId: " << tabletId
-                << ", at schemeshard: " << TabletID());
-        return;
-    }
-
-    Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
-}
-
+    const auto txId = TTxId(ev->Get()->Record.GetTxId()); 
+    if (!Operations.contains(txId)) { 
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
+            "Got TEvFileStore::TEvUpdateConfigResponse" 
+                << " for unknown txId " << txId 
+                << " tabletId " << ev->Get()->Record.GetOrigin()); 
+        return; 
+    } 
+ 
+    auto tabletId = TTabletId(ev->Get()->Record.GetOrigin()); 
+    auto partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx); 
+    if (partId == InvalidSubTxId) { 
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
+            "Got TEvUpdateVolumeConfigResponse but partId in unknown" 
+                << ", for txId: " << txId 
+                << ", tabletId: " << tabletId 
+                << ", at schemeshard: " << TabletID()); 
+        return; 
+    } 
+ 
+    Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx); 
+} 
+ 
 void TSchemeShard::Handle(TEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     auto tabletId = TTabletId(record.GetTenantSchemeShard());

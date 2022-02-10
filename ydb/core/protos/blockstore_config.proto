@@ -39,7 +39,7 @@ message TVolumeConfig {
     optional string ProjectId = 8;
     optional string FolderId = 9;
     optional string CloudId = 10;
-    optional uint32 TabletVersion = 11;
+    optional uint32 TabletVersion = 11; 
 
     // Binary data for private use by BlockStore implementation (legacy, unused)
     optional bytes Opaque = 12;

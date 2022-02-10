@@ -636,21 +636,21 @@ Y_UNIT_TEST(TestCastFromString) {
 
 Y_UNIT_TEST(TestMap) {
     TMapType modelProto;
-
+ 
     auto& items = *modelProto.MutableItems();
     items["key1"] = "value1";
     items["key2"] = "value2";
     items["key3"] = "value3";
-
+ 
     TString modelStr(R"_({"Items":[{"key":"key3","value":"value3"},{"key":"key2","value":"value2"},{"key":"key1","value":"value1"}]})_");
-
+ 
     TJson2ProtoConfig config;
     TMapType proto;
     UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TMapType>(modelStr, config));
-
+ 
     UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 } // TestMap
-
+ 
 Y_UNIT_TEST(TestCastRobust) {
     NJson::TJsonValue json;
     json["I32"] = "5";

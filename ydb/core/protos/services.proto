@@ -306,7 +306,7 @@ enum EServiceKikimr {
 };
 
 message TActivity {
-
+ 
     // Must be consistent with IActor::EActorActivity in ActorLib's part.
     // NOTE: all values are used as indices in counters array.
     // NOTE: numeric values can be changed and must be used only locally (inside one process),
@@ -779,14 +779,14 @@ message TActivity {
         YT_TABLE_WRITER_ACTOR = 464;
         SCHEME_BOARD_SUBSCRIBER_PROXY_ACTOR = 465;
         S3_WRAPPER_ACTOR = 466;
-        FILESTORE_SCHEMESHARD = 467;
-        FILESTORE_SERVICE = 468;
-        FILESTORE_SERVICE_WORKER = 469;
+        FILESTORE_SCHEMESHARD = 467; 
+        FILESTORE_SERVICE = 468; 
+        FILESTORE_SERVICE_WORKER = 469; 
         TX_OLAPSHARD_ACTOR = 470;
-        FILESTORE_TABLET = 471;
-        FILESTORE_TABLET_WORKER = 472;
-        FILESTORE_TABLET_PROXY = 473;
-        FILESTORE_SS_PROXY = 474;
+        FILESTORE_TABLET = 471; 
+        FILESTORE_TABLET_WORKER = 472; 
+        FILESTORE_TABLET_PROXY = 473; 
+        FILESTORE_SS_PROXY = 474; 
         IMPORT_S3_DOWNLOADER_ACTOR = 475;
         MEMORY_TRACKER = 476;
         TX_COLUMNSHARD_ACTOR = 477;

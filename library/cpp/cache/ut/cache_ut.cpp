@@ -12,23 +12,23 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
     Y_UNIT_TEST(LRUListTest) {
         typedef TLRUList<int, TString> TListType;
         TListType list(2);
-
+ 
         TListType::TItem x1(1, "ttt");
         list.Insert(&x1);
         UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1);
-
+ 
         TListType::TItem x2(2, "yyy");
         list.Insert(&x2);
         UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1);
-
+ 
         list.Promote(list.GetOldest());
         UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 2);
-
+ 
         TListType::TItem x3(3, "zzz");
         list.Insert(&x3);
         UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 1);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(LRUListWeightedTest) {
         typedef TLRUList<int, TString, size_t (*)(const TString&)> TListType;
         TListType list(7, [](auto& string) {
@@ -68,23 +68,23 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
     Y_UNIT_TEST(LFUListTest) {
         typedef TLFUList<int, TString> TListType;
         TListType list(2);
-
+ 
         TListType::TItem x1(1, "ttt");
         list.Insert(&x1);
         UNIT_ASSERT_EQUAL(list.GetLeastFrequentlyUsed()->Key, 1);
-
+ 
         TListType::TItem x2(2, "yyy");
         list.Insert(&x2);
         UNIT_ASSERT_EQUAL(list.GetLeastFrequentlyUsed()->Key, 1);
-
+ 
         list.Promote(list.GetLeastFrequentlyUsed());
         UNIT_ASSERT_EQUAL(list.GetLeastFrequentlyUsed()->Key, 2);
-
+ 
         TListType::TItem x3(3, "zzz");
         list.Insert(&x3);
         UNIT_ASSERT_EQUAL(list.GetLeastFrequentlyUsed()->Key, 1);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(LWListTest) {
         typedef TLWList<int, TString, size_t, TStrokaWeighter> TListType;
         TListType list(2);

@@ -393,8 +393,8 @@ public:
 };
 
 inline TActorId TTabletStorageInfo::BSProxyIDForChannel(ui32 channel, ui32 generation) const {
-    const ui32 group = GroupFor(channel, generation);
-    Y_VERIFY(group != Max<ui32>());
+    const ui32 group = GroupFor(channel, generation); 
+    Y_VERIFY(group != Max<ui32>()); 
     const TActorId proxy = MakeBlobStorageProxyID(group);
     return proxy;
 }

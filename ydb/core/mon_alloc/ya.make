@@ -1,20 +1,20 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:kikimr)
-
-IF (PROFILE_MEMORY_ALLOCATIONS)
+ 
+IF (PROFILE_MEMORY_ALLOCATIONS) 
     CFLAGS(
         -DPROFILE_MEMORY_ALLOCATIONS
     )
-ENDIF()
-
-SRCS(
-    monitor.cpp
-    profiler.cpp
-    stats.cpp
-)
-
-PEERDIR(
+ENDIF() 
+ 
+SRCS( 
+    monitor.cpp 
+    profiler.cpp 
+    stats.cpp 
+) 
+ 
+PEERDIR( 
     library/cpp/actors/core
     library/cpp/actors/prof
     library/cpp/html/pcdata
@@ -25,8 +25,8 @@ PEERDIR(
     library/cpp/ytalloc/api
     ydb/core/base
     ydb/core/control
-)
-
+) 
+ 
 IF (ALLOCATOR == "TCMALLOC_256K")
     SRCS(
         tcmalloc.cpp
@@ -40,4 +40,4 @@ ELSE()
     )
 ENDIF()
 
-END()
+END() 

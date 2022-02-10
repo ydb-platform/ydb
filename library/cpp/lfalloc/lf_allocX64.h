@@ -37,10 +37,10 @@ static inline long AtomicAdd(TAtomic& a, long b) {
     return _InterlockedExchangeAdd(&a, b) + b;
 }
 
-static inline long AtomicSub(TAtomic& a, long b) {
-    return AtomicAdd(a, -b);
-}
-
+static inline long AtomicSub(TAtomic& a, long b) { 
+    return AtomicAdd(a, -b); 
+} 
+ 
 #pragma comment(lib, "synchronization.lib")
 
 #ifndef NDEBUG
@@ -121,7 +121,7 @@ static inline long AtomicSub(TAtomic& a, long b) {
 
 #ifndef NDEBUG
 #define DBG_FILL_MEMORY
-static bool FillMemoryOnAllocation = true;
+static bool FillMemoryOnAllocation = true; 
 #endif
 
 static bool TransparentHugePages = false; // force MADV_HUGEPAGE for large allocs
@@ -189,9 +189,9 @@ const int N_SIZES = 25;
 #endif
 const int nSizeIdxToSize[N_SIZES] = {
     -1,
-#if defined(_64_)
-    16, 16, 32, 32, 48, 64, 96, 128,
-#else
+#if defined(_64_) 
+    16, 16, 32, 32, 48, 64, 96, 128, 
+#else 
     8,
     16,
     24,
@@ -200,7 +200,7 @@ const int nSizeIdxToSize[N_SIZES] = {
     64,
     96,
     128,
-#endif
+#endif 
     192, 256, 384, 512, 768, 1024, 1536, 2048,
     3072, 4096, 6144, 8192, 12288, 16384, 24576, 32768,
 #ifdef LFALLOC_YT
@@ -214,11 +214,11 @@ const size_t N_MAX_FAST_SIZE = 32768;
 #endif
 const unsigned char size2idxArr1[64 + 1] = {
     1,
-#if defined(_64_)
+#if defined(_64_) 
     2, 2, 4, 4, // 16, 16, 32, 32
-#else
+#else 
     1, 2, 3, 4, // 8, 16, 24, 32
-#endif
+#endif 
     5, 5, 6, 6,                                                     // 48, 64
     7, 7, 7, 7, 8, 8, 8, 8,                                         // 96, 128
     9, 9, 9, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 10, 10, 10,         // 192, 256
@@ -312,25 +312,25 @@ inline void VerifyMmapResult(void* result) {
 static char* AllocWithMMapLinuxImpl(uintptr_t sz, EMMapMode mode) {
     char* volatile* areaPtr;
     char* areaStart;
-    uintptr_t areaFinish;
-
+    uintptr_t areaFinish; 
+ 
     int mapProt = PROT_READ | PROT_WRITE;
     int mapFlags = MAP_PRIVATE | MAP_ANON;
-
-    if (mode == MM_HUGE) {
-        areaPtr = reinterpret_cast<char* volatile*>(&linuxAllocPointerHuge);
-        areaStart = reinterpret_cast<char*>(LINUX_MMAP_AREA_START + N_MAX_WORKSET_SIZE);
-        areaFinish = N_HUGE_AREA_FINISH;
-    } else {
-        areaPtr = reinterpret_cast<char* volatile*>(&linuxAllocPointer);
-        areaStart = reinterpret_cast<char*>(LINUX_MMAP_AREA_START);
-        areaFinish = N_MAX_WORKSET_SIZE;
-
-        if (MapHugeTLB) {
-            mapFlags |= MAP_HUGETLB;
-        }
-    }
-
+ 
+    if (mode == MM_HUGE) { 
+        areaPtr = reinterpret_cast<char* volatile*>(&linuxAllocPointerHuge); 
+        areaStart = reinterpret_cast<char*>(LINUX_MMAP_AREA_START + N_MAX_WORKSET_SIZE); 
+        areaFinish = N_HUGE_AREA_FINISH; 
+    } else { 
+        areaPtr = reinterpret_cast<char* volatile*>(&linuxAllocPointer); 
+        areaStart = reinterpret_cast<char*>(LINUX_MMAP_AREA_START); 
+        areaFinish = N_MAX_WORKSET_SIZE; 
+ 
+        if (MapHugeTLB) { 
+            mapFlags |= MAP_HUGETLB; 
+        } 
+    } 
+ 
     bool wrapped = false;
     for (;;) {
         char* prevAllocPtr = *areaPtr;
@@ -340,24 +340,24 @@ static char* AllocWithMMapLinuxImpl(uintptr_t sz, EMMapMode mode) {
                 NMalloc::AbortFromCorruptedAllocator("virtual memory is over fragmented");
             }
             // wrap after all area is used
-            DoCas(areaPtr, areaStart, prevAllocPtr);
+            DoCas(areaPtr, areaStart, prevAllocPtr); 
             wrapped = true;
             continue;
         }
 
-        if (DoCas(areaPtr, nextAllocPtr, prevAllocPtr) != prevAllocPtr)
+        if (DoCas(areaPtr, nextAllocPtr, prevAllocPtr) != prevAllocPtr) 
             continue;
 
         char* largeBlock = (char*)mmap(prevAllocPtr, sz, mapProt, mapFlags, -1, 0);
         VerifyMmapResult(largeBlock);
         if (largeBlock == prevAllocPtr)
-            return largeBlock;
+            return largeBlock; 
         if (largeBlock)
             munmap(largeBlock, sz);
 
         if (sz < 0x80000) {
             // skip utilized area with big steps
-            DoCas(areaPtr, nextAllocPtr + 0x10 * 0x10000, nextAllocPtr);
+            DoCas(areaPtr, nextAllocPtr + 0x10 * 0x10000, nextAllocPtr); 
         }
     }
 }
@@ -367,14 +367,14 @@ static char* AllocWithMMap(uintptr_t sz, EMMapMode mode) {
     (void)mode;
 #ifdef _MSC_VER
     char* largeBlock = (char*)VirtualAlloc(0, sz, MEM_RESERVE, PAGE_READWRITE);
-    if (Y_UNLIKELY(largeBlock == nullptr))
+    if (Y_UNLIKELY(largeBlock == nullptr)) 
         NMalloc::AbortFromCorruptedAllocator("out of memory");
     if (Y_UNLIKELY(uintptr_t(((char*)largeBlock - ALLOC_START) + sz) >= N_MAX_WORKSET_SIZE))
         NMalloc::AbortFromCorruptedAllocator("out of working set, something has broken");
 #else
 #if defined(_freebsd_) || !defined(_64_)
     char* largeBlock = (char*)mmap(0, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
-    VerifyMmapResult(largeBlock);
+    VerifyMmapResult(largeBlock); 
     if (Y_UNLIKELY(uintptr_t(((char*)largeBlock - ALLOC_START) + sz) >= N_MAX_WORKSET_SIZE))
         NMalloc::AbortFromCorruptedAllocator("out of working set, something has broken");
 #else
@@ -384,7 +384,7 @@ static char* AllocWithMMap(uintptr_t sz, EMMapMode mode) {
     }
 #endif
 #endif
-    Y_ASSERT_NOBT(largeBlock);
+    Y_ASSERT_NOBT(largeBlock); 
     IncrementCounter(CT_MMAP, sz);
     IncrementCounter(CT_MMAP_CNT, 1);
     return largeBlock;
@@ -779,8 +779,8 @@ static bool DefragmentMem() {
         return false;
     }
 
-    IncrementCounter(CT_DEGRAGMENT_CNT, 1);
-
+    IncrementCounter(CT_DEGRAGMENT_CNT, 1); 
+ 
     int* nFreeCount = (int*)SystemAlloc(N_CHUNKS * sizeof(int));
     if (Y_UNLIKELY(!nFreeCount)) {
         //__debugbreak();
@@ -886,8 +886,8 @@ enum EDefrag {
 };
 
 static void* SlowLFAlloc(int nSizeIdx, int blockSize, EDefrag defrag) {
-    IncrementCounter(CT_SLOW_ALLOC_CNT, 1);
-
+    IncrementCounter(CT_SLOW_ALLOC_CNT, 1); 
+ 
     TLFLockHolder ls;
     for (;;) {
         bool locked = ls.TryLock(&LFGlobalLock);
@@ -918,9 +918,9 @@ static void* SlowLFAlloc(int nSizeIdx, int blockSize, EDefrag defrag) {
         }
 
         char* largeBlock = AllocWithMMap(N_LARGE_ALLOC_SIZE, MM_NORMAL);
-        uintptr_t addr = ((largeBlock - ALLOC_START) + N_CHUNK_SIZE - 1) & (~(N_CHUNK_SIZE - 1));
-        uintptr_t endAddr = ((largeBlock - ALLOC_START) + N_LARGE_ALLOC_SIZE) & (~(N_CHUNK_SIZE - 1));
-        for (uintptr_t p = addr; p < endAddr; p += N_CHUNK_SIZE) {
+        uintptr_t addr = ((largeBlock - ALLOC_START) + N_CHUNK_SIZE - 1) & (~(N_CHUNK_SIZE - 1)); 
+        uintptr_t endAddr = ((largeBlock - ALLOC_START) + N_LARGE_ALLOC_SIZE) & (~(N_CHUNK_SIZE - 1)); 
+        for (uintptr_t p = addr; p < endAddr; p += N_CHUNK_SIZE) { 
             uintptr_t chunk = p / N_CHUNK_SIZE;
             Y_ASSERT_NOBT(chunk * N_CHUNK_SIZE == p);
             Y_ASSERT_NOBT(chunkSizeIdx[chunk] == 0);
@@ -1031,70 +1031,70 @@ struct TLocalCounter {
     }
 };
 
-////////////////////////////////////////////////////////////////////////////////
-// DBG stuff
-////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////// 
+// DBG stuff 
+//////////////////////////////////////////////////////////////////////////////// 
 
-#if defined(LFALLOC_DBG)
-
-struct TPerTagAllocCounter {
-    TAtomic Size;
-    TAtomic Count;
-
+#if defined(LFALLOC_DBG) 
+ 
+struct TPerTagAllocCounter { 
+    TAtomic Size; 
+    TAtomic Count; 
+ 
     Y_FORCE_INLINE void Alloc(size_t size) {
-        AtomicAdd(Size, size);
-        AtomicAdd(Count, 1);
-    }
-
+        AtomicAdd(Size, size); 
+        AtomicAdd(Count, 1); 
+    } 
+ 
     Y_FORCE_INLINE void Free(size_t size) {
-        AtomicSub(Size, size);
-        AtomicSub(Count, 1);
-    }
-};
-
-struct TLocalPerTagAllocCounter {
-    intptr_t Size;
-    int Count;
-    int Updates;
-
+        AtomicSub(Size, size); 
+        AtomicSub(Count, 1); 
+    } 
+}; 
+ 
+struct TLocalPerTagAllocCounter { 
+    intptr_t Size; 
+    int Count; 
+    int Updates; 
+ 
     Y_FORCE_INLINE void Init() {
-        Size = 0;
-        Count = 0;
-        Updates = 0;
-    }
-
+        Size = 0; 
+        Count = 0; 
+        Updates = 0; 
+    } 
+ 
     Y_FORCE_INLINE void Alloc(TPerTagAllocCounter& parent, size_t size) {
-        Size += size;
-        ++Count;
-        if (++Updates > MAX_LOCAL_UPDATES) {
-            Flush(parent);
-        }
-    }
-
+        Size += size; 
+        ++Count; 
+        if (++Updates > MAX_LOCAL_UPDATES) { 
+            Flush(parent); 
+        } 
+    } 
+ 
     Y_FORCE_INLINE void Free(TPerTagAllocCounter& parent, size_t size) {
-        Size -= size;
-        --Count;
-        if (++Updates > MAX_LOCAL_UPDATES) {
-            Flush(parent);
-        }
-    }
-
+        Size -= size; 
+        --Count; 
+        if (++Updates > MAX_LOCAL_UPDATES) { 
+            Flush(parent); 
+        } 
+    } 
+ 
     Y_FORCE_INLINE void Flush(TPerTagAllocCounter& parent) {
         AtomicAdd(parent.Size, Size);
         Size = 0;
         AtomicAdd(parent.Count, Count);
         Count = 0;
-        Updates = 0;
-    }
-};
-
-static const int DBG_ALLOC_MAX_TAG = 1000;
+        Updates = 0; 
+    } 
+}; 
+ 
+static const int DBG_ALLOC_MAX_TAG = 1000; 
 static const int DBG_ALLOC_ALIGNED_TAG = 0xF0000000;
-static const int DBG_ALLOC_NUM_SIZES = 30;
-static TPerTagAllocCounter GlobalPerTagAllocCounters[DBG_ALLOC_MAX_TAG][DBG_ALLOC_NUM_SIZES];
-
+static const int DBG_ALLOC_NUM_SIZES = 30; 
+static TPerTagAllocCounter GlobalPerTagAllocCounters[DBG_ALLOC_MAX_TAG][DBG_ALLOC_NUM_SIZES]; 
+ 
 #endif // LFALLOC_DBG
-
+ 
 //////////////////////////////////////////////////////////////////////////
 const int THREAD_BUF = 256;
 static int borderSizes[N_SIZES];
@@ -1107,9 +1107,9 @@ struct TThreadAllocInfo {
     TThreadAllocInfo* pNextInfo;
     TLocalCounter LocalCounters[CT_MAX];
 
-#if defined(LFALLOC_DBG)
-    TLocalPerTagAllocCounter LocalPerTagAllocCounters[DBG_ALLOC_MAX_TAG][DBG_ALLOC_NUM_SIZES];
-#endif
+#if defined(LFALLOC_DBG) 
+    TLocalPerTagAllocCounter LocalPerTagAllocCounters[DBG_ALLOC_MAX_TAG][DBG_ALLOC_NUM_SIZES]; 
+#endif 
 #ifdef _win_
     HANDLE hThread;
 #endif
@@ -1136,14 +1136,14 @@ struct TThreadAllocInfo {
         for (int i = 0; i < CT_MAX; ++i) {
             LocalCounters[i].Init(&GlobalCounters[i]);
         }
-#if defined(LFALLOC_DBG)
-        for (int tag = 0; tag < DBG_ALLOC_MAX_TAG; ++tag) {
-            for (int sizeIdx = 0; sizeIdx < DBG_ALLOC_NUM_SIZES; ++sizeIdx) {
-                auto& local = LocalPerTagAllocCounters[tag][sizeIdx];
-                local.Init();
-            }
-        }
-#endif
+#if defined(LFALLOC_DBG) 
+        for (int tag = 0; tag < DBG_ALLOC_MAX_TAG; ++tag) { 
+            for (int sizeIdx = 0; sizeIdx < DBG_ALLOC_NUM_SIZES; ++sizeIdx) { 
+                auto& local = LocalPerTagAllocCounters[tag][sizeIdx]; 
+                local.Init(); 
+            } 
+        } 
+#endif 
     }
     void Done() {
         for (auto sizeIdx : FreePtrIndex) {
@@ -1152,15 +1152,15 @@ struct TThreadAllocInfo {
         for (auto& localCounter : LocalCounters) {
             localCounter.Flush();
         }
-#if defined(LFALLOC_DBG)
-        for (int tag = 0; tag < DBG_ALLOC_MAX_TAG; ++tag) {
-            for (int sizeIdx = 0; sizeIdx < DBG_ALLOC_NUM_SIZES; ++sizeIdx) {
-                auto& local = LocalPerTagAllocCounters[tag][sizeIdx];
-                auto& global = GlobalPerTagAllocCounters[tag][sizeIdx];
-                local.Flush(global);
-            }
-        }
-#endif
+#if defined(LFALLOC_DBG) 
+        for (int tag = 0; tag < DBG_ALLOC_MAX_TAG; ++tag) { 
+            for (int sizeIdx = 0; sizeIdx < DBG_ALLOC_NUM_SIZES; ++sizeIdx) { 
+                auto& local = LocalPerTagAllocCounters[tag][sizeIdx]; 
+                auto& global = GlobalPerTagAllocCounters[tag][sizeIdx]; 
+                local.Flush(global); 
+            } 
+        } 
+#endif 
 #ifdef _win_
         if (hThread)
             CloseHandle(hThread);
@@ -1304,21 +1304,21 @@ static void AllocThreadInfo() {
     // DBG stuff
     //////////////////////////////////////////////////////////////////////////
 
-#if defined(LFALLOC_DBG)
+#if defined(LFALLOC_DBG) 
 
-struct TAllocHeader {
+struct TAllocHeader { 
     uint64_t Size;
     int Tag;
-    int Cookie;
-};
-
+    int Cookie; 
+}; 
+ 
 // should be power of 2
 static_assert(sizeof(TAllocHeader) == 16);
 
 static inline void* GetAllocPtr(TAllocHeader* p) {
-    return p + 1;
-}
-
+    return p + 1; 
+} 
+ 
 static inline TAllocHeader* GetAllocHeader(void* p) {
     auto* header = ((TAllocHeader*)p) - 1;
     if (header->Tag == DBG_ALLOC_ALIGNED_TAG) {
@@ -1326,24 +1326,24 @@ static inline TAllocHeader* GetAllocHeader(void* p) {
     }
 
     return header;
-}
-
-PERTHREAD int AllocationTag;
+} 
+ 
+PERTHREAD int AllocationTag; 
 extern "C" int SetThreadAllocTag(int tag) {
-    int prevTag = AllocationTag;
+    int prevTag = AllocationTag; 
     if (tag < DBG_ALLOC_MAX_TAG && tag >= 0) {
-        AllocationTag = tag;
-    }
-    return prevTag;
-}
-
-PERTHREAD bool ProfileCurrentThread;
+        AllocationTag = tag; 
+    } 
+    return prevTag; 
+} 
+ 
+PERTHREAD bool ProfileCurrentThread; 
 extern "C" bool SetProfileCurrentThread(bool newVal) {
-    bool prevVal = ProfileCurrentThread;
-    ProfileCurrentThread = newVal;
-    return prevVal;
-}
-
+    bool prevVal = ProfileCurrentThread; 
+    ProfileCurrentThread = newVal; 
+    return prevVal; 
+} 
+ 
 static volatile bool ProfileAllThreads;
 extern "C" bool SetProfileAllThreads(bool newVal) {
     bool prevVal = ProfileAllThreads;
@@ -1351,176 +1351,176 @@ extern "C" bool SetProfileAllThreads(bool newVal) {
     return prevVal;
 }
 
-static volatile bool AllocationSamplingEnabled;
+static volatile bool AllocationSamplingEnabled; 
 extern "C" bool SetAllocationSamplingEnabled(bool newVal) {
-    bool prevVal = AllocationSamplingEnabled;
-    AllocationSamplingEnabled = newVal;
-    return prevVal;
-}
-
-static size_t AllocationSampleRate = 1000;
+    bool prevVal = AllocationSamplingEnabled; 
+    AllocationSamplingEnabled = newVal; 
+    return prevVal; 
+} 
+ 
+static size_t AllocationSampleRate = 1000; 
 extern "C" size_t SetAllocationSampleRate(size_t newVal) {
-    size_t prevVal = AllocationSampleRate;
-    AllocationSampleRate = newVal;
-    return prevVal;
-}
-
-static size_t AllocationSampleMaxSize = N_MAX_FAST_SIZE;
+    size_t prevVal = AllocationSampleRate; 
+    AllocationSampleRate = newVal; 
+    return prevVal; 
+} 
+ 
+static size_t AllocationSampleMaxSize = N_MAX_FAST_SIZE; 
 extern "C" size_t SetAllocationSampleMaxSize(size_t newVal) {
-    size_t prevVal = AllocationSampleMaxSize;
-    AllocationSampleMaxSize = newVal;
-    return prevVal;
-}
-
-using TAllocationCallback = int(int tag, size_t size, int sizeIdx);
-static TAllocationCallback* AllocationCallback;
+    size_t prevVal = AllocationSampleMaxSize; 
+    AllocationSampleMaxSize = newVal; 
+    return prevVal; 
+} 
+ 
+using TAllocationCallback = int(int tag, size_t size, int sizeIdx); 
+static TAllocationCallback* AllocationCallback; 
 extern "C" TAllocationCallback* SetAllocationCallback(TAllocationCallback* newVal) {
-    TAllocationCallback* prevVal = AllocationCallback;
-    AllocationCallback = newVal;
-    return prevVal;
-}
-
-using TDeallocationCallback = void(int cookie, int tag, size_t size, int sizeIdx);
-static TDeallocationCallback* DeallocationCallback;
+    TAllocationCallback* prevVal = AllocationCallback; 
+    AllocationCallback = newVal; 
+    return prevVal; 
+} 
+ 
+using TDeallocationCallback = void(int cookie, int tag, size_t size, int sizeIdx); 
+static TDeallocationCallback* DeallocationCallback; 
 extern "C" TDeallocationCallback* SetDeallocationCallback(TDeallocationCallback* newVal) {
-    TDeallocationCallback* prevVal = DeallocationCallback;
-    DeallocationCallback = newVal;
-    return prevVal;
-}
-
-PERTHREAD TAtomic AllocationsCount;
-PERTHREAD bool InAllocationCallback;
-
-static const int DBG_ALLOC_INVALID_COOKIE = -1;
+    TDeallocationCallback* prevVal = DeallocationCallback; 
+    DeallocationCallback = newVal; 
+    return prevVal; 
+} 
+ 
+PERTHREAD TAtomic AllocationsCount; 
+PERTHREAD bool InAllocationCallback; 
+ 
+static const int DBG_ALLOC_INVALID_COOKIE = -1; 
 static inline int SampleAllocation(TAllocHeader* p, int sizeIdx) {
-    int cookie = DBG_ALLOC_INVALID_COOKIE;
+    int cookie = DBG_ALLOC_INVALID_COOKIE; 
     if (AllocationSamplingEnabled && (ProfileCurrentThread || ProfileAllThreads) && !InAllocationCallback) {
-        if (p->Size > AllocationSampleMaxSize || ++AllocationsCount % AllocationSampleRate == 0) {
-            if (AllocationCallback) {
-                InAllocationCallback = true;
-                cookie = AllocationCallback(p->Tag, p->Size, sizeIdx);
-                InAllocationCallback = false;
-            }
-        }
-    }
-    return cookie;
-}
-
+        if (p->Size > AllocationSampleMaxSize || ++AllocationsCount % AllocationSampleRate == 0) { 
+            if (AllocationCallback) { 
+                InAllocationCallback = true; 
+                cookie = AllocationCallback(p->Tag, p->Size, sizeIdx); 
+                InAllocationCallback = false; 
+            } 
+        } 
+    } 
+    return cookie; 
+} 
+ 
 static inline void SampleDeallocation(TAllocHeader* p, int sizeIdx) {
-    if (p->Cookie != DBG_ALLOC_INVALID_COOKIE && !InAllocationCallback) {
-        if (DeallocationCallback) {
-            InAllocationCallback = true;
-            DeallocationCallback(p->Cookie, p->Tag, p->Size, sizeIdx);
-            InAllocationCallback = false;
-        }
-    }
-}
-
+    if (p->Cookie != DBG_ALLOC_INVALID_COOKIE && !InAllocationCallback) { 
+        if (DeallocationCallback) { 
+            InAllocationCallback = true; 
+            DeallocationCallback(p->Cookie, p->Tag, p->Size, sizeIdx); 
+            InAllocationCallback = false; 
+        } 
+    } 
+} 
+ 
 static inline void TrackPerTagAllocation(TAllocHeader* p, int sizeIdx) {
     if (p->Tag < DBG_ALLOC_MAX_TAG && p->Tag >= 0) {
         Y_ASSERT_NOBT(sizeIdx < DBG_ALLOC_NUM_SIZES);
-        auto& global = GlobalPerTagAllocCounters[p->Tag][sizeIdx];
-
-        TThreadAllocInfo* thr = pThreadInfo;
-        if (thr) {
-            auto& local = thr->LocalPerTagAllocCounters[p->Tag][sizeIdx];
-            local.Alloc(global, p->Size);
-        } else {
-            global.Alloc(p->Size);
-        }
-    }
-}
-
+        auto& global = GlobalPerTagAllocCounters[p->Tag][sizeIdx]; 
+ 
+        TThreadAllocInfo* thr = pThreadInfo; 
+        if (thr) { 
+            auto& local = thr->LocalPerTagAllocCounters[p->Tag][sizeIdx]; 
+            local.Alloc(global, p->Size); 
+        } else { 
+            global.Alloc(p->Size); 
+        } 
+    } 
+} 
+ 
 static inline void TrackPerTagDeallocation(TAllocHeader* p, int sizeIdx) {
     if (p->Tag < DBG_ALLOC_MAX_TAG && p->Tag >= 0) {
         Y_ASSERT_NOBT(sizeIdx < DBG_ALLOC_NUM_SIZES);
-        auto& global = GlobalPerTagAllocCounters[p->Tag][sizeIdx];
-
-        TThreadAllocInfo* thr = pThreadInfo;
-        if (thr) {
-            auto& local = thr->LocalPerTagAllocCounters[p->Tag][sizeIdx];
-            local.Free(global, p->Size);
-        } else {
-            global.Free(p->Size);
-        }
-    }
-}
-
+        auto& global = GlobalPerTagAllocCounters[p->Tag][sizeIdx]; 
+ 
+        TThreadAllocInfo* thr = pThreadInfo; 
+        if (thr) { 
+            auto& local = thr->LocalPerTagAllocCounters[p->Tag][sizeIdx]; 
+            local.Free(global, p->Size); 
+        } else { 
+            global.Free(p->Size); 
+        } 
+    } 
+} 
+ 
 static void* TrackAllocation(void* ptr, size_t size, int sizeIdx) {
-    TAllocHeader* p = (TAllocHeader*)ptr;
-    p->Size = size;
-    p->Tag = AllocationTag;
-    p->Cookie = SampleAllocation(p, sizeIdx);
-    TrackPerTagAllocation(p, sizeIdx);
-    return GetAllocPtr(p);
-}
-
+    TAllocHeader* p = (TAllocHeader*)ptr; 
+    p->Size = size; 
+    p->Tag = AllocationTag; 
+    p->Cookie = SampleAllocation(p, sizeIdx); 
+    TrackPerTagAllocation(p, sizeIdx); 
+    return GetAllocPtr(p); 
+} 
+ 
 static void TrackDeallocation(void* ptr, int sizeIdx) {
-    TAllocHeader* p = (TAllocHeader*)ptr;
-    SampleDeallocation(p, sizeIdx);
-    TrackPerTagDeallocation(p, sizeIdx);
-}
-
-struct TPerTagAllocInfo {
-    ssize_t Count;
-    ssize_t Size;
-};
-
-extern "C" void GetPerTagAllocInfo(
-    bool flushPerThreadCounters,
-    TPerTagAllocInfo* info,
-    int& maxTag,
+    TAllocHeader* p = (TAllocHeader*)ptr; 
+    SampleDeallocation(p, sizeIdx); 
+    TrackPerTagDeallocation(p, sizeIdx); 
+} 
+ 
+struct TPerTagAllocInfo { 
+    ssize_t Count; 
+    ssize_t Size; 
+}; 
+ 
+extern "C" void GetPerTagAllocInfo( 
+    bool flushPerThreadCounters, 
+    TPerTagAllocInfo* info, 
+    int& maxTag, 
     int& numSizes) {
-    maxTag = DBG_ALLOC_MAX_TAG;
-    numSizes = DBG_ALLOC_NUM_SIZES;
-
-    if (info) {
-        if (flushPerThreadCounters) {
+    maxTag = DBG_ALLOC_MAX_TAG; 
+    numSizes = DBG_ALLOC_NUM_SIZES; 
+ 
+    if (info) { 
+        if (flushPerThreadCounters) { 
             TLFLockHolder ll(&LFLockThreadInfo);
             for (TThreadAllocInfo** p = &pThreadInfoList; *p;) {
                 TThreadAllocInfo* pInfo = *p;
-                for (int tag = 0; tag < DBG_ALLOC_MAX_TAG; ++tag) {
-                    for (int sizeIdx = 0; sizeIdx < DBG_ALLOC_NUM_SIZES; ++sizeIdx) {
-                        auto& local = pInfo->LocalPerTagAllocCounters[tag][sizeIdx];
-                        auto& global = GlobalPerTagAllocCounters[tag][sizeIdx];
-                        local.Flush(global);
-                    }
-                }
-                p = &pInfo->pNextInfo;
-            }
-        }
-
-        for (int tag = 0; tag < DBG_ALLOC_MAX_TAG; ++tag) {
-            for (int sizeIdx = 0; sizeIdx < DBG_ALLOC_NUM_SIZES; ++sizeIdx) {
-                auto& global = GlobalPerTagAllocCounters[tag][sizeIdx];
+                for (int tag = 0; tag < DBG_ALLOC_MAX_TAG; ++tag) { 
+                    for (int sizeIdx = 0; sizeIdx < DBG_ALLOC_NUM_SIZES; ++sizeIdx) { 
+                        auto& local = pInfo->LocalPerTagAllocCounters[tag][sizeIdx]; 
+                        auto& global = GlobalPerTagAllocCounters[tag][sizeIdx]; 
+                        local.Flush(global); 
+                    } 
+                } 
+                p = &pInfo->pNextInfo; 
+            } 
+        } 
+ 
+        for (int tag = 0; tag < DBG_ALLOC_MAX_TAG; ++tag) { 
+            for (int sizeIdx = 0; sizeIdx < DBG_ALLOC_NUM_SIZES; ++sizeIdx) { 
+                auto& global = GlobalPerTagAllocCounters[tag][sizeIdx]; 
                 auto& res = info[tag * DBG_ALLOC_NUM_SIZES + sizeIdx];
-                res.Count = global.Count;
-                res.Size = global.Size;
-            }
-        }
-    }
-}
-
+                res.Count = global.Count; 
+                res.Size = global.Size; 
+            } 
+        } 
+    } 
+} 
+ 
 #endif // LFALLOC_DBG
-
+ 
 //////////////////////////////////////////////////////////////////////////
 static Y_FORCE_INLINE void* LFAllocImpl(size_t _nSize) {
-#if defined(LFALLOC_DBG)
-    size_t size = _nSize;
-    _nSize += sizeof(TAllocHeader);
-#endif
-
+#if defined(LFALLOC_DBG) 
+    size_t size = _nSize; 
+    _nSize += sizeof(TAllocHeader); 
+#endif 
+ 
     IncrementCounter(CT_USER_ALLOC, _nSize);
 
     int nSizeIdx;
     if (_nSize > 512) {
-        if (_nSize > N_MAX_FAST_SIZE) {
-            void* ptr = LargeBlockAlloc(_nSize, CT_LARGE_ALLOC);
-#if defined(LFALLOC_DBG)
-            ptr = TrackAllocation(ptr, size, N_SIZES);
-#endif
-            return ptr;
-        }
+        if (_nSize > N_MAX_FAST_SIZE) { 
+            void* ptr = LargeBlockAlloc(_nSize, CT_LARGE_ALLOC); 
+#if defined(LFALLOC_DBG) 
+            ptr = TrackAllocation(ptr, size, N_SIZES); 
+#endif 
+            return ptr; 
+        } 
         nSizeIdx = size2idxArr2[(_nSize - 1) >> 8];
     } else
         nSizeIdx = size2idxArr1[1 + (((int)_nSize - 1) >> 3)];
@@ -1533,22 +1533,22 @@ static Y_FORCE_INLINE void* LFAllocImpl(size_t _nSize) {
         AllocThreadInfo();
         thr = pThreadInfo;
         if (!thr) {
-            void* ptr = LFAllocNoCache(nSizeIdx, MEM_DEFRAG);
-#if defined(LFALLOC_DBG)
-            ptr = TrackAllocation(ptr, size, nSizeIdx);
-#endif
-            return ptr;
+            void* ptr = LFAllocNoCache(nSizeIdx, MEM_DEFRAG); 
+#if defined(LFALLOC_DBG) 
+            ptr = TrackAllocation(ptr, size, nSizeIdx); 
+#endif 
+            return ptr; 
         }
     }
     {
         int& freePtrIdx = thr->FreePtrIndex[nSizeIdx];
-        if (freePtrIdx < THREAD_BUF) {
-            void* ptr = thr->FreePtrs[nSizeIdx][freePtrIdx++];
-#if defined(LFALLOC_DBG)
-            ptr = TrackAllocation(ptr, size, nSizeIdx);
-#endif
-            return ptr;
-        }
+        if (freePtrIdx < THREAD_BUF) { 
+            void* ptr = thr->FreePtrs[nSizeIdx][freePtrIdx++]; 
+#if defined(LFALLOC_DBG) 
+            ptr = TrackAllocation(ptr, size, nSizeIdx); 
+#endif 
+            return ptr; 
+        } 
 
         // try to alloc from global free list
         char* buf[FL_GROUP_SIZE];
@@ -1563,11 +1563,11 @@ static Y_FORCE_INLINE void* LFAllocImpl(size_t _nSize) {
         for (int i = 0; i < count - 1; ++i)
             dstBuf[-i] = buf[i];
         freePtrIdx -= count - 1;
-        void* ptr = buf[count - 1];
-#if defined(LFALLOC_DBG)
-        ptr = TrackAllocation(ptr, size, nSizeIdx);
-#endif
-        return ptr;
+        void* ptr = buf[count - 1]; 
+#if defined(LFALLOC_DBG) 
+        ptr = TrackAllocation(ptr, size, nSizeIdx); 
+#endif 
+        return ptr; 
     }
 }
 
@@ -1582,33 +1582,33 @@ static Y_FORCE_INLINE void* LFAlloc(size_t _nSize) {
 }
 
 static Y_FORCE_INLINE void LFFree(void* p) {
-#if defined(LFALLOC_DBG)
-    if (p == nullptr)
-        return;
-    p = GetAllocHeader(p);
-#endif
-
+#if defined(LFALLOC_DBG) 
+    if (p == nullptr) 
+        return; 
+    p = GetAllocHeader(p); 
+#endif 
+ 
     uintptr_t chkOffset = ((char*)p - ALLOC_START) - 1ll;
     if (chkOffset >= N_MAX_WORKSET_SIZE) {
         if (p == nullptr)
             return;
-#if defined(LFALLOC_DBG)
-        TrackDeallocation(p, N_SIZES);
-#endif
+#if defined(LFALLOC_DBG) 
+        TrackDeallocation(p, N_SIZES); 
+#endif 
         LargeBlockFree(p, CT_LARGE_FREE);
         return;
     }
-
+ 
     uintptr_t chunk = ((char*)p - ALLOC_START) / N_CHUNK_SIZE;
     ptrdiff_t nSizeIdx = chunkSizeIdx[chunk];
     if (nSizeIdx <= 0) {
-#if defined(LFALLOC_DBG)
-        TrackDeallocation(p, N_SIZES);
-#endif
+#if defined(LFALLOC_DBG) 
+        TrackDeallocation(p, N_SIZES); 
+#endif 
         LargeBlockFree(p, CT_LARGE_FREE);
         return;
     }
-
+ 
 #if defined(LFALLOC_DBG)
     TrackDeallocation(p, nSizeIdx);
 #endif
@@ -1645,12 +1645,12 @@ static Y_FORCE_INLINE void LFFree(void* p) {
 }
 
 static size_t LFGetSize(const void* p) {
-#if defined(LFALLOC_DBG)
-    if (p == nullptr)
-        return 0;
+#if defined(LFALLOC_DBG) 
+    if (p == nullptr) 
+        return 0; 
     return GetAllocHeader(const_cast<void*>(p))->Size;
-#endif
-
+#endif 
+ 
     uintptr_t chkOffset = ((const char*)p - ALLOC_START);
     if (chkOffset >= N_MAX_WORKSET_SIZE) {
         if (p == nullptr)
@@ -1827,10 +1827,10 @@ static bool LFAlloc_SetParam(const char* param, const char* value) {
         TransparentHugePages = !strcmp(value, "true");
         return true;
     }
-    if (!strcmp(param, "MapHugeTLB")) {
-        MapHugeTLB = !strcmp(value, "true");
-        return true;
-    }
+    if (!strcmp(param, "MapHugeTLB")) { 
+        MapHugeTLB = !strcmp(value, "true"); 
+        return true; 
+    } 
     if (!strcmp(param, "EnableDefrag")) {
         EnableDefrag = !strcmp(value, "true");
         return true;
@@ -1839,15 +1839,15 @@ static bool LFAlloc_SetParam(const char* param, const char* value) {
 };
 
 static const char* LFAlloc_GetParam(const char* param) {
-    struct TParam {
-        const char* Name;
-        const char* Value;
-    };
-
-    static const TParam Params[] = {
+    struct TParam { 
+        const char* Name; 
+        const char* Value; 
+    }; 
+ 
+    static const TParam Params[] = { 
         {"GetLFAllocCounterFast", (const char*)&GetLFAllocCounterFast},
         {"GetLFAllocCounterFull", (const char*)&GetLFAllocCounterFull},
-#if defined(LFALLOC_DBG)
+#if defined(LFALLOC_DBG) 
         {"SetThreadAllocTag", (const char*)&SetThreadAllocTag},
         {"SetProfileCurrentThread", (const char*)&SetProfileCurrentThread},
         {"SetProfileAllThreads", (const char*)&SetProfileAllThreads},
@@ -1858,12 +1858,12 @@ static const char* LFAlloc_GetParam(const char* param) {
         {"SetDeallocationCallback", (const char*)&SetDeallocationCallback},
         {"GetPerTagAllocInfo", (const char*)&GetPerTagAllocInfo},
 #endif // LFALLOC_DBG
-    };
-
-    for (int i = 0; i < Y_ARRAY_SIZE(Params); ++i) {
-        if (strcmp(param, Params[i].Name) == 0) {
-            return Params[i].Value;
-        }
+    }; 
+ 
+    for (int i = 0; i < Y_ARRAY_SIZE(Params); ++i) { 
+        if (strcmp(param, Params[i].Name) == 0) { 
+            return Params[i].Value; 
+        } 
     }
     return nullptr;
 }

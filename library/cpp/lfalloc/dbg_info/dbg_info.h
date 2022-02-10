@@ -1,12 +1,12 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/generic/ptr.h>
-#include <util/system/types.h>
-
-namespace NAllocDbg {
+#include <util/system/types.h> 
+ 
+namespace NAllocDbg { 
     ////////////////////////////////////////////////////////////////////////////////
     // Allocation statistics
-
+ 
     enum ELFAllocCounter {
         CT_USER_ALLOC,     // accumulated size requested by user code
         CT_MMAP,           // accumulated mmapped size
@@ -23,55 +23,55 @@ namespace NAllocDbg {
         CT_DEGRAGMENT_CNT, // number of memory defragmentations
         CT_MAX
     };
-
+ 
     i64 GetAllocationCounterFast(ELFAllocCounter counter);
     i64 GetAllocationCounterFull(ELFAllocCounter counter);
-
+ 
     ////////////////////////////////////////////////////////////////////////////////
     // Allocation statistics could be tracked on per-tag basis
-
+ 
     int SetThreadAllocTag(int tag);
-
+ 
     class TScopedTag {
     private:
         int PrevTag;
-
+ 
     public:
         explicit TScopedTag(int tag) {
             PrevTag = SetThreadAllocTag(tag);
         }
-
+ 
         ~TScopedTag() {
             SetThreadAllocTag(PrevTag);
         }
     };
-
+ 
     struct TPerTagAllocInfo {
         ssize_t Count;
         ssize_t Size;
     };
-
+ 
     TArrayPtr<TPerTagAllocInfo> GetPerTagAllocInfo(
         bool flushPerThreadCounters,
         int& maxTag,
         int& numSizes);
-
+ 
     ////////////////////////////////////////////////////////////////////////////////
     // Allocation sampling could be used to collect detailed information
-
+ 
     bool SetProfileCurrentThread(bool newVal);
     bool SetProfileAllThreads(bool newVal);
     bool SetAllocationSamplingEnabled(bool newVal);
-
+ 
     size_t SetAllocationSampleRate(size_t newVal);
     size_t SetAllocationSampleMaxSize(size_t newVal);
-
-#define DBG_ALLOC_INVALID_COOKIE (-1)
-
+ 
+#define DBG_ALLOC_INVALID_COOKIE (-1) 
+ 
     using TAllocationCallback = int(int tag, size_t size, int sizeIdx);
     using TDeallocationCallback = void(int cookie, int tag, size_t size, int sizeIdx);
-
+ 
     TAllocationCallback* SetAllocationCallback(TAllocationCallback* newVal);
     TDeallocationCallback* SetDeallocationCallback(TDeallocationCallback* newVal);
-
+ 
 }

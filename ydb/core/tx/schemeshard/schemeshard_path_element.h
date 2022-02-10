@@ -436,10 +436,10 @@ public:
         return PathType == EPathType::EPathTypeBlockStoreVolume;
     }
 
-    bool IsFileStore() const {
-        return PathType == EPathType::EPathTypeFileStore;
-    }
-
+    bool IsFileStore() const { 
+        return PathType == EPathType::EPathTypeFileStore; 
+    } 
+ 
     bool IsKesus() const {
         return PathType == EPathType::EPathTypeKesus;
     }

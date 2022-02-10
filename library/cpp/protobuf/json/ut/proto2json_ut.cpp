@@ -901,21 +901,21 @@ Y_UNIT_TEST(TestInf) {
 
     UNIT_ASSERT_EXCEPTION(Proto2Json(proto, TProto2JsonConfig()), yexception);
 } // TestInf
-
+ 
 Y_UNIT_TEST(TestMap) {
     TMapType proto;
-
+ 
     auto& items = *proto.MutableItems();
     items["key1"] = "value1";
     items["key2"] = "value2";
     items["key3"] = "value3";
-
+ 
     TString modelStr(R"_({"Items":[{"key":"key3","value":"value3"},{"key":"key2","value":"value2"},{"key":"key1","value":"value1"}]})_");
-
+ 
     TStringStream jsonStr;
     TProto2JsonConfig config;
     UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
-
+ 
     NJson::TJsonValue jsonValue, modelValue;
     NJson::TJsonValue::TArray jsonItems, modelItems;
     UNIT_ASSERT(NJson::ReadJsonTree(jsonStr.Str(), &jsonValue));
@@ -930,7 +930,7 @@ Y_UNIT_TEST(TestMap) {
     SortBy(modelItems, itemKey);
     UNIT_ASSERT_EQUAL(jsonItems, modelItems);
 } // TestMap
-
+ 
 Y_UNIT_TEST(TestMapAsObject) {
     TMapType proto;
 
@@ -951,20 +951,20 @@ Y_UNIT_TEST(TestMapAsObject) {
 
 Y_UNIT_TEST(TestMapWTF) {
     TMapType proto;
-
+ 
     auto& items = *proto.MutableItems();
     items["key1"] = "value1";
     items["key2"] = "value2";
     items["key3"] = "value3";
-
+ 
     TString modelStr(R"_({"Items":{"key3":"value3","key2":"value2","key1":"value1"}})_");
-
+ 
     TStringStream jsonStr;
     UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr));
-
+ 
     UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
 } // TestMapWTF
-
+ 
 Y_UNIT_TEST(TestStringifyLongNumbers) {
 #define TEST_SINGLE(flag, value, expectString)                             \
     do {                                                                   \

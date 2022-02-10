@@ -62,7 +62,7 @@ public:
         const TChecker& IsTable(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& NotBackupTable(EStatus status = NKikimrScheme::StatusSchemeError) const;
         const TChecker& IsBlockStoreVolume(EStatus status = EStatus::StatusNameConflict) const;
-        const TChecker& IsFileStore(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsFileStore(EStatus status = EStatus::StatusNameConflict) const; 
         const TChecker& IsKesus(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsPQGroup(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsSubDomain(EStatus status = EStatus::StatusNameConflict) const;

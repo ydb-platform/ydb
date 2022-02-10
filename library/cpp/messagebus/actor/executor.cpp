@@ -176,7 +176,7 @@ TExecutor::TExecutor(const TExecutor::TConfig& config)
 void TExecutor::Init() {
     Impl.Reset(new TImpl(this));
 
-    AtomicSet(ExitWorkers, 0);
+    AtomicSet(ExitWorkers, 0); 
 
     Y_VERIFY(Config.WorkerCount > 0);
 
@@ -192,7 +192,7 @@ TExecutor::~TExecutor() {
 }
 
 void TExecutor::Stop() {
-    AtomicSet(ExitWorkers, 1);
+    AtomicSet(ExitWorkers, 1); 
 
     Impl->HelperStopSignal.Signal();
     Impl->HelperThread.Join();
@@ -214,7 +214,7 @@ void TExecutor::EnqueueWork(TArrayRef<IWorkItem* const> wis) {
     if (wis.empty())
         return;
 
-    if (Y_UNLIKELY(AtomicGet(ExitWorkers) != 0)) {
+    if (Y_UNLIKELY(AtomicGet(ExitWorkers) != 0)) { 
         Y_VERIFY(WorkItems.Empty(), "executor %s: cannot add tasks after queue shutdown", Config.Name);
     }
 
@@ -289,7 +289,7 @@ TAutoPtr<IWorkItem> TExecutor::DequeueWork() {
     if (!WorkItems.TryPop(&wi, &queueSize)) {
         TWhatThreadDoesAcquireGuard<TMutex> g(WorkMutex, "executor: acquiring lock for DequeueWork");
         while (!WorkItems.TryPop(&wi, &queueSize)) {
-            if (AtomicGet(ExitWorkers) != 0)
+            if (AtomicGet(ExitWorkers) != 0) 
                 return nullptr;
 
             TWhatThreadDoesPushPop pp("waiting for work on condvar");

@@ -22,7 +22,7 @@ public:
     Push(ElementType&& element) noexcept {
         TEntry* const next = NewEntry(static_cast<ElementType&&>(element));
         TEntry* const prev = AtomicSwap(&Back, next);
-        AtomicSet(prev ? prev->Next : Front, next);
+        AtomicSet(prev ? prev->Next : Front, next); 
         return !prev;
     }
 
@@ -52,7 +52,7 @@ public:
     /// Peek top element. Must be used only from one thread.
     ElementType&
     Top() const noexcept {
-        return AtomicGet(Front)->Data;
+        return AtomicGet(Front)->Data; 
     }
 
     bool
@@ -191,8 +191,8 @@ private:
 
 protected:
     virtual typename TBase::TEntry* NewEntry(ElementType&& element) noexcept override {
-        while (const auto top = AtomicGet(Stack))
-            if (AtomicCas(&Stack, top->Next, top)) {
+        while (const auto top = AtomicGet(Stack)) 
+            if (AtomicCas(&Stack, top->Next, top)) { 
                 top->Data = static_cast<ElementType&&>(element);
                 AtomicSet(top->Next, nullptr);
                 return top;
@@ -206,7 +206,7 @@ protected:
         const auto next = entry->Next;
         do
             AtomicSet(entry->Next, AtomicGet(Stack));
-        while (!AtomicCas(&Stack, entry, entry->Next));
+        while (!AtomicCas(&Stack, entry, entry->Next)); 
         return next;
     }
 };

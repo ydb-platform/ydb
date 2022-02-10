@@ -124,94 +124,94 @@ private:
     size_t MaxSize;
 };
 
-template <typename TKey, typename TValue>
-class TLFUList {
-public:
-    TLFUList(size_t maxSize)
-        : List()
-        , ListSize(0)
-        , MaxSize(maxSize)
-    {
-    }
-
+template <typename TKey, typename TValue> 
+class TLFUList { 
+public: 
+    TLFUList(size_t maxSize) 
+        : List() 
+        , ListSize(0) 
+        , MaxSize(maxSize) 
+    { 
+    } 
+ 
     struct TItem: public TIntrusiveListItem<TItem> {
-        typedef TIntrusiveListItem<TItem> TBase;
-        TItem(const TKey& key, const TValue& value = TValue())
-            : TBase()
-            , Key(key)
-            , Value(value)
-            , Counter(0)
-        {
-        }
-
-        TItem(const TItem& rhs)
-            : TBase()
-            , Key(rhs.Key)
-            , Value(rhs.Value)
-            , Counter(rhs.Counter)
-        {
-        }
-
+        typedef TIntrusiveListItem<TItem> TBase; 
+        TItem(const TKey& key, const TValue& value = TValue()) 
+            : TBase() 
+            , Key(key) 
+            , Value(value) 
+            , Counter(0) 
+        { 
+        } 
+ 
+        TItem(const TItem& rhs) 
+            : TBase() 
+            , Key(rhs.Key) 
+            , Value(rhs.Value) 
+            , Counter(rhs.Counter) 
+        { 
+        } 
+ 
         bool operator<(const TItem& rhs) const {
-            return Key < rhs.Key;
-        }
-
+            return Key < rhs.Key; 
+        } 
+ 
         bool operator==(const TItem& rhs) const {
-            return Key == rhs.Key;
-        }
-
-        TKey Key;
-        TValue Value;
-        size_t Counter;
-
-        struct THash {
+            return Key == rhs.Key; 
+        } 
+ 
+        TKey Key; 
+        TValue Value; 
+        size_t Counter; 
+ 
+        struct THash { 
             size_t operator()(const TItem& item) const {
-                return ::THash<TKey>()(item.Key);
-            }
-        };
-    };
-
-public:
-    TItem* Insert(TItem* item) {
-        List.PushBack(item); // give a chance for promotion
-        ++ListSize;
+                return ::THash<TKey>()(item.Key); 
+            } 
+        }; 
+    }; 
+ 
+public: 
+    TItem* Insert(TItem* item) { 
+        List.PushBack(item); // give a chance for promotion 
+        ++ListSize; 
 
         return RemoveIfOverflown();
     }
 
     TItem* RemoveIfOverflown() {
         TItem* deleted = nullptr;
-        if (ListSize > MaxSize) {
-            deleted = GetLeastFrequentlyUsed();
-            Erase(deleted);
-        }
-        return deleted;
-    }
-
-    TItem* GetLeastFrequentlyUsed() {
+        if (ListSize > MaxSize) { 
+            deleted = GetLeastFrequentlyUsed(); 
+            Erase(deleted); 
+        } 
+        return deleted; 
+    } 
+ 
+    TItem* GetLeastFrequentlyUsed() { 
         typename TListType::TIterator it = List.Begin();
         Y_ASSERT(it != List.End());
-        return &*it;
-    }
-
-    void Erase(TItem* item) {
-        item->Unlink();
-        --ListSize;
-    }
-
-    void Promote(TItem* item) {
-        size_t counter = ++item->Counter;
+        return &*it; 
+    } 
+ 
+    void Erase(TItem* item) { 
+        item->Unlink(); 
+        --ListSize; 
+    } 
+ 
+    void Promote(TItem* item) { 
+        size_t counter = ++item->Counter; 
         typename TListType::TIterator it = item;
-        while (it != List.End() && counter >= it->Counter) {
-            ++it;
-        }
-        item->LinkBefore(&*it);
-    }
-
-    size_t GetSize() const {
-        return ListSize;
-    }
-
+        while (it != List.End() && counter >= it->Counter) { 
+            ++it; 
+        } 
+        item->LinkBefore(&*it); 
+    } 
+ 
+    size_t GetSize() const { 
+        return ListSize; 
+    } 
+ 
     size_t GetMaxSize() const {
         return MaxSize;
     }
@@ -222,13 +222,13 @@ public:
         MaxSize = newSize;
     }
 
-private:
+private: 
     typedef TIntrusiveList<TItem> TListType;
     TListType List;
-    size_t ListSize;
-    size_t MaxSize;
-};
-
+    size_t ListSize; 
+    size_t MaxSize; 
+}; 
+ 
 // Least Weighted list
 // discards the least weighted items first
 // doesn't support promotion
@@ -578,7 +578,7 @@ template <typename TKey, typename TValue, typename TDeleter = TNoopDelete, class
 class TLRUCache: public TCache<TKey, TValue, TLRUList<TKey, TValue, TSizeProvider>, TDeleter> {
     using TListType = TLRUList<TKey, TValue, TSizeProvider>;
     typedef TCache<TKey, TValue, TListType, TDeleter> TBase;
-
+ 
 public:
     TLRUCache(size_t maxSize, bool multiValue = false, const TSizeProvider& sizeProvider = TSizeProvider())
         : TBase(TListType(maxSize, sizeProvider), multiValue)
@@ -600,28 +600,28 @@ public:
         return TBase::List.GetTotalSize();
     }
 };
-
-template <typename TKey, typename TValue, typename TDeleter = TNoopDelete>
+ 
+template <typename TKey, typename TValue, typename TDeleter = TNoopDelete> 
 class TLFUCache: public TCache<TKey, TValue, TLFUList<TKey, TValue>, TDeleter> {
     typedef TCache<TKey, TValue, TLFUList<TKey, TValue>, TDeleter> TBase;
     using TListType = TLFUList<TKey, TValue>;
-
-public:
-    typedef typename TBase::TIterator TIterator;
-
-    TLFUCache(size_t maxSize, bool multiValue = false)
+ 
+public: 
+    typedef typename TBase::TIterator TIterator; 
+ 
+    TLFUCache(size_t maxSize, bool multiValue = false) 
         : TBase(TListType(maxSize), multiValue)
-    {
-    }
-
-    TValue& GetLeastFrequentlyUsed() {
-        return TBase::List.GetLeastFrequentlyUsed()->Value;
-    }
-
-    TIterator FindLeastFrequentlyUsed() {
-        return TBase::Empty() ? TBase::End() : this->FindByItem(TBase::List.GetLeastFrequentlyUsed());
-    }
-};
+    { 
+    } 
+ 
+    TValue& GetLeastFrequentlyUsed() { 
+        return TBase::List.GetLeastFrequentlyUsed()->Value; 
+    } 
+ 
+    TIterator FindLeastFrequentlyUsed() { 
+        return TBase::Empty() ? TBase::End() : this->FindByItem(TBase::List.GetLeastFrequentlyUsed()); 
+    } 
+}; 
 
 // Least Weighted cache
 // discards the least weighted items first

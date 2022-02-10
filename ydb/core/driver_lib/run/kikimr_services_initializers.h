@@ -100,13 +100,13 @@ public:
 
 class TLoggerInitializer : public IKikimrServicesInitializer {
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
-    std::shared_ptr<TLogBackend> LogBackend;
+    std::shared_ptr<TLogBackend> LogBackend; 
     TString PathToConfigCacheFile;
 
 public:
     TLoggerInitializer(const TKikimrRunConfig& runConfig,
-                       TIntrusivePtr<NActors::NLog::TSettings> logSettings,
-                       std::shared_ptr<TLogBackend> logBackend);
+                       TIntrusivePtr<NActors::NLog::TSettings> logSettings, 
+                       std::shared_ptr<TLogBackend> logBackend); 
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -367,7 +367,7 @@ public:
 class TMemoryTrackerInitializer : public IKikimrServicesInitializer {
 public:
     TMemoryTrackerInitializer(const TKikimrRunConfig& runConfig);
-
+ 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 

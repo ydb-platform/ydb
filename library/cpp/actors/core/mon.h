@@ -42,11 +42,11 @@ namespace NActors {
 
         // base class for HTTP info response
         struct IEvHttpInfoRes: public NActors::TEventLocal<IEvHttpInfoRes, HttpInfoRes> {
-            enum EContentType {
-                Html,
-                Custom,
-            };
-
+            enum EContentType { 
+                Html, 
+                Custom, 
+            }; 
+ 
             IEvHttpInfoRes() {
             }
 
@@ -54,7 +54,7 @@ namespace NActors {
             }
 
             virtual void Output(IOutputStream& out) const = 0;
-            virtual EContentType GetContentType() const = 0;
+            virtual EContentType GetContentType() const = 0; 
         };
 
         // Ready to output HTML in TString
@@ -62,7 +62,7 @@ namespace NActors {
             TEvHttpInfoRes(const TString& answer, int subReqId = 0, EContentType contentType = Html)
                 : Answer(answer)
                 , SubRequestId(subReqId)
-                , ContentType(contentType)
+                , ContentType(contentType) 
             {
             }
 
@@ -70,13 +70,13 @@ namespace NActors {
                 out << Answer;
             }
 
-            EContentType GetContentType() const override {
-                return ContentType;
-            }
-
+            EContentType GetContentType() const override { 
+                return ContentType; 
+            } 
+ 
             const TString Answer;
             const int SubRequestId;
-            const EContentType ContentType;
+            const EContentType ContentType; 
         };
 
         struct TEvRemoteHttpInfo: public NActors::TEventBase<TEvRemoteHttpInfo, RemoteHttpInfo> {

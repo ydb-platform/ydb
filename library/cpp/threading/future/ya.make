@@ -4,7 +4,7 @@ OWNER(
 
 LIBRARY()
 
-SRCS(
+SRCS( 
     async.cpp
     core/future.cpp
     core/fwd.cpp
@@ -13,8 +13,8 @@ SRCS(
     wait/wait.cpp
     wait/wait_group.cpp
     wait/wait_policy.cpp
-)
-
+) 
+ 
 END()
 
 RECURSE_FOR_TESTS(

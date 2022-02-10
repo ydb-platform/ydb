@@ -853,24 +853,24 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, VolumeConfig, AlterVersion, PartitionCount>;
     };
 
-    struct FileStoreInfos : Table<78> {
-        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Config: Column<2, NScheme::NTypeIds::String> {};
-        struct Version: Column<3, NScheme::NTypeIds::Uint64> {};
-
-        using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, Config, Version>;
-    };
-
-    struct FileStoreAlters : Table<79> {
-        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Config: Column<2, NScheme::NTypeIds::String> {};
-        struct Version: Column<3, NScheme::NTypeIds::Uint64> {};
-
-        using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, Config, Version>;
-    };
-
+    struct FileStoreInfos : Table<78> { 
+        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {}; 
+        struct Config: Column<2, NScheme::NTypeIds::String> {}; 
+        struct Version: Column<3, NScheme::NTypeIds::Uint64> {}; 
+ 
+        using TKey = TableKey<PathId>; 
+        using TColumns = TableColumns<PathId, Config, Version>; 
+    }; 
+ 
+    struct FileStoreAlters : Table<79> { 
+        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {}; 
+        struct Config: Column<2, NScheme::NTypeIds::String> {}; 
+        struct Version: Column<3, NScheme::NTypeIds::Uint64> {}; 
+ 
+        using TKey = TableKey<PathId>; 
+        using TColumns = TableColumns<PathId, Config, Version>; 
+    }; 
+ 
     struct KesusInfos : Table<26> {
         struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
         struct Config: Column<2, NScheme::NTypeIds::String> {};
@@ -1663,8 +1663,8 @@ struct Schema : NIceDb::Schema {
         AlterSolomonVolumes,
         AlterSolomonPartitions,
         TablePartitionStats,
-        SubDomainSchemeQuotas,
-        FileStoreInfos,
+        SubDomainSchemeQuotas, 
+        FileStoreInfos, 
         FileStoreAlters,
         TableIndexDataColumns,
         TableIndexDataColumnsAlterData,

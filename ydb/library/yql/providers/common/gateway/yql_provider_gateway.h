@@ -81,11 +81,11 @@ template <typename T>
 inline void SetPromiseValue(NThreading::TPromise<T>& promise, const NThreading::TFuture<T>& future)
 {
     future.Subscribe([=] (const NThreading::TFuture<T>& f) mutable {
-        try {
+        try { 
             promise.SetValue(f.GetValue());
-        } catch (...) {
+        } catch (...) { 
             promise.SetException(std::current_exception());
-        }
+        } 
     });
 }
 

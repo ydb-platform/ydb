@@ -1,9 +1,9 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:rtmr)
-
-SRCS(
-    skiplist.cpp
-)
-
-END()
+ 
+SRCS( 
+    skiplist.cpp 
+) 
+ 
+END() 

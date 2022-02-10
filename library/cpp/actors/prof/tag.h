@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/fwd.h>
+#include <util/generic/fwd.h> 
 
 /*
   Common registry for tagging memory profiler.
@@ -15,21 +15,21 @@ namespace NProfiling {
     ui32 MakeTags(const TVector<const char*>& ss);
 
     const char* GetTag(ui32 tag);
-    size_t GetTagsCount();
+    size_t GetTagsCount(); 
 
-    using TSetThreadAllocTag = ui32(ui32 tag);
-    extern TSetThreadAllocTag* SetThreadAllocTag;
-
+    using TSetThreadAllocTag = ui32(ui32 tag); 
+    extern TSetThreadAllocTag* SetThreadAllocTag; 
+ 
     class TMemoryTagScope {
     public:
         explicit TMemoryTagScope(ui32 tag)
-            : RestoreTag(SetThreadAllocTag(tag))
+            : RestoreTag(SetThreadAllocTag(tag)) 
         {
         }
-
+ 
         explicit TMemoryTagScope(const char* tagName) {
             ui32 newTag = MakeTag(tagName);
-            RestoreTag = SetThreadAllocTag(newTag);
+            RestoreTag = SetThreadAllocTag(newTag); 
         }
 
         TMemoryTagScope(TMemoryTagScope&& move)
@@ -47,20 +47,20 @@ namespace NProfiling {
         }
 
         static void Reset(ui32 tag) {
-            SetThreadAllocTag(tag);
+            SetThreadAllocTag(tag); 
         }
 
         void Release() {
             if (!Released) {
-                SetThreadAllocTag(RestoreTag);
+                SetThreadAllocTag(RestoreTag); 
                 Released = true;
             }
         }
 
-        ~TMemoryTagScope() {
+        ~TMemoryTagScope() { 
             if (!Released) {
-                SetThreadAllocTag(RestoreTag);
-            }
+                SetThreadAllocTag(RestoreTag); 
+            } 
         }
 
     protected:

@@ -39,7 +39,7 @@ public:
 #ifdef _linux_
         return __atomic_exchange_n(&Value, newValue, __ATOMIC_SEQ_CST);
 #else
-        return AtomicSwap(&Value, newValue);
+        return AtomicSwap(&Value, newValue); 
 #endif
     }
 #endif

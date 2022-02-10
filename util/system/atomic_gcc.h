@@ -5,32 +5,32 @@
                                                        :  \
                                                        : "memory")
 
-static inline TAtomicBase AtomicGet(const TAtomic& a) {
-    TAtomicBase tmp;
+static inline TAtomicBase AtomicGet(const TAtomic& a) { 
+    TAtomicBase tmp; 
 #if defined(_arm64_)
-    __asm__ __volatile__(
-        "ldar %x[value], %[ptr]  \n\t"
-        : [value] "=r"(tmp)
-        : [ptr] "Q"(a)
-        : "memory");
+    __asm__ __volatile__( 
+        "ldar %x[value], %[ptr]  \n\t" 
+        : [value] "=r"(tmp) 
+        : [ptr] "Q"(a) 
+        : "memory"); 
 #else
-    __atomic_load(&a, &tmp, __ATOMIC_ACQUIRE);
+    __atomic_load(&a, &tmp, __ATOMIC_ACQUIRE); 
 #endif
-    return tmp;
-}
-
-static inline void AtomicSet(TAtomic& a, TAtomicBase v) {
+    return tmp; 
+} 
+ 
+static inline void AtomicSet(TAtomic& a, TAtomicBase v) { 
 #if defined(_arm64_)
-    __asm__ __volatile__(
-        "stlr %x[value], %[ptr]  \n\t"
-        : [ptr] "=Q"(a)
-        : [value] "r"(v)
-        : "memory");
-#else
-    __atomic_store(&a, &v, __ATOMIC_RELEASE);
-#endif
+    __asm__ __volatile__( 
+        "stlr %x[value], %[ptr]  \n\t" 
+        : [ptr] "=Q"(a) 
+        : [value] "r"(v) 
+        : "memory"); 
+#else 
+    __atomic_store(&a, &v, __ATOMIC_RELEASE); 
+#endif 
 }
-
+ 
 static inline intptr_t AtomicIncrement(TAtomic& p) {
     return __atomic_add_fetch(&p, 1, __ATOMIC_SEQ_CST);
 }
@@ -55,7 +55,7 @@ static inline intptr_t AtomicGetAndAdd(TAtomic& p, intptr_t v) {
     return __atomic_fetch_add(&p, v, __ATOMIC_SEQ_CST);
 }
 
-static inline intptr_t AtomicSwap(TAtomic* p, intptr_t v) {
+static inline intptr_t AtomicSwap(TAtomic* p, intptr_t v) { 
     (void)p; // disable strange 'parameter set but not used' warning on gcc
     intptr_t ret;
     __atomic_exchange(p, &v, &ret, __ATOMIC_SEQ_CST);

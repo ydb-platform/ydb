@@ -9,11 +9,11 @@ namespace NKikimr {
 
 struct TEvBlockStore {
     enum EEv {
-        EvBegin = EventSpaceBegin(TKikimrEvents::ES_BLOCKSTORE) + 1011,
-
-        EvUpdateVolumeConfig = EvBegin + 13,
+        EvBegin = EventSpaceBegin(TKikimrEvents::ES_BLOCKSTORE) + 1011, 
+ 
+        EvUpdateVolumeConfig = EvBegin + 13, 
         EvUpdateVolumeConfigResponse,
-
+ 
         EvEnd
     };
 

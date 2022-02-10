@@ -921,10 +921,10 @@ struct TShardInfo {
         return TShardInfo(txId, pathId, ETabletType::BlockStorePartition2);
     }
 
-    static TShardInfo FileStoreInfo(TTxId txId, TPathId pathId) {
-        return TShardInfo(txId, pathId, ETabletType::FileStore);
-    }
-
+    static TShardInfo FileStoreInfo(TTxId txId, TPathId pathId) { 
+        return TShardInfo(txId, pathId, ETabletType::FileStore); 
+    } 
+ 
     static TShardInfo KesusInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::Kesus);
     }
@@ -1984,44 +1984,44 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
     }
 };
 
-struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
-    using TPtr = TIntrusivePtr<TFileStoreInfo>;
-
-    TShardIdx IndexShardIdx = InvalidShardIdx;
-    TTabletId IndexTabletId = InvalidTabletId;
-
-    NKikimrFileStore::TConfig Config;
-    ui64 Version = 0;
-
-    THolder<NKikimrFileStore::TConfig> AlterConfig;
-    ui64 AlterVersion = 0;
-
-    void PrepareAlter(const NKikimrFileStore::TConfig& alterConfig) {
-        Y_VERIFY(!AlterConfig);
-        Y_VERIFY(!AlterVersion);
-
+struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> { 
+    using TPtr = TIntrusivePtr<TFileStoreInfo>; 
+ 
+    TShardIdx IndexShardIdx = InvalidShardIdx; 
+    TTabletId IndexTabletId = InvalidTabletId; 
+ 
+    NKikimrFileStore::TConfig Config; 
+    ui64 Version = 0; 
+ 
+    THolder<NKikimrFileStore::TConfig> AlterConfig; 
+    ui64 AlterVersion = 0; 
+ 
+    void PrepareAlter(const NKikimrFileStore::TConfig& alterConfig) { 
+        Y_VERIFY(!AlterConfig); 
+        Y_VERIFY(!AlterVersion); 
+ 
         AlterConfig = MakeHolder<NKikimrFileStore::TConfig>();
         AlterConfig->CopyFrom(alterConfig);
-
+ 
         Y_VERIFY(!AlterConfig->GetBlockSize());
         AlterConfig->SetBlockSize(Config.GetBlockSize());
 
-        AlterVersion = Version + 1;
-    }
-
-    void FinishAlter() {
-        Y_VERIFY(AlterConfig);
-        Y_VERIFY(AlterVersion);
-
-        Config.CopyFrom(*AlterConfig);
-        ++Version;
-        Y_VERIFY(Version == AlterVersion);
-
-        AlterConfig.Reset();
-        AlterVersion = 0;
-    }
-};
-
+        AlterVersion = Version + 1; 
+    } 
+ 
+    void FinishAlter() { 
+        Y_VERIFY(AlterConfig); 
+        Y_VERIFY(AlterVersion); 
+ 
+        Config.CopyFrom(*AlterConfig); 
+        ++Version; 
+        Y_VERIFY(Version == AlterVersion); 
+ 
+        AlterConfig.Reset(); 
+        AlterVersion = 0; 
+    } 
+}; 
+ 
 struct TKesusInfo : public TSimpleRefCount<TKesusInfo> {
     using TPtr = TIntrusivePtr<TKesusInfo>;
 

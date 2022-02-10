@@ -1,15 +1,15 @@
-PROGRAM(skiplist-perf)
-
+PROGRAM(skiplist-perf) 
+ 
 OWNER(g:rtmr)
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/charset
     library/cpp/getopt/small
     library/cpp/threading/skip_list
-)
-
-SRCS(
-    main.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    main.cpp 
+) 
+ 
+END() 

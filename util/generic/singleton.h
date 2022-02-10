@@ -54,7 +54,7 @@ namespace NPrivate {
 
         UnlockRecursive(lock);
 
-        return ret;
+        return ret; 
     }
 
     template <class T, size_t P, class... TArgs>

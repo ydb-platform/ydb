@@ -1,17 +1,17 @@
-#pragma once
-
+#pragma once 
+ 
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actor.h>
-
+ 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
-namespace NKikimr {
+ 
+namespace NKikimr { 
     struct IAllocStats {
         virtual ~IAllocStats() = default;
         virtual void Update() = 0;
     };
 
-    NActors::IActor* CreateMemStatsCollector(
+    NActors::IActor* CreateMemStatsCollector( 
         ui32 intervalSec,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
@@ -27,4 +27,4 @@ namespace NKikimr {
         static ui64 GetAllocatedMemoryEstimate();
         static double GetMemoryUsage();
     };
-}
+} 

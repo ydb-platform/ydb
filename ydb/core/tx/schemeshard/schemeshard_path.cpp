@@ -490,23 +490,23 @@ const TPath::TChecker& TPath::TChecker::IsBlockStoreVolume(TPath::TChecker::ESta
     return *this;
 }
 
-const TPath::TChecker& TPath::TChecker::IsFileStore(TPath::TChecker::EStatus status) const {
-    if (Failed) {
-        return *this;
-    }
-
-    if (Path.Base()->IsFileStore()) {
-        return *this;
-    }
-
-    Failed = true;
-    Status = status;
-    Explain << "path is not a FileStore"
-            << ", pathId: " <<  Path.Base()->PathId
+const TPath::TChecker& TPath::TChecker::IsFileStore(TPath::TChecker::EStatus status) const { 
+    if (Failed) { 
+        return *this; 
+    } 
+ 
+    if (Path.Base()->IsFileStore()) { 
+        return *this; 
+    } 
+ 
+    Failed = true; 
+    Status = status; 
+    Explain << "path is not a FileStore" 
+            << ", pathId: " <<  Path.Base()->PathId 
             << ", path type: " << NKikimrSchemeOp::EPathType_Name(Path.Base()->PathType);
-    return *this;
-}
-
+    return *this; 
+} 
+ 
 const TPath::TChecker& TPath::TChecker::IsKesus(TPath::TChecker::EStatus status) const {
     if (Failed) {
         return *this;

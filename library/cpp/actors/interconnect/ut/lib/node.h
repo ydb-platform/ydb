@@ -66,26 +66,26 @@ public:
         constexpr ui32 LoggerComponentId = 410; // NKikimrServices::LOGGER
 
         auto loggerSettings = MakeIntrusive<NLog::TSettings>(
-            loggerActorId,
+            loggerActorId, 
             (NLog::EComponent)LoggerComponentId,
             NLog::PRI_INFO,
             NLog::PRI_DEBUG,
-            0U);
-
-        loggerSettings->Append(
-            NActorsServices::EServiceCommon_MIN,
+            0U); 
+ 
+        loggerSettings->Append( 
+            NActorsServices::EServiceCommon_MIN, 
             NActorsServices::EServiceCommon_MAX,
             NActorsServices::EServiceCommon_Name
         );
-
+ 
         constexpr ui32 WilsonComponentId = 430; // NKikimrServices::WILSON
-        static const TString WilsonComponentName = "WILSON";
-
-        loggerSettings->Append(
+        static const TString WilsonComponentName = "WILSON"; 
+ 
+        loggerSettings->Append( 
             (NLog::EComponent)WilsonComponentId,
             (NLog::EComponent)WilsonComponentId + 1,
             [](NLog::EComponent) -> const TString & { return WilsonComponentName; });
-
+ 
         // register nameserver table
         auto names = MakeIntrusive<TTableNameserverSetup>();
         for (ui32 i = 1; i <= numNodes; ++i) {

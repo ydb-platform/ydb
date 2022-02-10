@@ -42,7 +42,7 @@ public:
      * \returns                         Current object count.
      */
     static inline long ResetObjectCount() noexcept {
-        return AtomicSwap(&Count_, 0);
+        return AtomicSwap(&Count_, 0); 
     }
 
 private:

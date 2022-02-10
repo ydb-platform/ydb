@@ -417,14 +417,14 @@
     - nlist.h: contrib/restricted/libelf/lib/nlist.h
     - sys_elf.h: contrib/restricted/libelf/lib/sys_elf.h
 
-- source_filter: "^contrib/libs/dpdk/"
+- source_filter: "^contrib/libs/dpdk/" 
   includes:
     - process.h: contrib/libs/dpdk/drivers/bus/dpaa/include/process.h
 
-- source_filter: "^contrib/libs/dpdk_arm64/"
-  includes:
-    - process.h: contrib/libs/dpdk_arm64/drivers/bus/dpaa/include/process.h
-
+- source_filter: "^contrib/libs/dpdk_arm64/" 
+  includes: 
+    - process.h: contrib/libs/dpdk_arm64/drivers/bus/dpaa/include/process.h 
+ 
 - source_filter: "^contrib/libs/usrsctp/"
   includes:
     - netinet/sctp_uio.h: contrib/libs/usrsctp/usrsctplib/netinet/sctp_uio.h

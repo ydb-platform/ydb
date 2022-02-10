@@ -684,25 +684,25 @@ void TPathDescriber::DescribeBlockStoreVolume(TPathId pathId, TPathElement::TPtr
     }
 }
 
-void TPathDescriber::DescribeFileStore(TPathId pathId, TPathElement::TPtr pathEl) {
-    Y_VERIFY(pathEl->IsFileStore());
-    auto it = Self->FileStoreInfos.FindPtr(pathId);
-    Y_VERIFY(it, "FileStore info is not found");
-    TFileStoreInfo::TPtr fs = *it;
-
-    auto* entry = Result->Record.MutablePathDescription()->MutableFileStoreDescription();
-    entry->SetName(pathEl->Name);
-    entry->SetPathId(pathId.LocalPathId);
-    if (fs->IndexTabletId) {
-        entry->SetIndexTabletId(ui64(fs->IndexTabletId));
-    }
-    entry->SetVersion(fs->Version);
-
-    auto* config = entry->MutableConfig();
-    config->CopyFrom(fs->Config);
-    config->SetVersion(fs->Version);
-}
-
+void TPathDescriber::DescribeFileStore(TPathId pathId, TPathElement::TPtr pathEl) { 
+    Y_VERIFY(pathEl->IsFileStore()); 
+    auto it = Self->FileStoreInfos.FindPtr(pathId); 
+    Y_VERIFY(it, "FileStore info is not found"); 
+    TFileStoreInfo::TPtr fs = *it; 
+ 
+    auto* entry = Result->Record.MutablePathDescription()->MutableFileStoreDescription(); 
+    entry->SetName(pathEl->Name); 
+    entry->SetPathId(pathId.LocalPathId); 
+    if (fs->IndexTabletId) { 
+        entry->SetIndexTabletId(ui64(fs->IndexTabletId)); 
+    } 
+    entry->SetVersion(fs->Version); 
+ 
+    auto* config = entry->MutableConfig(); 
+    config->CopyFrom(fs->Config); 
+    config->SetVersion(fs->Version); 
+} 
+ 
 void TPathDescriber::DescribeKesus(TPathId pathId, TPathElement::TPtr pathEl) {
     Y_VERIFY(pathEl->IsKesus());
     auto it = Self->KesusInfos.FindPtr(pathId);

@@ -145,13 +145,13 @@ private:
     inline void TestAtomicSwap() {
         TAtomic v = 0;
 
-        UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&v, 3), 0);
-        UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&v, 5), 3);
-        UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&v, -7), 5);
-        UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&v, Max<intptr_t>()), -7);
+        UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&v, 3), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&v, 5), 3); 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&v, -7), 5); 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&v, Max<intptr_t>()), -7); 
         UNIT_ASSERT_VALUES_EQUAL(v, Max<intptr_t>());
     }
-
+ 
     inline void TestAtomicOr() {
         TAtomic v = 0xf0;
 
@@ -173,19 +173,19 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(AtomicXor(v, 0xff), 0x00);
     }
 
-    inline void TestAtomicPtr() {
-        int* p;
+    inline void TestAtomicPtr() { 
+        int* p; 
         AtomicSet(p, nullptr);
-
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGet(p), 0);
-
-        int i;
-        AtomicSet(p, &i);
-
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGet(p), &i);
+ 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGet(p), 0); 
+ 
+        int i; 
+        AtomicSet(p, &i); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGet(p), &i); 
         UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&p, nullptr), &i);
         UNIT_ASSERT(AtomicCas(&p, &i, nullptr));
-    }
+    } 
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TAtomicTest<TAtomic>);

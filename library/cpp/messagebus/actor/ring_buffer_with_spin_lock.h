@@ -9,11 +9,11 @@ class TRingBufferWithSpinLock {
 private:
     TRingBuffer<T> RingBuffer;
     TSpinLock SpinLock;
-    TAtomic CachedSize;
-
+    TAtomic CachedSize; 
+ 
 public:
     TRingBufferWithSpinLock()
-        : CachedSize(0)
+        : CachedSize(0) 
     {
     }
 
@@ -28,11 +28,11 @@ public:
 
         TGuard<TSpinLock> Guard(SpinLock);
         RingBuffer.PushAll(collection);
-        AtomicSet(CachedSize, RingBuffer.Size());
+        AtomicSet(CachedSize, RingBuffer.Size()); 
     }
 
     bool TryPop(T* r, size_t* sizePtr = nullptr) {
-        if (AtomicGet(CachedSize) == 0) {
+        if (AtomicGet(CachedSize) == 0) { 
             return false;
         }
 
@@ -42,7 +42,7 @@ public:
             TGuard<TSpinLock> Guard(SpinLock);
             ok = RingBuffer.TryPop(r);
             size = RingBuffer.Size();
-            AtomicSet(CachedSize, size);
+            AtomicSet(CachedSize, size); 
         }
         if (!!sizePtr) {
             *sizePtr = size;
@@ -63,25 +63,25 @@ public:
         if (collection.size() == 0) {
             return TryPop(r);
         } else {
-            if (AtomicGet(CachedSize) == 0) {
+            if (AtomicGet(CachedSize) == 0) { 
                 *r = collection[0];
                 if (collection.size() > 1) {
                     TGuard<TSpinLock> guard(SpinLock);
                     RingBuffer.PushAll(MakeArrayRef(collection.data() + 1, collection.size() - 1));
-                    AtomicSet(CachedSize, RingBuffer.Size());
+                    AtomicSet(CachedSize, RingBuffer.Size()); 
                 }
             } else {
                 TGuard<TSpinLock> guard(SpinLock);
                 RingBuffer.PushAll(collection);
                 *r = RingBuffer.Pop();
-                AtomicSet(CachedSize, RingBuffer.Size());
+                AtomicSet(CachedSize, RingBuffer.Size()); 
             }
             return true;
         }
     }
 
     bool Empty() const {
-        return AtomicGet(CachedSize) == 0;
+        return AtomicGet(CachedSize) == 0; 
     }
 
     size_t Size() const {

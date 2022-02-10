@@ -216,7 +216,7 @@ namespace NActors {
             HANDSHAKE_FAIL_SESSION_MISMATCH,
         };
 
-        TEvHandshakeFail(EnumHandshakeFail temporary, TString explanation)
+        TEvHandshakeFail(EnumHandshakeFail temporary, TString explanation) 
             : Temporary(temporary)
             , Explanation(std::move(explanation))
         {

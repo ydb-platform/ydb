@@ -18,7 +18,7 @@ RECURSE(
     grpc_cli
     kyotocabinet
     langid
-    leveldb
+    leveldb 
     lld
     lldb
     mp4viewer
@@ -39,7 +39,7 @@ RECURSE(
     swig
     tf
     tpce-benchmark
-    tpch-benchmark
+    tpch-benchmark 
     tre
     unbound
     unbound/build

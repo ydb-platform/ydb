@@ -1,9 +1,9 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:rtmr)
-
-SRCS(
-    queue.cpp
-)
-
-END()
+ 
+SRCS( 
+    queue.cpp 
+) 
+ 
+END() 

@@ -133,8 +133,8 @@ namespace {
 #endif
         }
 
-        //The UNIX semaphore object does not support a timed "wait", and
-        //hence to maintain consistancy, for win32 case we use INFINITE or 0 timeout.
+        //The UNIX semaphore object does not support a timed "wait", and 
+        //hence to maintain consistancy, for win32 case we use INFINITE or 0 timeout. 
         inline void Acquire() noexcept {
 #ifdef _win_
             Y_VERIFY(::WaitForSingleObject(Handle, INFINITE) == WAIT_OBJECT_0, "can not acquire semaphore");
@@ -154,7 +154,7 @@ namespace {
             // zero-second time-out interval
             // WAIT_OBJECT_0: current free count > 0
             // WAIT_TIMEOUT:  current free count == 0
-            return ::WaitForSingleObject(Handle, 0) == WAIT_OBJECT_0;
+            return ::WaitForSingleObject(Handle, 0) == WAIT_OBJECT_0; 
 #else
     #ifdef USE_SYSV_SEMAPHORES
             struct sembuf ops[] = {{0, -1, SEM_UNDO | IPC_NOWAIT}};

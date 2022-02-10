@@ -8,12 +8,12 @@ Y_UNIT_TEST_SUITE(TSchemeProtoTest) {
 
     Y_UNIT_TEST(TestFromProtobuf) {
         DoTestProtobuf(true, false);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestToProtobuf) {
         DoTestProtobuf(false, false);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestFromProtobufWithDict) {
         DoTestProtobuf(true, true);
     }
@@ -207,14 +207,14 @@ Y_UNIT_TEST_SUITE(TSchemeProtoTest) {
         *(m.AddMessages()) = m2, v["Messages"][0] = v2;
         *(m.AddMessages()) = m2, v["Messages"][1] = v2;
 
-        if (fromProto) {
+        if (fromProto) { 
             UNIT_ASSERT(NSc::TValue::Equal(v, NSc::TValue::From(m, mapAsDict)));
-        } else {
-            NSc::TMessage proto;
-            v.To(proto);
-
+        } else { 
+            NSc::TMessage proto; 
+            v.To(proto); 
+ 
             TString differentPath;
-            UNIT_ASSERT_C(NProtoBuf::IsEqual(m, proto, &differentPath), differentPath);
-        }
+            UNIT_ASSERT_C(NProtoBuf::IsEqual(m, proto, &differentPath), differentPath); 
+        } 
     }
 };

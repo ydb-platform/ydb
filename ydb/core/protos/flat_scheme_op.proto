@@ -305,7 +305,7 @@ message TTTLSettings {
 
     message TEnabled {
         optional string ColumnName = 1;
-        optional uint32 ExpireAfterSeconds = 2;
+        optional uint32 ExpireAfterSeconds = 2; 
         optional EUnit ColumnUnit = 3;
         optional TSysSettings SysSettings = 4;
     }
@@ -948,14 +948,14 @@ message TBlockStoreVolumeDescription {
     optional uint64 TokenVersion = 8; // do not set
 }
 
-message TFileStoreDescription {
-    optional string Name = 1; // mandatory
-    optional uint64 PathId = 2;
-    optional uint64 IndexTabletId = 3; // do not set
-    optional NKikimrFileStore.TConfig Config = 4; // mandatory
-    optional uint64 Version = 5; // do not set
-}
-
+message TFileStoreDescription { 
+    optional string Name = 1; // mandatory 
+    optional uint64 PathId = 2; 
+    optional uint64 IndexTabletId = 3; // do not set 
+    optional NKikimrFileStore.TConfig Config = 4; // mandatory 
+    optional uint64 Version = 5; // do not set 
+} 
+ 
 message TKesusDescription {
     optional string Name = 1; // mandatory
     optional uint64 PathId = 2;
@@ -1130,10 +1130,10 @@ enum EOperationType {
     ESchemeOpDropTableIndexAtMainTable = 49;
 
     ESchemeOpCancelIndexBuild = 50;
-
-    ESchemeOpCreateFileStore = 51;
-    ESchemeOpAlterFileStore = 52;
-    ESchemeOpDropFileStore = 53;
+ 
+    ESchemeOpCreateFileStore = 51; 
+    ESchemeOpAlterFileStore = 52; 
+    ESchemeOpDropFileStore = 53; 
 
     ESchemeOpRestore = 54;
 
@@ -1258,8 +1258,8 @@ message TModifyScheme {
     optional TAlterSolomonVolume AlterSolomonVolume = 33;
     optional TDropIndex DropIndex = 34;
     optional TIndexBuildControl CancelIndexBuild = 35;
-    optional TFileStoreDescription CreateFileStore = 37;
-    optional TFileStoreDescription AlterFileStore = 38;
+    optional TFileStoreDescription CreateFileStore = 37; 
+    optional TFileStoreDescription AlterFileStore = 38; 
     optional TRestoreTask Restore = 39;
     optional TColumnStoreDescription CreateColumnStore = 40;
     optional TColumnTableDescription CreateColumnTable = 41;
@@ -1320,7 +1320,7 @@ enum EPathType {
     EPathTypeSolomonVolume = 8;
     EPathTypeTableIndex = 9; // Used for abstract index
     EPathTypeExtSubDomain = 10;
-    EPathTypeFileStore = 11;
+    EPathTypeFileStore = 11; 
     EPathTypeColumnStore = 12;
     EPathTypeColumnTable = 13;
     EPathTypeCdcStream = 14;
@@ -1365,7 +1365,7 @@ message TPathVersion {
     optional uint64 KesusVersion = 12;
     optional uint64 RTMRVersion = 13;
     optional uint64 SolomonVersion = 14;
-    optional uint64 FileStoreVersion = 15;
+    optional uint64 FileStoreVersion = 15; 
     optional uint64 ColumnStoreVersion = 16;
     optional uint64 ColumnTableVersion = 17;
     optional uint64 ColumnTableShardingVersion = 18;
@@ -1454,7 +1454,7 @@ message TPathDescription {
     optional TIndexDescription TableIndex = 17;
     repeated NKikimrTabletBase.TMetrics TablePartitionMetrics = 18;
     repeated uint64 AbandonedTenantsSchemeShards = 19;
-    optional TFileStoreDescription FileStoreDescription = 20;
+    optional TFileStoreDescription FileStoreDescription = 20; 
     optional TColumnStoreDescription ColumnStoreDescription = 21;
     optional TColumnTableDescription ColumnTableDescription = 22;
     optional TCdcStreamDescription CdcStreamDescription = 23;

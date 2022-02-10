@@ -1,11 +1,11 @@
-/*
+/* 
  * Copyright (c) Yann Collet, Facebook, Inc.
  * All rights reserved.
  *
- * This source code is licensed under both the BSD-style license (found in the
- * LICENSE file in the root directory of this source tree) and the GPLv2 (found
- * in the COPYING file in the root directory of this source tree).
- * You may select, at your option, one of the above-listed licenses.
+ * This source code is licensed under both the BSD-style license (found in the 
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found 
+ * in the COPYING file in the root directory of this source tree). 
+ * You may select, at your option, one of the above-listed licenses. 
  */
 
 
@@ -336,7 +336,7 @@ typedef U32 DTable_max_t[FSE_DTABLE_SIZE_U32(FSE_MAX_TABLELOG)];
 /****************************************************************
 *  Internal functions
 ****************************************************************/
-FORCE_INLINE unsigned FSE_highbit32 (U32 val)
+FORCE_INLINE unsigned FSE_highbit32 (U32 val) 
 {
 #   if defined(_MSC_VER)   /* Visual */
     unsigned long r;
@@ -1435,7 +1435,7 @@ typedef struct ZSTD_Cctx_s
 #else
     U32 hashTable[HASH_TABLESIZE];
 #endif
-    BYTE buffer[WORKPLACESIZE];
+    BYTE buffer[WORKPLACESIZE]; 
 } cctxi_t;
 
 
@@ -2004,58 +2004,58 @@ size_t ZSTDv01_decompress(void* dst, size_t maxDstSize, const void* src, size_t 
 /* ZSTD_errorFrameSizeInfoLegacy() :
    assumes `cSize` and `dBound` are _not_ NULL */
 static void ZSTD_errorFrameSizeInfoLegacy(size_t* cSize, unsigned long long* dBound, size_t ret)
-{
+{ 
     *cSize = ret;
     *dBound = ZSTD_CONTENTSIZE_ERROR;
 }
 
 void ZSTDv01_findFrameSizeInfoLegacy(const void *src, size_t srcSize, size_t* cSize, unsigned long long* dBound)
 {
-    const BYTE* ip = (const BYTE*)src;
-    size_t remainingSize = srcSize;
+    const BYTE* ip = (const BYTE*)src; 
+    size_t remainingSize = srcSize; 
     size_t nbBlocks = 0;
-    U32 magicNumber;
-    blockProperties_t blockProperties;
+    U32 magicNumber; 
+    blockProperties_t blockProperties; 
 
-    /* Frame Header */
+    /* Frame Header */ 
     if (srcSize < ZSTD_frameHeaderSize+ZSTD_blockHeaderSize) {
         ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(srcSize_wrong));
         return;
     }
-    magicNumber = ZSTD_readBE32(src);
+    magicNumber = ZSTD_readBE32(src); 
     if (magicNumber != ZSTD_magicNumber) {
         ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(prefix_unknown));
         return;
     }
-    ip += ZSTD_frameHeaderSize; remainingSize -= ZSTD_frameHeaderSize;
-
-    /* Loop on each block */
-    while (1)
-    {
-        size_t blockSize = ZSTDv01_getcBlockSize(ip, remainingSize, &blockProperties);
+    ip += ZSTD_frameHeaderSize; remainingSize -= ZSTD_frameHeaderSize; 
+ 
+    /* Loop on each block */ 
+    while (1) 
+    { 
+        size_t blockSize = ZSTDv01_getcBlockSize(ip, remainingSize, &blockProperties); 
         if (ZSTDv01_isError(blockSize)) {
             ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, blockSize);
             return;
         }
-
-        ip += ZSTD_blockHeaderSize;
-        remainingSize -= ZSTD_blockHeaderSize;
+ 
+        ip += ZSTD_blockHeaderSize; 
+        remainingSize -= ZSTD_blockHeaderSize; 
         if (blockSize > remainingSize) {
             ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(srcSize_wrong));
             return;
         }
-
-        if (blockSize == 0) break;   /* bt_end */
-
-        ip += blockSize;
-        remainingSize -= blockSize;
+ 
+        if (blockSize == 0) break;   /* bt_end */ 
+ 
+        ip += blockSize; 
+        remainingSize -= blockSize; 
         nbBlocks++;
-    }
-
+    } 
+ 
     *cSize = ip - (const BYTE*)src;
     *dBound = nbBlocks * BLOCKSIZE;
-}
-
+} 
+ 
 /*******************************
 *  Streaming Decompression API
 *******************************/

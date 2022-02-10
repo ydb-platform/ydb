@@ -71,16 +71,16 @@
 /* **************************************************************
 *  Error Management
 ****************************************************************/
-#define HUF_isError ERR_isError
+#define HUF_isError ERR_isError 
 
 
-/* **************************************************************
-*  Byte alignment for workSpace management
-****************************************************************/
-#define HUF_ALIGN(x, a)         HUF_ALIGN_MASK((x), (a) - 1)
-#define HUF_ALIGN_MASK(x, mask) (((x) + (mask)) & ~(mask))
-
-
+/* ************************************************************** 
+*  Byte alignment for workSpace management 
+****************************************************************/ 
+#define HUF_ALIGN(x, a)         HUF_ALIGN_MASK((x), (a) - 1) 
+#define HUF_ALIGN_MASK(x, mask) (((x) + (mask)) & ~(mask)) 
+ 
+ 
 /* **************************************************************
 *  BMI2 Variant Wrappers
 ****************************************************************/
@@ -350,7 +350,7 @@ size_t HUF_readDTableX1_wksp_bmi2(HUF_DTable* DTable, const void* src, size_t sr
 
     DEBUG_STATIC_ASSERT(HUF_DECOMPRESS_WORKSPACE_SIZE >= sizeof(*wksp));
     if (sizeof(*wksp) > wkspSize) return ERROR(tableLog_tooLarge);
-
+ 
     DEBUG_STATIC_ASSERT(sizeof(DTableDesc) == sizeof(HUF_DTable));
     /* ZSTD_memset(huffWeight, 0, sizeof(huffWeight)); */   /* is not necessary, even though some analyzer complain ... */
 
@@ -363,7 +363,7 @@ size_t HUF_readDTableX1_wksp_bmi2(HUF_DTable* DTable, const void* src, size_t sr
         U32 const maxTableLog = dtd.maxTableLog + 1;
         U32 const targetTableLog = MIN(maxTableLog, HUF_DECODER_FAST_TABLELOG);
         tableLog = HUF_rescaleStats(wksp->huffWeight, wksp->rankVal, nbSymbols, tableLog, targetTableLog);
-        if (tableLog > (U32)(dtd.maxTableLog+1)) return ERROR(tableLog_tooLarge);   /* DTable too small, Huffman tree cannot fit in */
+        if (tableLog > (U32)(dtd.maxTableLog+1)) return ERROR(tableLog_tooLarge);   /* DTable too small, Huffman tree cannot fit in */ 
         dtd.tableType = 0;
         dtd.tableLog = (BYTE)tableLog;
         ZSTD_memcpy(DTable, &dtd, sizeof(dtd));
@@ -477,7 +477,7 @@ size_t HUF_readDTableX1_wksp_bmi2(HUF_DTable* DTable, const void* src, size_t sr
     return iSize;
 }
 
-FORCE_INLINE_TEMPLATE BYTE
+FORCE_INLINE_TEMPLATE BYTE 
 HUF_decodeSymbolX1(BIT_DStream_t* Dstream, const HUF_DEltX1* dt, const U32 dtLog)
 {
     size_t const val = BIT_lookBitsFast(Dstream, dtLog); /* note : dtLog >= 1 */
@@ -497,7 +497,7 @@ HUF_decodeSymbolX1(BIT_DStream_t* Dstream, const HUF_DEltX1* dt, const U32 dtLog
     if (MEM_64bits()) \
         HUF_DECODE_SYMBOLX1_0(ptr, DStreamPtr)
 
-HINT_INLINE size_t
+HINT_INLINE size_t 
 HUF_decodeStreamX1(BYTE* p, BIT_DStream_t* const bitDPtr, BYTE* const pEnd, const HUF_DEltX1* const dt, const U32 dtLog)
 {
     BYTE* const pStart = p;
@@ -514,19 +514,19 @@ HUF_decodeStreamX1(BYTE* p, BIT_DStream_t* const bitDPtr, BYTE* const pEnd, cons
         BIT_reloadDStream(bitDPtr);
     }
 
-    /* [0-3] symbols remaining */
-    if (MEM_32bits())
-        while ((BIT_reloadDStream(bitDPtr) == BIT_DStream_unfinished) & (p < pEnd))
+    /* [0-3] symbols remaining */ 
+    if (MEM_32bits()) 
+        while ((BIT_reloadDStream(bitDPtr) == BIT_DStream_unfinished) & (p < pEnd)) 
             HUF_DECODE_SYMBOLX1_0(p, bitDPtr);
 
-    /* no more data to retrieve from bitstream, no need to reload */
+    /* no more data to retrieve from bitstream, no need to reload */ 
     while (p < pEnd)
         HUF_DECODE_SYMBOLX1_0(p, bitDPtr);
 
     return pEnd-pStart;
 }
 
-FORCE_INLINE_TEMPLATE size_t
+FORCE_INLINE_TEMPLATE size_t 
 HUF_decompress1X1_usingDTable_internal_body(
           void* dst,  size_t dstSize,
     const void* cSrc, size_t cSrcSize,
@@ -540,7 +540,7 @@ HUF_decompress1X1_usingDTable_internal_body(
     DTableDesc const dtd = HUF_getDTableDesc(DTable);
     U32 const dtLog = dtd.tableLog;
 
-    CHECK_F( BIT_initDStream(&bitD, cSrc, cSrcSize) );
+    CHECK_F( BIT_initDStream(&bitD, cSrc, cSrcSize) ); 
 
     HUF_decodeStreamX1(op, &bitD, oend, dt, dtLog);
 
@@ -549,7 +549,7 @@ HUF_decompress1X1_usingDTable_internal_body(
     return dstSize;
 }
 
-FORCE_INLINE_TEMPLATE size_t
+FORCE_INLINE_TEMPLATE size_t 
 HUF_decompress4X1_usingDTable_internal_body(
           void* dst,  size_t dstSize,
     const void* cSrc, size_t cSrcSize,
@@ -592,12 +592,12 @@ HUF_decompress4X1_usingDTable_internal_body(
 
         if (length4 > cSrcSize) return ERROR(corruption_detected);   /* overflow */
         if (opStart4 > oend) return ERROR(corruption_detected);      /* overflow */
-        CHECK_F( BIT_initDStream(&bitD1, istart1, length1) );
-        CHECK_F( BIT_initDStream(&bitD2, istart2, length2) );
-        CHECK_F( BIT_initDStream(&bitD3, istart3, length3) );
-        CHECK_F( BIT_initDStream(&bitD4, istart4, length4) );
+        CHECK_F( BIT_initDStream(&bitD1, istart1, length1) ); 
+        CHECK_F( BIT_initDStream(&bitD2, istart2, length2) ); 
+        CHECK_F( BIT_initDStream(&bitD3, istart3, length3) ); 
+        CHECK_F( BIT_initDStream(&bitD4, istart4, length4) ); 
 
-        /* up to 16 symbols per loop (4 symbols per stream) in 64-bit mode */
+        /* up to 16 symbols per loop (4 symbols per stream) in 64-bit mode */ 
         if ((size_t)(oend - op4) >= sizeof(size_t)) {
             for ( ; (endSignal) & (op4 < olimit) ; ) {
                 HUF_DECODE_SYMBOLX1_2(op1, &bitD1);
@@ -624,8 +624,8 @@ HUF_decompress4X1_usingDTable_internal_body(
         }
 
         /* check corruption */
-        /* note : should not be necessary : op# advance in lock step, and we control op4.
-         *        but curiously, binary generated by gcc 7.2 & 7.3 with -mbmi2 runs faster when >=1 test is present */
+        /* note : should not be necessary : op# advance in lock step, and we control op4. 
+         *        but curiously, binary generated by gcc 7.2 & 7.3 with -mbmi2 runs faster when >=1 test is present */ 
         if (op1 > opStart2) return ERROR(corruption_detected);
         if (op2 > opStart3) return ERROR(corruption_detected);
         if (op3 > opStart4) return ERROR(corruption_detected);
@@ -638,8 +638,8 @@ HUF_decompress4X1_usingDTable_internal_body(
         HUF_decodeStreamX1(op4, &bitD4, oend,     dt, dtLog);
 
         /* check */
-        { U32 const endCheck = BIT_endOfDStream(&bitD1) & BIT_endOfDStream(&bitD2) & BIT_endOfDStream(&bitD3) & BIT_endOfDStream(&bitD4);
-          if (!endCheck) return ERROR(corruption_detected); }
+        { U32 const endCheck = BIT_endOfDStream(&bitD1) & BIT_endOfDStream(&bitD2) & BIT_endOfDStream(&bitD3) & BIT_endOfDStream(&bitD4); 
+          if (!endCheck) return ERROR(corruption_detected); } 
 
         /* decoded size */
         return dstSize;
@@ -720,13 +720,13 @@ HUF_decompress4X1_usingDTable_internal_bmi2_asm(
 }
 #endif /* ZSTD_ENABLE_ASM_X86_64_BMI2 */
 
-typedef size_t (*HUF_decompress_usingDTable_t)(void *dst, size_t dstSize,
-                                               const void *cSrc,
-                                               size_t cSrcSize,
-                                               const HUF_DTable *DTable);
-
+typedef size_t (*HUF_decompress_usingDTable_t)(void *dst, size_t dstSize, 
+                                               const void *cSrc, 
+                                               size_t cSrcSize, 
+                                               const HUF_DTable *DTable); 
+ 
 HUF_DGEN(HUF_decompress1X1_usingDTable_internal)
-
+ 
 static size_t HUF_decompress4X1_usingDTable_internal(void* dst, size_t dstSize, void const* cSrc,
                     size_t cSrcSize, HUF_DTable const* DTable, int bmi2)
 {
@@ -741,54 +741,54 @@ static size_t HUF_decompress4X1_usingDTable_internal(void* dst, size_t dstSize, 
 #else
     (void)bmi2;
 #endif
-
+ 
 #if ZSTD_ENABLE_ASM_X86_64_BMI2 && defined(__BMI2__)
     return HUF_decompress4X1_usingDTable_internal_bmi2_asm(dst, dstSize, cSrc, cSrcSize, DTable);
 #else
     return HUF_decompress4X1_usingDTable_internal_default(dst, dstSize, cSrc, cSrcSize, DTable);
 #endif
 }
-
+ 
 
 size_t HUF_decompress1X1_usingDTable(
-          void* dst,  size_t dstSize,
-    const void* cSrc, size_t cSrcSize,
-    const HUF_DTable* DTable)
-{
+          void* dst,  size_t dstSize, 
+    const void* cSrc, size_t cSrcSize, 
+    const HUF_DTable* DTable) 
+{ 
     DTableDesc dtd = HUF_getDTableDesc(DTable);
     if (dtd.tableType != 0) return ERROR(GENERIC);
     return HUF_decompress1X1_usingDTable_internal(dst, dstSize, cSrc, cSrcSize, DTable, /* bmi2 */ 0);
 }
 
 size_t HUF_decompress1X1_DCtx_wksp(HUF_DTable* DCtx, void* dst, size_t dstSize,
-                                   const void* cSrc, size_t cSrcSize,
-                                   void* workSpace, size_t wkspSize)
-{
-    const BYTE* ip = (const BYTE*) cSrc;
+                                   const void* cSrc, size_t cSrcSize, 
+                                   void* workSpace, size_t wkspSize) 
+{ 
+    const BYTE* ip = (const BYTE*) cSrc; 
 
     size_t const hSize = HUF_readDTableX1_wksp(DCtx, cSrc, cSrcSize, workSpace, wkspSize);
-    if (HUF_isError(hSize)) return hSize;
-    if (hSize >= cSrcSize) return ERROR(srcSize_wrong);
-    ip += hSize; cSrcSize -= hSize;
-
+    if (HUF_isError(hSize)) return hSize; 
+    if (hSize >= cSrcSize) return ERROR(srcSize_wrong); 
+    ip += hSize; cSrcSize -= hSize; 
+ 
     return HUF_decompress1X1_usingDTable_internal(dst, dstSize, ip, cSrcSize, DCtx, /* bmi2 */ 0);
-}
-
-
+} 
+ 
+ 
 size_t HUF_decompress4X1_usingDTable(
-          void* dst,  size_t dstSize,
-    const void* cSrc, size_t cSrcSize,
-    const HUF_DTable* DTable)
-{
-    DTableDesc dtd = HUF_getDTableDesc(DTable);
-    if (dtd.tableType != 0) return ERROR(GENERIC);
+          void* dst,  size_t dstSize, 
+    const void* cSrc, size_t cSrcSize, 
+    const HUF_DTable* DTable) 
+{ 
+    DTableDesc dtd = HUF_getDTableDesc(DTable); 
+    if (dtd.tableType != 0) return ERROR(GENERIC); 
     return HUF_decompress4X1_usingDTable_internal(dst, dstSize, cSrc, cSrcSize, DTable, /* bmi2 */ 0);
-}
-
+} 
+ 
 static size_t HUF_decompress4X1_DCtx_wksp_bmi2(HUF_DTable* dctx, void* dst, size_t dstSize,
-                                   const void* cSrc, size_t cSrcSize,
-                                   void* workSpace, size_t wkspSize, int bmi2)
-{
+                                   const void* cSrc, size_t cSrcSize, 
+                                   void* workSpace, size_t wkspSize, int bmi2) 
+{ 
     const BYTE* ip = (const BYTE*) cSrc;
 
     size_t const hSize = HUF_readDTableX1_wksp_bmi2(dctx, cSrc, cSrcSize, workSpace, wkspSize, bmi2);
@@ -800,13 +800,13 @@ static size_t HUF_decompress4X1_DCtx_wksp_bmi2(HUF_DTable* dctx, void* dst, size
 }
 
 size_t HUF_decompress4X1_DCtx_wksp(HUF_DTable* dctx, void* dst, size_t dstSize,
-                                   const void* cSrc, size_t cSrcSize,
-                                   void* workSpace, size_t wkspSize)
-{
+                                   const void* cSrc, size_t cSrcSize, 
+                                   void* workSpace, size_t wkspSize) 
+{ 
     return HUF_decompress4X1_DCtx_wksp_bmi2(dctx, dst, dstSize, cSrc, cSrcSize, workSpace, wkspSize, 0);
-}
-
-
+} 
+ 
+ 
 #endif /* HUF_FORCE_DECOMPRESS_X2 */
 
 
@@ -1059,16 +1059,16 @@ size_t HUF_readDTableX2_wksp_bmi2(HUF_DTable* DTable,
     size_t iSize;
     void* dtPtr = DTable+1;   /* force compiler to avoid strict-aliasing */
     HUF_DEltX2* const dt = (HUF_DEltX2*)dtPtr;
-    U32 *rankStart;
+    U32 *rankStart; 
 
     HUF_ReadDTableX2_Workspace* const wksp = (HUF_ReadDTableX2_Workspace*)workSpace;
-
+ 
     if (sizeof(*wksp) > wkspSize) return ERROR(GENERIC);
-
+ 
     rankStart = wksp->rankStart0 + 1;
     ZSTD_memset(wksp->rankStats, 0, sizeof(wksp->rankStats));
     ZSTD_memset(wksp->rankStart0, 0, sizeof(wksp->rankStart0));
-
+ 
     DEBUG_STATIC_ASSERT(sizeof(HUF_DEltX2) == sizeof(HUF_DTable));   /* if compiler fails here, assertion is wrong */
     if (maxTableLog > HUF_TABLELOG_MAX) return ERROR(tableLog_tooLarge);
     /* ZSTD_memset(weightList, 0, sizeof(weightList)); */  /* is not necessary, even though some analyzer complain ... */
@@ -1467,13 +1467,13 @@ size_t HUF_decompress1X2_usingDTable(
 }
 
 size_t HUF_decompress1X2_DCtx_wksp(HUF_DTable* DCtx, void* dst, size_t dstSize,
-                                   const void* cSrc, size_t cSrcSize,
-                                   void* workSpace, size_t wkspSize)
+                                   const void* cSrc, size_t cSrcSize, 
+                                   void* workSpace, size_t wkspSize) 
 {
     const BYTE* ip = (const BYTE*) cSrc;
 
     size_t const hSize = HUF_readDTableX2_wksp(DCtx, cSrc, cSrcSize,
-                                               workSpace, wkspSize);
+                                               workSpace, wkspSize); 
     if (HUF_isError(hSize)) return hSize;
     if (hSize >= cSrcSize) return ERROR(srcSize_wrong);
     ip += hSize; cSrcSize -= hSize;
@@ -1481,7 +1481,7 @@ size_t HUF_decompress1X2_DCtx_wksp(HUF_DTable* DCtx, void* dst, size_t dstSize,
     return HUF_decompress1X2_usingDTable_internal(dst, dstSize, ip, cSrcSize, DCtx, /* bmi2 */ 0);
 }
 
-
+ 
 size_t HUF_decompress4X2_usingDTable(
           void* dst,  size_t dstSize,
     const void* cSrc, size_t cSrcSize,
@@ -1493,13 +1493,13 @@ size_t HUF_decompress4X2_usingDTable(
 }
 
 static size_t HUF_decompress4X2_DCtx_wksp_bmi2(HUF_DTable* dctx, void* dst, size_t dstSize,
-                                   const void* cSrc, size_t cSrcSize,
-                                   void* workSpace, size_t wkspSize, int bmi2)
+                                   const void* cSrc, size_t cSrcSize, 
+                                   void* workSpace, size_t wkspSize, int bmi2) 
 {
     const BYTE* ip = (const BYTE*) cSrc;
 
     size_t hSize = HUF_readDTableX2_wksp(dctx, cSrc, cSrcSize,
-                                         workSpace, wkspSize);
+                                         workSpace, wkspSize); 
     if (HUF_isError(hSize)) return hSize;
     if (hSize >= cSrcSize) return ERROR(srcSize_wrong);
     ip += hSize; cSrcSize -= hSize;
@@ -1508,13 +1508,13 @@ static size_t HUF_decompress4X2_DCtx_wksp_bmi2(HUF_DTable* dctx, void* dst, size
 }
 
 size_t HUF_decompress4X2_DCtx_wksp(HUF_DTable* dctx, void* dst, size_t dstSize,
-                                   const void* cSrc, size_t cSrcSize,
-                                   void* workSpace, size_t wkspSize)
-{
+                                   const void* cSrc, size_t cSrcSize, 
+                                   void* workSpace, size_t wkspSize) 
+{ 
     return HUF_decompress4X2_DCtx_wksp_bmi2(dctx, dst, dstSize, cSrc, cSrcSize, workSpace, wkspSize, /* bmi2 */ 0);
-}
-
-
+} 
+ 
+ 
 #endif /* HUF_FORCE_DECOMPRESS_X1 */
 
 
@@ -1586,13 +1586,13 @@ static const algo_time_t algoTime[16 /* Quantization */][2 /* single, double */]
 #endif
 
 /** HUF_selectDecoder() :
- *  Tells which decoder is likely to decode faster,
- *  based on a set of pre-computed metrics.
+ *  Tells which decoder is likely to decode faster, 
+ *  based on a set of pre-computed metrics. 
  * @return : 0==HUF_decompress4X1, 1==HUF_decompress4X2 .
- *  Assumption : 0 < dstSize <= 128 KB */
+ *  Assumption : 0 < dstSize <= 128 KB */ 
 U32 HUF_selectDecoder (size_t dstSize, size_t cSrcSize)
 {
-    assert(dstSize > 0);
+    assert(dstSize > 0); 
     assert(dstSize <= 128*1024);
 #if defined(HUF_FORCE_DECOMPRESS_X1)
     (void)dstSize;
@@ -1604,25 +1604,25 @@ U32 HUF_selectDecoder (size_t dstSize, size_t cSrcSize)
     return 1;
 #else
     /* decoder timing evaluation */
-    {   U32 const Q = (cSrcSize >= dstSize) ? 15 : (U32)(cSrcSize * 16 / dstSize);   /* Q < 16 */
-        U32 const D256 = (U32)(dstSize >> 8);
-        U32 const DTime0 = algoTime[Q][0].tableTime + (algoTime[Q][0].decode256Time * D256);
-        U32 DTime1 = algoTime[Q][1].tableTime + (algoTime[Q][1].decode256Time * D256);
+    {   U32 const Q = (cSrcSize >= dstSize) ? 15 : (U32)(cSrcSize * 16 / dstSize);   /* Q < 16 */ 
+        U32 const D256 = (U32)(dstSize >> 8); 
+        U32 const DTime0 = algoTime[Q][0].tableTime + (algoTime[Q][0].decode256Time * D256); 
+        U32 DTime1 = algoTime[Q][1].tableTime + (algoTime[Q][1].decode256Time * D256); 
         DTime1 += DTime1 >> 5;  /* small advantage to algorithm using less memory, to reduce cache eviction */
-        return DTime1 < DTime0;
+        return DTime1 < DTime0; 
     }
 #endif
 }
 
 
-size_t HUF_decompress4X_hufOnly_wksp(HUF_DTable* dctx, void* dst,
-                                     size_t dstSize, const void* cSrc,
-                                     size_t cSrcSize, void* workSpace,
-                                     size_t wkspSize)
-{
+size_t HUF_decompress4X_hufOnly_wksp(HUF_DTable* dctx, void* dst, 
+                                     size_t dstSize, const void* cSrc, 
+                                     size_t cSrcSize, void* workSpace, 
+                                     size_t wkspSize) 
+{ 
     /* validation checks */
     if (dstSize == 0) return ERROR(dstSize_tooSmall);
-    if (cSrcSize == 0) return ERROR(corruption_detected);
+    if (cSrcSize == 0) return ERROR(corruption_detected); 
 
     {   U32 const algoNb = HUF_selectDecoder(dstSize, cSrcSize);
 #if defined(HUF_FORCE_DECOMPRESS_X1)
@@ -1641,9 +1641,9 @@ size_t HUF_decompress4X_hufOnly_wksp(HUF_DTable* dctx, void* dst,
     }
 }
 
-size_t HUF_decompress1X_DCtx_wksp(HUF_DTable* dctx, void* dst, size_t dstSize,
-                                  const void* cSrc, size_t cSrcSize,
-                                  void* workSpace, size_t wkspSize)
+size_t HUF_decompress1X_DCtx_wksp(HUF_DTable* dctx, void* dst, size_t dstSize, 
+                                  const void* cSrc, size_t cSrcSize, 
+                                  void* workSpace, size_t wkspSize) 
 {
     /* validation checks */
     if (dstSize == 0) return ERROR(dstSize_tooSmall);
@@ -1664,17 +1664,17 @@ size_t HUF_decompress1X_DCtx_wksp(HUF_DTable* dctx, void* dst, size_t dstSize,
                                 cSrcSize, workSpace, wkspSize);
 #else
         return algoNb ? HUF_decompress1X2_DCtx_wksp(dctx, dst, dstSize, cSrc,
-                                cSrcSize, workSpace, wkspSize):
+                                cSrcSize, workSpace, wkspSize): 
                         HUF_decompress1X1_DCtx_wksp(dctx, dst, dstSize, cSrc,
-                                cSrcSize, workSpace, wkspSize);
+                                cSrcSize, workSpace, wkspSize); 
 #endif
     }
 }
-
-
-size_t HUF_decompress1X_usingDTable_bmi2(void* dst, size_t maxDstSize, const void* cSrc, size_t cSrcSize, const HUF_DTable* DTable, int bmi2)
-{
-    DTableDesc const dtd = HUF_getDTableDesc(DTable);
+ 
+ 
+size_t HUF_decompress1X_usingDTable_bmi2(void* dst, size_t maxDstSize, const void* cSrc, size_t cSrcSize, const HUF_DTable* DTable, int bmi2) 
+{ 
+    DTableDesc const dtd = HUF_getDTableDesc(DTable); 
 #if defined(HUF_FORCE_DECOMPRESS_X1)
     (void)dtd;
     assert(dtd.tableType == 0);
@@ -1687,25 +1687,25 @@ size_t HUF_decompress1X_usingDTable_bmi2(void* dst, size_t maxDstSize, const voi
     return dtd.tableType ? HUF_decompress1X2_usingDTable_internal(dst, maxDstSize, cSrc, cSrcSize, DTable, bmi2) :
                            HUF_decompress1X1_usingDTable_internal(dst, maxDstSize, cSrc, cSrcSize, DTable, bmi2);
 #endif
-}
-
+} 
+ 
 #ifndef HUF_FORCE_DECOMPRESS_X2
 size_t HUF_decompress1X1_DCtx_wksp_bmi2(HUF_DTable* dctx, void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize, void* workSpace, size_t wkspSize, int bmi2)
-{
-    const BYTE* ip = (const BYTE*) cSrc;
-
+{ 
+    const BYTE* ip = (const BYTE*) cSrc; 
+ 
     size_t const hSize = HUF_readDTableX1_wksp_bmi2(dctx, cSrc, cSrcSize, workSpace, wkspSize, bmi2);
-    if (HUF_isError(hSize)) return hSize;
-    if (hSize >= cSrcSize) return ERROR(srcSize_wrong);
-    ip += hSize; cSrcSize -= hSize;
-
+    if (HUF_isError(hSize)) return hSize; 
+    if (hSize >= cSrcSize) return ERROR(srcSize_wrong); 
+    ip += hSize; cSrcSize -= hSize; 
+ 
     return HUF_decompress1X1_usingDTable_internal(dst, dstSize, ip, cSrcSize, dctx, bmi2);
-}
+} 
 #endif
-
-size_t HUF_decompress4X_usingDTable_bmi2(void* dst, size_t maxDstSize, const void* cSrc, size_t cSrcSize, const HUF_DTable* DTable, int bmi2)
-{
-    DTableDesc const dtd = HUF_getDTableDesc(DTable);
+ 
+size_t HUF_decompress4X_usingDTable_bmi2(void* dst, size_t maxDstSize, const void* cSrc, size_t cSrcSize, const HUF_DTable* DTable, int bmi2) 
+{ 
+    DTableDesc const dtd = HUF_getDTableDesc(DTable); 
 #if defined(HUF_FORCE_DECOMPRESS_X1)
     (void)dtd;
     assert(dtd.tableType == 0);
@@ -1718,15 +1718,15 @@ size_t HUF_decompress4X_usingDTable_bmi2(void* dst, size_t maxDstSize, const voi
     return dtd.tableType ? HUF_decompress4X2_usingDTable_internal(dst, maxDstSize, cSrc, cSrcSize, DTable, bmi2) :
                            HUF_decompress4X1_usingDTable_internal(dst, maxDstSize, cSrc, cSrcSize, DTable, bmi2);
 #endif
-}
-
-size_t HUF_decompress4X_hufOnly_wksp_bmi2(HUF_DTable* dctx, void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize, void* workSpace, size_t wkspSize, int bmi2)
-{
-    /* validation checks */
-    if (dstSize == 0) return ERROR(dstSize_tooSmall);
-    if (cSrcSize == 0) return ERROR(corruption_detected);
-
-    {   U32 const algoNb = HUF_selectDecoder(dstSize, cSrcSize);
+} 
+ 
+size_t HUF_decompress4X_hufOnly_wksp_bmi2(HUF_DTable* dctx, void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize, void* workSpace, size_t wkspSize, int bmi2) 
+{ 
+    /* validation checks */ 
+    if (dstSize == 0) return ERROR(dstSize_tooSmall); 
+    if (cSrcSize == 0) return ERROR(corruption_detected); 
+ 
+    {   U32 const algoNb = HUF_selectDecoder(dstSize, cSrcSize); 
 #if defined(HUF_FORCE_DECOMPRESS_X1)
         (void)algoNb;
         assert(algoNb == 0);
@@ -1739,8 +1739,8 @@ size_t HUF_decompress4X_hufOnly_wksp_bmi2(HUF_DTable* dctx, void* dst, size_t ds
         return algoNb ? HUF_decompress4X2_DCtx_wksp_bmi2(dctx, dst, dstSize, cSrc, cSrcSize, workSpace, wkspSize, bmi2) :
                         HUF_decompress4X1_DCtx_wksp_bmi2(dctx, dst, dstSize, cSrc, cSrcSize, workSpace, wkspSize, bmi2);
 #endif
-    }
-}
+    } 
+} 
 
 #ifndef ZSTD_NO_UNUSED_FUNCTIONS
 #ifndef HUF_FORCE_DECOMPRESS_X2

@@ -159,10 +159,10 @@ namespace NCodecs {
                 lens.push_back(r.size());
             }
 
-            ZDICT_legacy_params_t params;
+            ZDICT_legacy_params_t params; 
             memset(&params, 0, sizeof(params));
-            params.zParams.compressionLevel = 1;
-            params.zParams.notificationLevel = 1;
+            params.zParams.compressionLevel = 1; 
+            params.zParams.notificationLevel = 1; 
             Dict.Resize(Max<size_t>(1 << 20, data.Size() + 16 * lens.size()));
 
             if (!lens) {

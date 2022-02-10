@@ -1,11 +1,11 @@
-/*
+/* 
  * Copyright (c) Yann Collet, Facebook, Inc.
  * All rights reserved.
  *
- * This source code is licensed under both the BSD-style license (found in the
- * LICENSE file in the root directory of this source tree) and the GPLv2 (found
- * in the COPYING file in the root directory of this source tree).
- * You may select, at your option, one of the above-listed licenses.
+ * This source code is licensed under both the BSD-style license (found in the 
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found 
+ * in the COPYING file in the root directory of this source tree). 
+ * You may select, at your option, one of the above-listed licenses. 
  */
 
 #ifndef ZSTDv06_H
@@ -42,7 +42,7 @@ extern "C" {
 ZSTDLIBv06_API size_t ZSTDv06_decompress( void* dst, size_t dstCapacity,
                                     const void* src, size_t compressedSize);
 
-/**
+/** 
 ZSTDv06_findFrameSizeInfoLegacy() : get the source length and decompressed bound of a ZSTD frame compliant with v0.6.x format
     srcSize : The size of the 'src' buffer, at least as large as the frame pointed to by 'src'
     cSize (output parameter)  : the number of bytes that would be read to decompress this frame
@@ -51,7 +51,7 @@ ZSTDv06_findFrameSizeInfoLegacy() : get the source length and decompressed bound
                                 or ZSTD_CONTENTSIZE_ERROR if an error occurs
 
     note : assumes `cSize` and `dBound` are _not_ NULL.
-*/
+*/ 
 void ZSTDv06_findFrameSizeInfoLegacy(const void *src, size_t srcSize,
                                      size_t* cSize, unsigned long long* dBound);
 

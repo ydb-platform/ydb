@@ -1,11 +1,11 @@
-/*
+/* 
  * Copyright (c) Yann Collet, Facebook, Inc.
  * All rights reserved.
  *
- * This source code is licensed under both the BSD-style license (found in the
- * LICENSE file in the root directory of this source tree) and the GPLv2 (found
- * in the COPYING file in the root directory of this source tree).
- * You may select, at your option, one of the above-listed licenses.
+ * This source code is licensed under both the BSD-style license (found in the 
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found 
+ * in the COPYING file in the root directory of this source tree). 
+ * You may select, at your option, one of the above-listed licenses. 
  */
 
 /* Note : this module is expected to remain private, do not expose it */
@@ -52,8 +52,8 @@ typedef ZSTD_ErrorCode ERR_enum;
 *  Error codes handling
 ******************************************/
 #undef ERROR   /* already defined on Visual Studio */
-#define ERROR(name) ZSTD_ERROR(name)
-#define ZSTD_ERROR(name) ((size_t)-PREFIX(name))
+#define ERROR(name) ZSTD_ERROR(name) 
+#define ZSTD_ERROR(name) ((size_t)-PREFIX(name)) 
 
 ERR_STATIC unsigned ERR_isError(size_t code) { return (code > ERROR(maxCode)); }
 

@@ -1,11 +1,11 @@
-/*
+/* 
  * Copyright (c) Yann Collet, Facebook, Inc.
  * All rights reserved.
  *
- * This source code is licensed under both the BSD-style license (found in the
- * LICENSE file in the root directory of this source tree) and the GPLv2 (found
- * in the COPYING file in the root directory of this source tree).
- * You may select, at your option, one of the above-listed licenses.
+ * This source code is licensed under both the BSD-style license (found in the 
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found 
+ * in the COPYING file in the root directory of this source tree). 
+ * You may select, at your option, one of the above-listed licenses. 
  */
 
 #ifndef ZSTD_V01_H_28739879432
@@ -42,13 +42,13 @@ size_t ZSTDv01_decompress( void* dst, size_t maxOriginalSize,
                                  or an error code if it fails (which can be tested using ZSTDv01_isError())
      dBound (output parameter) : an upper-bound for the decompressed size of the data in the frame
                                  or ZSTD_CONTENTSIZE_ERROR if an error occurs
-
+ 
      note : assumes `cSize` and `dBound` are _not_ NULL.
  */
 void ZSTDv01_findFrameSizeInfoLegacy(const void *src, size_t srcSize,
                                      size_t* cSize, unsigned long long* dBound);
 
-/**
+/** 
 ZSTDv01_isError() : tells if the result of ZSTDv01_decompress() is an error
 */
 unsigned ZSTDv01_isError(size_t code);

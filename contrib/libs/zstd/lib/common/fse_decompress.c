@@ -18,10 +18,10 @@
 ****************************************************************/
 #include "debug.h"      /* assert */
 #include "bitstream.h"
-#include "compiler.h"
+#include "compiler.h" 
 #define FSE_STATIC_LINKING_ONLY
 #include "fse.h"
-#include "error_private.h"
+#include "error_private.h" 
 #define ZSTD_DEPS_NEED_MALLOC
 #include "zstd_deps.h"
 
@@ -165,8 +165,8 @@ static size_t FSE_buildDTable_internal(FSE_DTable* dt, const short* normalizedCo
     {   U32 u;
         for (u=0; u<tableSize; u++) {
             FSE_FUNCTION_TYPE const symbol = (FSE_FUNCTION_TYPE)(tableDecode[u].symbol);
-            U32 const nextState = symbolNext[symbol]++;
-            tableDecode[u].nbBits = (BYTE) (tableLog - BIT_highbit32(nextState) );
+            U32 const nextState = symbolNext[symbol]++; 
+            tableDecode[u].nbBits = (BYTE) (tableLog - BIT_highbit32(nextState) ); 
             tableDecode[u].newState = (U16) ( (nextState << tableDecode[u].nbBits) - tableSize);
     }   }
 
@@ -228,7 +228,7 @@ size_t FSE_buildDTable_raw (FSE_DTable* dt, unsigned nbBits)
     return 0;
 }
 
-FORCE_INLINE_TEMPLATE size_t FSE_decompress_usingDTable_generic(
+FORCE_INLINE_TEMPLATE size_t FSE_decompress_usingDTable_generic( 
           void* dst, size_t maxDstSize,
     const void* cSrc, size_t cSrcSize,
     const FSE_DTable* dt, const unsigned fast)

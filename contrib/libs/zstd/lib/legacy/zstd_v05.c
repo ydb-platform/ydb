@@ -1,11 +1,11 @@
-/*
+/* 
  * Copyright (c) Yann Collet, Facebook, Inc.
  * All rights reserved.
  *
- * This source code is licensed under both the BSD-style license (found in the
- * LICENSE file in the root directory of this source tree) and the GPLv2 (found
- * in the COPYING file in the root directory of this source tree).
- * You may select, at your option, one of the above-listed licenses.
+ * This source code is licensed under both the BSD-style license (found in the 
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found 
+ * in the COPYING file in the root directory of this source tree). 
+ * You may select, at your option, one of the above-listed licenses. 
  */
 
 
@@ -750,7 +750,7 @@ MEM_STATIC size_t BITv05_readBitsFast(BITv05_DStream_t* bitD, unsigned nbBits);
 /*-**************************************************************
 *  Helper functions
 ****************************************************************/
-MEM_STATIC unsigned BITv05_highbit32 (U32 val)
+MEM_STATIC unsigned BITv05_highbit32 (U32 val) 
 {
 #   if defined(_MSC_VER)   /* Visual */
     unsigned long r;
@@ -802,13 +802,13 @@ MEM_STATIC size_t BITv05_initDStream(BITv05_DStream_t* bitD, const void* srcBuff
         bitD->bitContainer = *(const BYTE*)(bitD->start);
         switch(srcSize)
         {
-            case 7: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[6]) << (sizeof(size_t)*8 - 16);/* fall-through */
-            case 6: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[5]) << (sizeof(size_t)*8 - 24);/* fall-through */
-            case 5: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[4]) << (sizeof(size_t)*8 - 32);/* fall-through */
-            case 4: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[3]) << 24; /* fall-through */
-            case 3: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[2]) << 16; /* fall-through */
-            case 2: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[1]) <<  8; /* fall-through */
-            default: break;
+            case 7: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[6]) << (sizeof(size_t)*8 - 16);/* fall-through */ 
+            case 6: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[5]) << (sizeof(size_t)*8 - 24);/* fall-through */ 
+            case 5: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[4]) << (sizeof(size_t)*8 - 32);/* fall-through */ 
+            case 4: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[3]) << 24; /* fall-through */ 
+            case 3: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[2]) << 16; /* fall-through */ 
+            case 2: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[1]) <<  8; /* fall-through */ 
+            default: break; 
         }
         contain32 = ((const BYTE*)srcBuffer)[srcSize-1];
         if (contain32 == 0) return ERROR(GENERIC);   /* endMark not present */
@@ -856,8 +856,8 @@ MEM_STATIC size_t BITv05_readBitsFast(BITv05_DStream_t* bitD, unsigned nbBits)
 
 MEM_STATIC BITv05_DStream_status BITv05_reloadDStream(BITv05_DStream_t* bitD)
 {
-    if (bitD->bitsConsumed > (sizeof(bitD->bitContainer)*8))  /* should never happen */
-        return BITv05_DStream_overflow;
+    if (bitD->bitsConsumed > (sizeof(bitD->bitContainer)*8))  /* should never happen */ 
+        return BITv05_DStream_overflow; 
 
     if (bitD->ptr >= bitD->start + sizeof(bitD->bitContainer)) {
         bitD->ptr -= bitD->bitsConsumed >> 3;
@@ -2822,7 +2822,7 @@ static size_t ZSTDv05_decodeFrameHeader_Part2(ZSTDv05_DCtx* zc, const void* src,
     if (srcSize != zc->headerSize)
         return ERROR(srcSize_wrong);
     result = ZSTDv05_getFrameParams(&(zc->params), src, srcSize);
-    if ((MEM_32bits()) && (zc->params.windowLog > 25)) return ERROR(frameParameter_unsupported);
+    if ((MEM_32bits()) && (zc->params.windowLog > 25)) return ERROR(frameParameter_unsupported); 
     return result;
 }
 
@@ -3162,7 +3162,7 @@ static void ZSTDv05_decodeSequence(seq_t* seq, seqState_t* seqState)
             }
             litLength>>=1;
         }
-        if (dumps >= de) { dumps = de-1; }  /* late correction, to avoid read overflow (data is now corrupted anyway) */
+        if (dumps >= de) { dumps = de-1; }  /* late correction, to avoid read overflow (data is now corrupted anyway) */ 
     }
 
     /* Offset */
@@ -3199,7 +3199,7 @@ static void ZSTDv05_decodeSequence(seq_t* seq, seqState_t* seqState)
             }
             matchLength >>= 1;
         }
-        if (dumps >= de) { dumps = de-1; }  /* late correction, to avoid read overflow (data is now corrupted anyway) */
+        if (dumps >= de) { dumps = de-1; }  /* late correction, to avoid read overflow (data is now corrupted anyway) */ 
     }
     matchLength += MINMATCH;
 
@@ -3522,19 +3522,19 @@ size_t ZSTDv05_decompress(void* dst, size_t maxDstSize, const void* src, size_t 
 /* ZSTD_errorFrameSizeInfoLegacy() :
    assumes `cSize` and `dBound` are _not_ NULL */
 static void ZSTD_errorFrameSizeInfoLegacy(size_t* cSize, unsigned long long* dBound, size_t ret)
-{
+{ 
     *cSize = ret;
     *dBound = ZSTD_CONTENTSIZE_ERROR;
 }
 
 void ZSTDv05_findFrameSizeInfoLegacy(const void *src, size_t srcSize, size_t* cSize, unsigned long long* dBound)
 {
-    const BYTE* ip = (const BYTE*)src;
-    size_t remainingSize = srcSize;
+    const BYTE* ip = (const BYTE*)src; 
+    size_t remainingSize = srcSize; 
     size_t nbBlocks = 0;
-    blockProperties_t blockProperties;
+    blockProperties_t blockProperties; 
 
-    /* Frame Header */
+    /* Frame Header */ 
     if (srcSize < ZSTDv05_frameHeaderSize_min) {
         ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(srcSize_wrong));
         return;
@@ -3543,35 +3543,35 @@ void ZSTDv05_findFrameSizeInfoLegacy(const void *src, size_t srcSize, size_t* cS
         ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(prefix_unknown));
         return;
     }
-    ip += ZSTDv05_frameHeaderSize_min; remainingSize -= ZSTDv05_frameHeaderSize_min;
-
-    /* Loop on each block */
-    while (1)
-    {
-        size_t cBlockSize = ZSTDv05_getcBlockSize(ip, remainingSize, &blockProperties);
+    ip += ZSTDv05_frameHeaderSize_min; remainingSize -= ZSTDv05_frameHeaderSize_min; 
+ 
+    /* Loop on each block */ 
+    while (1) 
+    { 
+        size_t cBlockSize = ZSTDv05_getcBlockSize(ip, remainingSize, &blockProperties); 
         if (ZSTDv05_isError(cBlockSize)) {
             ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, cBlockSize);
             return;
         }
-
-        ip += ZSTDv05_blockHeaderSize;
-        remainingSize -= ZSTDv05_blockHeaderSize;
+ 
+        ip += ZSTDv05_blockHeaderSize; 
+        remainingSize -= ZSTDv05_blockHeaderSize; 
         if (cBlockSize > remainingSize) {
             ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(srcSize_wrong));
             return;
         }
-
-        if (cBlockSize == 0) break;   /* bt_end */
-
-        ip += cBlockSize;
-        remainingSize -= cBlockSize;
+ 
+        if (cBlockSize == 0) break;   /* bt_end */ 
+ 
+        ip += cBlockSize; 
+        remainingSize -= cBlockSize; 
         nbBlocks++;
-    }
-
+    } 
+ 
     *cSize = ip - (const BYTE*)src;
     *dBound = nbBlocks * BLOCKSIZE;
-}
-
+} 
+ 
 /* ******************************
 *  Streaming Decompression API
 ********************************/
@@ -3916,7 +3916,7 @@ size_t ZBUFFv05_decompressContinue(ZBUFFv05_DCtx* zbc, void* dst, size_t* maxDst
                 zbc->stage = ZBUFFv05ds_decodeHeader;
                 break;
             }
-	    /* fall-through */
+	    /* fall-through */ 
         case ZBUFFv05ds_loadHeader:
             /* complete header from src */
             {
@@ -3934,7 +3934,7 @@ size_t ZBUFFv05_decompressContinue(ZBUFFv05_DCtx* zbc, void* dst, size_t* maxDst
                 }
                 /* zbc->stage = ZBUFFv05ds_decodeHeader; break; */   /* useless : stage follows */
             }
-	    /* fall-through */
+	    /* fall-through */ 
         case ZBUFFv05ds_decodeHeader:
                 /* apply header to create / resize buffers */
                 {
@@ -3961,7 +3961,7 @@ size_t ZBUFFv05_decompressContinue(ZBUFFv05_DCtx* zbc, void* dst, size_t* maxDst
                     break;
                 }
                 zbc->stage = ZBUFFv05ds_read;
-		/* fall-through */
+		/* fall-through */ 
         case ZBUFFv05ds_read:
             {
                 size_t neededInSize = ZSTDv05_nextSrcSizeToDecompress(zbc->zc);
@@ -3985,7 +3985,7 @@ size_t ZBUFFv05_decompressContinue(ZBUFFv05_DCtx* zbc, void* dst, size_t* maxDst
                 if (ip==iend) { notDone = 0; break; }   /* no more input */
                 zbc->stage = ZBUFFv05ds_load;
             }
-	    /* fall-through */
+	    /* fall-through */ 
         case ZBUFFv05ds_load:
             {
                 size_t neededInSize = ZSTDv05_nextSrcSizeToDecompress(zbc->zc);
@@ -4006,9 +4006,9 @@ size_t ZBUFFv05_decompressContinue(ZBUFFv05_DCtx* zbc, void* dst, size_t* maxDst
                     zbc->outEnd = zbc->outStart +  decodedSize;
                     zbc->stage = ZBUFFv05ds_flush;
                     /* break; */  /* ZBUFFv05ds_flush follows */
-                }
-	    }
-	    /* fall-through */
+                } 
+	    } 
+	    /* fall-through */ 
         case ZBUFFv05ds_flush:
             {
                 size_t toFlushSize = zbc->outEnd - zbc->outStart;

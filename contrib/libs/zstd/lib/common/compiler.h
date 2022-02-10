@@ -1,38 +1,38 @@
-/*
+/* 
  * Copyright (c) Yann Collet, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under both the BSD-style license (found in the
- * LICENSE file in the root directory of this source tree) and the GPLv2 (found
- * in the COPYING file in the root directory of this source tree).
- * You may select, at your option, one of the above-listed licenses.
- */
-
-#ifndef ZSTD_COMPILER_H
-#define ZSTD_COMPILER_H
-
+ * All rights reserved. 
+ * 
+ * This source code is licensed under both the BSD-style license (found in the 
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found 
+ * in the COPYING file in the root directory of this source tree). 
+ * You may select, at your option, one of the above-listed licenses. 
+ */ 
+ 
+#ifndef ZSTD_COMPILER_H 
+#define ZSTD_COMPILER_H 
+ 
 #include "portability_macros.h"
 
-/*-*******************************************************
-*  Compiler specifics
-*********************************************************/
-/* force inlining */
+/*-******************************************************* 
+*  Compiler specifics 
+*********************************************************/ 
+/* force inlining */ 
 
 #if !defined(ZSTD_NO_INLINE)
 #if (defined(__GNUC__) && !defined(__STRICT_ANSI__)) || defined(__cplusplus) || defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L   /* C99 */
-#  define INLINE_KEYWORD inline
-#else
-#  define INLINE_KEYWORD
-#endif
-
+#  define INLINE_KEYWORD inline 
+#else 
+#  define INLINE_KEYWORD 
+#endif 
+ 
 #if defined(__GNUC__) || defined(__ICCARM__)
-#  define FORCE_INLINE_ATTR __attribute__((always_inline))
-#elif defined(_MSC_VER)
-#  define FORCE_INLINE_ATTR __forceinline
-#else
-#  define FORCE_INLINE_ATTR
-#endif
-
+#  define FORCE_INLINE_ATTR __attribute__((always_inline)) 
+#elif defined(_MSC_VER) 
+#  define FORCE_INLINE_ATTR __forceinline 
+#else 
+#  define FORCE_INLINE_ATTR 
+#endif 
+ 
 #else
 
 #define INLINE_KEYWORD
@@ -40,7 +40,7 @@
 
 #endif
 
-/**
+/** 
   On MSVC qsort requires that functions passed into it use the __cdecl calling conversion(CC).
   This explicitly marks such functions as __cdecl so that the code will still compile
   if a CC other than __cdecl has been made the default.
@@ -52,28 +52,28 @@
 #endif
 
 /**
- * FORCE_INLINE_TEMPLATE is used to define C "templates", which take constant
+ * FORCE_INLINE_TEMPLATE is used to define C "templates", which take constant 
  * parameters. They must be inlined for the compiler to eliminate the constant
- * branches.
- */
-#define FORCE_INLINE_TEMPLATE static INLINE_KEYWORD FORCE_INLINE_ATTR
-/**
- * HINT_INLINE is used to help the compiler generate better code. It is *not*
- * used for "templates", so it can be tweaked based on the compilers
- * performance.
- *
- * gcc-4.8 and gcc-4.9 have been shown to benefit from leaving off the
- * always_inline attribute.
- *
- * clang up to 5.0.0 (trunk) benefit tremendously from the always_inline
- * attribute.
- */
-#if !defined(__clang__) && defined(__GNUC__) && __GNUC__ >= 4 && __GNUC_MINOR__ >= 8 && __GNUC__ < 5
-#  define HINT_INLINE static INLINE_KEYWORD
-#else
-#  define HINT_INLINE static INLINE_KEYWORD FORCE_INLINE_ATTR
-#endif
-
+ * branches. 
+ */ 
+#define FORCE_INLINE_TEMPLATE static INLINE_KEYWORD FORCE_INLINE_ATTR 
+/** 
+ * HINT_INLINE is used to help the compiler generate better code. It is *not* 
+ * used for "templates", so it can be tweaked based on the compilers 
+ * performance. 
+ * 
+ * gcc-4.8 and gcc-4.9 have been shown to benefit from leaving off the 
+ * always_inline attribute. 
+ * 
+ * clang up to 5.0.0 (trunk) benefit tremendously from the always_inline 
+ * attribute. 
+ */ 
+#if !defined(__clang__) && defined(__GNUC__) && __GNUC__ >= 4 && __GNUC_MINOR__ >= 8 && __GNUC__ < 5 
+#  define HINT_INLINE static INLINE_KEYWORD 
+#else 
+#  define HINT_INLINE static INLINE_KEYWORD FORCE_INLINE_ATTR 
+#endif 
+ 
 /* UNUSED_ATTR tells the compiler it is okay if the function is unused. */
 #if defined(__GNUC__)
 #  define UNUSED_ATTR __attribute__((unused))
@@ -81,37 +81,37 @@
 #  define UNUSED_ATTR
 #endif
 
-/* force no inlining */
-#ifdef _MSC_VER
-#  define FORCE_NOINLINE static __declspec(noinline)
-#else
+/* force no inlining */ 
+#ifdef _MSC_VER 
+#  define FORCE_NOINLINE static __declspec(noinline) 
+#else 
 #  if defined(__GNUC__) || defined(__ICCARM__)
-#    define FORCE_NOINLINE static __attribute__((__noinline__))
-#  else
-#    define FORCE_NOINLINE static
-#  endif
-#endif
+#    define FORCE_NOINLINE static __attribute__((__noinline__)) 
+#  else 
+#    define FORCE_NOINLINE static 
+#  endif 
+#endif 
+ 
 
-
-/* target attribute */
+/* target attribute */ 
 #if defined(__GNUC__) || defined(__ICCARM__)
-#  define TARGET_ATTRIBUTE(target) __attribute__((__target__(target)))
-#else
-#  define TARGET_ATTRIBUTE(target)
-#endif
-
+#  define TARGET_ATTRIBUTE(target) __attribute__((__target__(target))) 
+#else 
+#  define TARGET_ATTRIBUTE(target) 
+#endif 
+ 
 /* Target attribute for BMI2 dynamic dispatch.
  * Enable lzcnt, bmi, and bmi2.
  * We test for bmi1 & bmi2. lzcnt is included in bmi1.
- */
+ */ 
 #define BMI2_TARGET_ATTRIBUTE TARGET_ATTRIBUTE("lzcnt,bmi,bmi2")
-
+ 
 /* prefetch
  * can be disabled, by declaring NO_PREFETCH build macro */
 #if defined(NO_PREFETCH)
 #  define PREFETCH_L1(ptr)  (void)(ptr)  /* disabled */
 #  define PREFETCH_L2(ptr)  (void)(ptr)  /* disabled */
-#else
+#else 
 #  if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_I86))  /* _mm_prefetch() is not defined outside of x86/x64 */
 #    include <mmintrin.h>   /* https://msdn.microsoft.com/fr-fr/library/84szxsww(v=vs.90).aspx */
 #    define PREFETCH_L1(ptr)  _mm_prefetch((const char*)(ptr), _MM_HINT_T0)
@@ -127,7 +127,7 @@
 #    define PREFETCH_L2(ptr) (void)(ptr)  /* disabled */
 #  endif
 #endif  /* NO_PREFETCH */
-
+ 
 #define CACHELINE_SIZE 64
 
 #define PREFETCH_AREA(p, s)  {            \
@@ -165,16 +165,16 @@
 #define UNLIKELY(x) (x)
 #endif
 
-/* disable warnings */
-#ifdef _MSC_VER    /* Visual Studio */
-#  include <intrin.h>                    /* For Visual 2005 */
-#  pragma warning(disable : 4100)        /* disable: C4100: unreferenced formal parameter */
-#  pragma warning(disable : 4127)        /* disable: C4127: conditional expression is constant */
-#  pragma warning(disable : 4204)        /* disable: C4204: non-constant aggregate initializer */
-#  pragma warning(disable : 4214)        /* disable: C4214: non-int bitfields */
-#  pragma warning(disable : 4324)        /* disable: C4324: padded structure */
-#endif
-
+/* disable warnings */ 
+#ifdef _MSC_VER    /* Visual Studio */ 
+#  include <intrin.h>                    /* For Visual 2005 */ 
+#  pragma warning(disable : 4100)        /* disable: C4100: unreferenced formal parameter */ 
+#  pragma warning(disable : 4127)        /* disable: C4127: conditional expression is constant */ 
+#  pragma warning(disable : 4204)        /* disable: C4204: non-constant aggregate initializer */ 
+#  pragma warning(disable : 4214)        /* disable: C4214: non-int bitfields */ 
+#  pragma warning(disable : 4324)        /* disable: C4324: padded structure */ 
+#endif 
+ 
 /*Like DYNAMIC_BMI2 but for compile time determination of BMI2 support*/
 #ifndef STATIC_BMI2
 #  if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_I86))
@@ -332,4 +332,4 @@ void __asan_poison_memory_region(void const volatile *addr, size_t size);
 void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
 #endif
 
-#endif /* ZSTD_COMPILER_H */
+#endif /* ZSTD_COMPILER_H */ 

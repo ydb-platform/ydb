@@ -1,38 +1,38 @@
-/*
+/* 
  * Copyright (c) Yann Collet, Facebook, Inc.
  * All rights reserved.
  *
- * This source code is licensed under both the BSD-style license (found in the
- * LICENSE file in the root directory of this source tree) and the GPLv2 (found
- * in the COPYING file in the root directory of this source tree).
- * You may select, at your option, one of the above-listed licenses.
+ * This source code is licensed under both the BSD-style license (found in the 
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found 
+ * in the COPYING file in the root directory of this source tree). 
+ * You may select, at your option, one of the above-listed licenses. 
  */
 
 #ifndef ZSTD_CCOMMON_H_MODULE
 #define ZSTD_CCOMMON_H_MODULE
 
-/* this module contains definitions which must be identical
- * across compression, decompression and dictBuilder.
- * It also contains a few functions useful to at least 2 of them
- * and which benefit from being inlined */
+/* this module contains definitions which must be identical 
+ * across compression, decompression and dictBuilder. 
+ * It also contains a few functions useful to at least 2 of them 
+ * and which benefit from being inlined */ 
 
 /*-*************************************
 *  Dependencies
 ***************************************/
-#include "compiler.h"
+#include "compiler.h" 
 #include "cpu.h"
 #include "mem.h"
 #include "debug.h"                 /* assert, DEBUGLOG, RAWLOG, g_debuglevel */
 #include "error_private.h"
 #define ZSTD_STATIC_LINKING_ONLY
 #include "../zstd.h"
-#define FSE_STATIC_LINKING_ONLY
-#include "fse.h"
-#define HUF_STATIC_LINKING_ONLY
-#include "huf.h"
-#ifndef XXH_STATIC_LINKING_ONLY
-#  define XXH_STATIC_LINKING_ONLY  /* XXH64_state_t */
-#endif
+#define FSE_STATIC_LINKING_ONLY 
+#include "fse.h" 
+#define HUF_STATIC_LINKING_ONLY 
+#include "huf.h" 
+#ifndef XXH_STATIC_LINKING_ONLY 
+#  define XXH_STATIC_LINKING_ONLY  /* XXH64_state_t */ 
+#endif 
 #include <contrib/libs/xxhash/xxhash.h>                /* XXH_reset, update, digest */
 #ifndef ZSTD_NO_TRACE
 #  include "zstd_trace.h"
@@ -40,22 +40,22 @@
 #  define ZSTD_TRACE 0
 #endif
 
-#if defined (__cplusplus)
-extern "C" {
-#endif
-
+#if defined (__cplusplus) 
+extern "C" { 
+#endif 
+ 
 /* ---- static assert (debug) --- */
 #define ZSTD_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c)
 #define ZSTD_isError ERR_isError   /* for inlining */
 #define FSE_isError  ERR_isError
 #define HUF_isError  ERR_isError
-
-
-/*-*************************************
+ 
+ 
+/*-************************************* 
 *  shared macros
 ***************************************/
-#undef MIN
-#undef MAX
+#undef MIN 
+#undef MAX 
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
 #define MAX(a,b) ((a)>(b) ? (a) : (b))
 #define BOUNDED(min,val,max) (MAX(min,MIN(val,max)))
@@ -85,7 +85,7 @@ static UNUSED_ATTR const size_t ZSTD_fcs_fieldSize[4] = { 0, 2, 4, 8 };
 static UNUSED_ATTR const size_t ZSTD_did_fieldSize[4] = { 0, 1, 2, 4 };
 
 #define ZSTD_FRAMEIDSIZE 4   /* magic number size */
-
+ 
 #define ZSTD_BLOCKHEADERSIZE 3   /* C standard doesn't allow `static const` variable to be init using another `static const` variable */
 static UNUSED_ATTR const size_t ZSTD_blockHeaderSize = ZSTD_BLOCKHEADERSIZE;
 typedef enum { bt_raw, bt_rle, bt_compressed, bt_reserved } blockType_e;
@@ -104,15 +104,15 @@ typedef enum { set_basic, set_rle, set_compressed, set_repeat } symbolEncodingTy
 
 #define Litbits  8
 #define MaxLit ((1<<Litbits) - 1)
-#define MaxML   52
-#define MaxLL   35
-#define DefaultMaxOff 28
-#define MaxOff  31
+#define MaxML   52 
+#define MaxLL   35 
+#define DefaultMaxOff 28 
+#define MaxOff  31 
 #define MaxSeq MAX(MaxLL, MaxML)   /* Assumption : MaxOff < MaxLL,MaxML */
 #define MLFSELog    9
 #define LLFSELog    9
 #define OffFSELog   8
-#define MaxFSELog  MAX(MAX(MLFSELog, LLFSELog), OffFSELog)
+#define MaxFSELog  MAX(MAX(MLFSELog, LLFSELog), OffFSELog) 
 
 #define ZSTD_MAX_HUF_HEADER_SIZE 128 /* header + <= 127 byte tree description */
 /* Each table cannot take more than #symbols * FSELog bits */
@@ -281,7 +281,7 @@ typedef enum {
 
 
 /*-*******************************************
-*  Private declarations
+*  Private declarations 
 *********************************************/
 typedef struct seqDef_s {
     U32 offBase;   /* offBase == Offset + ZSTD_REP_NUM, or repcode 1,2,3 */
@@ -351,8 +351,8 @@ typedef struct {
     unsigned long long decompressedBound;
 } ZSTD_frameSizeInfo;   /* decompress & legacy */
 
-const seqStore_t* ZSTD_getSeqStore(const ZSTD_CCtx* ctx);   /* compress & dictBuilder */
-void ZSTD_seqToCodes(const seqStore_t* seqStorePtr);   /* compress, dictBuilder, decodeCorpus (shouldn't get its definition from here) */
+const seqStore_t* ZSTD_getSeqStore(const ZSTD_CCtx* ctx);   /* compress & dictBuilder */ 
+void ZSTD_seqToCodes(const seqStore_t* seqStorePtr);   /* compress, dictBuilder, decodeCorpus (shouldn't get its definition from here) */ 
 
 /* custom memory allocation functions */
 void* ZSTD_customMalloc(size_t size, ZSTD_customMem customMem);
@@ -360,10 +360,10 @@ void* ZSTD_customCalloc(size_t size, ZSTD_customMem customMem);
 void ZSTD_customFree(void* ptr, ZSTD_customMem customMem);
 
 
-MEM_STATIC U32 ZSTD_highbit32(U32 val)   /* compress, dictBuilder, decodeCorpus */
+MEM_STATIC U32 ZSTD_highbit32(U32 val)   /* compress, dictBuilder, decodeCorpus */ 
 {
-    assert(val != 0);
-    {
+    assert(val != 0); 
+    { 
 #   if defined(_MSC_VER)   /* Visual */
 #       if STATIC_BMI2 == 1
             return _lzcnt_u32(val)^31;
@@ -382,16 +382,16 @@ MEM_STATIC U32 ZSTD_highbit32(U32 val)   /* compress, dictBuilder, decodeCorpus 
 #   elif defined(__ICCARM__)    /* IAR Intrinsic */
         return 31 - __CLZ(val);
 #   else   /* Software version */
-        static const U32 DeBruijnClz[32] = { 0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30, 8, 12, 20, 28, 15, 17, 24, 7, 19, 27, 23, 6, 26, 5, 4, 31 };
-        U32 v = val;
-        v |= v >> 1;
-        v |= v >> 2;
-        v |= v >> 4;
-        v |= v >> 8;
-        v |= v >> 16;
-        return DeBruijnClz[(v * 0x07C4ACDDU) >> 27];
+        static const U32 DeBruijnClz[32] = { 0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30, 8, 12, 20, 28, 15, 17, 24, 7, 19, 27, 23, 6, 26, 5, 4, 31 }; 
+        U32 v = val; 
+        v |= v >> 1; 
+        v |= v >> 2; 
+        v |= v >> 4; 
+        v |= v >> 8; 
+        v |= v >> 16; 
+        return DeBruijnClz[(v * 0x07C4ACDDU) >> 27]; 
 #   endif
-    }
+    } 
 }
 
 /**
@@ -452,25 +452,25 @@ MEM_STATIC unsigned ZSTD_countTrailingZeros(size_t val)
 }
 
 
-/* ZSTD_invalidateRepCodes() :
- * ensures next compression will not use repcodes from previous block.
- * Note : only works with regular variant;
- *        do not use with extDict variant ! */
-void ZSTD_invalidateRepCodes(ZSTD_CCtx* cctx);   /* zstdmt, adaptive_compression (shouldn't get this definition from here) */
-
-
-typedef struct {
-    blockType_e blockType;
-    U32 lastBlock;
-    U32 origSize;
+/* ZSTD_invalidateRepCodes() : 
+ * ensures next compression will not use repcodes from previous block. 
+ * Note : only works with regular variant; 
+ *        do not use with extDict variant ! */ 
+void ZSTD_invalidateRepCodes(ZSTD_CCtx* cctx);   /* zstdmt, adaptive_compression (shouldn't get this definition from here) */ 
+ 
+ 
+typedef struct { 
+    blockType_e blockType; 
+    U32 lastBlock; 
+    U32 origSize; 
 } blockProperties_t;   /* declared here for decompress and fullbench */
-
-/*! ZSTD_getcBlockSize() :
- *  Provides the size of compressed block from block header `src` */
-/* Used by: decompress, fullbench (does not get its definition from here) */
-size_t ZSTD_getcBlockSize(const void* src, size_t srcSize,
-                          blockProperties_t* bpPtr);
-
+ 
+/*! ZSTD_getcBlockSize() : 
+ *  Provides the size of compressed block from block header `src` */ 
+/* Used by: decompress, fullbench (does not get its definition from here) */ 
+size_t ZSTD_getcBlockSize(const void* src, size_t srcSize, 
+                          blockProperties_t* bpPtr); 
+ 
 /*! ZSTD_decodeSeqHeaders() :
  *  decode sequence header from src */
 /* Used by: decompress, fullbench (does not get its definition from here) */
@@ -486,8 +486,8 @@ MEM_STATIC int ZSTD_cpuSupportsBmi2(void)
     return ZSTD_cpuid_bmi1(cpuid) && ZSTD_cpuid_bmi2(cpuid);
 }
 
-#if defined (__cplusplus)
-}
-#endif
-
+#if defined (__cplusplus) 
+} 
+#endif 
+ 
 #endif   /* ZSTD_CCOMMON_H_MODULE */

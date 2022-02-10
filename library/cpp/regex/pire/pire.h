@@ -10,35 +10,35 @@
 #include <library/cpp/charset/doccodes.h>
 
 namespace NPire {
-    using TChar = Pire::Char;
+    using TChar = Pire::Char; 
     using Pire::MaxChar;
 
     // Scanner classes
-    using TScanner = Pire::Scanner;
-    using TNonrelocScanner = Pire::NonrelocScanner;
-    using TScannerNoMask = Pire::ScannerNoMask;
-    using TNonrelocScannerNoMask = Pire::NonrelocScannerNoMask;
-    using THalfFinalScanner = Pire::HalfFinalScanner;
-    using TNonrelocHalfFinalScanner = Pire::NonrelocHalfFinalScanner;
-    using THalfFinalScannerNoMask = Pire::HalfFinalScannerNoMask;
-    using TNonrelocHalfFinalScannerNoMask = Pire::NonrelocHalfFinalScannerNoMask;
-    using TSimpleScanner = Pire::SimpleScanner;
-    using TSlowScanner = Pire::SlowScanner;
-    using TCapturingScanner = Pire::CapturingScanner;
-    using TSlowCapturingScanner = Pire::SlowCapturingScanner;
-    using TCountingScanner = Pire::CountingScanner;
+    using TScanner = Pire::Scanner; 
+    using TNonrelocScanner = Pire::NonrelocScanner; 
+    using TScannerNoMask = Pire::ScannerNoMask; 
+    using TNonrelocScannerNoMask = Pire::NonrelocScannerNoMask; 
+    using THalfFinalScanner = Pire::HalfFinalScanner; 
+    using TNonrelocHalfFinalScanner = Pire::NonrelocHalfFinalScanner; 
+    using THalfFinalScannerNoMask = Pire::HalfFinalScannerNoMask; 
+    using TNonrelocHalfFinalScannerNoMask = Pire::NonrelocHalfFinalScannerNoMask; 
+    using TSimpleScanner = Pire::SimpleScanner; 
+    using TSlowScanner = Pire::SlowScanner; 
+    using TCapturingScanner = Pire::CapturingScanner; 
+    using TSlowCapturingScanner = Pire::SlowCapturingScanner; 
+    using TCountingScanner = Pire::CountingScanner; 
 
-    template <typename T1, typename T2>
-    using TScannerPair = Pire::ScannerPair<T1, T2>;
-
+    template <typename T1, typename T2> 
+    using TScannerPair = Pire::ScannerPair<T1, T2>; 
+ 
     // Helper classes
-    using TFsm = Pire::Fsm;
-    using TLexer = Pire::Lexer;
-    using TTerm = Pire::Term;
-    using TEncoding = Pire::Encoding;
-    using TFeature = Pire::Feature;
-    using TFeaturePtr = Pire::Feature::Ptr;
-    using TError = Pire::Error;
+    using TFsm = Pire::Fsm; 
+    using TLexer = Pire::Lexer; 
+    using TTerm = Pire::Term; 
+    using TEncoding = Pire::Encoding; 
+    using TFeature = Pire::Feature; 
+    using TFeaturePtr = Pire::Feature::Ptr; 
+    using TError = Pire::Error; 
 
     // Helper functions
     using Pire::LongestPrefix;

@@ -27,7 +27,7 @@ public:
 
     // Constants
 public:
-    static const size_t MAX_EXT_LEN = 11; // max length of supported extensions
+    static const size_t MAX_EXT_LEN = 11; // max length of supported extensions 
 
     // Helper methods
 private:
@@ -95,10 +95,10 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_IMAGE_PNM, "image/x-portable-anymap\0", "pnm\0pgm\0ppm\0pbm\0"},
     {MIME_IMAGE_SVG, "image/svg+xml\0", "svg\0"},
     {MIME_IMAGE_ICON, "image/x-icon\0image/vnd.microsoft.icon\0", "ico\0"},
-    {MIME_WOFF, "font/woff\0", "woff\0"},
-    {MIME_WOFF2, "font/woff2\0", "woff2\0"},
-    {MIME_TTF, "font/ttf\0", "ttf\0"},
-    {MIME_WEBMANIFEST, "application/manifest+json\0", "webmanifest\0"},
+    {MIME_WOFF, "font/woff\0", "woff\0"}, 
+    {MIME_WOFF2, "font/woff2\0", "woff2\0"}, 
+    {MIME_TTF, "font/ttf\0", "ttf\0"}, 
+    {MIME_WEBMANIFEST, "application/manifest+json\0", "webmanifest\0"}, 
     {MIME_MAX, nullptr, nullptr},
 
     // Additional records
@@ -246,8 +246,8 @@ const char* MimeNames[MIME_MAX] = {
     "pnm",     // MIME_IMAGE_PNM       // 40
     "svg",     // MIME_IMAGE_SVG       // 41
     "ico",     // MIME_IMAGE_ICON      // 42
-    "woff",    // MIME_WOFF            // 43
-    "woff2",   // MIME_WOFF2           // 44
-    "ttf",     // MIME_TTF             // 45
-    "webmanifest" // MIME_WEBMANIFEST // 46
+    "woff",    // MIME_WOFF            // 43 
+    "woff2",   // MIME_WOFF2           // 44 
+    "ttf",     // MIME_TTF             // 45 
+    "webmanifest" // MIME_WEBMANIFEST // 46 
 };

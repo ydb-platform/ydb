@@ -1184,7 +1184,7 @@ RECURSE(
     zope.event
     zope.interface
     zope.schema
-    zstandard
+    zstandard 
 )
 
 IF (OS_WINDOWS)

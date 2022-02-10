@@ -39,7 +39,7 @@ struct async_in_buffer : ::boost::process::detail::posix::handler_base_ext,
     {
     }
     template <typename Executor>
-    inline void on_success(Executor & /* exec */) 
+    inline void on_success(Executor & /* exec */)
     {
         auto  pipe              = this->pipe;
         if (this->promise)
@@ -60,7 +60,7 @@ struct async_in_buffer : ::boost::process::detail::posix::handler_base_ext,
         }
         else
             boost::asio::async_write(*pipe, buf,
-                [pipe](const boost::system::error_code&, std::size_t /* size */){}); 
+                [pipe](const boost::system::error_code&, std::size_t /* size */){});
 
         std::move(*pipe).source().close();
 

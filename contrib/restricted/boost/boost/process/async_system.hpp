@@ -82,7 +82,7 @@ struct async_system_handler : ::boost::process::detail::api::async_handler
     {
 #if defined(BOOST_POSIX_API)
         if (errored)
-            return [](int /* exit_code */, const std::error_code & /* ec */){}; 
+            return [](int /* exit_code */, const std::error_code & /* ec */){};
 #endif
         auto & h = init.completion_handler;
         return [h](int exit_code, const std::error_code & ec) mutable

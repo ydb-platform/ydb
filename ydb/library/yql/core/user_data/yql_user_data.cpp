@@ -1,5 +1,5 @@
 #include "yql_user_data.h"
-#include <util/folder/iterator.h> 
+#include <util/folder/iterator.h>
 
 namespace NYql {
 namespace NUserData {
@@ -20,26 +20,26 @@ void TUserData::UserDataToLibraries(
     modules["core"] = "/lib/yql/core.yql";
 }
 
-void TUserData::FillFromFolder( 
+void TUserData::FillFromFolder(
     TFsPath root,
-    EType type, 
-    TVector<TUserData>& userData 
-) { 
-    if (!root.Exists()) { 
-        return; 
-    } 
+    EType type,
+    TVector<TUserData>& userData
+) {
+    if (!root.Exists()) {
+        return;
+    }
     root = root.RealPath();
     TDirIterator dir(root, TDirIterator::TOptions(FTS_LOGICAL));
     for (auto file = dir.begin(), end = dir.end(); file != end; ++file) {
-        if (file->fts_level == FTS_ROOTLEVEL) { 
-            continue; 
-        } 
-        TFsPath filePath(file->fts_path); 
-        userData.push_back({ 
+        if (file->fts_level == FTS_ROOTLEVEL) {
+            continue;
+        }
+        TFsPath filePath(file->fts_path);
+        userData.push_back({
             type, EDisposition::FILESYSTEM, filePath.RelativeTo(root), filePath
-        }); 
-    } 
+        });
+    }
 }
- 
+
 }
-} 
+}

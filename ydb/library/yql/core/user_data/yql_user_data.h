@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/folder/path.h> 
+#include <util/folder/path.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
@@ -32,12 +32,12 @@ struct TUserData {
         const TVector<TUserData>& userData,
         THashMap<TString,TString>& libraries
     );
- 
-    static void FillFromFolder( 
+
+    static void FillFromFolder(
         TFsPath root,
-        EType type, 
-        TVector<TUserData>& userData 
-    ); 
+        EType type,
+        TVector<TUserData>& userData
+    );
 };
 
 

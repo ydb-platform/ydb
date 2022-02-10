@@ -63,7 +63,7 @@ class MemoryPoolStats {
 /// take care of the required 64-byte alignment.
 class ARROW_EXPORT MemoryPool {
  public:
-  virtual ~MemoryPool() = default; 
+  virtual ~MemoryPool() = default;
 
   /// \brief EXPERIMENTAL. Create a new instance of the default MemoryPool
   static std::unique_ptr<MemoryPool> CreateDefault();
@@ -87,13 +87,13 @@ class ARROW_EXPORT MemoryPool {
   ///   faster deallocation if supported by its backend.
   virtual void Free(uint8_t* buffer, int64_t size) = 0;
 
-  /// Return unused memory to the OS 
-  /// 
-  /// Only applies to allocators that hold onto unused memory.  This will be 
-  /// best effort, a memory pool may not implement this feature or may be 
-  /// unable to fulfill the request due to fragmentation. 
-  virtual void ReleaseUnused() {} 
- 
+  /// Return unused memory to the OS
+  ///
+  /// Only applies to allocators that hold onto unused memory.  This will be
+  /// best effort, a memory pool may not implement this feature or may be
+  /// unable to fulfill the request due to fragmentation.
+  virtual void ReleaseUnused() {}
+
   /// The number of bytes that were allocated and not yet free'd through
   /// this allocator.
   virtual int64_t bytes_allocated() const = 0;
@@ -104,11 +104,11 @@ class ARROW_EXPORT MemoryPool {
   /// returns -1
   virtual int64_t max_memory() const;
 
-  /// The name of the backend used by this MemoryPool (e.g. "system" or "jemalloc"). 
+  /// The name of the backend used by this MemoryPool (e.g. "system" or "jemalloc").
   virtual std::string backend_name() const = 0;
 
  protected:
-  MemoryPool() = default; 
+  MemoryPool() = default;
 };
 
 class ARROW_EXPORT LoggingMemoryPool : public MemoryPool {
@@ -156,10 +156,10 @@ class ARROW_EXPORT ProxyMemoryPool : public MemoryPool {
   std::unique_ptr<ProxyMemoryPoolImpl> impl_;
 };
 
-/// \brief Return a process-wide memory pool based on the system allocator. 
+/// \brief Return a process-wide memory pool based on the system allocator.
 ARROW_EXPORT MemoryPool* system_memory_pool();
 
-/// \brief Return a process-wide memory pool based on jemalloc. 
+/// \brief Return a process-wide memory pool based on jemalloc.
 ///
 /// May return NotImplemented if jemalloc is not available.
 ARROW_EXPORT Status jemalloc_memory_pool(MemoryPool** out);
@@ -175,11 +175,11 @@ ARROW_EXPORT Status jemalloc_memory_pool(MemoryPool** out);
 ARROW_EXPORT
 Status jemalloc_set_decay_ms(int ms);
 
-/// \brief Return a process-wide memory pool based on mimalloc. 
+/// \brief Return a process-wide memory pool based on mimalloc.
 ///
 /// May return NotImplemented if mimalloc is not available.
 ARROW_EXPORT Status mimalloc_memory_pool(MemoryPool** out);
 
-ARROW_EXPORT std::vector<std::string> SupportedMemoryBackendNames(); 
- 
+ARROW_EXPORT std::vector<std::string> SupportedMemoryBackendNames();
+
 }  // namespace arrow

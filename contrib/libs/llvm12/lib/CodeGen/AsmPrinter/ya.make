@@ -28,7 +28,7 @@ PEERDIR(
     contrib/libs/llvm12/lib/Target
 )
 
-IF (SANITIZER_TYPE == "undefined") 
+IF (SANITIZER_TYPE == "undefined")
     PEERDIR(
         contrib/libs/llvm12/lib/Target/ARM/MCTargetDesc
     )

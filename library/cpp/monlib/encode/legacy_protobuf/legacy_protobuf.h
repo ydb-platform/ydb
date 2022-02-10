@@ -1,6 +1,6 @@
 #pragma once
 
-#include <google/protobuf/message.h> 
+#include <google/protobuf/message.h>
 #include <util/datetime/base.h>
 
 namespace NMonitoring {

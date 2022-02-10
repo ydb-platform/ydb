@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <iterator>
 
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 #include <library/cpp/lwtrace/mon/analytics/all.h>
 #include <library/cpp/lwtrace/all.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>

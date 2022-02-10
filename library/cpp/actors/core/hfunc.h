@@ -3,7 +3,7 @@
 #include "actor.h"
 #include "executor_thread.h"
 
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 
 #define HFunc(TEvType, HandleFunc)                                                  \
     case TEvType::EventType: {                                                      \
@@ -21,7 +21,7 @@
 
 #define HFuncTraced(TEvType, HandleFunc)                          \
     case TEvType::EventType: {                                    \
-        TRACE_EVENT_TYPE(Y_STRINGIZE(TEvType));                      \ 
+        TRACE_EVENT_TYPE(Y_STRINGIZE(TEvType));                      \
         TEvType::TPtr* x = reinterpret_cast<TEvType::TPtr*>(&ev); \
         HandleFunc(*x, ctx);                                      \
         break;                                                    \
@@ -29,7 +29,7 @@
 
 #define hFuncTraced(TEvType, HandleFunc)                                            \
     case TEvType::EventType: {                                                      \
-        TRACE_EVENT_TYPE(Y_STRINGIZE(TEvType));                                        \ 
+        TRACE_EVENT_TYPE(Y_STRINGIZE(TEvType));                                        \
         typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
         HandleFunc(*x);                                                             \
         break;                                                                      \

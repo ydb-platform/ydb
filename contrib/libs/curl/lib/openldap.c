@@ -6,11 +6,11 @@
  *                 \___|\___/|_| \_\_____|
  *
  * Copyright (C) 2010, Howard Chu, <hyc@openldap.org>
- * Copyright (C) 2011 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 2011 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html. 
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -107,7 +107,7 @@ const struct Curl_handler Curl_handler_ldap = {
   ZERO_NULL,                            /* connection_check */
   PORT_LDAP,                            /* defport */
   CURLPROTO_LDAP,                       /* protocol */
-  CURLPROTO_LDAP,                       /* family */ 
+  CURLPROTO_LDAP,                       /* family */
   PROTOPT_NONE                          /* flags */
 };
 
@@ -133,8 +133,8 @@ const struct Curl_handler Curl_handler_ldaps = {
   ZERO_NULL,                            /* readwrite */
   ZERO_NULL,                            /* connection_check */
   PORT_LDAPS,                           /* defport */
-  CURLPROTO_LDAPS,                      /* protocol */ 
-  CURLPROTO_LDAP,                       /* family */ 
+  CURLPROTO_LDAPS,                      /* protocol */
+  CURLPROTO_LDAP,                       /* family */
   PROTOPT_SSL                           /* flags */
 };
 #endif
@@ -164,10 +164,10 @@ struct ldapconninfo {
   bool didbind;
 };
 
-struct ldapreqinfo { 
+struct ldapreqinfo {
   int msgid;
   int nument;
-}; 
+};
 
 static CURLcode ldap_setup_connection(struct connectdata *conn)
 {
@@ -376,7 +376,7 @@ static CURLcode ldap_disconnect(struct connectdata *conn, bool dead_connection)
 static CURLcode ldap_do(struct connectdata *conn, bool *done)
 {
   struct ldapconninfo *li = conn->proto.ldapc;
-  struct ldapreqinfo *lr; 
+  struct ldapreqinfo *lr;
   CURLcode status = CURLE_OK;
   int rc = 0;
   LDAPURLDesc *ludp = NULL;
@@ -408,11 +408,11 @@ static CURLcode ldap_do(struct connectdata *conn, bool *done)
     failf(data, "LDAP local: ldap_search_ext %s", ldap_err2string(rc));
     return CURLE_LDAP_SEARCH_FAILED;
   }
-  lr = calloc(1, sizeof(struct ldapreqinfo)); 
+  lr = calloc(1, sizeof(struct ldapreqinfo));
   if(!lr)
     return CURLE_OUT_OF_MEMORY;
   lr->msgid = msgid;
-  data->req.p.ldap = lr; 
+  data->req.p.ldap = lr;
   Curl_setup_transfer(data, FIRSTSOCKET, -1, FALSE, -1);
   *done = TRUE;
   return CURLE_OK;
@@ -421,7 +421,7 @@ static CURLcode ldap_do(struct connectdata *conn, bool *done)
 static CURLcode ldap_done(struct connectdata *conn, CURLcode res,
                           bool premature)
 {
-  struct ldapreqinfo *lr = conn->data->req.p.ldap; 
+  struct ldapreqinfo *lr = conn->data->req.p.ldap;
 
   (void)res;
   (void)premature;
@@ -433,7 +433,7 @@ static CURLcode ldap_done(struct connectdata *conn, CURLcode res,
       ldap_abandon_ext(li->ld, lr->msgid, NULL, NULL);
       lr->msgid = 0;
     }
-    conn->data->req.p.ldap = NULL; 
+    conn->data->req.p.ldap = NULL;
     free(lr);
   }
 
@@ -445,7 +445,7 @@ static ssize_t ldap_recv(struct connectdata *conn, int sockindex, char *buf,
 {
   struct ldapconninfo *li = conn->proto.ldapc;
   struct Curl_easy *data = conn->data;
-  struct ldapreqinfo *lr = data->req.p.ldap; 
+  struct ldapreqinfo *lr = data->req.p.ldap;
   int rc, ret;
   LDAPMessage *msg = NULL;
   LDAPMessage *ent;

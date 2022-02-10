@@ -12,7 +12,7 @@
 #include <ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.h>
 #include <ydb/library/yql/parser/proto_ast/proto_ast.h>
 
-#include <google/protobuf/message.h> 
+#include <google/protobuf/message.h>
 
 #include <util/string/strip.h>
 

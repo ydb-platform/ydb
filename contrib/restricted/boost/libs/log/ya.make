@@ -28,7 +28,7 @@ IF (OS_WINDOWS)
         -D_SCL_SECURE_NO_WARNINGS
     )
 ELSE()
-    IF (OS_LINUX AND OS_SDK != "ubuntu-10") 
+    IF (OS_LINUX AND OS_SDK != "ubuntu-10")
         CFLAGS(
             -DBOOST_LOG_HAS_PTHREAD_MUTEX_ROBUST
         )

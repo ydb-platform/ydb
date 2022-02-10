@@ -39,11 +39,11 @@ IF (USE_SYSTEM_PYTHON)
             ENABLE(PYTHON_NOT_FOUND)
         ENDIF()
         CFLAGS(
-            GLOBAL "-isystem$EXTERNAL_PYTHON_RESOURCE_GLOBAL/python/include" 
-            GLOBAL "-isystem$EXTERNAL_PYTHON_RESOURCE_GLOBAL/python/include/python${PY_VERSION}" 
+            GLOBAL "-isystem$EXTERNAL_PYTHON_RESOURCE_GLOBAL/python/include"
+            GLOBAL "-isystem$EXTERNAL_PYTHON_RESOURCE_GLOBAL/python/include/python${PY_VERSION}"
         )
     ELSEIF (OS_DARWIN)
-        IF (PYTHON_DISTR == "macos-brew") 
+        IF (PYTHON_DISTR == "macos-brew")
             IF (ARCH_X86_64)
                 IF (_SYSTEM_PYTHON27)
                     DECLARE_EXTERNAL_RESOURCE(EXTERNAL_PYTHON sbr:562720527)
@@ -90,7 +90,7 @@ IF (USE_SYSTEM_PYTHON)
                 ENABLE(PYTHON_NOT_FOUND)
             ENDIF()
         ENDIF()
-        CFLAGS(GLOBAL "-isystem$EXTERNAL_PYTHON_RESOURCE_GLOBAL/python/Python.framework/Versions/${PY_FRAMEWORK_VERSION}/include/python${PY_VERSION}") 
+        CFLAGS(GLOBAL "-isystem$EXTERNAL_PYTHON_RESOURCE_GLOBAL/python/Python.framework/Versions/${PY_FRAMEWORK_VERSION}/include/python${PY_VERSION}")
     ELSEIF (OS_WINDOWS)
         IF (ARCH_X86_64)
             IF (_SYSTEM_PYTHON27)

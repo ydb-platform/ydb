@@ -31,8 +31,8 @@
 #include "y_absl/debugging/symbolize_win32.inc"
 #elif defined(__APPLE__)
 #include "y_absl/debugging/symbolize_darwin.inc"
-#elif defined(__EMSCRIPTEN__) 
-#include "y_absl/debugging/symbolize_emscripten.inc" 
+#elif defined(__EMSCRIPTEN__)
+#include "y_absl/debugging/symbolize_emscripten.inc"
 #else
 #include "y_absl/debugging/symbolize_unimplemented.inc"
 #endif

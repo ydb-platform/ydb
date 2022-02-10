@@ -690,7 +690,7 @@ namespace boost { namespace spirit { namespace repository { namespace qi { names
             ParseDispatcher const& dispatcher;
 
             // silence MSVC warning C4512: assignment operator could not be generated
-            BOOST_DELETED_FUNCTION(complex_kwd_function& operator= (complex_kwd_function const&)); 
+            BOOST_DELETED_FUNCTION(complex_kwd_function& operator= (complex_kwd_function const&));
         };
 
 

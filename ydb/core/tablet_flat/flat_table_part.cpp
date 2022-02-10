@@ -200,7 +200,7 @@ TSharedData TPartScheme::Serialize() const
     }
 
     TStringStream ss;
-    proto.SerializeToArcadiaStream(&ss); 
+    proto.SerializeToArcadiaStream(&ss);
 
     return NPage::THello::Wrap(ss.Str(), EPage::Schem2, Groups.size() > 1 ? 1 : 0);
 }

@@ -25,8 +25,8 @@ namespace NRainCheck {
                 return SizeValue;
             }
 
-            TArrayRef<char> MemRegion() { 
-                return TArrayRef((char*)Data(), Size()); 
+            TArrayRef<char> MemRegion() {
+                return TArrayRef((char*)Data(), Size());
             }
 
             ui32* MagicNumberLocation() {

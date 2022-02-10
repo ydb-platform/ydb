@@ -173,9 +173,9 @@ protected:
 
 
 template <bool x>
-struct POCO_STATIC_ASSERTION_FAILURE  
-{ 
-}; 
+struct POCO_STATIC_ASSERTION_FAILURE 
+{
+};
 
 template <>
 struct POCO_STATIC_ASSERTION_FAILURE<true>

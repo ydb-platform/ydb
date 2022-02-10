@@ -70,7 +70,7 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/grpc/python
-    contrib/python/protobuf 
+    contrib/python/protobuf
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos

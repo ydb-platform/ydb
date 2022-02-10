@@ -24,10 +24,10 @@
 #include <utility>
 
 #include "arrow/compute/function.h"
-#include "arrow/compute/function_internal.h" 
+#include "arrow/compute/function_internal.h"
 #include "arrow/compute/registry_internal.h"
 #include "arrow/status.h"
-#include "arrow/util/logging.h" 
+#include "arrow/util/logging.h"
 
 namespace arrow {
 namespace compute {
@@ -35,8 +35,8 @@ namespace compute {
 class FunctionRegistry::FunctionRegistryImpl {
  public:
   Status AddFunction(std::shared_ptr<Function> function, bool allow_overwrite) {
-    RETURN_NOT_OK(function->Validate()); 
- 
+    RETURN_NOT_OK(function->Validate());
+
     std::lock_guard<std::mutex> mutation_guard(lock_);
 
     const std::string& name = function->name();
@@ -59,20 +59,20 @@ class FunctionRegistry::FunctionRegistryImpl {
     return Status::OK();
   }
 
-  Status AddFunctionOptionsType(const FunctionOptionsType* options_type, 
-                                bool allow_overwrite = false) { 
-    std::lock_guard<std::mutex> mutation_guard(lock_); 
- 
-    const std::string name = options_type->type_name(); 
-    auto it = name_to_options_type_.find(name); 
-    if (it != name_to_options_type_.end() && !allow_overwrite) { 
-      return Status::KeyError( 
-          "Already have a function options type registered with name: ", name); 
-    } 
-    name_to_options_type_[name] = options_type; 
-    return Status::OK(); 
-  } 
- 
+  Status AddFunctionOptionsType(const FunctionOptionsType* options_type,
+                                bool allow_overwrite = false) {
+    std::lock_guard<std::mutex> mutation_guard(lock_);
+
+    const std::string name = options_type->type_name();
+    auto it = name_to_options_type_.find(name);
+    if (it != name_to_options_type_.end() && !allow_overwrite) {
+      return Status::KeyError(
+          "Already have a function options type registered with name: ", name);
+    }
+    name_to_options_type_[name] = options_type;
+    return Status::OK();
+  }
+
   Result<std::shared_ptr<Function>> GetFunction(const std::string& name) const {
     auto it = name_to_function_.find(name);
     if (it == name_to_function_.end()) {
@@ -90,21 +90,21 @@ class FunctionRegistry::FunctionRegistryImpl {
     return results;
   }
 
-  Result<const FunctionOptionsType*> GetFunctionOptionsType( 
-      const std::string& name) const { 
-    auto it = name_to_options_type_.find(name); 
-    if (it == name_to_options_type_.end()) { 
-      return Status::KeyError("No function options type registered with name: ", name); 
-    } 
-    return it->second; 
-  } 
- 
+  Result<const FunctionOptionsType*> GetFunctionOptionsType(
+      const std::string& name) const {
+    auto it = name_to_options_type_.find(name);
+    if (it == name_to_options_type_.end()) {
+      return Status::KeyError("No function options type registered with name: ", name);
+    }
+    return it->second;
+  }
+
   int num_functions() const { return static_cast<int>(name_to_function_.size()); }
 
  private:
   std::mutex lock_;
   std::unordered_map<std::string, std::shared_ptr<Function>> name_to_function_;
-  std::unordered_map<std::string, const FunctionOptionsType*> name_to_options_type_; 
+  std::unordered_map<std::string, const FunctionOptionsType*> name_to_options_type_;
 };
 
 std::unique_ptr<FunctionRegistry> FunctionRegistry::Make() {
@@ -125,11 +125,11 @@ Status FunctionRegistry::AddAlias(const std::string& target_name,
   return impl_->AddAlias(target_name, source_name);
 }
 
-Status FunctionRegistry::AddFunctionOptionsType(const FunctionOptionsType* options_type, 
-                                                bool allow_overwrite) { 
-  return impl_->AddFunctionOptionsType(options_type, allow_overwrite); 
-} 
- 
+Status FunctionRegistry::AddFunctionOptionsType(const FunctionOptionsType* options_type,
+                                                bool allow_overwrite) {
+  return impl_->AddFunctionOptionsType(options_type, allow_overwrite);
+}
+
 Result<std::shared_ptr<Function>> FunctionRegistry::GetFunction(
     const std::string& name) const {
   return impl_->GetFunction(name);
@@ -139,11 +139,11 @@ std::vector<std::string> FunctionRegistry::GetFunctionNames() const {
   return impl_->GetFunctionNames();
 }
 
-Result<const FunctionOptionsType*> FunctionRegistry::GetFunctionOptionsType( 
-    const std::string& name) const { 
-  return impl_->GetFunctionOptionsType(name); 
-} 
- 
+Result<const FunctionOptionsType*> FunctionRegistry::GetFunctionOptionsType(
+    const std::string& name) const {
+  return impl_->GetFunctionOptionsType(name);
+}
+
 int FunctionRegistry::num_functions() const { return impl_->num_functions(); }
 
 namespace internal {
@@ -161,30 +161,30 @@ static std::unique_ptr<FunctionRegistry> CreateBuiltInRegistry() {
   RegisterScalarStringAscii(registry.get());
   RegisterScalarValidity(registry.get());
   RegisterScalarFillNull(registry.get());
-  RegisterScalarIfElse(registry.get()); 
-  RegisterScalarTemporal(registry.get()); 
+  RegisterScalarIfElse(registry.get());
+  RegisterScalarTemporal(registry.get());
 
-  RegisterScalarOptions(registry.get()); 
+  RegisterScalarOptions(registry.get());
 
   // Vector functions
   RegisterVectorHash(registry.get());
-  RegisterVectorReplace(registry.get()); 
+  RegisterVectorReplace(registry.get());
   RegisterVectorSelection(registry.get());
   RegisterVectorNested(registry.get());
   RegisterVectorSort(registry.get());
 
-  RegisterVectorOptions(registry.get()); 
- 
-  // Aggregate functions 
-  RegisterScalarAggregateBasic(registry.get()); 
-  RegisterScalarAggregateMode(registry.get()); 
-  RegisterScalarAggregateQuantile(registry.get()); 
-  RegisterScalarAggregateTDigest(registry.get()); 
-  RegisterScalarAggregateVariance(registry.get()); 
-  RegisterHashAggregateBasic(registry.get()); 
- 
-  RegisterAggregateOptions(registry.get()); 
- 
+  RegisterVectorOptions(registry.get());
+
+  // Aggregate functions
+  RegisterScalarAggregateBasic(registry.get());
+  RegisterScalarAggregateMode(registry.get());
+  RegisterScalarAggregateQuantile(registry.get());
+  RegisterScalarAggregateTDigest(registry.get());
+  RegisterScalarAggregateVariance(registry.get());
+  RegisterHashAggregateBasic(registry.get());
+
+  RegisterAggregateOptions(registry.get());
+
   return registry;
 }
 

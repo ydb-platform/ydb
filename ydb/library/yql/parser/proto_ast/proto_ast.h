@@ -4,7 +4,7 @@
 
 #include <contrib/libs/antlr3_cpp_runtime/include/antlr3.hpp>
 
-#include <google/protobuf/message.h> 
+#include <google/protobuf/message.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/charset/utf8.h>

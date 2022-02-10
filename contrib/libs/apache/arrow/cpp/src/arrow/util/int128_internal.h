@@ -16,10 +16,10 @@
 // under the License.
 #pragma once
 
-#include "arrow/util/config.h" 
+#include "arrow/util/config.h"
 #include "arrow/util/macros.h"
 
-#ifndef ARROW_USE_NATIVE_INT128 
+#ifndef ARROW_USE_NATIVE_INT128
 #include <boost/multiprecision/cpp_int.hpp>
 #endif
 

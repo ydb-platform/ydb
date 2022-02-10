@@ -7,8 +7,8 @@ LIBRARY()
 
 VERSION(1.13)
 
-LICENSE(Service-Dll-Harness) 
- 
+LICENSE(Service-Dll-Harness)
+
 WITHOUT_LICENSE_TEXTS()
 
 NO_RUNTIME()

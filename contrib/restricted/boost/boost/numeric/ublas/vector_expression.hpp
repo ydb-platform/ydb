@@ -49,11 +49,11 @@ namespace boost { namespace numeric { namespace ublas {
         explicit vector_reference (referred_type &e):
             e_ (e) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-        BOOST_UBLAS_INLINE 
-        vector_reference (const vector_reference&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+        BOOST_UBLAS_INLINE
+        vector_reference (const vector_reference&) = default;
+#endif
+
         // Accessors
         BOOST_UBLAS_INLINE
         size_type size () const {

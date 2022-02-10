@@ -9,7 +9,7 @@
     #include <pthread.h>
 #endif
 
-class TMutex::TImpl { 
+class TMutex::TImpl {
 public:
     inline TImpl() {
 #if defined(_win_)
@@ -120,27 +120,27 @@ private:
 #endif
 };
 
-TMutex::TMutex() 
+TMutex::TMutex()
     : Impl_(new TImpl())
 {
 }
 
-TMutex::TMutex(TMutex&&) = default; 
+TMutex::TMutex(TMutex&&) = default;
 
-TMutex::~TMutex() = default; 
+TMutex::~TMutex() = default;
 
-void TMutex::Acquire() noexcept { 
+void TMutex::Acquire() noexcept {
     Impl_->Acquire();
 }
 
-bool TMutex::TryAcquire() noexcept { 
+bool TMutex::TryAcquire() noexcept {
     return Impl_->TryAcquire();
 }
 
-void TMutex::Release() noexcept { 
+void TMutex::Release() noexcept {
     Impl_->Release();
 }
 
-void* TMutex::Handle() const noexcept { 
+void* TMutex::Handle() const noexcept {
     return Impl_->Handle();
 }

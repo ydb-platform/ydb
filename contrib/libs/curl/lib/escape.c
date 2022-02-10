@@ -5,11 +5,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html. 
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -81,43 +81,43 @@ char *curl_easy_escape(struct Curl_easy *data, const char *string,
 {
   size_t length;
   CURLcode result;
-  struct dynbuf d; 
+  struct dynbuf d;
 
   if(inlength < 0)
     return NULL;
 
-  Curl_dyn_init(&d, CURL_MAX_INPUT_LENGTH * 3); 
+  Curl_dyn_init(&d, CURL_MAX_INPUT_LENGTH * 3);
 
-  length = (inlength?(size_t)inlength:strlen(string)); 
-  if(!length) 
-    return strdup(""); 
+  length = (inlength?(size_t)inlength:strlen(string));
+  if(!length)
+    return strdup("");
 
   while(length--) {
     unsigned char in = *string; /* we need to treat the characters unsigned */
 
-    if(Curl_isunreserved(in)) { 
-      /* append this */ 
-      if(Curl_dyn_addn(&d, &in, 1)) 
-        return NULL; 
-    } 
+    if(Curl_isunreserved(in)) {
+      /* append this */
+      if(Curl_dyn_addn(&d, &in, 1))
+        return NULL;
+    }
     else {
       /* encode it */
-      char encoded[4]; 
+      char encoded[4];
       result = Curl_convert_to_network(data, (char *)&in, 1);
       if(result) {
         /* Curl_convert_to_network calls failf if unsuccessful */
-        Curl_dyn_free(&d); 
+        Curl_dyn_free(&d);
         return NULL;
       }
 
-      msnprintf(encoded, sizeof(encoded), "%%%02X", in); 
-      if(Curl_dyn_add(&d, encoded)) 
-        return NULL; 
+      msnprintf(encoded, sizeof(encoded), "%%%02X", in);
+      if(Curl_dyn_add(&d, encoded))
+        return NULL;
     }
     string++;
   }
- 
-  return Curl_dyn_ptr(&d); 
+
+  return Curl_dyn_ptr(&d);
 }
 
 /*
@@ -128,34 +128,34 @@ char *curl_easy_escape(struct Curl_easy *data, const char *string,
  *
  * 'data' can be set to NULL but then this function can't convert network
  * data to host for non-ascii.
- * 
- * ctrl options: 
- * - REJECT_NADA: accept everything 
- * - REJECT_CTRL: rejects control characters (byte codes lower than 32) in 
- *                the data 
- * - REJECT_ZERO: rejects decoded zero bytes 
- * 
- * The values for the enum starts at 2, to make the assert detect legacy 
- * invokes that used TRUE/FALSE (0 and 1). 
+ *
+ * ctrl options:
+ * - REJECT_NADA: accept everything
+ * - REJECT_CTRL: rejects control characters (byte codes lower than 32) in
+ *                the data
+ * - REJECT_ZERO: rejects decoded zero bytes
+ *
+ * The values for the enum starts at 2, to make the assert detect legacy
+ * invokes that used TRUE/FALSE (0 and 1).
  */
- 
+
 CURLcode Curl_urldecode(struct Curl_easy *data,
                         const char *string, size_t length,
                         char **ostring, size_t *olen,
-                        enum urlreject ctrl) 
+                        enum urlreject ctrl)
 {
-  size_t alloc; 
-  char *ns; 
+  size_t alloc;
+  char *ns;
   size_t strindex = 0;
   unsigned long hex;
   CURLcode result = CURLE_OK;
 
-  DEBUGASSERT(string); 
-  DEBUGASSERT(ctrl >= REJECT_NADA); /* crash on TRUE/FALSE */ 
- 
-  alloc = (length?length:strlen(string)) + 1; 
-  ns = malloc(alloc); 
- 
+  DEBUGASSERT(string);
+  DEBUGASSERT(ctrl >= REJECT_NADA); /* crash on TRUE/FALSE */
+
+  alloc = (length?length:strlen(string)) + 1;
+  ns = malloc(alloc);
+
   if(!ns)
     return CURLE_OUT_OF_MEMORY;
 
@@ -187,8 +187,8 @@ CURLcode Curl_urldecode(struct Curl_easy *data,
       alloc -= 2;
     }
 
-    if(((ctrl == REJECT_CTRL) && (in < 0x20)) || 
-       ((ctrl == REJECT_ZERO) && (in == 0))) { 
+    if(((ctrl == REJECT_CTRL) && (in < 0x20)) ||
+       ((ctrl == REJECT_ZERO) && (in == 0))) {
       free(ns);
       return CURLE_URL_MALFORMAT;
     }
@@ -222,7 +222,7 @@ char *curl_easy_unescape(struct Curl_easy *data, const char *string,
     size_t inputlen = length;
     size_t outputlen;
     CURLcode res = Curl_urldecode(data, string, inputlen, &str, &outputlen,
-                                  REJECT_NADA); 
+                                  REJECT_NADA);
     if(res)
       return NULL;
 

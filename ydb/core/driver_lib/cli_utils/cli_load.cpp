@@ -1,5 +1,5 @@
 #include "cli.h"
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 namespace NKikimr {
 namespace NDriverClient {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2020, Intel Corporation 
+ * Copyright (c) 2015-2020, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -323,10 +323,10 @@ typedef struct hs_expr_ext {
  *       - HS_FLAG_PREFILTER - Compile pattern in prefiltering mode.
  *       - HS_FLAG_SOM_LEFTMOST - Report the leftmost start of match offset
  *                                when a match is found.
- *       - HS_FLAG_COMBINATION - Parse the expression in logical combination 
- *                               syntax. 
- *       - HS_FLAG_QUIET - Ignore match reporting for this expression. Used for 
- *                         the sub-expressions in logical combinations. 
+ *       - HS_FLAG_COMBINATION - Parse the expression in logical combination
+ *                               syntax.
+ *       - HS_FLAG_QUIET - Ignore match reporting for this expression. Used for
+ *                         the sub-expressions in logical combinations.
  *
  * @param mode
  *      Compiler mode flags that affect the database as a whole. One of @ref
@@ -396,10 +396,10 @@ hs_error_t HS_CDECL hs_compile(const char *expression, unsigned int flags,
  *       - HS_FLAG_PREFILTER - Compile pattern in prefiltering mode.
  *       - HS_FLAG_SOM_LEFTMOST - Report the leftmost start of match offset
  *                                when a match is found.
- *       - HS_FLAG_COMBINATION - Parse the expression in logical combination 
- *                               syntax. 
- *       - HS_FLAG_QUIET - Ignore match reporting for this expression. Used for 
- *                         the sub-expressions in logical combinations. 
+ *       - HS_FLAG_COMBINATION - Parse the expression in logical combination
+ *                               syntax.
+ *       - HS_FLAG_QUIET - Ignore match reporting for this expression. Used for
+ *                         the sub-expressions in logical combinations.
  *
  * @param ids
  *      An array of integers specifying the ID number to be associated with the
@@ -480,10 +480,10 @@ hs_error_t HS_CDECL hs_compile_multi(const char *const *expressions,
  *       - HS_FLAG_PREFILTER - Compile pattern in prefiltering mode.
  *       - HS_FLAG_SOM_LEFTMOST - Report the leftmost start of match offset
  *                                when a match is found.
- *       - HS_FLAG_COMBINATION - Parse the expression in logical combination 
- *                               syntax. 
- *       - HS_FLAG_QUIET - Ignore match reporting for this expression. Used for 
- *                         the sub-expressions in logical combinations. 
+ *       - HS_FLAG_COMBINATION - Parse the expression in logical combination
+ *                               syntax.
+ *       - HS_FLAG_QUIET - Ignore match reporting for this expression. Used for
+ *                         the sub-expressions in logical combinations.
  *
  * @param ids
  *      An array of integers specifying the ID number to be associated with the
@@ -540,163 +540,163 @@ hs_error_t HS_CDECL hs_compile_ext_multi(const char *const *expressions,
                                 hs_database_t **db, hs_compile_error_t **error);
 
 /**
- * The basic pure literal expression compiler. 
- * 
- * This is the function call with which a pure literal expression (not a 
- * common regular expression) is compiled into a Hyperscan database which 
- * can be passed to the runtime functions (such as @ref hs_scan(), 
- * @ref hs_open_stream(), etc.) 
- * 
- * @param expression 
- *      The NULL-terminated expression to parse. Note that this string must 
- *      represent ONLY the pattern to be matched, with no delimiters or flags; 
- *      any global flags should be specified with the @p flags argument. For 
- *      example, the expression `/abc?def/i` should be compiled by providing 
- *      `abc?def` as the @p expression, and @ref HS_FLAG_CASELESS as the @a 
- *      flags. Meanwhile, the string content shall be fully parsed in a literal 
- *      sense without any regular grammars. For example, the @p expression 
- *      `abc?` simply means a char sequence of `a`, `b`, `c`, and `?`. The `?` 
- *      here doesn't mean 0 or 1 quantifier under regular semantics. 
- * 
- * @param flags 
- *      Flags which modify the behaviour of the expression. Multiple flags may 
- *      be used by ORing them together. Compared to @ref hs_compile(), fewer 
- *      valid values are provided: 
- *       - HS_FLAG_CASELESS - Matching will be performed case-insensitively. 
- *       - HS_FLAG_SINGLEMATCH - Only one match will be generated for the 
- *                               expression per stream. 
- *       - HS_FLAG_SOM_LEFTMOST - Report the leftmost start of match offset 
- *                                when a match is found. 
- * 
- * @param len 
- *      The length of the text content of the pure literal expression. As the 
- *      text content indicated by @p expression is treated as single character 
- *      one by one, the special terminating character `\0` should be allowed 
- *      to appear in expression, and not treated as a terminator for a string. 
- *      Thus, the end of a pure literal expression cannot be indicated by 
- *      identifying `\0`, but by counting to the expression length. 
- * 
- * @param mode 
- *      Compiler mode flags that affect the database as a whole. One of @ref 
- *      HS_MODE_STREAM or @ref HS_MODE_BLOCK or @ref HS_MODE_VECTORED must be 
- *      supplied, to select between the generation of a streaming, block or 
- *      vectored database. In addition, other flags (beginning with HS_MODE_) 
- *      may be supplied to enable specific features. See @ref HS_MODE_FLAG for 
- *      more details. 
- * 
- * @param platform 
- *      If not NULL, the platform structure is used to determine the target 
- *      platform for the database. If NULL, a database suitable for running 
- *      on the current host platform is produced. 
- * 
- * @param db 
- *      On success, a pointer to the generated database will be returned in 
- *      this parameter, or NULL on failure. The caller is responsible for 
- *      deallocating the buffer using the @ref hs_free_database() function. 
- * 
- * @param error 
- *      If the compile fails, a pointer to a @ref hs_compile_error_t will be 
- *      returned, providing details of the error condition. The caller is 
- *      responsible for deallocating the buffer using the @ref 
- *      hs_free_compile_error() function. 
- * 
- * @return 
- *      @ref HS_SUCCESS is returned on successful compilation; @ref 
- *      HS_COMPILER_ERROR on failure, with details provided in the error 
- *      parameter. 
- */ 
-hs_error_t HS_CDECL hs_compile_lit(const char *expression, unsigned flags, 
-                                   const size_t len, unsigned mode, 
-                                   const hs_platform_info_t *platform, 
-                                   hs_database_t **db, 
-                                   hs_compile_error_t **error); 
-/** 
- * The multiple pure literal expression compiler. 
- * 
- * This is the function call with which a set of pure literal expressions is 
- * compiled into a database which can be passed to the runtime functions (such 
- * as @ref hs_scan(), @ref hs_open_stream(), etc.) Each expression can be 
- * labelled with a unique integer which is passed into the match callback to 
- * identify the pattern that has matched. 
- * 
- * @param expressions 
- *      The NULL-terminated expression to parse. Note that this string must 
- *      represent ONLY the pattern to be matched, with no delimiters or flags; 
- *      any global flags should be specified with the @p flags argument. For 
- *      example, the expression `/abc?def/i` should be compiled by providing 
- *      `abc?def` as the @p expression, and @ref HS_FLAG_CASELESS as the @a 
- *      flags. Meanwhile, the string content shall be fully parsed in a literal 
- *      sense without any regular grammars. For example, the @p expression 
- *      `abc?` simply means a char sequence of `a`, `b`, `c`, and `?`. The `?` 
- *      here doesn't mean 0 or 1 quantifier under regular semantics. 
- * 
- * @param flags 
- *      Array of flags which modify the behaviour of each expression. Multiple 
- *      flags may be used by ORing them together. Specifying the NULL pointer 
- *      in place of an array will set the flags value for all patterns to zero. 
- *      Compared to @ref hs_compile_multi(), fewer valid values are provided: 
- *       - HS_FLAG_CASELESS - Matching will be performed case-insensitively. 
- *       - HS_FLAG_SINGLEMATCH - Only one match will be generated for the 
- *                               expression per stream. 
- *       - HS_FLAG_SOM_LEFTMOST - Report the leftmost start of match offset 
- *                                when a match is found. 
- * 
- * @param ids 
- *      An array of integers specifying the ID number to be associated with the 
- *      corresponding pattern in the expressions array. Specifying the NULL 
- *      pointer in place of an array will set the ID value for all patterns to 
- *      zero. 
- * 
- * @param lens 
- *      Array of lengths of the text content of each pure literal expression. 
- *      As the text content indicated by @p expression is treated as single 
- *      character one by one, the special terminating character `\0` should be 
- *      allowed to appear in expression, and not treated as a terminator for a 
- *      string. Thus, the end of a pure literal expression cannot be indicated 
- *      by identifying `\0`, but by counting to the expression length. 
- * 
- * @param elements 
- *      The number of elements in the input arrays. 
- * 
- * @param mode 
- *      Compiler mode flags that affect the database as a whole. One of @ref 
- *      HS_MODE_STREAM or @ref HS_MODE_BLOCK or @ref HS_MODE_VECTORED must be 
- *      supplied, to select between the generation of a streaming, block or 
- *      vectored database. In addition, other flags (beginning with HS_MODE_) 
- *      may be supplied to enable specific features. See @ref HS_MODE_FLAG for 
- *      more details. 
- * 
- * @param platform 
- *      If not NULL, the platform structure is used to determine the target 
- *      platform for the database. If NULL, a database suitable for running 
- *      on the current host platform is produced. 
- * 
- * @param db 
- *      On success, a pointer to the generated database will be returned in 
- *      this parameter, or NULL on failure. The caller is responsible for 
- *      deallocating the buffer using the @ref hs_free_database() function. 
- * 
- * @param error 
- *      If the compile fails, a pointer to a @ref hs_compile_error_t will be 
- *      returned, providing details of the error condition. The caller is 
- *      responsible for deallocating the buffer using the @ref 
- *      hs_free_compile_error() function. 
- * 
- * @return 
- *      @ref HS_SUCCESS is returned on successful compilation; @ref 
- *      HS_COMPILER_ERROR on failure, with details provided in the error 
- *      parameter. 
- */ 
-hs_error_t HS_CDECL hs_compile_lit_multi(const char * const *expressions, 
-                                         const unsigned *flags, 
-                                         const unsigned *ids, 
-                                         const size_t *lens, 
-                                         unsigned elements, unsigned mode, 
-                                         const hs_platform_info_t *platform, 
-                                         hs_database_t **db, 
-                                         hs_compile_error_t **error); 
- 
-/** 
+ * The basic pure literal expression compiler.
+ *
+ * This is the function call with which a pure literal expression (not a
+ * common regular expression) is compiled into a Hyperscan database which
+ * can be passed to the runtime functions (such as @ref hs_scan(),
+ * @ref hs_open_stream(), etc.)
+ *
+ * @param expression
+ *      The NULL-terminated expression to parse. Note that this string must
+ *      represent ONLY the pattern to be matched, with no delimiters or flags;
+ *      any global flags should be specified with the @p flags argument. For
+ *      example, the expression `/abc?def/i` should be compiled by providing
+ *      `abc?def` as the @p expression, and @ref HS_FLAG_CASELESS as the @a
+ *      flags. Meanwhile, the string content shall be fully parsed in a literal
+ *      sense without any regular grammars. For example, the @p expression
+ *      `abc?` simply means a char sequence of `a`, `b`, `c`, and `?`. The `?`
+ *      here doesn't mean 0 or 1 quantifier under regular semantics.
+ *
+ * @param flags
+ *      Flags which modify the behaviour of the expression. Multiple flags may
+ *      be used by ORing them together. Compared to @ref hs_compile(), fewer
+ *      valid values are provided:
+ *       - HS_FLAG_CASELESS - Matching will be performed case-insensitively.
+ *       - HS_FLAG_SINGLEMATCH - Only one match will be generated for the
+ *                               expression per stream.
+ *       - HS_FLAG_SOM_LEFTMOST - Report the leftmost start of match offset
+ *                                when a match is found.
+ *
+ * @param len
+ *      The length of the text content of the pure literal expression. As the
+ *      text content indicated by @p expression is treated as single character
+ *      one by one, the special terminating character `\0` should be allowed
+ *      to appear in expression, and not treated as a terminator for a string.
+ *      Thus, the end of a pure literal expression cannot be indicated by
+ *      identifying `\0`, but by counting to the expression length.
+ *
+ * @param mode
+ *      Compiler mode flags that affect the database as a whole. One of @ref
+ *      HS_MODE_STREAM or @ref HS_MODE_BLOCK or @ref HS_MODE_VECTORED must be
+ *      supplied, to select between the generation of a streaming, block or
+ *      vectored database. In addition, other flags (beginning with HS_MODE_)
+ *      may be supplied to enable specific features. See @ref HS_MODE_FLAG for
+ *      more details.
+ *
+ * @param platform
+ *      If not NULL, the platform structure is used to determine the target
+ *      platform for the database. If NULL, a database suitable for running
+ *      on the current host platform is produced.
+ *
+ * @param db
+ *      On success, a pointer to the generated database will be returned in
+ *      this parameter, or NULL on failure. The caller is responsible for
+ *      deallocating the buffer using the @ref hs_free_database() function.
+ *
+ * @param error
+ *      If the compile fails, a pointer to a @ref hs_compile_error_t will be
+ *      returned, providing details of the error condition. The caller is
+ *      responsible for deallocating the buffer using the @ref
+ *      hs_free_compile_error() function.
+ *
+ * @return
+ *      @ref HS_SUCCESS is returned on successful compilation; @ref
+ *      HS_COMPILER_ERROR on failure, with details provided in the error
+ *      parameter.
+ */
+hs_error_t HS_CDECL hs_compile_lit(const char *expression, unsigned flags,
+                                   const size_t len, unsigned mode,
+                                   const hs_platform_info_t *platform,
+                                   hs_database_t **db,
+                                   hs_compile_error_t **error);
+/**
+ * The multiple pure literal expression compiler.
+ *
+ * This is the function call with which a set of pure literal expressions is
+ * compiled into a database which can be passed to the runtime functions (such
+ * as @ref hs_scan(), @ref hs_open_stream(), etc.) Each expression can be
+ * labelled with a unique integer which is passed into the match callback to
+ * identify the pattern that has matched.
+ *
+ * @param expressions
+ *      The NULL-terminated expression to parse. Note that this string must
+ *      represent ONLY the pattern to be matched, with no delimiters or flags;
+ *      any global flags should be specified with the @p flags argument. For
+ *      example, the expression `/abc?def/i` should be compiled by providing
+ *      `abc?def` as the @p expression, and @ref HS_FLAG_CASELESS as the @a
+ *      flags. Meanwhile, the string content shall be fully parsed in a literal
+ *      sense without any regular grammars. For example, the @p expression
+ *      `abc?` simply means a char sequence of `a`, `b`, `c`, and `?`. The `?`
+ *      here doesn't mean 0 or 1 quantifier under regular semantics.
+ *
+ * @param flags
+ *      Array of flags which modify the behaviour of each expression. Multiple
+ *      flags may be used by ORing them together. Specifying the NULL pointer
+ *      in place of an array will set the flags value for all patterns to zero.
+ *      Compared to @ref hs_compile_multi(), fewer valid values are provided:
+ *       - HS_FLAG_CASELESS - Matching will be performed case-insensitively.
+ *       - HS_FLAG_SINGLEMATCH - Only one match will be generated for the
+ *                               expression per stream.
+ *       - HS_FLAG_SOM_LEFTMOST - Report the leftmost start of match offset
+ *                                when a match is found.
+ *
+ * @param ids
+ *      An array of integers specifying the ID number to be associated with the
+ *      corresponding pattern in the expressions array. Specifying the NULL
+ *      pointer in place of an array will set the ID value for all patterns to
+ *      zero.
+ *
+ * @param lens
+ *      Array of lengths of the text content of each pure literal expression.
+ *      As the text content indicated by @p expression is treated as single
+ *      character one by one, the special terminating character `\0` should be
+ *      allowed to appear in expression, and not treated as a terminator for a
+ *      string. Thus, the end of a pure literal expression cannot be indicated
+ *      by identifying `\0`, but by counting to the expression length.
+ *
+ * @param elements
+ *      The number of elements in the input arrays.
+ *
+ * @param mode
+ *      Compiler mode flags that affect the database as a whole. One of @ref
+ *      HS_MODE_STREAM or @ref HS_MODE_BLOCK or @ref HS_MODE_VECTORED must be
+ *      supplied, to select between the generation of a streaming, block or
+ *      vectored database. In addition, other flags (beginning with HS_MODE_)
+ *      may be supplied to enable specific features. See @ref HS_MODE_FLAG for
+ *      more details.
+ *
+ * @param platform
+ *      If not NULL, the platform structure is used to determine the target
+ *      platform for the database. If NULL, a database suitable for running
+ *      on the current host platform is produced.
+ *
+ * @param db
+ *      On success, a pointer to the generated database will be returned in
+ *      this parameter, or NULL on failure. The caller is responsible for
+ *      deallocating the buffer using the @ref hs_free_database() function.
+ *
+ * @param error
+ *      If the compile fails, a pointer to a @ref hs_compile_error_t will be
+ *      returned, providing details of the error condition. The caller is
+ *      responsible for deallocating the buffer using the @ref
+ *      hs_free_compile_error() function.
+ *
+ * @return
+ *      @ref HS_SUCCESS is returned on successful compilation; @ref
+ *      HS_COMPILER_ERROR on failure, with details provided in the error
+ *      parameter.
+ */
+hs_error_t HS_CDECL hs_compile_lit_multi(const char * const *expressions,
+                                         const unsigned *flags,
+                                         const unsigned *ids,
+                                         const size_t *lens,
+                                         unsigned elements, unsigned mode,
+                                         const hs_platform_info_t *platform,
+                                         hs_database_t **db,
+                                         hs_compile_error_t **error);
+
+/**
  * Free an error structure generated by @ref hs_compile(), @ref
  * hs_compile_multi() or @ref hs_compile_ext_multi().
  *
@@ -748,10 +748,10 @@ hs_error_t HS_CDECL hs_free_compile_error(hs_compile_error_t *error);
  *       - HS_FLAG_PREFILTER - Compile pattern in prefiltering mode.
  *       - HS_FLAG_SOM_LEFTMOST - Report the leftmost start of match offset
  *                                when a match is found.
- *       - HS_FLAG_COMBINATION - Parse the expression in logical combination 
- *                               syntax. 
- *       - HS_FLAG_QUIET - Ignore match reporting for this expression. Used for 
- *                         the sub-expressions in logical combinations. 
+ *       - HS_FLAG_COMBINATION - Parse the expression in logical combination
+ *                               syntax.
+ *       - HS_FLAG_QUIET - Ignore match reporting for this expression. Used for
+ *                         the sub-expressions in logical combinations.
  *
  * @param info
  *      On success, a pointer to the pattern information will be returned in
@@ -814,10 +814,10 @@ hs_error_t HS_CDECL hs_expression_info(const char *expression,
  *       - HS_FLAG_PREFILTER - Compile pattern in prefiltering mode.
  *       - HS_FLAG_SOM_LEFTMOST - Report the leftmost start of match offset
  *                                when a match is found.
- *       - HS_FLAG_COMBINATION - Parse the expression in logical combination 
- *                               syntax. 
- *       - HS_FLAG_QUIET - Ignore match reporting for this expression. Used for 
- *                         the sub-expressions in logical combinations. 
+ *       - HS_FLAG_COMBINATION - Parse the expression in logical combination
+ *                               syntax.
+ *       - HS_FLAG_QUIET - Ignore match reporting for this expression. Used for
+ *                         the sub-expressions in logical combinations.
  *
  * @param ext
  *      A pointer to a filled @ref hs_expr_ext_t structure that defines
@@ -983,33 +983,33 @@ hs_error_t HS_CDECL hs_populate_platform(hs_platform_info_t *platform);
  * offset when a match is reported for this expression. (By default, no start
  * of match is returned.)
  *
- * For all the 3 modes, enabling this behaviour may reduce performance. And 
- * particularly, it may increase stream state requirements in streaming mode. 
+ * For all the 3 modes, enabling this behaviour may reduce performance. And
+ * particularly, it may increase stream state requirements in streaming mode.
  */
 #define HS_FLAG_SOM_LEFTMOST    256
 
-/** 
- * Compile flag: Logical combination. 
- * 
- * This flag instructs Hyperscan to parse this expression as logical 
- * combination syntax. 
- * Logical constraints consist of operands, operators and parentheses. 
- * The operands are expression indices, and operators can be 
- * '!'(NOT), '&'(AND) or '|'(OR). 
- * For example: 
- *     (101&102&103)|(104&!105) 
- *     ((301|302)&303)&(304|305) 
- */ 
-#define HS_FLAG_COMBINATION     512 
- 
-/** 
- * Compile flag: Don't do any match reporting. 
- * 
- * This flag instructs Hyperscan to ignore match reporting for this expression. 
- * It is designed to be used on the sub-expressions in logical combinations. 
- */ 
-#define HS_FLAG_QUIET           1024 
- 
+/**
+ * Compile flag: Logical combination.
+ *
+ * This flag instructs Hyperscan to parse this expression as logical
+ * combination syntax.
+ * Logical constraints consist of operands, operators and parentheses.
+ * The operands are expression indices, and operators can be
+ * '!'(NOT), '&'(AND) or '|'(OR).
+ * For example:
+ *     (101&102&103)|(104&!105)
+ *     ((301|302)&303)&(304|305)
+ */
+#define HS_FLAG_COMBINATION     512
+
+/**
+ * Compile flag: Don't do any match reporting.
+ *
+ * This flag instructs Hyperscan to ignore match reporting for this expression.
+ * It is designed to be used on the sub-expressions in logical combinations.
+ */
+#define HS_FLAG_QUIET           1024
+
 /** @} */
 
 /**
@@ -1034,15 +1034,15 @@ hs_error_t HS_CDECL hs_populate_platform(hs_platform_info_t *platform);
  */
 #define HS_CPU_FEATURES_AVX512           (1ULL << 3)
 
-/** 
- * CPU features flag - Intel(R) Advanced Vector Extensions 512 
- * Vector Byte Manipulation Instructions (Intel(R) AVX512VBMI) 
- * 
- * Setting this flag indicates that the target platform supports AVX512VBMI 
- * instructions. Using AVX512VBMI implies the use of AVX512. 
- */ 
-#define HS_CPU_FEATURES_AVX512VBMI       (1ULL << 4) 
- 
+/**
+ * CPU features flag - Intel(R) Advanced Vector Extensions 512
+ * Vector Byte Manipulation Instructions (Intel(R) AVX512VBMI)
+ *
+ * Setting this flag indicates that the target platform supports AVX512VBMI
+ * instructions. Using AVX512VBMI implies the use of AVX512.
+ */
+#define HS_CPU_FEATURES_AVX512VBMI       (1ULL << 4)
+
 /** @} */
 
 /**
@@ -1123,22 +1123,22 @@ hs_error_t HS_CDECL hs_populate_platform(hs_platform_info_t *platform);
  */
 #define HS_TUNE_FAMILY_GLM 8
 
-/** 
- * Tuning Parameter - Intel(R) microarchitecture code name Icelake 
- * 
- * This indicates that the compiled database should be tuned for the 
- * Icelake microarchitecture. 
- */ 
-#define HS_TUNE_FAMILY_ICL 9 
- 
-/** 
- * Tuning Parameter - Intel(R) microarchitecture code name Icelake Server 
- * 
- * This indicates that the compiled database should be tuned for the 
- * Icelake Server microarchitecture. 
- */ 
-#define HS_TUNE_FAMILY_ICX 10 
- 
+/**
+ * Tuning Parameter - Intel(R) microarchitecture code name Icelake
+ *
+ * This indicates that the compiled database should be tuned for the
+ * Icelake microarchitecture.
+ */
+#define HS_TUNE_FAMILY_ICL 9
+
+/**
+ * Tuning Parameter - Intel(R) microarchitecture code name Icelake Server
+ *
+ * This indicates that the compiled database should be tuned for the
+ * Icelake Server microarchitecture.
+ */
+#define HS_TUNE_FAMILY_ICX 10
+
 /** @} */
 
 /**

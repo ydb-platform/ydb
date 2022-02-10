@@ -23,7 +23,7 @@
 #include "y_absl/strings/str_format.h"
 
 #include <ares.h>
-#error #include <uv.h> 
+#error #include <uv.h>
 
 #include "src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver.h"
 

@@ -16,19 +16,19 @@
 // under the License.
 
 #include "arrow/config.h"
- 
-#include <cstdint> 
- 
+
+#include <cstdint>
+
 #include "arrow/util/config.h"
-#include "arrow/util/cpu_info.h" 
+#include "arrow/util/cpu_info.h"
 
 namespace arrow {
 
-using internal::CpuInfo; 
- 
-namespace { 
- 
-const BuildInfo kBuildInfo = { 
+using internal::CpuInfo;
+
+namespace {
+
+const BuildInfo kBuildInfo = {
     // clang-format off
     ARROW_VERSION,
     ARROW_VERSION_MAJOR,
@@ -46,33 +46,33 @@ const BuildInfo kBuildInfo = {
     // clang-format on
 };
 
-template <typename QueryFlagFunction> 
-std::string MakeSimdLevelString(QueryFlagFunction&& query_flag) { 
-  if (query_flag(CpuInfo::AVX512)) { 
-    return "avx512"; 
-  } else if (query_flag(CpuInfo::AVX2)) { 
-    return "avx2"; 
-  } else if (query_flag(CpuInfo::AVX)) { 
-    return "avx"; 
-  } else if (query_flag(CpuInfo::SSE4_2)) { 
-    return "sse4_2"; 
-  } else { 
-    return "none"; 
-  } 
-} 
- 
-};  // namespace 
- 
+template <typename QueryFlagFunction>
+std::string MakeSimdLevelString(QueryFlagFunction&& query_flag) {
+  if (query_flag(CpuInfo::AVX512)) {
+    return "avx512";
+  } else if (query_flag(CpuInfo::AVX2)) {
+    return "avx2";
+  } else if (query_flag(CpuInfo::AVX)) {
+    return "avx";
+  } else if (query_flag(CpuInfo::SSE4_2)) {
+    return "sse4_2";
+  } else {
+    return "none";
+  }
+}
+
+};  // namespace
+
 const BuildInfo& GetBuildInfo() { return kBuildInfo; }
 
-RuntimeInfo GetRuntimeInfo() { 
-  RuntimeInfo info; 
-  auto cpu_info = CpuInfo::GetInstance(); 
-  info.simd_level = 
-      MakeSimdLevelString([&](int64_t flags) { return cpu_info->IsSupported(flags); }); 
-  info.detected_simd_level = 
-      MakeSimdLevelString([&](int64_t flags) { return cpu_info->IsDetected(flags); }); 
-  return info; 
-} 
- 
+RuntimeInfo GetRuntimeInfo() {
+  RuntimeInfo info;
+  auto cpu_info = CpuInfo::GetInstance();
+  info.simd_level =
+      MakeSimdLevelString([&](int64_t flags) { return cpu_info->IsSupported(flags); });
+  info.detected_simd_level =
+      MakeSimdLevelString([&](int64_t flags) { return cpu_info->IsDetected(flags); });
+  return info;
+}
+
 }  // namespace arrow

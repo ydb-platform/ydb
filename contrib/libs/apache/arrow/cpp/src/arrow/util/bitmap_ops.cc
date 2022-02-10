@@ -172,7 +172,7 @@ Result<std::shared_ptr<Buffer>> CopyBitmap(MemoryPool* pool, const uint8_t* data
 }
 
 Result<std::shared_ptr<Buffer>> InvertBitmap(MemoryPool* pool, const uint8_t* data,
-                                             int64_t offset, int64_t length) { 
+                                             int64_t offset, int64_t length) {
   return TransferBitmap<TransferMode::Invert>(pool, data, offset, length);
 }
 
@@ -215,26 +215,26 @@ bool BitmapEquals(const uint8_t* left, int64_t left_offset, const uint8_t* right
   return true;
 }
 
-bool OptionalBitmapEquals(const uint8_t* left, int64_t left_offset, const uint8_t* right, 
-                          int64_t right_offset, int64_t length) { 
-  if (left == nullptr && right == nullptr) { 
-    return true; 
-  } else if (left != nullptr && right != nullptr) { 
-    return BitmapEquals(left, left_offset, right, right_offset, length); 
-  } else if (left != nullptr) { 
-    return CountSetBits(left, left_offset, length) == length; 
-  } else { 
-    return CountSetBits(right, right_offset, length) == length; 
-  } 
-} 
- 
-bool OptionalBitmapEquals(const std::shared_ptr<Buffer>& left, int64_t left_offset, 
-                          const std::shared_ptr<Buffer>& right, int64_t right_offset, 
-                          int64_t length) { 
-  return OptionalBitmapEquals(left ? left->data() : nullptr, left_offset, 
-                              right ? right->data() : nullptr, right_offset, length); 
-} 
- 
+bool OptionalBitmapEquals(const uint8_t* left, int64_t left_offset, const uint8_t* right,
+                          int64_t right_offset, int64_t length) {
+  if (left == nullptr && right == nullptr) {
+    return true;
+  } else if (left != nullptr && right != nullptr) {
+    return BitmapEquals(left, left_offset, right, right_offset, length);
+  } else if (left != nullptr) {
+    return CountSetBits(left, left_offset, length) == length;
+  } else {
+    return CountSetBits(right, right_offset, length) == length;
+  }
+}
+
+bool OptionalBitmapEquals(const std::shared_ptr<Buffer>& left, int64_t left_offset,
+                          const std::shared_ptr<Buffer>& right, int64_t right_offset,
+                          int64_t length) {
+  return OptionalBitmapEquals(left ? left->data() : nullptr, left_offset,
+                              right ? right->data() : nullptr, right_offset, length);
+}
+
 namespace {
 
 template <template <typename> class BitOp>
@@ -346,42 +346,42 @@ void BitmapXor(const uint8_t* left, int64_t left_offset, const uint8_t* right,
   BitmapOp<std::bit_xor>(left, left_offset, right, right_offset, length, out_offset, out);
 }
 
-template <typename T> 
-struct AndNotOp { 
-  constexpr T operator()(const T& l, const T& r) const { return l & ~r; } 
-}; 
- 
-Result<std::shared_ptr<Buffer>> BitmapAndNot(MemoryPool* pool, const uint8_t* left, 
-                                             int64_t left_offset, const uint8_t* right, 
-                                             int64_t right_offset, int64_t length, 
-                                             int64_t out_offset) { 
-  return BitmapOp<AndNotOp>(pool, left, left_offset, right, right_offset, length, 
-                            out_offset); 
-} 
- 
-void BitmapAndNot(const uint8_t* left, int64_t left_offset, const uint8_t* right, 
-                  int64_t right_offset, int64_t length, int64_t out_offset, 
-                  uint8_t* out) { 
-  BitmapOp<AndNotOp>(left, left_offset, right, right_offset, length, out_offset, out); 
-} 
- 
-template <typename T> 
-struct OrNotOp { 
-  constexpr T operator()(const T& l, const T& r) const { return l | ~r; } 
-}; 
- 
-Result<std::shared_ptr<Buffer>> BitmapOrNot(MemoryPool* pool, const uint8_t* left, 
-                                            int64_t left_offset, const uint8_t* right, 
-                                            int64_t right_offset, int64_t length, 
-                                            int64_t out_offset) { 
-  return BitmapOp<OrNotOp>(pool, left, left_offset, right, right_offset, length, 
-                           out_offset); 
-} 
- 
-void BitmapOrNot(const uint8_t* left, int64_t left_offset, const uint8_t* right, 
-                 int64_t right_offset, int64_t length, int64_t out_offset, uint8_t* out) { 
-  BitmapOp<OrNotOp>(left, left_offset, right, right_offset, length, out_offset, out); 
-} 
- 
+template <typename T>
+struct AndNotOp {
+  constexpr T operator()(const T& l, const T& r) const { return l & ~r; }
+};
+
+Result<std::shared_ptr<Buffer>> BitmapAndNot(MemoryPool* pool, const uint8_t* left,
+                                             int64_t left_offset, const uint8_t* right,
+                                             int64_t right_offset, int64_t length,
+                                             int64_t out_offset) {
+  return BitmapOp<AndNotOp>(pool, left, left_offset, right, right_offset, length,
+                            out_offset);
+}
+
+void BitmapAndNot(const uint8_t* left, int64_t left_offset, const uint8_t* right,
+                  int64_t right_offset, int64_t length, int64_t out_offset,
+                  uint8_t* out) {
+  BitmapOp<AndNotOp>(left, left_offset, right, right_offset, length, out_offset, out);
+}
+
+template <typename T>
+struct OrNotOp {
+  constexpr T operator()(const T& l, const T& r) const { return l | ~r; }
+};
+
+Result<std::shared_ptr<Buffer>> BitmapOrNot(MemoryPool* pool, const uint8_t* left,
+                                            int64_t left_offset, const uint8_t* right,
+                                            int64_t right_offset, int64_t length,
+                                            int64_t out_offset) {
+  return BitmapOp<OrNotOp>(pool, left, left_offset, right, right_offset, length,
+                           out_offset);
+}
+
+void BitmapOrNot(const uint8_t* left, int64_t left_offset, const uint8_t* right,
+                 int64_t right_offset, int64_t length, int64_t out_offset, uint8_t* out) {
+  BitmapOp<OrNotOp>(left, left_offset, right, right_offset, length, out_offset, out);
+}
+
 }  // namespace internal
 }  // namespace arrow

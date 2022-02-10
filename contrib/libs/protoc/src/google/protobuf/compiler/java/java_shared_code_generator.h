@@ -36,28 +36,28 @@
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_SHARED_CODE_GENERATOR_H__
 
 #include <memory>
-#include <string> 
+#include <string>
 #include <vector>
 
-#include <google/protobuf/stubs/common.h> 
-#include <google/protobuf/compiler/java/java_options.h> 
+#include <google/protobuf/stubs/common.h>
+#include <google/protobuf/compiler/java/java_options.h>
 
 namespace google {
 namespace protobuf {
-class FileDescriptor;  // descriptor.h 
-namespace compiler { 
-class GeneratorContext;  // code_generator.h 
-namespace java { 
-class ClassNameResolver;  // name_resolver.h 
+class FileDescriptor;  // descriptor.h
+namespace compiler {
+class GeneratorContext;  // code_generator.h
+namespace java {
+class ClassNameResolver;  // name_resolver.h
 }
-}  // namespace compiler 
-namespace io { 
-class Printer;  // printer.h 
-} 
-}  // namespace protobuf 
-}  // namespace google 
+}  // namespace compiler
+namespace io {
+class Printer;  // printer.h
+}
+}  // namespace protobuf
+}  // namespace google
 
-namespace google { 
+namespace google {
 namespace protobuf {
 namespace compiler {
 namespace java {
@@ -70,13 +70,13 @@ class SharedCodeGenerator {
   ~SharedCodeGenerator();
 
   void Generate(GeneratorContext* generator_context,
-                std::vector<TProtoStringType>* file_list, 
-                std::vector<TProtoStringType>* annotation_file_list); 
+                std::vector<TProtoStringType>* file_list,
+                std::vector<TProtoStringType>* annotation_file_list);
 
   void GenerateDescriptors(io::Printer* printer);
 
  private:
-  std::unique_ptr<ClassNameResolver> name_resolver_; 
+  std::unique_ptr<ClassNameResolver> name_resolver_;
   const FileDescriptor* file_;
   const Options options_;
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(SharedCodeGenerator);
@@ -85,6 +85,6 @@ class SharedCodeGenerator {
 }  // namespace java
 }  // namespace compiler
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
 #endif  // GOOGLE_PROTOBUF_COMPILER_JAVA_SHARED_CODE_GENERATOR_H__

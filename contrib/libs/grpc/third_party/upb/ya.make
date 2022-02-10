@@ -2,7 +2,7 @@
 
 LIBRARY()
 
-OWNER(g:cpp-contrib) 
+OWNER(g:cpp-contrib)
 
 LICENSE(
     BSD-3-Clause AND

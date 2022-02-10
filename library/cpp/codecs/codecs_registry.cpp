@@ -101,18 +101,18 @@ namespace NCodecs {
 
             TVector<TString> ListNames() const override {
                 TVector<TString> vs;
-                vs.push_back(ToString(TSolarCodec::MyName())); 
-                vs.push_back(ToString(TSolarCodec::MyName8k())); 
-                vs.push_back(ToString(TSolarCodec::MyName16k())); 
-                vs.push_back(ToString(TSolarCodec::MyName32k())); 
-                vs.push_back(ToString(TSolarCodec::MyName64k())); 
-                vs.push_back(ToString(TSolarCodec::MyName256k())); 
-                vs.push_back(ToString(TSolarCodec::MyName8kAdapt())); 
-                vs.push_back(ToString(TSolarCodec::MyName16kAdapt())); 
-                vs.push_back(ToString(TSolarCodec::MyName32kAdapt())); 
-                vs.push_back(ToString(TSolarCodec::MyName64kAdapt())); 
-                vs.push_back(ToString(TSolarCodec::MyName256kAdapt())); 
-                vs.push_back(ToString(TSolarCodec::MyNameShortInt())); 
+                vs.push_back(ToString(TSolarCodec::MyName()));
+                vs.push_back(ToString(TSolarCodec::MyName8k()));
+                vs.push_back(ToString(TSolarCodec::MyName16k()));
+                vs.push_back(ToString(TSolarCodec::MyName32k()));
+                vs.push_back(ToString(TSolarCodec::MyName64k()));
+                vs.push_back(ToString(TSolarCodec::MyName256k()));
+                vs.push_back(ToString(TSolarCodec::MyName8kAdapt()));
+                vs.push_back(ToString(TSolarCodec::MyName16kAdapt()));
+                vs.push_back(ToString(TSolarCodec::MyName32kAdapt()));
+                vs.push_back(ToString(TSolarCodec::MyName64kAdapt()));
+                vs.push_back(ToString(TSolarCodec::MyName256kAdapt()));
+                vs.push_back(ToString(TSolarCodec::MyNameShortInt()));
                 return vs;
             }
         };
@@ -141,8 +141,8 @@ namespace NCodecs {
 
             TVector<TString> ListNames() const override {
                 TVector<TString> vs;
-                vs.push_back(ToString(TCompTableCodec::MyNameHQ())); 
-                vs.push_back(ToString(TCompTableCodec::MyNameLQ())); 
+                vs.push_back(ToString(TCompTableCodec::MyNameHQ()));
+                vs.push_back(ToString(TCompTableCodec::MyNameLQ()));
                 return vs;
             }
         };
@@ -156,7 +156,7 @@ namespace NCodecs {
             }
 
             TString GetName() const override {
-                return ToString(Codec->Name()); 
+                return ToString(Codec->Name());
             }
 
             ui8 Encode(TStringBuf r, TBuffer& b) const override {

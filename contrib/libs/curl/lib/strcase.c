@@ -5,11 +5,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html. 
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -26,8 +26,8 @@
 
 #include "strcase.h"
 
-static char raw_tolower(char in); 
- 
+static char raw_tolower(char in);
+
 /* Portable, consistent toupper (remember EBCDIC). Do not use toupper() because
    its behavior is altered by the current locale. */
 char Curl_raw_toupper(char in)
@@ -95,75 +95,75 @@ char Curl_raw_toupper(char in)
   return in;
 }
 
- 
-/* Portable, consistent tolower (remember EBCDIC). Do not use tolower() because 
-   its behavior is altered by the current locale. */ 
-static char raw_tolower(char in) 
-{ 
-#if !defined(CURL_DOES_CONVERSIONS) 
-  if(in >= 'A' && in <= 'Z') 
-    return (char)('a' + in - 'A'); 
-#else 
-  switch(in) { 
-  case 'A': 
-    return 'a'; 
-  case 'B': 
-    return 'b'; 
-  case 'C': 
-    return 'c'; 
-  case 'D': 
-    return 'd'; 
-  case 'E': 
-    return 'e'; 
-  case 'F': 
-    return 'f'; 
-  case 'G': 
-    return 'g'; 
-  case 'H': 
-    return 'h'; 
-  case 'I': 
-    return 'i'; 
-  case 'J': 
-    return 'j'; 
-  case 'K': 
-    return 'k'; 
-  case 'L': 
-    return 'l'; 
-  case 'M': 
-    return 'm'; 
-  case 'N': 
-    return 'n'; 
-  case 'O': 
-    return 'o'; 
-  case 'P': 
-    return 'p'; 
-  case 'Q': 
-    return 'q'; 
-  case 'R': 
-    return 'r'; 
-  case 'S': 
-    return 's'; 
-  case 'T': 
-    return 't'; 
-  case 'U': 
-    return 'u'; 
-  case 'V': 
-    return 'v'; 
-  case 'W': 
-    return 'w'; 
-  case 'X': 
-    return 'x'; 
-  case 'Y': 
-    return 'y'; 
-  case 'Z': 
-    return 'z'; 
-  } 
-#endif 
- 
-  return in; 
-} 
- 
- 
+
+/* Portable, consistent tolower (remember EBCDIC). Do not use tolower() because
+   its behavior is altered by the current locale. */
+static char raw_tolower(char in)
+{
+#if !defined(CURL_DOES_CONVERSIONS)
+  if(in >= 'A' && in <= 'Z')
+    return (char)('a' + in - 'A');
+#else
+  switch(in) {
+  case 'A':
+    return 'a';
+  case 'B':
+    return 'b';
+  case 'C':
+    return 'c';
+  case 'D':
+    return 'd';
+  case 'E':
+    return 'e';
+  case 'F':
+    return 'f';
+  case 'G':
+    return 'g';
+  case 'H':
+    return 'h';
+  case 'I':
+    return 'i';
+  case 'J':
+    return 'j';
+  case 'K':
+    return 'k';
+  case 'L':
+    return 'l';
+  case 'M':
+    return 'm';
+  case 'N':
+    return 'n';
+  case 'O':
+    return 'o';
+  case 'P':
+    return 'p';
+  case 'Q':
+    return 'q';
+  case 'R':
+    return 'r';
+  case 'S':
+    return 's';
+  case 'T':
+    return 't';
+  case 'U':
+    return 'u';
+  case 'V':
+    return 'v';
+  case 'W':
+    return 'w';
+  case 'X':
+    return 'x';
+  case 'Y':
+    return 'y';
+  case 'Z':
+    return 'z';
+  }
+#endif
+
+  return in;
+}
+
+
 /*
  * Curl_strcasecompare() is for doing "raw" case insensitive strings. This is
  * meant to be locale independent and only compare strings we know are safe
@@ -236,21 +236,21 @@ void Curl_strntoupper(char *dest, const char *src, size_t n)
   } while(*src++ && --n);
 }
 
-/* Copy a lower case version of the string from src to dest.  The 
- * strings may overlap.  No more than n characters of the string are copied 
- * (including any NUL) and the destination string will NOT be 
- * NUL-terminated if that limit is reached. 
- */ 
-void Curl_strntolower(char *dest, const char *src, size_t n) 
-{ 
-  if(n < 1) 
-    return; 
- 
-  do { 
-    *dest++ = raw_tolower(*src); 
-  } while(*src++ && --n); 
-} 
- 
+/* Copy a lower case version of the string from src to dest.  The
+ * strings may overlap.  No more than n characters of the string are copied
+ * (including any NUL) and the destination string will NOT be
+ * NUL-terminated if that limit is reached.
+ */
+void Curl_strntolower(char *dest, const char *src, size_t n)
+{
+  if(n < 1)
+    return;
+
+  do {
+    *dest++ = raw_tolower(*src);
+  } while(*src++ && --n);
+}
+
 /* --- public functions --- */
 
 int curl_strequal(const char *first, const char *second)

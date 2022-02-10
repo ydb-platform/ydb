@@ -412,7 +412,7 @@ namespace NBus {
             ssize_t bytes;
             {
                 TWhatThreadDoesPushPop pp("recv syscall");
-                bytes = SocketRecv(ReaderData.Channel->GetSocket(), TArrayRef<char>(ReaderData.Buffer.Pos(), ReaderData.Buffer.Avail())); 
+                bytes = SocketRecv(ReaderData.Channel->GetSocket(), TArrayRef<char>(ReaderData.Buffer.Pos(), ReaderData.Buffer.Avail()));
             }
 
             if (bytes < 0) {
@@ -621,7 +621,7 @@ namespace NBus {
                 ssize_t bytes;
                 {
                     TWhatThreadDoesPushPop pp("send syscall");
-                    bytes = SocketSend(WriterData.Channel->GetSocket(), TArrayRef<const char>(WriterData.Buffer.LeftPos(), WriterData.Buffer.Size())); 
+                    bytes = SocketSend(WriterData.Channel->GetSocket(), TArrayRef<const char>(WriterData.Buffer.LeftPos(), WriterData.Buffer.Size()));
                 }
 
                 if (bytes < 0) {

@@ -370,7 +370,7 @@ Y_UNIT_TEST_SUITE(TBase64) {
     }
 
     Y_UNIT_TEST(TestEmptyString) {
-        const TString x = ""; 
+        const TString x = "";
         const TString xEnc = "";
         const TString y = Base64Decode(xEnc);
         const TString yEnc = Base64Encode(x);

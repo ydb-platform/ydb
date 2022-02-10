@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(g:messagebus)
 
-IF (SANITIZER_TYPE == "undefined") 
+IF (SANITIZER_TYPE == "undefined")
     NO_SANITIZE()
 ENDIF()
 

@@ -709,7 +709,7 @@ inline int ComparePointKeys(const TKeyDesc& point1, const TKeyDesc& point2) {
     Y_VERIFY(point1.Range.Point);
     Y_VERIFY(point2.Range.Point);
     return CompareTypedCellVectors(
-        point1.Range.From.data(), point2.Range.From.data(), point1.KeyColumnTypes.data(), point1.KeyColumnTypes.size()); 
+        point1.Range.From.data(), point2.Range.From.data(), point1.KeyColumnTypes.data(), point1.KeyColumnTypes.size());
 }
 
 inline int ComparePointAndRangeKeys(const TKeyDesc& point, const TKeyDesc& range) {

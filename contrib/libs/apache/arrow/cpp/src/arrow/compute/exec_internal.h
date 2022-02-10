@@ -84,14 +84,14 @@ class ARROW_EXPORT ExecListener {
 
 class DatumAccumulator : public ExecListener {
  public:
-  DatumAccumulator() = default; 
+  DatumAccumulator() = default;
 
   Status OnResult(Datum value) override {
     values_.emplace_back(value);
     return Status::OK();
   }
 
-  std::vector<Datum> values() { return std::move(values_); } 
+  std::vector<Datum> values() { return std::move(values_); }
 
  private:
   std::vector<Datum> values_;
@@ -102,17 +102,17 @@ class DatumAccumulator : public ExecListener {
 /// inputs will be split into non-chunked ExecBatch values for execution
 Status CheckAllValues(const std::vector<Datum>& values);
 
-class ARROW_EXPORT KernelExecutor { 
+class ARROW_EXPORT KernelExecutor {
  public:
-  virtual ~KernelExecutor() = default; 
+  virtual ~KernelExecutor() = default;
 
-  /// The Kernel's `init` method must be called and any KernelState set in the 
-  /// KernelContext *before* KernelExecutor::Init is called. This is to facilitate 
-  /// the case where init may be expensive and does not need to be called again for 
-  /// each execution of the kernel, for example the same lookup table can be re-used 
-  /// for all scanned batches in a dataset filter. 
-  virtual Status Init(KernelContext*, KernelInitArgs) = 0; 
- 
+  /// The Kernel's `init` method must be called and any KernelState set in the
+  /// KernelContext *before* KernelExecutor::Init is called. This is to facilitate
+  /// the case where init may be expensive and does not need to be called again for
+  /// each execution of the kernel, for example the same lookup table can be re-used
+  /// for all scanned batches in a dataset filter.
+  virtual Status Init(KernelContext*, KernelInitArgs) = 0;
+
   /// XXX: Better configurability for listener
   /// Not thread-safe
   virtual Status Execute(const std::vector<Datum>& args, ExecListener* listener) = 0;
@@ -120,9 +120,9 @@ class ARROW_EXPORT KernelExecutor {
   virtual Datum WrapResults(const std::vector<Datum>& args,
                             const std::vector<Datum>& outputs) = 0;
 
-  static std::unique_ptr<KernelExecutor> MakeScalar(); 
-  static std::unique_ptr<KernelExecutor> MakeVector(); 
-  static std::unique_ptr<KernelExecutor> MakeScalarAggregate(); 
+  static std::unique_ptr<KernelExecutor> MakeScalar();
+  static std::unique_ptr<KernelExecutor> MakeVector();
+  static std::unique_ptr<KernelExecutor> MakeScalarAggregate();
 };
 
 /// \brief Populate validity bitmap with the intersection of the nullity of the

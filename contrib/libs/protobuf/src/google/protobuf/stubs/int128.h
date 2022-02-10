@@ -30,12 +30,12 @@
 #ifndef GOOGLE_PROTOBUF_STUBS_INT128_H_
 #define GOOGLE_PROTOBUF_STUBS_INT128_H_
 
-#include <google/protobuf/stubs/common.h> 
+#include <google/protobuf/stubs/common.h>
 
 #include <iosfwd>
 
-#include <google/protobuf/port_def.inc> 
- 
+#include <google/protobuf/port_def.inc>
+
 namespace google {
 namespace protobuf {
 
@@ -50,7 +50,7 @@ struct uint128_pod;
 #endif
 
 // An unsigned 128-bit integer type. Thread-compatible.
-class PROTOBUF_EXPORT uint128 { 
+class PROTOBUF_EXPORT uint128 {
  public:
   UINT128_CONSTEXPR uint128();  // Sets to 0, but don't trust on this behavior.
   UINT128_CONSTEXPR uint128(uint64 top, uint64 bottom);
@@ -86,8 +86,8 @@ class PROTOBUF_EXPORT uint128 {
   friend uint64 Uint128High64(const uint128& v);
 
   // We add "std::" to avoid including all of port.h.
-  PROTOBUF_EXPORT friend std::ostream& operator<<(std::ostream& o, 
-                                                  const uint128& b); 
+  PROTOBUF_EXPORT friend std::ostream& operator<<(std::ostream& o,
+                                                  const uint128& b);
 
  private:
   static void DivModImpl(uint128 dividend, uint128 divisor,
@@ -118,11 +118,11 @@ struct uint128_pod {
   uint64 lo;
 };
 
-PROTOBUF_EXPORT extern const uint128_pod kuint128max; 
+PROTOBUF_EXPORT extern const uint128_pod kuint128max;
 
 // allow uint128 to be logged
-PROTOBUF_EXPORT extern std::ostream& operator<<(std::ostream& o, 
-                                                const uint128& b); 
+PROTOBUF_EXPORT extern std::ostream& operator<<(std::ostream& o,
+                                                const uint128& b);
 
 // Methods to access low and high pieces of 128-bit value.
 // Defined externally from uint128 to facilitate conversion
@@ -382,6 +382,6 @@ inline uint128& uint128::operator--() {
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc> 
- 
+#include <google/protobuf/port_undef.inc>
+
 #endif  // GOOGLE_PROTOBUF_STUBS_INT128_H_

@@ -49,16 +49,16 @@ bool is_equal(const NGHolder &a, ReportID a_r, const NGHolder &b, ReportID b_r);
 
 u64a hash_holder(const NGHolder &g);
 
-// Util Functors 
-struct NGHolderHasher { 
-    size_t operator()(const std::shared_ptr<const NGHolder> &h) const { 
-        return hash_holder(*h); 
-    } 
-    size_t operator()(const std::shared_ptr<NGHolder> &h) const { 
-        return hash_holder(*h); 
-    } 
-}; 
- 
+// Util Functors
+struct NGHolderHasher {
+    size_t operator()(const std::shared_ptr<const NGHolder> &h) const {
+        return hash_holder(*h);
+    }
+    size_t operator()(const std::shared_ptr<NGHolder> &h) const {
+        return hash_holder(*h);
+    }
+};
+
 struct NGHolderEqual {
     bool operator()(const std::shared_ptr<const NGHolder> &a,
                     const std::shared_ptr<const NGHolder> &b) const {

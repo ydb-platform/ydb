@@ -25,14 +25,14 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/io/caching.h" 
-#include "arrow/io/type_fwd.h" 
+#include "arrow/io/caching.h"
+#include "arrow/io/type_fwd.h"
 #include "arrow/ipc/message.h"
 #include "arrow/ipc/options.h"
 #include "arrow/record_batch.h"
 #include "arrow/result.h"
-#include "arrow/type_fwd.h" 
-#include "arrow/util/async_generator.h" 
+#include "arrow/type_fwd.h"
+#include "arrow/util/async_generator.h"
 #include "arrow/util/macros.h"
 #include "arrow/util/visibility.h"
 
@@ -101,8 +101,8 @@ class ARROW_EXPORT RecordBatchStreamReader : public RecordBatchReader {
 };
 
 /// \brief Reads the record batch file format
-class ARROW_EXPORT RecordBatchFileReader 
-    : public std::enable_shared_from_this<RecordBatchFileReader> { 
+class ARROW_EXPORT RecordBatchFileReader
+    : public std::enable_shared_from_this<RecordBatchFileReader> {
  public:
   virtual ~RecordBatchFileReader() = default;
 
@@ -150,26 +150,26 @@ class ARROW_EXPORT RecordBatchFileReader
       const std::shared_ptr<io::RandomAccessFile>& file, int64_t footer_offset,
       const IpcReadOptions& options = IpcReadOptions::Defaults());
 
-  /// \brief Open a file asynchronously (owns the file). 
-  static Future<std::shared_ptr<RecordBatchFileReader>> OpenAsync( 
-      const std::shared_ptr<io::RandomAccessFile>& file, 
-      const IpcReadOptions& options = IpcReadOptions::Defaults()); 
- 
-  /// \brief Open a file asynchronously (borrows the file). 
-  static Future<std::shared_ptr<RecordBatchFileReader>> OpenAsync( 
-      io::RandomAccessFile* file, 
-      const IpcReadOptions& options = IpcReadOptions::Defaults()); 
- 
-  /// \brief Open a file asynchronously (owns the file). 
-  static Future<std::shared_ptr<RecordBatchFileReader>> OpenAsync( 
-      const std::shared_ptr<io::RandomAccessFile>& file, int64_t footer_offset, 
-      const IpcReadOptions& options = IpcReadOptions::Defaults()); 
- 
-  /// \brief Open a file asynchronously (borrows the file). 
-  static Future<std::shared_ptr<RecordBatchFileReader>> OpenAsync( 
-      io::RandomAccessFile* file, int64_t footer_offset, 
-      const IpcReadOptions& options = IpcReadOptions::Defaults()); 
- 
+  /// \brief Open a file asynchronously (owns the file).
+  static Future<std::shared_ptr<RecordBatchFileReader>> OpenAsync(
+      const std::shared_ptr<io::RandomAccessFile>& file,
+      const IpcReadOptions& options = IpcReadOptions::Defaults());
+
+  /// \brief Open a file asynchronously (borrows the file).
+  static Future<std::shared_ptr<RecordBatchFileReader>> OpenAsync(
+      io::RandomAccessFile* file,
+      const IpcReadOptions& options = IpcReadOptions::Defaults());
+
+  /// \brief Open a file asynchronously (owns the file).
+  static Future<std::shared_ptr<RecordBatchFileReader>> OpenAsync(
+      const std::shared_ptr<io::RandomAccessFile>& file, int64_t footer_offset,
+      const IpcReadOptions& options = IpcReadOptions::Defaults());
+
+  /// \brief Open a file asynchronously (borrows the file).
+  static Future<std::shared_ptr<RecordBatchFileReader>> OpenAsync(
+      io::RandomAccessFile* file, int64_t footer_offset,
+      const IpcReadOptions& options = IpcReadOptions::Defaults());
+
   /// \brief The schema read from the file
   virtual std::shared_ptr<Schema> schema() const = 0;
 
@@ -192,24 +192,24 @@ class ARROW_EXPORT RecordBatchFileReader
 
   /// \brief Return current read statistics
   virtual ReadStats stats() const = 0;
- 
-  /// \brief Computes the total number of rows in the file. 
-  virtual Result<int64_t> CountRows() = 0; 
- 
-  /// \brief Get a reentrant generator of record batches. 
-  /// 
-  /// \param[in] coalesce If true, enable I/O coalescing. 
-  /// \param[in] io_context The IOContext to use (controls which thread pool 
-  ///     is used for I/O). 
-  /// \param[in] cache_options Options for coalescing (if enabled). 
-  /// \param[in] executor Optionally, an executor to use for decoding record 
-  ///     batches. This is generally only a benefit for very wide and/or 
-  ///     compressed batches. 
-  virtual Result<AsyncGenerator<std::shared_ptr<RecordBatch>>> GetRecordBatchGenerator( 
-      const bool coalesce = false, 
-      const io::IOContext& io_context = io::default_io_context(), 
-      const io::CacheOptions cache_options = io::CacheOptions::LazyDefaults(), 
-      arrow::internal::Executor* executor = NULLPTR) = 0; 
+
+  /// \brief Computes the total number of rows in the file.
+  virtual Result<int64_t> CountRows() = 0;
+
+  /// \brief Get a reentrant generator of record batches.
+  ///
+  /// \param[in] coalesce If true, enable I/O coalescing.
+  /// \param[in] io_context The IOContext to use (controls which thread pool
+  ///     is used for I/O).
+  /// \param[in] cache_options Options for coalescing (if enabled).
+  /// \param[in] executor Optionally, an executor to use for decoding record
+  ///     batches. This is generally only a benefit for very wide and/or
+  ///     compressed batches.
+  virtual Result<AsyncGenerator<std::shared_ptr<RecordBatch>>> GetRecordBatchGenerator(
+      const bool coalesce = false,
+      const io::IOContext& io_context = io::default_io_context(),
+      const io::CacheOptions cache_options = io::CacheOptions::LazyDefaults(),
+      arrow::internal::Executor* executor = NULLPTR) = 0;
 };
 
 /// \brief A general listener class to receive events.
@@ -304,7 +304,7 @@ class ARROW_EXPORT StreamDecoder {
   /// Listener::OnRecordBatchDecoded() to receive decoded record batches
   /// \param[in] options any IPC reading options (optional)
   StreamDecoder(std::shared_ptr<Listener> listener,
-                IpcReadOptions options = IpcReadOptions::Defaults()); 
+                IpcReadOptions options = IpcReadOptions::Defaults());
 
   virtual ~StreamDecoder();
 
@@ -380,7 +380,7 @@ class ARROW_EXPORT StreamDecoder {
   ///   memcpy(buffer->mutable_data() + current_buffer_size,
   ///          small_chunk,
   ///          small_chunk_size);
-  ///   if (buffer->size() < decoder.next_required_size()) { 
+  ///   if (buffer->size() < decoder.next_required_size()) {
   ///     continue;
   ///   }
   ///   std::shared_ptr<arrow::Buffer> chunk(buffer.release());
@@ -397,9 +397,9 @@ class ARROW_EXPORT StreamDecoder {
   /// decoder
   int64_t next_required_size() const;
 
-  /// \brief Return current read statistics 
-  ReadStats stats() const; 
- 
+  /// \brief Return current read statistics
+  ReadStats stats() const;
+
  private:
   class StreamDecoderImpl;
   std::unique_ptr<StreamDecoderImpl> impl_;
@@ -526,8 +526,8 @@ Result<std::shared_ptr<SparseTensor>> ReadSparseTensorPayload(const IpcPayload& 
 ARROW_EXPORT
 Status FuzzIpcStream(const uint8_t* data, int64_t size);
 ARROW_EXPORT
-Status FuzzIpcTensorStream(const uint8_t* data, int64_t size); 
-ARROW_EXPORT 
+Status FuzzIpcTensorStream(const uint8_t* data, int64_t size);
+ARROW_EXPORT
 Status FuzzIpcFile(const uint8_t* data, int64_t size);
 
 }  // namespace internal

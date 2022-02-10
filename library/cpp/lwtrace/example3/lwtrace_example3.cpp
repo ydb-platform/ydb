@@ -1,5 +1,5 @@
 #include <library/cpp/lwtrace/all.h>
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 #include "my_action.h"
 
 #define LWTRACE_EXAMPLE_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)          \

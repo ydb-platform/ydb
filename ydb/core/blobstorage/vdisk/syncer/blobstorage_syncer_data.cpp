@@ -27,7 +27,7 @@ namespace NKikimr {
             s.Write(&LastGood, sizeof(LastGood));
         }
 
-        void TPeerSyncState::ParseFromArcadiaStream(IInputStream &s) { 
+        void TPeerSyncState::ParseFromArcadiaStream(IInputStream &s) {
             i32 status = 0;
             if (s.Load(&status, sizeof(status)) != sizeof(status))
                 ythrow yexception() << "invalid status size";
@@ -129,8 +129,8 @@ namespace NKikimr {
             // we don't serialize PeerGuidInfo because we can't do it in old format
         }
 
-        void TPeer::ParseFromArcadiaStream(IInputStream &s) { 
-            PeerSyncState.ParseFromArcadiaStream(s); 
+        void TPeer::ParseFromArcadiaStream(IInputStream &s) {
+            PeerSyncState.ParseFromArcadiaStream(s);
             // we don't parse PeerGuidInfo because we can't do it in old format
         }
 
@@ -243,7 +243,7 @@ namespace NKikimr {
         // write to stream
         TStringStream str;
         str.Write(&Signature, sizeof(Signature));
-        Proto.SerializeToArcadiaStream(&str); 
+        Proto.SerializeToArcadiaStream(&str);
         return str.Str();
     }
 

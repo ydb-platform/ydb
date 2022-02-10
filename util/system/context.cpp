@@ -54,11 +54,11 @@ extern "C" int __mysetjmp(__myjmp_buf env) __attribute__((__returns_twice__));
 namespace {
     class TStackType {
     public:
-        inline TStackType(TArrayRef<char> range) noexcept 
+        inline TStackType(TArrayRef<char> range) noexcept
     #if defined(STACK_GROW_DOWN)
-            : Data_(range.data() + range.size()) 
+            : Data_(range.data() + range.size())
     #else
-            : Data_(range.data() + STACK_ALIGN) 
+            : Data_(range.data() + STACK_ALIGN)
     #endif
         {
             ReAlign();
@@ -206,10 +206,10 @@ void TContMachineContext::SwitchTo(TContMachineContext* next) noexcept {
     #endif
     }
 }
-#elif defined(_win_) && defined(_32_) 
-void __stdcall ContextTrampoLine(void* arg) { 
-    Run(arg); 
-} 
+#elif defined(_win_) && defined(_32_)
+void __stdcall ContextTrampoLine(void* arg) {
+    Run(arg);
+}
 #else
 void ContextTrampoLine(void* arg) {
     Run(arg);
@@ -225,7 +225,7 @@ TContMachineContext::TContMachineContext()
 }
 
 TContMachineContext::TContMachineContext(const TContClosure& c)
-    : Fiber_(CreateFiber(c.Stack.size(), (LPFIBER_START_ROUTINE)ContextTrampoLine, (LPVOID)c.TrampoLine)) 
+    : Fiber_(CreateFiber(c.Stack.size(), (LPFIBER_START_ROUTINE)ContextTrampoLine, (LPVOID)c.TrampoLine))
     , MainFiber_(false)
 {
     Y_ENSURE(Fiber_, TStringBuf("fiber error"));
@@ -258,7 +258,7 @@ struct TContMachineContext::TImpl {
         : TL(c.TrampoLine)
         , Finish(false)
     {
-        Thread.Reset(new TThread(TThread::TParams(Run, this).SetStackSize(c.Stack.size()).SetStackPointer((void*)c.Stack.data()))); 
+        Thread.Reset(new TThread(TThread::TParams(Run, this).SetStackSize(c.Stack.size()).SetStackPointer((void*)c.Stack.data())));
         Thread->Start();
     }
 

@@ -32,8 +32,8 @@ class ExecContext;
 /// \addtogroup compute-concrete-options
 /// @{
 
-class ARROW_EXPORT FilterOptions : public FunctionOptions { 
- public: 
+class ARROW_EXPORT FilterOptions : public FunctionOptions {
+ public:
   /// Configure the action taken when a slot of the selection mask is null
   enum NullSelectionBehavior {
     /// the corresponding filtered value will be removed in the output
@@ -42,89 +42,89 @@ class ARROW_EXPORT FilterOptions : public FunctionOptions {
     EMIT_NULL,
   };
 
-  explicit FilterOptions(NullSelectionBehavior null_selection = DROP); 
-  constexpr static char const kTypeName[] = "FilterOptions"; 
+  explicit FilterOptions(NullSelectionBehavior null_selection = DROP);
+  constexpr static char const kTypeName[] = "FilterOptions";
   static FilterOptions Defaults() { return FilterOptions(); }
 
   NullSelectionBehavior null_selection_behavior = DROP;
 };
 
-class ARROW_EXPORT TakeOptions : public FunctionOptions { 
- public: 
-  explicit TakeOptions(bool boundscheck = true); 
-  constexpr static char const kTypeName[] = "TakeOptions"; 
+class ARROW_EXPORT TakeOptions : public FunctionOptions {
+ public:
+  explicit TakeOptions(bool boundscheck = true);
+  constexpr static char const kTypeName[] = "TakeOptions";
   static TakeOptions BoundsCheck() { return TakeOptions(true); }
   static TakeOptions NoBoundsCheck() { return TakeOptions(false); }
   static TakeOptions Defaults() { return BoundsCheck(); }
- 
-  bool boundscheck = true; 
+
+  bool boundscheck = true;
 };
 
-/// \brief Options for the dictionary encode function 
-class ARROW_EXPORT DictionaryEncodeOptions : public FunctionOptions { 
- public: 
-  /// Configure how null values will be encoded 
-  enum NullEncodingBehavior { 
-    /// the null value will be added to the dictionary with a proper index 
-    ENCODE, 
-    /// the null value will be masked in the indices array 
-    MASK 
-  }; 
- 
-  explicit DictionaryEncodeOptions(NullEncodingBehavior null_encoding = MASK); 
-  constexpr static char const kTypeName[] = "DictionaryEncodeOptions"; 
-  static DictionaryEncodeOptions Defaults() { return DictionaryEncodeOptions(); } 
- 
-  NullEncodingBehavior null_encoding_behavior = MASK; 
-}; 
- 
-enum class SortOrder { 
-  Ascending, 
-  Descending, 
-}; 
- 
-/// \brief One sort key for PartitionNthIndices (TODO) and SortIndices 
-class ARROW_EXPORT SortKey : public util::EqualityComparable<SortKey> { 
- public: 
-  explicit SortKey(std::string name, SortOrder order = SortOrder::Ascending) 
-      : name(name), order(order) {} 
- 
-  using util::EqualityComparable<SortKey>::Equals; 
-  using util::EqualityComparable<SortKey>::operator==; 
-  using util::EqualityComparable<SortKey>::operator!=; 
-  bool Equals(const SortKey& other) const; 
-  std::string ToString() const; 
- 
-  /// The name of the sort column. 
-  std::string name; 
-  /// How to order by this sort key. 
-  SortOrder order; 
-}; 
- 
-class ARROW_EXPORT ArraySortOptions : public FunctionOptions { 
- public: 
-  explicit ArraySortOptions(SortOrder order = SortOrder::Ascending); 
-  constexpr static char const kTypeName[] = "ArraySortOptions"; 
-  static ArraySortOptions Defaults() { return ArraySortOptions{}; } 
- 
-  SortOrder order; 
-}; 
- 
-class ARROW_EXPORT SortOptions : public FunctionOptions { 
- public: 
-  explicit SortOptions(std::vector<SortKey> sort_keys = {}); 
-  constexpr static char const kTypeName[] = "SortOptions"; 
-  static SortOptions Defaults() { return SortOptions{}; } 
- 
-  std::vector<SortKey> sort_keys; 
-}; 
- 
+/// \brief Options for the dictionary encode function
+class ARROW_EXPORT DictionaryEncodeOptions : public FunctionOptions {
+ public:
+  /// Configure how null values will be encoded
+  enum NullEncodingBehavior {
+    /// the null value will be added to the dictionary with a proper index
+    ENCODE,
+    /// the null value will be masked in the indices array
+    MASK
+  };
+
+  explicit DictionaryEncodeOptions(NullEncodingBehavior null_encoding = MASK);
+  constexpr static char const kTypeName[] = "DictionaryEncodeOptions";
+  static DictionaryEncodeOptions Defaults() { return DictionaryEncodeOptions(); }
+
+  NullEncodingBehavior null_encoding_behavior = MASK;
+};
+
+enum class SortOrder {
+  Ascending,
+  Descending,
+};
+
+/// \brief One sort key for PartitionNthIndices (TODO) and SortIndices
+class ARROW_EXPORT SortKey : public util::EqualityComparable<SortKey> {
+ public:
+  explicit SortKey(std::string name, SortOrder order = SortOrder::Ascending)
+      : name(name), order(order) {}
+
+  using util::EqualityComparable<SortKey>::Equals;
+  using util::EqualityComparable<SortKey>::operator==;
+  using util::EqualityComparable<SortKey>::operator!=;
+  bool Equals(const SortKey& other) const;
+  std::string ToString() const;
+
+  /// The name of the sort column.
+  std::string name;
+  /// How to order by this sort key.
+  SortOrder order;
+};
+
+class ARROW_EXPORT ArraySortOptions : public FunctionOptions {
+ public:
+  explicit ArraySortOptions(SortOrder order = SortOrder::Ascending);
+  constexpr static char const kTypeName[] = "ArraySortOptions";
+  static ArraySortOptions Defaults() { return ArraySortOptions{}; }
+
+  SortOrder order;
+};
+
+class ARROW_EXPORT SortOptions : public FunctionOptions {
+ public:
+  explicit SortOptions(std::vector<SortKey> sort_keys = {});
+  constexpr static char const kTypeName[] = "SortOptions";
+  static SortOptions Defaults() { return SortOptions{}; }
+
+  std::vector<SortKey> sort_keys;
+};
+
 /// \brief Partitioning options for NthToIndices
-class ARROW_EXPORT PartitionNthOptions : public FunctionOptions { 
- public: 
-  explicit PartitionNthOptions(int64_t pivot); 
-  PartitionNthOptions() : PartitionNthOptions(0) {} 
-  constexpr static char const kTypeName[] = "PartitionNthOptions"; 
+class ARROW_EXPORT PartitionNthOptions : public FunctionOptions {
+ public:
+  explicit PartitionNthOptions(int64_t pivot);
+  PartitionNthOptions() : PartitionNthOptions(0) {}
+  constexpr static char const kTypeName[] = "PartitionNthOptions";
 
   /// The index into the equivalent sorted array of the partition pivot element.
   int64_t pivot;
@@ -171,23 +171,23 @@ Result<std::shared_ptr<ArrayData>> GetTakeIndices(
 
 }  // namespace internal
 
-/// \brief ReplaceWithMask replaces each value in the array corresponding 
-/// to a true value in the mask with the next element from `replacements`. 
-/// 
-/// \param[in] values Array input to replace 
-/// \param[in] mask Array or Scalar of Boolean mask values 
-/// \param[in] replacements The replacement values to draw from. There must 
-/// be as many replacement values as true values in the mask. 
-/// \param[in] ctx the function execution context, optional 
-/// 
-/// \return the resulting datum 
-/// 
-/// \since 5.0.0 
-/// \note API not yet finalized 
-ARROW_EXPORT 
-Result<Datum> ReplaceWithMask(const Datum& values, const Datum& mask, 
-                              const Datum& replacements, ExecContext* ctx = NULLPTR); 
- 
+/// \brief ReplaceWithMask replaces each value in the array corresponding
+/// to a true value in the mask with the next element from `replacements`.
+///
+/// \param[in] values Array input to replace
+/// \param[in] mask Array or Scalar of Boolean mask values
+/// \param[in] replacements The replacement values to draw from. There must
+/// be as many replacement values as true values in the mask.
+/// \param[in] ctx the function execution context, optional
+///
+/// \return the resulting datum
+///
+/// \since 5.0.0
+/// \note API not yet finalized
+ARROW_EXPORT
+Result<Datum> ReplaceWithMask(const Datum& values, const Datum& mask,
+                              const Datum& replacements, ExecContext* ctx = NULLPTR);
+
 /// \brief Take from an array of values at indices in another array
 ///
 /// The output array will be of the same type as the input values
@@ -233,73 +233,73 @@ ARROW_EXPORT
 Result<std::shared_ptr<Array>> NthToIndices(const Array& values, int64_t n,
                                             ExecContext* ctx = NULLPTR);
 
-/// \brief Returns the indices that would sort an array in the 
-/// specified order. 
+/// \brief Returns the indices that would sort an array in the
+/// specified order.
 ///
 /// Perform an indirect sort of array. The output array will contain
 /// indices that would sort an array, which would be the same length
-/// as input. Nulls will be stably partitioned to the end of the output 
-/// regardless of order. 
+/// as input. Nulls will be stably partitioned to the end of the output
+/// regardless of order.
 ///
-/// For example given array = [null, 1, 3.3, null, 2, 5.3] and order 
-/// = SortOrder::DESCENDING, the output will be [5, 2, 4, 1, 0, 
-/// 3]. 
+/// For example given array = [null, 1, 3.3, null, 2, 5.3] and order
+/// = SortOrder::DESCENDING, the output will be [5, 2, 4, 1, 0,
+/// 3].
 ///
-/// \param[in] array array to sort 
-/// \param[in] order ascending or descending 
+/// \param[in] array array to sort
+/// \param[in] order ascending or descending
 /// \param[in] ctx the function execution context, optional
 /// \return offsets indices that would sort an array
 ARROW_EXPORT
-Result<std::shared_ptr<Array>> SortIndices(const Array& array, 
-                                           SortOrder order = SortOrder::Ascending, 
-                                           ExecContext* ctx = NULLPTR); 
+Result<std::shared_ptr<Array>> SortIndices(const Array& array,
+                                           SortOrder order = SortOrder::Ascending,
+                                           ExecContext* ctx = NULLPTR);
 
-/// \brief Returns the indices that would sort a chunked array in the 
-/// specified order. 
-/// 
-/// Perform an indirect sort of chunked array. The output array will 
-/// contain indices that would sort a chunked array, which would be 
-/// the same length as input. Nulls will be stably partitioned to the 
-/// end of the output regardless of order. 
-/// 
-/// For example given chunked_array = [[null, 1], [3.3], [null, 2, 
-/// 5.3]] and order = SortOrder::DESCENDING, the output will be [5, 2, 
-/// 4, 1, 0, 3]. 
-/// 
-/// \param[in] chunked_array chunked array to sort 
-/// \param[in] order ascending or descending 
-/// \param[in] ctx the function execution context, optional 
-/// \return offsets indices that would sort an array 
-ARROW_EXPORT 
-Result<std::shared_ptr<Array>> SortIndices(const ChunkedArray& chunked_array, 
-                                           SortOrder order = SortOrder::Ascending, 
-                                           ExecContext* ctx = NULLPTR); 
- 
-/// \brief Returns the indices that would sort an input in the 
-/// specified order. Input is one of array, chunked array record batch 
-/// or table. 
-/// 
-/// Perform an indirect sort of input. The output array will contain 
-/// indices that would sort an input, which would be the same length 
-/// as input. Nulls will be stably partitioned to the end of the 
-/// output regardless of order. 
-/// 
-/// For example given input (table) = { 
-/// "column1": [[null,   1], [   3, null, 2, 1]], 
-/// "column2": [[   5], [3,   null, null, 5, 5]], 
-/// } and options = { 
-/// {"column1", SortOrder::Ascending}, 
-/// {"column2", SortOrder::Descending}, 
-/// }, the output will be [5, 1, 4, 2, 0, 3]. 
-/// 
-/// \param[in] datum array, chunked array, record batch or table to sort 
-/// \param[in] options options 
-/// \param[in] ctx the function execution context, optional 
-/// \return offsets indices that would sort a table 
-ARROW_EXPORT 
-Result<std::shared_ptr<Array>> SortIndices(const Datum& datum, const SortOptions& options, 
-                                           ExecContext* ctx = NULLPTR); 
- 
+/// \brief Returns the indices that would sort a chunked array in the
+/// specified order.
+///
+/// Perform an indirect sort of chunked array. The output array will
+/// contain indices that would sort a chunked array, which would be
+/// the same length as input. Nulls will be stably partitioned to the
+/// end of the output regardless of order.
+///
+/// For example given chunked_array = [[null, 1], [3.3], [null, 2,
+/// 5.3]] and order = SortOrder::DESCENDING, the output will be [5, 2,
+/// 4, 1, 0, 3].
+///
+/// \param[in] chunked_array chunked array to sort
+/// \param[in] order ascending or descending
+/// \param[in] ctx the function execution context, optional
+/// \return offsets indices that would sort an array
+ARROW_EXPORT
+Result<std::shared_ptr<Array>> SortIndices(const ChunkedArray& chunked_array,
+                                           SortOrder order = SortOrder::Ascending,
+                                           ExecContext* ctx = NULLPTR);
+
+/// \brief Returns the indices that would sort an input in the
+/// specified order. Input is one of array, chunked array record batch
+/// or table.
+///
+/// Perform an indirect sort of input. The output array will contain
+/// indices that would sort an input, which would be the same length
+/// as input. Nulls will be stably partitioned to the end of the
+/// output regardless of order.
+///
+/// For example given input (table) = {
+/// "column1": [[null,   1], [   3, null, 2, 1]],
+/// "column2": [[   5], [3,   null, null, 5, 5]],
+/// } and options = {
+/// {"column1", SortOrder::Ascending},
+/// {"column2", SortOrder::Descending},
+/// }, the output will be [5, 1, 4, 2, 0, 3].
+///
+/// \param[in] datum array, chunked array, record batch or table to sort
+/// \param[in] options options
+/// \param[in] ctx the function execution context, optional
+/// \return offsets indices that would sort a table
+ARROW_EXPORT
+Result<std::shared_ptr<Array>> SortIndices(const Datum& datum, const SortOptions& options,
+                                           ExecContext* ctx = NULLPTR);
+
 /// \brief Compute unique elements from an array-like object
 ///
 /// Note if a null occurs in the input it will NOT be included in the output.
@@ -338,29 +338,29 @@ Result<std::shared_ptr<StructArray>> ValueCounts(const Datum& value,
                                                  ExecContext* ctx = NULLPTR);
 
 /// \brief Dictionary-encode values in an array-like object
-/// 
-/// Any nulls encountered in the dictionary will be handled according to the 
-/// specified null encoding behavior. 
-/// 
-/// For example, given values ["a", "b", null, "a", null] the output will be 
-/// (null_encoding == ENCODE) Indices: [0, 1, 2, 0, 2] / Dict: ["a", "b", null] 
-/// (null_encoding == MASK)   Indices: [0, 1, null, 0, null] / Dict: ["a", "b"] 
-/// 
-/// If the input is already dictionary encoded this function is a no-op unless 
-/// it needs to modify the null_encoding (TODO) 
-/// 
+///
+/// Any nulls encountered in the dictionary will be handled according to the
+/// specified null encoding behavior.
+///
+/// For example, given values ["a", "b", null, "a", null] the output will be
+/// (null_encoding == ENCODE) Indices: [0, 1, 2, 0, 2] / Dict: ["a", "b", null]
+/// (null_encoding == MASK)   Indices: [0, 1, null, 0, null] / Dict: ["a", "b"]
+///
+/// If the input is already dictionary encoded this function is a no-op unless
+/// it needs to modify the null_encoding (TODO)
+///
 /// \param[in] data array-like input
 /// \param[in] ctx the function execution context, optional
-/// \param[in] options configures null encoding behavior 
+/// \param[in] options configures null encoding behavior
 /// \return result with same shape and type as input
 ///
 /// \since 1.0.0
 /// \note API not yet finalized
 ARROW_EXPORT
-Result<Datum> DictionaryEncode( 
-    const Datum& data, 
-    const DictionaryEncodeOptions& options = DictionaryEncodeOptions::Defaults(), 
-    ExecContext* ctx = NULLPTR); 
+Result<Datum> DictionaryEncode(
+    const Datum& data,
+    const DictionaryEncodeOptions& options = DictionaryEncodeOptions::Defaults(),
+    ExecContext* ctx = NULLPTR);
 
 // ----------------------------------------------------------------------
 // Deprecated functions
@@ -401,10 +401,10 @@ Result<std::shared_ptr<Table>> Take(const Table& table, const ChunkedArray& indi
                                     const TakeOptions& options = TakeOptions::Defaults(),
                                     ExecContext* context = NULLPTR);
 
-ARROW_DEPRECATED("Deprecated in 3.0.0. Use SortIndices()") 
-ARROW_EXPORT 
-Result<std::shared_ptr<Array>> SortToIndices(const Array& values, 
-                                             ExecContext* ctx = NULLPTR); 
- 
+ARROW_DEPRECATED("Deprecated in 3.0.0. Use SortIndices()")
+ARROW_EXPORT
+Result<std::shared_ptr<Array>> SortToIndices(const Array& values,
+                                             ExecContext* ctx = NULLPTR);
+
 }  // namespace compute
 }  // namespace arrow

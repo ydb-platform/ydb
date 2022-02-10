@@ -5,12 +5,12 @@
  *                | (__| |_| |  _ <| |___
  *                 \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
  * Copyright (C) 2010, Howard Chu, <hyc@highlandsun.com>
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html. 
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -79,7 +79,7 @@ const struct Curl_handler Curl_handler_rtmp = {
   ZERO_NULL,                            /* connection_check */
   PORT_RTMP,                            /* defport */
   CURLPROTO_RTMP,                       /* protocol */
-  CURLPROTO_RTMP,                       /* family */ 
+  CURLPROTO_RTMP,                       /* family */
   PROTOPT_NONE                          /* flags*/
 };
 
@@ -101,7 +101,7 @@ const struct Curl_handler Curl_handler_rtmpt = {
   ZERO_NULL,                            /* connection_check */
   PORT_RTMPT,                           /* defport */
   CURLPROTO_RTMPT,                      /* protocol */
-  CURLPROTO_RTMPT,                      /* family */ 
+  CURLPROTO_RTMPT,                      /* family */
   PROTOPT_NONE                          /* flags*/
 };
 
@@ -123,7 +123,7 @@ const struct Curl_handler Curl_handler_rtmpe = {
   ZERO_NULL,                            /* connection_check */
   PORT_RTMP,                            /* defport */
   CURLPROTO_RTMPE,                      /* protocol */
-  CURLPROTO_RTMPE,                      /* family */ 
+  CURLPROTO_RTMPE,                      /* family */
   PROTOPT_NONE                          /* flags*/
 };
 
@@ -145,7 +145,7 @@ const struct Curl_handler Curl_handler_rtmpte = {
   ZERO_NULL,                            /* connection_check */
   PORT_RTMPT,                           /* defport */
   CURLPROTO_RTMPTE,                     /* protocol */
-  CURLPROTO_RTMPTE,                     /* family */ 
+  CURLPROTO_RTMPTE,                     /* family */
   PROTOPT_NONE                          /* flags*/
 };
 
@@ -167,7 +167,7 @@ const struct Curl_handler Curl_handler_rtmps = {
   ZERO_NULL,                            /* connection_check */
   PORT_RTMPS,                           /* defport */
   CURLPROTO_RTMPS,                      /* protocol */
-  CURLPROTO_RTMP,                       /* family */ 
+  CURLPROTO_RTMP,                       /* family */
   PROTOPT_NONE                          /* flags*/
 };
 
@@ -189,7 +189,7 @@ const struct Curl_handler Curl_handler_rtmpts = {
   ZERO_NULL,                            /* connection_check */
   PORT_RTMPS,                           /* defport */
   CURLPROTO_RTMPTS,                     /* protocol */
-  CURLPROTO_RTMPT,                      /* family */ 
+  CURLPROTO_RTMPT,                      /* family */
   PROTOPT_NONE                          /* flags*/
 };
 

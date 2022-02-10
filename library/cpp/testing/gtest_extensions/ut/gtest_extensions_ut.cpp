@@ -251,7 +251,7 @@ struct T1 {
     int x;
 };
 
-void PrintTo(T1 value, std::ostream* stream) { 
+void PrintTo(T1 value, std::ostream* stream) {
     *stream << "T1{" << value.x << "}";
 }
 

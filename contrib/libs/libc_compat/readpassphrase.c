@@ -1,8 +1,8 @@
-/*    $OpenBSD: readpassphrase.c,v 1.27 2019/01/25 00:19:25 millert Exp $    */ 
+/*    $OpenBSD: readpassphrase.c,v 1.27 2019/01/25 00:19:25 millert Exp $    */
 
 /*
  * Copyright (c) 2000-2002, 2007, 2010
- *    Todd C. Miller <millert@openbsd.org> 
+ *    Todd C. Miller <millert@openbsd.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -22,15 +22,15 @@
  */
 
 #include <ctype.h>
-#include <errno.h> 
+#include <errno.h>
 #include <fcntl.h>
-#include <paths.h> 
-#include <pwd.h> 
-#include <signal.h> 
+#include <paths.h>
+#include <pwd.h>
+#include <signal.h>
 #include <string.h>
-#include <termios.h> 
+#include <termios.h>
 #include <unistd.h>
-#include <readpassphrase.h> 
+#include <readpassphrase.h>
 
 #ifndef TCSASOFT
 /* If we don't have TCSASOFT define it so that ORing it it below is a no-op. */
@@ -42,7 +42,7 @@
 #  define _POSIX_VDISABLE       VDISABLE
 #endif
 
-static volatile sig_atomic_t signo[_NSIG]; 
+static volatile sig_atomic_t signo[_NSIG];
 
 static void handler(int);
 
@@ -63,7 +63,7 @@ readpassphrase(const char *prompt, char *buf, size_t bufsiz, int flags)
     }
 
 restart:
-    for (i = 0; i < _NSIG; i++) 
+    for (i = 0; i < _NSIG; i++)
         signo[i] = 0;
     nr = -1;
     save_errno = 0;
@@ -90,7 +90,7 @@ restart:
     if (input != STDIN_FILENO && tcgetattr(input, &oterm) == 0) {
         memcpy(&term, &oterm, sizeof(term));
         if (!(flags & RPP_ECHO_ON))
-            term.c_lflag &= ~(ECHO | ECHONL); 
+            term.c_lflag &= ~(ECHO | ECHONL);
         (void)tcsetattr(input, TCSAFLUSH|TCSASOFT, &term);
     } else {
         memset(&term, 0, sizeof(term));
@@ -165,7 +165,7 @@ restart:
      * If we were interrupted by a signal, resend it to ourselves
      * now that we have restored the signal handlers.
      */
-    for (i = 0; i < _NSIG; i++) { 
+    for (i = 0; i < _NSIG; i++) {
         if (signo[i]) {
             kill(getpid(), i);
             switch (i) {
@@ -184,9 +184,9 @@ restart:
     return(nr == -1 ? NULL : buf);
 }
 
- 
+
 static void handler(int s)
 {
- 
+
     signo[s] = 1;
 }

@@ -41,22 +41,22 @@ class ExecContext;
 /// \addtogroup compute-concrete-options
 /// @{
 
-class ARROW_EXPORT CastOptions : public FunctionOptions { 
- public: 
-  explicit CastOptions(bool safe = true); 
+class ARROW_EXPORT CastOptions : public FunctionOptions {
+ public:
+  explicit CastOptions(bool safe = true);
 
-  constexpr static char const kTypeName[] = "CastOptions"; 
-  static CastOptions Safe(std::shared_ptr<DataType> to_type = NULLPTR) { 
-    CastOptions safe(true); 
-    safe.to_type = std::move(to_type); 
-    return safe; 
-  } 
+  constexpr static char const kTypeName[] = "CastOptions";
+  static CastOptions Safe(std::shared_ptr<DataType> to_type = NULLPTR) {
+    CastOptions safe(true);
+    safe.to_type = std::move(to_type);
+    return safe;
+  }
 
-  static CastOptions Unsafe(std::shared_ptr<DataType> to_type = NULLPTR) { 
-    CastOptions unsafe(false); 
-    unsafe.to_type = std::move(to_type); 
-    return unsafe; 
-  } 
+  static CastOptions Unsafe(std::shared_ptr<DataType> to_type = NULLPTR) {
+    CastOptions unsafe(false);
+    unsafe.to_type = std::move(to_type);
+    return unsafe;
+  }
 
   // Type being casted to. May be passed separate to eager function
   // compute::Cast
@@ -78,10 +78,10 @@ class ARROW_EXPORT CastOptions : public FunctionOptions {
 // the same execution machinery
 class CastFunction : public ScalarFunction {
  public:
-  CastFunction(std::string name, Type::type out_type_id); 
+  CastFunction(std::string name, Type::type out_type_id);
 
-  Type::type out_type_id() const { return out_type_id_; } 
-  const std::vector<Type::type>& in_type_ids() const { return in_type_ids_; } 
+  Type::type out_type_id() const { return out_type_id_; }
+  const std::vector<Type::type>& in_type_ids() const { return in_type_ids_; }
 
   Status AddKernel(Type::type in_type_id, std::vector<InputType> in_types,
                    OutputType out_type, ArrayKernelExec exec,
@@ -92,12 +92,12 @@ class CastFunction : public ScalarFunction {
   // function to CastInit
   Status AddKernel(Type::type in_type_id, ScalarKernel kernel);
 
-  Result<const Kernel*> DispatchExact( 
+  Result<const Kernel*> DispatchExact(
       const std::vector<ValueDescr>& values) const override;
 
  private:
-  std::vector<Type::type> in_type_ids_; 
-  const Type::type out_type_id_; 
+  std::vector<Type::type> in_type_ids_;
+  const Type::type out_type_id_;
 };
 
 ARROW_EXPORT
@@ -151,17 +151,17 @@ Result<Datum> Cast(const Datum& value, std::shared_ptr<DataType> to_type,
                    const CastOptions& options = CastOptions::Safe(),
                    ExecContext* ctx = NULLPTR);
 
-/// \brief Cast several values simultaneously. Safe cast options are used. 
-/// \param[in] values datums to cast 
-/// \param[in] descrs ValueDescrs to cast to 
-/// \param[in] ctx the function execution context, optional 
-/// \return the resulting datums 
-/// 
-/// \since 4.0.0 
-/// \note API not yet finalized 
-ARROW_EXPORT 
-Result<std::vector<Datum>> Cast(std::vector<Datum> values, std::vector<ValueDescr> descrs, 
-                                ExecContext* ctx = NULLPTR); 
- 
+/// \brief Cast several values simultaneously. Safe cast options are used.
+/// \param[in] values datums to cast
+/// \param[in] descrs ValueDescrs to cast to
+/// \param[in] ctx the function execution context, optional
+/// \return the resulting datums
+///
+/// \since 4.0.0
+/// \note API not yet finalized
+ARROW_EXPORT
+Result<std::vector<Datum>> Cast(std::vector<Datum> values, std::vector<ValueDescr> descrs,
+                                ExecContext* ctx = NULLPTR);
+
 }  // namespace compute
 }  // namespace arrow

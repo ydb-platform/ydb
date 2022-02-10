@@ -37,7 +37,7 @@
 
 #include <thrift/concurrency/Mutex.h>
 
-#error include <ext/hash_map> 
+#error include <ext/hash_map>
 #include <execinfo.h>
 #include <stdio.h>
 

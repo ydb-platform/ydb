@@ -216,7 +216,7 @@ struct TSchemeTraits {
     static inline TVector<TString> GetKeys(TConstValueRef v) {
         TVector<TString> res;
         for (const auto& key : v->DictKeys(true)) {
-            res.push_back(ToString(key)); 
+            res.push_back(ToString(key));
         }
         return res;
     }

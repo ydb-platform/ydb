@@ -47,7 +47,7 @@ namespace boost { namespace spirit { namespace qi { namespace detail
         BOOST_SCOPED_ENUM(skip_flag) const post_skip;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(match_manip& operator= (match_manip const&)); 
+        BOOST_DELETED_FUNCTION(match_manip& operator= (match_manip const&));
     };
 
     template <typename Expr, typename Skipper, typename Attribute>
@@ -66,7 +66,7 @@ namespace boost { namespace spirit { namespace qi { namespace detail
         BOOST_SCOPED_ENUM(skip_flag) const post_skip;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(match_manip& operator= (match_manip const&)); 
+        BOOST_DELETED_FUNCTION(match_manip& operator= (match_manip const&));
     };
 
     template <typename Expr, typename Skipper, typename Attribute>
@@ -85,7 +85,7 @@ namespace boost { namespace spirit { namespace qi { namespace detail
         BOOST_SCOPED_ENUM(skip_flag) const post_skip;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(match_manip& operator= (match_manip const&)); 
+        BOOST_DELETED_FUNCTION(match_manip& operator= (match_manip const&));
     };
 
     ///////////////////////////////////////////////////////////////////////////

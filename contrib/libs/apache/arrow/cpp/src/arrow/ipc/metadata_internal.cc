@@ -271,12 +271,12 @@ Status ConcreteTypeFromFlatbuffer(flatbuf::Type type, const void* type_data,
       return Status::OK();
     case flatbuf::Type::Decimal: {
       auto dec_type = static_cast<const flatbuf::Decimal*>(type_data);
-      if (dec_type->bitWidth() == 128) { 
-        return Decimal128Type::Make(dec_type->precision(), dec_type->scale()).Value(out); 
-      } else if (dec_type->bitWidth() == 256) { 
-        return Decimal256Type::Make(dec_type->precision(), dec_type->scale()).Value(out); 
-      } else { 
-        return Status::Invalid("Library only supports 128-bit or 256-bit decimal values"); 
+      if (dec_type->bitWidth() == 128) {
+        return Decimal128Type::Make(dec_type->precision(), dec_type->scale()).Value(out);
+      } else if (dec_type->bitWidth() == 256) {
+        return Decimal256Type::Make(dec_type->precision(), dec_type->scale()).Value(out);
+      } else {
+        return Status::Invalid("Library only supports 128-bit or 256-bit decimal values");
       }
     }
     case flatbuf::Type::Date: {
@@ -428,7 +428,7 @@ static Status GetDictionaryEncoding(FBB& fbb, const std::shared_ptr<Field>& fiel
                                     const DictionaryType& type, int64_t dictionary_id,
                                     DictionaryOffset* out) {
   // We assume that the dictionary index type (as an integer) has already been
-  // validated elsewhere, and can safely assume we are dealing with integers 
+  // validated elsewhere, and can safely assume we are dealing with integers
   const auto& index_type = checked_cast<const IntegerType&>(*type.index_type());
 
   auto index_type_offset =
@@ -594,24 +594,24 @@ class FieldToFlatbufferVisitor {
     return Status::OK();
   }
 
-  Status Visit(const Decimal128Type& type) { 
+  Status Visit(const Decimal128Type& type) {
     const auto& dec_type = checked_cast<const Decimal128Type&>(type);
     fb_type_ = flatbuf::Type::Decimal;
-    type_offset_ = flatbuf::CreateDecimal(fbb_, dec_type.precision(), dec_type.scale(), 
-                                          /*bitWidth=*/128) 
-                       .Union(); 
+    type_offset_ = flatbuf::CreateDecimal(fbb_, dec_type.precision(), dec_type.scale(),
+                                          /*bitWidth=*/128)
+                       .Union();
     return Status::OK();
   }
 
-  Status Visit(const Decimal256Type& type) { 
-    const auto& dec_type = checked_cast<const Decimal256Type&>(type); 
-    fb_type_ = flatbuf::Type::Decimal; 
-    type_offset_ = flatbuf::CreateDecimal(fbb_, dec_type.precision(), dec_type.scale(), 
-                                          /*bitWith=*/256) 
-                       .Union(); 
-    return Status::OK(); 
-  } 
- 
+  Status Visit(const Decimal256Type& type) {
+    const auto& dec_type = checked_cast<const Decimal256Type&>(type);
+    fb_type_ = flatbuf::Type::Decimal;
+    type_offset_ = flatbuf::CreateDecimal(fbb_, dec_type.precision(), dec_type.scale(),
+                                          /*bitWith=*/256)
+                       .Union();
+    return Status::OK();
+  }
+
   Status Visit(const ListType& type) {
     fb_type_ = flatbuf::Type::List;
     RETURN_NOT_OK(VisitChildFields(type));
@@ -753,15 +753,15 @@ Status FieldFromFlatbuffer(const flatbuf::Field* field, FieldPosition field_pos,
 
   // Reconstruct the data type
   // 1. Data type children
-  FieldVector child_fields; 
+  FieldVector child_fields;
   const auto& children = field->children();
-  // As a tolerance, allow for a null children field meaning "no children" (ARROW-12100) 
-  if (children != nullptr) { 
-    child_fields.resize(children->size()); 
-    for (int i = 0; i < static_cast<int>(children->size()); ++i) { 
-      RETURN_NOT_OK(FieldFromFlatbuffer(children->Get(i), field_pos.child(i), 
-                                        dictionary_memo, &child_fields[i])); 
-    } 
+  // As a tolerance, allow for a null children field meaning "no children" (ARROW-12100)
+  if (children != nullptr) {
+    child_fields.resize(children->size());
+    for (int i = 0; i < static_cast<int>(children->size()); ++i) {
+      RETURN_NOT_OK(FieldFromFlatbuffer(children->Get(i), field_pos.child(i),
+                                        dictionary_memo, &child_fields[i]));
+    }
   }
 
   // 2. Top-level concrete data type
@@ -871,12 +871,12 @@ Status SchemaToFlatbuffer(FBB& fbb, const Schema& schema,
 Result<std::shared_ptr<Buffer>> WriteFBMessage(
     FBB& fbb, flatbuf::MessageHeader header_type, flatbuffers::Offset<void> header,
     int64_t body_length, MetadataVersion version,
-    const std::shared_ptr<const KeyValueMetadata>& custom_metadata, MemoryPool* pool) { 
+    const std::shared_ptr<const KeyValueMetadata>& custom_metadata, MemoryPool* pool) {
   auto message = flatbuf::CreateMessage(fbb, MetadataVersionToFlatbuffer(version),
                                         header_type, header, body_length,
                                         SerializeCustomMetadata(fbb, custom_metadata));
   fbb.Finish(message);
-  return WriteFlatbufferBuilder(fbb, pool); 
+  return WriteFlatbufferBuilder(fbb, pool);
 }
 
 using FieldNodeVector =
@@ -1183,8 +1183,8 @@ Status WriteSchemaMessage(const Schema& schema, const DictionaryFieldMapper& map
   flatbuffers::Offset<flatbuf::Schema> fb_schema;
   RETURN_NOT_OK(SchemaToFlatbuffer(fbb, schema, mapper, &fb_schema));
   return WriteFBMessage(fbb, flatbuf::MessageHeader::Schema, fb_schema.Union(),
-                        /*body_length=*/0, options.metadata_version, 
-                        /*custom_metadata=*/nullptr, options.memory_pool) 
+                        /*body_length=*/0, options.metadata_version,
+                        /*custom_metadata=*/nullptr, options.memory_pool)
       .Value(out);
 }
 
@@ -1198,8 +1198,8 @@ Status WriteRecordBatchMessage(
   RETURN_NOT_OK(
       MakeRecordBatch(fbb, length, body_length, nodes, buffers, options, &record_batch));
   return WriteFBMessage(fbb, flatbuf::MessageHeader::RecordBatch, record_batch.Union(),
-                        body_length, options.metadata_version, custom_metadata, 
-                        options.memory_pool) 
+                        body_length, options.metadata_version, custom_metadata,
+                        options.memory_pool)
       .Value(out);
 }
 
@@ -1233,8 +1233,8 @@ Result<std::shared_ptr<Buffer>> WriteTensorMessage(const Tensor& tensor,
       flatbuf::CreateTensor(fbb, fb_type_type, fb_type, fb_shape, fb_strides, &buffer);
 
   return WriteFBMessage(fbb, flatbuf::MessageHeader::Tensor, fb_tensor.Union(),
-                        body_length, options.metadata_version, 
-                        /*custom_metadata=*/nullptr, options.memory_pool); 
+                        body_length, options.metadata_version,
+                        /*custom_metadata=*/nullptr, options.memory_pool);
 }
 
 Result<std::shared_ptr<Buffer>> WriteSparseTensorMessage(
@@ -1245,8 +1245,8 @@ Result<std::shared_ptr<Buffer>> WriteSparseTensorMessage(
   RETURN_NOT_OK(
       MakeSparseTensor(fbb, sparse_tensor, body_length, buffers, &fb_sparse_tensor));
   return WriteFBMessage(fbb, flatbuf::MessageHeader::SparseTensor,
-                        fb_sparse_tensor.Union(), body_length, options.metadata_version, 
-                        /*custom_metadata=*/nullptr, options.memory_pool); 
+                        fb_sparse_tensor.Union(), body_length, options.metadata_version,
+                        /*custom_metadata=*/nullptr, options.memory_pool);
 }
 
 Status WriteDictionaryMessage(
@@ -1261,8 +1261,8 @@ Status WriteDictionaryMessage(
   auto dictionary_batch =
       flatbuf::CreateDictionaryBatch(fbb, id, record_batch, is_delta).Union();
   return WriteFBMessage(fbb, flatbuf::MessageHeader::DictionaryBatch, dictionary_batch,
-                        body_length, options.metadata_version, custom_metadata, 
-                        options.memory_pool) 
+                        body_length, options.metadata_version, custom_metadata,
+                        options.memory_pool)
       .Value(out);
 }
 
@@ -1338,11 +1338,11 @@ Status GetSchema(const void* opaque_schema, DictionaryMemo* dictionary_memo,
 
   std::shared_ptr<KeyValueMetadata> metadata;
   RETURN_NOT_OK(internal::GetKeyValueMetadata(schema->custom_metadata(), &metadata));
-  // set endianess using the value in flatbuf schema 
-  auto endianness = schema->endianness() == flatbuf::Endianness::Little 
-                        ? Endianness::Little 
-                        : Endianness::Big; 
-  *out = ::arrow::schema(std::move(fields), endianness, metadata); 
+  // set endianess using the value in flatbuf schema
+  auto endianness = schema->endianness() == flatbuf::Endianness::Little
+                        ? Endianness::Little
+                        : Endianness::Big;
+  *out = ::arrow::schema(std::move(fields), endianness, metadata);
   return Status::OK();
 }
 
@@ -1356,9 +1356,9 @@ Status GetTensorMetadata(const Buffer& metadata, std::shared_ptr<DataType>* type
     return Status::IOError("Header-type of flatbuffer-encoded Message is not Tensor.");
   }
 
-  flatbuffers::uoffset_t ndim = tensor->shape()->size(); 
+  flatbuffers::uoffset_t ndim = tensor->shape()->size();
 
-  for (flatbuffers::uoffset_t i = 0; i < ndim; ++i) { 
+  for (flatbuffers::uoffset_t i = 0; i < ndim; ++i) {
     auto dim = tensor->shape()->Get(i);
 
     shape->push_back(dim->size());
@@ -1366,12 +1366,12 @@ Status GetTensorMetadata(const Buffer& metadata, std::shared_ptr<DataType>* type
   }
 
   if (tensor->strides() && tensor->strides()->size() > 0) {
-    if (tensor->strides()->size() != ndim) { 
-      return Status::IOError( 
-          "The sizes of shape and strides in a tensor are mismatched."); 
-    } 
- 
-    for (decltype(ndim) i = 0; i < ndim; ++i) { 
+    if (tensor->strides()->size() != ndim) {
+      return Status::IOError(
+          "The sizes of shape and strides in a tensor are mismatched.");
+    }
+
+    for (decltype(ndim) i = 0; i < ndim; ++i) {
       strides->push_back(tensor->strides()->Get(i));
     }
   }

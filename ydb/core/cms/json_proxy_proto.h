@@ -5,7 +5,7 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/mon/mon.h>
 
-#include <google/protobuf/util/json_util.h> 
+#include <google/protobuf/util/json_util.h>
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

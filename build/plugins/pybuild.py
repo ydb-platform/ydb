@@ -483,19 +483,19 @@ def onpy_srcs(unit, *args):
             unit.onresource(res)
             add_python_lint_checks(unit, 2, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split())
 
-    use_vanilla_protoc = unit.get('USE_VANILLA_PROTOC') == 'yes' 
-    if use_vanilla_protoc: 
-        cpp_runtime_path = 'contrib/libs/protobuf_std' 
-        py_runtime_path = 'contrib/python/protobuf_std' 
-        builtin_proto_path = cpp_runtime_path + '/' + BUILTIN_PROTO 
-    else: 
-        cpp_runtime_path = 'contrib/libs/protobuf' 
-        py_runtime_path = 'contrib/python/protobuf' 
-        builtin_proto_path = cpp_runtime_path + '/' + BUILTIN_PROTO 
+    use_vanilla_protoc = unit.get('USE_VANILLA_PROTOC') == 'yes'
+    if use_vanilla_protoc:
+        cpp_runtime_path = 'contrib/libs/protobuf_std'
+        py_runtime_path = 'contrib/python/protobuf_std'
+        builtin_proto_path = cpp_runtime_path + '/' + BUILTIN_PROTO
+    else:
+        cpp_runtime_path = 'contrib/libs/protobuf'
+        py_runtime_path = 'contrib/python/protobuf'
+        builtin_proto_path = cpp_runtime_path + '/' + BUILTIN_PROTO
 
     if protos:
-        if not upath.startswith(py_runtime_path) and not upath.startswith(builtin_proto_path): 
-            unit.onpeerdir(py_runtime_path) 
+        if not upath.startswith(py_runtime_path) and not upath.startswith(builtin_proto_path):
+            unit.onpeerdir(py_runtime_path)
 
         unit.onpeerdir(unit.get("PY_PROTO_DEPS").split())
 
@@ -511,7 +511,7 @@ def onpy_srcs(unit, *args):
             unit.onpeerdir(['kernel/gazetteer/proto'])
 
     if evs:
-        unit.onpeerdir([cpp_runtime_path]) 
+        unit.onpeerdir([cpp_runtime_path])
         unit.on_generate_py_evs_internal([path for path, mod in evs])
         unit.onpy_srcs([ev_arg(path, mod, unit) for path, mod in evs])
 

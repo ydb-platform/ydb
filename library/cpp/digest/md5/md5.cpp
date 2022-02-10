@@ -9,11 +9,11 @@
 #include <contrib/libs/nayuki_md5/md5.h>
 
 namespace {
- 
+
     constexpr size_t MD5_BLOCK_LENGTH = 64;
     constexpr size_t MD5_PADDING_SHIFT = 56;
-    constexpr size_t MD5_HEX_DIGEST_LENGTH = 32; 
- 
+    constexpr size_t MD5_HEX_DIGEST_LENGTH = 32;
+
     struct TMd5Stream: public IOutputStream {
         inline TMd5Stream(MD5* md5)
             : M_(md5)
@@ -48,13 +48,13 @@ char* MD5::File(const char* filename, char* buf) {
 }
 
 TString MD5::File(const TString& filename) {
-    TString buf; 
-    buf.ReserveAndResize(MD5_HEX_DIGEST_LENGTH); 
-    auto result = MD5::File(filename.data(), buf.begin()); 
-    if (result == nullptr) { 
-        buf.clear(); 
-    } 
-    return buf; 
+    TString buf;
+    buf.ReserveAndResize(MD5_HEX_DIGEST_LENGTH);
+    auto result = MD5::File(filename.data(), buf.begin());
+    if (result == nullptr) {
+        buf.clear();
+    }
+    return buf;
 }
 
 char* MD5::Data(const TArrayRef<const ui8>& data, char* buf) {
@@ -66,16 +66,16 @@ char* MD5::Data(const void* data, size_t len, char* buf) {
 }
 
 TString MD5::Data(const TArrayRef<const ui8>& data) {
-    TString buf; 
-    buf.ReserveAndResize(MD5_HEX_DIGEST_LENGTH); 
+    TString buf;
+    buf.ReserveAndResize(MD5_HEX_DIGEST_LENGTH);
     Data(data, buf.begin());
-    return buf; 
-} 
- 
-TString MD5::Data(TStringBuf data) { 
+    return buf;
+}
+
+TString MD5::Data(TStringBuf data) {
     return Data(MakeUnsignedArrayRef(data));
-} 
- 
+}
+
 char* MD5::Stream(IInputStream* in, char* buf) {
     return MD5().Update(in).End(buf);
 }

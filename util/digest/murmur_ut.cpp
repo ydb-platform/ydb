@@ -6,9 +6,9 @@
 class TMurmurHashTest: public TTestBase {
     UNIT_TEST_SUITE(TMurmurHashTest);
     UNIT_TEST(TestHash32)
-    UNIT_TEST(TestUnalignedHash32) 
+    UNIT_TEST(TestUnalignedHash32)
     UNIT_TEST(TestHash64)
-    UNIT_TEST(TestUnalignedHash64) 
+    UNIT_TEST(TestUnalignedHash64)
     UNIT_TEST(TestWrapperBiggerTypes)
     UNIT_TEST_SUITE_END();
 
@@ -27,17 +27,17 @@ private:
         Test<ui32>(buf, 253, 80030810UL);
     }
 
-    inline void TestUnalignedHash32() { 
-        ui8 buf[257]; 
-        ui8* unalignedBuf = buf + 1; 
- 
-        for (size_t i = 0; i < 256; ++i) { 
-            unalignedBuf[i] = i; 
-        } 
- 
-        Test<ui32>(unalignedBuf, 256, 2373126550UL); 
-    } 
- 
+    inline void TestUnalignedHash32() {
+        ui8 buf[257];
+        ui8* unalignedBuf = buf + 1;
+
+        for (size_t i = 0; i < 256; ++i) {
+            unalignedBuf[i] = i;
+        }
+
+        Test<ui32>(unalignedBuf, 256, 2373126550UL);
+    }
+
     inline void TestHash64() {
         ui8 buf[256];
 
@@ -52,17 +52,17 @@ private:
         Test<ui64>(buf, 253, ULL(11553864555081396353));
     }
 
-    inline void TestUnalignedHash64() { 
-        ui8 buf[257]; 
-        ui8* unalignedBuf = buf + 1; 
- 
-        for (size_t i = 0; i < 256; ++i) { 
-            unalignedBuf[i] = i; 
-        } 
- 
-        Test<ui64>(unalignedBuf, 256, ULL(12604435678857905857)); 
-    } 
- 
+    inline void TestUnalignedHash64() {
+        ui8 buf[257];
+        ui8* unalignedBuf = buf + 1;
+
+        for (size_t i = 0; i < 256; ++i) {
+            unalignedBuf[i] = i;
+        }
+
+        Test<ui64>(unalignedBuf, 256, ULL(12604435678857905857));
+    }
+
     inline void TestWrapperBiggerTypes() {
         ui32 buf[] = {24, 42};
         TestWrapper<ui32, ui32>({buf, buf + 2}, MurmurHash<ui32>(buf, sizeof(ui32) * 2));

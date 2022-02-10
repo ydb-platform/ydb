@@ -16,7 +16,7 @@ using namespace NYsonPull;
 
 namespace {
 
-[[noreturn]] Y_NO_INLINE void UnexpectedEvent(EEventType ev) { 
+[[noreturn]] Y_NO_INLINE void UnexpectedEvent(EEventType ev) {
     UdfTerminate((::TStringBuilder() << "Unexpected event: " << ev).c_str());
 }
 

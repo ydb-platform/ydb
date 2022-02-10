@@ -51,7 +51,7 @@ namespace boost { namespace spirit { namespace karma { namespace detail
         Delimiter const& delim;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(fail_function& operator= (fail_function const&)); 
+        BOOST_DELETED_FUNCTION(fail_function& operator= (fail_function const&));
     };
 
 }}}}

@@ -475,7 +475,7 @@ public:
 
 private:
   void allocate_space() {
-    base_ = allocator_.allocate(this->num_elements()); 
+    base_ = allocator_.allocate(this->num_elements());
     this->set_base_ptr(base_);
     allocated_elements_ = this->num_elements();
     std::uninitialized_fill_n(base_,allocated_elements_,T());
@@ -484,7 +484,7 @@ private:
   void deallocate_space() {
     if(base_) {
       for(T* i = base_; i != base_+allocated_elements_; ++i)
-        std::destroy_at(i); 
+        std::destroy_at(i);
       allocator_.deallocate(base_,allocated_elements_);
     }
   }

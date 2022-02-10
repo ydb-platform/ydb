@@ -40,7 +40,7 @@ DIAGNOSTIC_PUSH
   DIAGNOSTIC_IGNORE(4800) // forcing value to bool 'true' or 'false'
 #endif
 
-#include "contrib/libs/apache/orc/proto/orc_proto.pb.h" 
+#include "contrib/libs/apache/orc/proto/orc_proto.pb.h"
 
 DIAGNOSTIC_POP
 

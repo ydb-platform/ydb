@@ -11,9 +11,9 @@
 
 #define ZDICT_STATIC_LINKING_ONLY
 
-#include <contrib/libs/zstd/include/zdict.h> 
-#include <contrib/libs/zstd/include/zstd.h> 
-#include <contrib/libs/zstd/include/zstd_errors.h> 
+#include <contrib/libs/zstd/include/zdict.h>
+#include <contrib/libs/zstd/include/zstd.h>
+#include <contrib/libs/zstd/include/zstd_errors.h>
 
 // See IGNIETFERRO-320 for possible bugs
 
@@ -234,7 +234,7 @@ namespace NCodecs {
     }
 
     TString TZStdDictCodec::GetName() const {
-        return TStringBuilder() << MyName() << "-" << Impl->GetCompressionLevel(); 
+        return TStringBuilder() << MyName() << "-" << Impl->GetCompressionLevel();
     }
 
     ui8 TZStdDictCodec::Encode(TStringBuf in, TBuffer& out) const {

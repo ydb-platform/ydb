@@ -110,13 +110,13 @@
 
 DEMANGLE_NAMESPACE_BEGIN
 
-template <class T, size_t N> class PODSmallVector { 
+template <class T, size_t N> class PODSmallVector {
   static_assert(std::is_pod<T>::value,
                 "T is required to be a plain old data type");
 
-  T *First = nullptr; 
-  T *Last = nullptr; 
-  T *Cap = nullptr; 
+  T *First = nullptr;
+  T *Last = nullptr;
+  T *Cap = nullptr;
   T Inline[N] = {0};
 
   bool isInline() const { return First == Inline; }
@@ -130,13 +130,13 @@ template <class T, size_t N> class PODSmallVector {
   void reserve(size_t NewCap) {
     size_t S = size();
     if (isInline()) {
-      auto *Tmp = static_cast<T *>(std::malloc(NewCap * sizeof(T))); 
+      auto *Tmp = static_cast<T *>(std::malloc(NewCap * sizeof(T)));
       if (Tmp == nullptr)
         std::terminate();
       std::copy(First, Last, Tmp);
       First = Tmp;
     } else {
-      First = static_cast<T *>(std::realloc(First, NewCap * sizeof(T))); 
+      First = static_cast<T *>(std::realloc(First, NewCap * sizeof(T)));
       if (First == nullptr)
         std::terminate();
     }
@@ -147,10 +147,10 @@ template <class T, size_t N> class PODSmallVector {
 public:
   PODSmallVector() : First(Inline), Last(First), Cap(Inline + N) {}
 
-  PODSmallVector(const PODSmallVector &) = delete; 
-  PODSmallVector &operator=(const PODSmallVector &) = delete; 
+  PODSmallVector(const PODSmallVector &) = delete;
+  PODSmallVector &operator=(const PODSmallVector &) = delete;
 
-  PODSmallVector(PODSmallVector &&Other) : PODSmallVector() { 
+  PODSmallVector(PODSmallVector &&Other) : PODSmallVector() {
     if (Other.isInline()) {
       std::copy(Other.begin(), Other.end(), First);
       Last = First + Other.size();
@@ -164,7 +164,7 @@ public:
     Other.clearInline();
   }
 
-  PODSmallVector &operator=(PODSmallVector &&Other) { 
+  PODSmallVector &operator=(PODSmallVector &&Other) {
     if (Other.isInline()) {
       if (!isInline()) {
         std::free(First);
@@ -191,14 +191,14 @@ public:
     return *this;
   }
 
-  // NOLINTNEXTLINE(readability-identifier-naming) 
-  void push_back(const T &Elem) { 
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  void push_back(const T &Elem) {
     if (Last == Cap)
       reserve(size() * 2);
     *Last++ = Elem;
   }
 
-  // NOLINTNEXTLINE(readability-identifier-naming) 
+  // NOLINTNEXTLINE(readability-identifier-naming)
   void pop_back() {
     assert(Last != First && "Popping empty vector!");
     --Last;
@@ -209,16 +209,16 @@ public:
     Last = First + Index;
   }
 
-  T *begin() { return First; } 
-  T *end() { return Last; } 
+  T *begin() { return First; }
+  T *end() { return Last; }
 
   bool empty() const { return First == Last; }
   size_t size() const { return static_cast<size_t>(Last - First); }
-  T &back() { 
+  T &back() {
     assert(Last != First && "Calling back() on empty vector!");
     return *(Last - 1);
   }
-  T &operator[](size_t Index) { 
+  T &operator[](size_t Index) {
     assert(Index < size() && "Invalid access!");
     return *(begin() + Index);
   }
@@ -397,19 +397,19 @@ public:
 class VendorExtQualType final : public Node {
   const Node *Ty;
   StringView Ext;
-  const Node *TA; 
+  const Node *TA;
 
 public:
-  VendorExtQualType(const Node *Ty_, StringView Ext_, const Node *TA_) 
-      : Node(KVendorExtQualType), Ty(Ty_), Ext(Ext_), TA(TA_) {} 
+  VendorExtQualType(const Node *Ty_, StringView Ext_, const Node *TA_)
+      : Node(KVendorExtQualType), Ty(Ty_), Ext(Ext_), TA(TA_) {}
 
-  template <typename Fn> void match(Fn F) const { F(Ty, Ext, TA); } 
+  template <typename Fn> void match(Fn F) const { F(Ty, Ext, TA); }
 
   void printLeft(OutputBuffer &OB) const override {
     Ty->print(OB);
     OB += " ";
     OB += Ext;
-    if (TA != nullptr) 
+    if (TA != nullptr)
       TA->print(OB);
   }
 };
@@ -649,14 +649,14 @@ class ReferenceType : public Node {
   // rule here is rvalue ref to rvalue ref collapses to a rvalue ref, and any
   // other combination collapses to a lvalue ref.
   //
-  // A combination of a TemplateForwardReference and a back-ref Substitution 
+  // A combination of a TemplateForwardReference and a back-ref Substitution
   // from an ill-formed string may have created a cycle; use cycle detection to
   // avoid looping forever.
   std::pair<ReferenceKind, const Node *> collapse(OutputBuffer &OB) const {
     auto SoFar = std::make_pair(RK, Pointee);
     // Track the chain of nodes for the Floyd's 'tortoise and hare'
     // cycle-detection algorithm, since getSyntaxNode(S) is impure
-    PODSmallVector<const Node *, 8> Prev; 
+    PODSmallVector<const Node *, 8> Prev;
     for (;;) {
       const Node *SN = SoFar.second->getSyntaxNode(OB);
       if (SN->getKind() != KReferenceType)
@@ -3723,17 +3723,17 @@ Node *AbstractManglingParser<Derived, Alloc>::parseQualifiedType() {
       return make<ObjCProtoName>(Child, Proto);
     }
 
-    Node *TA = nullptr; 
-    if (look() == 'I') { 
-      TA = getDerived().parseTemplateArgs(); 
-      if (TA == nullptr) 
-        return nullptr; 
-    } 
- 
+    Node *TA = nullptr;
+    if (look() == 'I') {
+      TA = getDerived().parseTemplateArgs();
+      if (TA == nullptr)
+        return nullptr;
+    }
+
     Node *Child = getDerived().parseQualifiedType();
     if (Child == nullptr)
       return nullptr;
-    return make<VendorExtQualType>(Child, Qual, TA); 
+    return make<VendorExtQualType>(Child, Qual, TA);
   }
 
   Qualifiers Quals = parseCVQualifiers();
@@ -3906,7 +3906,7 @@ Node *AbstractManglingParser<Derived, Alloc>::parseType() {
     //                ::= Dh   # IEEE 754r half-precision floating point (16 bits)
     case 'h':
       First += 2;
-      return make<NameType>("half"); 
+      return make<NameType>("half");
     //                ::= DF <number> _ # ISO/IEC TS 18661 binary floating point (N bits)
     case 'F': {
       First += 2;
@@ -5268,18 +5268,18 @@ Node *AbstractManglingParser<Derived, Alloc>::parseEncoding() {
   class SaveTemplateParams {
     AbstractManglingParser *Parser;
     decltype(TemplateParams) OldParams;
-    decltype(OuterTemplateParams) OldOuterParams; 
+    decltype(OuterTemplateParams) OldOuterParams;
 
   public:
     SaveTemplateParams(AbstractManglingParser *TheParser) : Parser(TheParser) {
       OldParams = std::move(Parser->TemplateParams);
-      OldOuterParams = std::move(Parser->OuterTemplateParams); 
+      OldOuterParams = std::move(Parser->OuterTemplateParams);
       Parser->TemplateParams.clear();
-      Parser->OuterTemplateParams.clear(); 
+      Parser->OuterTemplateParams.clear();
     }
     ~SaveTemplateParams() {
       Parser->TemplateParams = std::move(OldParams);
-      Parser->OuterTemplateParams = std::move(OldOuterParams); 
+      Parser->OuterTemplateParams = std::move(OldOuterParams);
     }
   } SaveTemplateParams(this);
 

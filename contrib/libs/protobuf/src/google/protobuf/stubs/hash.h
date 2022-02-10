@@ -33,12 +33,12 @@
 #ifndef GOOGLE_PROTOBUF_STUBS_HASH_H__
 #define GOOGLE_PROTOBUF_STUBS_HASH_H__
 
-#include <cstring> 
-#include <string> 
-#include <unordered_map> 
-#include <unordered_set> 
+#include <cstring>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
 
-#include <google/protobuf/stubs/port.h> 
+#include <google/protobuf/stubs/port.h>
 
 # define GOOGLE_PROTOBUF_HASH_NAMESPACE_DECLARATION_START \
   namespace google {                                      \
@@ -49,7 +49,7 @@ namespace google {
 namespace protobuf {
 
 template <typename Key>
-struct hash : public std::hash<Key> {}; 
+struct hash : public std::hash<Key> {};
 
 template <typename Key>
 struct hash<const Key*> {
@@ -79,21 +79,21 @@ struct hash<bool> {
 };
 
 template <>
-struct hash<TProtoStringType> { 
-  inline size_t operator()(const TProtoStringType& key) const { 
+struct hash<TProtoStringType> {
+  inline size_t operator()(const TProtoStringType& key) const {
     return hash<const char*>()(key.c_str());
   }
 
   static const size_t bucket_size = 4;
   static const size_t min_buckets = 8;
-  inline bool operator()(const TProtoStringType& a, const TProtoStringType& b) const { 
+  inline bool operator()(const TProtoStringType& a, const TProtoStringType& b) const {
     return a < b;
   }
 };
 
 template <typename First, typename Second>
-struct hash<std::pair<First, Second> > { 
-  inline size_t operator()(const std::pair<First, Second>& key) const { 
+struct hash<std::pair<First, Second> > {
+  inline size_t operator()(const std::pair<First, Second>& key) const {
     size_t first_hash = hash<First>()(key.first);
     size_t second_hash = hash<Second>()(key.second);
 
@@ -104,8 +104,8 @@ struct hash<std::pair<First, Second> > {
 
   static const size_t bucket_size = 4;
   static const size_t min_buckets = 8;
-  inline bool operator()(const std::pair<First, Second>& a, 
-                           const std::pair<First, Second>& b) const { 
+  inline bool operator()(const std::pair<First, Second>& a,
+                           const std::pair<First, Second>& b) const {
     return a < b;
   }
 };

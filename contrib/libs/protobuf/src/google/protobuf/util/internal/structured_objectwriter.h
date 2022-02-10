@@ -33,12 +33,12 @@
 
 #include <memory>
 
-#include <google/protobuf/stubs/casts.h> 
-#include <google/protobuf/stubs/common.h> 
-#include <google/protobuf/util/internal/object_writer.h> 
+#include <google/protobuf/stubs/casts.h>
+#include <google/protobuf/stubs/common.h>
+#include <google/protobuf/util/internal/object_writer.h>
 
-#include <google/protobuf/port_def.inc> 
- 
+#include <google/protobuf/port_def.inc>
+
 namespace google {
 namespace protobuf {
 namespace util {
@@ -55,7 +55,7 @@ namespace converter {
 // StructuredObjectWriter and its use.
 //
 // Derived classes could be thread-unsafe.
-class PROTOBUF_EXPORT StructuredObjectWriter : public ObjectWriter { 
+class PROTOBUF_EXPORT StructuredObjectWriter : public ObjectWriter {
  public:
   virtual ~StructuredObjectWriter() {}
 
@@ -65,12 +65,12 @@ class PROTOBUF_EXPORT StructuredObjectWriter : public ObjectWriter {
   // StructuredObjectWriter behaves as a visitor. BaseElement represents a node
   // in the input tree. Implementation of StructuredObjectWriter should also
   // extend BaseElement to keep track of the location in the input tree.
-  class PROTOBUF_EXPORT BaseElement { 
+  class PROTOBUF_EXPORT BaseElement {
    public:
     // Takes ownership of the parent Element.
     explicit BaseElement(BaseElement* parent)
-        : parent_(parent), 
-          level_(parent == nullptr ? 0 : parent->level() + 1) {} 
+        : parent_(parent),
+          level_(parent == nullptr ? 0 : parent->level() + 1) {}
     virtual ~BaseElement() {}
 
     // Releases ownership of the parent and returns a pointer to it.
@@ -80,7 +80,7 @@ class PROTOBUF_EXPORT StructuredObjectWriter : public ObjectWriter {
     }
 
     // Returns true if this element is the root.
-    bool is_root() const { return parent_ == nullptr; } 
+    bool is_root() const { return parent_ == nullptr; }
 
     // Returns the number of hops from this element to the root element.
     int level() const { return level_; }
@@ -91,10 +91,10 @@ class PROTOBUF_EXPORT StructuredObjectWriter : public ObjectWriter {
 
    private:
     // Pointer to the parent Element.
-    std::unique_ptr<BaseElement> parent_; 
+    std::unique_ptr<BaseElement> parent_;
 
     // Number of hops to the root Element.
-    // The root Element has nullptr parent_ and a level_ of 0. 
+    // The root Element has nullptr parent_ and a level_ of 0.
     const int level_;
 
     GOOGLE_DISALLOW_IMPLICIT_CONSTRUCTORS(BaseElement);
@@ -113,8 +113,8 @@ class PROTOBUF_EXPORT StructuredObjectWriter : public ObjectWriter {
 }  // namespace converter
 }  // namespace util
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
-#include <google/protobuf/port_undef.inc> 
- 
+#include <google/protobuf/port_undef.inc>
+
 #endif  // GOOGLE_PROTOBUF_UTIL_CONVERTER_STRUCTURED_OBJECTWRITER_H__

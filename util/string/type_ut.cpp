@@ -18,11 +18,11 @@ Y_UNIT_TEST_SUITE(TStringClassify) {
         UNIT_ASSERT(IsTrue("YeS"));
         UNIT_ASSERT(IsTrue("on"));
         UNIT_ASSERT(IsTrue("true"));
-        UNIT_ASSERT(IsTrue("t")); 
+        UNIT_ASSERT(IsTrue("t"));
         UNIT_ASSERT(IsTrue("da"));
 
-        UNIT_ASSERT(!IsTrue("")); 
-        UNIT_ASSERT(!IsTrue("tr")); 
+        UNIT_ASSERT(!IsTrue(""));
+        UNIT_ASSERT(!IsTrue("tr"));
         UNIT_ASSERT(!IsTrue("foobar"));
     }
 
@@ -31,11 +31,11 @@ Y_UNIT_TEST_SUITE(TStringClassify) {
         UNIT_ASSERT(IsFalse("no"));
         UNIT_ASSERT(IsFalse("off"));
         UNIT_ASSERT(IsFalse("false"));
-        UNIT_ASSERT(IsFalse("f")); 
+        UNIT_ASSERT(IsFalse("f"));
         UNIT_ASSERT(IsFalse("net"));
 
-        UNIT_ASSERT(!IsFalse("")); 
-        UNIT_ASSERT(!IsFalse("fa")); 
+        UNIT_ASSERT(!IsFalse(""));
+        UNIT_ASSERT(!IsFalse("fa"));
         UNIT_ASSERT(!IsFalse("foobar"));
     }
 

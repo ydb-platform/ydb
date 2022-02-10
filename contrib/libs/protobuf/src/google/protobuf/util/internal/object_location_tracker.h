@@ -31,10 +31,10 @@
 #ifndef GOOGLE_PROTOBUF_UTIL_CONVERTER_OBJECT_LOCATION_TRACKER_H__
 #define GOOGLE_PROTOBUF_UTIL_CONVERTER_OBJECT_LOCATION_TRACKER_H__
 
-#include <string> 
+#include <string>
 
-#include <google/protobuf/stubs/common.h> 
-#include <google/protobuf/util/internal/location_tracker.h> 
+#include <google/protobuf/stubs/common.h>
+#include <google/protobuf/util/internal/location_tracker.h>
 
 namespace google {
 namespace protobuf {
@@ -47,10 +47,10 @@ class ObjectLocationTracker : public LocationTrackerInterface {
   // Creates an empty location tracker.
   ObjectLocationTracker() {}
 
-  ~ObjectLocationTracker() override {} 
+  ~ObjectLocationTracker() override {}
 
   // Returns empty because nothing is tracked.
-  TProtoStringType ToString() const override { return ""; } 
+  TProtoStringType ToString() const override { return ""; }
 
  private:
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(ObjectLocationTracker);
@@ -59,6 +59,6 @@ class ObjectLocationTracker : public LocationTrackerInterface {
 }  // namespace converter
 }  // namespace util
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
 #endif  // GOOGLE_PROTOBUF_UTIL_CONVERTER_OBJECT_LOCATION_TRACKER_H__

@@ -3,10 +3,10 @@
 #include <ydb/public/api//protos/annotations/validation.pb.h>
 #include <ydb/core/util/yverify_stream.h>
 
-#include <google/protobuf/compiler/code_generator.h> 
-#include <google/protobuf/compiler/plugin.h> 
-#include <google/protobuf/io/printer.h> 
-#include <google/protobuf/io/zero_copy_stream.h> 
+#include <google/protobuf/compiler/code_generator.h>
+#include <google/protobuf/compiler/plugin.h>
+#include <google/protobuf/io/printer.h>
+#include <google/protobuf/io/zero_copy_stream.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>

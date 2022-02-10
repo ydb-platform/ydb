@@ -49,11 +49,11 @@ namespace boost { namespace numeric { namespace ublas {
         explicit matrix_reference (referred_type &e):
               e_ (e) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-    BOOST_UBLAS_INLINE 
-    matrix_reference (const matrix_reference&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+    BOOST_UBLAS_INLINE
+    matrix_reference (const matrix_reference&) = default;
+#endif
+
         // Accessors
         BOOST_UBLAS_INLINE
         size_type size1 () const {
@@ -1581,11 +1581,11 @@ namespace boost { namespace numeric { namespace ublas {
             const_iterator1 (const self_type &mu, const const_subiterator1_type &it):
                 container_const_reference<self_type> (mu), it_ (it) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-        BOOST_UBLAS_INLINE 
-        const_iterator1 (const const_iterator1&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+        BOOST_UBLAS_INLINE
+        const_iterator1 (const const_iterator1&) = default;
+#endif
+
             // Arithmetic
             BOOST_UBLAS_INLINE
             const_iterator1 &operator ++ () {
@@ -1757,11 +1757,11 @@ namespace boost { namespace numeric { namespace ublas {
             const_iterator2 (const self_type &mu, const const_subiterator2_type &it):
                 container_const_reference<self_type> (mu), it_ (it) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-        BOOST_UBLAS_INLINE 
-        const_iterator2 (const const_iterator2&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+        BOOST_UBLAS_INLINE
+        const_iterator2 (const const_iterator2&) = default;
+#endif
+
             // Arithmetic
             BOOST_UBLAS_INLINE
             const_iterator2 &operator ++ () {
@@ -2142,11 +2142,11 @@ namespace boost { namespace numeric { namespace ublas {
                              const const_iterator21_type &it2, const const_iterator21_type &it2_end):
                 container_const_reference<self_type> (mb), i_ (i), j_ (j), it1_ (it1), it1_end_ (it1_end), it2_ (it2), it2_end_ (it2_end) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-        BOOST_UBLAS_INLINE 
-        const_iterator1 (const const_iterator1&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+        BOOST_UBLAS_INLINE
+        const_iterator1 (const const_iterator1&) = default;
+#endif
+
         private:
             // Dense specializations
             BOOST_UBLAS_INLINE
@@ -2498,11 +2498,11 @@ namespace boost { namespace numeric { namespace ublas {
                              const const_iterator22_type &it2, const const_iterator22_type &it2_end):
                 container_const_reference<self_type> (mb), i_ (i), j_ (j), it1_ (it1), it1_end_ (it1_end), it2_ (it2), it2_end_ (it2_end) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-        BOOST_UBLAS_INLINE 
-        const_iterator2 (const const_iterator2&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+        BOOST_UBLAS_INLINE
+        const_iterator2 (const const_iterator2&) = default;
+#endif
+
         private:
             // Dense access specializations
             BOOST_UBLAS_INLINE
@@ -3047,11 +3047,11 @@ namespace boost { namespace numeric { namespace ublas {
             const_iterator1 (const self_type &mbs, const const_subiterator1_type &it1, const const_iterator21_type &it2):
                 container_const_reference<self_type> (mbs), it1_ (it1), it2_ (it2) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-        BOOST_UBLAS_INLINE 
-        const_iterator1 (const const_iterator1&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+        BOOST_UBLAS_INLINE
+        const_iterator1 (const const_iterator1&) = default;
+#endif
+
             // Arithmetic
             BOOST_UBLAS_INLINE
             const_iterator1 &operator ++ () {
@@ -3231,11 +3231,11 @@ namespace boost { namespace numeric { namespace ublas {
             const_iterator2 (const self_type &mbs, const const_subiterator1_type &it1, const const_iterator22_type &it2):
                 container_const_reference<self_type> (mbs), it1_ (it1), it2_ (it2) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-        BOOST_UBLAS_INLINE 
-        const_iterator2 (const const_iterator2&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+        BOOST_UBLAS_INLINE
+        const_iterator2 (const const_iterator2&) = default;
+#endif
+
             // Arithmetic
             BOOST_UBLAS_INLINE
             const_iterator2 &operator ++ () {
@@ -3580,11 +3580,11 @@ namespace boost { namespace numeric { namespace ublas {
             const_iterator1 (const self_type &mbs, const const_iterator11_type &it1, const const_subiterator2_type &it2):
                 container_const_reference<self_type> (mbs), it1_ (it1), it2_ (it2) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-        BOOST_UBLAS_INLINE 
-        const_iterator1 (const const_iterator1&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+        BOOST_UBLAS_INLINE
+        const_iterator1 (const const_iterator1&) = default;
+#endif
+
             // Arithmetic
             BOOST_UBLAS_INLINE
             const_iterator1 &operator ++ () {
@@ -3764,11 +3764,11 @@ namespace boost { namespace numeric { namespace ublas {
             const_iterator2 (const self_type &mbs, const const_iterator12_type &it1, const const_subiterator2_type &it2):
                 container_const_reference<self_type> (mbs), it1_ (it1), it2_ (it2) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-        BOOST_UBLAS_INLINE 
-        const_iterator2 (const const_iterator2&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+        BOOST_UBLAS_INLINE
+        const_iterator2 (const const_iterator2&) = default;
+#endif
+
             // Arithmetic
             BOOST_UBLAS_INLINE
             const_iterator2 &operator ++ () {
@@ -4123,11 +4123,11 @@ namespace boost { namespace numeric { namespace ublas {
                 container_const_reference<self_type> (mvb), it1_ (it1) {}
 #endif
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-        BOOST_UBLAS_INLINE 
-        const_iterator (const const_iterator&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+        BOOST_UBLAS_INLINE
+        const_iterator (const const_iterator&) = default;
+#endif
+
         private:
             // Dense random access specialization
             BOOST_UBLAS_INLINE
@@ -4534,11 +4534,11 @@ namespace boost { namespace numeric { namespace ublas {
                 container_const_reference<self_type> (mvb), it2_ (it2) {}
 #endif
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-        BOOST_UBLAS_INLINE 
-        const_iterator (const const_iterator&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+        BOOST_UBLAS_INLINE
+        const_iterator (const const_iterator&) = default;
+#endif
+
         private:
             // Dense random access specialization
             BOOST_UBLAS_INLINE
@@ -4984,11 +4984,11 @@ namespace boost { namespace numeric { namespace ublas {
                 container_const_reference<self_type> (mmb), it1_ (it1), it2_ (it2) {}
 #endif
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-        BOOST_UBLAS_INLINE 
-        const_iterator1 (const const_iterator1&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+        BOOST_UBLAS_INLINE
+        const_iterator1 (const const_iterator1&) = default;
+#endif
+
         private:
             // Random access specialization
             BOOST_UBLAS_INLINE
@@ -5251,11 +5251,11 @@ namespace boost { namespace numeric { namespace ublas {
                 container_const_reference<self_type> (mmb), it1_ (it1), it2_ (it2) {}
 #endif
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-        BOOST_UBLAS_INLINE 
-        const_iterator2 (const const_iterator2&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+        BOOST_UBLAS_INLINE
+        const_iterator2 (const const_iterator2&) = default;
+#endif
+
         private:
             // Random access specialization
             BOOST_UBLAS_INLINE

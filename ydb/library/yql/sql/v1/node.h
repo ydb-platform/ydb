@@ -1,6 +1,6 @@
 #pragma once
 
-#include <google/protobuf/message.h> 
+#include <google/protobuf/message.h>
 #include <ydb/library/yql/utils/resetable_setting.h>
 #include <ydb/library/yql/parser/proto_ast/proto_ast.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>

@@ -32,26 +32,26 @@
 //  Based on original Protocol Buffers design by
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
-#include <google/protobuf/compiler/java/java_message_builder_lite.h> 
+#include <google/protobuf/compiler/java/java_message_builder_lite.h>
 
 #include <algorithm>
 #include <map>
 #include <memory>
 #include <vector>
 
-#include <google/protobuf/compiler/java/java_context.h> 
-#include <google/protobuf/compiler/java/java_doc_comment.h> 
-#include <google/protobuf/compiler/java/java_enum.h> 
-#include <google/protobuf/compiler/java/java_extension.h> 
-#include <google/protobuf/compiler/java/java_generator_factory.h> 
-#include <google/protobuf/compiler/java/java_helpers.h> 
-#include <google/protobuf/compiler/java/java_name_resolver.h> 
-#include <google/protobuf/descriptor.pb.h> 
-#include <google/protobuf/io/coded_stream.h> 
-#include <google/protobuf/io/printer.h> 
-#include <google/protobuf/wire_format.h> 
-#include <google/protobuf/stubs/strutil.h> 
-#include <google/protobuf/stubs/substitute.h> 
+#include <google/protobuf/compiler/java/java_context.h>
+#include <google/protobuf/compiler/java/java_doc_comment.h>
+#include <google/protobuf/compiler/java/java_enum.h>
+#include <google/protobuf/compiler/java/java_extension.h>
+#include <google/protobuf/compiler/java/java_generator_factory.h>
+#include <google/protobuf/compiler/java/java_helpers.h>
+#include <google/protobuf/compiler/java/java_name_resolver.h>
+#include <google/protobuf/descriptor.pb.h>
+#include <google/protobuf/io/coded_stream.h>
+#include <google/protobuf/io/printer.h>
+#include <google/protobuf/wire_format.h>
+#include <google/protobuf/stubs/strutil.h>
+#include <google/protobuf/stubs/substitute.h>
 
 namespace google {
 namespace protobuf {
@@ -60,71 +60,71 @@ namespace java {
 
 MessageBuilderLiteGenerator::MessageBuilderLiteGenerator(
     const Descriptor* descriptor, Context* context)
-    : descriptor_(descriptor), 
-      context_(context), 
-      name_resolver_(context->GetNameResolver()), 
-      field_generators_(descriptor, context_) { 
+    : descriptor_(descriptor),
+      context_(context),
+      name_resolver_(context->GetNameResolver()),
+      field_generators_(descriptor, context_) {
   GOOGLE_CHECK(!HasDescriptorMethods(descriptor->file(), context->EnforceLite()))
       << "Generator factory error: A lite message generator is used to "
          "generate non-lite messages.";
-  for (int i = 0; i < descriptor_->field_count(); i++) { 
-    if (IsRealOneof(descriptor_->field(i))) { 
-      oneofs_.insert(descriptor_->field(i)->containing_oneof()); 
-    } 
-  } 
+  for (int i = 0; i < descriptor_->field_count(); i++) {
+    if (IsRealOneof(descriptor_->field(i))) {
+      oneofs_.insert(descriptor_->field(i)->containing_oneof());
+    }
+  }
 }
 
 MessageBuilderLiteGenerator::~MessageBuilderLiteGenerator() {}
 
-void MessageBuilderLiteGenerator::Generate(io::Printer* printer) { 
+void MessageBuilderLiteGenerator::Generate(io::Printer* printer) {
   WriteMessageDocComment(printer, descriptor_);
   printer->Print(
-      "public static final class Builder extends\n" 
-      "    com.google.protobuf.GeneratedMessageLite.$extendible$Builder<\n" 
-      "      $classname$, Builder> implements\n" 
-      "    $extra_interfaces$\n" 
-      "    $classname$OrBuilder {\n", 
-      "classname", name_resolver_->GetImmutableClassName(descriptor_), 
-      "extra_interfaces", ExtraBuilderInterfaces(descriptor_), "extendible", 
-      descriptor_->extension_range_count() > 0 ? "Extendable" : ""); 
+      "public static final class Builder extends\n"
+      "    com.google.protobuf.GeneratedMessageLite.$extendible$Builder<\n"
+      "      $classname$, Builder> implements\n"
+      "    $extra_interfaces$\n"
+      "    $classname$OrBuilder {\n",
+      "classname", name_resolver_->GetImmutableClassName(descriptor_),
+      "extra_interfaces", ExtraBuilderInterfaces(descriptor_), "extendible",
+      descriptor_->extension_range_count() > 0 ? "Extendable" : "");
   printer->Indent();
 
   GenerateCommonBuilderMethods(printer);
 
   // oneof
-  std::map<TProtoStringType, TProtoStringType> vars; 
-  for (auto oneof : oneofs_) { 
-    vars["oneof_name"] = context_->GetOneofGeneratorInfo(oneof)->name; 
-    vars["oneof_capitalized_name"] = 
-        context_->GetOneofGeneratorInfo(oneof)->capitalized_name; 
-    vars["oneof_index"] = StrCat(oneof->index()); 
+  std::map<TProtoStringType, TProtoStringType> vars;
+  for (auto oneof : oneofs_) {
+    vars["oneof_name"] = context_->GetOneofGeneratorInfo(oneof)->name;
+    vars["oneof_capitalized_name"] =
+        context_->GetOneofGeneratorInfo(oneof)->capitalized_name;
+    vars["oneof_index"] = StrCat(oneof->index());
 
     // oneofCase() and clearOneof()
     printer->Print(vars,
-                   "@java.lang.Override\n" 
-                   "public $oneof_capitalized_name$Case\n" 
-                   "    get$oneof_capitalized_name$Case() {\n" 
-                   "  return instance.get$oneof_capitalized_name$Case();\n" 
-                   "}\n" 
-                   "\n" 
-                   "public Builder clear$oneof_capitalized_name$() {\n" 
-                   "  copyOnWrite();\n" 
-                   "  instance.clear$oneof_capitalized_name$();\n" 
-                   "  return this;\n" 
-                   "}\n" 
-                   "\n"); 
+                   "@java.lang.Override\n"
+                   "public $oneof_capitalized_name$Case\n"
+                   "    get$oneof_capitalized_name$Case() {\n"
+                   "  return instance.get$oneof_capitalized_name$Case();\n"
+                   "}\n"
+                   "\n"
+                   "public Builder clear$oneof_capitalized_name$() {\n"
+                   "  copyOnWrite();\n"
+                   "  instance.clear$oneof_capitalized_name$();\n"
+                   "  return this;\n"
+                   "}\n"
+                   "\n");
   }
 
   for (int i = 0; i < descriptor_->field_count(); i++) {
     printer->Print("\n");
     field_generators_.get(descriptor_->field(i))
-        .GenerateBuilderMembers(printer); 
+        .GenerateBuilderMembers(printer);
   }
 
   printer->Print(
-      "\n" 
-      "// @@protoc_insertion_point(builder_scope:$full_name$)\n", 
-      "full_name", descriptor_->full_name()); 
+      "\n"
+      "// @@protoc_insertion_point(builder_scope:$full_name$)\n",
+      "full_name", descriptor_->full_name());
 
   printer->Outdent();
   printer->Print("}\n");
@@ -132,15 +132,15 @@ void MessageBuilderLiteGenerator::Generate(io::Printer* printer) {
 
 // ===================================================================
 
-void MessageBuilderLiteGenerator::GenerateCommonBuilderMethods( 
-    io::Printer* printer) { 
+void MessageBuilderLiteGenerator::GenerateCommonBuilderMethods(
+    io::Printer* printer) {
   printer->Print(
-      "// Construct using $classname$.newBuilder()\n" 
-      "private Builder() {\n" 
-      "  super(DEFAULT_INSTANCE);\n" 
-      "}\n" 
-      "\n", 
-      "classname", name_resolver_->GetImmutableClassName(descriptor_)); 
+      "// Construct using $classname$.newBuilder()\n"
+      "private Builder() {\n"
+      "  super(DEFAULT_INSTANCE);\n"
+      "}\n"
+      "\n",
+      "classname", name_resolver_->GetImmutableClassName(descriptor_));
 }
 
 // ===================================================================

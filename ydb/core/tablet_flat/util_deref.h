@@ -37,6 +37,6 @@ namespace NKikimr {
         }
 
         const char Pad[sizeof(T)];
-    } Y_PACKED; 
+    } Y_PACKED;
 
 }

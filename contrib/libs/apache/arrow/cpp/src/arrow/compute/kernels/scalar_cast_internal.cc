@@ -148,40 +148,40 @@ void CastNumberToNumberUnsafe(Type::type in_type, Type::type out_type, const Dat
 
 // ----------------------------------------------------------------------
 
-Status UnpackDictionary(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
-  DCHECK(out->is_array()); 
- 
+Status UnpackDictionary(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  DCHECK(out->is_array());
+
   DictionaryArray dict_arr(batch[0].array());
   const CastOptions& options = checked_cast<const CastState&>(*ctx->state()).options;
 
   const auto& dict_type = *dict_arr.dictionary()->type();
-  if (!dict_type.Equals(options.to_type) && !CanCast(dict_type, *options.to_type)) { 
-    return Status::Invalid("Cast type ", options.to_type->ToString(), 
-                           " incompatible with dictionary type ", dict_type.ToString()); 
+  if (!dict_type.Equals(options.to_type) && !CanCast(dict_type, *options.to_type)) {
+    return Status::Invalid("Cast type ", options.to_type->ToString(),
+                           " incompatible with dictionary type ", dict_type.ToString());
   }
 
-  ARROW_ASSIGN_OR_RAISE(*out, 
-                        Take(Datum(dict_arr.dictionary()), Datum(dict_arr.indices()), 
-                             TakeOptions::Defaults(), ctx->exec_context())); 
- 
-  if (!dict_type.Equals(options.to_type)) { 
-    ARROW_ASSIGN_OR_RAISE(*out, Cast(*out, options)); 
+  ARROW_ASSIGN_OR_RAISE(*out,
+                        Take(Datum(dict_arr.dictionary()), Datum(dict_arr.indices()),
+                             TakeOptions::Defaults(), ctx->exec_context()));
+
+  if (!dict_type.Equals(options.to_type)) {
+    ARROW_ASSIGN_OR_RAISE(*out, Cast(*out, options));
   }
-  return Status::OK(); 
+  return Status::OK();
 }
 
-Status OutputAllNull(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
-  if (out->is_scalar()) { 
-    out->scalar()->is_valid = false; 
-  } else { 
-    ArrayData* output = out->mutable_array(); 
-    output->buffers = {nullptr}; 
-    output->null_count = batch.length; 
-  } 
-  return Status::OK(); 
+Status OutputAllNull(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  if (out->is_scalar()) {
+    out->scalar()->is_valid = false;
+  } else {
+    ArrayData* output = out->mutable_array();
+    output->buffers = {nullptr};
+    output->null_count = batch.length;
+  }
+  return Status::OK();
 }
 
-Status CastFromExtension(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
+Status CastFromExtension(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
   const CastOptions& options = checked_cast<const CastState*>(ctx->state())->options;
 
   const DataType& in_type = *batch[0].type();
@@ -190,20 +190,20 @@ Status CastFromExtension(KernelContext* ctx, const ExecBatch& batch, Datum* out)
   ExtensionArray extension(batch[0].array());
 
   Datum casted_storage;
-  RETURN_NOT_OK(Cast(*extension.storage(), out->type(), options, ctx->exec_context()) 
-                    .Value(&casted_storage)); 
+  RETURN_NOT_OK(Cast(*extension.storage(), out->type(), options, ctx->exec_context())
+                    .Value(&casted_storage));
   out->value = casted_storage.array();
-  return Status::OK(); 
+  return Status::OK();
 }
 
-Status CastFromNull(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
-  if (!batch[0].is_scalar()) { 
-    ArrayData* output = out->mutable_array(); 
-    std::shared_ptr<Array> nulls; 
-    RETURN_NOT_OK(MakeArrayOfNull(output->type, batch.length).Value(&nulls)); 
-    out->value = nulls->data(); 
-  } 
-  return Status::OK(); 
+Status CastFromNull(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  if (!batch[0].is_scalar()) {
+    ArrayData* output = out->mutable_array();
+    std::shared_ptr<Array> nulls;
+    RETURN_NOT_OK(MakeArrayOfNull(output->type, batch.length).Value(&nulls));
+    out->value = nulls->data();
+  }
+  return Status::OK();
 }
 
 Result<ValueDescr> ResolveOutputFromOptions(KernelContext* ctx,
@@ -223,25 +223,25 @@ Result<ValueDescr> ResolveOutputFromOptions(KernelContext* ctx,
 
 OutputType kOutputTargetType(ResolveOutputFromOptions);
 
-Status ZeroCopyCastExec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
-  DCHECK_EQ(batch[0].kind(), Datum::ARRAY); 
-  // Make a copy of the buffers into a destination array without carrying 
-  // the type 
-  const ArrayData& input = *batch[0].array(); 
-  ArrayData* output = out->mutable_array(); 
-  output->length = input.length; 
-  output->SetNullCount(input.null_count); 
-  output->buffers = input.buffers; 
-  output->offset = input.offset; 
-  output->child_data = input.child_data; 
-  return Status::OK(); 
+Status ZeroCopyCastExec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  DCHECK_EQ(batch[0].kind(), Datum::ARRAY);
+  // Make a copy of the buffers into a destination array without carrying
+  // the type
+  const ArrayData& input = *batch[0].array();
+  ArrayData* output = out->mutable_array();
+  output->length = input.length;
+  output->SetNullCount(input.null_count);
+  output->buffers = input.buffers;
+  output->offset = input.offset;
+  output->child_data = input.child_data;
+  return Status::OK();
 }
 
 void AddZeroCopyCast(Type::type in_type_id, InputType in_type, OutputType out_type,
                      CastFunction* func) {
   auto sig = KernelSignature::Make({in_type}, out_type);
   ScalarKernel kernel;
-  kernel.exec = TrivialScalarUnaryAsArraysExec(ZeroCopyCastExec); 
+  kernel.exec = TrivialScalarUnaryAsArraysExec(ZeroCopyCastExec);
   kernel.signature = sig;
   kernel.null_handling = NullHandling::COMPUTED_NO_PREALLOCATE;
   kernel.mem_allocation = MemAllocation::NO_PREALLOCATE;
@@ -255,12 +255,12 @@ static bool CanCastFromDictionary(Type::type type_id) {
 
 void AddCommonCasts(Type::type out_type_id, OutputType out_ty, CastFunction* func) {
   // From null to this type
-  ScalarKernel kernel; 
-  kernel.exec = CastFromNull; 
-  kernel.signature = KernelSignature::Make({null()}, out_ty); 
-  kernel.null_handling = NullHandling::COMPUTED_NO_PREALLOCATE; 
-  kernel.mem_allocation = MemAllocation::NO_PREALLOCATE; 
-  DCHECK_OK(func->AddKernel(Type::NA, std::move(kernel))); 
+  ScalarKernel kernel;
+  kernel.exec = CastFromNull;
+  kernel.signature = KernelSignature::Make({null()}, out_ty);
+  kernel.null_handling = NullHandling::COMPUTED_NO_PREALLOCATE;
+  kernel.mem_allocation = MemAllocation::NO_PREALLOCATE;
+  DCHECK_OK(func->AddKernel(Type::NA, std::move(kernel)));
 
   // From dictionary to this type
   if (CanCastFromDictionary(out_type_id)) {
@@ -268,10 +268,10 @@ void AddCommonCasts(Type::type out_type_id, OutputType out_ty, CastFunction* fun
     //
     // XXX: Uses Take and does its own memory allocation for the moment. We can
     // fix this later.
-    DCHECK_OK(func->AddKernel(Type::DICTIONARY, {InputType(Type::DICTIONARY)}, out_ty, 
-                              TrivialScalarUnaryAsArraysExec(UnpackDictionary), 
-                              NullHandling::COMPUTED_NO_PREALLOCATE, 
-                              MemAllocation::NO_PREALLOCATE)); 
+    DCHECK_OK(func->AddKernel(Type::DICTIONARY, {InputType(Type::DICTIONARY)}, out_ty,
+                              TrivialScalarUnaryAsArraysExec(UnpackDictionary),
+                              NullHandling::COMPUTED_NO_PREALLOCATE,
+                              MemAllocation::NO_PREALLOCATE));
   }
 
   // From extension type to this type

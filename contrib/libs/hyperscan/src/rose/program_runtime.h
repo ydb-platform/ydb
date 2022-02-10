@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2019, Intel Corporation 
+ * Copyright (c) 2015-2019, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,7 +34,7 @@
 #ifndef PROGRAM_RUNTIME_H
 #define PROGRAM_RUNTIME_H
 
-#include "hwlm/hwlm.h" // for hwlmcb_rv_t 
+#include "hwlm/hwlm.h" // for hwlmcb_rv_t
 #include "rose.h"
 #include "scratch.h"
 #include "ue2common.h"
@@ -54,8 +54,8 @@ hwlmcb_rv_t roseRunProgram(const struct RoseEngine *t,
                            struct hs_scratch *scratch, u32 programOffset,
                            u64a som, u64a end, u8 prog_flags);
 
-hwlmcb_rv_t roseRunProgram_l(const struct RoseEngine *t, 
+hwlmcb_rv_t roseRunProgram_l(const struct RoseEngine *t,
                              struct hs_scratch *scratch, u32 programOffset,
-                             u64a som, u64a end, u8 prog_flags); 
+                             u64a som, u64a end, u8 prog_flags);
 
 #endif // PROGRAM_RUNTIME_H

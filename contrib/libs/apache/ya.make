@@ -1,5 +1,5 @@
-RECURSE( 
-    arrow 
-    avro 
-    orc 
-) 
+RECURSE(
+    arrow
+    avro
+    orc
+)

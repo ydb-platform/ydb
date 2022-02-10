@@ -173,7 +173,7 @@ namespace NKikimr {
             return true;
 
         TMemoryInput stream(begin, end - begin);
-        return NKikimrVDiskData::TBulkFormedSstInfoSet().ParseFromArcadiaStream(&stream); 
+        return NKikimrVDiskData::TBulkFormedSstInfoSet().ParseFromArcadiaStream(&stream);
     }
 
     template <class TKey, class TMemRec>

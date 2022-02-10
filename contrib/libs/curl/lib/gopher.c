@@ -5,11 +5,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html. 
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -28,7 +28,7 @@
 #include <curl/curl.h>
 #include "transfer.h"
 #include "sendf.h"
-#include "connect.h" 
+#include "connect.h"
 #include "progress.h"
 #include "gopher.h"
 #include "select.h"
@@ -71,7 +71,7 @@ const struct Curl_handler Curl_handler_gopher = {
   ZERO_NULL,                            /* connection_check */
   PORT_GOPHER,                          /* defport */
   CURLPROTO_GOPHER,                     /* protocol */
-  CURLPROTO_GOPHER,                     /* family */ 
+  CURLPROTO_GOPHER,                     /* family */
   PROTOPT_NONE                          /* flags */
 };
 
@@ -85,10 +85,10 @@ static CURLcode gopher_do(struct connectdata *conn, bool *done)
   char *query = data->state.up.query;
   char *sel = NULL;
   char *sel_org = NULL;
-  timediff_t timeout_ms; 
+  timediff_t timeout_ms;
   ssize_t amount, k;
   size_t len;
-  int what; 
+  int what;
 
   *done = TRUE; /* unconditionally */
 
@@ -117,7 +117,7 @@ static CURLcode gopher_do(struct connectdata *conn, bool *done)
     newp += 2;
 
     /* ... and finally unescape */
-    result = Curl_urldecode(data, newp, 0, &sel, &len, REJECT_ZERO); 
+    result = Curl_urldecode(data, newp, 0, &sel, &len, REJECT_ZERO);
     free(gopherpath);
     if(result)
       return result;
@@ -141,35 +141,35 @@ static CURLcode gopher_do(struct connectdata *conn, bool *done)
     else
       break;
 
-    timeout_ms = Curl_timeleft(conn->data, NULL, FALSE); 
-    if(timeout_ms < 0) { 
-      result = CURLE_OPERATION_TIMEDOUT; 
-      break; 
-    } 
-    if(!timeout_ms) 
-      timeout_ms = TIMEDIFF_T_MAX; 
- 
+    timeout_ms = Curl_timeleft(conn->data, NULL, FALSE);
+    if(timeout_ms < 0) {
+      result = CURLE_OPERATION_TIMEDOUT;
+      break;
+    }
+    if(!timeout_ms)
+      timeout_ms = TIMEDIFF_T_MAX;
+
     /* Don't busyloop. The entire loop thing is a work-around as it causes a
        BLOCKING behavior which is a NO-NO. This function should rather be
        split up in a do and a doing piece where the pieces that aren't
        possible to send now will be sent in the doing function repeatedly
        until the entire request is sent.
     */
-    what = SOCKET_WRITABLE(sockfd, timeout_ms); 
-    if(what < 0) { 
+    what = SOCKET_WRITABLE(sockfd, timeout_ms);
+    if(what < 0) {
       result = CURLE_SEND_ERROR;
       break;
     }
-    else if(!what) { 
-      result = CURLE_OPERATION_TIMEDOUT; 
-      break; 
-    } 
+    else if(!what) {
+      result = CURLE_OPERATION_TIMEDOUT;
+      break;
+    }
   }
 
   free(sel_org);
 
   if(!result)
-    result = Curl_write(conn, sockfd, "\r\n", 2, &amount); 
+    result = Curl_write(conn, sockfd, "\r\n", 2, &amount);
   if(result) {
     failf(data, "Failed sending Gopher request");
     return result;

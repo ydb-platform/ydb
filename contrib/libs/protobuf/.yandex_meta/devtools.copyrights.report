@@ -54,7 +54,7 @@ BELONGS ya.make
         src/google/protobuf/stubs/map_util.h [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 7ddb2995f48012001146c0eb94d23367
-BELONGS ya.make 
+BELONGS ya.make
     License text:
         Copyright 2008 Google Inc.  All rights reserved.
     Scancode info:

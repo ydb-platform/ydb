@@ -35,22 +35,22 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_CPP_EXTENSION_H__
 #define GOOGLE_PROTOBUF_COMPILER_CPP_EXTENSION_H__
 
-#include <map> 
-#include <string> 
- 
-#include <google/protobuf/stubs/common.h> 
-#include <google/protobuf/compiler/cpp/cpp_options.h> 
+#include <map>
+#include <string>
+
+#include <google/protobuf/stubs/common.h>
+#include <google/protobuf/compiler/cpp/cpp_options.h>
 
 namespace google {
 namespace protobuf {
-class FieldDescriptor;  // descriptor.h 
-namespace io { 
-class Printer;  // printer.h 
+class FieldDescriptor;  // descriptor.h
+namespace io {
+class Printer;  // printer.h
 }
-}  // namespace protobuf 
-}  // namespace google 
+}  // namespace protobuf
+}  // namespace google
 
-namespace google { 
+namespace google {
 namespace protobuf {
 namespace compiler {
 namespace cpp {
@@ -66,26 +66,26 @@ class ExtensionGenerator {
   ~ExtensionGenerator();
 
   // Header stuff.
-  void GenerateDeclaration(io::Printer* printer) const; 
+  void GenerateDeclaration(io::Printer* printer) const;
 
   // Source file stuff.
   void GenerateDefinition(io::Printer* printer);
 
-  bool IsScoped() const; 
+  bool IsScoped() const;
 
  private:
   const FieldDescriptor* descriptor_;
-  TProtoStringType type_traits_; 
+  TProtoStringType type_traits_;
   Options options_;
 
-  std::map<TProtoStringType, TProtoStringType> variables_; 
- 
+  std::map<TProtoStringType, TProtoStringType> variables_;
+
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(ExtensionGenerator);
 };
 
 }  // namespace cpp
 }  // namespace compiler
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
 #endif  // GOOGLE_PROTOBUF_COMPILER_CPP_MESSAGE_H__

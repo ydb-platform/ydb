@@ -15,7 +15,7 @@
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 #include <util/system/valgrind.h>
 
@@ -116,8 +116,8 @@ void TTester::ThreeShardPointKeyResolver(TKeyDesc& key) {
             key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
         }
     } else {
-        UNIT_ASSERT(key.Range.From.size() > 0); 
-        UNIT_ASSERT(key.Range.To.size() > 0); 
+        UNIT_ASSERT(key.Range.From.size() > 0);
+        UNIT_ASSERT(key.Range.To.size() > 0);
         UNIT_ASSERT(key.Range.InclusiveFrom);
         UNIT_ASSERT(key.Range.InclusiveTo);
 

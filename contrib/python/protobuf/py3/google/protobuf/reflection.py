@@ -48,23 +48,23 @@ this file*.
 __author__ = 'robinson@google.com (Will Robinson)'
 
 
-from google.protobuf import message_factory 
-from google.protobuf import symbol_database 
+from google.protobuf import message_factory
+from google.protobuf import symbol_database
 
 # The type of all Message classes.
 # Part of the public interface, but normally only used by message factories.
-GeneratedProtocolMessageType = message_factory._GENERATED_PROTOCOL_MESSAGE_TYPE 
+GeneratedProtocolMessageType = message_factory._GENERATED_PROTOCOL_MESSAGE_TYPE
 
 MESSAGE_CLASS_CACHE = {}
 
 
-# Deprecated. Please NEVER use reflection.ParseMessage(). 
+# Deprecated. Please NEVER use reflection.ParseMessage().
 def ParseMessage(descriptor, byte_str):
   """Generate a new Message instance from this Descriptor and a byte string.
 
-  DEPRECATED: ParseMessage is deprecated because it is using MakeClass(). 
-  Please use MessageFactory.GetPrototype() instead. 
- 
+  DEPRECATED: ParseMessage is deprecated because it is using MakeClass().
+  Please use MessageFactory.GetPrototype() instead.
+
   Args:
     descriptor: Protobuf Descriptor object
     byte_str: Serialized protocol buffer byte string
@@ -78,18 +78,18 @@ def ParseMessage(descriptor, byte_str):
   return new_msg
 
 
-# Deprecated. Please NEVER use reflection.MakeClass(). 
+# Deprecated. Please NEVER use reflection.MakeClass().
 def MakeClass(descriptor):
   """Construct a class object for a protobuf described by descriptor.
 
-  DEPRECATED: use MessageFactory.GetPrototype() instead. 
+  DEPRECATED: use MessageFactory.GetPrototype() instead.
 
   Args:
     descriptor: A descriptor.Descriptor object describing the protobuf.
   Returns:
     The Message class object described by the descriptor.
   """
-  # Original implementation leads to duplicate message classes, which won't play 
-  # well with extensions. Message factory info is also missing. 
-  # Redirect to message_factory. 
-  return symbol_database.Default().GetPrototype(descriptor) 
+  # Original implementation leads to duplicate message classes, which won't play
+  # well with extensions. Message factory info is also missing.
+  # Redirect to message_factory.
+  return symbol_database.Default().GetPrototype(descriptor)

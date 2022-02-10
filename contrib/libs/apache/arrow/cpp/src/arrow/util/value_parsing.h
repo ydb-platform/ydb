@@ -486,80 +486,80 @@ static inline bool ParseHH_MM_SS(const char* s, Duration* out) {
 
 static inline bool ParseSubSeconds(const char* s, size_t length, TimeUnit::type unit,
                                    uint32_t* out) {
-  // The decimal point has been peeled off at this point 
- 
-  // Fail if number of decimal places provided exceeds what the unit can hold. 
-  // Calculate how many trailing decimal places are omitted for the unit 
-  // e.g. if 4 decimal places are provided and unit is MICRO, 2 are missing 
-  size_t omitted = 0; 
-  switch (unit) { 
-    case TimeUnit::MILLI: 
-      if (ARROW_PREDICT_FALSE(length > 3)) { 
-        return false; 
-      } 
-      if (length < 3) { 
-        omitted = 3 - length; 
-      } 
+  // The decimal point has been peeled off at this point
+
+  // Fail if number of decimal places provided exceeds what the unit can hold.
+  // Calculate how many trailing decimal places are omitted for the unit
+  // e.g. if 4 decimal places are provided and unit is MICRO, 2 are missing
+  size_t omitted = 0;
+  switch (unit) {
+    case TimeUnit::MILLI:
+      if (ARROW_PREDICT_FALSE(length > 3)) {
+        return false;
+      }
+      if (length < 3) {
+        omitted = 3 - length;
+      }
       break;
-    case TimeUnit::MICRO: 
-      if (ARROW_PREDICT_FALSE(length > 6)) { 
-        return false; 
-      } 
-      if (length < 6) { 
-        omitted = 6 - length; 
-      } 
+    case TimeUnit::MICRO:
+      if (ARROW_PREDICT_FALSE(length > 6)) {
+        return false;
+      }
+      if (length < 6) {
+        omitted = 6 - length;
+      }
       break;
-    case TimeUnit::NANO: 
-      if (ARROW_PREDICT_FALSE(length > 9)) { 
-        return false; 
-      } 
-      if (length < 9) { 
-        omitted = 9 - length; 
-      } 
+    case TimeUnit::NANO:
+      if (ARROW_PREDICT_FALSE(length > 9)) {
+        return false;
+      }
+      if (length < 9) {
+        omitted = 9 - length;
+      }
       break;
     default:
       return false;
   }
 
-  if (ARROW_PREDICT_TRUE(omitted == 0)) { 
-    return ParseUnsigned(s, length, out); 
-  } else { 
-    uint32_t subseconds; 
-    bool success = ParseUnsigned(s, length, &subseconds); 
-    if (ARROW_PREDICT_TRUE(success)) { 
-      switch (omitted) { 
-        case 1: 
-          *out = subseconds * 10; 
-          break; 
-        case 2: 
-          *out = subseconds * 100; 
-          break; 
-        case 3: 
-          *out = subseconds * 1000; 
-          break; 
-        case 4: 
-          *out = subseconds * 10000; 
-          break; 
-        case 5: 
-          *out = subseconds * 100000; 
-          break; 
-        case 6: 
-          *out = subseconds * 1000000; 
-          break; 
-        case 7: 
-          *out = subseconds * 10000000; 
-          break; 
-        case 8: 
-          *out = subseconds * 100000000; 
-          break; 
-        default: 
-          // Impossible case 
-          break; 
-      } 
-      return true; 
-    } else { 
-      return false; 
-    } 
+  if (ARROW_PREDICT_TRUE(omitted == 0)) {
+    return ParseUnsigned(s, length, out);
+  } else {
+    uint32_t subseconds;
+    bool success = ParseUnsigned(s, length, &subseconds);
+    if (ARROW_PREDICT_TRUE(success)) {
+      switch (omitted) {
+        case 1:
+          *out = subseconds * 10;
+          break;
+        case 2:
+          *out = subseconds * 100;
+          break;
+        case 3:
+          *out = subseconds * 1000;
+          break;
+        case 4:
+          *out = subseconds * 10000;
+          break;
+        case 5:
+          *out = subseconds * 100000;
+          break;
+        case 6:
+          *out = subseconds * 1000000;
+          break;
+        case 7:
+          *out = subseconds * 10000000;
+          break;
+        case 8:
+          *out = subseconds * 100000000;
+          break;
+        default:
+          // Impossible case
+          break;
+      }
+      return true;
+    } else {
+      return false;
+    }
   }
 }
 
@@ -572,21 +572,21 @@ static inline bool ParseTimestampISO8601(const char* s, size_t length,
 
   // We allow the following formats for all units:
   // - "YYYY-MM-DD"
-  // - "YYYY-MM-DD[ T]hhZ?" 
-  // - "YYYY-MM-DD[ T]hh:mmZ?" 
-  // - "YYYY-MM-DD[ T]hh:mm:ssZ?" 
+  // - "YYYY-MM-DD[ T]hhZ?"
+  // - "YYYY-MM-DD[ T]hh:mmZ?"
+  // - "YYYY-MM-DD[ T]hh:mm:ssZ?"
   //
-  // We allow the following formats for unit == MILLI, MICRO, or NANO: 
-  // - "YYYY-MM-DD[ T]hh:mm:ss.s{1,3}Z?" 
+  // We allow the following formats for unit == MILLI, MICRO, or NANO:
+  // - "YYYY-MM-DD[ T]hh:mm:ss.s{1,3}Z?"
   //
-  // We allow the following formats for unit == MICRO, or NANO: 
-  // - "YYYY-MM-DD[ T]hh:mm:ss.s{4,6}Z?" 
+  // We allow the following formats for unit == MICRO, or NANO:
+  // - "YYYY-MM-DD[ T]hh:mm:ss.s{4,6}Z?"
   //
-  // We allow the following formats for unit == NANO: 
-  // - "YYYY-MM-DD[ T]hh:mm:ss.s{7,9}Z?" 
+  // We allow the following formats for unit == NANO:
+  // - "YYYY-MM-DD[ T]hh:mm:ss.s{7,9}Z?"
   //
   // UTC is always assumed, and the DataType's timezone is ignored.
-  // 
+  //
 
   if (ARROW_PREDICT_FALSE(length < 10)) return false;
 
@@ -621,15 +621,15 @@ static inline bool ParseTimestampISO8601(const char* s, size_t length,
       }
       break;
     case 19:  // YYYY-MM-DD[ T]hh:mm:ss
-    case 21:  // YYYY-MM-DD[ T]hh:mm:ss.s 
-    case 22:  // YYYY-MM-DD[ T]hh:mm:ss.ss 
-    case 23:  // YYYY-MM-DD[ T]hh:mm:ss.sss 
-    case 24:  // YYYY-MM-DD[ T]hh:mm:ss.ssss 
-    case 25:  // YYYY-MM-DD[ T]hh:mm:ss.sssss 
-    case 26:  // YYYY-MM-DD[ T]hh:mm:ss.ssssss 
-    case 27:  // YYYY-MM-DD[ T]hh:mm:ss.sssssss 
-    case 28:  // YYYY-MM-DD[ T]hh:mm:ss.ssssssss 
-    case 29:  // YYYY-MM-DD[ T]hh:mm:ss.sssssssss 
+    case 21:  // YYYY-MM-DD[ T]hh:mm:ss.s
+    case 22:  // YYYY-MM-DD[ T]hh:mm:ss.ss
+    case 23:  // YYYY-MM-DD[ T]hh:mm:ss.sss
+    case 24:  // YYYY-MM-DD[ T]hh:mm:ss.ssss
+    case 25:  // YYYY-MM-DD[ T]hh:mm:ss.sssss
+    case 26:  // YYYY-MM-DD[ T]hh:mm:ss.ssssss
+    case 27:  // YYYY-MM-DD[ T]hh:mm:ss.sssssss
+    case 28:  // YYYY-MM-DD[ T]hh:mm:ss.ssssssss
+    case 29:  // YYYY-MM-DD[ T]hh:mm:ss.sssssssss
       if (ARROW_PREDICT_FALSE(!detail::ParseHH_MM_SS(s + 11, &seconds_since_midnight))) {
         return false;
       }
@@ -645,13 +645,13 @@ static inline bool ParseTimestampISO8601(const char* s, size_t length,
     return true;
   }
 
-  if (ARROW_PREDICT_FALSE(s[19] != '.')) { 
-    return false; 
-  } 
- 
+  if (ARROW_PREDICT_FALSE(s[19] != '.')) {
+    return false;
+  }
+
   uint32_t subseconds = 0;
   if (ARROW_PREDICT_FALSE(
-          !detail::ParseSubSeconds(s + 20, length - 20, unit, &subseconds))) { 
+          !detail::ParseSubSeconds(s + 20, length - 20, unit, &subseconds))) {
     return false;
   }
 
@@ -753,7 +753,7 @@ struct StringConverter<TIME_TYPE, enable_if_time<TIME_TYPE>> {
 
     uint32_t subseconds_count = 0;
     if (ARROW_PREDICT_FALSE(
-            !detail::ParseSubSeconds(s + 9, length - 9, unit, &subseconds_count))) { 
+            !detail::ParseSubSeconds(s + 9, length - 9, unit, &subseconds_count))) {
       return false;
     }
 

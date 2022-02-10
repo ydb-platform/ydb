@@ -23,20 +23,20 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/debugging/symbolize
     contrib/restricted/abseil-cpp-tstring/y_absl/demangle
     contrib/restricted/abseil-cpp-tstring/y_absl/numeric
-    contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal/exponential_biased 
+    contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal/exponential_biased
     contrib/restricted/abseil-cpp-tstring/y_absl/strings
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings/cord 
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/absl_cord_internal 
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/absl_strings_internal 
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/cordz_functions 
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/cordz_handle 
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/cordz_info 
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings/cord
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/absl_cord_internal
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/absl_strings_internal
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/cordz_functions
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/cordz_handle
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/cordz_info
     contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/str_format
-    contrib/restricted/abseil-cpp-tstring/y_absl/synchronization 
-    contrib/restricted/abseil-cpp-tstring/y_absl/synchronization/internal 
-    contrib/restricted/abseil-cpp-tstring/y_absl/time 
-    contrib/restricted/abseil-cpp-tstring/y_absl/time/civil_time 
-    contrib/restricted/abseil-cpp-tstring/y_absl/time/time_zone 
+    contrib/restricted/abseil-cpp-tstring/y_absl/synchronization
+    contrib/restricted/abseil-cpp-tstring/y_absl/synchronization/internal
+    contrib/restricted/abseil-cpp-tstring/y_absl/time
+    contrib/restricted/abseil-cpp-tstring/y_absl/time/civil_time
+    contrib/restricted/abseil-cpp-tstring/y_absl/time/time_zone
     contrib/restricted/abseil-cpp-tstring/y_absl/types/bad_optional_access
 )
 

@@ -663,11 +663,11 @@ namespace boost { namespace numeric { namespace ublas {
         indexed_iterator (container_type &c, size_type it):
             container_reference<container_type> (c), it_ (it) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-        BOOST_UBLAS_INLINE 
-        indexed_iterator (const indexed_iterator&) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+        BOOST_UBLAS_INLINE
+        indexed_iterator (const indexed_iterator&) = default;
+#endif
+
         // Arithmetic
         BOOST_UBLAS_INLINE
         indexed_iterator &operator ++ () {

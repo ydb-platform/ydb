@@ -5,11 +5,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html. 
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -62,19 +62,19 @@
 /*
  * Curl_ipv6works() returns TRUE if IPv6 seems to work.
  */
-bool Curl_ipv6works(struct connectdata *conn) 
+bool Curl_ipv6works(struct connectdata *conn)
 {
-  if(conn) { 
-    /* the nature of most system is that IPv6 status doesn't come and go 
-       during a program's lifetime so we only probe the first time and then we 
-       have the info kept for fast re-use */ 
-    DEBUGASSERT(conn); 
-    DEBUGASSERT(conn->data); 
-    DEBUGASSERT(conn->data->multi); 
-    return conn->data->multi->ipv6_works; 
-  } 
-  else { 
-    int ipv6_works = -1; 
+  if(conn) {
+    /* the nature of most system is that IPv6 status doesn't come and go
+       during a program's lifetime so we only probe the first time and then we
+       have the info kept for fast re-use */
+    DEBUGASSERT(conn);
+    DEBUGASSERT(conn->data);
+    DEBUGASSERT(conn->data->multi);
+    return conn->data->multi->ipv6_works;
+  }
+  else {
+    int ipv6_works = -1;
     /* probe to see if we have a working IPv6 stack */
     curl_socket_t s = socket(PF_INET6, SOCK_DGRAM, 0);
     if(s == CURL_SOCKET_BAD)
@@ -84,7 +84,7 @@ bool Curl_ipv6works(struct connectdata *conn)
       ipv6_works = 1;
       Curl_closesocket(NULL, s);
     }
-    return (ipv6_works>0)?TRUE:FALSE; 
+    return (ipv6_works>0)?TRUE:FALSE;
   }
 }
 
@@ -95,7 +95,7 @@ bool Curl_ipv6works(struct connectdata *conn)
 bool Curl_ipvalid(struct connectdata *conn)
 {
   if(conn->ip_version == CURL_IPRESOLVE_V6)
-    return Curl_ipv6works(conn); 
+    return Curl_ipv6works(conn);
 
   return TRUE;
 }
@@ -103,16 +103,16 @@ bool Curl_ipvalid(struct connectdata *conn)
 #if defined(CURLRES_SYNCH)
 
 #ifdef DEBUG_ADDRINFO
-static void dump_addrinfo(struct connectdata *conn, 
-                          const struct Curl_addrinfo *ai) 
+static void dump_addrinfo(struct connectdata *conn,
+                          const struct Curl_addrinfo *ai)
 {
   printf("dump_addrinfo:\n");
   for(; ai; ai = ai->ai_next) {
     char buf[INET6_ADDRSTRLEN];
     printf("    fam %2d, CNAME %s, ",
            ai->ai_family, ai->ai_canonname ? ai->ai_canonname : "<none>");
-    Curl_printable_address(ai, buf, sizeof(buf)); 
-    printf("%s\n", buf); 
+    Curl_printable_address(ai, buf, sizeof(buf));
+    printf("%s\n", buf);
   }
 }
 #else
@@ -128,13 +128,13 @@ static void dump_addrinfo(struct connectdata *conn,
  * memory we need to free after use. That memory *MUST* be freed with
  * Curl_freeaddrinfo(), nothing else.
  */
-struct Curl_addrinfo *Curl_getaddrinfo(struct connectdata *conn, 
-                                       const char *hostname, 
-                                       int port, 
-                                       int *waitp) 
+struct Curl_addrinfo *Curl_getaddrinfo(struct connectdata *conn,
+                                       const char *hostname,
+                                       int port,
+                                       int *waitp)
 {
   struct addrinfo hints;
-  struct Curl_addrinfo *res; 
+  struct Curl_addrinfo *res;
   int error;
   char sbuf[12];
   char *sbufptr = NULL;
@@ -161,7 +161,7 @@ struct Curl_addrinfo *Curl_getaddrinfo(struct connectdata *conn,
     break;
   }
 
-  if((pf != PF_INET) && !Curl_ipv6works(conn)) 
+  if((pf != PF_INET) && !Curl_ipv6works(conn))
     /* The stack seems to be a non-IPv6 one */
     pf = PF_INET;
 

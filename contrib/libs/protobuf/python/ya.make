@@ -1,7 +1,7 @@
 PACKAGE()
 
-WITHOUT_LICENSE_TEXTS() 
- 
+WITHOUT_LICENSE_TEXTS()
+
 LICENSE(BSD-3-Clause)
 
 OWNER(
@@ -9,6 +9,6 @@ OWNER(
     g:cpp-contrib
 )
 
-GENERATE_PY_PROTOS(contrib/libs/protobuf/src/google/protobuf/descriptor.proto) 
+GENERATE_PY_PROTOS(contrib/libs/protobuf/src/google/protobuf/descriptor.proto)
 
 END()

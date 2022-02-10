@@ -15,7 +15,7 @@
 
 #include "util/util.h"
 #include "util/logging.h"
-#include "util/strutil.h" 
+#include "util/strutil.h"
 #include "re2/prefilter.h"
 #include "re2/re2.h"
 
@@ -54,22 +54,22 @@ void PrefilterTree::Add(Prefilter* prefilter) {
   prefilter_vec_.push_back(prefilter);
 }
 
-void PrefilterTree::Compile(std::vector<std::string>* atom_vec) { 
+void PrefilterTree::Compile(std::vector<std::string>* atom_vec) {
   if (compiled_) {
     LOG(DFATAL) << "Compile called already.";
     return;
   }
 
-  // Some legacy users of PrefilterTree call Compile() before 
-  // adding any regexps and expect Compile() to have no effect. 
+  // Some legacy users of PrefilterTree call Compile() before
+  // adding any regexps and expect Compile() to have no effect.
   if (prefilter_vec_.empty())
     return;
 
   compiled_ = true;
 
-  // TODO(junyer): Use std::unordered_set<Prefilter*> instead? 
-  NodeMap nodes; 
-  AssignUniqueIds(&nodes, atom_vec); 
+  // TODO(junyer): Use std::unordered_set<Prefilter*> instead?
+  NodeMap nodes;
+  AssignUniqueIds(&nodes, atom_vec);
 
   // Identify nodes that are too common among prefilters and are
   // triggering too many parents. Then get rid of them if possible.
@@ -102,27 +102,27 @@ void PrefilterTree::Compile(std::vector<std::string>* atom_vec) {
   }
 
   if (ExtraDebug)
-    PrintDebugInfo(&nodes); 
+    PrintDebugInfo(&nodes);
 }
 
-Prefilter* PrefilterTree::CanonicalNode(NodeMap* nodes, Prefilter* node) { 
-  std::string node_string = NodeString(node); 
-  NodeMap::iterator iter = nodes->find(node_string); 
-  if (iter == nodes->end()) 
+Prefilter* PrefilterTree::CanonicalNode(NodeMap* nodes, Prefilter* node) {
+  std::string node_string = NodeString(node);
+  NodeMap::iterator iter = nodes->find(node_string);
+  if (iter == nodes->end())
     return NULL;
   return (*iter).second;
 }
 
-std::string PrefilterTree::NodeString(Prefilter* node) const { 
+std::string PrefilterTree::NodeString(Prefilter* node) const {
   // Adding the operation disambiguates AND/OR/atom nodes.
-  std::string s = StringPrintf("%d", node->op()) + ":"; 
+  std::string s = StringPrintf("%d", node->op()) + ":";
   if (node->op() == Prefilter::ATOM) {
     s += node->atom();
   } else {
     for (size_t i = 0; i < node->subs()->size(); i++) {
       if (i > 0)
         s += ',';
-      s += StringPrintf("%d", (*node->subs())[i]->unique_id()); 
+      s += StringPrintf("%d", (*node->subs())[i]->unique_id());
     }
   }
   return s;
@@ -138,7 +138,7 @@ bool PrefilterTree::KeepNode(Prefilter* node) const {
       return false;
 
     case Prefilter::ALL:
-    case Prefilter::NONE: 
+    case Prefilter::NONE:
       return false;
 
     case Prefilter::ATOM:
@@ -165,8 +165,8 @@ bool PrefilterTree::KeepNode(Prefilter* node) const {
   }
 }
 
-void PrefilterTree::AssignUniqueIds(NodeMap* nodes, 
-                                    std::vector<std::string>* atom_vec) { 
+void PrefilterTree::AssignUniqueIds(NodeMap* nodes,
+                                    std::vector<std::string>* atom_vec) {
   atom_vec->clear();
 
   // Build vector of all filter nodes, sorted topologically
@@ -203,11 +203,11 @@ void PrefilterTree::AssignUniqueIds(NodeMap* nodes,
     if (node == NULL)
       continue;
     node->set_unique_id(-1);
-    Prefilter* canonical = CanonicalNode(nodes, node); 
+    Prefilter* canonical = CanonicalNode(nodes, node);
     if (canonical == NULL) {
       // Any further nodes that have the same node string
       // will find this node as the canonical node.
-      nodes->emplace(NodeString(node), node); 
+      nodes->emplace(NodeString(node), node);
       if (node->op() == Prefilter::ATOM) {
         atom_vec->push_back(node->atom());
         atom_index_to_id_.push_back(unique_id);
@@ -217,7 +217,7 @@ void PrefilterTree::AssignUniqueIds(NodeMap* nodes,
       node->set_unique_id(canonical->unique_id());
     }
   }
-  entries_.resize(nodes->size()); 
+  entries_.resize(nodes->size());
 
   // Create parent StdIntMap for the entries.
   for (int i = static_cast<int>(v.size()) - 1; i >= 0; i--) {
@@ -225,7 +225,7 @@ void PrefilterTree::AssignUniqueIds(NodeMap* nodes,
     if (prefilter == NULL)
       continue;
 
-    if (CanonicalNode(nodes, prefilter) != prefilter) 
+    if (CanonicalNode(nodes, prefilter) != prefilter)
       continue;
 
     Entry* entry = &entries_[prefilter->unique_id()];
@@ -238,7 +238,7 @@ void PrefilterTree::AssignUniqueIds(NodeMap* nodes,
     if (prefilter == NULL)
       continue;
 
-    if (CanonicalNode(nodes, prefilter) != prefilter) 
+    if (CanonicalNode(nodes, prefilter) != prefilter)
       continue;
 
     Entry* entry = &entries_[prefilter->unique_id()];
@@ -258,7 +258,7 @@ void PrefilterTree::AssignUniqueIds(NodeMap* nodes,
         std::set<int> uniq_child;
         for (size_t j = 0; j < prefilter->subs()->size(); j++) {
           Prefilter* child = (*prefilter->subs())[j];
-          Prefilter* canonical = CanonicalNode(nodes, child); 
+          Prefilter* canonical = CanonicalNode(nodes, child);
           if (canonical == NULL) {
             LOG(DFATAL) << "Null canonical node";
             return;
@@ -285,7 +285,7 @@ void PrefilterTree::AssignUniqueIds(NodeMap* nodes,
   for (size_t i = 0; i < prefilter_vec_.size(); i++) {
     if (prefilter_vec_[i] == NULL)
       continue;
-    int id = CanonicalNode(nodes, prefilter_vec_[i])->unique_id(); 
+    int id = CanonicalNode(nodes, prefilter_vec_[i])->unique_id();
     DCHECK_LE(0, id);
     Entry* entry = &entries_[id];
     entry->regexps.push_back(static_cast<int>(i));
@@ -298,27 +298,27 @@ void PrefilterTree::RegexpsGivenStrings(
     std::vector<int>* regexps) const {
   regexps->clear();
   if (!compiled_) {
-    // Some legacy users of PrefilterTree call Compile() before 
-    // adding any regexps and expect Compile() to have no effect. 
-    // This kludge is a counterpart to that kludge. 
-    if (prefilter_vec_.empty()) 
-      return; 
- 
+    // Some legacy users of PrefilterTree call Compile() before
+    // adding any regexps and expect Compile() to have no effect.
+    // This kludge is a counterpart to that kludge.
+    if (prefilter_vec_.empty())
+      return;
+
     LOG(ERROR) << "RegexpsGivenStrings called before Compile.";
-    for (size_t i = 0; i < prefilter_vec_.size(); i++) 
+    for (size_t i = 0; i < prefilter_vec_.size(); i++)
       regexps->push_back(static_cast<int>(i));
   } else {
-    IntMap regexps_map(static_cast<int>(prefilter_vec_.size())); 
-    std::vector<int> matched_atom_ids; 
-    for (size_t j = 0; j < matched_atoms.size(); j++) 
-      matched_atom_ids.push_back(atom_index_to_id_[matched_atoms[j]]); 
-    PropagateMatch(matched_atom_ids, &regexps_map); 
-    for (IntMap::iterator it = regexps_map.begin(); 
-         it != regexps_map.end(); 
-         ++it) 
-      regexps->push_back(it->index()); 
+    IntMap regexps_map(static_cast<int>(prefilter_vec_.size()));
+    std::vector<int> matched_atom_ids;
+    for (size_t j = 0; j < matched_atoms.size(); j++)
+      matched_atom_ids.push_back(atom_index_to_id_[matched_atoms[j]]);
+    PropagateMatch(matched_atom_ids, &regexps_map);
+    for (IntMap::iterator it = regexps_map.begin();
+         it != regexps_map.end();
+         ++it)
+      regexps->push_back(it->index());
 
-    regexps->insert(regexps->end(), unfiltered_.begin(), unfiltered_.end()); 
+    regexps->insert(regexps->end(), unfiltered_.begin(), unfiltered_.end());
   }
   std::sort(regexps->begin(), regexps->end());
 }
@@ -364,11 +364,11 @@ void PrefilterTree::PrintPrefilter(int regexpid) {
   LOG(ERROR) << DebugNodeString(prefilter_vec_[regexpid]);
 }
 
-void PrefilterTree::PrintDebugInfo(NodeMap* nodes) { 
+void PrefilterTree::PrintDebugInfo(NodeMap* nodes) {
   LOG(ERROR) << "#Unique Atoms: " << atom_index_to_id_.size();
   LOG(ERROR) << "#Unique Nodes: " << entries_.size();
 
-  for (size_t i = 0; i < entries_.size(); i++) { 
+  for (size_t i = 0; i < entries_.size(); i++) {
     StdIntMap* parents = entries_[i].parents;
     const std::vector<int>& regexps = entries_[i].regexps;
     LOG(ERROR) << "EntryId: " << i
@@ -377,14 +377,14 @@ void PrefilterTree::PrintDebugInfo(NodeMap* nodes) {
       LOG(ERROR) << it->first;
   }
   LOG(ERROR) << "Map:";
-  for (NodeMap::const_iterator iter = nodes->begin(); 
-       iter != nodes->end(); ++iter) 
+  for (NodeMap::const_iterator iter = nodes->begin();
+       iter != nodes->end(); ++iter)
     LOG(ERROR) << "NodeId: " << (*iter).second->unique_id()
                << " Str: " << (*iter).first;
 }
 
-std::string PrefilterTree::DebugNodeString(Prefilter* node) const { 
-  std::string node_string = ""; 
+std::string PrefilterTree::DebugNodeString(Prefilter* node) const {
+  std::string node_string = "";
   if (node->op() == Prefilter::ATOM) {
     DCHECK(!node->atom().empty());
     node_string += node->atom();
@@ -395,7 +395,7 @@ std::string PrefilterTree::DebugNodeString(Prefilter* node) const {
     for (size_t i = 0; i < node->subs()->size(); i++) {
       if (i > 0)
         node_string += ',';
-      node_string += StringPrintf("%d", (*node->subs())[i]->unique_id()); 
+      node_string += StringPrintf("%d", (*node->subs())[i]->unique_id());
       node_string += ":";
       node_string += DebugNodeString((*node->subs())[i]);
     }

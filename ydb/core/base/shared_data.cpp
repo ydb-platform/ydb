@@ -13,7 +13,7 @@ namespace NKikimr {
         char* data = nullptr;
         if (size > 0) {
             if (size >= MaxDataSize) {
-                throw std::length_error("Allocate size overflow"); 
+                throw std::length_error("Allocate size overflow");
             }
             auto allocSize = OverheadSize + size;
             char* raw = reinterpret_cast<char*>(y_allocate(allocSize));

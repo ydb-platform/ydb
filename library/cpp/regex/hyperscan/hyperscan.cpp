@@ -1,13 +1,13 @@
 #include "hyperscan.h"
 
-#include <contrib/libs/hyperscan/runtime_core2/hs_common.h> 
-#include <contrib/libs/hyperscan/runtime_core2/hs_runtime.h> 
-#include <contrib/libs/hyperscan/runtime_corei7/hs_common.h> 
-#include <contrib/libs/hyperscan/runtime_corei7/hs_runtime.h> 
-#include <contrib/libs/hyperscan/runtime_avx2/hs_common.h> 
-#include <contrib/libs/hyperscan/runtime_avx2/hs_runtime.h> 
-#include <contrib/libs/hyperscan/runtime_avx512/hs_common.h> 
-#include <contrib/libs/hyperscan/runtime_avx512/hs_runtime.h> 
+#include <contrib/libs/hyperscan/runtime_core2/hs_common.h>
+#include <contrib/libs/hyperscan/runtime_core2/hs_runtime.h>
+#include <contrib/libs/hyperscan/runtime_corei7/hs_common.h>
+#include <contrib/libs/hyperscan/runtime_corei7/hs_runtime.h>
+#include <contrib/libs/hyperscan/runtime_avx2/hs_common.h>
+#include <contrib/libs/hyperscan/runtime_avx2/hs_runtime.h>
+#include <contrib/libs/hyperscan/runtime_avx512/hs_common.h>
+#include <contrib/libs/hyperscan/runtime_avx512/hs_runtime.h>
 
 #include <util/generic/singleton.h>
 
@@ -49,10 +49,10 @@ namespace NHyperscan {
             return platformInfo;
         }
 
-        hs_platform_info_t MakeCurrentPlatformInfo() { 
-            return MakePlatformInfo(RuntimeCpuFeatures(DetectCurrentRuntime())); 
-        } 
- 
+        hs_platform_info_t MakeCurrentPlatformInfo() {
+            return MakePlatformInfo(RuntimeCpuFeatures(DetectCurrentRuntime()));
+        }
+
         TImpl::TImpl(ERuntime runtime) {
             switch (runtime) {
                 default:
@@ -179,8 +179,8 @@ namespace NHyperscan {
     } // namespace NPrivate
 
     TDatabase Compile(const TStringBuf& regex, unsigned int flags) {
-        auto platformInfo = NPrivate::MakeCurrentPlatformInfo(); 
-        return NPrivate::Compile(regex, flags, &platformInfo); 
+        auto platformInfo = NPrivate::MakeCurrentPlatformInfo();
+        return NPrivate::Compile(regex, flags, &platformInfo);
     }
 
     TDatabase Compile(const TStringBuf& regex, unsigned int flags, TCPUFeatures cpuFeatures) {
@@ -194,8 +194,8 @@ namespace NHyperscan {
             const TVector<unsigned int>& ids,
             const TVector<const hs_expr_ext_t*>* extendedParameters)
     {
-        auto platformInfo = NPrivate::MakeCurrentPlatformInfo(); 
-        return NPrivate::CompileMulti(regexs, flags, ids, &platformInfo, extendedParameters); 
+        auto platformInfo = NPrivate::MakeCurrentPlatformInfo();
+        return NPrivate::CompileMulti(regexs, flags, ids, &platformInfo, extendedParameters);
     }
 
     TDatabase CompileMulti(

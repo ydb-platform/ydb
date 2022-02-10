@@ -32,7 +32,7 @@ namespace NCodecs {
         }
 
         TString GetName() const override {
-            return ToString(MyName()); 
+            return ToString(MyName());
         }
 
         ui8 Encode(TStringBuf s, TBuffer& b) const override {
@@ -52,15 +52,15 @@ namespace NCodecs {
                 s = TStringBuf{db.data(), db.size()};
             }
 
-            TArrayRef<const TValue> tin{(const TValue*)s.data(), s.size() / sizeof(TValue)}; 
+            TArrayRef<const TValue> tin{(const TValue*)s.data(), s.size() / sizeof(TValue)};
 
-            const ui64 sz = tin.size(); 
+            const ui64 sz = tin.size();
             ui64 bitcounts[BitsInT + 1];
             Zero(bitcounts);
 
             ui32 zeros = 0;
 
-            for (const TValue* it = tin.begin(); it != tin.end(); ++it) { 
+            for (const TValue* it = tin.begin(); it != tin.end(); ++it) {
                 TUnsigned v = 1 + (TUnsigned)*it;
                 ui64 l = MostSignificantBit(v) + 1;
                 ++bitcounts[l];
@@ -105,7 +105,7 @@ namespace NCodecs {
                 bout.Write(hasexceptions, 1);
                 bout.Write(optimalbits, 6);
 
-                for (const TValue* it = tin.begin(); it != tin.end(); ++it) { 
+                for (const TValue* it = tin.begin(); it != tin.end(); ++it) {
                     TUnsigned word = 1 + (TUnsigned)*it;
                     ui64 len = MostSignificantBit(word) + 1;
                     if (len > optimalbits || !word) {

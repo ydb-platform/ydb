@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TUtf16String data(u"qw ab  qwabcab");
         TUtf16String canonic[] = {u"qw", u"ab", TUtf16String(), u"qwabcab"};
         TVector<TUtf16String> good(canonic, canonic + 4);
-        TCharDelimiter<const wchar16> delim(' '); 
+        TCharDelimiter<const wchar16> delim(' ');
 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TUtf16String canonic[] = {u"qw ", u" qw", TUtf16String(), u"c", TUtf16String()};
         TVector<TUtf16String> good(canonic, canonic + 5);
         TUtf16String wideDelim(u"ab");
-        TStringDelimiter<const wchar16> delim(wideDelim.data()); 
+        TStringDelimiter<const wchar16> delim(wideDelim.data());
 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TUtf16String canonic[] = {u"q", u" ab q", u"abab", TUtf16String(), u"ab"};
         TVector<TUtf16String> good(canonic, canonic + 5);
         TUtf16String wideDelim(u"wc");
-        TSetDelimiter<const wchar16> delim(wideDelim.data()); 
+        TSetDelimiter<const wchar16> delim(wideDelim.data());
 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
     }
@@ -223,7 +223,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TUtf16String canonic[] = {u"q", u" ab q", u"abab", TUtf16String(), u"ab"};
         TVector<TUtf16String> good(1);
         TUtf16String wideDelim(u"wc");
-        TSetDelimiter<const wchar16> delim(wideDelim.data()); 
+        TSetDelimiter<const wchar16> delim(wideDelim.data());
 
         TVector<TUtf16String> test;
         TContainerConsumer<TVector<TUtf16String>> consumer(&test);
@@ -654,7 +654,7 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
 
         TVector<TUtf16String> actual2 = {u"привет,", u"как", u"дела"};
         num = 0;
-        for (TWtringBuf elem : StringSplitter(u"привет, как дела").Split(wchar16(' '))) { 
+        for (TWtringBuf elem : StringSplitter(u"привет, как дела").Split(wchar16(' '))) {
             UNIT_ASSERT_VALUES_EQUAL(elem, actual2[num++]);
         }
 

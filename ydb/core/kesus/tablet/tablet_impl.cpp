@@ -119,12 +119,12 @@ void TKesusTablet::Handle(TEvents::TEvPoisonPill::TPtr& ev) {
 void TKesusTablet::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     const auto* msg = ev->Get();
     switch (msg->SourceType) {
-        case TEvKesus::EvRegisterProxyResult: 
-            if (auto* proxy = Proxies.FindPtr(ev->Sender)) { 
+        case TEvKesus::EvRegisterProxyResult:
+            if (auto* proxy = Proxies.FindPtr(ev->Sender)) {
                 ClearProxy(proxy, TActivationContext::AsActorContext());
                 ForgetProxy(proxy);
             }
-            break; 
+            break;
         default:
             break;
     }

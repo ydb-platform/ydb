@@ -25,7 +25,7 @@
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 
-#include <zlib.h> 
+#include <zlib.h>
 
 #include "src/core/lib/slice/slice_internal.h"
 

@@ -32,13 +32,13 @@
 //  Based on original Protocol Buffers design by
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
-#include <google/protobuf/compiler/code_generator.h> 
+#include <google/protobuf/compiler/code_generator.h>
 
-#include <google/protobuf/stubs/logging.h> 
-#include <google/protobuf/stubs/common.h> 
-#include <google/protobuf/compiler/plugin.pb.h> 
-#include <google/protobuf/descriptor.h> 
-#include <google/protobuf/stubs/strutil.h> 
+#include <google/protobuf/stubs/logging.h>
+#include <google/protobuf/stubs/common.h>
+#include <google/protobuf/compiler/plugin.pb.h>
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/stubs/strutil.h>
 
 namespace google {
 namespace protobuf {
@@ -46,20 +46,20 @@ namespace compiler {
 
 CodeGenerator::~CodeGenerator() {}
 
-bool CodeGenerator::GenerateAll(const std::vector<const FileDescriptor*>& files, 
-                                const TProtoStringType& parameter, 
-                                GeneratorContext* generator_context, 
-                                TProtoStringType* error) const { 
-  // Default implementation is just to call the per file method, and prefix any 
+bool CodeGenerator::GenerateAll(const std::vector<const FileDescriptor*>& files,
+                                const TProtoStringType& parameter,
+                                GeneratorContext* generator_context,
+                                TProtoStringType* error) const {
+  // Default implementation is just to call the per file method, and prefix any
   // error string with the file to provide context.
   bool succeeded = true;
   for (int i = 0; i < files.size(); i++) {
     const FileDescriptor* file = files[i];
     succeeded = Generate(file, parameter, generator_context, error);
     if (!succeeded && error && error->empty()) {
-      *error = 
-          "Code generator returned false but provided no error " 
-          "description."; 
+      *error =
+          "Code generator returned false but provided no error "
+          "description.";
     }
     if (error && !error->empty()) {
       *error = file->name() + ": " + *error;
@@ -74,23 +74,23 @@ bool CodeGenerator::GenerateAll(const std::vector<const FileDescriptor*>& files,
 
 GeneratorContext::~GeneratorContext() {}
 
-io::ZeroCopyOutputStream* GeneratorContext::OpenForAppend( 
-    const TProtoStringType& filename) { 
+io::ZeroCopyOutputStream* GeneratorContext::OpenForAppend(
+    const TProtoStringType& filename) {
   return NULL;
 }
 
 io::ZeroCopyOutputStream* GeneratorContext::OpenForInsert(
-    const TProtoStringType& filename, const TProtoStringType& insertion_point) { 
+    const TProtoStringType& filename, const TProtoStringType& insertion_point) {
   GOOGLE_LOG(FATAL) << "This GeneratorContext does not support insertion.";
   return NULL;  // make compiler happy
 }
 
-io::ZeroCopyOutputStream* GeneratorContext::OpenForInsertWithGeneratedCodeInfo( 
-    const TProtoStringType& filename, const TProtoStringType& insertion_point, 
-    const google::protobuf::GeneratedCodeInfo& /*info*/) { 
-  return OpenForInsert(filename, insertion_point); 
-} 
- 
+io::ZeroCopyOutputStream* GeneratorContext::OpenForInsertWithGeneratedCodeInfo(
+    const TProtoStringType& filename, const TProtoStringType& insertion_point,
+    const google::protobuf::GeneratedCodeInfo& /*info*/) {
+  return OpenForInsert(filename, insertion_point);
+}
+
 void GeneratorContext::ListParsedFiles(
     std::vector<const FileDescriptor*>* output) {
   GOOGLE_LOG(FATAL) << "This GeneratorContext does not support ListParsedFiles";
@@ -104,15 +104,15 @@ void GeneratorContext::GetCompilerVersion(Version* version) const {
 }
 
 // Parses a set of comma-delimited name/value pairs.
-void ParseGeneratorParameter( 
-    const TProtoStringType& text, 
-    std::vector<std::pair<TProtoStringType, TProtoStringType> >* output) { 
-  std::vector<TProtoStringType> parts = Split(text, ",", true); 
+void ParseGeneratorParameter(
+    const TProtoStringType& text,
+    std::vector<std::pair<TProtoStringType, TProtoStringType> >* output) {
+  std::vector<TProtoStringType> parts = Split(text, ",", true);
 
   for (int i = 0; i < parts.size(); i++) {
-    TProtoStringType::size_type equals_pos = parts[i].find_first_of('='); 
-    std::pair<TProtoStringType, TProtoStringType> value; 
-    if (equals_pos == TProtoStringType::npos) { 
+    TProtoStringType::size_type equals_pos = parts[i].find_first_of('=');
+    std::pair<TProtoStringType, TProtoStringType> value;
+    if (equals_pos == TProtoStringType::npos) {
       value.first = parts[i];
       value.second = "";
     } else {
@@ -123,15 +123,15 @@ void ParseGeneratorParameter(
   }
 }
 
-// Strips ".proto" or ".protodevel" from the end of a filename. 
-TProtoStringType StripProto(const TProtoStringType& filename) { 
-  if (HasSuffixString(filename, ".protodevel")) { 
-    return StripSuffixString(filename, ".protodevel"); 
-  } else { 
-    return StripSuffixString(filename, ".proto"); 
-  } 
-} 
- 
+// Strips ".proto" or ".protodevel" from the end of a filename.
+TProtoStringType StripProto(const TProtoStringType& filename) {
+  if (HasSuffixString(filename, ".protodevel")) {
+    return StripSuffixString(filename, ".protodevel");
+  } else {
+    return StripSuffixString(filename, ".proto");
+  }
+}
+
 }  // namespace compiler
 }  // namespace protobuf
 }  // namespace google

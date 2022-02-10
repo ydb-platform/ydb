@@ -214,7 +214,7 @@ BOOST_LOG_API named_scope_list::named_scope_list(named_scope_list const& that) :
         aux::named_scope_list_node* prev = &m_RootNode;
         for (const_iterator src = that.begin(), end = that.end(); src != end; ++src, ++p)
         {
-            new((void*)p) value_type(*src); // won't throw 
+            new((void*)p) value_type(*src); // won't throw
             p->_m_pPrev = prev;
             prev->_m_pNext = p;
             prev = p;
@@ -232,7 +232,7 @@ BOOST_LOG_API named_scope_list::~named_scope_list()
         iterator it(m_RootNode._m_pNext);
         iterator end(&m_RootNode);
         while (it != end)
-            it->~value_type(); 
+            it->~value_type();
         allocator_type::deallocate(static_cast< pointer >(m_RootNode._m_pNext), m_Size);
     }
 }

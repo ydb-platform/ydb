@@ -9,7 +9,7 @@
 #define FMT_TEST_ASSERT_H_
 
 #include <stdexcept>
- 
+
 #include <gtest/gtest.h>
 
 class assertion_failure : public std::logic_error {

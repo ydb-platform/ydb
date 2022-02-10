@@ -9,9 +9,9 @@ OWNER(g:cpp-contrib)
 LICENSE(Apache-2.0)
 
 PEERDIR(
-    contrib/restricted/abseil-cpp/absl/base/internal/raw_logging 
-    contrib/restricted/abseil-cpp/absl/base/log_severity 
-    contrib/restricted/abseil-cpp/absl/profiling/internal/exponential_biased 
+    contrib/restricted/abseil-cpp/absl/base/internal/raw_logging
+    contrib/restricted/abseil-cpp/absl/base/log_severity
+    contrib/restricted/abseil-cpp/absl/profiling/internal/exponential_biased
 )
 
 ADDINCL(
@@ -26,10 +26,10 @@ CFLAGS(
     -DNOMINMAX
 )
 
-SRCDIR(contrib/restricted/abseil-cpp/absl/strings/internal) 
+SRCDIR(contrib/restricted/abseil-cpp/absl/strings/internal)
 
 SRCS(
-    cordz_functions.cc 
+    cordz_functions.cc
 )
 
 END()

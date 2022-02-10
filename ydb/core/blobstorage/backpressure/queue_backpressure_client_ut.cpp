@@ -220,16 +220,16 @@ public:
         NActors::TActorId loggerActorId{1, "logger"};
         TIntrusivePtr<NActors::NLog::TSettings> logSettings{new NActors::NLog::TSettings{loggerActorId,
             NKikimrServices::LOGGER, NActors::NLog::PRI_ERROR, NActors::NLog::PRI_ERROR, 0}};
-        logSettings->Append( 
-            NActorsServices::EServiceCommon_MIN, 
-            NActorsServices::EServiceCommon_MAX, 
-            NActorsServices::EServiceCommon_Name 
-        ); 
-        logSettings->Append( 
-            NKikimrServices::EServiceKikimr_MIN, 
+        logSettings->Append(
+            NActorsServices::EServiceCommon_MIN,
+            NActorsServices::EServiceCommon_MAX,
+            NActorsServices::EServiceCommon_Name
+        );
+        logSettings->Append(
+            NKikimrServices::EServiceKikimr_MIN,
             NKikimrServices::EServiceKikimr_MAX,
-            NKikimrServices::EServiceKikimr_Name 
-        ); 
+            NKikimrServices::EServiceKikimr_Name
+        );
 
         TString explanation;
         logSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_QUEUE, explanation);

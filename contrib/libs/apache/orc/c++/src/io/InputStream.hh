@@ -76,7 +76,7 @@ namespace orc {
     virtual bool Next(const void** data, int*size) override;
     virtual void BackUp(int count) override;
     virtual bool Skip(int count) override;
-    virtual int64_t ByteCount() const override; 
+    virtual int64_t ByteCount() const override;
     virtual void seek(PositionProvider& position) override;
     virtual std::string getName() const override;
   };

@@ -173,7 +173,7 @@ namespace NActors {
     void TCoroutineChunkSerializer::DoRun() {
         while (!CancelFlag) {
             Y_VERIFY(Event);
-            SerializationSuccess = Event->SerializeToArcadiaStream(this); 
+            SerializationSuccess = Event->SerializeToArcadiaStream(this);
             Event = nullptr;
             if (!CancelFlag) { // cancel flag may have been received during serialization
                 InnerContext.SwitchTo(BufFeedContext);

@@ -35,24 +35,24 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_CPP_FIELD_H__
 #define GOOGLE_PROTOBUF_COMPILER_CPP_FIELD_H__
 
-#include <cstdint> 
+#include <cstdint>
 #include <map>
 #include <memory>
-#include <string> 
+#include <string>
 
-#include <google/protobuf/compiler/cpp/cpp_helpers.h> 
-#include <google/protobuf/compiler/cpp/cpp_options.h> 
-#include <google/protobuf/descriptor.h> 
+#include <google/protobuf/compiler/cpp/cpp_helpers.h>
+#include <google/protobuf/compiler/cpp/cpp_options.h>
+#include <google/protobuf/descriptor.h>
 
 namespace google {
 namespace protobuf {
-namespace io { 
-class Printer;  // printer.h 
+namespace io {
+class Printer;  // printer.h
 }
-}  // namespace protobuf 
-}  // namespace google 
+}  // namespace protobuf
+}  // namespace google
 
-namespace google { 
+namespace google {
 namespace protobuf {
 namespace compiler {
 namespace cpp {
@@ -62,21 +62,21 @@ namespace cpp {
 // ['name', 'index', 'number', 'classname', 'declared_type', 'tag_size',
 // 'deprecation'].
 void SetCommonFieldVariables(const FieldDescriptor* descriptor,
-                             std::map<TProtoStringType, TProtoStringType>* variables, 
+                             std::map<TProtoStringType, TProtoStringType>* variables,
                              const Options& options);
 
-void SetCommonOneofFieldVariables( 
-    const FieldDescriptor* descriptor, 
-    std::map<TProtoStringType, TProtoStringType>* variables); 
+void SetCommonOneofFieldVariables(
+    const FieldDescriptor* descriptor,
+    std::map<TProtoStringType, TProtoStringType>* variables);
 
 class FieldGenerator {
  public:
-  explicit FieldGenerator(const FieldDescriptor* descriptor, 
-                          const Options& options) 
-      : descriptor_(descriptor), options_(options) {} 
+  explicit FieldGenerator(const FieldDescriptor* descriptor,
+                          const Options& options)
+      : descriptor_(descriptor), options_(options) {}
   virtual ~FieldGenerator();
-  virtual void GenerateSerializeWithCachedSizes( 
-      io::Printer* printer) const final{}; 
+  virtual void GenerateSerializeWithCachedSizes(
+      io::Printer* printer) const final{};
   // Generate lines of code declaring members fields of the message class
   // needed to represent this field.  These are placed inside the message
   // class.
@@ -94,35 +94,35 @@ class FieldGenerator {
   // Generate inline definitions of accessor functions for this field.
   // These are placed inside the header after all class definitions.
   virtual void GenerateInlineAccessorDefinitions(
-      io::Printer* printer) const = 0; 
+      io::Printer* printer) const = 0;
 
   // Generate definitions of accessors that aren't inlined.  These are
   // placed somewhere in the .cc file.
   // Most field types don't need this, so the default implementation is empty.
   virtual void GenerateNonInlineAccessorDefinitions(
-      io::Printer* /*printer*/) const {} 
+      io::Printer* /*printer*/) const {}
 
-  // Generate declarations of accessors that are for internal purposes only. 
-  // Most field types don't need this, so the default implementation is empty. 
-  virtual void GenerateInternalAccessorDefinitions( 
-      io::Printer* /*printer*/) const {} 
- 
-  // Generate definitions of accessors that are for internal purposes only. 
-  // Most field types don't need this, so the default implementation is empty. 
-  virtual void GenerateInternalAccessorDeclarations( 
-      io::Printer* /*printer*/) const {} 
- 
+  // Generate declarations of accessors that are for internal purposes only.
+  // Most field types don't need this, so the default implementation is empty.
+  virtual void GenerateInternalAccessorDefinitions(
+      io::Printer* /*printer*/) const {}
+
+  // Generate definitions of accessors that are for internal purposes only.
+  // Most field types don't need this, so the default implementation is empty.
+  virtual void GenerateInternalAccessorDeclarations(
+      io::Printer* /*printer*/) const {}
+
   // Generate lines of code (statements, not declarations) which clear the
   // field.  This is used to define the clear_$name$() method
   virtual void GenerateClearingCode(io::Printer* printer) const = 0;
 
-  // Generate lines of code (statements, not declarations) which clear the 
-  // field as part of the Clear() method for the whole message.  For message 
-  // types which have field presence bits, MessageGenerator::GenerateClear 
-  // will have already checked the presence bits. 
+  // Generate lines of code (statements, not declarations) which clear the
+  // field as part of the Clear() method for the whole message.  For message
+  // types which have field presence bits, MessageGenerator::GenerateClear
+  // will have already checked the presence bits.
   //
-  // Since most field types can re-use GenerateClearingCode, this method is 
-  // not pure virtual. 
+  // Since most field types can re-use GenerateClearingCode, this method is
+  // not pure virtual.
   virtual void GenerateMessageClearingCode(io::Printer* printer) const {
     GenerateClearingCode(printer);
   }
@@ -157,19 +157,19 @@ class FieldGenerator {
 
   // Generate a manual destructor invocation for use when the message is on an
   // arena. The code that this method generates will be executed inside a
-  // shared-for-the-whole-message-class method registered with 
-  // OwnDestructor(). The method should return |true| if it generated any code 
-  // that requires a call; this allows the message generator to eliminate the 
-  // OwnDestructor() registration if no fields require it. 
+  // shared-for-the-whole-message-class method registered with
+  // OwnDestructor(). The method should return |true| if it generated any code
+  // that requires a call; this allows the message generator to eliminate the
+  // OwnDestructor() registration if no fields require it.
   virtual bool GenerateArenaDestructorCode(io::Printer* printer) const {
     return false;
   }
 
-  // Generate initialization code for private members declared by 
-  // GeneratePrivateMembers(), specifically for the constexpr constructor. 
-  // These go into the constructor's initializer list and must follow that 
-  // syntax (eg `field_(args)`). Does not include `:` or `,` separators. 
-  virtual void GenerateConstinitInitializer(io::Printer* printer) const {} 
+  // Generate initialization code for private members declared by
+  // GeneratePrivateMembers(), specifically for the constexpr constructor.
+  // These go into the constructor's initializer list and must follow that
+  // syntax (eg `field_(args)`). Does not include `:` or `,` separators.
+  virtual void GenerateConstinitInitializer(io::Printer* printer) const {}
 
   // Generate lines to serialize this field directly to the array "target",
   // which are placed within the message's SerializeWithCachedSizesToArray()
@@ -181,12 +181,12 @@ class FieldGenerator {
   // are placed in the message's ByteSize() method.
   virtual void GenerateByteSize(io::Printer* printer) const = 0;
 
-  void SetHasBitIndex(int32_t has_bit_index); 
- 
+  void SetHasBitIndex(int32_t has_bit_index);
+
  protected:
-  const FieldDescriptor* descriptor_; 
+  const FieldDescriptor* descriptor_;
   const Options& options_;
-  std::map<TProtoStringType, TProtoStringType> variables_; 
+  std::map<TProtoStringType, TProtoStringType> variables_;
 
  private:
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(FieldGenerator);
@@ -195,28 +195,28 @@ class FieldGenerator {
 // Convenience class which constructs FieldGenerators for a Descriptor.
 class FieldGeneratorMap {
  public:
-  FieldGeneratorMap(const Descriptor* descriptor, const Options& options, 
-                    MessageSCCAnalyzer* scc_analyzer); 
+  FieldGeneratorMap(const Descriptor* descriptor, const Options& options,
+                    MessageSCCAnalyzer* scc_analyzer);
   ~FieldGeneratorMap();
 
   const FieldGenerator& get(const FieldDescriptor* field) const;
 
-  void SetHasBitIndices(const std::vector<int>& has_bit_indices_) { 
-    for (int i = 0; i < descriptor_->field_count(); ++i) { 
-      field_generators_[i]->SetHasBitIndex(has_bit_indices_[i]); 
-    } 
-  } 
- 
+  void SetHasBitIndices(const std::vector<int>& has_bit_indices_) {
+    for (int i = 0; i < descriptor_->field_count(); ++i) {
+      field_generators_[i]->SetHasBitIndex(has_bit_indices_[i]);
+    }
+  }
+
  private:
   const Descriptor* descriptor_;
-  std::vector<std::unique_ptr<FieldGenerator>> field_generators_; 
+  std::vector<std::unique_ptr<FieldGenerator>> field_generators_;
 
-  static FieldGenerator* MakeGoogleInternalGenerator( 
-      const FieldDescriptor* field, const Options& options, 
-      MessageSCCAnalyzer* scc_analyzer); 
+  static FieldGenerator* MakeGoogleInternalGenerator(
+      const FieldDescriptor* field, const Options& options,
+      MessageSCCAnalyzer* scc_analyzer);
   static FieldGenerator* MakeGenerator(const FieldDescriptor* field,
-                                       const Options& options, 
-                                       MessageSCCAnalyzer* scc_analyzer); 
+                                       const Options& options,
+                                       MessageSCCAnalyzer* scc_analyzer);
 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(FieldGeneratorMap);
 };
@@ -224,6 +224,6 @@ class FieldGeneratorMap {
 }  // namespace cpp
 }  // namespace compiler
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
 #endif  // GOOGLE_PROTOBUF_COMPILER_CPP_FIELD_H__

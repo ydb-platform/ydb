@@ -19,7 +19,7 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 ADDINCL(
-    GLOBAL contrib/libs/nghttp2/lib/includes 
+    GLOBAL contrib/libs/nghttp2/lib/includes
     contrib/libs/nghttp2
     contrib/libs/nghttp2/lib
 )

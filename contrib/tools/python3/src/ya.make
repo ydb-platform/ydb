@@ -179,19 +179,19 @@ SRCS(
     Python/traceback.c
 )
 
-SUPPRESSIONS( 
-    tsan.supp 
+SUPPRESSIONS(
+    tsan.supp
 )
 
 IF (OS_WINDOWS)
     SRCS(
-        PC/WinMain.c 
-        PC/dl_nt.c 
-        PC/getpathp.c 
-        PC/invalid_parameter_handler.c 
-        PC/msvcrtmodule.c 
-        PC/winreg.c 
-        PC/winsound.c 
+        PC/WinMain.c
+        PC/dl_nt.c
+        PC/getpathp.c
+        PC/invalid_parameter_handler.c
+        PC/msvcrtmodule.c
+        PC/winreg.c
+        PC/winsound.c
         Python/dynload_win.c
     )
 ELSE()

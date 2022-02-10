@@ -258,7 +258,7 @@ namespace boost {
                     void *vdptr = alloc_.allocate(new_size, is_allocated_? oldptr : 0);
                     newptr = static_cast<Ch *>(vdptr);
 #else
-                    newptr = alloc_.allocate(new_size); 
+                    newptr = alloc_.allocate(new_size);
 #endif
                 }
 

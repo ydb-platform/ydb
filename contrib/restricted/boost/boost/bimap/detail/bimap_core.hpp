@@ -404,7 +404,7 @@ class bimap_core
     <
         relation,
         core_indices,
-        BOOST_DEDUCED_TYPENAME std::allocator_traits<typename parameters::allocator>::template rebind_alloc<relation> 
+        BOOST_DEDUCED_TYPENAME std::allocator_traits<typename parameters::allocator>::template rebind_alloc<relation>
 
     > core_type;
 

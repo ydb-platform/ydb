@@ -322,7 +322,7 @@ private:
 
                 case NKikimrProto::TRYLATER_SIZE: // watermark overflow
                     ResetWatchdogTimer(ctx.Now());
-                    [[fallthrough]]; 
+                    [[fallthrough]];
                 case NKikimrProto::TRYLATER: { // unexpected MsgId/SequenceId on the remote end
                     const auto& window = F(qos, Window);
 

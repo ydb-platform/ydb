@@ -26,7 +26,7 @@
 
 #ifdef GRPC_UV
 
-#error #include <uv.h> 
+#error #include <uv.h>
 
 // TODO(kpayson)  It would be nice to abstract this so we don't
 // depend on anything uv specific

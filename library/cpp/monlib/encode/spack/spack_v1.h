@@ -76,7 +76,7 @@ namespace NMonitoring {
     ///////////////////////////////////////////////////////////////////////////////
     // TSpackHeader
     ///////////////////////////////////////////////////////////////////////////////
-    struct Y_PACKED TSpackHeader { 
+    struct Y_PACKED TSpackHeader {
         ui16 Magic = 0x5053;   // "SP"
         ui16 Version;          // MSB - major version, LSB - minor version
         ui16 HeaderSize = sizeof(TSpackHeader);

@@ -118,7 +118,7 @@ namespace boost { namespace spirit
         int depth;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(basic_info_walker& operator= (basic_info_walker const&)); 
+        BOOST_DELETED_FUNCTION(basic_info_walker& operator= (basic_info_walker const&));
     };
 
     // bare-bones print support
@@ -141,7 +141,7 @@ namespace boost { namespace spirit
         Out& out;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(simple_printer& operator= (simple_printer const&)); 
+        BOOST_DELETED_FUNCTION(simple_printer& operator= (simple_printer const&));
     };
 
     template <typename Out>

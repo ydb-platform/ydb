@@ -64,13 +64,13 @@ class TFilteringRange {
     using TRawIterator = decltype(std::begin(std::declval<TContainer&>()));
     using TConditionWrapper = std::reference_wrapper<std::remove_reference_t<TCondition>>;
 public:
-    //TODO: make TIterator typedef private 
+    //TODO: make TIterator typedef private
     using TIterator = TFilteringIterator<TRawIterator, TConditionWrapper>;
- 
+
     using iterator = TIterator;
     using const_iterator = TIterator;
-    using value_type = typename TIterator::value_type; 
-    using reference = typename TIterator::reference; 
+    using value_type = typename TIterator::value_type;
+    using reference = typename TIterator::reference;
 
     TFilteringRange(TContainer&& container, TCondition&& predicate)
         : Container(std::forward<TContainer>(container))

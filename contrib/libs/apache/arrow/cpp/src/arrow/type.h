@@ -30,7 +30,7 @@
 #include "arrow/result.h"
 #include "arrow/type_fwd.h"  // IWYU pragma: export
 #include "arrow/util/checked_cast.h"
-#include "arrow/util/endian.h" 
+#include "arrow/util/endian.h"
 #include "arrow/util/macros.h"
 #include "arrow/util/variant.h"
 #include "arrow/util/visibility.h"
@@ -127,7 +127,7 @@ class ARROW_EXPORT DataType : public detail::Fingerprintable {
   ARROW_DEPRECATED("Use field(i)")
   const std::shared_ptr<Field>& child(int i) const { return field(i); }
 
-  /// Returns the child-field at index i. 
+  /// Returns the child-field at index i.
   const std::shared_ptr<Field>& field(int i) const { return children_[i]; }
 
   ARROW_DEPRECATED("Use fields()")
@@ -182,18 +182,18 @@ class ARROW_EXPORT DataType : public detail::Fingerprintable {
 ARROW_EXPORT
 std::ostream& operator<<(std::ostream& os, const DataType& type);
 
-/// \brief Return the compatible physical data type 
-/// 
-/// Some types may have distinct logical meanings but the exact same physical 
-/// representation.  For example, TimestampType has Int64Type as a physical 
-/// type (defined as TimestampType::PhysicalType). 
-/// 
-/// The return value is as follows: 
-/// - if a `PhysicalType` alias exists in the concrete type class, return 
-///   an instance of `PhysicalType`. 
-/// - otherwise, return the input type itself. 
-std::shared_ptr<DataType> GetPhysicalType(const std::shared_ptr<DataType>& type); 
- 
+/// \brief Return the compatible physical data type
+///
+/// Some types may have distinct logical meanings but the exact same physical
+/// representation.  For example, TimestampType has Int64Type as a physical
+/// type (defined as TimestampType::PhysicalType).
+///
+/// The return value is as follows:
+/// - if a `PhysicalType` alias exists in the concrete type class, return
+///   an instance of `PhysicalType`.
+/// - otherwise, return the input type itself.
+std::shared_ptr<DataType> GetPhysicalType(const std::shared_ptr<DataType>& type);
+
 /// \brief Base class for all fixed-width data types
 class ARROW_EXPORT FixedWidthType : public DataType {
  public:
@@ -626,10 +626,10 @@ class ARROW_EXPORT LargeListType : public BaseListType {
 /// \brief Concrete type class for map data
 ///
 /// Map data is nested data where each value is a variable number of
-/// key-item pairs.  Its physical representation is the same as 
-/// a list of `{key, item}` structs. 
-/// 
-/// Maps can be recursively nested, for example map(utf8, map(utf8, int32)). 
+/// key-item pairs.  Its physical representation is the same as
+/// a list of `{key, item}` structs.
+///
+/// Maps can be recursively nested, for example map(utf8, map(utf8, int32)).
 class ARROW_EXPORT MapType : public ListType {
  public:
   static constexpr Type::type type_id = Type::MAP;
@@ -876,22 +876,22 @@ class ARROW_EXPORT StructType : public NestedType {
 /// \brief Base type class for (fixed-size) decimal data
 class ARROW_EXPORT DecimalType : public FixedSizeBinaryType {
  public:
-  explicit DecimalType(Type::type type_id, int32_t byte_width, int32_t precision, 
-                       int32_t scale) 
-      : FixedSizeBinaryType(byte_width, type_id), precision_(precision), scale_(scale) {} 
+  explicit DecimalType(Type::type type_id, int32_t byte_width, int32_t precision,
+                       int32_t scale)
+      : FixedSizeBinaryType(byte_width, type_id), precision_(precision), scale_(scale) {}
 
-  /// Constructs concrete decimal types 
-  static Result<std::shared_ptr<DataType>> Make(Type::type type_id, int32_t precision, 
-                                                int32_t scale); 
- 
+  /// Constructs concrete decimal types
+  static Result<std::shared_ptr<DataType>> Make(Type::type type_id, int32_t precision,
+                                                int32_t scale);
+
   int32_t precision() const { return precision_; }
   int32_t scale() const { return scale_; }
 
-  /// \brief Returns the number of bytes needed for precision. 
-  /// 
-  /// precision must be >= 1 
-  static int32_t DecimalSize(int32_t precision); 
- 
+  /// \brief Returns the number of bytes needed for precision.
+  ///
+  /// precision must be >= 1
+  static int32_t DecimalSize(int32_t precision);
+
  protected:
   std::string ComputeFingerprint() const override;
 
@@ -900,24 +900,24 @@ class ARROW_EXPORT DecimalType : public FixedSizeBinaryType {
 };
 
 /// \brief Concrete type class for 128-bit decimal data
-/// 
-/// Arrow decimals are fixed-point decimal numbers encoded as a scaled 
-/// integer.  The precision is the number of significant digits that the 
-/// decimal type can represent; the scale is the number of digits after 
-/// the decimal point (note the scale can be negative). 
-/// 
-/// As an example, `Decimal128Type(7, 3)` can exactly represent the numbers 
-/// 1234.567 and -1234.567 (encoded internally as the 128-bit integers 
-/// 1234567 and -1234567, respectively), but neither 12345.67 nor 123.4567. 
-/// 
-/// Decimal128Type has a maximum precision of 38 significant digits 
-/// (also available as Decimal128Type::kMaxPrecision). 
-/// If higher precision is needed, consider using Decimal256Type. 
+///
+/// Arrow decimals are fixed-point decimal numbers encoded as a scaled
+/// integer.  The precision is the number of significant digits that the
+/// decimal type can represent; the scale is the number of digits after
+/// the decimal point (note the scale can be negative).
+///
+/// As an example, `Decimal128Type(7, 3)` can exactly represent the numbers
+/// 1234.567 and -1234.567 (encoded internally as the 128-bit integers
+/// 1234567 and -1234567, respectively), but neither 12345.67 nor 123.4567.
+///
+/// Decimal128Type has a maximum precision of 38 significant digits
+/// (also available as Decimal128Type::kMaxPrecision).
+/// If higher precision is needed, consider using Decimal256Type.
 class ARROW_EXPORT Decimal128Type : public DecimalType {
  public:
-  static constexpr Type::type type_id = Type::DECIMAL128; 
+  static constexpr Type::type type_id = Type::DECIMAL128;
 
-  static constexpr const char* type_name() { return "decimal128"; } 
+  static constexpr const char* type_name() { return "decimal128"; }
 
   /// Decimal128Type constructor that aborts on invalid input.
   explicit Decimal128Type(int32_t precision, int32_t scale);
@@ -926,47 +926,47 @@ class ARROW_EXPORT Decimal128Type : public DecimalType {
   static Result<std::shared_ptr<DataType>> Make(int32_t precision, int32_t scale);
 
   std::string ToString() const override;
-  std::string name() const override { return "decimal128"; } 
+  std::string name() const override { return "decimal128"; }
 
   static constexpr int32_t kMinPrecision = 1;
   static constexpr int32_t kMaxPrecision = 38;
-  static constexpr int32_t kByteWidth = 16; 
+  static constexpr int32_t kByteWidth = 16;
 };
 
-/// \brief Concrete type class for 256-bit decimal data 
-/// 
-/// Arrow decimals are fixed-point decimal numbers encoded as a scaled 
-/// integer.  The precision is the number of significant digits that the 
-/// decimal type can represent; the scale is the number of digits after 
-/// the decimal point (note the scale can be negative). 
-/// 
-/// Decimal256Type has a maximum precision of 76 significant digits. 
-/// (also available as Decimal256Type::kMaxPrecision). 
-/// 
-/// For most use cases, the maximum precision offered by Decimal128Type 
-/// is sufficient, and it will result in a more compact and more efficient 
-/// encoding. 
-class ARROW_EXPORT Decimal256Type : public DecimalType { 
- public: 
-  static constexpr Type::type type_id = Type::DECIMAL256; 
- 
-  static constexpr const char* type_name() { return "decimal256"; } 
- 
-  /// Decimal256Type constructor that aborts on invalid input. 
-  explicit Decimal256Type(int32_t precision, int32_t scale); 
- 
-  /// Decimal256Type constructor that returns an error on invalid input. 
-  static Result<std::shared_ptr<DataType>> Make(int32_t precision, int32_t scale); 
- 
-  std::string ToString() const override; 
-  std::string name() const override { return "decimal256"; } 
- 
-  static constexpr int32_t kMinPrecision = 1; 
-  static constexpr int32_t kMaxPrecision = 76; 
-  static constexpr int32_t kByteWidth = 32; 
-}; 
- 
-/// \brief Base type class for union data 
+/// \brief Concrete type class for 256-bit decimal data
+///
+/// Arrow decimals are fixed-point decimal numbers encoded as a scaled
+/// integer.  The precision is the number of significant digits that the
+/// decimal type can represent; the scale is the number of digits after
+/// the decimal point (note the scale can be negative).
+///
+/// Decimal256Type has a maximum precision of 76 significant digits.
+/// (also available as Decimal256Type::kMaxPrecision).
+///
+/// For most use cases, the maximum precision offered by Decimal128Type
+/// is sufficient, and it will result in a more compact and more efficient
+/// encoding.
+class ARROW_EXPORT Decimal256Type : public DecimalType {
+ public:
+  static constexpr Type::type type_id = Type::DECIMAL256;
+
+  static constexpr const char* type_name() { return "decimal256"; }
+
+  /// Decimal256Type constructor that aborts on invalid input.
+  explicit Decimal256Type(int32_t precision, int32_t scale);
+
+  /// Decimal256Type constructor that returns an error on invalid input.
+  static Result<std::shared_ptr<DataType>> Make(int32_t precision, int32_t scale);
+
+  std::string ToString() const override;
+  std::string name() const override { return "decimal256"; }
+
+  static constexpr int32_t kMinPrecision = 1;
+  static constexpr int32_t kMaxPrecision = 76;
+  static constexpr int32_t kByteWidth = 32;
+};
+
+/// \brief Base type class for union data
 class ARROW_EXPORT UnionType : public NestedType {
  public:
   static constexpr int8_t kMaxTypeCode = 127;
@@ -1014,17 +1014,17 @@ class ARROW_EXPORT UnionType : public NestedType {
   std::vector<int> child_ids_;
 };
 
-/// \brief Concrete type class for sparse union data 
-/// 
-/// A sparse union is a nested type where each logical value is taken from 
-/// a single child.  A buffer of 8-bit type ids indicates which child 
-/// a given logical value is to be taken from. 
-/// 
-/// In a sparse union, each child array should have the same length as the 
-/// union array, regardless of the actual number of union values that 
-/// refer to it. 
-/// 
-/// Note that, unlike most other types, unions don't have a top-level validity bitmap. 
+/// \brief Concrete type class for sparse union data
+///
+/// A sparse union is a nested type where each logical value is taken from
+/// a single child.  A buffer of 8-bit type ids indicates which child
+/// a given logical value is to be taken from.
+///
+/// In a sparse union, each child array should have the same length as the
+/// union array, regardless of the actual number of union values that
+/// refer to it.
+///
+/// Note that, unlike most other types, unions don't have a top-level validity bitmap.
 class ARROW_EXPORT SparseUnionType : public UnionType {
  public:
   static constexpr Type::type type_id = Type::SPARSE_UNION;
@@ -1041,20 +1041,20 @@ class ARROW_EXPORT SparseUnionType : public UnionType {
   std::string name() const override { return "sparse_union"; }
 };
 
-/// \brief Concrete type class for dense union data 
-/// 
-/// A dense union is a nested type where each logical value is taken from 
-/// a single child, at a specific offset.  A buffer of 8-bit type ids 
-/// indicates which child a given logical value is to be taken from, 
-/// and a buffer of 32-bit offsets indicates at which physical position 
-/// in the given child array the logical value is to be taken from. 
-/// 
-/// Unlike a sparse union, a dense union allows encoding only the child array 
-/// values which are actually referred to by the union array.  This is 
-/// counterbalanced by the additional footprint of the offsets buffer, and 
-/// the additional indirection cost when looking up values. 
-/// 
-/// Note that, unlike most other types, unions don't have a top-level validity bitmap. 
+/// \brief Concrete type class for dense union data
+///
+/// A dense union is a nested type where each logical value is taken from
+/// a single child, at a specific offset.  A buffer of 8-bit type ids
+/// indicates which child a given logical value is to be taken from,
+/// and a buffer of 32-bit offsets indicates at which physical position
+/// in the given child array the logical value is to be taken from.
+///
+/// Unlike a sparse union, a dense union allows encoding only the child array
+/// values which are actually referred to by the union array.  This is
+/// counterbalanced by the additional footprint of the offsets buffer, and
+/// the additional indirection cost when looking up values.
+///
+/// Note that, unlike most other types, unions don't have a top-level validity bitmap.
 class ARROW_EXPORT DenseUnionType : public UnionType {
  public:
   static constexpr Type::type type_id = Type::DENSE_UNION;
@@ -1413,7 +1413,7 @@ class ARROW_EXPORT DictionaryType : public FixedWidthType {
 /// FieldPaths provide a number of accessors for drilling down to potentially nested
 /// children. They are overloaded for convenience to support Schema (returns a field),
 /// DataType (returns a child field), Field (returns a child field of this field's type)
-/// Array (returns a child array), RecordBatch (returns a column). 
+/// Array (returns a child array), RecordBatch (returns a column).
 class ARROW_EXPORT FieldPath {
  public:
   FieldPath() = default;
@@ -1427,11 +1427,11 @@ class ARROW_EXPORT FieldPath {
   std::string ToString() const;
 
   size_t hash() const;
-  struct Hash { 
-    size_t operator()(const FieldPath& path) const { return path.hash(); } 
-  }; 
+  struct Hash {
+    size_t operator()(const FieldPath& path) const { return path.hash(); }
+  };
 
-  bool empty() const { return indices_.empty(); } 
+  bool empty() const { return indices_.empty(); }
   bool operator==(const FieldPath& other) const { return indices() == other.indices(); }
   bool operator!=(const FieldPath& other) const { return indices() != other.indices(); }
 
@@ -1449,9 +1449,9 @@ class ARROW_EXPORT FieldPath {
   /// \brief Retrieve the referenced column from a RecordBatch or Table
   Result<std::shared_ptr<Array>> Get(const RecordBatch& batch) const;
 
-  /// \brief Retrieve the referenced child from an Array or ArrayData 
+  /// \brief Retrieve the referenced child from an Array or ArrayData
   Result<std::shared_ptr<Array>> Get(const Array& array) const;
-  Result<std::shared_ptr<ArrayData>> Get(const ArrayData& data) const; 
+  Result<std::shared_ptr<ArrayData>> Get(const ArrayData& data) const;
 
  private:
   std::vector<int> indices_;
@@ -1543,13 +1543,13 @@ class ARROW_EXPORT FieldRef {
   std::string ToString() const;
 
   size_t hash() const;
-  struct Hash { 
-    size_t operator()(const FieldRef& ref) const { return ref.hash(); } 
-  }; 
+  struct Hash {
+    size_t operator()(const FieldRef& ref) const { return ref.hash(); }
+  };
 
-  explicit operator bool() const { return Equals(FieldPath{}); } 
-  bool operator!() const { return !Equals(FieldPath{}); } 
- 
+  explicit operator bool() const { return Equals(FieldPath{}); }
+  bool operator!() const { return !Equals(FieldPath{}); }
+
   bool IsFieldPath() const { return util::holds_alternative<FieldPath>(impl_); }
   bool IsName() const { return util::holds_alternative<std::string>(impl_); }
   bool IsNested() const {
@@ -1558,13 +1558,13 @@ class ARROW_EXPORT FieldRef {
     return true;
   }
 
-  const FieldPath* field_path() const { 
-    return IsFieldPath() ? &util::get<FieldPath>(impl_) : NULLPTR; 
-  } 
-  const std::string* name() const { 
-    return IsName() ? &util::get<std::string>(impl_) : NULLPTR; 
-  } 
- 
+  const FieldPath* field_path() const {
+    return IsFieldPath() ? &util::get<FieldPath>(impl_) : NULLPTR;
+  }
+  const std::string* name() const {
+    return IsName() ? &util::get<std::string>(impl_) : NULLPTR;
+  }
+
   /// \brief Retrieve FieldPath of every child field which matches this FieldRef.
   std::vector<FieldPath> FindAll(const Schema& schema) const;
   std::vector<FieldPath> FindAll(const Field& field) const;
@@ -1572,7 +1572,7 @@ class ARROW_EXPORT FieldRef {
   std::vector<FieldPath> FindAll(const FieldVector& fields) const;
 
   /// \brief Convenience function which applies FindAll to arg's type or schema.
-  std::vector<FieldPath> FindAll(const ArrayData& array) const; 
+  std::vector<FieldPath> FindAll(const ArrayData& array) const;
   std::vector<FieldPath> FindAll(const Array& array) const;
   std::vector<FieldPath> FindAll(const RecordBatch& batch) const;
 
@@ -1644,16 +1644,16 @@ class ARROW_EXPORT FieldRef {
   template <typename T>
   Result<GetType<T>> GetOneOrNone(const T& root) const {
     ARROW_ASSIGN_OR_RAISE(auto match, FindOneOrNone(root));
-    if (match.empty()) { 
-      return static_cast<GetType<T>>(NULLPTR); 
+    if (match.empty()) {
+      return static_cast<GetType<T>>(NULLPTR);
     }
-    return match.Get(root).ValueOrDie(); 
+    return match.Get(root).ValueOrDie();
   }
 
  private:
   void Flatten(std::vector<FieldRef> children);
 
-  util::Variant<FieldPath, std::string, std::vector<FieldRef>> impl_; 
+  util::Variant<FieldPath, std::string, std::vector<FieldRef>> impl_;
 
   ARROW_EXPORT friend void PrintTo(const FieldRef& ref, std::ostream* os);
 };
@@ -1661,16 +1661,16 @@ class ARROW_EXPORT FieldRef {
 // ----------------------------------------------------------------------
 // Schema
 
-enum class Endianness { 
-  Little = 0, 
-  Big = 1, 
-#if ARROW_LITTLE_ENDIAN 
-  Native = Little 
-#else 
-  Native = Big 
-#endif 
-}; 
- 
+enum class Endianness {
+  Little = 0,
+  Big = 1,
+#if ARROW_LITTLE_ENDIAN
+  Native = Little
+#else
+  Native = Big
+#endif
+};
+
 /// \class Schema
 /// \brief Sequence of arrow::Field objects describing the columns of a record
 /// batch or table data structure
@@ -1678,12 +1678,12 @@ class ARROW_EXPORT Schema : public detail::Fingerprintable,
                             public util::EqualityComparable<Schema>,
                             public util::ToStringOstreamable<Schema> {
  public:
-  explicit Schema(FieldVector fields, Endianness endianness, 
+  explicit Schema(FieldVector fields, Endianness endianness,
                   std::shared_ptr<const KeyValueMetadata> metadata = NULLPTR);
 
-  explicit Schema(FieldVector fields, 
-                  std::shared_ptr<const KeyValueMetadata> metadata = NULLPTR); 
- 
+  explicit Schema(FieldVector fields,
+                  std::shared_ptr<const KeyValueMetadata> metadata = NULLPTR);
+
   Schema(const Schema&);
 
   ~Schema() override;
@@ -1692,24 +1692,24 @@ class ARROW_EXPORT Schema : public detail::Fingerprintable,
   bool Equals(const Schema& other, bool check_metadata = false) const;
   bool Equals(const std::shared_ptr<Schema>& other, bool check_metadata = false) const;
 
-  /// \brief Set endianness in the schema 
-  /// 
-  /// \return new Schema 
-  std::shared_ptr<Schema> WithEndianness(Endianness endianness) const; 
- 
-  /// \brief Return endianness in the schema 
-  Endianness endianness() const; 
- 
-  /// \brief Indicate if endianness is equal to platform-native endianness 
-  bool is_native_endian() const; 
- 
+  /// \brief Set endianness in the schema
+  ///
+  /// \return new Schema
+  std::shared_ptr<Schema> WithEndianness(Endianness endianness) const;
+
+  /// \brief Return endianness in the schema
+  Endianness endianness() const;
+
+  /// \brief Indicate if endianness is equal to platform-native endianness
+  bool is_native_endian() const;
+
   /// \brief Return the number of fields (columns) in the schema
   int num_fields() const;
 
   /// Return the ith schema element. Does not boundscheck
   const std::shared_ptr<Field>& field(int i) const;
 
-  const FieldVector& fields() const; 
+  const FieldVector& fields() const;
 
   std::vector<std::string> field_names() const;
 
@@ -1717,7 +1717,7 @@ class ARROW_EXPORT Schema : public detail::Fingerprintable,
   std::shared_ptr<Field> GetFieldByName(const std::string& name) const;
 
   /// \brief Return the indices of all fields having this name in sorted order
-  FieldVector GetAllFieldsByName(const std::string& name) const; 
+  FieldVector GetAllFieldsByName(const std::string& name) const;
 
   /// Returns -1 if name not found
   int GetFieldIndex(const std::string& name) const;
@@ -1731,7 +1731,7 @@ class ARROW_EXPORT Schema : public detail::Fingerprintable,
   /// \brief The custom key-value metadata, if any
   ///
   /// \return metadata may be null
-  const std::shared_ptr<const KeyValueMetadata>& metadata() const; 
+  const std::shared_ptr<const KeyValueMetadata>& metadata() const;
 
   /// \brief Render a string representation of the schema suitable for debugging
   /// \param[in] show_metadata when true, if KeyValueMetadata is non-empty,
@@ -1771,9 +1771,9 @@ class ARROW_EXPORT Schema : public detail::Fingerprintable,
   std::unique_ptr<Impl> impl_;
 };
 
-ARROW_EXPORT 
-std::string EndiannessToString(Endianness endianness); 
- 
+ARROW_EXPORT
+std::string EndiannessToString(Endianness endianness);
+
 // ----------------------------------------------------------------------
 
 /// \brief Convenience class to incrementally construct/merge schemas.
@@ -1802,18 +1802,18 @@ class ARROW_EXPORT SchemaBuilder {
   };
 
   /// \brief Construct an empty SchemaBuilder
-  /// `field_merge_options` is only effective when `conflict_policy` == `CONFLICT_MERGE`. 
+  /// `field_merge_options` is only effective when `conflict_policy` == `CONFLICT_MERGE`.
   SchemaBuilder(
       ConflictPolicy conflict_policy = CONFLICT_APPEND,
       Field::MergeOptions field_merge_options = Field::MergeOptions::Defaults());
   /// \brief Construct a SchemaBuilder from a list of fields
-  /// `field_merge_options` is only effective when `conflict_policy` == `CONFLICT_MERGE`. 
+  /// `field_merge_options` is only effective when `conflict_policy` == `CONFLICT_MERGE`.
   SchemaBuilder(
       std::vector<std::shared_ptr<Field>> fields,
       ConflictPolicy conflict_policy = CONFLICT_APPEND,
       Field::MergeOptions field_merge_options = Field::MergeOptions::Defaults());
   /// \brief Construct a SchemaBuilder from a schema, preserving the metadata
-  /// `field_merge_options` is only effective when `conflict_policy` == `CONFLICT_MERGE`. 
+  /// `field_merge_options` is only effective when `conflict_policy` == `CONFLICT_MERGE`.
   SchemaBuilder(
       const std::shared_ptr<Schema>& schema,
       ConflictPolicy conflict_policy = CONFLICT_APPEND,

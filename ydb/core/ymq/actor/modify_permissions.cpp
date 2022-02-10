@@ -1,6 +1,6 @@
 #include "action.h"
 
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 #include <util/string/ascii.h>
 #include <util/string/vector.h>

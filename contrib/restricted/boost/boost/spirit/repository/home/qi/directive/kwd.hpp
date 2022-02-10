@@ -173,7 +173,7 @@ template <typename T>
 
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(kwd_pass_iterator& operator= (kwd_pass_iterator const&)); 
+        BOOST_DELETED_FUNCTION(kwd_pass_iterator& operator= (kwd_pass_iterator const&));
     };
 
     template <typename T>
@@ -203,7 +203,7 @@ template <typename T>
         T const exact;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(kwd_exact_iterator& operator= (kwd_exact_iterator const&)); 
+        BOOST_DELETED_FUNCTION(kwd_exact_iterator& operator= (kwd_exact_iterator const&));
     };
 
     template <typename T>
@@ -234,7 +234,7 @@ template <typename T>
         T const max;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(kwd_finite_iterator& operator= (kwd_finite_iterator const&)); 
+        BOOST_DELETED_FUNCTION(kwd_finite_iterator& operator= (kwd_finite_iterator const&));
     };
 
     template <typename T>
@@ -253,7 +253,7 @@ template <typename T>
         T const min;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(kwd_infinite_iterator& operator= (kwd_infinite_iterator const&)); 
+        BOOST_DELETED_FUNCTION(kwd_infinite_iterator& operator= (kwd_infinite_iterator const&));
     };
 
     // This class enables the transportation of parameters needed to call
@@ -437,7 +437,7 @@ template <typename T>
                 spirit::qi::literal_string<KeywordType, true> >::type keyword_string_type;
        keyword_string_type keyword;
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(kwd_parser& operator= (kwd_parser const&)); 
+        BOOST_DELETED_FUNCTION(kwd_parser& operator= (kwd_parser const&));
 
         template <typename Iterator, typename Context, typename Skipper>
         static spirit::qi::detail::fail_function<Iterator, Context, Skipper>
@@ -581,7 +581,7 @@ template <typename Subject, typename KeywordType, typename LoopIter, typename Di
 
         KeywordType keyword;
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(complex_kwd_parser& operator= (complex_kwd_parser const&)); 
+        BOOST_DELETED_FUNCTION(complex_kwd_parser& operator= (complex_kwd_parser const&));
 
         template <typename Iterator, typename Context, typename Skipper>
         static spirit::qi::detail::fail_function<Iterator, Context, Skipper>

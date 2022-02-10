@@ -77,7 +77,7 @@ namespace NYson {
     }
 
     TString TokenTypeToString(ETokenType type) {
-        return TString(1, TokenTypeToChar(type)); 
+        return TString(1, TokenTypeToChar(type));
     }
 
     ////////////////////////////////////////////////////////////////////////////////

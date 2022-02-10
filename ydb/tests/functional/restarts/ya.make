@@ -7,7 +7,7 @@ TEST_SRCS(
 )
 
 SPLIT_FACTOR(10)
-IF (SANITIZER_TYPE == "thread") 
+IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat)

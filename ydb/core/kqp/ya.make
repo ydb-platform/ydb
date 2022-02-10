@@ -23,7 +23,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow 
+    contrib/libs/apache/arrow
     library/cpp/actors/core
     library/cpp/actors/helpers
     library/cpp/digest/md5

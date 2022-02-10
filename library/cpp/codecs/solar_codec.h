@@ -121,7 +121,7 @@ namespace NCodecs {
         }
 
         TString GetName() const override {
-            return ToString(MyName()); 
+            return ToString(MyName());
         }
 
     protected:
@@ -207,9 +207,9 @@ namespace NCodecs {
 
         TString GetName() const override {
             if (CanUseShortInt()) {
-                return ToString(MyNameShortInt()); 
+                return ToString(MyNameShortInt());
             } else {
-                return ToString(MyName()); 
+                return ToString(MyName());
             }
         }
     };
@@ -231,7 +231,7 @@ namespace NCodecs {
         }
 
         TString GetName() const override {
-            return ToString(MyNameShortInt()); 
+            return ToString(MyNameShortInt());
         }
 
     protected:

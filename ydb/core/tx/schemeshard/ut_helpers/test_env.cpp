@@ -453,7 +453,7 @@ private:
 
     TPreSerialisedMessage GetSerialisedMessage(TAutoPtr<IEventBase> message) {
         TAllocChunkSerializer serializer;
-        const bool success = message->SerializeToArcadiaStream(&serializer); 
+        const bool success = message->SerializeToArcadiaStream(&serializer);
         Y_VERIFY(success);
         TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->IsExtendedFormat());
         return TPreSerialisedMessage(message->Type(), data);

@@ -27,20 +27,20 @@
 // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#include <google/protobuf/stubs/stringpiece.h> 
+#include <google/protobuf/stubs/stringpiece.h>
 
 #include <string.h>
 #include <algorithm>
 #include <climits>
-#include <string> 
+#include <string>
 #include <ostream>
 
-#include <google/protobuf/stubs/logging.h> 
- 
+#include <google/protobuf/stubs/logging.h>
+
 namespace google {
 namespace protobuf {
-namespace stringpiece_internal { 
- 
+namespace stringpiece_internal {
+
 std::ostream& operator<<(std::ostream& o, StringPiece piece) {
   o.write(piece.data(), piece.size());
   return o;
@@ -50,11 +50,11 @@ void StringPiece::LogFatalSizeTooBig(size_t size, const char* details) {
   GOOGLE_LOG(FATAL) << "size too big: " << size << " details: " << details;
 }
 
-void StringPiece::CopyToString(TProtoStringType* target) const { 
+void StringPiece::CopyToString(TProtoStringType* target) const {
   target->assign(ptr_, length_);
 }
 
-void StringPiece::AppendToString(TProtoStringType* target) const { 
+void StringPiece::AppendToString(TProtoStringType* target) const {
   target->append(ptr_, length_);
 }
 
@@ -75,9 +75,9 @@ bool StringPiece::ConsumeFromEnd(StringPiece x) {
   return false;
 }
 
-StringPiece::size_type StringPiece::copy(char* buf, size_type n, 
+StringPiece::size_type StringPiece::copy(char* buf, size_type n,
                                          size_type pos) const {
-  size_type ret = std::min(length_ - pos, n); 
+  size_type ret = std::min(length_ - pos, n);
   memcpy(buf, ptr_ + pos, ret);
   return ret;
 }
@@ -86,7 +86,7 @@ bool StringPiece::contains(StringPiece s) const {
   return find(s, 0) != npos;
 }
 
-StringPiece::size_type StringPiece::find(StringPiece s, size_type pos) const { 
+StringPiece::size_type StringPiece::find(StringPiece s, size_type pos) const {
   if (length_ <= 0 || pos > static_cast<size_type>(length_)) {
     if (length_ == 0 && pos == 0 && s.length_ == 0) return 0;
     return npos;
@@ -96,34 +96,34 @@ StringPiece::size_type StringPiece::find(StringPiece s, size_type pos) const {
   return result == ptr_ + length_ ? npos : result - ptr_;
 }
 
-StringPiece::size_type StringPiece::find(char c, size_type pos) const { 
+StringPiece::size_type StringPiece::find(char c, size_type pos) const {
   if (length_ <= 0 || pos >= static_cast<size_type>(length_)) {
     return npos;
   }
   const char* result = static_cast<const char*>(
       memchr(ptr_ + pos, c, length_ - pos));
-  return result != nullptr ? result - ptr_ : npos; 
+  return result != nullptr ? result - ptr_ : npos;
 }
 
-StringPiece::size_type StringPiece::rfind(StringPiece s, size_type pos) const { 
+StringPiece::size_type StringPiece::rfind(StringPiece s, size_type pos) const {
   if (length_ < s.length_) return npos;
   const size_t ulen = length_;
   if (s.length_ == 0) return std::min(ulen, pos);
 
-  const char* last = ptr_ + std::min(ulen - s.length_, pos) + s.length_; 
+  const char* last = ptr_ + std::min(ulen - s.length_, pos) + s.length_;
   const char* result = std::find_end(ptr_, last, s.ptr_, s.ptr_ + s.length_);
   return result != last ? result - ptr_ : npos;
 }
 
 // Search range is [0..pos] inclusive.  If pos == npos, search everything.
-StringPiece::size_type StringPiece::rfind(char c, size_type pos) const { 
+StringPiece::size_type StringPiece::rfind(char c, size_type pos) const {
   // Note: memrchr() is not available on Windows.
-  if (empty()) return npos; 
-  for (size_type i = std::min(pos, length_ - 1);; --i) { 
+  if (empty()) return npos;
+  for (size_type i = std::min(pos, length_ - 1);; --i) {
     if (ptr_[i] == c) {
       return i;
     }
-    if (i == 0) break; 
+    if (i == 0) break;
   }
   return npos;
 }
@@ -138,16 +138,16 @@ StringPiece::size_type StringPiece::rfind(char c, size_type pos) const {
 //   bool table[UCHAR_MAX + 1]
 static inline void BuildLookupTable(StringPiece characters_wanted,
                                     bool* table) {
-  const StringPiece::size_type length = characters_wanted.length(); 
+  const StringPiece::size_type length = characters_wanted.length();
   const char* const data = characters_wanted.data();
-  for (StringPiece::size_type i = 0; i < length; ++i) { 
+  for (StringPiece::size_type i = 0; i < length; ++i) {
     table[static_cast<unsigned char>(data[i])] = true;
   }
 }
 
-StringPiece::size_type StringPiece::find_first_of(StringPiece s, 
+StringPiece::size_type StringPiece::find_first_of(StringPiece s,
                                                   size_type pos) const {
-  if (empty() || s.empty()) { 
+  if (empty() || s.empty()) {
     return npos;
   }
   // Avoid the cost of BuildLookupTable() for a single-character search.
@@ -155,7 +155,7 @@ StringPiece::size_type StringPiece::find_first_of(StringPiece s,
 
   bool lookup[UCHAR_MAX + 1] = { false };
   BuildLookupTable(s, lookup);
-  for (size_type i = pos; i < length_; ++i) { 
+  for (size_type i = pos; i < length_; ++i) {
     if (lookup[static_cast<unsigned char>(ptr_[i])]) {
       return i;
     }
@@ -163,16 +163,16 @@ StringPiece::size_type StringPiece::find_first_of(StringPiece s,
   return npos;
 }
 
-StringPiece::size_type StringPiece::find_first_not_of(StringPiece s, 
+StringPiece::size_type StringPiece::find_first_not_of(StringPiece s,
                                                       size_type pos) const {
-  if (empty()) return npos; 
-  if (s.empty()) return 0; 
+  if (empty()) return npos;
+  if (s.empty()) return 0;
   // Avoid the cost of BuildLookupTable() for a single-character search.
   if (s.length_ == 1) return find_first_not_of(s.ptr_[0], pos);
 
   bool lookup[UCHAR_MAX + 1] = { false };
   BuildLookupTable(s, lookup);
-  for (size_type i = pos; i < length_; ++i) { 
+  for (size_type i = pos; i < length_; ++i) {
     if (!lookup[static_cast<unsigned char>(ptr_[i])]) {
       return i;
     }
@@ -180,9 +180,9 @@ StringPiece::size_type StringPiece::find_first_not_of(StringPiece s,
   return npos;
 }
 
-StringPiece::size_type StringPiece::find_first_not_of(char c, 
+StringPiece::size_type StringPiece::find_first_not_of(char c,
                                                       size_type pos) const {
-  if (empty()) return npos; 
+  if (empty()) return npos;
 
   for (; pos < static_cast<size_type>(length_); ++pos) {
     if (ptr_[pos] != c) {
@@ -192,65 +192,65 @@ StringPiece::size_type StringPiece::find_first_not_of(char c,
   return npos;
 }
 
-StringPiece::size_type StringPiece::find_last_of(StringPiece s, 
+StringPiece::size_type StringPiece::find_last_of(StringPiece s,
                                                  size_type pos) const {
-  if (empty() || s.empty()) return npos; 
+  if (empty() || s.empty()) return npos;
   // Avoid the cost of BuildLookupTable() for a single-character search.
   if (s.length_ == 1) return find_last_of(s.ptr_[0], pos);
 
   bool lookup[UCHAR_MAX + 1] = { false };
   BuildLookupTable(s, lookup);
-  for (size_type i = std::min(pos, length_ - 1);; --i) { 
+  for (size_type i = std::min(pos, length_ - 1);; --i) {
     if (lookup[static_cast<unsigned char>(ptr_[i])]) {
       return i;
     }
-    if (i == 0) break; 
+    if (i == 0) break;
   }
   return npos;
 }
 
-StringPiece::size_type StringPiece::find_last_not_of(StringPiece s, 
+StringPiece::size_type StringPiece::find_last_not_of(StringPiece s,
                                                      size_type pos) const {
-  if (empty()) return npos; 
+  if (empty()) return npos;
 
-  size_type i = std::min(pos, length() - 1); 
-  if (s.empty()) return i; 
+  size_type i = std::min(pos, length() - 1);
+  if (s.empty()) return i;
 
   // Avoid the cost of BuildLookupTable() for a single-character search.
   if (s.length_ == 1) return find_last_not_of(s.ptr_[0], pos);
 
   bool lookup[UCHAR_MAX + 1] = { false };
   BuildLookupTable(s, lookup);
-  for (;; --i) { 
+  for (;; --i) {
     if (!lookup[static_cast<unsigned char>(ptr_[i])]) {
       return i;
     }
-    if (i == 0) break; 
+    if (i == 0) break;
   }
   return npos;
 }
 
-StringPiece::size_type StringPiece::find_last_not_of(char c, 
+StringPiece::size_type StringPiece::find_last_not_of(char c,
                                                      size_type pos) const {
-  if (empty()) return npos; 
-  size_type i = std::min(pos, length_ - 1); 
-  for (;; --i) { 
+  if (empty()) return npos;
+  size_type i = std::min(pos, length_ - 1);
+  for (;; --i) {
     if (ptr_[i] != c) {
       return i;
     }
-    if (i == 0) break; 
+    if (i == 0) break;
   }
   return npos;
 }
 
 StringPiece StringPiece::substr(size_type pos, size_type n) const {
-  if (pos > length()) pos = length(); 
-  if (n > length_ - pos) n = length() - pos; 
+  if (pos > length()) pos = length();
+  if (n > length_ - pos) n = length() - pos;
   return StringPiece(ptr_ + pos, n);
 }
 
 const StringPiece::size_type StringPiece::npos = size_type(-1);
 
-}  // namespace stringpiece_internal 
+}  // namespace stringpiece_internal
 }  // namespace protobuf
 }  // namespace google

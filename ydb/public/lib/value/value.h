@@ -6,7 +6,7 @@
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
 
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 namespace NKikimr {
 namespace NClient {

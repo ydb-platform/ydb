@@ -1,3 +1,3 @@
-RECURSE( 
-    murmur 
-) 
+RECURSE(
+    murmur
+)

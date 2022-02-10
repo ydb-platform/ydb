@@ -7,30 +7,30 @@
 #include <cstring>
 #include <type_traits>
 
-#if (defined(__x86_64) || defined(__x86_64__) || defined(_M_X64)   \ 
+#if (defined(__x86_64) || defined(__x86_64__) || defined(_M_X64)   \
        || defined(__amd64) || defined(__aarch64__) || defined(_M_ARM64) \
        || defined(__MINGW64__)                                          \
        || defined(__s390x__)                                            \
-       || (defined(__ppc64__) || defined(__PPC64__) || defined(__ppc64le__) || defined(__PPC64LE__)) \ 
-       || defined(__EMSCRIPTEN__)) 
+       || (defined(__ppc64__) || defined(__PPC64__) || defined(__ppc64le__) || defined(__PPC64LE__)) \
+       || defined(__EMSCRIPTEN__))
 #define FASTFLOAT_64BIT
-#elif (defined(__i386) || defined(__i386__) || defined(_M_IX86)   \ 
-     || defined(__arm__) || defined(_M_ARM)                   \ 
-     || defined(__MINGW32__)) 
-#define FASTFLOAT_32BIT 
+#elif (defined(__i386) || defined(__i386__) || defined(_M_IX86)   \
+     || defined(__arm__) || defined(_M_ARM)                   \
+     || defined(__MINGW32__))
+#define FASTFLOAT_32BIT
 #else
-  // Need to check incrementally, since SIZE_MAX is a size_t, avoid overflow. 
-  // We can never tell the register width, but the SIZE_MAX is a good approximation. 
-  // UINTPTR_MAX and INTPTR_MAX are optional, so avoid them for max portability. 
-  #if SIZE_MAX == 0xffff 
-    #error Unknown platform (16-bit, unsupported) 
-  #elif SIZE_MAX == 0xffffffff 
-    #define FASTFLOAT_32BIT 
-  #elif SIZE_MAX == 0xffffffffffffffff 
-    #define FASTFLOAT_64BIT 
-  #else 
-    #error Unknown platform (not 32-bit, not 64-bit?) 
-  #endif 
+  // Need to check incrementally, since SIZE_MAX is a size_t, avoid overflow.
+  // We can never tell the register width, but the SIZE_MAX is a good approximation.
+  // UINTPTR_MAX and INTPTR_MAX are optional, so avoid them for max portability.
+  #if SIZE_MAX == 0xffff
+    #error Unknown platform (16-bit, unsupported)
+  #elif SIZE_MAX == 0xffffffff
+    #define FASTFLOAT_32BIT
+  #elif SIZE_MAX == 0xffffffffffffffff
+    #define FASTFLOAT_64BIT
+  #else
+    #error Unknown platform (not 32-bit, not 64-bit?)
+  #endif
 #endif
 
 #if ((defined(_WIN32) || defined(_WIN64)) && !defined(__clang__))
@@ -46,8 +46,8 @@
 #else
 #if defined(__APPLE__) || defined(__FreeBSD__)
 #include <machine/endian.h>
-#elif defined(sun) || defined(__sun) 
-#include <sys/byteorder.h> 
+#elif defined(sun) || defined(__sun)
+#include <sys/byteorder.h>
 #else
 #include <endian.h>
 #endif
@@ -156,7 +156,7 @@ fastfloat_really_inline int leading_zeroes(uint64_t input_num) {
 #ifdef FASTFLOAT_32BIT
 
 // slow emulation routine for 32-bit
-fastfloat_really_inline uint64_t emulu(uint32_t x, uint32_t y) { 
+fastfloat_really_inline uint64_t emulu(uint32_t x, uint32_t y) {
     return x * (uint64_t)y;
 }
 
@@ -164,12 +164,12 @@ fastfloat_really_inline uint64_t emulu(uint32_t x, uint32_t y) {
 #if !defined(__MINGW64__)
 fastfloat_really_inline uint64_t _umul128(uint64_t ab, uint64_t cd,
                                           uint64_t *hi) {
-  uint64_t ad = emulu((uint32_t)(ab >> 32), (uint32_t)cd); 
-  uint64_t bd = emulu((uint32_t)ab, (uint32_t)cd); 
-  uint64_t adbc = ad + emulu((uint32_t)ab, (uint32_t)(cd >> 32)); 
+  uint64_t ad = emulu((uint32_t)(ab >> 32), (uint32_t)cd);
+  uint64_t bd = emulu((uint32_t)ab, (uint32_t)cd);
+  uint64_t adbc = ad + emulu((uint32_t)ab, (uint32_t)(cd >> 32));
   uint64_t adbc_carry = !!(adbc < ad);
   uint64_t lo = bd + (adbc << 32);
-  *hi = emulu((uint32_t)(ab >> 32), (uint32_t)(cd >> 32)) + (adbc >> 32) + 
+  *hi = emulu((uint32_t)(ab >> 32), (uint32_t)(cd >> 32)) + (adbc >> 32) +
         (adbc_carry << 32) + !!(lo < bd);
   return lo;
 }
@@ -186,7 +186,7 @@ fastfloat_really_inline value128 full_multiplication(uint64_t a,
   // ARM64 has native support for 64-bit multiplications, no need to emulate
   answer.high = __umulh(a, b);
   answer.low = a * b;
-#elif defined(FASTFLOAT_32BIT) || (defined(_WIN64) && !defined(__clang__)) 
+#elif defined(FASTFLOAT_32BIT) || (defined(_WIN64) && !defined(__clang__))
   answer.low = _umul128(a, b, &answer.high); // _umul128 not available on ARM64
 #elif defined(FASTFLOAT_64BIT)
   __uint128_t r = ((__uint128_t)a) * b;
@@ -205,9 +205,9 @@ struct adjusted_mantissa {
   bool operator==(const adjusted_mantissa &o) const {
     return mantissa == o.mantissa && power2 == o.power2;
   }
-  bool operator!=(const adjusted_mantissa &o) const { 
-    return mantissa != o.mantissa || power2 != o.power2; 
-  } 
+  bool operator!=(const adjusted_mantissa &o) const {
+    return mantissa != o.mantissa || power2 != o.power2;
+  }
 };
 
 // Bias so we can get the real exponent with an invalid adjusted_mantissa.
@@ -222,72 +222,72 @@ constexpr static float powers_of_ten_float[] = {1e0, 1e1, 1e2, 1e3, 1e4, 1e5,
 template <typename T> struct binary_format {
   using equiv_uint = typename std::conditional<sizeof(T) == 4, uint32_t, uint64_t>::type;
 
-  static inline constexpr int mantissa_explicit_bits(); 
-  static inline constexpr int minimum_exponent(); 
-  static inline constexpr int infinite_power(); 
-  static inline constexpr int sign_index(); 
-  static inline constexpr int min_exponent_fast_path(); 
-  static inline constexpr int max_exponent_fast_path(); 
-  static inline constexpr int max_exponent_round_to_even(); 
-  static inline constexpr int min_exponent_round_to_even(); 
-  static inline constexpr uint64_t max_mantissa_fast_path(); 
-  static inline constexpr int largest_power_of_ten(); 
-  static inline constexpr int smallest_power_of_ten(); 
-  static inline constexpr T exact_power_of_ten(int64_t power); 
+  static inline constexpr int mantissa_explicit_bits();
+  static inline constexpr int minimum_exponent();
+  static inline constexpr int infinite_power();
+  static inline constexpr int sign_index();
+  static inline constexpr int min_exponent_fast_path();
+  static inline constexpr int max_exponent_fast_path();
+  static inline constexpr int max_exponent_round_to_even();
+  static inline constexpr int min_exponent_round_to_even();
+  static inline constexpr uint64_t max_mantissa_fast_path();
+  static inline constexpr int largest_power_of_ten();
+  static inline constexpr int smallest_power_of_ten();
+  static inline constexpr T exact_power_of_ten(int64_t power);
   static inline constexpr size_t max_digits();
   static inline constexpr equiv_uint exponent_mask();
   static inline constexpr equiv_uint mantissa_mask();
   static inline constexpr equiv_uint hidden_bit_mask();
 };
 
-template <> inline constexpr int binary_format<double>::mantissa_explicit_bits() { 
+template <> inline constexpr int binary_format<double>::mantissa_explicit_bits() {
   return 52;
 }
-template <> inline constexpr int binary_format<float>::mantissa_explicit_bits() { 
+template <> inline constexpr int binary_format<float>::mantissa_explicit_bits() {
   return 23;
 }
 
-template <> inline constexpr int binary_format<double>::max_exponent_round_to_even() { 
+template <> inline constexpr int binary_format<double>::max_exponent_round_to_even() {
   return 23;
 }
 
-template <> inline constexpr int binary_format<float>::max_exponent_round_to_even() { 
+template <> inline constexpr int binary_format<float>::max_exponent_round_to_even() {
   return 10;
 }
 
-template <> inline constexpr int binary_format<double>::min_exponent_round_to_even() { 
+template <> inline constexpr int binary_format<double>::min_exponent_round_to_even() {
   return -4;
 }
 
-template <> inline constexpr int binary_format<float>::min_exponent_round_to_even() { 
+template <> inline constexpr int binary_format<float>::min_exponent_round_to_even() {
   return -17;
 }
 
-template <> inline constexpr int binary_format<double>::minimum_exponent() { 
+template <> inline constexpr int binary_format<double>::minimum_exponent() {
   return -1023;
 }
-template <> inline constexpr int binary_format<float>::minimum_exponent() { 
+template <> inline constexpr int binary_format<float>::minimum_exponent() {
   return -127;
 }
 
-template <> inline constexpr int binary_format<double>::infinite_power() { 
+template <> inline constexpr int binary_format<double>::infinite_power() {
   return 0x7FF;
 }
-template <> inline constexpr int binary_format<float>::infinite_power() { 
+template <> inline constexpr int binary_format<float>::infinite_power() {
   return 0xFF;
 }
 
-template <> inline constexpr int binary_format<double>::sign_index() { return 63; } 
-template <> inline constexpr int binary_format<float>::sign_index() { return 31; } 
+template <> inline constexpr int binary_format<double>::sign_index() { return 63; }
+template <> inline constexpr int binary_format<float>::sign_index() { return 31; }
 
-template <> inline constexpr int binary_format<double>::min_exponent_fast_path() { 
+template <> inline constexpr int binary_format<double>::min_exponent_fast_path() {
 #if (FLT_EVAL_METHOD != 1) && (FLT_EVAL_METHOD != 0)
   return 0;
 #else
   return -22;
 #endif
 }
-template <> inline constexpr int binary_format<float>::min_exponent_fast_path() { 
+template <> inline constexpr int binary_format<float>::min_exponent_fast_path() {
 #if (FLT_EVAL_METHOD != 1) && (FLT_EVAL_METHOD != 0)
   return 0;
 #else
@@ -295,46 +295,46 @@ template <> inline constexpr int binary_format<float>::min_exponent_fast_path() 
 #endif
 }
 
-template <> inline constexpr int binary_format<double>::max_exponent_fast_path() { 
+template <> inline constexpr int binary_format<double>::max_exponent_fast_path() {
   return 22;
 }
-template <> inline constexpr int binary_format<float>::max_exponent_fast_path() { 
+template <> inline constexpr int binary_format<float>::max_exponent_fast_path() {
   return 10;
 }
 
-template <> inline constexpr uint64_t binary_format<double>::max_mantissa_fast_path() { 
+template <> inline constexpr uint64_t binary_format<double>::max_mantissa_fast_path() {
   return uint64_t(2) << mantissa_explicit_bits();
 }
-template <> inline constexpr uint64_t binary_format<float>::max_mantissa_fast_path() { 
+template <> inline constexpr uint64_t binary_format<float>::max_mantissa_fast_path() {
   return uint64_t(2) << mantissa_explicit_bits();
 }
 
 template <>
-inline constexpr double binary_format<double>::exact_power_of_ten(int64_t power) { 
+inline constexpr double binary_format<double>::exact_power_of_ten(int64_t power) {
   return powers_of_ten_double[power];
 }
 template <>
-inline constexpr float binary_format<float>::exact_power_of_ten(int64_t power) { 
+inline constexpr float binary_format<float>::exact_power_of_ten(int64_t power) {
 
   return powers_of_ten_float[power];
 }
 
 
 template <>
-inline constexpr int binary_format<double>::largest_power_of_ten() { 
+inline constexpr int binary_format<double>::largest_power_of_ten() {
   return 308;
 }
 template <>
-inline constexpr int binary_format<float>::largest_power_of_ten() { 
+inline constexpr int binary_format<float>::largest_power_of_ten() {
   return 38;
 }
 
 template <>
-inline constexpr int binary_format<double>::smallest_power_of_ten() { 
+inline constexpr int binary_format<double>::smallest_power_of_ten() {
   return -342;
 }
 template <>
-inline constexpr int binary_format<float>::smallest_power_of_ten() { 
+inline constexpr int binary_format<float>::smallest_power_of_ten() {
   return -65;
 }
 
@@ -387,7 +387,7 @@ fastfloat_really_inline void to_float(bool negative, adjusted_mantissa am, T &va
 #else
    // For little-endian systems:
    ::memcpy(&value, &word, sizeof(T));
-#endif 
+#endif
 }
 
 } // namespace fast_float

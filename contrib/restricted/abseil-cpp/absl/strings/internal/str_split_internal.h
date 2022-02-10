@@ -32,7 +32,7 @@
 #include <array>
 #include <initializer_list>
 #include <iterator>
-#include <tuple> 
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -64,7 +64,7 @@ class ConvertibleToStringView {
   ConvertibleToStringView(const std::string& s)  // NOLINT(runtime/explicit)
       : value_(s) {}
 
-  // Disable conversion from rvalue strings. 
+  // Disable conversion from rvalue strings.
   ConvertibleToStringView(std::string&& s) = delete;
   ConvertibleToStringView(const std::string&& s) = delete;
 
@@ -182,13 +182,13 @@ template <typename T>
 struct HasConstIterator<T, absl::void_t<typename T::const_iterator>>
     : std::true_type {};
 
-// HasEmplace<T>::value is true iff there exists a method T::emplace(). 
-template <typename T, typename = void> 
-struct HasEmplace : std::false_type {}; 
-template <typename T> 
-struct HasEmplace<T, absl::void_t<decltype(std::declval<T>().emplace())>> 
-    : std::true_type {}; 
- 
+// HasEmplace<T>::value is true iff there exists a method T::emplace().
+template <typename T, typename = void>
+struct HasEmplace : std::false_type {};
+template <typename T>
+struct HasEmplace<T, absl::void_t<decltype(std::declval<T>().emplace())>>
+    : std::true_type {};
+
 // IsInitializerList<T>::value is true iff T is an std::initializer_list. More
 // details below in Splitter<> where this is used.
 std::false_type IsInitializerListDispatch(...);  // default: No
@@ -379,43 +379,43 @@ class Splitter {
   // value.
   template <typename Container, typename First, typename Second>
   struct ConvertToContainer<Container, std::pair<const First, Second>, true> {
-    using iterator = typename Container::iterator; 
- 
+    using iterator = typename Container::iterator;
+
     Container operator()(const Splitter& splitter) const {
       Container m;
-      iterator it; 
+      iterator it;
       bool insert = true;
-      for (const absl::string_view sv : splitter) { 
+      for (const absl::string_view sv : splitter) {
         if (insert) {
-          it = InsertOrEmplace(&m, sv); 
+          it = InsertOrEmplace(&m, sv);
         } else {
-          it->second = Second(sv); 
+          it->second = Second(sv);
         }
         insert = !insert;
       }
       return m;
     }
 
-    // Inserts the key and an empty value into the map, returning an iterator to 
-    // the inserted item. We use emplace() if available, otherwise insert(). 
-    template <typename M> 
-    static absl::enable_if_t<HasEmplace<M>::value, iterator> InsertOrEmplace( 
-        M* m, absl::string_view key) { 
-      // Use piecewise_construct to support old versions of gcc in which pair 
-      // constructor can't otherwise construct string from string_view. 
-      return ToIter(m->emplace(std::piecewise_construct, std::make_tuple(key), 
-                               std::tuple<>())); 
-    } 
-    template <typename M> 
-    static absl::enable_if_t<!HasEmplace<M>::value, iterator> InsertOrEmplace( 
-        M* m, absl::string_view key) { 
-      return ToIter(m->insert(std::make_pair(First(key), Second("")))); 
-    } 
+    // Inserts the key and an empty value into the map, returning an iterator to
+    // the inserted item. We use emplace() if available, otherwise insert().
+    template <typename M>
+    static absl::enable_if_t<HasEmplace<M>::value, iterator> InsertOrEmplace(
+        M* m, absl::string_view key) {
+      // Use piecewise_construct to support old versions of gcc in which pair
+      // constructor can't otherwise construct string from string_view.
+      return ToIter(m->emplace(std::piecewise_construct, std::make_tuple(key),
+                               std::tuple<>()));
+    }
+    template <typename M>
+    static absl::enable_if_t<!HasEmplace<M>::value, iterator> InsertOrEmplace(
+        M* m, absl::string_view key) {
+      return ToIter(m->insert(std::make_pair(First(key), Second(""))));
+    }
 
-    static iterator ToIter(std::pair<iterator, bool> pair) { 
-      return pair.first; 
-    } 
-    static iterator ToIter(iterator iter) { return iter; } 
+    static iterator ToIter(std::pair<iterator, bool> pair) {
+      return pair.first;
+    }
+    static iterator ToIter(iterator iter) { return iter; }
   };
 
   StringType text_;

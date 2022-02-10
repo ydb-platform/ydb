@@ -20,7 +20,7 @@ CFLAGS(
     -DNOMINMAX
 )
 
-SRCDIR(contrib/restricted/abseil-cpp/absl/profiling/internal) 
+SRCDIR(contrib/restricted/abseil-cpp/absl/profiling/internal)
 
 SRCS(
     exponential_biased.cc

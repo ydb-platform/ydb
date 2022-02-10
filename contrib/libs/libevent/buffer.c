@@ -1421,11 +1421,11 @@ evbuffer_pullup(struct evbuffer *buf, ev_ssize_t size)
 	for (; chain != NULL && (size_t)size >= chain->off; chain = next) {
 		next = chain->next;
 
-		if (chain->buffer) { 
-			memcpy(buffer, chain->buffer + chain->misalign, chain->off); 
-			size -= chain->off; 
-			buffer += chain->off; 
-		} 
+		if (chain->buffer) {
+			memcpy(buffer, chain->buffer + chain->misalign, chain->off);
+			size -= chain->off;
+			buffer += chain->off;
+		}
 		if (chain == last_with_data)
 			removed_last_with_data = 1;
 		if (&chain->next == buf->last_with_datap)
@@ -3274,9 +3274,9 @@ evbuffer_add_file_segment(struct evbuffer *buf,
 		chain->off = length;
 	}
 
-	EVLOCK_LOCK(seg->lock, 0); 
-	++seg->refcnt; 
-	EVLOCK_UNLOCK(seg->lock, 0); 
+	EVLOCK_LOCK(seg->lock, 0);
+	++seg->refcnt;
+	EVLOCK_UNLOCK(seg->lock, 0);
 	extra->segment = seg;
 	buf->n_add_for_cb += length;
 	evbuffer_chain_insert(buf, chain);

@@ -123,13 +123,13 @@ bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value) {
         return bool(value) && (ui64)std::abs(value.Get<i64>()) < NUdf::MAX_TIMESTAMP;
 
     case NUdf::EDataSlot::TzDate:
-        return bool(value) && value.Get<ui16>() < NUdf::MAX_DATE && value.GetTimezoneId() < NUdf::GetTimezones().size(); 
+        return bool(value) && value.Get<ui16>() < NUdf::MAX_DATE && value.GetTimezoneId() < NUdf::GetTimezones().size();
 
     case NUdf::EDataSlot::TzDatetime:
-        return bool(value) && value.Get<ui32>() < NUdf::MAX_DATETIME && value.GetTimezoneId() < NUdf::GetTimezones().size(); 
+        return bool(value) && value.Get<ui32>() < NUdf::MAX_DATETIME && value.GetTimezoneId() < NUdf::GetTimezones().size();
 
     case NUdf::EDataSlot::TzTimestamp:
-        return bool(value) && value.Get<ui64>() < NUdf::MAX_TIMESTAMP && value.GetTimezoneId() < NUdf::GetTimezones().size(); 
+        return bool(value) && value.Get<ui64>() < NUdf::MAX_TIMESTAMP && value.GetTimezoneId() < NUdf::GetTimezones().size();
 
     case NUdf::EDataSlot::Utf8:
         return bool(value) && IsUtf8(value.AsStringRef());

@@ -160,7 +160,7 @@ IF (OS_WINDOWS)
     )
 ENDIF()
 
-IF (SANITIZER_TYPE == memory) 
+IF (SANITIZER_TYPE == memory)
     CFLAGS(
         -DPURIFY
     )
@@ -358,10 +358,10 @@ IF (ARCADIA_OPENSSL_DISABLE_ARMV7_TICK)
 ENDIF()
 
 END()
- 
-IF (NOT DLL_FOR AND NOT OS_IOS) 
-    RECURSE( 
-        apps 
-        dynamic 
-    ) 
-ENDIF() 
+
+IF (NOT DLL_FOR AND NOT OS_IOS)
+    RECURSE(
+        apps
+        dynamic
+    )
+ENDIF()

@@ -5,11 +5,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html. 
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -67,7 +67,7 @@
 #include "curl_memory.h"
 #include "memdebug.h"
 
-#if defined(WIN32) || defined(MSDOS) || defined(__EMX__) 
+#if defined(WIN32) || defined(MSDOS) || defined(__EMX__)
 #define DOS_FILESYSTEM 1
 #endif
 
@@ -111,7 +111,7 @@ const struct Curl_handler Curl_handler_file = {
   ZERO_NULL,                            /* connection_check */
   0,                                    /* defport */
   CURLPROTO_FILE,                       /* protocol */
-  CURLPROTO_FILE,                       /* family */ 
+  CURLPROTO_FILE,                       /* family */
   PROTOPT_NONETWORK | PROTOPT_NOURLQUERY /* flags */
 };
 
@@ -119,8 +119,8 @@ const struct Curl_handler Curl_handler_file = {
 static CURLcode file_setup_connection(struct connectdata *conn)
 {
   /* allocate the FILE specific struct */
-  conn->data->req.p.file = calloc(1, sizeof(struct FILEPROTO)); 
-  if(!conn->data->req.p.file) 
+  conn->data->req.p.file = calloc(1, sizeof(struct FILEPROTO));
+  if(!conn->data->req.p.file)
     return CURLE_OUT_OF_MEMORY;
 
   return CURLE_OK;
@@ -135,7 +135,7 @@ static CURLcode file_connect(struct connectdata *conn, bool *done)
 {
   struct Curl_easy *data = conn->data;
   char *real_path;
-  struct FILEPROTO *file = data->req.p.file; 
+  struct FILEPROTO *file = data->req.p.file;
   int fd;
 #ifdef DOS_FILESYSTEM
   size_t i;
@@ -144,7 +144,7 @@ static CURLcode file_connect(struct connectdata *conn, bool *done)
   size_t real_path_len;
 
   CURLcode result = Curl_urldecode(data, data->state.up.path, 0, &real_path,
-                                   &real_path_len, REJECT_ZERO); 
+                                   &real_path_len, REJECT_ZERO);
   if(result)
     return result;
 
@@ -209,7 +209,7 @@ static CURLcode file_connect(struct connectdata *conn, bool *done)
 static CURLcode file_done(struct connectdata *conn,
                                CURLcode status, bool premature)
 {
-  struct FILEPROTO *file = conn->data->req.p.file; 
+  struct FILEPROTO *file = conn->data->req.p.file;
   (void)status; /* not used */
   (void)premature; /* not used */
 
@@ -228,7 +228,7 @@ static CURLcode file_disconnect(struct connectdata *conn,
                                 bool dead_connection)
 {
   (void)dead_connection; /* not used */
-  return file_done(conn, 0, 0); 
+  return file_done(conn, 0, 0);
 }
 
 #ifdef DOS_FILESYSTEM
@@ -239,7 +239,7 @@ static CURLcode file_disconnect(struct connectdata *conn,
 
 static CURLcode file_upload(struct connectdata *conn)
 {
-  struct FILEPROTO *file = conn->data->req.p.file; 
+  struct FILEPROTO *file = conn->data->req.p.file;
   const char *dir = strchr(file->path, DIRSEP);
   int fd;
   int mode;
@@ -381,7 +381,7 @@ static CURLcode file_do(struct connectdata *conn, bool *done)
   if(data->set.upload)
     return file_upload(conn);
 
-  file = conn->data->req.p.file; 
+  file = conn->data->req.p.file;
 
   /* get the fd from the connection phase */
   fd = file->fd;

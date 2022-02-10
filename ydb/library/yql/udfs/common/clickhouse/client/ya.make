@@ -411,7 +411,7 @@ IF (OS_LINUX AND CLANG AND NOT WITH_VALGRIND)
         contrib/libs/pdqsort
         contrib/libs/lz4
         contrib/libs/apache/arrow/src
-        contrib/libs/apache/avro 
+        contrib/libs/apache/avro
         contrib/libs/apache/orc/c++/include
         ydb/library/yql/udfs/common/clickhouse/client/base
         ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random

@@ -20,7 +20,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    contrib/libs/apache/arrow 
+    contrib/libs/apache/arrow
     ydb/core/base
 )
 

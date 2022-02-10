@@ -3,13 +3,13 @@
 #include <util/system/compiler.h>
 
 #include <cstdlib>
-#include <new> 
+#include <new>
 
 inline void* y_allocate(size_t n) {
     void* r = malloc(n);
 
     if (r == nullptr) {
-        throw std::bad_alloc(); 
+        throw std::bad_alloc();
     }
 
     return r;
@@ -36,7 +36,7 @@ inline void* y_reallocate(void* p, size_t new_sz) {
     void* r = realloc(p, new_sz);
 
     if (r == nullptr) {
-        throw std::bad_alloc(); 
+        throw std::bad_alloc();
     }
 
     return r;

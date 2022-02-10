@@ -15,7 +15,7 @@
 
 #include <boost/assert.hpp>
 
-#include <boost/core/allocator_access.hpp> 
+#include <boost/core/allocator_access.hpp>
 #include <boost/mem_fn.hpp>
 #include <boost/heap/detail/heap_comparison.hpp>
 #include <boost/heap/detail/ordered_adaptor_iterator.hpp>
@@ -67,7 +67,7 @@ class d_ary_heap:
     typedef typename heap_base_maker::type super_t;
     typedef typename super_t::internal_type internal_type;
 
-    typedef typename boost::allocator_rebind<typename heap_base_maker::allocator_argument, internal_type>::type internal_type_allocator; 
+    typedef typename boost::allocator_rebind<typename heap_base_maker::allocator_argument, internal_type>::type internal_type_allocator;
     typedef std::vector<internal_type, internal_type_allocator> container_type;
     typedef typename container_type::const_iterator container_iterator;
 

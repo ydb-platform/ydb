@@ -43,40 +43,40 @@ struct IterationTraits {
   /// \brief a reserved value which indicates the end of iteration. By
   /// default this is NULLPTR since most iterators yield pointer types.
   /// Specialize IterationTraits if different end semantics are required.
-  /// 
-  /// Note: This should not be used to determine if a given value is a 
-  /// terminal value.  Use IsIterationEnd (which uses IsEnd) instead.  This 
-  /// is only for returning terminal values. 
+  ///
+  /// Note: This should not be used to determine if a given value is a
+  /// terminal value.  Use IsIterationEnd (which uses IsEnd) instead.  This
+  /// is only for returning terminal values.
   static T End() { return T(NULLPTR); }
- 
-  /// \brief Checks to see if the value is a terminal value. 
-  /// A method is used here since T is not neccesarily comparable in many 
-  /// cases even though it has a distinct final value 
-  static bool IsEnd(const T& val) { return val == End(); } 
+
+  /// \brief Checks to see if the value is a terminal value.
+  /// A method is used here since T is not neccesarily comparable in many
+  /// cases even though it has a distinct final value
+  static bool IsEnd(const T& val) { return val == End(); }
 };
 
 template <typename T>
-T IterationEnd() { 
-  return IterationTraits<T>::End(); 
-} 
- 
-template <typename T> 
-bool IsIterationEnd(const T& val) { 
-  return IterationTraits<T>::IsEnd(val); 
-} 
- 
-template <typename T> 
+T IterationEnd() {
+  return IterationTraits<T>::End();
+}
+
+template <typename T>
+bool IsIterationEnd(const T& val) {
+  return IterationTraits<T>::IsEnd(val);
+}
+
+template <typename T>
 struct IterationTraits<util::optional<T>> {
   /// \brief by default when iterating through a sequence of optional,
   /// nullopt indicates the end of iteration.
   /// Specialize IterationTraits if different end semantics are required.
   static util::optional<T> End() { return util::nullopt; }
 
-  /// \brief by default when iterating through a sequence of optional, 
-  /// nullopt (!has_value()) indicates the end of iteration. 
-  /// Specialize IterationTraits if different end semantics are required. 
-  static bool IsEnd(const util::optional<T>& val) { return !val.has_value(); } 
- 
+  /// \brief by default when iterating through a sequence of optional,
+  /// nullopt (!has_value()) indicates the end of iteration.
+  /// Specialize IterationTraits if different end semantics are required.
+  static bool IsEnd(const util::optional<T>& val) { return !val.has_value(); }
+
   // TODO(bkietz) The range-for loop over Iterator<optional<T>> yields
   // Result<optional<T>> which is unnecessary (since only the unyielded end optional
   // is nullopt. Add IterationTraits::GetRangeElement() to handle this case
@@ -87,8 +87,8 @@ template <typename T>
 class Iterator : public util::EqualityComparable<Iterator<T>> {
  public:
   /// \brief Iterator may be constructed from any type which has a member function
-  /// with signature Result<T> Next(); 
-  /// End of iterator is signalled by returning IteratorTraits<T>::End(); 
+  /// with signature Result<T> Next();
+  /// End of iterator is signalled by returning IteratorTraits<T>::End();
   ///
   /// The argument is moved or copied to the heap and kept in a unique_ptr<void>. Only
   /// its destructor and its Next method (which are stored in function pointers) are
@@ -116,7 +116,7 @@ class Iterator : public util::EqualityComparable<Iterator<T>> {
     for (;;) {
       ARROW_ASSIGN_OR_RAISE(auto value, Next());
 
-      if (IsIterationEnd(value)) break; 
+      if (IsIterationEnd(value)) break;
 
       ARROW_RETURN_NOT_OK(visitor(std::move(value)));
     }
@@ -210,132 +210,132 @@ class Iterator : public util::EqualityComparable<Iterator<T>> {
 };
 
 template <typename T>
-struct TransformFlow { 
-  using YieldValueType = T; 
- 
-  TransformFlow(YieldValueType value, bool ready_for_next) 
-      : finished_(false), 
-        ready_for_next_(ready_for_next), 
-        yield_value_(std::move(value)) {} 
-  TransformFlow(bool finished, bool ready_for_next) 
-      : finished_(finished), ready_for_next_(ready_for_next), yield_value_() {} 
- 
-  bool HasValue() const { return yield_value_.has_value(); } 
-  bool Finished() const { return finished_; } 
-  bool ReadyForNext() const { return ready_for_next_; } 
-  T Value() const { return *yield_value_; } 
- 
-  bool finished_ = false; 
-  bool ready_for_next_ = false; 
-  util::optional<YieldValueType> yield_value_; 
-}; 
- 
-struct TransformFinish { 
-  template <typename T> 
-  operator TransformFlow<T>() && {  // NOLINT explicit 
-    return TransformFlow<T>(true, true); 
-  } 
-}; 
- 
-struct TransformSkip { 
-  template <typename T> 
-  operator TransformFlow<T>() && {  // NOLINT explicit 
-    return TransformFlow<T>(false, true); 
-  } 
-}; 
- 
-template <typename T> 
-TransformFlow<T> TransformYield(T value = {}, bool ready_for_next = true) { 
-  return TransformFlow<T>(std::move(value), ready_for_next); 
-} 
- 
-template <typename T, typename V> 
-using Transformer = std::function<Result<TransformFlow<V>>(T)>; 
- 
-template <typename T, typename V> 
-class TransformIterator { 
- public: 
-  explicit TransformIterator(Iterator<T> it, Transformer<T, V> transformer) 
-      : it_(std::move(it)), 
-        transformer_(std::move(transformer)), 
-        last_value_(), 
-        finished_() {} 
- 
-  Result<V> Next() { 
-    while (!finished_) { 
-      ARROW_ASSIGN_OR_RAISE(util::optional<V> next, Pump()); 
-      if (next.has_value()) { 
-        return std::move(*next); 
-      } 
-      ARROW_ASSIGN_OR_RAISE(last_value_, it_.Next()); 
-    } 
-    return IterationTraits<V>::End(); 
-  } 
- 
- private: 
-  // Calls the transform function on the current value.  Can return in several ways 
-  // * If the next value is requested (e.g. skip) it will return an empty optional 
-  // * If an invalid status is encountered that will be returned 
-  // * If finished it will return IterationTraits<V>::End() 
-  // * If a value is returned by the transformer that will be returned 
-  Result<util::optional<V>> Pump() { 
-    if (!finished_ && last_value_.has_value()) { 
-      auto next_res = transformer_(*last_value_); 
-      if (!next_res.ok()) { 
-        finished_ = true; 
-        return next_res.status(); 
-      } 
-      auto next = *next_res; 
-      if (next.ReadyForNext()) { 
-        if (IsIterationEnd(*last_value_)) { 
-          finished_ = true; 
-        } 
-        last_value_.reset(); 
-      } 
-      if (next.Finished()) { 
-        finished_ = true; 
-      } 
-      if (next.HasValue()) { 
-        return next.Value(); 
-      } 
-    } 
-    if (finished_) { 
-      return IterationTraits<V>::End(); 
-    } 
-    return util::nullopt; 
-  } 
- 
-  Iterator<T> it_; 
-  Transformer<T, V> transformer_; 
-  util::optional<T> last_value_; 
-  bool finished_ = false; 
-}; 
- 
-/// \brief Transforms an iterator according to a transformer, returning a new Iterator. 
-/// 
-/// The transformer will be called on each element of the source iterator and for each 
-/// call it can yield a value, skip, or finish the iteration.  When yielding a value the 
-/// transformer can choose to consume the source item (the default, ready_for_next = true) 
-/// or to keep it and it will be called again on the same value. 
-/// 
-/// This is essentially a more generic form of the map operation that can return 0, 1, or 
-/// many values for each of the source items. 
-/// 
-/// The transformer will be exposed to the end of the source sequence 
-/// (IterationTraits::End) in case it needs to return some penultimate item(s). 
-/// 
-/// Any invalid status returned by the transformer will be returned immediately. 
-template <typename T, typename V> 
-Iterator<V> MakeTransformedIterator(Iterator<T> it, Transformer<T, V> op) { 
-  return Iterator<V>(TransformIterator<T, V>(std::move(it), std::move(op))); 
-} 
- 
-template <typename T> 
+struct TransformFlow {
+  using YieldValueType = T;
+
+  TransformFlow(YieldValueType value, bool ready_for_next)
+      : finished_(false),
+        ready_for_next_(ready_for_next),
+        yield_value_(std::move(value)) {}
+  TransformFlow(bool finished, bool ready_for_next)
+      : finished_(finished), ready_for_next_(ready_for_next), yield_value_() {}
+
+  bool HasValue() const { return yield_value_.has_value(); }
+  bool Finished() const { return finished_; }
+  bool ReadyForNext() const { return ready_for_next_; }
+  T Value() const { return *yield_value_; }
+
+  bool finished_ = false;
+  bool ready_for_next_ = false;
+  util::optional<YieldValueType> yield_value_;
+};
+
+struct TransformFinish {
+  template <typename T>
+  operator TransformFlow<T>() && {  // NOLINT explicit
+    return TransformFlow<T>(true, true);
+  }
+};
+
+struct TransformSkip {
+  template <typename T>
+  operator TransformFlow<T>() && {  // NOLINT explicit
+    return TransformFlow<T>(false, true);
+  }
+};
+
+template <typename T>
+TransformFlow<T> TransformYield(T value = {}, bool ready_for_next = true) {
+  return TransformFlow<T>(std::move(value), ready_for_next);
+}
+
+template <typename T, typename V>
+using Transformer = std::function<Result<TransformFlow<V>>(T)>;
+
+template <typename T, typename V>
+class TransformIterator {
+ public:
+  explicit TransformIterator(Iterator<T> it, Transformer<T, V> transformer)
+      : it_(std::move(it)),
+        transformer_(std::move(transformer)),
+        last_value_(),
+        finished_() {}
+
+  Result<V> Next() {
+    while (!finished_) {
+      ARROW_ASSIGN_OR_RAISE(util::optional<V> next, Pump());
+      if (next.has_value()) {
+        return std::move(*next);
+      }
+      ARROW_ASSIGN_OR_RAISE(last_value_, it_.Next());
+    }
+    return IterationTraits<V>::End();
+  }
+
+ private:
+  // Calls the transform function on the current value.  Can return in several ways
+  // * If the next value is requested (e.g. skip) it will return an empty optional
+  // * If an invalid status is encountered that will be returned
+  // * If finished it will return IterationTraits<V>::End()
+  // * If a value is returned by the transformer that will be returned
+  Result<util::optional<V>> Pump() {
+    if (!finished_ && last_value_.has_value()) {
+      auto next_res = transformer_(*last_value_);
+      if (!next_res.ok()) {
+        finished_ = true;
+        return next_res.status();
+      }
+      auto next = *next_res;
+      if (next.ReadyForNext()) {
+        if (IsIterationEnd(*last_value_)) {
+          finished_ = true;
+        }
+        last_value_.reset();
+      }
+      if (next.Finished()) {
+        finished_ = true;
+      }
+      if (next.HasValue()) {
+        return next.Value();
+      }
+    }
+    if (finished_) {
+      return IterationTraits<V>::End();
+    }
+    return util::nullopt;
+  }
+
+  Iterator<T> it_;
+  Transformer<T, V> transformer_;
+  util::optional<T> last_value_;
+  bool finished_ = false;
+};
+
+/// \brief Transforms an iterator according to a transformer, returning a new Iterator.
+///
+/// The transformer will be called on each element of the source iterator and for each
+/// call it can yield a value, skip, or finish the iteration.  When yielding a value the
+/// transformer can choose to consume the source item (the default, ready_for_next = true)
+/// or to keep it and it will be called again on the same value.
+///
+/// This is essentially a more generic form of the map operation that can return 0, 1, or
+/// many values for each of the source items.
+///
+/// The transformer will be exposed to the end of the source sequence
+/// (IterationTraits::End) in case it needs to return some penultimate item(s).
+///
+/// Any invalid status returned by the transformer will be returned immediately.
+template <typename T, typename V>
+Iterator<V> MakeTransformedIterator(Iterator<T> it, Transformer<T, V> op) {
+  return Iterator<V>(TransformIterator<T, V>(std::move(it), std::move(op)));
+}
+
+template <typename T>
 struct IterationTraits<Iterator<T>> {
   // The end condition for an Iterator of Iterators is a default constructed (null)
   // Iterator.
   static Iterator<T> End() { return Iterator<T>(); }
-  static bool IsEnd(const Iterator<T>& val) { return !val; } 
+  static bool IsEnd(const Iterator<T>& val) { return !val; }
 };
 
 template <typename Fn, typename T>
@@ -427,7 +427,7 @@ class MapIterator {
   Result<O> Next() {
     ARROW_ASSIGN_OR_RAISE(I i, it_.Next());
 
-    if (IsIterationEnd(i)) { 
+    if (IsIterationEnd(i)) {
       return IterationTraits<O>::End();
     }
 
@@ -489,7 +489,7 @@ struct FilterIterator {
       for (;;) {
         ARROW_ASSIGN_OR_RAISE(From i, it_.Next());
 
-        if (IsIterationEnd(i)) { 
+        if (IsIterationEnd(i)) {
           return IterationTraits<To>::End();
         }
 
@@ -525,12 +525,12 @@ class FlattenIterator {
   explicit FlattenIterator(Iterator<Iterator<T>> it) : parent_(std::move(it)) {}
 
   Result<T> Next() {
-    if (IsIterationEnd(child_)) { 
+    if (IsIterationEnd(child_)) {
       // Pop from parent's iterator.
       ARROW_ASSIGN_OR_RAISE(child_, parent_.Next());
 
       // Check if final iteration reached.
-      if (IsIterationEnd(child_)) { 
+      if (IsIterationEnd(child_)) {
         return IterationTraits<T>::End();
       }
 
@@ -539,7 +539,7 @@ class FlattenIterator {
 
     // Pop from child_ and check for depletion.
     ARROW_ASSIGN_OR_RAISE(T out, child_.Next());
-    if (IsIterationEnd(out)) { 
+    if (IsIterationEnd(out)) {
       // Reset state such that we pop from parent on the recursive call
       child_ = IterationTraits<Iterator<T>>::End();
 
@@ -559,10 +559,10 @@ Iterator<T> MakeFlattenIterator(Iterator<Iterator<T>> it) {
   return Iterator<T>(FlattenIterator<T>(std::move(it)));
 }
 
-template <typename Reader> 
-Iterator<typename Reader::ValueType> MakeIteratorFromReader( 
-    const std::shared_ptr<Reader>& reader) { 
-  return MakeFunctionIterator([reader] { return reader->Next(); }); 
+template <typename Reader>
+Iterator<typename Reader::ValueType> MakeIteratorFromReader(
+    const std::shared_ptr<Reader>& reader) {
+  return MakeFunctionIterator([reader] { return reader->Next(); });
 }
 
 }  // namespace arrow

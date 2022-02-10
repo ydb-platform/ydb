@@ -24,7 +24,7 @@
 #include "src/compiler/objective_c_generator.h"
 #include "src/compiler/objective_c_generator_helpers.h"
 
-#include <google/protobuf/compiler/objectivec/objectivec_helpers.h> 
+#include <google/protobuf/compiler/objectivec/objectivec_helpers.h>
 
 using ::google::protobuf::compiler::objectivec::ClassName;
 using ::grpc::protobuf::FileDescriptor;

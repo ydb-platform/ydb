@@ -49,7 +49,7 @@ namespace NPrivate {
                 using value_type = TValue;
                 using pointer = TValue*;
                 using reference = TValue&;
-                using const_reference = const TValue&; 
+                using const_reference = const TValue&;
                 using iterator_category = std::input_iterator_tag;
 
                 TValue operator*() {
@@ -85,9 +85,9 @@ namespace NPrivate {
         public:
             using iterator = TIterator;
             using const_iterator = TIterator;
-            using value_type = typename TIterator::value_type; 
-            using reference = typename TIterator::reference; 
-            using const_reference = typename TIterator::const_reference; 
+            using value_type = typename TIterator::value_type;
+            using reference = typename TIterator::reference;
+            using const_reference = typename TIterator::const_reference;
 
             TIterator begin() const {
                 return {TIteratorState{std::begin(*std::get<I>(Holders_).Ptr())...}};

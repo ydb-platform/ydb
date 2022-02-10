@@ -30,39 +30,39 @@
 
 // Author: kenton@google.com (Kenton Varda)
 
-#include <google/protobuf/stubs/common.h> 
- 
-#include <atomic> 
+#include <google/protobuf/stubs/common.h>
+
+#include <atomic>
 #include <errno.h>
 #include <sstream>
 #include <stdio.h>
 #include <vector>
 
 #ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN  // We only need minimal includes
-#endif 
+#endif
 #include <windows.h>
 #define snprintf _snprintf    // see comment in strutil.cc
 #elif defined(HAVE_PTHREAD)
 #include <pthread.h>
 #else
-#error "No suitable threading library available." 
+#error "No suitable threading library available."
 #endif
 #if defined(__ANDROID__)
 #include <android/log.h>
 #endif
 
-#include <google/protobuf/stubs/callback.h> 
-#include <google/protobuf/stubs/logging.h> 
-#include <google/protobuf/stubs/once.h> 
-#include <google/protobuf/stubs/status.h> 
-#include <google/protobuf/stubs/stringpiece.h> 
-#include <google/protobuf/stubs/strutil.h> 
-#include <google/protobuf/stubs/int128.h> 
- 
-#include <google/protobuf/port_def.inc> 
- 
+#include <google/protobuf/stubs/callback.h>
+#include <google/protobuf/stubs/logging.h>
+#include <google/protobuf/stubs/once.h>
+#include <google/protobuf/stubs/status.h>
+#include <google/protobuf/stubs/stringpiece.h>
+#include <google/protobuf/stubs/strutil.h>
+#include <google/protobuf/stubs/int128.h>
+
+#include <google/protobuf/port_def.inc>
+
 namespace google {
 namespace protobuf {
 
@@ -96,7 +96,7 @@ void VerifyVersion(int headerVersion,
   }
 }
 
-TProtoStringType VersionString(int version) { 
+TProtoStringType VersionString(int version) {
   int major = version / 1000000;
   int minor = (version / 1000) % 1000;
   int micro = version % 1000;
@@ -127,7 +127,7 @@ namespace internal {
 
 #if defined(__ANDROID__)
 inline void DefaultLogHandler(LogLevel level, const char* filename, int line,
-                              const TProtoStringType& message) { 
+                              const TProtoStringType& message) {
   if (level < GOOGLE_PROTOBUF_MIN_LOG_LEVEL) {
     return;
   }
@@ -162,7 +162,7 @@ inline void DefaultLogHandler(LogLevel level, const char* filename, int line,
 
 #else
 void DefaultLogHandler(LogLevel level, const char* filename, int line,
-                       const TProtoStringType& message) { 
+                       const TProtoStringType& message) {
   if (level < GOOGLE_PROTOBUF_MIN_LOG_LEVEL) {
     return;
   }
@@ -177,14 +177,14 @@ void DefaultLogHandler(LogLevel level, const char* filename, int line,
 #endif
 
 void NullLogHandler(LogLevel /* level */, const char* /* filename */,
-                    int /* line */, const TProtoStringType& /* message */) { 
+                    int /* line */, const TProtoStringType& /* message */) {
   // Nothing.
 }
 
 static LogHandler* log_handler_ = &DefaultLogHandler;
-static std::atomic<int> log_silencer_count_ = ATOMIC_VAR_INIT(0); 
+static std::atomic<int> log_silencer_count_ = ATOMIC_VAR_INIT(0);
 
-LogMessage& LogMessage::operator<<(const TProtoStringType& value) { 
+LogMessage& LogMessage::operator<<(const TProtoStringType& value) {
   message_ += value;
   return *this;
 }
@@ -199,7 +199,7 @@ LogMessage& LogMessage::operator<<(const StringPiece& value) {
   return *this;
 }
 
-LogMessage& LogMessage::operator<<(const util::Status& status) { 
+LogMessage& LogMessage::operator<<(const util::Status& status) {
   message_ += status.ToString();
   return *this;
 }
@@ -211,29 +211,29 @@ LogMessage& LogMessage::operator<<(const uint128& value) {
   return *this;
 }
 
-LogMessage& LogMessage::operator<<(char value) { 
-  return *this << StringPiece(&value, 1); 
-} 
- 
-LogMessage& LogMessage::operator<<(void* value) { 
-  StrAppend(&message_, strings::Hex(reinterpret_cast<uintptr_t>(value))); 
-  return *this; 
-} 
- 
+LogMessage& LogMessage::operator<<(char value) {
+  return *this << StringPiece(&value, 1);
+}
+
+LogMessage& LogMessage::operator<<(void* value) {
+  StrAppend(&message_, strings::Hex(reinterpret_cast<uintptr_t>(value)));
+  return *this;
+}
+
 #undef DECLARE_STREAM_OPERATOR
-#define DECLARE_STREAM_OPERATOR(TYPE)              \ 
-  LogMessage& LogMessage::operator<<(TYPE value) { \ 
-    StrAppend(&message_, value);                   \ 
-    return *this;                                  \ 
+#define DECLARE_STREAM_OPERATOR(TYPE)              \
+  LogMessage& LogMessage::operator<<(TYPE value) { \
+    StrAppend(&message_, value);                   \
+    return *this;                                  \
   }
 
-DECLARE_STREAM_OPERATOR(int) 
-DECLARE_STREAM_OPERATOR(unsigned int) 
-DECLARE_STREAM_OPERATOR(long)           // NOLINT(runtime/int) 
-DECLARE_STREAM_OPERATOR(unsigned long)  // NOLINT(runtime/int) 
-DECLARE_STREAM_OPERATOR(double) 
-DECLARE_STREAM_OPERATOR(long long)           // NOLINT(runtime/int) 
-DECLARE_STREAM_OPERATOR(unsigned long long)  // NOLINT(runtime/int) 
+DECLARE_STREAM_OPERATOR(int)
+DECLARE_STREAM_OPERATOR(unsigned int)
+DECLARE_STREAM_OPERATOR(long)           // NOLINT(runtime/int)
+DECLARE_STREAM_OPERATOR(unsigned long)  // NOLINT(runtime/int)
+DECLARE_STREAM_OPERATOR(double)
+DECLARE_STREAM_OPERATOR(long long)           // NOLINT(runtime/int)
+DECLARE_STREAM_OPERATOR(unsigned long long)  // NOLINT(runtime/int)
 #undef DECLARE_STREAM_OPERATOR
 
 LogMessage::LogMessage(LogLevel level, const char* filename, int line)
@@ -252,11 +252,11 @@ void LogMessage::Finish() {
   }
 
   if (level_ == LOGLEVEL_FATAL) {
-#if PROTOBUF_USE_EXCEPTIONS 
-    throw FatalException(filename_, line_, message_); 
-#else 
+#if PROTOBUF_USE_EXCEPTIONS
+    throw FatalException(filename_, line_, message_);
+#else
     abort();
-#endif 
+#endif
   }
 }
 
@@ -269,9 +269,9 @@ void LogFinisher::operator=(LogMessage& other) {
 LogHandler* SetLogHandler(LogHandler* new_func) {
   LogHandler* old = internal::log_handler_;
   if (old == &internal::NullLogHandler) {
-    old = nullptr; 
+    old = nullptr;
   }
-  if (new_func == nullptr) { 
+  if (new_func == nullptr) {
     internal::log_handler_ = &internal::NullLogHandler;
   } else {
     internal::log_handler_ = new_func;
@@ -301,7 +301,7 @@ void DoNothing() {}
 //
 // TODO(xiaofeng): PROTOBUF_LITTLE_ENDIAN is unfortunately defined in
 // google/protobuf/io/coded_stream.h and therefore can not be used here.
-// Maybe move that macro definition here in the future. 
+// Maybe move that macro definition here in the future.
 uint32 ghtonl(uint32 x) {
   union {
     uint32 result;
@@ -315,14 +315,14 @@ uint32 ghtonl(uint32 x) {
 }
 
 #if PROTOBUF_USE_EXCEPTIONS
-FatalException::~FatalException() throw() {} 
+FatalException::~FatalException() throw() {}
 
-const char* FatalException::what() const throw() { 
+const char* FatalException::what() const throw() {
   return message_.c_str();
 }
 #endif
 
 }  // namespace protobuf
 }  // namespace google
- 
-#include <google/protobuf/port_undef.inc> 
+
+#include <google/protobuf/port_undef.inc>

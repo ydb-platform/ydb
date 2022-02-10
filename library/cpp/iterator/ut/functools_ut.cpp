@@ -1,6 +1,6 @@
-#include <library/cpp/iterator/functools.h> 
+#include <library/cpp/iterator/functools.h>
 
-#include <library/cpp/testing/gtest/gtest.h> 
+#include <library/cpp/testing/gtest/gtest.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/xrange.h>
@@ -58,17 +58,17 @@ using namespace NFuncTools;
             auto it3 = std::move(it);
             Y_UNUSED(it3);
             Y_UNUSED(*it3);
-            EXPECT_TRUE(it3 == it3); 
-            EXPECT_FALSE(it3 != it3); 
+            EXPECT_TRUE(it3 == it3);
+            EXPECT_FALSE(it3 != it3);
             // const TIterator
             const auto it4 = it3;
             Y_UNUSED(*it4);
-            EXPECT_TRUE(it4 == it4); 
-            EXPECT_FALSE(it4 != it4); 
-            EXPECT_TRUE(it3 == it4); 
-            EXPECT_TRUE(it4 == it3); 
-            EXPECT_FALSE(it3 != it4); 
-            EXPECT_FALSE(it4 != it3); 
+            EXPECT_TRUE(it4 == it4);
+            EXPECT_FALSE(it4 != it4);
+            EXPECT_TRUE(it3 == it4);
+            EXPECT_TRUE(it4 == it3);
+            EXPECT_FALSE(it3 != it4);
+            EXPECT_FALSE(it4 != it3);
         }
 
         auto it = container.begin();
@@ -118,57 +118,57 @@ using namespace NFuncTools;
     }
 
 
-    TEST(FuncTools, CompileRange) { 
+    TEST(FuncTools, CompileRange) {
         TestViewCompileability(Range(19));
         TestViewCompileability(Range(10, 19));
         TestViewCompileability(Range(10, 19, 2));
     }
 
 
-    TEST(FuncTools, Enumerate) { 
-        TVector<size_t> a = {1, 2, 4}; 
-        TVector<size_t> b; 
-        TVector<size_t> c = {1}; 
+    TEST(FuncTools, Enumerate) {
+        TVector<size_t> a = {1, 2, 4};
+        TVector<size_t> b;
+        TVector<size_t> c = {1};
         for (auto& v : {a, b, c}) {
-            size_t j = 0; 
+            size_t j = 0;
             FOR_DISPATCH_2(i, x, Enumerate(v)) {
-                EXPECT_EQ(v[i], x); 
-                EXPECT_EQ(i, j++); 
-                EXPECT_LT(i, v.size()); 
+                EXPECT_EQ(v[i], x);
+                EXPECT_EQ(i, j++);
+                EXPECT_LT(i, v.size());
             }
-            EXPECT_EQ(j, v.size()); 
+            EXPECT_EQ(j, v.size());
         }
 
-        TVector<size_t> d = {0, 0, 0}; 
+        TVector<size_t> d = {0, 0, 0};
         FOR_DISPATCH_2(i, x, Enumerate(d)) {
             x = i;
         }
-        EXPECT_THAT( 
-            d, 
-            testing::ElementsAre(0u, 1u, 2u) 
-        ); 
+        EXPECT_THAT(
+            d,
+            testing::ElementsAre(0u, 1u, 2u)
+        );
     }
 
-    TEST(FuncTools, EnumerateTemporary) { 
-        TVector<size_t> a = {1, 2, 4}; 
-        TVector<size_t> b; 
-        TVector<size_t> c = {1}; 
+    TEST(FuncTools, EnumerateTemporary) {
+        TVector<size_t> a = {1, 2, 4};
+        TVector<size_t> b;
+        TVector<size_t> c = {1};
         for (auto& v : {a, b, c}) {
-            size_t j = 0; 
+            size_t j = 0;
             FOR_DISPATCH_2(i, x, Enumerate(TVector(v))) {
-                EXPECT_EQ(v[i], x); 
-                EXPECT_EQ(i, j++); 
-                EXPECT_LT(i, v.size()); 
+                EXPECT_EQ(v[i], x);
+                EXPECT_EQ(i, j++);
+                EXPECT_LT(i, v.size());
             }
-            EXPECT_EQ(j, v.size()); 
+            EXPECT_EQ(j, v.size());
         }
 
-        FOR_DISPATCH_2(i, x, Enumerate(TVector<size_t>{1, 2, 3})) { 
-            EXPECT_EQ(i + 1, x); 
+        FOR_DISPATCH_2(i, x, Enumerate(TVector<size_t>{1, 2, 3})) {
+            EXPECT_EQ(i + 1, x);
         }
     }
 
-    TEST(FuncTools, CompileEnumerate) { 
+    TEST(FuncTools, CompileEnumerate) {
         auto container = std::vector{1, 2, 3};
         TestViewCompileability(Enumerate(container));
         const auto constContainer = std::vector{1, 2, 3};
@@ -180,13 +180,13 @@ using namespace NFuncTools;
         FOR_DISPATCH_2(i, x, Enumerate(MakeMinimalisticContainer())) {
             res.push_back({i, x});
         }
-        EXPECT_EQ(res, (std::vector<std::pair<int, int>>{ 
+        EXPECT_EQ(res, (std::vector<std::pair<int, int>>{
             {0, 0}, {1, 1}, {2, 2},
         }));
     }
 
-    TEST(FuncTools, Zip) { 
-        TVector<std::pair<TVector<size_t>, TVector<size_t>>> ts = { 
+    TEST(FuncTools, Zip) {
+        TVector<std::pair<TVector<size_t>, TVector<size_t>>> ts = {
             {{1, 2, 3}, {4, 5, 6}},
             {{1, 2, 3}, {4, 5, 6, 7}},
             {{1, 2, 3, 4}, {4, 5, 6}},
@@ -194,28 +194,28 @@ using namespace NFuncTools;
         };
 
         FOR_DISPATCH_2(a, b, ts) {
-            size_t k = 0; 
+            size_t k = 0;
             FOR_DISPATCH_2(i, j, Zip(a, b)) {
-                EXPECT_EQ(++k, i); 
-                EXPECT_EQ(i + 3, j); 
+                EXPECT_EQ(++k, i);
+                EXPECT_EQ(i + 3, j);
             }
-            EXPECT_EQ(k, Min(a.size(), b.size())); 
+            EXPECT_EQ(k, Min(a.size(), b.size()));
         }
     }
 
-    TEST(FuncTools, ZipReference) { 
+    TEST(FuncTools, ZipReference) {
         TVector a = {0, 1, 2};
         TVector b = {2, 1, 0, -1};
         FOR_DISPATCH_2(ai, bi, Zip(a, b)) {
             ai = bi;
         }
-        EXPECT_THAT( 
-            a, 
-            testing::ElementsAre(2u, 1u, 0u) 
-        ); 
+        EXPECT_THAT(
+            a,
+            testing::ElementsAre(2u, 1u, 0u)
+        );
     }
 
-    TEST(FuncTools, Zip3) { 
+    TEST(FuncTools, Zip3) {
         TVector<std::tuple<TVector<i32>, TVector<i32>, TVector<i32>>> ts = {
             {{1, 2, 3}, {4, 5, 6}, {11, 3}},
             {{1, 2, 3}, {4, 5, 6, 7}, {9, 0}},
@@ -235,11 +235,11 @@ using namespace NFuncTools;
                 f.push_back({ai, bi, ci});
             }
 
-            EXPECT_EQ(e, f); 
+            EXPECT_EQ(e, f);
         }
     }
 
-    TEST(FuncTools, CompileZip) { 
+    TEST(FuncTools, CompileZip) {
         auto container = std::vector{1, 2, 3};
         TestViewCompileability(Zip(container));
         TestViewCompileability(Zip(container, container, container));
@@ -252,12 +252,12 @@ using namespace NFuncTools;
         FOR_DISPATCH_2(a, b, Zip(MakeMinimalisticContainer(), container)) {
             res.push_back({a, b});
         }
-        EXPECT_EQ(res, (std::vector<std::pair<int, int>>{ 
+        EXPECT_EQ(res, (std::vector<std::pair<int, int>>{
             {0, 1}, {1, 2}, {2, 3},
         }));
     }
 
-    TEST(FuncTools, Filter) { 
+    TEST(FuncTools, Filter) {
         TVector<TVector<i32>> ts = {
             {},
             {1},
@@ -282,11 +282,11 @@ using namespace NFuncTools;
                 c.push_back(x);
             }
 
-            EXPECT_EQ(b, c); 
+            EXPECT_EQ(b, c);
         }
     }
 
-    TEST(FuncTools, CompileFilter) { 
+    TEST(FuncTools, CompileFilter) {
         auto container = std::vector{1, 2, 3};
         auto isOdd = [](int x) { return bool(x & 1); };
         TestViewCompileability(Filter(isOdd, container));
@@ -294,7 +294,7 @@ using namespace NFuncTools;
         TestViewCompileability(Filter(isOdd, arrayContainer));
     }
 
-    TEST(FuncTools, Map) { 
+    TEST(FuncTools, Map) {
         TVector<TVector<i32>> ts = {
             {},
             {1},
@@ -315,7 +315,7 @@ using namespace NFuncTools;
                 c.push_back(x);
             }
 
-            EXPECT_EQ(b, c); 
+            EXPECT_EQ(b, c);
         }
 
         TVector floats = {1.4, 4.1, 13.9};
@@ -329,11 +329,11 @@ using namespace NFuncTools;
         for (auto i : Map<float>(Map<int>(floats))) {
             resFloat.push_back(i);
         }
-        EXPECT_EQ(ints, res); 
-        EXPECT_EQ(roundedFloats, resFloat); 
+        EXPECT_EQ(ints, res);
+        EXPECT_EQ(roundedFloats, resFloat);
     }
 
-    TEST(FuncTools, CompileMap) { 
+    TEST(FuncTools, CompileMap) {
         auto container = std::vector{1, 2, 3};
         auto sqr = [](int x) { return x * x; };
         TestViewCompileability(Map(sqr, container));
@@ -341,25 +341,25 @@ using namespace NFuncTools;
         TestViewCompileability(Map(sqr, arrayContainer));
     }
 
-    TEST(FuncTools, MapRandomAccess) { 
+    TEST(FuncTools, MapRandomAccess) {
         auto sqr = [](int x) { return x * x; };
         {
             auto container = std::vector{1, 2, 3};
             auto mapped = Map(sqr, container);
-            static_assert( 
-                std::is_same_v<decltype(mapped)::iterator::iterator_category, std::random_access_iterator_tag> 
-            ); 
+            static_assert(
+                std::is_same_v<decltype(mapped)::iterator::iterator_category, std::random_access_iterator_tag>
+            );
         }
         {
             auto container = std::set<int>{1, 2, 3};
             auto mapped = Map(sqr, container);
-            static_assert( 
-                std::is_same_v<decltype(mapped)::iterator::iterator_category, std::input_iterator_tag> 
-            ); 
+            static_assert(
+                std::is_same_v<decltype(mapped)::iterator::iterator_category, std::input_iterator_tag>
+            );
         }
     }
 
-    TEST(FuncTools, CartesianProduct) { 
+    TEST(FuncTools, CartesianProduct) {
         TVector<std::pair<TVector<i32>, TVector<i32>>> ts = {
             {{1, 2, 3}, {4, 5, 6}},
             {{1, 2, 3}, {4, 5, 6, 7}},
@@ -381,7 +381,7 @@ using namespace NFuncTools;
                 d.push_back({ai, bi});
             }
 
-            EXPECT_EQ(c, d); 
+            EXPECT_EQ(c, d);
         }
 
         {
@@ -390,12 +390,12 @@ using namespace NFuncTools;
             FOR_DISPATCH_2(gi, i, CartesianProduct(g, h)) {
                 gi.push_back(i);
             }
-            EXPECT_EQ(g[0], h); 
-            EXPECT_EQ(g[1], h); 
+            EXPECT_EQ(g[0], h);
+            EXPECT_EQ(g[1], h);
         }
     }
 
-    TEST(FuncTools, CartesianProduct3) { 
+    TEST(FuncTools, CartesianProduct3) {
         TVector<std::tuple<TVector<i32>, TVector<i32>, TVector<i32>>> ts = {
             {{1, 2, 3}, {4, 5, 6}, {11, 3}},
             {{1, 2, 3}, {4, 5, 6, 7}, {9}},
@@ -419,11 +419,11 @@ using namespace NFuncTools;
                 f.push_back({ai, bi, ci});
             }
 
-            EXPECT_EQ(e, f); 
+            EXPECT_EQ(e, f);
         }
     }
 
-    TEST(FuncTools, CompileCartesianProduct) { 
+    TEST(FuncTools, CompileCartesianProduct) {
         auto container = std::vector{1, 2, 3};
         TestViewCompileability(CartesianProduct(container, container));
         const auto constContainer = std::vector{1, 2, 3};
@@ -435,14 +435,14 @@ using namespace NFuncTools;
         FOR_DISPATCH_2(a, b, CartesianProduct(MakeMinimalisticContainer(), MakeMinimalisticContainer())) {
             res.push_back({a, b});
         }
-        EXPECT_EQ(res, (std::vector<std::pair<int, int>>{ 
+        EXPECT_EQ(res, (std::vector<std::pair<int, int>>{
             {0, 0}, {0, 1}, {0, 2},
             {1, 0}, {1, 1}, {1, 2},
             {2, 0}, {2, 1}, {2, 2},
         }));
     }
 
-    TEST(FuncTools, Concatenate2) { 
+    TEST(FuncTools, Concatenate2) {
         TVector<std::pair<TVector<i32>, TVector<i32>>> ts = {
             {{1, 2, 3}, {4, 5, 6}},
             {{1, 2, 3}, {4, 5, 6, 7}},
@@ -465,7 +465,7 @@ using namespace NFuncTools;
                 d.push_back(x);
             }
 
-            EXPECT_EQ(c, d); 
+            EXPECT_EQ(c, d);
         }
 
         {
@@ -474,11 +474,11 @@ using namespace NFuncTools;
             for (auto x : Concatenate(a, TVector<i32>{5, 6})) {
                 c.push_back(x);
             }
-            EXPECT_EQ(c, (TVector<i32>{1, 2, 3, 4, 5, 6})); 
+            EXPECT_EQ(c, (TVector<i32>{1, 2, 3, 4, 5, 6}));
         }
     }
 
-    TEST(FuncTools, CompileConcatenate) { 
+    TEST(FuncTools, CompileConcatenate) {
         auto container = std::vector{1, 2, 3};
         TestViewCompileability(Concatenate(container, container));
         const auto constContainer = std::vector{1, 2, 3};
@@ -490,42 +490,42 @@ using namespace NFuncTools;
         for (auto a : Concatenate(MakeMinimalisticContainer(), MakeMinimalisticContainer())) {
             res.push_back(a);
         }
-        EXPECT_EQ(res, (std::vector{0, 1, 2, 0, 1, 2})); 
+        EXPECT_EQ(res, (std::vector{0, 1, 2, 0, 1, 2}));
     }
 
-    TEST(FuncTools, Combo) { 
-        FOR_DISPATCH_2(i, j, Enumerate(xrange(10u))) { 
-            EXPECT_EQ(i, j); 
+    TEST(FuncTools, Combo) {
+        FOR_DISPATCH_2(i, j, Enumerate(xrange(10u))) {
+            EXPECT_EQ(i, j);
         }
 
-        FOR_DISPATCH_2(i, jk, Enumerate(Enumerate(xrange(10u)))) { 
-            EXPECT_EQ(i, std::get<0>(jk)); 
-            EXPECT_EQ(std::get<0>(jk), std::get<1>(jk)); 
+        FOR_DISPATCH_2(i, jk, Enumerate(Enumerate(xrange(10u)))) {
+            EXPECT_EQ(i, std::get<0>(jk));
+            EXPECT_EQ(std::get<0>(jk), std::get<1>(jk));
         }
 
-        TVector<size_t> a = {0, 1, 2}; 
+        TVector<size_t> a = {0, 1, 2};
         FOR_DISPATCH_2(i, j, Enumerate(Reversed(a))) {
-            EXPECT_EQ(i, 2 - j); 
+            EXPECT_EQ(i, 2 - j);
         }
 
         FOR_DISPATCH_2(i, j, Enumerate(Map<float>(a))) {
-            EXPECT_EQ(i, (size_t)j); 
+            EXPECT_EQ(i, (size_t)j);
         }
 
         FOR_DISPATCH_2(i, j, Zip(a, Map<float>(a))) {
-            EXPECT_EQ(i, (size_t)j); 
+            EXPECT_EQ(i, (size_t)j);
         }
 
         auto mapper = [](auto&& x) {
             return std::get<0>(x) + std::get<1>(x);
         };
         FOR_DISPATCH_2(i, j, Zip(a, Map(mapper, Zip(a, a)))) {
-            EXPECT_EQ(j, 2 * i); 
+            EXPECT_EQ(j, 2 * i);
         }
     }
 
 
-    TEST(FuncTools, CopyIterator) { 
+    TEST(FuncTools, CopyIterator) {
         TVector a = {1, 2, 3, 4};
         TVector b = {4, 5, 6, 7};
 
@@ -544,12 +544,12 @@ using namespace NFuncTools;
             auto iterable = Enumerate(a);
             testIterator(std::begin(iterable),
                 [](auto p2, auto p3, auto p4) {
-                    EXPECT_EQ(std::get<0>(p2), 1u); 
-                    EXPECT_EQ(std::get<1>(p2), 2); 
-                    EXPECT_EQ(std::get<0>(p3), 2u); 
-                    EXPECT_EQ(std::get<1>(p3), 3); 
-                    EXPECT_EQ(std::get<0>(p4), 3u); 
-                    EXPECT_EQ(std::get<1>(p4), 4); 
+                    EXPECT_EQ(std::get<0>(p2), 1u);
+                    EXPECT_EQ(std::get<1>(p2), 2);
+                    EXPECT_EQ(std::get<0>(p3), 2u);
+                    EXPECT_EQ(std::get<1>(p3), 3);
+                    EXPECT_EQ(std::get<0>(p4), 3u);
+                    EXPECT_EQ(std::get<1>(p4), 4);
                 });
         }
 
@@ -557,9 +557,9 @@ using namespace NFuncTools;
             auto iterable = Map([](i32 x) { return x*x; }, a);
             testIterator(std::begin(iterable),
                 [](auto p2, auto p3, auto p4) {
-                    EXPECT_EQ(p2, 4); 
-                    EXPECT_EQ(p3, 9); 
-                    EXPECT_EQ(p4, 16); 
+                    EXPECT_EQ(p2, 4);
+                    EXPECT_EQ(p3, 9);
+                    EXPECT_EQ(p4, 16);
                 });
         }
 
@@ -567,12 +567,12 @@ using namespace NFuncTools;
             auto iterable = Zip(a, b);
             testIterator(std::begin(iterable),
                 [](auto p2, auto p3, auto p4) {
-                    EXPECT_EQ(std::get<0>(p2), 2); 
-                    EXPECT_EQ(std::get<1>(p2), 5); 
-                    EXPECT_EQ(std::get<0>(p3), 3); 
-                    EXPECT_EQ(std::get<1>(p3), 6); 
-                    EXPECT_EQ(std::get<0>(p4), 4); 
-                    EXPECT_EQ(std::get<1>(p4), 7); 
+                    EXPECT_EQ(std::get<0>(p2), 2);
+                    EXPECT_EQ(std::get<1>(p2), 5);
+                    EXPECT_EQ(std::get<0>(p3), 3);
+                    EXPECT_EQ(std::get<1>(p3), 6);
+                    EXPECT_EQ(std::get<0>(p4), 4);
+                    EXPECT_EQ(std::get<1>(p4), 7);
                 });
         }
 
@@ -581,9 +581,9 @@ using namespace NFuncTools;
             auto iterable = Filter([](i32 x) { return !(x & 1); }, c);
             testIterator(std::begin(iterable),
                 [](auto p2, auto p3, auto p4) {
-                    EXPECT_EQ(p2, 4); 
-                    EXPECT_EQ(p3, 6); 
-                    EXPECT_EQ(p4, 8); 
+                    EXPECT_EQ(p2, 4);
+                    EXPECT_EQ(p3, 6);
+                    EXPECT_EQ(p4, 8);
                 });
         }
 
@@ -592,12 +592,12 @@ using namespace NFuncTools;
             // (0, 2), (0, 3), (1, 2), (1, 3)
             testIterator(std::begin(iterable),
                 [](auto p2, auto p3, auto p4) {
-                    EXPECT_EQ(std::get<0>(p2), 0); 
-                    EXPECT_EQ(std::get<1>(p2), 3); 
-                    EXPECT_EQ(std::get<0>(p3), 1); 
-                    EXPECT_EQ(std::get<1>(p3), 2); 
-                    EXPECT_EQ(std::get<0>(p4), 1); 
-                    EXPECT_EQ(std::get<1>(p4), 3); 
+                    EXPECT_EQ(std::get<0>(p2), 0);
+                    EXPECT_EQ(std::get<1>(p2), 3);
+                    EXPECT_EQ(std::get<0>(p3), 1);
+                    EXPECT_EQ(std::get<1>(p3), 2);
+                    EXPECT_EQ(std::get<0>(p4), 1);
+                    EXPECT_EQ(std::get<1>(p4), 3);
                 });
         }
     }

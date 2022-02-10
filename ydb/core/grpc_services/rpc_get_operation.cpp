@@ -4,7 +4,7 @@
 #include "rpc_import_base.h"
 #include "rpc_operation_request_base.h"
 
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>

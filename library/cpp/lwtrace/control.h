@@ -8,7 +8,7 @@
 
 #include <library/cpp/lwtrace/protos/lwtrace.pb.h>
 
-#include <google/protobuf/repeated_field.h> 
+#include <google/protobuf/repeated_field.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/hash.h>

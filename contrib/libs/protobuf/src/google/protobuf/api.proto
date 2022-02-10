@@ -40,7 +40,7 @@ option java_package = "com.google.protobuf";
 option java_outer_classname = "ApiProto";
 option java_multiple_files = true;
 option objc_class_prefix = "GPB";
-option go_package = "google.golang.org/protobuf/types/known/apipb"; 
+option go_package = "google.golang.org/protobuf/types/known/apipb";
 
 // Api is a light-weight descriptor for an API Interface.
 //
@@ -167,7 +167,7 @@ message Method {
 // The mixin construct implies that all methods in `AccessControl` are
 // also declared with same name and request/response types in
 // `Storage`. A documentation generator or annotation processor will
-// see the effective `Storage.GetAcl` method after inheriting 
+// see the effective `Storage.GetAcl` method after inheriting
 // documentation and annotations as follows:
 //
 //     service Storage {

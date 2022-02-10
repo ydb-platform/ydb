@@ -53,10 +53,10 @@ class TJsonBrowse : public TActorBootstrapped<TJsonBrowse> {
         operator const TString&() const {
             return Path;
         }
- 
-        bool operator== (const TString& otherPath) const { 
-            return Path == otherPath; 
-        } 
+
+        bool operator== (const TString& otherPath) const {
+            return Path == otherPath;
+        }
     };
 
     TVector<TPathStateInfo> Paths;

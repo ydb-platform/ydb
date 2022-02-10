@@ -1,8 +1,8 @@
 #pragma once
 
-#include <util/generic/fwd.h> 
-#include <util/generic/strbuf.h> 
-#include <util/generic/utility.h> 
+#include <util/generic/fwd.h>
+#include <util/generic/strbuf.h>
+#include <util/generic/utility.h>
 #include <util/system/defaults.h>
 
 class TMemoryMap;
@@ -136,10 +136,10 @@ public:
         return (const unsigned char*)Data();
     }
 
-    inline TStringBuf AsStringBuf() const noexcept { 
-        return TStringBuf(AsCharPtr(), size()); 
-    } 
- 
+    inline TStringBuf AsStringBuf() const noexcept {
+        return TStringBuf(AsCharPtr(), size());
+    }
+
     /// Drops the data array.
     inline void Drop() noexcept {
         TBlob().Swap(*this);

@@ -3,7 +3,7 @@
 LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
- 
+
 OWNER(
     dldmitry
     efmv

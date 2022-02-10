@@ -8,7 +8,7 @@ OWNER(
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE == "thread") 
+IF (SANITIZER_TYPE == "thread")
     TIMEOUT(2400)
     SPLIT_FACTOR(20)
     SIZE(LARGE)

@@ -463,7 +463,7 @@ namespace NKikimr {
 
             FirstRunState.RunWriteFinalLocally();
             auto guid = FirstRunState.GetGuid();
-            Y_VERIFY(guid); 
+            Y_VERIFY(guid);
             ui64 dbBirthLsn = 0;
             auto msg = TEvSyncerCommit::LocalFinal(guid, dbBirthLsn);
             ctx.Send(CommitterId, msg.release());
@@ -491,7 +491,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         void Finish(const TActorContext &ctx) {
             auto guid = FirstRunState.GetGuid();
-            Y_VERIFY(guid); 
+            Y_VERIFY(guid);
             ctx.Send(NotifyId, new TEvSyncerGuidFirstRunDone(guid));
             LOG_DEBUG(ctx, BS_SYNCER,
                       VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: FINISH"));

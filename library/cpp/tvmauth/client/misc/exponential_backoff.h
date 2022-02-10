@@ -4,8 +4,8 @@
 #include <util/random/normal.h>
 #include <util/system/event.h>
 
-#include <atomic> 
- 
+#include <atomic>
+
 namespace NTvmAuth {
     // https://habr.com/ru/post/227225/
     class TExponentialBackoff {

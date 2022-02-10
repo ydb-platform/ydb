@@ -4,7 +4,7 @@
 #include <util/generic/yexception.h>
 
 #define ZSTD_STATIC_LINKING_ONLY
-#include <contrib/libs/zstd/include/zstd.h> 
+#include <contrib/libs/zstd/include/zstd.h>
 
 namespace {
     inline void CheckError(const char* op, size_t code) {

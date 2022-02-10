@@ -304,7 +304,7 @@ protected:
         // ISO/IEC 14882:1998(E), ISO/IEC 14882:2003(E), 21.3.4 ('... the const version')
         const TStringType s(Data_._123456());
 
-        UNIT_ASSERT(s[s.size()] == 0); 
+        UNIT_ASSERT(s[s.size()] == 0);
     }
 
     // Allowed since C++17, see http://www.open-std.org/jtc1/sc22/wg21/docs/lwg-defects.html#2475
@@ -474,15 +474,15 @@ protected:
     void capacity() {
         TStringType s;
 
-        UNIT_ASSERT(s.capacity() < s.max_size()); 
-        UNIT_ASSERT(s.capacity() >= s.size()); 
+        UNIT_ASSERT(s.capacity() < s.max_size());
+        UNIT_ASSERT(s.capacity() >= s.size());
 
         for (int i = 0; i < 18; ++i) {
             s += ' ';
 
-            UNIT_ASSERT(s.capacity() > 0); 
-            UNIT_ASSERT(s.capacity() < s.max_size()); 
-            UNIT_ASSERT(s.capacity() >= s.size()); 
+            UNIT_ASSERT(s.capacity() > 0);
+            UNIT_ASSERT(s.capacity() < s.max_size());
+            UNIT_ASSERT(s.capacity() >= s.size());
         }
     }
 
@@ -610,13 +610,13 @@ protected:
 
         TStringType test(Data.aba());
 
-        UNIT_ASSERT(test.rfind(Data.a(), 2, 1) == 2); 
-        UNIT_ASSERT(test.rfind(Data.a(), 1, 1) == 0); 
-        UNIT_ASSERT(test.rfind(Data.a(), 0, 1) == 0); 
+        UNIT_ASSERT(test.rfind(Data.a(), 2, 1) == 2);
+        UNIT_ASSERT(test.rfind(Data.a(), 1, 1) == 0);
+        UNIT_ASSERT(test.rfind(Data.a(), 0, 1) == 0);
 
-        UNIT_ASSERT(test.rfind(*Data.a(), 2) == 2); 
-        UNIT_ASSERT(test.rfind(*Data.a(), 1) == 0); 
-        UNIT_ASSERT(test.rfind(*Data.a(), 0) == 0); 
+        UNIT_ASSERT(test.rfind(*Data.a(), 2) == 2);
+        UNIT_ASSERT(test.rfind(*Data.a(), 1) == 0);
+        UNIT_ASSERT(test.rfind(*Data.a(), 0) == 0);
     }
 #endif
     void find_last_not_of() {
@@ -682,7 +682,7 @@ protected:
         i = s.begin();
         ci = s.begin() + 1;
         s.replace(i, i, ci, ci + 1);
-        UNIT_ASSERT(s == Data._2123456()); 
+        UNIT_ASSERT(s == Data._2123456());
 
         s = Data._123456();
         s.replace(s.begin() + 4, s.end(), cs.begin(), cs.end());
@@ -749,36 +749,36 @@ public:
     UNIT_TEST(TestIterators);
     UNIT_TEST(TestReverseIterators);
     UNIT_TEST(TestAppendUtf16)
-    UNIT_TEST(TestFillingAssign) 
-    UNIT_TEST(TestStdStreamApi) 
+    UNIT_TEST(TestFillingAssign)
+    UNIT_TEST(TestStdStreamApi)
     //UNIT_TEST(TestOperatorsCI); must fail
     UNIT_TEST_SUITE_END();
 
     void TestAppendUtf16() {
-        TString appended = TString("А роза упала").AppendUtf16(u" на лапу Азора"); 
-        UNIT_ASSERT(appended == "А роза упала на лапу Азора"); 
+        TString appended = TString("А роза упала").AppendUtf16(u" на лапу Азора");
+        UNIT_ASSERT(appended == "А роза упала на лапу Азора");
     }
- 
-    void TestFillingAssign() { 
-        TString s("abc"); 
-        s.assign(5, 'a'); 
-        UNIT_ASSERT_VALUES_EQUAL(s, "aaaaa"); 
-    } 
- 
-    void TestStdStreamApi() { 
-        const TString data = "abracadabra"; 
-        std::stringstream ss; 
-        ss << data; 
- 
-        UNIT_ASSERT_VALUES_EQUAL(data, ss.str()); 
- 
+
+    void TestFillingAssign() {
+        TString s("abc");
+        s.assign(5, 'a');
+        UNIT_ASSERT_VALUES_EQUAL(s, "aaaaa");
+    }
+
+    void TestStdStreamApi() {
+        const TString data = "abracadabra";
+        std::stringstream ss;
+        ss << data;
+
+        UNIT_ASSERT_VALUES_EQUAL(data, ss.str());
+
         ss << '\n'
            << data << std::endl;
- 
+
         TString read = "xxx";
-        ss >> read; 
-        UNIT_ASSERT_VALUES_EQUAL(read, data); 
-    } 
+        ss >> read;
+        UNIT_ASSERT_VALUES_EQUAL(read, data);
+    }
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TStringTest);
@@ -885,7 +885,7 @@ private:
     void TestLetOperator() {
         TUtf16String str;
 
-        str = wchar16('X'); 
+        str = wchar16('X');
         UNIT_ASSERT(str == TUtf16String::FromAscii("X"));
 
         const TUtf16String hello = TUtf16String::FromAscii("hello");
@@ -1083,7 +1083,7 @@ private:
     void TestLetOperator() {
         TUtf32String str;
 
-        str = wchar32('X'); 
+        str = wchar32('X');
         UNIT_ASSERT(str == TUtf32String::FromAscii("X"));
 
         const TUtf32String hello = TUtf32String::FromAscii("hello");
@@ -1176,20 +1176,20 @@ public:
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TWideStringStdTest);
- 
-Y_UNIT_TEST_SUITE(TStringConversionTest) { 
-    Y_UNIT_TEST(ConversionToStdStringTest) { 
-        TString abra = "cadabra"; 
-        std::string stdAbra = abra; 
-        UNIT_ASSERT_VALUES_EQUAL(stdAbra, "cadabra"); 
-    } 
- 
-    Y_UNIT_TEST(ConversionToStdStringViewTest) { 
-        TString abra = "cadabra"; 
-        std::string_view stdAbra = abra; 
-        UNIT_ASSERT_VALUES_EQUAL(stdAbra, "cadabra"); 
-    } 
-} 
+
+Y_UNIT_TEST_SUITE(TStringConversionTest) {
+    Y_UNIT_TEST(ConversionToStdStringTest) {
+        TString abra = "cadabra";
+        std::string stdAbra = abra;
+        UNIT_ASSERT_VALUES_EQUAL(stdAbra, "cadabra");
+    }
+
+    Y_UNIT_TEST(ConversionToStdStringViewTest) {
+        TString abra = "cadabra";
+        std::string_view stdAbra = abra;
+        UNIT_ASSERT_VALUES_EQUAL(stdAbra, "cadabra");
+    }
+}
 
 Y_UNIT_TEST_SUITE(HashFunctorTests) {
     Y_UNIT_TEST(TestTransparency) {

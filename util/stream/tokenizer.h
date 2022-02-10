@@ -190,7 +190,7 @@ private:
 
     inline void CheckBuf() const {
         if (!Buf_.Data()) {
-            throw std::bad_alloc(); 
+            throw std::bad_alloc();
         }
     }
 

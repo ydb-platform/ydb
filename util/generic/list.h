@@ -13,8 +13,8 @@ template <class T, class A>
 class TList: public std::list<T, TReboundAllocator<A, T>> {
     using TBase = std::list<T, TReboundAllocator<A, T>>;
 
-public: 
-    using TBase::TBase; 
+public:
+    using TBase::TBase;
 
     inline explicit operator bool() const noexcept {
         return !this->empty();

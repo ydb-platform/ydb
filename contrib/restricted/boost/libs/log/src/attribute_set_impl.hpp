@@ -62,13 +62,13 @@ public:
 
 #if BOOST_LOG_ATTRIBUTE_SET_MAX_POOL_SIZE > 0
 
-    typedef T value_type; 
-    typedef size_t size_type; 
-    typedef ptrdiff_t difference_type; 
-    typedef T* pointer; 
-    typedef const T* const_pointer; 
-    typedef T& reference; 
-    typedef const T& const_reference; 
+    typedef T value_type;
+    typedef size_t size_type;
+    typedef ptrdiff_t difference_type;
+    typedef T* pointer;
+    typedef const T* const_pointer;
+    typedef T& reference;
+    typedef const T& const_reference;
 
 private:
     array< pointer, BOOST_LOG_ATTRIBUTE_SET_MAX_POOL_SIZE > m_Pool;
@@ -114,7 +114,7 @@ public:
         return *this;
     }
 
-    pointer allocate(size_type n) 
+    pointer allocate(size_type n)
     {
         if (m_PooledCount > 0)
         {
@@ -122,7 +122,7 @@ public:
             return m_Pool[m_PooledCount];
         }
         else
-            return base_type::allocate(n); 
+            return base_type::allocate(n);
     }
 
     void deallocate(pointer p, size_type n)
@@ -233,7 +233,7 @@ public:
         node_list::const_iterator it = that.m_Nodes.begin(), end = that.m_Nodes.end();
         for (; it != end; ++it)
         {
-            node* const n = m_Allocator.allocate(1); 
+            node* const n = m_Allocator.allocate(1);
             new (n) node(it->m_Value.first, it->m_Value.second);
             m_Nodes.push_back(*n);
 
@@ -274,7 +274,7 @@ public:
                 return std::make_pair(iterator(p), false);
         }
 
-        node* const n = m_Allocator.allocate(1); 
+        node* const n = m_Allocator.allocate(1);
         new (n) node(key, data);
 
         node_list::iterator it;

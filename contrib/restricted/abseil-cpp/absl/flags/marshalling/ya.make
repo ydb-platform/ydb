@@ -16,8 +16,8 @@ PEERDIR(
     contrib/restricted/abseil-cpp/absl/base/log_severity
     contrib/restricted/abseil-cpp/absl/numeric
     contrib/restricted/abseil-cpp/absl/strings
-    contrib/restricted/abseil-cpp/absl/strings/internal/absl_strings_internal 
-    contrib/restricted/abseil-cpp/absl/strings/internal/str_format 
+    contrib/restricted/abseil-cpp/absl/strings/internal/absl_strings_internal
+    contrib/restricted/abseil-cpp/absl/strings/internal/str_format
 )
 
 ADDINCL(
@@ -32,10 +32,10 @@ CFLAGS(
     -DNOMINMAX
 )
 
-SRCDIR(contrib/restricted/abseil-cpp/absl/flags) 
+SRCDIR(contrib/restricted/abseil-cpp/absl/flags)
 
 SRCS(
-    marshalling.cc 
+    marshalling.cc
 )
 
 END()

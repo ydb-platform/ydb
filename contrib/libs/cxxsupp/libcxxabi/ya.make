@@ -4,8 +4,8 @@ LIBRARY()
 
 OWNER(
     heretic
-    g:cpp-committee 
-    g:cpp-contrib 
+    g:cpp-committee
+    g:cpp-contrib
 )
 
 VERSION(2021-12-08)
@@ -13,7 +13,7 @@ VERSION(2021-12-08)
 ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/c1a14a5c3e6fef181f920b66ec159b6bfac4d457.tar.gz)
 
 LICENSE(
-    Apache-2.0 AND 
+    Apache-2.0 AND
     Apache-2.0 WITH LLVM-exception AND
     MIT AND
     NCSA
@@ -23,14 +23,14 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 ADDINCL(
     contrib/libs/cxxsupp/libcxxabi/include
-    contrib/libs/cxxsupp/libcxx/include 
-    contrib/libs/cxxsupp/libcxx 
+    contrib/libs/cxxsupp/libcxx/include
+    contrib/libs/cxxsupp/libcxx
 )
 
 NO_COMPILER_WARNINGS()
 
-NO_RUNTIME() 
- 
+NO_RUNTIME()
+
 NO_UTIL()
 
 CFLAGS(
@@ -57,9 +57,9 @@ SRCS(
     src/stdlib_typeinfo.cpp
 )
 
-SRC_CPP_PIC( 
+SRC_CPP_PIC(
     src/cxa_thread_atexit.cpp
     -fno-lto
-) 
- 
+)
+
 END()

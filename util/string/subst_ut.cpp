@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(TStringSubst) {
 
     Y_UNIT_TEST(TestSubstCharGlobal) {
         TUtf16String w = u"abcdabcd";
-        SubstGlobal(w, wchar16('b'), wchar16('B'), 3); 
+        SubstGlobal(w, wchar16('b'), wchar16('B'), 3);
         UNIT_ASSERT_EQUAL(w, u"abcdaBcd");
 
         TString s = "aaa";
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(TStringSubst) {
 
     Y_UNIT_TEST(TestSubstCharGlobalRet) {
         const TUtf16String w1 = u"abcdabcd";
-        const TUtf16String w2 = SubstGlobalCopy(w1, wchar16('b'), wchar16('B'), 3); 
+        const TUtf16String w2 = SubstGlobalCopy(w1, wchar16('b'), wchar16('B'), 3);
         UNIT_ASSERT_EQUAL(w2, u"abcdaBcd");
 
         const TString s1 = "aaa";

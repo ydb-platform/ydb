@@ -7,7 +7,7 @@ OWNER(
     g:geoapps_infra
 )
 
-VERSION(7.74.0) 
+VERSION(7.74.0)
 
 ORIGINAL_SOURCE(https://curl.haxx.se/download/curl-7.74.0.tar.bz2)
 
@@ -21,49 +21,49 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/libc_compat 
+    contrib/libs/libc_compat
     contrib/libs/openssl
     contrib/libs/zlib
 )
 
 ADDINCL(
     GLOBAL contrib/libs/curl/include
-    contrib/libs/c-ares 
+    contrib/libs/c-ares
     contrib/libs/curl/lib
 )
 
-IF (NOT OS_WINDOWS) 
+IF (NOT OS_WINDOWS)
     PEERDIR(
-        contrib/libs/nghttp2 
+        contrib/libs/nghttp2
     )
 ENDIF()
 
-NO_COMPILER_WARNINGS() 
+NO_COMPILER_WARNINGS()
 
-NO_RUNTIME() 
- 
-IF (MAPSMOBI_BUILD_TARGET) 
-    SET(ARCADIA_CURL_DNS_RESOLVER MULTITHREADED) 
+NO_RUNTIME()
+
+IF (MAPSMOBI_BUILD_TARGET)
+    SET(ARCADIA_CURL_DNS_RESOLVER MULTITHREADED)
     CFLAGS(
         -DMAPSMOBI_BUILD
     )
 ENDIF()
 
-DEFAULT(ARCADIA_CURL_DNS_RESOLVER ARES) 
+DEFAULT(ARCADIA_CURL_DNS_RESOLVER ARES)
 
 CFLAGS(
     GLOBAL -DCURL_STATICLIB
     -DBUILDING_LIBCURL
     -DHAVE_CONFIG_H
-    -DARCADIA_CURL_DNS_RESOLVER_${ARCADIA_CURL_DNS_RESOLVER} 
+    -DARCADIA_CURL_DNS_RESOLVER_${ARCADIA_CURL_DNS_RESOLVER}
 )
 
-IF (ARCADIA_CURL_DNS_RESOLVER == ARES) 
-    PEERDIR( 
-        contrib/libs/c-ares 
-    ) 
-ENDIF() 
- 
+IF (ARCADIA_CURL_DNS_RESOLVER == ARES)
+    PEERDIR(
+        contrib/libs/c-ares
+    )
+ENDIF()
+
 SRCS(
     lib/altsvc.c
     lib/amigaos.c
@@ -95,10 +95,10 @@ SRCS(
     lib/dict.c
     lib/doh.c
     lib/dotdot.c
-    lib/dynbuf.c 
+    lib/dynbuf.c
     lib/easy.c
-    lib/easygetopt.c 
-    lib/easyoptions.c 
+    lib/easygetopt.c
+    lib/easyoptions.c
     lib/escape.c
     lib/file.c
     lib/fileinfo.c
@@ -116,7 +116,7 @@ SRCS(
     lib/hostip4.c
     lib/hostip6.c
     lib/hostsyn.c
-    lib/hsts.c 
+    lib/hsts.c
     lib/http.c
     lib/http2.c
     lib/http_chunks.c
@@ -137,7 +137,7 @@ SRCS(
     lib/memdebug.c
     lib/mime.c
     lib/mprintf.c
-    lib/mqtt.c 
+    lib/mqtt.c
     lib/multi.c
     lib/netrc.c
     lib/non-ascii.c
@@ -149,7 +149,7 @@ SRCS(
     lib/progress.c
     lib/psl.c
     lib/rand.c
-    lib/rename.c 
+    lib/rename.c
     lib/rtsp.c
     lib/select.c
     lib/sendf.c
@@ -159,7 +159,7 @@ SRCS(
     lib/slist.c
     lib/smb.c
     lib/smtp.c
-    lib/socketpair.c 
+    lib/socketpair.c
     lib/socks.c
     lib/socks_gssapi.c
     lib/socks_sspi.c
@@ -190,16 +190,16 @@ SRCS(
     lib/vauth/spnego_sspi.c
     lib/vauth/vauth.c
     lib/version.c
-    lib/version_win32.c 
+    lib/version_win32.c
     lib/vquic/ngtcp2.c
     lib/vquic/quiche.c
-    lib/vquic/vquic.c 
+    lib/vquic/vquic.c
     lib/vssh/libssh.c
     lib/vssh/libssh2.c
-    lib/vssh/wolfssh.c 
-    lib/vtls/bearssl.c 
-    lib/vtls/keylog.c 
-    lib/vtls/mbedtls_threadlock.c 
+    lib/vssh/wolfssh.c
+    lib/vtls/bearssl.c
+    lib/vtls/keylog.c
+    lib/vtls/mbedtls_threadlock.c
     lib/vtls/openssl.c
     lib/vtls/sectransp.c
     lib/vtls/vtls.c

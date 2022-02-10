@@ -64,13 +64,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 ====================COPYRIGHT====================
-// Copyright 2005 Google Inc. 
+// Copyright 2005 Google Inc.
 // All rights reserved.
 
 
 ====================COPYRIGHT====================
-Copyright (C) 1994, 1995, 1996, 1999, 2000, 2001, 2002, 2004, 2005, 
-2006, 2007, 2008, 2009 Free Software Foundation, Inc. 
+Copyright (C) 1994, 1995, 1996, 1999, 2000, 2001, 2002, 2004, 2005,
+2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================

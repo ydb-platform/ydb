@@ -10,7 +10,7 @@ public:
     inline THolder(Args... args) {
         Ptr = Create(args...);
         if (!Ptr) {
-            throw std::bad_alloc(); 
+            throw std::bad_alloc();
         }
     }
 

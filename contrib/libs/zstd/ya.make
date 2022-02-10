@@ -19,7 +19,7 @@ LICENSE(
     BSD-3-Clause AND
     MIT
 )
- 
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
@@ -38,7 +38,7 @@ NO_RUNTIME()
 
 CFLAGS(
     -DZSTD_LEGACY_SUPPORT=1
-    -DZSTD_MULTITHREAD 
+    -DZSTD_MULTITHREAD
 )
 
 IF (ARCH_X86_64 AND NOT MSVC)
@@ -51,45 +51,45 @@ IF (ARCH_X86_64 AND NOT MSVC)
 ENDIF()
 
 SRCS(
-    lib/common/debug.c 
-    lib/common/entropy_common.c 
-    lib/common/error_private.c 
-    lib/common/fse_decompress.c 
-    lib/common/pool.c 
-    lib/common/threading.c 
-    lib/common/zstd_common.c 
-    lib/compress/fse_compress.c 
-    lib/compress/hist.c 
-    lib/compress/huf_compress.c 
-    lib/compress/zstd_compress.c 
-    lib/compress/zstd_compress_literals.c 
-    lib/compress/zstd_compress_sequences.c 
-    lib/compress/zstd_compress_superblock.c 
-    lib/compress/zstd_double_fast.c 
-    lib/compress/zstd_fast.c 
-    lib/compress/zstd_lazy.c 
-    lib/compress/zstd_ldm.c 
-    lib/compress/zstd_opt.c 
-    lib/compress/zstdmt_compress.c 
-    lib/decompress/huf_decompress.c 
-    lib/decompress/zstd_ddict.c 
-    lib/decompress/zstd_decompress.c 
-    lib/decompress/zstd_decompress_block.c 
-    lib/dictBuilder/cover.c 
-    lib/dictBuilder/divsufsort.c 
-    lib/dictBuilder/fastcover.c 
-    lib/dictBuilder/zdict.c 
-    lib/legacy/zstd_v01.c 
-    lib/legacy/zstd_v02.c 
-    lib/legacy/zstd_v03.c 
-    lib/legacy/zstd_v04.c 
-    lib/legacy/zstd_v05.c 
-    lib/legacy/zstd_v06.c 
-    lib/legacy/zstd_v07.c 
+    lib/common/debug.c
+    lib/common/entropy_common.c
+    lib/common/error_private.c
+    lib/common/fse_decompress.c
+    lib/common/pool.c
+    lib/common/threading.c
+    lib/common/zstd_common.c
+    lib/compress/fse_compress.c
+    lib/compress/hist.c
+    lib/compress/huf_compress.c
+    lib/compress/zstd_compress.c
+    lib/compress/zstd_compress_literals.c
+    lib/compress/zstd_compress_sequences.c
+    lib/compress/zstd_compress_superblock.c
+    lib/compress/zstd_double_fast.c
+    lib/compress/zstd_fast.c
+    lib/compress/zstd_lazy.c
+    lib/compress/zstd_ldm.c
+    lib/compress/zstd_opt.c
+    lib/compress/zstdmt_compress.c
+    lib/decompress/huf_decompress.c
+    lib/decompress/zstd_ddict.c
+    lib/decompress/zstd_decompress.c
+    lib/decompress/zstd_decompress_block.c
+    lib/dictBuilder/cover.c
+    lib/dictBuilder/divsufsort.c
+    lib/dictBuilder/fastcover.c
+    lib/dictBuilder/zdict.c
+    lib/legacy/zstd_v01.c
+    lib/legacy/zstd_v02.c
+    lib/legacy/zstd_v03.c
+    lib/legacy/zstd_v04.c
+    lib/legacy/zstd_v05.c
+    lib/legacy/zstd_v06.c
+    lib/legacy/zstd_v07.c
 )
 
 END()
- 
-RECURSE( 
-    programs/zstd 
-) 
+
+RECURSE(
+    programs/zstd
+)

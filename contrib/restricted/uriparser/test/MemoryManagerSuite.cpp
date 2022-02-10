@@ -207,7 +207,7 @@ TEST(MemoryManagerCompletenessSuite, MallocAndFreeRequiredOnly) {
 
 
 
-TEST(MemoryManagerTestingSuite, DISABLED_DefaultMemoryManager) { 
+TEST(MemoryManagerTestingSuite, DISABLED_DefaultMemoryManager) {
 	ASSERT_EQ(uriTestMemoryManager(&defaultMemoryManager), URI_SUCCESS);
 }
 
@@ -229,7 +229,7 @@ TEST(MemoryManagerTestingSuite, CompleteMemoryManager) {
 
 
 
-TEST(MemoryManagerTestingSuite, DISABLED_EmulateCalloc) { 
+TEST(MemoryManagerTestingSuite, DISABLED_EmulateCalloc) {
 	UriMemoryManager partialEmulationMemoryManager;
 	memcpy(&partialEmulationMemoryManager, &defaultMemoryManager,
 			sizeof(UriMemoryManager));

@@ -7,13 +7,13 @@
   # DB2_ODBC_CLI
   - sqlcli1.h
 
- 
-- includes: 
-  - gelf.h: contrib/restricted/libelf/include/libelf/gelf.h 
-  - libelf.h: contrib/restricted/libelf/include/libelf/libelf.h 
-  - libelf/libelf.h: contrib/restricted/libelf/include/libelf/libelf.h 
-  - libelf/sys_elf.h: contrib/restricted/libelf/include/libelf/sys_elf.h 
- 
+
+- includes:
+  - gelf.h: contrib/restricted/libelf/include/libelf/gelf.h
+  - libelf.h: contrib/restricted/libelf/include/libelf/libelf.h
+  - libelf/libelf.h: contrib/restricted/libelf/include/libelf/libelf.h
+  - libelf/sys_elf.h: contrib/restricted/libelf/include/libelf/sys_elf.h
+
 # We have lots of ADDINCLs to contrib/libs/libiconv all around the repo
 # so we need to add it to sysincl for consistent resolving.
 # We can go the other way here and remove iconv.h from all sysincl configs
@@ -147,10 +147,10 @@
     - atomic.h:      contrib/libs/zeromq/missing_includes/atomic.h
     - Mstcpip.h:     contrib/libs/zeromq/missing_includes/Mstcpip.h
 
-- source_filter: "^contrib/restricted/openal-soft" 
-  includes: 
-    - atomic.h: contrib/restricted/openal-soft/common/atomic.h 
- 
+- source_filter: "^contrib/restricted/openal-soft"
+  includes:
+    - atomic.h: contrib/restricted/openal-soft/common/atomic.h
+
 - source_filter: "^contrib/libs/ffmpeg-3"
   includes:
     - fontconfig/fontconfig.h
@@ -161,7 +161,7 @@
   includes:
     - port.h:        contrib/libs/glog/missing_includes/port.h
 
-- source_filter: "^contrib/(deprecated/onednn|libs/intel/onednn)" 
+- source_filter: "^contrib/(deprecated/onednn|libs/intel/onednn)"
   includes:
     - mkl_cblas.h: contrib/libs/intel/mkl/include/mkl_cblas.h
     - mkl_version.h: contrib/libs/intel/mkl/include/mkl_version.h

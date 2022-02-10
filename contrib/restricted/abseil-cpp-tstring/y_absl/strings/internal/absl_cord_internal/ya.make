@@ -19,7 +19,7 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/base/log_severity
     contrib/restricted/abseil-cpp-tstring/y_absl/numeric
     contrib/restricted/abseil-cpp-tstring/y_absl/strings
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/absl_strings_internal 
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/absl_strings_internal
 )
 
 ADDINCL(
@@ -28,15 +28,15 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal) 
+SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal)
 
 SRCS(
-    cord_internal.cc 
-    cord_rep_btree.cc 
-    cord_rep_btree_navigator.cc 
-    cord_rep_btree_reader.cc 
-    cord_rep_consume.cc 
-    cord_rep_ring.cc 
+    cord_internal.cc
+    cord_rep_btree.cc
+    cord_rep_btree_navigator.cc
+    cord_rep_btree_reader.cc
+    cord_rep_consume.cc
+    cord_rep_ring.cc
 )
 
 END()

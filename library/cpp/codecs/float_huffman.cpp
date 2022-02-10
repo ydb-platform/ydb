@@ -57,7 +57,7 @@ namespace NCodecs::NFloatHuff {
             {0x00000000, 0x16, 5, 32}, // whole range, 37 bits, prefix                 [01101]
         };
 
-        [[noreturn]] Y_NO_INLINE void ThrowInvalidOffset(size_t size, size_t byteOffset) { 
+        [[noreturn]] Y_NO_INLINE void ThrowInvalidOffset(size_t size, size_t byteOffset) {
             ythrow yexception() <<
                 "Decompression error: requested decoding 8 bytes past end of input buffer of " << size << " bytes size at position " << byteOffset << ". ";
         }

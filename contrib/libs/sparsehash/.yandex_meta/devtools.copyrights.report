@@ -85,14 +85,14 @@ BELONGS ya.make
     Files with this license:
         src/sparsehash/type_traits.h [1:2]
 
-KEEP     COPYRIGHT_SERVICE_LABEL e39408c802577553441f8aa6de7753a4 
+KEEP     COPYRIGHT_SERVICE_LABEL e39408c802577553441f8aa6de7753a4
 BELONGS ya.make
     License text:
-        Copyright (C) 1994, 1995, 1996, 1999, 2000, 2001, 2002, 2004, 2005, 
-        2006, 2007, 2008, 2009 Free Software Foundation, Inc. 
+        Copyright (C) 1994, 1995, 1996, 1999, 2000, 2001, 2002, 2004, 2005,
+        2006, 2007, 2008, 2009 Free Software Foundation, Inc.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        INSTALL [4:5] 
+        INSTALL [4:5]

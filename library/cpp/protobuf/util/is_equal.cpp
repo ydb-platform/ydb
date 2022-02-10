@@ -1,7 +1,7 @@
 #include "is_equal.h"
 #include "traits.h"
 
-#include <google/protobuf/descriptor.h> 
+#include <google/protobuf/descriptor.h>
 
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>

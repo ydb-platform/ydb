@@ -36,23 +36,23 @@
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_SERVICE_H__
 
 #include <map>
-#include <google/protobuf/descriptor.h> 
+#include <google/protobuf/descriptor.h>
 
 namespace google {
 namespace protobuf {
-namespace compiler { 
-namespace java { 
-class Context;            // context.h 
-class ClassNameResolver;  // name_resolver.h 
-}  // namespace java 
-}  // namespace compiler 
-namespace io { 
-class Printer;  // printer.h 
+namespace compiler {
+namespace java {
+class Context;            // context.h
+class ClassNameResolver;  // name_resolver.h
+}  // namespace java
+}  // namespace compiler
+namespace io {
+class Printer;  // printer.h
 }
-}  // namespace protobuf 
-}  // namespace google 
+}  // namespace protobuf
+}  // namespace google
 
-namespace google { 
+namespace google {
 namespace protobuf {
 namespace compiler {
 namespace java {
@@ -124,7 +124,7 @@ class ImmutableServiceGenerator : public ServiceGenerator {
                                        const MethodDescriptor* method);
 
   // Return the output type of the method.
-  TProtoStringType GetOutput(const MethodDescriptor* method); 
+  TProtoStringType GetOutput(const MethodDescriptor* method);
 
   Context* context_;
   ClassNameResolver* name_resolver_;
@@ -134,6 +134,6 @@ class ImmutableServiceGenerator : public ServiceGenerator {
 }  // namespace java
 }  // namespace compiler
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
 #endif  // NET_PROTO2_COMPILER_JAVA_SERVICE_H__

@@ -30,7 +30,7 @@ namespace {
 grpc::protobuf::util::Status ParseJson(const char* json_str,
                                        grpc::protobuf::Message* message) {
   grpc::protobuf::json::JsonParseOptions options;
-  options.case_insensitive_enum_parsing = true; 
+  options.case_insensitive_enum_parsing = true;
   return grpc::protobuf::json::JsonStringToMessage(json_str, message, options);
 }
 

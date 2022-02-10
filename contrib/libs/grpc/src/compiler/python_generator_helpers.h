@@ -81,7 +81,7 @@ TString ModuleAlias(const TString& filename,
                         const TString& import_prefix,
                         const std::vector<TString>& prefixes_to_filter) {
   TString module_name =
-      ModuleName(filename, import_prefix, prefixes_to_filter); 
+      ModuleName(filename, import_prefix, prefixes_to_filter);
   // We can't have dots in the module name, so we replace each with _dot_.
   // But that could lead to a collision between a.b and a_dot_b, so we also
   // duplicate each underscore.
@@ -109,7 +109,7 @@ bool GetModuleAndMessagePath(
 
   TString module;
   if (generator_file_name != file_name || generate_in_pb2_grpc) {
-    module = ModuleAlias(file_name, import_prefix, prefixes_to_filter) + "."; 
+    module = ModuleAlias(file_name, import_prefix, prefixes_to_filter) + ".";
   } else {
     module = "";
   }

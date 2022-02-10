@@ -124,13 +124,13 @@ public:
     typedef std::allocator< named_scope_entry > allocator_type;
 
     //  Standard types
-	typedef named_scope_entry value_type; 
-    typedef size_t size_type; 
-    typedef ptrdiff_t difference_type; 
-    typedef value_type* pointer; 
-    typedef const value_type* const_pointer; 
-    typedef value_type& reference; 
-    typedef value_type const& const_reference; 
+	typedef named_scope_entry value_type;
+    typedef size_t size_type;
+    typedef ptrdiff_t difference_type;
+    typedef value_type* pointer;
+    typedef const value_type* const_pointer;
+    typedef value_type& reference;
+    typedef value_type const& const_reference;
 
 #ifndef BOOST_LOG_DOXYGEN_PASS
 

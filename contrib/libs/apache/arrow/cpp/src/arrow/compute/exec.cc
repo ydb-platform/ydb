@@ -36,8 +36,8 @@
 #include "arrow/compute/registry.h"
 #include "arrow/compute/util_internal.h"
 #include "arrow/datum.h"
-#include "arrow/pretty_print.h" 
-#include "arrow/record_batch.h" 
+#include "arrow/pretty_print.h"
+#include "arrow/record_batch.h"
 #include "arrow/scalar.h"
 #include "arrow/status.h"
 #include "arrow/type.h"
@@ -47,8 +47,8 @@
 #include "arrow/util/checked_cast.h"
 #include "arrow/util/cpu_info.h"
 #include "arrow/util/logging.h"
-#include "arrow/util/make_unique.h" 
-#include "arrow/util/vector.h" 
+#include "arrow/util/make_unique.h"
+#include "arrow/util/vector.h"
 
 namespace arrow {
 
@@ -59,104 +59,104 @@ using internal::CpuInfo;
 
 namespace compute {
 
-ExecContext* default_exec_context() { 
-  static ExecContext default_ctx; 
-  return &default_ctx; 
-} 
- 
-ExecBatch::ExecBatch(const RecordBatch& batch) 
-    : values(batch.num_columns()), length(batch.num_rows()) { 
-  auto columns = batch.column_data(); 
-  std::move(columns.begin(), columns.end(), values.begin()); 
-} 
- 
-bool ExecBatch::Equals(const ExecBatch& other) const { 
-  return guarantee == other.guarantee && values == other.values; 
-} 
- 
-void PrintTo(const ExecBatch& batch, std::ostream* os) { 
-  *os << "ExecBatch\n"; 
- 
-  static const std::string indent = "    "; 
- 
-  *os << indent << "# Rows: " << batch.length << "\n"; 
-  if (batch.guarantee != literal(true)) { 
-    *os << indent << "Guarantee: " << batch.guarantee.ToString() << "\n"; 
-  } 
- 
-  int i = 0; 
-  for (const Datum& value : batch.values) { 
-    *os << indent << "" << i++ << ": "; 
- 
-    if (value.is_scalar()) { 
-      *os << "Scalar[" << value.scalar()->ToString() << "]\n"; 
-      continue; 
-    } 
- 
-    auto array = value.make_array(); 
-    PrettyPrintOptions options; 
-    options.skip_new_lines = true; 
-    *os << "Array"; 
-    ARROW_CHECK_OK(PrettyPrint(*array, options, os)); 
-    *os << "\n"; 
-  } 
-} 
- 
-ExecBatch ExecBatch::Slice(int64_t offset, int64_t length) const { 
-  ExecBatch out = *this; 
-  for (auto& value : out.values) { 
-    if (value.is_scalar()) continue; 
-    value = value.array()->Slice(offset, length); 
-  } 
-  out.length = length; 
-  return out; 
-} 
- 
-Result<ExecBatch> ExecBatch::Make(std::vector<Datum> values) { 
-  if (values.empty()) { 
-    return Status::Invalid("Cannot infer ExecBatch length without at least one value"); 
-  } 
- 
-  int64_t length = -1; 
-  for (const auto& value : values) { 
-    if (value.is_scalar()) { 
-      continue; 
-    } 
- 
-    if (length == -1) { 
-      length = value.length(); 
-      continue; 
-    } 
- 
-    if (length != value.length()) { 
-      return Status::Invalid( 
-          "Arrays used to construct an ExecBatch must have equal length"); 
-    } 
-  } 
- 
-  if (length == -1) { 
-    length = 1; 
-  } 
- 
-  return ExecBatch(std::move(values), length); 
-} 
- 
-Result<std::shared_ptr<RecordBatch>> ExecBatch::ToRecordBatch( 
-    std::shared_ptr<Schema> schema, MemoryPool* pool) const { 
-  ArrayVector columns(schema->num_fields()); 
- 
-  for (size_t i = 0; i < columns.size(); ++i) { 
-    const Datum& value = values[i]; 
-    if (value.is_array()) { 
-      columns[i] = value.make_array(); 
-      continue; 
-    } 
-    ARROW_ASSIGN_OR_RAISE(columns[i], MakeArrayFromScalar(*value.scalar(), length, pool)); 
-  } 
- 
-  return RecordBatch::Make(std::move(schema), length, std::move(columns)); 
-} 
- 
+ExecContext* default_exec_context() {
+  static ExecContext default_ctx;
+  return &default_ctx;
+}
+
+ExecBatch::ExecBatch(const RecordBatch& batch)
+    : values(batch.num_columns()), length(batch.num_rows()) {
+  auto columns = batch.column_data();
+  std::move(columns.begin(), columns.end(), values.begin());
+}
+
+bool ExecBatch::Equals(const ExecBatch& other) const {
+  return guarantee == other.guarantee && values == other.values;
+}
+
+void PrintTo(const ExecBatch& batch, std::ostream* os) {
+  *os << "ExecBatch\n";
+
+  static const std::string indent = "    ";
+
+  *os << indent << "# Rows: " << batch.length << "\n";
+  if (batch.guarantee != literal(true)) {
+    *os << indent << "Guarantee: " << batch.guarantee.ToString() << "\n";
+  }
+
+  int i = 0;
+  for (const Datum& value : batch.values) {
+    *os << indent << "" << i++ << ": ";
+
+    if (value.is_scalar()) {
+      *os << "Scalar[" << value.scalar()->ToString() << "]\n";
+      continue;
+    }
+
+    auto array = value.make_array();
+    PrettyPrintOptions options;
+    options.skip_new_lines = true;
+    *os << "Array";
+    ARROW_CHECK_OK(PrettyPrint(*array, options, os));
+    *os << "\n";
+  }
+}
+
+ExecBatch ExecBatch::Slice(int64_t offset, int64_t length) const {
+  ExecBatch out = *this;
+  for (auto& value : out.values) {
+    if (value.is_scalar()) continue;
+    value = value.array()->Slice(offset, length);
+  }
+  out.length = length;
+  return out;
+}
+
+Result<ExecBatch> ExecBatch::Make(std::vector<Datum> values) {
+  if (values.empty()) {
+    return Status::Invalid("Cannot infer ExecBatch length without at least one value");
+  }
+
+  int64_t length = -1;
+  for (const auto& value : values) {
+    if (value.is_scalar()) {
+      continue;
+    }
+
+    if (length == -1) {
+      length = value.length();
+      continue;
+    }
+
+    if (length != value.length()) {
+      return Status::Invalid(
+          "Arrays used to construct an ExecBatch must have equal length");
+    }
+  }
+
+  if (length == -1) {
+    length = 1;
+  }
+
+  return ExecBatch(std::move(values), length);
+}
+
+Result<std::shared_ptr<RecordBatch>> ExecBatch::ToRecordBatch(
+    std::shared_ptr<Schema> schema, MemoryPool* pool) const {
+  ArrayVector columns(schema->num_fields());
+
+  for (size_t i = 0; i < columns.size(); ++i) {
+    const Datum& value = values[i];
+    if (value.is_array()) {
+      columns[i] = value.make_array();
+      continue;
+    }
+    ARROW_ASSIGN_OR_RAISE(columns[i], MakeArrayFromScalar(*value.scalar(), length, pool));
+  }
+
+  return RecordBatch::Make(std::move(schema), length, std::move(columns));
+}
+
 namespace {
 
 Result<std::shared_ptr<Buffer>> AllocateDataBuffer(KernelContext* ctx, int64_t length,
@@ -164,57 +164,57 @@ Result<std::shared_ptr<Buffer>> AllocateDataBuffer(KernelContext* ctx, int64_t l
   if (bit_width == 1) {
     return ctx->AllocateBitmap(length);
   } else {
-    int64_t buffer_size = BitUtil::BytesForBits(length * bit_width); 
+    int64_t buffer_size = BitUtil::BytesForBits(length * bit_width);
     return ctx->Allocate(buffer_size);
   }
 }
 
-struct BufferPreallocation { 
-  explicit BufferPreallocation(int bit_width = -1, int added_length = 0) 
-      : bit_width(bit_width), added_length(added_length) {} 
+struct BufferPreallocation {
+  explicit BufferPreallocation(int bit_width = -1, int added_length = 0)
+      : bit_width(bit_width), added_length(added_length) {}
 
-  int bit_width; 
-  int added_length; 
-}; 
- 
-void ComputeDataPreallocate(const DataType& type, 
-                            std::vector<BufferPreallocation>* widths) { 
-  if (is_fixed_width(type.id()) && type.id() != Type::NA) { 
-    widths->emplace_back(checked_cast<const FixedWidthType&>(type).bit_width()); 
-    return; 
+  int bit_width;
+  int added_length;
+};
+
+void ComputeDataPreallocate(const DataType& type,
+                            std::vector<BufferPreallocation>* widths) {
+  if (is_fixed_width(type.id()) && type.id() != Type::NA) {
+    widths->emplace_back(checked_cast<const FixedWidthType&>(type).bit_width());
+    return;
   }
-  // Preallocate binary and list offsets 
-  switch (type.id()) { 
-    case Type::BINARY: 
-    case Type::STRING: 
-    case Type::LIST: 
-    case Type::MAP: 
-      widths->emplace_back(32, /*added_length=*/1); 
-      return; 
-    case Type::LARGE_BINARY: 
-    case Type::LARGE_STRING: 
-    case Type::LARGE_LIST: 
-      widths->emplace_back(64, /*added_length=*/1); 
-      return; 
-    default: 
-      break; 
-  } 
+  // Preallocate binary and list offsets
+  switch (type.id()) {
+    case Type::BINARY:
+    case Type::STRING:
+    case Type::LIST:
+    case Type::MAP:
+      widths->emplace_back(32, /*added_length=*/1);
+      return;
+    case Type::LARGE_BINARY:
+    case Type::LARGE_STRING:
+    case Type::LARGE_LIST:
+      widths->emplace_back(64, /*added_length=*/1);
+      return;
+    default:
+      break;
+  }
 }
 
 }  // namespace
 
 namespace detail {
 
-Status CheckAllValues(const std::vector<Datum>& values) { 
-  for (const auto& value : values) { 
-    if (!value.is_value()) { 
-      return Status::Invalid("Tried executing function with non-value type: ", 
-                             value.ToString()); 
-    } 
-  } 
-  return Status::OK(); 
-} 
- 
+Status CheckAllValues(const std::vector<Datum>& values) {
+  for (const auto& value : values) {
+    if (!value.is_value()) {
+      return Status::Invalid("Tried executing function with non-value type: ",
+                             value.ToString());
+    }
+  }
+  return Status::OK();
+}
+
 ExecBatchIterator::ExecBatchIterator(std::vector<Datum> args, int64_t length,
                                      int64_t max_chunksize)
     : args_(std::move(args)),
@@ -311,35 +311,35 @@ bool ExecBatchIterator::Next(ExecBatch* batch) {
   return true;
 }
 
-namespace { 
- 
-struct NullGeneralization { 
-  enum type { PERHAPS_NULL, ALL_VALID, ALL_NULL }; 
- 
-  static type Get(const Datum& datum) { 
-    if (datum.type()->id() == Type::NA) { 
-      return ALL_NULL; 
-    } 
- 
-    if (datum.is_scalar()) { 
-      return datum.scalar()->is_valid ? ALL_VALID : ALL_NULL; 
-    } 
- 
-    const auto& arr = *datum.array(); 
- 
+namespace {
+
+struct NullGeneralization {
+  enum type { PERHAPS_NULL, ALL_VALID, ALL_NULL };
+
+  static type Get(const Datum& datum) {
+    if (datum.type()->id() == Type::NA) {
+      return ALL_NULL;
+    }
+
+    if (datum.is_scalar()) {
+      return datum.scalar()->is_valid ? ALL_VALID : ALL_NULL;
+    }
+
+    const auto& arr = *datum.array();
+
     // Do not count the bits if they haven't been counted already
-    const int64_t known_null_count = arr.null_count.load(); 
-    if ((known_null_count == 0) || (arr.buffers[0] == NULLPTR)) { 
-      return ALL_VALID; 
-    } 
- 
-    if (known_null_count == arr.length) { 
-      return ALL_NULL; 
-    } 
- 
-    return PERHAPS_NULL; 
+    const int64_t known_null_count = arr.null_count.load();
+    if ((known_null_count == 0) || (arr.buffers[0] == NULLPTR)) {
+      return ALL_VALID;
+    }
+
+    if (known_null_count == arr.length) {
+      return ALL_NULL;
+    }
+
+    return PERHAPS_NULL;
   }
-}; 
+};
 
 // Null propagation implementation that deals both with preallocated bitmaps
 // and maybe-to-be allocated bitmaps
@@ -356,17 +356,17 @@ class NullPropagator {
  public:
   NullPropagator(KernelContext* ctx, const ExecBatch& batch, ArrayData* output)
       : ctx_(ctx), batch_(batch), output_(output) {
-    for (const Datum& datum : batch_.values) { 
-      auto null_generalization = NullGeneralization::Get(datum); 
- 
-      if (null_generalization == NullGeneralization::ALL_NULL) { 
-        is_all_null_ = true; 
+    for (const Datum& datum : batch_.values) {
+      auto null_generalization = NullGeneralization::Get(datum);
+
+      if (null_generalization == NullGeneralization::ALL_NULL) {
+        is_all_null_ = true;
       }
- 
-      if (null_generalization != NullGeneralization::ALL_VALID && 
-          datum.kind() == Datum::ARRAY) { 
-        arrays_with_nulls_.push_back(datum.array().get()); 
-      } 
+
+      if (null_generalization != NullGeneralization::ALL_VALID &&
+          datum.kind() == Datum::ARRAY) {
+        arrays_with_nulls_.push_back(datum.array().get());
+      }
     }
 
     if (output->buffers[0] != nullptr) {
@@ -386,33 +386,33 @@ class NullPropagator {
     return Status::OK();
   }
 
-  Status AllNullShortCircuit() { 
-    // OK, the output should be all null 
-    output_->null_count = output_->length; 
+  Status AllNullShortCircuit() {
+    // OK, the output should be all null
+    output_->null_count = output_->length;
 
-    if (bitmap_preallocated_) { 
-      BitUtil::SetBitsTo(bitmap_, output_->offset, output_->length, false); 
-      return Status::OK(); 
-    } 
- 
+    if (bitmap_preallocated_) {
+      BitUtil::SetBitsTo(bitmap_, output_->offset, output_->length, false);
+      return Status::OK();
+    }
+
     // Walk all the values with nulls instead of breaking on the first in case
     // we find a bitmap that can be reused in the non-preallocated case
-    for (const ArrayData* arr : arrays_with_nulls_) { 
-      if (arr->null_count.load() == arr->length && arr->buffers[0] != nullptr) { 
-        // Reuse this all null bitmap 
-        output_->buffers[0] = arr->buffers[0]; 
-        return Status::OK(); 
+    for (const ArrayData* arr : arrays_with_nulls_) {
+      if (arr->null_count.load() == arr->length && arr->buffers[0] != nullptr) {
+        // Reuse this all null bitmap
+        output_->buffers[0] = arr->buffers[0];
+        return Status::OK();
       }
     }
 
-    RETURN_NOT_OK(EnsureAllocated()); 
-    BitUtil::SetBitsTo(bitmap_, output_->offset, output_->length, false); 
-    return Status::OK(); 
+    RETURN_NOT_OK(EnsureAllocated());
+    BitUtil::SetBitsTo(bitmap_, output_->offset, output_->length, false);
+    return Status::OK();
   }
 
   Status PropagateSingle() {
     // One array
-    const ArrayData& arr = *arrays_with_nulls_[0]; 
+    const ArrayData& arr = *arrays_with_nulls_[0];
     const std::shared_ptr<Buffer>& arr_bitmap = arr.buffers[0];
 
     // Reuse the null count if it's known
@@ -420,27 +420,27 @@ class NullPropagator {
 
     if (bitmap_preallocated_) {
       CopyBitmap(arr_bitmap->data(), arr.offset, arr.length, bitmap_, output_->offset);
-      return Status::OK(); 
-    } 
- 
-    // Two cases when memory was not pre-allocated: 
-    // 
-    // * Offset is zero: we reuse the bitmap as is 
-    // * Offset is nonzero but a multiple of 8: we can slice the bitmap 
-    // * Offset is not a multiple of 8: we must allocate and use CopyBitmap 
-    // 
-    // Keep in mind that output_->offset is not permitted to be nonzero when 
-    // the bitmap is not preallocated, and that precondition is asserted 
-    // higher in the call stack. 
-    if (arr.offset == 0) { 
-      output_->buffers[0] = arr_bitmap; 
-    } else if (arr.offset % 8 == 0) { 
-      output_->buffers[0] = 
-          SliceBuffer(arr_bitmap, arr.offset / 8, BitUtil::BytesForBits(arr.length)); 
+      return Status::OK();
+    }
+
+    // Two cases when memory was not pre-allocated:
+    //
+    // * Offset is zero: we reuse the bitmap as is
+    // * Offset is nonzero but a multiple of 8: we can slice the bitmap
+    // * Offset is not a multiple of 8: we must allocate and use CopyBitmap
+    //
+    // Keep in mind that output_->offset is not permitted to be nonzero when
+    // the bitmap is not preallocated, and that precondition is asserted
+    // higher in the call stack.
+    if (arr.offset == 0) {
+      output_->buffers[0] = arr_bitmap;
+    } else if (arr.offset % 8 == 0) {
+      output_->buffers[0] =
+          SliceBuffer(arr_bitmap, arr.offset / 8, BitUtil::BytesForBits(arr.length));
     } else {
-      RETURN_NOT_OK(EnsureAllocated()); 
-      CopyBitmap(arr_bitmap->data(), arr.offset, arr.length, bitmap_, 
-                 /*dst_offset=*/0); 
+      RETURN_NOT_OK(EnsureAllocated());
+      CopyBitmap(arr_bitmap->data(), arr.offset, arr.length, bitmap_,
+                 /*dst_offset=*/0);
     }
     return Status::OK();
   }
@@ -459,27 +459,27 @@ class NullPropagator {
                 output_->buffers[0]->mutable_data());
     };
 
-    DCHECK_GT(arrays_with_nulls_.size(), 1); 
+    DCHECK_GT(arrays_with_nulls_.size(), 1);
 
     // Seed the output bitmap with the & of the first two bitmaps
-    Accumulate(*arrays_with_nulls_[0], *arrays_with_nulls_[1]); 
+    Accumulate(*arrays_with_nulls_[0], *arrays_with_nulls_[1]);
 
     // Accumulate the rest
-    for (size_t i = 2; i < arrays_with_nulls_.size(); ++i) { 
-      Accumulate(*output_, *arrays_with_nulls_[i]); 
+    for (size_t i = 2; i < arrays_with_nulls_.size(); ++i) {
+      Accumulate(*output_, *arrays_with_nulls_[i]);
     }
     return Status::OK();
   }
 
   Status Execute() {
-    if (is_all_null_) { 
-      // An all-null value (scalar null or all-null array) gives us a short 
-      // circuit opportunity 
-      return AllNullShortCircuit(); 
+    if (is_all_null_) {
+      // An all-null value (scalar null or all-null array) gives us a short
+      // circuit opportunity
+      return AllNullShortCircuit();
     }
 
     // At this point, by construction we know that all of the values in
-    // arrays_with_nulls_ are arrays that are not all null. So there are a 
+    // arrays_with_nulls_ are arrays that are not all null. So there are a
     // few cases:
     //
     // * No arrays. This is a no-op w/o preallocation but when the bitmap is
@@ -494,27 +494,27 @@ class NullPropagator {
 
     output_->null_count = kUnknownNullCount;
 
-    if (arrays_with_nulls_.empty()) { 
+    if (arrays_with_nulls_.empty()) {
       // No arrays with nulls case
       output_->null_count = 0;
       if (bitmap_preallocated_) {
         BitUtil::SetBitsTo(bitmap_, output_->offset, output_->length, true);
       }
       return Status::OK();
-    } 
- 
-    if (arrays_with_nulls_.size() == 1) { 
+    }
+
+    if (arrays_with_nulls_.size() == 1) {
       return PropagateSingle();
     }
- 
-    return PropagateMultiple(); 
+
+    return PropagateMultiple();
   }
 
  private:
   KernelContext* ctx_;
   const ExecBatch& batch_;
-  std::vector<const ArrayData*> arrays_with_nulls_; 
-  bool is_all_null_ = false; 
+  std::vector<const ArrayData*> arrays_with_nulls_;
+  bool is_all_null_ = false;
   ArrayData* output_;
   uint8_t* bitmap_;
   bool bitmap_preallocated_ = false;
@@ -523,15 +523,15 @@ class NullPropagator {
 std::shared_ptr<ChunkedArray> ToChunkedArray(const std::vector<Datum>& values,
                                              const std::shared_ptr<DataType>& type) {
   std::vector<std::shared_ptr<Array>> arrays;
-  arrays.reserve(values.size()); 
-  for (const Datum& val : values) { 
-    if (val.length() == 0) { 
+  arrays.reserve(values.size());
+  for (const Datum& val : values) {
+    if (val.length() == 0) {
       // Skip empty chunks
       continue;
     }
-    arrays.emplace_back(val.make_array()); 
+    arrays.emplace_back(val.make_array());
   }
-  return std::make_shared<ChunkedArray>(std::move(arrays), type); 
+  return std::make_shared<ChunkedArray>(std::move(arrays), type);
 }
 
 bool HaveChunkedArray(const std::vector<Datum>& values) {
@@ -543,25 +543,25 @@ bool HaveChunkedArray(const std::vector<Datum>& values) {
   return false;
 }
 
-template <typename KernelType> 
-class KernelExecutorImpl : public KernelExecutor { 
+template <typename KernelType>
+class KernelExecutorImpl : public KernelExecutor {
  public:
-  Status Init(KernelContext* kernel_ctx, KernelInitArgs args) override { 
-    kernel_ctx_ = kernel_ctx; 
-    kernel_ = static_cast<const KernelType*>(args.kernel); 
+  Status Init(KernelContext* kernel_ctx, KernelInitArgs args) override {
+    kernel_ctx_ = kernel_ctx;
+    kernel_ = static_cast<const KernelType*>(args.kernel);
 
-    // Resolve the output descriptor for this kernel 
-    ARROW_ASSIGN_OR_RAISE( 
-        output_descr_, kernel_->signature->out_type().Resolve(kernel_ctx_, args.inputs)); 
+    // Resolve the output descriptor for this kernel
+    ARROW_ASSIGN_OR_RAISE(
+        output_descr_, kernel_->signature->out_type().Resolve(kernel_ctx_, args.inputs));
 
     return Status::OK();
   }
 
- protected: 
+ protected:
   // This is overridden by the VectorExecutor
   virtual Status SetupArgIteration(const std::vector<Datum>& args) {
-    ARROW_ASSIGN_OR_RAISE( 
-        batch_iterator_, ExecBatchIterator::Make(args, exec_context()->exec_chunksize())); 
+    ARROW_ASSIGN_OR_RAISE(
+        batch_iterator_, ExecBatchIterator::Make(args, exec_context()->exec_chunksize()));
     return Status::OK();
   }
 
@@ -570,29 +570,29 @@ class KernelExecutorImpl : public KernelExecutor {
     out->buffers.resize(output_num_buffers_);
 
     if (validity_preallocated_) {
-      ARROW_ASSIGN_OR_RAISE(out->buffers[0], kernel_ctx_->AllocateBitmap(length)); 
+      ARROW_ASSIGN_OR_RAISE(out->buffers[0], kernel_ctx_->AllocateBitmap(length));
     }
-    if (kernel_->null_handling == NullHandling::OUTPUT_NOT_NULL) { 
-      out->null_count = 0; 
+    if (kernel_->null_handling == NullHandling::OUTPUT_NOT_NULL) {
+      out->null_count = 0;
     }
-    for (size_t i = 0; i < data_preallocated_.size(); ++i) { 
-      const auto& prealloc = data_preallocated_[i]; 
-      if (prealloc.bit_width >= 0) { 
-        ARROW_ASSIGN_OR_RAISE( 
-            out->buffers[i + 1], 
-            AllocateDataBuffer(kernel_ctx_, length + prealloc.added_length, 
-                               prealloc.bit_width)); 
-      } 
-    } 
+    for (size_t i = 0; i < data_preallocated_.size(); ++i) {
+      const auto& prealloc = data_preallocated_[i];
+      if (prealloc.bit_width >= 0) {
+        ARROW_ASSIGN_OR_RAISE(
+            out->buffers[i + 1],
+            AllocateDataBuffer(kernel_ctx_, length + prealloc.added_length,
+                               prealloc.bit_width));
+      }
+    }
     return out;
   }
 
-  ExecContext* exec_context() { return kernel_ctx_->exec_context(); } 
-  KernelState* state() { return kernel_ctx_->state(); } 
+  ExecContext* exec_context() { return kernel_ctx_->exec_context(); }
+  KernelState* state() { return kernel_ctx_->state(); }
 
   // Not all of these members are used for every executor type
 
-  KernelContext* kernel_ctx_; 
+  KernelContext* kernel_ctx_;
   const KernelType* kernel_;
   std::unique_ptr<ExecBatchIterator> batch_iterator_;
   ValueDescr output_descr_;
@@ -602,13 +602,13 @@ class KernelExecutorImpl : public KernelExecutor {
   // If true, then memory is preallocated for the validity bitmap with the same
   // strategy as the data buffer(s).
   bool validity_preallocated_ = false;
- 
-  // The kernel writes into data buffers preallocated for these bit widths 
-  // (0 indicates no preallocation); 
-  std::vector<BufferPreallocation> data_preallocated_; 
+
+  // The kernel writes into data buffers preallocated for these bit widths
+  // (0 indicates no preallocation);
+  std::vector<BufferPreallocation> data_preallocated_;
 };
 
-class ScalarExecutor : public KernelExecutorImpl<ScalarKernel> { 
+class ScalarExecutor : public KernelExecutorImpl<ScalarKernel> {
  public:
   Status Execute(const std::vector<Datum>& args, ExecListener* listener) override {
     RETURN_NOT_OK(PrepareExecute(args));
@@ -646,9 +646,9 @@ class ScalarExecutor : public KernelExecutorImpl<ScalarKernel> {
       } else {
         // XXX: In the case where no outputs are omitted, is returning a 0-length
         // array always the correct move?
-        return MakeArrayOfNull(output_descr_.type, /*length=*/0, 
-                               exec_context()->memory_pool()) 
-            .ValueOrDie(); 
+        return MakeArrayOfNull(output_descr_.type, /*length=*/0,
+                               exec_context()->memory_pool())
+            .ValueOrDie();
       }
     }
   }
@@ -661,7 +661,7 @@ class ScalarExecutor : public KernelExecutorImpl<ScalarKernel> {
     if (output_descr_.shape == ValueDescr::ARRAY) {
       ArrayData* out_arr = out.mutable_array();
       if (kernel_->null_handling == NullHandling::INTERSECTION) {
-        RETURN_NOT_OK(PropagateNulls(kernel_ctx_, batch, out_arr)); 
+        RETURN_NOT_OK(PropagateNulls(kernel_ctx_, batch, out_arr));
       } else if (kernel_->null_handling == NullHandling::OUTPUT_NOT_NULL) {
         out_arr->null_count = 0;
       }
@@ -676,7 +676,7 @@ class ScalarExecutor : public KernelExecutorImpl<ScalarKernel> {
       }
     }
 
-    RETURN_NOT_OK(kernel_->exec(kernel_ctx_, batch, &out)); 
+    RETURN_NOT_OK(kernel_->exec(kernel_ctx_, batch, &out));
     if (!preallocate_contiguous_) {
       // If we are producing chunked output rather than one big array, then
       // emit each chunk as soon as it's available
@@ -686,7 +686,7 @@ class ScalarExecutor : public KernelExecutorImpl<ScalarKernel> {
   }
 
   Status PrepareExecute(const std::vector<Datum>& args) {
-    RETURN_NOT_OK(this->SetupArgIteration(args)); 
+    RETURN_NOT_OK(this->SetupArgIteration(args));
 
     if (output_descr_.shape == ValueDescr::ARRAY) {
       // If the executor is configured to produce a single large Array output for
@@ -749,26 +749,26 @@ class ScalarExecutor : public KernelExecutorImpl<ScalarKernel> {
     // Decide if we need to preallocate memory for this kernel
     validity_preallocated_ =
         (kernel_->null_handling != NullHandling::COMPUTED_NO_PREALLOCATE &&
-         kernel_->null_handling != NullHandling::OUTPUT_NOT_NULL && 
-         output_descr_.type->id() != Type::NA); 
-    if (kernel_->mem_allocation == MemAllocation::PREALLOCATE) { 
-      ComputeDataPreallocate(*output_descr_.type, &data_preallocated_); 
-    } 
+         kernel_->null_handling != NullHandling::OUTPUT_NOT_NULL &&
+         output_descr_.type->id() != Type::NA);
+    if (kernel_->mem_allocation == MemAllocation::PREALLOCATE) {
+      ComputeDataPreallocate(*output_descr_.type, &data_preallocated_);
+    }
 
-    // Contiguous preallocation only possible on non-nested types if all 
-    // buffers are preallocated.  Otherwise, we must go chunk-by-chunk. 
+    // Contiguous preallocation only possible on non-nested types if all
+    // buffers are preallocated.  Otherwise, we must go chunk-by-chunk.
     //
-    // Some kernels are also unable to write into sliced outputs, so we respect the 
-    // kernel's attributes. 
+    // Some kernels are also unable to write into sliced outputs, so we respect the
+    // kernel's attributes.
     preallocate_contiguous_ =
-        (exec_context()->preallocate_contiguous() && kernel_->can_write_into_slices && 
-         validity_preallocated_ && !is_nested(output_descr_.type->id()) && 
-         !is_dictionary(output_descr_.type->id()) && 
-         data_preallocated_.size() == static_cast<size_t>(output_num_buffers_ - 1) && 
-         std::all_of(data_preallocated_.begin(), data_preallocated_.end(), 
-                     [](const BufferPreallocation& prealloc) { 
-                       return prealloc.bit_width >= 0; 
-                     })); 
+        (exec_context()->preallocate_contiguous() && kernel_->can_write_into_slices &&
+         validity_preallocated_ && !is_nested(output_descr_.type->id()) &&
+         !is_dictionary(output_descr_.type->id()) &&
+         data_preallocated_.size() == static_cast<size_t>(output_num_buffers_ - 1) &&
+         std::all_of(data_preallocated_.begin(), data_preallocated_.end(),
+                     [](const BufferPreallocation& prealloc) {
+                       return prealloc.bit_width >= 0;
+                     }));
     if (preallocate_contiguous_) {
       ARROW_ASSIGN_OR_RAISE(preallocated_, PrepareOutput(total_length));
     }
@@ -790,7 +790,7 @@ Status PackBatchNoChunks(const std::vector<Datum>& args, ExecBatch* out) {
     switch (arg.kind()) {
       case Datum::SCALAR:
       case Datum::ARRAY:
-      case Datum::CHUNKED_ARRAY: 
+      case Datum::CHUNKED_ARRAY:
         length = std::max(arg.length(), length);
         break;
       default:
@@ -803,7 +803,7 @@ Status PackBatchNoChunks(const std::vector<Datum>& args, ExecBatch* out) {
   return Status::OK();
 }
 
-class VectorExecutor : public KernelExecutorImpl<VectorKernel> { 
+class VectorExecutor : public KernelExecutorImpl<VectorKernel> {
  public:
   Status Execute(const std::vector<Datum>& args, ExecListener* listener) override {
     RETURN_NOT_OK(PrepareExecute(args));
@@ -823,15 +823,15 @@ class VectorExecutor : public KernelExecutorImpl<VectorKernel> {
                     const std::vector<Datum>& outputs) override {
     // If execution yielded multiple chunks (because large arrays were split
     // based on the ExecContext parameters, then the result is a ChunkedArray
-    if (kernel_->output_chunked && (HaveChunkedArray(inputs) || outputs.size() > 1)) { 
-      return ToChunkedArray(outputs, output_descr_.type); 
-    } else if (outputs.size() == 1) { 
-      // Outputs have just one element 
-      return outputs[0]; 
+    if (kernel_->output_chunked && (HaveChunkedArray(inputs) || outputs.size() > 1)) {
+      return ToChunkedArray(outputs, output_descr_.type);
+    } else if (outputs.size() == 1) {
+      // Outputs have just one element
+      return outputs[0];
     } else {
-      // XXX: In the case where no outputs are omitted, is returning a 0-length 
-      // array always the correct move? 
-      return MakeArrayOfNull(output_descr_.type, /*length=*/0).ValueOrDie(); 
+      // XXX: In the case where no outputs are omitted, is returning a 0-length
+      // array always the correct move?
+      return MakeArrayOfNull(output_descr_.type, /*length=*/0).ValueOrDie();
     }
   }
 
@@ -851,9 +851,9 @@ class VectorExecutor : public KernelExecutorImpl<VectorKernel> {
 
     if (kernel_->null_handling == NullHandling::INTERSECTION &&
         output_descr_.shape == ValueDescr::ARRAY) {
-      RETURN_NOT_OK(PropagateNulls(kernel_ctx_, batch, out.mutable_array())); 
+      RETURN_NOT_OK(PropagateNulls(kernel_ctx_, batch, out.mutable_array()));
     }
-    RETURN_NOT_OK(kernel_->exec(kernel_ctx_, batch, &out)); 
+    RETURN_NOT_OK(kernel_->exec(kernel_ctx_, batch, &out));
     if (!kernel_->finalize) {
       // If there is no result finalizer (e.g. for hash-based functions, we can
       // emit the processed batch right away rather than waiting
@@ -868,7 +868,7 @@ class VectorExecutor : public KernelExecutorImpl<VectorKernel> {
     if (kernel_->finalize) {
       // Intermediate results require post-processing after the execution is
       // completed (possibly involving some accumulated state)
-      RETURN_NOT_OK(kernel_->finalize(kernel_ctx_, &results_)); 
+      RETURN_NOT_OK(kernel_->finalize(kernel_ctx_, &results_));
       for (const auto& result : results_) {
         RETURN_NOT_OK(listener->OnResult(result));
       }
@@ -878,39 +878,39 @@ class VectorExecutor : public KernelExecutorImpl<VectorKernel> {
 
   Status SetupArgIteration(const std::vector<Datum>& args) override {
     if (kernel_->can_execute_chunkwise) {
-      ARROW_ASSIGN_OR_RAISE(batch_iterator_, ExecBatchIterator::Make( 
-                                                 args, exec_context()->exec_chunksize())); 
+      ARROW_ASSIGN_OR_RAISE(batch_iterator_, ExecBatchIterator::Make(
+                                                 args, exec_context()->exec_chunksize()));
     }
     return Status::OK();
   }
 
   Status PrepareExecute(const std::vector<Datum>& args) {
-    RETURN_NOT_OK(this->SetupArgIteration(args)); 
+    RETURN_NOT_OK(this->SetupArgIteration(args));
     output_num_buffers_ = static_cast<int>(output_descr_.type->layout().buffers.size());
 
     // Decide if we need to preallocate memory for this kernel
     validity_preallocated_ =
         (kernel_->null_handling != NullHandling::COMPUTED_NO_PREALLOCATE &&
          kernel_->null_handling != NullHandling::OUTPUT_NOT_NULL);
-    if (kernel_->mem_allocation == MemAllocation::PREALLOCATE) { 
-      ComputeDataPreallocate(*output_descr_.type, &data_preallocated_); 
-    } 
+    if (kernel_->mem_allocation == MemAllocation::PREALLOCATE) {
+      ComputeDataPreallocate(*output_descr_.type, &data_preallocated_);
+    }
     return Status::OK();
   }
 
   std::vector<Datum> results_;
 };
 
-class ScalarAggExecutor : public KernelExecutorImpl<ScalarAggregateKernel> { 
+class ScalarAggExecutor : public KernelExecutorImpl<ScalarAggregateKernel> {
  public:
-  Status Init(KernelContext* ctx, KernelInitArgs args) override { 
-    input_descrs_ = &args.inputs; 
-    options_ = args.options; 
-    return KernelExecutorImpl<ScalarAggregateKernel>::Init(ctx, args); 
-  } 
+  Status Init(KernelContext* ctx, KernelInitArgs args) override {
+    input_descrs_ = &args.inputs;
+    options_ = args.options;
+    return KernelExecutorImpl<ScalarAggregateKernel>::Init(ctx, args);
+  }
 
   Status Execute(const std::vector<Datum>& args, ExecListener* listener) override {
-    RETURN_NOT_OK(this->SetupArgIteration(args)); 
+    RETURN_NOT_OK(this->SetupArgIteration(args));
 
     ExecBatch batch;
     while (batch_iterator_->Next(&batch)) {
@@ -921,7 +921,7 @@ class ScalarAggExecutor : public KernelExecutorImpl<ScalarAggregateKernel> {
     }
 
     Datum out;
-    RETURN_NOT_OK(kernel_->finalize(kernel_ctx_, &out)); 
+    RETURN_NOT_OK(kernel_->finalize(kernel_ctx_, &out));
     RETURN_NOT_OK(listener->OnResult(std::move(out)));
     return Status::OK();
   }
@@ -934,78 +934,78 @@ class ScalarAggExecutor : public KernelExecutorImpl<ScalarAggregateKernel> {
 
  private:
   Status Consume(const ExecBatch& batch) {
-    // FIXME(ARROW-11840) don't merge *any* aggegates for every batch 
-    ARROW_ASSIGN_OR_RAISE( 
-        auto batch_state, 
-        kernel_->init(kernel_ctx_, {kernel_, *input_descrs_, options_})); 
+    // FIXME(ARROW-11840) don't merge *any* aggegates for every batch
+    ARROW_ASSIGN_OR_RAISE(
+        auto batch_state,
+        kernel_->init(kernel_ctx_, {kernel_, *input_descrs_, options_}));
 
     if (batch_state == nullptr) {
-      return Status::Invalid("ScalarAggregation requires non-null kernel state"); 
+      return Status::Invalid("ScalarAggregation requires non-null kernel state");
     }
 
-    KernelContext batch_ctx(exec_context()); 
+    KernelContext batch_ctx(exec_context());
     batch_ctx.SetState(batch_state.get());
 
-    RETURN_NOT_OK(kernel_->consume(&batch_ctx, batch)); 
-    RETURN_NOT_OK(kernel_->merge(kernel_ctx_, std::move(*batch_state), state())); 
+    RETURN_NOT_OK(kernel_->consume(&batch_ctx, batch));
+    RETURN_NOT_OK(kernel_->merge(kernel_ctx_, std::move(*batch_state), state()));
     return Status::OK();
   }
- 
-  const std::vector<ValueDescr>* input_descrs_; 
-  const FunctionOptions* options_; 
+
+  const std::vector<ValueDescr>* input_descrs_;
+  const FunctionOptions* options_;
 };
 
 template <typename ExecutorType,
           typename FunctionType = typename ExecutorType::FunctionType>
-Result<std::unique_ptr<KernelExecutor>> MakeExecutor(ExecContext* ctx, 
-                                                     const Function* func, 
-                                                     const FunctionOptions* options) { 
+Result<std::unique_ptr<KernelExecutor>> MakeExecutor(ExecContext* ctx,
+                                                     const Function* func,
+                                                     const FunctionOptions* options) {
   DCHECK_EQ(ExecutorType::function_kind, func->kind());
   auto typed_func = checked_cast<const FunctionType*>(func);
-  return std::unique_ptr<KernelExecutor>(new ExecutorType(ctx, typed_func, options)); 
+  return std::unique_ptr<KernelExecutor>(new ExecutorType(ctx, typed_func, options));
 }
 
-}  // namespace 
- 
-Status PropagateNulls(KernelContext* ctx, const ExecBatch& batch, ArrayData* output) { 
-  DCHECK_NE(nullptr, output); 
-  DCHECK_GT(output->buffers.size(), 0); 
- 
-  if (output->type->id() == Type::NA) { 
-    // Null output type is a no-op (rare when this would happen but we at least 
-    // will test for it) 
-    return Status::OK(); 
+}  // namespace
+
+Status PropagateNulls(KernelContext* ctx, const ExecBatch& batch, ArrayData* output) {
+  DCHECK_NE(nullptr, output);
+  DCHECK_GT(output->buffers.size(), 0);
+
+  if (output->type->id() == Type::NA) {
+    // Null output type is a no-op (rare when this would happen but we at least
+    // will test for it)
+    return Status::OK();
   }
- 
-  // This function is ONLY able to write into output with non-zero offset 
-  // when the bitmap is preallocated. This could be a DCHECK but returning 
-  // error Status for now for emphasis 
-  if (output->offset != 0 && output->buffers[0] == nullptr) { 
-    return Status::Invalid( 
-        "Can only propagate nulls into pre-allocated memory " 
-        "when the output offset is non-zero"); 
-  } 
-  NullPropagator propagator(ctx, batch, output); 
-  return propagator.Execute(); 
+
+  // This function is ONLY able to write into output with non-zero offset
+  // when the bitmap is preallocated. This could be a DCHECK but returning
+  // error Status for now for emphasis
+  if (output->offset != 0 && output->buffers[0] == nullptr) {
+    return Status::Invalid(
+        "Can only propagate nulls into pre-allocated memory "
+        "when the output offset is non-zero");
+  }
+  NullPropagator propagator(ctx, batch, output);
+  return propagator.Execute();
 }
 
-std::unique_ptr<KernelExecutor> KernelExecutor::MakeScalar() { 
-  return ::arrow::internal::make_unique<detail::ScalarExecutor>(); 
-} 
- 
-std::unique_ptr<KernelExecutor> KernelExecutor::MakeVector() { 
-  return ::arrow::internal::make_unique<detail::VectorExecutor>(); 
-} 
- 
-std::unique_ptr<KernelExecutor> KernelExecutor::MakeScalarAggregate() { 
-  return ::arrow::internal::make_unique<detail::ScalarAggExecutor>(); 
-} 
- 
+std::unique_ptr<KernelExecutor> KernelExecutor::MakeScalar() {
+  return ::arrow::internal::make_unique<detail::ScalarExecutor>();
+}
+
+std::unique_ptr<KernelExecutor> KernelExecutor::MakeVector() {
+  return ::arrow::internal::make_unique<detail::VectorExecutor>();
+}
+
+std::unique_ptr<KernelExecutor> KernelExecutor::MakeScalarAggregate() {
+  return ::arrow::internal::make_unique<detail::ScalarAggExecutor>();
+}
+
 }  // namespace detail
 
-ExecContext::ExecContext(MemoryPool* pool, ::arrow::internal::Executor* executor, 
-                         FunctionRegistry* func_registry) 
-    : pool_(pool), executor_(executor) { 
+ExecContext::ExecContext(MemoryPool* pool, ::arrow::internal::Executor* executor,
+                         FunctionRegistry* func_registry)
+    : pool_(pool), executor_(executor) {
   this->func_registry_ = func_registry == nullptr ? GetFunctionRegistry() : func_registry;
 }
 

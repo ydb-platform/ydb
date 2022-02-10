@@ -101,7 +101,7 @@ namespace boost {
     }
   private:
     template <class Edge, class Graph>
-    void tree_edge(Edge /* u */, Graph& /* g */) { } 
+    void tree_edge(Edge /* u */, Graph& /* g */) { }
   };
   template <class Visitors>
   dijkstra_visitor<Visitors>
@@ -228,7 +228,7 @@ namespace boost {
     template <class Graph, class IndexMap, class Value>
     struct vertex_property_map_generator_helper<Graph, IndexMap, Value, false> {
       typedef boost::vector_property_map<Value, IndexMap> type;
-      static type build(const Graph& /* g */, const IndexMap& index, boost::scoped_array<Value>& /* array_holder */) { 
+      static type build(const Graph& /* g */, const IndexMap& index, boost::scoped_array<Value>& /* array_holder */) {
         return boost::make_vector_property_map<Value>(index);
       }
     };
@@ -263,7 +263,7 @@ namespace boost {
     template <class Graph, class IndexMap>
     struct default_color_map_generator_helper<Graph, IndexMap, false> {
       typedef boost::vector_property_map<boost::two_bit_color_type, IndexMap> type;
-      static type build(const Graph& /* g */, const IndexMap& index) { 
+      static type build(const Graph& /* g */, const IndexMap& index) {
         return boost::make_vector_property_map<boost::two_bit_color_type>(index);
       }
     };

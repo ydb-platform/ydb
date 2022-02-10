@@ -651,7 +651,7 @@ namespace {
         }
 
         for (ui32 i = 0; i < dataBuffers.size(); ++i) {
-            std::get<0>(parts[i]) = dataBuffers[i].GetCells().data(); 
+            std::get<0>(parts[i]) = dataBuffers[i].GetCells().data();
         }
 
         bool reverse = false;

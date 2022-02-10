@@ -71,7 +71,7 @@ class TDerivedIntricateObject
 {
 private:
     // Payload.
-    [[maybe_unused]] std::array<char, 32> Payload; 
+    [[maybe_unused]] std::array<char, 32> Payload;
 };
 
 typedef TIntrusivePtr<TDerivedIntricateObject> TDerivedIntricateObjectPtr;

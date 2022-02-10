@@ -6,7 +6,7 @@
 #include <util/system/file.h>
 #include <util/system/fs.h>
 #include <util/stream/file.h>
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 namespace NKikimr {
 namespace NConsole {

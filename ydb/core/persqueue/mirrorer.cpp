@@ -9,7 +9,7 @@
 
 #include <library/cpp/time_provider/time_provider.h>
 
-#include <google/protobuf/util/message_differencer.h> 
+#include <google/protobuf/util/message_differencer.h>
 
 #include <util/string/join.h>
 

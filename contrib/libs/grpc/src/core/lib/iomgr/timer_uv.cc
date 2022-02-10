@@ -30,7 +30,7 @@
 #include "src/core/lib/iomgr/timer.h"
 #include "src/core/lib/iomgr/timer_custom.h"
 
-#error #include <uv.h> 
+#error #include <uv.h>
 
 static void timer_close_callback(uv_handle_t* handle) { gpr_free(handle); }
 

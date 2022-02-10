@@ -17,7 +17,7 @@
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 #include <library/cpp/svnversion/svnversion.h>
 
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 namespace NKikimr {
 

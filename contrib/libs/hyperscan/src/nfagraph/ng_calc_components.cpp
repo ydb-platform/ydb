@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2018, Intel Corporation 
+ * Copyright (c) 2015-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -57,7 +57,7 @@
 #include "grey.h"
 #include "ue2common.h"
 #include "util/graph_range.h"
-#include "util/graph_undirected.h" 
+#include "util/graph_undirected.h"
 #include "util/make_unique.h"
 
 #include <map>
@@ -310,19 +310,19 @@ void splitIntoComponents(unique_ptr<NGHolder> g,
         return;
     }
 
-    auto ug = make_undirected_graph(*g); 
+    auto ug = make_undirected_graph(*g);
 
-    // Filter specials and shell vertices from undirected graph. 
-    unordered_set<NFAVertex> bad_vertices( 
-        {g->start, g->startDs, g->accept, g->acceptEod}); 
-    bad_vertices.insert(head_shell.begin(), head_shell.end()); 
-    bad_vertices.insert(tail_shell.begin(), tail_shell.end()); 
+    // Filter specials and shell vertices from undirected graph.
+    unordered_set<NFAVertex> bad_vertices(
+        {g->start, g->startDs, g->accept, g->acceptEod});
+    bad_vertices.insert(head_shell.begin(), head_shell.end());
+    bad_vertices.insert(tail_shell.begin(), tail_shell.end());
 
     auto filtered_ug = boost::make_filtered_graph(
-        ug, boost::keep_all(), make_bad_vertex_filter(&bad_vertices)); 
+        ug, boost::keep_all(), make_bad_vertex_filter(&bad_vertices));
 
     // Actually run the connected components algorithm.
-    map<NFAVertex, u32> split_components; 
+    map<NFAVertex, u32> split_components;
     const u32 num = connected_components(
         filtered_ug, boost::make_assoc_property_map(split_components));
 
@@ -339,7 +339,7 @@ void splitIntoComponents(unique_ptr<NGHolder> g,
 
     // Collect vertex lists per component.
     for (const auto &m : split_components) {
-        NFAVertex v = m.first; 
+        NFAVertex v = m.first;
         u32 c = m.second;
         verts[c].push_back(v);
         DEBUG_PRINTF("vertex %zu is in comp %u\n", (*g)[v].index, c);

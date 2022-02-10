@@ -17,7 +17,7 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/restricted/uriparser 
+    contrib/restricted/uriparser
 )
 
 ADDINCL(
@@ -29,10 +29,10 @@ NO_COMPILER_WARNINGS()
 NO_UTIL()
 
 SRCS(
-    FourSuite.cpp 
-    MemoryManagerSuite.cpp 
-    VersionSuite.cpp 
-    test.cpp 
+    FourSuite.cpp
+    MemoryManagerSuite.cpp
+    VersionSuite.cpp
+    test.cpp
 )
 
 END()

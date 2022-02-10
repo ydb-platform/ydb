@@ -1156,7 +1156,7 @@ Copyright 2006-2011, the V8 project authors. All rights reserved.
 Copyright © 1991-2020 Unicode, Inc. All rights reserved.
 
 
-====================Custom-Punycode==================== 
+====================Custom-Punycode====================
 Disclaimer and license
 
     Regarding this entire document or any portion of it (including

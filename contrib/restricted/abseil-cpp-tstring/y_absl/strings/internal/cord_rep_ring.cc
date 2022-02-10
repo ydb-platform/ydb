@@ -26,7 +26,7 @@
 #include "y_absl/base/macros.h"
 #include "y_absl/container/inlined_vector.h"
 #include "y_absl/strings/internal/cord_internal.h"
-#include "y_absl/strings/internal/cord_rep_consume.h" 
+#include "y_absl/strings/internal/cord_rep_consume.h"
 #include "y_absl/strings/internal/cord_rep_flat.h"
 
 namespace y_absl {
@@ -40,7 +40,7 @@ using index_type = CordRepRing::index_type;
 enum class Direction { kForward, kReversed };
 
 inline bool IsFlatOrExternal(CordRep* rep) {
-  return rep->IsFlat() || rep->IsExternal(); 
+  return rep->IsFlat() || rep->IsExternal();
 }
 
 // Verifies that n + extra <= kMaxCapacity: throws std::length_error otherwise.
@@ -178,7 +178,7 @@ bool CordRepRing::IsValid(std::ostream& output) const {
     if (offset >= child->length || entry_length > child->length - offset) {
       output << "entry[" << head << "] has offset " << offset
              << " and entry length " << entry_length
-             << " which are outside of the child's length of " << child->length; 
+             << " which are outside of the child's length of " << child->length;
       return false;
     }
 
@@ -229,7 +229,7 @@ void CordRepRing::SetCapacityForTesting(size_t capacity) {
 }
 
 void CordRepRing::Delete(CordRepRing* rep) {
-  assert(rep != nullptr && rep->IsRing()); 
+  assert(rep != nullptr && rep->IsRing());
 #if defined(__cpp_sized_deallocation)
   size_t size = AllocSize(rep->capacity_);
   rep->~CordRepRing();
@@ -277,11 +277,11 @@ CordRepRing* CordRepRing::Mutable(CordRepRing* rep, size_t extra) {
   // Get current number of entries, and check for max capacity.
   size_t entries = rep->entries();
 
-  if (!rep->refcount.IsMutable()) { 
-    return Copy(rep, rep->head(), rep->tail(), extra); 
+  if (!rep->refcount.IsMutable()) {
+    return Copy(rep, rep->head(), rep->tail(), extra);
   } else if (entries + extra > rep->capacity()) {
-    const size_t min_grow = rep->capacity() + rep->capacity() / 2; 
-    const size_t min_extra = (std::max)(extra, min_grow - entries); 
+    const size_t min_grow = rep->capacity() + rep->capacity() / 2;
+    const size_t min_extra = (std::max)(extra, min_grow - entries);
     CordRepRing* newrep = CordRepRing::New(entries, min_extra);
     newrep->Fill<false>(rep, rep->head(), rep->tail());
     CordRepRing::Delete(rep);
@@ -292,10 +292,10 @@ CordRepRing* CordRepRing::Mutable(CordRepRing* rep, size_t extra) {
 }
 
 Span<char> CordRepRing::GetAppendBuffer(size_t size) {
-  assert(refcount.IsMutable()); 
+  assert(refcount.IsMutable());
   index_type back = retreat(tail_);
   CordRep* child = entry_child(back);
-  if (child->tag >= FLAT && child->refcount.IsMutable()) { 
+  if (child->tag >= FLAT && child->refcount.IsMutable()) {
     size_t capacity = child->flat()->Capacity();
     pos_type end_pos = entry_end_pos(back);
     size_t data_offset = entry_data_offset(back);
@@ -312,10 +312,10 @@ Span<char> CordRepRing::GetAppendBuffer(size_t size) {
 }
 
 Span<char> CordRepRing::GetPrependBuffer(size_t size) {
-  assert(refcount.IsMutable()); 
+  assert(refcount.IsMutable());
   CordRep* child = entry_child(head_);
   size_t data_offset = entry_data_offset(head_);
-  if (data_offset && child->refcount.IsMutable() && child->tag >= FLAT) { 
+  if (data_offset && child->refcount.IsMutable() && child->tag >= FLAT) {
     size_t n = (std::min)(data_offset, size);
     this->length += n;
     begin_pos_ -= n;
@@ -327,12 +327,12 @@ Span<char> CordRepRing::GetPrependBuffer(size_t size) {
 }
 
 CordRepRing* CordRepRing::CreateFromLeaf(CordRep* child, size_t offset,
-                                         size_t len, size_t extra) { 
+                                         size_t len, size_t extra) {
   CordRepRing* rep = CordRepRing::New(1, extra);
   rep->head_ = 0;
   rep->tail_ = rep->advance(0);
-  rep->length = len; 
-  rep->entry_end_pos()[0] = len; 
+  rep->length = len;
+  rep->entry_end_pos()[0] = len;
   rep->entry_child()[0] = child;
   rep->entry_data_offset()[0] = static_cast<offset_type>(offset);
   return Validate(rep);
@@ -340,16 +340,16 @@ CordRepRing* CordRepRing::CreateFromLeaf(CordRep* child, size_t offset,
 
 CordRepRing* CordRepRing::CreateSlow(CordRep* child, size_t extra) {
   CordRepRing* rep = nullptr;
-  Consume(child, [&](CordRep* child_arg, size_t offset, size_t len) { 
-    if (IsFlatOrExternal(child_arg)) { 
-      rep = rep ? AppendLeaf(rep, child_arg, offset, len) 
-                : CreateFromLeaf(child_arg, offset, len, extra); 
+  Consume(child, [&](CordRep* child_arg, size_t offset, size_t len) {
+    if (IsFlatOrExternal(child_arg)) {
+      rep = rep ? AppendLeaf(rep, child_arg, offset, len)
+                : CreateFromLeaf(child_arg, offset, len, extra);
     } else if (rep) {
-      rep = AddRing<AddMode::kAppend>(rep, child_arg->ring(), offset, len); 
-    } else if (offset == 0 && child_arg->length == len) { 
-      rep = Mutable(child_arg->ring(), extra); 
+      rep = AddRing<AddMode::kAppend>(rep, child_arg->ring(), offset, len);
+    } else if (offset == 0 && child_arg->length == len) {
+      rep = Mutable(child_arg->ring(), extra);
     } else {
-      rep = SubRing(child_arg->ring(), offset, len, extra); 
+      rep = SubRing(child_arg->ring(), offset, len, extra);
     }
   });
   return Validate(rep, nullptr, __LINE__);
@@ -360,7 +360,7 @@ CordRepRing* CordRepRing::Create(CordRep* child, size_t extra) {
   if (IsFlatOrExternal(child)) {
     return CreateFromLeaf(child, 0, length, extra);
   }
-  if (child->IsRing()) { 
+  if (child->IsRing()) {
     return Mutable(child->ring(), extra);
   }
   return CreateSlow(child, extra);
@@ -368,18 +368,18 @@ CordRepRing* CordRepRing::Create(CordRep* child, size_t extra) {
 
 template <CordRepRing::AddMode mode>
 CordRepRing* CordRepRing::AddRing(CordRepRing* rep, CordRepRing* ring,
-                                  size_t offset, size_t len) { 
+                                  size_t offset, size_t len) {
   assert(offset < ring->length);
   constexpr bool append = mode == AddMode::kAppend;
   Position head = ring->Find(offset);
-  Position tail = ring->FindTail(head.index, offset + len); 
+  Position tail = ring->FindTail(head.index, offset + len);
   const index_type entries = ring->entries(head.index, tail.index);
 
   rep = Mutable(rep, entries);
 
   // The delta for making ring[head].end_pos into 'len - offset'
   const pos_type delta_length =
-      (append ? rep->begin_pos_ + rep->length : rep->begin_pos_ - len) - 
+      (append ? rep->begin_pos_ + rep->length : rep->begin_pos_ - len) -
       ring->entry_begin_pos(head.index) - head.offset;
 
   // Start filling at `tail`, or `entries` before `head`
@@ -420,36 +420,36 @@ CordRepRing* CordRepRing::AddRing(CordRepRing* rep, CordRepRing* ring,
   }
 
   // Commit changes
-  rep->length += len; 
+  rep->length += len;
   if (append) {
     rep->tail_ = filler.pos();
   } else {
     rep->head_ = filler.head();
-    rep->begin_pos_ -= len; 
+    rep->begin_pos_ -= len;
   }
 
   return Validate(rep);
 }
 
 CordRepRing* CordRepRing::AppendSlow(CordRepRing* rep, CordRep* child) {
-  Consume(child, [&rep](CordRep* child_arg, size_t offset, size_t len) { 
-    if (child_arg->IsRing()) { 
-      rep = AddRing<AddMode::kAppend>(rep, child_arg->ring(), offset, len); 
+  Consume(child, [&rep](CordRep* child_arg, size_t offset, size_t len) {
+    if (child_arg->IsRing()) {
+      rep = AddRing<AddMode::kAppend>(rep, child_arg->ring(), offset, len);
     } else {
-      rep = AppendLeaf(rep, child_arg, offset, len); 
+      rep = AppendLeaf(rep, child_arg, offset, len);
     }
   });
   return rep;
 }
 
 CordRepRing* CordRepRing::AppendLeaf(CordRepRing* rep, CordRep* child,
-                                     size_t offset, size_t len) { 
+                                     size_t offset, size_t len) {
   rep = Mutable(rep, 1);
   index_type back = rep->tail_;
   const pos_type begin_pos = rep->begin_pos_ + rep->length;
   rep->tail_ = rep->advance(rep->tail_);
-  rep->length += len; 
-  rep->entry_end_pos()[back] = begin_pos + len; 
+  rep->length += len;
+  rep->entry_end_pos()[back] = begin_pos + len;
   rep->entry_child()[back] = child;
   rep->entry_data_offset()[back] = static_cast<offset_type>(offset);
   return Validate(rep, nullptr, __LINE__);
@@ -460,31 +460,31 @@ CordRepRing* CordRepRing::Append(CordRepRing* rep, CordRep* child) {
   if (IsFlatOrExternal(child)) {
     return AppendLeaf(rep, child, 0, length);
   }
-  if (child->IsRing()) { 
+  if (child->IsRing()) {
     return AddRing<AddMode::kAppend>(rep, child->ring(), 0, length);
   }
   return AppendSlow(rep, child);
 }
 
 CordRepRing* CordRepRing::PrependSlow(CordRepRing* rep, CordRep* child) {
-  ReverseConsume(child, [&](CordRep* child_arg, size_t offset, size_t len) { 
-    if (IsFlatOrExternal(child_arg)) { 
-      rep = PrependLeaf(rep, child_arg, offset, len); 
+  ReverseConsume(child, [&](CordRep* child_arg, size_t offset, size_t len) {
+    if (IsFlatOrExternal(child_arg)) {
+      rep = PrependLeaf(rep, child_arg, offset, len);
     } else {
-      rep = AddRing<AddMode::kPrepend>(rep, child_arg->ring(), offset, len); 
+      rep = AddRing<AddMode::kPrepend>(rep, child_arg->ring(), offset, len);
     }
   });
   return Validate(rep);
 }
 
 CordRepRing* CordRepRing::PrependLeaf(CordRepRing* rep, CordRep* child,
-                                      size_t offset, size_t len) { 
+                                      size_t offset, size_t len) {
   rep = Mutable(rep, 1);
   index_type head = rep->retreat(rep->head_);
   pos_type end_pos = rep->begin_pos_;
   rep->head_ = head;
-  rep->length += len; 
-  rep->begin_pos_ -= len; 
+  rep->length += len;
+  rep->begin_pos_ -= len;
   rep->entry_end_pos()[head] = end_pos;
   rep->entry_child()[head] = child;
   rep->entry_data_offset()[head] = static_cast<offset_type>(offset);
@@ -496,7 +496,7 @@ CordRepRing* CordRepRing::Prepend(CordRepRing* rep, CordRep* child) {
   if (IsFlatOrExternal(child)) {
     return PrependLeaf(rep, child, 0, length);
   }
-  if (child->IsRing()) { 
+  if (child->IsRing()) {
     return AddRing<AddMode::kPrepend>(rep, child->ring(), 0, length);
   }
   return PrependSlow(rep, child);
@@ -504,7 +504,7 @@ CordRepRing* CordRepRing::Prepend(CordRepRing* rep, CordRep* child) {
 
 CordRepRing* CordRepRing::Append(CordRepRing* rep, y_absl::string_view data,
                                  size_t extra) {
-  if (rep->refcount.IsMutable()) { 
+  if (rep->refcount.IsMutable()) {
     Span<char> avail = rep->GetAppendBuffer(data.length());
     if (!avail.empty()) {
       memcpy(avail.data(), data.data(), avail.length());
@@ -538,7 +538,7 @@ CordRepRing* CordRepRing::Append(CordRepRing* rep, y_absl::string_view data,
 
 CordRepRing* CordRepRing::Prepend(CordRepRing* rep, y_absl::string_view data,
                                   size_t extra) {
-  if (rep->refcount.IsMutable()) { 
+  if (rep->refcount.IsMutable()) {
     Span<char> avail = rep->GetPrependBuffer(data.length());
     if (!avail.empty()) {
       const char* tail = data.data() + data.length() - avail.length();
@@ -664,21 +664,21 @@ char CordRepRing::GetCharacter(size_t offset) const {
 }
 
 CordRepRing* CordRepRing::SubRing(CordRepRing* rep, size_t offset,
-                                  size_t len, size_t extra) { 
+                                  size_t len, size_t extra) {
   assert(offset <= rep->length);
-  assert(offset <= rep->length - len); 
+  assert(offset <= rep->length - len);
 
-  if (len == 0) { 
+  if (len == 0) {
     CordRep::Unref(rep);
     return nullptr;
   }
 
   // Find position of first byte
   Position head = rep->Find(offset);
-  Position tail = rep->FindTail(head.index, offset + len); 
+  Position tail = rep->FindTail(head.index, offset + len);
   const size_t new_entries = rep->entries(head.index, tail.index);
 
-  if (rep->refcount.IsMutable() && extra <= (rep->capacity() - new_entries)) { 
+  if (rep->refcount.IsMutable() && extra <= (rep->capacity() - new_entries)) {
     // We adopt a privately owned rep and no extra entries needed.
     if (head.index != rep->head_) UnrefEntries(rep, rep->head_, head.index);
     if (tail.index != rep->tail_) UnrefEntries(rep, tail.index, rep->tail_);
@@ -692,7 +692,7 @@ CordRepRing* CordRepRing::SubRing(CordRepRing* rep, size_t offset,
   }
 
   // Adjust begin_pos and length
-  rep->length = len; 
+  rep->length = len;
   rep->begin_pos_ += offset;
 
   // Adjust head and tail blocks
@@ -715,7 +715,7 @@ CordRepRing* CordRepRing::RemovePrefix(CordRepRing* rep, size_t len,
   }
 
   Position head = rep->Find(len);
-  if (rep->refcount.IsMutable()) { 
+  if (rep->refcount.IsMutable()) {
     if (head.index != rep->head_) UnrefEntries(rep, rep->head_, head.index);
     rep->head_ = head.index;
   } else {
@@ -745,7 +745,7 @@ CordRepRing* CordRepRing::RemoveSuffix(CordRepRing* rep, size_t len,
   }
 
   Position tail = rep->FindTail(rep->length - len);
-  if (rep->refcount.IsMutable()) { 
+  if (rep->refcount.IsMutable()) {
     // We adopt a privately owned rep, scrub.
     if (tail.index != rep->tail_) UnrefEntries(rep, tail.index, rep->tail_);
     rep->tail_ = tail.index;

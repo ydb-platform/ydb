@@ -1,5 +1,5 @@
 #include "cli.h"
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 #include <util/stream/file.h>
 #include <util/string/printf.h>
 

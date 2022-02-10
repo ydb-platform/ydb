@@ -147,7 +147,7 @@ namespace boost { namespace spirit { namespace karma
         generator_impl_type generator_;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(lit_auto_generator& operator= (lit_auto_generator const&)); 
+        BOOST_DELETED_FUNCTION(lit_auto_generator& operator= (lit_auto_generator const&));
     };
 
     ///////////////////////////////////////////////////////////////////////////

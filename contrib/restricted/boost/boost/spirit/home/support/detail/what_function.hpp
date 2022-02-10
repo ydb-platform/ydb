@@ -40,7 +40,7 @@ namespace boost { namespace spirit { namespace detail
         Context& context;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(what_function& operator= (what_function const&)); 
+        BOOST_DELETED_FUNCTION(what_function& operator= (what_function const&));
     };
 }}}
 

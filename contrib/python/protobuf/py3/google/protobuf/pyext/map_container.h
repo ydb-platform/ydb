@@ -33,12 +33,12 @@
 
 #include <Python.h>
 
-#include <cstdint> 
+#include <cstdint>
 #include <memory>
 
-#include <google/protobuf/descriptor.h> 
-#include <google/protobuf/message.h> 
-#include <google/protobuf/pyext/message.h> 
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/message.h>
+#include <google/protobuf/pyext/message.h>
 
 namespace google {
 namespace protobuf {
@@ -51,13 +51,13 @@ struct CMessageClass;
 
 // This struct is used directly for ScalarMap, and is the base class of
 // MessageMapContainer, which is used for MessageMap.
-struct MapContainer : public ContainerBase { 
+struct MapContainer : public ContainerBase {
   // Use to get a mutable message when necessary.
   Message* GetMutableMessage();
 
   // We bump this whenever we perform a mutation, to invalidate existing
   // iterators.
-  uint64_t version; 
+  uint64_t version;
 };
 
 struct MessageMapContainer : public MapContainer {
@@ -73,17 +73,17 @@ extern PyTypeObject MapIterator_Type;  // Both map types use the same iterator.
 
 // Builds a MapContainer object, from a parent message and a
 // field descriptor.
-extern MapContainer* NewScalarMapContainer( 
+extern MapContainer* NewScalarMapContainer(
     CMessage* parent, const FieldDescriptor* parent_field_descriptor);
 
 // Builds a MessageMap object, from a parent message and a
 // field descriptor.
-extern MessageMapContainer* NewMessageMapContainer( 
+extern MessageMapContainer* NewMessageMapContainer(
     CMessage* parent, const FieldDescriptor* parent_field_descriptor,
     CMessageClass* message_class);
 
 }  // namespace python
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
 #endif  // GOOGLE_PROTOBUF_PYTHON_CPP_MAP_CONTAINER_H__

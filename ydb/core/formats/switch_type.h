@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 
 namespace NKikimr::NArrow {
 
@@ -69,18 +69,18 @@ bool SwitchType(arrow::Type::type typeId, TFunc&& f) {
             return f(TTypeWrapper<arrow::LargeStringType>());
         case arrow::Type::LARGE_BINARY:
             return f(TTypeWrapper<arrow::LargeBinaryType>());
-        case arrow::Type::DECIMAL256: 
-        case arrow::Type::DENSE_UNION: 
-        case arrow::Type::DICTIONARY: 
-        case arrow::Type::EXTENSION: 
-        case arrow::Type::FIXED_SIZE_LIST: 
-        case arrow::Type::INTERVAL_DAY_TIME: 
+        case arrow::Type::DECIMAL256:
+        case arrow::Type::DENSE_UNION:
+        case arrow::Type::DICTIONARY:
+        case arrow::Type::EXTENSION:
+        case arrow::Type::FIXED_SIZE_LIST:
+        case arrow::Type::INTERVAL_DAY_TIME:
         case arrow::Type::LARGE_LIST:
-        case arrow::Type::LIST: 
-        case arrow::Type::MAP: 
+        case arrow::Type::LIST:
+        case arrow::Type::MAP:
         case arrow::Type::MAX_ID:
-        case arrow::Type::SPARSE_UNION: 
-        case arrow::Type::STRUCT: 
+        case arrow::Type::SPARSE_UNION:
+        case arrow::Type::STRUCT:
             break;
     }
 

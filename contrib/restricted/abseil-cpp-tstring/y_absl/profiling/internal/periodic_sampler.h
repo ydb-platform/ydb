@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_PROFILING_INTERNAL_PERIODIC_SAMPLER_H_ 
-#define ABSL_PROFILING_INTERNAL_PERIODIC_SAMPLER_H_ 
+#ifndef ABSL_PROFILING_INTERNAL_PERIODIC_SAMPLER_H_
+#define ABSL_PROFILING_INTERNAL_PERIODIC_SAMPLER_H_
 
 #include <stdint.h>
 
 #include <atomic>
 
 #include "y_absl/base/optimization.h"
-#include "y_absl/profiling/internal/exponential_biased.h" 
+#include "y_absl/profiling/internal/exponential_biased.h"
 
 namespace y_absl {
 ABSL_NAMESPACE_BEGIN
-namespace profiling_internal { 
+namespace profiling_internal {
 
 // PeriodicSamplerBase provides the basic period sampler implementation.
 //
@@ -149,7 +149,7 @@ class PeriodicSamplerBase {
   //   ICC   x64 (OK) : https://gcc.godbolt.org/z/ptTNfD
   //   MSVC  x64 (OK) : https://gcc.godbolt.org/z/76j4-5
   uint64_t stride_ = 0;
-  y_absl::profiling_internal::ExponentialBiased rng_; 
+  y_absl::profiling_internal::ExponentialBiased rng_;
 };
 
 inline bool PeriodicSamplerBase::SubtleMaybeSample() noexcept {
@@ -204,8 +204,8 @@ class PeriodicSampler final : public PeriodicSamplerBase {
 template <typename Tag, int default_period>
 std::atomic<int> PeriodicSampler<Tag, default_period>::period_(default_period);
 
-}  // namespace profiling_internal 
+}  // namespace profiling_internal
 ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_PROFILING_INTERNAL_PERIODIC_SAMPLER_H_ 
+#endif  // ABSL_PROFILING_INTERNAL_PERIODIC_SAMPLER_H_

@@ -69,8 +69,8 @@ void PrintIncludes(grpc_generator::Printer* printer,
                    bool use_system_headers, const TString& search_path) {
   std::map<TString, TString> vars;
 
-  vars["l"] = use_system_headers ? '<' : '"'; 
-  vars["r"] = use_system_headers ? '>' : '"'; 
+  vars["l"] = use_system_headers ? '<' : '"';
+  vars["r"] = use_system_headers ? '>' : '"';
 
   if (!search_path.empty()) {
     vars["l"] += search_path;

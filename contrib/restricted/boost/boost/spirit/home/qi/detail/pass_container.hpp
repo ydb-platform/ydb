@@ -355,7 +355,7 @@ namespace boost { namespace spirit { namespace qi { namespace detail
         Attr& attr;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(pass_container& operator= (pass_container const&)); 
+        BOOST_DELETED_FUNCTION(pass_container& operator= (pass_container const&));
     };
 
     ///////////////////////////////////////////////////////////////////////////

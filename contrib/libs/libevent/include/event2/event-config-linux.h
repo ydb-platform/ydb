@@ -26,9 +26,9 @@
 /* Define to 1 if you have the `accept4' function. */
 #define EVENT__HAVE_ACCEPT4 1
 
-/* Define to 1 if you have the <afunix.h> header file. */ 
-/* #undef EVENT__HAVE_AFUNIX_H */ 
- 
+/* Define to 1 if you have the <afunix.h> header file. */
+/* #undef EVENT__HAVE_AFUNIX_H */
+
 /* Define to 1 if you have the `arc4random' function. */
 /* #undef EVENT__HAVE_ARC4RANDOM */
 
@@ -46,11 +46,11 @@
 
 /* Define to 1 if you have the declaration of `CTL_KERN', and to 0 if you
    don't. */
-/* #undef EVENT__HAVE_DECL_CTL_KERN */ 
+/* #undef EVENT__HAVE_DECL_CTL_KERN */
 
 /* Define to 1 if you have the declaration of `KERN_ARND', and to 0 if you
    don't. */
-/* #undef EVENT__HAVE_DECL_KERN_ARND */ 
+/* #undef EVENT__HAVE_DECL_KERN_ARND */
 
 /* Define if /dev/poll is available */
 /* #undef EVENT__HAVE_DEVPOLL */
@@ -115,9 +115,9 @@
 /* Define to 1 if you have the `getprotobynumber' function. */
 #define EVENT__HAVE_GETPROTOBYNUMBER 1
 
-/* Define to 1 if you have the `getrandom' function. */ 
-#define EVENT__HAVE_GETRANDOM 1 
- 
+/* Define to 1 if you have the `getrandom' function. */
+#define EVENT__HAVE_GETRANDOM 1
+
 /* Define to 1 if you have the `getservbyname' function. */
 #define EVENT__HAVE_GETSERVBYNAME 1
 
@@ -142,18 +142,18 @@
 /* Define to 1 if you have the `kqueue' function. */
 /* #undef EVENT__HAVE_KQUEUE */
 
-/* Define to 1 if you have the `ws2_32' library (-lws2_32). */ 
-/* #undef EVENT__HAVE_LIBWS2_32 */ 
- 
+/* Define to 1 if you have the `ws2_32' library (-lws2_32). */
+/* #undef EVENT__HAVE_LIBWS2_32 */
+
 /* Define if the system has zlib */
 #define EVENT__HAVE_LIBZ 1
 
 /* Define to 1 if you have the `mach_absolute_time' function. */
 /* #undef EVENT__HAVE_MACH_ABSOLUTE_TIME */
 
-/* Define to 1 if you have the <mach/mach.h> header file. */ 
-/* #undef EVENT__HAVE_MACH_MACH_H */ 
- 
+/* Define to 1 if you have the <mach/mach.h> header file. */
+/* #undef EVENT__HAVE_MACH_MACH_H */
+
 /* Define to 1 if you have the <mach/mach_time.h> header file. */
 /* #undef EVENT__HAVE_MACH_MACH_TIME_H */
 
@@ -305,7 +305,7 @@
 #define EVENT__HAVE_STRUCT_SOCKADDR_UN 1
 
 /* Define to 1 if you have the `sysctl' function. */
-/* #undef EVENT__HAVE_SYSCTL */ 
+/* #undef EVENT__HAVE_SYSCTL */
 
 /* Define to 1 if you have the <sys/devpoll.h> header file. */
 /* #undef EVENT__HAVE_SYS_DEVPOLL_H */
@@ -331,9 +331,9 @@
 /* Define to 1 if you have the <sys/queue.h> header file. */
 #define EVENT__HAVE_SYS_QUEUE_H 1
 
-/* Define to 1 if you have the <sys/random.h> header file. */ 
-#define EVENT__HAVE_SYS_RANDOM_H 1 
- 
+/* Define to 1 if you have the <sys/random.h> header file. */
+#define EVENT__HAVE_SYS_RANDOM_H 1
+
 /* Define to 1 if you have the <sys/resource.h> header file. */
 #define EVENT__HAVE_SYS_RESOURCE_H 1
 
@@ -350,7 +350,7 @@
 #define EVENT__HAVE_SYS_STAT_H 1
 
 /* Define to 1 if you have the <sys/sysctl.h> header file. */
-/* #undef EVENT__HAVE_SYS_SYSCTL_H */ 
+/* #undef EVENT__HAVE_SYS_SYSCTL_H */
 
 /* Define to 1 if you have the <sys/timerfd.h> header file. */
 #define EVENT__HAVE_SYS_TIMERFD_H 1
@@ -424,12 +424,12 @@
 /* Define to 1 if you have the <zlib.h> header file. */
 #define EVENT__HAVE_ZLIB_H 1
 
-/* Define to 1 if you have the `_gmtime64' function. */ 
-/* #undef EVENT__HAVE__GMTIME64 */ 
- 
-/* Define to 1 if you have the `_gmtime64_s' function. */ 
-/* #undef EVENT__HAVE__GMTIME64_S */ 
- 
+/* Define to 1 if you have the `_gmtime64' function. */
+/* #undef EVENT__HAVE__GMTIME64 */
+
+/* Define to 1 if you have the `_gmtime64_s' function. */
+/* #undef EVENT__HAVE__GMTIME64_S */
+
 /* Define to 1 if compiler have __FUNCTION__ */
 #define EVENT__HAVE___FUNCTION__ 1
 
@@ -440,7 +440,7 @@
 #define EVENT__LT_OBJDIR ".libs/"
 
 /* Numeric representation of the version */
-#define EVENT__NUMERIC_VERSION 0x02010c00 
+#define EVENT__NUMERIC_VERSION 0x02010c00
 
 /* Name of package */
 #define EVENT__PACKAGE "libevent"
@@ -452,7 +452,7 @@
 #define EVENT__PACKAGE_NAME "libevent"
 
 /* Define to the full name and version of this package. */
-#define EVENT__PACKAGE_STRING "libevent 2.1.12-stable" 
+#define EVENT__PACKAGE_STRING "libevent 2.1.12-stable"
 
 /* Define to the one symbol short name of this package. */
 #define EVENT__PACKAGE_TARNAME "libevent"
@@ -461,7 +461,7 @@
 #define EVENT__PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define EVENT__PACKAGE_VERSION "2.1.12-stable" 
+#define EVENT__PACKAGE_VERSION "2.1.12-stable"
 
 /* Define to necessary symbol if this constant uses a non-standard name on
    your system. */
@@ -523,7 +523,7 @@
 
 
 /* Version number of package */
-#define EVENT__VERSION "2.1.12-stable" 
+#define EVENT__VERSION "2.1.12-stable"
 
 /* Enable large inode numbers on Mac OS X 10.5.  */
 #ifndef _DARWIN_USE_64_BIT_INODE

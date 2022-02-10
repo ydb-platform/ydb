@@ -1,8 +1,8 @@
 /*
- *  Copyright (c) 2016-2020 Positive Technologies, https://www.ptsecurity.com, 
+ *  Copyright (c) 2016-2020 Positive Technologies, https://www.ptsecurity.com,
  *  Fast Positive Hash.
  *
- *  Portions Copyright (c) 2010-2020 Leonid Yuriev <leo@yuriev.ru>, 
+ *  Portions Copyright (c) 2010-2020 Leonid Yuriev <leo@yuriev.ru>,
  *  The 1Hippeus project (t1h).
  *
  *  This software is provided 'as-is', without any express or implied
@@ -34,7 +34,7 @@
  *     hardware tricks).
  *  3. Not suitable for cryptography.
  *
- * The Future will (be) Positive. Всё будет хорошо. 
+ * The Future will (be) Positive. Всё будет хорошо.
  *
  * ACKNOWLEDGEMENT:
  * The t1ha was originally developed by Leonid Yuriev (Леонид Юрьев)
@@ -123,10 +123,10 @@
 #endif
 
 #ifndef __optimize
-#if defined(__clang__) && !__has_attribute(__optimize__) 
+#if defined(__clang__) && !__has_attribute(__optimize__)
 #define __optimize(ops)
-#elif defined(__GNUC__) || __has_attribute(__optimize__) 
-#define __optimize(ops) __attribute__((__optimize__(ops))) 
+#elif defined(__GNUC__) || __has_attribute(__optimize__)
+#define __optimize(ops) __attribute__((__optimize__(ops)))
 #else
 #define __optimize(ops)
 #endif
@@ -135,13 +135,13 @@
 #ifndef __cold
 #if defined(__OPTIMIZE__)
 #if defined(__e2k__)
-#define __cold __optimize(1) __attribute__((__cold__)) 
-#elif defined(__clang__) && !__has_attribute(__cold__) &&                      \ 
-    __has_attribute(__section__) 
+#define __cold __optimize(1) __attribute__((__cold__))
+#elif defined(__clang__) && !__has_attribute(__cold__) &&                      \
+    __has_attribute(__section__)
 /* just put infrequently used functions in separate section */
-#define __cold __attribute__((__section__("text.unlikely"))) __optimize("Os") 
-#elif defined(__GNUC__) || __has_attribute(__cold__) 
-#define __cold __attribute__((__cold__)) __optimize("Os") 
+#define __cold __attribute__((__section__("text.unlikely"))) __optimize("Os")
+#elif defined(__GNUC__) || __has_attribute(__cold__)
+#define __cold __attribute__((__cold__)) __optimize("Os")
 #else
 #define __cold __optimize("Os")
 #endif
@@ -161,7 +161,7 @@
 #endif
 
 #if defined(__e2k__)
-#include <e2kbuiltin.h> 
+#include <e2kbuiltin.h>
 #endif
 
 #ifndef likely
@@ -182,14 +182,14 @@
 #define bswap16(v) __builtin_bswap16(v)
 #endif
 
-#if !defined(__maybe_unused) &&                                                \ 
-    (__GNUC_PREREQ(4, 3) || __has_attribute(__unused__)) 
-#define __maybe_unused __attribute__((__unused__)) 
+#if !defined(__maybe_unused) &&                                                \
+    (__GNUC_PREREQ(4, 3) || __has_attribute(__unused__))
+#define __maybe_unused __attribute__((__unused__))
 #endif
 
 #if !defined(__always_inline) &&                                               \
-    (__GNUC_PREREQ(3, 2) || __has_attribute(__always_inline__)) 
-#define __always_inline __inline __attribute__((__always_inline__)) 
+    (__GNUC_PREREQ(3, 2) || __has_attribute(__always_inline__))
+#define __always_inline __inline __attribute__((__always_inline__))
 #endif
 
 #if defined(__e2k__)
@@ -401,24 +401,24 @@ static __always_inline uint16_t bswap16(uint16_t v) { return v << 8 | v >> 8; }
 #endif
 #endif /* bswap16 */
 
-#if defined(__ia32__) ||                                                       \ 
-    T1HA_SYS_UNALIGNED_ACCESS == T1HA_UNALIGNED_ACCESS__EFFICIENT 
-/* The __builtin_assume_aligned() leads gcc/clang to load values into the 
- * registers, even when it is possible to directly use an operand from memory. 
- * This can lead to a shortage of registers and a significant slowdown. 
- * Therefore avoid unnecessary use of  __builtin_assume_aligned() for x86. */ 
-#define read_unaligned(ptr, bits) (*(const uint##bits##_t *__restrict)(ptr)) 
-#define read_aligned(ptr, bits) (*(const uint##bits##_t *__restrict)(ptr)) 
-#endif /* __ia32__ */ 
- 
+#if defined(__ia32__) ||                                                       \
+    T1HA_SYS_UNALIGNED_ACCESS == T1HA_UNALIGNED_ACCESS__EFFICIENT
+/* The __builtin_assume_aligned() leads gcc/clang to load values into the
+ * registers, even when it is possible to directly use an operand from memory.
+ * This can lead to a shortage of registers and a significant slowdown.
+ * Therefore avoid unnecessary use of  __builtin_assume_aligned() for x86. */
+#define read_unaligned(ptr, bits) (*(const uint##bits##_t *__restrict)(ptr))
+#define read_aligned(ptr, bits) (*(const uint##bits##_t *__restrict)(ptr))
+#endif /* __ia32__ */
+
 #ifndef read_unaligned
-#if defined(__GNUC__) || __has_attribute(__packed__) 
+#if defined(__GNUC__) || __has_attribute(__packed__)
 typedef struct {
   uint8_t unaligned_8;
   uint16_t unaligned_16;
   uint32_t unaligned_32;
   uint64_t unaligned_64;
-} __attribute__((__packed__)) t1ha_unaligned_proxy; 
+} __attribute__((__packed__)) t1ha_unaligned_proxy;
 #define read_unaligned(ptr, bits)                                              \
   (((const t1ha_unaligned_proxy *)((const uint8_t *)(ptr)-offsetof(            \
         t1ha_unaligned_proxy, unaligned_##bits)))                              \
@@ -448,25 +448,25 @@ typedef struct {
 #if __GNUC_PREREQ(4, 8) || __has_builtin(__builtin_assume_aligned)
 #define read_aligned(ptr, bits)                                                \
   (*(const uint##bits##_t *)__builtin_assume_aligned(ptr, ALIGNMENT_##bits))
-#elif (__GNUC_PREREQ(3, 3) || __has_attribute(__aligned__)) &&                 \ 
-    !defined(__clang__) 
+#elif (__GNUC_PREREQ(3, 3) || __has_attribute(__aligned__)) &&                 \
+    !defined(__clang__)
 #define read_aligned(ptr, bits)                                                \
-  (*(const uint##bits##_t                                                      \ 
-     __attribute__((__aligned__(ALIGNMENT_##bits))) *)(ptr)) 
-#elif __has_attribute(__assume_aligned__) 
+  (*(const uint##bits##_t                                                      \
+     __attribute__((__aligned__(ALIGNMENT_##bits))) *)(ptr))
+#elif __has_attribute(__assume_aligned__)
 
 static __always_inline const
-    uint16_t *__attribute__((__assume_aligned__(ALIGNMENT_16))) 
+    uint16_t *__attribute__((__assume_aligned__(ALIGNMENT_16)))
     cast_aligned_16(const void *ptr) {
   return (const uint16_t *)ptr;
 }
 static __always_inline const
-    uint32_t *__attribute__((__assume_aligned__(ALIGNMENT_32))) 
+    uint32_t *__attribute__((__assume_aligned__(ALIGNMENT_32)))
     cast_aligned_32(const void *ptr) {
   return (const uint32_t *)ptr;
 }
 static __always_inline const
-    uint64_t *__attribute__((__assume_aligned__(ALIGNMENT_64))) 
+    uint64_t *__attribute__((__assume_aligned__(ALIGNMENT_64)))
     cast_aligned_64(const void *ptr) {
   return (const uint64_t *)ptr;
 }
@@ -524,8 +524,8 @@ static __always_inline const
 /*---------------------------------------------------------- Little Endian */
 
 #ifndef fetch16_le_aligned
-static __maybe_unused __always_inline uint16_t 
-fetch16_le_aligned(const void *v) { 
+static __maybe_unused __always_inline uint16_t
+fetch16_le_aligned(const void *v) {
   assert(((uintptr_t)v) % ALIGNMENT_16 == 0);
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
   return read_aligned(v, 16);
@@ -536,8 +536,8 @@ fetch16_le_aligned(const void *v) {
 #endif /* fetch16_le_aligned */
 
 #ifndef fetch16_le_unaligned
-static __maybe_unused __always_inline uint16_t 
-fetch16_le_unaligned(const void *v) { 
+static __maybe_unused __always_inline uint16_t
+fetch16_le_unaligned(const void *v) {
 #if T1HA_SYS_UNALIGNED_ACCESS == T1HA_UNALIGNED_ACCESS__UNABLE
   const uint8_t *p = (const uint8_t *)v;
   return p[0] | (uint16_t)p[1] << 8;
@@ -550,8 +550,8 @@ fetch16_le_unaligned(const void *v) {
 #endif /* fetch16_le_unaligned */
 
 #ifndef fetch32_le_aligned
-static __maybe_unused __always_inline uint32_t 
-fetch32_le_aligned(const void *v) { 
+static __maybe_unused __always_inline uint32_t
+fetch32_le_aligned(const void *v) {
   assert(((uintptr_t)v) % ALIGNMENT_32 == 0);
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
   return read_aligned(v, 32);
@@ -562,8 +562,8 @@ fetch32_le_aligned(const void *v) {
 #endif /* fetch32_le_aligned */
 
 #ifndef fetch32_le_unaligned
-static __maybe_unused __always_inline uint32_t 
-fetch32_le_unaligned(const void *v) { 
+static __maybe_unused __always_inline uint32_t
+fetch32_le_unaligned(const void *v) {
 #if T1HA_SYS_UNALIGNED_ACCESS == T1HA_UNALIGNED_ACCESS__UNABLE
   return fetch16_le_unaligned(v) |
          (uint32_t)fetch16_le_unaligned((const uint8_t *)v + 2) << 16;
@@ -576,8 +576,8 @@ fetch32_le_unaligned(const void *v) {
 #endif /* fetch32_le_unaligned */
 
 #ifndef fetch64_le_aligned
-static __maybe_unused __always_inline uint64_t 
-fetch64_le_aligned(const void *v) { 
+static __maybe_unused __always_inline uint64_t
+fetch64_le_aligned(const void *v) {
   assert(((uintptr_t)v) % ALIGNMENT_64 == 0);
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
   return read_aligned(v, 64);
@@ -588,8 +588,8 @@ fetch64_le_aligned(const void *v) {
 #endif /* fetch64_le_aligned */
 
 #ifndef fetch64_le_unaligned
-static __maybe_unused __always_inline uint64_t 
-fetch64_le_unaligned(const void *v) { 
+static __maybe_unused __always_inline uint64_t
+fetch64_le_unaligned(const void *v) {
 #if T1HA_SYS_UNALIGNED_ACCESS == T1HA_UNALIGNED_ACCESS__UNABLE
   return fetch32_le_unaligned(v) |
          (uint64_t)fetch32_le_unaligned((const uint8_t *)v + 4) << 32;
@@ -601,8 +601,8 @@ fetch64_le_unaligned(const void *v) {
 }
 #endif /* fetch64_le_unaligned */
 
-static __maybe_unused __always_inline uint64_t tail64_le_aligned(const void *v, 
-                                                                 size_t tail) { 
+static __maybe_unused __always_inline uint64_t tail64_le_aligned(const void *v,
+                                                                 size_t tail) {
   const uint8_t *const p = (const uint8_t *)v;
 #if T1HA_USE_FAST_ONESHOT_READ && !defined(__SANITIZE_ADDRESS__)
   /* We can perform a 'oneshot' read, which is little bit faster. */
@@ -680,8 +680,8 @@ static __maybe_unused __always_inline uint64_t tail64_le_aligned(const void *v,
   (((PAGESIZE - (size)) & (uintptr_t)(ptr)) != 0)
 #endif /* T1HA_USE_FAST_ONESHOT_READ */
 
-static __maybe_unused __always_inline uint64_t 
-tail64_le_unaligned(const void *v, size_t tail) { 
+static __maybe_unused __always_inline uint64_t
+tail64_le_unaligned(const void *v, size_t tail) {
   const uint8_t *p = (const uint8_t *)v;
 #if defined(can_read_underside) &&                                             \
     (UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul)
@@ -980,14 +980,14 @@ tail64_be_unaligned(const void *v, size_t tail) {
 /***************************************************************************/
 
 #ifndef rot64
-static __maybe_unused __always_inline uint64_t rot64(uint64_t v, unsigned s) { 
+static __maybe_unused __always_inline uint64_t rot64(uint64_t v, unsigned s) {
   return (v >> s) | (v << (64 - s));
 }
 #endif /* rot64 */
 
 #ifndef mul_32x32_64
-static __maybe_unused __always_inline uint64_t mul_32x32_64(uint32_t a, 
-                                                            uint32_t b) { 
+static __maybe_unused __always_inline uint64_t mul_32x32_64(uint32_t a,
+                                                            uint32_t b) {
   return a * (uint64_t)b;
 }
 #endif /* mul_32x32_64 */
@@ -1037,9 +1037,9 @@ add64carry_last(unsigned carry, uint64_t base, uint64_t addend, uint64_t *sum) {
 static __maybe_unused __always_inline uint64_t mul_64x64_128(uint64_t a,
                                                              uint64_t b,
                                                              uint64_t *h) {
-#if (defined(__SIZEOF_INT128__) ||                                             \ 
-     (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)) &&            \ 
-    (!defined(__LCC__) || __LCC__ != 124) 
+#if (defined(__SIZEOF_INT128__) ||                                             \
+     (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)) &&            \
+    (!defined(__LCC__) || __LCC__ != 124)
   __uint128_t r = (__uint128_t)a * (__uint128_t)b;
   /* modern GCC could nicely optimize this */
   *h = (uint64_t)(r >> 64);
@@ -1094,15 +1094,15 @@ static __maybe_unused __always_inline uint64_t mux64(uint64_t v,
   return l ^ h;
 }
 
-static __maybe_unused __always_inline uint64_t final64(uint64_t a, uint64_t b) { 
+static __maybe_unused __always_inline uint64_t final64(uint64_t a, uint64_t b) {
   uint64_t x = (a + rot64(b, 41)) * prime_0;
   uint64_t y = (rot64(a, 23) + b) * prime_6;
   return mux64(x ^ y, prime_5);
 }
 
-static __maybe_unused __always_inline void mixup64(uint64_t *__restrict a, 
-                                                   uint64_t *__restrict b, 
-                                                   uint64_t v, uint64_t prime) { 
+static __maybe_unused __always_inline void mixup64(uint64_t *__restrict a,
+                                                   uint64_t *__restrict b,
+                                                   uint64_t v, uint64_t prime) {
   uint64_t h;
   *a ^= mul_64x64_128(*b + v, prime, &h);
   *b += h;
@@ -1124,8 +1124,8 @@ typedef union t1ha_uint128 {
   };
 } t1ha_uint128_t;
 
-static __maybe_unused __always_inline t1ha_uint128_t 
-not128(const t1ha_uint128_t v) { 
+static __maybe_unused __always_inline t1ha_uint128_t
+not128(const t1ha_uint128_t v) {
   t1ha_uint128_t r;
 #if defined(__SIZEOF_INT128__) ||                                              \
     (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)
@@ -1137,8 +1137,8 @@ not128(const t1ha_uint128_t v) {
   return r;
 }
 
-static __maybe_unused __always_inline t1ha_uint128_t 
-left128(const t1ha_uint128_t v, unsigned s) { 
+static __maybe_unused __always_inline t1ha_uint128_t
+left128(const t1ha_uint128_t v, unsigned s) {
   t1ha_uint128_t r;
   assert(s < 128);
 #if defined(__SIZEOF_INT128__) ||                                              \
@@ -1151,8 +1151,8 @@ left128(const t1ha_uint128_t v, unsigned s) {
   return r;
 }
 
-static __maybe_unused __always_inline t1ha_uint128_t 
-right128(const t1ha_uint128_t v, unsigned s) { 
+static __maybe_unused __always_inline t1ha_uint128_t
+right128(const t1ha_uint128_t v, unsigned s) {
   t1ha_uint128_t r;
   assert(s < 128);
 #if defined(__SIZEOF_INT128__) ||                                              \
@@ -1165,8 +1165,8 @@ right128(const t1ha_uint128_t v, unsigned s) {
   return r;
 }
 
-static __maybe_unused __always_inline t1ha_uint128_t or128(t1ha_uint128_t x, 
-                                                           t1ha_uint128_t y) { 
+static __maybe_unused __always_inline t1ha_uint128_t or128(t1ha_uint128_t x,
+                                                           t1ha_uint128_t y) {
   t1ha_uint128_t r;
 #if defined(__SIZEOF_INT128__) ||                                              \
     (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)
@@ -1178,8 +1178,8 @@ static __maybe_unused __always_inline t1ha_uint128_t or128(t1ha_uint128_t x,
   return r;
 }
 
-static __maybe_unused __always_inline t1ha_uint128_t xor128(t1ha_uint128_t x, 
-                                                            t1ha_uint128_t y) { 
+static __maybe_unused __always_inline t1ha_uint128_t xor128(t1ha_uint128_t x,
+                                                            t1ha_uint128_t y) {
   t1ha_uint128_t r;
 #if defined(__SIZEOF_INT128__) ||                                              \
     (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)
@@ -1191,8 +1191,8 @@ static __maybe_unused __always_inline t1ha_uint128_t xor128(t1ha_uint128_t x,
   return r;
 }
 
-static __maybe_unused __always_inline t1ha_uint128_t rot128(t1ha_uint128_t v, 
-                                                            unsigned s) { 
+static __maybe_unused __always_inline t1ha_uint128_t rot128(t1ha_uint128_t v,
+                                                            unsigned s) {
   s &= 127;
 #if defined(__SIZEOF_INT128__) ||                                              \
     (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)
@@ -1203,8 +1203,8 @@ static __maybe_unused __always_inline t1ha_uint128_t rot128(t1ha_uint128_t v,
 #endif
 }
 
-static __maybe_unused __always_inline t1ha_uint128_t add128(t1ha_uint128_t x, 
-                                                            t1ha_uint128_t y) { 
+static __maybe_unused __always_inline t1ha_uint128_t add128(t1ha_uint128_t x,
+                                                            t1ha_uint128_t y) {
   t1ha_uint128_t r;
 #if defined(__SIZEOF_INT128__) ||                                              \
     (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)
@@ -1215,8 +1215,8 @@ static __maybe_unused __always_inline t1ha_uint128_t add128(t1ha_uint128_t x,
   return r;
 }
 
-static __maybe_unused __always_inline t1ha_uint128_t mul128(t1ha_uint128_t x, 
-                                                            t1ha_uint128_t y) { 
+static __maybe_unused __always_inline t1ha_uint128_t mul128(t1ha_uint128_t x,
+                                                            t1ha_uint128_t y) {
   t1ha_uint128_t r;
 #if defined(__SIZEOF_INT128__) ||                                              \
     (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)
@@ -1233,20 +1233,20 @@ static __maybe_unused __always_inline t1ha_uint128_t mul128(t1ha_uint128_t x,
 #if T1HA0_AESNI_AVAILABLE && defined(__ia32__)
 uint64_t t1ha_ia32cpu_features(void);
 
-static __maybe_unused __always_inline bool 
-t1ha_ia32_AESNI_avail(uint64_t ia32cpu_features) { 
+static __maybe_unused __always_inline bool
+t1ha_ia32_AESNI_avail(uint64_t ia32cpu_features) {
   /* check for AES-NI */
   return (ia32cpu_features & UINT32_C(0x02000000)) != 0;
 }
 
-static __maybe_unused __always_inline bool 
-t1ha_ia32_AVX_avail(uint64_t ia32cpu_features) { 
+static __maybe_unused __always_inline bool
+t1ha_ia32_AVX_avail(uint64_t ia32cpu_features) {
   /* check for any AVX */
   return (ia32cpu_features & UINT32_C(0x1A000000)) == UINT32_C(0x1A000000);
 }
 
-static __maybe_unused __always_inline bool 
-t1ha_ia32_AVX2_avail(uint64_t ia32cpu_features) { 
+static __maybe_unused __always_inline bool
+t1ha_ia32_AVX2_avail(uint64_t ia32cpu_features) {
   /* check for 'Advanced Vector Extensions 2' */
   return ((ia32cpu_features >> 32) & 32) != 0;
 }

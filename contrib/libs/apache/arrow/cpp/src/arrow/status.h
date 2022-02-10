@@ -83,7 +83,7 @@ enum class StatusCode : char {
   IOError = 5,
   CapacityError = 6,
   IndexError = 7,
-  Cancelled = 8, 
+  Cancelled = 8,
   UnknownError = 9,
   NotImplemented = 10,
   SerializationError = 11,
@@ -205,12 +205,12 @@ class ARROW_MUST_USE_TYPE ARROW_EXPORT Status : public util::EqualityComparable<
     return Status::FromArgs(StatusCode::Invalid, std::forward<Args>(args)...);
   }
 
-  /// Return an error status for cancelled operation 
-  template <typename... Args> 
-  static Status Cancelled(Args&&... args) { 
-    return Status::FromArgs(StatusCode::Cancelled, std::forward<Args>(args)...); 
-  } 
- 
+  /// Return an error status for cancelled operation
+  template <typename... Args>
+  static Status Cancelled(Args&&... args) {
+    return Status::FromArgs(StatusCode::Cancelled, std::forward<Args>(args)...);
+  }
+
   /// Return an error status when an index is out of bounds
   template <typename... Args>
   static Status IndexError(Args&&... args) {
@@ -270,8 +270,8 @@ class ARROW_MUST_USE_TYPE ARROW_EXPORT Status : public util::EqualityComparable<
   bool IsKeyError() const { return code() == StatusCode::KeyError; }
   /// Return true iff the status indicates invalid data.
   bool IsInvalid() const { return code() == StatusCode::Invalid; }
-  /// Return true iff the status indicates a cancelled operation. 
-  bool IsCancelled() const { return code() == StatusCode::Cancelled; } 
+  /// Return true iff the status indicates a cancelled operation.
+  bool IsCancelled() const { return code() == StatusCode::Cancelled; }
   /// Return true iff the status indicates an IO-related failure.
   bool IsIOError() const { return code() == StatusCode::IOError; }
   /// Return true iff the status indicates a container reaching capacity limits.
@@ -312,10 +312,10 @@ class ARROW_MUST_USE_TYPE ARROW_EXPORT Status : public util::EqualityComparable<
   StatusCode code() const { return ok() ? StatusCode::OK : state_->code; }
 
   /// \brief Return the specific error message attached to this status.
-  const std::string& message() const { 
-    static const std::string no_message = ""; 
-    return ok() ? no_message : state_->msg; 
-  } 
+  const std::string& message() const {
+    static const std::string no_message = "";
+    return ok() ? no_message : state_->msg;
+  }
 
   /// \brief Return the status detail attached to this message.
   const std::shared_ptr<StatusDetail>& detail() const {
@@ -443,7 +443,7 @@ namespace internal {
 
 // Extract Status from Status or Result<T>
 // Useful for the status check macros such as RETURN_NOT_OK.
-inline const Status& GenericToStatus(const Status& st) { return st; } 
+inline const Status& GenericToStatus(const Status& st) { return st; }
 inline Status GenericToStatus(Status&& st) { return std::move(st); }
 
 }  // namespace internal

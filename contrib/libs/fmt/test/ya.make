@@ -12,7 +12,7 @@ OWNER(
 LICENSE(MIT)
 
 PEERDIR(
-    contrib/libs/fmt 
+    contrib/libs/fmt
     contrib/restricted/googletest/googlemock
 )
 

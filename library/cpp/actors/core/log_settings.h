@@ -110,14 +110,14 @@ namespace NActors {
             void Append(EComponent minVal, EComponent maxVal, EComponentToStringFunc func);
 
             template <typename T>
-            void Append(T minVal, T maxVal, const TString& (*func)(T)) { 
-                Append( 
-                    static_cast<EComponent>(minVal), 
-                    static_cast<EComponent>(maxVal), 
-                    [func](EComponent c) -> const TString& { 
-                        return func(static_cast<T>(c)); 
-                    } 
-                ); 
+            void Append(T minVal, T maxVal, const TString& (*func)(T)) {
+                Append(
+                    static_cast<EComponent>(minVal),
+                    static_cast<EComponent>(maxVal),
+                    [func](EComponent c) -> const TString& {
+                        return func(static_cast<T>(c));
+                    }
+                );
             }
 
             inline bool Satisfies(EPriority priority, EComponent component, ui64 sampleBy = 0) const {

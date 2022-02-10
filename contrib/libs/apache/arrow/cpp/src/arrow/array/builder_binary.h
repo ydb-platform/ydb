@@ -61,7 +61,7 @@ class BaseBinaryBuilder : public ArrayBuilder {
     ARROW_RETURN_NOT_OK(AppendNextOffset());
     // Safety check for UBSAN.
     if (ARROW_PREDICT_TRUE(length > 0)) {
-      ARROW_RETURN_NOT_OK(ValidateOverflow(length)); 
+      ARROW_RETURN_NOT_OK(ValidateOverflow(length));
       ARROW_RETURN_NOT_OK(value_data_builder_.Append(value, length));
     }
 
@@ -77,23 +77,23 @@ class BaseBinaryBuilder : public ArrayBuilder {
     return Append(value.data(), static_cast<offset_type>(value.size()));
   }
 
-  /// Extend the last appended value by appending more data at the end 
-  /// 
-  /// Unlike Append, this does not create a new offset. 
-  Status ExtendCurrent(const uint8_t* value, offset_type length) { 
-    // Safety check for UBSAN. 
-    if (ARROW_PREDICT_TRUE(length > 0)) { 
-      ARROW_RETURN_NOT_OK(ValidateOverflow(length)); 
-      ARROW_RETURN_NOT_OK(value_data_builder_.Append(value, length)); 
-    } 
-    return Status::OK(); 
-  } 
- 
-  Status ExtendCurrent(util::string_view value) { 
-    return ExtendCurrent(reinterpret_cast<const uint8_t*>(value.data()), 
-                         static_cast<offset_type>(value.size())); 
-  } 
- 
+  /// Extend the last appended value by appending more data at the end
+  ///
+  /// Unlike Append, this does not create a new offset.
+  Status ExtendCurrent(const uint8_t* value, offset_type length) {
+    // Safety check for UBSAN.
+    if (ARROW_PREDICT_TRUE(length > 0)) {
+      ARROW_RETURN_NOT_OK(ValidateOverflow(length));
+      ARROW_RETURN_NOT_OK(value_data_builder_.Append(value, length));
+    }
+    return Status::OK();
+  }
+
+  Status ExtendCurrent(util::string_view value) {
+    return ExtendCurrent(reinterpret_cast<const uint8_t*>(value.data()),
+                         static_cast<offset_type>(value.size()));
+  }
+
   Status AppendNulls(int64_t length) final {
     const int64_t num_bytes = value_data_builder_.length();
     ARROW_RETURN_NOT_OK(Reserve(length));
@@ -111,23 +111,23 @@ class BaseBinaryBuilder : public ArrayBuilder {
     return Status::OK();
   }
 
-  Status AppendEmptyValue() final { 
-    ARROW_RETURN_NOT_OK(AppendNextOffset()); 
-    ARROW_RETURN_NOT_OK(Reserve(1)); 
-    UnsafeAppendToBitmap(true); 
-    return Status::OK(); 
-  } 
- 
-  Status AppendEmptyValues(int64_t length) final { 
-    const int64_t num_bytes = value_data_builder_.length(); 
-    ARROW_RETURN_NOT_OK(Reserve(length)); 
-    for (int64_t i = 0; i < length; ++i) { 
-      offsets_builder_.UnsafeAppend(static_cast<offset_type>(num_bytes)); 
-    } 
-    UnsafeAppendToBitmap(length, true); 
-    return Status::OK(); 
-  } 
- 
+  Status AppendEmptyValue() final {
+    ARROW_RETURN_NOT_OK(AppendNextOffset());
+    ARROW_RETURN_NOT_OK(Reserve(1));
+    UnsafeAppendToBitmap(true);
+    return Status::OK();
+  }
+
+  Status AppendEmptyValues(int64_t length) final {
+    const int64_t num_bytes = value_data_builder_.length();
+    ARROW_RETURN_NOT_OK(Reserve(length));
+    for (int64_t i = 0; i < length; ++i) {
+      offsets_builder_.UnsafeAppend(static_cast<offset_type>(num_bytes));
+    }
+    UnsafeAppendToBitmap(length, true);
+    return Status::OK();
+  }
+
   /// \brief Append without checking capacity
   ///
   /// Offsets and data should have been presized using Reserve() and
@@ -150,28 +150,28 @@ class BaseBinaryBuilder : public ArrayBuilder {
     UnsafeAppend(value.data(), static_cast<offset_type>(value.size()));
   }
 
-  /// Like ExtendCurrent, but do not check capacity 
-  void UnsafeExtendCurrent(const uint8_t* value, offset_type length) { 
-    value_data_builder_.UnsafeAppend(value, length); 
-  } 
- 
-  void UnsafeExtendCurrent(util::string_view value) { 
-    UnsafeExtendCurrent(reinterpret_cast<const uint8_t*>(value.data()), 
-                        static_cast<offset_type>(value.size())); 
-  } 
- 
+  /// Like ExtendCurrent, but do not check capacity
+  void UnsafeExtendCurrent(const uint8_t* value, offset_type length) {
+    value_data_builder_.UnsafeAppend(value, length);
+  }
+
+  void UnsafeExtendCurrent(util::string_view value) {
+    UnsafeExtendCurrent(reinterpret_cast<const uint8_t*>(value.data()),
+                        static_cast<offset_type>(value.size()));
+  }
+
   void UnsafeAppendNull() {
     const int64_t num_bytes = value_data_builder_.length();
     offsets_builder_.UnsafeAppend(static_cast<offset_type>(num_bytes));
     UnsafeAppendToBitmap(false);
   }
 
-  void UnsafeAppendEmptyValue() { 
-    const int64_t num_bytes = value_data_builder_.length(); 
-    offsets_builder_.UnsafeAppend(static_cast<offset_type>(num_bytes)); 
-    UnsafeAppendToBitmap(true); 
-  } 
- 
+  void UnsafeAppendEmptyValue() {
+    const int64_t num_bytes = value_data_builder_.length();
+    offsets_builder_.UnsafeAppend(static_cast<offset_type>(num_bytes));
+    UnsafeAppendToBitmap(true);
+  }
+
   /// \brief Append a sequence of strings in one shot.
   ///
   /// \param[in] values a vector of strings
@@ -467,14 +467,14 @@ class ARROW_EXPORT FixedSizeBinaryBuilder : public ArrayBuilder {
     return Status::OK();
   }
 
-  Status Append(const Buffer& s) { 
-    ARROW_RETURN_NOT_OK(Reserve(1)); 
-    UnsafeAppend(util::string_view(s)); 
-    return Status::OK(); 
-  } 
- 
-  Status Append(const std::shared_ptr<Buffer>& s) { return Append(*s); } 
- 
+  Status Append(const Buffer& s) {
+    ARROW_RETURN_NOT_OK(Reserve(1));
+    UnsafeAppend(util::string_view(s));
+    return Status::OK();
+  }
+
+  Status Append(const std::shared_ptr<Buffer>& s) { return Append(*s); }
+
   template <size_t NBYTES>
   Status Append(const std::array<uint8_t, NBYTES>& value) {
     ARROW_RETURN_NOT_OK(Reserve(1));
@@ -489,9 +489,9 @@ class ARROW_EXPORT FixedSizeBinaryBuilder : public ArrayBuilder {
   Status AppendNull() final;
   Status AppendNulls(int64_t length) final;
 
-  Status AppendEmptyValue() final; 
-  Status AppendEmptyValues(int64_t length) final; 
- 
+  Status AppendEmptyValue() final;
+  Status AppendEmptyValues(int64_t length) final;
+
   void UnsafeAppend(const uint8_t* value) {
     UnsafeAppendToBitmap(true);
     if (ARROW_PREDICT_TRUE(byte_width_ > 0)) {
@@ -510,10 +510,10 @@ class ARROW_EXPORT FixedSizeBinaryBuilder : public ArrayBuilder {
     UnsafeAppend(reinterpret_cast<const uint8_t*>(value.data()));
   }
 
-  void UnsafeAppend(const Buffer& s) { UnsafeAppend(util::string_view(s)); } 
- 
-  void UnsafeAppend(const std::shared_ptr<Buffer>& s) { UnsafeAppend(*s); } 
- 
+  void UnsafeAppend(const Buffer& s) { UnsafeAppend(util::string_view(s)); }
+
+  void UnsafeAppend(const std::shared_ptr<Buffer>& s) { UnsafeAppend(*s); }
+
   void UnsafeAppendNull() {
     UnsafeAppendToBitmap(false);
     byte_builder_.UnsafeAppend(/*num_copies=*/byte_width_, 0);

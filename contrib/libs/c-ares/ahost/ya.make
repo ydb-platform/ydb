@@ -2,7 +2,7 @@
 
 PROGRAM(ahost)
 
-OWNER(max42 g:cpp-contrib) 
+OWNER(max42 g:cpp-contrib)
 
 LICENSE(MIT)
 

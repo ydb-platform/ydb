@@ -21,7 +21,7 @@
 
 #include <library/cpp/charset/ci_string.h>
 
-#include <google/protobuf/repeated_field.h> 
+#include <google/protobuf/repeated_field.h>
 
 #include <util/charset/wide.h>
 #include <util/generic/array_ref.h>

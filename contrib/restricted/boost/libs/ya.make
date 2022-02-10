@@ -63,9 +63,9 @@ RECURSE(
     thread
     timer
 )
- 
-IF (NOT OS_ANDROID) 
-    RECURSE( 
-        python 
-    ) 
-ENDIF() 
+
+IF (NOT OS_ANDROID)
+    RECURSE(
+        python
+    )
+ENDIF()

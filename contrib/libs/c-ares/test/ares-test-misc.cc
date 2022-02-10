@@ -27,7 +27,7 @@ TEST_F(DefaultChannelTest, GetServersFailures) {
   EXPECT_EQ(ARES_ENODATA, ares_get_servers(nullptr, &servers));
 }
 
-TEST_F(DefaultChannelTest, SetServers) { 
+TEST_F(DefaultChannelTest, SetServers) {
   EXPECT_EQ(ARES_SUCCESS, ares_set_servers(channel_, nullptr));
   std::vector<std::string> empty;
   EXPECT_EQ(empty, GetNameServers(channel_));
@@ -47,7 +47,7 @@ TEST_F(DefaultChannelTest, SetServers) {
   EXPECT_EQ(expected, GetNameServers(channel_));
 }
 
-TEST_F(DefaultChannelTest, SetServersPorts) { 
+TEST_F(DefaultChannelTest, SetServersPorts) {
   EXPECT_EQ(ARES_SUCCESS, ares_set_servers_ports(channel_, nullptr));
   std::vector<std::string> empty;
   EXPECT_EQ(empty, GetNameServers(channel_));
@@ -71,7 +71,7 @@ TEST_F(DefaultChannelTest, SetServersPorts) {
   EXPECT_EQ(expected, GetNameServers(channel_));
 }
 
-TEST_F(DefaultChannelTest, SetServersCSV) { 
+TEST_F(DefaultChannelTest, SetServersCSV) {
   EXPECT_EQ(ARES_ENODATA, ares_set_servers_csv(nullptr, "1.2.3.4"));
   EXPECT_EQ(ARES_ENODATA, ares_set_servers_csv(nullptr, "xyzzy,plugh"));
   EXPECT_EQ(ARES_ENODATA, ares_set_servers_csv(nullptr, "256.1.2.3"));
@@ -118,7 +118,7 @@ TEST_F(DefaultChannelTest, SetServersCSV) {
   EXPECT_EQ(ARES_EBADSTR, ares_set_servers_csv(channel_, "2.3.4.5,1.2.3.4:Z,3.4.5.6"));
 }
 
-TEST_F(DefaultChannelTest, TimeoutValue) { 
+TEST_F(DefaultChannelTest, TimeoutValue) {
   struct timeval tinfo;
   tinfo.tv_sec = 0;
   tinfo.tv_usec = 0;

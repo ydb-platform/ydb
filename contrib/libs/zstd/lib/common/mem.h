@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Yann Collet, Facebook, Inc. 
+ * Copyright (c) Yann Collet, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -18,10 +18,10 @@ extern "C" {
 /*-****************************************
 *  Dependencies
 ******************************************/
-#include <stddef.h>  /* size_t, ptrdiff_t */ 
-#include "compiler.h"  /* __has_builtin */ 
-#include "debug.h"  /* DEBUG_STATIC_ASSERT */ 
-#include "zstd_deps.h"  /* ZSTD_memcpy */ 
+#include <stddef.h>  /* size_t, ptrdiff_t */
+#include "compiler.h"  /* __has_builtin */
+#include "debug.h"  /* DEBUG_STATIC_ASSERT */
+#include "zstd_deps.h"  /* ZSTD_memcpy */
 
 
 /*-****************************************
@@ -45,11 +45,11 @@ extern "C" {
 *  Basic Types
 *****************************************************************/
 #if  !defined (__VMS) && (defined (__cplusplus) || (defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 */) )
-#  if defined(_AIX) 
-#    include <inttypes.h> 
-#  else 
-#    include <stdint.h> /* intptr_t */ 
-#  endif 
+#  if defined(_AIX)
+#    include <inttypes.h>
+#  else
+#    include <stdint.h> /* intptr_t */
+#  endif
   typedef   uint8_t BYTE;
   typedef   uint8_t U8;
   typedef    int8_t S8;
@@ -85,54 +85,54 @@ extern "C" {
 
 
 /*-**************************************************************
-*  Memory I/O API 
+*  Memory I/O API
 *****************************************************************/
-/*=== Static platform detection ===*/ 
-MEM_STATIC unsigned MEM_32bits(void); 
-MEM_STATIC unsigned MEM_64bits(void); 
-MEM_STATIC unsigned MEM_isLittleEndian(void); 
- 
-/*=== Native unaligned read/write ===*/ 
-MEM_STATIC U16 MEM_read16(const void* memPtr); 
-MEM_STATIC U32 MEM_read32(const void* memPtr); 
-MEM_STATIC U64 MEM_read64(const void* memPtr); 
-MEM_STATIC size_t MEM_readST(const void* memPtr); 
- 
-MEM_STATIC void MEM_write16(void* memPtr, U16 value); 
-MEM_STATIC void MEM_write32(void* memPtr, U32 value); 
-MEM_STATIC void MEM_write64(void* memPtr, U64 value); 
- 
-/*=== Little endian unaligned read/write ===*/ 
-MEM_STATIC U16 MEM_readLE16(const void* memPtr); 
-MEM_STATIC U32 MEM_readLE24(const void* memPtr); 
-MEM_STATIC U32 MEM_readLE32(const void* memPtr); 
-MEM_STATIC U64 MEM_readLE64(const void* memPtr); 
-MEM_STATIC size_t MEM_readLEST(const void* memPtr); 
- 
-MEM_STATIC void MEM_writeLE16(void* memPtr, U16 val); 
-MEM_STATIC void MEM_writeLE24(void* memPtr, U32 val); 
-MEM_STATIC void MEM_writeLE32(void* memPtr, U32 val32); 
-MEM_STATIC void MEM_writeLE64(void* memPtr, U64 val64); 
-MEM_STATIC void MEM_writeLEST(void* memPtr, size_t val); 
- 
-/*=== Big endian unaligned read/write ===*/ 
-MEM_STATIC U32 MEM_readBE32(const void* memPtr); 
-MEM_STATIC U64 MEM_readBE64(const void* memPtr); 
-MEM_STATIC size_t MEM_readBEST(const void* memPtr); 
- 
-MEM_STATIC void MEM_writeBE32(void* memPtr, U32 val32); 
-MEM_STATIC void MEM_writeBE64(void* memPtr, U64 val64); 
-MEM_STATIC void MEM_writeBEST(void* memPtr, size_t val); 
- 
-/*=== Byteswap ===*/ 
-MEM_STATIC U32 MEM_swap32(U32 in); 
-MEM_STATIC U64 MEM_swap64(U64 in); 
-MEM_STATIC size_t MEM_swapST(size_t in); 
- 
- 
-/*-************************************************************** 
-*  Memory I/O Implementation 
-*****************************************************************/ 
+/*=== Static platform detection ===*/
+MEM_STATIC unsigned MEM_32bits(void);
+MEM_STATIC unsigned MEM_64bits(void);
+MEM_STATIC unsigned MEM_isLittleEndian(void);
+
+/*=== Native unaligned read/write ===*/
+MEM_STATIC U16 MEM_read16(const void* memPtr);
+MEM_STATIC U32 MEM_read32(const void* memPtr);
+MEM_STATIC U64 MEM_read64(const void* memPtr);
+MEM_STATIC size_t MEM_readST(const void* memPtr);
+
+MEM_STATIC void MEM_write16(void* memPtr, U16 value);
+MEM_STATIC void MEM_write32(void* memPtr, U32 value);
+MEM_STATIC void MEM_write64(void* memPtr, U64 value);
+
+/*=== Little endian unaligned read/write ===*/
+MEM_STATIC U16 MEM_readLE16(const void* memPtr);
+MEM_STATIC U32 MEM_readLE24(const void* memPtr);
+MEM_STATIC U32 MEM_readLE32(const void* memPtr);
+MEM_STATIC U64 MEM_readLE64(const void* memPtr);
+MEM_STATIC size_t MEM_readLEST(const void* memPtr);
+
+MEM_STATIC void MEM_writeLE16(void* memPtr, U16 val);
+MEM_STATIC void MEM_writeLE24(void* memPtr, U32 val);
+MEM_STATIC void MEM_writeLE32(void* memPtr, U32 val32);
+MEM_STATIC void MEM_writeLE64(void* memPtr, U64 val64);
+MEM_STATIC void MEM_writeLEST(void* memPtr, size_t val);
+
+/*=== Big endian unaligned read/write ===*/
+MEM_STATIC U32 MEM_readBE32(const void* memPtr);
+MEM_STATIC U64 MEM_readBE64(const void* memPtr);
+MEM_STATIC size_t MEM_readBEST(const void* memPtr);
+
+MEM_STATIC void MEM_writeBE32(void* memPtr, U32 val32);
+MEM_STATIC void MEM_writeBE64(void* memPtr, U64 val64);
+MEM_STATIC void MEM_writeBEST(void* memPtr, size_t val);
+
+/*=== Byteswap ===*/
+MEM_STATIC U32 MEM_swap32(U32 in);
+MEM_STATIC U64 MEM_swap64(U64 in);
+MEM_STATIC size_t MEM_swapST(size_t in);
+
+
+/*-**************************************************************
+*  Memory I/O Implementation
+*****************************************************************/
 /* MEM_FORCE_MEMORY_ACCESS :
  * By default, access to unaligned memory is controlled by `memcpy()`, which is safe and portable.
  * Unfortunately, on some target/compiler combinations, the generated assembly is sub-optimal.
@@ -147,7 +147,7 @@ MEM_STATIC size_t MEM_swapST(size_t in);
  * Prefer these methods in priority order (0 > 1 > 2)
  */
 #ifndef MEM_FORCE_MEMORY_ACCESS   /* can be defined externally, on command line for example */
-#  if defined(__INTEL_COMPILER) || defined(__GNUC__) || defined(__ICCARM__) 
+#  if defined(__INTEL_COMPILER) || defined(__GNUC__) || defined(__ICCARM__)
 #    define MEM_FORCE_MEMORY_ACCESS 1
 #  endif
 #endif
@@ -222,37 +222,37 @@ MEM_STATIC void MEM_write64(void* memPtr, U64 value) { ((unalign64*)memPtr)->v =
 
 MEM_STATIC U16 MEM_read16(const void* memPtr)
 {
-    U16 val; ZSTD_memcpy(&val, memPtr, sizeof(val)); return val; 
+    U16 val; ZSTD_memcpy(&val, memPtr, sizeof(val)); return val;
 }
 
 MEM_STATIC U32 MEM_read32(const void* memPtr)
 {
-    U32 val; ZSTD_memcpy(&val, memPtr, sizeof(val)); return val; 
+    U32 val; ZSTD_memcpy(&val, memPtr, sizeof(val)); return val;
 }
 
 MEM_STATIC U64 MEM_read64(const void* memPtr)
 {
-    U64 val; ZSTD_memcpy(&val, memPtr, sizeof(val)); return val; 
+    U64 val; ZSTD_memcpy(&val, memPtr, sizeof(val)); return val;
 }
 
 MEM_STATIC size_t MEM_readST(const void* memPtr)
 {
-    size_t val; ZSTD_memcpy(&val, memPtr, sizeof(val)); return val; 
+    size_t val; ZSTD_memcpy(&val, memPtr, sizeof(val)); return val;
 }
 
 MEM_STATIC void MEM_write16(void* memPtr, U16 value)
 {
-    ZSTD_memcpy(memPtr, &value, sizeof(value)); 
+    ZSTD_memcpy(memPtr, &value, sizeof(value));
 }
 
 MEM_STATIC void MEM_write32(void* memPtr, U32 value)
 {
-    ZSTD_memcpy(memPtr, &value, sizeof(value)); 
+    ZSTD_memcpy(memPtr, &value, sizeof(value));
 }
 
 MEM_STATIC void MEM_write64(void* memPtr, U64 value)
 {
-    ZSTD_memcpy(memPtr, &value, sizeof(value)); 
+    ZSTD_memcpy(memPtr, &value, sizeof(value));
 }
 
 #endif /* MEM_FORCE_MEMORY_ACCESS */
@@ -324,7 +324,7 @@ MEM_STATIC void MEM_writeLE16(void* memPtr, U16 val)
 
 MEM_STATIC U32 MEM_readLE24(const void* memPtr)
 {
-    return (U32)MEM_readLE16(memPtr) + ((U32)(((const BYTE*)memPtr)[2]) << 16); 
+    return (U32)MEM_readLE16(memPtr) + ((U32)(((const BYTE*)memPtr)[2]) << 16);
 }
 
 MEM_STATIC void MEM_writeLE24(void* memPtr, U32 val)
@@ -431,10 +431,10 @@ MEM_STATIC void MEM_writeBEST(void* memPtr, size_t val)
         MEM_writeBE64(memPtr, (U64)val);
 }
 
-/* code only tested on 32 and 64 bits systems */ 
-MEM_STATIC void MEM_check(void) { DEBUG_STATIC_ASSERT((sizeof(size_t)==4) || (sizeof(size_t)==8)); } 
+/* code only tested on 32 and 64 bits systems */
+MEM_STATIC void MEM_check(void) { DEBUG_STATIC_ASSERT((sizeof(size_t)==4) || (sizeof(size_t)==8)); }
 
- 
+
 #if defined (__cplusplus)
 }
 #endif

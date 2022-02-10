@@ -1,6 +1,6 @@
 #include "vdisk_config.h"
 #include <ydb/core/base/interconnect_channels.h>
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 namespace NKikimr {
 

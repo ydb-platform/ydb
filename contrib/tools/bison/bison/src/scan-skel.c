@@ -42,11 +42,11 @@
 #endif
 
 /* %if-c++-only */
-#define BISON_FALLTHROUGH [[fallthrough]] 
+#define BISON_FALLTHROUGH [[fallthrough]]
 /* %endif */
 
 /* %if-c-only */
-#define BISON_FALLTHROUGH  
+#define BISON_FALLTHROUGH 
 /* %endif */
 
 /* %if-c-only */
@@ -1619,7 +1619,7 @@ static int yy_get_next_buffer (void)
 					/* Reset buffer status. */
 					skel_restart(skel_in );
 
-					BISON_FALLTHROUGH; 
+					BISON_FALLTHROUGH;
 
 				case EOB_ACT_END_OF_FILE:
 					{

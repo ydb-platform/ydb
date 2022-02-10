@@ -50,5 +50,5 @@ private:
     class TPortManagerImpl;
     THolder<TPortManagerImpl> Impl_;
 };
- 
-ui16 GetRandomPort(); 
+
+ui16 GetRandomPort();

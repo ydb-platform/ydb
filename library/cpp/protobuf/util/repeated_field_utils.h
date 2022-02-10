@@ -1,6 +1,6 @@
 #pragma once
 
-#include <google/protobuf/repeated_field.h> 
+#include <google/protobuf/repeated_field.h>
 #include <util/generic/vector.h>
 
 template <typename T>

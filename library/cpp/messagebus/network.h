@@ -2,7 +2,7 @@
 
 #include "netaddr.h"
 
-#include <util/generic/array_ref.h> 
+#include <util/generic/array_ref.h>
 #include <util/generic/ptr.h>
 #include <util/network/socket.h>
 
@@ -12,9 +12,9 @@ namespace NBus {
     namespace NPrivate {
         void SetSockOptTcpCork(SOCKET s, bool value);
 
-        [[nodiscard]] ssize_t SocketSend(SOCKET s, TArrayRef<const char> data); 
+        [[nodiscard]] ssize_t SocketSend(SOCKET s, TArrayRef<const char> data);
 
-        [[nodiscard]] ssize_t SocketRecv(SOCKET s, TArrayRef<char> buffer); 
+        [[nodiscard]] ssize_t SocketRecv(SOCKET s, TArrayRef<char> buffer);
 
     }
 

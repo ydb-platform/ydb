@@ -1,4 +1,4 @@
-GTEST_UGLY() 
+GTEST_UGLY()
 
 OWNER(
     dvshkurko

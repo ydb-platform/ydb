@@ -18,23 +18,23 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/spinlock_wait
     contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/throw_delegate
     contrib/restricted/abseil-cpp-tstring/y_absl/base/log_severity
-    contrib/restricted/abseil-cpp-tstring/y_absl/container/internal/absl_hashtablez_sampler 
+    contrib/restricted/abseil-cpp-tstring/y_absl/container/internal/absl_hashtablez_sampler
     contrib/restricted/abseil-cpp-tstring/y_absl/debugging
     contrib/restricted/abseil-cpp-tstring/y_absl/debugging/stacktrace
     contrib/restricted/abseil-cpp-tstring/y_absl/debugging/symbolize
     contrib/restricted/abseil-cpp-tstring/y_absl/demangle
-    contrib/restricted/abseil-cpp-tstring/y_absl/hash 
+    contrib/restricted/abseil-cpp-tstring/y_absl/hash
     contrib/restricted/abseil-cpp-tstring/y_absl/numeric
-    contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal/exponential_biased 
+    contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal/exponential_biased
     contrib/restricted/abseil-cpp-tstring/y_absl/strings
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/absl_strings_internal 
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/absl_strings_internal
     contrib/restricted/abseil-cpp-tstring/y_absl/synchronization
     contrib/restricted/abseil-cpp-tstring/y_absl/synchronization/internal
     contrib/restricted/abseil-cpp-tstring/y_absl/time
     contrib/restricted/abseil-cpp-tstring/y_absl/time/civil_time
     contrib/restricted/abseil-cpp-tstring/y_absl/time/time_zone
     contrib/restricted/abseil-cpp-tstring/y_absl/types/bad_optional_access
-    contrib/restricted/abseil-cpp-tstring/y_absl/types 
+    contrib/restricted/abseil-cpp-tstring/y_absl/types
 )
 
 ADDINCL(
@@ -43,10 +43,10 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/container/internal) 
+SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/container/internal)
 
 SRCS(
-    raw_hash_set.cc 
+    raw_hash_set.cc
 )
 
 END()

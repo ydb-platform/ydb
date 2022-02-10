@@ -8,11 +8,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html. 
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -79,51 +79,51 @@
  */
 
 /* ASN.1 parsed element. */
-struct Curl_asn1Element { 
-  const char *header;         /* Pointer to header byte. */ 
-  const char *beg;            /* Pointer to element data. */ 
-  const char *end;            /* Pointer to 1st byte after element. */ 
-  unsigned char class;        /* ASN.1 element class. */ 
-  unsigned char tag;          /* ASN.1 element tag. */ 
-  bool          constructed;  /* Element is constructed. */ 
-}; 
+struct Curl_asn1Element {
+  const char *header;         /* Pointer to header byte. */
+  const char *beg;            /* Pointer to element data. */
+  const char *end;            /* Pointer to 1st byte after element. */
+  unsigned char class;        /* ASN.1 element class. */
+  unsigned char tag;          /* ASN.1 element tag. */
+  bool          constructed;  /* Element is constructed. */
+};
 
 
 /* ASN.1 OID table entry. */
-struct Curl_OID { 
-  const char *numoid;  /* Dotted-numeric OID. */ 
-  const char *textoid; /* OID name. */ 
-}; 
+struct Curl_OID {
+  const char *numoid;  /* Dotted-numeric OID. */
+  const char *textoid; /* OID name. */
+};
 
 
 /* X509 certificate: RFC 5280. */
-struct Curl_X509certificate { 
-  struct Curl_asn1Element certificate; 
-  struct Curl_asn1Element version; 
-  struct Curl_asn1Element serialNumber; 
-  struct Curl_asn1Element signatureAlgorithm; 
-  struct Curl_asn1Element signature; 
-  struct Curl_asn1Element issuer; 
-  struct Curl_asn1Element notBefore; 
-  struct Curl_asn1Element notAfter; 
-  struct Curl_asn1Element subject; 
-  struct Curl_asn1Element subjectPublicKeyInfo; 
-  struct Curl_asn1Element subjectPublicKeyAlgorithm; 
-  struct Curl_asn1Element subjectPublicKey; 
-  struct Curl_asn1Element issuerUniqueID; 
-  struct Curl_asn1Element subjectUniqueID; 
-  struct Curl_asn1Element extensions; 
-}; 
+struct Curl_X509certificate {
+  struct Curl_asn1Element certificate;
+  struct Curl_asn1Element version;
+  struct Curl_asn1Element serialNumber;
+  struct Curl_asn1Element signatureAlgorithm;
+  struct Curl_asn1Element signature;
+  struct Curl_asn1Element issuer;
+  struct Curl_asn1Element notBefore;
+  struct Curl_asn1Element notAfter;
+  struct Curl_asn1Element subject;
+  struct Curl_asn1Element subjectPublicKeyInfo;
+  struct Curl_asn1Element subjectPublicKeyAlgorithm;
+  struct Curl_asn1Element subjectPublicKey;
+  struct Curl_asn1Element issuerUniqueID;
+  struct Curl_asn1Element subjectUniqueID;
+  struct Curl_asn1Element extensions;
+};
 
 /*
  * Prototypes.
  */
 
-const char *Curl_getASN1Element(struct Curl_asn1Element *elem, 
-                                const char *beg, const char *end); 
-const char *Curl_ASN1tostr(struct Curl_asn1Element *elem, int type); 
-const char *Curl_DNtostr(struct Curl_asn1Element *dn); 
-int Curl_parseX509(struct Curl_X509certificate *cert, 
+const char *Curl_getASN1Element(struct Curl_asn1Element *elem,
+                                const char *beg, const char *end);
+const char *Curl_ASN1tostr(struct Curl_asn1Element *elem, int type);
+const char *Curl_DNtostr(struct Curl_asn1Element *dn);
+int Curl_parseX509(struct Curl_X509certificate *cert,
                    const char *beg, const char *end);
 CURLcode Curl_extract_certinfo(struct connectdata *conn, int certnum,
                                const char *beg, const char *end);

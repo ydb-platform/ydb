@@ -24,8 +24,8 @@
 #include <boost/mpl/bool.hpp>
 
 #ifdef BOOST_PHOENIX_HAS_UNORDERED_SET_AND_MAP
-#include <unordered_set> 
-#include <unordered_map> 
+#include <unordered_set>
+#include <unordered_map>
 #endif
 
 namespace boost

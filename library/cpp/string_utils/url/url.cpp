@@ -190,8 +190,8 @@ void SplitUrlToHostAndPath(const TStringBuf url, TStringBuf& host, TStringBuf& p
 
 void SplitUrlToHostAndPath(const TStringBuf url, TString& host, TString& path) {
     auto [hostBuf, pathBuf] = NUrl::SplitUrlToHostAndPath(url);
-    host = hostBuf; 
-    path = pathBuf; 
+    host = hostBuf;
+    path = pathBuf;
 }
 
 void SeparateUrlFromQueryAndFragment(const TStringBuf url, TStringBuf& sanitizedUrl, TStringBuf& query, TStringBuf& fragment) {

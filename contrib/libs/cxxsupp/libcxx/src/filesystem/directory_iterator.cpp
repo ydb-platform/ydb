@@ -55,7 +55,7 @@ static file_type get_file_type(DirEntT* ent, int) {
 #endif // defined(DT_BLK)
 
 template <class DirEntT>
-static file_type get_file_type(DirEntT*, long) { 
+static file_type get_file_type(DirEntT*, long) {
   return file_type::none;
 }
 

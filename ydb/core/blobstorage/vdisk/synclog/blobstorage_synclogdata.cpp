@@ -479,7 +479,7 @@ namespace NKikimr {
                 TStringStream s;
                 s.Write(&TSyncLogHeader::SyncLogPbSignature, sizeof(ui32));
                 // pb payload
-                bool success = pb.SerializeToArcadiaStream(&s); 
+                bool success = pb.SerializeToArcadiaStream(&s);
                 Y_VERIFY(success);
                 return s.Str();
             }

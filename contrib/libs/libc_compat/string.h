@@ -1,18 +1,18 @@
-#pragma once 
- 
-#include <stddef.h> 
+#pragma once
+
+#include <stddef.h>
 #include <ctype.h>
 #include <string.h>
- 
-#ifdef __cplusplus 
-extern "C" { 
-#endif 
- 
-#if !defined(__FreeBSD__) && !defined(__APPLE__)
-size_t strlcpy(char* dst, const char* src, size_t len); 
-size_t strlcat(char* dst, const char* src, size_t len); 
+
+#ifdef __cplusplus
+extern "C" {
 #endif
- 
+
+#if !defined(__FreeBSD__) && !defined(__APPLE__)
+size_t strlcpy(char* dst, const char* src, size_t len);
+size_t strlcat(char* dst, const char* src, size_t len);
+#endif
+
 #if (!defined(__linux__) && !defined(__FreeBSD__) && !defined(__APPLE__)) || (defined(__ANDROID__) && __ANDROID_API__ < 21)
 char* stpcpy(char* dst, const char* src);
 #endif
@@ -39,6 +39,6 @@ char* strsep(char** stringp, const char* delim);
 void* memrchr(const void* s, int c, size_t n);
 #endif
 
-#ifdef __cplusplus 
-} //extern "C" 
-#endif 
+#ifdef __cplusplus
+} //extern "C"
+#endif

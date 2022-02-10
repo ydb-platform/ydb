@@ -282,7 +282,7 @@ private:
 public:
     inline TImpl(const TStringBuf cmd, const TList<TString>& args, const TShellCommandOptions& options, const TString& workdir)
         : Pid(0)
-        , Command(ToString(cmd)) 
+        , Command(ToString(cmd))
         , Arguments(args)
         , WorkDir(workdir)
         , ExecutionStatus(SHELL_NONE)
@@ -334,7 +334,7 @@ public:
         if (AtomicGet(ExecutionStatus) == SHELL_RUNNING) {
             ythrow yexception() << "You cannot change command parameters while process is running";
         }
-        Arguments.push_back(ToString(argument)); 
+        Arguments.push_back(ToString(argument));
     }
 
     inline const TString& GetOutput() const {

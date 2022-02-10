@@ -44,7 +44,7 @@ namespace NKikimr {
             GroupGeneration = vdisk.GroupGeneration;
             Y_VERIFY(val.VDiskIdShort == vdisk, "val.VDiskId# %s vdisk# %s",
                      val.VDiskIdShort.ToString().data(), vdisk.ToString().data());
-            val.Get().ParseFromArcadiaStream(Str); 
+            val.Get().ParseFromArcadiaStream(Str);
         }
 
         void Finish() {
@@ -101,7 +101,7 @@ namespace NKikimr {
 
         void Finish() {
             if (Str)
-                Proto->SerializeToArcadiaStream(Str); 
+                Proto->SerializeToArcadiaStream(Str);
         }
 
     private:
@@ -121,7 +121,7 @@ namespace NKikimr {
         TDes(IInputStream &str)
             : Proto(&LocalProto)
         {
-            auto res = LocalProto.ParseFromArcadiaStream(&str); 
+            auto res = LocalProto.ParseFromArcadiaStream(&str);
             if (!res)
                 ythrow yexception() << "NKikimrVDiskData::TSyncerNeighbors parse error";
         }

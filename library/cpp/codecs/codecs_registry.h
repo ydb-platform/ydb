@@ -27,7 +27,7 @@ namespace NCodecs {
 
             TVector<TString> ListNames() const override {
                 TVector<TString> vs;
-                vs.push_back(ToString(TCodec::MyName())); 
+                vs.push_back(ToString(TCodec::MyName()));
                 return vs;
             }
         };

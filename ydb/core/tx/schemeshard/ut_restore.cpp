@@ -161,8 +161,8 @@ namespace {
         NKikimrMiniKQL::TResult result;
 
         TString error;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, query, result, error); 
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error); 
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, query, result, error);
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         return result;

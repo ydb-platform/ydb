@@ -38,8 +38,8 @@
 
 #include <memory>
 
-#include <google/protobuf/pyext/message.h> 
- 
+#include <google/protobuf/pyext/message.h>
+
 namespace google {
 namespace protobuf {
 
@@ -51,12 +51,12 @@ namespace python {
 typedef struct ExtensionDict {
   PyObject_HEAD;
 
-  // Strong, owned reference to the parent message. Never NULL. 
+  // Strong, owned reference to the parent message. Never NULL.
   CMessage* parent;
 } ExtensionDict;
 
 extern PyTypeObject ExtensionDict_Type;
-extern PyTypeObject ExtensionIterator_Type; 
+extern PyTypeObject ExtensionIterator_Type;
 
 namespace extension_dict {
 
@@ -66,6 +66,6 @@ ExtensionDict* NewExtensionDict(CMessage *parent);
 }  // namespace extension_dict
 }  // namespace python
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
 #endif  // GOOGLE_PROTOBUF_PYTHON_CPP_EXTENSION_DICT_H__

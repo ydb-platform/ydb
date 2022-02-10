@@ -26,7 +26,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow 
+    contrib/libs/apache/arrow
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/engine

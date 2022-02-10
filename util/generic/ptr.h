@@ -213,10 +213,10 @@ public:
     }
 
 #ifdef __cpp_impl_three_way_comparison
-    template <class Other> 
-    inline bool operator==(const Other& p) const noexcept { 
-        return (p == Get()); 
-    } 
+    template <class Other>
+    inline bool operator==(const Other& p) const noexcept {
+        return (p == Get());
+    }
 #endif
 private:
     inline void DoDestroy() noexcept {
@@ -328,10 +328,10 @@ public:
     }
 
 #ifdef __cpp_impl_three_way_comparison
-    template <class Other> 
-    inline bool operator==(const Other& p) const noexcept { 
-        return (p == Get()); 
-    } 
+    template <class Other>
+    inline bool operator==(const Other& p) const noexcept {
+        return (p == Get());
+    }
 #endif
 private:
     inline void DoDestroy() noexcept {
@@ -580,10 +580,10 @@ public:
     }
 
 #ifdef __cpp_impl_three_way_comparison
-    template <class Other> 
-    inline bool operator==(const Other& p) const noexcept { 
-        return (p == Get()); 
-    } 
+    template <class Other>
+    inline bool operator==(const Other& p) const noexcept {
+        return (p == Get());
+    }
 #endif
 private:
     inline void Ref() noexcept {
@@ -691,10 +691,10 @@ public:
     }
 
 #ifdef __cpp_impl_three_way_comparison
-    template <class Other> 
-    inline bool operator==(const Other& p) const noexcept { 
-        return (p == Get()); 
-    } 
+    template <class Other>
+    inline bool operator==(const Other& p) const noexcept {
+        return (p == Get());
+    }
 #endif
 private:
     inline void Ref() noexcept {
@@ -895,10 +895,10 @@ public:
     }
 
 #ifdef __cpp_impl_three_way_comparison
-    template <class Other> 
-    inline bool operator==(const Other& p) const noexcept { 
-        return (p == Get()); 
-    } 
+    template <class Other>
+    inline bool operator==(const Other& p) const noexcept {
+        return (p == Get());
+    }
 #endif
 private:
     template <class X>
@@ -1039,10 +1039,10 @@ public:
     }
 
 #ifdef __cpp_impl_three_way_comparison
-    template <class Other> 
-    inline bool operator==(const Other& p) const noexcept { 
-        return (p == Get()); 
-    } 
+    template <class Other>
+    inline bool operator==(const Other& p) const noexcept {
+        return (p == Get());
+    }
 #endif
 private:
     inline void DoDestroy() noexcept {
@@ -1103,10 +1103,10 @@ public:
     }
 
 #ifdef __cpp_impl_three_way_comparison
-    template <class Other> 
-    inline bool operator==(const Other& p) const noexcept { 
-        return (p == Get()); 
-    } 
+    template <class Other>
+    inline bool operator==(const Other& p) const noexcept {
+        return (p == Get());
+    }
 #endif
 private:
     inline void Unshare() {

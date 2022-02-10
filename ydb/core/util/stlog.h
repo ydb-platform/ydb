@@ -2,7 +2,7 @@
 
 #include <ydb/core/protos/services.pb.h>
 #include <library/cpp/actors/core/log.h>
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 // special hack for gcc
 static struct STLOG_PARAM_T {} STLOG_PARAM;

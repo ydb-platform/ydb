@@ -35,10 +35,10 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_JAVA_MESSAGE_LITE_H__
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_MESSAGE_LITE_H__
 
-#include <map> 
-#include <string> 
-#include <google/protobuf/compiler/java/java_field.h> 
-#include <google/protobuf/compiler/java/java_message.h> 
+#include <map>
+#include <string>
+#include <google/protobuf/compiler/java/java_field.h>
+#include <google/protobuf/compiler/java/java_message.h>
 
 namespace google {
 namespace protobuf {
@@ -53,12 +53,12 @@ class ImmutableMessageLiteGenerator : public MessageGenerator {
   virtual void Generate(io::Printer* printer);
   virtual void GenerateInterface(io::Printer* printer);
   virtual void GenerateExtensionRegistrationCode(io::Printer* printer);
-  virtual void GenerateStaticVariables(io::Printer* printer, 
-                                       int* bytecode_estimate); 
+  virtual void GenerateStaticVariables(io::Printer* printer,
+                                       int* bytecode_estimate);
   virtual int GenerateStaticVariableInitializers(io::Printer* printer);
-  void GenerateKotlinDsl(io::Printer* printer) const override; 
-  void GenerateKotlinMembers(io::Printer* printer) const override; 
-  void GenerateTopLevelKotlinMembers(io::Printer* printer) const override; 
+  void GenerateKotlinDsl(io::Printer* printer) const override;
+  void GenerateKotlinMembers(io::Printer* printer) const override;
+  void GenerateTopLevelKotlinMembers(io::Printer* printer) const override;
 
  private:
   void GenerateParseFromMethods(io::Printer* printer);
@@ -68,8 +68,8 @@ class ImmutableMessageLiteGenerator : public MessageGenerator {
   void GenerateInitializers(io::Printer* printer);
   void GenerateParser(io::Printer* printer);
   void GenerateConstructor(io::Printer* printer);
-  void GenerateDynamicMethodNewBuildMessageInfo(io::Printer* printer); 
-  void GenerateKotlinExtensions(io::Printer* printer) const; 
+  void GenerateDynamicMethodNewBuildMessageInfo(io::Printer* printer);
+  void GenerateKotlinExtensions(io::Printer* printer) const;
 
   Context* context_;
   ClassNameResolver* name_resolver_;
@@ -81,6 +81,6 @@ class ImmutableMessageLiteGenerator : public MessageGenerator {
 }  // namespace java
 }  // namespace compiler
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
 #endif  // GOOGLE_PROTOBUF_COMPILER_JAVA_MESSAGE_LITE_H__

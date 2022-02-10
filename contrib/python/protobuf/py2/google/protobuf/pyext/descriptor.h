@@ -35,15 +35,15 @@
 
 #include <Python.h>
 
-#include <google/protobuf/descriptor.h> 
+#include <google/protobuf/descriptor.h>
 
 namespace google {
 namespace protobuf {
 namespace python {
 
-// Should match the type of ConstStringParam. 
-using StringParam = TProtoStringType; 
- 
+// Should match the type of ConstStringParam.
+using StringParam = TProtoStringType;
+
 extern PyTypeObject PyMessageDescriptor_Type;
 extern PyTypeObject PyFieldDescriptor_Type;
 extern PyTypeObject PyEnumDescriptor_Type;
@@ -102,6 +102,6 @@ bool InitDescriptor();
 
 }  // namespace python
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
 #endif  // GOOGLE_PROTOBUF_PYTHON_CPP_DESCRIPTOR_H__

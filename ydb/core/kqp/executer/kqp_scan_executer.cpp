@@ -699,9 +699,9 @@ private:
                     break;
                 }
 
-                case NKqpProto::TKqpPhyConnection::kMap: 
+                case NKqpProto::TKqpPhyConnection::kMap:
                     partitionsCount = originStageInfo.Tasks.size();
-                    break; 
+                    break;
 
                 default:
                     break;

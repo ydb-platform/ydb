@@ -52,7 +52,7 @@ namespace boost { namespace spirit { namespace lex
         Action f;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(action& operator= (action const&)); 
+        BOOST_DELETED_FUNCTION(action& operator= (action const&));
     };
 
 }}}

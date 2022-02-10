@@ -33,9 +33,9 @@
 #ifndef GOOGLE_PROTOBUF_STUBS_STATUS_MACROS_H_
 #define GOOGLE_PROTOBUF_STUBS_STATUS_MACROS_H_
 
-#include <google/protobuf/stubs/common.h> 
-#include <google/protobuf/stubs/status.h> 
-#include <google/protobuf/stubs/statusor.h> 
+#include <google/protobuf/stubs/common.h>
+#include <google/protobuf/stubs/status.h>
+#include <google/protobuf/stubs/statusor.h>
 
 namespace google {
 namespace protobuf {
@@ -46,11 +46,11 @@ namespace util {
 //
 // Example:
 //   RETURN_IF_ERROR(DoThings(4));
-#define RETURN_IF_ERROR(expr)                                                \ 
-  do {                                                                       \ 
+#define RETURN_IF_ERROR(expr)                                                \
+  do {                                                                       \
     /* Using _status below to avoid capture problems if expr is "status". */ \
-    const PROTOBUF_NAMESPACE_ID::util::Status _status = (expr);              \ 
-    if (PROTOBUF_PREDICT_FALSE(!_status.ok())) return _status;               \ 
+    const PROTOBUF_NAMESPACE_ID::util::Status _status = (expr);              \
+    if (PROTOBUF_PREDICT_FALSE(!_status.ok())) return _status;               \
   } while (0)
 
 // Internal helper for concatenating macro values.
@@ -60,14 +60,14 @@ namespace util {
 template<typename T>
 Status DoAssignOrReturn(T& lhs, StatusOr<T> result) {
   if (result.ok()) {
-    lhs = result.value(); 
+    lhs = result.value();
   }
   return result.status();
 }
 
 #define ASSIGN_OR_RETURN_IMPL(status, lhs, rexpr) \
   Status status = DoAssignOrReturn(lhs, (rexpr)); \
-  if (PROTOBUF_PREDICT_FALSE(!status.ok())) return status; 
+  if (PROTOBUF_PREDICT_FALSE(!status.ok())) return status;
 
 // Executes an expression that returns a util::StatusOr, extracting its value
 // into the variable defined by lhs (or returning on error).

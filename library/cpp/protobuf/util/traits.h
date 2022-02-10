@@ -2,8 +2,8 @@
 
 #include <util/generic/typetraits.h>
 
-#include <google/protobuf/descriptor.h> 
-#include <google/protobuf/message.h> 
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/message.h>
 
 namespace NProtoBuf {
 // this nasty windows.h macro interfers with protobuf::Reflection::GetMessage()

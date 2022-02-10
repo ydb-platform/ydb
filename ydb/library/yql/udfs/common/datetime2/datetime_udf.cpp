@@ -545,7 +545,7 @@ namespace {
 
     SIMPLE_UDF(TGetTimezoneName, char*(TAutoMap<TResource<TMResourceName>>)) {
         auto timezoneId = GetTimezoneId(args[0]);
-        if (timezoneId >= NUdf::GetTimezones().size()) { 
+        if (timezoneId >= NUdf::GetTimezones().size()) {
             return TUnboxedValuePod();
         }
         return valueBuilder->NewString(NUdf::GetTimezones()[timezoneId]);

@@ -266,7 +266,7 @@ int TCommandDescribe::PrintStreamResponse(const NYdb::NPersQueue::TDescribeTopic
         case EOutputFormat::Json:
             Cerr << "Warning! Option --json is deprecated and will be removed soon. "
                  << "Use \"--format proto-json-base64\" option instead." << Endl;
-            [[fallthrough]]; 
+            [[fallthrough]];
         case EOutputFormat::ProtoJsonBase64:
             return PrintStreamResponseProtoJsonBase64(result);
         default:
@@ -629,7 +629,7 @@ int TCommandDescribe::PrintTableResponse(NTable::TDescribeTableResult& result) {
     case EOutputFormat::Json:
         Cerr << "Warning! Option --json is deprecated and will be removed soon. "
             << "Use \"--format proto-json-base64\" option instead." << Endl;
-        [[fallthrough]]; 
+        [[fallthrough]];
     case EOutputFormat::ProtoJsonBase64:
         return PrintResponseProtoJsonBase64(tableDescription);
     default:
@@ -678,7 +678,7 @@ int TCommandDescribe::PrintResponseProtoJsonBase64(const NTable::TTableDescripti
         &json,
         jsonOpts
     );
-    if (convertStatus.ok()) { 
+    if (convertStatus.ok()) {
         Cout << json << Endl;
     } else {
         Cerr << "Error occurred while converting result proto to json" << Endl;

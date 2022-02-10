@@ -5,11 +5,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html. 
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -27,9 +27,9 @@
  * RFC4752 The Kerberos V5 ("GSSAPI") SASL Mechanism
  * RFC4954 SMTP Authentication
  * RFC5321 SMTP protocol
- * RFC5890 Internationalized Domain Names for Applications (IDNA) 
- * RFC6531 SMTP Extension for Internationalized Email 
- * RFC6532 Internationalized Email Headers 
+ * RFC5890 Internationalized Domain Names for Applications (IDNA)
+ * RFC6531 SMTP Extension for Internationalized Email
+ * RFC6532 Internationalized Email Headers
  * RFC6749 OAuth 2.0 Authorization Framework
  * RFC8314 Use of TLS for Email Submission and Access
  * Draft   SMTP URL Interface   <draft-earhart-url-smtp-00.txt>
@@ -104,8 +104,8 @@ static CURLcode smtp_setup_connection(struct connectdata *conn);
 static CURLcode smtp_parse_url_options(struct connectdata *conn);
 static CURLcode smtp_parse_url_path(struct connectdata *conn);
 static CURLcode smtp_parse_custom_request(struct connectdata *conn);
-static CURLcode smtp_parse_address(struct connectdata *conn, const char *fqma, 
-                                   char **address, struct hostname *host); 
+static CURLcode smtp_parse_address(struct connectdata *conn, const char *fqma,
+                                   char **address, struct hostname *host);
 static CURLcode smtp_perform_auth(struct connectdata *conn, const char *mech,
                                   const char *initresp);
 static CURLcode smtp_continue_auth(struct connectdata *conn, const char *resp);
@@ -133,7 +133,7 @@ const struct Curl_handler Curl_handler_smtp = {
   ZERO_NULL,                        /* connection_check */
   PORT_SMTP,                        /* defport */
   CURLPROTO_SMTP,                   /* protocol */
-  CURLPROTO_SMTP,                   /* family */ 
+  CURLPROTO_SMTP,                   /* family */
   PROTOPT_CLOSEACTION | PROTOPT_NOURLQUERY | /* flags */
   PROTOPT_URLOPTIONS
 };
@@ -161,7 +161,7 @@ const struct Curl_handler Curl_handler_smtps = {
   ZERO_NULL,                        /* connection_check */
   PORT_SMTPS,                       /* defport */
   CURLPROTO_SMTPS,                  /* protocol */
-  CURLPROTO_SMTP,                   /* family */ 
+  CURLPROTO_SMTP,                   /* family */
   PROTOPT_CLOSEACTION | PROTOPT_SSL
   | PROTOPT_NOURLQUERY | PROTOPT_URLOPTIONS /* flags */
 };
@@ -185,7 +185,7 @@ static void smtp_to_smtps(struct connectdata *conn)
   conn->handler = &Curl_handler_smtps;
 
   /* Set the connection's upgraded to TLS flag */
-  conn->bits.tls_upgraded = TRUE; 
+  conn->bits.tls_upgraded = TRUE;
 }
 #else
 #define smtp_to_smtps(x) Curl_nop_stmt
@@ -486,57 +486,57 @@ static CURLcode smtp_perform_command(struct connectdata *conn)
 {
   CURLcode result = CURLE_OK;
   struct Curl_easy *data = conn->data;
-  struct SMTP *smtp = data->req.p.smtp; 
+  struct SMTP *smtp = data->req.p.smtp;
 
-  if(smtp->rcpt) { 
-    /* We notify the server we are sending UTF-8 data if a) it supports the 
-       SMTPUTF8 extension and b) The mailbox contains UTF-8 charaacters, in 
-       either the local address or host name parts. This is regardless of 
-       whether the host name is encoded using IDN ACE */ 
-    bool utf8 = FALSE; 
- 
-    if((!smtp->custom) || (!smtp->custom[0])) { 
-      char *address = NULL; 
-      struct hostname host = { NULL, NULL, NULL, NULL }; 
- 
-      /* Parse the mailbox to verify into the local address and host name 
-         parts, converting the host name to an IDN A-label if necessary */ 
-      result = smtp_parse_address(conn, smtp->rcpt->data, 
-                                  &address, &host); 
-      if(result) 
-        return result; 
- 
-      /* Establish whether we should report SMTPUTF8 to the server for this 
-         mailbox as per RFC-6531 sect. 3.1 point 6 */ 
-      utf8 = (conn->proto.smtpc.utf8_supported) && 
-             ((host.encalloc) || (!Curl_is_ASCII_name(address)) || 
-              (!Curl_is_ASCII_name(host.name))); 
- 
-      /* Send the VRFY command (Note: The host name part may be absent when the 
-         host is a local system) */ 
-      result = Curl_pp_sendf(&conn->proto.smtpc.pp, "VRFY %s%s%s%s", 
-                             address, 
-                             host.name ? "@" : "", 
-                             host.name ? host.name : "", 
-                             utf8 ? " SMTPUTF8" : ""); 
- 
-      Curl_free_idnconverted_hostname(&host); 
-      free(address); 
-    } 
-    else { 
-      /* Establish whether we should report that we support SMTPUTF8 for EXPN 
-         commands to the server as per RFC-6531 sect. 3.1 point 6 */ 
-      utf8 = (conn->proto.smtpc.utf8_supported) && 
-             (!strcmp(smtp->custom, "EXPN")); 
- 
-      /* Send the custom recipient based command such as the EXPN command */ 
-      result = Curl_pp_sendf(&conn->proto.smtpc.pp, "%s %s%s", smtp->custom, 
-                             smtp->rcpt->data, 
-                             utf8 ? " SMTPUTF8" : ""); 
-    } 
-  } 
+  if(smtp->rcpt) {
+    /* We notify the server we are sending UTF-8 data if a) it supports the
+       SMTPUTF8 extension and b) The mailbox contains UTF-8 charaacters, in
+       either the local address or host name parts. This is regardless of
+       whether the host name is encoded using IDN ACE */
+    bool utf8 = FALSE;
+
+    if((!smtp->custom) || (!smtp->custom[0])) {
+      char *address = NULL;
+      struct hostname host = { NULL, NULL, NULL, NULL };
+
+      /* Parse the mailbox to verify into the local address and host name
+         parts, converting the host name to an IDN A-label if necessary */
+      result = smtp_parse_address(conn, smtp->rcpt->data,
+                                  &address, &host);
+      if(result)
+        return result;
+
+      /* Establish whether we should report SMTPUTF8 to the server for this
+         mailbox as per RFC-6531 sect. 3.1 point 6 */
+      utf8 = (conn->proto.smtpc.utf8_supported) &&
+             ((host.encalloc) || (!Curl_is_ASCII_name(address)) ||
+              (!Curl_is_ASCII_name(host.name)));
+
+      /* Send the VRFY command (Note: The host name part may be absent when the
+         host is a local system) */
+      result = Curl_pp_sendf(&conn->proto.smtpc.pp, "VRFY %s%s%s%s",
+                             address,
+                             host.name ? "@" : "",
+                             host.name ? host.name : "",
+                             utf8 ? " SMTPUTF8" : "");
+
+      Curl_free_idnconverted_hostname(&host);
+      free(address);
+    }
+    else {
+      /* Establish whether we should report that we support SMTPUTF8 for EXPN
+         commands to the server as per RFC-6531 sect. 3.1 point 6 */
+      utf8 = (conn->proto.smtpc.utf8_supported) &&
+             (!strcmp(smtp->custom, "EXPN"));
+
+      /* Send the custom recipient based command such as the EXPN command */
+      result = Curl_pp_sendf(&conn->proto.smtpc.pp, "%s %s%s", smtp->custom,
+                             smtp->rcpt->data,
+                             utf8 ? " SMTPUTF8" : "");
+    }
+  }
   else
-    /* Send the non-recipient based command such as HELP */ 
+    /* Send the non-recipient based command such as HELP */
     result = Curl_pp_sendf(&conn->proto.smtpc.pp, "%s",
                            smtp->custom && smtp->custom[0] != '\0' ?
                            smtp->custom : "HELP");
@@ -561,43 +561,43 @@ static CURLcode smtp_perform_mail(struct connectdata *conn)
   CURLcode result = CURLE_OK;
   struct Curl_easy *data = conn->data;
 
-  /* We notify the server we are sending UTF-8 data if a) it supports the 
-     SMTPUTF8 extension and b) The mailbox contains UTF-8 charaacters, in 
-     either the local address or host name parts. This is regardless of 
-     whether the host name is encoded using IDN ACE */ 
-  bool utf8 = FALSE; 
- 
+  /* We notify the server we are sending UTF-8 data if a) it supports the
+     SMTPUTF8 extension and b) The mailbox contains UTF-8 charaacters, in
+     either the local address or host name parts. This is regardless of
+     whether the host name is encoded using IDN ACE */
+  bool utf8 = FALSE;
+
   /* Calculate the FROM parameter */
-  if(data->set.str[STRING_MAIL_FROM]) { 
-    char *address = NULL; 
-    struct hostname host = { NULL, NULL, NULL, NULL }; 
- 
-    /* Parse the FROM mailbox into the local address and host name parts, 
-       converting the host name to an IDN A-label if necessary */ 
-    result = smtp_parse_address(conn, data->set.str[STRING_MAIL_FROM], 
-                                &address, &host); 
-    if(result) 
-      return result; 
- 
-    /* Establish whether we should report SMTPUTF8 to the server for this 
-       mailbox as per RFC-6531 sect. 3.1 point 4 and sect. 3.4 */ 
-    utf8 = (conn->proto.smtpc.utf8_supported) && 
-           ((host.encalloc) || (!Curl_is_ASCII_name(address)) || 
-            (!Curl_is_ASCII_name(host.name))); 
- 
-    if(host.name) { 
-      from = aprintf("<%s@%s>", address, host.name); 
- 
-      Curl_free_idnconverted_hostname(&host); 
-    } 
-    else 
-      /* An invalid mailbox was provided but we'll simply let the server worry 
-         about that and reply with a 501 error */ 
-      from = aprintf("<%s>", address); 
- 
-    free(address); 
-  } 
-  else 
+  if(data->set.str[STRING_MAIL_FROM]) {
+    char *address = NULL;
+    struct hostname host = { NULL, NULL, NULL, NULL };
+
+    /* Parse the FROM mailbox into the local address and host name parts,
+       converting the host name to an IDN A-label if necessary */
+    result = smtp_parse_address(conn, data->set.str[STRING_MAIL_FROM],
+                                &address, &host);
+    if(result)
+      return result;
+
+    /* Establish whether we should report SMTPUTF8 to the server for this
+       mailbox as per RFC-6531 sect. 3.1 point 4 and sect. 3.4 */
+    utf8 = (conn->proto.smtpc.utf8_supported) &&
+           ((host.encalloc) || (!Curl_is_ASCII_name(address)) ||
+            (!Curl_is_ASCII_name(host.name)));
+
+    if(host.name) {
+      from = aprintf("<%s@%s>", address, host.name);
+
+      Curl_free_idnconverted_hostname(&host);
+    }
+    else
+      /* An invalid mailbox was provided but we'll simply let the server worry
+         about that and reply with a 501 error */
+      from = aprintf("<%s>", address);
+
+    free(address);
+  }
+  else
     /* Null reverse-path, RFC-5321, sect. 3.6.3 */
     from = strdup("<>");
 
@@ -606,38 +606,38 @@ static CURLcode smtp_perform_mail(struct connectdata *conn)
 
   /* Calculate the optional AUTH parameter */
   if(data->set.str[STRING_MAIL_AUTH] && conn->proto.smtpc.sasl.authused) {
-    if(data->set.str[STRING_MAIL_AUTH][0] != '\0') { 
-      char *address = NULL; 
-      struct hostname host = { NULL, NULL, NULL, NULL }; 
- 
-      /* Parse the AUTH mailbox into the local address and host name parts, 
-         converting the host name to an IDN A-label if necessary */ 
-      result = smtp_parse_address(conn, data->set.str[STRING_MAIL_AUTH], 
-                                  &address, &host); 
-      if(result) { 
-        free(from); 
-        return result; 
-      } 
- 
-      /* Establish whether we should report SMTPUTF8 to the server for this 
-         mailbox as per RFC-6531 sect. 3.1 point 4 and sect. 3.4 */ 
-      if((!utf8) && (conn->proto.smtpc.utf8_supported) && 
-         ((host.encalloc) || (!Curl_is_ASCII_name(address)) || 
-          (!Curl_is_ASCII_name(host.name)))) 
-        utf8 = TRUE; 
- 
-      if(host.name) { 
-        auth = aprintf("<%s@%s>", address, host.name); 
- 
-        Curl_free_idnconverted_hostname(&host); 
-      } 
-      else 
-        /* An invalid mailbox was provided but we'll simply let the server 
-           worry about it */ 
-        auth = aprintf("<%s>", address); 
- 
-      free(address); 
-    } 
+    if(data->set.str[STRING_MAIL_AUTH][0] != '\0') {
+      char *address = NULL;
+      struct hostname host = { NULL, NULL, NULL, NULL };
+
+      /* Parse the AUTH mailbox into the local address and host name parts,
+         converting the host name to an IDN A-label if necessary */
+      result = smtp_parse_address(conn, data->set.str[STRING_MAIL_AUTH],
+                                  &address, &host);
+      if(result) {
+        free(from);
+        return result;
+      }
+
+      /* Establish whether we should report SMTPUTF8 to the server for this
+         mailbox as per RFC-6531 sect. 3.1 point 4 and sect. 3.4 */
+      if((!utf8) && (conn->proto.smtpc.utf8_supported) &&
+         ((host.encalloc) || (!Curl_is_ASCII_name(address)) ||
+          (!Curl_is_ASCII_name(host.name))))
+        utf8 = TRUE;
+
+      if(host.name) {
+        auth = aprintf("<%s@%s>", address, host.name);
+
+        Curl_free_idnconverted_hostname(&host);
+      }
+      else
+        /* An invalid mailbox was provided but we'll simply let the server
+           worry about it */
+        auth = aprintf("<%s>", address);
+
+      free(address);
+    }
     else
       /* Empty AUTH, RFC-2554, sect. 5 */
       auth = strdup("<>");
@@ -671,7 +671,7 @@ static CURLcode smtp_perform_mail(struct connectdata *conn)
     if(result) {
       free(from);
       free(auth);
- 
+
       return result;
     }
 
@@ -694,33 +694,33 @@ static CURLcode smtp_perform_mail(struct connectdata *conn)
     }
   }
 
-  /* If the mailboxes in the FROM and AUTH parameters don't include a UTF-8 
-     based address then quickly scan through the recipient list and check if 
-     any there do, as we need to correctly identify our support for SMTPUTF8 
-     in the envelope, as per RFC-6531 sect. 3.4 */ 
-  if(conn->proto.smtpc.utf8_supported && !utf8) { 
-    struct SMTP *smtp = data->req.p.smtp; 
-    struct curl_slist *rcpt = smtp->rcpt; 
- 
-    while(rcpt && !utf8) { 
-      /* Does the host name contain non-ASCII characters? */ 
-      if(!Curl_is_ASCII_name(rcpt->data)) 
-        utf8 = TRUE; 
- 
-      rcpt = rcpt->next; 
-    } 
-  } 
- 
+  /* If the mailboxes in the FROM and AUTH parameters don't include a UTF-8
+     based address then quickly scan through the recipient list and check if
+     any there do, as we need to correctly identify our support for SMTPUTF8
+     in the envelope, as per RFC-6531 sect. 3.4 */
+  if(conn->proto.smtpc.utf8_supported && !utf8) {
+    struct SMTP *smtp = data->req.p.smtp;
+    struct curl_slist *rcpt = smtp->rcpt;
+
+    while(rcpt && !utf8) {
+      /* Does the host name contain non-ASCII characters? */
+      if(!Curl_is_ASCII_name(rcpt->data))
+        utf8 = TRUE;
+
+      rcpt = rcpt->next;
+    }
+  }
+
   /* Send the MAIL command */
-  result = Curl_pp_sendf(&conn->proto.smtpc.pp, 
-                         "MAIL FROM:%s%s%s%s%s%s", 
-                         from,                 /* Mandatory                 */ 
-                         auth ? " AUTH=" : "", /* Optional on AUTH support  */ 
-                         auth ? auth : "",     /*                           */ 
-                         size ? " SIZE=" : "", /* Optional on SIZE support  */ 
-                         size ? size : "",     /*                           */ 
-                         utf8 ? " SMTPUTF8"    /* Internationalised mailbox */ 
-                               : "");          /* included in our envelope  */ 
+  result = Curl_pp_sendf(&conn->proto.smtpc.pp,
+                         "MAIL FROM:%s%s%s%s%s%s",
+                         from,                 /* Mandatory                 */
+                         auth ? " AUTH=" : "", /* Optional on AUTH support  */
+                         auth ? auth : "",     /*                           */
+                         size ? " SIZE=" : "", /* Optional on SIZE support  */
+                         size ? size : "",     /*                           */
+                         utf8 ? " SMTPUTF8"    /* Internationalised mailbox */
+                               : "");          /* included in our envelope  */
 
   free(from);
   free(auth);
@@ -743,29 +743,29 @@ static CURLcode smtp_perform_rcpt_to(struct connectdata *conn)
 {
   CURLcode result = CURLE_OK;
   struct Curl_easy *data = conn->data;
-  struct SMTP *smtp = data->req.p.smtp; 
-  char *address = NULL; 
-  struct hostname host = { NULL, NULL, NULL, NULL }; 
+  struct SMTP *smtp = data->req.p.smtp;
+  char *address = NULL;
+  struct hostname host = { NULL, NULL, NULL, NULL };
 
-  /* Parse the recipient mailbox into the local address and host name parts, 
-     converting the host name to an IDN A-label if necessary */ 
-  result = smtp_parse_address(conn, smtp->rcpt->data, 
-                              &address, &host); 
-  if(result) 
-    return result; 
- 
+  /* Parse the recipient mailbox into the local address and host name parts,
+     converting the host name to an IDN A-label if necessary */
+  result = smtp_parse_address(conn, smtp->rcpt->data,
+                              &address, &host);
+  if(result)
+    return result;
+
   /* Send the RCPT TO command */
-  if(host.name) 
-    result = Curl_pp_sendf(&conn->proto.smtpc.pp, "RCPT TO:<%s@%s>", address, 
-                           host.name); 
+  if(host.name)
+    result = Curl_pp_sendf(&conn->proto.smtpc.pp, "RCPT TO:<%s@%s>", address,
+                           host.name);
   else
-    /* An invalid mailbox was provided but we'll simply let the server worry 
-       about that and reply with a 501 error */ 
-    result = Curl_pp_sendf(&conn->proto.smtpc.pp, "RCPT TO:<%s>", address); 
- 
-  Curl_free_idnconverted_hostname(&host); 
-  free(address); 
- 
+    /* An invalid mailbox was provided but we'll simply let the server worry
+       about that and reply with a 501 error */
+    result = Curl_pp_sendf(&conn->proto.smtpc.pp, "RCPT TO:<%s>", address);
+
+  Curl_free_idnconverted_hostname(&host);
+  free(address);
+
   if(!result)
     state(conn, SMTP_RCPT);
 
@@ -865,10 +865,10 @@ static CURLcode smtp_state_ehlo_resp(struct connectdata *conn, int smtpcode,
     else if(len >= 4 && !memcmp(line, "SIZE", 4))
       smtpc->size_supported = TRUE;
 
-    /* Does the server support the UTF-8 capability? */ 
-    else if(len >= 8 && !memcmp(line, "SMTPUTF8", 8)) 
-      smtpc->utf8_supported = TRUE; 
- 
+    /* Does the server support the UTF-8 capability? */
+    else if(len >= 8 && !memcmp(line, "SMTPUTF8", 8))
+      smtpc->utf8_supported = TRUE;
+
     /* Does the server support authentication? */
     else if(len >= 5 && !memcmp(line, "AUTH ", 5)) {
       smtpc->auth_supported = TRUE;
@@ -991,7 +991,7 @@ static CURLcode smtp_state_command_resp(struct connectdata *conn, int smtpcode,
 {
   CURLcode result = CURLE_OK;
   struct Curl_easy *data = conn->data;
-  struct SMTP *smtp = data->req.p.smtp; 
+  struct SMTP *smtp = data->req.p.smtp;
   char *line = data->state.buffer;
   size_t len = strlen(line);
 
@@ -1057,54 +1057,54 @@ static CURLcode smtp_state_rcpt_resp(struct connectdata *conn, int smtpcode,
 {
   CURLcode result = CURLE_OK;
   struct Curl_easy *data = conn->data;
-  struct SMTP *smtp = data->req.p.smtp; 
-  bool is_smtp_err = FALSE; 
-  bool is_smtp_blocking_err = FALSE; 
+  struct SMTP *smtp = data->req.p.smtp;
+  bool is_smtp_err = FALSE;
+  bool is_smtp_blocking_err = FALSE;
 
   (void)instate; /* no use for this yet */
 
-  is_smtp_err = (smtpcode/100 != 2) ? TRUE : FALSE; 
- 
-  /* If there's multiple RCPT TO to be issued, it's possible to ignore errors 
-     and proceed with only the valid addresses. */ 
-  is_smtp_blocking_err = 
-    (is_smtp_err && !data->set.mail_rcpt_allowfails) ? TRUE : FALSE; 
- 
-  if(is_smtp_err) { 
-    /* Remembering the last failure which we can report if all "RCPT TO" have 
-       failed and we cannot proceed. */ 
-    smtp->rcpt_last_error = smtpcode; 
- 
-    if(is_smtp_blocking_err) { 
-      failf(data, "RCPT failed: %d", smtpcode); 
-      result = CURLE_SEND_ERROR; 
-    } 
+  is_smtp_err = (smtpcode/100 != 2) ? TRUE : FALSE;
+
+  /* If there's multiple RCPT TO to be issued, it's possible to ignore errors
+     and proceed with only the valid addresses. */
+  is_smtp_blocking_err =
+    (is_smtp_err && !data->set.mail_rcpt_allowfails) ? TRUE : FALSE;
+
+  if(is_smtp_err) {
+    /* Remembering the last failure which we can report if all "RCPT TO" have
+       failed and we cannot proceed. */
+    smtp->rcpt_last_error = smtpcode;
+
+    if(is_smtp_blocking_err) {
+      failf(data, "RCPT failed: %d", smtpcode);
+      result = CURLE_SEND_ERROR;
+    }
   }
   else {
-    /* Some RCPT TO commands have succeeded. */ 
-    smtp->rcpt_had_ok = TRUE; 
-  } 
- 
-  if(!is_smtp_blocking_err) { 
+    /* Some RCPT TO commands have succeeded. */
+    smtp->rcpt_had_ok = TRUE;
+  }
+
+  if(!is_smtp_blocking_err) {
     smtp->rcpt = smtp->rcpt->next;
 
     if(smtp->rcpt)
       /* Send the next RCPT TO command */
       result = smtp_perform_rcpt_to(conn);
     else {
-      /* We weren't able to issue a successful RCPT TO command while going 
-         over recipients (potentially multiple). Sending back last error. */ 
-      if(!smtp->rcpt_had_ok) { 
-        failf(data, "RCPT failed: %d (last error)", smtp->rcpt_last_error); 
-        result = CURLE_SEND_ERROR; 
-      } 
-      else { 
-        /* Send the DATA command */ 
-        result = Curl_pp_sendf(&conn->proto.smtpc.pp, "%s", "DATA"); 
+      /* We weren't able to issue a successful RCPT TO command while going
+         over recipients (potentially multiple). Sending back last error. */
+      if(!smtp->rcpt_had_ok) {
+        failf(data, "RCPT failed: %d (last error)", smtp->rcpt_last_error);
+        result = CURLE_SEND_ERROR;
+      }
+      else {
+        /* Send the DATA command */
+        result = Curl_pp_sendf(&conn->proto.smtpc.pp, "%s", "DATA");
 
-        if(!result) 
-          state(conn, SMTP_DATA); 
-      } 
+        if(!result)
+          state(conn, SMTP_DATA);
+      }
     }
   }
 
@@ -1280,7 +1280,7 @@ static CURLcode smtp_init(struct connectdata *conn)
   struct Curl_easy *data = conn->data;
   struct SMTP *smtp;
 
-  smtp = data->req.p.smtp = calloc(sizeof(struct SMTP), 1); 
+  smtp = data->req.p.smtp = calloc(sizeof(struct SMTP), 1);
   if(!smtp)
     result = CURLE_OUT_OF_MEMORY;
 
@@ -1324,7 +1324,7 @@ static CURLcode smtp_connect(struct connectdata *conn, bool *done)
   Curl_sasl_init(&smtpc->sasl, &saslsmtp);
 
   /* Initialise the pingpong layer */
-  Curl_pp_setup(pp); 
+  Curl_pp_setup(pp);
   Curl_pp_init(pp);
 
   /* Parse the URL options */
@@ -1359,7 +1359,7 @@ static CURLcode smtp_done(struct connectdata *conn, CURLcode status,
 {
   CURLcode result = CURLE_OK;
   struct Curl_easy *data = conn->data;
-  struct SMTP *smtp = data->req.p.smtp; 
+  struct SMTP *smtp = data->req.p.smtp;
   struct pingpong *pp = &conn->proto.smtpc.pp;
   char *eob;
   ssize_t len;
@@ -1445,7 +1445,7 @@ static CURLcode smtp_perform(struct connectdata *conn, bool *connected,
   /* This is SMTP and no proxy */
   CURLcode result = CURLE_OK;
   struct Curl_easy *data = conn->data;
-  struct SMTP *smtp = data->req.p.smtp; 
+  struct SMTP *smtp = data->req.p.smtp;
 
   DEBUGF(infof(conn->data, "DO phase starts\n"));
 
@@ -1459,12 +1459,12 @@ static CURLcode smtp_perform(struct connectdata *conn, bool *connected,
   /* Store the first recipient (or NULL if not specified) */
   smtp->rcpt = data->set.mail_rcpt;
 
-  /* Track of whether we've successfully sent at least one RCPT TO command */ 
-  smtp->rcpt_had_ok = FALSE; 
- 
-  /* Track of the last error we've received by sending RCPT TO command */ 
-  smtp->rcpt_last_error = 0; 
- 
+  /* Track of whether we've successfully sent at least one RCPT TO command */
+  smtp->rcpt_had_ok = FALSE;
+
+  /* Track of the last error we've received by sending RCPT TO command */
+  smtp->rcpt_last_error = 0;
+
   /* Initial data character is the first character in line: it is implicitly
      preceded by a virtual CRLF. */
   smtp->trailing_crlf = TRUE;
@@ -1553,7 +1553,7 @@ static CURLcode smtp_disconnect(struct connectdata *conn, bool dead_connection)
 /* Call this when the DO phase has completed */
 static CURLcode smtp_dophase_done(struct connectdata *conn, bool connected)
 {
-  struct SMTP *smtp = conn->data->req.p.smtp; 
+  struct SMTP *smtp = conn->data->req.p.smtp;
 
   (void)connected;
 
@@ -1620,7 +1620,7 @@ static CURLcode smtp_setup_connection(struct connectdata *conn)
   CURLcode result;
 
   /* Clear the TLS upgraded flag */
-  conn->bits.tls_upgraded = FALSE; 
+  conn->bits.tls_upgraded = FALSE;
 
   /* Initialise the SMTP layer */
   result = smtp_init(conn);
@@ -1692,8 +1692,8 @@ static CURLcode smtp_parse_url_path(struct connectdata *conn)
   }
 
   /* URL decode the path and use it as the domain in our EHLO */
-  return Curl_urldecode(conn->data, path, 0, &smtpc->domain, NULL, 
-                        REJECT_CTRL); 
+  return Curl_urldecode(conn->data, path, 0, &smtpc->domain, NULL,
+                        REJECT_CTRL);
 }
 
 /***********************************************************************
@@ -1706,88 +1706,88 @@ static CURLcode smtp_parse_custom_request(struct connectdata *conn)
 {
   CURLcode result = CURLE_OK;
   struct Curl_easy *data = conn->data;
-  struct SMTP *smtp = data->req.p.smtp; 
+  struct SMTP *smtp = data->req.p.smtp;
   const char *custom = data->set.str[STRING_CUSTOMREQUEST];
 
   /* URL decode the custom request */
   if(custom)
-    result = Curl_urldecode(data, custom, 0, &smtp->custom, NULL, REJECT_CTRL); 
+    result = Curl_urldecode(data, custom, 0, &smtp->custom, NULL, REJECT_CTRL);
 
   return result;
 }
 
-/*********************************************************************** 
- * 
- * smtp_parse_address() 
- * 
- * Parse the fully qualified mailbox address into a local address part and the 
- * host name, converting the host name to an IDN A-label, as per RFC-5890, if 
- * necessary. 
- * 
- * Parameters: 
- * 
- * conn  [in]              - The connection handle. 
- * fqma  [in]              - The fully qualified mailbox address (which may or 
- *                           may not contain UTF-8 characters). 
- * address        [in/out] - A new allocated buffer which holds the local 
- *                           address part of the mailbox. This buffer must be 
- *                           free'ed by the caller. 
- * host           [in/out] - The host name structure that holds the original, 
- *                           and optionally encoded, host name. 
- *                           Curl_free_idnconverted_hostname() must be called 
- *                           once the caller has finished with the structure. 
- * 
- * Returns CURLE_OK on success. 
- * 
- * Notes: 
- * 
- * Should a UTF-8 host name require conversion to IDN ACE and we cannot honor 
- * that conversion then we shall return success. This allow the caller to send 
- * the data to the server as a U-label (as per RFC-6531 sect. 3.2). 
- * 
- * If an mailbox '@' separator cannot be located then the mailbox is considered 
- * to be either a local mailbox or an invalid mailbox (depending on what the 
- * calling function deems it to be) then the input will simply be returned in 
- * the address part with the host name being NULL. 
- */ 
-static CURLcode smtp_parse_address(struct connectdata *conn, const char *fqma, 
-                                   char **address, struct hostname *host) 
-{ 
-  CURLcode result = CURLE_OK; 
-  size_t length; 
- 
-  /* Duplicate the fully qualified email address so we can manipulate it, 
-     ensuring it doesn't contain the delimiters if specified */ 
-  char *dup = strdup(fqma[0] == '<' ? fqma + 1  : fqma); 
-  if(!dup) 
-    return CURLE_OUT_OF_MEMORY; 
- 
-  length = strlen(dup); 
-  if(length) { 
-    if(dup[length - 1] == '>') 
-      dup[length - 1] = '\0'; 
-  } 
- 
-  /* Extract the host name from the address (if we can) */ 
-  host->name = strpbrk(dup, "@"); 
-  if(host->name) { 
-    *host->name = '\0'; 
-    host->name = host->name + 1; 
- 
-    /* Attempt to convert the host name to IDN ACE */ 
-    (void) Curl_idnconvert_hostname(conn, host); 
- 
-    /* If Curl_idnconvert_hostname() fails then we shall attempt to continue 
-       and send the host name using UTF-8 rather than as 7-bit ACE (which is 
-       our preference) */ 
-  } 
- 
-  /* Extract the local address from the mailbox */ 
-  *address = dup; 
- 
-  return result; 
-} 
- 
+/***********************************************************************
+ *
+ * smtp_parse_address()
+ *
+ * Parse the fully qualified mailbox address into a local address part and the
+ * host name, converting the host name to an IDN A-label, as per RFC-5890, if
+ * necessary.
+ *
+ * Parameters:
+ *
+ * conn  [in]              - The connection handle.
+ * fqma  [in]              - The fully qualified mailbox address (which may or
+ *                           may not contain UTF-8 characters).
+ * address        [in/out] - A new allocated buffer which holds the local
+ *                           address part of the mailbox. This buffer must be
+ *                           free'ed by the caller.
+ * host           [in/out] - The host name structure that holds the original,
+ *                           and optionally encoded, host name.
+ *                           Curl_free_idnconverted_hostname() must be called
+ *                           once the caller has finished with the structure.
+ *
+ * Returns CURLE_OK on success.
+ *
+ * Notes:
+ *
+ * Should a UTF-8 host name require conversion to IDN ACE and we cannot honor
+ * that conversion then we shall return success. This allow the caller to send
+ * the data to the server as a U-label (as per RFC-6531 sect. 3.2).
+ *
+ * If an mailbox '@' separator cannot be located then the mailbox is considered
+ * to be either a local mailbox or an invalid mailbox (depending on what the
+ * calling function deems it to be) then the input will simply be returned in
+ * the address part with the host name being NULL.
+ */
+static CURLcode smtp_parse_address(struct connectdata *conn, const char *fqma,
+                                   char **address, struct hostname *host)
+{
+  CURLcode result = CURLE_OK;
+  size_t length;
+
+  /* Duplicate the fully qualified email address so we can manipulate it,
+     ensuring it doesn't contain the delimiters if specified */
+  char *dup = strdup(fqma[0] == '<' ? fqma + 1  : fqma);
+  if(!dup)
+    return CURLE_OUT_OF_MEMORY;
+
+  length = strlen(dup);
+  if(length) {
+    if(dup[length - 1] == '>')
+      dup[length - 1] = '\0';
+  }
+
+  /* Extract the host name from the address (if we can) */
+  host->name = strpbrk(dup, "@");
+  if(host->name) {
+    *host->name = '\0';
+    host->name = host->name + 1;
+
+    /* Attempt to convert the host name to IDN ACE */
+    (void) Curl_idnconvert_hostname(conn, host);
+
+    /* If Curl_idnconvert_hostname() fails then we shall attempt to continue
+       and send the host name using UTF-8 rather than as 7-bit ACE (which is
+       our preference) */
+  }
+
+  /* Extract the local address from the mailbox */
+  *address = dup;
+
+  return result;
+}
+
 CURLcode Curl_smtp_escape_eob(struct connectdata *conn, const ssize_t nread)
 {
   /* When sending a SMTP payload we must detect CRLF. sequences making sure
@@ -1799,7 +1799,7 @@ CURLcode Curl_smtp_escape_eob(struct connectdata *conn, const ssize_t nread)
   ssize_t i;
   ssize_t si;
   struct Curl_easy *data = conn->data;
-  struct SMTP *smtp = data->req.p.smtp; 
+  struct SMTP *smtp = data->req.p.smtp;
   char *scratch = data->state.scratch;
   char *newscratch = NULL;
   char *oldscratch = NULL;

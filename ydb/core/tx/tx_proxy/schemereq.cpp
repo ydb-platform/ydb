@@ -401,7 +401,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable:
                     result->Record.SetSchemeShardStatus(NKikimrScheme::EStatus::StatusNotAvailable);
                     result->Record.SetSchemeShardReason("Schemeshard not available");
-                    break; 
+                    break;
                 default:
                     break;
             }

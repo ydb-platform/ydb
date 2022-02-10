@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018, Intel Corporation 
+ * Copyright (c) 2016-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -60,7 +60,7 @@
 #include "util/flat_containers.h"
 #include "util/graph.h"
 #include "util/graph_range.h"
-#include "util/graph_small_color_map.h" 
+#include "util/graph_small_color_map.h"
 #include "util/insertion_ordered.h"
 #include "util/make_unique.h"
 #include "util/order_check.h"
@@ -134,21 +134,21 @@ bool createsTransientLHS(const NGHolder &g, const vector<NFAVertex> &vv,
     return true;
 }
 
-/** 
- * Counts the number of vertices that are reachable from the set of sources 
- * given. 
- */ 
+/**
+ * Counts the number of vertices that are reachable from the set of sources
+ * given.
+ */
 static
-size_t count_reachable(const NGHolder &g, const vector<NFAVertex> &sources, 
-                small_color_map<decltype(get(vertex_index, g))> &color_map) { 
-    auto null_visitor = boost::make_dfs_visitor(boost::null_visitor()); 
-    color_map.fill(small_color::white); 
+size_t count_reachable(const NGHolder &g, const vector<NFAVertex> &sources,
+                small_color_map<decltype(get(vertex_index, g))> &color_map) {
+    auto null_visitor = boost::make_dfs_visitor(boost::null_visitor());
+    color_map.fill(small_color::white);
 
-    for (auto v : sources) { 
-        boost::depth_first_visit(g, v, null_visitor, color_map); 
-    } 
- 
-    return color_map.count(small_color::black); 
+    for (auto v : sources) {
+        boost::depth_first_visit(g, v, null_visitor, color_map);
+    }
+
+    return color_map.count(small_color::black);
 }
 
 static
@@ -695,12 +695,12 @@ unique_ptr<VertLitInfo> findBestSplit(const NGHolder &g,
     }
 
     if (last_chance) {
-        const size_t num_verts = num_vertices(g); 
-        auto color_map = make_small_color_map(g); 
+        const size_t num_verts = num_vertices(g);
+        auto color_map = make_small_color_map(g);
         for (auto &a : lits) {
-            size_t num_reachable = count_reachable(g, a->vv, color_map); 
-            double ratio = (double)num_reachable / (double)num_verts; 
-            a->split_ratio = ratio > 0.5 ? 1 - ratio : ratio; 
+            size_t num_reachable = count_reachable(g, a->vv, color_map);
+            double ratio = (double)num_reachable / (double)num_verts;
+            a->split_ratio = ratio > 0.5 ? 1 - ratio : ratio;
         }
     }
 
@@ -2040,7 +2040,7 @@ bool improvePrefix(NGHolder &h, RoseInGraph &vg, const vector<RoseInEdge> &ee,
     if (ee.size() > 1) {
         DEBUG_PRINTF("split the prefix apart based on succ literals\n");
         unordered_map<shared_ptr<NGHolder>, vector<pair<RoseInEdge, u32> >,
-                      NGHolderHasher, NGHolderEqual> trimmed; 
+                      NGHolderHasher, NGHolderEqual> trimmed;
 
         for (const auto &e : ee) {
             shared_ptr<NGHolder> hh = cloneHolder(h);

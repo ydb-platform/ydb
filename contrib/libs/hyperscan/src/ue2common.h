@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2018, Intel Corporation 
+ * Copyright (c) 2015-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -66,13 +66,13 @@ typedef signed int s32;
 /* We append the 'a' for aligned, since these aren't common, garden variety
  * 64 bit values. The alignment is necessary for structs on some platforms,
  * so we don't end up performing accidental unaligned accesses. */
-#if defined(_WIN32) && ! defined(_WIN64) 
-typedef unsigned long long ALIGN_ATTR(4) u64a; 
-typedef signed long long ALIGN_ATTR(4) s64a; 
-#else 
+#if defined(_WIN32) && ! defined(_WIN64)
+typedef unsigned long long ALIGN_ATTR(4) u64a;
+typedef signed long long ALIGN_ATTR(4) s64a;
+#else
 typedef unsigned long long ALIGN_ATTR(8) u64a;
 typedef signed long long ALIGN_ATTR(8) s64a;
-#endif 
+#endif
 
 /* get the SIMD types */
 #include "util/simd_types.h"
@@ -84,7 +84,7 @@ typedef u32 ReportID;
 /* Shorthand for attribute to mark a function as part of our public API.
  * Functions without this attribute will be hidden. */
 #if !defined(_WIN32)
-#define HS_PUBLIC_API     __attribute__((visibility("default"))) 
+#define HS_PUBLIC_API     __attribute__((visibility("default")))
 #else
 // TODO: dllexport defines for windows
 #define HS_PUBLIC_API
@@ -206,7 +206,7 @@ typedef u32 ReportID;
 #endif
 #endif
 
-#if defined(DEBUG) && !defined(DEBUG_PRINTF) 
+#if defined(DEBUG) && !defined(DEBUG_PRINTF)
 #include <string.h>
 #include <stdio.h>
 #define DEBUG_PRINTF(format, ...) printf("%s:%s:%d:" format, \

@@ -31,7 +31,7 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_JAVA_MAP_FIELD_H__
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_MAP_FIELD_H__
 
-#include <google/protobuf/compiler/java/java_field.h> 
+#include <google/protobuf/compiler/java/java_field.h>
 
 namespace google {
 namespace protobuf {
@@ -40,36 +40,36 @@ namespace java {
 
 class ImmutableMapFieldGenerator : public ImmutableFieldGenerator {
  public:
-  explicit ImmutableMapFieldGenerator(const FieldDescriptor* descriptor, 
-                                      int messageBitIndex, int builderBitIndex, 
-                                      Context* context); 
-  ~ImmutableMapFieldGenerator() override; 
+  explicit ImmutableMapFieldGenerator(const FieldDescriptor* descriptor,
+                                      int messageBitIndex, int builderBitIndex,
+                                      Context* context);
+  ~ImmutableMapFieldGenerator() override;
 
   // implements ImmutableFieldGenerator ---------------------------------------
-  int GetNumBitsForMessage() const override; 
-  int GetNumBitsForBuilder() const override; 
-  void GenerateInterfaceMembers(io::Printer* printer) const override; 
-  void GenerateMembers(io::Printer* printer) const override; 
-  void GenerateBuilderMembers(io::Printer* printer) const override; 
-  void GenerateInitializationCode(io::Printer* printer) const override; 
-  void GenerateBuilderClearCode(io::Printer* printer) const override; 
-  void GenerateMergingCode(io::Printer* printer) const override; 
-  void GenerateBuildingCode(io::Printer* printer) const override; 
-  void GenerateParsingCode(io::Printer* printer) const override; 
-  void GenerateParsingDoneCode(io::Printer* printer) const override; 
-  void GenerateSerializationCode(io::Printer* printer) const override; 
-  void GenerateSerializedSizeCode(io::Printer* printer) const override; 
-  void GenerateFieldBuilderInitializationCode( 
-      io::Printer* printer) const override; 
-  void GenerateEqualsCode(io::Printer* printer) const override; 
-  void GenerateHashCode(io::Printer* printer) const override; 
-  void GenerateKotlinDslMembers(io::Printer* printer) const override; 
+  int GetNumBitsForMessage() const override;
+  int GetNumBitsForBuilder() const override;
+  void GenerateInterfaceMembers(io::Printer* printer) const override;
+  void GenerateMembers(io::Printer* printer) const override;
+  void GenerateBuilderMembers(io::Printer* printer) const override;
+  void GenerateInitializationCode(io::Printer* printer) const override;
+  void GenerateBuilderClearCode(io::Printer* printer) const override;
+  void GenerateMergingCode(io::Printer* printer) const override;
+  void GenerateBuildingCode(io::Printer* printer) const override;
+  void GenerateParsingCode(io::Printer* printer) const override;
+  void GenerateParsingDoneCode(io::Printer* printer) const override;
+  void GenerateSerializationCode(io::Printer* printer) const override;
+  void GenerateSerializedSizeCode(io::Printer* printer) const override;
+  void GenerateFieldBuilderInitializationCode(
+      io::Printer* printer) const override;
+  void GenerateEqualsCode(io::Printer* printer) const override;
+  void GenerateHashCode(io::Printer* printer) const override;
+  void GenerateKotlinDslMembers(io::Printer* printer) const override;
 
-  TProtoStringType GetBoxedType() const; 
+  TProtoStringType GetBoxedType() const;
 
  private:
   const FieldDescriptor* descriptor_;
-  std::map<TProtoStringType, TProtoStringType> variables_; 
+  std::map<TProtoStringType, TProtoStringType> variables_;
   ClassNameResolver* name_resolver_;
   void GenerateMapGetters(io::Printer* printer) const;
 };
@@ -77,6 +77,6 @@ class ImmutableMapFieldGenerator : public ImmutableFieldGenerator {
 }  // namespace java
 }  // namespace compiler
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
 #endif  // GOOGLE_PROTOBUF_COMPILER_JAVA_MAP_FIELD_H__

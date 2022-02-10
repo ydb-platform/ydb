@@ -57,7 +57,7 @@ template <typename HandleType,
          >
 struct unordered_tree_iterator_storage
 {
-    unordered_tree_iterator_storage(ValueCompare const & /* cmp */) 
+    unordered_tree_iterator_storage(ValueCompare const & /* cmp */)
     {}
 
     void push(HandleType h)

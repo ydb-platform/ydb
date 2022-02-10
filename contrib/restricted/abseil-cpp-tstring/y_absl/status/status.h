@@ -55,7 +55,7 @@
 #include <util/generic/string.h>
 
 #include "y_absl/container/inlined_vector.h"
-#include "y_absl/functional/function_ref.h" 
+#include "y_absl/functional/function_ref.h"
 #include "y_absl/status/internal/status_internal.h"
 #include "y_absl/strings/cord.h"
 #include "y_absl/strings/string_view.h"
@@ -81,7 +81,7 @@ ABSL_NAMESPACE_BEGIN
 // `kFailedPrecondition` if both codes apply. Similarly prefer `kNotFound` or
 // `kAlreadyExists` over `kFailedPrecondition`.
 //
-// Because these errors may cross RPC boundaries, these codes are tied to the 
+// Because these errors may cross RPC boundaries, these codes are tied to the
 // `google.rpc.Code` definitions within
 // https://github.com/googleapis/googleapis/blob/master/google/rpc/code.proto
 // The string value of these RPC codes is denoted within each enum below.
@@ -115,10 +115,10 @@ enum class StatusCode : int {
   // StatusCode::kInvalidArgument
   //
   // kInvalidArgument (gRPC code "INVALID_ARGUMENT") indicates the caller
-  // specified an invalid argument, such as a malformed filename. Note that use 
-  // of such errors should be narrowly limited to indicate the invalid nature of 
-  // the arguments themselves. Errors with validly formed arguments that may 
-  // cause errors with the state of the receiving system should be denoted with 
+  // specified an invalid argument, such as a malformed filename. Note that use
+  // of such errors should be narrowly limited to indicate the invalid nature of
+  // the arguments themselves. Errors with validly formed arguments that may
+  // cause errors with the state of the receiving system should be denoted with
   // `kFailedPrecondition` instead.
   kInvalidArgument = 3,
 
@@ -138,15 +138,15 @@ enum class StatusCode : int {
   //
   // `kNotFound` is useful if a request should be denied for an entire class of
   // users, such as during a gradual feature rollout or undocumented allow list.
-  // If a request should be denied for specific sets of users, such as through 
-  // user-based access control, use `kPermissionDenied` instead. 
+  // If a request should be denied for specific sets of users, such as through
+  // user-based access control, use `kPermissionDenied` instead.
   kNotFound = 5,
 
   // StatusCode::kAlreadyExists
   //
-  // kAlreadyExists (gRPC code "ALREADY_EXISTS") indicates that the entity a 
-  // caller attempted to create (such as a file or directory) is already 
-  // present. 
+  // kAlreadyExists (gRPC code "ALREADY_EXISTS") indicates that the entity a
+  // caller attempted to create (such as a file or directory) is already
+  // present.
   kAlreadyExists = 6,
 
   // StatusCode::kPermissionDenied
@@ -185,7 +185,7 @@ enum class StatusCode : int {
   //      level (such as when a client-specified test-and-set fails, indicating
   //      the client should restart a read-modify-write sequence).
   //  (c) Use `kFailedPrecondition` if the client should not retry until
-  //      the system state has been explicitly fixed. For example, if a "rmdir" 
+  //      the system state has been explicitly fixed. For example, if a "rmdir"
   //      fails because the directory is non-empty, `kFailedPrecondition`
   //      should be returned since the client should not retry unless
   //      the files are deleted from the directory.
@@ -285,7 +285,7 @@ std::ostream& operator<<(std::ostream& os, StatusCode code);
 // y_absl::StatusToStringMode
 //
 // An `y_absl::StatusToStringMode` is an enumerated type indicating how
-// `y_absl::Status::ToString()` should construct the output string for a non-ok 
+// `y_absl::Status::ToString()` should construct the output string for a non-ok
 // status.
 enum class StatusToStringMode : int {
   // ToString will not contain any extra data (such as payloads). It will only
@@ -295,8 +295,8 @@ enum class StatusToStringMode : int {
   kWithPayload = 1 << 0,
   // ToString will include all the extra data this Status has.
   kWithEverything = ~kWithNoExtraData,
-  // Default mode used by ToString. Its exact value might change in the future. 
-  kDefault = kWithPayload, 
+  // Default mode used by ToString. Its exact value might change in the future.
+  kDefault = kWithPayload,
 };
 
 // y_absl::StatusToStringMode is specified as a bitmask type, which means the
@@ -347,7 +347,7 @@ inline StatusToStringMode& operator^=(StatusToStringMode& lhs,
 // API developers should construct their functions to return `y_absl::OkStatus()`
 // upon success, or an `y_absl::StatusCode` upon another type of error (e.g
 // an `y_absl::StatusCode::kInvalidArgument` error). The API provides convenience
-// functions to construct each status code. 
+// functions to construct each status code.
 //
 // Example:
 //
@@ -495,7 +495,7 @@ class Status final {
   // Returns the error message associated with this error code, if available.
   // Note that this message rarely describes the error code.  It is not unusual
   // for the error message to be the empty string. As a result, prefer
-  // `operator<<` or `Status::ToString()` for debug logging. 
+  // `operator<<` or `Status::ToString()` for debug logging.
   y_absl::string_view message() const;
 
   friend bool operator==(const Status&, const Status&);
@@ -513,7 +513,7 @@ class Status final {
   // result, and the payloads to be printed use the status payload printer
   // mechanism (which is internal).
   TString ToString(
-      StatusToStringMode mode = StatusToStringMode::kDefault) const; 
+      StatusToStringMode mode = StatusToStringMode::kDefault) const;
 
   // Status::IgnoreError()
   //
@@ -591,7 +591,7 @@ class Status final {
   // NOTE: Any mutation on the same 'y_absl::Status' object during visitation is
   // forbidden and could result in undefined behavior.
   void ForEachPayload(
-      y_absl::FunctionRef<void(y_absl::string_view, const y_absl::Cord&)> visitor) 
+      y_absl::FunctionRef<void(y_absl::string_view, const y_absl::Cord&)> visitor)
       const;
 
  private:

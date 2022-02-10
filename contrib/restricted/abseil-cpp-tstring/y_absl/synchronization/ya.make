@@ -24,7 +24,7 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/demangle
     contrib/restricted/abseil-cpp-tstring/y_absl/numeric
     contrib/restricted/abseil-cpp-tstring/y_absl/strings
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/absl_strings_internal 
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/absl_strings_internal
     contrib/restricted/abseil-cpp-tstring/y_absl/synchronization/internal
     contrib/restricted/abseil-cpp-tstring/y_absl/time
     contrib/restricted/abseil-cpp-tstring/y_absl/time/civil_time

@@ -293,7 +293,7 @@ headerFile( LEXER,
 #include \<util/stream/output.h>
 #include \<util/stream/str.h>
 
-#include \<google/protobuf/message.h> 
+#include \<google/protobuf/message.h>
 
 <if(recognizer.grammar.delegates)>
 // Include delegate definition header files
@@ -999,7 +999,7 @@ void
 Errors = errors;
 RuleReturnType root(<name>::<r.ruleDescriptor.name>());
 if (!lexer.HasError() && !Error && root) {
-    auto ast = google::protobuf::Arena::CreateMessage\<@ANTLR_PACKAGE_NAME@::T<name>AST>(Arena); 
+    auto ast = google::protobuf::Arena::CreateMessage\<@ANTLR_PACKAGE_NAME@::T<name>AST>(Arena);
     Y_ASSERT(dynamic_cast\<@ANTLR_PACKAGE_NAME@::TRule_<r.ruleDescriptor.name>* >(root));
     ast->unsafe_arena_set_allocated_rule_<r.ruleDescriptor.name>(static_cast\<@ANTLR_PACKAGE_NAME@::TRule_<r.ruleDescriptor.name>* >(root));
     return ast;
@@ -1324,7 +1324,7 @@ ruleDeclarations() ::= <<
 <if(PARSER)>
 RuleReturnType res = nullptr;
 <if(!ruleDescriptor.isSynPred)>
-@ANTLR_PACKAGE_NAME@::TRule_<ruleName>* retval = google::protobuf::Arena::CreateMessage\<@ANTLR_PACKAGE_NAME@::TRule_<ruleName>\>(Arena); 
+@ANTLR_PACKAGE_NAME@::TRule_<ruleName>* retval = google::protobuf::Arena::CreateMessage\<@ANTLR_PACKAGE_NAME@::TRule_<ruleName>\>(Arena);
 <endif>
 <endif>
 <if(memoize)>

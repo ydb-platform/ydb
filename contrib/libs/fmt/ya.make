@@ -7,7 +7,7 @@ OWNER(
     g:cpp-contrib
 )
 
-VERSION(7.1.3) 
+VERSION(7.1.3)
 
 ORIGINAL_SOURCE(https://github.com/fmtlib/fmt/archive/7.1.3.tar.gz)
 

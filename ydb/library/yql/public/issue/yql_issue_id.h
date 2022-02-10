@@ -3,10 +3,10 @@
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
 #include <library/cpp/resource/resource.h>
-#include <google/protobuf/descriptor.h> 
-#include <google/protobuf/repeated_field.h> 
-#include <google/protobuf/text_format.h> 
-#include <google/protobuf/message.h> 
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/repeated_field.h>
+#include <google/protobuf/text_format.h>
+#include <google/protobuf/message.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/singleton.h>

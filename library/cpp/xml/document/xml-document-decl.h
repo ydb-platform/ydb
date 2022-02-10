@@ -127,10 +127,10 @@ namespace NXml {
             const TConstNodes& Nodes;
             size_t Index;
             TConstNode operator*() const;
-            bool operator==(const TNodeIter& other) const { 
+            bool operator==(const TNodeIter& other) const {
                 return Index == other.Index;
             }
-            bool operator!=(const TNodeIter& other) const { 
+            bool operator!=(const TNodeIter& other) const {
                 return !(*this == other);
             }
             TNodeIter operator++() {

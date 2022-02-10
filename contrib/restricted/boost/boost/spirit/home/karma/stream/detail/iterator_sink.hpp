@@ -46,7 +46,7 @@ namespace boost { namespace spirit { namespace karma { namespace detail
         OutputIterator& sink;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(iterator_sink& operator= (iterator_sink const&)); 
+        BOOST_DELETED_FUNCTION(iterator_sink& operator= (iterator_sink const&));
     };
 
 }}}}

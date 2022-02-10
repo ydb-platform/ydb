@@ -4,13 +4,13 @@ PROGRAM()
 
 WITHOUT_LICENSE_TEXTS()
 
-OWNER(g:cpp-contrib) 
+OWNER(g:cpp-contrib)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/libs/grpc/src/compiler/grpc_plugin_support
-    contrib/libs/protoc 
+    contrib/libs/protoc
 )
 
 ADDINCL(

@@ -21,8 +21,8 @@ PROVIDES(libidn)
 
 NO_RUNTIME()
 
-NO_COMPILER_WARNINGS() 
- 
+NO_COMPILER_WARNINGS()
+
 ADDINCL(
     contrib/libs/libidn
 )
@@ -38,9 +38,9 @@ IF (OS_WINDOWS)
 ENDIF()
 
 IF (OS_ANDROID)
-    CFLAGS( 
+    CFLAGS(
         -DHAVE_LOCALE_H=1
-    ) 
+    )
 ENDIF()
 
 SRCDIR(contrib/libs/libidn)

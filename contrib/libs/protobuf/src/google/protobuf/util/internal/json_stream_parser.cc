@@ -28,21 +28,21 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/util/internal/json_stream_parser.h> 
+#include <google/protobuf/util/internal/json_stream_parser.h>
 
 #include <algorithm>
 #include <cctype>
-#include <cmath> 
+#include <cmath>
 #include <memory>
-#include <stack> 
-#include <string> 
+#include <stack>
+#include <string>
 
-#include <google/protobuf/stubs/common.h> 
-#include <google/protobuf/stubs/logging.h> 
-#include <google/protobuf/stubs/strutil.h> 
-#include <google/protobuf/stubs/status.h> 
-#include <google/protobuf/util/internal/object_writer.h> 
-#include <google/protobuf/util/internal/json_escaping.h> 
+#include <google/protobuf/stubs/common.h>
+#include <google/protobuf/stubs/logging.h>
+#include <google/protobuf/stubs/strutil.h>
+#include <google/protobuf/stubs/status.h>
+#include <google/protobuf/util/internal/object_writer.h>
+#include <google/protobuf/util/internal/json_escaping.h>
 
 
 namespace google {
@@ -54,13 +54,13 @@ namespace converter {
 // Number of digits in an escaped UTF-16 code unit ('\\' 'u' X X X X)
 static const int kUnicodeEscapedLength = 6;
 
-static const int kDefaultMaxRecursionDepth = 100; 
+static const int kDefaultMaxRecursionDepth = 100;
 
-// These cannot be constexpr for portability with VS2015. 
-static const StringPiece kKeywordTrue = "true"; 
-static const StringPiece kKeywordFalse = "false"; 
-static const StringPiece kKeywordNull = "null"; 
- 
+// These cannot be constexpr for portability with VS2015.
+static const StringPiece kKeywordTrue = "true";
+static const StringPiece kKeywordFalse = "false";
+static const StringPiece kKeywordNull = "null";
+
 inline bool IsLetter(char c) {
   return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || (c == '_') ||
          (c == '$');
@@ -70,32 +70,32 @@ inline bool IsAlphanumeric(char c) {
   return IsLetter(c) || ('0' <= c && c <= '9');
 }
 
-// Indicates a character may not be part of an unquoted key. 
-inline bool IsKeySeparator(char c) { 
-  return (ascii_isspace(c) || c == '"' || c == '\'' || c == '{' || 
-          c == '}' || c == '[' || c == ']' || c == ':' || c == ','); 
-} 
- 
-inline void ReplaceInvalidCodePoints(StringPiece str, 
-                                     const TProtoStringType& replacement, 
-                                     TProtoStringType* dst) { 
-  while (!str.empty()) { 
-    int n_valid_bytes = internal::UTF8SpnStructurallyValid(str); 
-    StringPiece valid_part = str.substr(0, n_valid_bytes); 
-    StrAppend(dst, valid_part); 
- 
-    if (n_valid_bytes == str.size()) { 
-      break; 
-    } 
- 
-    // Append replacement value. 
-    StrAppend(dst, replacement); 
- 
-    // Move past valid bytes + one invalid byte. 
-    str.remove_prefix(n_valid_bytes + 1); 
-  } 
-} 
- 
+// Indicates a character may not be part of an unquoted key.
+inline bool IsKeySeparator(char c) {
+  return (ascii_isspace(c) || c == '"' || c == '\'' || c == '{' ||
+          c == '}' || c == '[' || c == ']' || c == ':' || c == ',');
+}
+
+inline void ReplaceInvalidCodePoints(StringPiece str,
+                                     const TProtoStringType& replacement,
+                                     TProtoStringType* dst) {
+  while (!str.empty()) {
+    int n_valid_bytes = internal::UTF8SpnStructurallyValid(str);
+    StringPiece valid_part = str.substr(0, n_valid_bytes);
+    StrAppend(dst, valid_part);
+
+    if (n_valid_bytes == str.size()) {
+      break;
+    }
+
+    // Append replacement value.
+    StrAppend(dst, replacement);
+
+    // Move past valid bytes + one invalid byte.
+    str.remove_prefix(n_valid_bytes + 1);
+  }
+}
+
 static bool ConsumeKey(StringPiece* input, StringPiece* key) {
   if (input->empty() || !IsLetter((*input)[0])) return false;
   int len = 1;
@@ -109,21 +109,21 @@ static bool ConsumeKey(StringPiece* input, StringPiece* key) {
   return true;
 }
 
-// Same as 'ConsumeKey', but allows a widened set of key characters. 
-static bool ConsumeKeyPermissive(StringPiece* input, 
-                                 StringPiece* key) { 
-  if (input->empty() || !IsLetter((*input)[0])) return false; 
-  int len = 1; 
-  for (; len < input->size(); ++len) { 
-    if (IsKeySeparator((*input)[len])) { 
-      break; 
-    } 
-  } 
-  *key = StringPiece(input->data(), len); 
-  *input = StringPiece(input->data() + len, input->size() - len); 
-  return true; 
-} 
- 
+// Same as 'ConsumeKey', but allows a widened set of key characters.
+static bool ConsumeKeyPermissive(StringPiece* input,
+                                 StringPiece* key) {
+  if (input->empty() || !IsLetter((*input)[0])) return false;
+  int len = 1;
+  for (; len < input->size(); ++len) {
+    if (IsKeySeparator((*input)[len])) {
+      break;
+    }
+  }
+  *key = StringPiece(input->data(), len);
+  *input = StringPiece(input->data() + len, input->size() - len);
+  return true;
+}
+
 static bool MatchKey(StringPiece input) {
   return !input.empty() && IsLetter(input[0]);
 }
@@ -137,19 +137,19 @@ JsonStreamParser::JsonStreamParser(ObjectWriter* ow)
       key_(),
       key_storage_(),
       finishing_(false),
-      seen_non_whitespace_(false), 
-      allow_no_root_element_(false), 
+      seen_non_whitespace_(false),
+      allow_no_root_element_(false),
       parsed_(),
       parsed_storage_(),
       string_open_(0),
       chunk_storage_(),
       coerce_to_utf8_(false),
-      utf8_replacement_character_(" "), 
+      utf8_replacement_character_(" "),
       allow_empty_null_(false),
-      allow_permissive_key_naming_(false), 
-      loose_float_number_conversion_(false), 
-      recursion_depth_(0), 
-      max_recursion_depth_(kDefaultMaxRecursionDepth) { 
+      allow_permissive_key_naming_(false),
+      loose_float_number_conversion_(false),
+      recursion_depth_(0),
+      max_recursion_depth_(kDefaultMaxRecursionDepth) {
   // Initialize the stack with a single value to be parsed.
   stack_.push(VALUE);
 }
@@ -193,22 +193,22 @@ util::Status JsonStreamParser::FinishParse() {
     return util::Status();
   }
 
-  // Lifetime needs to last until RunParser returns, so keep this variable 
-  // outside of the coerce_to_utf8 block. 
-  std::unique_ptr<TProtoStringType> scratch; 
- 
-  bool is_valid_utf8 = internal::IsStructurallyValidUTF8(leftover_); 
-  if (coerce_to_utf8_ && !is_valid_utf8) { 
-    scratch.reset(new TProtoStringType); 
-    scratch->reserve(leftover_.size() * utf8_replacement_character_.size()); 
-    ReplaceInvalidCodePoints(leftover_, utf8_replacement_character_, 
-                             scratch.get()); 
-    p_ = json_ = *scratch; 
+  // Lifetime needs to last until RunParser returns, so keep this variable
+  // outside of the coerce_to_utf8 block.
+  std::unique_ptr<TProtoStringType> scratch;
+
+  bool is_valid_utf8 = internal::IsStructurallyValidUTF8(leftover_);
+  if (coerce_to_utf8_ && !is_valid_utf8) {
+    scratch.reset(new TProtoStringType);
+    scratch->reserve(leftover_.size() * utf8_replacement_character_.size());
+    ReplaceInvalidCodePoints(leftover_, utf8_replacement_character_,
+                             scratch.get());
+    p_ = json_ = *scratch;
   } else {
     p_ = json_ = leftover_;
-    if (!is_valid_utf8) { 
-      return ReportFailure("Encountered non UTF-8 code points.", 
-                           ParseErrorType::NON_UTF_8); 
+    if (!is_valid_utf8) {
+      return ReportFailure("Encountered non UTF-8 code points.",
+                           ParseErrorType::NON_UTF_8);
     }
   }
 
@@ -219,9 +219,9 @@ util::Status JsonStreamParser::FinishParse() {
   if (result.ok()) {
     SkipWhitespace();
     if (!p_.empty()) {
-      result = 
-          ReportFailure("Parsing terminated before end of input.", 
-                        ParseErrorType::PARSING_TERMINATED_BEFORE_END_OF_INPUT); 
+      result =
+          ReportFailure("Parsing terminated before end of input.",
+                        ParseErrorType::PARSING_TERMINATED_BEFORE_END_OF_INPUT);
     }
   }
   return result;
@@ -245,28 +245,28 @@ util::Status JsonStreamParser::ParseChunk(StringPiece chunk) {
     // If we do not expect anything i.e. stack is empty, and we have non-empty
     // string left to parse, we report an error.
     if (stack_.empty()) {
-      return ReportFailure( 
-          "Parsing terminated before end of input.", 
-          ParseErrorType::PARSING_TERMINATED_BEFORE_END_OF_INPUT); 
+      return ReportFailure(
+          "Parsing terminated before end of input.",
+          ParseErrorType::PARSING_TERMINATED_BEFORE_END_OF_INPUT);
     }
     // If we expect future data i.e. stack is non-empty, and we have some
     // unparsed data left, we save it for later parse.
-    leftover_ = TProtoStringType(p_); 
+    leftover_ = TProtoStringType(p_);
   }
   return util::Status();
 }
 
-bool JsonStreamParser::IsInputAllWhiteSpaces(TokenType type) { 
-  // Conclude the whole input is full of white spaces by: 
-  // - it is at the finishing stage 
-  // - we have run out of the input data 
-  // - haven't seen non-whitespace char so far 
-  if (finishing_ && p_.empty() && type == UNKNOWN && !seen_non_whitespace_) { 
-    return true; 
-  } 
-  return false; 
-} 
- 
+bool JsonStreamParser::IsInputAllWhiteSpaces(TokenType type) {
+  // Conclude the whole input is full of white spaces by:
+  // - it is at the finishing stage
+  // - we have run out of the input data
+  // - haven't seen non-whitespace char so far
+  if (finishing_ && p_.empty() && type == UNKNOWN && !seen_non_whitespace_) {
+    return true;
+  }
+  return false;
+}
+
 util::Status JsonStreamParser::RunParser() {
   while (!stack_.empty()) {
     ParseType type = stack_.top();
@@ -275,9 +275,9 @@ util::Status JsonStreamParser::RunParser() {
     util::Status result;
     switch (type) {
       case VALUE:
-        if (allow_no_root_element_ && IsInputAllWhiteSpaces(t)) { 
-          return util::Status(); 
-        } 
+        if (allow_no_root_element_ && IsInputAllWhiteSpaces(t)) {
+          return util::Status();
+        }
         result = ParseValue(t);
         break;
 
@@ -302,13 +302,13 @@ util::Status JsonStreamParser::RunParser() {
         break;
 
       default:
-        result = 
-            util::InternalError(StrCat("Unknown parse type: ", type)); 
+        result =
+            util::InternalError(StrCat("Unknown parse type: ", type));
         break;
     }
     if (!result.ok()) {
       // If we were cancelled, save our state and try again later.
-      if (!finishing_ && util::IsCancelled(result)) { 
+      if (!finishing_ && util::IsCancelled(result)) {
         stack_.push(type);
         // If we have a key we still need to render, make sure to save off the
         // contents in our own storage.
@@ -341,7 +341,7 @@ util::Status JsonStreamParser::ParseValue(TokenType type) {
     case BEGIN_NULL:
       return ParseNull();
     case UNKNOWN:
-      return ReportUnknown("Expected a value.", ParseErrorType::EXPECTED_VALUE); 
+      return ReportUnknown("Expected a value.", ParseErrorType::EXPECTED_VALUE);
     default: {
       if (allow_empty_null_ && IsEmptyNullAllowed(type)) {
         return ParseEmptyNull();
@@ -351,11 +351,11 @@ util::Status JsonStreamParser::ParseValue(TokenType type) {
       // This handles things like 'fals' being at the end of the string, we
       // don't know if the next char would be e, completing it, or something
       // else, making it invalid.
-      if (!finishing_ && p_.length() < kKeywordFalse.length()) { 
-        return util::CancelledError(""); 
+      if (!finishing_ && p_.length() < kKeywordFalse.length()) {
+        return util::CancelledError("");
       }
-      return ReportFailure("Unexpected token.", 
-                           ParseErrorType::UNEXPECTED_TOKEN); 
+      return ReportFailure("Unexpected token.",
+                           ParseErrorType::UNEXPECTED_TOKEN);
     }
   }
 }
@@ -391,10 +391,10 @@ util::Status JsonStreamParser::ParseStringHelper() {
       // depending on if we expect more data later.
       if (p_.length() == 1) {
         if (!finishing_) {
-          return util::CancelledError(""); 
+          return util::CancelledError("");
         }
-        return ReportFailure("Closing quote expected in string.", 
-                             ParseErrorType::EXPECTED_CLOSING_QUOTE); 
+        return ReportFailure("Closing quote expected in string.",
+                             ParseErrorType::EXPECTED_CLOSING_QUOTE);
       }
       // Parse a unicode escape if we found \u in the string.
       if (data[1] == 'u') {
@@ -460,12 +460,12 @@ util::Status JsonStreamParser::ParseStringHelper() {
   }
   // If we didn't find the closing quote but we expect more data, cancel for now
   if (!finishing_) {
-    return util::CancelledError(""); 
+    return util::CancelledError("");
   }
   // End of string reached without a closing quote, report an error.
   string_open_ = 0;
-  return ReportFailure("Closing quote expected in string.", 
-                       ParseErrorType::EXPECTED_CLOSING_QUOTE); 
+  return ReportFailure("Closing quote expected in string.",
+                       ParseErrorType::EXPECTED_CLOSING_QUOTE);
 }
 
 // Converts a unicode escaped character to a decimal value stored in a char32
@@ -478,18 +478,18 @@ util::Status JsonStreamParser::ParseStringHelper() {
 util::Status JsonStreamParser::ParseUnicodeEscape() {
   if (p_.length() < kUnicodeEscapedLength) {
     if (!finishing_) {
-      return util::CancelledError(""); 
+      return util::CancelledError("");
     }
-    return ReportFailure("Illegal hex string.", 
-                         ParseErrorType::ILLEGAL_HEX_STRING); 
+    return ReportFailure("Illegal hex string.",
+                         ParseErrorType::ILLEGAL_HEX_STRING);
   }
   GOOGLE_DCHECK_EQ('\\', p_.data()[0]);
   GOOGLE_DCHECK_EQ('u', p_.data()[1]);
   uint32 code = 0;
   for (int i = 2; i < kUnicodeEscapedLength; ++i) {
     if (!isxdigit(p_.data()[i])) {
-      return ReportFailure("Invalid escape sequence.", 
-                           ParseErrorType::INVALID_ESCAPE_SEQUENCE); 
+      return ReportFailure("Invalid escape sequence.",
+                           ParseErrorType::INVALID_ESCAPE_SEQUENCE);
     }
     code = (code << 4) + hex_digit_to_int(p_.data()[i]);
   }
@@ -497,11 +497,11 @@ util::Status JsonStreamParser::ParseUnicodeEscape() {
       code <= JsonEscaping::kMaxHighSurrogate) {
     if (p_.length() < 2 * kUnicodeEscapedLength) {
       if (!finishing_) {
-        return util::CancelledError(""); 
+        return util::CancelledError("");
       }
       if (!coerce_to_utf8_) {
-        return ReportFailure("Missing low surrogate.", 
-                             ParseErrorType::MISSING_LOW_SURROGATE); 
+        return ReportFailure("Missing low surrogate.",
+                             ParseErrorType::MISSING_LOW_SURROGATE);
       }
     } else if (p_.data()[kUnicodeEscapedLength] == '\\' &&
                p_.data()[kUnicodeEscapedLength + 1] == 'u') {
@@ -509,8 +509,8 @@ util::Status JsonStreamParser::ParseUnicodeEscape() {
       for (int i = kUnicodeEscapedLength + 2; i < 2 * kUnicodeEscapedLength;
            ++i) {
         if (!isxdigit(p_.data()[i])) {
-          return ReportFailure("Invalid escape sequence.", 
-                               ParseErrorType::INVALID_ESCAPE_SEQUENCE); 
+          return ReportFailure("Invalid escape sequence.",
+                               ParseErrorType::INVALID_ESCAPE_SEQUENCE);
         }
         low_code = (low_code << 4) + hex_digit_to_int(p_.data()[i]);
       }
@@ -522,17 +522,17 @@ util::Status JsonStreamParser::ParseUnicodeEscape() {
         // Advance past the first code unit escape.
         p_.remove_prefix(kUnicodeEscapedLength);
       } else if (!coerce_to_utf8_) {
-        return ReportFailure("Invalid low surrogate.", 
-                             ParseErrorType::INVALID_LOW_SURROGATE); 
+        return ReportFailure("Invalid low surrogate.",
+                             ParseErrorType::INVALID_LOW_SURROGATE);
       }
     } else if (!coerce_to_utf8_) {
-      return ReportFailure("Missing low surrogate.", 
-                           ParseErrorType::MISSING_LOW_SURROGATE); 
+      return ReportFailure("Missing low surrogate.",
+                           ParseErrorType::MISSING_LOW_SURROGATE);
     }
   }
   if (!coerce_to_utf8_ && !IsValidCodePoint(code)) {
-    return ReportFailure("Invalid unicode code point.", 
-                         ParseErrorType::INVALID_UNICODE); 
+    return ReportFailure("Invalid unicode code point.",
+                         ParseErrorType::INVALID_UNICODE);
   }
   char buf[UTFmax];
   int len = EncodeAsUTF8Char(code, buf);
@@ -563,27 +563,27 @@ util::Status JsonStreamParser::ParseNumber() {
         break;
 
       default:
-        return ReportFailure("Unable to parse number.", 
-                             ParseErrorType::UNABLE_TO_PARSE_NUMBER); 
+        return ReportFailure("Unable to parse number.",
+                             ParseErrorType::UNABLE_TO_PARSE_NUMBER);
     }
   }
   return result;
 }
 
-util::Status JsonStreamParser::ParseDoubleHelper(const TProtoStringType& number, 
-                                                 NumberResult* result) { 
-  if (!safe_strtod(number, &result->double_val)) { 
-    return ReportFailure("Unable to parse number.", 
-                         ParseErrorType::UNABLE_TO_PARSE_NUMBER); 
-  } 
-  if (!loose_float_number_conversion_ && !std::isfinite(result->double_val)) { 
-    return ReportFailure("Number exceeds the range of double.", 
-                         ParseErrorType::NUMBER_EXCEEDS_RANGE_DOUBLE); 
-  } 
-  result->type = NumberResult::DOUBLE; 
-  return util::Status(); 
-} 
- 
+util::Status JsonStreamParser::ParseDoubleHelper(const TProtoStringType& number,
+                                                 NumberResult* result) {
+  if (!safe_strtod(number, &result->double_val)) {
+    return ReportFailure("Unable to parse number.",
+                         ParseErrorType::UNABLE_TO_PARSE_NUMBER);
+  }
+  if (!loose_float_number_conversion_ && !std::isfinite(result->double_val)) {
+    return ReportFailure("Number exceeds the range of double.",
+                         ParseErrorType::NUMBER_EXCEEDS_RANGE_DOUBLE);
+  }
+  result->type = NumberResult::DOUBLE;
+  return util::Status();
+}
+
 util::Status JsonStreamParser::ParseNumberHelper(NumberResult* result) {
   const char* data = p_.data();
   int length = p_.length();
@@ -611,61 +611,61 @@ util::Status JsonStreamParser::ParseNumberHelper(NumberResult* result) {
   // If the entire input is a valid number, and we may have more content in the
   // future, we abort for now and resume when we know more.
   if (index == length && !finishing_) {
-    return util::CancelledError(""); 
+    return util::CancelledError("");
   }
 
   // Create a string containing just the number, so we can use safe_strtoX
-  TProtoStringType number = TProtoStringType(p_.substr(0, index)); 
+  TProtoStringType number = TProtoStringType(p_.substr(0, index));
 
   // Floating point number, parse as a double.
   if (floating) {
-    util::Status status = ParseDoubleHelper(number, result); 
-    if (status.ok()) { 
-      p_.remove_prefix(index); 
+    util::Status status = ParseDoubleHelper(number, result);
+    if (status.ok()) {
+      p_.remove_prefix(index);
     }
-    return status; 
+    return status;
   }
 
   // Positive non-floating point number, parse as a uint64.
   if (!negative) {
     // Octal/Hex numbers are not valid JSON values.
     if (number.length() >= 2 && number[0] == '0') {
-      return ReportFailure( 
-          "Octal/hex numbers are not valid JSON values.", 
-          ParseErrorType::OCTAL_OR_HEX_ARE_NOT_VALID_JSON_VALUES); 
+      return ReportFailure(
+          "Octal/hex numbers are not valid JSON values.",
+          ParseErrorType::OCTAL_OR_HEX_ARE_NOT_VALID_JSON_VALUES);
     }
-    if (safe_strtou64(number, &result->uint_val)) { 
-      result->type = NumberResult::UINT; 
-      p_.remove_prefix(index); 
-      return util::Status(); 
-    } else { 
-      // If the value is too large, parse it as double. 
-      util::Status status = ParseDoubleHelper(number, result); 
-      if (status.ok()) { 
-        p_.remove_prefix(index); 
-      } 
-      return status; 
+    if (safe_strtou64(number, &result->uint_val)) {
+      result->type = NumberResult::UINT;
+      p_.remove_prefix(index);
+      return util::Status();
+    } else {
+      // If the value is too large, parse it as double.
+      util::Status status = ParseDoubleHelper(number, result);
+      if (status.ok()) {
+        p_.remove_prefix(index);
+      }
+      return status;
     }
   }
 
   // Octal/Hex numbers are not valid JSON values.
   if (number.length() >= 3 && number[1] == '0') {
-    return ReportFailure( 
-        "Octal/hex numbers are not valid JSON values.", 
-        ParseErrorType::OCTAL_OR_HEX_ARE_NOT_VALID_JSON_VALUES); 
+    return ReportFailure(
+        "Octal/hex numbers are not valid JSON values.",
+        ParseErrorType::OCTAL_OR_HEX_ARE_NOT_VALID_JSON_VALUES);
   }
   // Negative non-floating point number, parse as an int64.
-  if (safe_strto64(number, &result->int_val)) { 
-    result->type = NumberResult::INT; 
-    p_.remove_prefix(index); 
-    return util::Status(); 
-  } else { 
-    // If the value is too large, parse it as double. 
-    util::Status status = ParseDoubleHelper(number, result); 
-    if (status.ok()) { 
-      p_.remove_prefix(index); 
-    } 
-    return status; 
+  if (safe_strto64(number, &result->int_val)) {
+    result->type = NumberResult::INT;
+    p_.remove_prefix(index);
+    return util::Status();
+  } else {
+    // If the value is too large, parse it as double.
+    util::Status status = ParseDoubleHelper(number, result);
+    if (status.ok()) {
+      p_.remove_prefix(index);
+    }
+    return status;
   }
 }
 
@@ -673,10 +673,10 @@ util::Status JsonStreamParser::HandleBeginObject() {
   GOOGLE_DCHECK_EQ('{', *p_.data());
   Advance();
   ow_->StartObject(key_);
-  auto status = IncrementRecursionDepth(key_); 
-  if (!status.ok()) { 
-    return status; 
-  } 
+  auto status = IncrementRecursionDepth(key_);
+  if (!status.ok()) {
+    return status;
+  }
   key_ = StringPiece();
   stack_.push(ENTRY);
   return util::Status();
@@ -684,15 +684,15 @@ util::Status JsonStreamParser::HandleBeginObject() {
 
 util::Status JsonStreamParser::ParseObjectMid(TokenType type) {
   if (type == UNKNOWN) {
-    return ReportUnknown("Expected , or } after key:value pair.", 
-                         ParseErrorType::EXPECTED_COMMA_OR_BRACES); 
+    return ReportUnknown("Expected , or } after key:value pair.",
+                         ParseErrorType::EXPECTED_COMMA_OR_BRACES);
   }
 
   // Object is complete, advance past the comma and render the EndObject.
   if (type == END_OBJECT) {
     Advance();
     ow_->EndObject();
-    --recursion_depth_; 
+    --recursion_depth_;
     return util::Status();
   }
   // Found a comma, advance past it and get ready for an entry.
@@ -702,21 +702,21 @@ util::Status JsonStreamParser::ParseObjectMid(TokenType type) {
     return util::Status();
   }
   // Illegal token after key:value pair.
-  return ReportFailure("Expected , or } after key:value pair.", 
-                       ParseErrorType::EXPECTED_COMMA_OR_BRACES); 
+  return ReportFailure("Expected , or } after key:value pair.",
+                       ParseErrorType::EXPECTED_COMMA_OR_BRACES);
 }
 
 util::Status JsonStreamParser::ParseEntry(TokenType type) {
   if (type == UNKNOWN) {
-    return ReportUnknown("Expected an object key or }.", 
-                         ParseErrorType::EXPECTED_OBJECT_KEY_OR_BRACES); 
+    return ReportUnknown("Expected an object key or }.",
+                         ParseErrorType::EXPECTED_OBJECT_KEY_OR_BRACES);
   }
 
   // Close the object and return. This allows for trailing commas.
   if (type == END_OBJECT) {
     ow_->EndObject();
     Advance();
-    --recursion_depth_; 
+    --recursion_depth_;
     return util::Status();
   }
 
@@ -737,18 +737,18 @@ util::Status JsonStreamParser::ParseEntry(TokenType type) {
   } else if (type == BEGIN_KEY) {
     // Key is a bare key (back compat), create a StringPiece pointing to it.
     result = ParseKey();
-  } else if (type == BEGIN_NULL || type == BEGIN_TRUE || type == BEGIN_FALSE) { 
-    // Key may be a bare key that begins with a reserved word. 
-    result = ParseKey(); 
-    if (result.ok() && (key_ == kKeywordNull || key_ == kKeywordTrue || 
-                        key_ == kKeywordFalse)) { 
-      result = ReportFailure("Expected an object key or }.", 
-                             ParseErrorType::EXPECTED_OBJECT_KEY_OR_BRACES); 
-    } 
+  } else if (type == BEGIN_NULL || type == BEGIN_TRUE || type == BEGIN_FALSE) {
+    // Key may be a bare key that begins with a reserved word.
+    result = ParseKey();
+    if (result.ok() && (key_ == kKeywordNull || key_ == kKeywordTrue ||
+                        key_ == kKeywordFalse)) {
+      result = ReportFailure("Expected an object key or }.",
+                             ParseErrorType::EXPECTED_OBJECT_KEY_OR_BRACES);
+    }
   } else {
     // Unknown key type, report an error.
-    result = ReportFailure("Expected an object key or }.", 
-                           ParseErrorType::EXPECTED_OBJECT_KEY_OR_BRACES); 
+    result = ReportFailure("Expected an object key or }.",
+                           ParseErrorType::EXPECTED_OBJECT_KEY_OR_BRACES);
   }
   // On success we next expect an entry mid ':' then an object mid ',' or '}'
   if (result.ok()) {
@@ -760,16 +760,16 @@ util::Status JsonStreamParser::ParseEntry(TokenType type) {
 
 util::Status JsonStreamParser::ParseEntryMid(TokenType type) {
   if (type == UNKNOWN) {
-    return ReportUnknown("Expected : between key:value pair.", 
-                         ParseErrorType::EXPECTED_COLON); 
+    return ReportUnknown("Expected : between key:value pair.",
+                         ParseErrorType::EXPECTED_COLON);
   }
   if (type == ENTRY_SEPARATOR) {
     Advance();
     stack_.push(VALUE);
     return util::Status();
   }
-  return ReportFailure("Expected : between key:value pair.", 
-                       ParseErrorType::EXPECTED_COLON); 
+  return ReportFailure("Expected : between key:value pair.",
+                       ParseErrorType::EXPECTED_COLON);
 }
 
 util::Status JsonStreamParser::HandleBeginArray() {
@@ -783,8 +783,8 @@ util::Status JsonStreamParser::HandleBeginArray() {
 
 util::Status JsonStreamParser::ParseArrayValue(TokenType type) {
   if (type == UNKNOWN) {
-    return ReportUnknown("Expected a value or ] within an array.", 
-                         ParseErrorType::EXPECTED_VALUE_OR_BRACKET); 
+    return ReportUnknown("Expected a value or ] within an array.",
+                         ParseErrorType::EXPECTED_VALUE_OR_BRACKET);
   }
 
   if (type == END_ARRAY) {
@@ -798,7 +798,7 @@ util::Status JsonStreamParser::ParseArrayValue(TokenType type) {
   // empty-null array value is relying on this ARRAY_MID token.
   stack_.push(ARRAY_MID);
   util::Status result = ParseValue(type);
-  if (util::IsCancelled(result)) { 
+  if (util::IsCancelled(result)) {
     // If we were cancelled, pop back off the ARRAY_MID so we don't try to
     // push it on again when we try over.
     stack_.pop();
@@ -808,8 +808,8 @@ util::Status JsonStreamParser::ParseArrayValue(TokenType type) {
 
 util::Status JsonStreamParser::ParseArrayMid(TokenType type) {
   if (type == UNKNOWN) {
-    return ReportUnknown("Expected , or ] after array value.", 
-                         ParseErrorType::EXPECTED_COMMA_OR_BRACKET); 
+    return ReportUnknown("Expected , or ] after array value.",
+                         ParseErrorType::EXPECTED_COMMA_OR_BRACKET);
   }
 
   if (type == END_ARRAY) {
@@ -825,28 +825,28 @@ util::Status JsonStreamParser::ParseArrayMid(TokenType type) {
     return util::Status();
   }
   // Illegal token after array value.
-  return ReportFailure("Expected , or ] after array value.", 
-                       ParseErrorType::EXPECTED_COMMA_OR_BRACKET); 
+  return ReportFailure("Expected , or ] after array value.",
+                       ParseErrorType::EXPECTED_COMMA_OR_BRACKET);
 }
 
 util::Status JsonStreamParser::ParseTrue() {
   ow_->RenderBool(key_, true);
   key_ = StringPiece();
-  p_.remove_prefix(kKeywordTrue.length()); 
+  p_.remove_prefix(kKeywordTrue.length());
   return util::Status();
 }
 
 util::Status JsonStreamParser::ParseFalse() {
   ow_->RenderBool(key_, false);
   key_ = StringPiece();
-  p_.remove_prefix(kKeywordFalse.length()); 
+  p_.remove_prefix(kKeywordFalse.length());
   return util::Status();
 }
 
 util::Status JsonStreamParser::ParseNull() {
   ow_->RenderNull(key_);
   key_ = StringPiece();
-  p_.remove_prefix(kKeywordNull.length()); 
+  p_.remove_prefix(kKeywordNull.length());
   return util::Status();
 }
 
@@ -862,8 +862,8 @@ bool JsonStreamParser::IsEmptyNullAllowed(TokenType type) {
          stack_.top() == OBJ_MID;
 }
 
-util::Status JsonStreamParser::ReportFailure(StringPiece message, 
-                                             ParseErrorType parse_code) { 
+util::Status JsonStreamParser::ReportFailure(StringPiece message,
+                                             ParseErrorType parse_code) {
   static const int kContextLength = 20;
   const char* p_start = p_.data();
   const char* json_start = json_.data();
@@ -871,42 +871,42 @@ util::Status JsonStreamParser::ReportFailure(StringPiece message,
   const char* end =
       std::min(p_start + kContextLength, json_start + json_.size());
   StringPiece segment(begin, end - begin);
-  TProtoStringType location(p_start - begin, ' '); 
+  TProtoStringType location(p_start - begin, ' ');
   location.push_back('^');
-  auto status = util::InvalidArgumentError( 
-      StrCat(message, "\n", segment, "\n", location)); 
-  return status; 
+  auto status = util::InvalidArgumentError(
+      StrCat(message, "\n", segment, "\n", location));
+  return status;
 }
 
-util::Status JsonStreamParser::ReportUnknown(StringPiece message, 
-                                             ParseErrorType parse_code) { 
+util::Status JsonStreamParser::ReportUnknown(StringPiece message,
+                                             ParseErrorType parse_code) {
   // If we aren't finishing the parse, cancel parsing and try later.
   if (!finishing_) {
-    return util::CancelledError(""); 
+    return util::CancelledError("");
   }
   if (p_.empty()) {
-    return ReportFailure(StrCat("Unexpected end of string. ", message), 
-                         parse_code); 
+    return ReportFailure(StrCat("Unexpected end of string. ", message),
+                         parse_code);
   }
-  return ReportFailure(message, parse_code); 
+  return ReportFailure(message, parse_code);
 }
 
-util::Status JsonStreamParser::IncrementRecursionDepth( 
-    StringPiece key) const { 
-  if (++recursion_depth_ > max_recursion_depth_) { 
-    return util::InvalidArgumentError(StrCat( 
-        "Message too deep. Max recursion depth reached for key '", key, "'")); 
-  } 
-  return util::Status(); 
-} 
- 
+util::Status JsonStreamParser::IncrementRecursionDepth(
+    StringPiece key) const {
+  if (++recursion_depth_ > max_recursion_depth_) {
+    return util::InvalidArgumentError(StrCat(
+        "Message too deep. Max recursion depth reached for key '", key, "'"));
+  }
+  return util::Status();
+}
+
 void JsonStreamParser::SkipWhitespace() {
   while (!p_.empty() && ascii_isspace(*p_.data())) {
     Advance();
   }
-  if (!p_.empty() && !ascii_isspace(*p_.data())) { 
-    seen_non_whitespace_ = true; 
-  } 
+  if (!p_.empty() && !ascii_isspace(*p_.data())) {
+    seen_non_whitespace_ = true;
+  }
 }
 
 void JsonStreamParser::Advance() {
@@ -918,24 +918,24 @@ void JsonStreamParser::Advance() {
 
 util::Status JsonStreamParser::ParseKey() {
   StringPiece original = p_;
- 
-  if (allow_permissive_key_naming_) { 
-    if (!ConsumeKeyPermissive(&p_, &key_)) { 
-      return ReportFailure("Invalid key or variable name.", 
-                           ParseErrorType::INVALID_KEY_OR_VARIABLE_NAME); 
-    } 
-  } else { 
-    if (!ConsumeKey(&p_, &key_)) { 
-      return ReportFailure("Invalid key or variable name.", 
-                           ParseErrorType::INVALID_KEY_OR_VARIABLE_NAME); 
-    } 
+
+  if (allow_permissive_key_naming_) {
+    if (!ConsumeKeyPermissive(&p_, &key_)) {
+      return ReportFailure("Invalid key or variable name.",
+                           ParseErrorType::INVALID_KEY_OR_VARIABLE_NAME);
+    }
+  } else {
+    if (!ConsumeKey(&p_, &key_)) {
+      return ReportFailure("Invalid key or variable name.",
+                           ParseErrorType::INVALID_KEY_OR_VARIABLE_NAME);
+    }
   }
- 
+
   // If we consumed everything but expect more data, reset p_ and cancel since
   // we can't know if the key was complete or not.
   if (!finishing_ && p_.empty()) {
     p_ = original;
-    return util::CancelledError(""); 
+    return util::CancelledError("");
   }
   // Since we aren't using the key storage, clear it out.
   key_storage_.clear();
@@ -954,21 +954,21 @@ JsonStreamParser::TokenType JsonStreamParser::GetNextTokenType() {
   // TODO(sven): Split this method based on context since different contexts
   // support different tokens. Would slightly speed up processing?
   const char* data = p_.data();
-  StringPiece data_view = StringPiece(data, size); 
+  StringPiece data_view = StringPiece(data, size);
   if (*data == '\"' || *data == '\'') return BEGIN_STRING;
   if (*data == '-' || ('0' <= *data && *data <= '9')) {
     return BEGIN_NUMBER;
   }
-  if (size >= kKeywordTrue.length() && 
-      HasPrefixString(data_view, kKeywordTrue)) { 
+  if (size >= kKeywordTrue.length() &&
+      HasPrefixString(data_view, kKeywordTrue)) {
     return BEGIN_TRUE;
   }
-  if (size >= kKeywordFalse.length() && 
-      HasPrefixString(data_view, kKeywordFalse)) { 
+  if (size >= kKeywordFalse.length() &&
+      HasPrefixString(data_view, kKeywordFalse)) {
     return BEGIN_FALSE;
   }
-  if (size >= kKeywordNull.length() && 
-      HasPrefixString(data_view, kKeywordNull)) { 
+  if (size >= kKeywordNull.length() &&
+      HasPrefixString(data_view, kKeywordNull)) {
     return BEGIN_NULL;
   }
   if (*data == '{') return BEGIN_OBJECT;

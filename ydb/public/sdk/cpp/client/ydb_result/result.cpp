@@ -8,7 +8,7 @@
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 namespace NYdb {
 

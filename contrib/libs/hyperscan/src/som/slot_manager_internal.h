@@ -97,7 +97,7 @@ struct SlotCache {
 
     CacheStore store;
 
-    std::unordered_set<std::shared_ptr<const NGHolder>, NGHolderHasher, 
+    std::unordered_set<std::shared_ptr<const NGHolder>, NGHolderHasher,
                   NGHolderEqual> initial_prefixes;
     std::vector<InitialResetInfo> initial_resets;
 };

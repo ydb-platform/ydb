@@ -1,8 +1,8 @@
 /*
- *  Copyright (c) 2016-2020 Positive Technologies, https://www.ptsecurity.com, 
+ *  Copyright (c) 2016-2020 Positive Technologies, https://www.ptsecurity.com,
  *  Fast Positive Hash.
  *
- *  Portions Copyright (c) 2010-2020 Leonid Yuriev <leo@yuriev.ru>, 
+ *  Portions Copyright (c) 2010-2020 Leonid Yuriev <leo@yuriev.ru>,
  *  The 1Hippeus project (t1h).
  *
  *  This software is provided 'as-is', without any express or implied
@@ -34,7 +34,7 @@
  *     hardware tricks).
  *  3. Not suitable for cryptography.
  *
- * The Future will (be) Positive. Всё будет хорошо. 
+ * The Future will (be) Positive. Всё будет хорошо.
  *
  * ACKNOWLEDGEMENT:
  * The t1ha was originally developed by Leonid Yuriev (Леонид Юрьев)
@@ -60,7 +60,7 @@
  *      // To disable unaligned access at all.
  *      #define T1HA_SYS_UNALIGNED_ACCESS 0
  *
- *      // To enable unaligned access, but indicate that it significantly slow. 
+ *      // To enable unaligned access, but indicate that it significantly slow.
  *      #define T1HA_SYS_UNALIGNED_ACCESS 1
  *
  *      // To enable unaligned access, and indicate that it effecient.
@@ -323,8 +323,8 @@
 #else
 #define __dll_export __declspec(dllexport)
 #endif
-#elif defined(__GNUC__) || __has_attribute(__visibility__) 
-#define __dll_export __attribute__((__visibility__("default"))) 
+#elif defined(__GNUC__) || __has_attribute(__visibility__)
+#define __dll_export __attribute__((__visibility__("default")))
 #else
 #define __dll_export
 #endif
@@ -337,8 +337,8 @@
 #else
 #define __dll_import __declspec(dllimport)
 #endif
-#elif defined(__GNUC__) || __has_attribute(__visibility__) 
-#define __dll_import __attribute__((__visibility__("default"))) 
+#elif defined(__GNUC__) || __has_attribute(__visibility__)
+#define __dll_import __attribute__((__visibility__("default")))
 #else
 #define __dll_import
 #endif
@@ -347,8 +347,8 @@
 #ifndef __force_inline
 #ifdef _MSC_VER
 #define __force_inline __forceinline
-#elif __GNUC_PREREQ(3, 2) || __has_attribute(__always_inline__) 
-#define __force_inline __inline __attribute__((__always_inline__)) 
+#elif __GNUC_PREREQ(3, 2) || __has_attribute(__always_inline__)
+#define __force_inline __inline __attribute__((__always_inline__))
 #else
 #define __force_inline __inline
 #endif
@@ -372,7 +372,7 @@
 
 #if defined(__GNUC__) && defined(__ia32__)
 #define T1HA_ALIGN_SUFFIX                                                      \
-  __attribute__((__aligned__(32))) /* required only for SIMD */ 
+  __attribute__((__aligned__(32))) /* required only for SIMD */
 #else
 #define T1HA_ALIGN_SUFFIX
 #endif /* GCC x86 */
@@ -383,14 +383,14 @@
 /* GNU ELF indirect functions usage control. For more info please see
  * https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
  * and https://sourceware.org/glibc/wiki/GNU_IFUNC */
-#if defined(__ELF__) && defined(__amd64__) &&                                  \ 
-    (__has_attribute(__ifunc__) ||                                             \ 
-     (!defined(__clang__) && defined(__GNUC__) && __GNUC__ >= 4 &&             \ 
-      !defined(__SANITIZE_ADDRESS__) && !defined(__SSP_ALL__))) 
-/* Enable gnu_indirect_function by default if : 
- *  - ELF AND x86_64 
- *  - attribute(__ifunc__) is available OR 
- *    GCC >= 4 WITHOUT -fsanitize=address NOR -fstack-protector-all */ 
+#if defined(__ELF__) && defined(__amd64__) &&                                  \
+    (__has_attribute(__ifunc__) ||                                             \
+     (!defined(__clang__) && defined(__GNUC__) && __GNUC__ >= 4 &&             \
+      !defined(__SANITIZE_ADDRESS__) && !defined(__SSP_ALL__)))
+/* Enable gnu_indirect_function by default if :
+ *  - ELF AND x86_64
+ *  - attribute(__ifunc__) is available OR
+ *    GCC >= 4 WITHOUT -fsanitize=address NOR -fstack-protector-all */
 #define T1HA_USE_INDIRECT_FUNCTIONS 1
 #else
 #define T1HA_USE_INDIRECT_FUNCTIONS 0

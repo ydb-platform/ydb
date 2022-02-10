@@ -6,7 +6,7 @@ OWNER(
     orivej
     g:cpp-contrib
 )
- 
+
 LICENSE(
     BSD-3-Clause AND
     BSL-1.0 AND

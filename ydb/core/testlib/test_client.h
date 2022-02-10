@@ -25,7 +25,7 @@
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/base/grpc_service_factory.h>
 
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 #include <functional>
 #include <algorithm>

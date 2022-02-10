@@ -45,17 +45,17 @@ struct BuildInfo {
   std::string package_kind;
 };
 
-struct RuntimeInfo { 
-  /// The enabled SIMD level 
-  /// 
-  /// This can be less than `detected_simd_level` if the ARROW_USER_SIMD_LEVEL 
-  /// environment variable is set to another value. 
-  std::string simd_level; 
- 
-  /// The SIMD level available on the OS and CPU 
-  std::string detected_simd_level; 
-}; 
- 
+struct RuntimeInfo {
+  /// The enabled SIMD level
+  ///
+  /// This can be less than `detected_simd_level` if the ARROW_USER_SIMD_LEVEL
+  /// environment variable is set to another value.
+  std::string simd_level;
+
+  /// The SIMD level available on the OS and CPU
+  std::string detected_simd_level;
+};
+
 /// \brief Get runtime build info.
 ///
 /// The returned values correspond to exact loaded version of the Arrow library,
@@ -64,9 +64,9 @@ struct RuntimeInfo {
 ARROW_EXPORT
 const BuildInfo& GetBuildInfo();
 
-/// \brief Get runtime info. 
-/// 
-ARROW_EXPORT 
-RuntimeInfo GetRuntimeInfo(); 
- 
+/// \brief Get runtime info.
+///
+ARROW_EXPORT
+RuntimeInfo GetRuntimeInfo();
+
 }  // namespace arrow

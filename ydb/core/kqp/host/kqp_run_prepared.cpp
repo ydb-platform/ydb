@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 namespace NKikimr {
 namespace NKqp {

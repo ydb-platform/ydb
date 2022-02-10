@@ -2,8 +2,8 @@
 
 #include "traits.h"
 
-#include <google/protobuf/descriptor.h> 
-#include <google/protobuf/message.h> 
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/message.h>
 
 #include <util/generic/cast.h>
 

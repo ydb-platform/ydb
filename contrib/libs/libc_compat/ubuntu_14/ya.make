@@ -19,7 +19,7 @@ NO_UTIL()
 DISABLE(NEED_PLATFORM_PEERDIRS)
 DISABLE(OPENSOURCE_EXPORT)
 
-IF (OS_SDK == "ubuntu-14") 
+IF (OS_SDK == "ubuntu-14")
     PEERDIR(
         build/platform/linux_sdk
     )

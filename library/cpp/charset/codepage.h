@@ -288,7 +288,7 @@ extern const CodePage& csYandex;
 
 /// these functions change (lowers) [end] position in case of utf-8
 /// null character is NOT assumed or written at [*end]
-void DecodeUnknownPlane(wchar16* start, wchar16*& end, const ECharset enc4unk); 
+void DecodeUnknownPlane(wchar16* start, wchar16*& end, const ECharset enc4unk);
 void DecodeUnknownPlane(wchar32* start, wchar32*& end, const ECharset enc4unk);
 
 inline void ToLower(char* s, size_t n, const CodePage& cp = csYandex) {

@@ -29,7 +29,7 @@ DIAGNOSTIC_PUSH
   DIAGNOSTIC_IGNORE("-Wreserved-id-macro")
 #endif
 
-#include <google/protobuf/io/zero_copy_stream.h> 
+#include <google/protobuf/io/zero_copy_stream.h>
 
 DIAGNOSTIC_POP
 

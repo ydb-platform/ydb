@@ -292,9 +292,9 @@ Y_UNIT_TEST_SUITE(Bloom) {
         /* 8xxx: Extend incomplete keys with nulls and check it precense */
 
         for (auto &row : ladder) {
-            const ui32 serial = 8000 + (*row).size(); 
+            const ui32 serial = 8000 + (*row).size();
 
-            for (ui32 grow = (*row).size(); grow++ < Height + 2; ) 
+            for (ui32 grow = (*row).size(); grow++ < Height + 2; )
                 row.Do(grow, nullptr);
 
             me.To(serial).Begin().Select(1).Has(row);

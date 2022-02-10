@@ -4,8 +4,8 @@
 #include <ydb/core/sys_view/service/query_history.h>
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h> 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
 
 namespace NKikimr {
 namespace NKqp {

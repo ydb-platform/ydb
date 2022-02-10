@@ -18,7 +18,7 @@
 #include "arrow/scalar.h"
 
 #include <memory>
-#include <sstream> 
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -45,10 +45,10 @@ bool Scalar::Equals(const Scalar& other, const EqualOptions& options) const {
   return ScalarEquals(*this, other, options);
 }
 
-bool Scalar::ApproxEquals(const Scalar& other, const EqualOptions& options) const { 
-  return ScalarApproxEquals(*this, other, options); 
-} 
- 
+bool Scalar::ApproxEquals(const Scalar& other, const EqualOptions& options) const {
+  return ScalarApproxEquals(*this, other, options);
+}
+
 struct ScalarHashImpl {
   static std::hash<std::string> string_hash;
 
@@ -74,14 +74,14 @@ struct ScalarHashImpl {
     return StdHash(s.value.low_bits()) & StdHash(s.value.high_bits());
   }
 
-  Status Visit(const Decimal256Scalar& s) { 
-    Status status = Status::OK(); 
-    for (uint64_t elem : s.value.little_endian_array()) { 
-      status &= StdHash(elem); 
-    } 
-    return status; 
-  } 
- 
+  Status Visit(const Decimal256Scalar& s) {
+    Status status = Status::OK();
+    for (uint64_t elem : s.value.little_endian_array()) {
+      status &= StdHash(elem);
+    }
+    return status;
+  }
+
   Status Visit(const BaseListScalar& s) { return ArrayHash(*s.value); }
 
   Status Visit(const StructScalar& s) {
@@ -91,11 +91,11 @@ struct ScalarHashImpl {
     return Status::OK();
   }
 
-  Status Visit(const DictionaryScalar& s) { 
-    AccumulateHashFrom(*s.value.index); 
-    return Status::OK(); 
-  } 
- 
+  Status Visit(const DictionaryScalar& s) {
+    AccumulateHashFrom(*s.value.index);
+    return Status::OK();
+  }
+
   // TODO(bkietz) implement less wimpy hashing when these have ValueType
   Status Visit(const UnionScalar& s) { return Status::OK(); }
   Status Visit(const ExtensionScalar& s) { return Status::OK(); }
@@ -132,21 +132,21 @@ struct ScalarHashImpl {
     return Status::OK();
   }
 
-  explicit ScalarHashImpl(const Scalar& scalar) : hash_(scalar.type->Hash()) { 
-    if (scalar.is_valid) { 
-      AccumulateHashFrom(scalar); 
-    } 
-  } 
+  explicit ScalarHashImpl(const Scalar& scalar) : hash_(scalar.type->Hash()) {
+    if (scalar.is_valid) {
+      AccumulateHashFrom(scalar);
+    }
+  }
 
   void AccumulateHashFrom(const Scalar& scalar) {
     DCHECK_OK(StdHash(scalar.type->fingerprint()));
     DCHECK_OK(VisitScalarInline(scalar, this));
   }
 
-  size_t hash_; 
+  size_t hash_;
 };
 
-size_t Scalar::hash() const { return ScalarHashImpl(*this).hash_; } 
+size_t Scalar::hash() const { return ScalarHashImpl(*this).hash_; }
 
 StringScalar::StringScalar(std::string s)
     : StringScalar(Buffer::FromString(std::move(s))) {}
@@ -193,20 +193,20 @@ FixedSizeListScalar::FixedSizeListScalar(std::shared_ptr<Array> value)
     : BaseListScalar(
           value, fixed_size_list(value->type(), static_cast<int32_t>(value->length()))) {}
 
-Result<std::shared_ptr<StructScalar>> StructScalar::Make( 
-    ScalarVector values, std::vector<std::string> field_names) { 
-  if (values.size() != field_names.size()) { 
-    return Status::Invalid("Mismatching number of field names and child scalars"); 
-  } 
- 
-  FieldVector fields(field_names.size()); 
-  for (size_t i = 0; i < fields.size(); ++i) { 
-    fields[i] = arrow::field(std::move(field_names[i]), values[i]->type); 
-  } 
- 
-  return std::make_shared<StructScalar>(std::move(values), struct_(std::move(fields))); 
-} 
- 
+Result<std::shared_ptr<StructScalar>> StructScalar::Make(
+    ScalarVector values, std::vector<std::string> field_names) {
+  if (values.size() != field_names.size()) {
+    return Status::Invalid("Mismatching number of field names and child scalars");
+  }
+
+  FieldVector fields(field_names.size());
+  for (size_t i = 0; i < fields.size(); ++i) {
+    fields[i] = arrow::field(std::move(field_names[i]), values[i]->type);
+  }
+
+  return std::make_shared<StructScalar>(std::move(values), struct_(std::move(fields)));
+}
+
 Result<std::shared_ptr<Scalar>> StructScalar::field(FieldRef ref) const {
   ARROW_ASSIGN_OR_RAISE(auto path, ref.FindOne(*type));
   if (path.indices().size() != 1) {
@@ -277,13 +277,13 @@ Result<std::shared_ptr<Scalar>> DictionaryScalar::GetEncodedValue() const {
   return value.dictionary->GetScalar(index_value);
 }
 
-std::shared_ptr<DictionaryScalar> DictionaryScalar::Make(std::shared_ptr<Scalar> index, 
-                                                         std::shared_ptr<Array> dict) { 
-  auto type = dictionary(index->type, dict->type()); 
-  return std::make_shared<DictionaryScalar>(ValueType{std::move(index), std::move(dict)}, 
-                                            std::move(type)); 
-} 
- 
+std::shared_ptr<DictionaryScalar> DictionaryScalar::Make(std::shared_ptr<Scalar> index,
+                                                         std::shared_ptr<Array> dict) {
+  auto type = dictionary(index->type, dict->type());
+  return std::make_shared<DictionaryScalar>(ValueType{std::move(index), std::move(dict)},
+                                            std::move(type));
+}
+
 template <typename T>
 using scalar_constructor_has_arrow_type =
     std::is_constructible<typename TypeTraits<T>::ScalarType, std::shared_ptr<DataType>>;
@@ -551,31 +551,31 @@ Status CastImpl(const ScalarType& from, StringScalar* to) {
   return Status::OK();
 }
 
-Status CastImpl(const Decimal128Scalar& from, StringScalar* to) { 
-  auto from_type = checked_cast<const Decimal128Type*>(from.type.get()); 
-  to->value = Buffer::FromString(from.value.ToString(from_type->scale())); 
-  return Status::OK(); 
-} 
- 
-Status CastImpl(const Decimal256Scalar& from, StringScalar* to) { 
-  auto from_type = checked_cast<const Decimal256Type*>(from.type.get()); 
-  to->value = Buffer::FromString(from.value.ToString(from_type->scale())); 
-  return Status::OK(); 
-} 
- 
-Status CastImpl(const StructScalar& from, StringScalar* to) { 
-  std::stringstream ss; 
-  ss << '{'; 
-  for (int i = 0; static_cast<size_t>(i) < from.value.size(); i++) { 
-    if (i > 0) ss << ", "; 
-    ss << from.type->field(i)->name() << ':' << from.type->field(i)->type()->ToString() 
-       << " = " << from.value[i]->ToString(); 
-  } 
-  ss << '}'; 
-  to->value = Buffer::FromString(ss.str()); 
-  return Status::OK(); 
-} 
- 
+Status CastImpl(const Decimal128Scalar& from, StringScalar* to) {
+  auto from_type = checked_cast<const Decimal128Type*>(from.type.get());
+  to->value = Buffer::FromString(from.value.ToString(from_type->scale()));
+  return Status::OK();
+}
+
+Status CastImpl(const Decimal256Scalar& from, StringScalar* to) {
+  auto from_type = checked_cast<const Decimal256Type*>(from.type.get());
+  to->value = Buffer::FromString(from.value.ToString(from_type->scale()));
+  return Status::OK();
+}
+
+Status CastImpl(const StructScalar& from, StringScalar* to) {
+  std::stringstream ss;
+  ss << '{';
+  for (int i = 0; static_cast<size_t>(i) < from.value.size(); i++) {
+    if (i > 0) ss << ", ";
+    ss << from.type->field(i)->name() << ':' << from.type->field(i)->type()->ToString()
+       << " = " << from.value[i]->ToString();
+  }
+  ss << '}';
+  to->value = Buffer::FromString(ss.str());
+  return Status::OK();
+}
+
 struct CastImplVisitor {
   Status NotImplemented() {
     return Status::NotImplemented("cast to ", *to_type_, " from ", *from_.type);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/array_ref.h> 
+#include <util/generic/array_ref.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
@@ -32,10 +32,10 @@ public:
     TBlob GetBlob(size_t index) const;
 
     template <typename T>
-    TArrayRef<const T> GetRegion(size_t index) const { 
+    TArrayRef<const T> GetRegion(size_t index) const {
         size_t len = GetBlockLen(index);
         Y_ENSURE(len % sizeof(T) == 0, "wrong data padding");
-        return TArrayRef<const T>(reinterpret_cast<const T*>(GetBlock(index)), len / sizeof(T)); 
+        return TArrayRef<const T>(reinterpret_cast<const T*>(GetBlock(index)), len / sizeof(T));
     }
 
     inline size_t GetBlocksCount() const {

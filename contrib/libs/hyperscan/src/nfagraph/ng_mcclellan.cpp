@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2018, Intel Corporation 
+ * Copyright (c) 2015-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -542,8 +542,8 @@ unique_ptr<raw_dfa> buildMcClellan(const NGHolder &graph,
         return nullptr;
     }
 
-    DEBUG_PRINTF("attempting to build %s mcclellan\n", 
-                 to_string(graph.kind).c_str()); 
+    DEBUG_PRINTF("attempting to build %s mcclellan\n",
+                 to_string(graph.kind).c_str());
     assert(allMatchStatesHaveReports(graph));
 
     bool prunable = grey.highlanderPruneDFA && has_managed_reports(graph);

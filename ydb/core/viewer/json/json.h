@@ -1,7 +1,7 @@
 #pragma once
 #include <unordered_map>
 #include <unordered_set>
-#include <google/protobuf/message.h> 
+#include <google/protobuf/message.h>
 #include <util/stream/output.h>
 
 struct TJsonSettings {

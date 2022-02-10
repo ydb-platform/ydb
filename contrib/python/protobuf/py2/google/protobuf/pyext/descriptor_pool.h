@@ -33,8 +33,8 @@
 
 #include <Python.h>
 
-#include <unordered_map> 
-#include <google/protobuf/descriptor.h> 
+#include <unordered_map>
+#include <google/protobuf/descriptor.h>
 
 namespace google {
 namespace protobuf {
@@ -59,10 +59,10 @@ typedef struct PyDescriptorPool {
   // The C++ pool containing Descriptors.
   DescriptorPool* pool;
 
-  // The error collector to store error info. Can be NULL. This pointer is 
-  // owned. 
-  DescriptorPool::ErrorCollector* error_collector; 
- 
+  // The error collector to store error info. Can be NULL. This pointer is
+  // owned.
+  DescriptorPool::ErrorCollector* error_collector;
+
   // The C++ pool acting as an underlay. Can be NULL.
   // This pointer is not owned and must stay alive.
   const DescriptorPool* underlay;
@@ -79,7 +79,7 @@ typedef struct PyDescriptorPool {
   // Cache the options for any kind of descriptor.
   // Descriptor pointers are owned by the DescriptorPool above.
   // Python objects are owned by the map.
-  std::unordered_map<const void*, PyObject*>* descriptor_options; 
+  std::unordered_map<const void*, PyObject*>* descriptor_options;
 } PyDescriptorPool;
 
 
@@ -131,6 +131,6 @@ bool InitDescriptorPool();
 
 }  // namespace python
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
 #endif  // GOOGLE_PROTOBUF_PYTHON_CPP_DESCRIPTOR_POOL_H__

@@ -4,7 +4,7 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-OWNER(g:cpp-contrib) 
+OWNER(g:cpp-contrib)
 
 LICENSE(Apache-2.0)
 
@@ -21,7 +21,7 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/meta
     contrib/restricted/abseil-cpp-tstring/y_absl/status
     contrib/restricted/abseil-cpp-tstring/y_absl/strings
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings/cord 
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings/cord
     contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/str_format
     contrib/restricted/abseil-cpp-tstring/y_absl/time
     library/cpp/resource

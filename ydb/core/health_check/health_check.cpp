@@ -1679,7 +1679,7 @@ public:
             case Ydb::Monitoring::StatusFlag::GREY: // the status is absent, the disk is not available
                 IncrementFor(failedRealms, protoVDiskId.ring());
                 ++failedDisks;
-                break; 
+                break;
             default:
                 break;
             }

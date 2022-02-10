@@ -1,8 +1,8 @@
 #include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <google/protobuf/duration.pb.h> 
-#include <google/protobuf/timestamp.pb.h> 
+#include <google/protobuf/duration.pb.h>
+#include <google/protobuf/timestamp.pb.h>
 
 static constexpr ui64 MicroSecondsInSecond = 1000 * 1000;
 static constexpr ui64 NanoSecondsInMicroSecond = 1000;

@@ -1,6 +1,6 @@
 #include "arrow_batch_builder.h"
-#include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h> 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
 
 namespace NKikimr::NArrow {
 

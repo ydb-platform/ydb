@@ -9,11 +9,11 @@
 #include <util/stream/output.h>
 #include <util/stream/input.h>
 
-#ifndef __NVCC__ 
+#ifndef __NVCC__
     // cuda is compiled in C++14 mode at the time
     #include <variant>
-#endif 
- 
+#endif
+
 template <typename T>
 class TSerializeTypeTraits {
 public:
@@ -639,7 +639,7 @@ public:
     }
 };
 
-#ifndef __NVCC__ 
+#ifndef __NVCC__
 
 namespace NPrivate {
     template <class Variant, class T, size_t I>

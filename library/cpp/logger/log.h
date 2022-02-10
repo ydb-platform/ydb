@@ -6,7 +6,7 @@
 #include "record.h"
 #include "thread.h"
 
-#include <util/generic/fwd.h> 
+#include <util/generic/fwd.h>
 #include <util/generic/ptr.h>
 
 #include <functional>

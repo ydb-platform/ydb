@@ -12,7 +12,7 @@ struct TCompactTrieKeySelector {
 
 template <class TChar>
 struct TCompactTrieCharKeySelector {
-    typedef TBasicString<TChar> TKey; 
+    typedef TBasicString<TChar> TKey;
     typedef TBasicStringBuf<TChar> TKeyBuf;
 };
 

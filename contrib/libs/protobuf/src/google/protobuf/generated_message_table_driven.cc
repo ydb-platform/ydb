@@ -28,16 +28,16 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/generated_message_table_driven.h> 
+#include <google/protobuf/generated_message_table_driven.h>
 
-#include <type_traits> 
+#include <type_traits>
 
-#include <google/protobuf/stubs/casts.h> 
-#include <google/protobuf/generated_message_table_driven_lite.h> 
-#include <google/protobuf/io/zero_copy_stream_impl_lite.h> 
-#include <google/protobuf/repeated_field.h> 
-#include <google/protobuf/wire_format.h> 
-#include <google/protobuf/wire_format_lite.h> 
+#include <google/protobuf/stubs/casts.h>
+#include <google/protobuf/generated_message_table_driven_lite.h>
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+#include <google/protobuf/repeated_field.h>
+#include <google/protobuf/wire_format.h>
+#include <google/protobuf/wire_format_lite.h>
 
 namespace google {
 namespace protobuf {
@@ -46,40 +46,40 @@ namespace internal {
 namespace {
 
 UnknownFieldSet* MutableUnknownFields(MessageLite* msg, int64 arena_offset) {
-  return Raw<InternalMetadata>(msg, arena_offset) 
-      ->mutable_unknown_fields<UnknownFieldSet>(); 
+  return Raw<InternalMetadata>(msg, arena_offset)
+      ->mutable_unknown_fields<UnknownFieldSet>();
 }
 
 struct UnknownFieldHandler {
-  // TODO(mvels): consider renaming UnknownFieldHandler to (TableDrivenTraits?), 
-  // and conflating InternalMetaData into it, simplifying the template. 
-  static constexpr bool IsLite() { return false; } 
- 
+  // TODO(mvels): consider renaming UnknownFieldHandler to (TableDrivenTraits?),
+  // and conflating InternalMetaData into it, simplifying the template.
+  static constexpr bool IsLite() { return false; }
+
   static bool Skip(MessageLite* msg, const ParseTable& table,
-                   io::CodedInputStream* input, int tag) { 
+                   io::CodedInputStream* input, int tag) {
     GOOGLE_DCHECK(table.unknown_field_set);
 
     return WireFormat::SkipField(input, tag,
-                                 MutableUnknownFields(msg, table.arena_offset)); 
+                                 MutableUnknownFields(msg, table.arena_offset));
   }
 
-  static void Varint(MessageLite* msg, const ParseTable& table, int tag, 
-                     int value) { 
+  static void Varint(MessageLite* msg, const ParseTable& table, int tag,
+                     int value) {
     GOOGLE_DCHECK(table.unknown_field_set);
 
-    MutableUnknownFields(msg, table.arena_offset) 
-        ->AddVarint(WireFormatLite::GetTagFieldNumber(tag), value); 
+    MutableUnknownFields(msg, table.arena_offset)
+        ->AddVarint(WireFormatLite::GetTagFieldNumber(tag), value);
   }
 
-  static bool ParseExtension(MessageLite* msg, const ParseTable& table, 
-                             io::CodedInputStream* input, int tag) { 
+  static bool ParseExtension(MessageLite* msg, const ParseTable& table,
+                             io::CodedInputStream* input, int tag) {
     ExtensionSet* extensions = GetExtensionSet(msg, table.extension_offset);
     if (extensions == NULL) {
       return false;
     }
 
-    const Message* prototype = 
-        down_cast<const Message*>(table.default_instance()); 
+    const Message* prototype =
+        down_cast<const Message*>(table.default_instance());
 
     GOOGLE_DCHECK(prototype != NULL);
     GOOGLE_DCHECK(table.unknown_field_set);
@@ -92,10 +92,10 @@ struct UnknownFieldHandler {
 
 }  // namespace
 
-bool MergePartialFromCodedStream(MessageLite* msg, const ParseTable& table, 
-                                 io::CodedInputStream* input) { 
-  return MergePartialFromCodedStreamImpl<UnknownFieldHandler>(msg, table, 
-                                                              input); 
+bool MergePartialFromCodedStream(MessageLite* msg, const ParseTable& table,
+                                 io::CodedInputStream* input) {
+  return MergePartialFromCodedStreamImpl<UnknownFieldHandler>(msg, table,
+                                                              input);
 }
 
 }  // namespace internal

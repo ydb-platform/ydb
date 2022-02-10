@@ -25,7 +25,7 @@
 
 #include "arrow/array/array_base.h"
 #include "arrow/array/data.h"
-#include "arrow/stl_iterator.h" 
+#include "arrow/stl_iterator.h"
 #include "arrow/type.h"
 #include "arrow/type_fwd.h"  // IWYU pragma: export
 #include "arrow/type_traits.h"
@@ -41,7 +41,7 @@ class NumericArray : public PrimitiveArray {
  public:
   using TypeClass = TYPE;
   using value_type = typename TypeClass::c_type;
-  using IteratorType = stl::ArrayIterator<NumericArray<TYPE>>; 
+  using IteratorType = stl::ArrayIterator<NumericArray<TYPE>>;
 
   explicit NumericArray(const std::shared_ptr<ArrayData>& data) : PrimitiveArray(data) {}
 
@@ -64,10 +64,10 @@ class NumericArray : public PrimitiveArray {
   // For API compatibility with BinaryArray etc.
   value_type GetView(int64_t i) const { return Value(i); }
 
-  IteratorType begin() const { return IteratorType(*this); } 
- 
-  IteratorType end() const { return IteratorType(*this, length()); } 
- 
+  IteratorType begin() const { return IteratorType(*this); }
+
+  IteratorType end() const { return IteratorType(*this, length()); }
+
  protected:
   using PrimitiveArray::PrimitiveArray;
 };
@@ -76,7 +76,7 @@ class NumericArray : public PrimitiveArray {
 class ARROW_EXPORT BooleanArray : public PrimitiveArray {
  public:
   using TypeClass = BooleanType;
-  using IteratorType = stl::ArrayIterator<BooleanArray>; 
+  using IteratorType = stl::ArrayIterator<BooleanArray>;
 
   explicit BooleanArray(const std::shared_ptr<ArrayData>& data);
 
@@ -99,10 +99,10 @@ class ARROW_EXPORT BooleanArray : public PrimitiveArray {
   /// values. Result is not cached.
   int64_t true_count() const;
 
-  IteratorType begin() const { return IteratorType(*this); } 
- 
-  IteratorType end() const { return IteratorType(*this, length()); } 
- 
+  IteratorType begin() const { return IteratorType(*this); }
+
+  IteratorType end() const { return IteratorType(*this, length()); }
+
  protected:
   using PrimitiveArray::PrimitiveArray;
 };

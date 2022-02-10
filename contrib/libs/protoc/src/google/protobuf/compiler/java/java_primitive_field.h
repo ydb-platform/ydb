@@ -36,59 +36,59 @@
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_PRIMITIVE_FIELD_H__
 
 #include <map>
-#include <string> 
-#include <google/protobuf/compiler/java/java_field.h> 
+#include <string>
+#include <google/protobuf/compiler/java/java_field.h>
 
 namespace google {
 namespace protobuf {
-namespace compiler { 
-namespace java { 
-class Context;            // context.h 
-class ClassNameResolver;  // name_resolver.h 
-}  // namespace java 
-}  // namespace compiler 
-}  // namespace protobuf 
-}  // namespace google 
+namespace compiler {
+namespace java {
+class Context;            // context.h
+class ClassNameResolver;  // name_resolver.h
+}  // namespace java
+}  // namespace compiler
+}  // namespace protobuf
+}  // namespace google
 
-namespace google { 
+namespace google {
 namespace protobuf {
 namespace compiler {
 namespace java {
 
 class ImmutablePrimitiveFieldGenerator : public ImmutableFieldGenerator {
  public:
-  explicit ImmutablePrimitiveFieldGenerator(const FieldDescriptor* descriptor, 
-                                            int messageBitIndex, 
-                                            int builderBitIndex, 
-                                            Context* context); 
-  ~ImmutablePrimitiveFieldGenerator() override; 
+  explicit ImmutablePrimitiveFieldGenerator(const FieldDescriptor* descriptor,
+                                            int messageBitIndex,
+                                            int builderBitIndex,
+                                            Context* context);
+  ~ImmutablePrimitiveFieldGenerator() override;
 
-  // implements ImmutableFieldGenerator 
-  // --------------------------------------- 
-  int GetNumBitsForMessage() const override; 
-  int GetNumBitsForBuilder() const override; 
-  void GenerateInterfaceMembers(io::Printer* printer) const override; 
-  void GenerateMembers(io::Printer* printer) const override; 
-  void GenerateBuilderMembers(io::Printer* printer) const override; 
-  void GenerateInitializationCode(io::Printer* printer) const override; 
-  void GenerateBuilderClearCode(io::Printer* printer) const override; 
-  void GenerateMergingCode(io::Printer* printer) const override; 
-  void GenerateBuildingCode(io::Printer* printer) const override; 
-  void GenerateParsingCode(io::Printer* printer) const override; 
-  void GenerateParsingDoneCode(io::Printer* printer) const override; 
-  void GenerateSerializationCode(io::Printer* printer) const override; 
-  void GenerateSerializedSizeCode(io::Printer* printer) const override; 
-  void GenerateFieldBuilderInitializationCode( 
-      io::Printer* printer) const override; 
-  void GenerateEqualsCode(io::Printer* printer) const override; 
-  void GenerateHashCode(io::Printer* printer) const override; 
-  void GenerateKotlinDslMembers(io::Printer* printer) const override; 
+  // implements ImmutableFieldGenerator
+  // ---------------------------------------
+  int GetNumBitsForMessage() const override;
+  int GetNumBitsForBuilder() const override;
+  void GenerateInterfaceMembers(io::Printer* printer) const override;
+  void GenerateMembers(io::Printer* printer) const override;
+  void GenerateBuilderMembers(io::Printer* printer) const override;
+  void GenerateInitializationCode(io::Printer* printer) const override;
+  void GenerateBuilderClearCode(io::Printer* printer) const override;
+  void GenerateMergingCode(io::Printer* printer) const override;
+  void GenerateBuildingCode(io::Printer* printer) const override;
+  void GenerateParsingCode(io::Printer* printer) const override;
+  void GenerateParsingDoneCode(io::Printer* printer) const override;
+  void GenerateSerializationCode(io::Printer* printer) const override;
+  void GenerateSerializedSizeCode(io::Printer* printer) const override;
+  void GenerateFieldBuilderInitializationCode(
+      io::Printer* printer) const override;
+  void GenerateEqualsCode(io::Printer* printer) const override;
+  void GenerateHashCode(io::Printer* printer) const override;
+  void GenerateKotlinDslMembers(io::Printer* printer) const override;
 
-  TProtoStringType GetBoxedType() const override; 
+  TProtoStringType GetBoxedType() const override;
 
  protected:
   const FieldDescriptor* descriptor_;
-  std::map<TProtoStringType, TProtoStringType> variables_; 
+  std::map<TProtoStringType, TProtoStringType> variables_;
   ClassNameResolver* name_resolver_;
 
  private:
@@ -98,9 +98,9 @@ class ImmutablePrimitiveFieldGenerator : public ImmutableFieldGenerator {
 class ImmutablePrimitiveOneofFieldGenerator
     : public ImmutablePrimitiveFieldGenerator {
  public:
-  ImmutablePrimitiveOneofFieldGenerator(const FieldDescriptor* descriptor, 
-                                        int messageBitIndex, 
-                                        int builderBitIndex, Context* context); 
+  ImmutablePrimitiveOneofFieldGenerator(const FieldDescriptor* descriptor,
+                                        int messageBitIndex,
+                                        int builderBitIndex, Context* context);
   ~ImmutablePrimitiveOneofFieldGenerator();
 
   void GenerateMembers(io::Printer* printer) const;
@@ -121,34 +121,34 @@ class RepeatedImmutablePrimitiveFieldGenerator
   explicit RepeatedImmutablePrimitiveFieldGenerator(
       const FieldDescriptor* descriptor, int messageBitIndex,
       int builderBitIndex, Context* context);
-  ~RepeatedImmutablePrimitiveFieldGenerator() override; 
+  ~RepeatedImmutablePrimitiveFieldGenerator() override;
 
   // implements ImmutableFieldGenerator ---------------------------------------
-  int GetNumBitsForMessage() const override; 
-  int GetNumBitsForBuilder() const override; 
-  void GenerateInterfaceMembers(io::Printer* printer) const override; 
-  void GenerateMembers(io::Printer* printer) const override; 
-  void GenerateBuilderMembers(io::Printer* printer) const override; 
-  void GenerateInitializationCode(io::Printer* printer) const override; 
-  void GenerateBuilderClearCode(io::Printer* printer) const override; 
-  void GenerateMergingCode(io::Printer* printer) const override; 
-  void GenerateBuildingCode(io::Printer* printer) const override; 
-  void GenerateParsingCode(io::Printer* printer) const override; 
-  void GenerateParsingCodeFromPacked(io::Printer* printer) const override; 
-  void GenerateParsingDoneCode(io::Printer* printer) const override; 
-  void GenerateSerializationCode(io::Printer* printer) const override; 
-  void GenerateSerializedSizeCode(io::Printer* printer) const override; 
-  void GenerateFieldBuilderInitializationCode( 
-      io::Printer* printer) const override; 
-  void GenerateEqualsCode(io::Printer* printer) const override; 
-  void GenerateHashCode(io::Printer* printer) const override; 
-  void GenerateKotlinDslMembers(io::Printer* printer) const override; 
+  int GetNumBitsForMessage() const override;
+  int GetNumBitsForBuilder() const override;
+  void GenerateInterfaceMembers(io::Printer* printer) const override;
+  void GenerateMembers(io::Printer* printer) const override;
+  void GenerateBuilderMembers(io::Printer* printer) const override;
+  void GenerateInitializationCode(io::Printer* printer) const override;
+  void GenerateBuilderClearCode(io::Printer* printer) const override;
+  void GenerateMergingCode(io::Printer* printer) const override;
+  void GenerateBuildingCode(io::Printer* printer) const override;
+  void GenerateParsingCode(io::Printer* printer) const override;
+  void GenerateParsingCodeFromPacked(io::Printer* printer) const override;
+  void GenerateParsingDoneCode(io::Printer* printer) const override;
+  void GenerateSerializationCode(io::Printer* printer) const override;
+  void GenerateSerializedSizeCode(io::Printer* printer) const override;
+  void GenerateFieldBuilderInitializationCode(
+      io::Printer* printer) const override;
+  void GenerateEqualsCode(io::Printer* printer) const override;
+  void GenerateHashCode(io::Printer* printer) const override;
+  void GenerateKotlinDslMembers(io::Printer* printer) const override;
 
-  TProtoStringType GetBoxedType() const override; 
+  TProtoStringType GetBoxedType() const override;
 
  private:
   const FieldDescriptor* descriptor_;
-  std::map<TProtoStringType, TProtoStringType> variables_; 
+  std::map<TProtoStringType, TProtoStringType> variables_;
   ClassNameResolver* name_resolver_;
 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(RepeatedImmutablePrimitiveFieldGenerator);
@@ -157,6 +157,6 @@ class RepeatedImmutablePrimitiveFieldGenerator
 }  // namespace java
 }  // namespace compiler
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
 #endif  // GOOGLE_PROTOBUF_COMPILER_JAVA_PRIMITIVE_FIELD_H__

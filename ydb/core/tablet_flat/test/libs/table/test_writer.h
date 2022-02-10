@@ -48,7 +48,7 @@ namespace NTest {
 
             if (auto *raw = Store->GetMeta()) {
                 TMemoryInput stream(raw->data(), raw->size());
-                Y_VERIFY(root.ParseFromArcadiaStream(&stream)); 
+                Y_VERIFY(root.ParseFromArcadiaStream(&stream));
             } else {
                 root.SetEpoch(0); /* for loading from abi blobs */
             }

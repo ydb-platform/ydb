@@ -1,6 +1,6 @@
 #include "string_transform.h"
 
-#include <google/protobuf/stubs/strutil.h> 
+#include <google/protobuf/stubs/strutil.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
 

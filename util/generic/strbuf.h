@@ -5,144 +5,144 @@
 #include "utility.h"
 #include "typetraits.h"
 
-#include <string_view> 
- 
-using namespace std::string_view_literals; 
- 
-template <typename TCharType, typename TTraits> 
+#include <string_view>
+
+using namespace std::string_view_literals;
+
+template <typename TCharType, typename TTraits>
 class TBasicStringBuf: public std::basic_string_view<TCharType>,
                        public TStringBase<TBasicStringBuf<TCharType, TTraits>, TCharType, TTraits> {
-private: 
+private:
     using TdSelf = TBasicStringBuf;
-    using TBase = TStringBase<TdSelf, TCharType, TTraits>; 
-    using TStringView = std::basic_string_view<TCharType>; 
+    using TBase = TStringBase<TdSelf, TCharType, TTraits>;
+    using TStringView = std::basic_string_view<TCharType>;
 
 public:
-    using char_type = TCharType; // TODO: DROP 
+    using char_type = TCharType; // TODO: DROP
     using traits_type = TTraits;
 
-    //Resolving some ambiguity between TStringBase and std::basic_string_view 
-    //for typenames 
-    using typename TStringView::const_iterator; 
+    //Resolving some ambiguity between TStringBase and std::basic_string_view
+    //for typenames
+    using typename TStringView::const_iterator;
     using typename TStringView::const_reference;
-    using typename TStringView::const_reverse_iterator; 
+    using typename TStringView::const_reverse_iterator;
     using typename TStringView::iterator;
-    using typename TStringView::reference; 
+    using typename TStringView::reference;
     using typename TStringView::reverse_iterator;
     using typename TStringView::size_type;
     using typename TStringView::value_type;
- 
-    //for constants 
-    using TStringView::npos; 
- 
-    //for methods and operators 
-    using TStringView::begin; 
-    using TStringView::cbegin; 
-    using TStringView::cend; 
+
+    //for constants
+    using TStringView::npos;
+
+    //for methods and operators
+    using TStringView::begin;
+    using TStringView::cbegin;
+    using TStringView::cend;
     using TStringView::crbegin;
     using TStringView::crend;
     using TStringView::end;
-    using TStringView::rbegin; 
-    using TStringView::rend; 
- 
+    using TStringView::rbegin;
+    using TStringView::rend;
+
     using TStringView::data;
     using TStringView::empty;
-    using TStringView::size; 
- 
-    using TStringView::operator[]; 
- 
-    /* 
-     * WARN: 
-     * TBase::at silently return 0 in case of range error, 
-     * while std::string_view throws std::out_of_range. 
-     */ 
-    using TBase::at; 
+    using TStringView::size;
+
+    using TStringView::operator[];
+
+    /*
+     * WARN:
+     * TBase::at silently return 0 in case of range error,
+     * while std::string_view throws std::out_of_range.
+     */
+    using TBase::at;
     using TStringView::back;
-    using TStringView::front; 
- 
-    using TStringView::find; 
-    /* 
-     * WARN: 
-     *      TBase::*find* methods take into account TCharTraits, 
-     *      while TTStringView::*find* would use default std::char_traits. 
-     */ 
+    using TStringView::front;
+
+    using TStringView::find;
+    /*
+     * WARN:
+     *      TBase::*find* methods take into account TCharTraits,
+     *      while TTStringView::*find* would use default std::char_traits.
+     */
     using TBase::find_first_not_of;
-    using TBase::find_first_of; 
+    using TBase::find_first_of;
     using TBase::find_last_not_of;
-    using TBase::find_last_of; 
+    using TBase::find_last_of;
     using TBase::rfind;
- 
-    using TStringView::copy; 
-    /* 
-     * WARN: 
-     *  TBase::compare takes into account TCharTraits, 
-     *  thus making it possible to implement case-insensitive string buffers, 
-     *  if it is using TStringBase::compare 
-     */ 
-    using TBase::compare; 
- 
-    /* 
-     * WARN: 
-     *  TBase::substr properly checks boundary cases and clamps them with maximum valid values, 
-     *  while TStringView::substr throws std::out_of_range error. 
-     */ 
-    using TBase::substr; 
- 
-    /* 
-     * WARN: 
-     *  Constructing std::string_view(nullptr, non_zero_size) ctor 
-     *  results in undefined behavior according to the standard. 
-     *  In libc++ this UB results in runtime assertion, though it is better 
-     *  to generate compilation error instead. 
-     */ 
-    constexpr inline TBasicStringBuf(std::nullptr_t begin, size_t size) = delete; 
- 
-    constexpr inline TBasicStringBuf(const TCharType* data, size_t size) noexcept 
-        : TStringView(data, size) 
+
+    using TStringView::copy;
+    /*
+     * WARN:
+     *  TBase::compare takes into account TCharTraits,
+     *  thus making it possible to implement case-insensitive string buffers,
+     *  if it is using TStringBase::compare
+     */
+    using TBase::compare;
+
+    /*
+     * WARN:
+     *  TBase::substr properly checks boundary cases and clamps them with maximum valid values,
+     *  while TStringView::substr throws std::out_of_range error.
+     */
+    using TBase::substr;
+
+    /*
+     * WARN:
+     *  Constructing std::string_view(nullptr, non_zero_size) ctor
+     *  results in undefined behavior according to the standard.
+     *  In libc++ this UB results in runtime assertion, though it is better
+     *  to generate compilation error instead.
+     */
+    constexpr inline TBasicStringBuf(std::nullptr_t begin, size_t size) = delete;
+
+    constexpr inline TBasicStringBuf(const TCharType* data, size_t size) noexcept
+        : TStringView(data, size)
     {
     }
 
-    constexpr TBasicStringBuf(const TCharType* data) noexcept 
-        /* 
-         * WARN: TBase::StrLen properly handles nullptr, 
-         * while std::string_view (using std::char_traits) will abort in such case 
-         */ 
-        : TStringView(data, TBase::StrLen(data)) 
+    constexpr TBasicStringBuf(const TCharType* data) noexcept
+        /*
+         * WARN: TBase::StrLen properly handles nullptr,
+         * while std::string_view (using std::char_traits) will abort in such case
+         */
+        : TStringView(data, TBase::StrLen(data))
     {
     }
 
     constexpr inline TBasicStringBuf(const TCharType* beg, const TCharType* end) noexcept
-        : TStringView(beg, end - beg) 
+        : TStringView(beg, end - beg)
     {
     }
 
     template <typename D, typename T>
-    inline TBasicStringBuf(const TStringBase<D, TCharType, T>& str) noexcept 
-        : TStringView(str.data(), str.size()) 
+    inline TBasicStringBuf(const TStringBase<D, TCharType, T>& str) noexcept
+        : TStringView(str.data(), str.size())
     {
     }
 
     template <typename T, typename A>
-    inline TBasicStringBuf(const std::basic_string<TCharType, T, A>& str) noexcept 
-        : TStringView(str) 
+    inline TBasicStringBuf(const std::basic_string<TCharType, T, A>& str) noexcept
+        : TStringView(str)
     {
     }
 
-    template <typename TCharTraits> 
-    constexpr TBasicStringBuf(std::basic_string_view<TCharType, TCharTraits> view) noexcept 
-        : TStringView(view) 
-    { 
-    } 
- 
+    template <typename TCharTraits>
+    constexpr TBasicStringBuf(std::basic_string_view<TCharType, TCharTraits> view) noexcept
+        : TStringView(view)
+    {
+    }
+
     constexpr inline TBasicStringBuf() noexcept {
-        /* 
-         * WARN: 
-         *  This ctor can not be defaulted due to the following feature of default initialization: 
-         *  If T is a const-qualified type, it must be a class type with a user-provided default constructor. 
-         *  (see https://en.cppreference.com/w/cpp/language/default_initialization). 
-         * 
-         *  This means, that a class with default ctor can not be a constant member of another class with default ctor. 
-         */ 
+        /*
+         * WARN:
+         *  This ctor can not be defaulted due to the following feature of default initialization:
+         *  If T is a const-qualified type, it must be a class type with a user-provided default constructor.
+         *  (see https://en.cppreference.com/w/cpp/language/default_initialization).
+         *
+         *  This means, that a class with default ctor can not be a constant member of another class with default ctor.
+         */
     }
 
     inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos, size_t n) noexcept
@@ -157,9 +157,9 @@ public:
     }
 
     Y_PURE_FUNCTION inline TBasicStringBuf SubString(size_t pos, size_t n) const noexcept {
-        pos = Min(pos, size()); 
-        n = Min(n, size() - pos); 
-        return TBasicStringBuf(data() + pos, n); 
+        pos = Min(pos, size());
+        n = Min(n, size() - pos);
+        return TBasicStringBuf(data() + pos, n);
     }
 
 public:
@@ -168,7 +168,7 @@ public:
     }
 
     constexpr bool IsInited() const noexcept {
-        return data() != nullptr; 
+        return data() != nullptr;
     }
 
 public:
@@ -183,7 +183,7 @@ public:
      * @param[out] r                    The second part of split result.
      * @returns                         Whether the split was actually performed.
      */
-    inline bool TrySplit(TCharType delim, TdSelf& l, TdSelf& r) const noexcept { 
+    inline bool TrySplit(TCharType delim, TdSelf& l, TdSelf& r) const noexcept {
         return TrySplitOn(TBase::find(delim), l, r);
     }
 
@@ -198,7 +198,7 @@ public:
      * @param[out] r                    The second part of split result.
      * @returns                         Whether the split was actually performed.
      */
-    inline bool TryRSplit(TCharType delim, TdSelf& l, TdSelf& r) const noexcept { 
+    inline bool TryRSplit(TCharType delim, TdSelf& l, TdSelf& r) const noexcept {
         return TrySplitOn(TBase::rfind(delim), l, r);
     }
 
@@ -232,11 +232,11 @@ public:
         return TrySplitOn(TBase::rfind(delim), l, r, delim.size());
     }
 
-    inline void Split(TCharType delim, TdSelf& l, TdSelf& r) const noexcept { 
+    inline void Split(TCharType delim, TdSelf& l, TdSelf& r) const noexcept {
         SplitTemplate(delim, l, r);
     }
 
-    inline void RSplit(TCharType delim, TdSelf& l, TdSelf& r) const noexcept { 
+    inline void RSplit(TCharType delim, TdSelf& l, TdSelf& r) const noexcept {
         RSplitTemplate(delim, l, r);
     }
 
@@ -262,7 +262,7 @@ private:
 public:
     // In all methods below with @pos parameter, @pos is supposed to be
     // a result of string find()/rfind()/find_first() or other similiar functions,
-    // returning either position within string length [0..size()) or npos. 
+    // returning either position within string length [0..size()) or npos.
     // For all other @pos values (out of string index range) the behaviour isn't well defined
     // For example, for TStringBuf s("abc"):
     // s.TrySplitOn(s.find('z'), ...) is false, but s.TrySplitOn(100500, ...) is true.
@@ -328,7 +328,7 @@ public:
 
     inline bool BeforeSuffix(const TdSelf& suffix, TdSelf& result) const noexcept {
         if (this->EndsWith(suffix)) {
-            result = Head(size() - suffix.size()); 
+            result = Head(size() - suffix.size());
             return true;
         }
         return false;
@@ -377,19 +377,19 @@ public:
 */
 
 public:
-    TdSelf SplitOff(TCharType delim) { 
+    TdSelf SplitOff(TCharType delim) {
         TdSelf tok;
         Split(delim, *this, tok);
         return tok;
     }
 
-    TdSelf RSplitOff(TCharType delim) { 
+    TdSelf RSplitOff(TCharType delim) {
         TdSelf tok;
         RSplit(delim, tok, *this);
         return tok;
     }
 
-    bool NextTok(TCharType delim, TdSelf& tok) { 
+    bool NextTok(TCharType delim, TdSelf& tok) {
         return NextTokTemplate(delim, tok);
     }
 
@@ -397,7 +397,7 @@ public:
         return NextTokTemplate(delim, tok);
     }
 
-    bool RNextTok(TCharType delim, TdSelf& tok) { 
+    bool RNextTok(TCharType delim, TdSelf& tok) {
         return RNextTokTemplate(delim, tok);
     }
 
@@ -408,7 +408,7 @@ public:
     bool ReadLine(TdSelf& tok) {
         if (NextTok('\n', tok)) {
             while (!tok.empty() && tok.back() == '\r') {
-                tok.remove_suffix(1); 
+                tok.remove_suffix(1);
             }
 
             return true;
@@ -417,11 +417,11 @@ public:
         return false;
     }
 
-    TdSelf NextTok(TCharType delim) { 
+    TdSelf NextTok(TCharType delim) {
         return NextTokTemplate(delim);
     }
 
-    TdSelf RNextTok(TCharType delim) { 
+    TdSelf RNextTok(TCharType delim) {
         return RNextTokTemplate(delim);
     }
 
@@ -436,28 +436,28 @@ public:
 public: // string subsequences
     /// Cut last @c shift characters (or less if length is less than @c shift)
     inline TdSelf& Chop(size_t shift) noexcept {
-        this->remove_suffix(std::min(shift, size())); 
+        this->remove_suffix(std::min(shift, size()));
         return *this;
     }
 
     /// Cut first @c shift characters (or less if length is less than @c shift)
     inline TdSelf& Skip(size_t shift) noexcept {
-        this->remove_prefix(std::min(shift, size())); 
+        this->remove_prefix(std::min(shift, size()));
         return *this;
     }
 
     /// Sets the start pointer to a position relative to the end
-    inline TdSelf& RSeek(size_t tailSize) noexcept { 
-        if (size() > tailSize) { 
-            //WARN: removing TStringView:: will lead to an infinite recursion 
-            *this = TStringView::substr(size() - tailSize, tailSize); 
+    inline TdSelf& RSeek(size_t tailSize) noexcept {
+        if (size() > tailSize) {
+            //WARN: removing TStringView:: will lead to an infinite recursion
+            *this = TStringView::substr(size() - tailSize, tailSize);
         }
 
         return *this;
     }
 
     // coverity[exn_spec_violation]
-    inline TdSelf& Trunc(size_t targetSize) noexcept { 
+    inline TdSelf& Trunc(size_t targetSize) noexcept {
         // Coverity false positive issue
         // exn_spec_violation: An exception of type "std::out_of_range" is thrown but the exception specification "noexcept" doesn't allow it to be thrown. This will result in a call to terminate().
         // fun_call_w_exception: Called function TStringView::substr throws an exception of type "std::out_of_range".
@@ -503,7 +503,7 @@ private:
 
     template <typename TDelimiterType>
     bool NextTokTemplate(TDelimiterType delim, TdSelf& tok) {
-        if (!empty()) { 
+        if (!empty()) {
             tok = NextTokTemplate(delim);
             return true;
         }
@@ -512,7 +512,7 @@ private:
 
     template <typename TDelimiterType>
     bool RNextTokTemplate(TDelimiterType delim, TdSelf& tok) {
-        if (!empty()) { 
+        if (!empty()) {
             tok = RNextTokTemplate(delim);
             return true;
         }

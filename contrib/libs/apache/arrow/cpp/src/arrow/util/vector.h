@@ -17,20 +17,20 @@
 
 #pragma once
 
-#include <algorithm> 
+#include <algorithm>
 #include <utility>
 #include <vector>
 
-#include "arrow/result.h" 
-#include "arrow/util/algorithm.h" 
-#include "arrow/util/functional.h" 
+#include "arrow/result.h"
+#include "arrow/util/algorithm.h"
+#include "arrow/util/functional.h"
 #include "arrow/util/logging.h"
 
 namespace arrow {
 namespace internal {
 
 template <typename T>
-std::vector<T> DeleteVectorElement(const std::vector<T>& values, size_t index) { 
+std::vector<T> DeleteVectorElement(const std::vector<T>& values, size_t index) {
   DCHECK(!values.empty());
   DCHECK_LT(index, values.size());
   std::vector<T> out;
@@ -45,8 +45,8 @@ std::vector<T> DeleteVectorElement(const std::vector<T>& values, size_t index) {
 }
 
 template <typename T>
-std::vector<T> AddVectorElement(const std::vector<T>& values, size_t index, 
-                                T new_element) { 
+std::vector<T> AddVectorElement(const std::vector<T>& values, size_t index,
+                                T new_element) {
   DCHECK_LE(index, values.size());
   std::vector<T> out;
   out.reserve(values.size() + 1);
@@ -61,8 +61,8 @@ std::vector<T> AddVectorElement(const std::vector<T>& values, size_t index,
 }
 
 template <typename T>
-std::vector<T> ReplaceVectorElement(const std::vector<T>& values, size_t index, 
-                                    T new_element) { 
+std::vector<T> ReplaceVectorElement(const std::vector<T>& values, size_t index,
+                                    T new_element) {
   DCHECK_LE(index, values.size());
   std::vector<T> out;
   out.reserve(values.size());
@@ -76,97 +76,97 @@ std::vector<T> ReplaceVectorElement(const std::vector<T>& values, size_t index,
   return out;
 }
 
-template <typename T, typename Predicate> 
-std::vector<T> FilterVector(std::vector<T> values, Predicate&& predicate) { 
-  auto new_end = 
-      std::remove_if(values.begin(), values.end(), std::forward<Predicate>(predicate)); 
-  values.erase(new_end, values.end()); 
-  return values; 
-} 
- 
-template <typename Fn, typename From, 
-          typename To = decltype(std::declval<Fn>()(std::declval<From>()))> 
-std::vector<To> MapVector(Fn&& map, const std::vector<From>& source) { 
-  std::vector<To> out; 
-  out.reserve(source.size()); 
-  std::transform(source.begin(), source.end(), std::back_inserter(out), 
-                 std::forward<Fn>(map)); 
-  return out; 
-} 
- 
-template <typename Fn, typename From, 
-          typename To = decltype(std::declval<Fn>()(std::declval<From>()))> 
-std::vector<To> MapVector(Fn&& map, std::vector<From>&& source) { 
-  std::vector<To> out; 
-  out.reserve(source.size()); 
-  std::transform(std::make_move_iterator(source.begin()), 
-                 std::make_move_iterator(source.end()), std::back_inserter(out), 
-                 std::forward<Fn>(map)); 
-  return out; 
-} 
- 
-/// \brief Like MapVector, but where the function can fail. 
-template <typename Fn, typename From = internal::call_traits::argument_type<0, Fn>, 
-          typename To = typename internal::call_traits::return_type<Fn>::ValueType> 
-Result<std::vector<To>> MaybeMapVector(Fn&& map, const std::vector<From>& source) { 
-  std::vector<To> out; 
-  out.reserve(source.size()); 
-  ARROW_RETURN_NOT_OK(MaybeTransform(source.begin(), source.end(), 
-                                     std::back_inserter(out), std::forward<Fn>(map))); 
-  return std::move(out); 
-} 
- 
-template <typename Fn, typename From = internal::call_traits::argument_type<0, Fn>, 
-          typename To = typename internal::call_traits::return_type<Fn>::ValueType> 
-Result<std::vector<To>> MaybeMapVector(Fn&& map, std::vector<From>&& source) { 
-  std::vector<To> out; 
-  out.reserve(source.size()); 
-  ARROW_RETURN_NOT_OK(MaybeTransform(std::make_move_iterator(source.begin()), 
-                                     std::make_move_iterator(source.end()), 
-                                     std::back_inserter(out), std::forward<Fn>(map))); 
-  return std::move(out); 
-} 
- 
-template <typename T> 
-std::vector<T> FlattenVectors(const std::vector<std::vector<T>>& vecs) { 
-  std::size_t sum = 0; 
-  for (const auto& vec : vecs) { 
-    sum += vec.size(); 
-  } 
-  std::vector<T> out; 
-  out.reserve(sum); 
-  for (const auto& vec : vecs) { 
-    out.insert(out.end(), vec.begin(), vec.end()); 
-  } 
-  return out; 
-} 
- 
-template <typename T> 
-Result<std::vector<T>> UnwrapOrRaise(std::vector<Result<T>>&& results) { 
-  std::vector<T> out; 
-  out.reserve(results.size()); 
-  auto end = std::make_move_iterator(results.end()); 
-  for (auto it = std::make_move_iterator(results.begin()); it != end; it++) { 
-    if (!it->ok()) { 
-      return it->status(); 
-    } 
-    out.push_back(it->MoveValueUnsafe()); 
-  } 
-  return std::move(out); 
-} 
- 
-template <typename T> 
-Result<std::vector<T>> UnwrapOrRaise(const std::vector<Result<T>>& results) { 
-  std::vector<T> out; 
-  out.reserve(results.size()); 
-  for (const auto& result : results) { 
-    if (!result.ok()) { 
-      return result.status(); 
-    } 
-    out.push_back(result.ValueUnsafe()); 
-  } 
-  return std::move(out); 
-} 
- 
+template <typename T, typename Predicate>
+std::vector<T> FilterVector(std::vector<T> values, Predicate&& predicate) {
+  auto new_end =
+      std::remove_if(values.begin(), values.end(), std::forward<Predicate>(predicate));
+  values.erase(new_end, values.end());
+  return values;
+}
+
+template <typename Fn, typename From,
+          typename To = decltype(std::declval<Fn>()(std::declval<From>()))>
+std::vector<To> MapVector(Fn&& map, const std::vector<From>& source) {
+  std::vector<To> out;
+  out.reserve(source.size());
+  std::transform(source.begin(), source.end(), std::back_inserter(out),
+                 std::forward<Fn>(map));
+  return out;
+}
+
+template <typename Fn, typename From,
+          typename To = decltype(std::declval<Fn>()(std::declval<From>()))>
+std::vector<To> MapVector(Fn&& map, std::vector<From>&& source) {
+  std::vector<To> out;
+  out.reserve(source.size());
+  std::transform(std::make_move_iterator(source.begin()),
+                 std::make_move_iterator(source.end()), std::back_inserter(out),
+                 std::forward<Fn>(map));
+  return out;
+}
+
+/// \brief Like MapVector, but where the function can fail.
+template <typename Fn, typename From = internal::call_traits::argument_type<0, Fn>,
+          typename To = typename internal::call_traits::return_type<Fn>::ValueType>
+Result<std::vector<To>> MaybeMapVector(Fn&& map, const std::vector<From>& source) {
+  std::vector<To> out;
+  out.reserve(source.size());
+  ARROW_RETURN_NOT_OK(MaybeTransform(source.begin(), source.end(),
+                                     std::back_inserter(out), std::forward<Fn>(map)));
+  return std::move(out);
+}
+
+template <typename Fn, typename From = internal::call_traits::argument_type<0, Fn>,
+          typename To = typename internal::call_traits::return_type<Fn>::ValueType>
+Result<std::vector<To>> MaybeMapVector(Fn&& map, std::vector<From>&& source) {
+  std::vector<To> out;
+  out.reserve(source.size());
+  ARROW_RETURN_NOT_OK(MaybeTransform(std::make_move_iterator(source.begin()),
+                                     std::make_move_iterator(source.end()),
+                                     std::back_inserter(out), std::forward<Fn>(map)));
+  return std::move(out);
+}
+
+template <typename T>
+std::vector<T> FlattenVectors(const std::vector<std::vector<T>>& vecs) {
+  std::size_t sum = 0;
+  for (const auto& vec : vecs) {
+    sum += vec.size();
+  }
+  std::vector<T> out;
+  out.reserve(sum);
+  for (const auto& vec : vecs) {
+    out.insert(out.end(), vec.begin(), vec.end());
+  }
+  return out;
+}
+
+template <typename T>
+Result<std::vector<T>> UnwrapOrRaise(std::vector<Result<T>>&& results) {
+  std::vector<T> out;
+  out.reserve(results.size());
+  auto end = std::make_move_iterator(results.end());
+  for (auto it = std::make_move_iterator(results.begin()); it != end; it++) {
+    if (!it->ok()) {
+      return it->status();
+    }
+    out.push_back(it->MoveValueUnsafe());
+  }
+  return std::move(out);
+}
+
+template <typename T>
+Result<std::vector<T>> UnwrapOrRaise(const std::vector<Result<T>>& results) {
+  std::vector<T> out;
+  out.reserve(results.size());
+  for (const auto& result : results) {
+    if (!result.ok()) {
+      return result.status();
+    }
+    out.push_back(result.ValueUnsafe());
+  }
+  return std::move(out);
+}
+
 }  // namespace internal
 }  // namespace arrow

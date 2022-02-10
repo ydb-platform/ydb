@@ -191,7 +191,7 @@ namespace boost { namespace spirit { namespace iterator_policies
             result_type curtok;
 
             // silence MSVC warning C4512: assignment operator could not be generated
-            BOOST_DELETED_FUNCTION(shared& operator= (shared const&)); 
+            BOOST_DELETED_FUNCTION(shared& operator= (shared const&));
         };
     };
 

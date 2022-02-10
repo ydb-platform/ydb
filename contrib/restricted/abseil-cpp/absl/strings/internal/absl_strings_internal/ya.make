@@ -2,8 +2,8 @@
 
 LIBRARY()
 
-WITHOUT_LICENSE_TEXTS() 
- 
+WITHOUT_LICENSE_TEXTS()
+
 OWNER(g:cpp-contrib)
 
 LICENSE(Apache-2.0)
@@ -27,8 +27,8 @@ CFLAGS(
     -DNOMINMAX
 )
 
-SRCDIR(contrib/restricted/abseil-cpp/absl/strings/internal) 
- 
+SRCDIR(contrib/restricted/abseil-cpp/absl/strings/internal)
+
 SRCS(
     escaping.cc
     ostringstream.cc

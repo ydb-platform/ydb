@@ -283,7 +283,7 @@ private:
 };
 
 #define CHECK_EXPECTED(read, expected) \
-    YQL_ENSURE(read == expected, "Expected char: " << TString(1, expected).Quote() << ", but read: " << TString(1, read).Quote()); 
+    YQL_ENSURE(read == expected, "Expected char: " << TString(1, expected).Quote() << ", but read: " << TString(1, read).Quote());
 
 #define EXPECTED(buf, expected) \
     { char read = buf.Read(); CHECK_EXPECTED(read, expected); }

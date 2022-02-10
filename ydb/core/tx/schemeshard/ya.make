@@ -247,7 +247,7 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
-IF (OS_WINDOWS) 
+IF (OS_WINDOWS)
     SRCS(
         schemeshard_import_scheme_getter_fallback.cpp
     )

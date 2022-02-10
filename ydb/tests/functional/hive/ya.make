@@ -15,7 +15,7 @@ REQUIREMENTS(
     ram:16
 )
 
-IF (SANITIZER_TYPE == "thread") 
+IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1200)
     SIZE(LARGE)
     TAG(ya:fat)

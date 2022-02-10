@@ -1,6 +1,6 @@
 #pragma once
 
-#include <google/protobuf/message.h> 
+#include <google/protobuf/message.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <grpc++/server_context.h>

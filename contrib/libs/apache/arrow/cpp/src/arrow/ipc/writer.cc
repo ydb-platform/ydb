@@ -49,7 +49,7 @@
 #include "arrow/util/bitmap_ops.h"
 #include "arrow/util/checked_cast.h"
 #include "arrow/util/compression.h"
-#include "arrow/util/endian.h" 
+#include "arrow/util/endian.h"
 #include "arrow/util/key_value_metadata.h"
 #include "arrow/util/logging.h"
 #include "arrow/util/make_unique.h"
@@ -70,18 +70,18 @@ using internal::kArrowMagicBytes;
 
 namespace {
 
-bool HasNestedDict(const ArrayData& data) { 
-  if (data.type->id() == Type::DICTIONARY) { 
-    return true; 
-  } 
-  for (const auto& child : data.child_data) { 
-    if (HasNestedDict(*child)) { 
-      return true; 
-    } 
-  } 
-  return false; 
-} 
- 
+bool HasNestedDict(const ArrayData& data) {
+  if (data.type->id() == Type::DICTIONARY) {
+    return true;
+  }
+  for (const auto& child : data.child_data) {
+    if (HasNestedDict(*child)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 Status GetTruncatedBitmap(int64_t offset, int64_t length,
                           const std::shared_ptr<Buffer> input, MemoryPool* pool,
                           std::shared_ptr<Buffer>* buffer) {
@@ -557,7 +557,7 @@ class DictionarySerializer : public RecordBatchSerializer {
   Status Assemble(const std::shared_ptr<Array>& dictionary) {
     // Make a dummy record batch. A bit tedious as we have to make a schema
     auto schema = arrow::schema({arrow::field("dictionary", dictionary->type())});
-    auto batch = RecordBatch::Make(std::move(schema), dictionary->length(), {dictionary}); 
+    auto batch = RecordBatch::Make(std::move(schema), dictionary->length(), {dictionary});
     return RecordBatchSerializer::Assemble(*batch);
   }
 
@@ -997,21 +997,21 @@ class ARROW_EXPORT IpcFormatWriter : public RecordBatchWriter {
 
     IpcPayload payload;
     RETURN_NOT_OK(GetRecordBatchPayload(batch, options_, &payload));
-    RETURN_NOT_OK(WritePayload(payload)); 
-    ++stats_.num_record_batches; 
-    return Status::OK(); 
+    RETURN_NOT_OK(WritePayload(payload));
+    ++stats_.num_record_batches;
+    return Status::OK();
   }
 
-  Status WriteTable(const Table& table, int64_t max_chunksize) override { 
-    if (is_file_format_ && options_.unify_dictionaries) { 
-      ARROW_ASSIGN_OR_RAISE(auto unified_table, 
-                            DictionaryUnifier::UnifyTable(table, options_.memory_pool)); 
-      return RecordBatchWriter::WriteTable(*unified_table, max_chunksize); 
-    } else { 
-      return RecordBatchWriter::WriteTable(table, max_chunksize); 
-    } 
-  } 
- 
+  Status WriteTable(const Table& table, int64_t max_chunksize) override {
+    if (is_file_format_ && options_.unify_dictionaries) {
+      ARROW_ASSIGN_OR_RAISE(auto unified_table,
+                            DictionaryUnifier::UnifyTable(table, options_.memory_pool));
+      return RecordBatchWriter::WriteTable(*unified_table, max_chunksize);
+    } else {
+      return RecordBatchWriter::WriteTable(table, max_chunksize);
+    }
+  }
+
   Status Close() override {
     RETURN_NOT_OK(CheckStarted());
     return payload_writer_->Close();
@@ -1023,11 +1023,11 @@ class ARROW_EXPORT IpcFormatWriter : public RecordBatchWriter {
 
     IpcPayload payload;
     RETURN_NOT_OK(GetSchemaPayload(schema_, options_, mapper_, &payload));
-    return WritePayload(payload); 
+    return WritePayload(payload);
   }
 
-  WriteStats stats() const override { return stats_; } 
- 
+  WriteStats stats() const override { return stats_; }
+
  protected:
   Status CheckStarted() {
     if (!started_) {
@@ -1038,7 +1038,7 @@ class ARROW_EXPORT IpcFormatWriter : public RecordBatchWriter {
 
   Status WriteDictionaries(const RecordBatch& batch) {
     ARROW_ASSIGN_OR_RAISE(const auto dictionaries, CollectDictionaries(batch, mapper_));
-    const auto equal_options = EqualOptions().nans_equal(true); 
+    const auto equal_options = EqualOptions().nans_equal(true);
 
     for (const auto& pair : dictionaries) {
       int64_t dictionary_id = pair.first;
@@ -1047,57 +1047,57 @@ class ARROW_EXPORT IpcFormatWriter : public RecordBatchWriter {
       // If a dictionary with this id was already emitted, check if it was the same.
       auto* last_dictionary = &last_dictionaries_[dictionary_id];
       const bool dictionary_exists = (*last_dictionary != nullptr);
-      int64_t delta_start = 0; 
+      int64_t delta_start = 0;
       if (dictionary_exists) {
         if ((*last_dictionary)->data() == dictionary->data()) {
           // Fast shortcut for a common case.
           // Same dictionary data by pointer => no need to emit it again
           continue;
         }
-        const int64_t last_length = (*last_dictionary)->length(); 
-        const int64_t new_length = dictionary->length(); 
-        if (new_length == last_length && 
-            ((*last_dictionary)->Equals(dictionary, equal_options))) { 
+        const int64_t last_length = (*last_dictionary)->length();
+        const int64_t new_length = dictionary->length();
+        if (new_length == last_length &&
+            ((*last_dictionary)->Equals(dictionary, equal_options))) {
           // Same dictionary by value => no need to emit it again
           // (while this can have a CPU cost, this code path is required
           //  for the IPC file format)
           continue;
         }
-        if (is_file_format_) { 
-          return Status::Invalid( 
-              "Dictionary replacement detected when writing IPC file format. " 
-              "Arrow IPC files only support a single dictionary for a given field " 
-              "across all batches."); 
-        } 
- 
-        // (the read path doesn't support outer dictionary deltas, don't emit them) 
-        if (new_length > last_length && options_.emit_dictionary_deltas && 
-            !HasNestedDict(*dictionary->data()) && 
-            ((*last_dictionary) 
-                 ->RangeEquals(dictionary, 0, last_length, 0, equal_options))) { 
-          // New dictionary starts with the current dictionary 
-          delta_start = last_length; 
-        } 
+        if (is_file_format_) {
+          return Status::Invalid(
+              "Dictionary replacement detected when writing IPC file format. "
+              "Arrow IPC files only support a single dictionary for a given field "
+              "across all batches.");
+        }
+
+        // (the read path doesn't support outer dictionary deltas, don't emit them)
+        if (new_length > last_length && options_.emit_dictionary_deltas &&
+            !HasNestedDict(*dictionary->data()) &&
+            ((*last_dictionary)
+                 ->RangeEquals(dictionary, 0, last_length, 0, equal_options))) {
+          // New dictionary starts with the current dictionary
+          delta_start = last_length;
+        }
       }
 
-      IpcPayload payload; 
-      if (delta_start) { 
-        RETURN_NOT_OK(GetDictionaryPayload(dictionary_id, /*is_delta=*/true, 
-                                           dictionary->Slice(delta_start), options_, 
-                                           &payload)); 
-      } else { 
-        RETURN_NOT_OK( 
-            GetDictionaryPayload(dictionary_id, dictionary, options_, &payload)); 
+      IpcPayload payload;
+      if (delta_start) {
+        RETURN_NOT_OK(GetDictionaryPayload(dictionary_id, /*is_delta=*/true,
+                                           dictionary->Slice(delta_start), options_,
+                                           &payload));
+      } else {
+        RETURN_NOT_OK(
+            GetDictionaryPayload(dictionary_id, dictionary, options_, &payload));
       }
-      RETURN_NOT_OK(WritePayload(payload)); 
-      ++stats_.num_dictionary_batches; 
-      if (dictionary_exists) { 
-        if (delta_start) { 
-          ++stats_.num_dictionary_deltas; 
-        } else { 
-          ++stats_.num_replaced_dictionaries; 
-        } 
-      } 
+      RETURN_NOT_OK(WritePayload(payload));
+      ++stats_.num_dictionary_batches;
+      if (dictionary_exists) {
+        if (delta_start) {
+          ++stats_.num_dictionary_deltas;
+        } else {
+          ++stats_.num_replaced_dictionaries;
+        }
+      }
 
       // Remember dictionary for next batches
       *last_dictionary = dictionary;
@@ -1105,12 +1105,12 @@ class ARROW_EXPORT IpcFormatWriter : public RecordBatchWriter {
     return Status::OK();
   }
 
-  Status WritePayload(const IpcPayload& payload) { 
-    RETURN_NOT_OK(payload_writer_->WritePayload(payload)); 
-    ++stats_.num_messages; 
-    return Status::OK(); 
-  } 
- 
+  Status WritePayload(const IpcPayload& payload) {
+    RETURN_NOT_OK(payload_writer_->WritePayload(payload));
+    ++stats_.num_messages;
+    return Status::OK();
+  }
+
   std::unique_ptr<IpcPayloadWriter> payload_writer_;
   std::shared_ptr<Schema> shared_schema_;
   const Schema& schema_;
@@ -1126,7 +1126,7 @@ class ARROW_EXPORT IpcFormatWriter : public RecordBatchWriter {
 
   bool started_ = false;
   IpcWriteOptions options_;
-  WriteStats stats_; 
+  WriteStats stats_;
 };
 
 class StreamBookKeeper {

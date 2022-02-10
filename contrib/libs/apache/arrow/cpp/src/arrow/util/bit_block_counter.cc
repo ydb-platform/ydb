@@ -27,7 +27,7 @@
 namespace arrow {
 namespace internal {
 
-BitBlockCount BitBlockCounter::GetBlockSlow(int64_t block_size) noexcept { 
+BitBlockCount BitBlockCounter::GetBlockSlow(int64_t block_size) noexcept {
   const int16_t run_length = static_cast<int16_t>(std::min(bits_remaining_, block_size));
   int16_t popcount = static_cast<int16_t>(CountSetBits(bitmap_, offset_, run_length));
   bits_remaining_ -= run_length;
@@ -37,11 +37,11 @@ BitBlockCount BitBlockCounter::GetBlockSlow(int64_t block_size) noexcept {
   return {run_length, popcount};
 }
 
-// Prevent pointer arithmetic on nullptr, which is undefined behavior even if the pointer 
-// is never dereferenced. 
-inline const uint8_t* EnsureNotNull(const uint8_t* ptr) { 
-  static const uint8_t byte{}; 
-  return ptr == nullptr ? &byte : ptr; 
+// Prevent pointer arithmetic on nullptr, which is undefined behavior even if the pointer
+// is never dereferenced.
+inline const uint8_t* EnsureNotNull(const uint8_t* ptr) {
+  static const uint8_t byte{};
+  return ptr == nullptr ? &byte : ptr;
 }
 
 OptionalBitBlockCounter::OptionalBitBlockCounter(const uint8_t* validity_bitmap,
@@ -49,7 +49,7 @@ OptionalBitBlockCounter::OptionalBitBlockCounter(const uint8_t* validity_bitmap,
     : has_bitmap_(validity_bitmap != nullptr),
       position_(0),
       length_(length),
-      counter_(EnsureNotNull(validity_bitmap), offset, length) {} 
+      counter_(EnsureNotNull(validity_bitmap), offset, length) {}
 
 OptionalBitBlockCounter::OptionalBitBlockCounter(
     const std::shared_ptr<Buffer>& validity_bitmap, int64_t offset, int64_t length)
@@ -64,10 +64,10 @@ OptionalBinaryBitBlockCounter::OptionalBinaryBitBlockCounter(const uint8_t* left
     : has_bitmap_(HasBitmapFromBitmaps(left_bitmap != nullptr, right_bitmap != nullptr)),
       position_(0),
       length_(length),
-      unary_counter_(EnsureNotNull(left_bitmap != nullptr ? left_bitmap : right_bitmap), 
+      unary_counter_(EnsureNotNull(left_bitmap != nullptr ? left_bitmap : right_bitmap),
                      left_bitmap != nullptr ? left_offset : right_offset, length),
-      binary_counter_(EnsureNotNull(left_bitmap), left_offset, 
-                      EnsureNotNull(right_bitmap), right_offset, length) {} 
+      binary_counter_(EnsureNotNull(left_bitmap), left_offset,
+                      EnsureNotNull(right_bitmap), right_offset, length) {}
 
 OptionalBinaryBitBlockCounter::OptionalBinaryBitBlockCounter(
     const std::shared_ptr<Buffer>& left_bitmap, int64_t left_offset,

@@ -35,77 +35,77 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_CPP_MESSAGE_H__
 #define GOOGLE_PROTOBUF_COMPILER_CPP_MESSAGE_H__
 
-#include <cstdint> 
+#include <cstdint>
 #include <memory>
 #include <set>
-#include <string> 
- 
-#include <google/protobuf/compiler/cpp/cpp_field.h> 
-#include <google/protobuf/compiler/cpp/cpp_helpers.h> 
-#include <google/protobuf/compiler/cpp/cpp_message_layout_helper.h> 
-#include <google/protobuf/compiler/cpp/cpp_options.h> 
-#include <google/protobuf/compiler/cpp/cpp_parse_function_generator.h> 
+#include <string>
+
+#include <google/protobuf/compiler/cpp/cpp_field.h>
+#include <google/protobuf/compiler/cpp/cpp_helpers.h>
+#include <google/protobuf/compiler/cpp/cpp_message_layout_helper.h>
+#include <google/protobuf/compiler/cpp/cpp_options.h>
+#include <google/protobuf/compiler/cpp/cpp_parse_function_generator.h>
 
 namespace google {
 namespace protobuf {
-namespace io { 
-class Printer;  // printer.h 
+namespace io {
+class Printer;  // printer.h
 }
-}  // namespace protobuf 
-}  // namespace google 
+}  // namespace protobuf
+}  // namespace google
 
-namespace google { 
+namespace google {
 namespace protobuf {
 namespace compiler {
 namespace cpp {
 
-class EnumGenerator;       // enum.h 
-class ExtensionGenerator;  // extension.h 
+class EnumGenerator;       // enum.h
+class ExtensionGenerator;  // extension.h
 
 class MessageGenerator {
  public:
   // See generator.cc for the meaning of dllexport_decl.
-  MessageGenerator(const Descriptor* descriptor, 
-                   const std::map<TProtoStringType, TProtoStringType>& vars, 
-                   int index_in_file_messages, const Options& options, 
-                   MessageSCCAnalyzer* scc_analyzer); 
+  MessageGenerator(const Descriptor* descriptor,
+                   const std::map<TProtoStringType, TProtoStringType>& vars,
+                   int index_in_file_messages, const Options& options,
+                   MessageSCCAnalyzer* scc_analyzer);
   ~MessageGenerator();
 
   // Append the two types of nested generators to the corresponding vector.
-  void AddGenerators( 
-      std::vector<std::unique_ptr<EnumGenerator>>* enum_generators, 
-      std::vector<std::unique_ptr<ExtensionGenerator>>* extension_generators); 
+  void AddGenerators(
+      std::vector<std::unique_ptr<EnumGenerator>>* enum_generators,
+      std::vector<std::unique_ptr<ExtensionGenerator>>* extension_generators);
 
   // Generate definitions for this class and all its nested types.
   void GenerateClassDefinition(io::Printer* printer);
 
   // Generate definitions of inline methods (placed at the end of the header
   // file).
-  void GenerateInlineMethods(io::Printer* printer); 
+  void GenerateInlineMethods(io::Printer* printer);
 
   // Source file stuff.
 
   // Generate all non-inline methods for this class.
   void GenerateClassMethods(io::Printer* printer);
 
-  // Generate source file code that should go outside any namespace. 
-  void GenerateSourceInProto2Namespace(io::Printer* printer); 
- 
+  // Generate source file code that should go outside any namespace.
+  void GenerateSourceInProto2Namespace(io::Printer* printer);
+
  private:
   // Generate declarations and definitions of accessors for fields.
   void GenerateFieldAccessorDeclarations(io::Printer* printer);
-  void GenerateFieldAccessorDefinitions(io::Printer* printer); 
+  void GenerateFieldAccessorDefinitions(io::Printer* printer);
 
   // Generate the table-driven parsing array.  Returns the number of entries
   // generated.
   size_t GenerateParseOffsets(io::Printer* printer);
   size_t GenerateParseAuxTable(io::Printer* printer);
-  // Generates a ParseTable entry.  Returns whether the proto uses 
-  // table-driven parsing. 
+  // Generates a ParseTable entry.  Returns whether the proto uses
+  // table-driven parsing.
   bool GenerateParseTable(io::Printer* printer, size_t offset,
                           size_t aux_offset);
 
-  // Generate the field offsets array.  Returns the a pair of the total number 
+  // Generate the field offsets array.  Returns the a pair of the total number
   // of entries generated and the index of the first has_bit entry.
   std::pair<size_t, size_t> GenerateOffsets(io::Printer* printer);
   void GenerateSchema(io::Printer* printer, int offset, int has_offset);
@@ -127,20 +127,20 @@ class MessageGenerator {
   // Generate the arena-specific destructor code.
   void GenerateArenaDestructorCode(io::Printer* printer);
 
-  // Generate the constexpr constructor for constant initialization of the 
-  // default instance. 
-  void GenerateConstexprConstructor(io::Printer* printer); 
+  // Generate the constexpr constructor for constant initialization of the
+  // default instance.
+  void GenerateConstexprConstructor(io::Printer* printer);
 
   // Generate standard Message methods.
   void GenerateClear(io::Printer* printer);
   void GenerateOneofClear(io::Printer* printer);
   void GenerateSerializeWithCachedSizes(io::Printer* printer);
   void GenerateSerializeWithCachedSizesToArray(io::Printer* printer);
-  void GenerateSerializeWithCachedSizesBody(io::Printer* printer); 
-  void GenerateSerializeWithCachedSizesBodyShuffled(io::Printer* printer); 
+  void GenerateSerializeWithCachedSizesBody(io::Printer* printer);
+  void GenerateSerializeWithCachedSizesBodyShuffled(io::Printer* printer);
   void GenerateByteSize(io::Printer* printer);
   void GenerateMergeFrom(io::Printer* printer);
-  void GenerateClassSpecificMergeFrom(io::Printer* printer); 
+  void GenerateClassSpecificMergeFrom(io::Printer* printer);
   void GenerateCopyFrom(io::Printer* printer);
   void GenerateSwap(io::Printer* printer);
   void GenerateIsInitialized(io::Printer* printer);
@@ -156,60 +156,60 @@ class MessageGenerator {
   // Generate a switch statement to serialize 2+ fields from the same oneof.
   // Or, if fields.size() == 1, just call GenerateSerializeOneField().
   void GenerateSerializeOneofFields(
-      io::Printer* printer, const std::vector<const FieldDescriptor*>& fields); 
+      io::Printer* printer, const std::vector<const FieldDescriptor*>& fields);
   void GenerateSerializeOneExtensionRange(
-      io::Printer* printer, const Descriptor::ExtensionRange* range); 
+      io::Printer* printer, const Descriptor::ExtensionRange* range);
 
   // Generates has_foo() functions and variables for singular field has-bits.
   void GenerateSingularFieldHasBits(const FieldDescriptor* field,
-                                    Formatter format); 
+                                    Formatter format);
   // Generates has_foo() functions and variables for oneof field has-bits.
-  void GenerateOneofHasBits(io::Printer* printer); 
+  void GenerateOneofHasBits(io::Printer* printer);
   // Generates has_foo_bar() functions for oneof members.
   void GenerateOneofMemberHasBits(const FieldDescriptor* field,
-                                  const Formatter& format); 
+                                  const Formatter& format);
   // Generates the clear_foo() method for a field.
-  void GenerateFieldClear(const FieldDescriptor* field, bool is_inline, 
-                          Formatter format); 
+  void GenerateFieldClear(const FieldDescriptor* field, bool is_inline,
+                          Formatter format);
 
   void GenerateConstructorBody(io::Printer* printer,
                                std::vector<bool> already_processed,
                                bool copy_constructor) const;
 
   size_t HasBitsSize() const;
-  int HasBitIndex(const FieldDescriptor* a) const; 
-  int HasByteIndex(const FieldDescriptor* a) const; 
-  int HasWordIndex(const FieldDescriptor* a) const; 
-  bool SameHasByte(const FieldDescriptor* a, const FieldDescriptor* b) const; 
-  std::vector<uint32_t> RequiredFieldsBitMask() const; 
+  int HasBitIndex(const FieldDescriptor* a) const;
+  int HasByteIndex(const FieldDescriptor* a) const;
+  int HasWordIndex(const FieldDescriptor* a) const;
+  bool SameHasByte(const FieldDescriptor* a, const FieldDescriptor* b) const;
+  std::vector<uint32_t> RequiredFieldsBitMask() const;
 
   const Descriptor* descriptor_;
-  int index_in_file_messages_; 
-  TProtoStringType classname_; 
+  int index_in_file_messages_;
+  TProtoStringType classname_;
   Options options_;
   FieldGeneratorMap field_generators_;
-  // optimized_order_ is the order we layout the message's fields in the 
-  // class. This is reused to initialize the fields in-order for cache 
-  // efficiency. 
+  // optimized_order_ is the order we layout the message's fields in the
+  // class. This is reused to initialize the fields in-order for cache
+  // efficiency.
   //
   // optimized_order_ excludes oneof fields and weak fields.
-  std::vector<const FieldDescriptor*> optimized_order_; 
+  std::vector<const FieldDescriptor*> optimized_order_;
   std::vector<int> has_bit_indices_;
   int max_has_bit_index_;
-  std::vector<const EnumGenerator*> enum_generators_; 
-  std::vector<const ExtensionGenerator*> extension_generators_; 
+  std::vector<const EnumGenerator*> enum_generators_;
+  std::vector<const ExtensionGenerator*> extension_generators_;
   int num_required_fields_;
   int num_weak_fields_;
   // table_driven_ indicates the generated message uses table-driven parsing.
   bool table_driven_;
 
-  std::unique_ptr<MessageLayoutHelper> message_layout_helper_; 
-  std::unique_ptr<ParseFunctionGenerator> parse_function_generator_; 
+  std::unique_ptr<MessageLayoutHelper> message_layout_helper_;
+  std::unique_ptr<ParseFunctionGenerator> parse_function_generator_;
 
-  MessageSCCAnalyzer* scc_analyzer_; 
+  MessageSCCAnalyzer* scc_analyzer_;
 
-  std::map<TProtoStringType, TProtoStringType> variables_; 
- 
+  std::map<TProtoStringType, TProtoStringType> variables_;
+
   friend class FileGenerator;
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(MessageGenerator);
 };
@@ -217,6 +217,6 @@ class MessageGenerator {
 }  // namespace cpp
 }  // namespace compiler
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
 #endif  // GOOGLE_PROTOBUF_COMPILER_CPP_MESSAGE_H__

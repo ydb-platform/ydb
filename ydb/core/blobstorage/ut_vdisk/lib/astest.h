@@ -71,16 +71,16 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     TIntrusivePtr<NActors::NLog::TSettings> logSettings;
     logSettings.Reset(new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER, NActors::NLog::PRI_ERROR,
                                                    NActors::NLog::PRI_DEBUG, 0)); // NOTICE
-    logSettings->Append( 
-        NActorsServices::EServiceCommon_MIN, 
-        NActorsServices::EServiceCommon_MAX, 
-        NActorsServices::EServiceCommon_Name 
-    ); 
-    logSettings->Append( 
-        NKikimrServices::EServiceKikimr_MIN, 
-        NKikimrServices::EServiceKikimr_MAX, 
-        NKikimrServices::EServiceKikimr_Name 
-    ); 
+    logSettings->Append(
+        NActorsServices::EServiceCommon_MIN,
+        NActorsServices::EServiceCommon_MAX,
+        NActorsServices::EServiceCommon_Name
+    );
+    logSettings->Append(
+        NKikimrServices::EServiceKikimr_MIN,
+        NKikimrServices::EServiceKikimr_MAX,
+        NKikimrServices::EServiceKikimr_Name
+    );
     TString explanation;
     //logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_SKELETON, explanation);
     //logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, explan

@@ -38,25 +38,25 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_CODE_GENERATOR_H__
 #define GOOGLE_PROTOBUF_COMPILER_CODE_GENERATOR_H__
 
-#include <string> 
-#include <utility> 
+#include <string>
+#include <utility>
 #include <vector>
-#include <google/protobuf/stubs/common.h> 
+#include <google/protobuf/stubs/common.h>
 
-#include <google/protobuf/port_def.inc> 
- 
+#include <google/protobuf/port_def.inc>
+
 namespace google {
 namespace protobuf {
 
-namespace io { 
-class ZeroCopyOutputStream; 
-} 
+namespace io {
+class ZeroCopyOutputStream;
+}
 class FileDescriptor;
-class GeneratedCodeInfo; 
+class GeneratedCodeInfo;
 
 namespace compiler {
 class AccessInfoMap;
- 
+
 class Version;
 
 // Defined in this file.
@@ -66,7 +66,7 @@ class GeneratorContext;
 // The abstract interface to a class which generates code implementing a
 // particular proto file in a particular language.  A number of these may
 // be registered with CommandLineInterface to support various languages.
-class PROTOC_EXPORT CodeGenerator { 
+class PROTOC_EXPORT CodeGenerator {
  public:
   inline CodeGenerator() {}
   virtual ~CodeGenerator();
@@ -83,9 +83,9 @@ class PROTOC_EXPORT CodeGenerator {
   // Returns true if successful.  Otherwise, sets *error to a description of
   // the problem (e.g. "invalid parameter") and returns false.
   virtual bool Generate(const FileDescriptor* file,
-                        const TProtoStringType& parameter, 
+                        const TProtoStringType& parameter,
                         GeneratorContext* generator_context,
-                        TProtoStringType* error) const = 0; 
+                        TProtoStringType* error) const = 0;
 
   // Generates code for all given proto files.
   //
@@ -99,20 +99,20 @@ class PROTOC_EXPORT CodeGenerator {
   // Returns true if successful.  Otherwise, sets *error to a description of
   // the problem (e.g. "invalid parameter") and returns false.
   virtual bool GenerateAll(const std::vector<const FileDescriptor*>& files,
-                           const TProtoStringType& parameter, 
+                           const TProtoStringType& parameter,
                            GeneratorContext* generator_context,
-                           TProtoStringType* error) const; 
+                           TProtoStringType* error) const;
 
-  // Sync with plugin.proto. 
-  enum Feature { 
-    FEATURE_PROTO3_OPTIONAL = 1, 
-  }; 
- 
-  // Implement this to indicate what features this code generator supports. 
-  // This should be a bitwise OR of features from the Features enum in 
-  // plugin.proto. 
-  virtual uint64_t GetSupportedFeatures() const { return 0; } 
- 
+  // Sync with plugin.proto.
+  enum Feature {
+    FEATURE_PROTO3_OPTIONAL = 1,
+  };
+
+  // Implement this to indicate what features this code generator supports.
+  // This should be a bitwise OR of features from the Features enum in
+  // plugin.proto.
+  virtual uint64_t GetSupportedFeatures() const { return 0; }
+
   // This is no longer used, but this class is part of the opensource protobuf
   // library, so it has to remain to keep vtables the same for the current
   // version of the library. When protobufs does a api breaking change, the
@@ -127,7 +127,7 @@ class PROTOC_EXPORT CodeGenerator {
 // abstract interface represents the directory to which the CodeGenerator is
 // to write and other information about the context in which the Generator
 // runs.
-class PROTOC_EXPORT GeneratorContext { 
+class PROTOC_EXPORT GeneratorContext {
  public:
   inline GeneratorContext() {
   }
@@ -143,10 +143,10 @@ class PROTOC_EXPORT GeneratorContext {
   // generate the files "foo/bar.pb.h" and "foo/bar.pb.cc"; note that
   // "foo/" is included in these filenames.  The filename is not allowed to
   // contain "." or ".." components.
-  virtual io::ZeroCopyOutputStream* Open(const TProtoStringType& filename) = 0; 
+  virtual io::ZeroCopyOutputStream* Open(const TProtoStringType& filename) = 0;
 
   // Similar to Open() but the output will be appended to the file if exists
-  virtual io::ZeroCopyOutputStream* OpenForAppend(const TProtoStringType& filename); 
+  virtual io::ZeroCopyOutputStream* OpenForAppend(const TProtoStringType& filename);
 
   // Creates a ZeroCopyOutputStream which will insert code into the given file
   // at the given insertion point.  See plugin.proto (plugin.pb.h) for more
@@ -155,17 +155,17 @@ class PROTOC_EXPORT GeneratorContext {
   //
   // WARNING:  This feature is currently EXPERIMENTAL and is subject to change.
   virtual io::ZeroCopyOutputStream* OpenForInsert(
-      const TProtoStringType& filename, const TProtoStringType& insertion_point); 
+      const TProtoStringType& filename, const TProtoStringType& insertion_point);
 
-  // Similar to OpenForInsert, but if `info` is non-empty, will open (or create) 
-  // filename.pb.meta and insert info at the appropriate place with the 
-  // necessary shifts. The default implementation ignores `info`. 
-  // 
-  // WARNING:  This feature will be REMOVED in the near future. 
-  virtual io::ZeroCopyOutputStream* OpenForInsertWithGeneratedCodeInfo( 
-      const TProtoStringType& filename, const TProtoStringType& insertion_point, 
-      const google::protobuf::GeneratedCodeInfo& info); 
- 
+  // Similar to OpenForInsert, but if `info` is non-empty, will open (or create)
+  // filename.pb.meta and insert info at the appropriate place with the
+  // necessary shifts. The default implementation ignores `info`.
+  //
+  // WARNING:  This feature will be REMOVED in the near future.
+  virtual io::ZeroCopyOutputStream* OpenForInsertWithGeneratedCodeInfo(
+      const TProtoStringType& filename, const TProtoStringType& insertion_point,
+      const google::protobuf::GeneratedCodeInfo& info);
+
   // Returns a vector of FileDescriptors for all the files being compiled
   // in this run.  Useful for languages, such as Go, that treat files
   // differently when compiled as a set rather than individually.
@@ -190,16 +190,16 @@ typedef GeneratorContext OutputDirectory;
 //   "foo=bar,baz,qux=corge"
 // parses to the pairs:
 //   ("foo", "bar"), ("baz", ""), ("qux", "corge")
-PROTOC_EXPORT void ParseGeneratorParameter( 
-    const TProtoStringType&, std::vector<std::pair<TProtoStringType, TProtoStringType> >*); 
+PROTOC_EXPORT void ParseGeneratorParameter(
+    const TProtoStringType&, std::vector<std::pair<TProtoStringType, TProtoStringType> >*);
 
-// Strips ".proto" or ".protodevel" from the end of a filename. 
-PROTOC_EXPORT TProtoStringType StripProto(const TProtoStringType& filename); 
- 
+// Strips ".proto" or ".protodevel" from the end of a filename.
+PROTOC_EXPORT TProtoStringType StripProto(const TProtoStringType& filename);
+
 }  // namespace compiler
 }  // namespace protobuf
-}  // namespace google 
+}  // namespace google
 
-#include <google/protobuf/port_undef.inc> 
- 
+#include <google/protobuf/port_undef.inc>
+
 #endif  // GOOGLE_PROTOBUF_COMPILER_CODE_GENERATOR_H__

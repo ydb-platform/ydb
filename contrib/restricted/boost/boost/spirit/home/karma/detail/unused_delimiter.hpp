@@ -22,7 +22,7 @@ namespace boost { namespace spirit { namespace karma { namespace detail
         Delimiter const& delimiter;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(unused_delimiter& operator= (unused_delimiter const&)); 
+        BOOST_DELETED_FUNCTION(unused_delimiter& operator= (unused_delimiter const&));
     };
 
     // If a surrounding verbatim[] directive was specified, the current

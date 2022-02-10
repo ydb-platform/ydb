@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2018, Intel Corporation 
+ * Copyright (c) 2015-2018, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -128,15 +128,15 @@ void updateLastMatchOffset(struct RoseContext *tctxt, u64a offset) {
 }
 
 static really_inline
-void updateLastCombMatchOffset(struct RoseContext *tctxt, u64a offset) { 
-    DEBUG_PRINTF("match @%llu, last match @%llu\n", offset, 
-                 tctxt->lastCombMatchOffset); 
- 
-    assert(offset >= tctxt->lastCombMatchOffset); 
-    tctxt->lastCombMatchOffset = offset; 
-} 
- 
-static really_inline 
+void updateLastCombMatchOffset(struct RoseContext *tctxt, u64a offset) {
+    DEBUG_PRINTF("match @%llu, last match @%llu\n", offset,
+                 tctxt->lastCombMatchOffset);
+
+    assert(offset >= tctxt->lastCombMatchOffset);
+    tctxt->lastCombMatchOffset = offset;
+}
+
+static really_inline
 void updateMinMatchOffset(struct RoseContext *tctxt, u64a offset) {
     DEBUG_PRINTF("min match now @%llu, was @%llu\n", offset,
                  tctxt->minMatchOffset);

@@ -21,7 +21,7 @@ struct TStageId {
         return TxId == other.TxId && StageId == other.StageId;
     }
 
-    bool operator!=(const TStageId& other) const { 
+    bool operator!=(const TStageId& other) const {
         return !(*this == other);
     }
 

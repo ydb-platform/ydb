@@ -21,7 +21,7 @@ namespace NActors {
         : Stack(stackSize)
         , AllowUnhandledPoisonPill(allowUnhandledPoisonPill)
         , AllowUnhandledDtor(allowUnhandledDtor)
-        , FiberClosure{this, TArrayRef(Stack.Begin(), Stack.End())} 
+        , FiberClosure{this, TArrayRef(Stack.Begin(), Stack.End())}
         , FiberContext(FiberClosure)
     {
 #ifndef NDEBUG

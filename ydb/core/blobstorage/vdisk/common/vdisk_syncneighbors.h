@@ -98,11 +98,11 @@ namespace NKikimr {
             }
 
             template<bool Const>
-            bool IsMyFailDomain(const TFailDomainIteratorImpl<Const>& it) { 
-                return it == GetMyFailDomainIter(); 
-            } 
- 
-            template<bool Const> 
+            bool IsMyFailDomain(const TFailDomainIteratorImpl<Const>& it) {
+                return it == GetMyFailDomainIter();
+            }
+
+            template<bool Const>
             bool IsMyFailDomain(const TFailDomainIteratorImpl<Const>& it) const {
                 return it == GetMyFailDomainIter();
             }

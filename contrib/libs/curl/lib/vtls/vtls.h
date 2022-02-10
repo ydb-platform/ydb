@@ -7,11 +7,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html. 
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -107,7 +107,7 @@ CURLcode Curl_none_md5sum(unsigned char *input, size_t inputlen,
 #include "sectransp.h"      /* SecureTransport (Darwin) version */
 #include "mbedtls.h"        /* mbedTLS versions */
 #include "mesalink.h"       /* MesaLink versions */
-#include "bearssl.h"        /* BearSSL versions */ 
+#include "bearssl.h"        /* BearSSL versions */
 
 #ifndef MAX_PINNED_PUBKEY_SIZE
 #define MAX_PINNED_PUBKEY_SIZE 1048576 /* 1MB */
@@ -123,41 +123,41 @@ CURLcode Curl_none_md5sum(unsigned char *input, size_t inputlen,
 
 /* set of helper macros for the backends to access the correct fields. For the
    proxy or for the remote host - to properly support HTTPS proxy */
-#ifndef CURL_DISABLE_PROXY 
-#define SSL_IS_PROXY()                                                  \ 
-  (CURLPROXY_HTTPS == conn->http_proxy.proxytype &&                     \ 
-   ssl_connection_complete !=                                           \ 
-   conn->proxy_ssl[conn->sock[SECONDARYSOCKET] ==                       \ 
-                   CURL_SOCKET_BAD ? FIRSTSOCKET : SECONDARYSOCKET].state) 
-#define SSL_SET_OPTION(var)                                             \ 
-  (SSL_IS_PROXY() ? data->set.proxy_ssl.var : data->set.ssl.var) 
-#define SSL_SET_OPTION_LVALUE(var)                                      \ 
-  (*(SSL_IS_PROXY() ? &data->set.proxy_ssl.var : &data->set.ssl.var)) 
-#define SSL_CONN_CONFIG(var)                                            \ 
-  (SSL_IS_PROXY() ? conn->proxy_ssl_config.var : conn->ssl_config.var) 
-#define SSL_HOST_NAME()                                                 \ 
-  (SSL_IS_PROXY() ? conn->http_proxy.host.name : conn->host.name) 
-#define SSL_HOST_DISPNAME()                                             \ 
-  (SSL_IS_PROXY() ? conn->http_proxy.host.dispname : conn->host.dispname) 
-#define SSL_PINNED_PUB_KEY() (SSL_IS_PROXY()                            \ 
-  ? data->set.str[STRING_SSL_PINNEDPUBLICKEY_PROXY]                     \ 
-  : data->set.str[STRING_SSL_PINNEDPUBLICKEY_ORIG]) 
-#else 
-#define SSL_IS_PROXY() FALSE 
-#define SSL_SET_OPTION(var) data->set.ssl.var 
-#define SSL_SET_OPTION_LVALUE(var) data->set.ssl.var 
-#define SSL_CONN_CONFIG(var) conn->ssl_config.var 
-#define SSL_HOST_NAME() conn->host.name 
-#define SSL_HOST_DISPNAME() conn->host.dispname 
-#define SSL_PINNED_PUB_KEY()                                            \ 
-  data->set.str[STRING_SSL_PINNEDPUBLICKEY_ORIG] 
-#endif 
+#ifndef CURL_DISABLE_PROXY
+#define SSL_IS_PROXY()                                                  \
+  (CURLPROXY_HTTPS == conn->http_proxy.proxytype &&                     \
+   ssl_connection_complete !=                                           \
+   conn->proxy_ssl[conn->sock[SECONDARYSOCKET] ==                       \
+                   CURL_SOCKET_BAD ? FIRSTSOCKET : SECONDARYSOCKET].state)
+#define SSL_SET_OPTION(var)                                             \
+  (SSL_IS_PROXY() ? data->set.proxy_ssl.var : data->set.ssl.var)
+#define SSL_SET_OPTION_LVALUE(var)                                      \
+  (*(SSL_IS_PROXY() ? &data->set.proxy_ssl.var : &data->set.ssl.var))
+#define SSL_CONN_CONFIG(var)                                            \
+  (SSL_IS_PROXY() ? conn->proxy_ssl_config.var : conn->ssl_config.var)
+#define SSL_HOST_NAME()                                                 \
+  (SSL_IS_PROXY() ? conn->http_proxy.host.name : conn->host.name)
+#define SSL_HOST_DISPNAME()                                             \
+  (SSL_IS_PROXY() ? conn->http_proxy.host.dispname : conn->host.dispname)
+#define SSL_PINNED_PUB_KEY() (SSL_IS_PROXY()                            \
+  ? data->set.str[STRING_SSL_PINNEDPUBLICKEY_PROXY]                     \
+  : data->set.str[STRING_SSL_PINNEDPUBLICKEY_ORIG])
+#else
+#define SSL_IS_PROXY() FALSE
+#define SSL_SET_OPTION(var) data->set.ssl.var
+#define SSL_SET_OPTION_LVALUE(var) data->set.ssl.var
+#define SSL_CONN_CONFIG(var) conn->ssl_config.var
+#define SSL_HOST_NAME() conn->host.name
+#define SSL_HOST_DISPNAME() conn->host.dispname
+#define SSL_PINNED_PUB_KEY()                                            \
+  data->set.str[STRING_SSL_PINNEDPUBLICKEY_ORIG]
+#endif
 
-bool Curl_ssl_config_matches(struct ssl_primary_config *data, 
-                             struct ssl_primary_config *needle); 
+bool Curl_ssl_config_matches(struct ssl_primary_config *data,
+                             struct ssl_primary_config *needle);
 bool Curl_clone_primary_ssl_config(struct ssl_primary_config *source,
                                    struct ssl_primary_config *dest);
-void Curl_free_primary_ssl_config(struct ssl_primary_config *sslc); 
+void Curl_free_primary_ssl_config(struct ssl_primary_config *sslc);
 int Curl_ssl_getsock(struct connectdata *conn, curl_socket_t *socks);
 
 int Curl_ssl_backend(void);
@@ -235,7 +235,7 @@ CURLcode Curl_ssl_addsessionid(struct connectdata *conn,
  * take sessionid object ownership from sessionid cache
  * (e.g. decrement refcount).
  */
-void Curl_ssl_kill_session(struct Curl_ssl_session *session); 
+void Curl_ssl_kill_session(struct Curl_ssl_session *session);
 /* delete a session from the cache
  * Sessionid mutex must be locked (see Curl_ssl_sessionid_lock).
  * This will call engine-specific curlssl_session_free function, which must

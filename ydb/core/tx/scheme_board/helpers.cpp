@@ -1,8 +1,8 @@
 #include "helpers.h"
 
-#include <google/protobuf/io/coded_stream.h> 
-#include <google/protobuf/io/zero_copy_stream_impl_lite.h> 
-#include <google/protobuf/wire_format_lite.h> 
+#include <google/protobuf/io/coded_stream.h>
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+#include <google/protobuf/wire_format_lite.h>
 
 #include <library/cpp/actors/core/executor_thread.h>
 #include <library/cpp/actors/core/interconnect.h>
@@ -83,7 +83,7 @@ TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrScheme::TEvDescribeSchemeResu
 
 TIntrusivePtr<TEventSerializedData> SerializeEvent(IEventBase* ev) {
     TAllocChunkSerializer serializer;
-    Y_VERIFY(ev->SerializeToArcadiaStream(&serializer)); 
+    Y_VERIFY(ev->SerializeToArcadiaStream(&serializer));
     return serializer.Release(ev->IsExtendedFormat());
 }
 

@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         msg.Record.AddSomeData(MakeString((size1 + size2) % 50 + 11));
 
         auto serializer = MakeHolder<TAllocChunkSerializer>();
-        msg.SerializeToArcadiaStream(serializer.Get()); 
+        msg.SerializeToArcadiaStream(serializer.Get());
         auto buffers = serializer->Release(msg.IsExtendedFormat());
         UNIT_ASSERT_VALUES_EQUAL(buffers->GetSize(), msg.CalculateSerializedSize());
         TString ser = buffers->GetString();
@@ -127,14 +127,14 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         Y_PROTOBUF_SUPPRESS_NODISCARD msg.SerializeToString(&e1.PreSerializedData);
 
         auto serializer1 = MakeHolder<TAllocChunkSerializer>();
-        e1.SerializeToArcadiaStream(serializer1.Get()); 
+        e1.SerializeToArcadiaStream(serializer1.Get());
         auto buffers1 = serializer1->Release(e1.IsExtendedFormat());
         UNIT_ASSERT_VALUES_EQUAL(buffers1->GetSize(), e1.CalculateSerializedSize());
         TString ser1 = buffers1->GetString();
 
         TEvMessageWithPayload e2(msg);
         auto serializer2 = MakeHolder<TAllocChunkSerializer>();
-        e2.SerializeToArcadiaStream(serializer2.Get()); 
+        e2.SerializeToArcadiaStream(serializer2.Get());
         auto buffers2 = serializer2->Release(e2.IsExtendedFormat());
         UNIT_ASSERT_VALUES_EQUAL(buffers2->GetSize(), e2.CalculateSerializedSize());
         TString ser2 = buffers2->GetString();

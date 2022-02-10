@@ -28,12 +28,12 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/util/internal/json_escaping.h> 
+#include <google/protobuf/util/internal/json_escaping.h>
 
-#include <cstdint> 
- 
-#include <google/protobuf/stubs/logging.h> 
-#include <google/protobuf/stubs/common.h> 
+#include <cstdint>
+
+#include <google/protobuf/stubs/logging.h>
+#include <google/protobuf/stubs/common.h>
 
 namespace google {
 namespace protobuf {
@@ -52,34 +52,34 @@ static const char kHex[] = "0123456789abcdef";
 // kCommonEscapes[ch] is the escaped string of ch, if escaping is needed;
 //                    or an empty string, if escaping is not needed.
 static const char kCommonEscapes[160][7] = {
-    // C0 (ASCII and derivatives) control characters 
-    "\\u0000", "\\u0001", "\\u0002", "\\u0003",  // 0x00 
-    "\\u0004", "\\u0005", "\\u0006", "\\u0007", "\\b", "\\t", "\\n", "\\u000b", 
-    "\\f", "\\r", "\\u000e", "\\u000f", "\\u0010", "\\u0011", "\\u0012", 
-    "\\u0013",  // 0x10 
-    "\\u0014", "\\u0015", "\\u0016", "\\u0017", "\\u0018", "\\u0019", "\\u001a", 
-    "\\u001b", "\\u001c", "\\u001d", "\\u001e", "\\u001f", 
-    // Escaping of " and \ are required by www.json.org string definition. 
-    // Escaping of < and > are required for HTML security. 
-    "", "", "\\\"", "", "", "", "", "",                              // 0x20 
-    "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  // 0x30 
-    "", "", "", "", "\\u003c", "", "\\u003e", "", "", "", "", "", "", "", "", 
-    "",                                                                  // 0x40 
-    "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",      // 0x50 
-    "", "", "", "", "\\\\", "", "", "", "", "", "", "", "", "", "", "",  // 0x60 
-    "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",      // 0x70 
-    "", "", "", "", "", "", "", "\\u007f", 
-    // C1 (ISO 8859 and Unicode) extended control characters 
-    "\\u0080", "\\u0081", "\\u0082", "\\u0083",  // 0x80 
-    "\\u0084", "\\u0085", "\\u0086", "\\u0087", "\\u0088", "\\u0089", "\\u008a", 
-    "\\u008b", "\\u008c", "\\u008d", "\\u008e", "\\u008f", "\\u0090", "\\u0091", 
-    "\\u0092", "\\u0093",  // 0x90 
-    "\\u0094", "\\u0095", "\\u0096", "\\u0097", "\\u0098", "\\u0099", "\\u009a", 
-    "\\u009b", "\\u009c", "\\u009d", "\\u009e", "\\u009f"}; 
+    // C0 (ASCII and derivatives) control characters
+    "\\u0000", "\\u0001", "\\u0002", "\\u0003",  // 0x00
+    "\\u0004", "\\u0005", "\\u0006", "\\u0007", "\\b", "\\t", "\\n", "\\u000b",
+    "\\f", "\\r", "\\u000e", "\\u000f", "\\u0010", "\\u0011", "\\u0012",
+    "\\u0013",  // 0x10
+    "\\u0014", "\\u0015", "\\u0016", "\\u0017", "\\u0018", "\\u0019", "\\u001a",
+    "\\u001b", "\\u001c", "\\u001d", "\\u001e", "\\u001f",
+    // Escaping of " and \ are required by www.json.org string definition.
+    // Escaping of < and > are required for HTML security.
+    "", "", "\\\"", "", "", "", "", "",                              // 0x20
+    "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  // 0x30
+    "", "", "", "", "\\u003c", "", "\\u003e", "", "", "", "", "", "", "", "",
+    "",                                                                  // 0x40
+    "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",      // 0x50
+    "", "", "", "", "\\\\", "", "", "", "", "", "", "", "", "", "", "",  // 0x60
+    "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",      // 0x70
+    "", "", "", "", "", "", "", "\\u007f",
+    // C1 (ISO 8859 and Unicode) extended control characters
+    "\\u0080", "\\u0081", "\\u0082", "\\u0083",  // 0x80
+    "\\u0084", "\\u0085", "\\u0086", "\\u0087", "\\u0088", "\\u0089", "\\u008a",
+    "\\u008b", "\\u008c", "\\u008d", "\\u008e", "\\u008f", "\\u0090", "\\u0091",
+    "\\u0092", "\\u0093",  // 0x90
+    "\\u0094", "\\u0095", "\\u0096", "\\u0097", "\\u0098", "\\u0099", "\\u009a",
+    "\\u009b", "\\u009c", "\\u009d", "\\u009e", "\\u009f"};
 
 // Determines if the given char value is a unicode surrogate code unit (either
 // high-surrogate or low-surrogate).
-inline bool IsSurrogate(uint32_t c) { 
+inline bool IsSurrogate(uint32_t c) {
   // Optimized form of:
   // return c >= kMinHighSurrogate && c <= kMaxLowSurrogate;
   // (Reduced from 3 ALU instructions to 2 ALU instructions)
@@ -88,21 +88,21 @@ inline bool IsSurrogate(uint32_t c) {
 
 // Returns true if the given unicode code point cp is a valid
 // unicode code point (i.e. in the range 0 <= cp <= kMaxCodePoint).
-inline bool IsValidCodePoint(uint32_t cp) { 
+inline bool IsValidCodePoint(uint32_t cp) {
   return cp <= JsonEscaping::kMaxCodePoint;
 }
 
 // Returns the low surrogate for the given unicode code point. The result is
 // meaningless if the given code point is not a supplementary character.
-inline uint16_t ToLowSurrogate(uint32_t cp) { 
-  return (cp & 
-          (JsonEscaping::kMaxLowSurrogate - JsonEscaping::kMinLowSurrogate)) + 
-         JsonEscaping::kMinLowSurrogate; 
+inline uint16_t ToLowSurrogate(uint32_t cp) {
+  return (cp &
+          (JsonEscaping::kMaxLowSurrogate - JsonEscaping::kMinLowSurrogate)) +
+         JsonEscaping::kMinLowSurrogate;
 }
 
 // Returns the high surrogate for the given unicode code point. The result is
 // meaningless if the given code point is not a supplementary character.
-inline uint16_t ToHighSurrogate(uint32_t cp) { 
+inline uint16_t ToHighSurrogate(uint32_t cp) {
   return (cp >> 10) + (JsonEscaping::kMinHighSurrogate -
                        (JsonEscaping::kMinSupplementaryCodePoint >> 10));
 }
@@ -127,11 +127,11 @@ inline uint16_t ToHighSurrogate(uint32_t cp) {
 // Returns false if we encounter an invalid UTF-8 string. Returns true
 // otherwise, including the case when we reach the end of the input (str)
 // before a complete unicode code point is read.
-bool ReadCodePoint(StringPiece str, int index, uint32_t* cp, 
-                   int* num_left, int* num_read) { 
+bool ReadCodePoint(StringPiece str, int index, uint32_t* cp,
+                   int* num_left, int* num_read) {
   if (*num_left == 0) {
     // Last read was complete. Start reading a new unicode code point.
-    *cp = static_cast<uint8_t>(str[index++]); 
+    *cp = static_cast<uint8_t>(str[index++]);
     *num_read = 1;
     // The length of the code point is determined from reading the first byte.
     //
@@ -180,7 +180,7 @@ bool ReadCodePoint(StringPiece str, int index, uint32_t* cp,
     *num_read = 0;
   }
   while (*num_left > 0 && index < str.size()) {
-    uint32_t ch = static_cast<uint8_t>(str[index++]); 
+    uint32_t ch = static_cast<uint8_t>(str[index++]);
     --(*num_left);
     ++(*num_read);
     *cp = (*cp << 6) | (ch & 0x3f);
@@ -192,7 +192,7 @@ bool ReadCodePoint(StringPiece str, int index, uint32_t* cp,
 // Stores the 16-bit unicode code point as its hexadecimal digits in buffer
 // and returns a StringPiece that points to this buffer. The input buffer needs
 // to be at least 6 bytes long.
-StringPiece ToHex(uint16_t cp, char* buffer) { 
+StringPiece ToHex(uint16_t cp, char* buffer) {
   buffer[5] = kHex[cp & 0x0f];
   cp >>= 4;
   buffer[4] = kHex[cp & 0x0f];
@@ -200,15 +200,15 @@ StringPiece ToHex(uint16_t cp, char* buffer) {
   buffer[3] = kHex[cp & 0x0f];
   cp >>= 4;
   buffer[2] = kHex[cp & 0x0f];
-  return StringPiece(buffer, 6); 
+  return StringPiece(buffer, 6);
 }
 
 // Stores the 32-bit unicode code point as its hexadecimal digits in buffer
 // and returns a StringPiece that points to this buffer. The input buffer needs
 // to be at least 12 bytes long.
-StringPiece ToSurrogateHex(uint32_t cp, char* buffer) { 
-  uint16_t low = ToLowSurrogate(cp); 
-  uint16_t high = ToHighSurrogate(cp); 
+StringPiece ToSurrogateHex(uint32_t cp, char* buffer) {
+  uint16_t low = ToLowSurrogate(cp);
+  uint16_t high = ToHighSurrogate(cp);
 
   buffer[11] = kHex[low & 0x0f];
   low >>= 4;
@@ -236,7 +236,7 @@ StringPiece ToSurrogateHex(uint32_t cp, char* buffer) {
 //
 // If the given unicode code point does not need escaping, an empty
 // StringPiece is returned.
-StringPiece EscapeCodePoint(uint32_t cp, char* buffer) { 
+StringPiece EscapeCodePoint(uint32_t cp, char* buffer) {
   if (cp < 0xa0) return kCommonEscapes[cp];
   switch (cp) {
     // These are not required by json spec
@@ -274,8 +274,8 @@ StringPiece EscapeCodePoint(uint32_t cp, char* buffer) {
 // Tries to escape the given code point first. If the given code point
 // does not need to be escaped, but force_output is true, then render
 // the given multi-byte code point in UTF8 in the buffer and returns it.
-StringPiece EscapeCodePoint(uint32_t cp, char* buffer, 
-                                  bool force_output) { 
+StringPiece EscapeCodePoint(uint32_t cp, char* buffer,
+                                  bool force_output) {
   StringPiece sp = EscapeCodePoint(cp, buffer);
   if (force_output && sp.empty()) {
     buffer[5] = (cp & 0x3f) | 0x80;
@@ -304,7 +304,7 @@ StringPiece EscapeCodePoint(uint32_t cp, char* buffer,
 void JsonEscaping::Escape(strings::ByteSource* input,
                           strings::ByteSink* output) {
   char buffer[12] = "\\udead\\ubee";
-  uint32_t cp = 0;   // Current unicode code point. 
+  uint32_t cp = 0;   // Current unicode code point.
   int num_left = 0;  // Num of chars to read to complete the code point.
   while (input->Available() > 0) {
     StringPiece str = input->Peek();
@@ -322,10 +322,10 @@ void JsonEscaping::Escape(strings::ByteSource* input,
       ok = ReadCodePoint(str, i, &cp, &num_left, &num_read);
       if (num_left > 0 || !ok) break;  // case iii or iv
       escaped = EscapeCodePoint(cp, buffer, cp_was_split);
-      if (!escaped.empty()) break;  // case i or ii 
+      if (!escaped.empty()) break;  // case i or ii
       i += num_read;
       num_read = 0;
-    } while (i < str.length());  // case iv 
+    } while (i < str.length());  // case iv
     // First copy the un-escaped prefix, if any, to the output ByteSink.
     if (i > 0) input->CopyTo(output, i);
     if (num_read > 0) input->Skip(num_read);
@@ -344,28 +344,28 @@ void JsonEscaping::Escape(strings::ByteSource* input,
   }
 }
 
-void JsonEscaping::Escape(StringPiece input, strings::ByteSink* output) { 
-  const size_t len = input.length(); 
-  const char* p = input.data(); 
- 
-  bool can_skip_escaping = true; 
-  for (int i = 0; i < len; i++) { 
-    char c = p[i]; 
-    if (c < 0x20 || c >= 0x7F || c == '"' || c == '<' || c == '>' || 
-        c == '\\') { 
-      can_skip_escaping = false; 
-      break; 
-    } 
-  } 
- 
-  if (can_skip_escaping) { 
-    output->Append(input.data(), input.length()); 
-  } else { 
-    strings::ArrayByteSource source(input); 
-    Escape(&source, output); 
-  } 
-} 
- 
+void JsonEscaping::Escape(StringPiece input, strings::ByteSink* output) {
+  const size_t len = input.length();
+  const char* p = input.data();
+
+  bool can_skip_escaping = true;
+  for (int i = 0; i < len; i++) {
+    char c = p[i];
+    if (c < 0x20 || c >= 0x7F || c == '"' || c == '<' || c == '>' ||
+        c == '\\') {
+      can_skip_escaping = false;
+      break;
+    }
+  }
+
+  if (can_skip_escaping) {
+    output->Append(input.data(), input.length());
+  } else {
+    strings::ArrayByteSource source(input);
+    Escape(&source, output);
+  }
+}
+
 }  // namespace converter
 }  // namespace util
 }  // namespace protobuf

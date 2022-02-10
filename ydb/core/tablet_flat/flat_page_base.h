@@ -163,15 +163,15 @@ private:
 struct TDataRef {
     TPgSize Offset;
     TPgSize Size;
-} Y_PACKED; 
+} Y_PACKED;
 
 struct TRecordsHeader {
     TRecIdx Records;
-} Y_PACKED; 
+} Y_PACKED;
 
 struct TRecordsEntry {
     TPgSize Offset;
-} Y_PACKED; 
+} Y_PACKED;
 
 template <class TRecord, class TItem>
 struct TDataPageRecord {
@@ -230,7 +230,7 @@ struct TDataPageRecord {
             static_assert(sizeof(TDataRef) == sizeof(ui64), "");
         }
     }
-} Y_PACKED; 
+} Y_PACKED;
 
 #pragma pack(pop)
 

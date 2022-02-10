@@ -8,7 +8,7 @@
 #include <util/generic/ptr.h>
 #include <util/system/hostname.h>
 
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 using namespace NMonitoring;
 

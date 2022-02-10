@@ -35,7 +35,7 @@ namespace NArgonish {
             ui8 LastNode;
         };
 
-        struct TBlake2BParam { 
+        struct TBlake2BParam {
             ui8 DigestLen;                       /* 1 */
             ui8 KeyLen;                          /* 2 */
             ui8 Fanout;                          /* 3 */
@@ -48,7 +48,7 @@ namespace NArgonish {
             ui8 Reserved[14];                    /* 32 */
             ui8 Salt[BLAKE2B_SALTBYTES];         /* 48 */
             ui8 Personal[BLAKE2B_PERSONALBYTES]; /* 64 */
-        } Y_PACKED; 
+        } Y_PACKED;
 
         TBlake2BState State_;
         TBlake2BParam Param_;

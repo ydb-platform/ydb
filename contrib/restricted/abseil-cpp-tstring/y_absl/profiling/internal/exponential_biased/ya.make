@@ -17,7 +17,7 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal) 
+SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal)
 
 SRCS(
     exponential_biased.cc

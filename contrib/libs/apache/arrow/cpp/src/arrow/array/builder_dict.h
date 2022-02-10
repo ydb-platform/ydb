@@ -29,7 +29,7 @@
 #include "arrow/array/builder_primitive.h"  // IWYU pragma: export
 #include "arrow/array/data.h"
 #include "arrow/array/util.h"
-#include "arrow/scalar.h" 
+#include "arrow/scalar.h"
 #include "arrow/status.h"
 #include "arrow/type.h"
 #include "arrow/type_traits.h"
@@ -241,20 +241,20 @@ class DictionaryBuilderBase : public ArrayBuilder {
 
   /// \brief Append a decimal (only for Decimal128Type)
   template <typename T1 = T>
-  enable_if_decimal128<T1, Status> Append(const Decimal128& value) { 
+  enable_if_decimal128<T1, Status> Append(const Decimal128& value) {
     uint8_t data[16];
     value.ToBytes(data);
     return Append(data, 16);
   }
 
-  /// \brief Append a decimal (only for Decimal128Type) 
-  template <typename T1 = T> 
-  enable_if_decimal256<T1, Status> Append(const Decimal256& value) { 
-    uint8_t data[32]; 
-    value.ToBytes(data); 
-    return Append(data, 32); 
-  } 
- 
+  /// \brief Append a decimal (only for Decimal128Type)
+  template <typename T1 = T>
+  enable_if_decimal256<T1, Status> Append(const Decimal256& value) {
+    uint8_t data[32];
+    value.ToBytes(data);
+    return Append(data, 32);
+  }
+
   /// \brief Append a scalar null value
   Status AppendNull() final {
     length_ += 1;
@@ -270,18 +270,18 @@ class DictionaryBuilderBase : public ArrayBuilder {
     return indices_builder_.AppendNulls(length);
   }
 
-  Status AppendEmptyValue() final { 
-    length_ += 1; 
- 
-    return indices_builder_.AppendEmptyValue(); 
-  } 
- 
-  Status AppendEmptyValues(int64_t length) final { 
-    length_ += length; 
- 
-    return indices_builder_.AppendEmptyValues(length); 
-  } 
- 
+  Status AppendEmptyValue() final {
+    length_ += 1;
+
+    return indices_builder_.AppendEmptyValue();
+  }
+
+  Status AppendEmptyValues(int64_t length) final {
+    length_ += length;
+
+    return indices_builder_.AppendEmptyValues(length);
+  }
+
   /// \brief Insert values into the dictionary's memo, but do not append any
   /// indices. Can be used to initialize a new builder with known dictionary
   /// values
@@ -458,18 +458,18 @@ class DictionaryBuilderBase<BuilderType, NullType> : public ArrayBuilder {
     return indices_builder_.AppendNulls(length);
   }
 
-  Status AppendEmptyValue() final { 
-    length_ += 1; 
- 
-    return indices_builder_.AppendEmptyValue(); 
-  } 
- 
-  Status AppendEmptyValues(int64_t length) final { 
-    length_ += length; 
- 
-    return indices_builder_.AppendEmptyValues(length); 
-  } 
- 
+  Status AppendEmptyValue() final {
+    length_ += 1;
+
+    return indices_builder_.AppendEmptyValue();
+  }
+
+  Status AppendEmptyValues(int64_t length) final {
+    length_ += length;
+
+    return indices_builder_.AppendEmptyValues(length);
+  }
+
   /// \brief Append a whole dense array to the builder
   Status AppendArray(const Array& array) {
 #ifndef NDEBUG

@@ -173,7 +173,7 @@ message TResponse {
 
     optional NKikimrTxUserProxy.TTxProxyTimings ProxyTimings = 50;
 
-    optional int32 SchemeStatus = 300; // for enum definition see flat_tx_scheme.proto - enum EStatus 
+    optional int32 SchemeStatus = 300; // for enum definition see flat_tx_scheme.proto - enum EStatus
     optional uint32 SchemeTagId = 301;
     optional bytes SchemePrefix = 302;
 
@@ -450,7 +450,7 @@ message TFlatDescribeResponse {
     optional string Path = 9;
     optional NKikimrSchemeOp.TPathDescription PathDescription = 2;
     optional string ErrorReason = 3; // When present contains human-readable error description
-    optional int32 SchemeStatus = 4; 
+    optional int32 SchemeStatus = 4;
 
     optional NKikimrIssues.TStatusIds.EStatusCode StatusCode = 7;
     repeated Ydb.Issue.IssueMessage Issues = 8;

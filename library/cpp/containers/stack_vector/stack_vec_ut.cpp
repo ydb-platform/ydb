@@ -59,12 +59,12 @@ Y_UNIT_TEST_SUITE(TStackBasedVectorTest) {
     }
 
     Y_UNIT_TEST(TestReallyOnStack) {
-        const TStackVec<int> vec(5); 
- 
-        UNIT_ASSERT( 
-            (const char*)&vec <= (const char*)&vec[0] && 
-            (const char*)&vec[0] <= (const char*)&vec + sizeof(vec) 
-        ); 
+        const TStackVec<int> vec(5);
+
+        UNIT_ASSERT(
+            (const char*)&vec <= (const char*)&vec[0] &&
+            (const char*)&vec[0] <= (const char*)&vec + sizeof(vec)
+        );
     }
 
     Y_UNIT_TEST(TestFallback) {

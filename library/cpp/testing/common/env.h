@@ -38,7 +38,7 @@ const TString& GetRamDrivePath();
 
 // @brief return path from env:YA_TEST_OUTPUT_RAM_DRIVE_PATH
 const TString& GetOutputRamDrivePath();
- 
+
 // @brief return test parameter by name. If not exists, return an empty string
 const TString& GetTestParam(TStringBuf name);
 

@@ -177,7 +177,7 @@ fake_getnameinfo(const struct sockaddr *sa, size_t salen, char *host,
 
 extern int debug;
 
-static evutil_socket_t create_bind_socket_nonblock(struct evutil_addrinfo *, int reuse); 
+static evutil_socket_t create_bind_socket_nonblock(struct evutil_addrinfo *, int reuse);
 static evutil_socket_t bind_socket(const char *, ev_uint16_t, int reuse);
 static void name_from_addr(struct sockaddr *, ev_socklen_t, char **, char **);
 static struct evhttp_uri *evhttp_uri_parse_authority(char *source_uri);
@@ -361,7 +361,7 @@ evhttp_response_needs_body(struct evhttp_request *req)
 	return (req->response_code != HTTP_NOCONTENT &&
 		req->response_code != HTTP_NOTMODIFIED &&
 		(req->response_code < 100 || req->response_code >= 200) &&
-		req->type != EVHTTP_REQ_CONNECT && 
+		req->type != EVHTTP_REQ_CONNECT &&
 		req->type != EVHTTP_REQ_HEAD);
 }
 
@@ -482,9 +482,9 @@ evhttp_is_connection_close(int flags, struct evkeyvalq* headers)
 static int
 evhttp_is_request_connection_close(struct evhttp_request *req)
 {
-	if (req->type == EVHTTP_REQ_CONNECT) 
-		return 0; 
- 
+	if (req->type == EVHTTP_REQ_CONNECT)
+		return 0;
+
 	return
 		evhttp_is_connection_close(req->flags, req->input_headers) ||
 		evhttp_is_connection_close(req->flags, req->output_headers);
@@ -785,11 +785,11 @@ evhttp_connection_fail_(struct evhttp_connection *evcon,
 	/* We are trying the next request that was queued on us */
 	if (TAILQ_FIRST(&evcon->requests) != NULL)
 		evhttp_connection_connect_(evcon);
-	else 
-		if ((evcon->flags & EVHTTP_CON_OUTGOING) && 
-		    (evcon->flags & EVHTTP_CON_AUTOFREE)) { 
-			evhttp_connection_free(evcon); 
-		} 
+	else
+		if ((evcon->flags & EVHTTP_CON_OUTGOING) &&
+		    (evcon->flags & EVHTTP_CON_AUTOFREE)) {
+			evhttp_connection_free(evcon);
+		}
 
 	/* The call to evhttp_connection_reset_ overwrote errno.
 	 * Let's restore the original errno, so that the user's
@@ -3344,7 +3344,7 @@ evhttp_parse_query_impl(const char *str, struct evkeyvalq *headers,
 	p = argument = line;
 	while (p != NULL && *p != '\0') {
 		char *key, *value, *decoded_value;
-		int err; 
+		int err;
 		argument = strsep(&p, "&");
 
 		value = argument;
@@ -3360,10 +3360,10 @@ evhttp_parse_query_impl(const char *str, struct evkeyvalq *headers,
 		evhttp_decode_uri_internal(value, strlen(value),
 		    decoded_value, 1 /*always_decode_plus*/);
 		event_debug(("Query Param: %s -> %s\n", key, decoded_value));
-		err = evhttp_add_header_internal(headers, key, decoded_value); 
+		err = evhttp_add_header_internal(headers, key, decoded_value);
 		mm_free(decoded_value);
-		if (err) 
-			goto error; 
+		if (err)
+			goto error;
 	}
 
 	result = 0;
@@ -4467,7 +4467,7 @@ name_from_addr(struct sockaddr *sa, ev_socklen_t salen,
 
 /* Create a non-blocking socket and bind it */
 static evutil_socket_t
-create_bind_socket_nonblock(struct evutil_addrinfo *ai, int reuse) 
+create_bind_socket_nonblock(struct evutil_addrinfo *ai, int reuse)
 {
 	evutil_socket_t fd;
 
@@ -4570,14 +4570,14 @@ bind_socket(const char *address, ev_uint16_t port, int reuse)
 
 	/* just create an unbound socket */
 	if (address == NULL && port == 0)
-		return create_bind_socket_nonblock(NULL, 0); 
+		return create_bind_socket_nonblock(NULL, 0);
 
 	aitop = make_addrinfo(address, port);
 
 	if (aitop == NULL)
 		return (-1);
 
-	fd = create_bind_socket_nonblock(aitop, reuse); 
+	fd = create_bind_socket_nonblock(aitop, reuse);
 
 	evutil_freeaddrinfo(aitop);
 

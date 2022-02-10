@@ -8,7 +8,7 @@
 #include <ydb/core/formats/switch_type.h>
 #include <ydb/core/tx/ctor_logger.h>
 #include <ydb/core/tx/columnshard/blob.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 #include <util/generic/set.h>
 

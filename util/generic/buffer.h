@@ -2,7 +2,7 @@
 
 #include "utility.h"
 
-#include <util/generic/fwd.h> 
+#include <util/generic/fwd.h>
 #include <util/system/align.h>
 #include <util/system/yassert.h>
 

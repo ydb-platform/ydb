@@ -17,10 +17,10 @@ namespace NIteratorPrivate {
 
 template <class TIterator, class TMapper>
 class TMappedIterator {
-protected: 
+protected:
     using TSelf = TMappedIterator<TIterator, TMapper>;
     using TSrcPointerType = typename std::iterator_traits<TIterator>::reference;
-    using TValue = typename std::invoke_result_t<TMapper, TSrcPointerType>; 
+    using TValue = typename std::invoke_result_t<TMapper, TSrcPointerType>;
 public:
     using difference_type = std::ptrdiff_t;
     using value_type = TValue;
@@ -31,7 +31,7 @@ public:
 
     TMappedIterator(TIterator it, TMapper mapper)
         : Iter(it)
-        , Mapper(std::move(mapper)) 
+        , Mapper(std::move(mapper))
     {
     }
 
@@ -99,14 +99,14 @@ protected:
     using TContainerStorage = TAutoEmbedOrPtrPolicy<TContainer>;
     using TMapperStorage = TAutoEmbedOrPtrPolicy<TMapper>;
     using TMapperWrapper = std::reference_wrapper<std::remove_reference_t<TMapper>>;
-    using TInternalIterator = decltype(std::begin(std::declval<TContainer&>())); 
-    using TIterator = TMappedIterator<TInternalIterator, TMapperWrapper>; 
+    using TInternalIterator = decltype(std::begin(std::declval<TContainer&>()));
+    using TIterator = TMappedIterator<TInternalIterator, TMapperWrapper>;
 public:
-    using iterator = TIterator; 
-    using const_iterator = TIterator; 
-    using value_type = typename TIterator::value_type; 
-    using reference = typename TIterator::reference; 
-    using const_reference = typename TIterator::reference; 
+    using iterator = TIterator;
+    using const_iterator = TIterator;
+    using value_type = typename TIterator::value_type;
+    using reference = typename TIterator::reference;
+    using const_reference = typename TIterator::reference;
 
     TInputMappedRange(TContainer&& container, TMapper&& mapper)
         : Container(std::forward<TContainer>(container))
@@ -114,11 +114,11 @@ public:
     {
     }
 
-    TIterator begin() const { 
+    TIterator begin() const {
         return {std::begin(*Container.Ptr()), {*Mapper.Ptr()}};
     }
 
-    TIterator end() const { 
+    TIterator end() const {
         return {std::end(*Container.Ptr()), {*Mapper.Ptr()}};
     }
 
@@ -135,8 +135,8 @@ protected:
 template <class TContainer, class TMapper>
 class TRandomAccessMappedRange : public TInputMappedRange<TContainer, TMapper> {
     using TBase = TInputMappedRange<TContainer, TMapper>;
-    using TInternalIterator = typename TBase::TInternalIterator; 
-    using TIterator = typename TBase::TIterator; 
+    using TInternalIterator = typename TBase::TInternalIterator;
+    using TIterator = typename TBase::TIterator;
 public:
     using iterator = typename TBase::iterator;
     using const_iterator = typename TBase::const_iterator;

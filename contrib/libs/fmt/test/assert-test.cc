@@ -1,9 +1,9 @@
-// Formatting library for C++ - FMT_ASSERT test 
+// Formatting library for C++ - FMT_ASSERT test
 //
-// It is a separate test to minimize the number of EXPECT_DEBUG_DEATH checks 
-// which are slow on some platforms. In other tests FMT_ASSERT is made to throw 
-// an exception which is much faster and easier to check. 
-// 
+// It is a separate test to minimize the number of EXPECT_DEBUG_DEATH checks
+// which are slow on some platforms. In other tests FMT_ASSERT is made to throw
+// an exception which is much faster and easier to check.
+//
 // Copyright (c) 2012 - present, Victor Zverovich
 // All rights reserved.
 //

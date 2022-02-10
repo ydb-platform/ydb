@@ -63,7 +63,7 @@ namespace NActors {
                 return "THelloWorld::Blob";
             }
 
-            bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override { 
+            bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
                 return serializer->WriteString(&Blob);
             }
 
@@ -150,7 +150,7 @@ namespace NActors {
             {}
 
             TString ToStringHeader() const override;
-            bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override; 
+            bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override;
             static IEventBase* Load(TEventSerializedData* bufs);
             bool IsSerializable() const override;
 

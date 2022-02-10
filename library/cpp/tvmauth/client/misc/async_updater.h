@@ -18,7 +18,7 @@
 #include <util/generic/ptr.h>
 
 #include <array>
-#include <atomic> 
+#include <atomic>
 
 namespace NTvmAuth::NInternal {
     class TClientCaningKnife;

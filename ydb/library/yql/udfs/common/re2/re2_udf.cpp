@@ -144,12 +144,12 @@ namespace {
                 RE2::Options options;
 
                 options.set_posix_syntax(posix);
-                bool needUtf8 = (UTF8Detect(pattern) == UTF8); 
-                options.set_encoding( 
-                    needUtf8 
-                        ? RE2::Options::Encoding::EncodingUTF8 
-                        : RE2::Options::Encoding::EncodingLatin1 
-                ); 
+                bool needUtf8 = (UTF8Detect(pattern) == UTF8);
+                options.set_encoding(
+                    needUtf8
+                        ? RE2::Options::Encoding::EncodingUTF8
+                        : RE2::Options::Encoding::EncodingLatin1
+                );
                 if (optionsValue) {
 #define FIELD_HANDLE(name, index, type, defVal, setter, conv) options.setter(conv(optionsValue.GetElement(OptionsSchema.Indices[index]).Get<type>()));
                     OPTIONS_MAP(FIELD_HANDLE)
@@ -179,7 +179,7 @@ namespace {
                 switch (Mode) {
                     case MATCH:
                         anchor = RE2::ANCHOR_BOTH;
-                        [[fallthrough]]; 
+                        [[fallthrough]];
                     case GREP:
                         return TUnboxedValuePod(Regexp->Match(piece, 0, input.size(), anchor, nullptr, 0));
                     case CAPTURE: {
@@ -204,12 +204,12 @@ namespace {
                         if (!Regexp->CheckRewriteString(rewrite, &rewriteError)) {
                             UdfTerminate((TStringBuilder() << Pos_ << " [rewrite error] " << rewriteError).data());
                         }
-                        std::string result(input); 
+                        std::string result(input);
                         RE2::GlobalReplace(&result, *Regexp, rewrite);
                         return input == result ? TUnboxedValue(args[0]) : valueBuilder->NewString(result);
                     }
                     case COUNT: {
-                        std::string inputHolder(input); 
+                        std::string inputHolder(input);
                         const ui32 result = RE2::GlobalReplace(&inputHolder, *Regexp, "");
                         return TUnboxedValuePod(result);
                     }
@@ -482,7 +482,7 @@ namespace {
                     if (regexp.ok()) {
                         builder.SetError("Regexp contains no capturing groups");
                     } else {
-                        builder.SetError(regexp.error()); 
+                        builder.SetError(regexp.error());
                     }
                 }
             } else if (isReplace) {

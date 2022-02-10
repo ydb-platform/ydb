@@ -39,7 +39,7 @@
 #include "arrow/type_traits.h"
 #include "arrow/util/bit_util.h"
 #include "arrow/util/bitmap_builders.h"
-#include "arrow/util/endian.h" 
+#include "arrow/util/endian.h"
 #include "arrow/util/logging.h"
 #include "arrow/util/macros.h"
 #include "arrow/util/ubsan.h"
@@ -329,7 +329,7 @@ class HashTable {
 
     // Stash old entries and seal builder, effectively resetting the Buffer
     const Entry* old_entries = entries_;
-    ARROW_ASSIGN_OR_RAISE(auto previous, entries_builder_.FinishWithLength(capacity_)); 
+    ARROW_ASSIGN_OR_RAISE(auto previous, entries_builder_.FinishWithLength(capacity_));
     // Allocate new buffer
     RETURN_NOT_OK(UpsizeBuffer(new_capacity));
 
@@ -460,13 +460,13 @@ class ScalarMemoTable : public MemoTable {
         out_data[index] = entry->payload.value;
       }
     });
-    // Zero-initialize the null entry 
-    if (null_index_ != kKeyNotFound) { 
-      int32_t index = null_index_ - start; 
-      if (index >= 0) { 
-        out_data[index] = Scalar{}; 
-      } 
-    } 
+    // Zero-initialize the null entry
+    if (null_index_ != kKeyNotFound) {
+      int32_t index = null_index_ - start;
+      if (index >= 0) {
+        out_data[index] = Scalar{};
+      }
+    }
   }
 
   void CopyValues(Scalar* out_data) const { CopyValues(0, out_data); }
@@ -697,8 +697,8 @@ class BinaryMemoTable : public MemoTable {
     DCHECK_LE(start, size());
 
     const builder_offset_type* offsets = binary_builder_.offsets_data();
-    const builder_offset_type delta = 
-        start < binary_builder_.length() ? offsets[start] : 0; 
+    const builder_offset_type delta =
+        start < binary_builder_.length() ? offsets[start] : 0;
     for (int32_t i = start; i < size(); ++i) {
       const builder_offset_type adjusted_offset = offsets[i] - delta;
       Offset cast_offset = static_cast<Offset>(adjusted_offset);
@@ -781,8 +781,8 @@ class BinaryMemoTable : public MemoTable {
     if (left_size > 0) {
       memcpy(out_data, in_data + left_offset, left_size);
     }
-    // Zero-initialize the null entry 
-    memset(out_data + left_size, 0, width_size); 
+    // Zero-initialize the null entry
+    memset(out_data + left_size, 0, width_size);
 
     auto right_size = values_size() - static_cast<size_t>(null_data_offset);
     if (right_size > 0) {
@@ -852,8 +852,8 @@ struct HashTraits<T, enable_if_t<has_string_view<T>::value &&
   using MemoTableType = BinaryMemoTable<BinaryBuilder>;
 };
 
-template <typename T> 
-struct HashTraits<T, enable_if_decimal<T>> { 
+template <typename T>
+struct HashTraits<T, enable_if_decimal<T>> {
   using MemoTableType = BinaryMemoTable<BinaryBuilder>;
 };
 

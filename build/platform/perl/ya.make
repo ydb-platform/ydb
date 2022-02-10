@@ -15,14 +15,14 @@ IF (USE_PERL_SYSTEM)
         PEERDIR(build/platform/perl/5.26)
     ELSEIF (PERL_SDK == "ubuntu-20")
         PEERDIR(build/platform/perl/5.30)
-    ELSE() 
+    ELSE()
         MESSAGE(FATAL_ERROR "Building against system perl is not supported on ${PERL_SDK}")
     ENDIF()
 
 ELSE()
- 
-    MESSAGE(FATAL_ERROR "There is no perl ready for static linkage. Try using the system one.") 
- 
+
+    MESSAGE(FATAL_ERROR "There is no perl ready for static linkage. Try using the system one.")
+
 ENDIF()
 
 END()

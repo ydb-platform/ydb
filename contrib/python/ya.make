@@ -57,7 +57,7 @@ RECURSE(
     apispec-flask-restful
     appdirs
     APScheduler
-    apsw 
+    apsw
     aresponses
     argcomplete
     argon2-cffi
@@ -70,7 +70,7 @@ RECURSE(
     asn1crypto
     astroid
     asttokens
-    astunparse 
+    astunparse
     async-generator
     async-lru
     async-timeout
@@ -428,7 +428,7 @@ RECURSE(
     furl
     future
     futures
-    gast 
+    gast
     gcovr
     GDAL
     gemfileparser
@@ -450,7 +450,7 @@ RECURSE(
     google-auth-httplib2
     google-auth-oauthlib
     google-cloud-speech
-    google-pasta 
+    google-pasta
     googleads
     gpxpy
     GPy
@@ -571,7 +571,7 @@ RECURSE(
     jupytext
     kaitaistruct
     kazoo
-    Keras-Preprocessing 
+    Keras-Preprocessing
     kiwisolver
     kombu
     korean-lunar-calendar
@@ -689,7 +689,7 @@ RECURSE(
     opentracing
     opentracing-async-instrumentation
     opentracing-instrumentation
-    opt-einsum 
+    opt-einsum
     option
     ordered-set
     orderedmultidict
@@ -753,7 +753,7 @@ RECURSE(
     plyvel
     polib
     portalocker
-    portpicker 
+    portpicker
     ppdeep
     pq
     pql
@@ -769,8 +769,8 @@ RECURSE(
     promise
     prompt-toolkit
     prophet
-    protobuf 
-    protobuf_std 
+    protobuf
+    protobuf_std
     protobuf_to_dict
     psutil
     psycogreen
@@ -1053,14 +1053,14 @@ RECURSE(
     tblib
     Telethon
     tenacity
-    tensorflow-estimator 
+    tensorflow-estimator
     termcolor
     terminado
     terminaltables
     testpath
     text-unidecode
     textdata
-    texttable 
+    texttable
     textwrap3
     thinc
     threadloop
@@ -1204,7 +1204,7 @@ IF (OS_LINUX)
         pyroute2
     )
 
-    IF (OS_SDK != "ubuntu-12") 
+    IF (OS_SDK != "ubuntu-12")
         RECURSE(
             cysystemd
         )

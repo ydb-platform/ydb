@@ -791,7 +791,7 @@ namespace NKikimr {
                             Finished = true;
                             return true;
                         }
-                        [[fallthrough]]; 
+                        [[fallthrough]];
 
                     case EBlockStatus::NOT_ENOUGH_SPACE:
                         PutLinker();

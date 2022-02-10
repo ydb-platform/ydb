@@ -2,8 +2,8 @@
 
 LIBRARY()
 
-WITHOUT_LICENSE_TEXTS() 
- 
+WITHOUT_LICENSE_TEXTS()
+
 OWNER(
     somov
     g:cpp-contrib
@@ -24,8 +24,8 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal) 
- 
+SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal)
+
 SRCS(
     escaping.cc
     ostringstream.cc

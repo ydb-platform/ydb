@@ -316,7 +316,7 @@ namespace NMonitoring {
 
         inline void Clear() noexcept override {
             Labels_.clear();
-        }; 
+        };
 
         TLabelImpl<TStringBackend>& front() {
             return Labels_.front();
@@ -451,22 +451,22 @@ inline bool operator==(const NMonitoring::ILabels& lhs, const NMonitoring::ILabe
     return true;
 }
 
-bool operator==(const NMonitoring::ILabelsPtr& lhs, const NMonitoring::ILabelsPtr& rhs) = delete; 
-bool operator==(const NMonitoring::ILabels& lhs, const NMonitoring::ILabelsPtr& rhs) = delete; 
-bool operator==(const NMonitoring::ILabelsPtr& lhs, const NMonitoring::ILabels& rhs) = delete; 
+bool operator==(const NMonitoring::ILabelsPtr& lhs, const NMonitoring::ILabelsPtr& rhs) = delete;
+bool operator==(const NMonitoring::ILabels& lhs, const NMonitoring::ILabelsPtr& rhs) = delete;
+bool operator==(const NMonitoring::ILabelsPtr& lhs, const NMonitoring::ILabels& rhs) = delete;
 
 template<>
 struct TEqualTo<NMonitoring::ILabelsPtr> {
     bool operator()(const NMonitoring::ILabelsPtr& lhs, const NMonitoring::ILabelsPtr& rhs) {
-        return *lhs == *rhs; 
+        return *lhs == *rhs;
     }
 
     bool operator()(const NMonitoring::ILabelsPtr& lhs, const NMonitoring::ILabels& rhs) {
-        return *lhs == rhs; 
+        return *lhs == rhs;
     }
 
     bool operator()(const NMonitoring::ILabels& lhs, const NMonitoring::ILabelsPtr& rhs) {
-        return lhs == *rhs; 
+        return lhs == *rhs;
     }
 };
 

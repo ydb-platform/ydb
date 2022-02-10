@@ -169,7 +169,7 @@ class Span {
       typename std::enable_if<!std::is_const<T>::value, U>::type;
 
  public:
-  using element_type = T; 
+  using element_type = T;
   using value_type = y_absl::remove_cv_t<T>;
   using pointer = T*;
   using const_pointer = const T*;
@@ -243,8 +243,8 @@ class Span {
   //
   template <typename LazyT = T,
             typename = EnableIfConstView<LazyT>>
-  Span(std::initializer_list<value_type> v 
-           ABSL_ATTRIBUTE_LIFETIME_BOUND) noexcept  // NOLINT(runtime/explicit) 
+  Span(std::initializer_list<value_type> v
+           ABSL_ATTRIBUTE_LIFETIME_BOUND) noexcept  // NOLINT(runtime/explicit)
       : Span(v.begin(), v.size()) {}
 
   // Accessors

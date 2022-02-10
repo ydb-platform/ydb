@@ -316,7 +316,7 @@ void TResultSetPrinter::BeginResultSet() {
     case EOutputFormat::JsonUnicodeArray:
     case EOutputFormat::JsonBase64Array:
         Cout << '[';
-        break; 
+        break;
     default:
         break;
     }
@@ -327,7 +327,7 @@ void TResultSetPrinter::EndResultSet() {
     case EOutputFormat::JsonUnicodeArray:
     case EOutputFormat::JsonBase64Array:
         Cout << ']' << Endl;
-        break; 
+        break;
     default:
         break;
     }
@@ -338,7 +338,7 @@ void TResultSetPrinter::EndLineBeforeNextResult() {
     case EOutputFormat::JsonUnicodeArray:
     case EOutputFormat::JsonBase64Array:
         Cout << ',' << Endl;
-        break; 
+        break;
     default:
         break;
     }

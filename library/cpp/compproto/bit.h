@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/array_ref.h> 
+#include <util/generic/array_ref.h>
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 #include <util/stream/input.h>
@@ -82,8 +82,8 @@ namespace NCompProto {
             Junk();
         }
 
-        TArrayRef<const char> AsDataRegion() const { 
-            return TArrayRef<const char>(reinterpret_cast<const char*>(Out.data()), ByteLength()); 
+        TArrayRef<const char> AsDataRegion() const {
+            return TArrayRef<const char>(reinterpret_cast<const char*>(Out.data()), ByteLength());
         }
     };
 

@@ -24,7 +24,7 @@
 
 #include <sys/sdt.h>
 /* Generated from src/core/profiling/stap_probes.d */
-#error #include "src/core/lib/profiling/stap_probes.h" 
+#error #include "src/core/lib/profiling/stap_probes.h"
 
 /* Latency profiler API implementation. */
 void gpr_timer_add_mark(int tag, const char* tagstr, void* id, const char* file,

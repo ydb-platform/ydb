@@ -20,16 +20,16 @@
 namespace arrow {
 
 struct Datum;
-struct ValueDescr; 
+struct ValueDescr;
 
 namespace compute {
 
-class Function; 
-class FunctionOptions; 
- 
-class CastOptions; 
- 
-struct ExecBatch; 
+class Function;
+class FunctionOptions;
+
+class CastOptions;
+
+struct ExecBatch;
 class ExecContext;
 class KernelContext;
 
@@ -38,11 +38,11 @@ struct ScalarKernel;
 struct ScalarAggregateKernel;
 struct VectorKernel;
 
-struct KernelState; 
- 
-class Expression; 
-class ExecNode; 
-class ExecPlan; 
- 
+struct KernelState;
+
+class Expression;
+class ExecNode;
+class ExecPlan;
+
 }  // namespace compute
 }  // namespace arrow

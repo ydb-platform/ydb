@@ -150,7 +150,7 @@ public:
                 break;
             case TRateLimiterMode::RuOnProgress:
                 RlConfig = &ruRlProgressConfig;
-                break; 
+                break;
             case TRateLimiterMode::Off:
                 break;
         }

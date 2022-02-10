@@ -17,7 +17,7 @@
 
 #include <library/cpp/grpc/client/grpc_client_low.h>
 
-#include <google/protobuf/any.h> 
+#include <google/protobuf/any.h>
 
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>

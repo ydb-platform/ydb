@@ -3,7 +3,7 @@
 
 #include <library/cpp/histogram/adaptive/protos/histo.pb.h>
 
-#include <util/generic/algorithm.h> 
+#include <util/generic/algorithm.h>
 #include <util/generic/yexception.h>
 #include <util/generic/ymath.h>
 #include <util/string/printf.h>

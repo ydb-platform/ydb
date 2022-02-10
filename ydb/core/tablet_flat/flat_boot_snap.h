@@ -72,7 +72,7 @@ namespace NBoot {
             bool ok = ParseFromStringNoSizeLimit(Proto, body);
             Y_VERIFY(ok);
 
-            bool huge = (body.size() > 10*1024*1024); 
+            bool huge = (body.size() > 10*1024*1024);
 
             if (auto logl = Env->Logger()->Log(huge ? ELnLev::Crit : ELnLev::Info)) {
                 auto edge = Proto.HasVersion() ? Proto.GetVersion().GetHead():1;

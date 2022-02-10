@@ -18,8 +18,8 @@ void ConvertTableKeys(const TScheme& scheme, const TScheme::TTableInfo* tableInf
     const TArrayRef<const TCell>& row,  TSmallVec<TRawTypeValue>& key, ui64* keyDataBytes)
 {
     ui64 bytes = 0;
-    key.reserve(row.size()); 
-    for (size_t keyIdx = 0; keyIdx < row.size(); keyIdx++) { 
+    key.reserve(row.size());
+    for (size_t keyIdx = 0; keyIdx < row.size(); keyIdx++) {
         const TCell& cell = row[keyIdx];
         ui32 keyCol = tableInfo->KeyColumns[keyIdx];
         NScheme::TTypeId vtype = scheme.GetColumnInfo(tableInfo, keyCol)->PType;

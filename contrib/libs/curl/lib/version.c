@@ -5,11 +5,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html. 
+ * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -26,13 +26,13 @@
 #include "urldata.h"
 #include "vtls/vtls.h"
 #include "http2.h"
-#include "vssh/ssh.h" 
+#include "vssh/ssh.h"
 #include "quic.h"
 #include "curl_printf.h"
 
 #ifdef USE_ARES
-#  if defined(CURL_STATICLIB) && !defined(CARES_STATICLIB) &&   \ 
-  defined(WIN32) 
+#  if defined(CURL_STATICLIB) && !defined(CARES_STATICLIB) &&   \
+  defined(WIN32)
 #    define CARES_STATICLIB
 #  endif
 #  include <ares.h>
@@ -62,9 +62,9 @@
 #error #include <brotli/decode.h>
 #endif
 
-#ifdef HAVE_ZSTD 
-#error #include <zstd.h> 
-#endif 
+#ifdef HAVE_ZSTD
+#error #include <zstd.h>
+#endif
 
 #ifdef HAVE_BROTLI
 static size_t brotli_version(char *buf, size_t bufsz)
@@ -78,139 +78,139 @@ static size_t brotli_version(char *buf, size_t bufsz)
 }
 #endif
 
-#ifdef HAVE_ZSTD 
-static size_t zstd_version(char *buf, size_t bufsz) 
+#ifdef HAVE_ZSTD
+static size_t zstd_version(char *buf, size_t bufsz)
 {
-  unsigned long zstd_version = (unsigned long)ZSTD_versionNumber(); 
-  unsigned int major = (unsigned int)(zstd_version / (100 * 100)); 
-  unsigned int minor = (unsigned int)((zstd_version - 
-                         (major * 100 * 100)) / 100); 
-  unsigned int patch = (unsigned int)(zstd_version - 
-                         (major * 100 * 100) - (minor * 100)); 
+  unsigned long zstd_version = (unsigned long)ZSTD_versionNumber();
+  unsigned int major = (unsigned int)(zstd_version / (100 * 100));
+  unsigned int minor = (unsigned int)((zstd_version -
+                         (major * 100 * 100)) / 100);
+  unsigned int patch = (unsigned int)(zstd_version -
+                         (major * 100 * 100) - (minor * 100));
 
-  return msnprintf(buf, bufsz, "%u.%u.%u", major, minor, patch); 
-} 
-#endif 
+  return msnprintf(buf, bufsz, "%u.%u.%u", major, minor, patch);
+}
+#endif
 
-/* 
- * curl_version() returns a pointer to a static buffer. 
- * 
- * It is implemented to work multi-threaded by making sure repeated invokes 
- * generate the exact same string and never write any temporary data like 
- * zeros in the data. 
- */ 
+/*
+ * curl_version() returns a pointer to a static buffer.
+ *
+ * It is implemented to work multi-threaded by making sure repeated invokes
+ * generate the exact same string and never write any temporary data like
+ * zeros in the data.
+ */
 
-#define VERSION_PARTS 14 /* number of substrings we can concatenate */ 
+#define VERSION_PARTS 14 /* number of substrings we can concatenate */
 
-char *curl_version(void) 
-{ 
-  static char out[300]; 
-  char *outp; 
-  size_t outlen; 
-  const char *src[VERSION_PARTS]; 
-#ifdef USE_SSL 
-  char ssl_version[200]; 
-#endif 
-#ifdef HAVE_LIBZ 
-  char z_version[40]; 
-#endif 
-#ifdef HAVE_BROTLI 
-  char br_version[40] = "brotli/"; 
-#endif 
-#ifdef HAVE_ZSTD 
-  char zst_version[40] = "zstd/"; 
-#endif 
-#ifdef USE_ARES 
-  char cares_version[40]; 
-#endif 
-#if defined(USE_LIBIDN2) 
-  char idn_version[40]; 
-#endif 
-#ifdef USE_LIBPSL 
-  char psl_version[40]; 
-#endif 
-#if defined(HAVE_ICONV) && defined(CURL_DOES_CONVERSIONS) 
-  char iconv_version[40]="iconv"; 
-#endif 
-#ifdef USE_SSH 
-  char ssh_version[40]; 
-#endif 
-#ifdef USE_NGHTTP2 
-  char h2_version[40]; 
-#endif 
-#ifdef ENABLE_QUIC 
-  char h3_version[40]; 
-#endif 
-#ifdef USE_LIBRTMP 
-  char rtmp_version[40]; 
-#endif 
-  int i = 0; 
-  int j; 
- 
-#ifdef DEBUGBUILD 
-  /* Override version string when environment variable CURL_VERSION is set */ 
-  const char *debugversion = getenv("CURL_VERSION"); 
-  if(debugversion) { 
-    strncpy(out, debugversion, sizeof(out)-1); 
-    out[sizeof(out)-1] = '\0'; 
-    return out; 
-  }
-#endif 
-
-  src[i++] = LIBCURL_NAME "/" LIBCURL_VERSION; 
-#ifdef USE_SSL 
-  Curl_ssl_version(ssl_version, sizeof(ssl_version)); 
-  src[i++] = ssl_version; 
-#endif 
+char *curl_version(void)
+{
+  static char out[300];
+  char *outp;
+  size_t outlen;
+  const char *src[VERSION_PARTS];
+#ifdef USE_SSL
+  char ssl_version[200];
+#endif
 #ifdef HAVE_LIBZ
-  msnprintf(z_version, sizeof(z_version), "zlib/%s", zlibVersion()); 
-  src[i++] = z_version; 
+  char z_version[40];
 #endif
 #ifdef HAVE_BROTLI
-  brotli_version(&br_version[7], sizeof(br_version) - 7); 
-  src[i++] = br_version; 
+  char br_version[40] = "brotli/";
 #endif
-#ifdef HAVE_ZSTD 
-  zstd_version(&zst_version[5], sizeof(zst_version) - 5); 
-  src[i++] = zst_version; 
-#endif 
+#ifdef HAVE_ZSTD
+  char zst_version[40] = "zstd/";
+#endif
 #ifdef USE_ARES
-  msnprintf(cares_version, sizeof(cares_version), 
-            "c-ares/%s", ares_version(NULL)); 
-  src[i++] = cares_version; 
+  char cares_version[40];
+#endif
+#if defined(USE_LIBIDN2)
+  char idn_version[40];
+#endif
+#ifdef USE_LIBPSL
+  char psl_version[40];
+#endif
+#if defined(HAVE_ICONV) && defined(CURL_DOES_CONVERSIONS)
+  char iconv_version[40]="iconv";
+#endif
+#ifdef USE_SSH
+  char ssh_version[40];
+#endif
+#ifdef USE_NGHTTP2
+  char h2_version[40];
+#endif
+#ifdef ENABLE_QUIC
+  char h3_version[40];
+#endif
+#ifdef USE_LIBRTMP
+  char rtmp_version[40];
+#endif
+  int i = 0;
+  int j;
+
+#ifdef DEBUGBUILD
+  /* Override version string when environment variable CURL_VERSION is set */
+  const char *debugversion = getenv("CURL_VERSION");
+  if(debugversion) {
+    strncpy(out, debugversion, sizeof(out)-1);
+    out[sizeof(out)-1] = '\0';
+    return out;
+  }
+#endif
+
+  src[i++] = LIBCURL_NAME "/" LIBCURL_VERSION;
+#ifdef USE_SSL
+  Curl_ssl_version(ssl_version, sizeof(ssl_version));
+  src[i++] = ssl_version;
+#endif
+#ifdef HAVE_LIBZ
+  msnprintf(z_version, sizeof(z_version), "zlib/%s", zlibVersion());
+  src[i++] = z_version;
+#endif
+#ifdef HAVE_BROTLI
+  brotli_version(&br_version[7], sizeof(br_version) - 7);
+  src[i++] = br_version;
+#endif
+#ifdef HAVE_ZSTD
+  zstd_version(&zst_version[5], sizeof(zst_version) - 5);
+  src[i++] = zst_version;
+#endif
+#ifdef USE_ARES
+  msnprintf(cares_version, sizeof(cares_version),
+            "c-ares/%s", ares_version(NULL));
+  src[i++] = cares_version;
 #endif
 #ifdef USE_LIBIDN2
-  msnprintf(idn_version, sizeof(idn_version), 
-            "libidn2/%s", idn2_check_version(NULL)); 
-  src[i++] = idn_version; 
-#elif defined(USE_WIN32_IDN) 
-  src[i++] = (char *)"WinIDN"; 
+  msnprintf(idn_version, sizeof(idn_version),
+            "libidn2/%s", idn2_check_version(NULL));
+  src[i++] = idn_version;
+#elif defined(USE_WIN32_IDN)
+  src[i++] = (char *)"WinIDN";
 #endif
- 
+
 #ifdef USE_LIBPSL
-  msnprintf(psl_version, sizeof(psl_version), "libpsl/%s", psl_get_version()); 
-  src[i++] = psl_version; 
+  msnprintf(psl_version, sizeof(psl_version), "libpsl/%s", psl_get_version());
+  src[i++] = psl_version;
 #endif
 #if defined(HAVE_ICONV) && defined(CURL_DOES_CONVERSIONS)
 #ifdef _LIBICONV_VERSION
-  msnprintf(iconv_version, sizeof(iconv_version), "iconv/%d.%d", 
-            _LIBICONV_VERSION >> 8, _LIBICONV_VERSION & 255); 
+  msnprintf(iconv_version, sizeof(iconv_version), "iconv/%d.%d",
+            _LIBICONV_VERSION >> 8, _LIBICONV_VERSION & 255);
 #else
-  /* version unknown, let the default stand */ 
+  /* version unknown, let the default stand */
 #endif /* _LIBICONV_VERSION */
-  src[i++] = iconv_version; 
+  src[i++] = iconv_version;
 #endif
 #ifdef USE_SSH
-  Curl_ssh_version(ssh_version, sizeof(ssh_version)); 
-  src[i++] = ssh_version; 
+  Curl_ssh_version(ssh_version, sizeof(ssh_version));
+  src[i++] = ssh_version;
 #endif
 #ifdef USE_NGHTTP2
-  Curl_http2_ver(h2_version, sizeof(h2_version)); 
-  src[i++] = h2_version; 
+  Curl_http2_ver(h2_version, sizeof(h2_version));
+  src[i++] = h2_version;
 #endif
 #ifdef ENABLE_QUIC
-  Curl_quic_ver(h3_version, sizeof(h3_version)); 
-  src[i++] = h3_version; 
+  Curl_quic_ver(h3_version, sizeof(h3_version));
+  src[i++] = h3_version;
 #endif
 #ifdef USE_LIBRTMP
   {
@@ -222,34 +222,34 @@ char *curl_version(void)
     else
       suff[0] = '\0';
 
-    msnprintf(rtmp_version, sizeof(rtmp_version), "librtmp/%d.%d%s", 
+    msnprintf(rtmp_version, sizeof(rtmp_version), "librtmp/%d.%d%s",
               RTMP_LIB_VERSION >> 16, (RTMP_LIB_VERSION >> 8) & 0xff,
               suff);
-    src[i++] = rtmp_version; 
-  } 
-#endif 
-
-  DEBUGASSERT(i <= VERSION_PARTS); 
-
-  outp = &out[0]; 
-  outlen = sizeof(out); 
-  for(j = 0; j < i; j++) { 
-    size_t n = strlen(src[j]); 
-    /* we need room for a space, the string and the final zero */ 
-    if(outlen <= (n + 2)) 
-      break; 
-    if(j) { 
-      /* prepend a space if not the first */ 
-      *outp++ = ' '; 
-      outlen--; 
-    } 
-    memcpy(outp, src[j], n); 
-    outp += n; 
-    outlen -= n; 
+    src[i++] = rtmp_version;
   }
-  *outp = 0; 
+#endif
 
-  return out; 
+  DEBUGASSERT(i <= VERSION_PARTS);
+
+  outp = &out[0];
+  outlen = sizeof(out);
+  for(j = 0; j < i; j++) {
+    size_t n = strlen(src[j]);
+    /* we need room for a space, the string and the final zero */
+    if(outlen <= (n + 2))
+      break;
+    if(j) {
+      /* prepend a space if not the first */
+      *outp++ = ' ';
+      outlen--;
+    }
+    memcpy(outp, src[j], n);
+    outp += n;
+    outlen -= n;
+  }
+  *outp = 0;
+
+  return out;
 }
 
 /* data for curl_version_info
@@ -294,9 +294,9 @@ static const char * const protocols[] = {
   "ldaps",
 #endif
 #endif
-#ifndef CURL_DISABLE_MQTT 
-  "mqtt", 
-#endif 
+#ifndef CURL_DISABLE_MQTT
+  "mqtt",
+#endif
 #ifndef CURL_DISABLE_POP3
   "pop3",
 #endif
@@ -309,14 +309,14 @@ static const char * const protocols[] = {
 #ifndef CURL_DISABLE_RTSP
   "rtsp",
 #endif
-#if defined(USE_SSH) && !defined(USE_WOLFSSH) 
+#if defined(USE_SSH) && !defined(USE_WOLFSSH)
   "scp",
-#endif 
-#ifdef USE_SSH 
+#endif
+#ifdef USE_SSH
   "sftp",
 #endif
-#if !defined(CURL_DISABLE_SMB) && defined(USE_CURL_NTLM_CORE) && \ 
-   (CURL_SIZEOF_CURL_OFF_T > 4) 
+#if !defined(CURL_DISABLE_SMB) && defined(USE_CURL_NTLM_CORE) && \
+   (CURL_SIZEOF_CURL_OFF_T > 4)
   "smb",
 #  ifdef USE_SSL
   "smbs",
@@ -385,9 +385,9 @@ static curl_version_info_data version_info = {
     ( (SIZEOF_OFF_T > 4) || defined(USE_WIN32_LARGE_FILES) )
   | CURL_VERSION_LARGEFILE
 #endif
-#if defined(WIN32) && defined(UNICODE) && defined(_UNICODE) 
-  | CURL_VERSION_UNICODE 
-#endif 
+#if defined(WIN32) && defined(UNICODE) && defined(_UNICODE)
+  | CURL_VERSION_UNICODE
+#endif
 #if defined(CURL_DOES_CONVERSIONS)
   | CURL_VERSION_CONV
 #endif
@@ -412,15 +412,15 @@ static curl_version_info_data version_info = {
 #if defined(HAVE_BROTLI)
   | CURL_VERSION_BROTLI
 #endif
-#if defined(HAVE_ZSTD) 
-  | CURL_VERSION_ZSTD 
-#endif 
-#ifndef CURL_DISABLE_ALTSVC 
+#if defined(HAVE_ZSTD)
+  | CURL_VERSION_ZSTD
+#endif
+#ifndef CURL_DISABLE_ALTSVC
   | CURL_VERSION_ALTSVC
 #endif
-#if defined(USE_HSTS) 
-  | CURL_VERSION_HSTS 
-#endif 
+#if defined(USE_HSTS)
+  | CURL_VERSION_HSTS
+#endif
   ,
   NULL, /* ssl_version */
   0,    /* ssl_version_num, this is kept at zero */
@@ -435,19 +435,19 @@ static curl_version_info_data version_info = {
   NULL, /* brotli version */
   0,    /* nghttp2 version number */
   NULL, /* nghttp2 version string */
-  NULL, /* quic library string */ 
-#ifdef CURL_CA_BUNDLE 
-  CURL_CA_BUNDLE, /* cainfo */ 
-#else 
-  NULL, 
-#endif 
-#ifdef CURL_CA_PATH 
-  CURL_CA_PATH,  /* capath */ 
-#else 
-  NULL, 
-#endif 
-  0,    /* zstd_ver_num */ 
-  NULL  /* zstd version */ 
+  NULL, /* quic library string */
+#ifdef CURL_CA_BUNDLE
+  CURL_CA_BUNDLE, /* cainfo */
+#else
+  NULL,
+#endif
+#ifdef CURL_CA_PATH
+  CURL_CA_PATH,  /* capath */
+#else
+  NULL,
+#endif
+  0,    /* zstd_ver_num */
+  NULL  /* zstd version */
 };
 
 curl_version_info_data *curl_version_info(CURLversion stamp)
@@ -465,21 +465,21 @@ curl_version_info_data *curl_version_info(CURLversion stamp)
 #ifdef HAVE_BROTLI
   static char brotli_buffer[80];
 #endif
-#ifdef HAVE_ZSTD 
-  static char zstd_buffer[80]; 
-#endif 
+#ifdef HAVE_ZSTD
+  static char zstd_buffer[80];
+#endif
 
 
 #ifdef USE_SSL
   Curl_ssl_version(ssl_buffer, sizeof(ssl_buffer));
   version_info.ssl_version = ssl_buffer;
-#ifndef CURL_DISABLE_PROXY 
+#ifndef CURL_DISABLE_PROXY
   if(Curl_ssl->supports & SSLSUPP_HTTPS_PROXY)
     version_info.features |= CURL_VERSION_HTTPS_PROXY;
   else
     version_info.features &= ~CURL_VERSION_HTTPS_PROXY;
 #endif
-#endif 
+#endif
 
 #ifdef HAVE_LIBZ
   version_info.libz_version = zlibVersion();
@@ -522,12 +522,12 @@ curl_version_info_data *curl_version_info(CURLversion stamp)
   version_info.brotli_version = brotli_buffer;
 #endif
 
-#ifdef HAVE_ZSTD 
-  version_info.zstd_ver_num = (unsigned int)ZSTD_versionNumber(); 
-  zstd_version(zstd_buffer, sizeof(zstd_buffer)); 
-  version_info.zstd_version = zstd_buffer; 
-#endif 
- 
+#ifdef HAVE_ZSTD
+  version_info.zstd_ver_num = (unsigned int)ZSTD_versionNumber();
+  zstd_version(zstd_buffer, sizeof(zstd_buffer));
+  version_info.zstd_version = zstd_buffer;
+#endif
+
 #ifdef USE_NGHTTP2
   {
     nghttp2_info *h2 = nghttp2_version(0);

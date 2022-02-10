@@ -6,11 +6,11 @@
 // For the license information refer to format.h.
 
 #include "fmt/color.h"
- 
-#include <iterator> 
-#include <string> 
-#include <utility> 
- 
+
+#include <iterator>
+#include <string>
+#include <utility>
+
 #include "gtest-extra.h"
 
 TEST(ColorsTest, ColorsPrint) {
@@ -88,12 +88,12 @@ TEST(ColorsTest, Format) {
   EXPECT_EQ(fmt::format(fg(fmt::terminal_color::red), "{}", "foo"),
             "\x1b[31mfoo\x1b[0m");
 }
- 
-TEST(ColorsTest, FormatToOutAcceptsTextStyle) { 
-  fmt::text_style ts = fg(fmt::rgb(255, 20, 30)); 
-  std::string out; 
-  fmt::format_to(std::back_inserter(out), ts, "rgb(255,20,30){}{}{}", 1, 2, 3); 
- 
-  EXPECT_EQ(fmt::to_string(out), 
-            "\x1b[38;2;255;020;030mrgb(255,20,30)123\x1b[0m"); 
-} 
+
+TEST(ColorsTest, FormatToOutAcceptsTextStyle) {
+  fmt::text_style ts = fg(fmt::rgb(255, 20, 30));
+  std::string out;
+  fmt::format_to(std::back_inserter(out), ts, "rgb(255,20,30){}{}{}", 1, 2, 3);
+
+  EXPECT_EQ(fmt::to_string(out),
+            "\x1b[38;2;255;020;030mrgb(255,20,30)123\x1b[0m");
+}

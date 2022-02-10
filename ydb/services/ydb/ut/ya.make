@@ -37,7 +37,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow 
+    contrib/libs/apache/arrow
     library/cpp/getopt
     library/cpp/grpc/client
     library/cpp/regex/pcre

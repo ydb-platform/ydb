@@ -7,7 +7,7 @@ ENDIF()
 IF (NOT PREBUILT)
     INCLUDE(${ARCADIA_ROOT}/contrib/tools/protoc/plugins/cpp_styleguide/bin/ya.make)
 ENDIF()
- 
+
 RECURSE(
     bin
 )

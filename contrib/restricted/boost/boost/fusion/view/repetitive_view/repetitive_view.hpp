@@ -45,7 +45,7 @@ namespace boost { namespace fusion
         stored_seq_type seq;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(repetitive_view& operator= (repetitive_view const&)) 
+        BOOST_DELETED_FUNCTION(repetitive_view& operator= (repetitive_view const&))
     };
 
 }}

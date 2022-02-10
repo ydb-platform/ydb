@@ -97,7 +97,7 @@ private:
                 }
                 LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY,
                     "Created new entry for kesus " << msg->KesusPath.Quote());
-                [[fallthrough]]; 
+                [[fallthrough]];
 
             case CACHE_STATE_ACTIVE:
                 // Recheck schemecache for changes
@@ -105,7 +105,7 @@ private:
                     "Starting resolve for kesus " << msg->KesusPath.Quote());
                 RegisterWithSameMailbox(CreateResolveActor(msg->KesusPath));
                 entry.State = CACHE_STATE_RESOLVING;
-                [[fallthrough]]; 
+                [[fallthrough]];
 
             case CACHE_STATE_RESOLVING:
                 // Wait for result from schemecache

@@ -168,7 +168,7 @@ namespace NCodecs {
         }
 
         TString GetName() const override {
-            return ToString(MyName()); 
+            return ToString(MyName());
         }
     };
 
@@ -184,7 +184,7 @@ namespace NCodecs {
         }
 
         TString GetName() const override {
-            return ToString(MyName()); 
+            return ToString(MyName());
         }
     };
 

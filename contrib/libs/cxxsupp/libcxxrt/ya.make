@@ -15,7 +15,7 @@ OWNER(
     pg
     setser
     somov
-    g:cpp-committee 
+    g:cpp-committee
     g:cpp-contrib
 )
 
@@ -33,7 +33,7 @@ NO_RUNTIME()
 
 CXXFLAGS(-nostdinc++)
 
-IF (CXX_UNWIND == "glibcxx_dynamic" OR ARCH_PPC64LE) 
+IF (CXX_UNWIND == "glibcxx_dynamic" OR ARCH_PPC64LE)
     LDFLAGS(-lgcc_s)
 ELSE()
     PEERDIR(

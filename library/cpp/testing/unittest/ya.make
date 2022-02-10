@@ -1,7 +1,7 @@
 LIBRARY()
 
-PROVIDES(test_framework) 
- 
+PROVIDES(test_framework)
+
 OWNER(
     pg
     galaxycrab

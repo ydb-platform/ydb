@@ -209,8 +209,8 @@ std::shared_ptr<StatusDetail> StatusDetailFromErrno(int errnum);
 ARROW_EXPORT
 std::shared_ptr<StatusDetail> StatusDetailFromWinError(int errnum);
 #endif
-ARROW_EXPORT 
-std::shared_ptr<StatusDetail> StatusDetailFromSignal(int signum); 
+ARROW_EXPORT
+std::shared_ptr<StatusDetail> StatusDetailFromSignal(int signum);
 
 template <typename... Args>
 Status StatusFromErrno(int errnum, StatusCode code, Args&&... args) {
@@ -236,17 +236,17 @@ Status IOErrorFromWinError(int errnum, Args&&... args) {
 }
 #endif
 
-template <typename... Args> 
-Status StatusFromSignal(int signum, StatusCode code, Args&&... args) { 
-  return Status::FromDetailAndArgs(code, StatusDetailFromSignal(signum), 
-                                   std::forward<Args>(args)...); 
-} 
- 
-template <typename... Args> 
-Status CancelledFromSignal(int signum, Args&&... args) { 
-  return StatusFromSignal(signum, StatusCode::Cancelled, std::forward<Args>(args)...); 
-} 
- 
+template <typename... Args>
+Status StatusFromSignal(int signum, StatusCode code, Args&&... args) {
+  return Status::FromDetailAndArgs(code, StatusDetailFromSignal(signum),
+                                   std::forward<Args>(args)...);
+}
+
+template <typename... Args>
+Status CancelledFromSignal(int signum, Args&&... args) {
+  return StatusFromSignal(signum, StatusCode::Cancelled, std::forward<Args>(args)...);
+}
+
 ARROW_EXPORT
 int ErrnoFromStatus(const Status&);
 
@@ -254,9 +254,9 @@ int ErrnoFromStatus(const Status&);
 ARROW_EXPORT
 int WinErrorFromStatus(const Status&);
 
-ARROW_EXPORT 
-int SignalFromStatus(const Status&); 
- 
+ARROW_EXPORT
+int SignalFromStatus(const Status&);
+
 class ARROW_EXPORT TemporaryDir {
  public:
   ~TemporaryDir();
@@ -309,26 +309,26 @@ Result<SignalHandler> GetSignalHandler(int signum);
 ARROW_EXPORT
 Result<SignalHandler> SetSignalHandler(int signum, const SignalHandler& handler);
 
-/// \brief Reinstate the signal handler 
-/// 
-/// For use in signal handlers.  This is needed on platforms without sigaction() 
-/// such as Windows, as the default signal handler is restored there as 
-/// soon as a signal is raised. 
-ARROW_EXPORT 
-void ReinstateSignalHandler(int signum, SignalHandler::Callback handler); 
- 
-/// \brief Send a signal to the current process 
-/// 
-/// The thread which will receive the signal is unspecified. 
-ARROW_EXPORT 
-Status SendSignal(int signum); 
- 
-/// \brief Send a signal to the given thread 
-/// 
-/// This function isn't supported on Windows. 
-ARROW_EXPORT 
-Status SendSignalToThread(int signum, uint64_t thread_id); 
- 
+/// \brief Reinstate the signal handler
+///
+/// For use in signal handlers.  This is needed on platforms without sigaction()
+/// such as Windows, as the default signal handler is restored there as
+/// soon as a signal is raised.
+ARROW_EXPORT
+void ReinstateSignalHandler(int signum, SignalHandler::Callback handler);
+
+/// \brief Send a signal to the current process
+///
+/// The thread which will receive the signal is unspecified.
+ARROW_EXPORT
+Status SendSignal(int signum);
+
+/// \brief Send a signal to the given thread
+///
+/// This function isn't supported on Windows.
+ARROW_EXPORT
+Status SendSignalToThread(int signum, uint64_t thread_id);
+
 /// \brief Get an unpredictable random seed
 ///
 /// This function may be slightly costly, so should only be used to initialize
@@ -338,12 +338,12 @@ Status SendSignalToThread(int signum, uint64_t thread_id);
 ARROW_EXPORT
 int64_t GetRandomSeed();
 
-/// \brief Get the current thread id 
-/// 
-/// In addition to having the same properties as std::thread, the returned value 
-/// is a regular integer value, which is more convenient than an opaque type. 
-ARROW_EXPORT 
-uint64_t GetThreadId(); 
- 
+/// \brief Get the current thread id
+///
+/// In addition to having the same properties as std::thread, the returned value
+/// is a regular integer value, which is more convenient than an opaque type.
+ARROW_EXPORT
+uint64_t GetThreadId();
+
 }  // namespace internal
 }  // namespace arrow

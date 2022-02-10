@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2020, Intel Corporation 
+ * Copyright (c) 2015-2020, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -45,7 +45,7 @@
 #include "parser/buildstate.h"
 #include "parser/dump.h"
 #include "parser/Component.h"
-#include "parser/logical_combination.h" 
+#include "parser/logical_combination.h"
 #include "parser/parse_error.h"
 #include "parser/Parser.h"          // for flags
 #include "parser/position.h"
@@ -56,13 +56,13 @@
 #include "parser/unsupported.h"
 #include "parser/utf8_validate.h"
 #include "rose/rose_build.h"
-#include "rose/rose_internal.h" 
+#include "rose/rose_internal.h"
 #include "som/slot_manager_dump.h"
 #include "util/bytecode_ptr.h"
 #include "util/compile_error.h"
 #include "util/target_info.h"
 #include "util/verify_types.h"
-#include "util/ue2string.h" 
+#include "util/ue2string.h"
 
 #include <algorithm>
 #include <cassert>
@@ -109,66 +109,66 @@ void validateExt(const hs_expr_ext &ext) {
 
 }
 
-void ParsedLitExpression::parseLiteral(const char *expression, size_t len, 
-                                       bool nocase) { 
-    const char *c = expression; 
-    for (size_t i = 0; i < len; i++) { 
-        lit.push_back(*c, nocase); 
-        c++; 
-    } 
-} 
- 
-ParsedLitExpression::ParsedLitExpression(unsigned index_in, 
-                                         const char *expression, 
-                                         size_t expLength, unsigned flags, 
-                                         ReportID report) 
-    : expr(index_in, false, flags & HS_FLAG_SINGLEMATCH, false, false, 
-           SOM_NONE, report, 0, MAX_OFFSET, 0, 0, 0, false) { 
-    // For pure literal expression, below 'HS_FLAG_'s are unuseful: 
-    // DOTALL/ALLOWEMPTY/UTF8/UCP/PREFILTER/COMBINATION/QUIET/MULTILINE 
- 
-    if (flags & ~HS_FLAG_ALL) { 
-        DEBUG_PRINTF("Unrecognised flag, flags=%u.\n", flags); 
-        throw CompileError("Unrecognised flag."); 
-    } 
- 
-    // FIXME: we disallow highlander + SOM, see UE-1850. 
-    if ((flags & HS_FLAG_SINGLEMATCH) && (flags & HS_FLAG_SOM_LEFTMOST)) { 
-        throw CompileError("HS_FLAG_SINGLEMATCH is not supported in " 
-                           "combination with HS_FLAG_SOM_LEFTMOST."); 
-    } 
- 
-    // Set SOM type. 
-    if (flags & HS_FLAG_SOM_LEFTMOST) { 
-        expr.som = SOM_LEFT; 
-    } 
- 
-    // Transfer expression text into ue2_literal. 
-    bool nocase = flags & HS_FLAG_CASELESS ? true : false; 
-    parseLiteral(expression, expLength, nocase); 
- 
-} 
- 
+void ParsedLitExpression::parseLiteral(const char *expression, size_t len,
+                                       bool nocase) {
+    const char *c = expression;
+    for (size_t i = 0; i < len; i++) {
+        lit.push_back(*c, nocase);
+        c++;
+    }
+}
+
+ParsedLitExpression::ParsedLitExpression(unsigned index_in,
+                                         const char *expression,
+                                         size_t expLength, unsigned flags,
+                                         ReportID report)
+    : expr(index_in, false, flags & HS_FLAG_SINGLEMATCH, false, false,
+           SOM_NONE, report, 0, MAX_OFFSET, 0, 0, 0, false) {
+    // For pure literal expression, below 'HS_FLAG_'s are unuseful:
+    // DOTALL/ALLOWEMPTY/UTF8/UCP/PREFILTER/COMBINATION/QUIET/MULTILINE
+
+    if (flags & ~HS_FLAG_ALL) {
+        DEBUG_PRINTF("Unrecognised flag, flags=%u.\n", flags);
+        throw CompileError("Unrecognised flag.");
+    }
+
+    // FIXME: we disallow highlander + SOM, see UE-1850.
+    if ((flags & HS_FLAG_SINGLEMATCH) && (flags & HS_FLAG_SOM_LEFTMOST)) {
+        throw CompileError("HS_FLAG_SINGLEMATCH is not supported in "
+                           "combination with HS_FLAG_SOM_LEFTMOST.");
+    }
+
+    // Set SOM type.
+    if (flags & HS_FLAG_SOM_LEFTMOST) {
+        expr.som = SOM_LEFT;
+    }
+
+    // Transfer expression text into ue2_literal.
+    bool nocase = flags & HS_FLAG_CASELESS ? true : false;
+    parseLiteral(expression, expLength, nocase);
+
+}
+
 ParsedExpression::ParsedExpression(unsigned index_in, const char *expression,
                                    unsigned flags, ReportID report,
                                    const hs_expr_ext *ext)
     : expr(index_in, flags & HS_FLAG_ALLOWEMPTY, flags & HS_FLAG_SINGLEMATCH,
            false, flags & HS_FLAG_PREFILTER, SOM_NONE, report, 0, MAX_OFFSET,
-           0, 0, 0, flags & HS_FLAG_QUIET) { 
-    // We disallow SOM + Quiet. 
-    if ((flags & HS_FLAG_QUIET) && (flags & HS_FLAG_SOM_LEFTMOST)) { 
-        throw CompileError("HS_FLAG_QUIET is not supported in " 
-                           "combination with HS_FLAG_SOM_LEFTMOST."); 
-    } 
-    flags &= ~HS_FLAG_QUIET; 
+           0, 0, 0, flags & HS_FLAG_QUIET) {
+    // We disallow SOM + Quiet.
+    if ((flags & HS_FLAG_QUIET) && (flags & HS_FLAG_SOM_LEFTMOST)) {
+        throw CompileError("HS_FLAG_QUIET is not supported in "
+                           "combination with HS_FLAG_SOM_LEFTMOST.");
+    }
+    flags &= ~HS_FLAG_QUIET;
     ParseMode mode(flags);
 
     component = parse(expression, mode);
 
     expr.utf8 = mode.utf8; /* utf8 may be set by parse() */
 
-    const size_t len = strlen(expression); 
-    if (expr.utf8 && !isValidUtf8(expression, len)) { 
+    const size_t len = strlen(expression);
+    if (expr.utf8 && !isValidUtf8(expression, len)) {
         throw ParseError("Expression is not valid UTF-8.");
     }
 
@@ -283,45 +283,45 @@ void addExpression(NG &ng, unsigned index, const char *expression,
     DEBUG_PRINTF("index=%u, id=%u, flags=%u, expr='%s'\n", index, id, flags,
                  expression);
 
-    if (flags & HS_FLAG_COMBINATION) { 
-        if (flags & ~(HS_FLAG_COMBINATION | HS_FLAG_QUIET | 
-                      HS_FLAG_SINGLEMATCH)) { 
-            throw CompileError("only HS_FLAG_QUIET and HS_FLAG_SINGLEMATCH " 
-                               "are supported in combination " 
-                               "with HS_FLAG_COMBINATION."); 
-        } 
-        if (flags & HS_FLAG_QUIET) { 
-            DEBUG_PRINTF("skip QUIET logical combination expression %u\n", id); 
-        } else { 
-            u32 ekey = INVALID_EKEY; 
-            u64a min_offset = 0; 
-            u64a max_offset = MAX_OFFSET; 
-            if (flags & HS_FLAG_SINGLEMATCH) { 
-                ekey = ng.rm.getExhaustibleKey(id); 
-            } 
-            if (ext) { 
-                validateExt(*ext); 
-                if (ext->flags & ~(HS_EXT_FLAG_MIN_OFFSET | 
-                                   HS_EXT_FLAG_MAX_OFFSET)) { 
-                    throw CompileError("only HS_EXT_FLAG_MIN_OFFSET and " 
-                                       "HS_EXT_FLAG_MAX_OFFSET extra flags " 
-                                       "are supported in combination " 
-                                       "with HS_FLAG_COMBINATION."); 
-                } 
-                if (ext->flags & HS_EXT_FLAG_MIN_OFFSET) { 
-                    min_offset = ext->min_offset; 
-                } 
-                if (ext->flags & HS_EXT_FLAG_MAX_OFFSET) { 
-                    max_offset = ext->max_offset; 
-                } 
-            } 
-            ng.rm.pl.parseLogicalCombination(id, expression, ekey, min_offset, 
-                                             max_offset); 
-            DEBUG_PRINTF("parsed logical combination expression %u\n", id); 
-        } 
-        return; 
-    } 
- 
+    if (flags & HS_FLAG_COMBINATION) {
+        if (flags & ~(HS_FLAG_COMBINATION | HS_FLAG_QUIET |
+                      HS_FLAG_SINGLEMATCH)) {
+            throw CompileError("only HS_FLAG_QUIET and HS_FLAG_SINGLEMATCH "
+                               "are supported in combination "
+                               "with HS_FLAG_COMBINATION.");
+        }
+        if (flags & HS_FLAG_QUIET) {
+            DEBUG_PRINTF("skip QUIET logical combination expression %u\n", id);
+        } else {
+            u32 ekey = INVALID_EKEY;
+            u64a min_offset = 0;
+            u64a max_offset = MAX_OFFSET;
+            if (flags & HS_FLAG_SINGLEMATCH) {
+                ekey = ng.rm.getExhaustibleKey(id);
+            }
+            if (ext) {
+                validateExt(*ext);
+                if (ext->flags & ~(HS_EXT_FLAG_MIN_OFFSET |
+                                   HS_EXT_FLAG_MAX_OFFSET)) {
+                    throw CompileError("only HS_EXT_FLAG_MIN_OFFSET and "
+                                       "HS_EXT_FLAG_MAX_OFFSET extra flags "
+                                       "are supported in combination "
+                                       "with HS_FLAG_COMBINATION.");
+                }
+                if (ext->flags & HS_EXT_FLAG_MIN_OFFSET) {
+                    min_offset = ext->min_offset;
+                }
+                if (ext->flags & HS_EXT_FLAG_MAX_OFFSET) {
+                    max_offset = ext->max_offset;
+                }
+            }
+            ng.rm.pl.parseLogicalCombination(id, expression, ekey, min_offset,
+                                             max_offset);
+            DEBUG_PRINTF("parsed logical combination expression %u\n", id);
+        }
+        return;
+    }
+
     // Ensure that our pattern isn't too long (in characters).
     if (strlen(expression) > cc.grey.limitPatternLength) {
         throw CompileError("Pattern length exceeds limit.");
@@ -387,48 +387,48 @@ void addExpression(NG &ng, unsigned index, const char *expression,
     }
 }
 
-void addLitExpression(NG &ng, unsigned index, const char *expression, 
-                      unsigned flags, const hs_expr_ext *ext, ReportID id, 
-                      size_t expLength) { 
-    assert(expression); 
-    const CompileContext &cc = ng.cc; 
-    DEBUG_PRINTF("index=%u, id=%u, flags=%u, expr='%s', len='%zu'\n", index, 
-                 id, flags, expression, expLength); 
- 
-    // Extended parameters are not supported for pure literal patterns. 
-    if (ext && ext->flags != 0LLU) { 
-        throw CompileError("Extended parameters are not supported for pure " 
-                           "literal matching API."); 
-    } 
- 
-    // Ensure that our pattern isn't too long (in characters). 
-    if (expLength > cc.grey.limitPatternLength) { 
-        throw CompileError("Pattern length exceeds limit."); 
-    } 
- 
-    // filter out flags not supported by pure literal API. 
-    u64a not_supported = HS_FLAG_DOTALL | HS_FLAG_ALLOWEMPTY | HS_FLAG_UTF8 | 
-                         HS_FLAG_UCP | HS_FLAG_PREFILTER | HS_FLAG_COMBINATION | 
-                         HS_FLAG_QUIET | HS_FLAG_MULTILINE; 
- 
-    if (flags & not_supported) { 
-        throw CompileError("Only HS_FLAG_CASELESS, HS_FLAG_SINGLEMATCH and " 
-                           "HS_FLAG_SOM_LEFTMOST are supported in literal API."); 
-    } 
- 
-    // This expression must be a pure literal, we can build ue2_literal 
-    // directly based on expression text. 
-    ParsedLitExpression ple(index, expression, expLength, flags, id); 
- 
-    // Feed the ue2_literal into Rose. 
-    const auto &expr = ple.expr; 
-    if (ng.addLiteral(ple.lit, expr.index, expr.report, expr.highlander, 
-                      expr.som, expr.quiet)) { 
-        DEBUG_PRINTF("took pure literal\n"); 
-        return; 
-    } 
-} 
- 
+void addLitExpression(NG &ng, unsigned index, const char *expression,
+                      unsigned flags, const hs_expr_ext *ext, ReportID id,
+                      size_t expLength) {
+    assert(expression);
+    const CompileContext &cc = ng.cc;
+    DEBUG_PRINTF("index=%u, id=%u, flags=%u, expr='%s', len='%zu'\n", index,
+                 id, flags, expression, expLength);
+
+    // Extended parameters are not supported for pure literal patterns.
+    if (ext && ext->flags != 0LLU) {
+        throw CompileError("Extended parameters are not supported for pure "
+                           "literal matching API.");
+    }
+
+    // Ensure that our pattern isn't too long (in characters).
+    if (expLength > cc.grey.limitPatternLength) {
+        throw CompileError("Pattern length exceeds limit.");
+    }
+
+    // filter out flags not supported by pure literal API.
+    u64a not_supported = HS_FLAG_DOTALL | HS_FLAG_ALLOWEMPTY | HS_FLAG_UTF8 |
+                         HS_FLAG_UCP | HS_FLAG_PREFILTER | HS_FLAG_COMBINATION |
+                         HS_FLAG_QUIET | HS_FLAG_MULTILINE;
+
+    if (flags & not_supported) {
+        throw CompileError("Only HS_FLAG_CASELESS, HS_FLAG_SINGLEMATCH and "
+                           "HS_FLAG_SOM_LEFTMOST are supported in literal API.");
+    }
+
+    // This expression must be a pure literal, we can build ue2_literal
+    // directly based on expression text.
+    ParsedLitExpression ple(index, expression, expLength, flags, id);
+
+    // Feed the ue2_literal into Rose.
+    const auto &expr = ple.expr;
+    if (ng.addLiteral(ple.lit, expr.index, expr.report, expr.highlander,
+                      expr.som, expr.quiet)) {
+        DEBUG_PRINTF("took pure literal\n");
+        return;
+    }
+}
+
 static
 bytecode_ptr<RoseEngine> generateRoseEngine(NG &ng) {
     const u32 minWidth =
@@ -458,9 +458,9 @@ platform_t target_to_platform(const target_t &target_info) {
     if (!target_info.has_avx512()) {
         p |= HS_PLATFORM_NOAVX512;
     }
-    if (!target_info.has_avx512vbmi()) { 
-        p |= HS_PLATFORM_NOAVX512VBMI; 
-    } 
+    if (!target_info.has_avx512vbmi()) {
+        p |= HS_PLATFORM_NOAVX512VBMI;
+    }
     return p;
 }
 
@@ -503,13 +503,13 @@ hs_database_t *dbCreate(const char *in_bytecode, size_t len, u64a platform) {
 }
 
 
-struct hs_database *build(NG &ng, unsigned int *length, u8 pureFlag) { 
+struct hs_database *build(NG &ng, unsigned int *length, u8 pureFlag) {
     assert(length);
 
     auto rose = generateRoseEngine(ng);
-    struct RoseEngine *roseHead = rose.get(); 
-    roseHead->pureLiteral = pureFlag; 
- 
+    struct RoseEngine *roseHead = rose.get();
+    roseHead->pureLiteral = pureFlag;
+
     if (!rose) {
         throw CompileError("Unable to generate bytecode.");
     }

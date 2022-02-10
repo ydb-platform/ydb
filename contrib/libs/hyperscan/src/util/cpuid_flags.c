@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2020, Intel Corporation 
+ * Copyright (c) 2015-2020, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -50,11 +50,11 @@ u64a cpuid_flags(void) {
         cap |= HS_CPU_FEATURES_AVX512;
     }
 
-    if (check_avx512vbmi()) { 
-        DEBUG_PRINTF("AVX512VBMI enabled\n"); 
-        cap |= HS_CPU_FEATURES_AVX512VBMI; 
-    } 
- 
+    if (check_avx512vbmi()) {
+        DEBUG_PRINTF("AVX512VBMI enabled\n");
+        cap |= HS_CPU_FEATURES_AVX512VBMI;
+    }
+
 #if !defined(FAT_RUNTIME) && !defined(HAVE_AVX2)
     cap &= ~HS_CPU_FEATURES_AVX2;
 #endif
@@ -64,11 +64,11 @@ u64a cpuid_flags(void) {
     cap &= ~HS_CPU_FEATURES_AVX512;
 #endif
 
-#if (!defined(FAT_RUNTIME) && !defined(HAVE_AVX512VBMI)) ||                    \ 
-    (defined(FAT_RUNTIME) && !defined(BUILD_AVX512VBMI)) 
-    cap &= ~HS_CPU_FEATURES_AVX512VBMI; 
-#endif 
- 
+#if (!defined(FAT_RUNTIME) && !defined(HAVE_AVX512VBMI)) ||                    \
+    (defined(FAT_RUNTIME) && !defined(BUILD_AVX512VBMI))
+    cap &= ~HS_CPU_FEATURES_AVX512VBMI;
+#endif
+
     return cap;
 }
 
@@ -115,11 +115,11 @@ static const struct family_id known_microarch[] = {
     { 0x6, 0x8E, HS_TUNE_FAMILY_SKL }, /* Kabylake Mobile */
     { 0x6, 0x9E, HS_TUNE_FAMILY_SKL }, /* Kabylake desktop */
 
-    { 0x6, 0x7D, HS_TUNE_FAMILY_ICL }, /* Icelake */ 
-    { 0x6, 0x7E, HS_TUNE_FAMILY_ICL }, /* Icelake */ 
-    { 0x6, 0x6A, HS_TUNE_FAMILY_ICX }, /* Icelake Xeon-D */ 
-    { 0x6, 0x6C, HS_TUNE_FAMILY_ICX }, /* Icelake Xeon */ 
- 
+    { 0x6, 0x7D, HS_TUNE_FAMILY_ICL }, /* Icelake */
+    { 0x6, 0x7E, HS_TUNE_FAMILY_ICL }, /* Icelake */
+    { 0x6, 0x6A, HS_TUNE_FAMILY_ICX }, /* Icelake Xeon-D */
+    { 0x6, 0x6C, HS_TUNE_FAMILY_ICX }, /* Icelake Xeon */
+
 };
 
 #ifdef DUMP_SUPPORT
@@ -135,8 +135,8 @@ const char *dumpTune(u32 tune) {
         T_CASE(HS_TUNE_FAMILY_BDW);
         T_CASE(HS_TUNE_FAMILY_SKL);
         T_CASE(HS_TUNE_FAMILY_SKX);
-        T_CASE(HS_TUNE_FAMILY_ICL); 
-        T_CASE(HS_TUNE_FAMILY_ICX); 
+        T_CASE(HS_TUNE_FAMILY_ICL);
+        T_CASE(HS_TUNE_FAMILY_ICX);
     }
 #undef T_CASE
     return "unknown";

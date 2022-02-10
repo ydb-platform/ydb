@@ -4,10 +4,10 @@ option java_package = "ru.yandex.kikimr.proto";
 // 256-whatever range
 // add each service here
 enum EServiceKikimr {
-    // This value is reserved boundary. Is must not be aliased with any values 
-    // TODO: use reseved values upon protobuf update 
-    // KIKIMR_START = 256; 
- 
+    // This value is reserved boundary. Is must not be aliased with any values
+    // TODO: use reseved values upon protobuf update
+    // KIKIMR_START = 256;
+
     BLOBSTORAGE = 257;
     STATESTORAGE = 258;
     RESOURCE_BROKER = 259;

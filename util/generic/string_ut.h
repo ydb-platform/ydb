@@ -534,13 +534,13 @@ public:
         TStringType s2(Data._0());
         UNIT_ASSERT(s1 == s2);
 
-        TStringType fromZero(0); 
-        UNIT_ASSERT_VALUES_EQUAL(fromZero.size(), 0u); 
- 
-        TStringType fromChar(char_type('a')); 
-        UNIT_ASSERT_VALUES_EQUAL(fromChar.size(), 1u); 
-        UNIT_ASSERT_VALUES_EQUAL(fromChar[0], char_type('a')); 
- 
+        TStringType fromZero(0);
+        UNIT_ASSERT_VALUES_EQUAL(fromZero.size(), 0u);
+
+        TStringType fromChar(char_type('a'));
+        UNIT_ASSERT_VALUES_EQUAL(fromChar.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fromChar[0], char_type('a'));
+
 #ifndef TSTRING_IS_STD_STRING
         TStringType s3 = TStringType::Uninitialized(10);
         UNIT_ASSERT(s3.size() == 10);
@@ -824,7 +824,7 @@ public:
 
         // length()
         UNIT_ASSERT(s.length() == s.size());
-        UNIT_ASSERT(s.length() == traits_type::length(s.data())); 
+        UNIT_ASSERT(s.length() == traits_type::length(s.data()));
 
         // is_null()
         TStringType s1(Data.Empty());
@@ -909,7 +909,7 @@ public:
         //s2.reserve();
 
         TStringType s5(Data.abcde());
-        s5.clear(); 
+        s5.clear();
         UNIT_ASSERT(s5 == Data.Empty());
     }
 

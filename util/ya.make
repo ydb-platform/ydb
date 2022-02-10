@@ -1,7 +1,7 @@
 LIBRARY(yutil)
 
 OWNER(g:util)
-SUBSCRIBER(g:util-subscribers) 
+SUBSCRIBER(g:util-subscribers)
 
 NEED_CHECK()
 
@@ -325,8 +325,8 @@ JOIN_SRCS(
     system/yield.cpp
 )
 
-SRC(system/compiler.cpp -fno-lto) 
- 
+SRC(system/compiler.cpp -fno-lto)
+
 IF (OS_WINDOWS)
     SRCS(
         system/fs_win.cpp

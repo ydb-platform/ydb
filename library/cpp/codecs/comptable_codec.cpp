@@ -82,7 +82,7 @@ namespace NCodecs {
     TCompTableCodec::~TCompTableCodec() = default;
 
     TString TCompTableCodec::GetName() const {
-        return ToString(Impl->Quality ? MyNameHQ() : MyNameLQ()); 
+        return ToString(Impl->Quality ? MyNameHQ() : MyNameLQ());
     }
 
     ui8 TCompTableCodec::Encode(TStringBuf in, TBuffer& out) const {

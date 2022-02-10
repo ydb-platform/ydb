@@ -3,7 +3,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -779,9 +779,9 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                     ))";
                     NKikimrMiniKQL::TResult result;
                     TString err;
-                    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err); 
+                    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
                     UNIT_ASSERT_VALUES_EQUAL(err, "");
-                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
+                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
                 };
                 fnWriteRow(TTestTxConfig::FakeHiveTablets);
             }
@@ -828,9 +828,9 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                     )";
                     NKikimrMiniKQL::TResult result;
                     TString err;
-                    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err); 
+                    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
                     UNIT_ASSERT_VALUES_EQUAL(err, "");
-                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
+                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
                 };
                 fnWriteRow(TTestTxConfig::FakeHiveTablets);
 
@@ -884,9 +884,9 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                     )";
                     NKikimrMiniKQL::TResult result;
                     TString err;
-                    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err); 
+                    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
                     UNIT_ASSERT_VALUES_EQUAL(err, "");
-                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
+                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
                 };
                 fnWriteRow(TTestTxConfig::FakeHiveTablets);
 

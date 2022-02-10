@@ -28,21 +28,21 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/stubs/int128.h> 
+#include <google/protobuf/stubs/int128.h>
 
 #include <iomanip>
 #include <ostream>  // NOLINT(readability/streams)
 #include <sstream>
 
-#include <google/protobuf/stubs/logging.h> 
- 
-#include <google/protobuf/port_def.inc> 
- 
+#include <google/protobuf/stubs/logging.h>
+
+#include <google/protobuf/port_def.inc>
+
 namespace google {
 namespace protobuf {
 
-const uint128_pod kuint128max = {uint64_t{0xFFFFFFFFFFFFFFFFu}, 
-                                 uint64_t{0xFFFFFFFFFFFFFFFFu}}; 
+const uint128_pod kuint128max = {uint64_t{0xFFFFFFFFFFFFFFFFu},
+                                 uint64_t{0xFFFFFFFFFFFFFFFFu}};
 
 // Returns the 0-based position of the last set bit (i.e., most significant bit)
 // in the given uint64. The argument may not be 0.
@@ -65,7 +65,7 @@ static inline int Fls64(uint64 n) {
   STEP(uint32, n32, pos, 0x10);
   STEP(uint32, n32, pos, 0x08);
   STEP(uint32, n32, pos, 0x04);
-  return pos + ((uint64_t{0x3333333322221100u} >> (n32 << 2)) & 0x3); 
+  return pos + ((uint64_t{0x3333333322221100u} >> (n32 << 2)) & 0x3);
 }
 #undef STEP
 
@@ -83,31 +83,31 @@ void uint128::DivModImpl(uint128 dividend, uint128 divisor,
   if (divisor == 0) {
     GOOGLE_LOG(FATAL) << "Division or mod by zero: dividend.hi=" << dividend.hi_
                       << ", lo=" << dividend.lo_;
-  } else if (dividend < divisor) { 
+  } else if (dividend < divisor) {
     *quotient_ret = 0;
     *remainder_ret = dividend;
     return;
-  } else { 
-    int dividend_bit_length = Fls128(dividend); 
-    int divisor_bit_length = Fls128(divisor); 
-    int difference = dividend_bit_length - divisor_bit_length; 
-    uint128 quotient = 0; 
-    while (difference >= 0) { 
-      quotient <<= 1; 
-      uint128 shifted_divisor = divisor << difference; 
-      if (shifted_divisor <= dividend) { 
-        dividend -= shifted_divisor; 
-        quotient += 1; 
-      } 
-      difference -= 1; 
+  } else {
+    int dividend_bit_length = Fls128(dividend);
+    int divisor_bit_length = Fls128(divisor);
+    int difference = dividend_bit_length - divisor_bit_length;
+    uint128 quotient = 0;
+    while (difference >= 0) {
+      quotient <<= 1;
+      uint128 shifted_divisor = divisor << difference;
+      if (shifted_divisor <= dividend) {
+        dividend -= shifted_divisor;
+        quotient += 1;
+      }
+      difference -= 1;
     }
-    //record the final quotient and remainder 
-    *quotient_ret = quotient; 
-    *remainder_ret = dividend; 
+    //record the final quotient and remainder
+    *quotient_ret = quotient;
+    *remainder_ret = dividend;
   }
 }
 
- 
+
 uint128& uint128::operator/=(const uint128& divisor) {
   uint128 quotient = 0;
   uint128 remainder = 0;
@@ -131,18 +131,18 @@ std::ostream& operator<<(std::ostream& o, const uint128& b) {
   std::streamsize div_base_log;
   switch (flags & std::ios::basefield) {
     case std::ios::hex:
-      div = 
-          static_cast<uint64>(uint64_t{0x1000000000000000u});  // 16^15 
+      div =
+          static_cast<uint64>(uint64_t{0x1000000000000000u});  // 16^15
       div_base_log = 15;
       break;
     case std::ios::oct:
-      div = static_cast<uint64>( 
-          uint64_t{01000000000000000000000u});  // 8^21 
+      div = static_cast<uint64>(
+          uint64_t{01000000000000000000000u});  // 8^21
       div_base_log = 21;
       break;
     default:  // std::ios::dec
-      div = static_cast<uint64>( 
-          uint64_t{10000000000000000000u});  // 10^19 
+      div = static_cast<uint64>(
+          uint64_t{10000000000000000000u});  // 10^19
       div_base_log = 19;
       break;
   }
@@ -169,7 +169,7 @@ std::ostream& operator<<(std::ostream& o, const uint128& b) {
     os << std::noshowbase << std::setfill('0') << std::setw(div_base_log);
   }
   os << low.lo_;
-  std::string rep = os.str(); 
+  std::string rep = os.str();
 
   // Add the requisite padding.
   std::streamsize width = o.width(0);
@@ -188,5 +188,5 @@ std::ostream& operator<<(std::ostream& o, const uint128& b) {
 
 }  // namespace protobuf
 }  // namespace google
- 
-#include <google/protobuf/port_undef.inc>  // NOLINT 
+
+#include <google/protobuf/port_undef.inc>  // NOLINT

@@ -5,7 +5,7 @@
 #pragma once
 #include "replace_key.h"
 #include "arrow_helpers.h"
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <algorithm>
 
 namespace NKikimr::NArrow {

@@ -3,7 +3,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/text_format.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;

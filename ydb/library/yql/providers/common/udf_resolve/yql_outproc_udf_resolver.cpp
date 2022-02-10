@@ -82,7 +82,7 @@ void RunResolver(
     const TString& ldLibraryPath = {}) {
 
     TStringStream input;
-    YQL_ENSURE(request.SerializeToArcadiaStream(&input), "Cannot serialize TResolve proto message"); 
+    YQL_ENSURE(request.SerializeToArcadiaStream(&input), "Cannot serialize TResolve proto message");
     RunResolver(resolverPath, args, &input, outputHandler, ldLibraryPath);
 }
 

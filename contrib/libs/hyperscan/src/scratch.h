@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2019, Intel Corporation 
+ * Copyright (c) 2015-2019, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -36,7 +36,7 @@
 #ifndef SCRATCH_H_DA6D4FC06FF410
 #define SCRATCH_H_DA6D4FC06FF410
 
-#include "hs_common.h" 
+#include "hs_common.h"
 #include "ue2common.h"
 #include "rose/rose_types.h"
 
@@ -84,23 +84,23 @@ struct catchup_pq {
  * history. */
 #define STATUS_DELAY_DIRTY  (1U << 2)
 
-/** \brief Status flag: Unexpected Rose program error. */ 
-#define STATUS_ERROR        (1U << 3) 
- 
+/** \brief Status flag: Unexpected Rose program error. */
+#define STATUS_ERROR        (1U << 3)
+
 /** \brief Core information about the current scan, used everywhere. */
 struct core_info {
     void *userContext; /**< user-supplied context */
 
     /** \brief user-supplied match callback */
-    int (HS_CDECL *userCallback)(unsigned int id, unsigned long long from, 
-                                 unsigned long long to, unsigned int flags, 
-                                 void *ctx); 
+    int (HS_CDECL *userCallback)(unsigned int id, unsigned long long from,
+                                 unsigned long long to, unsigned int flags,
+                                 void *ctx);
 
     const struct RoseEngine *rose;
     char *state; /**< full stream state */
     char *exhaustionVector; /**< pointer to evec for this stream */
-    char *logicalVector; /**< pointer to lvec for this stream */ 
-    char *combVector; /**< pointer to cvec for this stream */ 
+    char *logicalVector; /**< pointer to lvec for this stream */
+    char *combVector; /**< pointer to cvec for this stream */
     const u8 *buf; /**< main scan buffer */
     size_t len; /**< length of main scan buffer in bytes */
     const u8 *hbuf; /**< history buffer */
@@ -122,7 +122,7 @@ struct RoseContext {
                          * stream */
     u64a lastMatchOffset; /**< last match offset report up out of rose;
                            * used _only_ for debugging, asserts */
-    u64a lastCombMatchOffset; /**< last match offset of active combinations */ 
+    u64a lastCombMatchOffset; /**< last match offset of active combinations */
     u64a minMatchOffset; /**< the earliest offset that we are still allowed to
                           * report */
     u64a minNonMpvMatchOffset; /**< the earliest offset that non-mpv engines are
@@ -231,15 +231,15 @@ char told_to_stop_matching(const struct hs_scratch *scratch) {
 
 static really_inline
 char can_stop_matching(const struct hs_scratch *scratch) {
-    return scratch->core_info.status & 
-           (STATUS_TERMINATED | STATUS_EXHAUSTED | STATUS_ERROR); 
+    return scratch->core_info.status &
+           (STATUS_TERMINATED | STATUS_EXHAUSTED | STATUS_ERROR);
 }
 
-static really_inline 
-char internal_matching_error(const struct hs_scratch *scratch) { 
-    return scratch->core_info.status & STATUS_ERROR; 
-} 
- 
+static really_inline
+char internal_matching_error(const struct hs_scratch *scratch) {
+    return scratch->core_info.status & STATUS_ERROR;
+}
+
 /**
  * \brief Mark scratch as in use.
  *

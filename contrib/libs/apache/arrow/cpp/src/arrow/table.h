@@ -98,7 +98,7 @@ class ARROW_EXPORT Table {
   virtual std::shared_ptr<ChunkedArray> column(int i) const = 0;
 
   /// \brief Return vector of all columns for table
-  virtual const std::vector<std::shared_ptr<ChunkedArray>>& columns() const = 0; 
+  virtual const std::vector<std::shared_ptr<ChunkedArray>>& columns() const = 0;
 
   /// Return a column's field by index
   std::shared_ptr<Field> field(int i) const { return schema_->field(i); }
@@ -151,7 +151,7 @@ class ARROW_EXPORT Table {
   /// \brief Return new table with specified columns
   Result<std::shared_ptr<Table>> SelectColumns(const std::vector<int>& indices) const;
 
-  /// \brief Replace schema key-value metadata with new metadata 
+  /// \brief Replace schema key-value metadata with new metadata
   /// \since 0.5.0
   ///
   /// \param[in] metadata new KeyValueMetadata

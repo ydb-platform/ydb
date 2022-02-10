@@ -233,7 +233,7 @@ namespace {
         case EOutputFormat::Json:
             Cerr << "Warning! Option --json is deprecated and will be removed soon. "
                 << "Use \"--format proto-json-base64\" option instead." << Endl;
-            [[fallthrough]]; 
+            [[fallthrough]];
         case EOutputFormat::ProtoJsonBase64:
             Cout << operation.ToJsonString() << Endl;
             break;
@@ -261,7 +261,7 @@ namespace {
         case EOutputFormat::Json:
             Cerr << "Warning! Option --json is deprecated and will be removed soon. "
                 << "Use \"--format proto-json-base64\" option instead." << Endl;
-            [[fallthrough]]; 
+            [[fallthrough]];
         case EOutputFormat::ProtoJsonBase64:
             Cout << operations.ToJsonString() << Endl;
             break;

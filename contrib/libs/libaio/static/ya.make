@@ -1,20 +1,20 @@
 # sources downloaded from: https://git.fedorahosted.org/cgit/libaio.git
 LIBRARY()
 
-IF (ARCH_ARMV7 OR ARCH_ARM64) 
-    LICENSE( 
-        GPL-2.0-only AND 
-        LGPL-2.0-or-later AND 
-        LGPL-2.1-only 
-    ) 
-ELSE() 
-    LICENSE( 
-        LGPL-2.0-or-later AND 
-        LGPL-2.1-only 
-    ) 
-ENDIF() 
+IF (ARCH_ARMV7 OR ARCH_ARM64)
+    LICENSE(
+        GPL-2.0-only AND
+        LGPL-2.0-or-later AND
+        LGPL-2.1-only
+    )
+ELSE()
+    LICENSE(
+        LGPL-2.0-or-later AND
+        LGPL-2.1-only
+    )
+ENDIF()
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 OWNER(
     vskipin
@@ -30,9 +30,9 @@ PROVIDES(libaio)
 
 SRCDIR(contrib/libs/libaio)
 
-ADDINCL( 
-    contrib/libs/libaio 
-) 
+ADDINCL(
+    contrib/libs/libaio
+)
 
 SRCS(
     io_cancel.c

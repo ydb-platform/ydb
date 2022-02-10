@@ -4,7 +4,7 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-OWNER(g:cpp-contrib) 
+OWNER(g:cpp-contrib)
 
 LICENSE(Apache-2.0)
 
@@ -15,7 +15,7 @@ PEERDIR(
     contrib/libs/grpc/src/proto/grpc/status
     contrib/libs/grpc/third_party/address_sorting
     contrib/libs/grpc/third_party/upb
-    contrib/libs/protobuf 
+    contrib/libs/protobuf
 )
 
 ADDINCL(

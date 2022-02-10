@@ -19,7 +19,7 @@
 
 namespace fast_float {
 
-namespace detail { 
+namespace detail {
 
 // remove all final zeroes
 inline void trim(decimal &h) {
@@ -30,7 +30,7 @@ inline void trim(decimal &h) {
 
 
 
-inline uint32_t number_of_digits_decimal_left_shift(const decimal &h, uint32_t shift) { 
+inline uint32_t number_of_digits_decimal_left_shift(const decimal &h, uint32_t shift) {
   shift &= 63;
   constexpr uint16_t number_of_digits_decimal_left_shift_table[65] = {
     0x0000, 0x0800, 0x0801, 0x0803, 0x1006, 0x1009, 0x100D, 0x1812, 0x1817,
@@ -123,7 +123,7 @@ inline uint32_t number_of_digits_decimal_left_shift(const decimal &h, uint32_t s
   return num_new_digits;
 }
 
-inline uint64_t round(decimal &h) { 
+inline uint64_t round(decimal &h) {
   if ((h.num_digits == 0) || (h.decimal_point < 0)) {
     return 0;
   } else if (h.decimal_point > 18) {
@@ -150,7 +150,7 @@ inline uint64_t round(decimal &h) {
 }
 
 // computes h * 2^-shift
-inline void decimal_left_shift(decimal &h, uint32_t shift) { 
+inline void decimal_left_shift(decimal &h, uint32_t shift) {
   if (h.num_digits == 0) {
     return;
   }
@@ -192,7 +192,7 @@ inline void decimal_left_shift(decimal &h, uint32_t shift) {
 }
 
 // computes h * 2^shift
-inline void decimal_right_shift(decimal &h, uint32_t shift) { 
+inline void decimal_right_shift(decimal &h, uint32_t shift) {
   uint32_t read_index = 0;
   uint32_t write_index = 0;
 
@@ -238,7 +238,7 @@ inline void decimal_right_shift(decimal &h, uint32_t shift) {
   trim(h);
 }
 
-} // namespace detail 
+} // namespace detail
 
 template <typename binary>
 adjusted_mantissa compute_float(decimal &d) {
@@ -280,8 +280,8 @@ adjusted_mantissa compute_float(decimal &d) {
   int32_t exp2 = 0;
   while (d.decimal_point > 0) {
     uint32_t n = uint32_t(d.decimal_point);
-    uint32_t shift = (n < num_powers) ? decimal_powers[n] : max_shift; 
-    detail::decimal_right_shift(d, shift); 
+    uint32_t shift = (n < num_powers) ? decimal_powers[n] : max_shift;
+    detail::decimal_right_shift(d, shift);
     if (d.decimal_point < -decimal_point_range) {
       // should be zero
       answer.power2 = 0;
@@ -300,12 +300,12 @@ adjusted_mantissa compute_float(decimal &d) {
       shift = (d.digits[0] < 2) ? 2 : 1;
     } else {
       uint32_t n = uint32_t(-d.decimal_point);
-      shift = (n < num_powers) ? decimal_powers[n] : max_shift; 
+      shift = (n < num_powers) ? decimal_powers[n] : max_shift;
     }
-    detail::decimal_left_shift(d, shift); 
+    detail::decimal_left_shift(d, shift);
     if (d.decimal_point > decimal_point_range) {
       // we want to get infinity:
-      answer.power2 = binary::infinite_power(); 
+      answer.power2 = binary::infinite_power();
       answer.mantissa = 0;
       return answer;
     }
@@ -319,7 +319,7 @@ adjusted_mantissa compute_float(decimal &d) {
     if (n > max_shift) {
       n = max_shift;
     }
-    detail::decimal_right_shift(d, n); 
+    detail::decimal_right_shift(d, n);
     exp2 += int32_t(n);
   }
   if ((exp2 - minimum_exponent) >= binary::infinite_power()) {
@@ -329,15 +329,15 @@ adjusted_mantissa compute_float(decimal &d) {
   }
 
   const int mantissa_size_in_bits = binary::mantissa_explicit_bits() + 1;
-  detail::decimal_left_shift(d, mantissa_size_in_bits); 
+  detail::decimal_left_shift(d, mantissa_size_in_bits);
 
-  uint64_t mantissa = detail::round(d); 
+  uint64_t mantissa = detail::round(d);
   // It is possible that we have an overflow, in which case we need
   // to shift back.
   if(mantissa >= (uint64_t(1) << mantissa_size_in_bits)) {
-    detail::decimal_right_shift(d, 1); 
+    detail::decimal_right_shift(d, 1);
     exp2 += 1;
-    mantissa = detail::round(d); 
+    mantissa = detail::round(d);
     if ((exp2 - minimum_exponent) >= binary::infinite_power()) {
       answer.power2 = binary::infinite_power();
       answer.mantissa = 0;
@@ -351,8 +351,8 @@ adjusted_mantissa compute_float(decimal &d) {
 }
 
 template <typename binary>
-adjusted_mantissa parse_long_mantissa(const char *first, const char* last, parse_options options) { 
-    decimal d = parse_decimal(first, last, options); 
+adjusted_mantissa parse_long_mantissa(const char *first, const char* last, parse_options options) {
+    decimal d = parse_decimal(first, last, options);
     return compute_float<binary>(d);
 }
 

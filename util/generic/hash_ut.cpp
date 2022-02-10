@@ -160,9 +160,9 @@ void THashTest::TestHMapConstructorsAndAssignments() {
     UNIT_ASSERT_VALUES_EQUAL(2, c4.at("two"));
     UNIT_ASSERT_VALUES_EQUAL(3, c4.at("three"));
     UNIT_ASSERT_VALUES_EQUAL(4, c4.at("four"));
- 
-    // non-existent values must be zero-initialized 
-    UNIT_ASSERT_VALUES_EQUAL(c1["nonexistent"], 0); 
+
+    // non-existent values must be zero-initialized
+    UNIT_ASSERT_VALUES_EQUAL(c1["nonexistent"], 0);
 }
 
 void THashTest::TestHMap1() {
@@ -807,18 +807,18 @@ public:
     {
     }
 
-    T* allocate(size_type n) { 
-        auto result = base_type::allocate(n); 
+    T* allocate(size_type n) {
+        auto result = base_type::allocate(n);
 
         if (Counters_) {
             ++Counters_->Allocations;
-            Counters_->Chunks.emplace(result, n * sizeof(T)); 
+            Counters_->Chunks.emplace(result, n * sizeof(T));
         }
 
         return result;
     }
 
-    void deallocate(T* p, size_type n) { 
+    void deallocate(T* p, size_type n) {
         if (Counters_) {
             ++Counters_->Deallocations;
             Counters_->Chunks.erase(std::make_pair(p, n * sizeof(T)));

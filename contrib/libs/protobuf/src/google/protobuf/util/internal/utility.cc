@@ -28,76 +28,76 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/util/internal/utility.h> 
+#include <google/protobuf/util/internal/utility.h>
 
 #include <algorithm>
-#include <cmath> 
-#include <cstdint> 
-#include <limits> 
+#include <cmath>
+#include <cstdint>
+#include <limits>
 
-#include <google/protobuf/stubs/callback.h> 
-#include <google/protobuf/stubs/common.h> 
-#include <google/protobuf/stubs/logging.h> 
-#include <google/protobuf/wrappers.pb.h> 
-#include <google/protobuf/descriptor.pb.h> 
-#include <google/protobuf/descriptor.h> 
-#include <google/protobuf/util/internal/constants.h> 
-#include <google/protobuf/stubs/strutil.h> 
-#include <google/protobuf/stubs/map_util.h> 
+#include <google/protobuf/stubs/callback.h>
+#include <google/protobuf/stubs/common.h>
+#include <google/protobuf/stubs/logging.h>
+#include <google/protobuf/wrappers.pb.h>
+#include <google/protobuf/descriptor.pb.h>
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/util/internal/constants.h>
+#include <google/protobuf/stubs/strutil.h>
+#include <google/protobuf/stubs/map_util.h>
 
 #include <util/string/util.h>
 
-// clang-format off 
-#include <google/protobuf/port_def.inc> 
-// clang-format on 
- 
+// clang-format off
+#include <google/protobuf/port_def.inc>
+// clang-format on
+
 namespace google {
 namespace protobuf {
 namespace util {
 namespace converter {
 
 bool GetBoolOptionOrDefault(
-    const RepeatedPtrField<google::protobuf::Option>& options, 
-    StringPiece option_name, bool default_value) { 
+    const RepeatedPtrField<google::protobuf::Option>& options,
+    StringPiece option_name, bool default_value) {
   const google::protobuf::Option* opt = FindOptionOrNull(options, option_name);
-  if (opt == nullptr) { 
+  if (opt == nullptr) {
     return default_value;
   }
   return GetBoolFromAny(opt->value());
 }
 
-int64_t GetInt64OptionOrDefault( 
-    const RepeatedPtrField<google::protobuf::Option>& options, 
-    StringPiece option_name, int64_t default_value) { 
+int64_t GetInt64OptionOrDefault(
+    const RepeatedPtrField<google::protobuf::Option>& options,
+    StringPiece option_name, int64_t default_value) {
   const google::protobuf::Option* opt = FindOptionOrNull(options, option_name);
-  if (opt == nullptr) { 
+  if (opt == nullptr) {
     return default_value;
   }
   return GetInt64FromAny(opt->value());
 }
 
 double GetDoubleOptionOrDefault(
-    const RepeatedPtrField<google::protobuf::Option>& options, 
-    StringPiece option_name, double default_value) { 
+    const RepeatedPtrField<google::protobuf::Option>& options,
+    StringPiece option_name, double default_value) {
   const google::protobuf::Option* opt = FindOptionOrNull(options, option_name);
-  if (opt == nullptr) { 
+  if (opt == nullptr) {
     return default_value;
   }
   return GetDoubleFromAny(opt->value());
 }
 
-TProtoStringType GetStringOptionOrDefault( 
-    const RepeatedPtrField<google::protobuf::Option>& options, 
-    StringPiece option_name, StringPiece default_value) { 
+TProtoStringType GetStringOptionOrDefault(
+    const RepeatedPtrField<google::protobuf::Option>& options,
+    StringPiece option_name, StringPiece default_value) {
   const google::protobuf::Option* opt = FindOptionOrNull(options, option_name);
-  if (opt == nullptr) { 
-    return TProtoStringType(default_value); 
+  if (opt == nullptr) {
+    return TProtoStringType(default_value);
   }
   return GetStringFromAny(opt->value());
 }
 
 template <typename T>
-void ParseFromAny(const TProtoStringType& data, T* result) { 
+void ParseFromAny(const TProtoStringType& data, T* result) {
   result->ParseFromString(data);
 }
 
@@ -109,7 +109,7 @@ bool GetBoolFromAny(const google::protobuf::Any& any) {
   return b.value();
 }
 
-int64_t GetInt64FromAny(const google::protobuf::Any& any) { 
+int64_t GetInt64FromAny(const google::protobuf::Any& any) {
   google::protobuf::Int64Value i;
   ParseFromAny(any.value(), &i);
   return i.value();
@@ -121,7 +121,7 @@ double GetDoubleFromAny(const google::protobuf::Any& any) {
   return i.value();
 }
 
-TProtoStringType GetStringFromAny(const google::protobuf::Any& any) { 
+TProtoStringType GetStringFromAny(const google::protobuf::Any& any) {
   google::protobuf::StringValue s;
   ParseFromAny(any.value(), &s);
   return s.value();
@@ -139,25 +139,25 @@ const StringPiece GetTypeWithoutUrl(StringPiece type_url) {
   }
 }
 
-const TProtoStringType GetFullTypeWithUrl(StringPiece simple_type) { 
+const TProtoStringType GetFullTypeWithUrl(StringPiece simple_type) {
   return StrCat(kTypeServiceBaseUrl, "/", simple_type);
 }
 
 const google::protobuf::Option* FindOptionOrNull(
-    const RepeatedPtrField<google::protobuf::Option>& options, 
-    StringPiece option_name) { 
+    const RepeatedPtrField<google::protobuf::Option>& options,
+    StringPiece option_name) {
   for (int i = 0; i < options.size(); ++i) {
     const google::protobuf::Option& opt = options.Get(i);
     if (opt.name() == option_name) {
       return &opt;
     }
   }
-  return nullptr; 
+  return nullptr;
 }
 
 const google::protobuf::Field* FindFieldInTypeOrNull(
     const google::protobuf::Type* type, StringPiece field_name) {
-  if (type != nullptr) { 
+  if (type != nullptr) {
     for (int i = 0; i < type->fields_size(); ++i) {
       const google::protobuf::Field& field = type->fields(i);
       if (field.name() == field_name) {
@@ -165,12 +165,12 @@ const google::protobuf::Field* FindFieldInTypeOrNull(
       }
     }
   }
-  return nullptr; 
+  return nullptr;
 }
 
 const google::protobuf::Field* FindJsonFieldInTypeOrNull(
     const google::protobuf::Type* type, StringPiece json_name) {
-  if (type != nullptr) { 
+  if (type != nullptr) {
     for (int i = 0; i < type->fields_size(); ++i) {
       const google::protobuf::Field& field = type->fields(i);
       if (field.json_name() == json_name) {
@@ -178,12 +178,12 @@ const google::protobuf::Field* FindJsonFieldInTypeOrNull(
       }
     }
   }
-  return nullptr; 
+  return nullptr;
 }
 
 const google::protobuf::Field* FindFieldInTypeByNumberOrNull(
-    const google::protobuf::Type* type, int32_t number) { 
-  if (type != nullptr) { 
+    const google::protobuf::Type* type, int32_t number) {
+  if (type != nullptr) {
     for (int i = 0; i < type->fields_size(); ++i) {
       const google::protobuf::Field& field = type->fields(i);
       if (field.number() == number) {
@@ -191,12 +191,12 @@ const google::protobuf::Field* FindFieldInTypeByNumberOrNull(
       }
     }
   }
-  return nullptr; 
+  return nullptr;
 }
 
 const google::protobuf::EnumValue* FindEnumValueByNameOrNull(
     const google::protobuf::Enum* enum_type, StringPiece enum_name) {
-  if (enum_type != nullptr) { 
+  if (enum_type != nullptr) {
     for (int i = 0; i < enum_type->enumvalue_size(); ++i) {
       const google::protobuf::EnumValue& enum_value = enum_type->enumvalue(i);
       if (enum_value.name() == enum_name) {
@@ -204,12 +204,12 @@ const google::protobuf::EnumValue* FindEnumValueByNameOrNull(
       }
     }
   }
-  return nullptr; 
+  return nullptr;
 }
 
 const google::protobuf::EnumValue* FindEnumValueByNumberOrNull(
-    const google::protobuf::Enum* enum_type, int32_t value) { 
-  if (enum_type != nullptr) { 
+    const google::protobuf::Enum* enum_type, int32_t value) {
+  if (enum_type != nullptr) {
     for (int i = 0; i < enum_type->enumvalue_size(); ++i) {
       const google::protobuf::EnumValue& enum_value = enum_type->enumvalue(i);
       if (enum_value.number() == value) {
@@ -217,20 +217,20 @@ const google::protobuf::EnumValue* FindEnumValueByNumberOrNull(
       }
     }
   }
-  return nullptr; 
+  return nullptr;
 }
 
 const google::protobuf::EnumValue* FindEnumValueByNameWithoutUnderscoreOrNull(
     const google::protobuf::Enum* enum_type, StringPiece enum_name) {
-  if (enum_type != nullptr) { 
+  if (enum_type != nullptr) {
     for (int i = 0; i < enum_type->enumvalue_size(); ++i) {
       const google::protobuf::EnumValue& enum_value = enum_type->enumvalue(i);
-      TProtoStringType enum_name_without_underscore = enum_value.name(); 
+      TProtoStringType enum_name_without_underscore = enum_value.name();
 
       // Remove underscore from the name.
-	   RemoveAll(enum_name_without_underscore, '_'); 
+	   RemoveAll(enum_name_without_underscore, '_');
       // Make the name uppercase.
-      for (TProtoStringType::iterator it = enum_name_without_underscore.begin(); 
+      for (TProtoStringType::iterator it = enum_name_without_underscore.begin();
            it != enum_name_without_underscore.end(); ++it) {
         *it = ascii_toupper(*it);
       }
@@ -240,21 +240,21 @@ const google::protobuf::EnumValue* FindEnumValueByNameWithoutUnderscoreOrNull(
       }
     }
   }
-  return nullptr; 
+  return nullptr;
 }
 
-TProtoStringType EnumValueNameToLowerCamelCase(StringPiece input) { 
-  TProtoStringType input_string(input); 
-  input_string.to_lower(); 
-  return ToCamelCase(input_string); 
-} 
- 
-TProtoStringType ToCamelCase(StringPiece input) { 
+TProtoStringType EnumValueNameToLowerCamelCase(StringPiece input) {
+  TProtoStringType input_string(input);
+  input_string.to_lower();
+  return ToCamelCase(input_string);
+}
+
+TProtoStringType ToCamelCase(StringPiece input) {
   bool capitalize_next = false;
   bool was_cap = true;
   bool is_cap = false;
   bool first_word = true;
-  TProtoStringType result; 
+  TProtoStringType result;
   result.reserve(input.size());
 
   for (size_t i = 0; i < input.size(); ++i, was_cap = is_cap) {
@@ -269,8 +269,8 @@ TProtoStringType ToCamelCase(StringPiece input) {
       // 1) following a lowercase:   "...aB..."
       // 2) followed by a lowercase: "...ABc..."
       if (!result.empty() && is_cap &&
-          (!was_cap || 
-           (i + 1 < input.size() && ascii_islower(input[i + 1])))) { 
+          (!was_cap ||
+           (i + 1 < input.size() && ascii_islower(input[i + 1])))) {
         first_word = false;
         result.push_back(input[i]);
       } else {
@@ -293,10 +293,10 @@ TProtoStringType ToCamelCase(StringPiece input) {
   return result;
 }
 
-TProtoStringType ToSnakeCase(StringPiece input) { 
+TProtoStringType ToSnakeCase(StringPiece input) {
   bool was_not_underscore = false;  // Initialize to false for case 1 (below)
   bool was_not_cap = false;
-  TProtoStringType result; 
+  TProtoStringType result;
   result.reserve(input.size() << 1);
 
   for (size_t i = 0; i < input.size(); ++i) {
@@ -310,9 +310,9 @@ TProtoStringType ToSnakeCase(StringPiece input) {
       //    (e.g. "GoogleLAB" => "google_lab")
       // 4) Followed by a lowercase: "...ABc..." => "...a_bc..."
       //    (e.g. "GBike" => "g_bike")
-      if (was_not_underscore &&                     //            case 1 out 
-          (was_not_cap ||                           // case 2 in, case 3 out 
-           (i + 1 < input.size() &&                 //            case 3 out 
+      if (was_not_underscore &&                     //            case 1 out
+          (was_not_cap ||                           // case 2 in, case 3 out
+           (i + 1 < input.size() &&                 //            case 3 out
             ascii_islower(input[i + 1])))) {  // case 4 in
         // We add an underscore for case 2 and case 4.
         result.push_back('_');
@@ -329,8 +329,8 @@ TProtoStringType ToSnakeCase(StringPiece input) {
   return result;
 }
 
-std::set<TProtoStringType>* well_known_types_ = nullptr; 
-PROTOBUF_NAMESPACE_ID::internal::once_flag well_known_types_init_; 
+std::set<TProtoStringType>* well_known_types_ = nullptr;
+PROTOBUF_NAMESPACE_ID::internal::once_flag well_known_types_init_;
 const char* well_known_types_name_array_[] = {
     "google.protobuf.Timestamp",   "google.protobuf.Duration",
     "google.protobuf.DoubleValue", "google.protobuf.FloatValue",
@@ -342,27 +342,27 @@ const char* well_known_types_name_array_[] = {
 void DeleteWellKnownTypes() { delete well_known_types_; }
 
 void InitWellKnownTypes() {
-  well_known_types_ = new std::set<TProtoStringType>; 
+  well_known_types_ = new std::set<TProtoStringType>;
   for (int i = 0; i < GOOGLE_ARRAYSIZE(well_known_types_name_array_); ++i) {
     well_known_types_->insert(well_known_types_name_array_[i]);
   }
   google::protobuf::internal::OnShutdown(&DeleteWellKnownTypes);
 }
 
-bool IsWellKnownType(const TProtoStringType& type_name) { 
-  PROTOBUF_NAMESPACE_ID::internal::call_once(well_known_types_init_, 
-                                             InitWellKnownTypes); 
+bool IsWellKnownType(const TProtoStringType& type_name) {
+  PROTOBUF_NAMESPACE_ID::internal::call_once(well_known_types_init_,
+                                             InitWellKnownTypes);
   return ContainsKey(*well_known_types_, type_name);
 }
 
-bool IsValidBoolString(StringPiece bool_string) { 
+bool IsValidBoolString(StringPiece bool_string) {
   return bool_string == "true" || bool_string == "false" ||
          bool_string == "1" || bool_string == "0";
 }
 
 bool IsMap(const google::protobuf::Field& field,
            const google::protobuf::Type& type) {
-  return field.cardinality() == google::protobuf::Field::CARDINALITY_REPEATED && 
+  return field.cardinality() == google::protobuf::Field::CARDINALITY_REPEATED &&
          (GetBoolOptionOrDefault(type.options(), "map_entry", false) ||
           GetBoolOptionOrDefault(type.options(),
                                  "google.protobuf.MessageOptions.map_entry",
@@ -377,16 +377,16 @@ bool IsMessageSetWireFormat(const google::protobuf::Type& type) {
              "google.protobuf.MessageOptions.message_set_wire_format", false);
 }
 
-TProtoStringType DoubleAsString(double value) { 
-  if (value == std::numeric_limits<double>::infinity()) return "Infinity"; 
-  if (value == -std::numeric_limits<double>::infinity()) return "-Infinity"; 
-  if (std::isnan(value)) return "NaN"; 
+TProtoStringType DoubleAsString(double value) {
+  if (value == std::numeric_limits<double>::infinity()) return "Infinity";
+  if (value == -std::numeric_limits<double>::infinity()) return "-Infinity";
+  if (std::isnan(value)) return "NaN";
 
   return SimpleDtoa(value);
 }
 
-TProtoStringType FloatAsString(float value) { 
-  if (std::isfinite(value)) return SimpleFtoa(value); 
+TProtoStringType FloatAsString(float value) {
+  if (std::isfinite(value)) return SimpleFtoa(value);
   return DoubleAsString(value);
 }
 
@@ -396,7 +396,7 @@ bool SafeStrToFloat(StringPiece str, float* value) {
     return false;
   }
 
-  if (std::isinf(double_value) || std::isnan(double_value)) return false; 
+  if (std::isinf(double_value) || std::isnan(double_value)) return false;
 
   // Fail if the value is not representable in float.
   if (double_value > std::numeric_limits<float>::max() ||

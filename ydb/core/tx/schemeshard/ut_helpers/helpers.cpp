@@ -109,9 +109,9 @@ namespace NSchemeShardUT_Private {
     void CheckExpected(const TVector<TEvSchemeShard::EStatus>& expected, TEvSchemeShard::EStatus result, const TString& reason)
     {
         for (TEvSchemeShard::EStatus exp : expected) {
-            if (result == exp) { 
-                return; 
-            } 
+            if (result == exp) {
+                return;
+            }
         }
         Cdbg << "Unexpected status: " << NKikimrScheme::EStatus_Name(result) << ": " << reason << Endl;
         UNIT_FAIL("Unexpected status: " << NKikimrScheme::EStatus_Name(result) << ": " << reason);
@@ -1091,7 +1091,7 @@ namespace NSchemeShardUT_Private {
         return volume;
     }
 
-    NKikimrProto::EReplyStatus LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query, NKikimrMiniKQL::TResult& result, TString& err) { 
+    NKikimrProto::EReplyStatus LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query, NKikimrMiniKQL::TResult& result, TString& err) {
         TActorId sender = runtime.AllocateEdgeActor();
 
         auto evTx = new TEvTablet::TEvLocalMKQL;
@@ -1112,15 +1112,15 @@ namespace NSchemeShardUT_Private {
 
         result.CopyFrom(event->Record.GetExecutionEngineEvaluatedResponse());
 
-        // emulate enum behavior from proto3 
-        return static_cast<NKikimrProto::EReplyStatus>(event->Record.GetStatus()); 
+        // emulate enum behavior from proto3
+        return static_cast<NKikimrProto::EReplyStatus>(event->Record.GetStatus());
     }
 
     NKikimrMiniKQL::TResult LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query) {
         NKikimrMiniKQL::TResult result;
         TString error;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, query, result, error); 
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error); 
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, query, result, error);
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
         return result;
     }
@@ -1145,7 +1145,7 @@ namespace NSchemeShardUT_Private {
         return result.GetValue().GetStruct(0).GetOptional().HasOptional();
     }
 
-    NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tabletId, const TString& schemeChangesStr, bool dryRun, 
+    NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tabletId, const TString& schemeChangesStr, bool dryRun,
                        NTabletFlatScheme::TSchemeChanges& scheme, TString& err) {
         TActorId sender = runtime.AllocateEdgeActor();
 
@@ -1164,14 +1164,14 @@ namespace NSchemeShardUT_Private {
         err = event->Record.GetErrorReason();
         scheme.CopyFrom(event->Record.GetFullScheme());
 
-        // emulate enum behavior from proto3 
-        return static_cast<NKikimrProto::EReplyStatus>(event->Record.GetStatus()); 
+        // emulate enum behavior from proto3
+        return static_cast<NKikimrProto::EReplyStatus>(event->Record.GetStatus());
     }
 
     ui64 GetDatashardState(TTestActorRuntime& runtime, ui64 tabletId) {
         NKikimrMiniKQL::TResult result;
         TString err;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, R"( 
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, R"(
                                    (
                                         (let row '('('Id (Uint64 '2)))) # Sys_State
                                         (let select '('Uint64))
@@ -1180,7 +1180,7 @@ namespace NSchemeShardUT_Private {
                                    )
                                    )", result, err);
         // Cdbg << result << "\n";
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         // Value { Struct { Optional { Optional { Struct { Optional { Uint64: 100 } } } } } } }
         return result.GetValue().GetStruct(0).GetOptional().GetOptional().GetStruct(0).GetOptional().GetUint64();
     }
@@ -1207,7 +1207,7 @@ namespace NSchemeShardUT_Private {
     ui64 GetDatashardSysTableValue(TTestActorRuntime& runtime, ui64 tabletId, ui64 sysKey) {
         NKikimrMiniKQL::TResult result;
         TString err;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(( 
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"((
             (let Sys_ValueKey '%ld)
             (let row '('('Id (Uint64 Sys_ValueKey))))
             (let select '('Uint64))
@@ -1215,7 +1215,7 @@ namespace NSchemeShardUT_Private {
             (return ret)
         ))", sysKey), result, err);
         // Cdbg << result << "\n";
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         // Value { Struct { Optional { Optional { Struct { Optional { Uint64: 100 } } } } } } }
         return result.GetValue().GetStruct(0).GetOptional().GetOptional().GetStruct(0).GetOptional().GetUint64();
     }
@@ -1231,8 +1231,8 @@ namespace NSchemeShardUT_Private {
     ui64 GetExecutorCacheSize(TTestActorRuntime& runtime, ui64 tabletId) {
         NTabletFlatScheme::TSchemeChanges scheme;
         TString err;
-        NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err); 
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
+        NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         //Cdbg << scheme << "\n";
         // looking for "Delta { DeltaType: UpdateExecutorInfo ExecutorCacheSize: 33554432 }"
         for (ui32 i = 0; i < scheme.DeltaSize(); ++i) {
@@ -1249,8 +1249,8 @@ namespace NSchemeShardUT_Private {
     bool GetFastLogPolicy(TTestActorRuntime& runtime, ui64 tabletId) {
         NTabletFlatScheme::TSchemeChanges scheme;
         TString err;
-        NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err); 
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
+        NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         //Cdbg << scheme << "\n";
         for (ui32 i = 0; i < scheme.DeltaSize(); ++i) {
             const auto& d = scheme.GetDelta(i);
@@ -1267,8 +1267,8 @@ namespace NSchemeShardUT_Private {
     bool GetByKeyFilterEnabled(TTestActorRuntime& runtime, ui64 tabletId, ui32 table) {
         NTabletFlatScheme::TSchemeChanges scheme;
         TString err;
-        NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err); 
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
+        NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         //Cdbg << scheme << "\n";
         for (ui32 i = 0; i < scheme.DeltaSize(); ++i) {
             const auto& d = scheme.GetDelta(i);
@@ -1286,8 +1286,8 @@ namespace NSchemeShardUT_Private {
     bool GetEraseCacheEnabled(TTestActorRuntime& runtime, ui64 tabletId, ui32 table) {
         NTabletFlatScheme::TSchemeChanges scheme;
         TString err;
-        NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err); 
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
+        NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         //Cdbg << scheme << "\n";
         bool found = false;
         bool enabled = false;
@@ -1308,8 +1308,8 @@ namespace NSchemeShardUT_Private {
     NKikimr::NLocalDb::TCompactionPolicyPtr GetCompactionPolicy(TTestActorRuntime& runtime, ui64 tabletId, ui32 localTableId) {
         NTabletFlatScheme::TSchemeChanges scheme;
         TString err;
-        NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err); 
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
+        NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         Cdbg << scheme << "\n";
         // looking for "Delta { DeltaType: SetCompactionPolicy TableId: 1001 CompactionPolicy { ... } }"
         for (ui32 i = 0; i < scheme.DeltaSize(); ++i) {
@@ -1326,7 +1326,7 @@ namespace NSchemeShardUT_Private {
         ui64 schemeshardTabletId = TTestTxConfig::SchemeShard;
         NKikimrMiniKQL::TResult result;
         TString err;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeshardTabletId, 
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeshardTabletId,
                                    Sprintf(R"(
                                    (
                                         (let key '('('Id (Uint64 '3)))) # SysParam_IsReadOnlyMode
@@ -1335,7 +1335,7 @@ namespace NSchemeShardUT_Private {
                                         (return ret)
                                    ))", (isReadOnly ? "1" : "0")), result, err);
         Cdbg << result << "\n";
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
     }
 
     void SetSchemeshardSchemaLimits(TTestActorRuntime& runtime, NSchemeShard::TSchemeLimits limits) {
@@ -1385,9 +1385,9 @@ namespace NSchemeShardUT_Private {
                                limits.MaxShards, limits.MaxShardsInPath, limits.MaxConsistentCopyTargets,
                                limits.MaxPathElementLength, escapedStr.c_str(), limits.MaxPQPartitions);
         Cdbg << prog << "\n";
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShard, prog, result, err); 
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShard, prog, result, err);
         Cdbg << result << "\n";
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
 
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, schemeShard, sender);
@@ -1413,10 +1413,10 @@ namespace NSchemeShardUT_Private {
                                     )
                                  )", domainId, serialized.c_str());
         Cdbg << prog << "\n";
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShard, prog, result, err); 
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShard, prog, result, err);
 
         Cdbg << result << "\n";
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
 
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, schemeShard, sender);
@@ -1427,14 +1427,14 @@ namespace NSchemeShardUT_Private {
     NKikimrSchemeOp::TTableDescription GetDatashardSchema(TTestActorRuntime& runtime, ui64 tabletId, ui64 tid) {
         NKikimrMiniKQL::TResult result;
         TString err;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"( 
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
             (
                 (let sel_ (SelectRow 'UserTables '('('Tid (Uint64 '%lu))) '('Schema)))
                 (let schema_ (Coalesce (FlatMap sel_ (lambda '(x) (Member x 'Schema))) (String '"")))
                 (return (AsList (SetResult 'Result schema_)))
             ))", tid), result, err);
 
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         //Cerr << result.GetType() << ' ' << result.GetValue() << Endl;
         TString schema = result.GetValue().GetStruct(0).GetOptional().GetBytes();
         NKikimrSchemeOp::TTableDescription tableDescription;

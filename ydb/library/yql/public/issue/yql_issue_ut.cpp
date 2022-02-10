@@ -5,8 +5,8 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
-#include <google/protobuf/message.h> 
-#include <google/protobuf/descriptor.h> 
+#include <google/protobuf/message.h>
+#include <google/protobuf/descriptor.h>
 
 using namespace google::protobuf;
 using namespace NYql;

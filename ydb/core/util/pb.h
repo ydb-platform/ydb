@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
-#include <google/protobuf/io/coded_stream.h> 
-#include <google/protobuf/text_format.h> 
+#include <google/protobuf/io/coded_stream.h>
+#include <google/protobuf/text_format.h>
 #include <util/stream/file.h>
 #include <util/generic/array_ref.h>
 #include <util/system/type_name.h>
@@ -31,8 +31,8 @@ bool ParseBinPBFromFile(const TString &path, T *pb) {
 // Deserialize persisted protobuf without checking size limit (size should have checked before saving)
 template <class TProto>
 bool ParseFromStringNoSizeLimit(TProto& proto, TArrayRef<const char> str) {
-    google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(str.data()), str.size()); 
-    input.SetTotalBytesLimit(str.size()); 
+    google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(str.data()), str.size());
+    input.SetTotalBytesLimit(str.size());
     return proto.ParseFromCodedStream(&input) && input.ConsumedEntireMessage();
 }
 
@@ -47,8 +47,8 @@ struct TProtoBox : public TProto {
 // Deserialized and merge persisted protobuf without checking size limit
 template <class TProto>
 bool MergeFromStringNoSizeLimit(TProto& proto, TArrayRef<const char> str) {
-    google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(str.data()), str.size()); 
-    input.SetTotalBytesLimit(str.size()); 
+    google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(str.data()), str.size());
+    input.SetTotalBytesLimit(str.size());
     return proto.MergeFromCodedStream(&input) && input.ConsumedEntireMessage();
 }
 

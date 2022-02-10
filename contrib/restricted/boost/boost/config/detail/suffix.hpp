@@ -994,7 +994,7 @@ namespace std{ using ::type_info; }
 // on unsupported compilers.
 //
 #ifndef BOOST_FALLTHROUGH
-#  define BOOST_FALLTHROUGH [[fallthrough]] 
+#  define BOOST_FALLTHROUGH [[fallthrough]]
 #endif
 
 //

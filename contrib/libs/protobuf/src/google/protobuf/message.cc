@@ -32,62 +32,62 @@
 //  Based on original Protocol Buffers design by
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
-#include <google/protobuf/message.h> 
- 
+#include <google/protobuf/message.h>
+
 #include <iostream>
 #include <stack>
-#include <unordered_map> 
+#include <unordered_map>
 
-#include <google/protobuf/stubs/casts.h> 
-#include <google/protobuf/stubs/logging.h> 
-#include <google/protobuf/stubs/common.h> 
-#include <google/protobuf/descriptor.pb.h> 
-#include <google/protobuf/parse_context.h> 
-#include <google/protobuf/reflection_internal.h> 
-#include <google/protobuf/io/coded_stream.h> 
-#include <google/protobuf/io/zero_copy_stream_impl.h> 
-#include <google/protobuf/descriptor.h> 
-#include <google/protobuf/generated_message_reflection.h> 
-#include <google/protobuf/generated_message_util.h> 
-#include <google/protobuf/map_field.h> 
-#include <google/protobuf/map_field_inl.h> 
-#include <google/protobuf/reflection_ops.h> 
-#include <google/protobuf/unknown_field_set.h> 
-#include <google/protobuf/wire_format.h> 
-#include <google/protobuf/wire_format_lite.h> 
-#include <google/protobuf/stubs/strutil.h> 
-#include <google/protobuf/stubs/map_util.h> 
-#include <google/protobuf/stubs/stl_util.h> 
-#include <google/protobuf/stubs/hash.h> 
+#include <google/protobuf/stubs/casts.h>
+#include <google/protobuf/stubs/logging.h>
+#include <google/protobuf/stubs/common.h>
+#include <google/protobuf/descriptor.pb.h>
+#include <google/protobuf/parse_context.h>
+#include <google/protobuf/reflection_internal.h>
+#include <google/protobuf/io/coded_stream.h>
+#include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/generated_message_reflection.h>
+#include <google/protobuf/generated_message_util.h>
+#include <google/protobuf/map_field.h>
+#include <google/protobuf/map_field_inl.h>
+#include <google/protobuf/reflection_ops.h>
+#include <google/protobuf/unknown_field_set.h>
+#include <google/protobuf/wire_format.h>
+#include <google/protobuf/wire_format_lite.h>
+#include <google/protobuf/stubs/strutil.h>
+#include <google/protobuf/stubs/map_util.h>
+#include <google/protobuf/stubs/stl_util.h>
+#include <google/protobuf/stubs/hash.h>
 
-#include <google/protobuf/port_def.inc> 
- 
+#include <google/protobuf/port_def.inc>
+
 namespace google {
 namespace protobuf {
 
-namespace internal { 
- 
-// TODO(gerbens) make this factorized better. This should not have to hop 
-// to reflection. Currently uses GeneratedMessageReflection and thus is 
-// defined in generated_message_reflection.cc 
-void RegisterFileLevelMetadata(const DescriptorTable* descriptor_table); 
- 
-}  // namespace internal 
- 
-using internal::ReflectionOps; 
+namespace internal {
+
+// TODO(gerbens) make this factorized better. This should not have to hop
+// to reflection. Currently uses GeneratedMessageReflection and thus is
+// defined in generated_message_reflection.cc
+void RegisterFileLevelMetadata(const DescriptorTable* descriptor_table);
+
+}  // namespace internal
+
+using internal::ReflectionOps;
 using internal::WireFormat;
-using internal::WireFormatLite; 
+using internal::WireFormatLite;
 
 void Message::MergeFrom(const Message& from) {
-  auto* class_to = GetClassData(); 
-  auto* class_from = from.GetClassData(); 
-  auto* merge_to_from = class_to ? class_to->merge_to_from : nullptr; 
-  if (class_to == nullptr || class_to != class_from) { 
-    merge_to_from = [](Message* to, const Message& from) { 
-      ReflectionOps::Merge(from, to); 
-    }; 
-  } 
-  merge_to_from(this, from); 
+  auto* class_to = GetClassData();
+  auto* class_from = from.GetClassData();
+  auto* merge_to_from = class_to ? class_to->merge_to_from : nullptr;
+  if (class_to == nullptr || class_to != class_from) {
+    merge_to_from = [](Message* to, const Message& from) {
+      ReflectionOps::Merge(from, to);
+    };
+  }
+  merge_to_from(this, from);
 }
 
 void Message::CheckTypeAndMergeFrom(const MessageLite& other) {
@@ -95,88 +95,88 @@ void Message::CheckTypeAndMergeFrom(const MessageLite& other) {
 }
 
 void Message::CopyFrom(const Message& from) {
-  if (&from == this) return; 
- 
-  auto* class_to = GetClassData(); 
-  auto* class_from = from.GetClassData(); 
-  auto* copy_to_from = class_to ? class_to->copy_to_from : nullptr; 
- 
-  if (class_to == nullptr || class_to != class_from) { 
-    const Descriptor* descriptor = GetDescriptor(); 
-    GOOGLE_CHECK_EQ(from.GetDescriptor(), descriptor) 
-        << ": Tried to copy from a message with a different type. " 
-           "to: " 
-        << descriptor->full_name() 
-        << ", " 
-           "from: " 
-        << from.GetDescriptor()->full_name(); 
-    copy_to_from = [](Message* to, const Message& from) { 
-      ReflectionOps::Copy(from, to); 
-    }; 
-  } 
-  copy_to_from(this, from); 
+  if (&from == this) return;
+
+  auto* class_to = GetClassData();
+  auto* class_from = from.GetClassData();
+  auto* copy_to_from = class_to ? class_to->copy_to_from : nullptr;
+
+  if (class_to == nullptr || class_to != class_from) {
+    const Descriptor* descriptor = GetDescriptor();
+    GOOGLE_CHECK_EQ(from.GetDescriptor(), descriptor)
+        << ": Tried to copy from a message with a different type. "
+           "to: "
+        << descriptor->full_name()
+        << ", "
+           "from: "
+        << from.GetDescriptor()->full_name();
+    copy_to_from = [](Message* to, const Message& from) {
+      ReflectionOps::Copy(from, to);
+    };
+  }
+  copy_to_from(this, from);
 }
 
-void Message::CopyWithSizeCheck(Message* to, const Message& from) { 
-#ifndef NDEBUG 
-  size_t from_size = from.ByteSizeLong(); 
-#endif 
-  to->Clear(); 
-#ifndef NDEBUG 
-  GOOGLE_CHECK_EQ(from_size, from.ByteSizeLong()) 
-      << "Source of CopyFrom changed when clearing target.  Either " 
-         "source is a nested message in target (not allowed), or " 
-         "another thread is modifying the source."; 
-#endif 
-  to->GetClassData()->merge_to_from(to, from); 
-} 
- 
-TProtoStringType Message::GetTypeName() const { 
+void Message::CopyWithSizeCheck(Message* to, const Message& from) {
+#ifndef NDEBUG
+  size_t from_size = from.ByteSizeLong();
+#endif
+  to->Clear();
+#ifndef NDEBUG
+  GOOGLE_CHECK_EQ(from_size, from.ByteSizeLong())
+      << "Source of CopyFrom changed when clearing target.  Either "
+         "source is a nested message in target (not allowed), or "
+         "another thread is modifying the source.";
+#endif
+  to->GetClassData()->merge_to_from(to, from);
+}
+
+TProtoStringType Message::GetTypeName() const {
   return GetDescriptor()->full_name();
 }
 
-void Message::Clear() { ReflectionOps::Clear(this); } 
+void Message::Clear() { ReflectionOps::Clear(this); }
 
 bool Message::IsInitialized() const {
   return ReflectionOps::IsInitialized(*this);
 }
 
-void Message::FindInitializationErrors(std::vector<TProtoStringType>* errors) const { 
+void Message::FindInitializationErrors(std::vector<TProtoStringType>* errors) const {
   return ReflectionOps::FindInitializationErrors(*this, "", errors);
 }
 
-TProtoStringType Message::InitializationErrorString() const { 
-  std::vector<TProtoStringType> errors; 
+TProtoStringType Message::InitializationErrorString() const {
+  std::vector<TProtoStringType> errors;
   FindInitializationErrors(&errors);
   return Join(errors, ", ");
 }
 
 void Message::CheckInitialized() const {
-  GOOGLE_CHECK(IsInitialized()) << "Message of type \"" << GetDescriptor()->full_name() 
-                         << "\" is missing required fields: " 
-                         << InitializationErrorString(); 
+  GOOGLE_CHECK(IsInitialized()) << "Message of type \"" << GetDescriptor()->full_name()
+                         << "\" is missing required fields: "
+                         << InitializationErrorString();
 }
 
 void Message::DiscardUnknownFields() {
   return ReflectionOps::DiscardUnknownFields(this);
 }
 
-const char* Message::_InternalParse(const char* ptr, 
-                                    internal::ParseContext* ctx) { 
-  return WireFormat::_InternalParse(this, ptr, ctx); 
+const char* Message::_InternalParse(const char* ptr,
+                                    internal::ParseContext* ctx) {
+  return WireFormat::_InternalParse(this, ptr, ctx);
 }
 
-uint8* Message::_InternalSerialize(uint8* target, 
-                                   io::EpsCopyOutputStream* stream) const { 
-  return WireFormat::_InternalSerialize(*this, target, stream); 
+uint8* Message::_InternalSerialize(uint8* target,
+                                   io::EpsCopyOutputStream* stream) const {
+  return WireFormat::_InternalSerialize(*this, target, stream);
 }
 
-// Yandex-specific 
-void Message::PrintJSON(IOutputStream& out) const { 
-  out << "(Something went wrong: no PrintJSON() override provided - are you using a non-styleguided .pb.h?)"; 
-} 
- 
-bool Message::ParseFromArcadiaStream(IInputStream* input) { 
+// Yandex-specific
+void Message::PrintJSON(IOutputStream& out) const {
+  out << "(Something went wrong: no PrintJSON() override provided - are you using a non-styleguided .pb.h?)";
+}
+
+bool Message::ParseFromArcadiaStream(IInputStream* input) {
   bool res = false;
   io::TInputStreamProxy proxy(input);
   {
@@ -186,7 +186,7 @@ bool Message::ParseFromArcadiaStream(IInputStream* input) {
   return res && !proxy.HasError();
 }
 
-bool Message::ParsePartialFromArcadiaStream(IInputStream* input) { 
+bool Message::ParsePartialFromArcadiaStream(IInputStream* input) {
   bool res = false;
   io::TInputStreamProxy proxy(input);
   {
@@ -196,7 +196,7 @@ bool Message::ParsePartialFromArcadiaStream(IInputStream* input) {
   return res && !proxy.HasError();
 }
 
-bool Message::SerializeToArcadiaStream(IOutputStream* output) const { 
+bool Message::SerializeToArcadiaStream(IOutputStream* output) const {
   bool res = false;
   io::TOutputStreamProxy proxy(output);
   {
@@ -206,7 +206,7 @@ bool Message::SerializeToArcadiaStream(IOutputStream* output) const {
   return res && !proxy.HasError();
 }
 
-bool Message::SerializePartialToArcadiaStream(IOutputStream* output) const { 
+bool Message::SerializePartialToArcadiaStream(IOutputStream* output) const {
   bool res = false;
   io::TOutputStreamProxy proxy(output);
   {
@@ -217,24 +217,24 @@ bool Message::SerializePartialToArcadiaStream(IOutputStream* output) const {
 }
 // End of Yandex-specific
 
-size_t Message::ByteSizeLong() const { 
-  size_t size = WireFormat::ByteSize(*this); 
-  SetCachedSize(internal::ToCachedSize(size)); 
-  return size; 
+size_t Message::ByteSizeLong() const {
+  size_t size = WireFormat::ByteSize(*this);
+  SetCachedSize(internal::ToCachedSize(size));
+  return size;
 }
 
-void Message::SetCachedSize(int /* size */) const { 
-  GOOGLE_LOG(FATAL) << "Message class \"" << GetDescriptor()->full_name() 
-             << "\" implements neither SetCachedSize() nor ByteSize().  " 
-                "Must implement one or the other."; 
+void Message::SetCachedSize(int /* size */) const {
+  GOOGLE_LOG(FATAL) << "Message class \"" << GetDescriptor()->full_name()
+             << "\" implements neither SetCachedSize() nor ByteSize().  "
+                "Must implement one or the other.";
 }
 
-size_t Message::SpaceUsedLong() const { 
-  return GetReflection()->SpaceUsedLong(*this); 
+size_t Message::SpaceUsedLong() const {
+  return GetReflection()->SpaceUsedLong(*this);
 }
 
-uint64 Message::GetInvariantPerBuild(uint64 salt) { 
-  return salt; 
+uint64 Message::GetInvariantPerBuild(uint64 salt) {
+  return salt;
 }
 
 // =============================================================================
@@ -244,50 +244,50 @@ MessageFactory::~MessageFactory() {}
 
 namespace {
 
- 
-#define HASH_MAP std::unordered_map 
-#define STR_HASH_FXN hash<::google::protobuf::StringPiece> 
- 
- 
-class GeneratedMessageFactory final : public MessageFactory { 
+
+#define HASH_MAP std::unordered_map
+#define STR_HASH_FXN hash<::google::protobuf::StringPiece>
+
+
+class GeneratedMessageFactory final : public MessageFactory {
  public:
   static GeneratedMessageFactory* singleton();
 
-  void RegisterFile(const google::protobuf::internal::DescriptorTable* table); 
+  void RegisterFile(const google::protobuf::internal::DescriptorTable* table);
   void RegisterType(const Descriptor* descriptor, const Message* prototype);
 
   // implements MessageFactory ---------------------------------------
-  const Message* GetPrototype(const Descriptor* type) override; 
+  const Message* GetPrototype(const Descriptor* type) override;
 
  private:
   // Only written at static init time, so does not require locking.
-  HASH_MAP<StringPiece, const google::protobuf::internal::DescriptorTable*, 
-           STR_HASH_FXN> 
-      file_map_; 
+  HASH_MAP<StringPiece, const google::protobuf::internal::DescriptorTable*,
+           STR_HASH_FXN>
+      file_map_;
 
-  internal::WrappedMutex mutex_; 
+  internal::WrappedMutex mutex_;
   // Initialized lazily, so requires locking.
-  std::unordered_map<const Descriptor*, const Message*> type_map_; 
+  std::unordered_map<const Descriptor*, const Message*> type_map_;
 };
 
 GeneratedMessageFactory* GeneratedMessageFactory::singleton() {
-  static auto instance = 
-      internal::OnShutdownDelete(new GeneratedMessageFactory); 
-  return instance; 
+  static auto instance =
+      internal::OnShutdownDelete(new GeneratedMessageFactory);
+  return instance;
 }
 
 void GeneratedMessageFactory::RegisterFile(
-    const google::protobuf::internal::DescriptorTable* table) { 
-  if (!InsertIfNotPresent(&file_map_, table->filename, table)) { 
-    GOOGLE_LOG(FATAL) << "File is already registered: " << table->filename; 
+    const google::protobuf::internal::DescriptorTable* table) {
+  if (!InsertIfNotPresent(&file_map_, table->filename, table)) {
+    GOOGLE_LOG(FATAL) << "File is already registered: " << table->filename;
   }
 }
 
 void GeneratedMessageFactory::RegisterType(const Descriptor* descriptor,
                                            const Message* prototype) {
   GOOGLE_DCHECK_EQ(descriptor->file()->pool(), DescriptorPool::generated_pool())
-      << "Tried to register a non-generated type with the generated " 
-         "type registry."; 
+      << "Tried to register a non-generated type with the generated "
+         "type registry.";
 
   // This should only be called as a result of calling a file registration
   // function during GetPrototype(), in which case we already have locked
@@ -311,12 +311,12 @@ const Message* GeneratedMessageFactory::GetPrototype(const Descriptor* type) {
   if (type->file()->pool() != DescriptorPool::generated_pool()) return NULL;
 
   // Apparently the file hasn't been registered yet.  Let's do that now.
-  const internal::DescriptorTable* registration_data = 
+  const internal::DescriptorTable* registration_data =
       FindPtrOrNull(file_map_, type->file()->name().c_str());
-  if (registration_data == NULL) { 
+  if (registration_data == NULL) {
     GOOGLE_LOG(DFATAL) << "File appears to be in generated pool but wasn't "
-                   "registered: " 
-                << type->file()->name(); 
+                   "registered: "
+                << type->file()->name();
     return NULL;
   }
 
@@ -326,7 +326,7 @@ const Message* GeneratedMessageFactory::GetPrototype(const Descriptor* type) {
   const Message* result = FindPtrOrNull(type_map_, type);
   if (result == NULL) {
     // Nope.  OK, register everything.
-    internal::RegisterFileLevelMetadata(registration_data); 
+    internal::RegisterFileLevelMetadata(registration_data);
     // Should be here now.
     result = FindPtrOrNull(type_map_, type);
   }
@@ -346,8 +346,8 @@ MessageFactory* MessageFactory::generated_factory() {
 }
 
 void MessageFactory::InternalRegisterGeneratedFile(
-    const google::protobuf::internal::DescriptorTable* table) { 
-  GeneratedMessageFactory::singleton()->RegisterFile(table); 
+    const google::protobuf::internal::DescriptorTable* table) {
+  GeneratedMessageFactory::singleton()->RegisterFile(table);
 }
 
 void MessageFactory::InternalRegisterGeneratedMessage(
@@ -356,21 +356,21 @@ void MessageFactory::InternalRegisterGeneratedMessage(
 }
 
 
-namespace { 
-template <typename T> 
-T* GetSingleton() { 
-  static T singleton; 
-  return &singleton; 
+namespace {
+template <typename T>
+T* GetSingleton() {
+  static T singleton;
+  return &singleton;
 }
-}  // namespace 
+}  // namespace
 
 const internal::RepeatedFieldAccessor* Reflection::RepeatedFieldAccessor(
     const FieldDescriptor* field) const {
   GOOGLE_CHECK(field->is_repeated());
   switch (field->cpp_type()) {
 #define HANDLE_PRIMITIVE_TYPE(TYPE, type) \
-  case FieldDescriptor::CPPTYPE_##TYPE:   \ 
-    return GetSingleton<internal::RepeatedFieldPrimitiveAccessor<type> >(); 
+  case FieldDescriptor::CPPTYPE_##TYPE:   \
+    return GetSingleton<internal::RepeatedFieldPrimitiveAccessor<type> >();
     HANDLE_PRIMITIVE_TYPE(INT32, int32)
     HANDLE_PRIMITIVE_TYPE(UINT32, uint32)
     HANDLE_PRIMITIVE_TYPE(INT64, int64)
@@ -384,14 +384,14 @@ const internal::RepeatedFieldAccessor* Reflection::RepeatedFieldAccessor(
       switch (field->options().ctype()) {
         default:
         case FieldOptions::STRING:
-          return GetSingleton<internal::RepeatedPtrFieldStringAccessor>(); 
+          return GetSingleton<internal::RepeatedPtrFieldStringAccessor>();
       }
       break;
     case FieldDescriptor::CPPTYPE_MESSAGE:
       if (field->is_map()) {
-        return GetSingleton<internal::MapFieldAccessor>(); 
+        return GetSingleton<internal::MapFieldAccessor>();
       } else {
-        return GetSingleton<internal::RepeatedPtrFieldMessageAccessor>(); 
+        return GetSingleton<internal::RepeatedPtrFieldMessageAccessor>();
       }
   }
   GOOGLE_LOG(FATAL) << "Should not reach here.";
@@ -399,30 +399,30 @@ const internal::RepeatedFieldAccessor* Reflection::RepeatedFieldAccessor(
 }
 
 namespace internal {
-template <> 
+template <>
 #if defined(_MSC_VER) && (_MSC_VER >= 1800)
-// Note: force noinline to workaround MSVC compiler bug with /Zc:inline, issue 
-// #240 
-PROTOBUF_NOINLINE 
+// Note: force noinline to workaround MSVC compiler bug with /Zc:inline, issue
+// #240
+PROTOBUF_NOINLINE
 #endif
-    Message* 
-    GenericTypeHandler<Message>::NewFromPrototype(const Message* prototype, 
-                                                  Arena* arena) { 
+    Message*
+    GenericTypeHandler<Message>::NewFromPrototype(const Message* prototype,
+                                                  Arena* arena) {
   return prototype->New(arena);
 }
-template <> 
+template <>
 #if defined(_MSC_VER) && (_MSC_VER >= 1800)
-// Note: force noinline to workaround MSVC compiler bug with /Zc:inline, issue 
-// #240 
-PROTOBUF_NOINLINE 
+// Note: force noinline to workaround MSVC compiler bug with /Zc:inline, issue
+// #240
+PROTOBUF_NOINLINE
 #endif
-    Arena* 
-    GenericTypeHandler<Message>::GetOwningArena(Message* value) { 
-  return value->GetOwningArena(); 
+    Arena*
+    GenericTypeHandler<Message>::GetOwningArena(Message* value) {
+  return value->GetOwningArena();
 }
 }  // namespace internal
 
 }  // namespace protobuf
 }  // namespace google
- 
-#include <google/protobuf/port_undef.inc> 
+
+#include <google/protobuf/port_undef.inc>

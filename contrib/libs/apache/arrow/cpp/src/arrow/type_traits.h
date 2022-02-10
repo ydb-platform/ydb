@@ -66,8 +66,8 @@ TYPE_ID_TRAIT(TIMESTAMP, TimestampType)
 TYPE_ID_TRAIT(INTERVAL_DAY_TIME, DayTimeIntervalType)
 TYPE_ID_TRAIT(INTERVAL_MONTHS, MonthIntervalType)
 TYPE_ID_TRAIT(DURATION, DurationType)
-TYPE_ID_TRAIT(DECIMAL128, Decimal128Type) 
-TYPE_ID_TRAIT(DECIMAL256, Decimal256Type) 
+TYPE_ID_TRAIT(DECIMAL128, Decimal128Type)
+TYPE_ID_TRAIT(DECIMAL256, Decimal256Type)
 TYPE_ID_TRAIT(STRUCT, StructType)
 TYPE_ID_TRAIT(LIST, ListType)
 TYPE_ID_TRAIT(LARGE_LIST, LargeListType)
@@ -233,7 +233,7 @@ struct TypeTraits<MonthIntervalType> {
   using ArrayType = MonthIntervalArray;
   using BuilderType = MonthIntervalBuilder;
   using ScalarType = MonthIntervalScalar;
-  using CType = MonthIntervalType::c_type; 
+  using CType = MonthIntervalType::c_type;
 
   static constexpr int64_t bytes_required(int64_t elements) {
     return elements * static_cast<int64_t>(sizeof(int32_t));
@@ -291,14 +291,14 @@ struct TypeTraits<Decimal128Type> {
 };
 
 template <>
-struct TypeTraits<Decimal256Type> { 
-  using ArrayType = Decimal256Array; 
-  using BuilderType = Decimal256Builder; 
-  using ScalarType = Decimal256Scalar; 
-  constexpr static bool is_parameter_free = false; 
-}; 
- 
-template <> 
+struct TypeTraits<Decimal256Type> {
+  using ArrayType = Decimal256Array;
+  using BuilderType = Decimal256Builder;
+  using ScalarType = Decimal256Scalar;
+  constexpr static bool is_parameter_free = false;
+};
+
+template <>
 struct TypeTraits<BinaryType> {
   using ArrayType = BinaryArray;
   using BuilderType = BinaryBuilder;
@@ -587,18 +587,18 @@ using is_decimal_type = std::is_base_of<DecimalType, T>;
 template <typename T, typename R = void>
 using enable_if_decimal = enable_if_t<is_decimal_type<T>::value, R>;
 
-template <typename T> 
-using is_decimal128_type = std::is_base_of<Decimal128Type, T>; 
- 
-template <typename T, typename R = void> 
-using enable_if_decimal128 = enable_if_t<is_decimal128_type<T>::value, R>; 
- 
-template <typename T> 
-using is_decimal256_type = std::is_base_of<Decimal256Type, T>; 
- 
-template <typename T, typename R = void> 
-using enable_if_decimal256 = enable_if_t<is_decimal256_type<T>::value, R>; 
- 
+template <typename T>
+using is_decimal128_type = std::is_base_of<Decimal128Type, T>;
+
+template <typename T, typename R = void>
+using enable_if_decimal128 = enable_if_t<is_decimal128_type<T>::value, R>;
+
+template <typename T>
+using is_decimal256_type = std::is_base_of<Decimal256Type, T>;
+
+template <typename T, typename R = void>
+using enable_if_decimal256 = enable_if_t<is_decimal256_type<T>::value, R>;
+
 // Nested Types
 
 template <typename T>
@@ -636,7 +636,7 @@ template <typename T>
 using is_list_type =
     std::integral_constant<bool, std::is_same<T, ListType>::value ||
                                      std::is_same<T, LargeListType>::value ||
-                                     std::is_same<T, FixedSizeListType>::value>; 
+                                     std::is_same<T, FixedSizeListType>::value>;
 
 template <typename T, typename R = void>
 using enable_if_list_type = enable_if_t<is_list_type<T>::value, R>;
@@ -846,17 +846,17 @@ static inline bool is_floating(Type::type type_id) {
   return false;
 }
 
-static inline bool is_decimal(Type::type type_id) { 
-  switch (type_id) { 
-    case Type::DECIMAL128: 
-    case Type::DECIMAL256: 
-      return true; 
-    default: 
-      break; 
-  } 
-  return false; 
-} 
- 
+static inline bool is_decimal(Type::type type_id) {
+  switch (type_id) {
+    case Type::DECIMAL128:
+    case Type::DECIMAL256:
+      return true;
+    default:
+      break;
+  }
+  return false;
+}
+
 static inline bool is_primitive(Type::type type_id) {
   switch (type_id) {
     case Type::BOOL:
@@ -927,8 +927,8 @@ static inline bool is_dictionary(Type::type type_id) {
 
 static inline bool is_fixed_size_binary(Type::type type_id) {
   switch (type_id) {
-    case Type::DECIMAL128: 
-    case Type::DECIMAL256: 
+    case Type::DECIMAL128:
+    case Type::DECIMAL256:
     case Type::FIXED_SIZE_BINARY:
       return true;
     default:
@@ -941,52 +941,52 @@ static inline bool is_fixed_width(Type::type type_id) {
   return is_primitive(type_id) || is_dictionary(type_id) || is_fixed_size_binary(type_id);
 }
 
-static inline int bit_width(Type::type type_id) { 
-  switch (type_id) { 
-    case Type::BOOL: 
-      return 1; 
-    case Type::UINT8: 
-    case Type::INT8: 
-      return 8; 
-    case Type::UINT16: 
-    case Type::INT16: 
-      return 16; 
-    case Type::UINT32: 
-    case Type::INT32: 
-    case Type::DATE32: 
-    case Type::TIME32: 
-      return 32; 
-    case Type::UINT64: 
-    case Type::INT64: 
-    case Type::DATE64: 
-    case Type::TIME64: 
-    case Type::TIMESTAMP: 
-    case Type::DURATION: 
-      return 64; 
- 
-    case Type::HALF_FLOAT: 
-      return 16; 
-    case Type::FLOAT: 
-      return 32; 
-    case Type::DOUBLE: 
-      return 64; 
- 
-    case Type::INTERVAL_MONTHS: 
-      return 32; 
-    case Type::INTERVAL_DAY_TIME: 
-      return 64; 
- 
-    case Type::DECIMAL128: 
-      return 128; 
-    case Type::DECIMAL256: 
-      return 256; 
- 
-    default: 
-      break; 
-  } 
-  return 0; 
-} 
- 
+static inline int bit_width(Type::type type_id) {
+  switch (type_id) {
+    case Type::BOOL:
+      return 1;
+    case Type::UINT8:
+    case Type::INT8:
+      return 8;
+    case Type::UINT16:
+    case Type::INT16:
+      return 16;
+    case Type::UINT32:
+    case Type::INT32:
+    case Type::DATE32:
+    case Type::TIME32:
+      return 32;
+    case Type::UINT64:
+    case Type::INT64:
+    case Type::DATE64:
+    case Type::TIME64:
+    case Type::TIMESTAMP:
+    case Type::DURATION:
+      return 64;
+
+    case Type::HALF_FLOAT:
+      return 16;
+    case Type::FLOAT:
+      return 32;
+    case Type::DOUBLE:
+      return 64;
+
+    case Type::INTERVAL_MONTHS:
+      return 32;
+    case Type::INTERVAL_DAY_TIME:
+      return 64;
+
+    case Type::DECIMAL128:
+      return 128;
+    case Type::DECIMAL256:
+      return 256;
+
+    default:
+      break;
+  }
+  return 0;
+}
+
 static inline bool is_nested(Type::type type_id) {
   switch (type_id) {
     case Type::LIST:
@@ -1003,22 +1003,22 @@ static inline bool is_nested(Type::type type_id) {
   return false;
 }
 
-static inline int offset_bit_width(Type::type type_id) { 
-  switch (type_id) { 
-    case Type::STRING: 
-    case Type::BINARY: 
-    case Type::LIST: 
-    case Type::MAP: 
-    case Type::DENSE_UNION: 
-      return 32; 
-    case Type::LARGE_STRING: 
-    case Type::LARGE_BINARY: 
-    case Type::LARGE_LIST: 
-      return 64; 
-    default: 
-      break; 
-  } 
-  return 0; 
-} 
- 
+static inline int offset_bit_width(Type::type type_id) {
+  switch (type_id) {
+    case Type::STRING:
+    case Type::BINARY:
+    case Type::LIST:
+    case Type::MAP:
+    case Type::DENSE_UNION:
+      return 32;
+    case Type::LARGE_STRING:
+    case Type::LARGE_BINARY:
+    case Type::LARGE_LIST:
+      return 64;
+    default:
+      break;
+  }
+  return 0;
+}
+
 }  // namespace arrow

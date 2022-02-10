@@ -35,34 +35,34 @@
 #ifndef GOOGLE_PROTOBUF_COMMON_H__
 #define GOOGLE_PROTOBUF_COMMON_H__
 
-#include <algorithm> 
-#include <iostream> 
-#include <map> 
-#include <memory> 
-#include <set> 
-#include <string> 
-#include <vector> 
- 
-#include <google/protobuf/stubs/macros.h> 
-#include <google/protobuf/stubs/platform_macros.h> 
-#include <google/protobuf/stubs/port.h> 
-#include <google/protobuf/stubs/stringpiece.h> 
+#include <algorithm>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+#include <vector>
 
-#ifndef PROTOBUF_USE_EXCEPTIONS 
-#if defined(_MSC_VER) && defined(_CPPUNWIND) 
-  #define PROTOBUF_USE_EXCEPTIONS 1 
-#elif defined(__EXCEPTIONS) 
-  #define PROTOBUF_USE_EXCEPTIONS 1 
-#else 
-  #define PROTOBUF_USE_EXCEPTIONS 0 
-#endif 
-#endif 
- 
+#include <google/protobuf/stubs/macros.h>
+#include <google/protobuf/stubs/platform_macros.h>
+#include <google/protobuf/stubs/port.h>
+#include <google/protobuf/stubs/stringpiece.h>
+
+#ifndef PROTOBUF_USE_EXCEPTIONS
+#if defined(_MSC_VER) && defined(_CPPUNWIND)
+  #define PROTOBUF_USE_EXCEPTIONS 1
+#elif defined(__EXCEPTIONS)
+  #define PROTOBUF_USE_EXCEPTIONS 1
+#else
+  #define PROTOBUF_USE_EXCEPTIONS 0
+#endif
+#endif
+
 #define Y_PROTOBUF_SUPPRESS_NODISCARD [[maybe_unused]] bool Y_GENERATE_UNIQUE_ID(pb_checker)=
 
-#if PROTOBUF_USE_EXCEPTIONS 
-#include <exception> 
-#endif 
+#if PROTOBUF_USE_EXCEPTIONS
+#include <exception>
+#endif
 #if defined(__APPLE__)
 #include <TargetConditionals.h>  // for TARGET_OS_IPHONE
 #endif
@@ -71,7 +71,7 @@
 #include <pthread.h>
 #endif
 
-#include <google/protobuf/port_def.inc> 
+#include <google/protobuf/port_def.inc>
 
 namespace std {}
 
@@ -84,7 +84,7 @@ namespace internal {
 
 // The current version, represented as a single integer to make comparison
 // easier:  major * 10^6 + minor * 10^3 + micro
-#define GOOGLE_PROTOBUF_VERSION 3017003 
+#define GOOGLE_PROTOBUF_VERSION 3017003
 
 // A suffix string for alpha, beta or rc releases. Empty for stable releases.
 #define GOOGLE_PROTOBUF_VERSION_SUFFIX ""
@@ -92,23 +92,23 @@ namespace internal {
 // The minimum header version which works with the current version of
 // the library.  This constant should only be used by protoc's C++ code
 // generator.
-static const int kMinHeaderVersionForLibrary = 3017000; 
+static const int kMinHeaderVersionForLibrary = 3017000;
 
 // The minimum protoc version which works with the current version of the
 // headers.
-#define GOOGLE_PROTOBUF_MIN_PROTOC_VERSION 3017000 
+#define GOOGLE_PROTOBUF_MIN_PROTOC_VERSION 3017000
 
 // The minimum header version which works with the current version of
 // protoc.  This constant should only be used in VerifyVersion().
-static const int kMinHeaderVersionForProtoc = 3017000; 
+static const int kMinHeaderVersionForProtoc = 3017000;
 
 // Verifies that the headers and libraries are compatible.  Use the macro
 // below to call this.
-void PROTOBUF_EXPORT VerifyVersion(int headerVersion, int minLibraryVersion, 
-                                   const char* filename); 
+void PROTOBUF_EXPORT VerifyVersion(int headerVersion, int minLibraryVersion,
+                                   const char* filename);
 
 // Converts a numeric version number to a string.
-TProtoStringType PROTOBUF_EXPORT VersionString(int version); 
+TProtoStringType PROTOBUF_EXPORT VersionString(int version);
 
 }  // namespace internal
 
@@ -129,14 +129,14 @@ namespace internal {
 
 // Checks if the buffer contains structurally-valid UTF-8.  Implemented in
 // structurally_valid.cc.
-PROTOBUF_EXPORT bool IsStructurallyValidUTF8(const char* buf, int len); 
+PROTOBUF_EXPORT bool IsStructurallyValidUTF8(const char* buf, int len);
 
-inline bool IsStructurallyValidUTF8(StringPiece str) { 
+inline bool IsStructurallyValidUTF8(StringPiece str) {
   return IsStructurallyValidUTF8(str.data(), static_cast<int>(str.length()));
 }
 
-// Returns initial number of bytes of structurally valid UTF-8. 
-PROTOBUF_EXPORT int UTF8SpnStructurallyValid(StringPiece str); 
+// Returns initial number of bytes of structurally valid UTF-8.
+PROTOBUF_EXPORT int UTF8SpnStructurallyValid(StringPiece str);
 
 // Coerce UTF-8 byte string in src_str to be
 // a structurally-valid equal-length string by selectively
@@ -150,51 +150,51 @@ PROTOBUF_EXPORT int UTF8SpnStructurallyValid(StringPiece str);
 //
 // Optimized for: all structurally valid and no byte copying is done.
 //
-PROTOBUF_EXPORT char* UTF8CoerceToStructurallyValid(StringPiece str, char* dst, 
-                                                    char replace_char); 
+PROTOBUF_EXPORT char* UTF8CoerceToStructurallyValid(StringPiece str, char* dst,
+                                                    char replace_char);
 
 }  // namespace internal
 
-// This lives in message_lite.h now, but we leave this here for any users that 
-// #include common.h and not message_lite.h. 
-PROTOBUF_EXPORT void ShutdownProtobufLibrary(); 
+// This lives in message_lite.h now, but we leave this here for any users that
+// #include common.h and not message_lite.h.
+PROTOBUF_EXPORT void ShutdownProtobufLibrary();
 
 namespace internal {
 
-// Strongly references the given variable such that the linker will be forced 
-// to pull in this variable's translation unit. 
-template <typename T> 
-void StrongReference(const T& var) { 
-  auto volatile unused = &var; 
-  (void)&unused;  // Use address to avoid an extra load of "unused". 
-} 
+// Strongly references the given variable such that the linker will be forced
+// to pull in this variable's translation unit.
+template <typename T>
+void StrongReference(const T& var) {
+  auto volatile unused = &var;
+  (void)&unused;  // Use address to avoid an extra load of "unused".
+}
 
 }  // namespace internal
- 
-#if PROTOBUF_USE_EXCEPTIONS 
-class FatalException : public std::exception { 
- public: 
-  FatalException(const char* filename, int line, const TProtoStringType& message) 
-      : filename_(filename), line_(line), message_(message) {} 
-  virtual ~FatalException() throw(); 
- 
-  virtual const char* what() const throw(); 
- 
-  const char* filename() const { return filename_; } 
-  int line() const { return line_; } 
-  const TProtoStringType& message() const { return message_; } 
- 
- private: 
-  const char* filename_; 
-  const int line_; 
-  const TProtoStringType message_; 
-}; 
-#endif 
- 
-// This is at the end of the file instead of the beginning to work around a bug 
-// in some versions of MSVC. 
-using string = TProtoStringType; 
- 
+
+#if PROTOBUF_USE_EXCEPTIONS
+class FatalException : public std::exception {
+ public:
+  FatalException(const char* filename, int line, const TProtoStringType& message)
+      : filename_(filename), line_(line), message_(message) {}
+  virtual ~FatalException() throw();
+
+  virtual const char* what() const throw();
+
+  const char* filename() const { return filename_; }
+  int line() const { return line_; }
+  const TProtoStringType& message() const { return message_; }
+
+ private:
+  const char* filename_;
+  const int line_;
+  const TProtoStringType message_;
+};
+#endif
+
+// This is at the end of the file instead of the beginning to work around a bug
+// in some versions of MSVC.
+using string = TProtoStringType;
+
 }  // namespace protobuf
 }  // namespace google
 
@@ -203,6 +203,6 @@ namespace NProtoBuf {
   using namespace google::protobuf;
 };
 
-#include <google/protobuf/port_undef.inc> 
- 
+#include <google/protobuf/port_undef.inc>
+
 #endif  // GOOGLE_PROTOBUF_COMMON_H__

@@ -13,7 +13,7 @@
 
 #include <library/cpp/actors/core/log.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 
 namespace NKikimrTxDataShard {
     class TKqpTransaction_TScanTaskMeta;

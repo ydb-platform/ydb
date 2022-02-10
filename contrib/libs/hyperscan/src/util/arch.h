@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020, Intel Corporation 
+ * Copyright (c) 2017-2020, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,7 +34,7 @@
 #define UTIL_ARCH_H_
 
 #define HAVE_SSE2
- 
+
 /*
  * MSVC uses a different form of inline asm
  */

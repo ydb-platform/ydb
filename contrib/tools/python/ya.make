@@ -1,5 +1,5 @@
-PROGRAM(python)
-
+PROGRAM(python) 
+ 
 OWNER(g:contrib orivej)
 
 LICENSE(PSF-2.0)
@@ -12,8 +12,8 @@ PEERDIR(
     contrib/tools/python/libpython
     contrib/tools/python/src/Modules/_sqlite
 )
-
-END()
+ 
+END() 
 
 RECURSE_FOR_TESTS(
     tests

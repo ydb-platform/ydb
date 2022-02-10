@@ -44,8 +44,8 @@ namespace NProtoBuf {
             Y_ASSERT(fd);                                 \
             return fd->default_value_##method();          \
         }                                                 \
-    };
-
+    }; 
+ 
     DECLARE_CPPTYPE_DEFAULT(FieldDescriptor::CppType::CPPTYPE_INT32, int32);
     DECLARE_CPPTYPE_DEFAULT(FieldDescriptor::CppType::CPPTYPE_INT64, int64);
     DECLARE_CPPTYPE_DEFAULT(FieldDescriptor::CppType::CPPTYPE_UINT32, uint32);
@@ -55,9 +55,9 @@ namespace NProtoBuf {
     DECLARE_CPPTYPE_DEFAULT(FieldDescriptor::CppType::CPPTYPE_BOOL, bool);
     DECLARE_CPPTYPE_DEFAULT(FieldDescriptor::CppType::CPPTYPE_ENUM, enum);
     DECLARE_CPPTYPE_DEFAULT(FieldDescriptor::CppType::CPPTYPE_STRING, string);
-
-#undef DECLARE_CPPTYPE_DEFAULT
-
+ 
+#undef DECLARE_CPPTYPE_DEFAULT 
+ 
     // getters/setters of field with specified CppType
     template <FieldDescriptor::CppType cpptype>
     struct TCppTypeTraits : TCppTypeTraitsBase {
@@ -190,7 +190,7 @@ namespace NProtoBuf {
             Y_ASSERT(index == 0);
             TBaseTraits::Set(msg, field, value);
         }
-
+ 
         static inline void Add(Message& msg, const FieldDescriptor* field, T value) {
             TBaseTraits::Set(msg, field, value);
         }
@@ -220,7 +220,7 @@ namespace NProtoBuf {
         static inline void Set(Message& msg, const FieldDescriptor* field, T value, size_t index = 0) {
             TBaseTraits::SetRepeated(msg, field, index, value);
         }
-
+ 
         static inline void Add(Message& msg, const FieldDescriptor* field, T value) {
             TBaseTraits::AddRepeated(msg, field, value);
         }

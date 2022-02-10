@@ -15,6 +15,6 @@ SRCS(
     json.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(json_value.h)
-
+GENERATE_ENUM_SERIALIZATION(json_value.h) 
+ 
 END()

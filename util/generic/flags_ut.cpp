@@ -11,8 +11,8 @@ enum ETestFlag1: ui16 {
 Y_DECLARE_FLAGS(ETest1, ETestFlag1)
 Y_DECLARE_OPERATORS_FOR_FLAGS(ETest1)
 
-static_assert(TTypeTraits<ETest1>::IsPod, "flags should be POD type");
-
+static_assert(TTypeTraits<ETest1>::IsPod, "flags should be POD type"); 
+ 
 enum class ETestFlag2 {
     Test1 = 1,
     Test2 = 2,

@@ -136,11 +136,11 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
     static const size_t CodedSize = Y_ARRAY_SIZE(CodedFactors);
     static const TStringBuf CodedFactorsBuf(reinterpret_cast<const char*>(CodedFactors), CodedSize);
 
-    void FillWithGarbage(float* factors, size_t count) {
-        void* data = static_cast<void*>(factors);
-        memset(data, 0xAA, sizeof(float) * count);
-    }
-
+    void FillWithGarbage(float* factors, size_t count) { 
+        void* data = static_cast<void*>(factors); 
+        memset(data, 0xAA, sizeof(float) * count); 
+    } 
+ 
     // Helper for dumping compressed values
     void PrintCompressed(const TVector<ui8>& codedFactors) {
         for (size_t i = 0; i < codedFactors.size(); ++i) {
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
 
     Y_UNIT_TEST(TestDecompressInParts) {
         float factors[FactorCount];
-        FillWithGarbage(factors, FactorCount);
+        FillWithGarbage(factors, FactorCount); 
         fh::TDecoder decoder(CodedFactorsBuf);
         const size_t firstPack = 100;
         // unpack first pack
@@ -198,26 +198,26 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
     }
 
     Y_UNIT_TEST(TestSkip) {
-        float factors[FactorCount];
-        FillWithGarbage(factors, FactorCount);
+        float factors[FactorCount]; 
+        FillWithGarbage(factors, FactorCount); 
         fh::TDecoder decoder(CodedFactorsBuf);
-        const size_t firstPack = 100;
-        // unpack first pack
+        const size_t firstPack = 100; 
+        // unpack first pack 
         UNIT_ASSERT_VALUES_EQUAL(decoder.Decode({factors, firstPack}), firstPack);
-        // skip some factors
-        const size_t skipCount = 60;
+        // skip some factors 
+        const size_t skipCount = 60; 
         UNIT_ASSERT_VALUES_EQUAL(decoder.Skip(skipCount / 2), skipCount / 2);
-        // unpack all, except some factors in the end
+        // unpack all, except some factors in the end 
         const auto toDecode = FactorCount - firstPack - skipCount;
         UNIT_ASSERT_VALUES_EQUAL(decoder.Decode({factors + firstPack, toDecode}), toDecode);
         UNIT_ASSERT_VALUES_EQUAL(decoder.Skip(skipCount / 2), skipCount / 2);
         for (size_t i = 0; i < FactorCount - skipCount; ++i) {
-            size_t correctedI = i < firstPack ? i : i + skipCount / 2;
-            UNIT_ASSERT_VALUES_EQUAL(factors[i], Factors[correctedI]);
-        }
-        //PrintDecompressed(factors);
-    }
-
+            size_t correctedI = i < firstPack ? i : i + skipCount / 2; 
+            UNIT_ASSERT_VALUES_EQUAL(factors[i], Factors[correctedI]); 
+        } 
+        //PrintDecompressed(factors); 
+    } 
+ 
     Y_UNIT_TEST(TestDecompressForgedData) {
         // this coredumps without end-of-coded-stream check, see SEARCH-1156 for details
         TString brokenBase64Encoded =

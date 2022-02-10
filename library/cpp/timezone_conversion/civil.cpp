@@ -122,57 +122,57 @@ namespace NDatetime {
         return Calc<TCivilSecond>(tp, diff);
     }
 
-    TCivilSecond AddCivil(const TCivilSecond& tp, TCivilDiff diff) {
-        switch (diff.Unit) {
-            case ECivilUnit::Second: {
-                return AddSeconds(tp, diff.Value);
-            }
-            case ECivilUnit::Minute: {
-                return AddMinutes(tp, diff.Value);
-            }
-            case ECivilUnit::Hour: {
-                return AddHours(tp, diff.Value);
-            }
-            case ECivilUnit::Day: {
-                return AddDays(tp, diff.Value);
-            }
-            case ECivilUnit::Month: {
-                return AddMonths(tp, diff.Value);
-            }
-            case ECivilUnit::Year: {
-                return AddYears(tp, diff.Value);
-            }
-            default: {
-                ythrow yexception() << "Unexpected civil unit value " << static_cast<int>(diff.Unit);
-            }
-        }
-    }
-
-    TCivilDiff GetCivilDiff(const TCivilSecond& tpX, const TCivilSecond& tpY, ECivilUnit unit) {
-        switch (unit) {
-            case ECivilUnit::Second: {
-                return {tpX - tpY, unit};
-            }
-            case ECivilUnit::Minute: {
-                return {static_cast<TCivilMinute>(tpX) - static_cast<TCivilMinute>(tpY), unit};
-            }
-            case ECivilUnit::Hour: {
-                return {static_cast<TCivilHour>(tpX) - static_cast<TCivilHour>(tpY), unit};
-            }
-            case ECivilUnit::Day: {
-                return {static_cast<TCivilDay>(tpX) - static_cast<TCivilDay>(tpY), unit};
-            }
-            case ECivilUnit::Month: {
-                return {static_cast<TCivilMonth>(tpX) - static_cast<TCivilMonth>(tpY), unit};
-            }
-            case ECivilUnit::Year: {
-                return {static_cast<TCivilYear>(tpX) - static_cast<TCivilYear>(tpY), unit};
-            }
-            default: {
-                ythrow yexception() << "Unexpected civil unit value " << static_cast<int>(unit);
-            }
-        }
-    }
+    TCivilSecond AddCivil(const TCivilSecond& tp, TCivilDiff diff) { 
+        switch (diff.Unit) { 
+            case ECivilUnit::Second: { 
+                return AddSeconds(tp, diff.Value); 
+            } 
+            case ECivilUnit::Minute: { 
+                return AddMinutes(tp, diff.Value); 
+            } 
+            case ECivilUnit::Hour: { 
+                return AddHours(tp, diff.Value); 
+            } 
+            case ECivilUnit::Day: { 
+                return AddDays(tp, diff.Value); 
+            } 
+            case ECivilUnit::Month: { 
+                return AddMonths(tp, diff.Value); 
+            } 
+            case ECivilUnit::Year: { 
+                return AddYears(tp, diff.Value); 
+            } 
+            default: { 
+                ythrow yexception() << "Unexpected civil unit value " << static_cast<int>(diff.Unit); 
+            } 
+        } 
+    } 
+ 
+    TCivilDiff GetCivilDiff(const TCivilSecond& tpX, const TCivilSecond& tpY, ECivilUnit unit) { 
+        switch (unit) { 
+            case ECivilUnit::Second: { 
+                return {tpX - tpY, unit}; 
+            } 
+            case ECivilUnit::Minute: { 
+                return {static_cast<TCivilMinute>(tpX) - static_cast<TCivilMinute>(tpY), unit}; 
+            } 
+            case ECivilUnit::Hour: { 
+                return {static_cast<TCivilHour>(tpX) - static_cast<TCivilHour>(tpY), unit}; 
+            } 
+            case ECivilUnit::Day: { 
+                return {static_cast<TCivilDay>(tpX) - static_cast<TCivilDay>(tpY), unit}; 
+            } 
+            case ECivilUnit::Month: { 
+                return {static_cast<TCivilMonth>(tpX) - static_cast<TCivilMonth>(tpY), unit}; 
+            } 
+            case ECivilUnit::Year: { 
+                return {static_cast<TCivilYear>(tpX) - static_cast<TCivilYear>(tpY), unit}; 
+            } 
+            default: { 
+                ythrow yexception() << "Unexpected civil unit value " << static_cast<int>(unit); 
+            } 
+        } 
+    } 
 }
 
 template <>

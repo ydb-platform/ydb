@@ -3,44 +3,44 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/system/file.h>
+#include <util/system/file.h> 
 #include <util/system/yassert.h>
 
 #ifdef _win_
     #include <io.h>
 #endif
 
-class TMockStdIn {
-public:
-    TMockStdIn()
+class TMockStdIn { 
+public: 
+    TMockStdIn() 
         : StdInCopy_(dup(0))
     {
     }
-    ~TMockStdIn() {
+    ~TMockStdIn() { 
         close(StdInCopy_);
-    }
-
-    template <typename FuncType>
+    } 
+ 
+    template <typename FuncType> 
     void ForInput(const TStringBuf text, const FuncType& func) {
-        TFile tempFile(TFile::Temporary("input_ut"));
+        TFile tempFile(TFile::Temporary("input_ut")); 
         tempFile.Write(text.data(), text.size());
-        tempFile.FlushData();
-        tempFile.Seek(0, sSet);
-
-        TFileHandle tempFh(tempFile.GetHandle());
+        tempFile.FlushData(); 
+        tempFile.Seek(0, sSet); 
+ 
+        TFileHandle tempFh(tempFile.GetHandle()); 
         tempFh.Duplicate2Posix(0);
-        tempFh.Release();
-
-        func();
-        Cin.ReadAll();
+        tempFh.Release(); 
+ 
+        func(); 
+        Cin.ReadAll(); 
         dup2(StdInCopy_, 0);
         clearerr(stdin);
-    }
+    } 
 
-private:
+private: 
     int StdInCopy_;
-};
-
+}; 
+ 
 class TNoInput: public IInputStream {
 public:
     TNoInput(ui64 size)
@@ -130,28 +130,28 @@ Y_UNIT_TEST_SUITE(TInputTest) {
         UNIT_ASSERT_VALUES_EQUAL(in.ReadLine(t), 0);
         UNIT_ASSERT_VALUES_EQUAL(t, "333");
     }
-
+ 
     Y_UNIT_TEST(TestStdInReadTo) {
-        std::pair<std::pair<TStringBuf, char>, TStringBuf> testPairs[] = {
-            {{"", '\n'}, ""},
-            {{"\n", '\n'}, ""},
-            {{"\n\t", '\t'}, "\n"},
-            {{"\t\n", '\n'}, "\t"},
+        std::pair<std::pair<TStringBuf, char>, TStringBuf> testPairs[] = { 
+            {{"", '\n'}, ""}, 
+            {{"\n", '\n'}, ""}, 
+            {{"\n\t", '\t'}, "\n"}, 
+            {{"\t\n", '\n'}, "\t"}, 
             {{"a\tb\n", '\t'}, "a"}};
-
-        TMockStdIn stdIn;
-
-        for (const auto& testPair : testPairs) {
-            const TStringBuf text = testPair.first.first;
-            const char delim = testPair.first.second;
-            const TStringBuf expectedValue = testPair.second;
-
-            stdIn.ForInput(text,
+ 
+        TMockStdIn stdIn; 
+ 
+        for (const auto& testPair : testPairs) { 
+            const TStringBuf text = testPair.first.first; 
+            const char delim = testPair.first.second; 
+            const TStringBuf expectedValue = testPair.second; 
+ 
+            stdIn.ForInput(text, 
                            [=] {
                                TString value;
                                Cin.ReadTo(value, delim);
                                UNIT_ASSERT_VALUES_EQUAL(value, expectedValue);
                            });
-        }
-    }
+        } 
+    } 
 }

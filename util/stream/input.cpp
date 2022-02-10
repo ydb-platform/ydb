@@ -209,7 +209,7 @@ namespace {
 
             st.AssignNoAlias(B_, r);
 
-            if (st && st.back() == ch) {
+            if (st && st.back() == ch) { 
                 st.pop_back();
             }
 

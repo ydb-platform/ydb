@@ -3,7 +3,7 @@
 #include <type_traits>
 
 #include <util/system/types.h>
-#include <util/generic/typetraits.h>
+#include <util/generic/typetraits.h> 
 #include <util/generic/fwd.h>
 
 class IOutputStream;
@@ -203,13 +203,13 @@ private:
     TInt Value_;
 };
 
-template <class T>
-struct TPodTraits<TFlags<T>> {
-    enum {
-        IsPod = TTypeTraits<T>::IsPod
-    };
-};
-
+template <class T> 
+struct TPodTraits<TFlags<T>> { 
+    enum { 
+        IsPod = TTypeTraits<T>::IsPod 
+    }; 
+}; 
+ 
 template <class Enum>
 struct THash<TFlags<Enum>> {
     size_t operator()(const TFlags<Enum>& flags) const noexcept {

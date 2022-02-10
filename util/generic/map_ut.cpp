@@ -476,21 +476,21 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
         expected.emplace("three", 3);
         UNIT_ASSERT_VALUES_EQUAL(mm, expected);
     }
-
+ 
     Y_UNIT_TEST(TestMovePoolAlloc) {
         using TMapInPool = TMap<int, int, TLess<int>, TPoolAllocator>;
-
-        TMemoryPool pool(1);
-
-        TMapInPool m(&pool);
-        m.emplace(0, 1);
-
+ 
+        TMemoryPool pool(1); 
+ 
+        TMapInPool m(&pool); 
+        m.emplace(0, 1); 
+ 
         UNIT_ASSERT(m.contains(0));
-        UNIT_ASSERT_VALUES_EQUAL(1, m[0]);
-
-        TMapInPool movedM = std::move(m);
-
+        UNIT_ASSERT_VALUES_EQUAL(1, m[0]); 
+ 
+        TMapInPool movedM = std::move(m); 
+ 
         UNIT_ASSERT(movedM.contains(0));
-        UNIT_ASSERT_VALUES_EQUAL(1, movedM[0]);
-    }
+        UNIT_ASSERT_VALUES_EQUAL(1, movedM[0]); 
+    } 
 }

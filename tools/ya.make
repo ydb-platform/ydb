@@ -30,10 +30,10 @@ RECURSE(
     doc_url_index_print
     dolbilo
     domschemec
-    domschemec/ut
+    domschemec/ut 
     drawrichtree
     dsindexer
-    easyparser
+    easyparser 
     enforce_fsync
     enum_parser
     event2cpp
@@ -87,7 +87,7 @@ RECURSE(
     oauth_token
     pgmigrate
     pire
-    print_ranking_features
+    print_ranking_features 
     printcorpus
     printdocstat
     printdom

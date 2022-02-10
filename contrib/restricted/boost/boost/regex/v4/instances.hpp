@@ -34,7 +34,7 @@ namespace boost{
 #endif
 
 #ifndef BOOST_REGEX_TRAITS_T
-template struct BOOST_REGEX_DECL boost::regex_traits<BOOST_REGEX_CHAR_T>;
+template struct BOOST_REGEX_DECL boost::regex_traits<BOOST_REGEX_CHAR_T>; 
 #  define BOOST_REGEX_TRAITS_T , boost::regex_traits<BOOST_REGEX_CHAR_T >
 #endif
 

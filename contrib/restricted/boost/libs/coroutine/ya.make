@@ -12,10 +12,10 @@ OWNER(
 
 INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
 
-PEERDIR(
+PEERDIR( 
     ${BOOST_ROOT}/libs/context
-)
-
+) 
+ 
 IF (OS_WINDOWS)
     SRCS(
         src/windows/stack_traits.cpp

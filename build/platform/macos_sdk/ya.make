@@ -10,11 +10,11 @@ IF (USE_STL_SYSTEM)
     SET(__XCODE_TOOLCHAIN_VERSION ${CPP_XCODE_TOOLCHAIN_VERSION})
     INCLUDE(${ARCADIA_ROOT}/build/platform/xcode/ya.make.inc)
     CFLAGS(
-        GLOBAL -F$MACOS_SDK_RESOURCE_GLOBAL/System/Library/Frameworks
+        GLOBAL -F$MACOS_SDK_RESOURCE_GLOBAL/System/Library/Frameworks 
     )
-    LDFLAGS(
-        -F$MACOS_SDK_RESOURCE_GLOBAL/System/Library/Frameworks
-    )
+    LDFLAGS( 
+        -F$MACOS_SDK_RESOURCE_GLOBAL/System/Library/Frameworks 
+    ) 
 ENDIF()
 
 END()

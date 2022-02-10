@@ -32,10 +32,10 @@ ADDINCL(
 
 END()
 
-RECURSE(
-    libs
-)
-
+RECURSE( 
+    libs 
+) 
+ 
 RECURSE_FOR_TESTS(
     arcadia_test
 )

@@ -12,22 +12,22 @@
  *  ----------------------------------------------------------------------------------  *
  *  |   0x0   |   0x4   |   0x8   |   0xc   |   0x10   |   0x14  |   0x18  |   0x1c  |  *
  *  ----------------------------------------------------------------------------------  *
- *  | fc_mxcsr|fc_x87_cw|       guard       |         R12        |        R13        |  *
+ *  | fc_mxcsr|fc_x87_cw|       guard       |         R12        |        R13        |  * 
  *  ----------------------------------------------------------------------------------  *
  *  ----------------------------------------------------------------------------------  *
  *  |    8    |    9    |   10    |   11    |    12    |    13   |    14   |    15   |  *
  *  ----------------------------------------------------------------------------------  *
  *  |   0x20  |   0x24  |   0x28  |  0x2c   |   0x30   |   0x34  |   0x38  |   0x3c  |  *
  *  ----------------------------------------------------------------------------------  *
- *  |        R14        |        R15        |         RBX        |        RBP        |  *
+ *  |        R14        |        R15        |         RBX        |        RBP        |  * 
  *  ----------------------------------------------------------------------------------  *
- *  ----------------------------------------------------------------------------------  *
- *  |   16    |   17    |   18    |   19    |    20    |    21   |    22   |    23   |  *
- *  ----------------------------------------------------------------------------------  *
- *  |   0x40  |   0x44  |                                                            |  *
- *  ----------------------------------------------------------------------------------  *
- *  |        RIP        |                                                            |  *
- *  ----------------------------------------------------------------------------------  *
+ *  ----------------------------------------------------------------------------------  * 
+ *  |   16    |   17    |   18    |   19    |    20    |    21   |    22   |    23   |  * 
+ *  ----------------------------------------------------------------------------------  * 
+ *  |   0x40  |   0x44  |                                                            |  * 
+ *  ----------------------------------------------------------------------------------  * 
+ *  |        RIP        |                                                            |  * 
+ *  ----------------------------------------------------------------------------------  * 
  *                                                                                      *
  ****************************************************************************************/
 
@@ -44,34 +44,34 @@ make_fcontext:
 
     /* reserve space for context-data on context-stack */
     /* on context-function entry: (RSP -0x8) % 16 == 0 */
-    leaq  -0x48(%rax), %rax
+    leaq  -0x48(%rax), %rax 
 
     /* third arg of make_fcontext() == address of context-function */
     /* stored in RBX */
-    movq  %rdx, 0x30(%rax)
+    movq  %rdx, 0x30(%rax) 
 
     /* save MMX control- and status-word */
     stmxcsr  (%rax)
     /* save x87 control-word */
     fnstcw   0x4(%rax)
 
-#if defined(TLS_STACK_PROTECTOR)
-    /* save stack guard */
-    movq  %fs:0x28, %rcx    /* read stack guard from TLS record */
-    movq  %rcx, 0x8(%rsp)   /* save stack guard */
-#endif
-
+#if defined(TLS_STACK_PROTECTOR) 
+    /* save stack guard */ 
+    movq  %fs:0x28, %rcx    /* read stack guard from TLS record */ 
+    movq  %rcx, 0x8(%rsp)   /* save stack guard */ 
+#endif 
+ 
     /* compute abs address of label trampoline */
     leaq  trampoline(%rip), %rcx
     /* save address of trampoline as return-address for context-function */
     /* will be entered after calling jump_fcontext() first time */
-    movq  %rcx, 0x40(%rax)
+    movq  %rcx, 0x40(%rax) 
 
     /* compute abs address of label finish */
     leaq  finish(%rip), %rcx
     /* save address of finish as return-address for context-function */
     /* will be entered after context-function returns */
-    movq  %rcx, 0x38(%rax)
+    movq  %rcx, 0x38(%rax) 
 
     ret /* return pointer to context-data */
 

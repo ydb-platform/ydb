@@ -141,7 +141,7 @@ RECURSE(
     certipy
     cffi
     channels
-    chardet
+    chardet 
     charset-normalizer
     channels
     chart-studio
@@ -354,7 +354,7 @@ RECURSE(
     factory-boy
     Faker
     fakeredis
-    falcon
+    falcon 
     falcon-cors
     falcon-multipart
     fallocate
@@ -550,7 +550,7 @@ RECURSE(
     joblib
     jmespath
     json-rpc
-    json2html
+    json2html 
     jsondiff
     jsonfield
     jsonobject
@@ -906,7 +906,7 @@ RECURSE(
     python-libarchive
     python-magic
     python-memcached
-    python-mimeparse
+    python-mimeparse 
     python-multipart
     python-pptx
     python-prctl

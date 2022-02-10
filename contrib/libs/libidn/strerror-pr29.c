@@ -20,7 +20,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-# include "idn_config.h"
+# include "idn_config.h" 
 #endif
 
 #include "pr29.h"

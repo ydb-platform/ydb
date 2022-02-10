@@ -68,7 +68,7 @@ extern "C"
 #endif
 
 #include <stddef.h>		/* size_t */
-#include "idn-int.h"		/* uint32_t */
+#include "idn-int.h"		/* uint32_t */ 
 
   enum punycode_status
   {

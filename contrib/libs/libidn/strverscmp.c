@@ -18,7 +18,7 @@
    Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #if !_LIBC
-# include "idn_config.h"
+# include "idn_config.h" 
 #endif
 
 #include <string.h>
@@ -56,7 +56,7 @@
    returning less than, equal to or greater than zero if S1 is less than,
    equal to or greater than S2 (for more info, see the texinfo doc).
 */
-int strverscmp(const char *s1, const char *s2)
+int strverscmp(const char *s1, const char *s2) 
 {
   const unsigned char *p1 = (const unsigned char *) s1;
   const unsigned char *p2 = (const unsigned char *) s2;

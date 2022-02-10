@@ -28,12 +28,12 @@ extern "C"
 #endif
 
 #include <stddef.h>		/* size_t */
-#ifdef _WIN32
-    #include "win/unistd.h"
-#else
-    #include <unistd.h>		/* ssize_t */
-#endif
-#include "idn-int.h"		/* uint32_t */
+#ifdef _WIN32 
+    #include "win/unistd.h" 
+#else 
+    #include <unistd.h>		/* ssize_t */ 
+#endif 
+#include "idn-int.h"		/* uint32_t */ 
 
   /* On Windows, variables that may be in a DLL must be marked
    * specially.  This is only active when not building libidn itself

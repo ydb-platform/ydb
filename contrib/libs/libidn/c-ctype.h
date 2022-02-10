@@ -24,11 +24,11 @@ Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
 #ifndef C_CTYPE_H
 #define C_CTYPE_H
 
-#ifdef _WIN32
-    #include "win/stdbool.h"
-#else
-    #include <stdbool.h>
-#endif
+#ifdef _WIN32 
+    #include "win/stdbool.h" 
+#else 
+    #include <stdbool.h> 
+#endif 
 
 
 #ifdef __cplusplus

@@ -86,14 +86,14 @@ public:
 
     /*! Run appropriate mode.
      *
-     * In this method following things happen:
+     * In this method following things happen: 
      *   1) If first argument is -h/--help/-? then print short description of
      *      all modes and exit with zero code.
      *   2) If first argument is -v/--version and version handler is specified,
-     *      then call it and exit with zero code.
+     *      then call it and exit with zero code. 
      *   3) Find mode with the same name as first argument. If it's found then
-     *      call it and return its return code.
-     *   4) If appropriate mode is not found - return non-zero code.
+     *      call it and return its return code. 
+     *   4) If appropriate mode is not found - return non-zero code. 
      */
     int Run(int argc, const char** argv) const;
 

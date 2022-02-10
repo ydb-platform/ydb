@@ -447,7 +447,7 @@ private:
         this->Defined_ = true;
     }
 };
-
+ 
 template <class T>
 using TMaybeFail = TMaybe<T, NMaybe::TPolicyUndefinedFail>;
 
@@ -492,12 +492,12 @@ constexpr bool operator==(const ::TMaybe<T, TPolicy>& left, const ::TMaybe<T, TP
                      !static_cast<bool>(left)
                          ? true
                          : *left == *right);
-}
-
+} 
+ 
 template <class T, class TPolicy>
 constexpr bool operator!=(const TMaybe<T, TPolicy>& left, const TMaybe<T, TPolicy>& right) {
     return !(left == right);
-}
+} 
 
 template <class T, class TPolicy>
 constexpr bool operator<(const TMaybe<T, TPolicy>& left, const TMaybe<T, TPolicy>& right) {

@@ -5,7 +5,7 @@
 
 #include <library/cpp/histogram/adaptive/protos/histo.pb.h>
 
-#include <util/generic/hash.h>
+#include <util/generic/hash.h> 
 #include <util/generic/ptr.h>
 #include <utility>
 
@@ -119,12 +119,12 @@ namespace NKiwiAggr {
                 it->second->ToProto(*histo);
             }
         }
-
-        void PrecomputePartialSums() {
-            for (auto& it : Histograms) {
-                it.second->PrecomputePartialSums();
-            }
-        }
+ 
+        void PrecomputePartialSums() { 
+            for (auto& it : Histograms) { 
+                it.second->PrecomputePartialSums(); 
+            } 
+        } 
     };
 
     template <class TMerger, class TSomeMultiHistogram>

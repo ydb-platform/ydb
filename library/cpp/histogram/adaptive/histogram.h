@@ -57,8 +57,8 @@ namespace NKiwiAggr {
         double GetValueAtPercentileSafe(double percentile) {
             return CalcUpperBoundSafe(percentile * GetSum());
         }
-
-        // Histogram implementation is supposed to clear all precomputed values() if Add() is called after PrecomputePartialSums()
+ 
+        // Histogram implementation is supposed to clear all precomputed values() if Add() is called after PrecomputePartialSums() 
         virtual void PrecomputePartialSums() {
         }
     };

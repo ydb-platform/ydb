@@ -468,8 +468,8 @@ DEF_INT_SPEC_I(wchar32, ui64) // wchar32 is always unsigned
         return FormatFlt<type>(t, buf, len);                   \
     }
 
-DEF_FLT_SPEC(long double)
-
+DEF_FLT_SPEC(long double) 
+ 
 #undef DEF_FLT_SPEC
 
 template <>

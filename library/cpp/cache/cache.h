@@ -24,8 +24,8 @@ public:
         , ItemsAmount(0)
         , TotalSize(0)
         , MaxSize(maxSize)
-    {
-    }
+    { 
+    } 
 
 public:
     struct TItem: public TIntrusiveListItem<TItem> {
@@ -34,20 +34,20 @@ public:
             : TBase()
             , Key(key)
             , Value(value)
-        {
-        }
+        { 
+        } 
 
         TItem(const TItem& rhs)
             : TBase()
             , Key(rhs.Key)
             , Value(rhs.Value)
-        {
-        }
+        { 
+        } 
 
         bool operator<(const TItem& rhs) const {
             return Key < rhs.Key;
         }
-
+ 
         bool operator==(const TItem& rhs) const {
             return Key == rhs.Key;
         }
@@ -58,13 +58,13 @@ public:
         struct THash {
             size_t operator()(const TItem& item) const {
                 return ::THash<TKey>()(item.Key);
-            }
+            } 
         };
     };
 
 public:
     TItem* Insert(TItem* item) {
-        List.PushBack(item);
+        List.PushBack(item); 
         ++ItemsAmount;
         TotalSize += SizeProvider(item->Value);
 
@@ -74,32 +74,32 @@ public:
     TItem* RemoveIfOverflown() {
         TItem* deleted = nullptr;
         if (TotalSize > MaxSize && ItemsAmount > 1) {
-            deleted = GetOldest();
-            Erase(deleted);
+            deleted = GetOldest(); 
+            Erase(deleted); 
         }
-        return deleted;
+        return deleted; 
     }
-
+ 
     TItem* GetOldest() {
         typename TListType::TIterator it = List.Begin();
         Y_ASSERT(it != List.End());
         return &*it;
     }
-
+ 
     void Erase(TItem* item) {
         item->Unlink();
         --ItemsAmount;
         TotalSize -= SizeProvider(item->Value);
     }
-
+ 
     void Promote(TItem* item) {
         item->Unlink();
-        List.PushBack(item);
+        List.PushBack(item); 
     }
-
-    size_t GetSize() const {
+ 
+    size_t GetSize() const { 
         return ItemsAmount;
-    }
+    } 
 
     size_t GetTotalSize() const {
         return TotalSize;
@@ -386,13 +386,13 @@ public:
     public:
         explicit TIterator(const TIndexConstIterator& iter)
             : Iter(iter)
-        {
-        }
-
+        { 
+        } 
+ 
         TValue& operator*() {
             return const_cast<TValue&>(Iter->Value);
         }
-
+ 
         TValue* operator->() {
             return const_cast<TValue*>(&Iter->Value);
         }
@@ -400,11 +400,11 @@ public:
         bool operator==(const TIterator& rhs) const {
             return Iter == rhs.Iter;
         }
-
+ 
         bool operator!=(const TIterator& rhs) const {
             return Iter != rhs.Iter;
         }
-
+ 
         TIterator& operator++() {
             ++Iter;
             return *this;
@@ -431,10 +431,10 @@ public:
     {
     }
 
-    ~TCache() {
-        Clear();
-    }
-
+    ~TCache() { 
+        Clear(); 
+    } 
+ 
     size_t Size() const {
         return Index.size();
     }
@@ -473,8 +473,8 @@ public:
 
     bool Insert(const std::pair<TKey, TValue>& p) {
         return Insert(p.first, p.second);
-    }
-
+    } 
+ 
     bool Insert(const TKey& key, const TValue& value) {
         TItem tmpItem(key, value);
         if (!MultiValue && Index.find(tmpItem) != Index.end())
@@ -495,42 +495,42 @@ public:
         Y_ASSERT(Index.size() == List.GetSize());
         return !insertedWasRemoved;
     }
-
-    void Update(const TKey& key, const TValue& value) {
+ 
+    void Update(const TKey& key, const TValue& value) { 
         if (MultiValue)
             ythrow yexception() << "TCache: can't \"Update\" in multicache";
-        TIterator it = Find(key);
-        if (it != End()) {
-            Erase(it);
-        }
-        Insert(key, value);
-
+        TIterator it = Find(key); 
+        if (it != End()) { 
+            Erase(it); 
+        } 
+        Insert(key, value); 
+ 
         Y_ASSERT(Index.size() == List.GetSize());
-    }
-
+    } 
+ 
     void Erase(TIterator it) {
-        TItem* item = const_cast<TItem*>(&*it.Iter);
-        List.Erase(item);
-        TDeleter::Destroy(item->Value);
+        TItem* item = const_cast<TItem*>(&*it.Iter); 
+        List.Erase(item); 
+        TDeleter::Destroy(item->Value); 
         Index.erase(it.Iter);
-
+ 
         Y_ASSERT(Index.size() == List.GetSize());
     }
-
+ 
     bool Empty() const {
         return Index.empty();
     }
-
-    void Clear() {
-        for (TIndexIterator it = Index.begin(); it != Index.end(); ++it) {
-            TItem* item = const_cast<TItem*>(&*it);
-            List.Erase(item);
-            TDeleter::Destroy(item->Value);
-        }
+ 
+    void Clear() { 
+        for (TIndexIterator it = Index.begin(); it != Index.end(); ++it) { 
+            TItem* item = const_cast<TItem*>(&*it); 
+            List.Erase(item); 
+            TDeleter::Destroy(item->Value); 
+        } 
         Y_ASSERT(List.GetSize() == 0);
-        Index.clear();
-    }
-
+        Index.clear(); 
+    } 
+ 
     void SetMaxSize(size_t newSize) {
         List.SetMaxSize(newSize);
 
@@ -549,7 +549,7 @@ protected:
     TIndex Index;
     TListType List;
     bool MultiValue;
-
+ 
     TIterator FindByItem(TItem* item) {
         std::pair<TIndexIterator, TIndexIterator> p = Index.equal_range(*item);
         // we have to delete the exact unlinked item (there may be multiple items for one key)
@@ -560,12 +560,12 @@ protected:
         return (it == p.second ? End() : TIterator(it));
     }
 
-    void EraseFromIndex(TItem* item) {
-        TDeleter::Destroy(item->Value);
+    void EraseFromIndex(TItem* item) { 
+        TDeleter::Destroy(item->Value); 
         TIterator it = FindByItem(item);
         Y_ASSERT(it != End());
         Index.erase(it.Iter);
-    }
+    } 
 };
 
 struct TNoopDelete {
@@ -582,8 +582,8 @@ class TLRUCache: public TCache<TKey, TValue, TLRUList<TKey, TValue, TSizeProvide
 public:
     TLRUCache(size_t maxSize, bool multiValue = false, const TSizeProvider& sizeProvider = TSizeProvider())
         : TBase(TListType(maxSize, sizeProvider), multiValue)
-    {
-    }
+    { 
+    } 
 
 public:
     typedef typename TBase::TIterator TIterator;

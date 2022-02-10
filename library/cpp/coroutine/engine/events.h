@@ -101,7 +101,7 @@ public:
     }
 
     void BroadCast(size_t number) noexcept {
-        for (size_t i = 0; i < number && !Waiters_.Empty(); ++i) {
+        for (size_t i = 0; i < number && !Waiters_.Empty(); ++i) { 
             Waiters_.PopFront()->Wake();
         }
     }

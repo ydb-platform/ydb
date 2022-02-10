@@ -139,10 +139,10 @@ namespace NKiwiAggr {
         virtual double CalcLowerBoundSafe(double sum) {
             return HistogramImpl->CalcLowerBoundSafe(sum);
         }
-
-        virtual void PrecomputePartialSums() {
-            return HistogramImpl->PrecomputePartialSums();
-        }
+ 
+        virtual void PrecomputePartialSums() { 
+            return HistogramImpl->PrecomputePartialSums(); 
+        } 
     };
 
 }

@@ -382,22 +382,22 @@ template <class T, class A>
 class TSerializer<std::deque<T, A>>: public TVectorSerializer<std::deque<T, A>> {
 };
 
-template <class TArray>
+template <class TArray> 
 class TStdArraySerializer {
 public:
     static inline void Save(IOutputStream* rh, const TArray& a) {
         ::SaveArray(rh, a.data(), a.size());
     }
-
+ 
     static inline void Load(IInputStream* rh, TArray& a) {
         ::LoadArray(rh, a.data(), a.size());
     }
-};
-
-template <class T, size_t N>
+}; 
+ 
+template <class T, size_t N> 
 class TSerializer<std::array<T, N>>: public TStdArraySerializer<std::array<T, N>> {
-};
-
+}; 
+ 
 template <class A, class B>
 class TSerializer<std::pair<A, B>> {
     using TPair = std::pair<A, B>;

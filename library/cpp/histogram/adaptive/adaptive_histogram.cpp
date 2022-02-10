@@ -1,12 +1,12 @@
 #include "adaptive_histogram.h"
 
-#include <util/generic/algorithm.h>
+#include <util/generic/algorithm.h> 
 #include <util/generic/yexception.h>
 #include <util/generic/ymath.h>
 #include <util/string/printf.h>
 
-#include <util/system/backtrace.h>
-
+#include <util/system/backtrace.h> 
+ 
 namespace NKiwiAggr {
     TAdaptiveHistogram::TAdaptiveHistogram(size_t intervals, ui64 id, TQualityFunction qualityFunc)
         : Id(id)
@@ -64,7 +64,7 @@ namespace NKiwiAggr {
         }
         TWeightedValue weightedValue(value, weight);
         Add(weightedValue, true);
-        PrecomputedBins.clear();
+        PrecomputedBins.clear(); 
     }
 
     void TAdaptiveHistogram::Merge(const THistogram& histo, double multiplier) {
@@ -294,25 +294,25 @@ namespace NKiwiAggr {
         if (bound > MaxValue) {
             return 0.0;
         }
-
-        if (!PrecomputedBins.empty()) {
-            return GetSumAboveBoundImpl(
-                bound,
-                PrecomputedBins,
-                LowerBound(PrecomputedBins.begin(), PrecomputedBins.end(), TFastBin{bound, -1.0, 0, 0}),
+ 
+        if (!PrecomputedBins.empty()) { 
+            return GetSumAboveBoundImpl( 
+                bound, 
+                PrecomputedBins, 
+                LowerBound(PrecomputedBins.begin(), PrecomputedBins.end(), TFastBin{bound, -1.0, 0, 0}), 
                 [](const auto& it) { return it->SumAbove; });
-        } else {
-            return GetSumAboveBoundImpl(
-                bound,
-                Bins,
-                Bins.lower_bound(TWeightedValue(bound, -1.0)),
-                [this](TPairSet::const_iterator rightBin) {
-                    ++rightBin;
-                    double sum = 0;
-                    for (TPairSet::const_iterator it = rightBin; it != Bins.end(); ++it) {
-                        sum += it->second;
-                    }
-                    return sum;
+        } else { 
+            return GetSumAboveBoundImpl( 
+                bound, 
+                Bins, 
+                Bins.lower_bound(TWeightedValue(bound, -1.0)), 
+                [this](TPairSet::const_iterator rightBin) { 
+                    ++rightBin; 
+                    double sum = 0; 
+                    for (TPairSet::const_iterator it = rightBin; it != Bins.end(); ++it) { 
+                        sum += it->second; 
+                    } 
+                    return sum; 
                 });
         }
     }
@@ -327,24 +327,24 @@ namespace NKiwiAggr {
         if (bound > MaxValue) {
             return Sum;
         }
-
-        if (!PrecomputedBins.empty()) {
-            return GetSumBelowBoundImpl(
-                bound,
-                PrecomputedBins,
-                LowerBound(PrecomputedBins.begin(), PrecomputedBins.end(), TFastBin{bound, -1.0, 0, 0}),
+ 
+        if (!PrecomputedBins.empty()) { 
+            return GetSumBelowBoundImpl( 
+                bound, 
+                PrecomputedBins, 
+                LowerBound(PrecomputedBins.begin(), PrecomputedBins.end(), TFastBin{bound, -1.0, 0, 0}), 
                 [](const auto& it) { return it->SumBelow; });
-        } else {
-            return GetSumBelowBoundImpl(
-                bound,
-                Bins,
-                Bins.lower_bound(TWeightedValue(bound, -1.0)),
-                [this](TPairSet::const_iterator rightBin) {
-                    double sum = 0;
-                    for (TPairSet::iterator it = Bins.begin(); it != rightBin; ++it) {
-                        sum += it->second;
-                    }
-                    return sum;
+        } else { 
+            return GetSumBelowBoundImpl( 
+                bound, 
+                Bins, 
+                Bins.lower_bound(TWeightedValue(bound, -1.0)), 
+                [this](TPairSet::const_iterator rightBin) { 
+                    double sum = 0; 
+                    for (TPairSet::iterator it = Bins.begin(); it != rightBin; ++it) { 
+                        sum += it->second; 
+                    } 
+                    return sum; 
                 });
         }
     }
@@ -583,55 +583,55 @@ namespace NKiwiAggr {
         Add(newBin, false);
     }
 
-    void TAdaptiveHistogram::PrecomputePartialSums() {
-        PrecomputedBins.clear();
-        PrecomputedBins.reserve(Bins.size());
-        double currentSum = 0;
-        for (const auto& bin : Bins) {
-            PrecomputedBins.emplace_back(bin.first, bin.second, currentSum, Sum - currentSum - bin.second);
-            currentSum += bin.second;
-        }
-    }
-
-    template <typename TBins, typename TGetSumAbove>
-    double TAdaptiveHistogram::GetSumAboveBoundImpl(double bound, const TBins& bins, typename TBins::const_iterator rightBin, const TGetSumAbove& getSumAbove) const {
-        typename TBins::value_type left(MinValue, 0.0);
-        typename TBins::value_type right(MaxValue, 0.0);
-        if (rightBin != bins.end()) {
-            right = *rightBin;
-        }
-        if (rightBin != bins.begin()) {
-            typename TBins::const_iterator leftBin = rightBin;
-            --leftBin;
-            left = *leftBin;
-        }
-        double sum = (right.second / 2) + ((right.first == left.first) ? ((left.second + right.second) / 2) : (((left.second + right.second) / 2) * (right.first - bound) / (right.first - left.first)));
-        if (rightBin == bins.end()) {
-            return sum;
-        }
-        sum += getSumAbove(rightBin);
-        return sum;
-    }
-
-    template <typename TBins, typename TGetSumBelow>
-    double TAdaptiveHistogram::GetSumBelowBoundImpl(double bound, const TBins& bins, typename TBins::const_iterator rightBin, const TGetSumBelow& getSumBelow) const {
-        typename TBins::value_type left(MinValue, 0.0);
-        typename TBins::value_type right(MaxValue, 0.0);
-        if (rightBin != bins.end()) {
-            right = *rightBin;
-        }
-        if (rightBin != bins.begin()) {
-            typename TBins::const_iterator leftBin = rightBin;
-            --leftBin;
-            left = *leftBin;
-        }
-        double sum = (left.second / 2) + ((right.first == left.first) ? ((left.second + right.second) / 2) : (((left.second + right.second) / 2) * (bound - left.first) / (right.first - left.first)));
-        if (rightBin == bins.begin()) {
-            return sum;
-        }
-        --rightBin;
-        sum += getSumBelow(rightBin);
-        return sum;
-    }
-
+    void TAdaptiveHistogram::PrecomputePartialSums() { 
+        PrecomputedBins.clear(); 
+        PrecomputedBins.reserve(Bins.size()); 
+        double currentSum = 0; 
+        for (const auto& bin : Bins) { 
+            PrecomputedBins.emplace_back(bin.first, bin.second, currentSum, Sum - currentSum - bin.second); 
+            currentSum += bin.second; 
+        } 
+    } 
+ 
+    template <typename TBins, typename TGetSumAbove> 
+    double TAdaptiveHistogram::GetSumAboveBoundImpl(double bound, const TBins& bins, typename TBins::const_iterator rightBin, const TGetSumAbove& getSumAbove) const { 
+        typename TBins::value_type left(MinValue, 0.0); 
+        typename TBins::value_type right(MaxValue, 0.0); 
+        if (rightBin != bins.end()) { 
+            right = *rightBin; 
+        } 
+        if (rightBin != bins.begin()) { 
+            typename TBins::const_iterator leftBin = rightBin; 
+            --leftBin; 
+            left = *leftBin; 
+        } 
+        double sum = (right.second / 2) + ((right.first == left.first) ? ((left.second + right.second) / 2) : (((left.second + right.second) / 2) * (right.first - bound) / (right.first - left.first))); 
+        if (rightBin == bins.end()) { 
+            return sum; 
+        } 
+        sum += getSumAbove(rightBin); 
+        return sum; 
+    } 
+ 
+    template <typename TBins, typename TGetSumBelow> 
+    double TAdaptiveHistogram::GetSumBelowBoundImpl(double bound, const TBins& bins, typename TBins::const_iterator rightBin, const TGetSumBelow& getSumBelow) const { 
+        typename TBins::value_type left(MinValue, 0.0); 
+        typename TBins::value_type right(MaxValue, 0.0); 
+        if (rightBin != bins.end()) { 
+            right = *rightBin; 
+        } 
+        if (rightBin != bins.begin()) { 
+            typename TBins::const_iterator leftBin = rightBin; 
+            --leftBin; 
+            left = *leftBin; 
+        } 
+        double sum = (left.second / 2) + ((right.first == left.first) ? ((left.second + right.second) / 2) : (((left.second + right.second) / 2) * (bound - left.first) / (right.first - left.first))); 
+        if (rightBin == bins.begin()) { 
+            return sum; 
+        } 
+        --rightBin; 
+        sum += getSumBelow(rightBin); 
+        return sum; 
+    } 
+ 
 }

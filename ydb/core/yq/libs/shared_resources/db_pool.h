@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <ydb/core/yq/libs/config/protos/yq_config.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/core/yq/libs/events/events.h>
@@ -46,14 +46,14 @@ public:
 private:
     friend class TDbPoolHolder;
 
-    TDbPoolMap(const NYq::NConfig::TDbPoolConfig& config,
-               NYdb::TDriver driver,
+    TDbPoolMap(const NYq::NConfig::TDbPoolConfig& config, 
+               NYdb::TDriver driver, 
                const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
                const NMonitoring::TDynamicCounterPtr& counters);
 
-    void Reset(const NYq::NConfig::TDbPoolConfig& config);
+    void Reset(const NYq::NConfig::TDbPoolConfig& config); 
     TMutex Mutex;
-    NYq::NConfig::TDbPoolConfig Config;
+    NYq::NConfig::TDbPoolConfig Config; 
     NYdb::TDriver Driver;
     THashMap<EDbPoolId, TDbPool::TPtr> Pools;
     THolder<NYdb::NTable::TTableClient> TableClient;
@@ -65,14 +65,14 @@ class TDbPoolHolder: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TDbPoolHolder>;
     TDbPoolHolder(
-        const NYq::NConfig::TDbPoolConfig& config,
+        const NYq::NConfig::TDbPoolConfig& config, 
         const NYdb::TDriver& driver,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const NMonitoring::TDynamicCounterPtr& counters);
 
     ~TDbPoolHolder();
 
-    void Reset(const NYq::NConfig::TDbPoolConfig& config);
+    void Reset(const NYq::NConfig::TDbPoolConfig& config); 
     TDbPool::TPtr GetOrCreate(EDbPoolId poolId, ui32 sessionsCount);
     NYdb::TDriver& GetDriver();
     TDbPoolMap::TPtr Get();

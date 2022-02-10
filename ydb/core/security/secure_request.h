@@ -14,7 +14,7 @@ private:
     THolder<TEvTicketParser::TEvAuthorizeTicketResult> AuthorizeTicketResult;
     bool RequireAdminAccess = false;
     bool UserAdmin = false;
-    TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> Entries;
+    TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> Entries; 
 
     static bool GetEnforceUserTokenRequirement() {
         return AppData()->EnforceUserTokenRequirement;
@@ -86,12 +86,12 @@ public:
         RequireAdminAccess = requireAdminAccess;
     }
 
-    void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries) {
-        Entries = entries;
+    void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries) { 
+        Entries = entries; 
     }
 
-    const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntries() const {
-        return Entries;
+    const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntries() const { 
+        return Entries; 
     }
 
     const TEvTicketParser::TEvAuthorizeTicketResult* GetAuthorizeTicketResult() const {

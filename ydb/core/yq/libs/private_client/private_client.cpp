@@ -158,25 +158,25 @@ TPrivateClient::TPrivateClient(
 TAsyncPingTaskResult TPrivateClient::PingTask(
     Yq::Private::PingTaskRequest&& request,
     const TPingTaskSettings& settings) {
-    return Impl->PingTask(std::move(request), settings);
+    return Impl->PingTask(std::move(request), settings); 
 }
 
 TAsyncGetTaskResult TPrivateClient::GetTask(
     Yq::Private::GetTaskRequest&& request,
     const TGetTaskSettings& settings) {
-    return Impl->GetTask(std::move(request), settings);
+    return Impl->GetTask(std::move(request), settings); 
 }
 
 TAsyncWriteTaskResult TPrivateClient::WriteTaskResult(
     Yq::Private::WriteTaskResultRequest&& request,
     const TWriteTaskResultSettings& settings) {
-    return Impl->WriteTaskResult(std::move(request), settings);
+    return Impl->WriteTaskResult(std::move(request), settings); 
 }
 
 TAsyncNodesHealthCheckResult TPrivateClient::NodesHealthCheck(
     Yq::Private::NodesHealthCheckRequest&& request,
     const TNodesHealthCheckSettings& settings) {
-    return Impl->NodesHealthCheck(std::move(request), settings);
+    return Impl->NodesHealthCheck(std::move(request), settings); 
 }
 
 } //NYq

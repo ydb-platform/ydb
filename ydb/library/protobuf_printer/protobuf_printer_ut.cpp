@@ -1,6 +1,6 @@
 #include "hide_field_printer.h"
 #include "protobuf_printer.h"
-#include "security_printer.h"
+#include "security_printer.h" 
 #include "stream_helper.h"
 #include "token_field_printer.h"
 #include <ydb/library/protobuf_printer/ut/test_proto.pb.h>
@@ -51,43 +51,43 @@ Y_UNIT_TEST_SUITE(HideFieldPrinterTest) {
         printer.RegisterFieldValuePrinters<NTestProto::TTestProto, THideFieldValuePrinter>("s1", "s2", "msg");
         {
             const TString s = TProtobufPrinterOutputWrapper(m, printer);
-            UNIT_ASSERT_STRINGS_EQUAL(s, "s1: \"***\"\ns2: \"***\"\nmsg {\n  ***\n}\n");
+            UNIT_ASSERT_STRINGS_EQUAL(s, "s1: \"***\"\ns2: \"***\"\nmsg {\n  ***\n}\n"); 
         }
 
         printer.SetSingleLineMode(true);
         {
             const TString s = TProtobufPrinterOutputWrapper(m, printer);
-            UNIT_ASSERT_STRINGS_EQUAL(s, "s1: \"***\" s2: \"***\" msg { *** } ");
+            UNIT_ASSERT_STRINGS_EQUAL(s, "s1: \"***\" s2: \"***\" msg { *** } "); 
         }
     }
 }
-
-Y_UNIT_TEST_SUITE(SecurityPrinterTest) {
-    Y_UNIT_TEST(PrintSensitive) {
-        NTestProto::TConnectionContent m;
-        m.set_name("name1");
-        m.mutable_setting()->mutable_connection2()->set_login("login1");
-        m.mutable_setting()->mutable_connection2()->set_password("pswd");
-
-        TSecurityTextFormatPrinter<NTestProto::TConnectionContent> printer;
-        printer.SetSingleLineMode(true);
-        {
-            const TString s = TProtobufPrinterOutputWrapper(m, printer);
-            UNIT_ASSERT_STRINGS_EQUAL(s, "name: \"name1\" setting { connection2 { login: \"***\" password: \"***\" } } ");
-        }
-    }
-
-    Y_UNIT_TEST(PrintRecursiveType) {
-        NTestProto::TRecursiveType response;
-        response.set_name("name1");
-        response.set_login("login1");
-        response.add_types()->set_login("login2");
-        response.add_types()->set_name("name3");
-        TSecurityTextFormatPrinter<NTestProto::TRecursiveType> printer;
-        printer.SetSingleLineMode(true);
-        {
-            const TString s = TProtobufPrinterOutputWrapper(response, printer);
-            UNIT_ASSERT_STRINGS_EQUAL(s, "name: \"name1\" login: \"***\" types { login: \"***\" } types { name: \"name3\" } ");
-        }
-    }
-}
+ 
+Y_UNIT_TEST_SUITE(SecurityPrinterTest) { 
+    Y_UNIT_TEST(PrintSensitive) { 
+        NTestProto::TConnectionContent m; 
+        m.set_name("name1"); 
+        m.mutable_setting()->mutable_connection2()->set_login("login1"); 
+        m.mutable_setting()->mutable_connection2()->set_password("pswd"); 
+ 
+        TSecurityTextFormatPrinter<NTestProto::TConnectionContent> printer; 
+        printer.SetSingleLineMode(true); 
+        { 
+            const TString s = TProtobufPrinterOutputWrapper(m, printer); 
+            UNIT_ASSERT_STRINGS_EQUAL(s, "name: \"name1\" setting { connection2 { login: \"***\" password: \"***\" } } "); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(PrintRecursiveType) { 
+        NTestProto::TRecursiveType response; 
+        response.set_name("name1"); 
+        response.set_login("login1"); 
+        response.add_types()->set_login("login2"); 
+        response.add_types()->set_name("name3"); 
+        TSecurityTextFormatPrinter<NTestProto::TRecursiveType> printer; 
+        printer.SetSingleLineMode(true); 
+        { 
+            const TString s = TProtobufPrinterOutputWrapper(response, printer); 
+            UNIT_ASSERT_STRINGS_EQUAL(s, "name: \"name1\" login: \"***\" types { login: \"***\" } types { name: \"name3\" } "); 
+        } 
+    } 
+} 

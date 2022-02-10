@@ -58,7 +58,7 @@ public:
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
         const ::NYq::NCommon::TServiceCounters& serviceCounters,
-        const NConfig::TPrivateApiConfig& privateApiConfig,
+        const NConfig::TPrivateApiConfig& privateApiConfig, 
         const ui32& icPort,
         const TString& address,
         const TString& tenant,
@@ -68,7 +68,7 @@ public:
         , TimeProvider(timeProvider)
         , RandomProvider(randomProvider)
         , ServiceCounters(serviceCounters, "node_manager")
-        , PrivateApiConfig(privateApiConfig)
+        , PrivateApiConfig(privateApiConfig) 
         , Tenant(tenant)
         , MkqlInitialMemoryLimit(mkqlInitialMemoryLimit)
         , YqSharedResources(yqSharedResources)
@@ -77,7 +77,7 @@ public:
         , Client(
             YqSharedResources->YdbDriver,
             NYdb::TCommonClientSettings()
-                .DiscoveryEndpoint(PrivateApiConfig.GetTaskServiceEndpoint())
+                .DiscoveryEndpoint(PrivateApiConfig.GetTaskServiceEndpoint()) 
                 .Database(PrivateApiConfig.GetTaskServiceDatabase() ? PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
             clientCounters)
 
@@ -92,7 +92,7 @@ public:
         NActors::IActor::PassAway();
     }
 
-    void Bootstrap(const TActorContext&) {
+    void Bootstrap(const TActorContext&) { 
         Become(&TYqlNodesManagerActor::StateFunc);
         ServiceCounters.Counters->GetCounter("EvBootstrap", true)->Inc();
         LOG_I("Bootstrap STARTED");
@@ -257,7 +257,7 @@ private:
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     ::NYq::NCommon::TServiceCounters ServiceCounters;
-    NConfig::TPrivateApiConfig PrivateApiConfig;
+    NConfig::TPrivateApiConfig PrivateApiConfig; 
     TString Tenant;
     ui64 MkqlInitialMemoryLimit;
 
@@ -296,7 +296,7 @@ IActor* CreateYqlNodesManager(
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
     const ::NYq::NCommon::TServiceCounters& serviceCounters,
-    const NConfig::TPrivateApiConfig& privateApiConfig,
+    const NConfig::TPrivateApiConfig& privateApiConfig, 
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const ui32& icPort,
     const TString& address,

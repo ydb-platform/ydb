@@ -33,9 +33,9 @@ public:
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
         NMonitoring::TDynamicCounterPtr counters,
-        const NConfig::TTokenAccessorConfig& tokenAccessorConfig)
-        : TokenAccessorConfig(tokenAccessorConfig)
-        , TimeProvider(timeProvider)
+        const NConfig::TTokenAccessorConfig& tokenAccessorConfig) 
+        : TokenAccessorConfig(tokenAccessorConfig) 
+        , TimeProvider(timeProvider) 
         , RandomProvider(randomProvider)
         , Counters(counters->GetSubgroup("subsystem", "private_api"))
     { }
@@ -56,14 +56,14 @@ private:
         Counters->GetCounter("EvPingTaskRequest", true)->Inc();
 
         Register(
-            CreatePingTaskRequestActor(ev->Sender, TimeProvider, ev->Release(), Counters),
+            CreatePingTaskRequestActor(ev->Sender, TimeProvider, ev->Release(), Counters), 
             NActors::TMailboxType::HTSwap, ctx.SelfID.PoolID());
     }
 
     void Handle(TEvents::TEvGetTaskRequest::TPtr& ev, const TActorContext& ctx) {
         Counters->GetCounter("EvGetTaskRequest", true)->Inc();
         Register(
-            CreateGetTaskRequestActor(ev->Sender, TokenAccessorConfig, TimeProvider, ev->Release(), Counters),
+            CreateGetTaskRequestActor(ev->Sender, TokenAccessorConfig, TimeProvider, ev->Release(), Counters), 
             NActors::TMailboxType::HTSwap, ctx.SelfID.PoolID());
     }
 
@@ -71,7 +71,7 @@ private:
         Counters->GetCounter("EvWriteTaskResultRequest", true)->Inc();
 
         Register(
-            CreateWriteTaskResultRequestActor(ev->Sender, TimeProvider, ev->Release(), Counters),
+            CreateWriteTaskResultRequestActor(ev->Sender, TimeProvider, ev->Release(), Counters), 
             NActors::TMailboxType::HTSwap, ctx.SelfID.PoolID());
     }
 
@@ -79,7 +79,7 @@ private:
         Counters->GetCounter("EvNodesHealthCheckRequest", true)->Inc();
 
         Register(
-            CreateNodesHealthCheckActor(ev->Sender, TimeProvider, ev->Release(), Counters),
+            CreateNodesHealthCheckActor(ev->Sender, TimeProvider, ev->Release(), Counters), 
             NActors::TMailboxType::HTSwap, ctx.SelfID.PoolID());
     }
 
@@ -98,7 +98,7 @@ private:
     }
 
 private:
-    const NConfig::TTokenAccessorConfig TokenAccessorConfig;
+    const NConfig::TTokenAccessorConfig TokenAccessorConfig; 
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     NMonitoring::TDynamicCounterPtr Counters;
@@ -113,8 +113,8 @@ IActor* CreateYqlAnalyticsPrivateProxy(
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
     NMonitoring::TDynamicCounterPtr counters,
-    const NConfig::TTokenAccessorConfig& tokenAccessorConfig) {
-    return new TYqlAnalyticsPrivateProxy(timeProvider, randomProvider, counters, tokenAccessorConfig);
+    const NConfig::TTokenAccessorConfig& tokenAccessorConfig) { 
+    return new TYqlAnalyticsPrivateProxy(timeProvider, randomProvider, counters, tokenAccessorConfig); 
 }
 
 } // namespace NYq

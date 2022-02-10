@@ -1,11 +1,11 @@
-#pragma once
-
-#include <util/generic/fwd.h>
+#pragma once 
+ 
+#include <util/generic/fwd.h> 
 #include <util/datetime/base.h>
-
-namespace NKikimr {
-    TString MaskTicket(TStringBuf token);
-    TString MaskTicket(const TString& token);
+ 
+namespace NKikimr { 
+    TString MaskTicket(TStringBuf token); 
+    TString MaskTicket(const TString& token); 
 
     // copy-pasted from <robot/library/utils/time_convert.h>
     template<typename Rep, typename Period>
@@ -17,4 +17,4 @@ namespace NKikimr {
     constexpr TInstant ToInstant(std::chrono::time_point<Clock, Duration> value) {
         return TInstant::MicroSeconds(ToMicroseconds(value.time_since_epoch()));
     }
-}
+} 

@@ -3553,12 +3553,12 @@
                         "os": "LINUX"
                     },
                     "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
                 }
             ]
         },
@@ -6817,8 +6817,8 @@
         "rtmr-deploy": {
             "formula": {
                 "sandbox_id": [
-                    1210829227,
-                    1210811623
+                    1210829227, 
+                    1210811623 
                 ],
                 "match": "rtmr-deploy"
             },

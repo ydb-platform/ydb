@@ -2,7 +2,7 @@
 #include <util/system/mutex.h>
 
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
-
+ 
 namespace NYq {
 
 class TResponseTasks {
@@ -28,4 +28,4 @@ private:
     THashMap<TString, TEvControlPlaneStorage::TTask> Tasks;
 };
 
-} //NYq
+} //NYq 

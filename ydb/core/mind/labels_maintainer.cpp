@@ -303,7 +303,7 @@ private:
 
         auto &dbLabels = config.GetDatabaseLabels();
         DatabaseLabelsEnabled = dbLabels.GetEnabled();
-        GroupAllMetrics = dbLabels.GetGroupAllMetrics();
+        GroupAllMetrics = dbLabels.GetGroupAllMetrics(); 
         DatabaseSensorServices.clear();
         for (auto &service : dbLabels.GetServices())
             DatabaseSensorServices.insert(service);
@@ -369,7 +369,7 @@ private:
 
 private:
     bool DatabaseLabelsEnabled;
-    bool GroupAllMetrics;
+    bool GroupAllMetrics; 
     bool DatabaseAttributeLabelsEnabled;
     bool ForceDatabaseLabels;
     bool InitializedLocalOptions;

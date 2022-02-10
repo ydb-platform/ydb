@@ -34,7 +34,7 @@ public:
         TIntrusivePtr<ITimeProvider> timeProvider,
         TAutoPtr<TEvents::TEvPingTaskRequest> ev,
         TDynamicCounterPtr counters)
-        : Sender(sender)
+        : Sender(sender) 
         , TimeProvider(timeProvider)
         , Ev(std::move(ev))
         , Counters(std::move(counters->GetSubgroup("subsystem", "private_api")->GetSubgroup("subcomponent", "PingTask")))
@@ -147,10 +147,10 @@ private:
             event->ResultSetMetas = {req.result_set_meta().begin(), req.result_set_meta().end()};
         }
         if (req.has_started_at()) {
-            event->StartedAt = TInstant::FromValue(google::protobuf::util::TimeUtil::TimestampToMicroseconds(req.started_at()));
+            event->StartedAt = TInstant::FromValue(google::protobuf::util::TimeUtil::TimestampToMicroseconds(req.started_at())); 
         }
         if (req.has_finished_at()) {
-            event->FinishedAt = TInstant::FromValue(google::protobuf::util::TimeUtil::TimestampToMicroseconds(req.finished_at()));
+            event->FinishedAt = TInstant::FromValue(google::protobuf::util::TimeUtil::TimestampToMicroseconds(req.finished_at())); 
         }
         event->ResignQuery = req.resign_query();
 
@@ -207,8 +207,8 @@ private:
         auto res = MakeHolder<TEvents::TEvPingTaskResponse>();
         res->Status = Ydb::StatusIds::SUCCESS;
         Yq::Private::PingTaskResult result;
-        result.set_action(ev->Get()->Action);
-        res->Record.ConstructInPlace(result);
+        result.set_action(ev->Get()->Action); 
+        res->Record.ConstructInPlace(result); 
         ctx.Send(Sender, res.Release());
         Die(ctx);
     }

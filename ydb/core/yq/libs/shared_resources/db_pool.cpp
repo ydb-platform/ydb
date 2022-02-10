@@ -6,9 +6,9 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-#include <util/stream/file.h>
-#include <util/string/strip.h>
-
+#include <util/stream/file.h> 
+#include <util/string/strip.h> 
+ 
 #define LOG_E(stream)                                                   \
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, stream)
 
@@ -35,8 +35,8 @@ public:
         CFunc(NActors::TEvents::TEvPoison::EventType, Die)
         HFunc(TEvents::TEvDbRequest, HandleRequest)
         HFunc(TEvents::TEvDbResponse, HandleResponse)
-        HFunc(TEvents::TEvDbFunctionRequest, HandleRequest)
-        HFunc(TEvents::TEvDbFunctionResponse, HandleResponse)
+        HFunc(TEvents::TEvDbFunctionRequest, HandleRequest) 
+        HFunc(TEvents::TEvDbFunctionResponse, HandleResponse) 
     )
 
     void Die(const TActorContext& ctx) override {
@@ -44,11 +44,11 @@ public:
         issues.AddIssue("DB connection closed");
         auto cancelled = NYdb::TStatus(NYdb::EStatus::CANCELLED, std::move(issues));
         for (const auto& x : Requests) {
-            if (auto pRequest = std::get_if<TRequest>(&x)) {
-                ctx.Send(pRequest->Sender, new TEvents::TEvDbResponse(cancelled, {}));
-            } else if (auto pRequest = std::get_if<TFunctionRequest>(&x)) {
-                ctx.Send(pRequest->Sender, new TEvents::TEvDbFunctionResponse(cancelled));
-            }
+            if (auto pRequest = std::get_if<TRequest>(&x)) { 
+                ctx.Send(pRequest->Sender, new TEvents::TEvDbResponse(cancelled, {})); 
+            } else if (auto pRequest = std::get_if<TFunctionRequest>(&x)) { 
+                ctx.Send(pRequest->Sender, new TEvents::TEvDbFunctionResponse(cancelled)); 
+            } 
         }
 
         State.reset();
@@ -64,49 +64,49 @@ public:
 
         RequestInProgress = true;
         RequestInProgressTimestamp = TInstant::Now();
-        const auto& requestVariant = Requests.front();
+        const auto& requestVariant = Requests.front(); 
 
-        if (auto pRequest = std::get_if<TRequest>(&requestVariant)) {
-            auto& request = *pRequest;
-            auto actorSystem = ctx.ActorSystem();
-            auto selfId = ctx.SelfID;
-            auto cookie = request.Cookie;
-            auto sharedResult = std::make_shared<TVector<NYdb::TResultSet>>();
-            NYdb::NTable::TRetryOperationSettings settings;
-            settings.Idempotent(request.Idempotent);
-            TableClient.RetryOperation<NYdb::NTable::TDataQueryResult>([sharedResult, request](NYdb::NTable::TSession session) {
-                return session.ExecuteDataQuery(request.Sql, NYdb::NTable::TTxControl::BeginTx(
-                    NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
-                    request.Params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true))
-                    .Apply([sharedResult](const auto& future) mutable {
-                        *sharedResult = future.GetValue().GetResultSets();
-                        return future;
-                    });
-            }, settings)
-            .Subscribe([state = std::weak_ptr<int>(State), sharedResult, actorSystem, cookie, selfId](const NThreading::TFuture<NYdb::TStatus>& statusFuture) {
-                if (state.lock()) {
-                    actorSystem->Send(new IEventHandle(selfId, selfId, new TEvents::TEvDbResponse(statusFuture.GetValue(), *sharedResult), 0, cookie));
-                }
-            });
-        } else if (auto pRequest = std::get_if<TFunctionRequest>(&requestVariant)) {
-            auto& request = *pRequest;
-            auto selfId = ctx.SelfID;
-            auto cookie = request.Cookie;
-            auto actorSystem = ctx.ActorSystem();
-            TableClient.RetryOperation([request](NYdb::NTable::TSession session) {
-                return request.Handler(session);
-            })
-            .Subscribe([state = std::weak_ptr<int>(State), actorSystem, selfId, cookie](const NThreading::TFuture<NYdb::TStatus>& statusFuture) {
-                if (state.lock()) {
-                    actorSystem->Send(new IEventHandle(selfId, selfId, new TEvents::TEvDbFunctionResponse(statusFuture.GetValue()), 0, cookie));
-                }
-            });
-        }
+        if (auto pRequest = std::get_if<TRequest>(&requestVariant)) { 
+            auto& request = *pRequest; 
+            auto actorSystem = ctx.ActorSystem(); 
+            auto selfId = ctx.SelfID; 
+            auto cookie = request.Cookie; 
+            auto sharedResult = std::make_shared<TVector<NYdb::TResultSet>>(); 
+            NYdb::NTable::TRetryOperationSettings settings; 
+            settings.Idempotent(request.Idempotent); 
+            TableClient.RetryOperation<NYdb::NTable::TDataQueryResult>([sharedResult, request](NYdb::NTable::TSession session) { 
+                return session.ExecuteDataQuery(request.Sql, NYdb::NTable::TTxControl::BeginTx( 
+                    NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(), 
+                    request.Params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true)) 
+                    .Apply([sharedResult](const auto& future) mutable { 
+                        *sharedResult = future.GetValue().GetResultSets(); 
+                        return future; 
+                    }); 
+            }, settings) 
+            .Subscribe([state = std::weak_ptr<int>(State), sharedResult, actorSystem, cookie, selfId](const NThreading::TFuture<NYdb::TStatus>& statusFuture) { 
+                if (state.lock()) { 
+                    actorSystem->Send(new IEventHandle(selfId, selfId, new TEvents::TEvDbResponse(statusFuture.GetValue(), *sharedResult), 0, cookie)); 
+                } 
+            }); 
+        } else if (auto pRequest = std::get_if<TFunctionRequest>(&requestVariant)) { 
+            auto& request = *pRequest; 
+            auto selfId = ctx.SelfID; 
+            auto cookie = request.Cookie; 
+            auto actorSystem = ctx.ActorSystem(); 
+            TableClient.RetryOperation([request](NYdb::NTable::TSession session) { 
+                return request.Handler(session); 
+            }) 
+            .Subscribe([state = std::weak_ptr<int>(State), actorSystem, selfId, cookie](const NThreading::TFuture<NYdb::TStatus>& statusFuture) { 
+                if (state.lock()) { 
+                    actorSystem->Send(new IEventHandle(selfId, selfId, new TEvents::TEvDbFunctionResponse(statusFuture.GetValue()), 0, cookie)); 
+                } 
+            }); 
+        } 
     }
 
     void HandleRequest(TEvents::TEvDbRequest::TPtr& ev, const TActorContext& ctx) {
         auto request = ev->Get();
-        Requests.emplace_back(TRequest{ev->Sender, ev->Cookie, request->Sql, std::move(request->Params), request->Idempotent});
+        Requests.emplace_back(TRequest{ev->Sender, ev->Cookie, request->Sql, std::move(request->Params), request->Idempotent}); 
         ProcessQueue(ctx);
     }
 
@@ -124,18 +124,18 @@ public:
         PopFromQueueAndProcess(ctx);
     }
 
-    void HandleRequest(TEvents::TEvDbFunctionRequest::TPtr& ev, const TActorContext& ctx) {
-        auto request = ev->Get();
-        Requests.emplace_back(TFunctionRequest{ev->Sender, ev->Cookie, std::move(request->Handler)});
-        ProcessQueue(ctx);
-    }
-
-    void HandleResponse(TEvents::TEvDbFunctionResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& request = Requests.front();
-        ctx.Send(ev->Forward(std::visit([](const auto& arg) { return arg.Sender; }, request)));
+    void HandleRequest(TEvents::TEvDbFunctionRequest::TPtr& ev, const TActorContext& ctx) { 
+        auto request = ev->Get(); 
+        Requests.emplace_back(TFunctionRequest{ev->Sender, ev->Cookie, std::move(request->Handler)}); 
+        ProcessQueue(ctx); 
+    } 
+ 
+    void HandleResponse(TEvents::TEvDbFunctionResponse::TPtr& ev, const TActorContext& ctx) { 
+        const auto& request = Requests.front(); 
+        ctx.Send(ev->Forward(std::visit([](const auto& arg) { return arg.Sender; }, request))); 
         PopFromQueueAndProcess(ctx);
-    }
-
+    } 
+ 
 private:
     struct TRequest {
         TActorId Sender;
@@ -154,22 +154,22 @@ private:
         {}
     };
 
-    struct TFunctionRequest {
-        using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>;
-        TActorId Sender;
-        ui64 Cookie;
-        TFunction Handler;
+    struct TFunctionRequest { 
+        using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>; 
+        TActorId Sender; 
+        ui64 Cookie; 
+        TFunction Handler; 
 
-        TFunctionRequest() = default;
-        TFunctionRequest(const TActorId sender, ui64 cookie, TFunction&& handler)
-            : Sender(sender)
-            , Cookie(cookie)
-            , Handler(handler)
-        {}
-    };
-
+        TFunctionRequest() = default; 
+        TFunctionRequest(const TActorId sender, ui64 cookie, TFunction&& handler) 
+            : Sender(sender) 
+            , Cookie(cookie) 
+            , Handler(handler) 
+        {} 
+    }; 
+ 
     NYdb::NTable::TTableClient TableClient;
-    TDeque<std::variant<TRequest, TFunctionRequest>> Requests;
+    TDeque<std::variant<TRequest, TFunctionRequest>> Requests; 
     bool RequestInProgress = false;
     TInstant RequestInProgressTimestamp = TInstant::Now();
     std::shared_ptr<int> State = std::make_shared<int>();
@@ -211,18 +211,18 @@ TActorId TDbPool::GetNextActor() {
     return Actors[Index++];
 }
 
-static void PrepareConfig(NYq::NConfig::TDbPoolConfig& config) {
-    if (!config.GetStorage().GetToken() && config.GetStorage().GetOAuthFile()) {
-        config.MutableStorage()->SetToken(StripString(TFileInput(config.GetStorage().GetOAuthFile()).ReadAll()));
-    }
-
-    if (!config.GetMaxSessionCount()) {
-        config.SetMaxSessionCount(10);
-    }
-}
-
+static void PrepareConfig(NYq::NConfig::TDbPoolConfig& config) { 
+    if (!config.GetStorage().GetToken() && config.GetStorage().GetOAuthFile()) { 
+        config.MutableStorage()->SetToken(StripString(TFileInput(config.GetStorage().GetOAuthFile()).ReadAll())); 
+    } 
+ 
+    if (!config.GetMaxSessionCount()) { 
+        config.SetMaxSessionCount(10); 
+    } 
+} 
+ 
 TDbPoolMap::TDbPoolMap(
-    const NYq::NConfig::TDbPoolConfig& config,
+    const NYq::NConfig::TDbPoolConfig& config, 
     NYdb::TDriver driver,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const NMonitoring::TDynamicCounterPtr& counters)
@@ -230,12 +230,12 @@ TDbPoolMap::TDbPoolMap(
     , Driver(driver)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , Counters(counters)
-{
-    PrepareConfig(Config);
-}
+{ 
+    PrepareConfig(Config); 
+} 
 
 TDbPoolHolder::TDbPoolHolder(
-    const NYq::NConfig::TDbPoolConfig& config,
+    const NYq::NConfig::TDbPoolConfig& config, 
     const NYdb::TDriver& driver,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const NMonitoring::TDynamicCounterPtr& counters)
@@ -248,7 +248,7 @@ TDbPoolHolder::~TDbPoolHolder()
     Driver.Stop(true);
 }
 
-void TDbPoolHolder::Reset(const NYq::NConfig::TDbPoolConfig& config) {
+void TDbPoolHolder::Reset(const NYq::NConfig::TDbPoolConfig& config) { 
     Pools->Reset(config);
 }
 
@@ -256,10 +256,10 @@ TDbPoolMap::TPtr TDbPoolHolder::Get() {
     return Pools;
 }
 
-void TDbPoolMap::Reset(const NYq::NConfig::TDbPoolConfig& config) {
+void TDbPoolMap::Reset(const NYq::NConfig::TDbPoolConfig& config) { 
     TGuard<TMutex> lock(Mutex);
     Config = config;
-    PrepareConfig(Config);
+    PrepareConfig(Config); 
     Pools.clear();
     TableClient = nullptr;
 }
@@ -275,24 +275,24 @@ TDbPool::TPtr TDbPoolMap::GetOrCreate(EDbPoolId dbPoolId, ui32 sessionsCount) {
         return it->second;
     }
 
-    if (!Config.GetStorage().GetEndpoint()) {
+    if (!Config.GetStorage().GetEndpoint()) { 
         return nullptr;
     }
 
     if (!TableClient) {
         auto clientSettings = NYdb::NTable::TClientSettings()
             .UseQueryCache(false)
-            .SessionPoolSettings(NYdb::NTable::TSessionPoolSettings().MaxActiveSessions(1 + Config.GetMaxSessionCount()))
-            .Database(Config.GetStorage().GetDatabase())
-            .DiscoveryEndpoint(Config.GetStorage().GetEndpoint())
+            .SessionPoolSettings(NYdb::NTable::TSessionPoolSettings().MaxActiveSessions(1 + Config.GetMaxSessionCount())) 
+            .Database(Config.GetStorage().GetDatabase()) 
+            .DiscoveryEndpoint(Config.GetStorage().GetEndpoint()) 
             .DiscoveryMode(NYdb::EDiscoveryMode::Async);
         NKikimr::TYdbCredentialsSettings credSettings;
-        credSettings.UseLocalMetadata = Config.GetStorage().GetUseLocalMetadataService();
-        credSettings.OAuthToken = Config.GetStorage().GetToken();
+        credSettings.UseLocalMetadata = Config.GetStorage().GetUseLocalMetadataService(); 
+        credSettings.OAuthToken = Config.GetStorage().GetToken(); 
 
         clientSettings.CredentialsProviderFactory(CredentialsProviderFactory(credSettings));
 
-        clientSettings.EnableSsl(Config.GetStorage().GetUseSsl());
+        clientSettings.EnableSsl(Config.GetStorage().GetUseSsl()); 
 
         TableClient = MakeHolder<NYdb::NTable::TTableClient>(Driver, clientSettings);
     }

@@ -1,79 +1,79 @@
-syntax = "proto3";
-
-package YandexQuery.V1;
-option java_package = "com.yandex.query.v1";
-
+syntax = "proto3"; 
+ 
+package YandexQuery.V1; 
+option java_package = "com.yandex.query.v1"; 
+ 
 import "ydb/public/api/protos/yq.proto";
-
-service YandexQueryService {
-    // Query
-    // Query is the text of an SQL request, the results of the last run and the state after the last run (partitions offsets, consumer in YDS)
-    // Create a query object with a given SQL
-    rpc CreateQuery(YandexQuery.CreateQueryRequest) returns (YandexQuery.CreateQueryResponse);
-
-    // Get a list of brief queries objects
-    rpc ListQueries(YandexQuery.ListQueriesRequest) returns (YandexQuery.ListQueriesResponse);
-
-    // Get full information about the object of the query
-    rpc DescribeQuery(YandexQuery.DescribeQueryRequest) returns (YandexQuery.DescribeQueryResponse);
-
+ 
+service YandexQueryService { 
+    // Query 
+    // Query is the text of an SQL request, the results of the last run and the state after the last run (partitions offsets, consumer in YDS) 
+    // Create a query object with a given SQL 
+    rpc CreateQuery(YandexQuery.CreateQueryRequest) returns (YandexQuery.CreateQueryResponse); 
+ 
+    // Get a list of brief queries objects 
+    rpc ListQueries(YandexQuery.ListQueriesRequest) returns (YandexQuery.ListQueriesResponse); 
+ 
+    // Get full information about the object of the query 
+    rpc DescribeQuery(YandexQuery.DescribeQueryRequest) returns (YandexQuery.DescribeQueryResponse); 
+ 
     // Get status of the query
     rpc GetQueryStatus(YandexQuery.GetQueryStatusRequest) returns (YandexQuery.GetQueryStatusResponse);
 
-    // Change the attributes of the query (acl, name, ...)
-    rpc ModifyQuery(YandexQuery.ModifyQueryRequest) returns (YandexQuery.ModifyQueryResponse);
-
-    // Completely delete the query
-    rpc DeleteQuery(YandexQuery.DeleteQueryRequest) returns (YandexQuery.DeleteQueryResponse);
-
-    // Change the state of the query lifecycle
-    rpc ControlQuery(YandexQuery.ControlQueryRequest) returns (YandexQuery.ControlQueryResponse);
-
-    // Get a results page
-    rpc GetResultData(YandexQuery.GetResultDataRequest) returns (YandexQuery.GetResultDataResponse);
-
-    // Job
-    // Job - appears immediately after starting the request and contains the request metadata
+    // Change the attributes of the query (acl, name, ...) 
+    rpc ModifyQuery(YandexQuery.ModifyQueryRequest) returns (YandexQuery.ModifyQueryResponse); 
+ 
+    // Completely delete the query 
+    rpc DeleteQuery(YandexQuery.DeleteQueryRequest) returns (YandexQuery.DeleteQueryResponse); 
+ 
+    // Change the state of the query lifecycle 
+    rpc ControlQuery(YandexQuery.ControlQueryRequest) returns (YandexQuery.ControlQueryResponse); 
+ 
+    // Get a results page 
+    rpc GetResultData(YandexQuery.GetResultDataRequest) returns (YandexQuery.GetResultDataResponse); 
+ 
+    // Job 
+    // Job - appears immediately after starting the request and contains the request metadata 
     // Get a list of jobs
-    rpc ListJobs(YandexQuery.ListJobsRequest) returns (YandexQuery.ListJobsResponse);
-
+    rpc ListJobs(YandexQuery.ListJobsRequest) returns (YandexQuery.ListJobsResponse); 
+ 
     // Get information about the job
     rpc DescribeJob(YandexQuery.DescribeJobRequest) returns (YandexQuery.DescribeJobResponse);
 
-    // Connection
-    // Connection - entity that describes connection points. This can be imagined as an analogue of a network address.
-    // Create a connection object (ObjectStorage, YDB, YDS, ...)
-    rpc CreateConnection(YandexQuery.CreateConnectionRequest) returns (YandexQuery.CreateConnectionResponse);
-
-    // Get a list of connections objects
-    rpc ListConnections(YandexQuery.ListConnectionsRequest) returns (YandexQuery.ListConnectionsResponse);
-
-    // Get information about the object of the connection
-    rpc DescribeConnection(YandexQuery.DescribeConnectionRequest) returns (YandexQuery.DescribeConnectionResponse);
-
-    // Change the attributes of the connection
-    rpc ModifyConnection(YandexQuery.ModifyConnectionRequest) returns (YandexQuery.ModifyConnectionResponse);
-
-    // Completely delete the connection
-    rpc DeleteConnection(YandexQuery.DeleteConnectionRequest) returns (YandexQuery.DeleteConnectionResponse);
-
-    // Test the connection (permissions, network, ...)
-    rpc TestConnection(YandexQuery.TestConnectionRequest) returns (YandexQuery.TestConnectionResponse);
-
-    // Binding
-    // Binding - entity using which a schema is assigned to non-schematic data
-    // Create a binding object - bind schema with ObjectStorage object or YDS stream
-    rpc CreateBinding(YandexQuery.CreateBindingRequest) returns (YandexQuery.CreateBindingResponse);
-
-    // Get a list of bindings objects
-    rpc ListBindings(YandexQuery.ListBindingsRequest) returns (YandexQuery.ListBindingsResponse);
-
-    // Get information about the object of the binding
-    rpc DescribeBinding(YandexQuery.DescribeBindingRequest) returns (YandexQuery.DescribeBindingResponse);
-
-    // Change the attributes of the binding
-    rpc ModifyBinding(YandexQuery.ModifyBindingRequest) returns (YandexQuery.ModifyBindingResponse);
-
-    // Completely delete the binding
-    rpc DeleteBinding(YandexQuery.DeleteBindingRequest) returns (YandexQuery.DeleteBindingResponse);
-}
+    // Connection 
+    // Connection - entity that describes connection points. This can be imagined as an analogue of a network address. 
+    // Create a connection object (ObjectStorage, YDB, YDS, ...) 
+    rpc CreateConnection(YandexQuery.CreateConnectionRequest) returns (YandexQuery.CreateConnectionResponse); 
+ 
+    // Get a list of connections objects 
+    rpc ListConnections(YandexQuery.ListConnectionsRequest) returns (YandexQuery.ListConnectionsResponse); 
+ 
+    // Get information about the object of the connection 
+    rpc DescribeConnection(YandexQuery.DescribeConnectionRequest) returns (YandexQuery.DescribeConnectionResponse); 
+ 
+    // Change the attributes of the connection 
+    rpc ModifyConnection(YandexQuery.ModifyConnectionRequest) returns (YandexQuery.ModifyConnectionResponse); 
+ 
+    // Completely delete the connection 
+    rpc DeleteConnection(YandexQuery.DeleteConnectionRequest) returns (YandexQuery.DeleteConnectionResponse); 
+ 
+    // Test the connection (permissions, network, ...) 
+    rpc TestConnection(YandexQuery.TestConnectionRequest) returns (YandexQuery.TestConnectionResponse); 
+ 
+    // Binding 
+    // Binding - entity using which a schema is assigned to non-schematic data 
+    // Create a binding object - bind schema with ObjectStorage object or YDS stream 
+    rpc CreateBinding(YandexQuery.CreateBindingRequest) returns (YandexQuery.CreateBindingResponse); 
+ 
+    // Get a list of bindings objects 
+    rpc ListBindings(YandexQuery.ListBindingsRequest) returns (YandexQuery.ListBindingsResponse); 
+ 
+    // Get information about the object of the binding 
+    rpc DescribeBinding(YandexQuery.DescribeBindingRequest) returns (YandexQuery.DescribeBindingResponse); 
+ 
+    // Change the attributes of the binding 
+    rpc ModifyBinding(YandexQuery.ModifyBindingRequest) returns (YandexQuery.ModifyBindingResponse); 
+ 
+    // Completely delete the binding 
+    rpc DeleteBinding(YandexQuery.DeleteBindingRequest) returns (YandexQuery.DeleteBindingResponse); 
+} 

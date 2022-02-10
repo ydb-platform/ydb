@@ -1550,7 +1550,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
             ctx.RebootTablet();
             testAfterModification();
 
-            req.SetResourcePath("?Invalid/Path?");
+            req.SetResourcePath("?Invalid/Path?"); 
             ctx.UpdateQuoterResource(req, Ydb::StatusIds::BAD_REQUEST); // invalid path
             testAfterModification();
             ctx.RebootTablet();
@@ -1596,7 +1596,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
             ctx.DeleteQuoterResource(req, Ydb::StatusIds::BAD_REQUEST); // no resource
             UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 4);
 
-            req.SetResourcePath("?Invalid/Path?");
+            req.SetResourcePath("?Invalid/Path?"); 
             ctx.DeleteQuoterResource(req, Ydb::StatusIds::BAD_REQUEST); // invalid path
             UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 4);
 

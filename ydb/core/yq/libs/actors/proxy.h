@@ -35,11 +35,11 @@ NActors::TActorId MakeYqlAnalyticsFetcherId(ui32 nodeId);
 
 NActors::IActor* CreatePendingFetcher(
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
-    const ::NYq::NConfig::TCommonConfig& commonConfig,
-    const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
-    const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
-    const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
-    const ::NYq::NConfig::TPingerConfig& pingerConfig,
+    const ::NYq::NConfig::TCommonConfig& commonConfig, 
+    const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig, 
+    const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig, 
+    const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig, 
+    const ::NYq::NConfig::TPingerConfig& pingerConfig, 
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
@@ -61,14 +61,14 @@ struct TResultId {
     int SetId;
     TString HistoryId;
     TString Owner;
-    TString CloudId;
+    TString CloudId; 
 };
 
 NActors::IActor* CreateResultWriter(
     const NYdb::TDriver& driver,
     const NActors::TActorId& executerId,
     const TString& resultType,
-    const NConfig::TPrivateApiConfig& privateApiConfig,
+    const NConfig::TPrivateApiConfig& privateApiConfig, 
     const TResultId& resultId,
     const TVector<TString>& columns,
     const TString& traceId,
@@ -82,7 +82,7 @@ NActors::IActor* CreatePingerActor(
     const TString& id,
     const TString& owner,
     const NYq::TPrivateClient& client,
-    const NActors::TActorId parent,
+    const NActors::TActorId parent, 
     const NConfig::TPingerConfig& config,
     const TInstant& deadline);
 

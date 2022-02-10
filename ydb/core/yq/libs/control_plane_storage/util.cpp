@@ -1,48 +1,48 @@
-#include "util.h"
-
-#include <util/stream/file.h>
-#include <util/string/strip.h>
-
-namespace NYq {
-
+#include "util.h" 
+ 
+#include <util/stream/file.h> 
+#include <util/string/strip.h> 
+ 
+namespace NYq { 
+ 
 bool IsTerminalStatus(YandexQuery::QueryMeta::ComputeStatus status)
 {
     return IsIn({ YandexQuery::QueryMeta::ABORTED_BY_USER, YandexQuery::QueryMeta::ABORTED_BY_SYSTEM,
         YandexQuery::QueryMeta::COMPLETED, YandexQuery::QueryMeta::FAILED }, status);
 }
 
-TDuration GetDuration(const TString& value, const TDuration& defaultValue)
-{
-    TDuration result = defaultValue;
-    TDuration::TryParse(value, result);
-    return result;
-}
-
-NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlaneStorageConfig config)
-{
-    if (!config.GetIdempotencyKeysTtl()) {
-        config.SetIdempotencyKeysTtl("10m");
-    }
-
-    if (!config.GetMaxRequestSize()) {
-        config.SetMaxRequestSize(7 * 1024 * 1024);
-    }
-
-    if (!config.GetMaxCountConnections()) {
-        config.SetMaxCountConnections(1000000);
-    }
-
-    if (!config.GetMaxCountQueries()) {
-        config.SetMaxCountQueries(1000000);
-    }
-
-    if (!config.GetMaxCountBindings()) {
-        config.SetMaxCountBindings(1000000);
-    }
-
-    if (!config.GetMaxCountJobs()) {
-        config.SetMaxCountJobs(20);
-    }
+TDuration GetDuration(const TString& value, const TDuration& defaultValue) 
+{ 
+    TDuration result = defaultValue; 
+    TDuration::TryParse(value, result); 
+    return result; 
+} 
+ 
+NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlaneStorageConfig config) 
+{ 
+    if (!config.GetIdempotencyKeysTtl()) { 
+        config.SetIdempotencyKeysTtl("10m"); 
+    } 
+ 
+    if (!config.GetMaxRequestSize()) { 
+        config.SetMaxRequestSize(7 * 1024 * 1024); 
+    } 
+ 
+    if (!config.GetMaxCountConnections()) { 
+        config.SetMaxCountConnections(1000000); 
+    } 
+ 
+    if (!config.GetMaxCountQueries()) { 
+        config.SetMaxCountQueries(1000000); 
+    } 
+ 
+    if (!config.GetMaxCountBindings()) { 
+        config.SetMaxCountBindings(1000000); 
+    } 
+ 
+    if (!config.GetMaxCountJobs()) { 
+        config.SetMaxCountJobs(20); 
+    } 
 
     if (!config.GetTasksBatchSize()) {
         config.SetTasksBatchSize(100);
@@ -64,33 +64,33 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
         config.SetStreamingRetryCounterLimit(20);
     }
 
-    if (!config.GetAnalyticsRetryCounterUpdateTime()) {
-        config.SetAnalyticsRetryCounterUpdateTime("1d");
+    if (!config.GetAnalyticsRetryCounterUpdateTime()) { 
+        config.SetAnalyticsRetryCounterUpdateTime("1d"); 
     }
 
-    if (!config.GetStreamingRetryCounterUpdateTime()) {
-        config.SetStreamingRetryCounterUpdateTime("1d");
+    if (!config.GetStreamingRetryCounterUpdateTime()) { 
+        config.SetStreamingRetryCounterUpdateTime("1d"); 
     }
 
     if (!config.GetAutomaticQueriesTtl()) {
         config.SetAutomaticQueriesTtl("1d");
     }
 
-    if (!config.GetTaskLeaseTtl()) {
-        config.SetTaskLeaseTtl("30s");
+    if (!config.GetTaskLeaseTtl()) { 
+        config.SetTaskLeaseTtl("30s"); 
     }
-
-    if (!config.GetStorage().GetToken() && config.GetStorage().GetOAuthFile()) {
-        config.MutableStorage()->SetToken(StripString(TFileInput(config.GetStorage().GetOAuthFile()).ReadAll()));
-    }
+ 
+    if (!config.GetStorage().GetToken() && config.GetStorage().GetOAuthFile()) { 
+        config.MutableStorage()->SetToken(StripString(TFileInput(config.GetStorage().GetOAuthFile()).ReadAll())); 
+    } 
 
     if (!config.GetResultSetsTtl()) {
         config.SetResultSetsTtl("1d");
     }
-
-    return config;
-}
-
+ 
+    return config; 
+} 
+ 
 bool DoesPingTaskUpdateQueriesTable(const TEvControlPlaneStorage::TEvPingTaskRequest* request) {
     if (!request) {
         return false;
@@ -127,4 +127,4 @@ std::pair<TString, TString> SplitId(const TString& id, char delim) {
         (it != id.end() ? id.substr(it - id.begin() + 1) : TString{""}));
 }
 
-} //namespace NYq
+} //namespace NYq 

@@ -101,8 +101,8 @@ namespace NKikimr {
 
 namespace Tests {
 
-
-
+ 
+ 
     TServerSettings& TServerSettings::SetDomainName(const TString& value) {
         StoragePoolTypes.erase("test");
         DomainName = value;
@@ -317,10 +317,10 @@ namespace Tests {
         GRpcServer->AddService(new NQuoter::TRateLimiterGRpcService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbLongTxService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxyId));
-        if (Settings->EnableYq) {
-            GRpcServer->AddService(new NGRpcService::TGRpcYandexQueryService(system, counters, grpcRequestProxyId));
+        if (Settings->EnableYq) { 
+            GRpcServer->AddService(new NGRpcService::TGRpcYandexQueryService(system, counters, grpcRequestProxyId)); 
             GRpcServer->AddService(new NGRpcService::TGRpcYqPrivateTaskService(system, counters, grpcRequestProxyId));
-        }
+        } 
         if (const auto& factory = Settings->GrpcServiceFactory) {
             // All services enabled by default for ut
             static const std::unordered_set<TString> dummy;
@@ -705,119 +705,119 @@ namespace Tests {
             Runtime->RegisterService(NNetClassifier::MakeNetClassifierID(), netClassifierId, nodeIdx);
         }
 
-        if (Settings->EnableYq) {
-            NYq::NConfig::TConfig protoConfig;
-            protoConfig.SetEnabled(true);
-
+        if (Settings->EnableYq) { 
+            NYq::NConfig::TConfig protoConfig; 
+            protoConfig.SetEnabled(true); 
+ 
             protoConfig.MutableCommon()->SetIdsPrefix("id");
 
-            TString endpoint = TStringBuilder() << "localhost:" << Settings->GrpcPort;
-            TString prefix = "Root/yq";
-            auto port = Runtime->GetPortManager().GetPort();
-            TString ydbMvpEndpoint = TStringBuilder()
-                << "http://localhost:"
-                << port
-                << "/yql-mock/abc";
+            TString endpoint = TStringBuilder() << "localhost:" << Settings->GrpcPort; 
+            TString prefix = "Root/yq"; 
+            auto port = Runtime->GetPortManager().GetPort(); 
+            TString ydbMvpEndpoint = TStringBuilder() 
+                << "http://localhost:" 
+                << port 
+                << "/yql-mock/abc"; 
+ 
+            { 
+                auto& controlPlaneProxyConfig = *protoConfig.MutableControlPlaneProxy(); 
+                controlPlaneProxyConfig.SetEnabled(true); 
+            } 
 
-            {
-                auto& controlPlaneProxyConfig = *protoConfig.MutableControlPlaneProxy();
-                controlPlaneProxyConfig.SetEnabled(true);
-            }
+            { 
+                auto& testConnectionConfig = *protoConfig.MutableTestConnection(); 
+                testConnectionConfig.SetEnabled(true); 
+            } 
+ 
+            { 
+                auto& controlPlaneStorageConfig = *protoConfig.MutableControlPlaneStorage(); 
+                controlPlaneStorageConfig.SetEnabled(true); 
+                controlPlaneStorageConfig.SetUseInMemory(Settings->AppConfig.GetYandexQueryConfig().GetControlPlaneStorage().GetUseInMemory()); 
+                auto& storage = *controlPlaneStorageConfig.MutableStorage(); 
+                storage.SetEndpoint(endpoint); 
+                storage.SetTablePrefix(prefix); 
+ 
+                controlPlaneStorageConfig.AddAvailableBinding("DATA_STREAMS"); 
+                controlPlaneStorageConfig.AddAvailableBinding("OBJECT_STORAGE"); 
+ 
+                controlPlaneStorageConfig.AddAvailableConnection("YDB_DATABASE"); 
+                controlPlaneStorageConfig.AddAvailableConnection("CLICKHOUSE_CLUSTER"); 
+                controlPlaneStorageConfig.AddAvailableConnection("DATA_STREAMS"); 
+                controlPlaneStorageConfig.AddAvailableConnection("OBJECT_STORAGE"); 
+                controlPlaneStorageConfig.AddAvailableConnection("MONITORING"); 
+            } 
 
-            {
-                auto& testConnectionConfig = *protoConfig.MutableTestConnection();
-                testConnectionConfig.SetEnabled(true);
-            }
+            { 
+                auto& commonConfig = *protoConfig.MutableCommon(); 
+                commonConfig.SetYdbMvpCloudEndpoint(ydbMvpEndpoint); 
+                commonConfig.SetIdsPrefix("ut"); 
+            } 
 
-            {
-                auto& controlPlaneStorageConfig = *protoConfig.MutableControlPlaneStorage();
-                controlPlaneStorageConfig.SetEnabled(true);
-                controlPlaneStorageConfig.SetUseInMemory(Settings->AppConfig.GetYandexQueryConfig().GetControlPlaneStorage().GetUseInMemory());
-                auto& storage = *controlPlaneStorageConfig.MutableStorage();
-                storage.SetEndpoint(endpoint);
-                storage.SetTablePrefix(prefix);
-
-                controlPlaneStorageConfig.AddAvailableBinding("DATA_STREAMS");
-                controlPlaneStorageConfig.AddAvailableBinding("OBJECT_STORAGE");
-
-                controlPlaneStorageConfig.AddAvailableConnection("YDB_DATABASE");
-                controlPlaneStorageConfig.AddAvailableConnection("CLICKHOUSE_CLUSTER");
-                controlPlaneStorageConfig.AddAvailableConnection("DATA_STREAMS");
-                controlPlaneStorageConfig.AddAvailableConnection("OBJECT_STORAGE");
-                controlPlaneStorageConfig.AddAvailableConnection("MONITORING");
-            }
-
-            {
-                auto& commonConfig = *protoConfig.MutableCommon();
-                commonConfig.SetYdbMvpCloudEndpoint(ydbMvpEndpoint);
-                commonConfig.SetIdsPrefix("ut");
-            }
-
-            {
-                auto& privateApiConfig = *protoConfig.MutablePrivateApi();
-                privateApiConfig.SetEnabled(true);
-                privateApiConfig.SetTaskServiceEndpoint(endpoint);
-                privateApiConfig.SetTaskServiceDatabase("Root");
-            }
-
-            {
-                auto& tokenAccessorConfig = *protoConfig.MutableTokenAccessor();
-                tokenAccessorConfig.SetEnabled(true);
-            }
-
-            {
-                auto& dbPoolConfig = *protoConfig.MutableDbPool();
-                dbPoolConfig.SetEnabled(true);
-                auto& storage = *dbPoolConfig.MutableStorage();
-                storage.SetEndpoint(endpoint);
-                storage.SetTablePrefix(prefix);
-            }
-
-            {
-                auto& resourceManagerConfig = *protoConfig.MutableResourceManager();
-                resourceManagerConfig.SetEnabled(true);
-            }
-
-            {
-                auto& privateProxyConfig = *protoConfig.MutablePrivateProxy();
-                privateProxyConfig.SetEnabled(true);
-            }
-
-            {
-                auto& nodesManagerConfig = *protoConfig.MutableNodesManager();
-                nodesManagerConfig.SetEnabled(true);
-            }
-
-            {
-                auto& pendingFetcherConfig = *protoConfig.MutablePendingFetcher();
-                pendingFetcherConfig.SetEnabled(true);
-            }
-
-            auto& appData = Runtime->GetAppData();
-
-            auto actorRegistrator = [&](NActors::TActorId serviceActorId, NActors::IActor* actor) {
-                auto actorId = Runtime->Register(actor, nodeIdx);
-                Runtime->RegisterService(serviceActorId, actorId, nodeIdx);
-            };
-
+            { 
+                auto& privateApiConfig = *protoConfig.MutablePrivateApi(); 
+                privateApiConfig.SetEnabled(true); 
+                privateApiConfig.SetTaskServiceEndpoint(endpoint); 
+                privateApiConfig.SetTaskServiceDatabase("Root"); 
+            } 
+ 
+            { 
+                auto& tokenAccessorConfig = *protoConfig.MutableTokenAccessor(); 
+                tokenAccessorConfig.SetEnabled(true); 
+            } 
+ 
+            { 
+                auto& dbPoolConfig = *protoConfig.MutableDbPool(); 
+                dbPoolConfig.SetEnabled(true); 
+                auto& storage = *dbPoolConfig.MutableStorage(); 
+                storage.SetEndpoint(endpoint); 
+                storage.SetTablePrefix(prefix); 
+            } 
+ 
+            { 
+                auto& resourceManagerConfig = *protoConfig.MutableResourceManager(); 
+                resourceManagerConfig.SetEnabled(true); 
+            } 
+ 
+            { 
+                auto& privateProxyConfig = *protoConfig.MutablePrivateProxy(); 
+                privateProxyConfig.SetEnabled(true); 
+            } 
+ 
+            { 
+                auto& nodesManagerConfig = *protoConfig.MutableNodesManager(); 
+                nodesManagerConfig.SetEnabled(true); 
+            } 
+ 
+            { 
+                auto& pendingFetcherConfig = *protoConfig.MutablePendingFetcher(); 
+                pendingFetcherConfig.SetEnabled(true); 
+            } 
+ 
+            auto& appData = Runtime->GetAppData(); 
+ 
+            auto actorRegistrator = [&](NActors::TActorId serviceActorId, NActors::IActor* actor) { 
+                auto actorId = Runtime->Register(actor, nodeIdx); 
+                Runtime->RegisterService(serviceActorId, actorId, nodeIdx); 
+            }; 
+ 
             const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
             auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             auto yqSharedResources = NYq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
             NYq::Init(
-                protoConfig,
-                Runtime->GetNodeId(nodeIdx),
-                actorRegistrator,
+                protoConfig, 
+                Runtime->GetNodeId(nodeIdx), 
+                actorRegistrator, 
                 &appData,
-                "TestTenant",
+                "TestTenant", 
                 nullptr, // MakeIntrusive<NPq::NConfigurationManager::TConnections>(),
                 yqSharedResources,
                 NKikimr::NFolderService::CreateMockFolderServiceActor,
                 NYq::CreateMockYqAuditServiceActor,
                 ydbCredFactory,
                 /*IcPort = */0
-                );
+                ); 
             NYq::InitTest(Runtime.Get(), port, Settings->GrpcPort, yqSharedResources);
-        }
+        } 
     }
 
     void TServer::SetupLogging() {

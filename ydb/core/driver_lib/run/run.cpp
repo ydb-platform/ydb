@@ -533,7 +533,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["analytics"] = &hasAnalytics;
         bool hasDataStreams = false;
         names["datastreams"] = &hasDataStreams;
-        bool hasYandexQuery = false;
+        bool hasYandexQuery = false; 
         names["yq"] = &hasYandexQuery;
         bool hasLogStore = false;
         names["logstore"] = &hasLogStore;
@@ -712,11 +712,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasDataStreams) {
             server.AddService(new NGRpcService::TGRpcDataStreamsService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
-
-        if (hasYandexQuery) {
-            server.AddService(new NGRpcService::TGRpcYandexQueryService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+ 
+        if (hasYandexQuery) { 
+            server.AddService(new NGRpcService::TGRpcYandexQueryService(ActorSystem.Get(), Counters, grpcRequestProxyId)); 
             server.AddService(new NGRpcService::TGRpcYqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxyId));
-        }
+        } 
 
         if (hasLogStore) {
             server.AddService(new NGRpcService::TGRpcYdbLogStoreService(ActorSystem.Get(), Counters, grpcRequestProxyId));
@@ -1311,16 +1311,16 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TLongTxServiceInitializer(runConfig));
     }
 
-    if (serviceMask.EnableKqp || serviceMask.EnableYandexQuery) {
+    if (serviceMask.EnableKqp || serviceMask.EnableYandexQuery) { 
         sil->AddServiceInitializer(new TYqlLogsInitializer(runConfig));
     }
 
-    if (serviceMask.EnableYandexQuery && runConfig.AppConfig.GetYandexQueryConfig().GetEnabled()) {
+    if (serviceMask.EnableYandexQuery && runConfig.AppConfig.GetYandexQueryConfig().GetEnabled()) { 
         YqSharedResources = NYq::CreateYqSharedResources(runConfig.AppConfig.GetYandexQueryConfig(),
             ModuleFactories->YdbCredentialProviderFactory, Counters->GetSubgroup("counters", "yq"));
         sil->AddServiceInitializer(new TYandexQueryInitializer(runConfig, ModuleFactories, YqSharedResources));
-    }
-
+    } 
+ 
     if (serviceMask.EnableSequenceProxyService) {
         sil->AddServiceInitializer(new TSequenceProxyServiceInitializer(runConfig));
     }

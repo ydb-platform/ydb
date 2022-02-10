@@ -9,13 +9,13 @@ Y_UNIT_TEST_SUITE(SecureProtobufPrinterTest) {
         {
             NKikimrClient::TSqsRequest msg;
             msg.MutableSendMessage()->SetMessageBody("trololo");
-            UNIT_ASSERT_STRINGS_EQUAL(SecureShortUtf8DebugString(msg), "SendMessage { MessageBody: \"***\" }");
+            UNIT_ASSERT_STRINGS_EQUAL(SecureShortUtf8DebugString(msg), "SendMessage { MessageBody: \"***\" }"); 
         }
 
         {
             NKikimrClient::TSqsResponse msg;
             msg.MutableReceiveMessage()->AddMessages()->SetData("trololo");
-            UNIT_ASSERT_STRINGS_EQUAL(SecureShortUtf8DebugString(msg), "ReceiveMessage { Messages { Data: \"***\" } }");
+            UNIT_ASSERT_STRINGS_EQUAL(SecureShortUtf8DebugString(msg), "ReceiveMessage { Messages { Data: \"***\" } }"); 
         }
     }
 

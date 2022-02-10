@@ -450,7 +450,7 @@ message TMonitoringConfig {
         optional string StaticSlotLabelValue = 7 [default = "static"];
         optional string DynamicSlotLabelValue = 8 [default = "dynamic"];
         optional string MultipleSlotLabelValue = 9 [default = "<multiple>"];
-        optional bool GroupAllMetrics = 10;
+        optional bool GroupAllMetrics = 10; 
     };
 
     message TDatabaseAttributeLabels {
@@ -1377,7 +1377,7 @@ message TAppConfig {
     optional TMeteringConfig MeteringConfig = 45;
     optional THiveConfig HiveConfig = 46;
     optional TDataShardConfig DataShardConfig = 49;
-    optional NYq.NConfig.TConfig YandexQueryConfig = 50;
+    optional NYq.NConfig.TConfig YandexQueryConfig = 50; 
     optional TCompactionConfig CompactionConfig = 52;
 
     repeated TNamedConfig NamedConfigs = 100;

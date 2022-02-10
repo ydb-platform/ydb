@@ -1,7 +1,7 @@
 #include "utils.h"
 
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
-
+ 
 namespace NYq {
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev)
@@ -48,13 +48,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     }
 
     TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "NodesHealthCheck(read)");
-    readQueryBuilder.AddTimestamp("now", TInstant::Now());
-    readQueryBuilder.AddString("tenant", tenant);
-    readQueryBuilder.AddText(
+    readQueryBuilder.AddTimestamp("now", TInstant::Now()); 
+    readQueryBuilder.AddString("tenant", tenant); 
+    readQueryBuilder.AddText( 
         "SELECT `" NODE_ID_COLUMN_NAME "`, `" INSTANCE_ID_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" ACTIVE_WORKERS_COLUMN_NAME"`, `" MEMORY_LIMIT_COLUMN_NAME"`, "
         "`" MEMORY_ALLOCATED_COLUMN_NAME"`, `" INTERCONNECT_PORT_COLUMN_NAME "`, `" NODE_ADDRESS_COLUMN_NAME "` FROM `" NODES_TABLE_NAME "`\n"
         "WHERE `" TENANT_COLUMN_NAME"` = $tenant AND `" EXPIRE_AT_COLUMN_NAME "` >= $now;\n"
-    );
+    ); 
 
     auto prepareParams = [=](const TVector<TResultSet>& resultSets) {
         for (const auto& resultSet : resultSets) {
@@ -74,31 +74,31 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
                 }
             }
         }
-
+ 
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "NodesHealthCheck(write)");
-        writeQueryBuilder.AddString("tenant", tenant);
-        writeQueryBuilder.AddUint32("node_id", nodeId);
-        writeQueryBuilder.AddString("instance_id", instanceId);
-        writeQueryBuilder.AddString("hostname", hostName);
-        writeQueryBuilder.AddTimestamp("deadline", deadline);
-        writeQueryBuilder.AddUint64("active_workers", activeWorkers);
-        writeQueryBuilder.AddUint64("memory_limit", memoryLimit);
-        writeQueryBuilder.AddUint64("memory_allocated", memoryAllocated);
-        writeQueryBuilder.AddUint32("ic_port", icPort);
-        writeQueryBuilder.AddString("node_address", nodeAddress);
-        writeQueryBuilder.AddText(
-            "UPSERT INTO `" NODES_TABLE_NAME "`\n"
-            "(`" TENANT_COLUMN_NAME "`, `" NODE_ID_COLUMN_NAME "`, `" INSTANCE_ID_COLUMN_NAME "`,\n"
-            "`" HOST_NAME_COLUMN_NAME "`, `" EXPIRE_AT_COLUMN_NAME "`, `" ACTIVE_WORKERS_COLUMN_NAME"`, `" MEMORY_LIMIT_COLUMN_NAME"`, `" MEMORY_ALLOCATED_COLUMN_NAME "`, `" INTERCONNECT_PORT_COLUMN_NAME "`, `" NODE_ADDRESS_COLUMN_NAME "`)\n"
-            "VALUES ($tenant ,$node_id, $instance_id, $hostname, $deadline, $active_workers, $memory_limit, $memory_allocated, $ic_port, $node_address);\n"
-        );
-        const auto writeQuery = writeQueryBuilder.Build();
-        return std::make_pair(writeQuery.Sql, writeQuery.Params);
+        writeQueryBuilder.AddString("tenant", tenant); 
+        writeQueryBuilder.AddUint32("node_id", nodeId); 
+        writeQueryBuilder.AddString("instance_id", instanceId); 
+        writeQueryBuilder.AddString("hostname", hostName); 
+        writeQueryBuilder.AddTimestamp("deadline", deadline); 
+        writeQueryBuilder.AddUint64("active_workers", activeWorkers); 
+        writeQueryBuilder.AddUint64("memory_limit", memoryLimit); 
+        writeQueryBuilder.AddUint64("memory_allocated", memoryAllocated); 
+        writeQueryBuilder.AddUint32("ic_port", icPort); 
+        writeQueryBuilder.AddString("node_address", nodeAddress); 
+        writeQueryBuilder.AddText( 
+            "UPSERT INTO `" NODES_TABLE_NAME "`\n" 
+            "(`" TENANT_COLUMN_NAME "`, `" NODE_ID_COLUMN_NAME "`, `" INSTANCE_ID_COLUMN_NAME "`,\n" 
+            "`" HOST_NAME_COLUMN_NAME "`, `" EXPIRE_AT_COLUMN_NAME "`, `" ACTIVE_WORKERS_COLUMN_NAME"`, `" MEMORY_LIMIT_COLUMN_NAME"`, `" MEMORY_ALLOCATED_COLUMN_NAME "`, `" INTERCONNECT_PORT_COLUMN_NAME "`, `" NODE_ADDRESS_COLUMN_NAME "`)\n" 
+            "VALUES ($tenant ,$node_id, $instance_id, $hostname, $deadline, $active_workers, $memory_limit, $memory_allocated, $ic_port, $node_address);\n" 
+        ); 
+        const auto writeQuery = writeQueryBuilder.Build(); 
+        return std::make_pair(writeQuery.Sql, writeQuery.Params); 
     };
 
-    const auto readQuery = readQueryBuilder.Build();
-    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    TAsyncStatus status = ReadModifyWrite(NActors::TActivationContext::ActorSystem(), readQuery.Sql, readQuery.Params, prepareParams, requestCounters, debugInfo);
+    const auto readQuery = readQueryBuilder.Build(); 
+    auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{}; 
+    TAsyncStatus status = ReadModifyWrite(NActors::TActivationContext::ActorSystem(), readQuery.Sql, readQuery.Params, prepareParams, requestCounters, debugInfo); 
     auto prepare = [response] { return *response; };
     auto success = SendResponse<TEvControlPlaneStorage::TEvNodesHealthCheckResponse, Yq::Private::NodesHealthCheckResult>(
         "NodesHealthCheckRequest",

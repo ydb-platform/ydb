@@ -6,7 +6,7 @@ OWNER(
 )
 
 SRCS(
-    sensitive.proto
+    sensitive.proto 
     validation.proto
 )
 

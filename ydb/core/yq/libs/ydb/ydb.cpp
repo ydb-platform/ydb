@@ -4,12 +4,12 @@
 
 #include <util/stream/str.h>
 #include <util/string/printf.h>
-#include <util/stream/file.h>
-#include <util/string/strip.h>
-#include <util/system/env.h>
+#include <util/stream/file.h> 
+#include <util/string/strip.h> 
+#include <util/system/env.h> 
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
-
+ 
 namespace NYq {
 
 using namespace NThreading;
@@ -55,10 +55,10 @@ TFuture<TStatus> CheckGeneration(
         return MakeFuture<TStatus>(selectResult);
     }
 
-
+ 
     TResultSetParser parser(selectResult.GetResultSet(0));
     if (parser.TryNextRow()) {
-        context->GenerationRead = parser.ColumnParser(context->GenerationColumn).GetOptionalUint64().GetOrElse(0);
+        context->GenerationRead = parser.ColumnParser(context->GenerationColumn).GetOptionalUint64().GetOrElse(0); 
     }
 
     bool isOk = false;
@@ -186,24 +186,24 @@ TYdbConnection::~TYdbConnection()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
-NYdb::TDriverConfig GetDriverConfig(const NConfig::TYdbStorageConfig& config,
-                                    const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) {
-    TString oauth;
-    if (config.GetToken()) {
-        oauth = config.GetToken();
-    } else if (config.GetOAuthFile()) {
-        oauth = StripString(TFileInput(config.GetOAuthFile()).ReadAll());
-    } else {
-        oauth = GetEnv("YDB_TOKEN");
-    }
-
-    const TString iamEndpoint = config.GetIamEndpoint();
-    const TString saKeyFile = config.GetSaKeyFile();
-
+ 
+NYdb::TDriverConfig GetDriverConfig(const NConfig::TYdbStorageConfig& config, 
+                                    const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) { 
+    TString oauth; 
+    if (config.GetToken()) { 
+        oauth = config.GetToken(); 
+    } else if (config.GetOAuthFile()) { 
+        oauth = StripString(TFileInput(config.GetOAuthFile()).ReadAll()); 
+    } else { 
+        oauth = GetEnv("YDB_TOKEN"); 
+    } 
+ 
+    const TString iamEndpoint = config.GetIamEndpoint(); 
+    const TString saKeyFile = config.GetSaKeyFile(); 
+ 
     auto driverConfig = TDriverConfig()
         .SetEndpoint(config.GetEndpoint())
-        .SetDatabase(config.GetDatabase());
+        .SetDatabase(config.GetDatabase()); 
 
     NKikimr::TYdbCredentialsSettings credSettings;
     credSettings.UseLocalMetadata = config.GetUseLocalMetadataService();
@@ -213,20 +213,20 @@ NYdb::TDriverConfig GetDriverConfig(const NConfig::TYdbStorageConfig& config,
 
     driverConfig.SetCredentialsProviderFactory(credProviderFactory(credSettings));
 
-    if (config.GetUseLocalMetadataService()) {
-        driverConfig.UseSecureConnection();
-    }
-
-    if (config.GetCertificateFile()) {
-        auto cert = StripString(TFileInput(config.GetCertificateFile()).ReadAll());
-        driverConfig.UseSecureConnection(cert);
-    }
-
-    return driverConfig;
-}
-
-TYdbConnectionPtr NewYdbConnection(const NConfig::TYdbStorageConfig& config,
-                                   const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) {
+    if (config.GetUseLocalMetadataService()) { 
+        driverConfig.UseSecureConnection(); 
+    } 
+ 
+    if (config.GetCertificateFile()) { 
+        auto cert = StripString(TFileInput(config.GetCertificateFile()).ReadAll()); 
+        driverConfig.UseSecureConnection(cert); 
+    } 
+ 
+    return driverConfig; 
+} 
+ 
+TYdbConnectionPtr NewYdbConnection(const NConfig::TYdbStorageConfig& config, 
+                                   const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) { 
     auto driverConfig = GetDriverConfig(config, credProviderFactory);
     return MakeIntrusive<TYdbConnection>(driverConfig, config);
 }

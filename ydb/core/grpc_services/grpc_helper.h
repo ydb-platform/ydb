@@ -40,8 +40,8 @@ inline TCreateLimiterCB CreateLimiterCb(TIntrusivePtr<TInFlightLimiterRegistry> 
     return TCreateLimiterCB(limiterRegistry);
 }
 
-template <typename TIn, typename TOut, typename TService, typename TInProtoPrinter=google::protobuf::TextFormat::Printer, typename TOutProtoPrinter=google::protobuf::TextFormat::Printer>
-using TGRpcRequest = NGrpc::TGRpcRequest<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter>;
+template <typename TIn, typename TOut, typename TService, typename TInProtoPrinter=google::protobuf::TextFormat::Printer, typename TOutProtoPrinter=google::protobuf::TextFormat::Printer> 
+using TGRpcRequest = NGrpc::TGRpcRequest<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter>; 
 
 } // namespace NGRpcService
 } // namespace NKikimr

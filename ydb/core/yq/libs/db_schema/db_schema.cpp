@@ -27,23 +27,23 @@ TSqlQueryBuilder& TSqlQueryBuilder::PopPk() {
 TSqlQueryBuilder& TSqlQueryBuilder::AddPk(const TString& name, const TValue& value)
 {
     Pk.push_back(name);
-    return AddValue(name, value, "==");
+    return AddValue(name, value, "=="); 
 }
 
-TSqlQueryBuilder& TSqlQueryBuilder::AddValue(const TString& name, const NYdb::TValue& value)
-{
-    const auto typeStr = value.GetType().ToString();
-    auto it = Parameters.find(name);
-    if (it == Parameters.end()) {
-        Parameters.emplace(name, typeStr);
-        ParametersOrdered.emplace_back(name, typeStr);
-        ParamsBuilder.AddParam("$" + name, value);
-    } else if (it->second != typeStr) {
-        ythrow yexception() << "Parameter `" << name << "' type " << typeStr << " != " << it->second;
-    }
-    return *this;
-}
-
+TSqlQueryBuilder& TSqlQueryBuilder::AddValue(const TString& name, const NYdb::TValue& value) 
+{ 
+    const auto typeStr = value.GetType().ToString(); 
+    auto it = Parameters.find(name); 
+    if (it == Parameters.end()) { 
+        Parameters.emplace(name, typeStr); 
+        ParametersOrdered.emplace_back(name, typeStr); 
+        ParamsBuilder.AddParam("$" + name, value); 
+    } else if (it->second != typeStr) { 
+        ythrow yexception() << "Parameter `" << name << "' type " << typeStr << " != " << it->second; 
+    } 
+    return *this; 
+} 
+ 
 TSqlQueryBuilder& TSqlQueryBuilder::AddValue(const TString& name, const TValue& value, const TString& pred)
 {
     TStringBuilder var; var << name;
@@ -73,7 +73,7 @@ TSqlQueryBuilder& TSqlQueryBuilder::AddColNames(TVector<TString>&& colNames)
 
 TSqlQueryBuilder& TSqlQueryBuilder::MaybeAddValue(const TString& name, const TMaybe<TValue>& value) {
     if (value) {
-        return AddValue(name, *value, "==");
+        return AddValue(name, *value, "=="); 
     } else {
         return *this;
     }
@@ -82,7 +82,7 @@ TSqlQueryBuilder& TSqlQueryBuilder::MaybeAddValue(const TString& name, const TMa
 TSqlQueryBuilder& TSqlQueryBuilder::AddText(const TString& sql, const TString& tableName)
 {
     if (tableName) {
-        Text << SubstGlobalCopy(sql, TString("{TABLENAME}"), tableName);
+        Text << SubstGlobalCopy(sql, TString("{TABLENAME}"), tableName); 
     } else {
         Text << sql;
     }
@@ -91,7 +91,7 @@ TSqlQueryBuilder& TSqlQueryBuilder::AddText(const TString& sql, const TString& t
 
 TSqlQueryBuilder& TSqlQueryBuilder::AddBeforeQuery(const TString& sql, const TString& tableName ) {
     if (tableName) {
-        BeforeQuery << SubstGlobalCopy(sql, TString("{TABLENAME}"), tableName);
+        BeforeQuery << SubstGlobalCopy(sql, TString("{TABLENAME}"), tableName); 
     } else {
         BeforeQuery << sql;
     }
@@ -174,7 +174,7 @@ TSqlQueryBuilder& TSqlQueryBuilder::End()
     TStringBuilder text;
 
     if (Op == "DELETE") {
-        text << "$todelete" << Counter << " = (SELECT * FROM `" << Table << "`\n";
+        text << "$todelete" << Counter << " = (SELECT * FROM `" << Table << "`\n"; 
         if (Pk.empty() && Fields.empty() && !Limit) {
             ythrow yexception() << "dangerous sql query";
         }
@@ -189,7 +189,7 @@ TSqlQueryBuilder& TSqlQueryBuilder::End()
 
         text.clear();
 
-        text << "DELETE FROM `" << Table << "`\n";
+        text << "DELETE FROM `" << Table << "`\n"; 
         text << "ON (SELECT * from $todelete" << Counter << ");\n";
     } else if (Op == "SELECT") {
         text << Op << ' ';
@@ -201,7 +201,7 @@ TSqlQueryBuilder& TSqlQueryBuilder::End()
                 text << ", ";
             }
         }
-        text << "\nFROM `" << Table << "`\n";
+        text << "\nFROM `" << Table << "`\n"; 
         ConstructWhereFilter(text);
         if (Limit > 0) {
             text << " LIMIT " << Limit;
@@ -220,11 +220,11 @@ TSqlQueryBuilder& TSqlQueryBuilder::End()
         text << "\n FROM $todelete" << (Counter-1) << ";\n";
     } else if (Op == "SELECT COUNT(*)") {
         text << Op ;
-        text << "\nFROM `" << Table << "`\n";
+        text << "\nFROM `" << Table << "`\n"; 
         ConstructWhereFilter(text);
         text << ";\n";
     } else if (Op == "UPDATE") {
-        text << Op << " `" << Table << "`\n";
+        text << Op << " `" << Table << "`\n"; 
         if (Pk.empty() && Fields.empty()) {
             ythrow yexception() << "dangerous sql query";
         }
@@ -249,7 +249,7 @@ TSqlQueryBuilder& TSqlQueryBuilder::End()
         BeforeQuery << text;
         text.clear();
     } else {
-        text << Op << " INTO `" << Table << "`\n";
+        text << Op << " INTO `" << Table << "`\n"; 
         text << "(\n" << "  ";
         for (const auto& pk : Pk) {
             text << "`" << pk << "`" << ",";
@@ -291,7 +291,7 @@ TSqlQueryBuilder::TResult TSqlQueryBuilder::Build()
     TStringBuilder declr;
     declr << "--!syntax_v1\n";
     declr << "-- Query name: " << QueryName << "\n";
-    declr << "PRAGMA TablePathPrefix(\"" << TablePrefix << "\");\n";
+    declr << "PRAGMA TablePathPrefix(\"" << TablePrefix << "\");\n"; 
     for (const auto& [k, v] : ParametersOrdered) {
         declr << "DECLARE $" << k << " as " << v << ";\n";
     }

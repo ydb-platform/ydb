@@ -19,7 +19,7 @@
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
-
+ 
 #define LOG_E(stream)                                                        \
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream)
 #define LOG_I(stream)                                                        \
@@ -39,7 +39,7 @@ public:
         const NYdb::TDriver& driver,
         const NActors::TActorId& executerId,
         const TString& resultType,
-        const NConfig::TPrivateApiConfig& privateApiConfig,
+        const NConfig::TPrivateApiConfig& privateApiConfig, 
         const TResultId& resultId,
         const TVector<TString>& columns,
         const TString& traceId,
@@ -53,7 +53,7 @@ public:
         , Client(
             driver,
             NYdb::TCommonClientSettings()
-                .DiscoveryEndpoint(privateApiConfig.GetTaskServiceEndpoint())
+                .DiscoveryEndpoint(privateApiConfig.GetTaskServiceEndpoint()) 
                 .Database(privateApiConfig.GetTaskServiceDatabase() ? privateApiConfig.GetTaskServiceDatabase(): TMaybe<TString>()),
             clientCounters)
     { }
@@ -73,8 +73,8 @@ private:
         HFunc(NDq::TEvDqCompute::TEvChannelData, OnChannelData)
         HFunc(TEvReadyState, OnReadyState);
         HFunc(TEvQueryResponse, OnQueryResult);
-
-        hFunc(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse, HandleResponse);
+ 
+        hFunc(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse, HandleResponse); 
     )
 
     void PassAway() {
@@ -120,29 +120,29 @@ private:
 
     void OnReadyState(TEvReadyState::TPtr&, const TActorContext&) { }
 
-    void HandleResponse(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse::TPtr& ev) {
-        const auto& issues = ev->Get()->Issues;
+    void HandleResponse(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse::TPtr& ev) { 
+        const auto& issues = ev->Get()->Issues; 
         auto it = Requests.find(ev->Get()->RequestId);
         if (issues) {
             SendIssuesAndSetErrorFlag(issues);
             return;
         }
 
-        if (it == Requests.end()) {
-            HasError = true;
+        if (it == Requests.end()) { 
+            HasError = true; 
             auto req = MakeHolder<TEvDqFailure>(TIssue("Unknown RequestId").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR), /*retriable=*/ false, /*needFallback=*/false);
             Send(ExecuterId, req.Release());
-            return;
-        }
-        auto& request = it->second;
+            return; 
+        } 
+        auto& request = it->second; 
         if (request.MessagesNum > 0)
             --request.MessagesNum;
-
+ 
         --InflightCounter;
 
         if (request.MessagesNum == 0) {
             FreeSpace += request.Size;
-
+ 
             if (FreeSpace > 0) {
                 auto res = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();
                 res->Record.SetChannelId(request.ChannelId);
@@ -166,8 +166,8 @@ private:
             MaybeFinish();
         }
         SendResult(); // Send remaining rows
-    }
-
+    } 
+ 
     void StopChannel(NDq::TEvDqCompute::TEvChannelData::TPtr& ev) {
         auto res = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();
         res->Record.SetChannelId(ev->Get()->Record.GetChannelData().GetChannelId());
@@ -251,9 +251,9 @@ private:
             return;
         }
 
-        ui64 startRowIndex = RowIndex;
+        ui64 startRowIndex = RowIndex; 
         RowIndex += resultSet.rows().size();
-
+ 
         auto& request = Requests[Cookie];
         request.Sender = ev->Sender;
         request.ChannelId = ev->Get()->Record.GetChannelData().GetChannelId();
@@ -358,7 +358,7 @@ NActors::IActor* CreateResultWriter(
     const NYdb::TDriver& driver,
     const NActors::TActorId& executerId,
     const TString& resultType,
-    const NConfig::TPrivateApiConfig& privateApiConfig,
+    const NConfig::TPrivateApiConfig& privateApiConfig, 
     const TResultId& resultId,
     const TVector<TString>& columns,
     const TString& traceId,

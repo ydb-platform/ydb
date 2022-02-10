@@ -205,7 +205,7 @@ RECURSE(
     lfalloc/dbg
     lfalloc/dbg_info
     lfalloc/yt
-    libgit2_wrapper
+    libgit2_wrapper 
     linear_regression
     linear_regression/benchmark
     linear_regression/ut

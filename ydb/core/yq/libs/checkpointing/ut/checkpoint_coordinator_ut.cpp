@@ -85,7 +85,7 @@ struct TTestBootstrap : public TTestActorRuntime {
         ActorToTask[EgressActor]  = GraphState.GetTask()[2].GetId();
 
         Settings = NConfig::TCheckpointCoordinatorConfig();
-        Settings.SetEnabled(true);
+        Settings.SetEnabled(true); 
         Settings.SetCheckpointingPeriodMillis(TDuration::Hours(1).MilliSeconds());
         Settings.SetMaxInflight(1);
 

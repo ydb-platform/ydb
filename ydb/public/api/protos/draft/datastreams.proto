@@ -512,7 +512,7 @@ message PutRecordRequest {
     // Hash value used to explicitly determine the shard
     string explicit_hash_key = 3;
     // Used as input to hash function that maps partition key to a specific shard
-    string partition_key = 4;
+    string partition_key = 4; 
     string sequence_number_for_ordering = 5;
     // Name of the stream to put record to
     string stream_name = 6;

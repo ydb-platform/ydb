@@ -1,23 +1,23 @@
 #pragma once
 
 #include <util/generic/string.h>
-#include <util/datetime/base.h>
+#include <util/datetime/base.h> 
 
 namespace NYq {
 
-enum class EEntityType : char {
-    UNDEFINED = 'u',
-    QUERY = 'q',
-    JOB = 'j',
-    RESULT = 'r',
-    CONNECTION = 'c',
+enum class EEntityType : char { 
+    UNDEFINED = 'u', 
+    QUERY = 'q', 
+    JOB = 'j', 
+    RESULT = 'r', 
+    CONNECTION = 'c', 
     BINDING = 'b',
     CHECKPOINT_GRAPH_DESCRIPTION = 'g',
-};
+}; 
 
-TString GetEntityIdAsString(const TString& prefix, EEntityType type);
-TString GetEntityIdAsString(const TString& prefix, EEntityType type, TInstant now, ui32 rnd);
-
+TString GetEntityIdAsString(const TString& prefix, EEntityType type); 
+TString GetEntityIdAsString(const TString& prefix, EEntityType type, TInstant now, ui32 rnd); 
+ 
 struct IEntityIdGenerator : public TThrRefBase {
     using TPtr = TIntrusivePtr<IEntityIdGenerator>;
 

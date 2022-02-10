@@ -6,10 +6,10 @@ namespace NYdb {
 namespace NYq {
 
 template<typename T>
-T CreateYqSettings(const TString& folderId)
+T CreateYqSettings(const TString& folderId) 
 {
     T settings;
-    settings.Header_ = {{ "x-yq-scope", TScope::YandexCloudScopeSchema + "://" + folderId }};
+    settings.Header_ = {{ "x-yq-scope", TScope::YandexCloudScopeSchema + "://" + folderId }}; 
     return settings;
 }
 

@@ -40,7 +40,7 @@ void UpsertToExistingTable(TDriver& driver, const TString& location){
     paramsBuilder.AddParam("$now").Timestamp(now).Build();
     auto params = paramsBuilder.Build();
 
-    const TString scope = TScope("some_folder_id").ToString();
+    const TString scope = TScope("some_folder_id").ToString(); 
 
     {
         auto result = session.ExecuteSchemeQuery(

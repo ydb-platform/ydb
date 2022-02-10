@@ -63,7 +63,7 @@
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <google/protobuf/util/time_util.h>
-
+ 
 #include <util/string/split.h>
 #include <ydb/core/yq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/yq/libs/checkpointing_common/defs.h>
@@ -128,10 +128,10 @@ public:
         const ::NYq::NCommon::TServiceCounters& serviceCounters
         , TRunActorParams&& params)
         : Params(std::move(params))
-        , CreatedAt(TInstant::Now())
+        , CreatedAt(TInstant::Now()) 
         , ServiceCounters(serviceCounters)
         , QueryCounters(serviceCounters)
-        , EnableCheckpointCoordinator(Params.QueryType == YandexQuery::QueryContent::STREAMING && Params.CheckpointCoordinatorConfig.GetEnabled())
+        , EnableCheckpointCoordinator(Params.QueryType == YandexQuery::QueryContent::STREAMING && Params.CheckpointCoordinatorConfig.GetEnabled()) 
         , MaxTasksPerOperation(Params.CommonConfig.GetMaxTasksPerOperation() ? Params.CommonConfig.GetMaxTasksPerOperation() : 40)
     {
     }
@@ -150,12 +150,12 @@ public:
                 TPrivateClient(
                     Params.Driver,
                     NYdb::TCommonClientSettings()
-                    .DiscoveryEndpoint(Params.PrivateApiConfig.GetTaskServiceEndpoint())
-                    .EnableSsl(Params.PrivateApiConfig.GetSecureTaskService())
+                    .DiscoveryEndpoint(Params.PrivateApiConfig.GetTaskServiceEndpoint()) 
+                    .EnableSsl(Params.PrivateApiConfig.GetSecureTaskService()) 
                     .AuthToken(Params.AuthToken)
                     .Database(Params.PrivateApiConfig.GetTaskServiceDatabase() ? Params.PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
                     Params.ClientCounters),
-                SelfId(),
+                SelfId(), 
                 Params.PingerConfig,
                 Params.Deadline
                 ));
@@ -344,9 +344,9 @@ private:
         default:
             Abort(TStringBuilder() << "Unknown query action: " << YandexQuery::QueryAction_Name(Action), YandexQuery::QueryMeta::FAILED);
             break;
-        }
-    }
-
+        } 
+    } 
+ 
     void CheckForConsumers() {
         struct TTopicIndependentConsumers {
             struct TTopicIndependentConsumer {
@@ -583,7 +583,7 @@ private:
             i64 Min;
             i64 Max;
             i64 Sum;
-            void Write(NYson::TYsonWriter& writer) {
+            void Write(NYson::TYsonWriter& writer) { 
                 writer.OnBeginMap();
                 if (Children.empty()) {
                         writer.OnKeyedItem("sum");
@@ -599,7 +599,7 @@ private:
                 } else {
                     for (auto& [name, child]: Children) {
                         writer.OnKeyedItem(name);
-                        child.Write(writer);
+                        child.Write(writer); 
                     }
                 }
                 writer.OnEndMap();
@@ -640,7 +640,7 @@ private:
         }
 
         NYson::TYsonWriter writer(&out);
-        statistics.Write(writer);
+        statistics.Write(writer); 
 
         return out.Str();
     }
@@ -831,16 +831,16 @@ private:
     }
 
     void PrepareQueryCounters() {
-        const TVector<TString> path = StringSplitter(Params.Scope.ToString()).Split('/').SkipEmpty(); // yandexcloud://{folder_id}
-        const TString folderId = path.size() == 2 && path.front().StartsWith(NYdb::NYq::TScope::YandexCloudScopeSchema)
-                            ? path.back() : TString{};
+        const TVector<TString> path = StringSplitter(Params.Scope.ToString()).Split('/').SkipEmpty(); // yandexcloud://{folder_id} 
+        const TString folderId = path.size() == 2 && path.front().StartsWith(NYdb::NYq::TScope::YandexCloudScopeSchema) 
+                            ? path.back() : TString{}; 
 
-
+ 
         QueryCounters = ServiceCounters;
-        PublicCountersParent = ServiceCounters.PublicCounters;
+        PublicCountersParent = ServiceCounters.PublicCounters; 
 
-        if (Params.CloudId && folderId) {
-            PublicCountersParent = PublicCountersParent->GetSubgroup("cloud_id", Params.CloudId)->GetSubgroup("folder_id", folderId);
+        if (Params.CloudId && folderId) { 
+            PublicCountersParent = PublicCountersParent->GetSubgroup("cloud_id", Params.CloudId)->GetSubgroup("folder_id", folderId); 
         }
         QueryCounters.PublicCounters = PublicCountersParent->GetSubgroup("query_id",
             Params.Automatic ? (Params.QueryName ? Params.QueryName : "automatic") : Params.QueryId);
@@ -858,9 +858,9 @@ private:
         dqConfiguration->FreezeDefaults();
         dqConfiguration->FallbackPolicy = "never";
 
-        ExecuterId = NActors::TActivationContext::Register(NYql::NDq::MakeDqExecuter(MakeYqlNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, ServiceCounters.Counters, TInstant::Now(), EnableCheckpointCoordinator));
+        ExecuterId = NActors::TActivationContext::Register(NYql::NDq::MakeDqExecuter(MakeYqlNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, ServiceCounters.Counters, TInstant::Now(), EnableCheckpointCoordinator)); 
 
-        NActors::TActorId resultId;
+        NActors::TActorId resultId; 
         if (dqGraphParams.GetResultType()) {
             TResultId writerResultId;
             {
@@ -883,7 +883,7 @@ private:
         }
 
         ControlId = NActors::TActivationContext::Register(NYql::MakeTaskController(SessionId, ExecuterId, resultId, dqConfiguration, QueryCounters, TDuration::Seconds(3)).Release());
-        if (EnableCheckpointCoordinator) {
+        if (EnableCheckpointCoordinator) { 
             CheckpointCoordinatorId = NActors::TActivationContext::Register(MakeCheckpointCoordinator(
                 ::NYq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
                 ControlId,
@@ -928,7 +928,7 @@ private:
             attr = dqSettings.Add();
             attr->SetName("_TableTimeout");
             attr->SetValue("0");
-
+ 
             attr = dqSettings.Add();
             attr->SetName("_LiteralTimeout");
             attr->SetValue("0");
@@ -946,39 +946,39 @@ private:
     }
 
     void AddClustersFromConfig(NYql::TGatewaysConfig& gatewaysConfig, THashMap<TString, TString>& clusters) const {
-        for (const auto& pq : Params.GatewaysConfig.GetPq().GetClusterMapping()) {
-            auto& clusterCfg = *gatewaysConfig.MutablePq()->AddClusterMapping();
-            clusterCfg = pq;
-            clusters.emplace(clusterCfg.GetName(), PqProviderName);
-        }
-
-        for (const auto& solomon : Params.GatewaysConfig.GetSolomon().GetClusterMapping()) {
-            auto& clusterCfg = *gatewaysConfig.MutableSolomon()->AddClusterMapping();
-            clusterCfg = solomon;
-            clusters.emplace(clusterCfg.GetName(), SolomonProviderName);
-        }
+        for (const auto& pq : Params.GatewaysConfig.GetPq().GetClusterMapping()) { 
+            auto& clusterCfg = *gatewaysConfig.MutablePq()->AddClusterMapping(); 
+            clusterCfg = pq; 
+            clusters.emplace(clusterCfg.GetName(), PqProviderName); 
+        } 
+ 
+        for (const auto& solomon : Params.GatewaysConfig.GetSolomon().GetClusterMapping()) { 
+            auto& clusterCfg = *gatewaysConfig.MutableSolomon()->AddClusterMapping(); 
+            clusterCfg = solomon; 
+            clusters.emplace(clusterCfg.GetName(), SolomonProviderName); 
+        } 
     }
 
     YandexQuery::QueryMeta::ComputeStatus GetFinishStatus(bool isOk) const {
-        if (isOk) {
-            return YandexQuery::QueryMeta::COMPLETED;
-        }
-
-        switch (Action) {
-        case YandexQuery::PAUSE:
-        case YandexQuery::PAUSE_GRACEFULLY:
-        case YandexQuery::ABORT:
-        case YandexQuery::ABORT_GRACEFULLY:
-            return YandexQuery::QueryMeta::ABORTED_BY_USER;
-        case YandexQuery::RESUME:
-            return YandexQuery::QueryMeta::ABORTED_BY_SYSTEM;
-        case YandexQuery::QUERY_ACTION_UNSPECIFIED:
-        case YandexQuery::QueryAction_INT_MIN_SENTINEL_DO_NOT_USE_:
-        case YandexQuery::QueryAction_INT_MAX_SENTINEL_DO_NOT_USE_:
-            return YandexQuery::QueryMeta::FAILED;
-        }
+        if (isOk) { 
+            return YandexQuery::QueryMeta::COMPLETED; 
+        } 
+ 
+        switch (Action) { 
+        case YandexQuery::PAUSE: 
+        case YandexQuery::PAUSE_GRACEFULLY: 
+        case YandexQuery::ABORT: 
+        case YandexQuery::ABORT_GRACEFULLY: 
+            return YandexQuery::QueryMeta::ABORTED_BY_USER; 
+        case YandexQuery::RESUME: 
+            return YandexQuery::QueryMeta::ABORTED_BY_SYSTEM; 
+        case YandexQuery::QUERY_ACTION_UNSPECIFIED: 
+        case YandexQuery::QueryAction_INT_MIN_SENTINEL_DO_NOT_USE_: 
+        case YandexQuery::QueryAction_INT_MAX_SENTINEL_DO_NOT_USE_: 
+            return YandexQuery::QueryMeta::FAILED; 
+        } 
     }
-
+ 
     YandexQuery::QueryMeta::ComputeStatus GetFinalizingStatus() { // Status before final. "*ING" one.
         switch (FinalQueryStatus) {
         case YandexQuery::QueryMeta_ComputeStatus_QueryMeta_ComputeStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
@@ -1120,8 +1120,8 @@ private:
         AddClustersFromConfig(gatewaysConfig, clusters);
         AddSystemClusters(gatewaysConfig, clusters, Params.AuthToken);
         AddClustersFromConnections(YqConnections,
-            Params.CommonConfig.GetUseBearerForYdb(),
-            Params.CommonConfig.GetObjectStorageEndpoint(),
+            Params.CommonConfig.GetUseBearerForYdb(), 
+            Params.CommonConfig.GetObjectStorageEndpoint(), 
             Params.AuthToken,
             Params.AccountIdSignatures,
             // out params:
@@ -1130,7 +1130,7 @@ private:
 
         TVector<TDataProviderInitializer> dataProvidersInit;
         const auto dbResolver = std::make_shared<TDatabaseAsyncResolverWithMeta>(TDatabaseAsyncResolverWithMeta(NActors::TActivationContext::ActorSystem(), Params.DatabaseResolver,
-            Params.CommonConfig.GetYdbMvpCloudEndpoint(), Params.CommonConfig.GetMdbGateway(), Params.CommonConfig.GetMdbTransformHost(), Params.QueryId, Params.AuthToken, Params.AccountIdSignatures, Connections));
+            Params.CommonConfig.GetYdbMvpCloudEndpoint(), Params.CommonConfig.GetMdbGateway(), Params.CommonConfig.GetMdbTransformHost(), Params.QueryId, Params.AuthToken, Params.AccountIdSignatures, Connections)); 
         {
             // TBD: move init to better place
             QueryStateUpdateRequest.set_scope(Params.Scope.ToString());
@@ -1178,8 +1178,8 @@ private:
             << Params.QueryId << '#'
             << Params.ResultId << '#'
             << Params.Scope.ToString() << '#'
-            << Params.Owner << '#'
-            << Params.CloudId;
+            << Params.Owner << '#' 
+            << Params.CloudId; 
 
         Program = progFactory.Create("-stdin-", Params.Sql, SessionId);
         Program->EnableResultPosition();
@@ -1317,7 +1317,7 @@ private:
 
 private:
     TRunActorParams Params;
-    THashMap<TString, YandexQuery::Connection> YqConnections;
+    THashMap<TString, YandexQuery::Connection> YqConnections; 
 
     TProgramPtr Program;
     TIssues Issues;
@@ -1325,8 +1325,8 @@ private:
     TQueryResult QueryResult;
     TInstant Deadline;
     TActorId Pinger;
-    TInstant CreatedAt;
-    YandexQuery::QueryAction Action = YandexQuery::QueryAction::QUERY_ACTION_UNSPECIFIED;
+    TInstant CreatedAt; 
+    YandexQuery::QueryAction Action = YandexQuery::QueryAction::QUERY_ACTION_UNSPECIFIED; 
     std::vector<NYq::NProto::TGraphParams> DqGraphParams;
     std::vector<i32> DqGrapResultIndices;
     i32 DqGraphIndex = 0;
@@ -1338,7 +1338,7 @@ private:
     TString SessionId;
     ::NYq::NCommon::TServiceCounters ServiceCounters;
     ::NYq::NCommon::TServiceCounters QueryCounters;
-    bool EnableCheckpointCoordinator = false;
+    bool EnableCheckpointCoordinator = false; 
     bool RetryNeeded = false;
     Yq::Private::PingTaskRequest QueryStateUpdateRequest;
     THashMap<TString, YandexQuery::Connection> Connections; // Necessary for DbAsyncResolver

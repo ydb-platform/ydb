@@ -25,17 +25,17 @@ namespace NKikimr {
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TICKET_PARSER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TICKET_PARSER)");
 
         struct TEvAuthorizeTicket : TEventLocal<TEvAuthorizeTicket, EvAuthorizeTicket> {
-            struct TEntry {
-                TStackVec<TString> Permissions;
-                TStackVec<std::pair<TString, TString>> Attributes;
-            };
-
+            struct TEntry { 
+                TStackVec<TString> Permissions; 
+                TStackVec<std::pair<TString, TString>> Attributes; 
+            }; 
+ 
             const TString Database;
             const TString Ticket;
             const TString PeerName;
-
+ 
             // if two identical permissions with different attributies are specified,
-            // only one of them will be processed. Which one is not guaranteed
+            // only one of them will be processed. Which one is not guaranteed 
             const std::vector<TEntry> Entries;
 
             struct TInitializationFields {
@@ -64,25 +64,25 @@ namespace NKikimr {
 
             TEvAuthorizeTicket(const TString& ticket, const TVector<std::pair<TString, TString>>& attributes, const TVector<TString>& permissions)
                 : Ticket(ticket)
-                , Entries({{permissions, attributes}})
+                , Entries({{permissions, attributes}}) 
             {}
 
             TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<std::pair<TString, TString>>& attributes, const TVector<TString>& permissions)
                 : Ticket(ticket)
                 , PeerName(peerName)
-                , Entries({{permissions, attributes}})
+                , Entries({{permissions, attributes}}) 
             {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TVector<TEntry>& entries)
-                : Ticket(ticket)
-                , Entries(entries)
-            {}
-
-            TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<TEntry>& entries)
-                : Ticket(ticket)
-                , PeerName(peerName)
-                , Entries(entries)
-            {}
+ 
+            TEvAuthorizeTicket(const TString& ticket, const TVector<TEntry>& entries) 
+                : Ticket(ticket) 
+                , Entries(entries) 
+            {} 
+ 
+            TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<TEntry>& entries) 
+                : Ticket(ticket) 
+                , PeerName(peerName) 
+                , Entries(entries) 
+            {} 
         };
 
         struct TError {

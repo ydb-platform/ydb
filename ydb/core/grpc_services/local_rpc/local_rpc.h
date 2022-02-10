@@ -47,11 +47,11 @@ public:
         return InternalToken;
     }
 
-    const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
-        Y_FAIL("Unimplemented");
-        return TMaybe<TString>{};
-    }
-
+    const TMaybe<TString> GetPeerMetaValues(const TString&) const override { 
+        Y_FAIL("Unimplemented"); 
+        return TMaybe<TString>{}; 
+    } 
+ 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         TResp resp;
         NGRpcService::TCommonResponseFiller<TResp, true>::Fill(resp, IssueManager.GetIssues(), CostInfo.get(), status);

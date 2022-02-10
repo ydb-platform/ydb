@@ -69,14 +69,14 @@ SRCS(
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
     rpc_whoami.cpp
-    rpc_yq.cpp
+    rpc_yq.cpp 
     table_profiles.cpp
     table_settings.cpp
     rpc_analytics_internal.cpp
 )
 
 PEERDIR(
-    contrib/libs/xxhash
+    contrib/libs/xxhash 
     library/cpp/cgiparam
     library/cpp/digest/old_crc
     ydb/core/actorlib_impl

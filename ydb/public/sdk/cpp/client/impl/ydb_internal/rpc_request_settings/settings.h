@@ -20,7 +20,7 @@ struct TRpcRequestSettings {
         TRpcRequestSettings rpcSettings;
         rpcSettings.TraceId = settings.TraceId_;
         rpcSettings.RequestType = settings.RequestType_;
-        rpcSettings.Header = settings.Header_;
+        rpcSettings.Header = settings.Header_; 
         rpcSettings.EndpointPolicy = TEndpointPolicy::UsePreferedEndpoint;
         rpcSettings.UseAuth = true;
         return rpcSettings;

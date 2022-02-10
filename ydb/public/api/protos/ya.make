@@ -44,7 +44,7 @@ SRCS(
     ydb_table.proto
     ydb_value.proto
     ydb_s3_internal.proto
-    yq.proto
+    yq.proto 
 )
 
 CPP_PROTO_PLUGIN0(validation ydb/core/grpc_services/validation)

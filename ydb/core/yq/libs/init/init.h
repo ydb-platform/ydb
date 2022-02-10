@@ -22,22 +22,22 @@ namespace NYq {
 using TActorRegistrator = std::function<void(NActors::TActorId, NActors::IActor*)>;
 
 IYqSharedResources::TPtr CreateYqSharedResources(
-    const NYq::NConfig::TConfig& config,
+    const NYq::NConfig::TConfig& config, 
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const NMonitoring::TDynamicCounterPtr& counters);
 
 void Init(
-    const NYq::NConfig::TConfig& config,
+    const NYq::NConfig::TConfig& config, 
     ui32 nodeId,
     const TActorRegistrator& actorRegistrator,
     const NKikimr::TAppData* appData,
-    const TString& tenant,
+    const TString& tenant, 
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const IYqSharedResources::TPtr& yqSharedResources,
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
-    const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig)>& auditServiceFactory,
+    const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig)>& auditServiceFactory, 
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ui32& icPort
 );
-
+ 
 } // NYq

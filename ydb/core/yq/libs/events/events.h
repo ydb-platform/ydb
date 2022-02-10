@@ -110,22 +110,22 @@ struct TEvents {
     };
 
     struct TEvDbFunctionRequest : NActors::TEventLocal<TEvDbFunctionRequest, TEventIds::EvDbFunctionRequest> {
-        using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>;
-        TFunction Handler;
-
+        using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>; 
+        TFunction Handler; 
+ 
         explicit TEvDbFunctionRequest(const TFunction& handler)
-            : Handler(handler)
-        {}
-    };
-
+            : Handler(handler) 
+        {} 
+    }; 
+ 
     struct TEvDbFunctionResponse : NActors::TEventLocal<TEvDbFunctionResponse, TEventIds::EvDbFunctionResponse> {
-        NYdb::TStatus Status;
-
+        NYdb::TStatus Status; 
+ 
         explicit TEvDbFunctionResponse(NYdb::TStatus status)
-            : Status(status)
-        {}
-    };
-
+            : Status(status) 
+        {} 
+    }; 
+ 
     struct TEvEndpointResponse : NActors::TEventLocal<TEvEndpointResponse, TEventIds::EvEndpointResponse> {
         struct TEndpoint {
             TString Endpoint;
@@ -182,7 +182,7 @@ struct TEvents {
 
         NYql::TIssues Issues;
     };
-
+ 
     struct TEvDataStreamsReadRulesDeletionResult : NActors::TEventLocal<TEvDataStreamsReadRulesDeletionResult, TEventIds::EvDataStreamsReadRulesDeletionResult> {
         explicit TEvDataStreamsReadRulesDeletionResult(NYql::TIssues transientIssues)
             : TransientIssues(std::move(transientIssues))
@@ -194,12 +194,12 @@ struct TEvents {
 
     struct TEvQueryActionResult : NActors::TEventLocal<TEvQueryActionResult, TEventIds::EvQueryActionResult> {
         explicit TEvQueryActionResult(YandexQuery::QueryAction action)
-            : Action(action)
-        {
-        }
-
-        YandexQuery::QueryAction Action;
-    };
+            : Action(action) 
+        { 
+        } 
+ 
+        YandexQuery::QueryAction Action; 
+    }; 
 
     struct TEvForwardPingRequest : NActors::TEventLocal<TEvForwardPingRequest, TEventIds::EvForwardPingRequest> {
         explicit TEvForwardPingRequest(const Yq::Private::PingTaskRequest& request, bool final = false)

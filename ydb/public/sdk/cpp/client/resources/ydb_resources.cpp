@@ -4,10 +4,10 @@
 
 namespace NYdb {
 
-const char* YDB_AUTH_TICKET_HEADER = "x-ydb-auth-ticket";
-const char* YDB_DATABASE_HEADER = "x-ydb-database";
-const char* YDB_TRACE_ID_HEADER = "x-ydb-trace-id";
-const char* YDB_SDK_BUILD_INFO_HEADER = "x-ydb-sdk-build-info";
+const char* YDB_AUTH_TICKET_HEADER = "x-ydb-auth-ticket"; 
+const char* YDB_DATABASE_HEADER = "x-ydb-database"; 
+const char* YDB_TRACE_ID_HEADER = "x-ydb-trace-id"; 
+const char* YDB_SDK_BUILD_INFO_HEADER = "x-ydb-sdk-build-info"; 
 const char* YDB_REQUEST_TYPE_HEADER = "x-ydb-request-type";
 const char* YDB_CONSUMED_UNITS_HEADER = "x-ydb-consumed-units";
 

@@ -20,7 +20,7 @@ public:
     TDeque<THttpIncomingRequestPtr> RecycledRequests;
 
     THPTimer InactivityTimer;
-    static constexpr TDuration InactivityTimeout = TDuration::Minutes(2);
+    static constexpr TDuration InactivityTimeout = TDuration::Minutes(2); 
     TEvPollerReady* InactivityEvent = nullptr;
 
     TPollerToken::TPtr PollerToken;

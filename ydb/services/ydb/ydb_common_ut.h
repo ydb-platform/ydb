@@ -46,7 +46,7 @@ public:
             NKikimrConfig::TAppConfig appConfig = {},
             const TVector<NKikimrKqp::TKqpSetting>& kqpSettings = {},
             TAutoPtr<TLogBackend> logBackend = {},
-            bool enableYq = false,
+            bool enableYq = false, 
             TAppPrepare::TFnReg udfFrFactory = nullptr,
             std::function<void(TServerSettings& settings)> builder = nullptr)
     {
@@ -77,7 +77,7 @@ public:
         ServerSettings->SetEnableNotNullColumns(true);
         ServerSettings->SetEnableSystemViews(TestSettings::EnableSystemViews);
         ServerSettings->SetEnableSchemeTransactionsAtSchemeShard(true);
-        ServerSettings->SetEnableYq(enableYq);
+        ServerSettings->SetEnableYq(enableYq); 
         ServerSettings->Formats = new TFormatFactory;
         ServerSettings->PQConfig = appConfig.GetPQConfig();
         if (appConfig.HasMeteringConfig() && appConfig.GetMeteringConfig().HasMeteringFilePath()) {

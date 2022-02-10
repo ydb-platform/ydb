@@ -1,22 +1,22 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
     hcpp
     g:kikimr
 )
-
-PEERDIR(
-    library/cpp/digest/crc32c
+ 
+PEERDIR( 
+    library/cpp/digest/crc32c 
     ydb/public/sdk/cpp/client/ydb_types/credentials
-)
-
-SRCS(
-    util.cpp
+) 
+ 
+SRCS( 
+    util.cpp 
     ydb_credentials_provider_factory.cpp
-)
-
-END()
-
+) 
+ 
+END() 
+ 
 RECURSE_FOR_TESTS(
-    ut
-)
+    ut 
+) 

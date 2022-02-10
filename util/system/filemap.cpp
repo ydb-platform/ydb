@@ -131,7 +131,7 @@ public:
         Mapping_ = nullptr;
         if (Length_) {
             Mapping_ = CreateFileMapping(File_.GetHandle(), nullptr,
-                                         (Mode_ & oAccessMask) == TFileMap::oRdWr ? PAGE_READWRITE : PAGE_READONLY, 
+                                         (Mode_ & oAccessMask) == TFileMap::oRdWr ? PAGE_READWRITE : PAGE_READONLY,
                                          (DWORD)(Length_ >> 32), (DWORD)(Length_ & 0xFFFFFFFF), nullptr);
             if (Mapping_ == nullptr) {
                 ythrow yexception() << "Can't create file mapping of '" << DbgName_ << "': " << LastSystemErrorText();
@@ -215,7 +215,7 @@ public:
     }
 
     inline bool IsWritable() const noexcept {
-        return (Mode_ & oRdWr || Mode_ & oCopyOnWr); 
+        return (Mode_ & oRdWr || Mode_ & oCopyOnWr);
     }
 
     inline TMapResult Map(i64 offset, size_t size) {
@@ -236,7 +236,7 @@ public:
         size += result.Head;
 
 #if defined(_win_)
-        result.Ptr = MapViewOfFile(Mapping_, 
+        result.Ptr = MapViewOfFile(Mapping_,
                                    (Mode_ & oAccessMask) == oRdOnly ? FILE_MAP_READ : (Mode_ & oAccessMask) == oCopyOnWr ? FILE_MAP_COPY
                                                                                                                          : FILE_MAP_WRITE,
                                    Hi32(base), Lo32(base), size);

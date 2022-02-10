@@ -51,9 +51,9 @@ struct TMemoryMapCommon {
     enum EOpenModeFlag {
         oRdOnly = 1,
         oRdWr = 2,
-        oCopyOnWr = 4, 
+        oCopyOnWr = 4,
 
-        oAccessMask = 7, 
+        oAccessMask = 7,
         oNotGreedy = 8,
         oPrecharge = 16,
         oPopulate = 32, // Populate page table entries (see mmap's MAP_POPULATE)

@@ -32,13 +32,13 @@
 
 /* --- auth_json_key parsing. --- */
 
-struct grpc_auth_json_key { 
+struct grpc_auth_json_key {
   const char* type;
   char* private_key_id;
   char* client_id;
   char* client_email;
   RSA* private_key;
-}; 
+};
 /* Returns 1 if the object is valid, 0 otherwise. */
 int grpc_auth_json_key_is_valid(const grpc_auth_json_key* json_key);
 

@@ -38,12 +38,12 @@ typedef struct connected_channel_channel_data {
   grpc_transport* transport;
 } channel_data;
 
-struct callback_state { 
+struct callback_state {
   grpc_closure closure;
   grpc_closure* original_closure;
   grpc_core::CallCombiner* call_combiner;
   const char* reason;
-}; 
+};
 typedef struct connected_channel_call_data {
   grpc_core::CallCombiner* call_combiner;
   // Closures used for returning results on the call combiner.

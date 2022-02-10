@@ -219,8 +219,8 @@ typedef struct {
 #include "big5.h"
 
 #include "ksc5601.h"
-#endif 
- 
+#endif
+
 #include "johab_hangul.h"
 
 /* CJK encodings [CES = character encoding scheme] [CJKV.INF chapter 4] */
@@ -251,7 +251,7 @@ typedef struct {
 #include "cp949.h"
 #include "johab.h"
 #include "iso2022_kr.h"
-#endif 
+#endif
 
 /* Encodings used by system dependent locales. */
 

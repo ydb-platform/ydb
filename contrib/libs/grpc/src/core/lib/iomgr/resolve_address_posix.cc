@@ -139,14 +139,14 @@ done:
   return err;
 }
 
-struct request { 
+struct request {
   char* name;
   char* default_port;
   grpc_closure* on_done;
   grpc_resolved_addresses** addrs_out;
   grpc_closure request_closure;
   void* arg;
-}; 
+};
 /* Callback to be passed to grpc Executor to asynch-ify
  * grpc_blocking_resolve_address */
 static void do_request_thread(void* rp, grpc_error* /*error*/) {

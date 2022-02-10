@@ -111,26 +111,26 @@ typedef enum {
 const char* grpc_chttp2_initiate_write_reason_string(
     grpc_chttp2_initiate_write_reason reason);
 
-struct grpc_chttp2_ping_queue { 
+struct grpc_chttp2_ping_queue {
   grpc_closure_list lists[GRPC_CHTTP2_PCL_COUNT] = {};
   uint64_t inflight_id = 0;
-}; 
-struct grpc_chttp2_repeated_ping_policy { 
+};
+struct grpc_chttp2_repeated_ping_policy {
   int max_pings_without_data;
   int max_ping_strikes;
   grpc_millis min_sent_ping_interval_without_data;
   grpc_millis min_recv_ping_interval_without_data;
-}; 
-struct grpc_chttp2_repeated_ping_state { 
+};
+struct grpc_chttp2_repeated_ping_state {
   grpc_millis last_ping_sent_time;
   int pings_before_data_required;
   grpc_timer delayed_ping_timer;
   bool is_delayed_ping_timer_set;
-}; 
-struct grpc_chttp2_server_ping_recv_state { 
+};
+struct grpc_chttp2_server_ping_recv_state {
   grpc_millis last_ping_recv_time;
   int ping_strikes;
-}; 
+};
 /* deframer state for the overall http2 stream of bytes */
 typedef enum {
   /* prefix: one entry per http2 connection prefix byte */
@@ -174,14 +174,14 @@ typedef enum {
   GRPC_DTS_FRAME
 } grpc_chttp2_deframe_transport_state;
 
-struct grpc_chttp2_stream_list { 
+struct grpc_chttp2_stream_list {
   grpc_chttp2_stream* head;
   grpc_chttp2_stream* tail;
-}; 
-struct grpc_chttp2_stream_link { 
+};
+struct grpc_chttp2_stream_link {
   grpc_chttp2_stream* next;
   grpc_chttp2_stream* prev;
-}; 
+};
 /* We keep several sets of connection wide parameters */
 typedef enum {
   /* The settings our peer has asked for (and we have acked) */
@@ -686,14 +686,14 @@ struct grpc_chttp2_stream {
 void grpc_chttp2_initiate_write(grpc_chttp2_transport* t,
                                 grpc_chttp2_initiate_write_reason reason);
 
-struct grpc_chttp2_begin_write_result { 
+struct grpc_chttp2_begin_write_result {
   /** are we writing? */
   bool writing;
   /** if writing: was it a complete flush (false) or a partial flush (true) */
   bool partial;
   /** did we queue any completions as part of beginning the write */
   bool early_results_scheduled;
-}; 
+};
 grpc_chttp2_begin_write_result grpc_chttp2_begin_write(
     grpc_chttp2_transport* t);
 void grpc_chttp2_end_write(grpc_chttp2_transport* t, grpc_error* error);

@@ -122,7 +122,7 @@ TString NFs::ReadLink(const TString& path) {
     while (true) {
         ssize_t r = readlink(path.data(), buf.Data(), buf.Size());
         if (r < 0) {
-            ythrow yexception() << "can't read link " << path << ", errno = " << errno; 
+            ythrow yexception() << "can't read link " << path << ", errno = " << errno;
         }
         if (r < (ssize_t)buf.Size()) {
             return TString(buf.Data(), r);

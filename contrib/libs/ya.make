@@ -136,7 +136,7 @@ RECURSE(
     libarchive
     libbpf
     libbz2
-    libc_compat 
+    libc_compat
     libc_userver_workarounds
     libcpuid
     libcroco
@@ -349,7 +349,7 @@ RECURSE(
     valgrind
     vlfeat
     vmaf
-    wapiti 
+    wapiti
     webrtc
     websocketpp
     woff2
@@ -431,7 +431,7 @@ ENDIF()
 IF (OS_ANDROID)
     RECURSE(
         android_cpufeatures
-        android_crazy_linker 
+        android_crazy_linker
     )
 ENDIF()
 

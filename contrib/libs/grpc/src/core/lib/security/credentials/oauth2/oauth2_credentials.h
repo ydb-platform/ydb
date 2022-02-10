@@ -34,12 +34,12 @@
   "s&subject_token_type=%s"
 
 // auth_refresh_token parsing.
-struct grpc_auth_refresh_token { 
+struct grpc_auth_refresh_token {
   const char* type;
   char* client_id;
   char* client_secret;
   char* refresh_token;
-}; 
+};
 /// Returns 1 if the object is valid, 0 otherwise.
 int grpc_auth_refresh_token_is_valid(
     const grpc_auth_refresh_token* refresh_token);

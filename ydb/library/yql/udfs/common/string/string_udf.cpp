@@ -6,7 +6,7 @@
 #include <library/cpp/deprecated/split/split_iterator.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/string_utils/base64/base64.h>
-#include <library/cpp/string_utils/levenshtein_diff/levenshtein_diff.h> 
+#include <library/cpp/string_utils/levenshtein_diff/levenshtein_diff.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/charset/wide.h>
@@ -378,7 +378,7 @@ namespace {
         Y_UNUSED(valueBuilder);
         const TStringBuf left(args[0].AsStringRef());
         const TStringBuf right(args[1].AsStringRef());
-        const ui64 result = NLevenshtein::Distance(left, right); 
+        const ui64 result = NLevenshtein::Distance(left, right);
         return TUnboxedValuePod(result);
     }
 

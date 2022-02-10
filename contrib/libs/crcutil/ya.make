@@ -22,13 +22,13 @@ IF (GCC AND USE_LTO)
 ENDIF()
 
 IF (ARCH_I386 OR ARCH_X86_64)
-    IF (OS_WINDOWS) 
+    IF (OS_WINDOWS)
         SRCS(
             multiword_64_64_cl_i386_mmx.cc
         )
     ELSEIF (OS_ANDROID AND ARCH_I386)
-        # 32-bit Android has some problems with register allocation, so we fall back to default implementation 
-    ELSE() 
+        # 32-bit Android has some problems with register allocation, so we fall back to default implementation
+    ELSE()
         IF (CLANG)
             CFLAGS(-DCRCUTIL_USE_MM_CRC32=1)
             IF (ARCH_I386)
@@ -53,13 +53,13 @@ IF (ARCH_I386 OR ARCH_X86_64)
             multiword_64_64_gcc_amd64_asm.cc
         )
     ENDIF()
-    IF (OS_WINDOWS) 
+    IF (OS_WINDOWS)
         SRCS(
             crc32c_sse4.cc
         )
-    ELSE() 
-        SRC_CPP_SSE4(crc32c_sse4.cc) 
-    ENDIF() 
+    ELSE()
+        SRC_CPP_SSE4(crc32c_sse4.cc)
+    ENDIF()
 ENDIF()
 
 SRCS(

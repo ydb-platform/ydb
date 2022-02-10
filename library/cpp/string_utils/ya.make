@@ -12,8 +12,8 @@ RECURSE(
     col_diff
     col_diff/ut
     indent_text
-    levenshtein_diff 
-    levenshtein_diff/ut 
+    levenshtein_diff
+    levenshtein_diff/ut
     old_url_normalize
     old_url_normalize/ut
     parse_size

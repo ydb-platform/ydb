@@ -1346,7 +1346,7 @@ namespace NSQLTranslationV1 {
     template<class TContainer>
     TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) {
         for (auto& item: container) {
-            if (NLevenshtein::Distance(name, item) < NYql::DefaultMistypeDistance) { 
+            if (NLevenshtein::Distance(name, item) < NYql::DefaultMistypeDistance) {
                 return item;
             }
         }

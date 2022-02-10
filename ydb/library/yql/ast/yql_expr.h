@@ -12,7 +12,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 
-#include <library/cpp/string_utils/levenshtein_diff/levenshtein_diff.h> 
+#include <library/cpp/string_utils/levenshtein_diff/levenshtein_diff.h>
 #include <library/cpp/enumbitset/enumbitset.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
@@ -500,7 +500,7 @@ public:
 
     TMaybe<TStringBuf> FindMistype(const TStringBuf& name) const {
         for (const auto& item: Items) {
-            if (NLevenshtein::Distance(name, item->GetName()) < DefaultMistypeDistance) { 
+            if (NLevenshtein::Distance(name, item->GetName()) < DefaultMistypeDistance) {
                 return item->GetName();
             }
         }

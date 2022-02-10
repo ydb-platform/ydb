@@ -8,7 +8,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace NLevenshtein { 
+namespace NLevenshtein {
     enum EEditMoveType {
         EMT_SPECIAL,
         EMT_PRESERVE,
@@ -140,7 +140,7 @@ namespace NLevenshtein {
     }
 
     template <class TStringType>
-    size_t Distance(const TStringType& str1, const TStringType& str2) { 
+    size_t Distance(const TStringType& str1, const TStringType& str2) {
         TEditChain editChain;
         GetEditChain(str1, str2, editChain);
         size_t result = 0;
@@ -169,7 +169,7 @@ namespace NLevenshtein {
         {
         }
     };
- 
+
     template <class TStringType>
     void GetStringReplacements(const TStringType& str1, const TStringType& str2, TVector<TReplacement>& res) {
         TEditChain editChain;

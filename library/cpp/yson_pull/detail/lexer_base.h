@@ -55,7 +55,7 @@ namespace NYsonPull {
                 token_buffer_.clear();
                 auto type = number_type::int64;
                 while (true) {
-                    auto ch = this->Base::template get_byte<true>(); 
+                    auto ch = this->Base::template get_byte<true>();
                     if (isdigit(ch) || ch == '+' || ch == '-') {
                         token_buffer_.push_back(ch);
                     } else if (ch == '.' || ch == 'e' || ch == 'E') {
@@ -106,7 +106,7 @@ namespace NYsonPull {
                 token_buffer_.clear();
                 auto& buf = Base::stream().buffer();
                 while (true) {
-                    this->Base::template fill_buffer<false>(); 
+                    this->Base::template fill_buffer<false>();
                     auto* quote = reinterpret_cast<const ui8*>(
                         ::memchr(buf.pos(), '"', buf.available()));
                     if (quote == nullptr) {
@@ -144,7 +144,7 @@ namespace NYsonPull {
             TStringBuf read_unquoted_string() {
                 token_buffer_.clear();
                 while (true) {
-                    auto ch = this->Base::template get_byte<true>(); 
+                    auto ch = this->Base::template get_byte<true>();
                     if (isalpha(ch) || isdigit(ch) ||
                         ch == '_' || ch == '-' || ch == '%' || ch == '.') {
                         token_buffer_.push_back(ch);
@@ -185,7 +185,7 @@ namespace NYsonPull {
                 auto needToRead = length;
                 token_buffer_.clear();
                 while (needToRead) {
-                    this->Base::template fill_buffer<false>(); 
+                    this->Base::template fill_buffer<false>();
                     auto chunk_size = std::min(needToRead, buf.available());
 
                     token_buffer_.insert(
@@ -206,7 +206,7 @@ namespace NYsonPull {
 
                 auto assert_literal = [&](TStringBuf literal) -> void {
                     for (size_t i = 2; i < literal.size(); ++i) {
-                        token_buffer_.push_back(this->Base::template get_byte<false>()); 
+                        token_buffer_.push_back(this->Base::template get_byte<false>());
                         Base::advance(1);
                         if (Y_UNLIKELY(token_buffer_.back() != literal[i])) {
                             throw_incorrect_percent_scalar();
@@ -215,7 +215,7 @@ namespace NYsonPull {
                 };
 
                 token_buffer_.clear();
-                token_buffer_.push_back(this->Base::template get_byte<false>()); 
+                token_buffer_.push_back(this->Base::template get_byte<false>());
                 Base::advance(1);
 
                 switch (token_buffer_[0]) {

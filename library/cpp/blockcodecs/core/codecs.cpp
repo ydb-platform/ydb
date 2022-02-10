@@ -1,6 +1,6 @@
 #include "codecs.h"
 #include "common.h"
-#include "register.h" 
+#include "register.h"
 
 #include <util/ysaveload.h>
 #include <util/stream/null.h>
@@ -49,11 +49,11 @@ namespace {
             Registry[codec->Name()] = codec;
         }
 
-        inline void Add(TCodecPtr codec) { 
-            Codecs.push_back(std::move(codec)); 
-            Add(Codecs.back().Get()); 
-        } 
- 
+        inline void Add(TCodecPtr codec) {
+            Codecs.push_back(std::move(codec));
+            Add(Codecs.back().Get());
+        }
+
         inline void Alias(TStringBuf from, TStringBuf to) {
             Tmp.emplace_back(from);
             Registry[Tmp.back()] = Registry[to];
@@ -86,14 +86,14 @@ TString NBlockCodecs::ListAllCodecsAsString() {
     return JoinSeq(TStringBuf(","), ListAllCodecs());
 }
 
-void NBlockCodecs::RegisterCodec(TCodecPtr codec) { 
-    Singleton<TCodecFactory>()->Add(std::move(codec)); 
-} 
- 
-void NBlockCodecs::RegisterAlias(TStringBuf from, TStringBuf to) { 
-    Singleton<TCodecFactory>()->Alias(from, to); 
-} 
- 
+void NBlockCodecs::RegisterCodec(TCodecPtr codec) {
+    Singleton<TCodecFactory>()->Add(std::move(codec));
+}
+
+void NBlockCodecs::RegisterAlias(TStringBuf from, TStringBuf to) {
+    Singleton<TCodecFactory>()->Alias(from, to);
+}
+
 void NBlockCodecs::SetMaxPossibleDecompressedLength(size_t maxPossibleDecompressedLength) {
     Singleton<TCodecFactory>()->MaxPossibleDecompressedLength = maxPossibleDecompressedLength;
 }

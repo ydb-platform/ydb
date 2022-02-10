@@ -155,11 +155,11 @@ httpcli_ssl_channel_security_connector_create(
 
 /* handshaker */
 
-struct on_done_closure { 
+struct on_done_closure {
   void (*func)(void* arg, grpc_endpoint* endpoint);
   void* arg;
   grpc_core::RefCountedPtr<grpc_core::HandshakeManager> handshake_mgr;
-}; 
+};
 static void on_handshake_done(void* arg, grpc_error* error) {
   auto* args = static_cast<grpc_core::HandshakerArgs*>(arg);
   on_done_closure* c = static_cast<on_done_closure*>(args->user_data);

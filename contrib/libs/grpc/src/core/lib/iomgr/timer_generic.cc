@@ -59,7 +59,7 @@ grpc_core::TraceFlag grpc_timer_check_trace(false, "timer_check");
  * stats maintained in 'stats' and the relevant timers are then moved from the
  * 'list' to 'heap'.
  */
-struct timer_shard { 
+struct timer_shard {
   gpr_mu mu;
   grpc_time_averaged_stats stats;
   /* All and only timers with deadlines < this will be in the heap. */
@@ -73,7 +73,7 @@ struct timer_shard {
   grpc_timer_heap heap;
   /* This holds timers whose deadline is >= queue_deadline_cap. */
   grpc_timer list;
-}; 
+};
 static size_t g_num_shards;
 
 /* Array of timer shards. Whenever a timer (grpc_timer *) is added, its address

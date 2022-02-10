@@ -1,14 +1,14 @@
-LIBRARY() 
- 
-OWNER(pg) 
- 
-PEERDIR( 
-    contrib/libs/snappy 
+LIBRARY()
+
+OWNER(pg)
+
+PEERDIR(
+    contrib/libs/snappy
     library/cpp/blockcodecs/core
-) 
- 
-SRCS( 
-    GLOBAL snappy.cpp 
-) 
- 
-END() 
+)
+
+SRCS(
+    GLOBAL snappy.cpp
+)
+
+END()

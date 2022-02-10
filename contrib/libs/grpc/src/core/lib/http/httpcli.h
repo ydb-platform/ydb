@@ -41,12 +41,12 @@ typedef struct grpc_httpcli_context {
   grpc_pollset_set* pollset_set;
 } grpc_httpcli_context;
 
-struct grpc_httpcli_handshaker { 
+struct grpc_httpcli_handshaker {
   const char* default_port;
   void (*handshake)(void* arg, grpc_endpoint* endpoint, const char* host,
                     grpc_millis deadline,
                     void (*on_done)(void* arg, grpc_endpoint* endpoint));
-}; 
+};
 extern const grpc_httpcli_handshaker grpc_httpcli_plaintext;
 extern const grpc_httpcli_handshaker grpc_httpcli_ssl;
 

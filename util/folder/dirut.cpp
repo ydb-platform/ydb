@@ -486,9 +486,9 @@ void MakePathIfNotExist(const char* path, int mode) {
     NFs::MakeDirectoryRecursive(path, NFs::EFilePermission(mode));
     if (!NFs::Exists(path) || !TFileStat(path).IsDir()) {
         ythrow TSystemError() << "failed to create directory " << path;
-    } 
-} 
- 
+    }
+}
+
 const char* GetFileNameComponent(const char* f) {
     const char* p = strrchr(f, LOCSLASH_C);
 #ifdef _win_

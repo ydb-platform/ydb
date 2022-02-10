@@ -49,9 +49,9 @@ inline void MakeDirIfNotExist(const TString& path, int mode = 0777) {
     MakeDirIfNotExist(path.data(), mode);
 }
 
-/// Create path making parent directories as needed 
+/// Create path making parent directories as needed
 void MakePathIfNotExist(const char* path, int mode = 0777);
- 
+
 void SlashFolderLocal(TString& folder);
 bool correctpath(TString& filename);
 bool resolvepath(TString& folder, const TString& home);

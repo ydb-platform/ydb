@@ -367,26 +367,26 @@ template <class T1, class T2, class P>
 static inline bool Equal(T1 f1, T1 l1, T2 f2, P p) {
     return std::equal(f1, l1, f2, p);
 }
- 
-template <class TI, class TO> 
-static inline TO Copy(TI f, TI l, TO t) { 
+
+template <class TI, class TO>
+static inline TO Copy(TI f, TI l, TO t) {
     return std::copy(f, l, t);
-} 
- 
-template <class TI, class TO> 
-static inline TO UniqueCopy(TI f, TI l, TO t) { 
+}
+
+template <class TI, class TO>
+static inline TO UniqueCopy(TI f, TI l, TO t) {
     return std::unique_copy(f, l, t);
-} 
- 
-template <class TI, class TO, class TP> 
-static inline TO UniqueCopy(TI f, TI l, TO t, TP p) { 
+}
+
+template <class TI, class TO, class TP>
+static inline TO UniqueCopy(TI f, TI l, TO t, TP p) {
     return std::unique_copy(f, l, t, p);
-} 
- 
-template <class TI, class TO, class TP> 
-static inline TO RemoveCopyIf(TI f, TI l, TO t, TP p) { 
+}
+
+template <class TI, class TO, class TP>
+static inline TO RemoveCopyIf(TI f, TI l, TO t, TP p) {
     return std::remove_copy_if(f, l, t, p);
-} 
+}
 
 template <class TI, class TO>
 static inline TO ReverseCopy(TI f, TI l, TO t) {

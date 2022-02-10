@@ -752,41 +752,41 @@ private:
     NUdf::TUnboxedValue List;
 };
 
-static NUdf::TUnboxedValue CreateEmptyRange(const THolderFactory& holderFactory) { 
-    NUdf::TUnboxedValue* itemsPtr = nullptr; 
-    auto res = holderFactory.CreateDirectArrayHolder(4, itemsPtr); 
-    // Empty list (data container) 
-    itemsPtr[0] = NUdf::TUnboxedValue(holderFactory.GetEmptyContainer()); 
-    // Truncated flag 
-    itemsPtr[1] = NUdf::TUnboxedValuePod(false); 
-    // First key 
-    itemsPtr[2] = NUdf::TUnboxedValuePod::Zero(); 
-    // Size 
-    itemsPtr[3] = NUdf::TUnboxedValuePod((ui64)0); 
- 
-    return res; 
-} 
- 
-static TSmallVec<bool> CreateBoolVec(const TListLiteral* list) { 
-    TSmallVec<bool> res; 
-    if (list) { 
-        res.reserve(list->GetItemsCount()); 
-        for (ui32 i = 0; i < list->GetItemsCount(); ++i) { 
-            res.push_back(AS_VALUE(TDataLiteral, list->GetItems()[i])->AsValue().Get<bool>()); 
-        } 
-    } 
- 
-    while (!res.empty() && !res.back()) { 
-        res.pop_back(); 
-    } 
- 
-    return res; 
-} 
- 
+static NUdf::TUnboxedValue CreateEmptyRange(const THolderFactory& holderFactory) {
+    NUdf::TUnboxedValue* itemsPtr = nullptr;
+    auto res = holderFactory.CreateDirectArrayHolder(4, itemsPtr);
+    // Empty list (data container)
+    itemsPtr[0] = NUdf::TUnboxedValue(holderFactory.GetEmptyContainer());
+    // Truncated flag
+    itemsPtr[1] = NUdf::TUnboxedValuePod(false);
+    // First key
+    itemsPtr[2] = NUdf::TUnboxedValuePod::Zero();
+    // Size
+    itemsPtr[3] = NUdf::TUnboxedValuePod((ui64)0);
+
+    return res;
+}
+
+static TSmallVec<bool> CreateBoolVec(const TListLiteral* list) {
+    TSmallVec<bool> res;
+    if (list) {
+        res.reserve(list->GetItemsCount());
+        for (ui32 i = 0; i < list->GetItemsCount(); ++i) {
+            res.push_back(AS_VALUE(TDataLiteral, list->GetItems()[i])->AsValue().Get<bool>());
+        }
+    }
+
+    while (!res.empty() && !res.back()) {
+        res.pop_back();
+    }
+
+    return res;
+}
+
 NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTableRange& range,
     TStructLiteral* columnIds, TListLiteral* skipNullKeys, TStructType* returnType, const TReadTarget& readTarget,
-    ui64 itemsLimit, ui64 bytesLimit, bool reverse, std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, 
-    const THolderFactory& holderFactory) 
+    ui64 itemsLimit, ui64 bytesLimit, bool reverse, std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs,
+    const THolderFactory& holderFactory)
 {
     // It is assumed that returnType has form:
     //  struct<
@@ -820,26 +820,26 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
     TSmallVec<NTable::TTag> systemColumnTags;
     AnalyzeRowType(columnIds, tags, systemColumnTags);
 
-    TSmallVec<bool> skipNullKeysFlags = CreateBoolVec(skipNullKeys); 
-    TSmallVec<bool> forbidNullArgsFrom = CreateBoolVec(forbidNullArgs.first); 
-    TSmallVec<bool> forbidNullArgsTo = CreateBoolVec(forbidNullArgs.second); 
- 
-    for (size_t keyIdx = 0; keyIdx < forbidNullArgsFrom.size(); keyIdx++) { 
-        if (!forbidNullArgsFrom[keyIdx]) 
-            continue; 
- 
-        if (keyIdx < range.From.size() && range.From[keyIdx].IsNull()) { 
-            return CreateEmptyRange(holderFactory); 
+    TSmallVec<bool> skipNullKeysFlags = CreateBoolVec(skipNullKeys);
+    TSmallVec<bool> forbidNullArgsFrom = CreateBoolVec(forbidNullArgs.first);
+    TSmallVec<bool> forbidNullArgsTo = CreateBoolVec(forbidNullArgs.second);
+
+    for (size_t keyIdx = 0; keyIdx < forbidNullArgsFrom.size(); keyIdx++) {
+        if (!forbidNullArgsFrom[keyIdx])
+            continue;
+
+        if (keyIdx < range.From.size() && range.From[keyIdx].IsNull()) {
+            return CreateEmptyRange(holderFactory);
         }
     }
 
-    for (size_t keyIdx = 0; keyIdx < forbidNullArgsTo.size(); keyIdx++) { 
-        if (!forbidNullArgsTo[keyIdx]) 
-            continue; 
- 
-        if (keyIdx < range.To.size() && range.To[keyIdx].IsNull()) { 
-            return CreateEmptyRange(holderFactory); 
-        } 
+    for (size_t keyIdx = 0; keyIdx < forbidNullArgsTo.size(); keyIdx++) {
+        if (!forbidNullArgsTo[keyIdx])
+            continue;
+
+        if (keyIdx < range.To.size() && range.To[keyIdx].IsNull()) {
+            return CreateEmptyRange(holderFactory);
+        }
     }
 
     Counters.NSelectRange++;
@@ -928,10 +928,10 @@ bool TEngineHost::IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>&
     return true;
 }
 
-ui64 TEngineHost::GetTableSchemaVersion(const TTableId&) const { 
-    return 0; 
-} 
- 
+ui64 TEngineHost::GetTableSchemaVersion(const TTableId&) const {
+    return 0;
+}
+
 ui64 TEngineHost::LocalTableId(const TTableId& tableId) const {
     return tableId.PathId.LocalPathId;
 }

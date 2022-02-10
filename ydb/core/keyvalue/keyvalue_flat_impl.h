@@ -322,7 +322,7 @@ protected:
                     State.SetIsSpringCleanupDone();
                 }
             }
-            CollectorActorId = ctx.RegisterWithSameMailbox(CreateKeyValueCollector(ctx.SelfID, State.GetCollectOperation(), 
+            CollectorActorId = ctx.RegisterWithSameMailbox(CreateKeyValueCollector(ctx.SelfID, State.GetCollectOperation(),
                 Info(), Executor()->Generation(), State.GetPerGenerationCounter(), isSpringCleanup));
             State.OnEvCollectDone(perGenerationCounterStepSize, ctx);
         } else {

@@ -1,15 +1,15 @@
-#include "service_yql_scripting.h" 
+#include "service_yql_scripting.h"
 #include "rpc_kqp_base.h"
 #include "rpc_common.h"
 
 #include <ydb/public/api/protos/ydb_scripting.pb.h>
- 
+
 namespace NKikimr {
 namespace NGRpcService {
 
-using TEvExplainYqlScriptRequest = 
-    TGrpcRequestOperationCall<Ydb::Scripting::ExplainYqlRequest, Ydb::Scripting::ExplainYqlResponse>; 
- 
+using TEvExplainYqlScriptRequest =
+    TGrpcRequestOperationCall<Ydb::Scripting::ExplainYqlRequest, Ydb::Scripting::ExplainYqlResponse>;
+
 using namespace Ydb;
 
 class TExplainYqlScriptRPC : public TRpcKqpRequestActor<TExplainYqlScriptRPC, TEvExplainYqlScriptRequest> {
@@ -18,7 +18,7 @@ class TExplainYqlScriptRPC : public TRpcKqpRequestActor<TExplainYqlScriptRPC, TE
 public:
     using TResult = Ydb::Scripting::ExplainYqlResult;
 
-    TExplainYqlScriptRPC(IRequestOpCtx* msg) 
+    TExplainYqlScriptRPC(IRequestOpCtx* msg)
         : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -36,7 +36,7 @@ public:
     }
 
     void Proceed(const TActorContext &ctx) {
-        const auto req = GetProtoRequest(); 
+        const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
@@ -104,8 +104,8 @@ public:
     }
 };
 
-void DoExplainYqlScript(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) { 
-    TActivationContext::AsActorContext().Register(new TExplainYqlScriptRPC(p.release())); 
+void DoExplainYqlScript(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TExplainYqlScriptRPC(p.release()));
 }
 
 } // namespace NGRpcService

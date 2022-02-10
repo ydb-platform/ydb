@@ -5,8 +5,8 @@
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <library/cpp/yson/node/node_io.h>
 
-#include <util/system/env.h> 
- 
+#include <util/system/env.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -229,11 +229,11 @@ bool TDefaultValueBuilder::FindTimezoneId(const NUdf::TStringRef& name, ui32& id
     return true;
 }
 
-bool TDefaultValueBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const { 
-    if (SecureParamsProvider_) 
-        return SecureParamsProvider_->GetSecureParam(key, value); 
-    return false; 
-} 
+bool TDefaultValueBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const {
+    if (SecureParamsProvider_)
+        return SecureParamsProvider_->GetSecureParam(key, value);
+    return false;
+}
 
 } // namespace NMiniKQL
 } // namespace Nkikimr

@@ -1,22 +1,22 @@
-#include "rpc_calls.h" 
+#include "rpc_calls.h"
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
 Y_UNIT_TEST_SUITE(SplitPathTests) {
     Y_UNIT_TEST(WithoutDatabaseShouldSuccess) {
-        { 
+        {
             auto pair = NGRpcService::SplitPath("/root/table");
             UNIT_ASSERT_VALUES_EQUAL(pair.first, "/root");
-            UNIT_ASSERT_VALUES_EQUAL(pair.second, "table"); 
-        } 
+            UNIT_ASSERT_VALUES_EQUAL(pair.second, "table");
+        }
         {
             auto pair = NGRpcService::SplitPath("/root/dir/table");
             UNIT_ASSERT_VALUES_EQUAL(pair.first, "/root/dir");
             UNIT_ASSERT_VALUES_EQUAL(pair.second, "table");
         }
-    } 
+    }
 
     Y_UNIT_TEST(WithDatabaseShouldSuccess) {
         for (auto db : TVector<TString>{"/root/db", "/root/db/"}) {
@@ -33,6 +33,6 @@ Y_UNIT_TEST_SUITE(SplitPathTests) {
             UNIT_ASSERT_EXCEPTION(NGRpcService::SplitPath("/root/db2", path), yexception);
         }
     }
-} 
- 
-} // namespace NKikimr 
+}
+
+} // namespace NKikimr

@@ -972,7 +972,7 @@ NUdf::TUnboxedValue PerformLocalSelectRow(TCallable& callable, IEngineFlatHost& 
 NUdf::TUnboxedValue PerformLocalSelectRange(TCallable& callable, IEngineFlatHost& engineHost,
     const THolderFactory& holderFactory, const TTypeEnvironment& env)
 {
-    MKQL_ENSURE(callable.GetInputsCount() >= 9 && callable.GetInputsCount() <= 13, "Expected 9 to 13 args"); 
+    MKQL_ENSURE(callable.GetInputsCount() >= 9 && callable.GetInputsCount() <= 13, "Expected 9 to 13 args");
     auto tableNode = callable.GetInput(0);
     const auto tableId = ExtractTableId(tableNode);
     ui32 flags = AS_VALUE(TDataLiteral, callable.GetInput(5))->AsValue().Get<ui32>();
@@ -1000,15 +1000,15 @@ NUdf::TUnboxedValue PerformLocalSelectRange(TCallable& callable, IEngineFlatHost
         reverse = AS_VALUE(TDataLiteral, callable.GetInput(10))->AsValue().Get<bool>();
     }
 
-    std::pair<TListLiteral*, TListLiteral*> forbidNullArgs{nullptr, nullptr}; 
-    if (callable.GetInputsCount() > 12) { 
-        forbidNullArgs.first = AS_VALUE(TListLiteral, callable.GetInput(11)); 
-        forbidNullArgs.second = AS_VALUE(TListLiteral, callable.GetInput(12)); 
-    } 
- 
+    std::pair<TListLiteral*, TListLiteral*> forbidNullArgs{nullptr, nullptr};
+    if (callable.GetInputsCount() > 12) {
+        forbidNullArgs.first = AS_VALUE(TListLiteral, callable.GetInput(11));
+        forbidNullArgs.second = AS_VALUE(TListLiteral, callable.GetInput(12));
+    }
+
     return engineHost.SelectRange(tableId, range,
         AS_VALUE(TStructLiteral, callable.GetInput(2)), skipNullKeys, AS_TYPE(TStructType, returnType),
-        ExtractFlatReadTarget(callable.GetInput(8)), itemsLimit, bytesLimit, reverse, forbidNullArgs, holderFactory); 
+        ExtractFlatReadTarget(callable.GetInput(8)), itemsLimit, bytesLimit, reverse, forbidNullArgs, holderFactory);
 }
 
 TStructType* GetTxLockType(const TTypeEnvironment& env, bool v2) {

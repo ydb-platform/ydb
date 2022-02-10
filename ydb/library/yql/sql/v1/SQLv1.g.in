@@ -33,7 +33,7 @@ sql_stmt_core:
   | declare_stmt
   | import_stmt
   | export_stmt
-  | alter_table_stmt 
+  | alter_table_stmt
   | do_stmt
   | define_action_or_subquery_stmt
   | if_stmt
@@ -460,7 +460,7 @@ create_table_entry:
 
 with_table_settings: WITH LPAREN table_settings_entry (COMMA table_settings_entry)* RPAREN;
 table_settings_entry: an_id EQUALS table_setting_value;
- 
+
 alter_table_stmt: ALTER TABLE simple_table_ref alter_table_action (COMMA alter_table_action)*;
 alter_table_action:
     alter_table_add_column
@@ -471,8 +471,8 @@ alter_table_action:
   | alter_table_set_table_setting_uncompat
   | alter_table_set_table_setting_compat
   | alter_table_reset_table_setting
-  | alter_table_add_index 
-  | alter_table_drop_index 
+  | alter_table_add_index
+  | alter_table_drop_index
   | alter_table_rename_to
   | alter_table_add_changefeed
   | alter_table_alter_changefeed
@@ -487,13 +487,13 @@ alter_table_alter_column_family: ALTER FAMILY an_id SET an_id family_setting_val
 alter_table_set_table_setting_uncompat: SET an_id table_setting_value;
 alter_table_set_table_setting_compat: SET LPAREN alter_table_setting_entry (COMMA alter_table_setting_entry)* RPAREN;
 alter_table_reset_table_setting: RESET LPAREN an_id (COMMA an_id)* RPAREN;
-alter_table_add_index: ADD table_index; 
-alter_table_drop_index: DROP INDEX an_id; 
+alter_table_add_index: ADD table_index;
+alter_table_drop_index: DROP INDEX an_id;
 alter_table_rename_to: RENAME TO an_id_table;
 alter_table_add_changefeed: ADD changefeed;
 alter_table_alter_changefeed: ALTER CHANGEFEED an_id changefeed_alter_settings;
 alter_table_drop_changefeed: DROP CHANGEFEED an_id;
- 
+
 column_schema: an_id_schema type_name_or_bind family_relation? (NOT? NULL)?;
 family_relation: FAMILY an_id;
 column_order_by_specification: an_id (ASC | DESC)?;
@@ -503,12 +503,12 @@ table_constraint:
   | PARTITION BY LPAREN an_id (COMMA an_id)* RPAREN
   | ORDER BY LPAREN column_order_by_specification (COMMA column_order_by_specification)* RPAREN
 ;
- 
+
 table_index: INDEX an_id table_index_type
     (WITH LPAREN an_id EQUALS an_id COMMA (an_id EQUALS an_id)* RPAREN)?
     ON LPAREN an_id_schema (COMMA an_id_schema)* RPAREN
     (COVER LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?;
- 
+
 table_index_type:
       global_index
     | local_index
@@ -857,7 +857,7 @@ keyword_schema_uncompat:
 keyword_compat: (
     ABORT
   | ACTION
-  | ADD 
+  | ADD
   | AFTER
   | ALTER
   | ANALYZE
@@ -880,7 +880,7 @@ keyword_compat: (
   | CONDITIONAL
   | CONFLICT
   | CONSTRAINT
-  | COVER 
+  | COVER
   | CREATE
   | CROSS
   | CURRENT
@@ -1113,7 +1113,7 @@ fragment Z:('z'|'Z');
 
 ABORT: A B O R T;
 ACTION: A C T I O N;
-ADD: A D D; 
+ADD: A D D;
 AFTER: A F T E R;
 ALL: A L L;
 ALTER: A L T E R;
@@ -1149,7 +1149,7 @@ COMPACT: C O M P A C T;
 CONDITIONAL: C O N D I T I O N A L;
 CONFLICT: C O N F L I C T;
 CONSTRAINT: C O N S T R A I N T;
-COVER: C O V E R; 
+COVER: C O V E R;
 CREATE: C R E A T E;
 CROSS: C R O S S;
 CUBE: C U B E;
@@ -1204,7 +1204,7 @@ FROM: F R O M;
 FULL: F U L L;
 FUNCTION: F U N C T I O N;
 GLOB: G L O B;
-GLOBAL: G L O B A L; 
+GLOBAL: G L O B A L;
 GROUP: G R O U P;
 GROUPING: G R O U P I N G;
 GROUPS: G R O U P S;
@@ -1235,7 +1235,7 @@ LEFT: L E F T;
 LIKE: L I K E;
 LIMIT: L I M I T;
 LIST: L I S T;
-LOCAL: L O C A L; 
+LOCAL: L O C A L;
 MATCH: M A T C H;
 NATURAL: N A T U R A L;
 NO: N O;

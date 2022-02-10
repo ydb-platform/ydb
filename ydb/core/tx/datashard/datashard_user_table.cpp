@@ -261,9 +261,9 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
                                       descr.GetPartitionRangeEndIsInclusive());
     }
 
-    TableSchemaVersion = descr.GetTableSchemaVersion(); 
+    TableSchemaVersion = descr.GetTableSchemaVersion();
     IsBackup = descr.GetIsBackup();
- 
+
     CheckSpecialColumns();
 
     for (const auto& indexDesc : descr.GetTableIndexes()) {
@@ -570,8 +570,8 @@ void TUserTable::ApplyAlter(
         alter.SetEraseCache(LocalTid, config.GetEnableEraseCache(), config.GetEraseCacheMinRows(), config.GetEraseCacheMaxBytes());
     }
 
-    schema.SetTableSchemaVersion(delta.GetTableSchemaVersion()); 
- 
+    schema.SetTableSchemaVersion(delta.GetTableSchemaVersion());
+
     SetSchema(schema);
 }
 

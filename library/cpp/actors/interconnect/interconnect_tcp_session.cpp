@@ -245,7 +245,7 @@ namespace NActors {
         auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, ReceiveContext, Proxy->Common,
             Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params);
         ReceiveContext->UnlockLastProcessedPacketSerial();
-        ReceiverId = Params.Encryption ? RegisterWithSameMailbox(actor.Release()) : Register(actor.Release(), TMailboxType::ReadAsFilled); 
+        ReceiverId = Params.Encryption ? RegisterWithSameMailbox(actor.Release()) : Register(actor.Release(), TMailboxType::ReadAsFilled);
 
         // register our socket in poller actor
         LOG_DEBUG_IC_SESSION("ICS11", "registering socket in PollerActor");

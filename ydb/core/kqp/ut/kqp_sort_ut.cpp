@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
         } else {
             UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
-            UNIT_ASSERT_C(!result.GetAst().Contains("Sort"), result.GetAst()); 
+            UNIT_ASSERT_C(!result.GetAst().Contains("Sort"), result.GetAst());
         }
 
         {
@@ -75,24 +75,24 @@ Y_UNIT_TEST_SUITE(KqpSort) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(ReverseOptimizedWithPredicate) {
-        auto setting = NKikimrKqp::TKqpSetting(); 
-        setting.SetName("_AllowReverseRange"); 
-        setting.SetValue("True"); 
- 
-        TKikimrRunner kikimr({setting}); 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        auto setting = NKikimrKqp::TKqpSetting();
+        setting.SetName("_AllowReverseRange");
+        setting.SetValue("True");
+
+        TKikimrRunner kikimr({setting});
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         TString query = Q_(R"(
-            SELECT Group, Name, Amount, Comment 
+            SELECT Group, Name, Amount, Comment
             FROM `/Root/Test`
-            WHERE Group < 2u 
-            ORDER BY Group DESC, Name DESC; 
+            WHERE Group < 2u
+            ORDER BY Group DESC, Name DESC;
         )");
- 
+
         auto result = session.ExplainDataQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
- 
+
         if (UseNewEngine) {
             UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
 
@@ -104,19 +104,19 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             UNIT_ASSERT(read.IsDefined());
             UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
         } else {
-            UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst()); 
-        } 
- 
-        { 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-            UNIT_ASSERT(result.IsSuccess()); 
-            CompareYson(R"([ 
-                [[1u];["Paul"];[300u];["None"]]; 
-                [[1u];["Anna"];[3500u];["None"]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
-        } 
-    } 
- 
+            UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([
+                [[1u];["Paul"];[300u];["None"]];
+                [[1u];["Anna"];[3500u];["None"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(ReverseFirstKeyOptimized) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_AllowReverseRange");
@@ -568,218 +568,218 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ComplexPkExclusiveSecondOptionalPredicate) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        { 
-            TString query = Q_(R"( 
-                DECLARE $x AS "Uint32"; 
-                DECLARE $y AS "String?"; 
- 
-                SELECT * 
+    Y_UNIT_TEST_NEW_ENGINE(ComplexPkExclusiveSecondOptionalPredicate) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            TString query = Q_(R"(
+                DECLARE $x AS "Uint32";
+                DECLARE $y AS "String?";
+
+                SELECT *
                 FROM `/Root/Join2`
-                WHERE Key1 = $x AND Key2 > $y 
-                ORDER BY Key1, Key2 
-                LIMIT 10; 
-            )"); 
- 
-            { 
-                auto params = db.GetParamsBuilder() 
-                    .AddParam("$x") 
-                        .Uint32(105) 
-                        .Build() 
-                    .AddParam("$y") 
-                        .OptionalString("One") 
-                        .Build() 
- 
-                    .Build(); 
- 
-                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-                UNIT_ASSERT(result.IsSuccess()); 
- 
-                CompareYson(R"([ 
-                    [[105u];["Two"];["Name4"];["Value28"]] 
-                ])", FormatResultSetYson(result.GetResultSet(0))); 
-            } 
- 
-            { 
-                auto params = db.GetParamsBuilder() 
-                    .AddParam("$x") 
-                        .Uint32(105) 
-                        .Build() 
-                    .AddParam("$y") 
-                        .EmptyOptional(EPrimitiveType::String) 
-                        .Build() 
- 
-                    .Build(); 
- 
-                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-                UNIT_ASSERT(result.IsSuccess()); 
- 
-                CompareYson(R"([ 
-                ])", FormatResultSetYson(result.GetResultSet(0))); 
-            } 
-        } 
- 
-        { 
-            TString query = Q_(R"( 
-                DECLARE $x AS "Uint32"; 
-                DECLARE $y AS "String?"; 
- 
-                SELECT * 
+                WHERE Key1 = $x AND Key2 > $y
+                ORDER BY Key1, Key2
+                LIMIT 10;
+            )");
+
+            {
+                auto params = db.GetParamsBuilder()
+                    .AddParam("$x")
+                        .Uint32(105)
+                        .Build()
+                    .AddParam("$y")
+                        .OptionalString("One")
+                        .Build()
+
+                    .Build();
+
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+                UNIT_ASSERT(result.IsSuccess());
+
+                CompareYson(R"([
+                    [[105u];["Two"];["Name4"];["Value28"]]
+                ])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                auto params = db.GetParamsBuilder()
+                    .AddParam("$x")
+                        .Uint32(105)
+                        .Build()
+                    .AddParam("$y")
+                        .EmptyOptional(EPrimitiveType::String)
+                        .Build()
+
+                    .Build();
+
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+                UNIT_ASSERT(result.IsSuccess());
+
+                CompareYson(R"([
+                ])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+
+        {
+            TString query = Q_(R"(
+                DECLARE $x AS "Uint32";
+                DECLARE $y AS "String?";
+
+                SELECT *
                 FROM `/Root/Join2`
-                WHERE Key1 = $x AND Key2 < $y 
-                ORDER BY Key1, Key2 
-                LIMIT 10; 
-            )"); 
- 
-            { 
-                auto params = db.GetParamsBuilder() 
-                    .AddParam("$x") 
-                        .Uint32(105) 
-                        .Build() 
-                    .AddParam("$y") 
-                        .OptionalString("Two") 
-                        .Build() 
- 
-                    .Build(); 
- 
-                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-                UNIT_ASSERT(result.IsSuccess()); 
- 
-                CompareYson(R"([ 
-                    [[105u];["One"];["Name2"];["Value27"]] 
-                ])", FormatResultSetYson(result.GetResultSet(0))); 
-            } 
- 
-            { 
-                auto params = db.GetParamsBuilder() 
-                    .AddParam("$x") 
-                        .Uint32(105) 
-                        .Build() 
-                    .AddParam("$y") 
-                        .EmptyOptional(EPrimitiveType::String) 
-                        .Build() 
- 
-                    .Build(); 
- 
-                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-                UNIT_ASSERT(result.IsSuccess()); 
- 
-                CompareYson(R"([ 
-                ])", FormatResultSetYson(result.GetResultSet(0))); 
-            } 
-        } 
-    } 
- 
-    Y_UNIT_TEST_NEW_ENGINE(ComplexPkInclusiveSecondOptionalPredicate) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        { 
-            TString query = Q_(R"( 
-                DECLARE $x AS "Uint32"; 
-                DECLARE $y AS "String?"; 
- 
-                SELECT * 
+                WHERE Key1 = $x AND Key2 < $y
+                ORDER BY Key1, Key2
+                LIMIT 10;
+            )");
+
+            {
+                auto params = db.GetParamsBuilder()
+                    .AddParam("$x")
+                        .Uint32(105)
+                        .Build()
+                    .AddParam("$y")
+                        .OptionalString("Two")
+                        .Build()
+
+                    .Build();
+
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+                UNIT_ASSERT(result.IsSuccess());
+
+                CompareYson(R"([
+                    [[105u];["One"];["Name2"];["Value27"]]
+                ])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                auto params = db.GetParamsBuilder()
+                    .AddParam("$x")
+                        .Uint32(105)
+                        .Build()
+                    .AddParam("$y")
+                        .EmptyOptional(EPrimitiveType::String)
+                        .Build()
+
+                    .Build();
+
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+                UNIT_ASSERT(result.IsSuccess());
+
+                CompareYson(R"([
+                ])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(ComplexPkInclusiveSecondOptionalPredicate) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            TString query = Q_(R"(
+                DECLARE $x AS "Uint32";
+                DECLARE $y AS "String?";
+
+                SELECT *
                 FROM `/Root/Join2`
-                WHERE Key1 = $x AND Key2 >= $y 
-                ORDER BY Key1, Key2 
-                LIMIT 10; 
-            )"); 
- 
-            { 
-                auto params = db.GetParamsBuilder() 
-                    .AddParam("$x") 
-                        .Uint32(105) 
-                        .Build() 
-                    .AddParam("$y") 
-                        .OptionalString("One") 
-                        .Build() 
- 
-                    .Build(); 
- 
-                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-                UNIT_ASSERT(result.IsSuccess()); 
- 
-                CompareYson(R"([ 
-                    [[105u];["One"];["Name2"];["Value27"]];[[105u];["Two"];["Name4"];["Value28"]] 
-                ])", FormatResultSetYson(result.GetResultSet(0))); 
-            } 
- 
-            { 
-                auto params = db.GetParamsBuilder() 
-                    .AddParam("$x") 
-                        .Uint32(105) 
-                        .Build() 
-                    .AddParam("$y") 
-                        .EmptyOptional(EPrimitiveType::String) 
-                        .Build() 
- 
-                    .Build(); 
- 
-                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-                UNIT_ASSERT(result.IsSuccess()); 
- 
-                CompareYson(R"([ 
-                ])", FormatResultSetYson(result.GetResultSet(0))); 
-            } 
-        } 
- 
-        { 
-            TString query = Q_(R"( 
-                DECLARE $x AS "Uint32"; 
-                DECLARE $y AS "String?"; 
- 
-                SELECT * 
+                WHERE Key1 = $x AND Key2 >= $y
+                ORDER BY Key1, Key2
+                LIMIT 10;
+            )");
+
+            {
+                auto params = db.GetParamsBuilder()
+                    .AddParam("$x")
+                        .Uint32(105)
+                        .Build()
+                    .AddParam("$y")
+                        .OptionalString("One")
+                        .Build()
+
+                    .Build();
+
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+                UNIT_ASSERT(result.IsSuccess());
+
+                CompareYson(R"([
+                    [[105u];["One"];["Name2"];["Value27"]];[[105u];["Two"];["Name4"];["Value28"]]
+                ])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                auto params = db.GetParamsBuilder()
+                    .AddParam("$x")
+                        .Uint32(105)
+                        .Build()
+                    .AddParam("$y")
+                        .EmptyOptional(EPrimitiveType::String)
+                        .Build()
+
+                    .Build();
+
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+                UNIT_ASSERT(result.IsSuccess());
+
+                CompareYson(R"([
+                ])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+
+        {
+            TString query = Q_(R"(
+                DECLARE $x AS "Uint32";
+                DECLARE $y AS "String?";
+
+                SELECT *
                 FROM `/Root/Join2`
-                WHERE Key1 = $x AND Key2 <= $y 
-                ORDER BY Key1, Key2 
-                LIMIT 10; 
-            )"); 
- 
-            { 
-                auto params = db.GetParamsBuilder() 
-                    .AddParam("$x") 
-                        .Uint32(105) 
-                        .Build() 
-                    .AddParam("$y") 
-                        .OptionalString("Two") 
-                        .Build() 
- 
-                    .Build(); 
- 
-                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-                UNIT_ASSERT(result.IsSuccess()); 
- 
-                CompareYson(R"([ 
-                    [[105u];["One"];["Name2"];["Value27"]];[[105u];["Two"];["Name4"];["Value28"]] 
-                ])", FormatResultSetYson(result.GetResultSet(0))); 
-            } 
- 
-            { 
-                auto params = db.GetParamsBuilder() 
-                    .AddParam("$x") 
-                        .Uint32(105) 
-                        .Build() 
-                    .AddParam("$y") 
-                        .EmptyOptional(EPrimitiveType::String) 
-                        .Build() 
- 
-                    .Build(); 
- 
-                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-                UNIT_ASSERT(result.IsSuccess()); 
- 
-                CompareYson(R"([ 
-                ])", FormatResultSetYson(result.GetResultSet(0))); 
-            } 
-        } 
-    } 
- 
+                WHERE Key1 = $x AND Key2 <= $y
+                ORDER BY Key1, Key2
+                LIMIT 10;
+            )");
+
+            {
+                auto params = db.GetParamsBuilder()
+                    .AddParam("$x")
+                        .Uint32(105)
+                        .Build()
+                    .AddParam("$y")
+                        .OptionalString("Two")
+                        .Build()
+
+                    .Build();
+
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+                UNIT_ASSERT(result.IsSuccess());
+
+                CompareYson(R"([
+                    [[105u];["One"];["Name2"];["Value27"]];[[105u];["Two"];["Name4"];["Value28"]]
+                ])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                auto params = db.GetParamsBuilder()
+                    .AddParam("$x")
+                        .Uint32(105)
+                        .Build()
+                    .AddParam("$y")
+                        .EmptyOptional(EPrimitiveType::String)
+                        .Build()
+
+                    .Build();
+
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+                UNIT_ASSERT(result.IsSuccess());
+
+                CompareYson(R"([
+                ])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(TopSortTableExpr) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -1082,7 +1082,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    // https://st.yandex-team.ru/KIKIMR-11523 
+    // https://st.yandex-team.ru/KIKIMR-11523
     Y_UNIT_TEST_NEW_ENGINE(PassLimit) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

@@ -1,4 +1,4 @@
-#include "service_logstore.h" 
+#include "service_logstore.h"
 #include "rpc_common.h"
 #include "rpc_scheme_base.h"
 
@@ -10,28 +10,28 @@
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/public/api/grpc/draft/ydb_logstore_v1.pb.h>
- 
+
 namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
 using namespace Ydb;
 
-using TEvCreateLogStoreRequest = 
-    TGrpcRequestOperationCall<Ydb::LogStore::CreateLogStoreRequest, Ydb::LogStore::CreateLogStoreResponse>; 
-using TEvDescribeLogStoreRequest = 
-    TGrpcRequestOperationCall<Ydb::LogStore::DescribeLogStoreRequest, Ydb::LogStore::DescribeLogStoreResponse>; 
-using TEvDropLogStoreRequest = 
-    TGrpcRequestOperationCall<Ydb::LogStore::DropLogStoreRequest, Ydb::LogStore::DropLogStoreResponse>; 
-using TEvCreateLogTableRequest = 
-    TGrpcRequestOperationCall<Ydb::LogStore::CreateLogTableRequest, Ydb::LogStore::CreateLogTableResponse>; 
-using TEvDescribeLogTableRequest = 
-    TGrpcRequestOperationCall<Ydb::LogStore::DescribeLogTableRequest, Ydb::LogStore::DescribeLogTableResponse>; 
-using TEvDropLogTableRequest = 
-    TGrpcRequestOperationCall<Ydb::LogStore::DropLogTableRequest, Ydb::LogStore::DropLogTableResponse>; 
-using TEvAlterLogTableRequest = 
-    TGrpcRequestOperationCall<Ydb::LogStore::AlterLogTableRequest, Ydb::LogStore::AlterLogTableResponse>; 
- 
+using TEvCreateLogStoreRequest =
+    TGrpcRequestOperationCall<Ydb::LogStore::CreateLogStoreRequest, Ydb::LogStore::CreateLogStoreResponse>;
+using TEvDescribeLogStoreRequest =
+    TGrpcRequestOperationCall<Ydb::LogStore::DescribeLogStoreRequest, Ydb::LogStore::DescribeLogStoreResponse>;
+using TEvDropLogStoreRequest =
+    TGrpcRequestOperationCall<Ydb::LogStore::DropLogStoreRequest, Ydb::LogStore::DropLogStoreResponse>;
+using TEvCreateLogTableRequest =
+    TGrpcRequestOperationCall<Ydb::LogStore::CreateLogTableRequest, Ydb::LogStore::CreateLogTableResponse>;
+using TEvDescribeLogTableRequest =
+    TGrpcRequestOperationCall<Ydb::LogStore::DescribeLogTableRequest, Ydb::LogStore::DescribeLogTableResponse>;
+using TEvDropLogTableRequest =
+    TGrpcRequestOperationCall<Ydb::LogStore::DropLogTableRequest, Ydb::LogStore::DropLogTableResponse>;
+using TEvAlterLogTableRequest =
+    TGrpcRequestOperationCall<Ydb::LogStore::AlterLogTableRequest, Ydb::LogStore::AlterLogTableResponse>;
+
 bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikimrSchemeOp::TColumnTableSchema& to,
     Ydb::StatusIds::StatusCode& status, TString& error)
 {
@@ -90,8 +90,8 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    explicit TCreateLogStoreRPC(IRequestOpCtx* request) 
-        : TBase(request) 
+    explicit TCreateLogStoreRPC(IRequestOpCtx* request)
+        : TBase(request)
     {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -142,8 +142,8 @@ class TDescribeLogStoreRPC : public TRpcSchemeRequestActor<TDescribeLogStoreRPC,
     using TBase = TRpcSchemeRequestActor<TDescribeLogStoreRPC, TEvDescribeLogStoreRequest>;
 
 public:
-    TDescribeLogStoreRPC(IRequestOpCtx* request) 
-        : TBase(request) {} 
+    TDescribeLogStoreRPC(IRequestOpCtx* request)
+        : TBase(request) {}
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
@@ -279,8 +279,8 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    explicit TCreateLogTableRPC(IRequestOpCtx* request) 
-        : TBase(request) 
+    explicit TCreateLogTableRPC(IRequestOpCtx* request)
+        : TBase(request)
     {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -342,8 +342,8 @@ class TDescribeLogTableRPC : public TRpcSchemeRequestActor<TDescribeLogTableRPC,
     using TBase = TRpcSchemeRequestActor<TDescribeLogTableRPC, TEvDescribeLogTableRequest>;
 
 public:
-    TDescribeLogTableRPC(IRequestOpCtx* request) 
-        : TBase(request) {} 
+    TDescribeLogTableRPC(IRequestOpCtx* request)
+        : TBase(request) {}
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
@@ -460,8 +460,8 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    explicit TAlterLogTableRPC(IRequestOpCtx* request) 
-        : TBase(request) 
+    explicit TAlterLogTableRPC(IRequestOpCtx* request)
+        : TBase(request)
     {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -511,33 +511,33 @@ private:
 using TDropLogStoreRPC = TDropLogRPC<TEvDropLogStoreRequest, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore>;
 using TDropLogTableRPC = TDropLogRPC<TEvDropLogTableRequest, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable>;
 
-void DoCreateLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) { 
-    TActivationContext::AsActorContext().Register(new TCreateLogStoreRPC(p.release())); 
+void DoCreateLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TCreateLogStoreRPC(p.release()));
 }
 
-void DoDescribeLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) { 
-    TActivationContext::AsActorContext().Register(new TDescribeLogStoreRPC(p.release())); 
+void DoDescribeLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TDescribeLogStoreRPC(p.release()));
 }
 
-void DoDropLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) { 
-    TActivationContext::AsActorContext().Register(new TDropLogStoreRPC(p.release())); 
+void DoDropLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TDropLogStoreRPC(p.release()));
 }
 
 
-void DoCreateLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) { 
-    TActivationContext::AsActorContext().Register(new TCreateLogTableRPC(p.release())); 
+void DoCreateLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TCreateLogTableRPC(p.release()));
 }
 
-void DoDescribeLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) { 
-    TActivationContext::AsActorContext().Register(new TDescribeLogTableRPC(p.release())); 
+void DoDescribeLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TDescribeLogTableRPC(p.release()));
 }
 
-void DoDropLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) { 
-    TActivationContext::AsActorContext().Register(new TDropLogTableRPC(p.release())); 
+void DoDropLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TDropLogTableRPC(p.release()));
 }
 
-void DoAlterLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) { 
-    TActivationContext::AsActorContext().Register(new TAlterLogTableRPC(p.release())); 
+void DoAlterLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TAlterLogTableRPC(p.release()));
 }
 
 } // namespace NKikimr

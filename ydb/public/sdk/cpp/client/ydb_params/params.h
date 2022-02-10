@@ -1,32 +1,32 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
- 
+
 #include <google/protobuf/map.h>
 
 namespace Ydb {
-    class TypedValue; 
-} 
- 
+    class TypedValue;
+}
+
 namespace NYdb {
- 
-namespace NScripting { 
-    class TScriptingClient; 
-} 
- 
+
+namespace NScripting {
+    class TScriptingClient;
+}
+
 namespace NTable {
     class TTableClient;
     class TSession;
     class TDataQuery;
 }
- 
+
 namespace NExperimental {
     class TStreamQueryClient;
 }
 
 class TParamsBuilder;
- 
-class TParams { 
+
+class TParams {
     friend class TParamsBuilder;
     friend class NTable::TTableClient;
     friend class NTable::TSession;
@@ -35,40 +35,40 @@ class TParams {
     friend class NExperimental::TStreamQueryClient;
 public:
     bool Empty() const;
- 
+
     TMap<TString, TValue> GetValues() const;
     TMaybe<TValue> GetValue(const TString& name) const;
 
 private:
-    TParams(::google::protobuf::Map<TString, Ydb::TypedValue>&& protoMap); 
+    TParams(::google::protobuf::Map<TString, Ydb::TypedValue>&& protoMap);
 
     ::google::protobuf::Map<TString, Ydb::TypedValue>* GetProtoMapPtr();
     const ::google::protobuf::Map<TString, Ydb::TypedValue>& GetProtoMap() const;
 
     class TImpl;
-    std::shared_ptr<TImpl> Impl_; 
+    std::shared_ptr<TImpl> Impl_;
 };
 
 class TParamValueBuilder : public TValueBuilderBase<TParamValueBuilder> {
-    friend class TParamsBuilder; 
-public: 
+    friend class TParamsBuilder;
+public:
     TParamsBuilder& Build();
     bool Finished();
 
-private: 
-    TParamValueBuilder(TParamsBuilder& owner, Ydb::Type& typeProto, Ydb::Value& valueProto); 
+private:
+    TParamValueBuilder(TParamsBuilder& owner, Ydb::Type& typeProto, Ydb::Value& valueProto);
 
     TParamsBuilder& Owner_;
     bool Finished_;
-}; 
- 
+};
+
 class TParamsBuilder : public TMoveOnly {
     friend class NTable::TDataQuery;
-public: 
+public:
     TParamsBuilder(TParamsBuilder&&);
-    TParamsBuilder(); 
+    TParamsBuilder();
     TParamsBuilder(const TMap<TString, TType>& typeInfo);
- 
+
     ~TParamsBuilder();
 
     TParamValueBuilder& AddParam(const TString& name);
@@ -76,13 +76,13 @@ public:
 
     bool HasTypeInfo() const;
 
-    TParams Build(); 
- 
-private: 
-    TParamsBuilder(const ::google::protobuf::Map<TString, Ydb::Type>& typeInfo); 
+    TParams Build();
 
-    class TImpl; 
+private:
+    TParamsBuilder(const ::google::protobuf::Map<TString, Ydb::Type>& typeInfo);
+
+    class TImpl;
     std::unique_ptr<TImpl> Impl_;
-}; 
- 
+};
+
 } // namespace NYdb

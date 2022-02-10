@@ -2,7 +2,7 @@
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
-#include "rpc_common.h" 
+#include "rpc_common.h"
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -17,14 +17,14 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace NOperationId;
 using namespace Ydb;
-using namespace Ydb::Table; 
+using namespace Ydb::Table;
 using namespace NKqp;
 
 class TExecuteDataQueryRPC : public TRpcKqpRequestActor<TExecuteDataQueryRPC, TEvExecuteDataQueryRequest> {
     using TBase = TRpcKqpRequestActor<TExecuteDataQueryRPC, TEvExecuteDataQueryRequest>;
 
 public:
-    using TResult = Ydb::Table::ExecuteQueryResult; 
+    using TResult = Ydb::Table::ExecuteQueryResult;
 
     TExecuteDataQueryRPC(TEvExecuteDataQueryRequest* msg)
         : TBase(msg) {}
@@ -44,14 +44,14 @@ public:
     }
 
     void Proceed(const TActorContext& ctx) {
-        const auto req = GetProtoRequest(); 
+        const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
         const auto requestType = Request_->GetRequestType();
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        SetAuthToken(ev, *Request_); 
-        SetDatabase(ev, *Request_); 
- 
+        SetAuthToken(ev, *Request_);
+        SetDatabase(ev, *Request_);
+
         NYql::TIssues issues;
         if (CheckSession(req->session_id(), issues)) {
             ev->Record.MutableRequest()->SetSessionId(req->session_id());
@@ -208,14 +208,14 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record.GetRef();
-        SetCost(record.GetConsumedRu()); 
+        SetCost(record.GetConsumedRu());
         AddServerHintsIfAny(record);
- 
+
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             const auto& kqpResponse = record.GetResponse();
             const auto& issueMessage = kqpResponse.GetQueryIssues();
 
-            auto queryResult = TEvExecuteDataQueryRequest::AllocateResult<Ydb::Table::ExecuteQueryResult>(Request_); 
+            auto queryResult = TEvExecuteDataQueryRequest::AllocateResult<Ydb::Table::ExecuteQueryResult>(Request_);
             ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
             ConvertQueryStats(kqpResponse, queryResult);
             if (kqpResponse.HasTxMeta()) {

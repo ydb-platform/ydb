@@ -112,7 +112,7 @@ namespace {
         }
 
         void AddError(const TAstNode& node, const TString& message) {
-            Expr.AddError(TIssue(node.GetPosition(), message)); 
+            Expr.AddError(TIssue(node.GetPosition(), message));
         }
 
         TExprNode::TPtr&& ProcessNode(const TAstNode& node, TExprNode::TPtr&& exprNode) {
@@ -2639,7 +2639,7 @@ bool ValidateName(TPosition position, TStringBuf name, TStringBuf descr, TExprCo
     }
 
     if (!IsUtf8(name)) {
-        ctx.AddError(TIssue(position, TStringBuilder() << 
+        ctx.AddError(TIssue(position, TStringBuilder() <<
             TString(descr).to_title() << " name must be a valid utf-8 byte sequence: " << TString{name}.Quote()));
         return false;
     }
@@ -2731,7 +2731,7 @@ bool TStructExprType::Validate(TPosition position, TExprContext& ctx) const {
         }
 
         if (item->GetName() == lastName) {
-            ctx.AddError(TIssue(position, TStringBuilder() << "Duplicated member: " << lastName)); 
+            ctx.AddError(TIssue(position, TStringBuilder() << "Duplicated member: " << lastName));
             return false;
         }
 
@@ -2748,18 +2748,18 @@ bool TStructExprType::Validate(TPositionHandle position, TExprContext& ctx) cons
 bool TVariantExprType::Validate(TPosition position, TExprContext& ctx) const {
     if (UnderlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
         if (!UnderlyingType->Cast<TTupleExprType>()->GetSize()) {
-            ctx.AddError(TIssue(position, TStringBuilder() << "Empty tuple is not allowed as underlying type")); 
+            ctx.AddError(TIssue(position, TStringBuilder() << "Empty tuple is not allowed as underlying type"));
             return false;
         }
     }
     else if (UnderlyingType->GetKind() == ETypeAnnotationKind::Struct) {
         if (!UnderlyingType->Cast<TStructExprType>()->GetSize()) {
-            ctx.AddError(TIssue(position, TStringBuilder() << "Empty struct is not allowed as underlying type")); 
+            ctx.AddError(TIssue(position, TStringBuilder() << "Empty struct is not allowed as underlying type"));
             return false;
         }
     }
     else {
-        ctx.AddError(TIssue(position, TStringBuilder() << "Expected tuple or struct, but got:" << *UnderlyingType)); 
+        ctx.AddError(TIssue(position, TStringBuilder() << "Expected tuple or struct, but got:" << *UnderlyingType));
         return false;
     }
 
@@ -2810,7 +2810,7 @@ bool TDictExprType::Validate(TPositionHandle position, TExprContext& ctx) const 
 
 bool TCallableExprType::Validate(TPosition position, TExprContext& ctx) const {
     if (OptionalArgumentsCount > Arguments.size()) {
-        ctx.AddError(TIssue(position, TStringBuilder() << "Too many optional arguments: " << OptionalArgumentsCount 
+        ctx.AddError(TIssue(position, TStringBuilder() << "Too many optional arguments: " << OptionalArgumentsCount
             << ", function has only " << Arguments.size() << " arguments"));
         return false;
     }
@@ -2818,7 +2818,7 @@ bool TCallableExprType::Validate(TPosition position, TExprContext& ctx) const {
     for (ui32 index = Arguments.size() - OptionalArgumentsCount; index < Arguments.size(); ++index) {
         auto type = Arguments[index].Type;
         if (type->GetKind() != ETypeAnnotationKind::Optional) {
-            ctx.AddError(TIssue(position, TStringBuilder() << "Expected optional type for argument: " << (index + 1) 
+            ctx.AddError(TIssue(position, TStringBuilder() << "Expected optional type for argument: " << (index + 1)
                 << " because it's an optional argument, but got: " << *type));
             return false;
         }
@@ -2830,7 +2830,7 @@ bool TCallableExprType::Validate(TPosition position, TExprContext& ctx) const {
         bool hasName = !Arguments[index].Name.empty();
         if (startedNames) {
             if (!hasName) {
-                ctx.AddError(TIssue(position, TStringBuilder() << "Unexpected positional argument at position " 
+                ctx.AddError(TIssue(position, TStringBuilder() << "Unexpected positional argument at position "
                     << (index + 1) << " just after named arguments"));
                 return false;
             }
@@ -2840,7 +2840,7 @@ bool TCallableExprType::Validate(TPosition position, TExprContext& ctx) const {
 
         if (hasName) {
             if (!usedNames.insert(Arguments[index].Name).second) {
-                ctx.AddError(TIssue(position, TStringBuilder() << "Duplication of named argument: " << Arguments[index].Name)); 
+                ctx.AddError(TIssue(position, TStringBuilder() << "Duplication of named argument: " << Arguments[index].Name));
                 return false;
             }
         }
@@ -2870,14 +2870,14 @@ TExprContext::TExprContext(ui64 nextUniqueId)
         [this](TPositionHandle p) { return GetHash(p); },
         [this](TPositionHandle a, TPositionHandle b) { return IsEqual(a, b); }
     )
-{ 
+{
     auto handle = AppendPosition(TPosition());
     YQL_ENSURE(handle.Handle == 0);
-    IssueManager.SetWarningToErrorTreatMessage( 
-        "Treat warning as error mode enabled. " 
-        "To disable it use \"pragma warning(\"default\", <code>);\""); 
+    IssueManager.SetWarningToErrorTreatMessage(
+        "Treat warning as error mode enabled. "
+        "To disable it use \"pragma warning(\"default\", <code>);\"");
     IssueManager.SetIssueCountLimit(100);
-} 
+}
 
 TPositionHandle TExprContext::AppendPosition(const TPosition& pos) {
     YQL_ENSURE(Positions.size() <= Max<ui32>(), "Too many positions");
@@ -3017,7 +3017,7 @@ const TVariantExprType* TMakeTypeImpl<TVariantExprType>::Make(TExprContext& ctx,
     return AddType<TVariantExprType>(ctx, hash, underlyingType);
 }
 
-const TErrorExprType* TMakeTypeImpl<TErrorExprType>::Make(TExprContext& ctx, const TIssue& error) { 
+const TErrorExprType* TMakeTypeImpl<TErrorExprType>::Make(TExprContext& ctx, const TIssue& error) {
     const auto hash = TErrorExprType::MakeHash(error);
     TErrorExprType sample(hash, error);
     if (const auto found = FindType(sample, ctx))

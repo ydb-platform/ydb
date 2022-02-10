@@ -77,9 +77,9 @@ public:
         , RetryQueue(*this)
     {}
 
-    void OnCall(NBus::EMessageStatus status, const TString& transportErrMessage, NThreading::TPromise<TResult> promise, TAutoPtr<NBus::TBusMessage> request, TAutoPtr<NBus::TBusMessage> reply) { 
+    void OnCall(NBus::EMessageStatus status, const TString& transportErrMessage, NThreading::TPromise<TResult> promise, TAutoPtr<NBus::TBusMessage> request, TAutoPtr<NBus::TBusMessage> reply) {
         if (status != NBus::MESSAGE_OK) {
-            promise.SetValue(TResult(status, transportErrMessage)); 
+            promise.SetValue(TResult(status, transportErrMessage));
         }
         if (status == NBus::MESSAGE_OK) {
             switch (reply->GetHeader()->Type) {
@@ -174,7 +174,7 @@ public:
                                        NBus::EMessageStatus status,
                                        TAutoPtr<NBus::TBusMessage> request,
                                        TAutoPtr<NBus::TBusMessage> reply) mutable -> void {
-            OnCall(status, "", promise, request, reply); 
+            OnCall(status, "", promise, request, reply);
         });
     }
 
@@ -212,14 +212,14 @@ public:
         RequestType* x = static_cast<RequestType*>(request.Get());
         const auto& proto = x->Record;
         auto callback = [this, request, promise](
-                const NGRpcProxy::TGrpcError* error, 
+                const NGRpcProxy::TGrpcError* error,
                 const typename ResponseType::RecordType& proto) {
             if (error) {
-                OnCall(MapGrpcStatus(error->second), error->first, promise, request, nullptr); 
+                OnCall(MapGrpcStatus(error->second), error->first, promise, request, nullptr);
             } else {
                 auto reply = new ResponseType;
                 reply->Record = proto;
-                OnCall(NBus::MESSAGE_OK, "", promise, request, reply); 
+                OnCall(NBus::MESSAGE_OK, "", promise, request, reply);
             }
         };
         (GRpcClient.Get()->*func)(proto, std::move(callback));
@@ -330,19 +330,19 @@ public:
         // we cleanup later to avoid dead lock because we are still inside callback of current client
         return [gRpcClient]() {};
     }
-private: 
-    static NBus::EMessageStatus MapGrpcStatus(int status) { 
-        switch (status) { 
-            case grpc::StatusCode::OK: 
-                return NBus::EMessageStatus::MESSAGE_OK; 
-            case grpc::StatusCode::DEADLINE_EXCEEDED: 
-                return NBus::EMessageStatus::MESSAGE_TIMEOUT; 
-            case grpc::StatusCode::RESOURCE_EXHAUSTED: 
-                return NBus::EMessageStatus::MESSAGE_BUSY; 
-            default: 
-                return NBus::MESSAGE_CONNECT_FAILED; 
-        } 
-    } 
+private:
+    static NBus::EMessageStatus MapGrpcStatus(int status) {
+        switch (status) {
+            case grpc::StatusCode::OK:
+                return NBus::EMessageStatus::MESSAGE_OK;
+            case grpc::StatusCode::DEADLINE_EXCEEDED:
+                return NBus::EMessageStatus::MESSAGE_TIMEOUT;
+            case grpc::StatusCode::RESOURCE_EXHAUSTED:
+                return NBus::EMessageStatus::MESSAGE_BUSY;
+            default:
+                return NBus::MESSAGE_CONNECT_FAILED;
+        }
+    }
 };
 
 TKikimr::TRetryQueue::TRetryQueue(TKikimr::TImpl& kikimr)

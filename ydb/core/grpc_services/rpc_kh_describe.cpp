@@ -316,7 +316,7 @@ private:
     void ReplyWithError(StatusIds::StatusCode status, const TString& message, const TActorContext& ctx) {
         Finished = true;
         Request->RaiseIssue(NYql::TIssue(message));
-        Request->ReplyWithYdbStatus(status); 
+        Request->ReplyWithYdbStatus(status);
 
         // We cannot Die() while scheme cache request is in flight because that request has pointer to
         // KeyRange member so we must not destroy it before we get the response

@@ -318,7 +318,7 @@ IComputationNode* WrapNot(TCallable& callable, const TComputationNodeFactoryCont
     bool isOptional;
     const auto& dataType = UnpackOptionalData(callable.GetInput(0), isOptional);
 
-    const auto schemeType = dataType->GetSchemeType(); 
+    const auto schemeType = dataType->GetSchemeType();
     MKQL_ENSURE(schemeType == NUdf::TDataType<bool>::Id, "Expected bool");
     const auto node = LocateNode(ctx.NodeLocator, callable, 0);
 

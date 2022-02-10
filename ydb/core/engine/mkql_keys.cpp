@@ -114,7 +114,7 @@ THolder<TKeyDesc> ExtractSelectRow(TCallable& callable, const TTypeEnvironment& 
 }
 
 THolder<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment& env) {
-    MKQL_ENSURE(callable.GetInputsCount() >= 9 && callable.GetInputsCount() <= 13, "Expected 9 to 13 args"); 
+    MKQL_ENSURE(callable.GetInputsCount() >= 9 && callable.GetInputsCount() <= 13, "Expected 9 to 13 args");
     auto tableId = ExtractTableId(callable.GetInput(0));
     auto columnsNode = callable.GetInput(1);
     MKQL_ENSURE(columnsNode.IsImmediate() && columnsNode.GetNode()->GetType()->IsType(), "Expected struct type");
@@ -320,36 +320,36 @@ TVector<THolder<TKeyDesc>> ExtractTableKeys(TExploringNodeVisitor& explorer, con
 }
 
 TTableId ExtractTableId(const TRuntimeNode& node) {
-    if (node.GetStaticType()->IsTuple()) { 
-        const TTupleLiteral* tupleNode = AS_VALUE(TTupleLiteral, node); 
-        MKQL_ENSURE(tupleNode->GetValuesCount() >= 3u, "Unexpected number of tuple items"); 
-        const ui64 ownerId = AS_VALUE(TDataLiteral, tupleNode->GetValue(0))->AsValue().Get<ui64>(); 
-        const ui64 localPathId = AS_VALUE(TDataLiteral, tupleNode->GetValue(1))->AsValue().Get<ui64>(); 
-        const ui64 schemaVersion = AS_VALUE(TDataLiteral, tupleNode->GetValue(2))->AsValue().Get<ui64>(); 
-        return TTableId(ownerId, localPathId, schemaVersion); 
-    } else { 
-        const TStringBuf buffer(AS_VALUE(TDataLiteral, node)->AsValue().AsStringRef()); 
-        using TPair = std::pair<ui64, ui64>; 
-        MKQL_ENSURE(sizeof(TPair) == buffer.size(), "Wrong table id buffer size."); 
-        const auto pair = reinterpret_cast<const TPair*>(buffer.data()); 
-        return TTableId(pair->first, pair->second); 
-    } 
+    if (node.GetStaticType()->IsTuple()) {
+        const TTupleLiteral* tupleNode = AS_VALUE(TTupleLiteral, node);
+        MKQL_ENSURE(tupleNode->GetValuesCount() >= 3u, "Unexpected number of tuple items");
+        const ui64 ownerId = AS_VALUE(TDataLiteral, tupleNode->GetValue(0))->AsValue().Get<ui64>();
+        const ui64 localPathId = AS_VALUE(TDataLiteral, tupleNode->GetValue(1))->AsValue().Get<ui64>();
+        const ui64 schemaVersion = AS_VALUE(TDataLiteral, tupleNode->GetValue(2))->AsValue().Get<ui64>();
+        return TTableId(ownerId, localPathId, schemaVersion);
+    } else {
+        const TStringBuf buffer(AS_VALUE(TDataLiteral, node)->AsValue().AsStringRef());
+        using TPair = std::pair<ui64, ui64>;
+        MKQL_ENSURE(sizeof(TPair) == buffer.size(), "Wrong table id buffer size.");
+        const auto pair = reinterpret_cast<const TPair*>(buffer.data());
+        return TTableId(pair->first, pair->second);
+    }
 }
 
-void FillKeyTupleValue(const NUdf::TUnboxedValue& row, const TVector<ui32>& rowIndices, 
-    const TVector<NUdf::TDataTypeId>& rowTypes, TVector<TCell>& cells, const TTypeEnvironment& env) 
-{ 
-    for (ui32 i = 0; i < rowIndices.size(); ++i) { 
-        auto rowIndex = rowIndices[i]; 
- 
-        auto value = row.GetElement(rowIndex); 
-        auto type = rowTypes[rowIndex]; 
- 
-        // NOTE: We have to copy values here as some values inlined in TUnboxedValue 
-        // cannot be be inlined in TCell. So set copy = true. 
-        cells[i] = MakeCell(type, value, env, /* copy */true); 
-    } 
+void FillKeyTupleValue(const NUdf::TUnboxedValue& row, const TVector<ui32>& rowIndices,
+    const TVector<NUdf::TDataTypeId>& rowTypes, TVector<TCell>& cells, const TTypeEnvironment& env)
+{
+    for (ui32 i = 0; i < rowIndices.size(); ++i) {
+        auto rowIndex = rowIndices[i];
+
+        auto value = row.GetElement(rowIndex);
+        auto type = rowTypes[rowIndex];
+
+        // NOTE: We have to copy values here as some values inlined in TUnboxedValue
+        // cannot be be inlined in TCell. So set copy = true.
+        cells[i] = MakeCell(type, value, env, /* copy */true);
+    }
 }
- 
+
 }
-} 
+}

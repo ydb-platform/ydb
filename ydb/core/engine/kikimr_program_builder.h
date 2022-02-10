@@ -64,8 +64,8 @@ struct TTableRangeOptions
     TKeyColumnValues FromColumns;
     TKeyColumnValues ToColumns;
     TArrayRef<bool> SkipNullKeys;
-    TArrayRef<bool> ForbidNullArgsFrom; 
-    TArrayRef<bool> ForbidNullArgsTo; 
+    TArrayRef<bool> ForbidNullArgsFrom;
+    TArrayRef<bool> ForbidNullArgsTo;
     TRuntimeNode Reverse; // default = <unset>
 };
 
@@ -101,7 +101,7 @@ public:
 private:
     TStructLiteralBuilder Builder;
     const TTypeEnvironment& Env;
-    TInternName NullInternName; 
+    TInternName NullInternName;
 };
 
 class TParametersBuilder
@@ -233,15 +233,15 @@ public:
     using TProgramBuilder::NewDataLiteral;
 private:
     TRuntimeNode NewDataLiteral(const std::pair<ui64, ui64>& data) const;
-    TRuntimeNode BuildTableId(const TTableId& tableId) const; 
+    TRuntimeNode BuildTableId(const TTableId& tableId) const;
     TVector<TRuntimeNode> FixKeysType(
-        const TArrayRef<const ui32>& keyTypes, 
-        const TKeyColumnValues& row) const; 
-    TRuntimeNode RewriteNullType( 
-        TRuntimeNode value, 
+        const TArrayRef<const ui32>& keyTypes,
+        const TKeyColumnValues& row) const;
+    TRuntimeNode RewriteNullType(
+        TRuntimeNode value,
         NUdf::TDataTypeId expectedType) const;
-    TInternName NullInternName; 
-    TTupleType* TableIdType; 
+    TInternName NullInternName;
+    TTupleType* TableIdType;
 };
 
 } // namespace NMiniKQL

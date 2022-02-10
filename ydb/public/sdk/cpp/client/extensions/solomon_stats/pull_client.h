@@ -28,7 +28,7 @@ public:
                 , const TString& cluster
                 , const TVector<std::pair<TString, TString>>& labels = {});
 
-        NMonitoring::TLabels GetLabels() const; 
+        NMonitoring::TLabels GetLabels() const;
 
     private:
         const TString Host_;

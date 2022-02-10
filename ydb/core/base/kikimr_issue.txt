@@ -28,9 +28,9 @@ ids { code: SCOPE_TXPROXY_INTERPRET severity: S_INFO}
 ids { code: SCOPE_TXPROXY_RESOLVE severity: S_INFO}
 ids { code: SCOPE_TXPROXY_PREPARE severity: S_INFO}
 ids { code: SCOPE_TXPROXY_EXECUTE severity: S_INFO}
- 
-ids { code: YDB_API_VALIDATION_ERROR severity: S_ERROR } 
-ids { code: YDB_AUTH_UNAVAILABLE severity: S_ERROR } 
-ids { code: YDB_DB_NOT_READY severity: S_ERROR } 
-ids { code: YDB_RESOURCE_USAGE_LIMITED severity: S_ERROR } 
- 
+
+ids { code: YDB_API_VALIDATION_ERROR severity: S_ERROR }
+ids { code: YDB_AUTH_UNAVAILABLE severity: S_ERROR }
+ids { code: YDB_DB_NOT_READY severity: S_ERROR }
+ids { code: YDB_RESOURCE_USAGE_LIMITED severity: S_ERROR }
+

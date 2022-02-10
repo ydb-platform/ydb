@@ -155,31 +155,31 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
             if (!rowset.Next())
                 return false;
         }
-        // Load scan state (only for scheme tx) 
-        { 
-            auto rowset = db.Table<Schema::ScanProgress>().Range().Select(); 
-            if (!rowset.IsReady()) 
-                return false; 
-            while (!rowset.EndOfSet()) { 
-                ui64 txId = rowset.GetValue<Schema::ScanProgress::TxId>(); 
+        // Load scan state (only for scheme tx)
+        {
+            auto rowset = db.Table<Schema::ScanProgress>().Range().Select();
+            if (!rowset.IsReady())
+                return false;
+            while (!rowset.EndOfSet()) {
+                ui64 txId = rowset.GetValue<Schema::ScanProgress::TxId>();
                 TSchemaOperation* op = FindSchemaTx(txId);
-                if (!op) { 
-                    LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::TX_DATASHARD, 
-                               "Op was not found for persisted scan tx id " << txId 
-                               << " on tablet " 
-                               << Self->TabletID()); 
-                    continue; 
-                } 
-                op->ScanState.LastKey = rowset.GetValue<Schema::ScanProgress::LastKey>(); 
-                op->ScanState.Bytes = rowset.GetValue<Schema::ScanProgress::LastBytes>(); 
-                ui64 lastStatus = rowset.GetValue<Schema::ScanProgress::LastStatus>(); 
-                op->ScanState.StatusCode = static_cast<Ydb::StatusIds::StatusCode>(lastStatus); 
-                auto binaryIssues = rowset.GetValue<Schema::ScanProgress::LastIssues>(); 
-                op->ScanState.Issues = DeserializeIssues(binaryIssues); 
-                if (!rowset.Next()) 
-                    return false; 
-            } 
-        } 
+                if (!op) {
+                    LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::TX_DATASHARD,
+                               "Op was not found for persisted scan tx id " << txId
+                               << " on tablet "
+                               << Self->TabletID());
+                    continue;
+                }
+                op->ScanState.LastKey = rowset.GetValue<Schema::ScanProgress::LastKey>();
+                op->ScanState.Bytes = rowset.GetValue<Schema::ScanProgress::LastBytes>();
+                ui64 lastStatus = rowset.GetValue<Schema::ScanProgress::LastStatus>();
+                op->ScanState.StatusCode = static_cast<Ydb::StatusIds::StatusCode>(lastStatus);
+                auto binaryIssues = rowset.GetValue<Schema::ScanProgress::LastIssues>();
+                op->ScanState.Issues = DeserializeIssues(binaryIssues);
+                if (!rowset.Next())
+                    return false;
+            }
+        }
     }
 
     return true;
@@ -284,11 +284,11 @@ void TTransQueue::RemoveSchemaOperation(NIceDb::TNiceDb& db, ui64 txId) {
     db.Table<Schema::SchemaOperations>().Key(txId).Delete();
 }
 
-void TTransQueue::RemoveScanProgress(NIceDb::TNiceDb& db, ui64 txId) { 
+void TTransQueue::RemoveScanProgress(NIceDb::TNiceDb& db, ui64 txId) {
     using Schema = TDataShard::Schema;
-    db.Table<Schema::ScanProgress>().Key(txId).Delete(); 
-} 
- 
+    db.Table<Schema::ScanProgress>().Key(txId).Delete();
+}
+
 /// @arg inOutStep, inOutTxId - last (complete) tx
 /// @return inOutStep, inOutTxId - next planned Tx
 void TTransQueue::GetPlannedTxId(ui64& step, ui64& txId) const {

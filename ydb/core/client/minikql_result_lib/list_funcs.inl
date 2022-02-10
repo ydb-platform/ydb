@@ -46,7 +46,7 @@ inline T TListType::iterator<T>::operator*() const {
 template <typename T>
 inline T TListType::iterator<T>::Get() const {
     ENSURE_KIND(ItemType, Data);
-    auto schemeType = ItemType.GetData().GetScheme(); 
+    auto schemeType = ItemType.GetData().GetScheme();
     return NPrivate::GetData<T>(*Item, schemeType);
 }
 

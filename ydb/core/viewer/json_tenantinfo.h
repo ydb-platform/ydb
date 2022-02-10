@@ -124,7 +124,7 @@ public:
     }
 
     void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
-        Ydb::Cms::ListDatabasesResult listTenantsResult; 
+        Ydb::Cms::ListDatabasesResult listTenantsResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
         for (const TString& path : listTenantsResult.paths()) {
             if (!Path.empty() && path != Path) {
@@ -137,7 +137,7 @@ public:
     }
 
     void Handle(NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr& ev) {
-        Ydb::Cms::GetDatabaseStatusResult getTenantStatusResult; 
+        Ydb::Cms::GetDatabaseStatusResult getTenantStatusResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&getTenantStatusResult);
         TString path = getTenantStatusResult.path();
         NKikimrViewer::TTenant& tenant = TenantByPath[path];

@@ -73,7 +73,7 @@ class DBForStaticSlots(object):
                     'TX_DATASHARD': LogLevels.DEBUG,
                     'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
                     'TX_PROXY_SCHEME_CACHE': LogLevels.DEBUG,
-                    'GRPC_SERVER': LogLevels.DEBUG, 
+                    'GRPC_SERVER': LogLevels.DEBUG,
                 }
             ),
         )
@@ -134,7 +134,7 @@ class DBWithDynamicSlot(object):
                     'NODE_BROKER': LogLevels.DEBUG,
                     'TX_DATASHARD': LogLevels.DEBUG,
                     'TX_PROXY': LogLevels.DEBUG,
-                    'GRPC_SERVER': LogLevels.DEBUG, 
+                    'GRPC_SERVER': LogLevels.DEBUG,
                 }
             )
         )

@@ -53,10 +53,10 @@ public:
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<false>));
         AddHandler(0, &TKqlInsertRows::Match, HNDL(BuildInsertStages));
         AddHandler(0, &TKqlUpdateRows::Match, HNDL(BuildUpdateStages));
-        AddHandler(0, &TKqlUpdateRowsIndex::Match, HNDL(BuildUpdateIndexStages)); 
-        AddHandler(0, &TKqlUpsertRowsIndex::Match, HNDL(BuildUpsertIndexStages)); 
-        AddHandler(0, &TKqlInsertRowsIndex::Match, HNDL(BuildInsertIndexStages)); 
-        AddHandler(0, &TKqlDeleteRowsIndex::Match, HNDL(BuildDeleteIndexStages)); 
+        AddHandler(0, &TKqlUpdateRowsIndex::Match, HNDL(BuildUpdateIndexStages));
+        AddHandler(0, &TKqlUpsertRowsIndex::Match, HNDL(BuildUpsertIndexStages));
+        AddHandler(0, &TKqlInsertRowsIndex::Match, HNDL(BuildInsertIndexStages));
+        AddHandler(0, &TKqlDeleteRowsIndex::Match, HNDL(BuildDeleteIndexStages));
         AddHandler(0, &TDqStage::Match, HNDL(FloatUpStage));
         AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems));
         AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute));
@@ -270,30 +270,30 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> BuildUpdateIndexStages(TExprBase node, TExprContext& ctx) { 
-        TExprBase output = KqpBuildUpdateIndexStages(node, ctx, KqpCtx); 
-        DumpAppliedRule("BuildUpdateIndexStages", node.Ptr(), output.Ptr(), ctx); 
-        return output; 
-    } 
- 
-    TMaybeNode<TExprBase> BuildUpsertIndexStages(TExprBase node, TExprContext& ctx) { 
-        TExprBase output = KqpBuildUpsertIndexStages(node, ctx, KqpCtx); 
-        DumpAppliedRule("BuildUpsertIndexStages", node.Ptr(), output.Ptr(), ctx); 
-        return output; 
-    } 
- 
-    TMaybeNode<TExprBase> BuildInsertIndexStages(TExprBase node, TExprContext& ctx) { 
-        TExprBase output = KqpBuildInsertIndexStages(node, ctx, KqpCtx); 
-        DumpAppliedRule("BuildInsertIndexStages", node.Ptr(), output.Ptr(), ctx); 
-        return output; 
-    } 
- 
-    TMaybeNode<TExprBase> BuildDeleteIndexStages(TExprBase node, TExprContext& ctx) { 
-        TExprBase output = KqpBuildDeleteIndexStages(node, ctx, KqpCtx); 
-        DumpAppliedRule("BuildDeleteIndexStages", node.Ptr(), output.Ptr(), ctx); 
-        return output; 
-    } 
- 
+    TMaybeNode<TExprBase> BuildUpdateIndexStages(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpBuildUpdateIndexStages(node, ctx, KqpCtx);
+        DumpAppliedRule("BuildUpdateIndexStages", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> BuildUpsertIndexStages(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpBuildUpsertIndexStages(node, ctx, KqpCtx);
+        DumpAppliedRule("BuildUpsertIndexStages", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> BuildInsertIndexStages(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpBuildInsertIndexStages(node, ctx, KqpCtx);
+        DumpAppliedRule("BuildInsertIndexStages", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> BuildDeleteIndexStages(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpBuildDeleteIndexStages(node, ctx, KqpCtx);
+        DumpAppliedRule("BuildDeleteIndexStages", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
     TMaybeNode<TExprBase> FloatUpStage(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpFloatUpStage(node, ctx);
         DumpAppliedRule("FloatUpStage", node.Ptr(), output.Ptr(), ctx);

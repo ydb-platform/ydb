@@ -10,7 +10,7 @@ SRCS(
     kqp_common.h
     kqp_resolve.cpp
     kqp_resolve.h
-    kqp_ru_calc.cpp 
+    kqp_ru_calc.cpp
     kqp_transform.cpp
     kqp_transform.h
     kqp_yql.cpp

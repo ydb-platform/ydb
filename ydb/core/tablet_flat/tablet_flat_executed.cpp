@@ -19,7 +19,7 @@ TTabletExecutedFlat::TTabletExecutedFlat(TTabletStorageInfo *info, const TActorI
 IExecutor* TTabletExecutedFlat::CreateExecutor(const TActorContext &ctx) {
     if (!Executor()) {
         IActor *executor = NFlatExecutorSetup::CreateExecutor(this, ctx.SelfID);
-        const TActorId executorID = ctx.RegisterWithSameMailbox(executor); 
+        const TActorId executorID = ctx.RegisterWithSameMailbox(executor);
         Executor0 = dynamic_cast<TExecutor *>(executor);
         Y_VERIFY(Executor0);
 

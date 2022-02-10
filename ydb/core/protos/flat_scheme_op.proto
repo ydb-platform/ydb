@@ -58,12 +58,12 @@ enum EColumnStorage {
     ColumnStorageTest_1_2_1k = 999;
 }
 
-enum EFreezeState { 
-    Unspecified = 0; 
-    Freeze = 1; 
-    Unfreeze = 2; 
-} 
- 
+enum EFreezeState {
+    Unspecified = 0;
+    Freeze = 1;
+    Unfreeze = 2;
+}
+
 enum EMvccState {
     MvccUnspecified = 0;
     MvccEnabled = 1;
@@ -268,7 +268,7 @@ message TPartitionConfig {
     optional bool EnableEraseCache = 18 [default = true]; // Use erase cache for faster iteration over erased rows
     optional uint32 EraseCacheMinRows = 19; // Minimum number of erased rows worth caching (default 16)
     optional uint32 EraseCacheMaxBytes = 20; // Maximum number of bytes to use for cached rows (default 1MB)
-    optional EFreezeState FreezeState = 21; 
+    optional EFreezeState FreezeState = 21;
     optional bool ShadowData = 22; // Table has separate shadow data for later merging
     repeated NKikimrHive.TFollowerGroup FollowerGroups = 23;
     reserved 24; // EMvccState MvccState = 24; no longer used
@@ -342,8 +342,8 @@ message TTableDescription {
     repeated TSplitBoundary SplitBoundary = 31;     // Boundaries for non-uniform split
 
     repeated TIndexDescription TableIndexes = 32;
- 
-    optional uint64 TableSchemaVersion = 33; 
+
+    optional uint64 TableSchemaVersion = 33;
 
     optional NKikimrProto.TPathID PathId = 34; // TPathId, owerride Id = 2
 
@@ -749,24 +749,24 @@ enum EIndexType {
 enum EIndexState {
     EIndexStateInvalid = 0;
     EIndexStateReady = 1;
-    EIndexStateNotReady = 2; 
-    EIndexStateWriteOnly = 3; 
+    EIndexStateNotReady = 2;
+    EIndexStateWriteOnly = 3;
 }
 
 message TIndexDescription {
     optional string Name = 1;
-    optional uint64 LocalPathId = 2; 
+    optional uint64 LocalPathId = 2;
 
     optional EIndexType Type = 3;
     optional EIndexState State = 4;
 
     repeated string KeyColumnNames = 5;
- 
-    optional uint64 SchemaVersion = 6; // Schema version of abstract index (not impl table) 
- 
-    optional uint64 PathOwnerId = 7; 
- 
-    repeated string DataColumnNames = 8; 
+
+    optional uint64 SchemaVersion = 6; // Schema version of abstract index (not impl table)
+
+    optional uint64 PathOwnerId = 7;
+
+    repeated string DataColumnNames = 8;
     // DataSize + IndexSize of indexImplTable
     optional uint64 DataSize = 9;
 }
@@ -775,9 +775,9 @@ message TIndexCreationConfig {
     optional string Name = 1;
     repeated string KeyColumnNames = 2;
     optional EIndexType Type = 3;
-    optional TTableDescription IndexImplTableDescription = 4; //description for index impl table 
-    optional EIndexState State = 5; //state of index at the creation time 
-    repeated string DataColumnNames = 6; //columns to be denormalized to read data just from index 
+    optional TTableDescription IndexImplTableDescription = 4; //description for index impl table
+    optional EIndexState State = 5; //state of index at the creation time
+    repeated string DataColumnNames = 6; //columns to be denormalized to read data just from index
 }
 
 message TIndexAlteringConfig {
@@ -1318,7 +1318,7 @@ enum EPathType {
     EPathTypeBlockStoreVolume = 6;
     EPathTypeKesus = 7;
     EPathTypeSolomonVolume = 8;
-    EPathTypeTableIndex = 9; // Used for abstract index 
+    EPathTypeTableIndex = 9; // Used for abstract index
     EPathTypeExtSubDomain = 10;
     EPathTypeFileStore = 11;
     EPathTypeColumnStore = 12;
@@ -1349,22 +1349,22 @@ enum EPathState {
     EPathStateMoving = 11;
 }
 
-message TPathVersion { 
-    optional uint64 GeneralVersion = 1; 
- 
-    optional uint64 ACLVersion = 2; 
-    optional uint64 EffectiveACLVersion = 3; 
-    optional uint64 UserAttrsVersion = 4; 
-    optional uint64 ChildrenVersion = 5; 
-    optional uint64 SubDomainVersion = 6; 
-    optional uint64 TableSchemaVersion = 7; 
-    optional uint64 TablePartitionVersion = 8; 
-    optional uint64 TableIndexVersion = 9; 
-    optional uint64 PQVersion = 10; 
-    optional uint64 BSVVersion = 11; 
-    optional uint64 KesusVersion = 12; 
-    optional uint64 RTMRVersion = 13; 
-    optional uint64 SolomonVersion = 14; 
+message TPathVersion {
+    optional uint64 GeneralVersion = 1;
+
+    optional uint64 ACLVersion = 2;
+    optional uint64 EffectiveACLVersion = 3;
+    optional uint64 UserAttrsVersion = 4;
+    optional uint64 ChildrenVersion = 5;
+    optional uint64 SubDomainVersion = 6;
+    optional uint64 TableSchemaVersion = 7;
+    optional uint64 TablePartitionVersion = 8;
+    optional uint64 TableIndexVersion = 9;
+    optional uint64 PQVersion = 10;
+    optional uint64 BSVVersion = 11;
+    optional uint64 KesusVersion = 12;
+    optional uint64 RTMRVersion = 13;
+    optional uint64 SolomonVersion = 14;
     optional uint64 FileStoreVersion = 15;
     optional uint64 ColumnStoreVersion = 16;
     optional uint64 ColumnTableVersion = 17;
@@ -1376,8 +1376,8 @@ message TPathVersion {
     optional uint64 SecurityStateVersion = 23;
     optional uint64 SequenceVersion = 24;
     optional uint64 ReplicationVersion = 25;
-} 
- 
+}
+
 // Describes single path
 message TDirEntry {
     optional string Name = 1;
@@ -1394,7 +1394,7 @@ message TDirEntry {
     optional bytes EffectiveACL = 12;
     optional uint64 PathVersion = 13;
     optional EPathSubType PathSubType = 14;
-    optional TPathVersion Version = 15; 
+    optional TPathVersion Version = 15;
 
     optional uint64 BalancerTabletID = 999; //temporary optimization for old PQ read/write protocol. Must be removed later
 }

@@ -1,31 +1,31 @@
-syntax = "proto3"; 
-option cc_enable_arenas = true; 
- 
-import "google/protobuf/any.proto"; 
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
- 
+
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
- 
-package Ydb.Operations; 
- 
-option java_package = "com.yandex.ydb";
-option java_outer_classname = "OperationProtos"; 
 
-message OperationParams { 
-    enum OperationMode { 
-        OPERATION_MODE_UNSPECIFIED = 0; 
+package Ydb.Operations;
+
+option java_package = "com.yandex.ydb";
+option java_outer_classname = "OperationProtos";
+
+message OperationParams {
+    enum OperationMode {
+        OPERATION_MODE_UNSPECIFIED = 0;
 
         // Server will only reply once operation is finished (ready=true), and operation object won't be
         // accessible after the reply. This is a basic request-response mode.
         SYNC = 1;
 
         ASYNC = 2;
-    } 
- 
-    OperationMode operation_mode = 1; 
+    }
+
+    OperationMode operation_mode = 1;
 
     // Indicates that client is no longer interested in the result of operation after the specified duration
     // starting from the time operation arrives at the server.
@@ -48,16 +48,16 @@ message OperationParams {
     // If enabled, server will report cost information, if supported by the operation.
     // This flag is mostly useful for SYNC operations, to get the cost information in the response.
     Ydb.FeatureFlag.Status report_cost_info = 5;
-} 
- 
-message GetOperationRequest { 
+}
+
+message GetOperationRequest {
     string id = 1 [(required) = true];
-} 
- 
-message GetOperationResponse { 
-    Operation operation = 1; 
-} 
- 
+}
+
+message GetOperationResponse {
+    Operation operation = 1;
+}
+
 message CancelOperationRequest {
     string id = 1 [(required) = true];
 }
@@ -89,21 +89,21 @@ message ListOperationsResponse {
     string next_page_token = 4;
 }
 
-message Operation { 
+message Operation {
     // Identifier of the operation, empty value means no active operation object is present (it was forgotten or
     // not created in the first place, as in SYNC operation mode).
-    string id = 1; 
- 
-    // true - this operation has beed finished (doesn't matter successful or not), 
-    // so Status field has status code, and Result field can contains result data. 
-    // false - this operation still running. You can repeat request using operation Id. 
-    bool ready = 2; 
- 
-    StatusIds.StatusCode status = 3; 
- 
-    repeated Ydb.Issue.IssueMessage issues = 4; 
-    // Result data 
-    google.protobuf.Any result = 5; 
+    string id = 1;
+
+    // true - this operation has beed finished (doesn't matter successful or not),
+    // so Status field has status code, and Result field can contains result data.
+    // false - this operation still running. You can repeat request using operation Id.
+    bool ready = 2;
+
+    StatusIds.StatusCode status = 3;
+
+    repeated Ydb.Issue.IssueMessage issues = 4;
+    // Result data
+    google.protobuf.Any result = 5;
 
     google.protobuf.Any metadata = 6;
 
@@ -111,5 +111,5 @@ message Operation {
     // For completed operations, it shows the final cost of the operation.
     // For operations in progress, it might indicate the current cost of the operation (if supported).
     CostInfo cost_info = 7;
-} 
- 
+}
+

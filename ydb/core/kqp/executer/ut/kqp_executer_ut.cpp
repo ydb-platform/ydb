@@ -52,7 +52,7 @@ TKikimrParamsMap GetParamsMap(const NYdb::TParams& params) {
 
     auto paramValues = params.GetValues();
     for (auto& pair : paramValues) {
-        Ydb::TypedValue protoParam; 
+        Ydb::TypedValue protoParam;
         protoParam.mutable_type()->CopyFrom(NYdb::TProtoAccessor::GetProto(pair.second.GetType()));
         protoParam.mutable_value()->CopyFrom(NYdb::TProtoAccessor::GetProto(pair.second));
 
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
         LogTxPlan(kikimr, tx);
 
-        auto db = kikimr.GetTableClient(); 
+        auto db = kikimr.GetTableClient();
         auto params = db.GetParamsBuilder()
             .AddParam("$items")
                 .BeginList()

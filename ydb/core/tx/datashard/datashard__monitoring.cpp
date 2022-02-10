@@ -77,7 +77,7 @@ public:
             rec.SetPath(pr.second->Path);
             rec.SetLocalId(pr.second->LocalTid);
             rec.SetPathId(pr.first);
-            rec.SetSchemaVersion(pr.second->GetTableSchemaVersion()); 
+            rec.SetSchemaVersion(pr.second->GetTableSchemaVersion());
             pr.second->GetSchema(*rec.MutableDescription());
 
             if (pr.second->Stats.StatsUpdateTime) {

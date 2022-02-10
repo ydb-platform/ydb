@@ -5,7 +5,7 @@
 namespace NSchemeShardUT_Private {
 namespace NExportReboots {
 
-void Run(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) { 
+void Run(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
         {
             TInactiveZone inactive(activeZone);
@@ -43,7 +43,7 @@ void Run(const TVector<TString>& tables, const TString& request, TTestWithReboot
     });
 }
 
-void Cancel(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) { 
+void Cancel(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
         {
             TInactiveZone inactive(activeZone);
@@ -86,7 +86,7 @@ void Cancel(const TVector<TString>& tables, const TString& request, TTestWithReb
     });
 }
 
-void Forget(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) { 
+void Forget(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
         {
             TInactiveZone inactive(activeZone);

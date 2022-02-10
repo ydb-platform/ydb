@@ -6,14 +6,14 @@
 namespace NYql {
 namespace NDecimal {
 Y_UNIT_TEST_SUITE(TYqlDecimalTest) {
-    void SimplePositiveTest(TInt128 v, ui8 precision, ui8 scale, const TString& expected) { 
+    void SimplePositiveTest(TInt128 v, ui8 precision, ui8 scale, const TString& expected) {
         TString result = ToString(v, precision, scale);
         UNIT_ASSERT_VALUES_EQUAL(result, expected);
-        TInt128 parsed = FromString(result, precision, scale); 
+        TInt128 parsed = FromString(result, precision, scale);
         UNIT_ASSERT(parsed == v);
     }
 
-    void SimpleNegativeFormatTest(TInt128 v, ui8 precision, ui8 scale) { 
+    void SimpleNegativeFormatTest(TInt128 v, ui8 precision, ui8 scale) {
         TString result = ToString(v, precision, scale);
         UNIT_ASSERT_VALUES_EQUAL(result, "");
     }
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTest) {
     }
 
     Y_UNIT_TEST(TestHugeNumberFormat) {
-        TInt128 max120 = Inf() - 1; 
+        TInt128 max120 = Inf() - 1;
         const char max120String[] = "99999999999999999999999999999999999"; // 35 digits
         static_assert(sizeof(max120String) == 36, "sizeof(max120String) == 36");
         SimplePositiveTest(max120, MaxPrecision, 0, max120String);

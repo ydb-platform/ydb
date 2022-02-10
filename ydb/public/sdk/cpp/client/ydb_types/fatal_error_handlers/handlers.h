@@ -6,6 +6,6 @@
 
 namespace NYdb {
 
-void ThrowFatalError(const TString& str); 
+void ThrowFatalError(const TString& str);
 
 } // namespace NYdb

@@ -83,7 +83,7 @@ static void PrimitiveValueToYson(EPrimitiveType type, TValueParser& parser, NYso
             writer.OnStringScalar(parser.GetDyNumber());
             break;
         default:
-            ThrowFatalError(TStringBuilder() << "Unsupported primitive type: " << type); 
+            ThrowFatalError(TStringBuilder() << "Unsupported primitive type: " << type);
     }
 }
 
@@ -91,7 +91,7 @@ static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& wr
 {
     switch (parser.GetKind()) {
         case TTypeParser::ETypeKind::Primitive:
-            PrimitiveValueToYson(parser.GetPrimitiveType(), parser, writer); 
+            PrimitiveValueToYson(parser.GetPrimitiveType(), parser, writer);
             break;
 
         case TTypeParser::ETypeKind::Decimal:
@@ -105,7 +105,7 @@ static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& wr
             } else {
                 writer.OnBeginList();
                 writer.OnListItem();
-                FormatValueYsonInternal(parser, writer); 
+                FormatValueYsonInternal(parser, writer);
                 writer.OnEndList();
             }
             parser.CloseOptional();
@@ -117,7 +117,7 @@ static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& wr
 
             while (parser.TryNextListItem()) {
                 writer.OnListItem();
-                FormatValueYsonInternal(parser, writer); 
+                FormatValueYsonInternal(parser, writer);
             }
 
             writer.OnEndList();
@@ -130,7 +130,7 @@ static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& wr
 
             while (parser.TryNextMember()) {
                 writer.OnListItem();
-                FormatValueYsonInternal(parser, writer); 
+                FormatValueYsonInternal(parser, writer);
             }
 
             writer.OnEndList();
@@ -143,7 +143,7 @@ static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& wr
 
             while (parser.TryNextElement()) {
                 writer.OnListItem();
-                FormatValueYsonInternal(parser, writer); 
+                FormatValueYsonInternal(parser, writer);
             }
 
             writer.OnEndList();
@@ -159,11 +159,11 @@ static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& wr
 
                 writer.OnListItem();
                 parser.DictKey();
-                FormatValueYsonInternal(parser, writer); 
+                FormatValueYsonInternal(parser, writer);
 
                 writer.OnListItem();
                 parser.DictPayload();
-                FormatValueYsonInternal(parser, writer); 
+                FormatValueYsonInternal(parser, writer);
 
                 writer.OnEndList();
             }
@@ -180,14 +180,14 @@ static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& wr
             break;
 
         default:
-            ThrowFatalError(TStringBuilder() << "Unsupported type kind: " << parser.GetKind()); 
+            ThrowFatalError(TStringBuilder() << "Unsupported type kind: " << parser.GetKind());
     }
 }
 
 void FormatValueYson(const TValue& value, NYson::TYsonWriter& writer)
 {
     TValueParser parser(value);
-    FormatValueYsonInternal(parser, writer); 
+    FormatValueYsonInternal(parser, writer);
 }
 
 TString FormatValueYson(const TValue& value, NYson::EYsonFormat ysonFormat)
@@ -195,7 +195,7 @@ TString FormatValueYson(const TValue& value, NYson::EYsonFormat ysonFormat)
     TStringStream out;
     NYson::TYsonWriter writer(&out, ysonFormat, ::NYson::EYsonType::Node, true);
 
-    FormatValueYson(value, writer); 
+    FormatValueYson(value, writer);
 
     return out.Str();
 }
@@ -212,7 +212,7 @@ void FormatResultSetYson(const TResultSet& result, NYson::TYsonWriter& writer)
         writer.OnBeginList();
         for (ui32 i = 0; i < columns.size(); ++i) {
             writer.OnListItem();
-            FormatValueYsonInternal(parser.ColumnParser(i), writer); 
+            FormatValueYsonInternal(parser.ColumnParser(i), writer);
         }
         writer.OnEndList();
     }
@@ -225,7 +225,7 @@ TString FormatResultSetYson(const TResultSet& result, NYson::EYsonFormat ysonFor
     TStringStream out;
     NYson::TYsonWriter writer(&out, ysonFormat, ::NYson::EYsonType::Node, true);
 
-    FormatResultSetYson(result, writer); 
+    FormatResultSetYson(result, writer);
 
     return out.Str();
 }

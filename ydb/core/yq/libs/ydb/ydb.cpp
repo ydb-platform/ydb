@@ -241,7 +241,7 @@ TStatus MakeErrorStatus(
     auto& issue = issues.back();
     issue.SetCode((ui32)code, severity);
 
-    return TStatus(code, std::move(issues)); 
+    return TStatus(code, std::move(issues));
 }
 
 NYql::TIssues StatusToIssues(const NYdb::TStatus& status) {

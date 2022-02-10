@@ -2,7 +2,7 @@
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
-#include "rpc_common.h" 
+#include "rpc_common.h"
 
 #include <ydb/core/protos/console_config.pb.h>
 
@@ -40,12 +40,12 @@ public:
     }
 
     void Proceed(const TActorContext &ctx) {
-        const auto req = GetProtoRequest(); 
+        const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        SetAuthToken(ev, *Request_); 
-        SetDatabase(ev, *Request_); 
- 
+        SetAuthToken(ev, *Request_);
+        SetDatabase(ev, *Request_);
+
         if (traceId) {
             ev->Record.SetTraceId(traceId.GetRef());
         }
@@ -76,7 +76,7 @@ public:
             const auto& kqpResponse = record.GetResponse();
             const auto& issueMessage = kqpResponse.GetQueryIssues();
 
-            Ydb::Table::ExplainQueryResult queryResult; 
+            Ydb::Table::ExplainQueryResult queryResult;
             queryResult.set_query_ast(kqpResponse.GetQueryAst());
             queryResult.set_query_plan(kqpResponse.GetQueryPlan());
 

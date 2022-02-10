@@ -86,7 +86,7 @@ public:
                 if (n.empty() && p.empty()) {
                     n = p = "/";
                 }
-                Paths.emplace_back(n, p, ctx.RegisterWithSameMailbox(new TBrowse(Viewer, ctx.SelfID, p, Event->Get()->UserToken))); 
+                Paths.emplace_back(n, p, ctx.RegisterWithSameMailbox(new TBrowse(Viewer, ctx.SelfID, p, Event->Get()->UserToken)));
                 ++pos;
                 prevpos = pos;
             } else {
@@ -96,7 +96,7 @@ public:
         if (pos != prevpos) {
             TString n = path.substr(prevpos, pos - prevpos);
             TString p = path.substr(0, pos);
-            Paths.emplace_back(n, p, ctx.RegisterWithSameMailbox(new TBrowse(Viewer, ctx.SelfID, p, Event->Get()->UserToken))); 
+            Paths.emplace_back(n, p, ctx.RegisterWithSameMailbox(new TBrowse(Viewer, ctx.SelfID, p, Event->Get()->UserToken)));
         }
     }
 
@@ -110,7 +110,7 @@ public:
         if (Recursive) {
             ParsePath(path, ctx);
         } else {
-            Paths.emplace_back(path, path, ctx.RegisterWithSameMailbox(new TBrowse(Viewer, ctx.SelfID, path, Event->Get()->UserToken))); 
+            Paths.emplace_back(path, path, ctx.RegisterWithSameMailbox(new TBrowse(Viewer, ctx.SelfID, path, Event->Get()->UserToken)));
         }
         Become(&TThis::StateWait, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }

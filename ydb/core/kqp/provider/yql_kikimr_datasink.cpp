@@ -64,16 +64,16 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus HandleAlterTable(TKiAlterTable node, TExprContext& ctx) override { 
-        Y_UNUSED(ctx); 
- 
-        auto cluster = node.DataSink().Cluster(); 
-        auto table = node.Table(); 
- 
+    TStatus HandleAlterTable(TKiAlterTable node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+
+        auto cluster = node.DataSink().Cluster();
+        auto table = node.Table();
+
         SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table));
         return TStatus::Ok;
-    } 
- 
+    }
+
     TStatus HandleDropTable(TKiDropTable node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
 
@@ -190,22 +190,22 @@ private:
                 }
 
                 auto mode = settings.Mode.Cast();
-                if (mode == "create") { 
+                if (mode == "create") {
                     if (!settings.Columns) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                            << "No columns provided for create mode.")); 
-                        return TStatus::Error; 
-                    } 
- 
+                            << "No columns provided for create mode."));
+                        return TStatus::Error;
+                    }
+
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
-                } else if (mode == "alter") { 
+                } else if (mode == "alter") {
                     if (!settings.AlterActions) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                             << "No actions provided for alter mode."));
-                        return TStatus::Error; 
-                    } 
- 
+                        return TStatus::Error;
+                    }
+
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 }
@@ -235,9 +235,9 @@ private:
 
     TStatus HandleDataQuery(TKiDataQuery node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
-        for (const auto& op : node.Operations()) { 
+        for (const auto& op : node.Operations()) {
             SessionCtx->Tables().GetOrAddTable(TString(op.Cluster()), SessionCtx->GetDatabase(), TString(op.Table()));
-        } 
+        }
         return TStatus::Ok;
     }
 
@@ -275,7 +275,7 @@ private:
         }
 
         if (auto call = node.Maybe<TKiUpdateRow>()) {
- 
+
             auto cluster = call.Cast().Cluster().Value();
             auto table = call.Cast().Table();
 
@@ -422,9 +422,9 @@ public:
             return true;
         }
 
-        if (node.IsCallable(TKiCreateTable::CallableName()) 
-            || node.IsCallable(TKiDropTable::CallableName()) 
-            || node.IsCallable(TKiAlterTable::CallableName())) { 
+        if (node.IsCallable(TKiCreateTable::CallableName())
+            || node.IsCallable(TKiDropTable::CallableName())
+            || node.IsCallable(TKiAlterTable::CallableName())) {
             return true;
         }
 
@@ -534,54 +534,54 @@ public:
                 NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
-                if (mode == "create") { 
+                if (mode == "create") {
                     YQL_ENSURE(settings.Columns);
                     YQL_ENSURE(!settings.Columns.Cast().Empty());
 
                     if (!settings.PrimaryKey) {
                         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Primary key is required for ydb tables."));
-                        return nullptr; 
-                    } 
- 
+                        return nullptr;
+                    }
+
                     if (!settings.PartitionBy.IsValid()) {
                         settings.PartitionBy = Build<TCoAtomList>(ctx, node->Pos()).Done();
                     }
 
-                    return Build<TKiCreateTable>(ctx, node->Pos()) 
-                        .World(node->Child(0)) 
-                        .DataSink(node->Child(1)) 
-                        .Table().Build(key.GetTablePath()) 
+                    return Build<TKiCreateTable>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Table().Build(key.GetTablePath())
                         .Columns(settings.Columns.Cast())
                         .PrimaryKey(settings.PrimaryKey.Cast())
                         .Settings(settings.Other)
-                        .Indexes(settings.Indexes.Cast()) 
+                        .Indexes(settings.Indexes.Cast())
                         .Changefeeds(settings.Changefeeds.Cast())
                         .PartitionBy(settings.PartitionBy.Cast())
                         .ColumnFamilies(settings.ColumnFamilies.Cast())
                         .TableSettings(settings.TableSettings.Cast())
-                        .Done() 
-                        .Ptr(); 
-                } else if (mode == "alter") { 
+                        .Done()
+                        .Ptr();
+                } else if (mode == "alter") {
                     for (auto setting : settings.Other) {
                         if (setting.Name().Value() == "intent") {
                             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Old AST format for AlterTable"));
                             return nullptr;
-                        } 
-                    } 
+                        }
+                    }
 
                     YQL_ENSURE(settings.AlterActions);
                     YQL_ENSURE(!settings.AlterActions.Cast().Empty());
 
-                    return Build<TKiAlterTable>(ctx, node->Pos()) 
-                        .World(node->Child(0)) 
-                        .DataSink(node->Child(1)) 
-                        .Table().Build(key.GetTablePath()) 
+                    return Build<TKiAlterTable>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Table().Build(key.GetTablePath())
                         .Actions(settings.AlterActions.Cast())
-                        .Done() 
-                        .Ptr(); 
-                } else { 
+                        .Done()
+                        .Ptr();
+                } else {
                     YQL_ENSURE(false, "unknown TableScheme mode \"" << TString(mode) << "\"");
-                } 
+                }
             }
 
             case TKikimrKey::Type::TableList:
@@ -718,10 +718,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleCreateTable(node.Cast(), ctx);
     }
 
-    if (auto node = TMaybeNode<TKiAlterTable>(input)) { 
-        return HandleAlterTable(node.Cast(), ctx); 
-    } 
- 
+    if (auto node = TMaybeNode<TKiAlterTable>(input)) {
+        return HandleAlterTable(node.Cast(), ctx);
+    }
+
     if (auto node = TMaybeNode<TKiDropTable>(input)) {
         return HandleDropTable(node.Cast(), ctx);
     }

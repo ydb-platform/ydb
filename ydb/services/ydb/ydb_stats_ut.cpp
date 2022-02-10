@@ -29,7 +29,7 @@ struct TStatCounters {
     i64 ReadySessionsRatio = 0;
     ui64 FakeSessions = 0;
     ui64 CacheMiss = 0;
-    ui64 RetryOperationDueAborted = 0; 
+    ui64 RetryOperationDueAborted = 0;
 };
 
 class TMetricEncoder: public NMonitoring::IMetricEncoder {
@@ -45,7 +45,7 @@ public:
         READYSESSIONSRATIO,
         FAKESESSIONS,
         CACHEMISS,
-        RETRYOPERATIONDUEABORTED, 
+        RETRYOPERATIONDUEABORTED,
 
         DISCOVERYDUEPESSIMIZATION,
         DISCOVERYDUEEXPIRATION,
@@ -77,34 +77,34 @@ public:
             return;
         }
 
-        if (value == "Discovery/TooManyBadEndpoints") { 
+        if (value == "Discovery/TooManyBadEndpoints") {
             State = ECounterType::DISCOVERYDUEPESSIMIZATION;
-        } else if (value == "Discovery/Regular") { 
+        } else if (value == "Discovery/Regular") {
             State = ECounterType::DISCOVERYDUEEXPIRATION;
-        } else if (value == "Request/FailedDiscoveryQueueOverflow") { 
+        } else if (value == "Request/FailedDiscoveryQueueOverflow") {
             State = ECounterType::REQUESTFAILDUEQUEUEOVERFLOW;
-        } else if (value == "Request/FailedNoEndpoint") { 
+        } else if (value == "Request/FailedNoEndpoint") {
             State = ECounterType::REQUESTFAILDUENOENDPOINT;
-        } else if (value == "Request/FailedTransportError") { 
+        } else if (value == "Request/FailedTransportError") {
             State = ECounterType::REQUESTFAILDUETRANSPORTERROR;
-        } else if (value == "Discovery/FailedTransportError") { 
+        } else if (value == "Discovery/FailedTransportError") {
             State = ECounterType::DISCOVERYFAILDUETRANSPORTERROR;
-        } else if (value == "Endpoints/Total") { 
+        } else if (value == "Endpoints/Total") {
             State = ECounterType::ENDPOINTCOUNT;
-        } else if (value == "Endpoints/BadRatio") { 
+        } else if (value == "Endpoints/BadRatio") {
             State = ECounterType::ENDPOINTPESSIMIZATIONRATIO;
-        } else if (value == "Endpoints/Good") { 
+        } else if (value == "Endpoints/Good") {
             State = ECounterType::ENDPOINTACTIVE;
-        } else if (value == "Sessions/InUse") { 
+        } else if (value == "Sessions/InUse") {
             State = ECounterType::ACTIVESESSIONSRATIO;
         } else if (value == "ready sessions ratio") {
             State = ECounterType::READYSESSIONSRATIO;
-        } else if (value == "Sessions/SessionsLimitExceeded") { 
+        } else if (value == "Sessions/SessionsLimitExceeded") {
             State = ECounterType::FAKESESSIONS;
-        } else if (value == "Request/ClientQueryCacheMiss") { 
+        } else if (value == "Request/ClientQueryCacheMiss") {
             State = ECounterType::CACHEMISS;
-        } else if (value == "RetryOperation/Aborted") { 
-            State = ECounterType::RETRYOPERATIONDUEABORTED; 
+        } else if (value == "RetryOperation/Aborted") {
+            State = ECounterType::RETRYOPERATIONDUEABORTED;
         } else if (value == "request latency") {
             State = ECounterType::REQUESTLATENCY;
         } else {
@@ -138,7 +138,7 @@ public:
 
             case ECounterType::FAKESESSIONS: Counters.FakeSessions = value; break;
             case ECounterType::CACHEMISS: Counters.CacheMiss = value; break;
-            case ECounterType::RETRYOPERATIONDUEABORTED: Counters.RetryOperationDueAborted = value; break; 
+            case ECounterType::RETRYOPERATIONDUEABORTED: Counters.RetryOperationDueAborted = value; break;
             default: return;
         }
     }
@@ -204,11 +204,11 @@ private:
 
 TCountersExtractExtension::TCountersExtractExtension(const TParams& params, IApi* api)
     : MetricRegistry_(new NMonitoring::TMetricRegistry())
-    , Api_(api) 
-{ 
+    , Api_(api)
+{
     api->SetMetricRegistry(MetricRegistry_.get());
-    params.Extractor->Register(this); 
-} 
+    params.Extractor->Register(this);
+}
 
 using namespace NYdb::NTable;
 
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(ClientStatsCollector) {
         }, retrySelectSettings).IsSuccess() == false);
 
         TStatCounters counters = extractor.Extract();
-        UNIT_ASSERT_VALUES_EQUAL(counters.RetryOperationDueAborted, retriesCount); 
+        UNIT_ASSERT_VALUES_EQUAL(counters.RetryOperationDueAborted, retriesCount);
 
         UNIT_ASSERT(client.RetryOperation([&upsertOperation, settings, txSettings](TSession session){
             auto beginResult = session.BeginTransaction(TTxSettings::SerializableRW(), txSettings).GetValueSync();
@@ -328,58 +328,58 @@ Y_UNIT_TEST_SUITE(ClientStatsCollector) {
         }, retrySelectSettings).GetValueSync().IsSuccess() == false);
 
         counters = extractor.Extract();
-        // cumulative counter 
-        UNIT_ASSERT_VALUES_EQUAL(counters.RetryOperationDueAborted, retriesCount * 2); 
+        // cumulative counter
+        UNIT_ASSERT_VALUES_EQUAL(counters.RetryOperationDueAborted, retriesCount * 2);
 
         driver.Stop(true);
     }
- 
+
     Y_UNIT_TEST(ExternalMetricRegistryByRawPtr) {
         NMonitoring::TMetricRegistry sensorsRegistry;
-        NYdb::TKikimrWithGrpcAndRootSchema server; 
- 
-        auto endpoint = TStringBuilder() << "localhost:" << server.GetPort(); 
-        NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(endpoint)); 
- 
+        NYdb::TKikimrWithGrpcAndRootSchema server;
+
+        auto endpoint = TStringBuilder() << "localhost:" << server.GetPort();
+        NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(endpoint));
+
         NSolomonStatExtension::AddMetricRegistry(driver, &sensorsRegistry);
-        { 
-            NYdb::NTable::TTableClient client(driver); 
- 
-            auto createSessionResult = client.GetSession().GetValueSync(); 
-            auto session = createSessionResult.GetSession(); 
-            UNIT_ASSERT(SimpleSelect(session, "SELECT 1;").IsSuccess()); 
- 
-            TStringStream out; 
+        {
+            NYdb::NTable::TTableClient client(driver);
+
+            auto createSessionResult = client.GetSession().GetValueSync();
+            auto session = createSessionResult.GetSession();
+            UNIT_ASSERT(SimpleSelect(session, "SELECT 1;").IsSuccess());
+
+            TStringStream out;
             NMonitoring::IMetricEncoderPtr encoder = NMonitoring::EncoderJson(&out);
-            sensorsRegistry.Accept(TInstant::Zero(), encoder.Get()); 
-        } 
-        driver.Stop(true); 
-    } 
- 
-    template<template<typename...> class TPointer> 
+            sensorsRegistry.Accept(TInstant::Zero(), encoder.Get());
+        }
+        driver.Stop(true);
+    }
+
+    template<template<typename...> class TPointer>
     void TestExternalMetricRegistry() {
         TPointer<NMonitoring::TMetricRegistry> sensorsRegistry(new NMonitoring::TMetricRegistry());
-        NYdb::TKikimrWithGrpcAndRootSchema server; 
- 
-        auto endpoint = TStringBuilder() << "localhost:" << server.GetPort(); 
-        NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(endpoint)); 
- 
+        NYdb::TKikimrWithGrpcAndRootSchema server;
+
+        auto endpoint = TStringBuilder() << "localhost:" << server.GetPort();
+        NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(endpoint));
+
         NSolomonStatExtension::AddMetricRegistry(driver, sensorsRegistry);
-        { 
-            NYdb::NTable::TTableClient client(driver); 
- 
-            auto createSessionResult = client.GetSession().GetValueSync(); 
-            auto session = createSessionResult.GetSession(); 
-            UNIT_ASSERT(SimpleSelect(session, "SELECT 1;").IsSuccess()); 
- 
-            TStringStream out; 
+        {
+            NYdb::NTable::TTableClient client(driver);
+
+            auto createSessionResult = client.GetSession().GetValueSync();
+            auto session = createSessionResult.GetSession();
+            UNIT_ASSERT(SimpleSelect(session, "SELECT 1;").IsSuccess());
+
+            TStringStream out;
             NMonitoring::IMetricEncoderPtr encoder = NMonitoring::EncoderJson(&out);
-            sensorsRegistry->Accept(TInstant::Zero(), encoder.Get()); 
-        } 
-        driver.Stop(true); 
-    } 
- 
+            sensorsRegistry->Accept(TInstant::Zero(), encoder.Get());
+        }
+        driver.Stop(true);
+    }
+
     Y_UNIT_TEST(ExternalMetricRegistryStdSharedPtr) {
         TestExternalMetricRegistry<std::shared_ptr>();
-    } 
+    }
 }

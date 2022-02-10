@@ -7,14 +7,14 @@
 #include <google/protobuf/stubs/status.h>
 #include <google/protobuf/util/json_util.h>
 
-namespace Ydb { 
-namespace Operations { 
- 
-class Operation; 
- 
-} // namespace Operations 
-} // namespace Ydb 
- 
+namespace Ydb {
+namespace Operations {
+
+class Operation;
+
+} // namespace Operations
+} // namespace Ydb
+
 namespace NYdb {
 
 class TStatus;

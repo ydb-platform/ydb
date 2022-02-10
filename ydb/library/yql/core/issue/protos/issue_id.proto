@@ -1,25 +1,25 @@
-package NYql; 
-option java_package = "ru.yandex.yql.proto"; 
- 
+package NYql;
+option java_package = "ru.yandex.yql.proto";
+
 import "ydb/library/yql/public/issue/protos/issue_severity.proto";
- 
-message TIssuesIds { 
- 
-    enum EIssueCode { 
-        DEFAULT_ERROR = 0; 
-        UNEXPECTED = 1; 
+
+message TIssuesIds {
+
+    enum EIssueCode {
+        DEFAULT_ERROR = 0;
+        UNEXPECTED = 1;
         INFO = 2;
         WARNING = 3;
         SUCCESS = 4;
 // core codes
-        CORE = 1000; 
-        CORE_GC = 1010; 
-        CORE_PRE_TYPE_ANN = 1020; 
-        CORE_TYPE_ANN = 1030; 
-        CORE_INTENT = 1040; 
-        CORE_TABLE_METADATA_LOADER = 1050; 
-        CORE_EXEC = 1060; 
-        CORE_OPTIMIZATION = 1070; 
+        CORE = 1000;
+        CORE_GC = 1010;
+        CORE_PRE_TYPE_ANN = 1020;
+        CORE_TYPE_ANN = 1030;
+        CORE_INTENT = 1040;
+        CORE_TABLE_METADATA_LOADER = 1050;
+        CORE_EXEC = 1060;
+        CORE_OPTIMIZATION = 1070;
         CORE_PARAM_EVALUATION = 1080;
         CORE_EXPR_EVALUATION = 1081;
         CORE_POST_TYPE_ANN = 1090;
@@ -43,7 +43,7 @@ message TIssuesIds {
         CORE_GC_STRINGS_LIMIT_EXCEEDED = 1501;
 
 // kikimr
-        KIKIMR_LOCKS_INVALIDATED = 2001; 
+        KIKIMR_LOCKS_INVALIDATED = 2001;
         KIKIMR_LOCKS_ACQUIRE_FAILURE = 2002;
         KIKIMR_SCHEME_ERROR = 2003;
         KIKIMR_COMPILE_ERROR = 2004;
@@ -65,10 +65,10 @@ message TIssuesIds {
         KIKIMR_OPERATION_CANCELLED = 2021;
         KIKIMR_UNAUTHENTICATED = 2022;
         KIKIMR_UNIMPLEMENTED = 2023;
-        KIKIMR_INDEX_METADATA_LOAD_FAILED = 2024; 
-        KIKIMR_GRPC_CONTEXT_ERROR = 2025; 
+        KIKIMR_INDEX_METADATA_LOAD_FAILED = 2024;
+        KIKIMR_GRPC_CONTEXT_ERROR = 2025;
         KIKIMR_OPERATION_STATE_UNKNOWN = 2026;
-        KIKIMR_INDEX_IS_NOT_READY = 2027; 
+        KIKIMR_INDEX_IS_NOT_READY = 2027;
         KIKIMR_SCHEME_MISMATCH = 2028;
         KIKIMR_PRECONDITION_FAILED = 2029;
         KIKIMR_UNSUPPORTED = 2030;
@@ -79,11 +79,11 @@ message TIssuesIds {
         KIKIMR_READ_MODIFIED_TABLE = 2500;
         KIKIMR_OPERATION_REVERTED = 2501;
         KIKIMR_UPDATE_TABLE_WITH_DELETES = 2502;
-        KIKIMR_WRONG_INDEX_USAGE = 2503; 
+        KIKIMR_WRONG_INDEX_USAGE = 2503;
 
 // yt
         YT_TABLE_PATH_RECORD_FOR_TMP = 3001;
-        YT_INFER_SCHEMA = 3002; 
+        YT_INFER_SCHEMA = 3002;
         YT_ACCESS_DENIED = 3003;
         YT_TABLE_NOT_FOUND = 3004;
         YT_NATIVE_PRAGMA = 3005;
@@ -173,13 +173,13 @@ message TIssuesIds {
 
 // range [200000, 399999) reserved for KiKiMR issue codes, do not use!
 
-    } 
- 
-    message TIssueId { 
-        optional EIssueCode code = 2; 
-        optional TSeverityIds.ESeverityId severity = 1; 
+    }
+
+    message TIssueId {
+        optional EIssueCode code = 2;
+        optional TSeverityIds.ESeverityId severity = 1;
         optional string format = 3;
-    } 
- 
-    repeated TIssueId ids = 1; 
-} 
+    }
+
+    repeated TIssueId ids = 1;
+}

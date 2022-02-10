@@ -2,27 +2,27 @@
 #include "table_description.h"
 #include "table_settings.h"
 #include "ydb_convert.h"
- 
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/issue_id.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
- 
+
 #include <util/generic/hash.h>
 
-namespace NKikimr { 
- 
-static NProtoBuf::Timestamp MillisecToProtoTimeStamp(ui64 ms) { 
-    NProtoBuf::Timestamp timestamp; 
-    timestamp.set_seconds((i64)(ms / 1000)); 
-    timestamp.set_nanos((i32)((ms % 1000) * 1000000)); 
-    return timestamp; 
-} 
- 
+namespace NKikimr {
+
+static NProtoBuf::Timestamp MillisecToProtoTimeStamp(ui64 ms) {
+    NProtoBuf::Timestamp timestamp;
+    timestamp.set_seconds((i64)(ms / 1000));
+    timestamp.set_nanos((i32)((ms % 1000) * 1000000));
+    return timestamp;
+}
+
 template <typename TYdbProto>
 void FillColumnDescriptionImpl(TYdbProto& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
- 
+
     splitKeyType.SetKind(NKikimrMiniKQL::ETypeKind::Tuple);
     splitKeyType.MutableTuple()->MutableElement()->Reserve(in.KeyColumnIdsSize());
     THashMap<ui32, size_t> columnIdToKeyPos;
@@ -33,35 +33,35 @@ void FillColumnDescriptionImpl(TYdbProto& out,
     }
 
     for (const auto& column : in.GetColumns()) {
-        NYql::NProto::TypeIds protoType; 
-        if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) { 
-            throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR) 
-                << "Got invalid type: " << column.GetType() << " for column: " << column.GetName(); 
-        } 
- 
-        auto newColumn = out.add_columns(); 
-        newColumn->set_name(column.GetName()); 
-        auto& item = *newColumn->mutable_type()->mutable_optional_type()->mutable_item(); 
-        if (protoType == NYql::NProto::TypeIds::Decimal) { 
-            auto typeParams = item.mutable_decimal_type(); 
-            // TODO: Change TEvDescribeSchemeResult to return decimal params 
-            typeParams->set_precision(22); 
-            typeParams->set_scale(9); 
-        } else { 
-            NMiniKQL::ExportPrimitiveTypeToProto(protoType, item); 
-        } 
+        NYql::NProto::TypeIds protoType;
+        if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
+            throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
+                << "Got invalid type: " << column.GetType() << " for column: " << column.GetName();
+        }
+
+        auto newColumn = out.add_columns();
+        newColumn->set_name(column.GetName());
+        auto& item = *newColumn->mutable_type()->mutable_optional_type()->mutable_item();
+        if (protoType == NYql::NProto::TypeIds::Decimal) {
+            auto typeParams = item.mutable_decimal_type();
+            // TODO: Change TEvDescribeSchemeResult to return decimal params
+            typeParams->set_precision(22);
+            typeParams->set_scale(9);
+        } else {
+            NMiniKQL::ExportPrimitiveTypeToProto(protoType, item);
+        }
 
         if (columnIdToKeyPos.count(column.GetId())) {
             size_t keyPos = columnIdToKeyPos[column.GetId()];
             auto tupleElement = splitKeyType.MutableTuple()->MutableElement(keyPos);
             tupleElement->SetKind(NKikimrMiniKQL::ETypeKind::Optional);
             ConvertYdbTypeToMiniKQLType(item, *tupleElement->MutableOptional()->MutableItem());
-        } 
+        }
 
-        if (column.HasFamilyName()) { 
-            newColumn->set_family(column.GetFamilyName()); 
-        } 
-    } 
+        if (column.HasFamilyName()) {
+            newColumn->set_family(column.GetFamilyName());
+        }
+    }
 
     if (in.HasTTLSettings() && in.GetTTLSettings().HasEnabled()) {
         const auto& inTTL = in.GetTTLSettings().GetEnabled();
@@ -89,13 +89,13 @@ void FillColumnDescriptionImpl(TYdbProto& out,
             break;
         }
     }
-} 
- 
+}
+
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
     FillColumnDescriptionImpl(out, splitKeyType, in);
 }
- 
+
 void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
     FillColumnDescriptionImpl(out, splitKeyType, in);
@@ -147,9 +147,9 @@ bool ExtractColumnTypeId(ui32& outTypeId, const Ydb::Type& inType, Ydb::StatusId
 }
 
 bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
-    const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error) { 
+    const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error) {
 
-    for (const auto& column : in) { 
+    for (const auto& column : in) {
         NKikimrSchemeOp:: TColumnDescription* cd = out.AddColumns();
         cd->SetName(column.name());
         if (!column.type().has_optional_type()) {
@@ -180,13 +180,13 @@ template <typename TYdbProto>
 void FillTableBoundaryImpl(TYdbProto& out,
         const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
 
-    for (const auto& boundary : in.GetSplitBoundary()) { 
-        if (boundary.HasSerializedKeyPrefix()) { 
-            throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR) 
-                << "Unexpected serialized response from txProxy"; 
-        } else if (boundary.HasKeyPrefix()) { 
+    for (const auto& boundary : in.GetSplitBoundary()) {
+        if (boundary.HasSerializedKeyPrefix()) {
+            throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
+                << "Unexpected serialized response from txProxy";
+        } else if (boundary.HasKeyPrefix()) {
             Ydb::TypedValue* ydbValue = nullptr;
- 
+
             if constexpr (std::is_same<TYdbProto, Ydb::Table::DescribeTableResult>::value) {
                 ydbValue = out.add_shard_key_bounds();
             } else if constexpr (std::is_same<TYdbProto, Ydb::Table::CreateTableRequest>::value) {
@@ -195,26 +195,26 @@ void FillTableBoundaryImpl(TYdbProto& out,
                 Y_FAIL("Unknown proto type");
             }
 
-            ConvertMiniKQLTypeToYdbType( 
-                splitKeyType, 
-                *ydbValue->mutable_type()); 
- 
-            ConvertMiniKQLValueToYdbValue( 
-                splitKeyType, 
-                boundary.GetKeyPrefix(), 
-                *ydbValue->mutable_value()); 
-        } else { 
-            throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR) 
-                << "Got invalid boundary"; 
-        } 
-    } 
-} 
- 
+            ConvertMiniKQLTypeToYdbType(
+                splitKeyType,
+                *ydbValue->mutable_type());
+
+            ConvertMiniKQLValueToYdbValue(
+                splitKeyType,
+                boundary.GetKeyPrefix(),
+                *ydbValue->mutable_value());
+        } else {
+            throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
+                << "Got invalid boundary";
+        }
+    }
+}
+
 void FillTableBoundary(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
     FillTableBoundaryImpl<Ydb::Table::DescribeTableResult>(out, in, splitKeyType);
 }
- 
+
 void FillTableBoundary(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
     FillTableBoundaryImpl<Ydb::Table::CreateTableRequest>(out, in, splitKeyType);
@@ -224,27 +224,27 @@ template <typename TYdbProto>
 void FillIndexDescriptionImpl(TYdbProto& out,
         const NKikimrSchemeOp::TTableDescription& in) {
 
-    for (const auto& tableIndex : in.GetTableIndexes()) { 
-        auto index = out.add_indexes(); 
+    for (const auto& tableIndex : in.GetTableIndexes()) {
+        auto index = out.add_indexes();
 
-        index->set_name(tableIndex.GetName()); 
+        index->set_name(tableIndex.GetName());
 
-        *index->mutable_index_columns() = { 
-            tableIndex.GetKeyColumnNames().begin(), 
-            tableIndex.GetKeyColumnNames().end() 
-        }; 
- 
-        *index->mutable_data_columns() = { 
-            tableIndex.GetDataColumnNames().begin(), 
-            tableIndex.GetDataColumnNames().end() 
-        }; 
- 
+        *index->mutable_index_columns() = {
+            tableIndex.GetKeyColumnNames().begin(),
+            tableIndex.GetKeyColumnNames().end()
+        };
+
+        *index->mutable_data_columns() = {
+            tableIndex.GetDataColumnNames().begin(),
+            tableIndex.GetDataColumnNames().end()
+        };
+
         switch (tableIndex.GetType()) {
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
-            *index->mutable_global_index() = Ydb::Table::GlobalIndex(); 
+            *index->mutable_global_index() = Ydb::Table::GlobalIndex();
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
-            *index->mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex(); 
+            *index->mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
             break;
         default:
             break;
@@ -257,10 +257,10 @@ void FillIndexDescriptionImpl(TYdbProto& out,
                 index->set_status(Ydb::Table::TableIndexDescription::STATUS_BUILDING);
             }
             index->set_size_bytes(tableIndex.GetDataSize());
-        } 
-    } 
-} 
- 
+        }
+    }
+}
+
 void FillIndexDescription(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TTableDescription& in) {
     FillIndexDescriptionImpl(out, in);
@@ -280,24 +280,24 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         return false;
     };
 
-    for (const auto& index : in.indexes()) { 
-        auto indexDesc = out.MutableIndexDescription()->Add(); 
+    for (const auto& index : in.indexes()) {
+        auto indexDesc = out.MutableIndexDescription()->Add();
 
         if (!index.data_columns().empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
-            return returnError(Ydb::StatusIds::UNSUPPORTED, "Data column feature is not supported yet"); 
+            return returnError(Ydb::StatusIds::UNSUPPORTED, "Data column feature is not supported yet");
         }
 
         // common fields
         indexDesc->SetName(index.name());
- 
+
         for (const auto& col : index.index_columns()) {
             indexDesc->AddKeyColumnNames(col);
         }
 
-        for (const auto& col : index.data_columns()) { 
-            indexDesc->AddDataColumnNames(col); 
-        } 
- 
+        for (const auto& col : index.data_columns()) {
+            indexDesc->AddDataColumnNames(col);
+        }
+
         // specific fields
         switch (index.type_case()) {
         case Ydb::Table::TableIndex::kGlobalIndex:
@@ -307,7 +307,7 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
             if (!AppData()->FeatureFlags.GetEnableAsyncIndexes()) {
                 return returnError(Ydb::StatusIds::UNSUPPORTED, "Async indexes are not supported yet");
-            } 
+            }
 
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync);
             break;
@@ -344,37 +344,37 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
 void FillTableStats(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic) {
 
-    auto stats = out.mutable_table_stats(); 
- 
-    if (withPartitionStatistic) { 
-        for (const auto& tablePartitionStat : in.GetTablePartitionStats()) { 
-            auto partition = stats->add_partition_stats(); 
-            partition->set_rows_estimate(tablePartitionStat.GetRowCount()); 
+    auto stats = out.mutable_table_stats();
+
+    if (withPartitionStatistic) {
+        for (const auto& tablePartitionStat : in.GetTablePartitionStats()) {
+            auto partition = stats->add_partition_stats();
+            partition->set_rows_estimate(tablePartitionStat.GetRowCount());
             partition->set_store_size(tablePartitionStat.GetDataSize() + tablePartitionStat.GetIndexSize());
-        } 
-    } 
- 
-    stats->set_rows_estimate(in.GetTableStats().GetRowCount()); 
-    stats->set_partitions(in.GetTableStats().GetPartCount()); 
- 
+        }
+    }
+
+    stats->set_rows_estimate(in.GetTableStats().GetRowCount());
+    stats->set_partitions(in.GetTableStats().GetPartCount());
+
     stats->set_store_size(in.GetTableStats().GetDataSize() + in.GetTableStats().GetIndexSize());
     for (const auto& index : in.GetTable().GetTableIndexes()) {
         stats->set_store_size(stats->store_size() + index.GetDataSize());
     }
 
-    ui64 modificationTimeMs = in.GetTableStats().GetLastUpdateTime(); 
+    ui64 modificationTimeMs = in.GetTableStats().GetLastUpdateTime();
     if (modificationTimeMs) {
         auto modificationTime = MillisecToProtoTimeStamp(modificationTimeMs);
         stats->mutable_modification_time()->CopyFrom(modificationTime);
     }
- 
+
     ui64 creationTimeMs = in.GetSelf().GetCreateStep();
     if (creationTimeMs) {
         auto creationTime = MillisecToProtoTimeStamp(creationTimeMs);
         stats->mutable_creation_time()->CopyFrom(creationTime);
     }
-} 
- 
+}
+
 static bool IsDefaultFamily(const NKikimrSchemeOp::TFamilyDescription& family) {
     if (family.HasId() && family.GetId() == 0) {
         return true; // explicit id 0
@@ -694,8 +694,8 @@ void FillReadReplicasSettings(Ydb::Table::DescribeTableResult& out,
 void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in) {
     FillReadReplicasSettingsImpl(out, in);
-} 
- 
+}
+
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
         const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error)
 {
@@ -731,4 +731,4 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     return true;
 }
 
-} // namespace NKikimr 
+} // namespace NKikimr

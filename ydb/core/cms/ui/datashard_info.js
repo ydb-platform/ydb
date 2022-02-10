@@ -37,10 +37,10 @@ function onDataShardInfoLoaded(data) {
                       <td class="ds-info">LocalId</td>
                       <td class="ds-info">${table.LocalId}</td>
                     </tr>
-                    <tr class="ds-info"> 
-                      <td class="ds-info">SchemaVersion</td> 
-                      <td class="ds-info">${table.SchemaVersion}</td> 
-                    </tr> 
+                    <tr class="ds-info">
+                      <td class="ds-info">SchemaVersion</td>
+                      <td class="ds-info">${table.SchemaVersion}</td>
+                    </tr>
                   </tbody>
                 </table>
             `;

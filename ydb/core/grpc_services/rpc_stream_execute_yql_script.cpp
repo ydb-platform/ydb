@@ -1,8 +1,8 @@
-#include "service_yql_scripting.h" 
+#include "service_yql_scripting.h"
 #include "rpc_kqp_base.h"
 
 #include <ydb/public/api/protos/ydb_scripting.pb.h>
- 
+
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/kikimr_issue.h>
@@ -16,9 +16,9 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-using TEvStreamExecuteYqlScriptRequest = 
-    TGrpcRequestNoOperationCall<Ydb::Scripting::ExecuteYqlRequest, Ydb::Scripting::ExecuteYqlPartialResponse>; 
- 
+using TEvStreamExecuteYqlScriptRequest =
+    TGrpcRequestNoOperationCall<Ydb::Scripting::ExecuteYqlRequest, Ydb::Scripting::ExecuteYqlPartialResponse>;
+
 namespace {
 
 using namespace NActors;
@@ -109,7 +109,7 @@ public:
         return NKikimrServices::TActivity::GRPC_STREAM_REQ;
     }
 
-    TStreamExecuteYqlScriptRPC(IRequestNoOpCtx* request, ui64 rpcBufferSize) 
+    TStreamExecuteYqlScriptRPC(IRequestNoOpCtx* request, ui64 rpcBufferSize)
         : TBase(request)
         , RpcBufferSize_(rpcBufferSize)
     {}
@@ -505,9 +505,9 @@ private:
 
 } // namespace
 
-void DoStreamExecuteYqlScript(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& facility) { 
-    ui64 rpcBufferSize = facility.GetAppConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize(); 
-    TActivationContext::AsActorContext().Register(new TStreamExecuteYqlScriptRPC(p.release(), rpcBufferSize)); 
+void DoStreamExecuteYqlScript(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& facility) {
+    ui64 rpcBufferSize = facility.GetAppConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
+    TActivationContext::AsActorContext().Register(new TStreamExecuteYqlScriptRPC(p.release(), rpcBufferSize));
 }
 
 } // namespace NGRpcService

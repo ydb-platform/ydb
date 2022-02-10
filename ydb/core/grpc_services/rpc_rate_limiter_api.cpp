@@ -20,11 +20,11 @@ class TRateLimiterRequest : public TRpcOperationRequestActor<TDerived, TRequest>
 public:
     using TBase = TRpcOperationRequestActor<TDerived, TRequest>;
 
-    TRateLimiterRequest(IRequestOpCtx* msg, bool trusted = false) 
-        : TBase(msg) 
-        , TrustedZone(trusted) 
-    {} 
- 
+    TRateLimiterRequest(IRequestOpCtx* msg, bool trusted = false)
+        : TBase(msg)
+        , TrustedZone(trusted)
+    {}
+
     bool ValidateResource(const Ydb::RateLimiter::Resource& resource, Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
         if (!ValidateResourcePath(resource.resource_path(), status, issues)) {
             return false;
@@ -47,27 +47,27 @@ public:
         }
         return true;
     }
- 
-    bool ValidateCoordinationNodePath(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) { 
-        auto databaseName = this->Request_->GetDatabaseName() 
-            .GetOrElse(DatabaseFromDomain(AppData())); 
- 
-        if (!TrustedZone && !GetCoordinationNodePath().StartsWith(databaseName)) { 
-            status = StatusIds::BAD_REQUEST; 
-            issues.AddIssue("Coordination node path not belong to current database."); 
-            return false; 
-        } 
-        return true; 
-    } 
- 
-protected: 
-    const TString& GetCoordinationNodePath() const { 
-        return this->GetProtoRequest()->coordination_node_path(); 
-    } 
- 
-private: 
-    const bool TrustedZone; 
-}; 
+
+    bool ValidateCoordinationNodePath(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
+        auto databaseName = this->Request_->GetDatabaseName()
+            .GetOrElse(DatabaseFromDomain(AppData()));
+
+        if (!TrustedZone && !GetCoordinationNodePath().StartsWith(databaseName)) {
+            status = StatusIds::BAD_REQUEST;
+            issues.AddIssue("Coordination node path not belong to current database.");
+            return false;
+        }
+        return true;
+    }
+
+protected:
+    const TString& GetCoordinationNodePath() const {
+        return this->GetProtoRequest()->coordination_node_path();
+    }
+
+private:
+    const bool TrustedZone;
+};
 
 template <class TEvRequest>
 class TRateLimiterControlRequest : public TRateLimiterRequest<TRateLimiterControlRequest<TEvRequest>, TEvRequest> {
@@ -82,12 +82,12 @@ public:
 
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         NYql::TIssues issues;
- 
-        if (!this->ValidateCoordinationNodePath(status, issues)) { 
-            this->Reply(status, issues, TActivationContext::ActorContextFor(this->SelfId())); 
-            return; 
-        } 
- 
+
+        if (!this->ValidateCoordinationNodePath(status, issues)) {
+            this->Reply(status, issues, TActivationContext::ActorContextFor(this->SelfId()));
+            return;
+        }
+
         if (!ValidateRequest(status, issues)) {
             this->Reply(status, issues, TActivationContext::ActorContextFor(this->SelfId()));
             return;
@@ -108,7 +108,7 @@ protected:
     }
 
     void ResolveCoordinationPath() {
-        TVector<TString> path = NKikimr::SplitPath(this->GetCoordinationNodePath()); 
+        TVector<TString> path = NKikimr::SplitPath(this->GetCoordinationNodePath());
         if (path.empty()) {
             this->Reply(StatusIds::BAD_REQUEST, "Empty path.", NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, TActivationContext::ActorContextFor(this->SelfId()));
             return;
@@ -235,14 +235,14 @@ public:
     }
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
-        return ValidateResource(GetProtoRequest()->resource(), status, issues); 
+        return ValidateResource(GetProtoRequest()->resource(), status, issues);
     }
 
     void SendRequest() override {
         Become(&TCreateRateLimiterResourceRPC::StateFunc);
 
         THolder<TEvKesus::TEvAddQuoterResource> req = MakeHolder<TEvKesus::TEvAddQuoterResource>();
-        CopyProps(GetProtoRequest()->resource(), *req->Record.MutableResource()); 
+        CopyProps(GetProtoRequest()->resource(), *req->Record.MutableResource());
         NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release(), 0);
     }
 
@@ -266,14 +266,14 @@ public:
     }
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
-        return ValidateResource(GetProtoRequest()->resource(), status, issues); 
+        return ValidateResource(GetProtoRequest()->resource(), status, issues);
     }
 
     void SendRequest() override {
         Become(&TAlterRateLimiterResourceRPC::StateFunc);
 
         THolder<TEvKesus::TEvUpdateQuoterResource> req = MakeHolder<TEvKesus::TEvUpdateQuoterResource>();
-        CopyProps(GetProtoRequest()->resource(), *req->Record.MutableResource()); 
+        CopyProps(GetProtoRequest()->resource(), *req->Record.MutableResource());
         NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release(), 0);
     }
 
@@ -297,14 +297,14 @@ public:
     }
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
-        return ValidateResourcePath(GetProtoRequest()->resource_path(), status, issues); 
+        return ValidateResourcePath(GetProtoRequest()->resource_path(), status, issues);
     }
 
     void SendRequest() override {
         Become(&TDropRateLimiterResourceRPC::StateFunc);
 
         THolder<TEvKesus::TEvDeleteQuoterResource> req = MakeHolder<TEvKesus::TEvDeleteQuoterResource>();
-        req->Record.SetResourcePath(GetProtoRequest()->resource_path()); 
+        req->Record.SetResourcePath(GetProtoRequest()->resource_path());
         NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release(), 0);
     }
 
@@ -328,7 +328,7 @@ public:
     }
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
-        if (const TString& path = GetProtoRequest()->resource_path()) { 
+        if (const TString& path = GetProtoRequest()->resource_path()) {
             return ValidateResourcePath(path, status, issues);
         }
         return true;
@@ -338,10 +338,10 @@ public:
         Become(&TListRateLimiterResourcesRPC::StateFunc);
 
         THolder<TEvKesus::TEvDescribeQuoterResources> req = MakeHolder<TEvKesus::TEvDescribeQuoterResources>();
-        if (const TString& path = GetProtoRequest()->resource_path()) { 
+        if (const TString& path = GetProtoRequest()->resource_path()) {
             req->Record.AddResourcePaths(path);
         }
-        req->Record.SetRecursive(GetProtoRequest()->recursive()); 
+        req->Record.SetRecursive(GetProtoRequest()->recursive());
         NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release(), 0);
     }
 
@@ -375,14 +375,14 @@ public:
     }
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
-        return ValidateResourcePath(GetProtoRequest()->resource_path(), status, issues); 
+        return ValidateResourcePath(GetProtoRequest()->resource_path(), status, issues);
     }
 
     void SendRequest() override {
         Become(&TDescribeRateLimiterResourceRPC::StateFunc);
 
         THolder<TEvKesus::TEvDescribeQuoterResources> req = MakeHolder<TEvKesus::TEvDescribeQuoterResources>();
-        req->Record.AddResourcePaths(GetProtoRequest()->resource_path()); 
+        req->Record.AddResourcePaths(GetProtoRequest()->resource_path());
         NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release(), 0);
     }
 
@@ -415,19 +415,19 @@ public:
 
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         NYql::TIssues issues;
- 
-        if (!ValidateCoordinationNodePath(status, issues)) { 
-            Reply(status, issues, TActivationContext::AsActorContext()); 
-            return; 
-        } 
- 
+
+        if (!ValidateCoordinationNodePath(status, issues)) {
+            Reply(status, issues, TActivationContext::AsActorContext());
+            return;
+        }
+
         if (!ValidateRequest(status, issues)) {
             Reply(status, issues, TActivationContext::AsActorContext());
             return;
         }
 
         SendRequest();
-    } 
+    }
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
@@ -438,11 +438,11 @@ public:
     }
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        if (!ValidateResourcePath(GetProtoRequest()->resource_path(), status, issues)) { 
+        if (!ValidateResourcePath(GetProtoRequest()->resource_path(), status, issues)) {
             return false;
         }
 
-        if (GetProtoRequest()->units_case() == Ydb::RateLimiter::AcquireResourceRequest::UnitsCase::UNITS_NOT_SET) { 
+        if (GetProtoRequest()->units_case() == Ydb::RateLimiter::AcquireResourceRequest::UnitsCase::UNITS_NOT_SET) {
             return false;
         }
 
@@ -452,24 +452,24 @@ public:
     void SendRequest() {
         Become(&TAcquireRateLimiterResourceRPC::StateFunc);
 
-        if (GetProtoRequest()->units_case() == Ydb::RateLimiter::AcquireResourceRequest::UnitsCase::kRequired) { 
+        if (GetProtoRequest()->units_case() == Ydb::RateLimiter::AcquireResourceRequest::UnitsCase::kRequired) {
             SendLeaf(
-                TEvQuota::TResourceLeaf(GetProtoRequest()->coordination_node_path(), 
-                                        GetProtoRequest()->resource_path(), 
-                                        GetProtoRequest()->required())); 
+                TEvQuota::TResourceLeaf(GetProtoRequest()->coordination_node_path(),
+                                        GetProtoRequest()->resource_path(),
+                                        GetProtoRequest()->required()));
             return;
-        } 
+        }
 
         SendLeaf(
-            TEvQuota::TResourceLeaf(GetProtoRequest()->coordination_node_path(), 
-                                    GetProtoRequest()->resource_path(), 
-                                    GetProtoRequest()->used(), 
+            TEvQuota::TResourceLeaf(GetProtoRequest()->coordination_node_path(),
+                                    GetProtoRequest()->resource_path(),
+                                    GetProtoRequest()->used(),
                                     true));
     }
 
     void SendLeaf(const TEvQuota::TResourceLeaf& leaf) {
         Send(MakeQuoterServiceID(),
-            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { leaf }, GetOperationTimeout()), 0, 0); 
+            new TEvQuota::TEvRequest(TEvQuota::EResourceOperator::And, { leaf }, GetOperationTimeout()), 0, 0);
     }
 
     void Handle(TEvQuota::TEvClearance::TPtr& ev) {
@@ -515,9 +515,9 @@ void TGRpcRequestProxy::Handle(TEvAcquireRateLimiterResource::TPtr& ev, const TA
     ctx.Register(new TAcquireRateLimiterResourceRPC(ev->Release().Release()));
 }
 
-template<> 
-IActor* TEvAcquireRateLimiterResource::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) { 
-    return new TAcquireRateLimiterResourceRPC(msg, true); 
-} 
- 
+template<>
+IActor* TEvAcquireRateLimiterResource::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TAcquireRateLimiterResourceRPC(msg, true);
+}
+
 } // namespace NKikimr::NGRpcService

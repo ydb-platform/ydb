@@ -4,7 +4,7 @@
 
 #include <library/cpp/grpc/client/grpc_client_low.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
- 
+
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
 
@@ -69,7 +69,7 @@ public:
                  << " (" << response.GetStatus().GetReason() << ")" << Endl;
     }
 
-    virtual void PrintResponse(const Ydb::Operations::Operation &response) 
+    virtual void PrintResponse(const Ydb::Operations::Operation &response)
     {
         if (response.status() == Ydb::StatusIds::SUCCESS)
             Cout << "OK" << Endl;
@@ -149,7 +149,7 @@ public:
 
     int Run(TConfig &config) override
     {
-        Ydb::Operations::Operation response; 
+        Ydb::Operations::Operation response;
         int res;
 
         res = DoGRpcRequest<TService, TRequest, TResponse, TFunction>
@@ -164,11 +164,11 @@ public:
 };
 
 class TClientCommandTenantList
-    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService, 
-                                      Ydb::Cms::ListDatabasesRequest, 
-                                      Ydb::Cms::ListDatabasesResponse, 
-                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncListDatabases), 
-                                      &Ydb::Cms::V1::CmsService::Stub::AsyncListDatabases> { 
+    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService,
+                                      Ydb::Cms::ListDatabasesRequest,
+                                      Ydb::Cms::ListDatabasesResponse,
+                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncListDatabases),
+                                      &Ydb::Cms::V1::CmsService::Stub::AsyncListDatabases> {
 public:
     TClientCommandTenantList()
         : TTenantClientGRpcCommand("list", {}, "List existing databases")
@@ -176,12 +176,12 @@ public:
 
     using TTenantClientGRpcCommand::PrintResponse;
 
-    void PrintResponse(const Ydb::Operations::Operation &response) override 
+    void PrintResponse(const Ydb::Operations::Operation &response) override
     {
         if (response.status() != Ydb::StatusIds::SUCCESS) {
             TTenantClientGRpcCommand::PrintResponse(response);
         } else {
-            Ydb::Cms::ListDatabasesResult result; 
+            Ydb::Cms::ListDatabasesResult result;
             Y_VERIFY(response.result().UnpackTo(&result));
 
             Cout << "Databases:" << Endl;
@@ -192,11 +192,11 @@ public:
 };
 
 class TClientCommandTenantOptions
-    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService, 
+    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService,
                                       Ydb::Cms::DescribeDatabaseOptionsRequest,
                                       Ydb::Cms::DescribeDatabaseOptionsResponse,
-                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncDescribeDatabaseOptions), 
-                                      &Ydb::Cms::V1::CmsService::Stub::AsyncDescribeDatabaseOptions> { 
+                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncDescribeDatabaseOptions),
+                                      &Ydb::Cms::V1::CmsService::Stub::AsyncDescribeDatabaseOptions> {
 public:
     TClientCommandTenantOptions()
         : TTenantClientGRpcCommand("options", {}, "Describe available database options")
@@ -236,11 +236,11 @@ public:
 };
 
 class TClientCommandTenantStatus
-    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService, 
-                                      Ydb::Cms::GetDatabaseStatusRequest, 
-                                      Ydb::Cms::GetDatabaseStatusResponse, 
-                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncGetDatabaseStatus), 
-                                      &Ydb::Cms::V1::CmsService::Stub::AsyncGetDatabaseStatus> { 
+    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService,
+                                      Ydb::Cms::GetDatabaseStatusRequest,
+                                      Ydb::Cms::GetDatabaseStatusResponse,
+                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncGetDatabaseStatus),
+                                      &Ydb::Cms::V1::CmsService::Stub::AsyncGetDatabaseStatus> {
 public:
     TClientCommandTenantStatus()
         : TTenantClientGRpcCommand("status", {}, "Get database status")
@@ -260,12 +260,12 @@ public:
 
     using TTenantClientGRpcCommand::PrintResponse;
 
-    void PrintResponse(const Ydb::Operations::Operation &response) override 
+    void PrintResponse(const Ydb::Operations::Operation &response) override
     {
         if (response.status() != Ydb::StatusIds::SUCCESS) {
             TTenantClientGRpcCommand::PrintResponse(response);
         } else {
-            Ydb::Cms::GetDatabaseStatusResult result; 
+            Ydb::Cms::GetDatabaseStatusResult result;
             Y_VERIFY(response.result().UnpackTo(&result));
             // type -> <required, allocated>
             THashMap<TString, std::pair<ui64, ui64>> pools;
@@ -308,11 +308,11 @@ public:
 };
 
 class TClientCommandTenantCreate
-    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService, 
-                                      Ydb::Cms::CreateDatabaseRequest, 
-                                      Ydb::Cms::CreateDatabaseResponse, 
-                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase), 
-                                      &Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase> { 
+    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService,
+                                      Ydb::Cms::CreateDatabaseRequest,
+                                      Ydb::Cms::CreateDatabaseResponse,
+                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase),
+                                      &Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase> {
     TVector<TString> Attributes;
     bool Serverless = false;
 
@@ -347,7 +347,7 @@ public:
             TVector<TString> items = StringSplitter(attr).Split('=').ToList<TString>();
             if (items.size() != 2)
                 ythrow yexception() << "bad format in attr '" + attr + "'";
-            (*GRpcRequest.mutable_attributes())[items[0]] = items[1]; 
+            (*GRpcRequest.mutable_attributes())[items[0]] = items[1];
         }
 
         if (Serverless) {
@@ -369,13 +369,13 @@ public:
 };
 
 class TClientCommandTenantRemove
-    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService, 
-                                      Ydb::Cms::RemoveDatabaseRequest, 
-                                      Ydb::Cms::RemoveDatabaseResponse, 
-                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncRemoveDatabase), 
-                                      &Ydb::Cms::V1::CmsService::Stub::AsyncRemoveDatabase> { 
+    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService,
+                                      Ydb::Cms::RemoveDatabaseRequest,
+                                      Ydb::Cms::RemoveDatabaseResponse,
+                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncRemoveDatabase),
+                                      &Ydb::Cms::V1::CmsService::Stub::AsyncRemoveDatabase> {
 private:
-    Ydb::Cms::RemoveDatabaseRequest Request; 
+    Ydb::Cms::RemoveDatabaseRequest Request;
     bool Force;
 
 public:
@@ -413,11 +413,11 @@ public:
 };
 
 class TClientCommandTenantAddUnits
-    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService, 
-                                      Ydb::Cms::AlterDatabaseRequest, 
-                                      Ydb::Cms::AlterDatabaseResponse, 
-                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase), 
-                                      &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase> { 
+    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService,
+                                      Ydb::Cms::AlterDatabaseRequest,
+                                      Ydb::Cms::AlterDatabaseResponse,
+                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase),
+                                      &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase> {
 public:
     TClientCommandTenantAddUnits()
         : TTenantClientGRpcCommand("add", {}, "Add computational units for database")
@@ -448,11 +448,11 @@ public:
 };
 
 class TClientCommandTenantRemoveUnits
-    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService, 
-                                      Ydb::Cms::AlterDatabaseRequest, 
-                                      Ydb::Cms::AlterDatabaseResponse, 
-                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase), 
-                                      &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase> { 
+    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService,
+                                      Ydb::Cms::AlterDatabaseRequest,
+                                      Ydb::Cms::AlterDatabaseResponse,
+                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase),
+                                      &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase> {
 public:
     TClientCommandTenantRemoveUnits()
         : TTenantClientGRpcCommand("remove", {}, "Remove computational units from database")
@@ -483,11 +483,11 @@ public:
 };
 
 class TClientCommandTenantRegisterUnits
-    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService, 
-                                      Ydb::Cms::AlterDatabaseRequest, 
-                                      Ydb::Cms::AlterDatabaseResponse, 
-                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase), 
-                                      &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase> { 
+    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService,
+                                      Ydb::Cms::AlterDatabaseRequest,
+                                      Ydb::Cms::AlterDatabaseResponse,
+                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase),
+                                      &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase> {
 public:
     TClientCommandTenantRegisterUnits()
         : TTenantClientGRpcCommand("register", {}, "Register computational units for database")
@@ -524,11 +524,11 @@ public:
 };
 
 class TClientCommandTenantDeregisterUnits
-    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService, 
-                                      Ydb::Cms::AlterDatabaseRequest, 
-                                      Ydb::Cms::AlterDatabaseResponse, 
-                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase), 
-                                      &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase> { 
+    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService,
+                                      Ydb::Cms::AlterDatabaseRequest,
+                                      Ydb::Cms::AlterDatabaseResponse,
+                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase),
+                                      &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase> {
 public:
     TClientCommandTenantDeregisterUnits()
         : TTenantClientGRpcCommand("deregister", {}, "Deregister computational units for database")
@@ -563,11 +563,11 @@ public:
 };
 
 class TClientCommandTenantAddPools
-    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService, 
-                                      Ydb::Cms::AlterDatabaseRequest, 
-                                      Ydb::Cms::AlterDatabaseResponse, 
-                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase), 
-                                      &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase> { 
+    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService,
+                                      Ydb::Cms::AlterDatabaseRequest,
+                                      Ydb::Cms::AlterDatabaseResponse,
+                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase),
+                                      &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase> {
 public:
     TClientCommandTenantAddPools()
         : TTenantClientGRpcCommand("add", {}, "Add storage resources for database")

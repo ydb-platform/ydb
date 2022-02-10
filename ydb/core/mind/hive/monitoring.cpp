@@ -2190,7 +2190,7 @@ public:
         TReassignTabletWaitActor* waitActor = nullptr;
         if (Wait) {
             waitActor = new TReassignTabletWaitActor(Source, Self);
-            waitActorId = ctx.RegisterWithSameMailbox(waitActor); 
+            waitActorId = ctx.RegisterWithSameMailbox(waitActor);
             Self->SubActors.emplace_back(waitActor);
         }
         for (TLeaderTabletInfo* tablet : tablets) {
@@ -2306,7 +2306,7 @@ public:
         TInitMigrationWaitActor* waitActor = nullptr;
         if (Wait) {
             waitActor = new TInitMigrationWaitActor(Source, Self);
-            waitActorId = ctx.RegisterWithSameMailbox(waitActor); 
+            waitActorId = ctx.RegisterWithSameMailbox(waitActor);
             Self->SubActors.emplace_back(waitActor);
         }
         // TODO: pass arguments as post data json
@@ -2380,7 +2380,7 @@ public:
         TActorId waitActorId;
         TQueryMigrationWaitActor* waitActor = nullptr;
         waitActor = new TQueryMigrationWaitActor(Source, Self);
-        waitActorId = ctx.RegisterWithSameMailbox(waitActor); 
+        waitActorId = ctx.RegisterWithSameMailbox(waitActor);
         Self->SubActors.emplace_back(waitActor);
         ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new TEvHive::TEvQueryMigration()));
         return true;
@@ -2453,7 +2453,7 @@ public:
             TStopTabletWaitActor* waitActor = nullptr;
             if (Wait) {
                 waitActor = new TStopTabletWaitActor(Source, Self);
-                waitActorId = ctx.RegisterWithSameMailbox(waitActor); 
+                waitActorId = ctx.RegisterWithSameMailbox(waitActor);
                 Self->SubActors.emplace_back(waitActor);
             }
             Self->Execute(Self->CreateStopTablet(TabletId, waitActorId));
@@ -2532,7 +2532,7 @@ public:
             TResumeTabletWaitActor* waitActor = nullptr;
             if (Wait) {
                 waitActor = new TResumeTabletWaitActor(Source, Self);
-                waitActorId = ctx.RegisterWithSameMailbox(waitActor); 
+                waitActorId = ctx.RegisterWithSameMailbox(waitActor);
                 Self->SubActors.emplace_back(waitActor);
             }
             Self->Execute(Self->CreateResumeTablet(TabletId, waitActorId));
@@ -3400,10 +3400,10 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
         if (cgi.Has("owner") && cgi.Has("owner_idx")) {
             ui64 owner = FromStringWithDefault<ui64>(cgi.Get("owner"), 0);
             ui64 ownerIdx = FromStringWithDefault<ui64>(cgi.Get("owner_idx"), 0);
-            ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, owner, ownerIdx, this)); 
+            ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, owner, ownerIdx, this));
         } else if (cgi.Has("tablet")) {
             TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);
-            ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, tabletId, this)); 
+            ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, tabletId, this));
         } else {
             ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"Error\": \"tablet or (owner, owner_idx) params must be specified\"}"));
         }

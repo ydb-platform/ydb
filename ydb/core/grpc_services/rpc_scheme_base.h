@@ -14,7 +14,7 @@ protected:
     using TBase = TRpcOperationRequestActor<TDerived, TRequest>;
 
 public:
-    TRpcSchemeRequestActor(IRequestOpCtx* request) 
+    TRpcSchemeRequestActor(IRequestOpCtx* request)
         : TBase(request) {}
 
 protected:
@@ -107,8 +107,8 @@ protected:
                     }
                    case NKikimrScheme::EStatus::StatusResourceExhausted:
                     case NKikimrScheme::EStatus::StatusPreconditionFailed: {
-                        return this->ReplyWithResult(Ydb::StatusIds::PRECONDITION_FAILED, issueMessage, ctx); 
-                    } 
+                        return this->ReplyWithResult(Ydb::StatusIds::PRECONDITION_FAILED, issueMessage, ctx);
+                    }
                     default: {
                         return this->ReplyWithResult(Ydb::StatusIds::GENERIC_ERROR, issueMessage, ctx);
                     }

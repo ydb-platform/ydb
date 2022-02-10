@@ -68,11 +68,11 @@ namespace NSQLTranslationV1 {
         DeleteOn,
     };
 
-    enum class EAlterTableIntentnt { 
-        AddColumn, 
-        DropColumn 
-    }; 
- 
+    enum class EAlterTableIntentnt {
+        AddColumn,
+        DropColumn
+    };
+
     class TContext;
     class ITableKeys;
     class ISource;
@@ -1146,7 +1146,7 @@ namespace NSQLTranslationV1 {
         TVector<TFamilyEntry> AlterColumnFamilies;
         TTableSettings TableSettings;
         TVector<TIndexDescription> AddIndexes;
-        TVector<TIdentifier> DropIndexes; 
+        TVector<TIdentifier> DropIndexes;
         TMaybe<TIdentifier> RenameTo;
         TVector<TChangefeedDescription> AddChangefeeds;
         TVector<TChangefeedDescription> AlterChangefeeds;

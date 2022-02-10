@@ -1,70 +1,70 @@
-syntax = "proto3"; 
-option cc_enable_arenas = true; 
- 
-package Ydb.Scheme; 
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Scheme;
 option java_package = "com.yandex.ydb.scheme";
 option java_outer_classname = "SchemeOperationProtos";
- 
+
 import "ydb/public/api/protos/ydb_operation.proto";
- 
-// Create directory. 
-// All intermediate directories must be created 
-message MakeDirectoryRequest { 
-    Ydb.Operations.OperationParams operation_params = 1; 
-    string path = 2; 
+
+// Create directory.
+// All intermediate directories must be created
+message MakeDirectoryRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
 }
- 
-message MakeDirectoryResponse { 
-    Ydb.Operations.Operation operation = 1; 
+
+message MakeDirectoryResponse {
+    Ydb.Operations.Operation operation = 1;
 }
- 
-// Remove directory 
-message RemoveDirectoryRequest { 
-    Ydb.Operations.OperationParams operation_params = 1; 
-    string path = 2; 
+
+// Remove directory
+message RemoveDirectoryRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
 }
- 
-message RemoveDirectoryResponse { 
-    Ydb.Operations.Operation operation = 1; 
+
+message RemoveDirectoryResponse {
+    Ydb.Operations.Operation operation = 1;
 }
- 
-// List directory 
-message ListDirectoryRequest { 
-    Ydb.Operations.OperationParams operation_params = 1; 
-    string path = 2; 
+
+// List directory
+message ListDirectoryRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
 }
- 
-message ListDirectoryResponse { 
-    // Holds ListDirectoryResult in case of successful call 
-    Ydb.Operations.Operation operation = 1; 
+
+message ListDirectoryResponse {
+    // Holds ListDirectoryResult in case of successful call
+    Ydb.Operations.Operation operation = 1;
 }
- 
-message Permissions { 
+
+message Permissions {
     // SID (Security ID) of user or group
-    string subject = 1; 
-    repeated string permission_names = 2; 
+    string subject = 1;
+    repeated string permission_names = 2;
 }
- 
-message Entry { 
-    enum Type { 
-        TYPE_UNSPECIFIED = 0; 
-        DIRECTORY = 1; 
-        TABLE = 2; 
-        PERS_QUEUE_GROUP = 3; 
-        DATABASE = 4; 
-        RTMR_VOLUME = 5; 
-        BLOCK_STORE_VOLUME = 6; 
+
+message Entry {
+    enum Type {
+        TYPE_UNSPECIFIED = 0;
+        DIRECTORY = 1;
+        TABLE = 2;
+        PERS_QUEUE_GROUP = 3;
+        DATABASE = 4;
+        RTMR_VOLUME = 5;
+        BLOCK_STORE_VOLUME = 6;
         COORDINATION_NODE = 7;
         SEQUENCE = 15;
         REPLICATION = 16;
     }
     
     // Name of scheme entry (dir2 of /dir1/dir2)
-    string name = 1; 
+    string name = 1;
     // SID (Security ID) of user or group
-    string owner = 2; 
-    Type type = 5; 
-    repeated Permissions effective_permissions = 6;  
+    string owner = 2;
+    Type type = 5;
+    repeated Permissions effective_permissions = 6; 
     repeated Permissions permissions = 7;
 
     // Size of entry in bytes. Currently filled for:
@@ -73,49 +73,49 @@ message Entry {
     // Empty (zero) in other cases.
     uint64 size_bytes = 8;
 }
- 
-message ListDirectoryResult { 
-    Entry self = 1; 
-    repeated Entry children = 2; 
+
+message ListDirectoryResult {
+    Entry self = 1;
+    repeated Entry children = 2;
 }
- 
-// Returns information about object with given path 
-message DescribePathRequest { 
-    Ydb.Operations.OperationParams operation_params = 1; 
-    string path = 2; 
+
+// Returns information about object with given path
+message DescribePathRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
 }
- 
-message DescribePathResponse { 
-    // Holds DescribePathResult in case of DescribePathResult 
-    Ydb.Operations.Operation operation = 1; 
+
+message DescribePathResponse {
+    // Holds DescribePathResult in case of DescribePathResult
+    Ydb.Operations.Operation operation = 1;
 }
- 
-message DescribePathResult { 
-    Entry self = 1; 
+
+message DescribePathResult {
+    Entry self = 1;
 }
- 
-message PermissionsAction { 
-    oneof action { 
-        // Grant permissions 
-        Permissions grant = 1; 
-        // Revoke permissions 
-        Permissions revoke = 2; 
-        // Rewrite permissions for given subject (last set win in case of multiple set for one subject) 
-        Permissions set = 3; 
-        // New owner for object 
-        string change_owner = 4; 
-    } 
+
+message PermissionsAction {
+    oneof action {
+        // Grant permissions
+        Permissions grant = 1;
+        // Revoke permissions
+        Permissions revoke = 2;
+        // Rewrite permissions for given subject (last set win in case of multiple set for one subject)
+        Permissions set = 3;
+        // New owner for object
+        string change_owner = 4;
+    }
 }
- 
-// Modify permissions of given object 
-message ModifyPermissionsRequest { 
-    Ydb.Operations.OperationParams operation_params = 1; 
-    string path = 2; 
-    repeated PermissionsAction actions = 3; 
-    // Clear all permissions on the object for all subjects 
-    bool clear_permissions = 4; 
+
+// Modify permissions of given object
+message ModifyPermissionsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
+    repeated PermissionsAction actions = 3;
+    // Clear all permissions on the object for all subjects
+    bool clear_permissions = 4;
 }
- 
-message ModifyPermissionsResponse { 
-    Ydb.Operations.Operation operation = 1; 
+
+message ModifyPermissionsResponse {
+    Ydb.Operations.Operation operation = 1;
 }

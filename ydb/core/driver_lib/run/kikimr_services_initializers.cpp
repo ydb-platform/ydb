@@ -46,7 +46,7 @@
 
 #include <ydb/core/grpc_services/grpc_mon.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
- 
+
 #include <ydb/core/kesus/proxy/proxy.h>
 #include <ydb/core/kesus/tablet/tablet.h>
 
@@ -1505,14 +1505,14 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                 TActorSetupCmd(cache, TMailboxType::ReadAsFilled, appData->UserPoolId));
         }
     }
- 
-    if (!IsServiceInitialized(setup, NGRpcService::CreateGRpcRequestProxyId())) { 
+
+    if (!IsServiceInitialized(setup, NGRpcService::CreateGRpcRequestProxyId())) {
         auto grpcReqProxy = NGRpcService::CreateGRpcRequestProxy(Config);
         setup->LocalServices.push_back(std::pair<TActorId,
-                                       TActorSetupCmd>(NGRpcService::CreateGRpcRequestProxyId(), 
-                                                       TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled, 
+                                       TActorSetupCmd>(NGRpcService::CreateGRpcRequestProxyId(),
+                                                       TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,
                                                                       appData->UserPoolId)));
-    } 
+    }
 
     if (!IsServiceInitialized(setup, NKesus::MakeKesusProxyServiceId())) {
         if (IActor* proxy = NKesus::CreateKesusProxyService()) {

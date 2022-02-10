@@ -111,7 +111,7 @@ TTypeCodecs::TTypeCodecs(TTypeId typeId) {
     case NTypeIds::String4k:
     case NTypeIds::String2m:
     case NTypeIds::Utf8:
-    case NTypeIds::Json: 
+    case NTypeIds::Json:
     case NTypeIds::JsonDocument:
     case NTypeIds::DyNumber:
         InitDefaults(this, TCodecType::VarLen);

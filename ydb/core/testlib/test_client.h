@@ -126,7 +126,7 @@ namespace Tests {
         TString MeteringFilePath;
 
         std::function<IActor*(const NKikimrProto::TAuthConfig&)> CreateTicketParser = NKikimr::CreateTicketParser;
-        std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory; 
+        std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
 
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
         TServerSettings& SetSupportsRedirect(bool value) { SupportsRedirect = value; return *this; }
@@ -166,19 +166,19 @@ namespace Tests {
             return *this;
         }
 
-        // Add additional grpc services 
-        template <typename TService> 
+        // Add additional grpc services
+        template <typename TService>
         TServerSettings& RegisterGrpcService(
             const TString& name,
             std::optional<NActors::TActorId> proxyId = std::nullopt
         ) {
-            if (!GrpcServiceFactory) { 
-                GrpcServiceFactory = std::make_shared<TGrpcServiceFactory>(); 
-            } 
+            if (!GrpcServiceFactory) {
+                GrpcServiceFactory = std::make_shared<TGrpcServiceFactory>();
+            }
             GrpcServiceFactory->Register<TService>(name, true, proxyId);
-            return *this; 
-        } 
- 
+            return *this;
+        }
+
         explicit TServerSettings(ui16 port, const NKikimrProto::TAuthConfig authConfig = {}, const NKikimrPQ::TPQConfig pqConfig = {})
             : Port(port)
             , AuthConfig(authConfig)
@@ -218,7 +218,7 @@ namespace Tests {
         virtual ~TServer();
 
         void EnableGRpc(const NGrpc::TServerOptions& options);
-        void EnableGRpc(ui16 port); 
+        void EnableGRpc(ui16 port);
 
         void SetupDefaultProfiles();
 
@@ -332,7 +332,7 @@ namespace Tests {
             return msgbusStatus;
         }
 
-        static ui64 GetPatchedSchemeRoot(ui64 schemeRoot, ui32 domain, bool supportsRedirect); 
+        static ui64 GetPatchedSchemeRoot(ui64 schemeRoot, ui32 domain, bool supportsRedirect);
         void WaitRootIsUp(const TString& root);
         TAutoPtr<NBus::TBusMessage> InitRootSchemeWithReply(const TString& root);
         void InitRootScheme();
@@ -361,9 +361,9 @@ namespace Tests {
 
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000));
-        NMsgBusProxy::EResponseStatus CreateTableWithUniformShardedIndex(const TString& parent, 
-            const NKikimrSchemeOp::TTableDescription &table, const TString& indexName, 
-            const TVector<TString> indexColumns, TDuration timeout = TDuration::Seconds(5000)); 
+        NMsgBusProxy::EResponseStatus CreateTableWithUniformShardedIndex(const TString& parent,
+            const NKikimrSchemeOp::TTableDescription &table, const TString& indexName,
+            const TVector<TString> indexColumns, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus SplitTable(const TString& table, ui64 datashardId, ui64 border, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CopyTable(const TString& parent, const TString& name, const TString& src);
         NMsgBusProxy::EResponseStatus CreateKesus(const TString& parent, const TString& name);

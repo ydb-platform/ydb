@@ -31,13 +31,13 @@ TKqpPlanner::TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NDqProto::
     , ScanTasks(std::move(scanTasks))
     , Snapshot(snapshot)
     , Database(database)
-    , UserToken(userToken) 
+    , UserToken(userToken)
     , Deadline(deadline)
     , StatsMode(statsMode)
     , DisableLlvmForUdfStages(disableLlvmForUdfStages)
     , EnableLlvm(enableLlvm)
     , WithSpilling(withSpilling)
-    , RlPath(rlPath) 
+    , RlPath(rlPath)
 {
     if (!Database) {
         // a piece of magic for tests
@@ -266,15 +266,15 @@ THolder<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::PrepareKqpNodeRequest(
     ev->Record.MutableRuntimeSettings()->SetUseLLVM(withLLVM);
     ev->Record.MutableRuntimeSettings()->SetUseSpilling(WithSpilling);
 
-    if (RlPath) { 
-        auto rlPath = ev->Record.MutableRuntimeSettings()->MutableRlPath(); 
-        rlPath->SetCoordinationNode(RlPath->GetCoordinationNode()); 
-        rlPath->SetResourcePath(RlPath->GetResourcePath()); 
-        rlPath->SetDatabase(Database); 
-        if (UserToken) 
-            rlPath->SetToken(UserToken.GetRef()); 
-    } 
- 
+    if (RlPath) {
+        auto rlPath = ev->Record.MutableRuntimeSettings()->MutableRlPath();
+        rlPath->SetCoordinationNode(RlPath->GetCoordinationNode());
+        rlPath->SetResourcePath(RlPath->GetResourcePath());
+        rlPath->SetDatabase(Database);
+        if (UserToken)
+            rlPath->SetToken(UserToken.GetRef());
+    }
+
     ev->Record.SetStartAllOrFail(true);
 
     return ev;

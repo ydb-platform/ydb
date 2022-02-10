@@ -46,13 +46,13 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     explicit TDomainInfo(const TPathId& domainKey, const TPathId& resourcesDomainKey)
         : DomainKey(domainKey)
         , ResourcesDomainKey(resourcesDomainKey)
-        , Coordinators(TVector<ui64>{}) 
+        , Coordinators(TVector<ui64>{})
     {}
 
     explicit TDomainInfo(const NKikimrSubDomains::TDomainDescription& descr)
         : DomainKey(GetDomainKey(descr.GetDomainKey()))
-        , Params(descr.GetProcessingParams()) 
-        , Coordinators(descr.GetProcessingParams()) 
+        , Params(descr.GetProcessingParams())
+        , Coordinators(descr.GetProcessingParams())
     {
         if (descr.HasResourcesDomainKey()) {
             ResourcesDomainKey = GetDomainKey(descr.GetResourcesDomainKey());
@@ -118,7 +118,7 @@ struct TSchemeCacheNavigate {
         KindSolomon = 7,
         KindSubdomain = 8,
         KindExtSubdomain = 9,
-        KindIndex = 10, 
+        KindIndex = 10,
         KindOlapStore = 11,
         KindOlapTable = 12,
         KindCdcStream = 13,
@@ -127,22 +127,22 @@ struct TSchemeCacheNavigate {
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
-        struct TChild { 
-            const TString Name; 
+        struct TChild {
+            const TString Name;
             const TPathId PathId;
-            const ui64 SchemaVersion; 
-            const EKind Kind; 
+            const ui64 SchemaVersion;
+            const EKind Kind;
 
             explicit TChild(const TString& name, const TPathId& pathId, EKind kind, ui64 schemaVersion = 0)
                 : Name(name)
-                , PathId(pathId) 
+                , PathId(pathId)
                 , SchemaVersion(schemaVersion)
                 , Kind(kind)
             {}
-        }; 
+        };
 
         EKind Kind = KindUnknown;
-        TVector<TChild> Children; 
+        TVector<TChild> Children;
     };
 
     struct TDirEntryInfo : public TAtomicRefCount<TDirEntryInfo>{
@@ -233,7 +233,7 @@ struct TSchemeCacheNavigate {
         THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
- 
+
         // other
         TIntrusiveConstPtr<TDomainDescription> DomainDescription;
         TIntrusiveConstPtr<TPQGroupInfo> PQGroupInfo;

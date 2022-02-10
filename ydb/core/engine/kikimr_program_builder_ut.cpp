@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
-        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2))); 
+        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Erase);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
-        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2))); 
+        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Erase);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
         UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo);
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
-        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2))); 
+        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Erase);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
         UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo);
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
-        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2))); 
+        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
@@ -286,7 +286,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
-        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2))); 
+        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Update);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
-        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2))); 
+        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Update);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
         UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo);
@@ -401,7 +401,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
-        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2))); 
+        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
@@ -451,7 +451,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
-        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2))); 
+        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
         UNIT_ASSERT(!tableKeys[0]->Range.InclusiveFrom);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
@@ -503,7 +503,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
-        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2))); 
+        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
@@ -558,7 +558,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
-        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2))); 
+        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
         UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo);
@@ -611,7 +611,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
-        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2))); 
+        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveFrom);
         UNIT_ASSERT(tableKeys[0]->Range.InclusiveTo);
@@ -663,7 +663,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         explorer.Walk(pgm, env);
         TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
-        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2))); 
+        UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
         UNIT_ASSERT(!tableKeys[0]->Range.InclusiveFrom);
         UNIT_ASSERT(!tableKeys[0]->Range.InclusiveTo);

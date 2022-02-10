@@ -11,7 +11,7 @@ namespace NGrpc {
  * Universal response that owns underlying message or buffer.
  */
 template <typename TMsg>
-class TUniversalResponse: public TAtomicRefCount<TUniversalResponse<TMsg>>, public TMoveOnly { 
+class TUniversalResponse: public TAtomicRefCount<TUniversalResponse<TMsg>>, public TMoveOnly {
     friend class grpc::SerializationTraits<TUniversalResponse<TMsg>>;
 
 public:

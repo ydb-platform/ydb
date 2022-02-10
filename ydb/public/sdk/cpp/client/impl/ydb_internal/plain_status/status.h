@@ -5,7 +5,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 
 #include <ydb/public/api/protos/ydb_operation.pb.h>
- 
+
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <library/cpp/grpc/client/grpc_client_low.h>
@@ -17,7 +17,7 @@ struct TPlainStatus {
     NYql::TIssues Issues;
     TStringType Endpoint;
     std::multimap<TStringType, TStringType> Metadata;
-    Ydb::CostInfo ConstInfo; 
+    Ydb::CostInfo ConstInfo;
 
     TPlainStatus()
         : Status(EStatus::SUCCESS)
@@ -48,11 +48,11 @@ struct TPlainStatus {
         const NGrpc::TGrpcStatus& grpcStatus, const TStringType& endpoint = TStringType(),
         std::multimap<TStringType, TStringType>&& metadata = {});
 
-    template<class T> 
-    void SetCostInfo(T&& costInfo) { 
-        ConstInfo = std::forward<T>(costInfo); 
-    } 
- 
+    template<class T>
+    void SetCostInfo(T&& costInfo) {
+        ConstInfo = std::forward<T>(costInfo);
+    }
+
     bool Ok() const {
         return Status == EStatus::SUCCESS;
     }

@@ -39,7 +39,7 @@ public:
             for (const ui64 tabletId : kv.second) {
                 auto res = WaitingTablets.insert(tabletId);
                 if (res.second) {
-                    ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, config)); 
+                    ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, config));
                     ++TotalTablets;
                 }
                 ++TotalBorrows;
@@ -235,7 +235,7 @@ public:
             return;
         }
 
-        auto actorId = ctx.RegisterWithSameMailbox( 
+        auto actorId = ctx.RegisterWithSameMailbox(
             new TTxMonitoringCleanupBorrowedPartsActor(
                 ctx.SelfID,
                 Ev->Sender,

@@ -1,15 +1,15 @@
-#pragma once 
+#pragma once
 #include "defs.h"
 #include "grpc_mon.h"
- 
+
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/counters/counters.h>
 
 #include <library/cpp/grpc/server/grpc_request.h>
- 
-namespace NKikimr { 
-namespace NGRpcService { 
- 
+
+namespace NKikimr {
+namespace NGRpcService {
+
 class TInFlightLimiterRegistry : public TThrRefBase {
 private:
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
@@ -42,6 +42,6 @@ inline TCreateLimiterCB CreateLimiterCb(TIntrusivePtr<TInFlightLimiterRegistry> 
 
 template <typename TIn, typename TOut, typename TService, typename TInProtoPrinter=google::protobuf::TextFormat::Printer, typename TOutProtoPrinter=google::protobuf::TextFormat::Printer>
 using TGRpcRequest = NGrpc::TGRpcRequest<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter>;
- 
-} // namespace NGRpcService 
-} // namespace NKikimr 
+
+} // namespace NGRpcService
+} // namespace NKikimr

@@ -1,13 +1,13 @@
-LIBRARY() 
- 
-OWNER( 
-    dcherednik 
-    g:kikimr 
-) 
- 
-SRCS( 
+LIBRARY()
+
+OWNER(
+    dcherednik
+    g:kikimr
+)
+
+SRCS(
     ydb_clickhouse_internal.cpp
-    ydb_dummy.cpp 
+    ydb_dummy.cpp
     ydb_experimental.cpp
     ydb_export.cpp
     ydb_import.cpp
@@ -18,9 +18,9 @@ SRCS(
     ydb_scripting.cpp
     ydb_table.cpp
     ydb_long_tx.cpp
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/monlib/encode
     library/cpp/uri
     ydb/core/base
@@ -36,9 +36,9 @@ PEERDIR(
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/library/yql/public/types
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     index_ut

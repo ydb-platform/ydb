@@ -51,7 +51,7 @@ public:
         }
 
         auto collector = CreateInfoCollector(SelfId(), TDuration::Seconds(15));
-        ctx.RegisterWithSameMailbox(collector); 
+        ctx.RegisterWithSameMailbox(collector);
 
         Become(&TThis::StateWork);
     }

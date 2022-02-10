@@ -111,7 +111,7 @@ protected:
         auto* result = CheckedCast<TExportScanProduct*>(op->ScanResult().Get());
         auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId());
 
-        schemeOp->Success = result->Success; 
+        schemeOp->Success = result->Success;
         schemeOp->Error = std::move(result->Error);
         schemeOp->BytesProcessed = result->BytesRead;
         schemeOp->RowsProcessed = result->RowsRead;

@@ -10,7 +10,7 @@ namespace NKikimr {
 
 namespace NMiniKQL {
 
-class THolderFactory; 
+class THolderFactory;
 
 NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, const THolderFactory& factory);
 

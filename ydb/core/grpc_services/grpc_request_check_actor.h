@@ -19,10 +19,10 @@ namespace NKikimr {
 namespace NGRpcService {
 
 template <typename TEvent>
-class TGrpcRequestCheckActor 
-    : public TActorBootstrappedSecureRequest<TGrpcRequestCheckActor<TEvent>> 
-    , public ICheckerIface 
-{ 
+class TGrpcRequestCheckActor
+    : public TActorBootstrappedSecureRequest<TGrpcRequestCheckActor<TEvent>>
+    , public ICheckerIface
+{
     using TSelf = TGrpcRequestCheckActor<TEvent>;
     using TBase = TActorBootstrappedSecureRequest<TGrpcRequestCheckActor>;
 public:
@@ -46,27 +46,27 @@ public:
         CheckedDatabaseName_ = CanonizePath(schemeData.GetPath());
         if (!GrpcRequestBaseCtx_->TryCustomAttributeProcess(schemeData, this)) {
             ProcessCommonAttributes(schemeData);
-        } 
-    } 
- 
+        }
+    }
+
     void ProcessCommonAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-        static std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"}; 
-        TVector<std::pair<TString, TString>> attributes; 
+        static std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
+        TVector<std::pair<TString, TString>> attributes;
         attributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
         for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
             if (std::find(allowedAttributes.begin(), allowedAttributes.end(), attr.GetKey()) != allowedAttributes.end()) {
                 attributes.emplace_back(attr.GetKey(), attr.GetValue());
             }
         }
-        if (!attributes.empty()) { 
-            SetEntries({{GetPermissions(), attributes}}); 
-        } 
+        if (!attributes.empty()) {
+            SetEntries({{GetPermissions(), attributes}});
+        }
     }
 
-    void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries) { 
-        TBase::SetEntries(entries); 
-    } 
- 
+    void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries) {
+        TBase::SetEntries(entries);
+    }
+
     void InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
 
     TGrpcRequestCheckActor(
@@ -104,7 +104,7 @@ public:
             }
         }
 
-        // Simple rps limitation 
+        // Simple rps limitation
         static NRpcService::TRlConfig rpsRlConfig(
             "serverless_rt_coordination_node_path",
             "serverless_rt_base_resource_rps",
@@ -115,7 +115,7 @@ public:
                 }
             );
 
-        // Limitation RU for unary calls in time of response 
+        // Limitation RU for unary calls in time of response
         static NRpcService::TRlConfig ruRlConfig(
             "serverless_rt_coordination_node_path",
             "serverless_rt_base_resource_ru",
@@ -128,18 +128,18 @@ public:
                 }
             );
 
-        // Limitation ru for calls with internall rl support (read table) 
-        static NRpcService::TRlConfig ruRlProgressConfig( 
-            "serverless_rt_coordination_node_path", 
-            "serverless_rt_base_resource_ru", 
-                { 
-                    NRpcService::TRlConfig::TOnReqAction { 
-                        1 
-                    } 
-                } 
-            ); 
- 
- 
+        // Limitation ru for calls with internall rl support (read table)
+        static NRpcService::TRlConfig ruRlProgressConfig(
+            "serverless_rt_coordination_node_path",
+            "serverless_rt_base_resource_ru",
+                {
+                    NRpcService::TRlConfig::TOnReqAction {
+                        1
+                    }
+                }
+            );
+
+
         auto rlMode = Request_->Get()->GetRlMode();
         switch (rlMode) {
             case TRateLimiterMode::Rps:
@@ -148,20 +148,20 @@ public:
             case TRateLimiterMode::Ru:
                 RlConfig = &ruRlConfig;
                 break;
-            case TRateLimiterMode::RuOnProgress: 
-                RlConfig = &ruRlProgressConfig; 
+            case TRateLimiterMode::RuOnProgress:
+                RlConfig = &ruRlProgressConfig;
                 break;
             case TRateLimiterMode::Off:
                 break;
-        } 
+        }
 
         if (!RlConfig) {
             // No rate limit config for this request
             return SetTokenAndDie(CheckedDatabaseName_);
         } else {
             THashMap<TString, TString> attributes;
-            for (const auto& [attrName, attrValue] : Attributes_) { 
-                attributes[attrName] = attrValue; 
+            for (const auto& [attrName, attrValue] : Attributes_) {
+                attributes[attrName] = attrValue;
             }
             return ProcessRateLimit(attributes, ctx);
         }
@@ -174,10 +174,10 @@ public:
         ReplyBackAndDie();
     }
 
-    void SetRlPath(TMaybe<NRpcService::TRlPath>&& rlPath) { 
-        GrpcRequestBaseCtx_->SetRlPath(std::move(rlPath)); 
-    } 
- 
+    void SetRlPath(TMaybe<NRpcService::TRlPath>&& rlPath) {
+        GrpcRequestBaseCtx_->SetRlPath(std::move(rlPath));
+    }
+
     STATEFN(DbAccessStateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvPoisonPill, HandlePoison);
@@ -196,17 +196,17 @@ private:
     }
 
     void ProcessOnRequest(Ydb::RateLimiter::AcquireResourceRequest&& req, const TActorContext& ctx) {
-        auto time = TInstant::Now(); 
-        auto cb = [this, time](Ydb::RateLimiter::AcquireResourceResponse resp) { 
-            TDuration delay = TInstant::Now() - time; 
+        auto time = TInstant::Now();
+        auto cb = [this, time](Ydb::RateLimiter::AcquireResourceResponse resp) {
+            TDuration delay = TInstant::Now() - time;
             switch (resp.operation().status()) {
                 case Ydb::StatusIds::SUCCESS:
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Request delayed for " << delay << " by ratelimiter"); 
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Request delayed for " << delay << " by ratelimiter");
                     SetTokenAndDie(CheckedDatabaseName_);
                     break;
                 case Ydb::StatusIds::TIMEOUT:
                     Counters_->IncDatabaseRateLimitedCounter();
-                    LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Throughput limit exceeded"); 
+                    LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Throughput limit exceeded");
                     ReplyOverloadedAndDie(MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED, "Throughput limit exceeded"));
                     break;
                 default:
@@ -264,13 +264,13 @@ private:
 
     void ProcessRateLimit(const THashMap<TString, TString>& attributes, const TActorContext& ctx) {
         // Match rate limit config and database attributes
-        auto rlPath = NRpcService::Match(*RlConfig, attributes); 
-        if (!rlPath) { 
+        auto rlPath = NRpcService::Match(*RlConfig, attributes);
+        if (!rlPath) {
             return SetTokenAndDie(CheckedDatabaseName_);
         } else {
-            auto actions = NRpcService::MakeRequests(*RlConfig, rlPath.GetRef()); 
-            SetRlPath(std::move(rlPath)); 
- 
+            auto actions = NRpcService::MakeRequests(*RlConfig, rlPath.GetRef());
+            SetRlPath(std::move(rlPath));
+
             Ydb::RateLimiter::AcquireResourceRequest req;
             bool hasOnReqAction = false;
             for (auto& action : actions) {
@@ -397,15 +397,15 @@ private:
     IRequestProxyCtx* GrpcRequestBaseCtx_;
     NRpcService::TRlConfig* RlConfig = nullptr;
     bool SkipCheckConnectRigths_ = false;
-    std::vector<std::pair<TString, TString>> Attributes_; 
+    std::vector<std::pair<TString, TString>> Attributes_;
 };
 
 // default behavior - attributes in schema
 template <typename TEvent>
 void TGrpcRequestCheckActor<TEvent>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) { 
-        Attributes_.emplace_back(std::make_pair(attr.GetKey(), attr.GetValue())); 
-    } 
+    for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
+        Attributes_.emplace_back(std::make_pair(attr.GetKey(), attr.GetValue()));
+    }
     InitializeAttributesFromSchema(schemeData);
 }
 
@@ -443,9 +443,9 @@ IActor* CreateGrpcRequestCheckActor(
     TAutoPtr<TEventHandle<TEvent>> request,
     TGrpcProxyCounters::TPtr counters,
     bool skipCheckConnectRigths) {
- 
+
     return new TGrpcRequestCheckActor<TEvent>(owner, schemeData, std::move(securityObject), std::move(request), counters, skipCheckConnectRigths);
 }
 
 }
-} 
+}

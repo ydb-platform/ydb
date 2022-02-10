@@ -20,7 +20,7 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST_NEW_ENGINE(PreparedQueryInvalidate) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
+        auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto prepareResult = session.PrepareDataQuery(Q_(R"(
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
     Y_UNIT_TEST_NEW_ENGINE(QueryCache) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
+        auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto query = Q_(R"(
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
     Y_UNIT_TEST_NEW_ENGINE(QueryTimeout) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
+        auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto query = Q_(R"(
@@ -276,63 +276,63 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(QueryClientTimeout) {
-        TStringStream logStream; 
+        TStringStream logStream;
 
-        { 
-            TKikimrRunner kikimr( 
-                TKikimrSettings() 
-                    .SetLogStream(&logStream)); 
-            auto db = kikimr.GetTableClient(); 
-            auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG); 
+        {
+            TKikimrRunner kikimr(
+                TKikimrSettings()
+                    .SetLogStream(&logStream));
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
 
-            auto query = Q_(R"( 
-                SELECT * FROM `/Root/TwoShard`; 
-            )"); 
+            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
 
-            auto txControl = TTxControl::BeginTx().CommitTx(); 
+            auto query = Q_(R"(
+                SELECT * FROM `/Root/TwoShard`;
+            )");
+
+            auto txControl = TTxControl::BeginTx().CommitTx();
 
             NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 1);
 
-            auto result = session.ExecuteDataQuery( 
-                query, 
-                txControl, 
-                TExecDataQuerySettings() 
-                    .UseClientTimeoutForOperation(false) 
-                    .ClientTimeout(TDuration::Seconds(3)) 
-            ).ExtractValueSync(); 
+            auto result = session.ExecuteDataQuery(
+                query,
+                txControl,
+                TExecDataQuerySettings()
+                    .UseClientTimeoutForOperation(false)
+                    .ClientTimeout(TDuration::Seconds(3))
+            ).ExtractValueSync();
 
-            result.GetIssues().PrintTo(Cerr); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_DEADLINE_EXCEEDED); 
- 
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_DEADLINE_EXCEEDED);
+
             NDataShard::gSkipRepliesFailPoint.Disable();
-        } 
- 
-        TString line; 
-        int v = 0; 
-        while (logStream.ReadLine(line)) { 
+        }
+
+        TString line;
+        int v = 0;
+        while (logStream.ReadLine(line)) {
             if (line.find("ExecuteDataQuery") == line.npos)
                 continue;
-            const TString pattern("timeout# "); 
-            auto start = line.find(pattern); 
-            if (start == line.npos) 
-                continue; 
-            // We just want integer part 
-            auto end = line.find('.', start + pattern.size()); 
-            UNIT_ASSERT(end > start + pattern.size()); //something wrong with string 
-            UNIT_ASSERT(end != line.npos); 
-            TString val = line.substr(start + pattern.size(), end - start - pattern.size()); 
-            v = std::stoi(val); 
-        } 
- 
-        UNIT_ASSERT(v); 
+            const TString pattern("timeout# ");
+            auto start = line.find(pattern);
+            if (start == line.npos)
+                continue;
+            // We just want integer part
+            auto end = line.find('.', start + pattern.size());
+            UNIT_ASSERT(end > start + pattern.size()); //something wrong with string
+            UNIT_ASSERT(end != line.npos);
+            TString val = line.substr(start + pattern.size(), end - start - pattern.size());
+            v = std::stoi(val);
+        }
+
+        UNIT_ASSERT(v);
         UNIT_ASSERT_C(v <= 3, "got " << v);
     }
 
     Y_UNIT_TEST_NEW_ENGINE(QueryCancel) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
+        auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto query = Q_(R"(
@@ -611,7 +611,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
     }
- 
+
     Y_UNIT_TEST_NEW_ENGINE(YqlTableSample) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpYqlSyntaxVersion");
@@ -893,7 +893,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
- 
+
     Y_UNIT_TEST_NEW_ENGINE(UnsafeTimestampCastV1) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -1002,15 +1002,15 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT(!phase1.table_access(1).has_updates());
             UNIT_ASSERT(!phase1.table_access(1).has_deletes());
         }
-        UNIT_ASSERT_VALUES_EQUAL(phase1.table_access(0).name(), "/Root/EightShard"); 
+        UNIT_ASSERT_VALUES_EQUAL(phase1.table_access(0).name(), "/Root/EightShard");
         UNIT_ASSERT(!phase1.table_access(0).has_reads());
-        UNIT_ASSERT_VALUES_EQUAL(phase1.table_access(0).updates().rows(), 3); 
-        UNIT_ASSERT(phase1.table_access(0).updates().bytes() > 0); 
+        UNIT_ASSERT_VALUES_EQUAL(phase1.table_access(0).updates().rows(), 3);
+        UNIT_ASSERT(phase1.table_access(0).updates().bytes() > 0);
         UNIT_ASSERT(!phase1.table_access(0).has_deletes());
 
         UNIT_ASSERT_VALUES_EQUAL(stats.total_duration_us(), totalDurationUs);
         UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), totalCpuTimeUs);
-    } 
+    }
 
     Y_UNIT_TEST_NEW_ENGINE(RowsLimit) {
         auto setting = NKikimrKqp::TKqpSetting();
@@ -1275,6 +1275,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
 }
- 
+
 } // namespace NKqp
 } // namespace NKikimr

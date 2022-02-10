@@ -6,7 +6,7 @@
 #include "udf_version.h"
 
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
- 
+
 #include <util/system/yassert.h> // FAIL, VERIFY_DEBUG
 #include <util/generic/utility.h> // Min, Max
 #include <util/generic/yexception.h> // Y_ENSURE

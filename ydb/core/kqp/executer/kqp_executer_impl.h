@@ -6,7 +6,7 @@
 #include "kqp_table_resolver.h"
 
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
- 
+
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/kikimr_issue.h>
@@ -71,16 +71,16 @@ inline bool IsDebugLogEnabled() {
            TlsActivationContext->LoggerSettings()->Satisfies(NActors::NLog::PRI_DEBUG, NKikimrServices::KQP_EXECUTER);
 }
 
-TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken, 
-    const NKikimrKqp::TRlPath& path); 
- 
+TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
+    const NKikimrKqp::TRlPath& path);
+
 template <class TDerived, EExecType ExecType>
 class TKqpExecuterBase : public TActorBootstrapped<TDerived> {
 public:
-    TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken, 
+    TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
         TKqpRequestCounters::TPtr counters)
         : Request(std::move(request))
-        , Database(database) 
+        , Database(database)
         , UserToken(userToken)
         , Counters(counters)
     {
@@ -254,55 +254,55 @@ protected:
         }
     }
 
-    void UpdateResourcesUsage(bool force) { 
-        TInstant now = TActivationContext::Now(); 
-        if ((now - LastResourceUsageUpdate < ResourceUsageUpdateInterval) && !force) 
-            return; 
- 
-        LastResourceUsageUpdate = now; 
- 
-        TProgressStat::TEntry consumption; 
-        for (const auto& p : PendingComputeActors) { 
-            const auto& t = p.second.GetLastUsage(); 
-            consumption += t; 
-        } 
- 
-        for (const auto& p : LastStats) { 
-            const auto& t = p.GetLastUsage(); 
-            consumption += t; 
-        } 
- 
-        auto ru = NRuCalc::CalcRequestUnit(consumption); 
- 
-        // Some heuristic to reduce overprice due to round part stats 
-        if (ru <= 100 && !force) 
-            return; 
- 
-        for (auto& p : PendingComputeActors) { 
-            p.second.Update(); 
-        } 
- 
-        for (auto& p : LastStats) { 
-            p.Update(); 
-        } 
- 
-        if (Request.RlPath) { 
-            auto actorId = ReportToRl(ru, Database, UserToken.GetOrElse(""), 
-                Request.RlPath.GetRef()); 
- 
-            LOG_D("Resource usage for last stat interval: " << consumption 
-                  << " ru: " << ru << " rl path: " << Request.RlPath.GetRef() 
-                  << " rl actor: " << actorId 
-                  << " force flag: " << force); 
-        } else { 
-            LOG_D("Resource usage for last stat interval: " << consumption 
-                  << " ru: " << ru << " rate limiter was not found" 
-                  << " force flag: " << force); 
-        } 
-    } 
- 
- 
- 
+    void UpdateResourcesUsage(bool force) {
+        TInstant now = TActivationContext::Now();
+        if ((now - LastResourceUsageUpdate < ResourceUsageUpdateInterval) && !force)
+            return;
+
+        LastResourceUsageUpdate = now;
+
+        TProgressStat::TEntry consumption;
+        for (const auto& p : PendingComputeActors) {
+            const auto& t = p.second.GetLastUsage();
+            consumption += t;
+        }
+
+        for (const auto& p : LastStats) {
+            const auto& t = p.GetLastUsage();
+            consumption += t;
+        }
+
+        auto ru = NRuCalc::CalcRequestUnit(consumption);
+
+        // Some heuristic to reduce overprice due to round part stats
+        if (ru <= 100 && !force)
+            return;
+
+        for (auto& p : PendingComputeActors) {
+            p.second.Update();
+        }
+
+        for (auto& p : LastStats) {
+            p.Update();
+        }
+
+        if (Request.RlPath) {
+            auto actorId = ReportToRl(ru, Database, UserToken.GetOrElse(""),
+                Request.RlPath.GetRef());
+
+            LOG_D("Resource usage for last stat interval: " << consumption
+                  << " ru: " << ru << " rl path: " << Request.RlPath.GetRef()
+                  << " rl actor: " << actorId
+                  << " force flag: " << force);
+        } else {
+            LOG_D("Resource usage for last stat interval: " << consumption
+                  << " ru: " << ru << " rate limiter was not found"
+                  << " force flag: " << force);
+        }
+    }
+
+
+
 protected:
     void BuildSysViewScanTasks(TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
         const NMiniKQL::TTypeEnvironment& typeEnv)
@@ -462,7 +462,7 @@ protected:
         auto* itemsLimitParam = stageInfo.Meta.Tx.Params.Values.FindPtr(itemsLimitParamName);
         YQL_ENSURE(itemsLimitParam);
 
-        auto [type, value] = NMiniKQL::ImportValueFromProto(itemsLimitParam->GetType(), itemsLimitParam->GetValue(), typeEnv, holderFactory); 
+        auto [type, value] = NMiniKQL::ImportValueFromProto(itemsLimitParam->GetType(), itemsLimitParam->GetValue(), typeEnv, holderFactory);
 
         YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
         itemsLimit = value.Get<ui64>();
@@ -532,10 +532,10 @@ protected:
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues)
     {
         for (auto computeActor : PendingComputeActors) {
-            LOG_D("terminate compute actor " << computeActor.first); 
+            LOG_D("terminate compute actor " << computeActor.first);
 
             auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(status, "Terminate execution");
-            this->Send(computeActor.first, ev.Release()); 
+            this->Send(computeActor.first, ev.Release());
         }
 
         auto& response = *ResponseEv->Record.MutableResponse();
@@ -599,8 +599,8 @@ protected:
 
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
-    const TString Database; 
-    const TMaybe<TString> UserToken; 
+    const TString Database;
+    const TMaybe<TString> UserToken;
     TKqpRequestCounters::TPtr Counters;
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant StartTime;
@@ -615,23 +615,23 @@ protected:
     TKqpTableKeys TableKeys;
 
     TActorId KqpTableResolverId;
-    THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS) 
-    TVector<TProgressStat> LastStats; 
+    THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
+    TVector<TProgressStat> LastStats;
 
     TInstant StartResolveTime;
-    TInstant LastResourceUsageUpdate; 
+    TInstant LastResourceUsageUpdate;
 
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
-private: 
-    static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100); 
+private:
+    static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 IActor* CreateKqpLiteralExecuter(IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters);
 
-IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, 
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters); 
+IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
+    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters);

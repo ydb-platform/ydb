@@ -1,132 +1,132 @@
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include "yql_issue_manager.h" 
- 
-using namespace NYql; 
- 
+
+#include "yql_issue_manager.h"
+
+using namespace NYql;
+
 static std::function<TIssuePtr()> CreateScopeIssueFunction(TString name, ui32 column, ui32 row) {
     return [name, column, row]() {
         return new TIssue(TPosition(column, row), name);
-    }; 
-} 
- 
+    };
+}
+
 Y_UNIT_TEST_SUITE(TIssueManagerTest) {
     Y_UNIT_TEST(NoErrorNoLevelTest) {
-        TIssueManager issueManager; 
+        TIssueManager issueManager;
         auto completedIssues = issueManager.GetCompletedIssues();
         UNIT_ASSERT_VALUES_EQUAL(completedIssues.Size(), 0);
-        auto issues = issueManager.GetIssues(); 
-        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 0); 
-    } 
- 
+        auto issues = issueManager.GetIssues();
+        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 0);
+    }
+
     Y_UNIT_TEST(NoErrorOneLevelTest) {
-        TIssueManager issueManager; 
+        TIssueManager issueManager;
         issueManager.AddScope(CreateScopeIssueFunction("A", 0, 0));
         auto completedIssues = issueManager.GetCompletedIssues();
         UNIT_ASSERT_VALUES_EQUAL(completedIssues.Size(), 0);
-        issueManager.LeaveScope(); 
-        auto issues = issueManager.GetIssues(); 
-        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 0); 
-    } 
- 
+        issueManager.LeaveScope();
+        auto issues = issueManager.GetIssues();
+        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 0);
+    }
+
     Y_UNIT_TEST(NoErrorTwoLevelsTest) {
-        TIssueManager issueManager; 
+        TIssueManager issueManager;
         issueManager.AddScope(CreateScopeIssueFunction("A", 0, 0));
         issueManager.AddScope(CreateScopeIssueFunction("B", 1, 1));
-        issueManager.LeaveScope(); 
+        issueManager.LeaveScope();
         auto completedIssues = issueManager.GetCompletedIssues();
         UNIT_ASSERT_VALUES_EQUAL(completedIssues.Size(), 0);
-        issueManager.LeaveScope(); 
-        auto issues = issueManager.GetIssues(); 
-        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 0); 
-    } 
- 
+        issueManager.LeaveScope();
+        auto issues = issueManager.GetIssues();
+        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 0);
+    }
+
     Y_UNIT_TEST(OneErrorOneLevelTest) {
-        TIssueManager issueManager; 
+        TIssueManager issueManager;
         issueManager.AddScope(CreateScopeIssueFunction("A", 0, 0));
         auto completedIssues1 = issueManager.GetCompletedIssues();
         UNIT_ASSERT_VALUES_EQUAL(completedIssues1.Size(), 0);
-        issueManager.RaiseIssue(TIssue(TPosition(1,2), "IssueOne")); 
+        issueManager.RaiseIssue(TIssue(TPosition(1,2), "IssueOne"));
         auto completedIssues2 = issueManager.GetCompletedIssues();
         UNIT_ASSERT_VALUES_EQUAL(completedIssues2.Size(), 0);
-        issueManager.LeaveScope(); 
+        issueManager.LeaveScope();
         auto completedIssues3 = issueManager.GetCompletedIssues();
         UNIT_ASSERT_VALUES_EQUAL(completedIssues3.Size(), 1);
 
-        auto issues = issueManager.GetIssues(); 
-        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1); 
-        auto scopeIssue = issues.begin(); 
-        UNIT_ASSERT_VALUES_EQUAL(scopeIssue->Message, "A"); 
-        auto subIssues = scopeIssue->GetSubIssues(); 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues.size(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->Message, "IssueOne"); 
-    } 
- 
+        auto issues = issueManager.GetIssues();
+        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1);
+        auto scopeIssue = issues.begin();
+        UNIT_ASSERT_VALUES_EQUAL(scopeIssue->Message, "A");
+        auto subIssues = scopeIssue->GetSubIssues();
+        UNIT_ASSERT_VALUES_EQUAL(subIssues.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->Message, "IssueOne");
+    }
+
     Y_UNIT_TEST(OneErrorTwoLevelsTest) {
-        TIssueManager issueManager; 
+        TIssueManager issueManager;
         issueManager.AddScope(CreateScopeIssueFunction("A", 0, 0));
         issueManager.AddScope(CreateScopeIssueFunction("B", 1, 1));
-        issueManager.RaiseIssue(TIssue(TPosition(1,2), "IssueOne")); 
-        issueManager.LeaveScope(); 
-        issueManager.LeaveScope(); 
-        auto issues = issueManager.GetIssues(); 
-        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1); 
-        auto scopeIssue = issues.begin(); 
-        UNIT_ASSERT_VALUES_EQUAL(scopeIssue->Message, "A"); 
-        auto subIssues = scopeIssue->GetSubIssues(); 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues.size(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->Message, "B"); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetSubIssues().size(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetSubIssues()[0]->Message, "IssueOne"); 
-    } 
- 
+        issueManager.RaiseIssue(TIssue(TPosition(1,2), "IssueOne"));
+        issueManager.LeaveScope();
+        issueManager.LeaveScope();
+        auto issues = issueManager.GetIssues();
+        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1);
+        auto scopeIssue = issues.begin();
+        UNIT_ASSERT_VALUES_EQUAL(scopeIssue->Message, "A");
+        auto subIssues = scopeIssue->GetSubIssues();
+        UNIT_ASSERT_VALUES_EQUAL(subIssues.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->Message, "B");
+
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetSubIssues().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetSubIssues()[0]->Message, "IssueOne");
+    }
+
     Y_UNIT_TEST(MultiErrorsMultiLevelsTest) {
-        TIssueManager issueManager; 
+        TIssueManager issueManager;
         issueManager.AddScope(CreateScopeIssueFunction("A", 0, 0));
-        issueManager.RaiseIssue(TIssue(TPosition(), "WarningScope1")); 
+        issueManager.RaiseIssue(TIssue(TPosition(), "WarningScope1"));
         issueManager.AddScope(CreateScopeIssueFunction("B", 1, 1));
         issueManager.AddScope(CreateScopeIssueFunction("C", 2, 2));
-        issueManager.RaiseIssue(TIssue(TPosition(), "ErrorScope3")); 
-        issueManager.LeaveScope(); 
-        issueManager.RaiseIssue(TIssue(TPosition(), "ErrorScope2")); 
-        issueManager.LeaveScope(); 
-        issueManager.LeaveScope(); 
-        auto issues = issueManager.GetIssues(); 
-        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1); 
-        auto scopeIssue = issues.begin(); 
-        auto subIssues = scopeIssue->GetSubIssues(); 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues.size(), 2); 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetSubIssues().size(), 0); //WarningScope1 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->Message, "WarningScope1"); 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues().size(), 2); 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues()[0]->GetSubIssues().size(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues()[0]->GetSubIssues()[0]->Message, "ErrorScope3"); 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues()[1]->Message, "ErrorScope2"); 
+        issueManager.RaiseIssue(TIssue(TPosition(), "ErrorScope3"));
+        issueManager.LeaveScope();
+        issueManager.RaiseIssue(TIssue(TPosition(), "ErrorScope2"));
+        issueManager.LeaveScope();
+        issueManager.LeaveScope();
+        auto issues = issueManager.GetIssues();
+        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1);
+        auto scopeIssue = issues.begin();
+        auto subIssues = scopeIssue->GetSubIssues();
+        UNIT_ASSERT_VALUES_EQUAL(subIssues.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->GetSubIssues().size(), 0); //WarningScope1
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->Message, "WarningScope1");
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues()[0]->GetSubIssues().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues()[0]->GetSubIssues()[0]->Message, "ErrorScope3");
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues()[1]->Message, "ErrorScope2");
         auto ref = R"___(<main>: Error: A
     <main>: Error: WarningScope1
     <main>:1:1: Error: B
         <main>:2:2: Error: C
             <main>: Error: ErrorScope3
         <main>: Error: ErrorScope2
-)___"; 
-        UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), ref); 
-    } 
- 
+)___";
+        UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), ref);
+    }
+
     Y_UNIT_TEST(TIssueScopeGuardSimpleTest) {
-        TIssueManager issueManager; 
-        { 
+        TIssueManager issueManager;
+        {
             TIssueScopeGuard guard(issueManager, CreateScopeIssueFunction("A", 0, 0));
-            issueManager.RaiseIssue(TIssue(TPosition(1,2), "ErrorScope1")); 
-        } 
-        auto issues = issueManager.GetIssues(); 
-        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1); 
-        auto scopeIssue = issues.begin(); 
-        UNIT_ASSERT_VALUES_EQUAL(scopeIssue->Message, "A"); 
-        auto subIssues = scopeIssue->GetSubIssues(); 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues.size(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->Message, "ErrorScope1"); 
-    } 
+            issueManager.RaiseIssue(TIssue(TPosition(1,2), "ErrorScope1"));
+        }
+        auto issues = issueManager.GetIssues();
+        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1);
+        auto scopeIssue = issues.begin();
+        UNIT_ASSERT_VALUES_EQUAL(scopeIssue->Message, "A");
+        auto subIssues = scopeIssue->GetSubIssues();
+        UNIT_ASSERT_VALUES_EQUAL(subIssues.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(subIssues[0]->Message, "ErrorScope1");
+    }
 
     Y_UNIT_TEST(FuseScopesTest) {
         TIssueManager issueManager;
@@ -203,4 +203,4 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
 )___";
         UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), ref);
     }
-} 
+}

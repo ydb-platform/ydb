@@ -44,51 +44,51 @@ Y_UNIT_TEST_SUITE(KqpDocumentApi) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(RestrictWriteExplicitPrepare) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        CreateSampleTables(session); 
- 
-        auto text = R"( 
-            DECLARE $rows AS 'List<Struct<Key1:String?, Key2:String?>>'; 
-            UPSERT INTO [/Root/DocumentApiTest] (Key1, Key2) 
-                SELECT Key1, Key2 FROM AS_TABLE($rows); 
-        )"; 
- 
-        { 
-            auto prepareResult = session.PrepareDataQuery(text).ExtractValueSync(); 
- 
-            prepareResult.GetIssues().PrintTo(Cerr); 
-            UNIT_ASSERT(!prepareResult.IsSuccess()); 
-            UNIT_ASSERT(HasIssue(prepareResult.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION)); 
-        } 
- 
-        auto prepareSettings = TPrepareDataQuerySettings().RequestType("_document_api_request"); 
-        auto prepareResult = session.PrepareDataQuery(text, prepareSettings).ExtractValueSync(); 
-        UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString()); 
- 
-        auto params = prepareResult.GetQuery().GetParamsBuilder() 
-            .AddParam("$rows") 
-                .BeginList() 
-                .AddListItem() 
-                    .BeginStruct() 
-                        .AddMember("Key1").OptionalString("k1") 
-                        .AddMember("Key2").OptionalString("k2") 
-                    .EndStruct() 
-                .EndList() 
-                .Build() 
-            .Build(); 
- 
-        auto execSettings = TExecDataQuerySettings().RequestType("_document_api_request"); 
-        auto result = prepareResult.GetQuery().Execute( 
-            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), 
-            std::move(params), execSettings).ExtractValueSync(); 
- 
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
-    } 
- 
+    Y_UNIT_TEST(RestrictWriteExplicitPrepare) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
+        auto text = R"(
+            DECLARE $rows AS 'List<Struct<Key1:String?, Key2:String?>>';
+            UPSERT INTO [/Root/DocumentApiTest] (Key1, Key2)
+                SELECT Key1, Key2 FROM AS_TABLE($rows);
+        )";
+
+        {
+            auto prepareResult = session.PrepareDataQuery(text).ExtractValueSync();
+
+            prepareResult.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT(!prepareResult.IsSuccess());
+            UNIT_ASSERT(HasIssue(prepareResult.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
+        }
+
+        auto prepareSettings = TPrepareDataQuerySettings().RequestType("_document_api_request");
+        auto prepareResult = session.PrepareDataQuery(text, prepareSettings).ExtractValueSync();
+        UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+
+        auto params = prepareResult.GetQuery().GetParamsBuilder()
+            .AddParam("$rows")
+                .BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key1").OptionalString("k1")
+                        .AddMember("Key2").OptionalString("k2")
+                    .EndStruct()
+                .EndList()
+                .Build()
+            .Build();
+
+        auto execSettings = TExecDataQuerySettings().RequestType("_document_api_request");
+        auto result = prepareResult.GetQuery().Execute(
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+            std::move(params), execSettings).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(AllowRead) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

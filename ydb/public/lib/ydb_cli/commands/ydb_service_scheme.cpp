@@ -344,29 +344,29 @@ namespace {
             return;
         }
         Cout << Endl << "Indexes: " << Endl;
-        for (const auto& index : indexes) { 
-            Cout << index.GetIndexName() << " [" << index.GetIndexType() << "] Index columns: ("; 
-            const auto& columns = index.GetIndexColumns(); 
+        for (const auto& index : indexes) {
+            Cout << index.GetIndexName() << " [" << index.GetIndexType() << "] Index columns: (";
+            const auto& columns = index.GetIndexColumns();
             for (auto colIt = columns.begin(); colIt != columns.end();) {
                 Cout << (*colIt);
                 if (++colIt != columns.end()) {
                     Cout << ",";
                 }
             }
- 
-            const auto& cover = index.GetDataColumns(); 
-            if (!cover) { 
-                Cout << ")" << Endl; 
-            } else { 
-                Cout << ") Cover columns: ("; 
-                for (auto colIt = cover.begin(); colIt != cover.end();) { 
-                    Cout << (*colIt); 
-                    if (++colIt != cover.end()) { 
-                        Cout << ","; 
-                    } 
-                } 
-                Cout << ")" << Endl; 
-            } 
+
+            const auto& cover = index.GetDataColumns();
+            if (!cover) {
+                Cout << ")" << Endl;
+            } else {
+                Cout << ") Cover columns: (";
+                for (auto colIt = cover.begin(); colIt != cover.end();) {
+                    Cout << (*colIt);
+                    if (++colIt != cover.end()) {
+                        Cout << ",";
+                    }
+                }
+                Cout << ")" << Endl;
+            }
         }
     }
 

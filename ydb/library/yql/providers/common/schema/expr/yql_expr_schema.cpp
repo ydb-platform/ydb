@@ -353,7 +353,7 @@ struct TExprTypeLoader {
         return ret;
     }
     void Error(const TString& info) {
-        Ctx.AddError(TIssue(Pos, info)); 
+        Ctx.AddError(TIssue(Pos, info));
     }
 };
 
@@ -361,7 +361,7 @@ const TTypeAnnotationNode* ParseTypeFromYson(const TStringBuf yson, TExprContext
     NYT::TNode node;
     TStringStream err;
     if (!ParseYson(node, yson, err)) {
-        ctx.AddError(TIssue(pos, err.Str())); 
+        ctx.AddError(TIssue(pos, err.Str()));
         return nullptr;
     }
 

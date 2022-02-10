@@ -49,47 +49,47 @@ struct TQueryExecutionStats {
     void Finish();
 };
 
-struct TTableStat { 
-    ui64 Rows = 0; 
-    ui64 Bytes = 0; 
+struct TTableStat {
+    ui64 Rows = 0;
+    ui64 Bytes = 0;
 
     TTableStat& operator+=(const TTableStat& rhs);
     TTableStat& operator-=(const TTableStat& rhs);
-}; 
- 
-struct TProgressStatEntry { 
+};
+
+struct TProgressStatEntry {
     TDuration ComputeTime;
     TTableStat ReadIOStat;
 
     TProgressStatEntry& operator+=(const TProgressStatEntry& rhs);
 
-    void Out(IOutputStream& o) const; 
-}; 
- 
-TTableStat CalcSumTableReadStat(const TProgressStatEntry& entry);
-TDuration CalcCumComputeTime(const TProgressStatEntry& entry); 
- 
-class TProgressStat { 
-public: 
-    using TEntry = TProgressStatEntry; 
+    void Out(IOutputStream& o) const;
+};
 
-    TProgressStat() = default; 
+TTableStat CalcSumTableReadStat(const TProgressStatEntry& entry);
+TDuration CalcCumComputeTime(const TProgressStatEntry& entry);
+
+class TProgressStat {
+public:
+    using TEntry = TProgressStatEntry;
+
+    TProgressStat() = default;
 
     void Set(const NYql::NDqProto::TDqComputeActorStats& stats);
 
-    void Update(); 
+    void Update();
 
-    TEntry GetLastUsage() const; 
+    TEntry GetLastUsage() const;
 
-private: 
-    TEntry Total; 
-    TEntry Cur; 
-}; 
- 
+private:
+    TEntry Total;
+    TEntry Cur;
+};
+
 } // namespace NKqp
 } // namespace NKikimr
- 
-template<> 
-inline void Out<NKikimr::NKqp::TProgressStatEntry>(IOutputStream& o, const NKikimr::NKqp::TProgressStatEntry& x) { 
-    return x.Out(o); 
-} 
+
+template<>
+inline void Out<NKikimr::NKqp::TProgressStatEntry>(IOutputStream& o, const NKikimr::NKqp::TProgressStatEntry& x) {
+    return x.Out(o);
+}

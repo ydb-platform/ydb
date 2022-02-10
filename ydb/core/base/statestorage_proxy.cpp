@@ -976,7 +976,7 @@ public:
             hFunc(TEvStateStorage::TEvReplicaProbeSubscribe, Handle);
             hFunc(TEvStateStorage::TEvReplicaProbeUnsubscribe, Handle);
         default:
-            TActivationContext::Send(ev->Forward(RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, FlowControlledInfo)))); 
+            TActivationContext::Send(ev->Forward(RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, FlowControlledInfo))));
             break;
         }
     }

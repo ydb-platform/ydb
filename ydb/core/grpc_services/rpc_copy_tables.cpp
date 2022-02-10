@@ -32,7 +32,7 @@ private:
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables);
         auto copy = modifyScheme->MutableCreateConsistentCopyTables();
 
-        const auto req = GetProtoRequest(); 
+        const auto req = GetProtoRequest();
         for (const auto& item: req->tables()) {
             auto description = copy->AddCopyTableDescriptions();
             description->SetSrcPath(item.source_path());

@@ -565,7 +565,7 @@ void TWriteSessionActor::RequestNextPartition(const TActorContext& ctx) {
         .BackoffMultiplier = 2,
         .DoFirstRetryInstantly = true
     };
-    PipeToBalancer = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, BalancerTabletId, clientConfig)); 
+    PipeToBalancer = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, BalancerTabletId, clientConfig));
 
     NTabletPipe::SendData(ctx, PipeToBalancer, x.Release());
 }
@@ -577,7 +577,7 @@ void TWriteSessionActor::Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse:
 }
 
 void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TActorContext &ctx) {
-    auto& record = ev->Get()->Record.GetRef(); 
+    auto& record = ev->Get()->Record.GetRef();
 
     if (record.GetYdbStatus() == Ydb::StatusIds::ABORTED) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " messageGroupId "

@@ -103,7 +103,7 @@ message TKikimrGrpcData {
     optional uint64 MaxMessageSizeBytes = 3;
     optional uint32 MaxInFlight = 4;
     optional bool EnableEndpointDiscovery = 5;
-    optional bool UseLegacyApi = 6; 
+    optional bool UseLegacyApi = 6;
 }
 
 message TKikimrClusterConfig {

@@ -566,7 +566,7 @@ namespace NKikimr {
                         << " entryPoint# "<< entryPoint
                         << " freeUpToLsn# " << freeUpToLsn
                         << "}";
-                    auto aid = ctx.RegisterWithSameMailbox(new TAsyncAdvanceLsnCommitter(HullLogCtx, HullDbCommitterCtx, 
+                    auto aid = ctx.RegisterWithSameMailbox(new TAsyncAdvanceLsnCommitter(HullLogCtx, HullDbCommitterCtx,
                         RTCtx->LevelIndex, ctx.SelfID, dbg.Str()));
                     ActiveActors.Insert(aid);
                     AdvanceCommitInProgress = true;

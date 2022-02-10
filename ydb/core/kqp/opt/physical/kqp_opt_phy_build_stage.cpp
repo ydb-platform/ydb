@@ -316,9 +316,9 @@ TExprBase KqpBuildLookupTableStage(TExprBase node, TExprContext& ctx) {
         return node;
     }
     const TKqlLookupTable& lookup = node.Cast<TKqlLookupTable>();
- 
+
     YQL_ENSURE(lookup.CallableName() == TKqlLookupTable::CallableName());
- 
+
     TMaybeNode<TDqStage> stage;
 
     if (!RequireLookupPrecomputeStage(lookup)) {

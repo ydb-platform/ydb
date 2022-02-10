@@ -72,7 +72,7 @@ public:
             TTabletId tabletId = FromStringWithDefault<TTabletId>(params.Get("tablet_id"), 0);
             if (tabletId != 0) {
                 Tablets.emplace_back(tabletId);
-                TActorId PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, GetPipeClientConfig())); 
+                TActorId PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, GetPipeClientConfig()));
                 NTabletPipe::SendData(ctx, PipeClient, new TEvTablet::TEvGetCounters(), tabletId);
                 PipeClients.emplace_back(PipeClient);
                 Become(&TThis::StateRequestedGetCounters, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
@@ -120,7 +120,7 @@ public:
             Tablets.erase(std::unique(Tablets.begin(), Tablets.end()), Tablets.end());
         }
         for (auto tabletId : Tablets) {
-            TActorId PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, GetPipeClientConfig())); 
+            TActorId PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, GetPipeClientConfig()));
             NTabletPipe::SendData(ctx, PipeClient, new TEvTablet::TEvGetCounters(), tabletId);
             PipeClients.emplace_back(PipeClient);
         }

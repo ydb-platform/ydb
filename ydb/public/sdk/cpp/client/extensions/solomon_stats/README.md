@@ -10,11 +10,11 @@ You can plug in YDB C++ SDK extension to monitor how your application interacts 
 - Query size, latency, etc.
 
 You can get these metrics via http server provided by YDB C++ SDK or implement your own MetricRegistry if it more convenient.
- 
+
 ## Setting up Solomon Monitoring
 
 > This is Yandex specific section for setting up internal monitoring called Solomon
- 
+
 ### Setup Solomon Environment
 TSolomonStatPullExtension class allows you to quickly setup you application monitoring. You need to prepare a Solomon project that can accept your metrics beforehand.
 [Create project, cluster and service, and connect them.](https://wiki.yandex-team.ru/solomon/howtostart/).
@@ -30,7 +30,7 @@ Fill in the following params:
 After creating NYdb::TDriver you need to add Solomon Monitoring extension. If you set up incorrect hostname or port **TSystemError** exception will be thrown.
 
 > **Important**: you must plug in monitoring before driver creation.
- 
+
 ```cl
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/extensions/solomon_stats/pull_client.h>
@@ -60,26 +60,26 @@ After creating NYdb::TDriver you need to add Solomon Monitoring extension. If yo
 ## Setup Monitoring of Your Choice
 
 Implementing NMonitoring::IMetricRegistry provides more flexibility. You can deliver application metrics to Prometheus or any other system of your choice, just register your specific NMonitoring::IMetricRegistry implementation via AddMetricRegistry function.
- 
+
 > **Important**: you must plug in monitoring before driver creation.
- 
+
 Select a method which is right for you:
-```cl 
+```cl
 #include <ydb/public/sdk/cpp/client/extensions/solomon_stats/pull_connector.h>
- 
-... 
- 
+
+...
+
 void AddMetricRegistry(NYdb::TDriver& driver, NMonitoring::IMetricRegistry* ptr);
 void AddMetricRegistry(NYdb::TDriver& driver, std::shared_ptr<NMonitoring::IMetricRegistry> ptr);
 void AddMetricRegistry(NYdb::TDriver& driver, TAtomicSharedPtr<NMonitoring::IMetricRegistry> ptr);
-``` 
- 
+```
+
 If you provide a raw pointer, it's your responsibility to delete the registry. You must shutdown the SDK driver before destroying the registry.
- 
+
 ## Metrics Description
- 
+
 The most valuable metrics are the following:
- 
+
 - Grpc/InFlightByYdbHost - queries in flight for a selected YDB hostname
 - Request/Latency - Query execution latency histogram from the client side, ms (without RetryOperation)
 - Request/ParamsSize - Query params size histogram in bytes
@@ -89,4 +89,4 @@ The most valuable metrics are the following:
 - Sessions/InPool - Number of sessions in a pool
 - Sessions/SessionsLimitExceeded - Rate of events for exceeding the limit on the number of sessions on the client side
 - SessionsByYdbHost - Number of sessions per YDB hosts
- 
+

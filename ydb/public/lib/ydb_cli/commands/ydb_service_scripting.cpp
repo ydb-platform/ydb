@@ -27,10 +27,10 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
     config.Opts->AddLongOption('s', "script", "Text of script to execute").RequiredArgument("[String]").StoreResult(&Script);
     config.Opts->AddLongOption('f', "file", "[Required] Script file").RequiredArgument("PATH").StoreResult(&ScriptFile);
     config.Opts->AddLongOption("explain", "Explain query").Optional().StoreTrue(&Explain);
-    config.Opts->AddLongOption("show-response-metadata", ResponseHeadersHelp).Optional().StoreTrue(&ShowHeaders); 
+    config.Opts->AddLongOption("show-response-metadata", ResponseHeadersHelp).Optional().StoreTrue(&ShowHeaders);
 
     AddParametersOption(config);
- 
+
     AddInputFormats(config, {
         EOutputFormat::JsonUnicode,
         EOutputFormat::JsonBase64

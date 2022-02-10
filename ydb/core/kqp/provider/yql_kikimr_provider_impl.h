@@ -32,7 +32,7 @@ private:
     virtual TStatus HandleUpdateTable(NNodes::TKiUpdateTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleDeleteTable(NNodes::TKiDeleteTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleCreateTable(NNodes::TKiCreateTable node, TExprContext& ctx) = 0;
-    virtual TStatus HandleAlterTable(NNodes::TKiAlterTable node, TExprContext& ctx) = 0; 
+    virtual TStatus HandleAlterTable(NNodes::TKiAlterTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropTable(NNodes::TKiDropTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleCreateUser(NNodes::TKiCreateUser node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterUser(NNodes::TKiAlterUser node, TExprContext& ctx) = 0;
@@ -84,17 +84,17 @@ public:
         return Target;
     }
 
-    const TMaybe<TString>& GetView() const { 
-        return View; 
-    } 
- 
+    const TMaybe<TString>& GetView() const {
+        return View;
+    }
+
     bool Extract(const TExprNode& key);
 
 private:
     TExprContext& Ctx;
     TMaybe<Type> KeyType;
     TString Target;
-    TMaybe<TString> View; 
+    TMaybe<TString> View;
 };
 
 struct TKiExecDataQuerySettings {
@@ -115,11 +115,11 @@ public:
     static bool IsFull(NNodes::TExprList list);
     static TMaybe<NCommon::TKeyRange> GetPointKeyRange(TExprContext& ctx, const TKikimrTableDescription& table, NNodes::TExprList range);
     static NNodes::TExprBase BuildReadRangeExpr(const TKikimrTableDescription& tableDesc,
-        const NCommon::TKeyRange& keyRange, NNodes::TCoAtomList select,  bool allowNulls, 
-        TExprContext& ctx); 
-    static NNodes::TExprBase BuildIndexReadRangeExpr(const TKikimrTableDescription& lookupTableDesc, 
-        const NCommon::TKeyRange& keyRange, NNodes::TCoAtomList select, bool allowNulls, 
-        const TKikimrTableDescription& dataTableDesc, TExprContext& ctx); 
+        const NCommon::TKeyRange& keyRange, NNodes::TCoAtomList select,  bool allowNulls,
+        TExprContext& ctx);
+    static NNodes::TExprBase BuildIndexReadRangeExpr(const TKikimrTableDescription& lookupTableDesc,
+        const NCommon::TKeyRange& keyRange, NNodes::TCoAtomList select, bool allowNulls,
+        const TKikimrTableDescription& dataTableDesc, TExprContext& ctx);
 
     NNodes::TExprList ToRangeExpr(NNodes::TExprBase owner, TExprContext& ctx);
 
@@ -204,28 +204,28 @@ NNodes::TMaybeNode<NNodes::TExprBase> TranslateToMkql(NNodes::TExprBase node, TE
 NNodes::TExprBase UnwrapKiReadTableValues(NNodes::TExprBase input, const TKikimrTableDescription& tableDesc,
     NNodes::TCoAtomList columns, TExprContext& ctx);
 
-NNodes::TKiVersionedTable BuildVersionedTable(const TKikimrTableMetadata& metadata, TPositionHandle pos, TExprContext& ctx); 
-NNodes::TCoAtomList BuildColumnsList( 
+NNodes::TKiVersionedTable BuildVersionedTable(const TKikimrTableMetadata& metadata, TPositionHandle pos, TExprContext& ctx);
+NNodes::TCoAtomList BuildColumnsList(
     const TKikimrTableDescription& table,
     TPositionHandle pos,
     TExprContext& ctx,
     bool withSystemColumns = false
 );
-NNodes::TCoAtomList BuildKeyColumnsList( 
-    const TKikimrTableDescription& table, 
-    TPositionHandle pos, 
-    TExprContext& ctx 
-); 
- 
-NNodes::TCoAtomList MergeColumns(const NNodes::TCoAtomList& col1, const TVector<TString>& col2, TExprContext& ctx); 
- 
+NNodes::TCoAtomList BuildKeyColumnsList(
+    const TKikimrTableDescription& table,
+    TPositionHandle pos,
+    TExprContext& ctx
+);
+
+NNodes::TCoAtomList MergeColumns(const NNodes::TCoAtomList& col1, const TVector<TString>& col2, TExprContext& ctx);
+
 bool IsKqlPureExpr(NNodes::TExprBase expr);
 bool IsKqlPureLambda(NNodes::TCoLambda lambda);
-bool IsKeySelectorPkPrefix(NNodes::TCoLambda lambda, const TKikimrTableDescription& desc, TVector<TString>* columns); 
+bool IsKeySelectorPkPrefix(NNodes::TCoLambda lambda, const TKikimrTableDescription& desc, TVector<TString>* columns);
 
-NNodes::TCoNameValueTupleList ExtractNamedKeyTuples(NNodes::TCoArgument arg, 
-    const TKikimrTableDescription& desc, TExprContext& ctx, const TString& tablePrefix = TString()); 
- 
+NNodes::TCoNameValueTupleList ExtractNamedKeyTuples(NNodes::TCoArgument arg,
+    const TKikimrTableDescription& desc, TExprContext& ctx, const TString& tablePrefix = TString());
+
 const TTypeAnnotationNode* GetReadTableRowType(TExprContext& ctx, const TKikimrTablesData& tablesData,
     const TString& cluster, const TString& table, NNodes::TCoAtomList select, bool withSystemColumns = false);
 
@@ -279,6 +279,6 @@ const TYdbOperations& KikimrRequireUnmodifiedOps();
 const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns();
 bool IsKikimrSystemColumn(const TStringBuf columnName);
 
-bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos); 
- 
+bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos);
+
 } // namespace NYql

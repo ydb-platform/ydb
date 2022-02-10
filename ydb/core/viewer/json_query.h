@@ -95,10 +95,10 @@ public:
         }
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
         request.SetQuery(query);
-        if (Action.empty() || Action == "execute-script" || Action == "execute") { 
+        if (Action.empty() || Action == "execute-script" || Action == "execute") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT); 
-            request.SetKeepSession(false); 
+            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
+            request.SetKeepSession(false);
         } else if (Action == "execute-scan") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);

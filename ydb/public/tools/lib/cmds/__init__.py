@@ -37,9 +37,9 @@ def ensure_path_exists(path):
 
 
 def parse_erasure(args):
-    erasure = os.getenv("YDB_ERASURE") 
-    if erasure is not None: 
-        return Erasure.from_string(erasure) 
+    erasure = os.getenv("YDB_ERASURE")
+    if erasure is not None:
+        return Erasure.from_string(erasure)
     if args.erasure is None:
         return None
     return Erasure.from_string(args.erasure)

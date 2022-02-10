@@ -457,10 +457,10 @@ void TFakeScanTx::AddPlanStepShardResult(ui32 /*shardId*/,
         YdbOld::ResultSet part;
         UNIT_ASSERT(part.ParseFromArray(res.data(), res.size()));
 
-        if (Result.column_metaSize()) 
-            part.Clearcolumn_meta(); 
+        if (Result.column_metaSize())
+            part.Clearcolumn_meta();
         Result.MergeFrom(part);
-        UNIT_ASSERT(Result.column_metaSize()); 
+        UNIT_ASSERT(Result.column_metaSize());
     } else if (event->Record.GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::ERROR) {
         Status = IEngineFlat::EStatus::Error;
     } else {

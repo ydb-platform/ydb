@@ -51,7 +51,7 @@ struct TOperationRequestSettings : public TSimpleRequestSettings<TDerived> {
     FLUENT_SETTING(TDuration, OperationTimeout);
     FLUENT_SETTING(TDuration, CancelAfter);
     FLUENT_SETTING_DEFAULT(bool, UseClientTimeoutForOperation, true);
-    FLUENT_SETTING_DEFAULT(bool, ReportCostInfo, false); 
+    FLUENT_SETTING_DEFAULT(bool, ReportCostInfo, false);
 
     TOperationRequestSettings() = default;
 
@@ -61,7 +61,7 @@ struct TOperationRequestSettings : public TSimpleRequestSettings<TDerived> {
         , OperationTimeout_(other.OperationTimeout_)
         , CancelAfter_(other.CancelAfter_)
         , UseClientTimeoutForOperation_(other.UseClientTimeoutForOperation_)
-        , ReportCostInfo_(other.ReportCostInfo_) 
+        , ReportCostInfo_(other.ReportCostInfo_)
     {}
 
     TSelf& CancelAfterWithTimeout(const TDuration& cancelAfter, const TDuration& operationTimeout) {

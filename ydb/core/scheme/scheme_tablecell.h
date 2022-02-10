@@ -161,7 +161,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
     case NKikimr::NScheme::NTypeIds::String4k:
     case NKikimr::NScheme::NTypeIds::String2m:
     case NKikimr::NScheme::NTypeIds::Utf8:
-    case NKikimr::NScheme::NTypeIds::Json: 
+    case NKikimr::NScheme::NTypeIds::Json:
     case NKikimr::NScheme::NTypeIds::Yson:
     // XXX: using memcmp is meaningless for both JsonDocument and Json
     case NKikimr::NScheme::NTypeIds::JsonDocument:

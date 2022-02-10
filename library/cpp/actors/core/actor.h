@@ -71,12 +71,12 @@ namespace NActors {
         // register new actor in ActorSystem on new fresh mailbox.
         static TActorId Register(IActor* actor, TActorId parentId = TActorId(), TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>());
 
-        // Register new actor in ActorSystem on same _mailbox_ as current actor. 
-        // There is one thread per mailbox to execute actor, which mean 
-        // no _cpu core scalability_ for such actors. 
-        // This method of registration can be usefull if multiple actors share 
-        // some memory. 
-        static TActorId RegisterWithSameMailbox(IActor* actor, TActorId parentId); 
+        // Register new actor in ActorSystem on same _mailbox_ as current actor.
+        // There is one thread per mailbox to execute actor, which mean
+        // no _cpu core scalability_ for such actors.
+        // This method of registration can be usefull if multiple actors share
+        // some memory.
+        static TActorId RegisterWithSameMailbox(IActor* actor, TActorId parentId);
 
         static const TActorContext& AsActorContext();
         static TActorContext ActorContextFor(TActorId id);
@@ -141,12 +141,12 @@ namespace NActors {
         // register new actor in ActorSystem on new fresh mailbox.
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const;
 
-        // Register new actor in ActorSystem on same _mailbox_ as current actor. 
-        // There is one thread per mailbox to execute actor, which mean 
-        // no _cpu core scalability_ for such actors. 
-        // This method of registration can be usefull if multiple actors share 
-        // some memory. 
-        TActorId RegisterWithSameMailbox(IActor* actor) const; 
+        // Register new actor in ActorSystem on same _mailbox_ as current actor.
+        // There is one thread per mailbox to execute actor, which mean
+        // no _cpu core scalability_ for such actors.
+        // This method of registration can be usefull if multiple actors share
+        // some memory.
+        TActorId RegisterWithSameMailbox(IActor* actor) const;
 
         std::pair<ui32, ui32> CountMailboxEvents(ui32 maxTraverse = Max<ui32>()) const;
     };
@@ -204,7 +204,7 @@ namespace NActors {
         virtual void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept = 0;
 
         virtual TActorId Register(IActor*, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const noexcept = 0;
-        virtual TActorId RegisterWithSameMailbox(IActor*) const noexcept = 0; 
+        virtual TActorId RegisterWithSameMailbox(IActor*) const noexcept = 0;
     };
 
     class TDecorator;
@@ -368,12 +368,12 @@ namespace NActors {
         // register new actor in ActorSystem on new fresh mailbox.
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const noexcept final;
 
-        // Register new actor in ActorSystem on same _mailbox_ as current actor. 
-        // There is one thread per mailbox to execute actor, which mean 
-        // no _cpu core scalability_ for such actors. 
-        // This method of registration can be usefull if multiple actors share 
-        // some memory. 
-        TActorId RegisterWithSameMailbox(IActor* actor) const noexcept final; 
+        // Register new actor in ActorSystem on same _mailbox_ as current actor.
+        // There is one thread per mailbox to execute actor, which mean
+        // no _cpu core scalability_ for such actors.
+        // This method of registration can be usefull if multiple actors share
+        // some memory.
+        TActorId RegisterWithSameMailbox(IActor* actor) const noexcept final;
 
         std::pair<ui32, ui32> CountMailboxEvents(ui32 maxTraverse = Max<ui32>()) const;
 
@@ -478,7 +478,7 @@ namespace NActors {
         virtual bool DoBeforeReceiving(TAutoPtr<IEventHandle>& /*ev*/, const TActorContext& /*ctx*/) {
             return true;
         }
- 
+
         virtual void DoAfterReceiving(const TActorContext& /*ctx*/)
         {
         }

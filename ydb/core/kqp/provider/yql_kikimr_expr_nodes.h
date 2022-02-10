@@ -61,7 +61,7 @@ public:
     explicit TKiReadTable(const TExprNode::TPtr& node)
         : TKiReadTableStub(node) {}
 
-    TString GetTable(TExprContext& ctx) const; 
+    TString GetTable(TExprContext& ctx) const;
     TCoAtomList GetSelectColumns(TExprContext& ctx, const TKikimrTablesData& tablesData,
         bool withVirtualColumns = false) const;
     TCoAtomList GetSelectColumns(TExprContext& ctx, const TKikimrTableDescription& tableData,

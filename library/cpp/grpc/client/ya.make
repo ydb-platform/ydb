@@ -6,11 +6,11 @@ OWNER(
 )
 
 SRCS(
-    grpc_client_low.cpp 
+    grpc_client_low.cpp
 )
 
 PEERDIR(
-    contrib/libs/grpc 
+    contrib/libs/grpc
 )
 
 END()

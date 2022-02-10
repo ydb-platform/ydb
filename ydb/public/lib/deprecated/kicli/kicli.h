@@ -63,8 +63,8 @@ public:
     static const TType String;
     static const TType String4k;
     static const TType String2m;
-    static const TType Yson; 
-    static const TType Json; 
+    static const TType Yson;
+    static const TType Json;
     static const TType JsonDocument;
     static const TType Timestamp;
 
@@ -204,7 +204,7 @@ public:
 };
 
 // for compatibility
-template <typename ParameterType, NScheme::TTypeId SchemeType = SchemeMapper<ParameterType>::SchemeType> 
+template <typename ParameterType, NScheme::TTypeId SchemeType = SchemeMapper<ParameterType>::SchemeType>
 class TParameterValue : public TStructMemberValue<TDataValue<ParameterType, SchemeType>> {
 public:
     TParameterValue(const TString& name, ParameterType parameter)
@@ -289,7 +289,7 @@ public:
     TString GetMessage() const;
     void Throw() const;
     EFacility GetFacility() const;
-    // Returns YDB status 
+    // Returns YDB status
     Ydb::StatusIds::StatusCode GetYdbStatus() const;
 
 protected:
@@ -342,11 +342,11 @@ public:
 
 protected:
     TResult(NBus::EMessageStatus transportStatus);
-    TResult(NBus::EMessageStatus transportStatus, const TString& message); 
+    TResult(NBus::EMessageStatus transportStatus, const TString& message);
     TResult(TAutoPtr<NBus::TBusMessage> reply);
 
     NBus::EMessageStatus TransportStatus;
-    TString TransportErrorMessage; 
+    TString TransportErrorMessage;
     TAtomicSharedPtr<NBus::TBusMessage> Reply;
 };
 

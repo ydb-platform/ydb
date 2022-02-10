@@ -22,7 +22,7 @@ namespace NKikimr {
 namespace NKesus {
 
 ////////////////////////////////////////////////////////////////////////////////
- 
+
 class TGRpcSessionActor
     : public TActorBootstrapped<TGRpcSessionActor>
 {
@@ -645,7 +645,7 @@ void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #endif
 
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-    MakeIntrusive<NGRpcService::TGRpcRequest<Ydb::Coordination::IN, Ydb::Coordination::OUT, TKesusGRpcService>>( \ 
+    MakeIntrusive<NGRpcService::TGRpcRequest<Ydb::Coordination::IN, Ydb::Coordination::OUT, TKesusGRpcService>>( \
         this, \
         &Service_, \
         CQ, \

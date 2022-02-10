@@ -98,10 +98,10 @@ int TCommandGetOperation::Run(TConfig& config) {
         } else {
             throw TMissUseException() << "Invalid operation ID (unexpected sub-kind of operation)";
         }
-    case Ydb::TOperationId::BUILD_INDEX: 
+    case Ydb::TOperationId::BUILD_INDEX:
         return GetOperation<NTable::TBuildIndexOperation>(client, OperationId, OutputFormat);
     default:
-        throw TMissUseException() << "Invalid operation ID (unexpected kind of operation)"; 
+        throw TMissUseException() << "Invalid operation ID (unexpected kind of operation)";
     }
 
     return EXIT_SUCCESS;

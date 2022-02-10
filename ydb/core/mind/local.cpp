@@ -180,7 +180,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             .BackoffMultiplier = 2,
             .DoFirstRetryInstantly = true
         };
-        HivePipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, HiveId, pipeConfig)); 
+        HivePipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, HiveId, pipeConfig));
 
         THolder<TEvLocal::TEvRegisterNode> request = MakeHolder<TEvLocal::TEvRegisterNode>(HiveId);
         for (auto &domain: ServicedDomains) {
@@ -974,7 +974,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     void OpenPipe(const TActorContext &ctx)
     {
         ClosePipe(ctx);
-        SchemeShardPipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, SchemeRoot, PipeConfig)); 
+        SchemeShardPipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, SchemeRoot, PipeConfig));
     }
 
     void ClosePipe(const TActorContext &ctx)

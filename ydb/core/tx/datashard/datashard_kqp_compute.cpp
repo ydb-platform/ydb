@@ -101,24 +101,24 @@ ui64 TKqpDatashardComputeContext::GetLocalTableId(const TTableId &tableId) const
 TVector<std::pair<NScheme::TTypeId, TString>> TKqpDatashardComputeContext::GetKeyColumnsInfo(
         const TTableId &tableId) const
 {
-    MKQL_ENSURE_S(Shard); 
-    const NDataShard::TUserTable::TCPtr* tablePtr = Shard->GetUserTables().FindPtr(tableId.PathId.LocalPathId); 
-    MKQL_ENSURE_S(tablePtr); 
-    const NDataShard::TUserTable::TCPtr table = *tablePtr; 
-    MKQL_ENSURE_S(table); 
- 
-    TVector<std::pair<NScheme::TTypeId, TString>> res; 
-    res.reserve(table->KeyColumnTypes.size()); 
- 
-    for (size_t i = 0 ; i < table->KeyColumnTypes.size(); i++) { 
-        auto col = table->Columns.at(table->KeyColumnIds[i]); 
-        MKQL_ENSURE_S(col.IsKey); 
-        MKQL_ENSURE_S(table->KeyColumnTypes[i] == col.Type); 
-        res.push_back({table->KeyColumnTypes[i], col.Name}); 
-    } 
-    return res; 
-} 
- 
+    MKQL_ENSURE_S(Shard);
+    const NDataShard::TUserTable::TCPtr* tablePtr = Shard->GetUserTables().FindPtr(tableId.PathId.LocalPathId);
+    MKQL_ENSURE_S(tablePtr);
+    const NDataShard::TUserTable::TCPtr table = *tablePtr;
+    MKQL_ENSURE_S(table);
+
+    TVector<std::pair<NScheme::TTypeId, TString>> res;
+    res.reserve(table->KeyColumnTypes.size());
+
+    for (size_t i = 0 ; i < table->KeyColumnTypes.size(); i++) {
+        auto col = table->Columns.at(table->KeyColumnIds[i]);
+        MKQL_ENSURE_S(col.IsKey);
+        MKQL_ENSURE_S(table->KeyColumnTypes[i] == col.Type);
+        res.push_back({table->KeyColumnTypes[i], col.Name});
+    }
+    return res;
+}
+
 THashMap<TString, NScheme::TTypeId> TKqpDatashardComputeContext::GetKeyColumnsMap(const TTableId &tableId) const {
     THashMap<TString, NScheme::TTypeId> columnsMap;
 

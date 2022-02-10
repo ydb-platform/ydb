@@ -58,7 +58,7 @@ public:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID(group), pipeConfig);
-        NodeBrokerPipe = ctx.RegisterWithSameMailbox(pipe); 
+        NodeBrokerPipe = ctx.RegisterWithSameMailbox(pipe);
 
         TAutoPtr<TEvNodeBroker::TEvRegistrationRequest> request
             = new TEvNodeBroker::TEvRegistrationRequest;

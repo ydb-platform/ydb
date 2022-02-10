@@ -207,20 +207,20 @@ TWriteValue& TWriteValue::Yson(const TString& value) {
     return *this;
 }
 
-TWriteValue& TWriteValue::Json(const char* value) { 
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Json); 
-    Value.SetText(value); 
-    return *this; 
-} 
- 
-TWriteValue& TWriteValue::Json(const TString& value) { 
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Json); 
-    Value.SetText(value); 
-    return *this; 
-} 
- 
+TWriteValue& TWriteValue::Json(const char* value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Json);
+    Value.SetText(value);
+    return *this;
+}
+
+TWriteValue& TWriteValue::Json(const TString& value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Json);
+    Value.SetText(value);
+    return *this;
+}
+
 TWriteValue& TWriteValue::Date(ui16 value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
     Type.MutableData()->SetScheme(NScheme::NTypeIds::Date);
@@ -396,7 +396,7 @@ TString TValue::GetDataText() const {
     case NScheme::NTypeIds::Float:
         return ToString(Value.GetFloat());
     case NScheme::NTypeIds::Utf8:
-    case NScheme::NTypeIds::Json: 
+    case NScheme::NTypeIds::Json:
         return Value.GetText();
     case NScheme::NTypeIds::String:
     case NScheme::NTypeIds::String4k:
@@ -945,12 +945,12 @@ TValue::operator TString() const {
             || Type.GetData().GetScheme() == NScheme::NTypeIds::String4k
             || Type.GetData().GetScheme() == NScheme::NTypeIds::String2m
             || Type.GetData().GetScheme() == NScheme::NTypeIds::Yson
-            || Type.GetData().GetScheme() == NScheme::NTypeIds::Json 
+            || Type.GetData().GetScheme() == NScheme::NTypeIds::Json
             );
     Y_ASSERT(Value.HasText() || Value.HasBytes());
-    return (Type.GetData().GetScheme() == NScheme::NTypeIds::Utf8 
-           || Type.GetData().GetScheme() == NScheme::NTypeIds::Json) 
-               ? Value.GetText() : Value.GetBytes(); 
+    return (Type.GetData().GetScheme() == NScheme::NTypeIds::Utf8
+           || Type.GetData().GetScheme() == NScheme::NTypeIds::Json)
+               ? Value.GetText() : Value.GetBytes();
 }
 
 

@@ -229,7 +229,7 @@ class KiKiMRClusterInterface(object):
 
         if attributes is not None:
             for name, value in attributes.items():
-                req.set_attribute(name, value) 
+                req.set_attribute(name, value)
 
         response = self.client.send_request(req.protobuf, method='ConsoleRequest')
         operation = response.CreateTenantResponse.Response.operation

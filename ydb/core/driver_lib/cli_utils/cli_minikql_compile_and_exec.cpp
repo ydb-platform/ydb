@@ -76,8 +76,8 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
     auto txRes = response.GetMiniKQLCompileResults();
 
     if (txRes.ProgramCompileErrorsSize() > 0) {
-        TIssues errors; 
-        NYql::IssuesFromMessage(txRes.GetProgramCompileErrors(), errors); 
+        TIssues errors;
+        NYql::IssuesFromMessage(txRes.GetProgramCompileErrors(), errors);
         Cerr << "Program compile errors:\n";
         if (config.PathToBinPgm) {
             errors.PrintTo(Cerr);
@@ -88,8 +88,8 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
     }
 
     if (txRes.ParamsCompileErrorsSize() > 0) {
-        TIssues errors; 
-        NYql::IssuesFromMessage(txRes.GetParamsCompileErrors(), errors); 
+        TIssues errors;
+        NYql::IssuesFromMessage(txRes.GetParamsCompileErrors(), errors);
         Cerr << "Params compile errors:\n";
         if (config.PathToBinParams) {
             errors.PrintTo(Cerr);

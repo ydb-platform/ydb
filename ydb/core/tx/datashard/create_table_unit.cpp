@@ -44,24 +44,24 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
-    const auto &schemeTx = tx->GetSchemeTx(); 
+    const auto &schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasCreateTable())
         return EExecutionStatus::Executed;
 
-    const auto &createTableTx = schemeTx.GetCreateTable(); 
- 
+    const auto &createTableTx = schemeTx.GetCreateTable();
+
     TPathId tableId(DataShard.GetPathOwnerId(), createTableTx.GetId_Deprecated());
     if (createTableTx.HasPathId()) {
         Y_VERIFY(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
         tableId.LocalPathId = createTableTx.GetPathId().GetLocalId();
     }
- 
-    const ui64 schemaVersion = createTableTx.HasTableSchemaVersion() ? createTableTx.GetTableSchemaVersion() : 0u; 
- 
+
+    const ui64 schemaVersion = createTableTx.HasTableSchemaVersion() ? createTableTx.GetTableSchemaVersion() : 0u;
+
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-               "Trying to CREATE TABLE at " << DataShard.TabletID() 
-               << " tableId# " << tableId 
-               << " schema version# " << schemaVersion); 
+               "Trying to CREATE TABLE at " << DataShard.TabletID()
+               << " tableId# " << tableId
+               << " schema version# " << schemaVersion);
 
     TUserTable::TPtr info = DataShard.CreateUserTable(txc, schemeTx.GetCreateTable());
     DataShard.AddUserTable(tableId, info);

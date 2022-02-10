@@ -17,10 +17,10 @@
 // allocator info
 #include <library/cpp/malloc/api/malloc.h>
 
-#ifndef _win_ 
-#include <sys/mman.h> 
-#endif 
- 
+#ifndef _win_
+#include <sys/mman.h>
+#endif
+
 namespace NKikimr {
 
 int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories) {
@@ -52,9 +52,9 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
     }
 
     int Main(int argc, char **argv, std::shared_ptr<TModuleFactories> factories) {
-#ifndef _win_ 
-        mlockall(MCL_CURRENT); 
-#endif 
+#ifndef _win_
+        mlockall(MCL_CURRENT);
+#endif
         using namespace NLastGetopt;
         using TDriverModeParser = TCliCommands<EDriverMode>;
 

@@ -10,59 +10,59 @@
 using namespace NYdb;
 
 Y_UNIT_TEST_SUITE(YdbScripting) {
-    void DoBasicTest(bool v1) { 
+    void DoBasicTest(bool v1) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
-                .SetEndpoint(location)); 
-        auto client = NYdb::NScripting::TScriptingClient(connection); 
- 
-        const TString v1Prefix = R"( 
-            --!syntax_v1 
-        )"; 
- 
-        const TString sql = R"( 
-            CREATE TABLE `/Root/TestTable` ( 
-                Key Uint64, 
-                Value String, 
-                PRIMARY KEY (Key) 
-            ); 
-            COMMIT; 
- 
-            REPLACE INTO `/Root/TestTable` (Key, Value) VALUES 
-                (1, "One"), 
-                (2, "Two"); 
-            COMMIT; 
- 
-            SELECT * FROM `/Root/TestTable`; 
-        )"; 
- 
-        auto result = client.ExecuteYqlScript((v1 ? v1Prefix : TString()) + sql).GetValueSync(); 
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+        auto client = NYdb::NScripting::TScriptingClient(connection);
+
+        const TString v1Prefix = R"(
+            --!syntax_v1
+        )";
+
+        const TString sql = R"(
+            CREATE TABLE `/Root/TestTable` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            COMMIT;
+
+            REPLACE INTO `/Root/TestTable` (Key, Value) VALUES
+                (1, "One"),
+                (2, "Two");
+            COMMIT;
+
+            SELECT * FROM `/Root/TestTable`;
+        )";
+
+        auto result = client.ExecuteYqlScript((v1 ? v1Prefix : TString()) + sql).GetValueSync();
         result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT(result.IsSuccess()); 
- 
+        UNIT_ASSERT(result.IsSuccess());
+
         TVector<TResultSet> resultSets = result.GetResultSets();
-        UNIT_ASSERT_EQUAL(resultSets.size(), 1); 
- 
+        UNIT_ASSERT_EQUAL(resultSets.size(), 1);
+
         TResultSetParser rsParser(resultSets[0]);
-        UNIT_ASSERT(rsParser.TryNextRow()); 
-        UNIT_ASSERT_EQUAL(rsParser.ColumnParser(0).GetOptionalUint64(), 1ul); 
-        UNIT_ASSERT_EQUAL(rsParser.ColumnParser(1).GetOptionalString(), "One"); 
-        UNIT_ASSERT(rsParser.TryNextRow()); 
-        UNIT_ASSERT_EQUAL(rsParser.ColumnParser(0).GetOptionalUint64(), 2ul); 
-        UNIT_ASSERT_EQUAL(rsParser.ColumnParser(1).GetOptionalString(), "Two"); 
-    } 
- 
-    Y_UNIT_TEST(BasicV0) { 
-        DoBasicTest(false); 
-    } 
- 
-    Y_UNIT_TEST(BasicV1) { 
-        DoBasicTest(true); 
-    } 
- 
+        UNIT_ASSERT(rsParser.TryNextRow());
+        UNIT_ASSERT_EQUAL(rsParser.ColumnParser(0).GetOptionalUint64(), 1ul);
+        UNIT_ASSERT_EQUAL(rsParser.ColumnParser(1).GetOptionalString(), "One");
+        UNIT_ASSERT(rsParser.TryNextRow());
+        UNIT_ASSERT_EQUAL(rsParser.ColumnParser(0).GetOptionalUint64(), 2ul);
+        UNIT_ASSERT_EQUAL(rsParser.ColumnParser(1).GetOptionalString(), "Two");
+    }
+
+    Y_UNIT_TEST(BasicV0) {
+        DoBasicTest(false);
+    }
+
+    Y_UNIT_TEST(BasicV1) {
+        DoBasicTest(true);
+    }
+
     Y_UNIT_TEST(MultiResults) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();

@@ -32,16 +32,16 @@ using NKikimrClient::TResponse;
 using NKikimrClient::TPersQueueRequest;
 
 using NGrpc::IQueueEvent;
- 
+
 using namespace NActors;
-using namespace NThreading; 
+using namespace NThreading;
 
 namespace NKikimr {
 namespace NGRpcProxy {
 namespace {
 
 using TGrpcBaseAsyncContext = NGrpc::TBaseAsyncContext<NGRpcProxy::TGRpcService>;
- 
+
 template <typename TIn, typename TOut = TResponse>
 class TSimpleRequest
     : public IQueueEvent
@@ -54,8 +54,8 @@ class TSimpleRequest
         ServerAsyncResponseWriter<TOut>*, CompletionQueue*, ServerCompletionQueue*, void*);
 
 public:
- 
-    TSimpleRequest(TGRpcService* server, 
+
+    TSimpleRequest(TGRpcService* server,
                    NKikimrClient::TGRpcServer::AsyncService* service,
                    ServerCompletionQueue* cq,
                    TOnRequest cb,
@@ -75,26 +75,26 @@ public:
         , RequestSize(0)
         , ResponseSize(0)
         , ResponseStatus(0)
-        , InProgress_(false) 
+        , InProgress_(false)
     {
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] created request Name# %s", this, Name);
     }
 
     ~TSimpleRequest() {
-        if (InProgress_) { 
-            //If we are ShuttingDown probably ActorSystem unable to recieve new events 
-            if (!Server->IsShuttingDown()) { 
-                LOG_ERROR(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] request destroyed with InProgress state Name# %s", this, Name); 
-            } 
+        if (InProgress_) {
+            //If we are ShuttingDown probably ActorSystem unable to recieve new events
+            if (!Server->IsShuttingDown()) {
+                LOG_ERROR(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] request destroyed with InProgress state Name# %s", this, Name);
+            }
             Counters->FinishProcessing(RequestSize, ResponseSize, false, ResponseStatus,
                 TDuration::Seconds(RequestTimer.Passed()));
-            Server->DecRequest(); 
+            Server->DecRequest();
         }
     }
 
     void Start() {
         if (auto guard = Server->ProtectShutdown()) {
-            (Service->*RequestCallback)(&Context, &Request, Writer.Get(), CQ, CQ, GetGRpcTag()); 
+            (Service->*RequestCallback)(&Context, &Request, Writer.Get(), CQ, CQ, GetGRpcTag());
         } else {
             // Server is shutting down, new requests cannot be started
             delete this;
@@ -245,10 +245,10 @@ public:
     }
 
 private:
-    void* GetGRpcTag() { 
-        return static_cast<IQueueEvent*>(this); 
-    } 
- 
+    void* GetGRpcTag() {
+        return static_cast<IQueueEvent*>(this);
+    }
+
     void Finish(const TOut& resp, ui32 status) {
         auto makeResponseString = [&] {
             TString x;
@@ -257,26 +257,26 @@ private:
             printer.PrintToString(resp, &x);
             return x;
         };
-        LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] issuing response Name# %s data# %s peer# %s", this, 
+        LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] issuing response Name# %s data# %s peer# %s", this,
             Name, makeResponseString().data(), Context.peer().c_str());
         ResponseSize = resp.ByteSize();
         ResponseStatus = status;
-        StateFunc = &TSimpleRequest::FinishDone; 
-        Writer->Finish(resp, Status::OK, GetGRpcTag()); 
+        StateFunc = &TSimpleRequest::FinishDone;
+        Writer->Finish(resp, Status::OK, GetGRpcTag());
     }
 
-    void FinishNoResource() { 
-        TOut resp; 
-        TString msg = "no resource"; 
-        LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] issuing response Name# %s nodata (no resources) peer# %s", this, 
-            Name, Context.peer().c_str()); 
- 
-        StateFunc = &TSimpleRequest::FinishDoneWithoutProcessing; 
-        Writer->Finish(resp, 
-                       grpc::Status(grpc::StatusCode::RESOURCE_EXHAUSTED, msg), 
-                       GetGRpcTag()); 
-    } 
- 
+    void FinishNoResource() {
+        TOut resp;
+        TString msg = "no resource";
+        LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] issuing response Name# %s nodata (no resources) peer# %s", this,
+            Name, Context.peer().c_str());
+
+        StateFunc = &TSimpleRequest::FinishDoneWithoutProcessing;
+        Writer->Finish(resp,
+                       grpc::Status(grpc::StatusCode::RESOURCE_EXHAUSTED, msg),
+                       GetGRpcTag());
+    }
+
     bool RequestDone(bool ok) {
         auto makeRequestString = [&] {
             TString resp;
@@ -289,7 +289,7 @@ private:
             }
             return resp;
         };
-        LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] received request Name# %s ok# %s data# %s peer# %s current inflight# %li", this, 
+        LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] received request Name# %s ok# %s data# %s peer# %s current inflight# %li", this,
             Name, ok ? "true" : "false", makeRequestString().data(), Context.peer().c_str(), Server->GetCurrentInFlight());
 
         if (Context.c_call() == nullptr) {
@@ -303,50 +303,50 @@ private:
             return false;
         }
 
-        Clone(); 
- 
+        Clone();
+
         if (!ok) {
             Counters->CountNotOkRequest();
             return false;
         }
 
-        if (Server->IncRequest()) { 
+        if (Server->IncRequest()) {
 
-            RequestSize = Request.ByteSize(); 
-            Counters->StartProcessing(RequestSize); 
+            RequestSize = Request.ByteSize();
+            Counters->StartProcessing(RequestSize);
             RequestTimer.Reset();
-            InProgress_ = true; 
+            InProgress_ = true;
 
-            Cb(this); 
-        } else { 
-            FinishNoResource(); 
-        } 
+            Cb(this);
+        } else {
+            FinishNoResource();
+        }
 
-        return true; 
+        return true;
     }
 
     bool FinishDone(bool ok) {
-        LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request Name# %s ok# %s peer# %s", this, 
-            Name, ok ? "true" : "false", Context.peer().c_str()); 
+        LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request Name# %s ok# %s peer# %s", this,
+            Name, ok ? "true" : "false", Context.peer().c_str());
         Counters->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,
             TDuration::Seconds(RequestTimer.Passed()));
-        Server->DecRequest(); 
-        InProgress_ = false; 
+        Server->DecRequest();
+        InProgress_ = false;
 
-        return false; 
-    } 
+        return false;
+    }
 
-    bool FinishDoneWithoutProcessing(bool ok) { 
-        LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request without processing Name# %s ok# %s peer# %s", this, 
-            Name, ok ? "true" : "false", Context.peer().c_str()); 
- 
+    bool FinishDoneWithoutProcessing(bool ok) {
+        LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request without processing Name# %s ok# %s peer# %s", this,
+            Name, ok ? "true" : "false", Context.peer().c_str());
+
         return false;
     }
 
 private:
     using TStateFunc = bool (TSimpleRequest::*)(bool);
 
-    TGRpcService* const Server; 
+    TGRpcService* const Server;
     TOnRequest Cb;
     TRequestCallback RequestCallback;
     TActorSystem& ActorSystem;
@@ -363,62 +363,62 @@ private:
     THPTimer RequestTimer;
 
     TMaybe<NMsgBusProxy::TBusMessageContext> BusContext;
-    bool InProgress_; 
+    bool InProgress_;
     bool RequestRegistered_ = false;
 };
 
 } // namespace
 
-TGRpcService::TGRpcService() 
-    : ActorSystem(nullptr) 
-{} 
+TGRpcService::TGRpcService()
+    : ActorSystem(nullptr)
+{}
 
 void TGRpcService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr) {
-    CQ = cq; 
-    Y_ASSERT(InitCb_); 
-    InitCb_(); 
+    CQ = cq;
+    Y_ASSERT(InitCb_);
+    InitCb_();
 }
 
 TFuture<void> TGRpcService::Prepare(TActorSystem* system, const TActorId& pqMeta, const TActorId& msgBusProxy,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters) { 
-    auto promise = NewPromise<void>(); 
-    InitCb_ = [=]() mutable { 
-        try { 
-            ActorSystem = system; 
-            PQMeta = pqMeta; 
-            MsgBusProxy = msgBusProxy; 
-            Counters = counters; 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+    auto promise = NewPromise<void>();
+    InitCb_ = [=]() mutable {
+        try {
+            ActorSystem = system;
+            PQMeta = pqMeta;
+            MsgBusProxy = msgBusProxy;
+            Counters = counters;
 
-            promise.SetValue(); 
-        } catch (...) { 
-            promise.SetException(std::current_exception()); 
-        } 
-    }; 
-    return promise.GetFuture(); 
+            promise.SetValue();
+        } catch (...) {
+            promise.SetException(std::current_exception());
+        }
+    };
+    return promise.GetFuture();
 }
 
 void TGRpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter *limiter) {
-    Limiter_ = limiter; 
-} 
- 
-bool TGRpcService::IncRequest() { 
-    return Limiter_->Inc(); 
-} 
- 
-void TGRpcService::DecRequest() { 
-    Limiter_->Dec(); 
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0); 
-} 
- 
-i64 TGRpcService::GetCurrentInFlight() const { 
-    return Limiter_->GetCurrentInFlight(); 
-} 
- 
-void TGRpcService::Start() { 
-    Y_VERIFY(ActorSystem); 
+    Limiter_ = limiter;
+}
+
+bool TGRpcService::IncRequest() {
+    return Limiter_->Inc();
+}
+
+void TGRpcService::DecRequest() {
+    Limiter_->Dec();
+    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
+}
+
+i64 TGRpcService::GetCurrentInFlight() const {
+    return Limiter_->GetCurrentInFlight();
+}
+
+void TGRpcService::Start() {
+    Y_VERIFY(ActorSystem);
     ui32 nodeId = ActorSystem->NodeId;
-    ActorSystem->Send(MakeGRpcProxyStatusID(nodeId), new TEvGRpcProxyStatus::TEvSetup(true, PersQueueWriteSessionsMaxCount, 
-                                        PersQueueReadSessionsMaxCount)); 
+    ActorSystem->Send(MakeGRpcProxyStatusID(nodeId), new TEvGRpcProxyStatus::TEvSetup(true, PersQueueWriteSessionsMaxCount,
+                                        PersQueueReadSessionsMaxCount));
     SetupIncomingRequests();
 }
 
@@ -426,7 +426,7 @@ void TGRpcService::RegisterRequestActor(NActors::IActor* req) {
     ActorSystem->Register(req, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
 }
 
-void TGRpcService::SetupIncomingRequests() { 
+void TGRpcService::SetupIncomingRequests() {
 
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 

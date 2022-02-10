@@ -5,14 +5,14 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
- 
+
 namespace NYdb {
 
 class TStatus::TImpl {
 public:
     const TPlainStatus Status;
 
-    TImpl(TPlainStatus&& status) 
+    TImpl(TPlainStatus&& status)
         : Status(std::move(status))
     { }
 
@@ -23,16 +23,16 @@ public:
     }
 
     void RaiseError(const TStringType& str) const {
-        ythrow TContractViolation(str); 
+        ythrow TContractViolation(str);
     }
 };
 
-TStatus::TStatus(EStatus statusCode, NYql::TIssues&& issues) 
-    : Impl_(std::make_shared<TImpl>(TPlainStatus{statusCode, std::move(issues)})) 
+TStatus::TStatus(EStatus statusCode, NYql::TIssues&& issues)
+    : Impl_(std::make_shared<TImpl>(TPlainStatus{statusCode, std::move(issues)}))
 { }
 
-TStatus::TStatus(TPlainStatus&& plain) 
-    : Impl_(std::make_shared<TImpl>(std::move(plain))) 
+TStatus::TStatus(TPlainStatus&& plain)
+    : Impl_(std::make_shared<TImpl>(std::move(plain)))
 { }
 
 const NYql::TIssues& TStatus::GetIssues() const {
@@ -68,10 +68,10 @@ const std::multimap<TStringType, TStringType>& TStatus::GetResponseMetadata() co
     return Impl_->Status.Metadata;
 }
 
-float TStatus::GetConsumedRu() const { 
-    return Impl_->Status.ConstInfo.consumed_units(); 
-} 
- 
+float TStatus::GetConsumedRu() const {
+    return Impl_->Status.ConstInfo.consumed_units();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TStreamPartStatus::TStreamPartStatus(TStatus&& status)

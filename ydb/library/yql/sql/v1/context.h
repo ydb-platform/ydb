@@ -79,7 +79,7 @@ namespace NSQLTranslationV1 {
     class TContext {
     public:
         TContext(const NSQLTranslation::TTranslationSettings& settings,
-                 NYql::TIssues& issues); 
+                 NYql::TIssues& issues);
 
         virtual ~TContext();
 
@@ -204,7 +204,7 @@ namespace NSQLTranslationV1 {
         THashMap<TString, TNodePtr> Variables;
         NSQLTranslation::TTranslationSettings Settings;
         std::unique_ptr<TMemoryPool> Pool;
-        NYql::TIssues& Issues; 
+        NYql::TIssues& Issues;
         TMap<TString, TNodePtr> UniversalAliases;
         THashSet<TString> Exports;
         THashMap<TString, TString> ImportModuleAliases;
@@ -214,7 +214,7 @@ namespace NSQLTranslationV1 {
         int ScopeLevel = 0;
         size_t AnonymousNameIndex = 0;
         TDeque<TScopedStatePtr> AllScopes;
-        bool HasPendingErrors; 
+        bool HasPendingErrors;
         THashMap<TString, ui32> GenIndexes;
         using TWinSpecsRef = std::reference_wrapper<TWinSpecs>;
         TDeque<TWinSpecsRef> WinSpecsScopes;

@@ -1,16 +1,16 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
- 
-namespace NYdb { 
-namespace NScripting { 
- 
+
+namespace NYdb {
+namespace NScripting {
+
 class TExecuteYqlResult : public TStatus {
 public:
     TExecuteYqlResult(TStatus&& status, TVector<TResultSet>&& resultSets,
         const TMaybe<NTable::TQueryStats>& queryStats);
- 
+
     const TVector<TResultSet>& GetResultSets() const;
     TResultSet GetResultSet(size_t resultIndex) const;
 
@@ -77,7 +77,7 @@ public:
 private:
     TYqlResultPartIterator(
         std::shared_ptr<TReaderImpl> impl,
-        TPlainStatus&& status 
+        TPlainStatus&& status
     );
     std::shared_ptr<TReaderImpl> ReaderImpl_;
 };
@@ -98,12 +98,12 @@ using TAsyncExecuteYqlResult = NThreading::TFuture<TExecuteYqlResult>;
 using TAsyncYqlResultPartIterator = NThreading::TFuture<TYqlResultPartIterator>;
 using TAsyncExplainYqlResult = NThreading::TFuture<TExplainYqlResult>;
 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+////////////////////////////////////////////////////////////////////////////////
+
 struct TExecuteYqlRequestSettings : public TOperationRequestSettings<TExecuteYqlRequestSettings> {
     FLUENT_SETTING_DEFAULT(NTable::ECollectQueryStatsMode, CollectQueryStats, NTable::ECollectQueryStatsMode::None);
 };
- 
+
 enum class ExplainYqlRequestMode {
     // Parse = 1,
     Validate = 2,
@@ -116,24 +116,24 @@ struct TExplainYqlRequestSettings : public TOperationRequestSettings<TExplainYql
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TScriptingClient { 
-    class TImpl; 
- 
-public: 
-    TScriptingClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings()); 
- 
+class TScriptingClient {
+    class TImpl;
+
+public:
+    TScriptingClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
+
     //! Returns new params builder
     TParamsBuilder GetParamsBuilder();
 
     TAsyncExecuteYqlResult ExecuteYqlScript(const TString& script,
         const TExecuteYqlRequestSettings& settings = TExecuteYqlRequestSettings());
- 
+
     TAsyncExecuteYqlResult ExecuteYqlScript(const TString& script, const TParams& params,
         const TExecuteYqlRequestSettings& settings = TExecuteYqlRequestSettings());
- 
+
     TAsyncExecuteYqlResult ExecuteYqlScript(const TString& script, TParams&& params,
         const TExecuteYqlRequestSettings& settings = TExecuteYqlRequestSettings());
- 
+
     TAsyncYqlResultPartIterator StreamExecuteYqlScript(const TString& script,
         const TExecuteYqlRequestSettings& settings = TExecuteYqlRequestSettings());
 
@@ -146,9 +146,9 @@ public:
     TAsyncExplainYqlResult ExplainYqlScript(const TString& script,
         const TExplainYqlRequestSettings& settings = TExplainYqlRequestSettings());
 
-private: 
-    std::shared_ptr<TImpl> Impl_; 
-}; 
- 
-} // namespace NScripting 
-} // namespace NYdb 
+private:
+    std::shared_ptr<TImpl> Impl_;
+};
+
+} // namespace NScripting
+} // namespace NYdb

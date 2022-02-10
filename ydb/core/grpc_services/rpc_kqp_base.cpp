@@ -1,4 +1,4 @@
-#include "rpc_kqp_base.h" 
+#include "rpc_kqp_base.h"
 
 #include <ydb/core/kqp/prepare/kqp_query_plan.h>
 
@@ -43,11 +43,11 @@ void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::T
             toTable.set_partitions_count(table.GetAffectedPartitions());
         }
 
-        std::sort(toPhase.mutable_table_access()->begin(), toPhase.mutable_table_access()->end(), 
-            [](const Ydb::TableStats::TableAccessStats& a, const Ydb::TableStats::TableAccessStats& b) { 
-                return a.name() < b.name(); 
-            }); 
- 
+        std::sort(toPhase.mutable_table_access()->begin(), toPhase.mutable_table_access()->end(),
+            [](const Ydb::TableStats::TableAccessStats& a, const Ydb::TableStats::TableAccessStats& b) {
+                return a.name() < b.name();
+            });
+
         NKqpProto::TKqpExecutionExtraStats executionExtraStats;
         if (exec.HasExtra() && exec.GetExtra().UnpackTo(&executionExtraStats)) {
             toPhase.set_affected_shards(executionExtraStats.GetAffectedShards());

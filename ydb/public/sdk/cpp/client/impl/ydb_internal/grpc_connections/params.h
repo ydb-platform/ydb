@@ -24,7 +24,7 @@ public:
     virtual bool GetGRpcKeepAlivePermitWithoutCalls() const = 0;
     virtual TDuration GetSocketIdleTimeout() const = 0;
     virtual const TLog& GetLog() const = 0;
-    virtual ui64 GetMemoryQuota() const = 0; 
+    virtual ui64 GetMemoryQuota() const = 0;
 };
 
 } // namespace NYdb

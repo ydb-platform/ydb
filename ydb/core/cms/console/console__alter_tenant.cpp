@@ -23,8 +23,8 @@ public:
         operation.set_ready(true);
         operation.set_status(code);
         auto issue = operation.add_issues();
-        issue->set_severity(NYql::TSeverityIds::S_ERROR); 
-        issue->set_message(error); 
+        issue->set_severity(NYql::TSeverityIds::S_ERROR);
+        issue->set_message(error);
 
         Tenant = nullptr;
 
@@ -197,27 +197,27 @@ public:
                 return Error(Ydb::StatusIds::BAD_REQUEST, "Data size soft quota cannot be larger than hard quota", ctx);
             }
         }
-         
-        // Check attributes. 
-        THashSet<TString> attrNames; 
-        for (const auto& [key, value] : rec.alter_attributes()) { 
-            if (!key) 
-               return Error(Ydb::StatusIds::BAD_REQUEST, 
-                             "Attribute name shouldn't be empty", ctx); 
-            if (attrNames.contains(key)) 
-                return Error(Ydb::StatusIds::BAD_REQUEST, 
-                             Sprintf("Multiple attributes with name '%s'", key.data()), ctx); 
-            attrNames.insert(key); 
-        } 
+        
+        // Check attributes.
+        THashSet<TString> attrNames;
+        for (const auto& [key, value] : rec.alter_attributes()) {
+            if (!key)
+               return Error(Ydb::StatusIds::BAD_REQUEST,
+                             "Attribute name shouldn't be empty", ctx);
+            if (attrNames.contains(key))
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                             Sprintf("Multiple attributes with name '%s'", key.data()), ctx);
+            attrNames.insert(key);
+        }
 
-        THashMap<TString, ui64> attributeMap; 
-        for (ui64 i = 0 ; i < Tenant->Attributes.UserAttributesSize(); i++) { 
-            bool res = attributeMap.emplace(Tenant->Attributes.GetUserAttributes(i).GetKey(), i).second; 
-            if (!res) 
-                return Error(Ydb::StatusIds::INTERNAL_ERROR, 
-                             "Unexpected duplicate attribute found in CMS local db", ctx); 
-        } 
- 
+        THashMap<TString, ui64> attributeMap;
+        for (ui64 i = 0 ; i < Tenant->Attributes.UserAttributesSize(); i++) {
+            bool res = attributeMap.emplace(Tenant->Attributes.GetUserAttributes(i).GetKey(), i).second;
+            if (!res)
+                return Error(Ydb::StatusIds::INTERNAL_ERROR,
+                             "Unexpected duplicate attribute found in CMS local db", ctx);
+        }
+
         // Apply computational units changes.
         if (rec.computational_units_to_add_size() || rec.computational_units_to_remove_size()) {
             ComputationalUnitsModified = true;
@@ -273,27 +273,27 @@ public:
             Self->DbUpdateTenantAlterIdempotencyKey(Tenant, Tenant->AlterIdempotencyKey, txc, ctx);
         }
 
-        if (!rec.alter_attributes().empty()) { 
-            for (const auto& [key, value] : rec.alter_attributes()) { 
-                const auto it = attributeMap.find(key); 
-                if (it != attributeMap.end()) { 
-                    if (value) { 
-                        Tenant->Attributes.MutableUserAttributes(it->second)->SetValue(value); 
-                    } else { 
-                        Tenant->Attributes.MutableUserAttributes(it->second)->ClearValue(); 
-                    } 
-                } else { 
-                    auto &r = *Tenant->Attributes.AddUserAttributes(); 
-                    r.SetKey(key); 
-                    if (value) { 
-                        r.SetValue(value); 
-                    } 
-                } 
-            } 
-            Self->DbUpdateTenantUserAttributes(Tenant, Tenant->Attributes, txc, ctx); 
-            updateSubdomainVersion = true; 
-        } 
- 
+        if (!rec.alter_attributes().empty()) {
+            for (const auto& [key, value] : rec.alter_attributes()) {
+                const auto it = attributeMap.find(key);
+                if (it != attributeMap.end()) {
+                    if (value) {
+                        Tenant->Attributes.MutableUserAttributes(it->second)->SetValue(value);
+                    } else {
+                        Tenant->Attributes.MutableUserAttributes(it->second)->ClearValue();
+                    }
+                } else {
+                    auto &r = *Tenant->Attributes.AddUserAttributes();
+                    r.SetKey(key);
+                    if (value) {
+                        r.SetValue(value);
+                    }
+                }
+            }
+            Self->DbUpdateTenantUserAttributes(Tenant, Tenant->Attributes, txc, ctx);
+            updateSubdomainVersion = true;
+        }
+
         if (updateSubdomainVersion) {
             SubdomainVersion = Tenant->SubdomainVersion + 1;
             Self->DbUpdateSubdomainVersion(Tenant, *SubdomainVersion, txc, ctx);

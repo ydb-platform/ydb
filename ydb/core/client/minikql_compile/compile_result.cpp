@@ -3,11 +3,11 @@
 
 namespace NYql {
 
-TMiniKQLCompileResult::TMiniKQLCompileResult(const TIssue& error) { 
+TMiniKQLCompileResult::TMiniKQLCompileResult(const TIssue& error) {
     Errors.AddIssue(error);
 }
 
-TMiniKQLCompileResult::TMiniKQLCompileResult(const TIssues& errors) 
+TMiniKQLCompileResult::TMiniKQLCompileResult(const TIssues& errors)
     : Errors(errors)
 {
 }

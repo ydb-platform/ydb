@@ -432,7 +432,7 @@ private:
         Driver = driver;
 
         auto ctx = TActivationContext::AsActorContext();
-        auto aid = ctx.RegisterWithSameMailbox(this); 
+        auto aid = ctx.RegisterWithSameMailbox(this);
 
         for (const auto& columnRecord : Tx.GetColumns()) {
             if (!scheme->ColInfo(columnRecord.GetId())) {

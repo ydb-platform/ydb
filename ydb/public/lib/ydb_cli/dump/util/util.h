@@ -15,7 +15,7 @@ inline TResult Result(EStatus code = EStatus::SUCCESS, const TString& error = {}
     if (error) {
         issues.AddIssue(NYql::TIssue(error));
     }
-    return TResult(TStatus(code, std::move(issues))); 
+    return TResult(TStatus(code, std::move(issues)));
 }
 
 template <typename TResult>

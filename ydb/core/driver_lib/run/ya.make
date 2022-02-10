@@ -157,8 +157,8 @@ END()
 RECURSE_FOR_TESTS(
     ut
 )
- 
-RECURSE_ROOT_RELATIVE( 
+
+RECURSE_ROOT_RELATIVE(
     ydb/core
     ydb/services
-) 
+)

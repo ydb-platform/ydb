@@ -579,23 +579,23 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
     transformers.push_back(TTransformStage(
         CreateFunctorTransformer(&ExpandApply),
         "ExpandApply",
-        issueCode)); 
+        issueCode));
     transformers.push_back(TTransformStage(
         CreateFunctorTransformer(
-            [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
+            [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             return ValidateProviders(input, output, ctx, typeAnnotationContext);
-        }), 
+        }),
         "ValidateProviders",
-        issueCode)); 
+        issueCode));
 
     transformers.push_back(TTransformStage(
-        CreateConfigureTransformer(typeAnnotationContext), 
+        CreateConfigureTransformer(typeAnnotationContext),
         "Configure",
-        issueCode)); 
+        issueCode));
     transformers.push_back(TTransformStage(
-        CreateIODiscoveryTransformer(typeAnnotationContext), 
+        CreateIODiscoveryTransformer(typeAnnotationContext),
         "IODiscovery",
-        issueCode)); 
+        issueCode));
     transformers.push_back(TTransformStage(
         CreateEpochsTransformer(typeAnnotationContext),
         "Epochs",
@@ -604,35 +604,35 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
     transformers.push_back(TTransformStage(
         CreateIntentDeterminationTransformer(typeAnnotationContext),
         "IntentDetermination",
-        issueCode)); 
+        issueCode));
     transformers.push_back(TTransformStage(
-        CreateTableMetadataLoader(typeAnnotationContext), 
+        CreateTableMetadataLoader(typeAnnotationContext),
         "TableMetadataLoader",
-        issueCode)); 
+        issueCode));
     auto& typeCtx = typeAnnotationContext;
     transformers.push_back(TTransformStage(
         CreateFunctorTransformer(
-            [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
-            return RewriteIO(input, output, typeCtx, ctx); 
-        }), 
+            [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            return RewriteIO(input, output, typeCtx, ctx);
+        }),
         "RewriteIO",
-        issueCode)); 
+        issueCode));
 
     issueCode = TIssuesIds::CORE_TYPE_ANN;
     auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(typeAnnotationContext);
     auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, typeAnnotationContext);
     transformers.push_back(TTransformStage(
-        typeTransformer, 
+        typeTransformer,
         "TypeAnnotation",
-        issueCode)); 
+        issueCode));
     if (wholeProgram) {
         transformers.push_back(TTransformStage(
             CreateFunctorTransformer(&CheckWholeProgramType),
             "CheckWholeProgramType",
-            issueCode)); 
+            issueCode));
     }
 
-    return CreateCompositeGraphTransformer(transformers, true); 
+    return CreateCompositeGraphTransformer(transformers, true);
 }
 
 bool SyncAnnotateTypes(

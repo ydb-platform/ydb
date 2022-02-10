@@ -134,11 +134,11 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     if (!schemeTx.HasAlterTable())
         return EExecutionStatus::Executed;
 
-    const auto& alterTableTx = schemeTx.GetAlterTable(); 
- 
+    const auto& alterTableTx = schemeTx.GetAlterTable();
+
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-               "Trying to ALTER TABLE at " << DataShard.TabletID() 
-               << " version " << alterTableTx.GetTableSchemaVersion()); 
+               "Trying to ALTER TABLE at " << DataShard.TabletID()
+               << " version " << alterTableTx.GetTableSchemaVersion());
 
     TPathId tableId(DataShard.GetPathOwnerId(), alterTableTx.GetId_Deprecated());
     if (alterTableTx.HasPathId()) {

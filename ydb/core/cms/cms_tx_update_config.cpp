@@ -55,7 +55,7 @@ public:
 
         if (Self->State->Config.SentinelConfig.Enable) {
             if (!Self->State->Sentinel) {
-                Self->State->Sentinel = Self->RegisterWithSameMailbox(CreateSentinel(Self->State)); 
+                Self->State->Sentinel = Self->RegisterWithSameMailbox(CreateSentinel(Self->State));
             }
         } else {
             if (Self->State->Sentinel) {

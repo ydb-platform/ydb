@@ -1,20 +1,20 @@
-LIBRARY() 
- 
-OWNER( 
-    dcherednik 
-    g:kikimr 
-) 
- 
-SRCS( 
+LIBRARY()
+
+OWNER(
+    dcherednik
+    g:kikimr
+)
+
+SRCS(
     endpoints.cpp
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/monlib/metrics
     ydb/public/api/grpc
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

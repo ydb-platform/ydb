@@ -20,7 +20,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/grpc 
+    contrib/libs/grpc
     library/cpp/actors/core
     library/cpp/threading/future
     ydb/core/protos

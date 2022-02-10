@@ -785,15 +785,15 @@ public:
     void RequestTenantSlotsStats(const TActorContext &ctx);
     void RetryResourcesRequests(const TActorContext &ctx);
 
-    void FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status); 
-    void FillTenantAllocatedSlots(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status, 
+    void FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status);
+    void FillTenantAllocatedSlots(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status,
                                   const NKikimrTenantSlotBroker::TTenantState &slots);
     void CheckSubDomainKey(TTenant::TPtr tenant, const TActorContext &ctx);
     void ConfigureTenantSubDomain(TTenant::TPtr tenant, const TActorContext &ctx);
     void CreateTenantSubDomain(TTenant::TPtr tenant, const TActorContext &ctx);
     void DeleteTenantSubDomain(TTenant::TPtr tenant, const TActorContext &ctx);
     void ProcessTenantActions(TTenant::TPtr tenant, const TActorContext &ctx);
-    TTenant::TPtr FillOperationStatus(const TString &id, Ydb::Operations::Operation &operation); 
+    TTenant::TPtr FillOperationStatus(const TString &id, Ydb::Operations::Operation &operation);
     void SendTenantNotifications(TTenant::TPtr tenant, TTenant::EAction action,
                                  Ydb::StatusIds::StatusCode code, const TActorContext &ctx);
     void DumpStateHTML(IOutputStream &os);
@@ -866,10 +866,10 @@ public:
                                            const TString &idempotencyKey,
                                            TTransactionContext &txc,
                                            const TActorContext &ctx);
-    void DbUpdateTenantUserAttributes(TTenant::TPtr tenant, 
+    void DbUpdateTenantUserAttributes(TTenant::TPtr tenant,
                                       const NKikimrSchemeOp::TAlterUserAttributes &attributes,
-                                      TTransactionContext &txc, 
-                                      const TActorContext &ctx); 
+                                      TTransactionContext &txc,
+                                      const TActorContext &ctx);
     void DbUpdateTenantGeneration(TTenant::TPtr tenant,
                                   ui64 generation,
                                   TTransactionContext &txc,

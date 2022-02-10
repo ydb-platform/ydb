@@ -10,8 +10,8 @@
 #include "defaults.h"
 #include "progname.h"
 
-bool SetHighestThreadPriority(); 
- 
+bool SetHighestThreadPriority();
+
 class TThread {
     template <typename Callable>
     struct TCallableParams;

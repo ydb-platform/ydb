@@ -45,16 +45,16 @@ namespace NPDisk {
             nodeIndex);
     }
 
-    void SetupSchemeCache(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& root) 
-    { 
+    void SetupSchemeCache(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& root)
+    {
         auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>();
         cacheConfig->Roots.emplace_back(1, TTestTxConfig::SchemeShard, root);
-        cacheConfig->Counters = new NMonitoring::TDynamicCounters(); 
- 
+        cacheConfig->Counters = new NMonitoring::TDynamicCounters();
+
         runtime.AddLocalService(MakeSchemeCacheID(),
             TActorSetupCmd(CreateSchemeBoardSchemeCache(cacheConfig.Get()), TMailboxType::Revolving, 0), nodeIndex);
-    } 
- 
+    }
+
     void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex)
     {
         TIntrusivePtr<TTabletResolverConfig> tabletResolverConfig(new TTabletResolverConfig());

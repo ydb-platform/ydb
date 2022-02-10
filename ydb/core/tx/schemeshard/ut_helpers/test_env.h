@@ -19,7 +19,7 @@ namespace NSchemeShardUT_Private {
     void TestWaitNotification(NActors::TTestActorRuntime &runtime, TSet<ui64> txIds, TActorId subscriberActorId);
     NActors::TActorId CreateNotificationSubscriber(NActors::TTestActorRuntime &runtime, ui64 schemeshardId);
     NActors::TActorId CreateFakeMetering(NActors::TTestActorRuntime &runtime);
- 
+
     struct TTestEnvOptions {
         using TSelf = TTestEnvOptions;
 
@@ -112,8 +112,8 @@ namespace NSchemeShardUT_Private {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // A wrapper to run test scenarios with reboots of schemeshard, hive and coordinator
-    class TTestWithReboots { 
-    public: 
+    class TTestWithReboots {
+    public:
         TVector<ui64> TabletIds;
         THolder<TTestActorRuntime> Runtime;
         TTestEnvOptions EnvOpts;
@@ -127,7 +127,7 @@ namespace NSchemeShardUT_Private {
         const bool KillOnCommit;
 
         explicit TTestWithReboots(bool killOnCommit = false, TTestEnv::TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard);
-        virtual ~TTestWithReboots() = default; 
+        virtual ~TTestWithReboots() = default;
 
         void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario);
         void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario, bool allowLogBatching);
@@ -145,8 +145,8 @@ namespace NSchemeShardUT_Private {
         void Prepare(const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone);
         void EnableTabletResolverScheduling(ui32 nodeIdx = 0);
         void Finalize();
-    private: 
-        virtual TTestEnv* CreateTestEnv(); 
+    private:
+        virtual TTestEnv* CreateTestEnv();
         // Make sure that user requests are not dropped
         static bool PassUserRequests(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
 

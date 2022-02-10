@@ -80,9 +80,9 @@ public:
         const TString& id = Request->GetProtoRequest()->id();
 
         try {
-            OperationId = TOperationId(id); 
+            OperationId = TOperationId(id);
 
-            switch (OperationId.GetKind()) { 
+            switch (OperationId.GetKind()) {
             case TOperationId::EXPORT:
             case TOperationId::IMPORT:
             case TOperationId::BUILD_INDEX:
@@ -110,10 +110,10 @@ public:
             hFunc(TEvIndexBuilder::TEvForgetResponse, Handle);
         default:
             return StateBase(ev, TlsActivationContext->AsActorContext());
-        } 
-    } 
- 
-private: 
+        }
+    }
+
+private:
     TOperationId OperationId;
     ui64 RawOperationId = 0;
 

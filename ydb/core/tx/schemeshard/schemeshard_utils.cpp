@@ -215,13 +215,13 @@ TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription &tableDesrc) 
 }
 
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig &indexDesc) {
-    NTableIndex::TIndexColumns result; 
+    NTableIndex::TIndexColumns result;
     for (auto& keyName: indexDesc.GetKeyColumnNames()) {
-        result.KeyColumns.push_back(keyName); 
+        result.KeyColumns.push_back(keyName);
     }
-    for (auto& keyName: indexDesc.GetDataColumnNames()) { 
-        result.DataColumns.push_back(keyName); 
-    } 
+    for (auto& keyName: indexDesc.GetDataColumnNames()) {
+        result.DataColumns.push_back(keyName);
+    }
     return result;
 }
 

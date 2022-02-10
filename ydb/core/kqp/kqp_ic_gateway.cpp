@@ -48,18 +48,18 @@ using NKikimrTxUserProxy::TMiniKQLTransaction;
 
 constexpr const IKqpGateway::TKqpSnapshot IKqpGateway::TKqpSnapshot::InvalidSnapshot = TKqpSnapshot();
 
-#define STATIC_ASSERT_STATE_EQUAL(name) \ 
-    static_assert(static_cast<ui32>(NYql::TIndexDescription::EIndexState::name) \ 
+#define STATIC_ASSERT_STATE_EQUAL(name) \
+    static_assert(static_cast<ui32>(NYql::TIndexDescription::EIndexState::name) \
         == NKikimrSchemeOp::EIndexState::EIndexState##name, \
-        "index state missmatch, flag: ## name"); 
- 
-STATIC_ASSERT_STATE_EQUAL(Invalid) 
-STATIC_ASSERT_STATE_EQUAL(Ready) 
-STATIC_ASSERT_STATE_EQUAL(NotReady) 
-STATIC_ASSERT_STATE_EQUAL(WriteOnly) 
- 
-#undef STATIC_ASSERT_STATE_EQUAL 
- 
+        "index state missmatch, flag: ## name");
+
+STATIC_ASSERT_STATE_EQUAL(Invalid)
+STATIC_ASSERT_STATE_EQUAL(Ready)
+STATIC_ASSERT_STATE_EQUAL(NotReady)
+STATIC_ASSERT_STATE_EQUAL(WriteOnly)
+
+#undef STATIC_ASSERT_STATE_EQUAL
+
 namespace {
 
 template <class TResult>
@@ -536,7 +536,7 @@ public:
 
         if (!result.Errors.Empty()) {
             Promise.SetValue(ResultFromIssues<TResult>(GetMkqlCompileStatus(result.Errors),
-                "Query compilation failed", result.Errors)); 
+                "Query compilation failed", result.Errors));
 
             this->Die(ctx);
             return;
@@ -685,7 +685,7 @@ public:
         auto& response = ev->Get()->Record;
         auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(response.GetStatus());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Received TEvProposeTransactionStatus for scheme request" 
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Received TEvProposeTransactionStatus for scheme request"
             << ", TxId: " << response.GetTxId()
             << ", status: " << status
             << ", scheme shard status: " << response.GetSchemeShardStatus());
@@ -701,14 +701,14 @@ public:
                 request->Record.SetTxId(response.GetTxId());
                 NTabletPipe::SendData(ctx, ShemePipeActorId, request.Release());
 
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Sent TEvNotifyTxCompletion request" 
+                LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Sent TEvNotifyTxCompletion request"
                     << ", TxId: " << response.GetTxId());
 
                 return;
             }
 
             case TEvTxUserProxy::TResultStatus::AccessDenied: {
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Access denied for scheme request" 
+                LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Access denied for scheme request"
                     << ", TxId: " << response.GetTxId());
 
                 TIssue issue(NYql::TPosition(), "Access denied.");
@@ -722,7 +722,7 @@ public:
                 if (response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusSuccess ||
                     response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists)
                 {
-                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request" 
+                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request"
                     << ", TxId: " << response.GetTxId());
 
                     IKqpGateway::TGenericResult result;
@@ -757,11 +757,11 @@ public:
                         return;
                     }
                     case NKikimrScheme::EStatus::StatusPathDoesNotExist: {
-                        Promise.SetValue(ResultFromIssues<TResult>(TIssuesIds::KIKIMR_SCHEME_ERROR, 
-                            response.GetSchemeShardReason(), {})); 
-                        this->Die(ctx); 
-                        return; 
-                    } 
+                        Promise.SetValue(ResultFromIssues<TResult>(TIssuesIds::KIKIMR_SCHEME_ERROR,
+                            response.GetSchemeShardReason(), {}));
+                        this->Die(ctx);
+                        return;
+                    }
 
                     default:
                         break;
@@ -980,14 +980,14 @@ private:
             : Serialized(serialized)
             , Data(serialized) {}
     };
-    using TNavigate = NSchemeCache::TSchemeCacheNavigate; 
+    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 public:
     TKikimrIcGateway(const TString& cluster, const TString& database, std::shared_ptr<IKqpTableMetadataLoader>&& metadataLoader,
         TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters, const TActorId& mkqlComplileService)
         : Cluster(cluster)
         , Database(database)
-        , ActorSystem(actorSystem) 
+        , ActorSystem(actorSystem)
         , NodeId(nodeId)
         , Counters(counters)
         , MetadataLoader(std::move(metadataLoader))
@@ -1028,10 +1028,10 @@ public:
         return MetadataLoader->GetCollectedSchemeData();
     }
 
-    TString GetTokenCompat() const { 
-        return UserToken ? UserToken->Serialized : TString(); 
-    } 
- 
+    TString GetTokenCompat() const {
+        return UserToken ? UserToken->Serialized : TString();
+    }
+
     TFuture<TListPathResult> ListPath(const TString& cluster, const TString &path) override {
         using TRequest = TEvTxUserProxy::TEvNavigate;
 
@@ -1064,26 +1064,26 @@ public:
         }
     }
 
-    static ui64 GetExpectedVersion(const std::pair<TIndexId, TString>& pathId) { 
-        return pathId.first.SchemaVersion; 
-    } 
- 
-    static ui64 GetExpectedVersion(const TString&) { 
-        return 0; 
-    } 
- 
+    static ui64 GetExpectedVersion(const std::pair<TIndexId, TString>& pathId) {
+        return pathId.first.SchemaVersion;
+    }
+
+    static ui64 GetExpectedVersion(const TString&) {
+        return 0;
+    }
+
     TFuture<TTableMetadataResult> LoadTableMetadata(const TString& cluster, const TString& table,
         TLoadTableMetadataSettings settings) override {
         try {
-            if (!CheckCluster(cluster)) { 
+            if (!CheckCluster(cluster)) {
                 return InvalidCluster<TTableMetadataResult>(cluster);
-            } 
+            }
             if (UserToken) {
                 return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, UserToken->Data);
-            } else { 
+            } else {
                 return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, Nothing());
-            } 
- 
+            }
+
         } catch (yexception& e) {
             return MakeFuture(ResultFromException<TTableMetadataResult>(e));
         }
@@ -1112,7 +1112,7 @@ public:
 
             using TConfigRequest = NConsole::TEvConfigsDispatcher::TEvGetConfigRequest;
             using TConfigResponse = NConsole::TEvConfigsDispatcher::TEvGetConfigResponse;
- 
+
             ui32 configKind = (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem;
             auto ev = MakeHolder<TConfigRequest>(configKind);
 
@@ -1148,12 +1148,12 @@ public:
                     auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
                     schemeTx.SetWorkingDir(pathPair.first);
                     NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
-                    if (!metadata->Indexes.empty()) { 
+                    if (!metadata->Indexes.empty()) {
                         schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
-                        tableDesc = schemeTx.MutableCreateIndexedTable()->MutableTableDescription(); 
-                        for (const auto& index : metadata->Indexes) { 
-                            auto indexDesc = schemeTx.MutableCreateIndexedTable()->AddIndexDescription(); 
-                            indexDesc->SetName(index.Name); 
+                        tableDesc = schemeTx.MutableCreateIndexedTable()->MutableTableDescription();
+                        for (const auto& index : metadata->Indexes) {
+                            auto indexDesc = schemeTx.MutableCreateIndexedTable()->AddIndexDescription();
+                            indexDesc->SetName(index.Name);
                             switch (index.Type) {
                                 case NYql::TIndexDescription::EType::GlobalSync:
                                     indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
@@ -1164,20 +1164,20 @@ public:
                             }
 
                             indexDesc->SetState(static_cast<::NKikimrSchemeOp::EIndexState>(index.State));
-                            for (const auto& col : index.KeyColumns) { 
-                                indexDesc->AddKeyColumnNames(col); 
-                            } 
-                            for (const auto& col : index.DataColumns) { 
-                                indexDesc->AddDataColumnNames(col); 
-                            } 
-                        } 
+                            for (const auto& col : index.KeyColumns) {
+                                indexDesc->AddKeyColumnNames(col);
+                            }
+                            for (const auto& col : index.DataColumns) {
+                                indexDesc->AddDataColumnNames(col);
+                            }
+                        }
                         FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
-                    } else { 
+                    } else {
                         schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
-                        tableDesc = schemeTx.MutableCreateTable(); 
+                        tableDesc = schemeTx.MutableCreateTable();
                         FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
-                    } 
- 
+                    }
+
                     Ydb::StatusIds::StatusCode code;
                     TString error;
                     TList<TString> warnings;
@@ -1189,7 +1189,7 @@ public:
                         tablePromise.SetValue(errResult);
                         return;
                     }
- 
+
                     SendSchemeRequest(ev.Release()).Apply(
                         [tablePromise, warnings{std::move(warnings)}](const TFuture<TGenericResult>& future) mutable {
                             if (warnings.size()) {
@@ -1215,22 +1215,22 @@ public:
     }
 
     TFuture<TGenericResult> AlterTable(Ydb::Table::AlterTableRequest&& req, const TString& cluster) override {
-        try { 
-            if (!CheckCluster(cluster)) { 
-                return InvalidCluster<TGenericResult>(cluster); 
-            } 
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
 
             // FIXME: should be defined in grpc_services/rpc_calls.h, but cause cyclic dependency
             using namespace NGRpcService;
             using TEvAlterTableRequest = TGRpcRequestValidationWrapper<TRpcServices::EvAlterTable, Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse, true, TRateLimiterMode::Rps>;
 
             return SendLocalRpcRequestNoResult<TEvAlterTableRequest>(std::move(req), Database, GetTokenCompat());
-        } 
-        catch (yexception& e) { 
-            return MakeFuture(ResultFromException<TGenericResult>(e)); 
-        } 
-    } 
- 
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
@@ -1271,8 +1271,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            Ydb::Table::DropTableRequest dropTable; 
-            dropTable.set_path(table); 
+            Ydb::Table::DropTableRequest dropTable;
+            dropTable.set_path(table);
 
             // FIXME: should be defined in grpc_services/rpc_calls.h, but cause cyclic dependency
             using namespace NGRpcService;
@@ -2007,30 +2007,30 @@ private:
         return promise.GetFuture();
     }
 
-    template<typename TRpc> 
-    TFuture<TGenericResult> SendLocalRpcRequestNoResult(typename TRpc::TRequest&& proto, const TString& databse, const TString& token) { 
-        return NRpcService::DoLocalRpc<TRpc>(std::move(proto), databse, token, ActorSystem).Apply([](NThreading::TFuture<typename TRpc::TResponse> future) { 
-            auto r = future.ExtractValue(); 
-            NYql::TIssues issues; 
-            NYql::IssuesFromMessage(r.operation().issues(), issues); 
- 
-            if (r.operation().ready() != true) { 
-                issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, TStringBuilder() 
-                    << "Unexpected operation for \"sync\" mode")); 
- 
-                const auto& yqlStatus = TIssuesIds::DEFAULT_ERROR; 
- 
-                auto result = ResultFromIssues<TGenericResult>(yqlStatus, issues); 
-                return NThreading::MakeFuture(result); 
-            } 
- 
-            const auto& yqlStatus = NYql::YqlStatusFromYdbStatus(r.operation().status()); 
- 
-            auto result = ResultFromIssues<TGenericResult>(yqlStatus, issues); 
-            return NThreading::MakeFuture(result); 
-        }); 
-    } 
- 
+    template<typename TRpc>
+    TFuture<TGenericResult> SendLocalRpcRequestNoResult(typename TRpc::TRequest&& proto, const TString& databse, const TString& token) {
+        return NRpcService::DoLocalRpc<TRpc>(std::move(proto), databse, token, ActorSystem).Apply([](NThreading::TFuture<typename TRpc::TResponse> future) {
+            auto r = future.ExtractValue();
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(r.operation().issues(), issues);
+
+            if (r.operation().ready() != true) {
+                issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, TStringBuilder()
+                    << "Unexpected operation for \"sync\" mode"));
+
+                const auto& yqlStatus = TIssuesIds::DEFAULT_ERROR;
+
+                auto result = ResultFromIssues<TGenericResult>(yqlStatus, issues);
+                return NThreading::MakeFuture(result);
+            }
+
+            const auto& yqlStatus = NYql::YqlStatusFromYdbStatus(r.operation().status());
+
+            auto result = ResultFromIssues<TGenericResult>(yqlStatus, issues);
+            return NThreading::MakeFuture(result);
+        });
+    }
+
     bool CheckCluster(const TString& cluster) {
         return cluster == Cluster;
     }
@@ -2349,9 +2349,9 @@ private:
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorUnknown:
                 status = TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN;
                 break;
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAborted: 
-                status = TIssuesIds::KIKIMR_OPERATION_ABORTED; 
-                break; 
+            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAborted:
+                status = TIssuesIds::KIKIMR_OPERATION_ABORTED;
+                break;
             default:
                 break;
         }
@@ -2589,7 +2589,7 @@ private:
         }
 
         if (metadata->TableSettings.ReadReplicasSettings) {
-            if (!NYql::ConvertReadReplicasSettingsToProto(metadata->TableSettings.ReadReplicasSettings.GetRef(), 
+            if (!NYql::ConvertReadReplicasSettingsToProto(metadata->TableSettings.ReadReplicasSettings.GetRef(),
                     *proto.mutable_read_replicas_settings(), code, error)) {
                 return false;
             }

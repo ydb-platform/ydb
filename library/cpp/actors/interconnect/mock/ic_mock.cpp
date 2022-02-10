@@ -227,7 +227,7 @@ namespace NActors {
                 CheckSession();
                 if (!Session) {
                     Session = new TSessionMockActor(this, State.GetValidSessionId());
-                    RegisterWithSameMailbox(Session); 
+                    RegisterWithSameMailbox(Session);
                 }
                 return Session;
             }

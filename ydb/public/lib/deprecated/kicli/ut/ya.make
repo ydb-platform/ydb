@@ -1,9 +1,9 @@
 UNITTEST_FOR(ydb/public/lib/deprecated/kicli)
 
-OWNER( 
-    xenoxeno 
-    g:kikimr 
-) 
+OWNER(
+    xenoxeno
+    g:kikimr
+)
 
 TIMEOUT(600)
 

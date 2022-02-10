@@ -50,7 +50,7 @@ public:
     virtual NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range,
         TStructLiteral* columnIds, TListLiteral* skipNullKeys, TStructType* returnType,
         const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse,
-        std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) = 0; 
+        std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) = 0;
 
     // Updates the single row. Column in commands must be unique.
     virtual void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
@@ -64,9 +64,9 @@ public:
 
     // Returns whether row belong this shard.
     virtual bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const = 0;
- 
-    // Returns schema version for given tableId 
-    virtual ui64 GetTableSchemaVersion(const TTableId& tableId) const = 0; 
+
+    // Returns schema version for given tableId
+    virtual ui64 GetTableSchemaVersion(const TTableId& tableId) const = 0;
 
     // Set callback for periodic execution
     virtual void SetPeriodicCallback(TPeriodicCallback&& callback) = 0;

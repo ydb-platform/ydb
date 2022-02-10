@@ -163,9 +163,9 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
                 NClient::TKeyColumn("Id", NClient::TType::Uint64),
                 NClient::TColumn("Species", NClient::TType::Utf8),
                 NClient::TColumn("Name", NClient::TType::Utf8),
-                NClient::TColumn("Weight", NClient::TType::Int64), 
-                NClient::TColumn("MiscY", NClient::TType::Yson), 
-                NClient::TColumn("MiscJ", NClient::TType::Json) 
+                NClient::TColumn("Weight", NClient::TType::Int64),
+                NClient::TColumn("MiscY", NClient::TType::Yson),
+                NClient::TColumn("MiscJ", NClient::TType::Json)
             });
         auto children = dc.GetChildren();
         UNIT_ASSERT(HasChild(dc, "/dc-1/Animals"));
@@ -177,27 +177,27 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "Species"; }));
         UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "Name"; }));
         UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "Weight"; }));
-        UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "MiscY"; })); 
-        UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "MiscJ"; })); 
+        UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "MiscY"; }));
+        UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "MiscJ"; }));
 
-        try { 
-            dc.CreateTable("FailedCreateTable", { 
-                NClient::TKeyColumn("Id", NClient::TType::Json), 
-                NClient::TColumn("Value", NClient::TType::Uint64) 
-            }); 
+        try {
+            dc.CreateTable("FailedCreateTable", {
+                NClient::TKeyColumn("Id", NClient::TType::Json),
+                NClient::TColumn("Value", NClient::TType::Uint64)
+            });
             UNIT_FAIL("Unexpected CreateTable success");
-        } catch (const yexception& ) { 
-        } 
- 
-        try { 
-            dc.CreateTable("FailedCreateTable", { 
-                NClient::TKeyColumn("Id", NClient::TType::Yson), 
-                NClient::TColumn("Value", NClient::TType::Uint64) 
-            }); 
+        } catch (const yexception& ) {
+        }
+
+        try {
+            dc.CreateTable("FailedCreateTable", {
+                NClient::TKeyColumn("Id", NClient::TType::Yson),
+                NClient::TColumn("Value", NClient::TType::Uint64)
+            });
             UNIT_FAIL("Unexpected CreateTable success");
-        } catch (const yexception& ) { 
-        } 
- 
+        } catch (const yexception& ) {
+        }
+
 #if 1 // TODO: it should be an error
         auto sameTable = dc.CreateTable("Animals", {
                 NClient::TKeyColumn("Id", NClient::TType::Uint64),
@@ -748,7 +748,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                     "  '('Name (Utf8 '\"Dobby\"))"
                     "  '('Weight (Utf8 '350))))"
                     "(let pgmReturn (AsList"
-                    "  (UpdateRow '('/dc-1/Zoo/Animals '0 '0:0) row myUpd)" 
+                    "  (UpdateRow '('/dc-1/Zoo/Animals '0 '0:0) row myUpd)"
                     "))"
                     "(return pgmReturn)"
                     ")");

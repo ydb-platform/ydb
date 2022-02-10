@@ -1,11 +1,11 @@
-#pragma once 
- 
+#pragma once
+
 #include "grpc_endpoint.h"
 
-#include "rpc_calls.h" 
- 
+#include "rpc_calls.h"
+
 #include <library/cpp/actors/core/actor.h>
- 
+
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 
@@ -13,40 +13,40 @@ namespace NKikimrConfig {
 class TAppConfig;
 }
 
-namespace NKikimr { 
- 
-struct TAppData; 
- 
-namespace NGRpcService { 
- 
-TString DatabaseFromDomain(const TAppData* appdata); 
+namespace NKikimr {
+
+struct TAppData;
+
+namespace NGRpcService {
+
+TString DatabaseFromDomain(const TAppData* appdata);
 IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig);
- 
-class TGRpcRequestProxy : public IFacilityProvider { 
-public: 
-    enum EEv { 
-        EvRefreshTokenResponse = EventSpaceBegin(TKikimrEvents::ES_GRPC_REQUEST_PROXY), 
-        EvEnd 
-    }; 
- 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_GRPC_REQUEST_PROXY), 
-        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_GRPC_REQUEST_PROXY)"); 
- 
-    struct TEvRefreshTokenResponse : public TEventLocal<TEvRefreshTokenResponse, EvRefreshTokenResponse> { 
-        bool Authenticated; 
-        TString InternalToken; 
-        bool Retryable; 
-        NYql::TIssues Issues; 
- 
-        TEvRefreshTokenResponse(bool ok, const TString& token, bool retryable, const NYql::TIssues& issues) 
-            : Authenticated(ok) 
-            , InternalToken(token) 
-            , Retryable(retryable) 
-            , Issues(issues) 
-        {} 
-    }; 
- 
-protected: 
+
+class TGRpcRequestProxy : public IFacilityProvider {
+public:
+    enum EEv {
+        EvRefreshTokenResponse = EventSpaceBegin(TKikimrEvents::ES_GRPC_REQUEST_PROXY),
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_GRPC_REQUEST_PROXY),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_GRPC_REQUEST_PROXY)");
+
+    struct TEvRefreshTokenResponse : public TEventLocal<TEvRefreshTokenResponse, EvRefreshTokenResponse> {
+        bool Authenticated;
+        TString InternalToken;
+        bool Retryable;
+        NYql::TIssues Issues;
+
+        TEvRefreshTokenResponse(bool ok, const TString& token, bool retryable, const NYql::TIssues& issues)
+            : Authenticated(ok)
+            , InternalToken(token)
+            , Retryable(retryable)
+            , Issues(issues)
+        {}
+    };
+
+protected:
     void Handle(TEvAlterTableRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCreateTableRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDropTableRequest::TPtr& ev, const TActorContext& ctx);
@@ -85,7 +85,7 @@ protected:
     void Handle(TEvGetShardLocationsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKikhouseDescribeTableRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvBiStreamPingRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvBiStreamPingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvExperimentalStreamQueryRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvStreamPQReadRequest::TPtr& ev, const TActorContext& ctx);
@@ -153,12 +153,12 @@ protected:
     void Handle(TEvDataStreamsStopStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx);
 
     TActorId DiscoveryCacheActorID;
-}; 
- 
+};
+
 inline TActorId CreateGRpcRequestProxyId() {
     const auto actorId = TActorId(0, "GRpcReqProxy");
-    return actorId; 
-} 
- 
-} // namespace NGRpcService 
-} // namespace NKikimr 
+    return actorId;
+}
+
+} // namespace NGRpcService
+} // namespace NKikimr

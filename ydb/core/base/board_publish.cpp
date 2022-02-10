@@ -112,7 +112,7 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
                 if (known && *known)
                     updated[replicaId] = *known;
                 else
-                    updated[replicaId] = RegisterWithSameMailbox(new TBoardReplicaPublishActor(Path, Payload, replicaId, SelfId())); 
+                    updated[replicaId] = RegisterWithSameMailbox(new TBoardReplicaPublishActor(Path, Payload, replicaId, SelfId()));
             }
 
             ReplicaPublishActors = std::move(updated);

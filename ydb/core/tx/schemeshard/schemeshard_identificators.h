@@ -85,11 +85,11 @@ class TIndexBuildIdTag {};
 using TIndexBuildId = TUi64Id<TIndexBuildIdTag, Max<ui64>()>;
 constexpr TIndexBuildId InvalidIndexBuildId = TIndexBuildId();
 
-enum class EIndexColumnKind : ui8 { 
-    KeyColumn = 0, 
-    DataColumn = 1 
-}; 
- 
+enum class EIndexColumnKind : ui8 {
+    KeyColumn = 0,
+    DataColumn = 1
+};
+
 class TPipeMessageId: public std::pair<ui64, ui64> {
     using TBase = std::pair<ui64, ui64>;
 public:

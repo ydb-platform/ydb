@@ -112,7 +112,7 @@ void NHPTimer::GetTime(STime* pTime) noexcept {
 double NHPTimer::GetTimePassed(STime* pTime) noexcept {
     STime old(*pTime);
 
-    *pTime = GetCycleCount(); 
+    *pTime = GetCycleCount();
 
     return GetSeconds(*pTime - old);
 }

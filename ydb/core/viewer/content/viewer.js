@@ -2462,7 +2462,7 @@ function onTreeDataComplete(result, obj, cb) {
                     child.icon = "glyphicon glyphicon-folder-close schema-good";
                     break;
                 case 2:     // Table
-                    child.children = true; 
+                    child.children = true;
                     child.icon = "glyphicon glyphicon-list schema-good";
                     break;
                 case 3:     // PQ Group
@@ -2485,21 +2485,21 @@ function onTreeDataComplete(result, obj, cb) {
                 children.push(child);
             }
             obj.describe = result;
-        } else if (result.PathDescription.Table) { 
-            if (result.PathDescription.Table.TableIndexes) { 
-                var ilen = result.PathDescription.Table.TableIndexes.length; 
-                for (var i = 0; i < ilen; i++) { 
-                    var child = {}; 
-                    child.id = concatPaths(result.Path, result.PathDescription.Table.TableIndexes[i].Name); 
-                    child.parent = result.Path; 
-                    child.text = result.PathDescription.Table.TableIndexes[i].Name; 
-                    child.children = true; 
-                    child.icon = "glyphicon glyphicon-book schema-good"; 
-                    child.data = function(obj1, cb1) { onTreeData(obj1, cb1); }; 
-                    children.push(child); 
-                } 
-                obj.describe = result; 
-            } 
+        } else if (result.PathDescription.Table) {
+            if (result.PathDescription.Table.TableIndexes) {
+                var ilen = result.PathDescription.Table.TableIndexes.length;
+                for (var i = 0; i < ilen; i++) {
+                    var child = {};
+                    child.id = concatPaths(result.Path, result.PathDescription.Table.TableIndexes[i].Name);
+                    child.parent = result.Path;
+                    child.text = result.PathDescription.Table.TableIndexes[i].Name;
+                    child.children = true;
+                    child.icon = "glyphicon glyphicon-book schema-good";
+                    child.data = function(obj1, cb1) { onTreeData(obj1, cb1); };
+                    children.push(child);
+                }
+                obj.describe = result;
+            }
             if (result.PathDescription.Table.CdcStreams) {
                 var ilen = result.PathDescription.Table.CdcStreams.length;
                 for (var i = 0; i < ilen; i++) {
@@ -2731,7 +2731,7 @@ function onTreeNodeComplete(result, obj) {
             }
             schemaHtml += "</table>";
             panelSchema.innerHTML = schemaHtml;
- 
+
             var indexes = table.TableIndexes;
             if (indexes !== undefined) {
                 var ilen = indexes.length;
@@ -2744,12 +2744,12 @@ function onTreeNodeComplete(result, obj) {
                         if (j < jlen - 1) {
                             schemaHtml += ", ";
                         }
-                    } 
+                    }
                     schemaHtml += "</td></tr>"
-                } 
+                }
                 schemaHtml += "</table>";
                 panelSchema.innerHTML += schemaHtml;
-            } 
+            }
 
             var cdcStreams = table.CdcStreams;
             if (cdcStreams !== undefined) {
@@ -2764,7 +2764,7 @@ function onTreeNodeComplete(result, obj) {
                 schemaHtml += "</table>";
                 panelSchema.innerHTML += schemaHtml;
             }
-        } 
+        }
 
         var tabLen;
         var tablet;

@@ -135,13 +135,13 @@ public:
         for (auto &x : Info->Channels) {
             if (auto *g = x.LatestEntry()) {
                 if (blocked.insert(g->GroupID).second)
-                    ReqActors.push_back(RegisterWithSameMailbox(new TTabletReqBlockBlobStorageGroup(SelfId(), tabletId, g->GroupID, Generation))); 
+                    ReqActors.push_back(RegisterWithSameMailbox(new TTabletReqBlockBlobStorageGroup(SelfId(), tabletId, g->GroupID, Generation)));
             }
 
             if (BlockPrevEntry) {
                 if (auto *pg = x.PreviousEntry())
                     if (blocked.insert(pg->GroupID).second)
-                        ReqActors.push_back(RegisterWithSameMailbox(new TTabletReqBlockBlobStorageGroup(SelfId(), tabletId, pg->GroupID, Generation))); 
+                        ReqActors.push_back(RegisterWithSameMailbox(new TTabletReqBlockBlobStorageGroup(SelfId(), tabletId, pg->GroupID, Generation)));
             }
         }
 

@@ -340,7 +340,7 @@ public:
     // Scan queries counters
     NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardDisconnect;
     NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardResolve;
-    NMonitoring::THistogramPtr ScanQueryRateLimitLatency; 
+    NMonitoring::THistogramPtr ScanQueryRateLimitLatency;
 
     // NewEngine vs OldEngine
     THashMap<NKikimrKqp::EQueryAction, NMonitoring::THistogramPtr> NewEngineForcedQueryLatencies;

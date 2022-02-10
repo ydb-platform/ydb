@@ -74,7 +74,7 @@ TExprBase ProjectColumns(const TExprBase& input, const THashSet<TStringBuf>& col
     return ProjectColumnsInternal(input, columnNames, ctx);
 }
 
-TKqpTable BuildTableMeta(const TKikimrTableMetadata& meta, const TPositionHandle& pos, TExprContext& ctx) { 
+TKqpTable BuildTableMeta(const TKikimrTableMetadata& meta, const TPositionHandle& pos, TExprContext& ctx) {
     return Build<TKqpTable>(ctx, pos)
         .Path().Build(meta.Name)
         .PathId().Build(meta.PathId.ToString())
@@ -83,9 +83,9 @@ TKqpTable BuildTableMeta(const TKikimrTableMetadata& meta, const TPositionHandle
         .Done();
 }
 
-TKqpTable BuildTableMeta(const TKikimrTableDescription& tableDesc, const TPositionHandle& pos, TExprContext& ctx) { 
-    YQL_ENSURE(tableDesc.Metadata); 
-    return BuildTableMeta(*tableDesc.Metadata, pos, ctx); 
-} 
- 
+TKqpTable BuildTableMeta(const TKikimrTableDescription& tableDesc, const TPositionHandle& pos, TExprContext& ctx) {
+    YQL_ENSURE(tableDesc.Metadata);
+    return BuildTableMeta(*tableDesc.Metadata, pos, ctx);
+}
+
 } // namespace NKikimr::NKqp::NOpt

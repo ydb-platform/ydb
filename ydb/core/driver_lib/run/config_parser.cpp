@@ -61,7 +61,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("memorylog-file", "set buffer size for memory log").OptionalArgument("PATH");
     opts.AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
     opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT");
-    opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT"); 
+    opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT");
     opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST");
     opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT");
     opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT");
@@ -147,12 +147,12 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         conf.SetPort(FromString<ui16>(res.Get("grpc-port")));
     }
 
-    if (res.Has("grpcs-port")) { 
-        auto& conf = *Config.AppConfig.MutableGRpcConfig(); 
-        conf.SetStartGRpcProxy(true); 
-        conf.SetSslPort(FromString<ui16>(res.Get("grpcs-port"))); 
-    } 
- 
+    if (res.Has("grpcs-port")) {
+        auto& conf = *Config.AppConfig.MutableGRpcConfig();
+        conf.SetStartGRpcProxy(true);
+        conf.SetSslPort(FromString<ui16>(res.Get("grpcs-port")));
+    }
+
     if (res.Has("grpc-public-host")) {
         auto& conf = *Config.AppConfig.MutableGRpcConfig();
         conf.SetPublicHost(res.Get("grpc-public-host"));

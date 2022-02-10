@@ -103,8 +103,8 @@ struct TEvBusProxy {
         EvInitRoot,
         EvChooseProxy,
 
-        EvStreamIsReadyNotUsed = EvRequest + 512, 
-        EvStreamIsDeadNotUsed, 
+        EvStreamIsReadyNotUsed = EvRequest + 512,
+        EvStreamIsDeadNotUsed,
 
         EvEnd
     };

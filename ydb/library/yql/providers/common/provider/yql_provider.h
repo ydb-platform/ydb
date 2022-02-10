@@ -40,14 +40,14 @@ struct TWriteTableSettings {
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> OrderBy;
     NNodes::TMaybeNode<NNodes::TCoLambda> Filter;
     NNodes::TMaybeNode<NNodes::TCoLambda> Update;
-    NNodes::TMaybeNode<NNodes::TCoIndexList> Indexes; 
+    NNodes::TMaybeNode<NNodes::TCoIndexList> Indexes;
     NNodes::TMaybeNode<NNodes::TCoChangefeedList> Changefeeds;
     NNodes::TCoNameValueTupleList Other;
     NNodes::TMaybeNode<NNodes::TExprList> ColumnFamilies;
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TableSettings;
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> AlterActions;
 
-    TWriteTableSettings(const NNodes::TCoNameValueTupleList& other) 
+    TWriteTableSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other) {}
 };
 
@@ -100,8 +100,8 @@ TVector<TString> GetStructFields(const TTypeAnnotationNode* type);
 
 void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStatistics& stats, NYson::TYsonWriter& writer);
 
-void FillSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& types, THashMap<TString, TString>& secureParams); 
- 
+void FillSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& types, THashMap<TString, TString>& secureParams);
+
 bool FillUsedFiles(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const TUserDataTable& crutches = {});
 
 std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedFiles(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter, const TUserDataTable& crutches = {});

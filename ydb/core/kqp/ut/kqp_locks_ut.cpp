@@ -9,7 +9,7 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpLocks) {
     Y_UNIT_TEST_NEW_ENGINE(Invalidate) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
+        auto db = kikimr.GetTableClient();
 
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
 
     Y_UNIT_TEST_NEW_ENGINE(DifferentKeyUpdate) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
+        auto db = kikimr.GetTableClient();
 
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         auto session2 = db.CreateSession().GetValueSync().GetSession();

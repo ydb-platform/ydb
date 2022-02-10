@@ -113,22 +113,22 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
         return false;
     }
 
-    static const struct { 
-        const TStringBuf Left = "Left"; 
-        const TStringBuf Inner = "Inner"; 
-        const TStringBuf LeftSemi = "LeftSemi"; 
-        const TStringBuf LeftOnly = "LeftOnly"; 
-        const TStringBuf RightSemi = "RightSemi"; 
-    } joinNames; 
+    static const struct {
+        const TStringBuf Left = "Left";
+        const TStringBuf Inner = "Inner";
+        const TStringBuf LeftSemi = "LeftSemi";
+        const TStringBuf LeftOnly = "LeftOnly";
+        const TStringBuf RightSemi = "RightSemi";
+    } joinNames;
 
-    static const TVector<TStringBuf> allowedJoins { 
-        joinNames.Left, 
-        joinNames.Inner, 
-        joinNames.LeftSemi, 
-        joinNames.LeftOnly, 
-        joinNames.RightSemi 
-    }; 
- 
+    static const TVector<TStringBuf> allowedJoins {
+        joinNames.Left,
+        joinNames.Inner,
+        joinNames.LeftSemi,
+        joinNames.LeftOnly,
+        joinNames.RightSemi
+    };
+
     const TStringBuf joinType = joinTuple.Type().Value();
     if (Find(allowedJoins, joinType) == allowedJoins.cend()) {
         return false;
@@ -141,23 +141,23 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
 
     auto rightExpr = GetEquiJoinInputList(joinTuple.RightScope().Cast<TCoAtom>(), joinLabels, joinInputs);
 
-    TMaybeNode<TKiSelectRangeBase> rightSelect; 
+    TMaybeNode<TKiSelectRangeBase> rightSelect;
     TMaybeNode<TCoFlatMap> rightFlatmap;
     TMaybeNode<TCoFilterNullMembers> rightFilterNull;
     TMaybeNode<TCoSkipNullMembers> rightSkipNull;
-    TMaybeNode<TCoAtom> indexTable; 
+    TMaybeNode<TCoAtom> indexTable;
 
-    if (auto select = rightExpr.Maybe<TKiSelectRangeBase>()) { 
+    if (auto select = rightExpr.Maybe<TKiSelectRangeBase>()) {
         rightSelect = select;
     }
 
-    if (auto select = rightExpr.Maybe<TCoFlatMap>().Input().Maybe<TKiSelectRangeBase>()) { 
+    if (auto select = rightExpr.Maybe<TCoFlatMap>().Input().Maybe<TKiSelectRangeBase>()) {
         rightSelect = select;
         rightFlatmap = rightExpr.Cast<TCoFlatMap>();
     }
 
     if (auto select = rightExpr.Maybe<TCoFlatMap>().Input().Maybe<TCoFilterNullMembers>()
-        .Input().Maybe<TKiSelectRangeBase>()) 
+        .Input().Maybe<TKiSelectRangeBase>())
     {
         rightSelect = select;
         rightFlatmap = rightExpr.Cast<TCoFlatMap>();
@@ -165,17 +165,17 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
     }
 
     if (auto select = rightExpr.Maybe<TCoFlatMap>().Input().Maybe<TCoSkipNullMembers>()
-        .Input().Maybe<TKiSelectRangeBase>()) 
+        .Input().Maybe<TKiSelectRangeBase>())
     {
         rightSelect = select;
         rightFlatmap = rightExpr.Cast<TCoFlatMap>();
         rightSkipNull = rightFlatmap.Input().Cast<TCoSkipNullMembers>();
     }
 
-    if (auto indexSelect = rightSelect.Maybe<TKiSelectIndexRange>()) { 
-        indexTable = indexSelect.Cast().IndexName(); 
-    } 
- 
+    if (auto indexSelect = rightSelect.Maybe<TKiSelectIndexRange>()) {
+        indexTable = indexSelect.Cast().IndexName();
+    }
+
     if (!rightSelect) {
         return false;
     }
@@ -187,7 +187,7 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
 
     const auto selectRange = rightSelect.Cast();
     const TStringBuf cluster = selectRange.Cluster().Value();
-    const TStringBuf lookupTable = indexTable ? indexTable.Cast().Value() : selectRange.Table().Path().Value(); 
+    const TStringBuf lookupTable = indexTable ? indexTable.Cast().Value() : selectRange.Table().Path().Value();
     const TKikimrTableDescription& lookupTableDesc = tablesData.ExistingTable(cluster, lookupTable);
 
     auto rightKeyRange = TKikimrKeyRange::GetPointKeyRange(ctx, lookupTableDesc, selectRange.Range());
@@ -227,7 +227,7 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
 
     TSet<TString> leftKeyColumnsSet;
     TSet<TString> rightKeyColumnsSet;
-    TVector<TColumnRange> keyColumnRanges(lookupTableDesc.Metadata->KeyColumnNames.size()); 
+    TVector<TColumnRange> keyColumnRanges(lookupTableDesc.Metadata->KeyColumnNames.size());
 
     for (size_t i = 0; i < joinKeyCount; ++i) {
         auto joinLeftLabel = joinTuple.LeftKeys().Item(i * 2);
@@ -247,7 +247,7 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
 
         TString rightColumnName = ToString(joinRightColumn.Value());
 
-        auto keyColumnIdx = lookupTableDesc.GetKeyColumnIndex(rightColumnName); 
+        auto keyColumnIdx = lookupTableDesc.GetKeyColumnIndex(rightColumnName);
         if (!keyColumnIdx) {
             // Non-key columns in join key currently not supported
             return false;
@@ -300,24 +300,24 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
     TCoAtomList lookupColumns = selectRange.Select();
     bool requireIndexValues = false; // 'true' means that some requested columns are not presented in the index-table,
                                      // so read from data-table is required
-    if (indexTable) { 
+    if (indexTable) {
         // In this case lookupTableDesc == indexTable,
         // so check whether index-table contains all lookup-columns
         for (const auto& lookupColumn : lookupColumns) {
-            if (!lookupTableDesc.Metadata->Columns.contains(TString(lookupColumn.Value()))) { 
-                requireIndexValues = true; 
-                break; 
-            } 
-        } 
-    } 
+            if (!lookupTableDesc.Metadata->Columns.contains(TString(lookupColumn.Value()))) {
+                requireIndexValues = true;
+                break;
+            }
+        }
+    }
 
     auto selectedColumns = (indexTable && requireIndexValues)
-        ? BuildKeyColumnsList(lookupTableDesc, selectRange.Pos(), ctx) 
+        ? BuildKeyColumnsList(lookupTableDesc, selectRange.Pos(), ctx)
         : lookupColumns;
- 
+
     auto lookup = TKikimrKeyRange::BuildReadRangeExpr(lookupTableDesc, TKeyRange(ctx, keyColumnRanges, {}),
                                                       selectedColumns, false /* allowNulls */, ctx);
- 
+
     // Skip null keys in lookup part as for equijoin semantics null != null,
     // so we can't have nulls in lookup part
     lookup = Build<TCoSkipNullMembers>(ctx, joinTuple.Pos())
@@ -341,9 +341,9 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
             .Done();
     }
 
-    // If we have index table AND need data from main we cand add this flat map here 
-    // because lookup is index table and does not have all columns 
-    if (rightFlatmap && !requireIndexValues) { 
+    // If we have index table AND need data from main we cand add this flat map here
+    // because lookup is index table and does not have all columns
+    if (rightFlatmap && !requireIndexValues) {
         lookup = Build<TCoFlatMap>(ctx, joinTuple.Pos())
             .Input(lookup)
             .Lambda(rightFlatmap.Cast().Lambda())
@@ -360,7 +360,7 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
             YQL_ENSURE(maybeInput);
 
             auto input = *maybeInput;
- 
+
             for (auto item: input->InputType->GetItems()) {
                 joinColumns.emplace_back(item->GetName(), input->FullName(item->GetName()));
             }
@@ -384,7 +384,7 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
 
             if (resultColumns) {
                 resultColumns->push_back(column);
-            } 
+            }
 
             auto tuple = Build<TCoNameValueTuple>(ctx, joinTuple.Pos())
                 .Name().Build(column)
@@ -397,12 +397,12 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
             resultTuples.emplace_back(std::move(tuple));
         }
     };
- 
+
     auto injectRightDataKey = [&tablesData, &selectRange, &ctx]
         (TMaybeNode<TExprBase>& rightRow, TVector<TExprBase>& joinResultTuples)
     {
         const TStringBuf cluster = selectRange.Cluster();
-        const TStringBuf table = selectRange.Table().Path(); 
+        const TStringBuf table = selectRange.Table().Path();
         const auto& desc = tablesData.ExistingTable(cluster, table);
         for (const auto& col : desc.Metadata->KeyColumnNames) {
             auto tuple = Build<TCoNameValueTuple>(ctx, selectRange.Pos())
@@ -415,7 +415,7 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
             joinResultTuples.push_back(tuple);
         }
     };
- 
+
     auto getJoinResultExpr = [requireIndexValues, &indexTable, &addJoinResults,
         &injectRightDataKey, &ctx, &joinTuple]
         (TMaybeNode<TExprBase> leftRowArg, TMaybeNode<TExprBase> rightRowArg)
@@ -447,89 +447,89 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
 
         return std::make_pair(expr, resultColumns);
     };
- 
+
     auto finalizeJoinResultExpr = [&joinTuple, &tablesData, &ctx,
-                                   &selectRange, &addJoinResults, &rightFlatmap, &joinType] 
-            (const TExprBase& input, const TVector<TString>& finishedColumns, bool needExtraRead) 
-                -> NNodes::TExprBase 
+                                   &selectRange, &addJoinResults, &rightFlatmap, &joinType]
+            (const TExprBase& input, const TVector<TString>& finishedColumns, bool needExtraRead)
+                -> NNodes::TExprBase
     {
         if (!needExtraRead) {
             return input;
         }
 
         TCoArgument joinResult = Build<TCoArgument>(ctx, joinTuple.Pos())
-            .Name("joinResult") 
-            .Done(); 
- 
-        TVector<TExprBase> joinResultTuples; 
-        for (const auto& col : finishedColumns) { 
-            auto tuple = Build<TCoNameValueTuple>(ctx, joinTuple.Pos()) 
-                .Name().Build(col) 
-                .Value<TCoMember>() 
+            .Name("joinResult")
+            .Done();
+
+        TVector<TExprBase> joinResultTuples;
+        for (const auto& col : finishedColumns) {
+            auto tuple = Build<TCoNameValueTuple>(ctx, joinTuple.Pos())
+                .Name().Build(col)
+                .Value<TCoMember>()
                     .Struct(joinResult)
-                    .Name().Build(col) 
-                    .Build() 
-                .Done(); 
-            joinResultTuples.push_back(tuple); 
-        } 
- 
+                    .Name().Build(col)
+                    .Build()
+                .Done();
+            joinResultTuples.push_back(tuple);
+        }
+
         const TStringBuf cluster = selectRange.Cluster();
-        const TStringBuf table = selectRange.Table().Path(); 
+        const TStringBuf table = selectRange.Table().Path();
         const auto& tableDesc = tablesData.ExistingTable(cluster, table);
-        TExprBase select = Build<TKiSelectRow>(ctx, joinTuple.Pos()) 
+        TExprBase select = Build<TKiSelectRow>(ctx, joinTuple.Pos())
             .Cluster(selectRange.Cluster())
             .Table(selectRange.Table())
             .Key(ExtractNamedKeyTuples(joinResult, tableDesc, ctx, tableDesc.Metadata->Name))
             .Select(selectRange.Select())
             .Done();
- 
-        if (rightFlatmap) { 
-            select = Build<TCoFlatMap>(ctx, joinTuple.Pos()) 
-                .Input(select) 
-                .Lambda(rightFlatmap.Cast().Lambda()) 
-                .Done(); 
-        } 
- 
+
+        if (rightFlatmap) {
+            select = Build<TCoFlatMap>(ctx, joinTuple.Pos())
+                .Input(select)
+                .Lambda(rightFlatmap.Cast().Lambda())
+                .Done();
+        }
+
         addJoinResults(joinTuple.RightScope(), select, joinResultTuples, nullptr);
- 
-        if (joinType == joinNames.Inner || joinType == joinNames.RightSemi) { 
-            return Build<TCoFlatMap>(ctx, joinTuple.Pos()) 
-                .Input(input) 
-                .Lambda() 
-                    .Args({joinResult}) 
-                    .Body<TCoOptionalIf>() 
-                        .Predicate<TCoHasItems>() 
-                            .List<TCoToList>() 
-                                .Optional(select) 
-                                .Build() 
-                            .Build() 
-                        .Value<TCoAsStruct>() 
-                            .Add(joinResultTuples) 
-                            .Build() 
-                        .Build() 
-                    .Build() 
-                .Done(); 
-        } else if (joinType == joinNames.Left){ 
-            return Build<TCoMap>(ctx, joinTuple.Pos()) 
-                .Input(input) 
-                .Lambda() 
-                    .Args({joinResult}) 
-                    .Body<TCoAsStruct>() 
-                        .Add(joinResultTuples) 
-                        .Build() 
-                    .Build() 
-                .Done(); 
-        } else { 
-            YQL_ENSURE(false, "unknown join type to call finalizeJoinResultExpr " << joinType); 
-        } 
-    }; 
- 
+
+        if (joinType == joinNames.Inner || joinType == joinNames.RightSemi) {
+            return Build<TCoFlatMap>(ctx, joinTuple.Pos())
+                .Input(input)
+                .Lambda()
+                    .Args({joinResult})
+                    .Body<TCoOptionalIf>()
+                        .Predicate<TCoHasItems>()
+                            .List<TCoToList>()
+                                .Optional(select)
+                                .Build()
+                            .Build()
+                        .Value<TCoAsStruct>()
+                            .Add(joinResultTuples)
+                            .Build()
+                        .Build()
+                    .Build()
+                .Done();
+        } else if (joinType == joinNames.Left){
+            return Build<TCoMap>(ctx, joinTuple.Pos())
+                .Input(input)
+                .Lambda()
+                    .Args({joinResult})
+                    .Body<TCoAsStruct>()
+                        .Add(joinResultTuples)
+                        .Build()
+                    .Build()
+                .Done();
+        } else {
+            YQL_ENSURE(false, "unknown join type to call finalizeJoinResultExpr " << joinType);
+        }
+    };
+
     auto leftExpr = getLeftExpr();
     TCoArgument rightRowArg = Build<TCoArgument>(ctx, joinTuple.Pos())
         .Name("rightRow")
         .Done();
 
-    if (joinType == joinNames.Left) { 
+    if (joinType == joinNames.Left) {
         TExprBase rightNothing = Build<TCoNothing>(ctx, joinTuple.Pos())
             .OptionalType<TCoTypeOf>()
                 .Value<TCoToOptional>()
@@ -539,8 +539,8 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
             .Done();
 
         auto joinResultExpr = getJoinResultExpr(leftRowArg, rightRowArg);
- 
-        auto joinMap = Build<TCoFlatMap>(ctx, joinTuple.Pos()) 
+
+        auto joinMap = Build<TCoFlatMap>(ctx, joinTuple.Pos())
             .Input(leftExpr)
             .Lambda()
                 .Args({leftRowArg})
@@ -552,23 +552,23 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
                         .Input(lookup)
                         .Lambda()
                             .Args({rightRowArg})
-                            .Body(joinResultExpr.first) 
+                            .Body(joinResultExpr.first)
                             .Build()
                         .Build()
                     .ElseValue<TCoAsList>()
-                        .Add(getJoinResultExpr(leftRowArg, rightNothing).first) 
+                        .Add(getJoinResultExpr(leftRowArg, rightNothing).first)
                         .Build()
                     .Build()
                 .Build()
             .Done();
-        idxLookupExpr = finalizeJoinResultExpr(joinMap, joinResultExpr.second, requireIndexValues); 
+        idxLookupExpr = finalizeJoinResultExpr(joinMap, joinResultExpr.second, requireIndexValues);
         return true;
     }
- 
-    if (joinType == joinNames.Inner) { 
+
+    if (joinType == joinNames.Inner) {
         const auto joinResultExpr = getJoinResultExpr(leftRowArg, rightRowArg);
 
-        auto joinMap = Build<TCoFlatMap>(ctx, joinTuple.Pos()) 
+        auto joinMap = Build<TCoFlatMap>(ctx, joinTuple.Pos())
             .Input<TCoSkipNullMembers>()
                 .Input(leftExpr)
                 .Members()
@@ -581,16 +581,16 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
                     .Input(lookup)
                     .Lambda()
                         .Args({rightRowArg})
-                        .Body(joinResultExpr.first) 
+                        .Body(joinResultExpr.first)
                         .Build()
                     .Build()
                 .Build()
             .Done();
-        idxLookupExpr = finalizeJoinResultExpr(joinMap, joinResultExpr.second, requireIndexValues); 
+        idxLookupExpr = finalizeJoinResultExpr(joinMap, joinResultExpr.second, requireIndexValues);
         return true;
     }
 
-    if (joinType == joinNames.LeftSemi) { 
+    if (joinType == joinNames.LeftSemi) {
         idxLookupExpr = Build<TCoFlatMap>(ctx, joinTuple.Pos())
             .Input<TCoSkipNullMembers>()
                 .Input(leftExpr)
@@ -604,14 +604,14 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
                     .Predicate<TCoHasItems>()
                         .List(lookup)
                         .Build()
-                    .Value(getJoinResultExpr(leftRowArg, {}).first) 
+                    .Value(getJoinResultExpr(leftRowArg, {}).first)
                     .Build()
                 .Build()
             .Done();
         return true;
     }
 
-    if (joinType == joinNames.LeftOnly) { 
+    if (joinType == joinNames.LeftOnly) {
         idxLookupExpr = Build<TCoFlatMap>(ctx, joinTuple.Pos())
             .Input(leftExpr)
             .Lambda()
@@ -622,14 +622,14 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
                             .List(lookup)
                             .Build()
                         .Build()
-                    .Value(getJoinResultExpr(leftRowArg, {}).first) 
+                    .Value(getJoinResultExpr(leftRowArg, {}).first)
                     .Build()
                 .Build()
             .Done();
         return true;
     }
 
-    if (joinType == joinNames.RightSemi) { 
+    if (joinType == joinNames.RightSemi) {
         // In this case we iterate over left table (with deduplication)
         // and do index-lookup in the right one.
 

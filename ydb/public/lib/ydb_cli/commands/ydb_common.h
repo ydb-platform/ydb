@@ -38,8 +38,8 @@ inline void ThrowOnError(NYdb::TStatus status) {
 }
 
 inline void ThrowOnError(const NYdb::TOperation& operation) {
-    if (!operation.Ready()) 
-        return; 
+    if (!operation.Ready())
+        return;
     ThrowOnError(operation.Status());
 }
 

@@ -30,7 +30,7 @@ protected:
         const TResponse& response,
         const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS
     ) {
-        TProtoResponseHelper::SendProtoResponse(response, status, Request); 
+        TProtoResponseHelper::SendProtoResponse(response, status, Request);
         this->PassAway();
     }
 
@@ -69,8 +69,8 @@ protected:
     }
 
     void Reply(const Ydb::Operations::Operation& operation) {
-        Request->SendOperation(operation); 
-        this->PassAway(); 
+        Request->SendOperation(operation);
+        this->PassAway();
     }
 
     bool CheckAccess(const TString& path, TIntrusivePtr<TSecurityObject> securityObject, ui32 access) {

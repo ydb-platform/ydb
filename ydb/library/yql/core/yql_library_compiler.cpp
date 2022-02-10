@@ -92,11 +92,11 @@ bool CompileLibrary(const TString& alias, const TString& script, TExprContext& c
     const auto& res = ParseAst(script, nullptr, alias);
     if (!res.IsOk()) {
         for (const auto& originalError : res.Issues) {
-            TIssue error(originalError); 
+            TIssue error(originalError);
             TStringBuilder message;
             message << error.Message << " (at " << alias << ")";
             error.Message = message;
-            ctx.AddError(error); 
+            ctx.AddError(error);
         }
         return false;
     }
@@ -134,7 +134,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
 
             if (import.second.first == lib.first) {
                 ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()),
-                    TStringBuilder() << "Library '" << lib.first << "' tries to import itself.")); 
+                    TStringBuilder() << "Library '" << lib.first << "' tries to import itself."));
                 return false;
             }
 
@@ -149,7 +149,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
 
             if (!exportTable) {
                 ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()),
-                    TStringBuilder() << "Library '" << lib.first << "' has unresolved dependency from '" << import.second.first << "'.")); 
+                    TStringBuilder() << "Library '" << lib.first << "' has unresolved dependency from '" << import.second.first << "'."));
                 return false;
             }
 
@@ -157,7 +157,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
                 replaces[import.first] = externalModule ? ctxToClone.DeepCopy(*ex->second, exportTable->ExprCtx(), clones, true, false) : ex->second;
             } else {
                 ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()),
-                    TStringBuilder() << "Library '" << lib.first << "' has unresolved symbol '" << import.second.second << "' from '" << import.second.first << "'.")); 
+                    TStringBuilder() << "Library '" << lib.first << "' has unresolved symbol '" << import.second.second << "' from '" << import.second.first << "'."));
                 return false;
             }
         }
@@ -178,7 +178,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
             for (const auto& expo : lib.second.Exports.Symbols()) {
                 if (!ReplaceNodes(*expo.second, replaces, hasChanges)) {
                     ctx.AddError(TIssue(ctxToClone.GetPosition(expo.second->Pos()),
-                        TStringBuilder() << "Cross reference detected under '" << expo.first << "' in '" << lib.first << "'.")); 
+                        TStringBuilder() << "Cross reference detected under '" << expo.first << "' in '" << lib.first << "'."));
                     return false;
                 }
             }

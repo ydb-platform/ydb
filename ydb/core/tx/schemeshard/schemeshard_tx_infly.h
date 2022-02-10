@@ -75,7 +75,7 @@ struct TTxState {
         item(TxCreateExtSubDomain, 30) \
         item(TxMergeTablePartition, 31) \
         item(TxAlterExtSubDomain, 32) \
-        item(TxForceDropExtSubDomain, 33) \ 
+        item(TxForceDropExtSubDomain, 33) \
         item(TxFillIndex, 34) \
         item(TxUpgradeSubDomain, 35) \
         item(TxUpgradeSubDomainDecision, 36) \
@@ -304,7 +304,7 @@ struct TTxState {
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
         case TxCreateTableIndex:
-        case TxFillIndex: 
+        case TxFillIndex:
         case TxCreateCdcStream:
         case TxCreateSequence:
         case TxCreateReplication:
@@ -402,7 +402,7 @@ struct TTxState {
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
         case TxCreateTableIndex:
-        case TxFillIndex: 
+        case TxFillIndex:
         case TxCreateCdcStream:
         case TxCreateCdcStreamAtTable:
         case TxCreateSequence:
@@ -511,7 +511,7 @@ struct TTxState {
         case TxUpgradeSubDomain:
         case TxUpgradeSubDomainDecision:
         case TxAlterUserAttributes:
-        case TxFillIndex: 
+        case TxFillIndex:
         case TxAlterTableIndex:
         case TxAlterSolomonVolume:
         case TxAlterCdcStream:

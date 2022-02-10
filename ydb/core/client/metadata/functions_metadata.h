@@ -4,10 +4,10 @@
 
 namespace NKikimr {
 
-namespace NMiniKQL { 
-    class IBuiltinFunctionRegistry; 
-} 
- 
+namespace NMiniKQL {
+    class IBuiltinFunctionRegistry;
+}
+
 void SerializeMetadata(const NMiniKQL::IBuiltinFunctionRegistry& funcRegistry, TString* out);
 void DeserializeMetadata(TStringBuf buffer, NMiniKQL::IBuiltinFunctionRegistry& funcRegistry);
 

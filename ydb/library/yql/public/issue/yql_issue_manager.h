@@ -1,42 +1,42 @@
-#pragma once 
- 
+#pragma once
+
 #include "yql_issue.h"
 #include "yql_warning.h"
 
-#include <util/generic/maybe.h> 
-#include <util/generic/stack.h> 
+#include <util/generic/maybe.h>
+#include <util/generic/stack.h>
 #include <util/generic/hash_set.h>
- 
+
 #include <array>
- 
-namespace NYql { 
- 
-class TIssueManager: private TNonCopyable { 
-public: 
-    void AddScope(std::function<TIssuePtr()> fn); 
-    void LeaveScope(); 
-    void LeaveAllScopes(); 
-    void RaiseIssue(const TIssue& issue); 
+
+namespace NYql {
+
+class TIssueManager: private TNonCopyable {
+public:
+    void AddScope(std::function<TIssuePtr()> fn);
+    void LeaveScope();
+    void LeaveAllScopes();
+    void RaiseIssue(const TIssue& issue);
     void RaiseIssues(const TIssues& issues);
-    bool RaiseWarning(TIssue issue); 
-    void AddIssues(const TIssues& errors); 
-    void AddIssues(const TPosition& pos, const TIssues& issues); 
-    bool HasOpenScopes() const; 
- 
+    bool RaiseWarning(TIssue issue);
+    void AddIssues(const TIssues& errors);
+    void AddIssues(const TPosition& pos, const TIssues& issues);
+    bool HasOpenScopes() const;
+
     TIssues GetIssues();
     TIssues GetCompletedIssues() const;
- 
+
     void Reset(const TIssues& issues);
-    void Reset(); 
+    void Reset();
 
     void AddWarningRule(const TWarningRule &rule);
-    void SetWarningToErrorTreatMessage(const TString& msg); 
+    void SetWarningToErrorTreatMessage(const TString& msg);
 
     void SetIssueCountLimit(size_t limit) {
         IssueLimit_ = limit;
     }
 
-private: 
+private:
     TIssuePtr CheckUniqAndLimit(const TIssue& issue);
 
     struct TIssueHash {
@@ -50,26 +50,26 @@ private:
         }
     };
     TStack<std::pair<TMaybe<TIssuePtr>, std::function<TIssuePtr()>>> RawIssues_;
-    TIssues CompletedIssues_; 
-    TMaybe<TString> WarningToErrorTreatMessage_; 
+    TIssues CompletedIssues_;
+    TMaybe<TString> WarningToErrorTreatMessage_;
     TWarningPolicy WarningPolicy_;
     std::array<TIssuePtr, NYql::TSeverityIds::ESeverityId_ARRAYSIZE> OverflowIssues_;
     std::array<THashSet<TIssuePtr, TIssueHash, TIssueEqual>, NYql::TSeverityIds::ESeverityId_ARRAYSIZE> UniqueIssues_;
     size_t IssueLimit_ = 0;
-}; 
- 
-class TIssueScopeGuard: private TNonCopyable { 
-    TIssueManager& Manager_; 
-public: 
-    TIssueScopeGuard(TIssueManager& manager, std::function<TIssuePtr()> fn) 
-        : Manager_(manager) 
-    { 
-        Manager_.AddScope(fn); 
-    } 
-    ~TIssueScopeGuard() 
-    { 
-        Manager_.LeaveScope(); 
-    } 
-}; 
- 
-} 
+};
+
+class TIssueScopeGuard: private TNonCopyable {
+    TIssueManager& Manager_;
+public:
+    TIssueScopeGuard(TIssueManager& manager, std::function<TIssuePtr()> fn)
+        : Manager_(manager)
+    {
+        Manager_.AddScope(fn);
+    }
+    ~TIssueScopeGuard()
+    {
+        Manager_.LeaveScope();
+    }
+};
+
+}

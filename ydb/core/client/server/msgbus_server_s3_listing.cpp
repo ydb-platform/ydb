@@ -744,7 +744,7 @@ protected:
             if (!description.empty()) {
                 GrpcRequest->RaiseIssue(NYql::TIssue(description));
             }
-            GrpcRequest->ReplyWithYdbStatus(grpcStatus); 
+            GrpcRequest->ReplyWithYdbStatus(grpcStatus);
         } else {
             Ydb::S3Internal::S3ListingResult grpcResult = TMessageConverter::ConvertResult(msgbusResponse);
             GrpcRequest->SendResult(grpcResult, Ydb::StatusIds::SUCCESS);

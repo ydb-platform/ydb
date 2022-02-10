@@ -63,12 +63,12 @@ class TDqComputeActorBase : public NActors::TActorBootstrapped<TDerived>
                           , public IDqSourceActor::ICallbacks
                           , public IDqSinkActor::ICallbacks
 {
-protected: 
+protected:
     enum EEvWakeupTag : ui64 {
         TimeoutTag = 1,
-        PeriodicStatsTag = 2, 
-        RlSendAllowedTag = 101, 
-        RlNoResourceTag = 102, 
+        PeriodicStatsTag = 2,
+        RlSendAllowedTag = 101,
+        RlNoResourceTag = 102,
     };
 
 public:
@@ -85,13 +85,13 @@ public:
                 this->Schedule(*RuntimeSettings.Timeout, new NActors::TEvents::TEvWakeup(EEvWakeupTag::TimeoutTag));
             }
 
-            if (auto reportStatsSettings = RuntimeSettings.ReportStatsSettings) { 
-                if (reportStatsSettings->MaxInterval) { 
-                    CA_LOG_D("Set periodic stats " << reportStatsSettings->MaxInterval); 
+            if (auto reportStatsSettings = RuntimeSettings.ReportStatsSettings) {
+                if (reportStatsSettings->MaxInterval) {
+                    CA_LOG_D("Set periodic stats " << reportStatsSettings->MaxInterval);
                     this->Schedule(reportStatsSettings->MaxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
-                } 
-            } 
- 
+                }
+            }
+
             if (SayHelloOnBootstrap()) {
                 // say "Hello" to executer
                 auto ev = MakeHolder<TEvDqCompute::TEvState>();
@@ -245,7 +245,7 @@ protected:
         }
 
         auto now = TInstant::Now();
- 
+
         if (Y_UNLIKELY(ProfileStats)) {
             ProfileStats->MkqlMaxUsedMemory = std::max(ProfileStats->MkqlMaxUsedMemory, alloc->GetPeakAllocated());
             CA_LOG_D("Peak memory usage: " << ProfileStats->MkqlMaxUsedMemory);
@@ -827,8 +827,8 @@ protected:
     }
 
     void HandleExecuteBase(NActors::TEvents::TEvWakeup::TPtr& ev) {
-        auto tag = (EEvWakeupTag) ev->Get()->Tag; 
-        switch (tag) { 
+        auto tag = (EEvWakeupTag) ev->Get()->Tag;
+        switch (tag) {
             case EEvWakeupTag::TimeoutTag: {
                 auto abortEv = MakeHolder<TEvDq::TEvAbortExecution>(Ydb::StatusIds::TIMEOUT, TStringBuilder()
                     << "Timeout event from compute actor " << this->SelfId()
@@ -838,27 +838,27 @@ protected:
 
                 TerminateSources("timeout exceeded", false);
                 Terminate(false, "timeout exceeded");
-                break; 
+                break;
             }
-            case EEvWakeupTag::PeriodicStatsTag: { 
-                const auto maxInterval = RuntimeSettings.ReportStatsSettings->MaxInterval; 
+            case EEvWakeupTag::PeriodicStatsTag: {
+                const auto maxInterval = RuntimeSettings.ReportStatsSettings->MaxInterval;
                 this->Schedule(maxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
- 
+
                 auto now = NActors::TActivationContext::Now();
                 if (now - LastSendStatsTime >= maxInterval) {
                     ReportStats(now);
-                } 
-                break; 
-            } 
-            default: 
-                static_cast<TDerived*>(this)->HandleEvWakeup(tag); 
+                }
+                break;
+            }
+            default:
+                static_cast<TDerived*>(this)->HandleEvWakeup(tag);
         }
     }
 
-    void HandleEvWakeup(EEvWakeupTag tag) { 
-        CA_LOG_E("Unhandled wakeup tag " << (ui64)tag); 
-    } 
- 
+    void HandleEvWakeup(EEvWakeupTag tag) {
+        CA_LOG_E("Unhandled wakeup tag " << (ui64)tag);
+    }
+
     void HandleExecuteBase(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         ui32 lostEventType = ev->Get()->SourceType;
         switch (lostEventType) {
@@ -1099,10 +1099,10 @@ private:
     }
 
 protected:
-    const TMaybe<NDqProto::TRlPath>& GetRlPath() const { 
-        return RuntimeSettings.RlPath; 
-    } 
- 
+    const TMaybe<NDqProto::TRlPath>& GetRlPath() const {
+        return RuntimeSettings.RlPath;
+    }
+
     TTxId GetTxId() const {
         return TxId;
     }
@@ -1424,37 +1424,37 @@ private:
 
     void ReportStats(TInstant now) {
         if (!RuntimeSettings.ReportStatsSettings) {
-            return; 
+            return;
         }
- 
+
         if (now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) {
-            return; 
+            return;
         }
- 
+
         auto evState = std::make_unique<TEvDqCompute::TEvState>();
-        evState->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING); 
-        evState->Record.SetTaskId(Task.GetId()); 
+        evState->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
+        evState->Record.SetTaskId(Task.GetId());
         FillStats(evState->Record.MutableStats(), /* last */ false);
- 
-        auto dbgPrintStats = [&]() { 
-            NProtoBuf::TextFormat::Printer printer; 
-            printer.SetUseShortRepeatedPrimitives(true); 
-            printer.SetSingleLineMode(true); 
-            printer.SetUseUtf8StringEscaping(true); 
- 
-            TString result; 
-            printer.PrintToString(evState->Record.GetStats(), &result); 
-            return result; 
-        }; 
- 
-        CA_LOG_D("Send stats to executor actor " << ExecuterId << " TaskId: " << Task.GetId() 
-            << " Stats: " << dbgPrintStats()); 
- 
+
+        auto dbgPrintStats = [&]() {
+            NProtoBuf::TextFormat::Printer printer;
+            printer.SetUseShortRepeatedPrimitives(true);
+            printer.SetSingleLineMode(true);
+            printer.SetUseUtf8StringEscaping(true);
+
+            TString result;
+            printer.PrintToString(evState->Record.GetStats(), &result);
+            return result;
+        };
+
+        CA_LOG_D("Send stats to executor actor " << ExecuterId << " TaskId: " << Task.GetId()
+            << " Stats: " << dbgPrintStats());
+
         this->Send(ExecuterId, evState.release(), NActors::IEventHandle::FlagTrackDelivery);
- 
-        LastSendStatsTime = now; 
-    } 
- 
+
+        LastSendStatsTime = now;
+    }
+
 protected:
     const NActors::TActorId ExecuterId;
     const TTxId TxId;
@@ -1497,9 +1497,9 @@ protected:
     };
     TProcessOutputsState ProcessOutputsState;
 
-private: 
+private:
     bool Running = true;
-    TInstant LastSendStatsTime; 
+    TInstant LastSendStatsTime;
 };
 
 } // namespace NYql

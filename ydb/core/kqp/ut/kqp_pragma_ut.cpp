@@ -11,7 +11,7 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpPragma) {
     Y_UNIT_TEST(Static) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
+        auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
 
     Y_UNIT_TEST_NEW_ENGINE(Runtime) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
+        auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
 
     Y_UNIT_TEST_NEW_ENGINE(Auth) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
+        auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
 
     Y_UNIT_TEST(ResetPerQuery) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
+        auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(

@@ -12,7 +12,7 @@ namespace NYdb {
     class TUtf8Transcoder
     {
     public:
-        explicit TUtf8Transcoder() 
+        explicit TUtf8Transcoder()
         {
         };
 
@@ -82,7 +82,7 @@ namespace NYdb {
                     Buffer.push_back(((c & '\x03') << 6) | (str[i + 1] & '\x3F'));
                     i += 1;
                 } else {
-                    ThrowFatalError("Unicode symbols with codes greater than 255 are not supported."); 
+                    ThrowFatalError("Unicode symbols with codes greater than 255 are not supported.");
                 }
             }
             if (IsAscii) {
@@ -109,7 +109,7 @@ namespace NYdb {
 
     class TYdbToJsonConverter {
     public:
-        TYdbToJsonConverter(TValueParser& parser, NJsonWriter::TBuf& writer, EBinaryStringEncoding encoding) 
+        TYdbToJsonConverter(TValueParser& parser, NJsonWriter::TBuf& writer, EBinaryStringEncoding encoding)
             : Parser(parser)
             , Writer(writer)
             , Encoding(encoding)
@@ -196,7 +196,7 @@ namespace NYdb {
                 Writer.WriteString(Parser.GetDyNumber());
                 break;
             default:
-                ThrowFatalError(TStringBuilder() << "Unsupported primitive type: " << type); 
+                ThrowFatalError(TStringBuilder() << "Unsupported primitive type: " << type);
             }
         }
 
@@ -274,7 +274,7 @@ namespace NYdb {
                 break;
 
             default:
-                ThrowFatalError(TStringBuilder() << "Unsupported type kind: " << Parser.GetKind()); 
+                ThrowFatalError(TStringBuilder() << "Unsupported type kind: " << Parser.GetKind());
             }
         }
 
@@ -289,7 +289,7 @@ namespace NYdb {
                 str << Base64Encode(s);
                 break;
             default:
-                ThrowFatalError(TStringBuilder() << "Unknown binary string encode mode: " 
+                ThrowFatalError(TStringBuilder() << "Unknown binary string encode mode: "
                     << static_cast<size_t>(Encoding));
             }
             str << "\"";
@@ -305,47 +305,47 @@ namespace NYdb {
 }
 
 void FormatValueJson(const TValue& value, NJsonWriter::TBuf& writer,
-    EBinaryStringEncoding encoding) 
+    EBinaryStringEncoding encoding)
 {
     TValueParser typeParser(value);
-    TYdbToJsonConverter converter(typeParser, writer, encoding); 
+    TYdbToJsonConverter converter(typeParser, writer, encoding);
     converter.Convert();
 }
 
-TString FormatValueJson(const TValue& value, EBinaryStringEncoding encoding) 
+TString FormatValueJson(const TValue& value, EBinaryStringEncoding encoding)
 {
     TStringStream out;
     NJsonWriter::TBuf writer(NJsonWriter::HEM_UNSAFE, &out);
 
-    FormatValueJson(value, writer, encoding); 
+    FormatValueJson(value, writer, encoding);
 
     return out.Str();
 }
 
 void FormatResultRowJson(TResultSetParser& parser, const TVector<TColumn>& columns, NJsonWriter::TBuf& writer,
-    EBinaryStringEncoding encoding) 
+    EBinaryStringEncoding encoding)
 {
     writer.BeginObject();
     for (ui32 i = 0; i < columns.size(); ++i) {
         writer.WriteKey(columns[i].Name);
-        TYdbToJsonConverter converter(parser.ColumnParser(i), writer, encoding); 
+        TYdbToJsonConverter converter(parser.ColumnParser(i), writer, encoding);
         converter.Convert();
     }
     writer.EndObject();
 }
 
 TString FormatResultRowJson(TResultSetParser& parser, const TVector<TColumn>& columns,
-    EBinaryStringEncoding encoding) 
+    EBinaryStringEncoding encoding)
 {
     TStringStream out;
     NJsonWriter::TBuf writer(NJsonWriter::HEM_UNSAFE, &out);
 
-    FormatResultRowJson(parser, columns, writer, encoding); 
+    FormatResultRowJson(parser, columns, writer, encoding);
 
     return out.Str();
 }
 
-void FormatResultSetJson(const TResultSet& result, IOutputStream* out, EBinaryStringEncoding encoding) 
+void FormatResultSetJson(const TResultSet& result, IOutputStream* out, EBinaryStringEncoding encoding)
 {
     auto columns = result.GetColumnsMeta();
 
@@ -353,16 +353,16 @@ void FormatResultSetJson(const TResultSet& result, IOutputStream* out, EBinarySt
 
     while (parser.TryNextRow()) {
         NJsonWriter::TBuf writer(NJsonWriter::HEM_UNSAFE, out);
-        FormatResultRowJson(parser, columns, writer, encoding); 
+        FormatResultRowJson(parser, columns, writer, encoding);
         *out << Endl;
     }
 }
 
-TString FormatResultSetJson(const TResultSet& result, EBinaryStringEncoding encoding) 
+TString FormatResultSetJson(const TResultSet& result, EBinaryStringEncoding encoding)
 {
     TStringStream out;
 
-    FormatResultSetJson(result, &out, encoding); 
+    FormatResultSetJson(result, &out, encoding);
 
     return out.Str();
 }
@@ -371,7 +371,7 @@ namespace {
     class TJsonToYdbConverter {
     public:
         TJsonToYdbConverter(TValueBuilder& valueBuilder, const NJson::TJsonValue& jsonValue, TTypeParser& typeParser,
-                EBinaryStringEncoding encoding) 
+                EBinaryStringEncoding encoding)
             : ValueBuilder(valueBuilder)
             , JsonValue(jsonValue)
             , TypeParser(typeParser)
@@ -395,7 +395,7 @@ namespace {
                 EnsureType(jsonValue, NJson::JSON_INTEGER);
                 long long intValue = jsonValue.GetInteger();
                 if (intValue > std::numeric_limits<i8>::max() || intValue < std::numeric_limits<i8>::min()) {
-                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in Int8 type"); 
+                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in Int8 type");
                 }
                 ValueBuilder.Int8(intValue);
                 break;
@@ -405,7 +405,7 @@ namespace {
                 EnsureType(jsonValue, NJson::JSON_UINTEGER);
                 unsigned long long intValue = jsonValue.GetUInteger();
                 if (intValue > std::numeric_limits<ui8>::max() || intValue < std::numeric_limits<ui8>::min()) {
-                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in UInt8 type"); 
+                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in UInt8 type");
                 }
                 ValueBuilder.Uint8(intValue);
                 break;
@@ -415,7 +415,7 @@ namespace {
                 EnsureType(jsonValue, NJson::JSON_INTEGER);
                 long long intValue = jsonValue.GetInteger();
                 if (intValue > std::numeric_limits<i16>::max() || intValue < std::numeric_limits<i16>::min()) {
-                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in Int16 type"); 
+                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in Int16 type");
                 }
                 ValueBuilder.Int16(intValue);
                 break;
@@ -425,7 +425,7 @@ namespace {
                 EnsureType(jsonValue, NJson::JSON_UINTEGER);
                 unsigned long long intValue = jsonValue.GetUInteger();
                 if (intValue > std::numeric_limits<ui16>::max() || intValue < std::numeric_limits<ui16>::min()) {
-                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in UInt16 type"); 
+                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in UInt16 type");
                 }
                 ValueBuilder.Uint16(intValue);
                 break;
@@ -435,7 +435,7 @@ namespace {
                 EnsureType(jsonValue, NJson::JSON_INTEGER);
                 long long intValue = jsonValue.GetInteger();
                 if (intValue > std::numeric_limits<i32>::max() || intValue < std::numeric_limits<i32>::min()) {
-                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in Int32 type"); 
+                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in Int32 type");
                 }
                 ValueBuilder.Int32(intValue);
                 break;
@@ -445,7 +445,7 @@ namespace {
                 EnsureType(jsonValue, NJson::JSON_UINTEGER);
                 unsigned long long intValue = jsonValue.GetUInteger();
                 if (intValue > std::numeric_limits<ui32>::max() || intValue < std::numeric_limits<ui32>::min()) {
-                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in UInt32 type"); 
+                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in UInt32 type");
                 }
                 ValueBuilder.Uint32(intValue);
                 break;
@@ -455,7 +455,7 @@ namespace {
                 EnsureType(jsonValue, NJson::JSON_INTEGER);
                 long long intValue = jsonValue.GetInteger();
                 if (intValue > std::numeric_limits<i64>::max() || intValue < std::numeric_limits<i64>::min()) {
-                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in Int64 type"); 
+                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in Int64 type");
                 }
                 ValueBuilder.Int64(intValue);
                 break;
@@ -465,7 +465,7 @@ namespace {
                 EnsureType(jsonValue, NJson::JSON_UINTEGER);
                 unsigned long long intValue = jsonValue.GetUInteger();
                 if (intValue > std::numeric_limits<ui64>::max() || intValue < std::numeric_limits<ui64>::min()) {
-                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in UInt64 type"); 
+                    ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in UInt64 type");
                 }
                 ValueBuilder.Uint64(intValue);
                 break;
@@ -483,7 +483,7 @@ namespace {
                 EnsureType(jsonValue, NJson::JSON_STRING);
                 TInstant date;
                 if (!TInstant::TryParseIso8601(jsonValue.GetString(), date)) {
-                    ThrowFatalError(TStringBuilder() << "Can't parse date from string \"" << jsonValue.GetString() << "\""); 
+                    ThrowFatalError(TStringBuilder() << "Can't parse date from string \"" << jsonValue.GetString() << "\"");
                 }
                 ValueBuilder.Date(date);
                 break;
@@ -493,7 +493,7 @@ namespace {
                 EnsureType(jsonValue, NJson::JSON_STRING);
                 TInstant dateTime;
                 if (!TInstant::TryParseIso8601(jsonValue.GetString(), dateTime)) {
-                    ThrowFatalError(TStringBuilder() << "Can't parse dateTime from string \"" << jsonValue.GetString() << "\""); 
+                    ThrowFatalError(TStringBuilder() << "Can't parse dateTime from string \"" << jsonValue.GetString() << "\"");
                 }
                 ValueBuilder.Datetime(dateTime);
                 break;
@@ -503,7 +503,7 @@ namespace {
                 EnsureType(jsonValue, NJson::JSON_STRING);
                 TInstant timestamp;
                 if (!TInstant::TryParseIso8601(jsonValue.GetString(), timestamp)) {
-                    ThrowFatalError(TStringBuilder() << "Can't parse timestamp from string \"" << jsonValue.GetString() << "\""); 
+                    ThrowFatalError(TStringBuilder() << "Can't parse timestamp from string \"" << jsonValue.GetString() << "\"");
                 }
                 ValueBuilder.Timestamp(timestamp);
                 break;
@@ -549,7 +549,7 @@ namespace {
                 ValueBuilder.DyNumber(jsonValue.GetString());
                 break;
             default:
-                ThrowFatalError(TStringBuilder() << "Unsupported primitive type: " << type); 
+                ThrowFatalError(TStringBuilder() << "Unsupported primitive type: " << type);
             }
         }
 
@@ -608,7 +608,7 @@ namespace {
                 typeBuilder.EndDict();
                 break;
             default:
-                ThrowFatalError(TStringBuilder() << "Unsupported type kind: " << TypeParser.GetKind()); 
+                ThrowFatalError(TStringBuilder() << "Unsupported type kind: " << TypeParser.GetKind());
             }
         }
 
@@ -667,7 +667,7 @@ namespace {
                     const TString& memberName = TypeParser.GetMemberName();
                     const auto it = jsonMap.find(memberName);
                     if (it == jsonMap.end()) {
-                        ThrowFatalError(TStringBuilder() << "No member \"" << memberName 
+                        ThrowFatalError(TStringBuilder() << "No member \"" << memberName
                             << "\" in the map in json string for YDB struct type");
                     }
                     ValueBuilder.AddMember(memberName);
@@ -675,7 +675,7 @@ namespace {
                     ++counter;
                 }
                 if (counter != jsonMap.size()) {
-                    ThrowFatalError("Map in json string contains more members than YDB struct does"); 
+                    ThrowFatalError("Map in json string contains more members than YDB struct does");
                 }
 
                 ValueBuilder.EndStruct();
@@ -690,13 +690,13 @@ namespace {
 
                 for (const auto& element : jsonValue.GetArray()) {
                     if (!TypeParser.TryNextElement()) {
-                        ThrowFatalError("Tuple in json string should contain less elements than provided"); 
+                        ThrowFatalError("Tuple in json string should contain less elements than provided");
                     }
                     ValueBuilder.AddElement();
                     ParseValue(element);
                 }
                 if (TypeParser.TryNextElement()) {
-                    ThrowFatalError("Tuple in json string should contain more elements than provided"); 
+                    ThrowFatalError("Tuple in json string should contain more elements than provided");
                 }
 
                 ValueBuilder.EndTuple();
@@ -713,7 +713,7 @@ namespace {
                         EnsureType(keyValueElement, NJson::JSON_ARRAY);
                         const auto& keyValueArray = keyValueElement.GetArray();
                         if (keyValueArray.size() != 2) {
-                            ThrowFatalError("Each element of a dict type in YDB must be represented with " 
+                            ThrowFatalError("Each element of a dict type in YDB must be represented with "
                                 "exactly 2 elements in array in json string");
                         }
                         auto it = keyValueArray.begin();
@@ -741,7 +741,7 @@ namespace {
                 break;
 
             default:
-                ThrowFatalError(TStringBuilder() << "Unsupported type kind: " << TypeParser.GetKind()); 
+                ThrowFatalError(TStringBuilder() << "Unsupported type kind: " << TypeParser.GetKind());
             }
 
         }
@@ -756,7 +756,7 @@ namespace {
                 str << Base64Decode(s);
                 break;
             default:
-                ThrowFatalError("Unknown binary string encode mode"); 
+                ThrowFatalError("Unknown binary string encode mode");
                 break;
             }
             return str.Str();
@@ -771,7 +771,7 @@ namespace {
                 TStringStream str;
                 NJsonWriter::TBuf writer(NJsonWriter::HEM_UNSAFE, &str);
                 writer.WriteJsonValue(&value);
-                ThrowFatalError(TStringBuilder() << "Wrong type for json value \"" << str.Str() 
+                ThrowFatalError(TStringBuilder() << "Wrong type for json value \"" << str.Str()
                     << "\". Expected type: " << type << ", received type: " << value.GetType() << ". ");
             }
         }
@@ -785,26 +785,26 @@ namespace {
     };
 }
 
-TValue JsonToYdbValue(const TString& jsonString, const TType& type, EBinaryStringEncoding encoding) { 
+TValue JsonToYdbValue(const TString& jsonString, const TType& type, EBinaryStringEncoding encoding) {
     NJson::TJsonValue jsonValue;
 
     try {
         if (!NJson::ReadJsonTree(jsonString, &jsonValue, true)) {
-            ThrowFatalError(TStringBuilder() << "Can't parse string \"" << jsonString << "\" as json."); 
+            ThrowFatalError(TStringBuilder() << "Can't parse string \"" << jsonString << "\" as json.");
         }
     }
     catch (std::exception& e) {
-        ThrowFatalError( 
+        ThrowFatalError(
             TStringBuilder() << "Exception while parsing string \"" << jsonString << "\" as json: " << e.what());
     }
-    return JsonToYdbValue(jsonValue, type, encoding); 
+    return JsonToYdbValue(jsonValue, type, encoding);
 }
 
-TValue JsonToYdbValue(const NJson::TJsonValue& jsonValue, const TType& type, EBinaryStringEncoding encoding) { 
+TValue JsonToYdbValue(const NJson::TJsonValue& jsonValue, const TType& type, EBinaryStringEncoding encoding) {
     TValueBuilder builder;
     TTypeParser typeParser(type);
 
-    TJsonToYdbConverter converter(builder, jsonValue, typeParser, encoding); 
+    TJsonToYdbConverter converter(builder, jsonValue, typeParser, encoding);
     converter.Convert();
 
     return builder.Build();

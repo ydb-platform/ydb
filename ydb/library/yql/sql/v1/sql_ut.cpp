@@ -154,10 +154,10 @@ Y_UNIT_TEST_SUITE(AnsiMode) {
 }
 
 Y_UNIT_TEST_SUITE(SqlParsingOnly) {
-    Y_UNIT_TEST(CoverColumnName) { 
-        UNIT_ASSERT(SqlToYql("SELECT cover FROM plato.Input").IsOk()); 
-    } 
- 
+    Y_UNIT_TEST(CoverColumnName) {
+        UNIT_ASSERT(SqlToYql("SELECT cover FROM plato.Input").IsOk());
+    }
+
     Y_UNIT_TEST(TableHints) {
         UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input WITH INFER_SCHEMA").IsOk());
         UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input WITH (INFER_SCHEMA)").IsOk());
@@ -861,23 +861,23 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Kikimr.PushData"]);
     }
 
-    Y_UNIT_TEST(ProcessUserTypeAuth) { 
+    Y_UNIT_TEST(ProcessUserTypeAuth) {
         NYql::TAstParseResult res = SqlToYql("process plato.Input using YDB::PushData(TableRows(), AsTuple('oauth', SecureParam('api:oauth')));", 1, TString(NYql::KikimrProviderName));
-        UNIT_ASSERT(res.Root); 
- 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
-            if (word == "YDB.PushData") { 
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("TupleType")); 
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("TypeOf")); 
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("api:oauth")); 
-            } 
-        }; 
- 
-        TWordCountHive elementStat = {{TString("YDB.PushData"), 0}}; 
-        VerifyProgram(res, elementStat, verifyLine); 
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["YDB.PushData"]); 
-    } 
- 
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "YDB.PushData") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("TupleType"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("TypeOf"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("api:oauth"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("YDB.PushData"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["YDB.PushData"]);
+    }
+
     Y_UNIT_TEST(SelectStreamRtmr) {
         NYql::TAstParseResult res = SqlToYql(
             "USE plato; INSERT INTO Output SELECT STREAM key FROM Input;",

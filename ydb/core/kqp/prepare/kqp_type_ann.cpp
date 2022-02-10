@@ -23,17 +23,17 @@ const TTypeAnnotationNode* MakeKqpEffectType(TExprContext& ctx) {
     return ctx.MakeType<TResourceExprType>(KqpEffectTag);
 }
 
-bool CheckKeyTuple(const TKqlKeyTuple& tuple, const TKikimrTableDescription& tableDesc, 
-    const TKikimrTableMetadataPtr meta, TExprContext& ctx) 
-{ 
-    YQL_ENSURE(meta); 
+bool CheckKeyTuple(const TKqlKeyTuple& tuple, const TKikimrTableDescription& tableDesc,
+    const TKikimrTableMetadataPtr meta, TExprContext& ctx)
+{
+    YQL_ENSURE(meta);
 
     for (ui32 i = 0; i < tuple.ArgCount(); ++i) {
         auto actualType = tuple.Arg(i).Ref().GetTypeAnn();
         YQL_ENSURE(actualType);
 
-        YQL_ENSURE(i < meta->KeyColumnNames.size()); 
-        auto expectedType = tableDesc.GetColumnType(meta->KeyColumnNames[i]); 
+        YQL_ENSURE(i < meta->KeyColumnNames.size());
+        auto expectedType = tableDesc.GetColumnType(meta->KeyColumnNames[i]);
         YQL_ENSURE(expectedType);
 
         if (IsSameAnnotation(*expectedType, *actualType)) {
@@ -48,8 +48,8 @@ bool CheckKeyTuple(const TKqlKeyTuple& tuple, const TKikimrTableDescription& tab
 
         ctx.AddError(TIssue(ctx.GetPosition(tuple.Pos()), TStringBuilder()
             << "Table key type mismatch"
-            << ", column: " << meta->KeyColumnNames[i] 
-            << ", table: " << meta->Name 
+            << ", column: " << meta->KeyColumnNames[i]
+            << ", table: " << meta->Name
             << ", expected: " << *expectedType
             << ", actual: " << *actualType));
 
@@ -141,61 +141,61 @@ const TFlowExprType* GetWideRowsType(TExprContext& ctx, const TStructExprType* r
     return ctx.MakeType<TFlowExprType>(wideRowType);
 }
 
-bool CalcKeyColumnsCount(TExprContext& ctx, const TPositionHandle pos, const TStructExprType& structType, 
-    const TKikimrTableDescription& tableDesc, const TKikimrTableMetadata& metadata, ui32& keyColumnsCount) 
-{ 
-    for (auto& keyColumnName : metadata.KeyColumnNames) { 
-        auto itemIndex = structType.FindItem(keyColumnName); 
-        if (!itemIndex) { 
-            break; 
-        } 
- 
-        auto itemType = structType.GetItems()[*itemIndex]->GetItemType(); 
-        auto keyColumnType = tableDesc.GetColumnType(keyColumnName); 
- 
-        if (CanCompare<true>(itemType, keyColumnType) == ECompareOptions::Uncomparable) { 
-            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() 
-                << "Invalid column type in table lookup, column: " <<  keyColumnName 
-                << ", expected: " << FormatType(keyColumnType) 
-                << ", actual: " << FormatType(itemType))); 
-            return false; 
-        } 
- 
-        ++keyColumnsCount; 
-    } 
-    return true; 
-} 
- 
+bool CalcKeyColumnsCount(TExprContext& ctx, const TPositionHandle pos, const TStructExprType& structType,
+    const TKikimrTableDescription& tableDesc, const TKikimrTableMetadata& metadata, ui32& keyColumnsCount)
+{
+    for (auto& keyColumnName : metadata.KeyColumnNames) {
+        auto itemIndex = structType.FindItem(keyColumnName);
+        if (!itemIndex) {
+            break;
+        }
+
+        auto itemType = structType.GetItems()[*itemIndex]->GetItemType();
+        auto keyColumnType = tableDesc.GetColumnType(keyColumnName);
+
+        if (CanCompare<true>(itemType, keyColumnType) == ECompareOptions::Uncomparable) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                << "Invalid column type in table lookup, column: " <<  keyColumnName
+                << ", expected: " << FormatType(keyColumnType)
+                << ", actual: " << FormatType(itemType)));
+            return false;
+        }
+
+        ++keyColumnsCount;
+    }
+    return true;
+}
+
 TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
-    const bool readIndex = TKqlReadTableIndex::Match(node.Get()); 
-    if (readIndex && !EnsureArgsCount(*node, 5, ctx)) { 
+    const bool readIndex = TKqlReadTableIndex::Match(node.Get());
+    if (readIndex && !EnsureArgsCount(*node, 5, ctx)) {
         return TStatus::Error;
     }
 
     if (!readIndex && !EnsureArgsCount(*node, 4, ctx)) {
-        return TStatus::Error; 
-    } 
- 
+        return TStatus::Error;
+    }
+
     auto table = ResolveTable(node->Child(TKqlReadTableBase::idx_Table), ctx, cluster, tablesData);
     if (!table.second) {
         return TStatus::Error;
     }
 
-    YQL_ENSURE(table.second->Metadata, "Expected loaded metadata"); 
- 
-    TKikimrTableMetadataPtr meta; 
- 
-    if (readIndex) { 
-        meta = table.second->Metadata->GetIndexMetadata(TString(node->Child(TKqlReadTableIndex::idx_Index)->Content())).first; 
-        if (!meta) { 
-            return TStatus::Error; 
-        } 
-    } else { 
-        meta = table.second->Metadata; 
-    } 
- 
+    YQL_ENSURE(table.second->Metadata, "Expected loaded metadata");
+
+    TKikimrTableMetadataPtr meta;
+
+    if (readIndex) {
+        meta = table.second->Metadata->GetIndexMetadata(TString(node->Child(TKqlReadTableIndex::idx_Index)->Content())).first;
+        if (!meta) {
+            return TStatus::Error;
+        }
+    } else {
+        meta = table.second->Metadata;
+    }
+
     const auto& columns = node->ChildPtr(TKqlReadTableBase::idx_Columns);
     if (!EnsureTupleOfAtoms(*columns, ctx)) {
         return TStatus::Error;
@@ -213,15 +213,15 @@ TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const 
 
     TKqlKeyRange range{node->ChildPtr(TKqlReadTableBase::idx_Range)};
 
-    if (!CheckKeyTuple(range.From(), *table.second, meta, ctx)) { 
+    if (!CheckKeyTuple(range.From(), *table.second, meta, ctx)) {
         return TStatus::Error;
     }
 
-    if (!CheckKeyTuple(range.To(), *table.second, meta, ctx)) { 
+    if (!CheckKeyTuple(range.To(), *table.second, meta, ctx)) {
         return TStatus::Error;
     }
 
-    if (TKqlReadTable::Match(node.Get()) || TKqlReadTableIndex::Match(node.Get())) { 
+    if (TKqlReadTable::Match(node.Get()) || TKqlReadTableIndex::Match(node.Get())) {
         node->SetTypeAnn(ctx.MakeType<TListExprType>(rowType));
     } else if (TKqpReadTable::Match(node.Get())) {
         node->SetTypeAnn(ctx.MakeType<TFlowExprType>(rowType));
@@ -320,7 +320,7 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
 TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
-    if (!EnsureArgsCount(*node, TKqlLookupIndex::Match(node.Get()) ? 4 : 3, ctx)) { 
+    if (!EnsureArgsCount(*node, TKqlLookupIndex::Match(node.Get()) ? 4 : 3, ctx)) {
         return TStatus::Error;
     }
 
@@ -368,19 +368,19 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
     auto structType = lookupType->Cast<TStructExprType>();
 
     ui32 keyColumnsCount = 0;
-    if (TKqlLookupIndex::Match(node.Get())) { 
-        auto index = node->Child(TKqlLookupIndex::idx_Index); 
-        if (!EnsureAtom(*index, ctx)) { 
-            return TStatus::Error; 
+    if (TKqlLookupIndex::Match(node.Get())) {
+        auto index = node->Child(TKqlLookupIndex::idx_Index);
+        if (!EnsureAtom(*index, ctx)) {
+            return TStatus::Error;
         }
-        auto indexMeta = table.second->Metadata->GetIndexMetadata(TString(index->Content())).first; 
+        auto indexMeta = table.second->Metadata->GetIndexMetadata(TString(index->Content())).first;
 
-        if (!CalcKeyColumnsCount(ctx, node->Pos(), *structType, *table.second, *indexMeta, keyColumnsCount)) { 
-            return TStatus::Error; 
-        } 
+        if (!CalcKeyColumnsCount(ctx, node->Pos(), *structType, *table.second, *indexMeta, keyColumnsCount)) {
+            return TStatus::Error;
+        }
 
-    } else { 
-        if (!CalcKeyColumnsCount(ctx, node->Pos(), *structType, *table.second, *table.second->Metadata, keyColumnsCount)) { 
+    } else {
+        if (!CalcKeyColumnsCount(ctx, node->Pos(), *structType, *table.second, *table.second->Metadata, keyColumnsCount)) {
             return TStatus::Error;
         }
     }
@@ -496,9 +496,9 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     if (TKqlUpsertRowsIndex::Match(node.Get())) {
-        Y_ENSURE(!table.second->Metadata->SecondaryGlobalIndexMetadata.empty()); 
-    } 
- 
+        Y_ENSURE(!table.second->Metadata->SecondaryGlobalIndexMetadata.empty());
+    }
+
     auto effectType = MakeKqpEffectType(ctx);
     if (isStream) {
         node->SetTypeAnn(ctx.MakeType<TStreamExprType>(effectType));
@@ -661,7 +661,7 @@ TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const
         itemType = input->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
         isStream = true;
     } else {
-        YQL_ENSURE(TKqlDeleteRows::Match(node.Get()) || TKqlDeleteRowsIndex::Match(node.Get())); 
+        YQL_ENSURE(TKqlDeleteRows::Match(node.Get()) || TKqlDeleteRowsIndex::Match(node.Get()));
         if (!EnsureListType(*input, ctx)) {
             return TStatus::Error;
         }
@@ -1066,11 +1066,11 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateUpsertRows(input, ctx, cluster, *tablesData);
             }
 
-            if (TKqlInsertRowsBase::Match(input.Get())) { 
+            if (TKqlInsertRowsBase::Match(input.Get())) {
                 return AnnotateInsertRows(input, ctx, cluster, *tablesData);
             }
 
-            if (TKqlUpdateRowsBase::Match(input.Get())) { 
+            if (TKqlUpdateRowsBase::Match(input.Get())) {
                 return AnnotateUpdateRows(input, ctx, cluster, *tablesData);
             }
 

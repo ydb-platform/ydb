@@ -239,7 +239,7 @@ public:
         auto handlers = Viewer->GetVirtualHandlers(CurrentType, CurrentPath);
         for (const auto* handler : handlers) {
             if (handler->BrowseHandler) {
-                TActorId browseActor = ctx.RegisterWithSameMailbox(handler->BrowseHandler(ctx.SelfID, BrowseContext)); 
+                TActorId browseActor = ctx.RegisterWithSameMailbox(handler->BrowseHandler(ctx.SelfID, BrowseContext));
                 Handlers.insert(browseActor);
                 ++Requests;
             }
@@ -419,7 +419,7 @@ public:
         if (it != PipeClients.end()) {
             return it->second;
         }
-        TActorId pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, GetPipeClientConfig())); 
+        TActorId pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, GetPipeClientConfig()));
         return PipeClients.emplace(tabletId, pipeClient).first->second;
     }
 

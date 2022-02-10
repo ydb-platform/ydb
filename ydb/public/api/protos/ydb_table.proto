@@ -1,6 +1,6 @@
-syntax = "proto3"; 
-option cc_enable_arenas = true; 
- 
+syntax = "proto3";
+option cc_enable_arenas = true;
+
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
@@ -10,113 +10,113 @@ import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_scheme.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_formats.proto";
- 
+
 import "google/protobuf/empty.proto";
-import "google/protobuf/timestamp.proto"; 
- 
-package Ydb.Table; 
+import "google/protobuf/timestamp.proto";
+
+package Ydb.Table;
 option java_package = "com.yandex.ydb.table";
- 
-// Create new session 
-message CreateSessionRequest { 
+
+// Create new session
+message CreateSessionRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 }
- 
-// Create new session 
-message CreateSessionResponse { 
-    // Holds CreateSessionResult in case of CreateSessionResult 
-    Ydb.Operations.Operation operation = 1; 
+
+// Create new session
+message CreateSessionResponse {
+    // Holds CreateSessionResult in case of CreateSessionResult
+    Ydb.Operations.Operation operation = 1;
 }
- 
-message CreateSessionResult { 
+
+message CreateSessionResult {
     // Session identifier
-    string session_id = 1; 
+    string session_id = 1;
 }
- 
-// Delete session with given id string 
-message DeleteSessionRequest { 
+
+// Delete session with given id string
+message DeleteSessionRequest {
     // Session identifier
-    string session_id = 1; 
+    string session_id = 1;
     Ydb.Operations.OperationParams operation_params = 2;
 }
- 
-message DeleteSessionResponse { 
-    Ydb.Operations.Operation operation = 1; 
+
+message DeleteSessionResponse {
+    Ydb.Operations.Operation operation = 1;
 }
- 
-message GlobalIndex { 
+
+message GlobalIndex {
 }
- 
+
 message GlobalAsyncIndex {
 }
 
-// Represent secondary index 
-message TableIndex { 
-    // Name of index 
-    string name = 1; 
-    // list of columns 
-    repeated string index_columns = 2; 
-    // Type of index 
-    oneof type { 
-       GlobalIndex global_index = 3; 
+// Represent secondary index
+message TableIndex {
+    // Name of index
+    string name = 1;
+    // list of columns
+    repeated string index_columns = 2;
+    // Type of index
+    oneof type {
+       GlobalIndex global_index = 3;
        GlobalAsyncIndex global_async_index = 4;
-    } 
-    // list of columns content to be copied in to index table 
-    repeated string data_columns = 5; 
+    }
+    // list of columns content to be copied in to index table
+    repeated string data_columns = 5;
 }
- 
-// Represent secondary index with index state 
-message TableIndexDescription { 
-    enum Status { 
-        STATUS_UNSPECIFIED = 0; 
-        // Index is ready to use 
-        STATUS_READY = 1; 
-        // index is being built 
-        STATUS_BUILDING = 2; 
-    } 
-    // Name of index 
-    string name = 1; 
-    // list of columns 
-    repeated string index_columns = 2; 
-    // Type of index 
-    oneof type { 
-       GlobalIndex global_index = 3; 
+
+// Represent secondary index with index state
+message TableIndexDescription {
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+        // Index is ready to use
+        STATUS_READY = 1;
+        // index is being built
+        STATUS_BUILDING = 2;
+    }
+    // Name of index
+    string name = 1;
+    // list of columns
+    repeated string index_columns = 2;
+    // Type of index
+    oneof type {
+       GlobalIndex global_index = 3;
        GlobalAsyncIndex global_async_index = 5;
-    } 
-    Status status = 4; 
-    // list of columns content to be copied in to index table 
-    repeated string data_columns = 6; 
+    }
+    Status status = 4;
+    // list of columns content to be copied in to index table
+    repeated string data_columns = 6;
     // Size of index data in bytes
     uint64 size_bytes = 7;
-} 
- 
-// State of index building operation 
-message IndexBuildState { 
-    enum State { 
-        STATE_UNSPECIFIED = 0; 
-        STATE_PREPARING = 1; 
-        STATE_TRANSFERING_DATA = 2; 
-        STATE_APPLYING = 3; 
-        STATE_DONE = 4; 
-        STATE_CANCELLATION = 5; 
-        STATE_CANCELLED = 6; 
+}
+
+// State of index building operation
+message IndexBuildState {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_PREPARING = 1;
+        STATE_TRANSFERING_DATA = 2;
+        STATE_APPLYING = 3;
+        STATE_DONE = 4;
+        STATE_CANCELLATION = 5;
+        STATE_CANCELLED = 6;
         STATE_REJECTION = 7;
         STATE_REJECTED = 8;
-    } 
-} 
- 
-// Description of index building operation 
-message IndexBuildDescription { 
-    string path = 1; 
-    TableIndex index = 2; 
-} 
- 
-message IndexBuildMetadata { 
-    IndexBuildDescription description = 1; 
-    IndexBuildState.State state = 2; 
-    float progress = 3; 
-} 
- 
+    }
+}
+
+// Description of index building operation
+message IndexBuildDescription {
+    string path = 1;
+    TableIndex index = 2;
+}
+
+message IndexBuildMetadata {
+    IndexBuildDescription description = 1;
+    IndexBuildState.State state = 2;
+    float progress = 3;
+}
+
 message StoragePool {
     string media = 1;
 }
@@ -167,34 +167,34 @@ message ExplicitPartitions {
     repeated TypedValue split_points = 1;
 }
 
-message PartitionStats { 
-    // Approximate number of rows in shard 
-    uint64 rows_estimate = 1; 
-    // Approximate size of shard (bytes) 
-    uint64 store_size = 2; 
-} 
- 
-message TableStats { 
-    // Stats for each partition 
-    repeated PartitionStats partition_stats = 1; 
-    // Approximate number of rows in table 
-    uint64 rows_estimate = 2; 
-    // Approximate size of table (bytes) 
-    uint64 store_size = 3; 
-    // Number of partitions in table 
-    uint64 partitions = 4; 
-    // Timestamp of table creation 
-    google.protobuf.Timestamp creation_time = 5; 
-    // Timestamp of last modification 
-    google.protobuf.Timestamp modification_time = 6; 
-} 
- 
+message PartitionStats {
+    // Approximate number of rows in shard
+    uint64 rows_estimate = 1;
+    // Approximate size of shard (bytes)
+    uint64 store_size = 2;
+}
+
+message TableStats {
+    // Stats for each partition
+    repeated PartitionStats partition_stats = 1;
+    // Approximate number of rows in table
+    uint64 rows_estimate = 2;
+    // Approximate size of table (bytes)
+    uint64 store_size = 3;
+    // Number of partitions in table
+    uint64 partitions = 4;
+    // Timestamp of table creation
+    google.protobuf.Timestamp creation_time = 5;
+    // Timestamp of last modification
+    google.protobuf.Timestamp modification_time = 6;
+}
+
 message PartitioningPolicy {
     enum AutoPartitioningPolicy {
-        AUTO_PARTITIONING_POLICY_UNSPECIFIED = 0; 
-        DISABLED = 1; 
-        AUTO_SPLIT = 2; 
-        AUTO_SPLIT_MERGE = 3; 
+        AUTO_PARTITIONING_POLICY_UNSPECIFIED = 0;
+        DISABLED = 1;
+        AUTO_SPLIT = 2;
+        AUTO_SPLIT_MERGE = 3;
     }
 
     string preset_name = 1;
@@ -393,20 +393,20 @@ message ReadReplicasSettings {
     reserved 3; // cluster_replicas_settings (part of oneof settings)
 }
 
-message CreateTableRequest { 
+message CreateTableRequest {
     // Session identifier
-    string session_id = 1; 
-    // Full path 
-    string path = 2; 
-    // Columns (name, type) 
+    string session_id = 1;
+    // Full path
+    string path = 2;
+    // Columns (name, type)
     repeated ColumnMeta columns = 3;
-    // List of columns used as primary key 
-    repeated string primary_key = 4; 
-    // Table profile 
+    // List of columns used as primary key
+    repeated string primary_key = 4;
+    // Table profile
     TableProfile profile = 5;
     Ydb.Operations.OperationParams operation_params = 6;
-    // List of secondary indexes 
-    repeated TableIndex indexes = 7; 
+    // List of secondary indexes
+    repeated TableIndex indexes = 7;
     // Table rows time to live settings
     TtlSettings ttl_settings = 8;
     // Storage settings for table
@@ -432,35 +432,35 @@ message CreateTableRequest {
     // Read replicas settings for table
     ReadReplicasSettings read_replicas_settings = 17;
 }
- 
-message CreateTableResponse { 
-    Ydb.Operations.Operation operation = 1; 
+
+message CreateTableResponse {
+    Ydb.Operations.Operation operation = 1;
 }
- 
-// Drop table with given path 
-message DropTableRequest { 
+
+// Drop table with given path
+message DropTableRequest {
     // Session identifier
-    string session_id = 1; 
-    // Full path 
-    string path = 2; 
-    reserved 3; 
+    string session_id = 1;
+    // Full path
+    string path = 2;
+    reserved 3;
     Ydb.Operations.OperationParams operation_params = 4;
 }
- 
-message DropTableResponse { 
-    Ydb.Operations.Operation operation = 1; 
+
+message DropTableResponse {
+    Ydb.Operations.Operation operation = 1;
 }
- 
-// Alter table with given path 
-message AlterTableRequest { 
+
+// Alter table with given path
+message AlterTableRequest {
     // Session identifier
-    string session_id = 1; 
-    // Full path 
-    string path = 2; 
-    // Columns (name, type) to add 
+    string session_id = 1;
+    // Full path
+    string path = 2;
+    // Columns (name, type) to add
     repeated ColumnMeta add_columns = 3;
-    // Columns to remove 
-    repeated string drop_columns = 4; 
+    // Columns to remove
+    repeated string drop_columns = 4;
     Ydb.Operations.OperationParams operation_params = 5;
     // Columns to alter
     repeated ColumnMeta alter_columns = 6;
@@ -469,10 +469,10 @@ message AlterTableRequest {
         TtlSettings set_ttl_settings = 7;
         google.protobuf.Empty drop_ttl_settings = 8;
     }
-    // Add secondary indexes 
-    repeated TableIndex add_indexes = 9; 
-    // Remove secondary indexes 
-    repeated string drop_indexes = 10; 
+    // Add secondary indexes
+    repeated TableIndex add_indexes = 9;
+    // Remove secondary indexes
+    repeated string drop_indexes = 10;
     // Change table storage settings
     StorageSettings alter_storage_settings = 11;
     // Add/alter column families
@@ -491,26 +491,26 @@ message AlterTableRequest {
     // Set read replicas settings for table
     ReadReplicasSettings set_read_replicas_settings = 18;
 }
- 
-message AlterTableResponse { 
-    Ydb.Operations.Operation operation = 1; 
+
+message AlterTableResponse {
+    Ydb.Operations.Operation operation = 1;
 }
- 
-// Copy table with given path 
-message CopyTableRequest { 
+
+// Copy table with given path
+message CopyTableRequest {
     // Session identifier
-    string session_id = 1; 
-    // Copy from path 
-    string source_path = 2; 
-    // Copy to path 
-    string destination_path = 3; 
+    string session_id = 1;
+    // Copy from path
+    string source_path = 2;
+    // Copy to path
+    string destination_path = 3;
     Ydb.Operations.OperationParams operation_params = 4;
 }
- 
-message CopyTableResponse { 
-    Ydb.Operations.Operation operation = 1; 
+
+message CopyTableResponse {
+    Ydb.Operations.Operation operation = 1;
 }
- 
+
 message CopyTableItem {
     // Copy from path
     string source_path = 1;
@@ -555,39 +555,39 @@ message RenameTablesResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
-// Describe table with given path 
-message DescribeTableRequest { 
+// Describe table with given path
+message DescribeTableRequest {
     // Session identifier
-    string session_id = 1; 
-    // Full path 
-    string path = 2; 
+    string session_id = 1;
+    // Full path
+    string path = 2;
     Ydb.Operations.OperationParams operation_params = 4;
-    // Includes shard key distribution info 
-    bool include_shard_key_bounds = 5; 
-    // Includes table statistics 
-    bool include_table_stats = 6; 
-    // Includes partition statistics (required include_table_statistics) 
-    bool include_partition_stats = 7; 
+    // Includes shard key distribution info
+    bool include_shard_key_bounds = 5;
+    // Includes table statistics
+    bool include_table_stats = 6;
+    // Includes partition statistics (required include_table_statistics)
+    bool include_partition_stats = 7;
 }
- 
-message DescribeTableResponse { 
-    // Holds DescribeTableResult in case of successful call 
-    Ydb.Operations.Operation operation = 1; 
+
+message DescribeTableResponse {
+    // Holds DescribeTableResult in case of successful call
+    Ydb.Operations.Operation operation = 1;
 }
- 
-message DescribeTableResult { 
-    // Description of scheme object 
-    Ydb.Scheme.Entry self = 1; 
-    // List of columns 
+
+message DescribeTableResult {
+    // Description of scheme object
+    Ydb.Scheme.Entry self = 1;
+    // List of columns
     repeated ColumnMeta columns = 2;
-    // List of primary key columns 
-    repeated string primary_key = 3; 
-    // List of key ranges for shard 
-    repeated TypedValue shard_key_bounds = 4; 
-    // List of indexes 
-    repeated TableIndexDescription indexes = 5; 
-    // Statistics of table 
-    TableStats table_stats = 6; 
+    // List of primary key columns
+    repeated string primary_key = 3;
+    // List of key ranges for shard
+    repeated TypedValue shard_key_bounds = 4;
+    // List of indexes
+    repeated TableIndexDescription indexes = 5;
+    // Statistics of table
+    TableStats table_stats = 6;
     // TTL params
     TtlSettings ttl_settings = 7;
     // Storage settings for table
@@ -605,13 +605,13 @@ message DescribeTableResult {
     // Read replicas settings for table
     ReadReplicasSettings read_replicas_settings = 14;
 }
- 
+
 message Query {
-    // Text of query or id prepared query 
+    // Text of query or id prepared query
     oneof query {
-        // SQL program 
+        // SQL program
         string yql_text = 1;
-        // Prepared query id 
+        // Prepared query id
         string id = 2;
     }
 }
@@ -662,46 +662,46 @@ message ExecuteDataQueryRequest {
     string session_id = 1;
     TransactionControl tx_control = 2;
     Query query = 3;
-    // Map of query parameters (optional) 
-    map<string, TypedValue> parameters = 4; 
+    // Map of query parameters (optional)
+    map<string, TypedValue> parameters = 4;
     QueryCachePolicy query_cache_policy = 5;
     Ydb.Operations.OperationParams operation_params = 6;
     QueryStatsCollection.Mode collect_stats = 7;
 }
 
 message ExecuteDataQueryResponse {
-    Ydb.Operations.Operation operation = 1; 
+    Ydb.Operations.Operation operation = 1;
 }
 
 message ExecuteSchemeQueryRequest {
     // Session identifier
     string session_id = 1;
-    // SQL text 
+    // SQL text
     string yql_text = 2;
     Ydb.Operations.OperationParams operation_params = 3;
 }
 
 message ExecuteSchemeQueryResponse {
-    Ydb.Operations.Operation operation = 1; 
+    Ydb.Operations.Operation operation = 1;
 }
 
-// Holds transaction id 
+// Holds transaction id
 message TransactionMeta {
     // Transaction identifier
     string id = 1;
 }
 
-// Holds query id and type of parameters 
+// Holds query id and type of parameters
 message QueryMeta {
     // Query identifier
     string id = 1;
-    // Type of parameters 
+    // Type of parameters
     map<string, Type> parameters_types = 2;
 }
 
-// One QueryResult can contain multiple tables 
-message ExecuteQueryResult { 
-    // Result rets (for each table) 
+// One QueryResult can contain multiple tables
+message ExecuteQueryResult {
+    // Result rets (for each table)
     repeated Ydb.ResultSet result_sets = 1;
     // Transaction metadata
     TransactionMeta tx_meta = 2;
@@ -710,58 +710,58 @@ message ExecuteQueryResult {
     // Query execution statistics
     Ydb.TableStats.QueryStats query_stats = 4;
 }
- 
-// Explain data query 
+
+// Explain data query
 message ExplainDataQueryRequest {
     // Session identifier
     string session_id = 1;
-    // SQL text to explain 
+    // SQL text to explain
     string yql_text = 2;
     Ydb.Operations.OperationParams operation_params = 3;
 }
 
 message ExplainDataQueryResponse {
-    // Holds ExplainQueryResult in case of successful call 
-    Ydb.Operations.Operation operation = 1; 
+    // Holds ExplainQueryResult in case of successful call
+    Ydb.Operations.Operation operation = 1;
 }
 
-message ExplainQueryResult { 
-    string query_ast = 1; 
-    string query_plan = 2; 
+message ExplainQueryResult {
+    string query_ast = 1;
+    string query_plan = 2;
 }
- 
-// Prepare given program to execute 
+
+// Prepare given program to execute
 message PrepareDataQueryRequest {
     // Session identifier
     string session_id = 1;
-    // SQL text 
+    // SQL text
     string yql_text = 2;
     Ydb.Operations.OperationParams operation_params = 3;
 }
 
 message PrepareDataQueryResponse {
-    // Holds PrepareQueryResult in case of successful call 
-    Ydb.Operations.Operation operation = 1; 
+    // Holds PrepareQueryResult in case of successful call
+    Ydb.Operations.Operation operation = 1;
 }
 
-message PrepareQueryResult { 
-    // Query id, used to perform ExecuteDataQuery 
-    string query_id = 1; 
-    // Parameters type, used to fill in parameter values 
+message PrepareQueryResult {
+    // Query id, used to perform ExecuteDataQuery
+    string query_id = 1;
+    // Parameters type, used to fill in parameter values
     map<string, Type> parameters_types = 2;
 }
- 
-// Keep session alive 
-message KeepAliveRequest { 
+
+// Keep session alive
+message KeepAliveRequest {
     // Session identifier
-    string session_id = 1; 
+    string session_id = 1;
     Ydb.Operations.OperationParams operation_params = 2;
 }
- 
-message KeepAliveResponse { 
-    Ydb.Operations.Operation operation = 1; 
+
+message KeepAliveResponse {
+    Ydb.Operations.Operation operation = 1;
 }
- 
+
 message KeepAliveResult {
     enum SessionStatus {
         SESSION_STATUS_UNSPECIFIED = 0;
@@ -772,7 +772,7 @@ message KeepAliveResult {
     SessionStatus session_status = 1;
 }
 
-// Begin transaction on given session with given settings 
+// Begin transaction on given session with given settings
 message BeginTransactionRequest {
     // Session identifier
     string session_id = 1;
@@ -781,15 +781,15 @@ message BeginTransactionRequest {
 }
 
 message BeginTransactionResponse {
-    // Holds BeginTransactionResult in case of successful call 
-    Ydb.Operations.Operation operation = 1; 
+    // Holds BeginTransactionResult in case of successful call
+    Ydb.Operations.Operation operation = 1;
 }
 
 message BeginTransactionResult {
     TransactionMeta tx_meta = 1;
 }
 
-// Commit transaction with given session and tx id 
+// Commit transaction with given session and tx id
 message CommitTransactionRequest {
     // Session identifier
     string session_id = 1;
@@ -800,14 +800,14 @@ message CommitTransactionRequest {
 }
 
 message CommitTransactionResponse {
-    Ydb.Operations.Operation operation = 1; 
+    Ydb.Operations.Operation operation = 1;
 }
 
 message CommitTransactionResult {
     Ydb.TableStats.QueryStats query_stats = 1;
 }
 
-// Rollback transaction with given session and tx id 
+// Rollback transaction with given session and tx id
 message RollbackTransactionRequest {
     // Session identifier
     string session_id = 1;
@@ -817,7 +817,7 @@ message RollbackTransactionRequest {
 }
 
 message RollbackTransactionResponse {
-    Ydb.Operations.Operation operation = 1; 
+    Ydb.Operations.Operation operation = 1;
 }
 
 message StoragePolicyDescription {
@@ -885,58 +885,58 @@ message DescribeTableOptionsResult {
     repeated ReplicationPolicyDescription replication_policy_presets = 6;
     repeated CachingPolicyDescription caching_policy_presets = 7;
 }
- 
-// ReadTable request/response 
- 
-message KeyRange { 
-    // Left border 
-    oneof from_bound { 
+
+// ReadTable request/response
+
+message KeyRange {
+    // Left border
+    oneof from_bound {
         // Specify if we don't want to include given key
-        TypedValue greater = 1; 
-        // Specify if we want to include given key 
-        TypedValue greater_or_equal = 2; 
-    } 
- 
-    // Right border 
-    oneof to_bound { 
+        TypedValue greater = 1;
+        // Specify if we want to include given key
+        TypedValue greater_or_equal = 2;
+    }
+
+    // Right border
+    oneof to_bound {
         // Specify if we don't want to include given key
-        TypedValue less = 3; 
-        // Specify if we want to include given key 
-        TypedValue less_or_equal = 4; 
-    } 
+        TypedValue less = 3;
+        // Specify if we want to include given key
+        TypedValue less_or_equal = 4;
+    }
 }
- 
-// Request to read table (without SQL) 
-message ReadTableRequest { 
+
+// Request to read table (without SQL)
+message ReadTableRequest {
     // Session identifier
-    string session_id = 1; 
-    // Path to table to read 
-    string path = 2; 
-    // Primary key range to read 
-    KeyRange key_range = 3; 
-    // Output columns 
-    repeated string columns = 4; 
-    // Require ordered reading 
-    bool ordered = 5; 
-    // Limits row count to read 
-    uint64 row_limit = 6; 
+    string session_id = 1;
+    // Path to table to read
+    string path = 2;
+    // Primary key range to read
+    KeyRange key_range = 3;
+    // Output columns
+    repeated string columns = 4;
+    // Require ordered reading
+    bool ordered = 5;
+    // Limits row count to read
+    uint64 row_limit = 6;
     // Use a server-side snapshot
     Ydb.FeatureFlag.Status use_snapshot = 7;
 }
- 
-// ReadTable doesn't use Operation, returns result directly 
-message ReadTableResponse { 
-    // Status of request (same as other statuses) 
-    StatusIds.StatusCode status = 1; 
-    // Issues 
-    repeated Ydb.Issue.IssueMessage issues = 2; 
-    // Read table result 
-    ReadTableResult result = 3; 
+
+// ReadTable doesn't use Operation, returns result directly
+message ReadTableResponse {
+    // Status of request (same as other statuses)
+    StatusIds.StatusCode status = 1;
+    // Issues
+    repeated Ydb.Issue.IssueMessage issues = 2;
+    // Read table result
+    ReadTableResult result = 3;
 }
- 
-// Result of read table request 
-message ReadTableResult { 
-    // Result set (same as result of sql request) 
+
+// Result of read table request
+message ReadTableResult {
+    // Result set (same as result of sql request)
     Ydb.ResultSet result_set = 1;
 }
 

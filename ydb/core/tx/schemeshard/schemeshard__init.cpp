@@ -1063,9 +1063,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui64, TString> TTableIndexColRec; 
-    typedef TDeque<TTableIndexColRec> TTableIndexKeyRows; 
-    typedef TDeque<TTableIndexColRec> TTableIndexDataRows; 
+    typedef std::tuple<TPathId, ui64, TString> TTableIndexColRec;
+    typedef TDeque<TTableIndexColRec> TTableIndexKeyRows;
+    typedef TDeque<TTableIndexColRec> TTableIndexDataRows;
 
     bool LoadTableIndexeKeys(NIceDb::TNiceDb& db, TTableIndexKeyRows& tableIndexKeys) const {
         {
@@ -1110,26 +1110,26 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    bool LoadTableIndexDataColumns(NIceDb::TNiceDb& db, TTableIndexDataRows& tableIndexData) const { 
-        auto rowSet = db.Table<Schema::TableIndexDataColumns>().Range().Select(); 
-        if (!rowSet.IsReady()) { 
-            return false; 
-        } 
- 
-        while (!rowSet.EndOfSet()) { 
-            auto pathId = TPathId(rowSet.GetValue<Schema::TableIndexDataColumns::PathOwnerId>(), 
-                                  rowSet.GetValue<Schema::TableIndexDataColumns::PathLocalId>()); 
-            auto id = rowSet.GetValue<Schema::TableIndexDataColumns::DataColumnId>(); 
-            auto name = rowSet.GetValue<Schema::TableIndexDataColumns::DataColumnName>(); 
- 
-            tableIndexData.emplace_back(pathId, id, name); 
-            if (!rowSet.Next()) { 
-                return false; 
-            } 
-        } 
-        return true; 
-    } 
- 
+    bool LoadTableIndexDataColumns(NIceDb::TNiceDb& db, TTableIndexDataRows& tableIndexData) const {
+        auto rowSet = db.Table<Schema::TableIndexDataColumns>().Range().Select();
+        if (!rowSet.IsReady()) {
+            return false;
+        }
+
+        while (!rowSet.EndOfSet()) {
+            auto pathId = TPathId(rowSet.GetValue<Schema::TableIndexDataColumns::PathOwnerId>(),
+                                  rowSet.GetValue<Schema::TableIndexDataColumns::PathLocalId>());
+            auto id = rowSet.GetValue<Schema::TableIndexDataColumns::DataColumnId>();
+            auto name = rowSet.GetValue<Schema::TableIndexDataColumns::DataColumnName>();
+
+            tableIndexData.emplace_back(pathId, id, name);
+            if (!rowSet.Next()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     typedef std::tuple<TShardIdx, ui32, TString, TString> TChannelBindingRec;
     typedef TDeque<TChannelBindingRec> TChannelBindingRows;
 
@@ -2582,21 +2582,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         {
 
             TTableIndexKeyRows indexKeys;
-            TTableIndexDataRows indexData; 
+            TTableIndexDataRows indexData;
             if (!LoadTableIndexeKeys(db, indexKeys)) {
                 return false;
             }
 
-            if (!LoadTableIndexDataColumns(db, indexData)) { 
-                return false; 
-            } 
- 
+            if (!LoadTableIndexDataColumns(db, indexData)) {
+                return false;
+            }
+
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for TableIndexKeys"
                              << ", readed records: " << indexKeys.size()
                              << ", at schemeshard: " << Self->TabletID());
 
-            for (const auto& rec: indexKeys) { 
+            for (const auto& rec: indexKeys) {
                 TPathId pathId = std::get<0>(rec);
                 ui32 keyId = std::get<1>(rec);
                 TString keyName = std::get<2>(rec);
@@ -2612,35 +2612,35 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 tableIndex->IndexKeys.emplace_back(keyName);
             }
 
-            // See KIKIMR-13300 and restore VERIFY after at least one restart 
-            TVector<std::pair<TPathId, ui32>> leakedDataColumns; 
-            for (const auto& rec: indexData) { 
-                TPathId pathId = std::get<0>(rec); 
-                ui32 dataId = std::get<1>(rec); 
-                TString dataName = std::get<2>(rec); 
- 
-                if (Self->PathsById.contains(pathId)) { 
-                    TPathElement::TPtr path = Self->PathsById.at(pathId); 
-                    Y_VERIFY_S(path->IsTableIndex(), "Path is not a table index, pathId: " << pathId); 
- 
-                    if (Self->Indexes.contains(pathId)) { 
-                        auto tableIndex = Self->Indexes.at(pathId); 
- 
-                        Y_VERIFY(dataId == tableIndex->IndexDataColumns.size()); 
-                        tableIndex->IndexDataColumns.emplace_back(dataName); 
-                    } else { 
-                        leakedDataColumns.emplace_back(pathId, dataId); 
-                    } 
-                } else { 
-                    leakedDataColumns.emplace_back(pathId, dataId); 
-                } 
-            } 
- 
-            for (const auto& pair : leakedDataColumns) { 
-                db.Table<Schema::TableIndexDataColumns>().Key(pair.first.OwnerId, pair.first.LocalPathId, pair.second).Delete(); 
-            } 
-            leakedDataColumns.clear(); 
- 
+            // See KIKIMR-13300 and restore VERIFY after at least one restart
+            TVector<std::pair<TPathId, ui32>> leakedDataColumns;
+            for (const auto& rec: indexData) {
+                TPathId pathId = std::get<0>(rec);
+                ui32 dataId = std::get<1>(rec);
+                TString dataName = std::get<2>(rec);
+
+                if (Self->PathsById.contains(pathId)) {
+                    TPathElement::TPtr path = Self->PathsById.at(pathId);
+                    Y_VERIFY_S(path->IsTableIndex(), "Path is not a table index, pathId: " << pathId);
+
+                    if (Self->Indexes.contains(pathId)) {
+                        auto tableIndex = Self->Indexes.at(pathId);
+
+                        Y_VERIFY(dataId == tableIndex->IndexDataColumns.size());
+                        tableIndex->IndexDataColumns.emplace_back(dataName);
+                    } else {
+                        leakedDataColumns.emplace_back(pathId, dataId);
+                    }
+                } else {
+                    leakedDataColumns.emplace_back(pathId, dataId);
+                }
+            }
+
+            for (const auto& pair : leakedDataColumns) {
+                db.Table<Schema::TableIndexDataColumns>().Key(pair.first.OwnerId, pair.first.LocalPathId, pair.second).Delete();
+            }
+            leakedDataColumns.clear();
+
             // Read TableIndexKeysAlterData
             {
                 auto rowset = db.Table<Schema::TableIndexKeysAlterData>().Range().Select();
@@ -2672,49 +2672,49 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         return false;
                 }
             }
- 
-            // Read TableIndexDataColumnsAlterData 
-            { 
-                TVector<std::pair<TPathId, ui32>> leakedDataColumnsAlterData; 
-                auto rowset = db.Table<Schema::TableIndexDataColumnsAlterData>().Range().Select(); 
-                if (!rowset.IsReady()) 
-                    return false; 
- 
-                while (!rowset.EndOfSet()) { 
-                    TOwnerId ownerId = rowset.GetValue<Schema::TableIndexDataColumnsAlterData::PathOwnerId>(); 
-                    TLocalPathId localPathId = rowset.GetValue<Schema::TableIndexDataColumnsAlterData::PathLocalId>(); 
-                    TPathId pathId(ownerId, localPathId); 
- 
-                    ui32 dataColId = rowset.GetValue<Schema::TableIndexDataColumnsAlterData::DataColumnId>(); 
-                    TString dataColName = rowset.GetValue<Schema::TableIndexDataColumnsAlterData::DataColumnName>(); 
- 
-                    if (Self->PathsById.contains(pathId)) { 
-                        TPathElement::TPtr path = Self->PathsById.at(pathId); 
-                        Y_VERIFY_S(path->IsTableIndex(), "Path is not a table index, pathId: " << pathId); 
- 
-                        if (Self->Indexes.contains(pathId)) { 
-                            auto tableIndex = Self->Indexes.at(pathId); 
- 
-                            Y_VERIFY(tableIndex->AlterData != nullptr); 
-                            auto alterData = tableIndex->AlterData; 
-                            Y_VERIFY(tableIndex->AlterVersion < alterData->AlterVersion); 
- 
-                            Y_VERIFY(dataColId == alterData->IndexDataColumns.size()); 
-                            alterData->IndexDataColumns.emplace_back(dataColName); 
-                        } else { 
+
+            // Read TableIndexDataColumnsAlterData
+            {
+                TVector<std::pair<TPathId, ui32>> leakedDataColumnsAlterData;
+                auto rowset = db.Table<Schema::TableIndexDataColumnsAlterData>().Range().Select();
+                if (!rowset.IsReady())
+                    return false;
+
+                while (!rowset.EndOfSet()) {
+                    TOwnerId ownerId = rowset.GetValue<Schema::TableIndexDataColumnsAlterData::PathOwnerId>();
+                    TLocalPathId localPathId = rowset.GetValue<Schema::TableIndexDataColumnsAlterData::PathLocalId>();
+                    TPathId pathId(ownerId, localPathId);
+
+                    ui32 dataColId = rowset.GetValue<Schema::TableIndexDataColumnsAlterData::DataColumnId>();
+                    TString dataColName = rowset.GetValue<Schema::TableIndexDataColumnsAlterData::DataColumnName>();
+
+                    if (Self->PathsById.contains(pathId)) {
+                        TPathElement::TPtr path = Self->PathsById.at(pathId);
+                        Y_VERIFY_S(path->IsTableIndex(), "Path is not a table index, pathId: " << pathId);
+
+                        if (Self->Indexes.contains(pathId)) {
+                            auto tableIndex = Self->Indexes.at(pathId);
+
+                            Y_VERIFY(tableIndex->AlterData != nullptr);
+                            auto alterData = tableIndex->AlterData;
+                            Y_VERIFY(tableIndex->AlterVersion < alterData->AlterVersion);
+
+                            Y_VERIFY(dataColId == alterData->IndexDataColumns.size());
+                            alterData->IndexDataColumns.emplace_back(dataColName);
+                        } else {
                            leakedDataColumnsAlterData.emplace_back(pathId, dataColId);
-                        } 
-                    } else { 
+                        }
+                    } else {
                        leakedDataColumnsAlterData.emplace_back(pathId, dataColId);
-                    } 
- 
-                    if (!rowset.Next()) 
-                        return false; 
-                } 
-                for (const auto& pair : leakedDataColumnsAlterData) { 
-                    db.Table<Schema::TableIndexDataColumnsAlterData>().Key(pair.first.OwnerId, pair.first.LocalPathId, pair.second).Delete(); 
-                } 
-            } 
+                    }
+
+                    if (!rowset.Next())
+                        return false;
+                }
+                for (const auto& pair : leakedDataColumnsAlterData) {
+                    db.Table<Schema::TableIndexDataColumnsAlterData>().Key(pair.first.OwnerId, pair.first.LocalPathId, pair.second).Delete();
+                }
+            }
         }
 
         // Read CdcStream
@@ -2887,7 +2887,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
                 volume->AlterVersion = rowset.GetValue<Schema::BlockStoreVolumes::AlterVersion>();
                 volume->MountToken = rowset.GetValue<Schema::BlockStoreVolumes::MountToken>();
-                volume->TokenVersion = rowset.GetValue<Schema::BlockStoreVolumes::TokenVersion>(); 
+                volume->TokenVersion = rowset.GetValue<Schema::BlockStoreVolumes::TokenVersion>();
                 Self->BlockStoreVolumes[pathId] = volume;
                 Self->IncrementPathDbRefCount(pathId);
 
@@ -4145,27 +4145,27 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(id);
 
-                    TString columnName = rowset.GetValue<Schema::IndexBuildColumns::ColumnName>(); 
-                    EIndexColumnKind columnKind = rowset.GetValueOrDefault<Schema::IndexBuildColumns::ColumnKind>(EIndexColumnKind::KeyColumn); 
+                    TString columnName = rowset.GetValue<Schema::IndexBuildColumns::ColumnName>();
+                    EIndexColumnKind columnKind = rowset.GetValueOrDefault<Schema::IndexBuildColumns::ColumnKind>(EIndexColumnKind::KeyColumn);
                     ui32 columnNo = rowset.GetValue<Schema::IndexBuildColumns::ColumnNo>();
 
-                    Y_VERIFY_S(columnNo == (buildInfo->IndexColumns.size() + buildInfo->DataColumns.size()), 
-                               "Unexpected non contiguous column number# " << columnNo << 
-                               " indexColumns# " << buildInfo->IndexColumns.size() << 
-                               " dataColumns# " << buildInfo->DataColumns.size()); 
+                    Y_VERIFY_S(columnNo == (buildInfo->IndexColumns.size() + buildInfo->DataColumns.size()),
+                               "Unexpected non contiguous column number# " << columnNo <<
+                               " indexColumns# " << buildInfo->IndexColumns.size() <<
+                               " dataColumns# " << buildInfo->DataColumns.size());
 
-                    switch (columnKind) { 
-                        case EIndexColumnKind::KeyColumn: 
-                            buildInfo->IndexColumns.push_back(columnName); 
-                        break; 
-                        case EIndexColumnKind::DataColumn: 
-                            buildInfo->DataColumns.push_back(columnName); 
-                        break; 
-                        default: 
-                            Y_FAIL_S("Unknown column kind# " << (int)columnKind); 
-                        break; 
-                    } 
- 
+                    switch (columnKind) {
+                        case EIndexColumnKind::KeyColumn:
+                            buildInfo->IndexColumns.push_back(columnName);
+                        break;
+                        case EIndexColumnKind::DataColumn:
+                            buildInfo->DataColumns.push_back(columnName);
+                        break;
+                        default:
+                            Y_FAIL_S("Unknown column kind# " << (int)columnKind);
+                        break;
+                    }
+
                     if (!rowset.Next()) {
                         return false;
                     }

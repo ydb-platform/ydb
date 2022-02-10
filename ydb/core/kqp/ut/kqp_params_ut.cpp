@@ -9,7 +9,7 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpParams) {
     Y_UNIT_TEST_NEW_ENGINE(RowsList) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient(); 
+        auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto query = session.PrepareDataQuery(Q1_(R"(

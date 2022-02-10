@@ -125,11 +125,11 @@ TStatus RemoveDirectoryRecursive(
                 break;
             }
             default:
-                return TStatus(EStatus::BAD_REQUEST, {}); 
+                return TStatus(EStatus::BAD_REQUEST, {});
         }
     }
 
-    return TStatus(EStatus::SUCCESS, {}); 
+    return TStatus(EStatus::SUCCESS, {});
 }
 
 } // NDump

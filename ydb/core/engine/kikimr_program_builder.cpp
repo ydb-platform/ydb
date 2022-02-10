@@ -57,7 +57,7 @@ TTableRangeOptions::TTableRangeOptions(const TTypeEnvironment& env)
         : ItemsLimit(BuildDataLiteral(NUdf::TUnboxedValuePod((ui64)0), NUdf::EDataSlot::Uint64, env), true)
     , BytesLimit(BuildDataLiteral(NUdf::TUnboxedValuePod((ui64)0), NUdf::EDataSlot::Uint64, env), true)
     , Flags(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)TReadRangeOptions::TFlags::Default), NUdf::EDataSlot::Uint32, env), true)
-    , Reverse(BuildDataLiteral(NUdf::TUnboxedValuePod(false), NUdf::EDataSlot::Bool, env), true) 
+    , Reverse(BuildDataLiteral(NUdf::TUnboxedValuePod(false), NUdf::EDataSlot::Bool, env), true)
 {
 }
 
@@ -75,22 +75,22 @@ TRuntimeNode TParametersBuilder::Build() {
     return TRuntimeNode(StructBuilder.Build(), true);
 }
 
-static TRuntimeNode DoRewriteNullType( 
-    TRuntimeNode value, 
+static TRuntimeNode DoRewriteNullType(
+    TRuntimeNode value,
     NUdf::TDataTypeId expectedType,
-    const TInternName& nullInternName, 
-    const TTypeEnvironment& env) 
-{ 
-    if (!value.IsImmediate()) { 
-        auto& callable = static_cast<TCallable&>(*value.GetNode()); 
-        auto callableName = callable.GetType()->GetNameStr(); 
-        if (callableName == nullInternName) { 
-            return TRuntimeNode(BuildEmptyOptionalDataLiteral(expectedType, env), true); 
-        } 
-    } 
-    return value; 
-} 
- 
+    const TInternName& nullInternName,
+    const TTypeEnvironment& env)
+{
+    if (!value.IsImmediate()) {
+        auto& callable = static_cast<TCallable&>(*value.GetNode());
+        auto callableName = callable.GetType()->GetNameStr();
+        if (callableName == nullInternName) {
+            return TRuntimeNode(BuildEmptyOptionalDataLiteral(expectedType, env), true);
+        }
+    }
+    return value;
+}
+
 TUpdateRowBuilder::TUpdateRowBuilder(const TTypeEnvironment& env)
     : Builder(env)
     , Env(env)
@@ -103,7 +103,7 @@ void TUpdateRowBuilder::SetColumn(
         TRuntimeNode value)
 {
     bool isOptional;
-    value = DoRewriteNullType(value, expectedType, NullInternName, Env); 
+    value = DoRewriteNullType(value, expectedType, NullInternName, Env);
     TDataType* dataType = UnpackOptionalData(value, isOptional);
     MKQL_ENSURE(expectedType == dataType->GetSchemeType(),
         "Mismatch of column type expectedType = " << expectedType
@@ -179,50 +179,50 @@ TKikimrProgramBuilder::TKikimrProgramBuilder(
 {
     UseNullType = false;
     NullInternName = Env.InternName(TStringBuf("Null"));
- 
-    std::array<TType*, 3> tupleTypes; 
-    tupleTypes[0] = NewDataType(NUdf::TDataType<ui64>::Id); 
-    tupleTypes[1] = NewDataType(NUdf::TDataType<ui64>::Id); 
-    tupleTypes[2] = NewDataType(NUdf::TDataType<ui64>::Id); 
-    TableIdType = TTupleType::Create(tupleTypes.size(), tupleTypes.data(), Env); 
+
+    std::array<TType*, 3> tupleTypes;
+    tupleTypes[0] = NewDataType(NUdf::TDataType<ui64>::Id);
+    tupleTypes[1] = NewDataType(NUdf::TDataType<ui64>::Id);
+    tupleTypes[2] = NewDataType(NUdf::TDataType<ui64>::Id);
+    TableIdType = TTupleType::Create(tupleTypes.size(), tupleTypes.data(), Env);
 }
 
-TRuntimeNode TKikimrProgramBuilder::RewriteNullType( 
-        TRuntimeNode value, 
+TRuntimeNode TKikimrProgramBuilder::RewriteNullType(
+        TRuntimeNode value,
         NUdf::TDataTypeId expectedType) const
-{ 
-    return DoRewriteNullType(value, expectedType, NullInternName, Env); 
-} 
- 
+{
+    return DoRewriteNullType(value, expectedType, NullInternName, Env);
+}
+
 TVector<TRuntimeNode> TKikimrProgramBuilder::FixKeysType(
         const TArrayRef<const ui32>& keyTypes,
-        const TKeyColumnValues& row) const 
+        const TKeyColumnValues& row) const
 {
     MKQL_ENSURE(!row.empty(), "Expected at least 1 key column");
     MKQL_ENSURE(keyTypes.size() == row.size(), "Mismatch of key types count");
     TVector<TRuntimeNode> tmp(row.size());
     for (ui32 i = 0; i < row.size(); ++i) {
-        tmp[i] = RewriteNullType(row[i], keyTypes[i]); 
+        tmp[i] = RewriteNullType(row[i], keyTypes[i]);
         bool isOptional;
-        TDataType* dataType = UnpackOptionalData(tmp[i], isOptional); 
+        TDataType* dataType = UnpackOptionalData(tmp[i], isOptional);
         MKQL_ENSURE(keyTypes[i] == dataType->GetSchemeType(),
-            "Mismatch of key column type, expected: " 
-            << keyTypes[i] << ", but got: " << dataType->GetSchemeType()); 
+            "Mismatch of key column type, expected: "
+            << keyTypes[i] << ", but got: " << dataType->GetSchemeType());
     }
-    return tmp; 
-} 
+    return tmp;
+}
 
 TRuntimeNode TKikimrProgramBuilder::ReadTarget(const TReadTarget& target) {
     MKQL_ENSURE(!target.HasSnapshotTime(), "Snapshots are not supported");
     return NewDataLiteral((ui32)target.GetMode());
 }
 
-TRuntimeNode TKikimrProgramBuilder::SelectRow( 
-        const TTableId& tableId, 
-        const TArrayRef<const ui32>& keyTypes, 
-        const TArrayRef<const TSelectColumn>& columns, 
-        const TKeyColumnValues& row, const TReadTarget& target) 
-{ 
+TRuntimeNode TKikimrProgramBuilder::SelectRow(
+        const TTableId& tableId,
+        const TArrayRef<const ui32>& keyTypes,
+        const TArrayRef<const TSelectColumn>& columns,
+        const TKeyColumnValues& row, const TReadTarget& target)
+{
     return SelectRow(tableId, keyTypes, columns, row, ReadTarget(target));
 }
 
@@ -235,18 +235,18 @@ TRuntimeNode TKikimrProgramBuilder::SelectRow(
     MKQL_ENSURE(AS_TYPE(TDataType, readTarget)->GetSchemeType() == NUdf::TDataType<ui32>::Id,
         "Read target must be ui32");
 
-    auto rows = FixKeysType(keyTypes, row); 
- 
+    auto rows = FixKeysType(keyTypes, row);
+
     TRuntimeNode tags;
     auto rowType = ValidateColumns(columns, tags, this);
     TType* optType = NewOptionalType(rowType);
 
     TCallableBuilder builder(Env, "SelectRow", optType);
- 
-    builder.Add(BuildTableId(tableId)); 
+
+    builder.Add(BuildTableId(tableId));
     builder.Add(TRuntimeNode(rowType, true));
     builder.Add(tags);
-    builder.Add(NewTuple(TKeyColumnValues(rows))); 
+    builder.Add(NewTuple(TKeyColumnValues(rows)));
     builder.Add(readTarget);
 
     return TRuntimeNode(builder.Build(), false);
@@ -262,22 +262,22 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
     return SelectRange(tableId, keyTypes, columns, options, ReadTarget(target));
 }
 
-static TRuntimeNode BuildOptionList(const TArrayRef<bool>& arr, TProgramBuilder& pBuilder) { 
-    TListLiteralBuilder builder(pBuilder.GetTypeEnvironment(), pBuilder.NewDataType(NUdf::TDataType<bool>::Id)); 
-    for (auto& item : arr) { 
-        builder.Add(pBuilder.NewDataLiteral(item)); 
-    } 
-    return TRuntimeNode(builder.Build(), true); 
-} 
- 
-static bool AtLeastOneFlagSet(const TArrayRef<bool>& arr) { 
-    for (bool flag : arr) { 
-        if (flag) 
-            return true; 
-    } 
-    return false; 
-} 
- 
+static TRuntimeNode BuildOptionList(const TArrayRef<bool>& arr, TProgramBuilder& pBuilder) {
+    TListLiteralBuilder builder(pBuilder.GetTypeEnvironment(), pBuilder.NewDataType(NUdf::TDataType<bool>::Id));
+    for (auto& item : arr) {
+        builder.Add(pBuilder.NewDataLiteral(item));
+    }
+    return TRuntimeNode(builder.Build(), true);
+}
+
+static bool AtLeastOneFlagSet(const TArrayRef<bool>& arr) {
+    for (bool flag : arr) {
+        if (flag)
+            return true;
+    }
+    return false;
+}
+
 TRuntimeNode TKikimrProgramBuilder::SelectRange(
         const TTableId& tableId,
         const TArrayRef<const ui32>& keyTypes,
@@ -303,17 +303,17 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
         TDataType* dataFrom = nullptr;
         TDataType* dataTo = nullptr;
         if (i < options.FromColumns.size()) {
-            from[i] = RewriteNullType(options.FromColumns[i], keyTypes[i]); 
- 
+            from[i] = RewriteNullType(options.FromColumns[i], keyTypes[i]);
+
             bool isOptionalFrom;
-            dataFrom = UnpackOptionalData(from[i], isOptionalFrom); 
+            dataFrom = UnpackOptionalData(from[i], isOptionalFrom);
         }
 
         if (i < options.ToColumns.size()) {
-            to[i] = RewriteNullType(options.ToColumns[i], keyTypes[i]); 
- 
+            to[i] = RewriteNullType(options.ToColumns[i], keyTypes[i]);
+
             bool isOptionalTo;
-            dataTo = UnpackOptionalData(to[i], isOptionalTo); 
+            dataTo = UnpackOptionalData(to[i], isOptionalTo);
         }
 
         MKQL_ENSURE(dataFrom || dataTo, "Invalid key tuple values");
@@ -335,9 +335,9 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
     TType* listType = NewListType(rowType);
     TDataType* boolType = TDataType::Create(NUdf::TDataType<bool>::Id, Env);
 
-    TRuntimeNode skipNullKeys = BuildOptionList(options.SkipNullKeys, *this); 
-    TRuntimeNode forbidNullArgsFrom = BuildOptionList(options.ForbidNullArgsFrom, *this); 
-    TRuntimeNode forbidNullArgsTo = BuildOptionList(options.ForbidNullArgsTo, *this); 
+    TRuntimeNode skipNullKeys = BuildOptionList(options.SkipNullKeys, *this);
+    TRuntimeNode forbidNullArgsFrom = BuildOptionList(options.ForbidNullArgsFrom, *this);
+    TRuntimeNode forbidNullArgsTo = BuildOptionList(options.ForbidNullArgsTo, *this);
 
     TStructTypeBuilder returnTypeBuilder(Env);
     returnTypeBuilder.Reserve(2);
@@ -345,25 +345,25 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
     returnTypeBuilder.Add(TStringBuf("Truncated"), boolType);
     auto returnType = returnTypeBuilder.Build();
     TCallableBuilder builder(Env, "SelectRange", returnType);
- 
-    builder.Add(BuildTableId(tableId)); 
+
+    builder.Add(BuildTableId(tableId));
     builder.Add(TRuntimeNode(rowType, true));
     builder.Add(tags);
-    builder.Add(NewTuple(TKeyColumnValues(from))); 
-    builder.Add(NewTuple(TKeyColumnValues(to))); 
+    builder.Add(NewTuple(TKeyColumnValues(from)));
+    builder.Add(NewTuple(TKeyColumnValues(to)));
     builder.Add(options.Flags);
     builder.Add(options.ItemsLimit);
     builder.Add(options.BytesLimit);
     builder.Add(readTarget);
     builder.Add(skipNullKeys);
-    builder.Add(options.Reverse); 
- 
-    // Compat with older kikimr 
-    // The following 'if' should be removed when all deployed versions have support for 13 parameters. 
-    if (AtLeastOneFlagSet(options.ForbidNullArgsFrom) || 
-        AtLeastOneFlagSet(options.ForbidNullArgsTo)) { 
-        builder.Add(forbidNullArgsFrom); 
-        builder.Add(forbidNullArgsTo); 
+    builder.Add(options.Reverse);
+
+    // Compat with older kikimr
+    // The following 'if' should be removed when all deployed versions have support for 13 parameters.
+    if (AtLeastOneFlagSet(options.ForbidNullArgsFrom) ||
+        AtLeastOneFlagSet(options.ForbidNullArgsTo)) {
+        builder.Add(forbidNullArgsFrom);
+        builder.Add(forbidNullArgsTo);
     }
 
     return TRuntimeNode(builder.Build(), false);
@@ -375,12 +375,12 @@ TRuntimeNode TKikimrProgramBuilder::UpdateRow(
         const TKeyColumnValues& row,
         TUpdateRowBuilder& update)
 {
-    auto rows = FixKeysType(keyTypes, row); 
+    auto rows = FixKeysType(keyTypes, row);
 
     TCallableBuilder builder(Env, "UpdateRow", Env.GetTypeOfVoid());
- 
-    builder.Add(BuildTableId(tableId)); 
-    builder.Add(NewTuple(TKeyColumnValues(rows))); 
+
+    builder.Add(BuildTableId(tableId));
+    builder.Add(NewTuple(TKeyColumnValues(rows)));
     builder.Add(update.Build());
     return TRuntimeNode(builder.Build(), false);
 }
@@ -390,12 +390,12 @@ TRuntimeNode TKikimrProgramBuilder::EraseRow(
         const TArrayRef<const ui32>& keyTypes,
         const TKeyColumnValues& row)
 {
-    auto rows = FixKeysType(keyTypes, row); 
+    auto rows = FixKeysType(keyTypes, row);
 
     TCallableBuilder builder(Env, "EraseRow", Env.GetTypeOfVoid());
- 
-    builder.Add(BuildTableId(tableId)); 
-    builder.Add(NewTuple(TKeyColumnValues(rows))); 
+
+    builder.Add(BuildTableId(tableId));
+    builder.Add(NewTuple(TKeyColumnValues(rows)));
     return TRuntimeNode(builder.Build(), false);
 }
 
@@ -657,19 +657,19 @@ TRuntimeNode TKikimrProgramBuilder::SetResult(const TStringBuf& label, TRuntimeN
 TRuntimeNode TKikimrProgramBuilder::NewDataLiteral(const std::pair<ui64, ui64>& data) const {
     return TRuntimeNode(BuildDataLiteral(NUdf::TStringRef(reinterpret_cast<const char*>(&data), sizeof(data)), LegacyPairUi64Ui64, Env), true);
 }
- 
-TRuntimeNode TKikimrProgramBuilder::BuildTableId(const TTableId& tableId) const { 
-    if (tableId.SchemaVersion) { 
-        std::array<TRuntimeNode, 3> items; 
-        items[0] = TProgramBuilder::NewDataLiteral<ui64>(tableId.PathId.OwnerId); 
-        items[1] = TProgramBuilder::NewDataLiteral<ui64>(tableId.PathId.LocalPathId); 
-        items[2] = TProgramBuilder::NewDataLiteral<ui64>(tableId.SchemaVersion); 
-        return TRuntimeNode(TTupleLiteral::Create(items.size(), items.data(), TableIdType, Env), true); 
-    } else { 
-        // temporary compatibility (KIKIMR-8446) 
-        return NewDataLiteral({tableId.PathId.OwnerId, tableId.PathId.LocalPathId}); 
-    } 
-} 
- 
+
+TRuntimeNode TKikimrProgramBuilder::BuildTableId(const TTableId& tableId) const {
+    if (tableId.SchemaVersion) {
+        std::array<TRuntimeNode, 3> items;
+        items[0] = TProgramBuilder::NewDataLiteral<ui64>(tableId.PathId.OwnerId);
+        items[1] = TProgramBuilder::NewDataLiteral<ui64>(tableId.PathId.LocalPathId);
+        items[2] = TProgramBuilder::NewDataLiteral<ui64>(tableId.SchemaVersion);
+        return TRuntimeNode(TTupleLiteral::Create(items.size(), items.data(), TableIdType, Env), true);
+    } else {
+        // temporary compatibility (KIKIMR-8446)
+        return NewDataLiteral({tableId.PathId.OwnerId, tableId.PathId.LocalPathId});
+    }
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

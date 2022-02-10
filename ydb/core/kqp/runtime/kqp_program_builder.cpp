@@ -207,7 +207,7 @@ TRuntimeNode TKqpProgramBuilder::KqpLookupTable(const TTableId& tableId, const T
 }
 
 TRuntimeNode TKqpProgramBuilder::KqpUpsertRows(const TTableId& tableId, const TRuntimeNode& rows,
-    const TArrayRef<TKqpTableColumn>& upsertColumns) 
+    const TArrayRef<TKqpTableColumn>& upsertColumns)
 {
     auto streamType = AS_TYPE(TStreamType, rows.GetStaticType());
     auto rowType = AS_TYPE(TStructType, streamType->GetItemType());

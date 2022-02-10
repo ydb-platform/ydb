@@ -44,20 +44,20 @@ public:
             break;
         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
             if (!Self->EnableAsyncIndexes) {
-                return Reply( 
-                    std::move(response), 
-                    Ydb::StatusIds::UNSUPPORTED, 
+                return Reply(
+                    std::move(response),
+                    Ydb::StatusIds::UNSUPPORTED,
                     TStringBuilder() << "Async indexes are not supported yet"
-                    ); 
-            } 
+                    );
+            }
             break;
         default:
             break;
-        } 
- 
-        const auto& dataColumns = request.GetSettings().index().data_columns(); 
- 
-        if (!dataColumns.empty() && !Self->AllowDataColumnForIndexTable) { 
+        }
+
+        const auto& dataColumns = request.GetSettings().index().data_columns();
+
+        if (!dataColumns.empty() && !Self->AllowDataColumnForIndexTable) {
             return Reply(
                 std::move(response),
                 Ydb::StatusIds::UNSUPPORTED,
@@ -202,7 +202,7 @@ private:
 
         buildInfo->IndexName = settings.index().name();
         buildInfo->IndexColumns.assign(settings.index().index_columns().begin(), settings.index().index_columns().end());
-        buildInfo->DataColumns.assign(settings.index().data_columns().begin(), settings.index().data_columns().end()); 
+        buildInfo->DataColumns.assign(settings.index().data_columns().begin(), settings.index().data_columns().end());
 
         buildInfo->Limits.MaxBatchRows = settings.max_batch_rows();
         buildInfo->Limits.MaxBatchBytes = settings.max_batch_bytes();

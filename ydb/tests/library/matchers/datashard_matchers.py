@@ -18,6 +18,6 @@ class TResponseMatcher(AbstractProtobufMatcher):
             self.expected_protobuf.MiniKQLCompileResults.ProgramCompileErrors = []
 
         self.expected_protobuf.MiniKQLCompileResults.ProgramCompileErrors.append(
-            FakeProtobuf(message=message) 
+            FakeProtobuf(message=message)
         )
         return self

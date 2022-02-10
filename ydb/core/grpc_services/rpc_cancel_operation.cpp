@@ -57,22 +57,22 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
 
     void Handle(TEvImport::TEvCancelImportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
- 
+
         LOG_D("Handle TEvImport::TEvCancelImportResponse"
             << ": record# " << record.ShortDebugString());
- 
+
         Reply(record.GetStatus(), record.GetIssues());
-    } 
- 
+    }
+
     void Handle(TEvIndexBuilder::TEvCancelResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
- 
+
         LOG_D("Handle TEvIndexBuilder::TEvCancelResponse"
             << ": record# " << record.ShortDebugString());
- 
-        Reply(record.GetStatus(), record.GetIssues()); 
-    } 
- 
+
+        Reply(record.GetStatus(), record.GetIssues());
+    }
+
 public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
@@ -80,9 +80,9 @@ public:
         const TString& id = Request->GetProtoRequest()->id();
 
         try {
-            OperationId = TOperationId(id); 
+            OperationId = TOperationId(id);
 
-            switch (OperationId.GetKind()) { 
+            switch (OperationId.GetKind()) {
             case TOperationId::EXPORT:
             case TOperationId::IMPORT:
             case TOperationId::BUILD_INDEX:
@@ -90,7 +90,7 @@ public:
                     return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Unable to extract operation id");
                 }
                 break;
- 
+
             default:
                 return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Unknown operation kind");
             }
@@ -113,8 +113,8 @@ public:
         }
     }
 
-private: 
-    TOperationId OperationId; 
+private:
+    TOperationId OperationId;
     ui64 RawOperationId = 0;
 
 }; // TCancelOperationRPC

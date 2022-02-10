@@ -161,7 +161,7 @@ struct TAppData {
 
     // Used to allow column families for testing
     bool AllowColumnFamiliesForTest = false;
-    bool AllowPrivateTableDescribeForTest = false; 
+    bool AllowPrivateTableDescribeForTest = false;
 
     // Used to allow immediate ReadTable in tests
     bool AllowReadTableImmediate = false;

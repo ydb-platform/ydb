@@ -622,277 +622,277 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(s3, 0);
     }
 
-    Y_UNIT_TEST(ShardFreezeRejectBadProtobuf) { 
-        TPortManager pm; 
-        ui16 port = pm.GetPort(2134); 
-        TServer cleverServer = TServer(TServerSettings(port)); 
-        if (!true) { 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG); 
-        } 
- 
-        TFlatMsgBusClient annoyingClient(port); 
- 
-        const char * table = R"(Name: "Table" 
-            Columns { Name: "key"   Type: "Uint32" } 
-            Columns { Name: "value" Type: "Uint32" } 
-            KeyColumnNames: ["key"] 
-            UniformPartitionsCount: 2)"; 
- 
-        annoyingClient.InitRoot(); 
-        annoyingClient.CreateTable("/dc-1", table); 
- 
-        { 
-            // Alter and freeze 
-            auto res = annoyingClient.AlterTable("/dc-1", R"( 
-                Name: "Table" 
+    Y_UNIT_TEST(ShardFreezeRejectBadProtobuf) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        TServer cleverServer = TServer(TServerSettings(port));
+        if (!true) {
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG);
+        }
+
+        TFlatMsgBusClient annoyingClient(port);
+
+        const char * table = R"(Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2)";
+
+        annoyingClient.InitRoot();
+        annoyingClient.CreateTable("/dc-1", table);
+
+        {
+            // Alter and freeze
+            auto res = annoyingClient.AlterTable("/dc-1", R"(
+                Name: "Table"
                 PartitionConfig { FreezeState: Freeze FollowerCount: 1 }
-            )"); 
-            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_ERROR); 
-        } 
- 
-        { 
-            auto res = annoyingClient.AlterTable("/dc-1", R"( 
-                Name: "Table" 
-                PartitionConfig { FreezeState: Unspecified} 
-            )"); 
-            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_ERROR); 
-        } 
- 
-        { 
-            auto res = annoyingClient.AlterTable("/dc-1", R"( 
-                Name: "Table" 
-                DropColumns { Name: "value" } 
-                PartitionConfig { FreezeState: Unspecified } 
-            )"); 
-            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_ERROR); 
-        } 
- 
-        { 
-            auto res = annoyingClient.AlterTable("/dc-1", R"( 
-                Name: "Table" 
-                DropColumns { Name: "value" } 
-                PartitionConfig { FreezeState: Unfreeze } 
-            )"); 
-            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_ERROR); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(ShardUnfreezeNonFrozen) { 
-        TPortManager pm; 
-        ui16 port = pm.GetPort(2134); 
-        TServer cleverServer = TServer(TServerSettings(port)); 
-        if (!true) { 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG); 
-        } 
- 
-        TFlatMsgBusClient annoyingClient(port); 
- 
-        const char * table = R"(Name: "Table" 
-            Columns { Name: "key"   Type: "Uint32" } 
-            Columns { Name: "value" Type: "Uint32" } 
-            KeyColumnNames: ["key"] 
-            UniformPartitionsCount: 2)"; 
- 
-        annoyingClient.InitRoot(); 
-        annoyingClient.CreateTable("/dc-1", table); 
- 
-        { 
-            auto res = annoyingClient.AlterTable("/dc-1", R"( 
-                Name: "Table" 
-                PartitionConfig { FreezeState: Unfreeze} 
-            )"); 
-            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(ShardFreezeUnfreezeAlreadySet) { 
-        TPortManager pm; 
-        ui16 port = pm.GetPort(2134); 
-        TServer cleverServer = TServer(TServerSettings(port)); 
-        if (!true) { 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG); 
-        } 
- 
-        TFlatMsgBusClient annoyingClient(port); 
- 
-        const char * table = R"(Name: "Table" 
-            Columns { Name: "key"   Type: "Uint32" } 
-            Columns { Name: "value" Type: "Uint32" } 
-            KeyColumnNames: ["key"] 
-            UniformPartitionsCount: 2)"; 
- 
-        annoyingClient.InitRoot(); 
-        annoyingClient.CreateTable("/dc-1", table); 
- 
-        { 
-            auto res = annoyingClient.AlterTable("/dc-1", R"( 
-                Name: "Table" 
-                PartitionConfig { FreezeState: Freeze} 
-            )"); 
-            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK); 
-        } 
- 
-        { 
-            auto res = annoyingClient.AlterTable("/dc-1", R"( 
-                Name: "Table" 
-                PartitionConfig { FreezeState: Freeze} 
-            )"); 
-            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK); 
-        } 
- 
-        { 
-            auto res = annoyingClient.AlterTable("/dc-1", R"( 
-                Name: "Table" 
-                PartitionConfig { FreezeState: Unfreeze} 
-            )"); 
-            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK); 
-        } 
- 
-        { 
-            auto res = annoyingClient.AlterTable("/dc-1", R"( 
-                Name: "Table" 
-                PartitionConfig { FreezeState: Unfreeze} 
-            )"); 
-            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(ShardFreezeUnfreezeRejectScheme) { 
-        TPortManager pm; 
-        ui16 port = pm.GetPort(2134); 
-        TServer cleverServer = TServer(TServerSettings(port)); 
-        if (!true) { 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG); 
-        } 
- 
-        TFlatMsgBusClient annoyingClient(port); 
- 
-        const char * table = R"(Name: "Table" 
-            Columns { Name: "key"   Type: "Uint32" } 
-            Columns { Name: "value" Type: "Uint32" } 
-            KeyColumnNames: ["key"] 
-            UniformPartitionsCount: 2)"; 
- 
-        annoyingClient.InitRoot(); 
-        annoyingClient.CreateTable("/dc-1", table); 
- 
-        // Alter, freeze datashard 
-        annoyingClient.AlterTable("/dc-1", R"( 
-            Name: "Table" 
-            PartitionConfig { FreezeState: Freeze } 
-        )"); 
-        { 
-            auto res = annoyingClient.AlterTable("/dc-1", R"( 
-                Name: "Table" 
-                DropColumns { Name: "value" } 
-            )"); 
-            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_ERROR); 
-        } 
- 
-        annoyingClient.AlterTable("/dc-1", R"( 
-            Name: "Table" 
-            PartitionConfig { FreezeState: Unfreeze } 
-        )"); 
-        { 
-            auto res = annoyingClient.AlterTable("/dc-1", R"( 
-                Name: "Table" 
-                DropColumns { Name: "value" } 
-            )"); 
-            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(ShardFreezeUnfreeze) { 
-        TPortManager pm; 
-        ui16 port = pm.GetPort(2134); 
-        TServer cleverServer = TServer(TServerSettings(port)); 
-        if (!true) { 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG); 
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG); 
-        } 
- 
-        TFlatMsgBusClient annoyingClient(port); 
- 
-        const char * table = R"(Name: "Table" 
-            Columns { Name: "key"   Type: "Uint32" } 
-            Columns { Name: "value" Type: "Uint32" } 
-            KeyColumnNames: ["key"] 
-            UniformPartitionsCount: 2)"; 
- 
-        annoyingClient.InitRoot(); 
-        annoyingClient.CreateTable("/dc-1", table); 
- 
-        // Alter, freeze datashard 
-        annoyingClient.AlterTable("/dc-1", R"( 
-            Name: "Table" 
-            PartitionConfig { FreezeState: Freeze } 
-        )"); 
-        { 
-            // write should be rejected 
-            TString insertRowQuery = "(" 
-                "(let key '('('key (Uint32 '%u))))" 
-                "(let value '('('value (Uint32 '%u))))" 
-                "(let ret_ (AsList" 
-                "    (UpdateRow '/dc-1/Table key value)" 
-                "))" 
-                "(return ret_)" 
-                ")"; 
- 
-            TClient::TFlatQueryOptions opts; 
-            NKikimrClient::TResponse response; 
- 
-            ui32 status = annoyingClient.FlatQueryRaw(Sprintf(insertRowQuery.data(), 1, 6000000).data(), opts, response); 
-            UNIT_ASSERT(status == NMsgBusProxy::MSTATUS_REJECTED); 
- 
-            Cout << "SELECT value FROM Table WHERE key = 0" << Endl; 
-            annoyingClient.FlatQuery(R"(( 
-                (let row_ '('('key (Uint32 '0)))) 
-                (let cols_ '('value)) 
-                (let select_ (SelectRow '/dc-1/Table row_ cols_)) 
-                (let ret_ (AsList (SetResult 'ret0 select_))) 
-                (return ret_) 
-            ))", NMsgBusProxy::MSTATUS_OK); 
-        } 
- 
-        annoyingClient.AlterTable("/dc-1", R"( 
-            Name: "Table" 
-            PartitionConfig { FreezeState: Unfreeze } 
-        )"); 
- 
-        { 
- 
-            TString insertRowQuery = "(" 
-                "(let key '('('key (Uint32 '%u))))" 
-                "(let value '('('value (Uint32 '%u))))" 
-                "(let ret_ (AsList" 
-                "    (UpdateRow '/dc-1/Table key value)" 
-                "))" 
-                "(return ret_)" 
-                ")"; 
- 
-            TClient::TFlatQueryOptions opts; 
-            NKikimrClient::TResponse response; 
- 
-            ui32 status = annoyingClient.FlatQueryRaw(Sprintf(insertRowQuery.data(), 1, 6000000).data(), opts, response); 
- 
-            UNIT_ASSERT(status == NMsgBusProxy::MSTATUS_OK); 
-        } 
-    } 
- 
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_ERROR);
+        }
+
+        {
+            auto res = annoyingClient.AlterTable("/dc-1", R"(
+                Name: "Table"
+                PartitionConfig { FreezeState: Unspecified}
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_ERROR);
+        }
+
+        {
+            auto res = annoyingClient.AlterTable("/dc-1", R"(
+                Name: "Table"
+                DropColumns { Name: "value" }
+                PartitionConfig { FreezeState: Unspecified }
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_ERROR);
+        }
+
+        {
+            auto res = annoyingClient.AlterTable("/dc-1", R"(
+                Name: "Table"
+                DropColumns { Name: "value" }
+                PartitionConfig { FreezeState: Unfreeze }
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_ERROR);
+        }
+    }
+
+    Y_UNIT_TEST(ShardUnfreezeNonFrozen) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        TServer cleverServer = TServer(TServerSettings(port));
+        if (!true) {
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG);
+        }
+
+        TFlatMsgBusClient annoyingClient(port);
+
+        const char * table = R"(Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2)";
+
+        annoyingClient.InitRoot();
+        annoyingClient.CreateTable("/dc-1", table);
+
+        {
+            auto res = annoyingClient.AlterTable("/dc-1", R"(
+                Name: "Table"
+                PartitionConfig { FreezeState: Unfreeze}
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK);
+        }
+    }
+
+    Y_UNIT_TEST(ShardFreezeUnfreezeAlreadySet) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        TServer cleverServer = TServer(TServerSettings(port));
+        if (!true) {
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG);
+        }
+
+        TFlatMsgBusClient annoyingClient(port);
+
+        const char * table = R"(Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2)";
+
+        annoyingClient.InitRoot();
+        annoyingClient.CreateTable("/dc-1", table);
+
+        {
+            auto res = annoyingClient.AlterTable("/dc-1", R"(
+                Name: "Table"
+                PartitionConfig { FreezeState: Freeze}
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK);
+        }
+
+        {
+            auto res = annoyingClient.AlterTable("/dc-1", R"(
+                Name: "Table"
+                PartitionConfig { FreezeState: Freeze}
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK);
+        }
+
+        {
+            auto res = annoyingClient.AlterTable("/dc-1", R"(
+                Name: "Table"
+                PartitionConfig { FreezeState: Unfreeze}
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK);
+        }
+
+        {
+            auto res = annoyingClient.AlterTable("/dc-1", R"(
+                Name: "Table"
+                PartitionConfig { FreezeState: Unfreeze}
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK);
+        }
+    }
+
+    Y_UNIT_TEST(ShardFreezeUnfreezeRejectScheme) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        TServer cleverServer = TServer(TServerSettings(port));
+        if (!true) {
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG);
+        }
+
+        TFlatMsgBusClient annoyingClient(port);
+
+        const char * table = R"(Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2)";
+
+        annoyingClient.InitRoot();
+        annoyingClient.CreateTable("/dc-1", table);
+
+        // Alter, freeze datashard
+        annoyingClient.AlterTable("/dc-1", R"(
+            Name: "Table"
+            PartitionConfig { FreezeState: Freeze }
+        )");
+        {
+            auto res = annoyingClient.AlterTable("/dc-1", R"(
+                Name: "Table"
+                DropColumns { Name: "value" }
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_ERROR);
+        }
+
+        annoyingClient.AlterTable("/dc-1", R"(
+            Name: "Table"
+            PartitionConfig { FreezeState: Unfreeze }
+        )");
+        {
+            auto res = annoyingClient.AlterTable("/dc-1", R"(
+                Name: "Table"
+                DropColumns { Name: "value" }
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK);
+        }
+    }
+
+    Y_UNIT_TEST(ShardFreezeUnfreeze) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        TServer cleverServer = TServer(TServerSettings(port));
+        if (!true) {
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG);
+        }
+
+        TFlatMsgBusClient annoyingClient(port);
+
+        const char * table = R"(Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2)";
+
+        annoyingClient.InitRoot();
+        annoyingClient.CreateTable("/dc-1", table);
+
+        // Alter, freeze datashard
+        annoyingClient.AlterTable("/dc-1", R"(
+            Name: "Table"
+            PartitionConfig { FreezeState: Freeze }
+        )");
+        {
+            // write should be rejected
+            TString insertRowQuery = "("
+                "(let key '('('key (Uint32 '%u))))"
+                "(let value '('('value (Uint32 '%u))))"
+                "(let ret_ (AsList"
+                "    (UpdateRow '/dc-1/Table key value)"
+                "))"
+                "(return ret_)"
+                ")";
+
+            TClient::TFlatQueryOptions opts;
+            NKikimrClient::TResponse response;
+
+            ui32 status = annoyingClient.FlatQueryRaw(Sprintf(insertRowQuery.data(), 1, 6000000).data(), opts, response);
+            UNIT_ASSERT(status == NMsgBusProxy::MSTATUS_REJECTED);
+
+            Cout << "SELECT value FROM Table WHERE key = 0" << Endl;
+            annoyingClient.FlatQuery(R"((
+                (let row_ '('('key (Uint32 '0))))
+                (let cols_ '('value))
+                (let select_ (SelectRow '/dc-1/Table row_ cols_))
+                (let ret_ (AsList (SetResult 'ret0 select_)))
+                (return ret_)
+            ))", NMsgBusProxy::MSTATUS_OK);
+        }
+
+        annoyingClient.AlterTable("/dc-1", R"(
+            Name: "Table"
+            PartitionConfig { FreezeState: Unfreeze }
+        )");
+
+        {
+
+            TString insertRowQuery = "("
+                "(let key '('('key (Uint32 '%u))))"
+                "(let value '('('value (Uint32 '%u))))"
+                "(let ret_ (AsList"
+                "    (UpdateRow '/dc-1/Table key value)"
+                "))"
+                "(return ret_)"
+                ")";
+
+            TClient::TFlatQueryOptions opts;
+            NKikimrClient::TResponse response;
+
+            ui32 status = annoyingClient.FlatQueryRaw(Sprintf(insertRowQuery.data(), 1, 6000000).data(), opts, response);
+
+            UNIT_ASSERT(status == NMsgBusProxy::MSTATUS_OK);
+        }
+    }
+
     Y_UNIT_TEST(Mix_DML_DDL) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
@@ -1422,8 +1422,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             TEvTxUserProxy::TResultStatus::AccessDenied); // as argonaut@
 
         annoyingClient.SetSecurityToken("berkanavt@" BUILTIN_ACL_DOMAIN); // as berkanavt@
-        NACLib::TDiffACL newAcl; 
-        newAcl.ClearAccess(); 
+        NACLib::TDiffACL newAcl;
+        newAcl.ClearAccess();
         newAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericWrite, "argonaut@" BUILTIN_ACL_DOMAIN);
         annoyingClient.ModifyACL("/dc-1", "Berkanavt", newAcl.SerializeAsString()); // as berkanavt@
         annoyingClient.ResetSchemeCache(cleverServer, tabletId);
@@ -3780,7 +3780,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
     }
 
-    static NKikimrMiniKQL::TResult CreateTableAndExecuteMkql(const TString& mkql) { 
+    static NKikimrMiniKQL::TResult CreateTableAndExecuteMkql(const TString& mkql) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -3823,11 +3823,11 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         fillValues(2,  {},            "Four");
         fillValues(2,  TString("k1"), "Five");
 
-        return annoyingClient.FlatQuery(mkql); 
-    } 
- 
-    Y_UNIT_TEST(SelectRangeSkipNullKeys) { 
-        auto res = CreateTableAndExecuteMkql(Sprintf(R"( 
+        return annoyingClient.FlatQuery(mkql);
+    }
+
+    Y_UNIT_TEST(SelectRangeSkipNullKeys) {
+        auto res = CreateTableAndExecuteMkql(Sprintf(R"(
             (
             (let range '('ExcFrom 'ExcTo '('Key1 (Null) (Void)) '('Key2 (Null) (Void))))
             (let data (SelectRange
@@ -3851,147 +3851,147 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL((TString)list[1]["Value"], "Five");
     }
 
-    Y_UNIT_TEST(SelectRangeForbidNullArgs1) { 
-        auto res = CreateTableAndExecuteMkql(Sprintf(R"( 
-            ( 
-            (let range '('IncFrom 'IncTo '('Key1 (Null) (Void)) '('Key2 (Null) (Void)))) 
-            (let data (SelectRange 
-                '"/dc-1/test/TestTable" 
-                range 
-                '('Value) 
-                '( 
-                    '('"ForbidNullArgsFrom" '('Key2)) 
-                 ) 
-            )) 
-            (return (AsList (SetResult 'Result data))) 
-            ) 
-            )" 
-        )); 
- 
-        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
-        TValue result = value["Result"]; 
-        auto list = result["List"]; 
-        UNIT_ASSERT_VALUES_EQUAL(list.Size(), 0); 
-    } 
- 
-    Y_UNIT_TEST(SelectRangeForbidNullArgs2) { 
-        auto res = CreateTableAndExecuteMkql(Sprintf(R"( 
-            ( 
-            (let range '('IncFrom 'IncTo '('Key1 (Null) (Void)) '('Key2 (Null) (Void)))) 
-            (let data (SelectRange 
-                '"/dc-1/test/TestTable" 
-                range 
-                '('Value) 
-                '( 
-                    '('"ForbidNullArgsFrom" '('Key1)) 
-                 ) 
-            )) 
-            (return (AsList (SetResult 'Result data))) 
-            ) 
-            )" 
-        )); 
- 
-        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
-        TValue result = value["Result"]; 
-        auto list = result["List"]; 
-        UNIT_ASSERT_VALUES_EQUAL(list.Size(), 0); 
-    } 
- 
-    Y_UNIT_TEST(SelectRangeNullArgs3) { 
-        auto res = CreateTableAndExecuteMkql(Sprintf(R"( 
-            ( 
-            (let range '('IncFrom 'IncTo '('Key1 (Uint64 '1) (Uint64 '1)) '('Key2 (Null) (Void)))) 
-            (let data (SelectRange 
-                '"/dc-1/test/TestTable" 
-                range 
-                '('Value) 
-                '( 
-                 ) 
-            )) 
-            (return (AsList (SetResult 'Result data))) 
-            ) 
-            )" 
-        )); 
- 
-        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
- 
-        TValue result = value["Result"]; 
-        auto list = result["List"]; 
-        UNIT_ASSERT_VALUES_EQUAL(list.Size(), 2); 
-        UNIT_ASSERT_VALUES_EQUAL((TString)list[0]["Value"], "Two"); 
-        UNIT_ASSERT_VALUES_EQUAL((TString)list[1]["Value"], "Three"); 
-    } 
- 
-    Y_UNIT_TEST(SelectRangeForbidNullArgs3) { 
-        auto res = CreateTableAndExecuteMkql(Sprintf(R"( 
-            ( 
-            (let range '('IncFrom 'IncTo '('Key1 (Uint64 '1) (Uint64 '1)) '('Key2 (Null) (Void)))) 
-            (let data (SelectRange 
-                '"/dc-1/test/TestTable" 
-                range 
-                '('Value) 
-                '( 
-                    '('"ForbidNullArgsFrom" '('Key2)) 
-                 ) 
-            )) 
-            (return (AsList (SetResult 'Result data))) 
-            ) 
-            )" 
-        )); 
- 
-        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
- 
-        TValue result = value["Result"]; 
-        auto list = result["List"]; 
-        UNIT_ASSERT_VALUES_EQUAL(list.Size(), 0); 
-    } 
- 
-    Y_UNIT_TEST(SelectRangeNullArgs4) { 
-        auto res = CreateTableAndExecuteMkql(Sprintf(R"( 
-            ( 
-            (let range '('IncFrom 'IncTo '('Key1 (Uint64 '1) (Uint64 '1)) '('Key2 (Null) (Null) ))) 
-            (let data (SelectRange 
-                '"/dc-1/test/TestTable" 
-                range 
-                '('Value) 
-                '( 
-                 ) 
-            )) 
-            (return (AsList (SetResult 'Result data))) 
-            ) 
-            )" 
-        )); 
- 
-        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
-        TValue result = value["Result"]; 
-        auto list = result["List"]; 
-        UNIT_ASSERT_VALUES_EQUAL(list.Size(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL((TString)list[0]["Value"], "Two"); 
-    } 
- 
-    Y_UNIT_TEST(SelectRangeForbidNullArgs4) { 
-        auto res = CreateTableAndExecuteMkql(Sprintf(R"( 
-            ( 
-            (let range '('IncFrom 'IncTo '('Key1 (Uint64 '1) (Uint64 '1)) '('Key2 (Null) (Null) ))) 
-            (let data (SelectRange 
-                '"/dc-1/test/TestTable" 
-                range 
-                '('Value) 
-                '( 
-                    '('"ForbidNullArgsTo" '('Key2)) 
-                 ) 
-            )) 
-            (return (AsList (SetResult 'Result data))) 
-            ) 
-            )" 
-        )); 
- 
-        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
-        TValue result = value["Result"]; 
-        auto list = result["List"]; 
-        UNIT_ASSERT_VALUES_EQUAL(list.Size(), 0); 
-    } 
- 
+    Y_UNIT_TEST(SelectRangeForbidNullArgs1) {
+        auto res = CreateTableAndExecuteMkql(Sprintf(R"(
+            (
+            (let range '('IncFrom 'IncTo '('Key1 (Null) (Void)) '('Key2 (Null) (Void))))
+            (let data (SelectRange
+                '"/dc-1/test/TestTable"
+                range
+                '('Value)
+                '(
+                    '('"ForbidNullArgsFrom" '('Key2))
+                 )
+            ))
+            (return (AsList (SetResult 'Result data)))
+            )
+            )"
+        ));
+
+        TValue value = TValue::Create(res.GetValue(), res.GetType());
+        TValue result = value["Result"];
+        auto list = result["List"];
+        UNIT_ASSERT_VALUES_EQUAL(list.Size(), 0);
+    }
+
+    Y_UNIT_TEST(SelectRangeForbidNullArgs2) {
+        auto res = CreateTableAndExecuteMkql(Sprintf(R"(
+            (
+            (let range '('IncFrom 'IncTo '('Key1 (Null) (Void)) '('Key2 (Null) (Void))))
+            (let data (SelectRange
+                '"/dc-1/test/TestTable"
+                range
+                '('Value)
+                '(
+                    '('"ForbidNullArgsFrom" '('Key1))
+                 )
+            ))
+            (return (AsList (SetResult 'Result data)))
+            )
+            )"
+        ));
+
+        TValue value = TValue::Create(res.GetValue(), res.GetType());
+        TValue result = value["Result"];
+        auto list = result["List"];
+        UNIT_ASSERT_VALUES_EQUAL(list.Size(), 0);
+    }
+
+    Y_UNIT_TEST(SelectRangeNullArgs3) {
+        auto res = CreateTableAndExecuteMkql(Sprintf(R"(
+            (
+            (let range '('IncFrom 'IncTo '('Key1 (Uint64 '1) (Uint64 '1)) '('Key2 (Null) (Void))))
+            (let data (SelectRange
+                '"/dc-1/test/TestTable"
+                range
+                '('Value)
+                '(
+                 )
+            ))
+            (return (AsList (SetResult 'Result data)))
+            )
+            )"
+        ));
+
+        TValue value = TValue::Create(res.GetValue(), res.GetType());
+
+        TValue result = value["Result"];
+        auto list = result["List"];
+        UNIT_ASSERT_VALUES_EQUAL(list.Size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL((TString)list[0]["Value"], "Two");
+        UNIT_ASSERT_VALUES_EQUAL((TString)list[1]["Value"], "Three");
+    }
+
+    Y_UNIT_TEST(SelectRangeForbidNullArgs3) {
+        auto res = CreateTableAndExecuteMkql(Sprintf(R"(
+            (
+            (let range '('IncFrom 'IncTo '('Key1 (Uint64 '1) (Uint64 '1)) '('Key2 (Null) (Void))))
+            (let data (SelectRange
+                '"/dc-1/test/TestTable"
+                range
+                '('Value)
+                '(
+                    '('"ForbidNullArgsFrom" '('Key2))
+                 )
+            ))
+            (return (AsList (SetResult 'Result data)))
+            )
+            )"
+        ));
+
+        TValue value = TValue::Create(res.GetValue(), res.GetType());
+
+        TValue result = value["Result"];
+        auto list = result["List"];
+        UNIT_ASSERT_VALUES_EQUAL(list.Size(), 0);
+    }
+
+    Y_UNIT_TEST(SelectRangeNullArgs4) {
+        auto res = CreateTableAndExecuteMkql(Sprintf(R"(
+            (
+            (let range '('IncFrom 'IncTo '('Key1 (Uint64 '1) (Uint64 '1)) '('Key2 (Null) (Null) )))
+            (let data (SelectRange
+                '"/dc-1/test/TestTable"
+                range
+                '('Value)
+                '(
+                 )
+            ))
+            (return (AsList (SetResult 'Result data)))
+            )
+            )"
+        ));
+
+        TValue value = TValue::Create(res.GetValue(), res.GetType());
+        TValue result = value["Result"];
+        auto list = result["List"];
+        UNIT_ASSERT_VALUES_EQUAL(list.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL((TString)list[0]["Value"], "Two");
+    }
+
+    Y_UNIT_TEST(SelectRangeForbidNullArgs4) {
+        auto res = CreateTableAndExecuteMkql(Sprintf(R"(
+            (
+            (let range '('IncFrom 'IncTo '('Key1 (Uint64 '1) (Uint64 '1)) '('Key2 (Null) (Null) )))
+            (let data (SelectRange
+                '"/dc-1/test/TestTable"
+                range
+                '('Value)
+                '(
+                    '('"ForbidNullArgsTo" '('Key2))
+                 )
+            ))
+            (return (AsList (SetResult 'Result data)))
+            )
+            )"
+        ));
+
+        TValue value = TValue::Create(res.GetValue(), res.GetType());
+        TValue result = value["Result"];
+        auto list = result["List"];
+        UNIT_ASSERT_VALUES_EQUAL(list.Size(), 0);
+    }
+
     Y_UNIT_TEST(SelectRangeReverse) {
         const ui32 TABLE_ROWS = 10;
 

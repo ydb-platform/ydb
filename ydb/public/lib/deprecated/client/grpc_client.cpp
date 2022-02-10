@@ -23,7 +23,7 @@ namespace NKikimr {
                 virtual void Finished() = 0;
             };
 
-            struct IStreamRequestReadProcessor : public IProcessorBase 
+            struct IStreamRequestReadProcessor : public IProcessorBase
             {
                 virtual void InvokeProcess() = 0;
                 virtual void InvokeFinish() = 0;
@@ -68,7 +68,7 @@ namespace NKikimr {
 
                 ~TRequestProcessor() {
                     if (!Invoked) {
-                        TGrpcError error = {"request left unhandled", -1}; 
+                        TGrpcError error = {"request left unhandled", -1};
                         Callback(&error, Reply);
                     }
                 }
@@ -87,7 +87,7 @@ namespace NKikimr {
                         Callback(nullptr, Reply);
                     } else {
                         const auto& msg = Status.error_message();
-                        TGrpcError error = {TString(msg.data(), msg.length()), Status.error_code()}; 
+                        TGrpcError error = {TString(msg.data(), msg.length()), Status.error_code()};
                         Callback(&error, Reply);
                     }
                 }
@@ -95,7 +95,7 @@ namespace NKikimr {
 
             template<typename TRequest, typename TResponse>
             class TStreamRequestProcessor
-                : public IStreamRequestReadProcessor 
+                : public IStreamRequestReadProcessor
             {
             public:
                 using TAsyncReaderPtr = std::unique_ptr<grpc::ClientAsyncReader<TResponse>>;
@@ -137,7 +137,7 @@ namespace NKikimr {
 
                 ~TStreamRequestProcessor() {
                     if (!Finished) {
-                        TGrpcError error = {"request left unhandled", -1}; 
+                        TGrpcError error = {"request left unhandled", -1};
                         Finish(&error);
                     }
                 }
@@ -169,7 +169,7 @@ namespace NKikimr {
                         Finish(nullptr);
                     } else {
                         const auto& msg = Status.error_message();
-                        TGrpcError error = {TString(msg.data(), msg.length()), Status.error_code()}; 
+                        TGrpcError error = {TString(msg.data(), msg.length()), Status.error_code()};
                         Finish(&error);
                     }
                 }
@@ -259,7 +259,7 @@ namespace NKikimr {
                         break;
                     }
                     if (IsStreamTag(tag)) {
-                        THolder<IStreamRequestReadProcessor> processor(static_cast<IStreamRequestReadProcessor*>(tag)); 
+                        THolder<IStreamRequestReadProcessor> processor(static_cast<IStreamRequestReadProcessor*>(tag));
                         if (ok) {
                             processor->InvokeProcess();
                             Y_UNUSED(processor.Release()); // keep processor alive

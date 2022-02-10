@@ -10,7 +10,7 @@
 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/protobuf/util/pb_io.h>
- 
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -88,7 +88,7 @@ TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, const T
 
 Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::NCommon::TOperationResult& queryResult);
 void AddQueryIssues(NKikimrKqp::TQueryResponse& response, const NYql::TIssues& issues);
-bool HasSchemeOrFatalIssues(const NYql::TIssues& issues); 
+bool HasSchemeOrFatalIssues(const NYql::TIssues& issues);
 
 // for tests only
 void FailForcedNewEngineCompilationForTests(bool fail = true);

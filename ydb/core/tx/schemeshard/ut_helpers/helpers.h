@@ -386,11 +386,11 @@ namespace NSchemeShardUT_Private {
         });
     }
 
-    TRowVersion CreateVolatileSnapshot( 
-        TTestActorRuntime& runtime, 
-        const TVector<TString>& tables, 
-        TDuration timeout); 
- 
+    TRowVersion CreateVolatileSnapshot(
+        TTestActorRuntime& runtime,
+        const TVector<TString>& tables,
+        TDuration timeout);
+
     TPathId TestFindTabletSubDomainPathId(
         TTestActorRuntime& runtime, ui64 tabletId,
         NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected = NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS);

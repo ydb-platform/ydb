@@ -898,7 +898,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             CFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
         })
     };
-    ctx.RegisterWithSameMailbox(new TRegisterNodeActor(ev, this)); 
+    ctx.RegisterWithSameMailbox(new TRegisterNodeActor(ev, this));
 }
 
 void TNodeBroker::Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,

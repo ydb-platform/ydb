@@ -54,11 +54,11 @@ struct TEvTxUserProxy {
         EvExportRequest = EvProposeTransaction + 2 * 512,
         EvExportResponse,
 
-        EvUploadRowsResponse, 
- 
-        EvGetProxyServicesRequest, 
-        EvGetProxyServicesResponse, 
- 
+        EvUploadRowsResponse,
+
+        EvGetProxyServicesRequest,
+        EvGetProxyServicesResponse,
+
         EvResolveTablesResponse,
 
         EvEnd
@@ -197,28 +197,28 @@ struct TEvTxUserProxy {
         { }
     };
 
-    struct TEvGetProxyServicesRequest : public TEventLocal<TEvGetProxyServicesRequest, EvGetProxyServicesRequest> { 
-        // empty 
-    }; 
- 
-    struct TEvGetProxyServicesResponse : public TEventLocal<TEvGetProxyServicesResponse, EvGetProxyServicesResponse> { 
-        const NTxProxy::TTxProxyServices Services; 
- 
-        TEvGetProxyServicesResponse( 
-                const NTxProxy::TTxProxyServices& services) 
-            : Services(services) 
-        { } 
-    }; 
- 
-    struct TEvUploadRowsResponse: public TEventLocal<TEvUploadRowsResponse, EvUploadRowsResponse> { 
-        Ydb::StatusIds::StatusCode Status; 
-        NYql::TIssues Issues; 
- 
-        TEvUploadRowsResponse(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) 
-            : Status(status) 
-            , Issues(issues) 
-        {} 
-    }; 
+    struct TEvGetProxyServicesRequest : public TEventLocal<TEvGetProxyServicesRequest, EvGetProxyServicesRequest> {
+        // empty
+    };
+
+    struct TEvGetProxyServicesResponse : public TEventLocal<TEvGetProxyServicesResponse, EvGetProxyServicesResponse> {
+        const NTxProxy::TTxProxyServices Services;
+
+        TEvGetProxyServicesResponse(
+                const NTxProxy::TTxProxyServices& services)
+            : Services(services)
+        { }
+    };
+
+    struct TEvUploadRowsResponse: public TEventLocal<TEvUploadRowsResponse, EvUploadRowsResponse> {
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+
+        TEvUploadRowsResponse(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
+            : Status(status)
+            , Issues(issues)
+        {}
+    };
 };
 
 struct TEvTxProxyReq {

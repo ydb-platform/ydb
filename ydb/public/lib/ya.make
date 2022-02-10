@@ -4,7 +4,7 @@ RECURSE(
     base
     deprecated
     experimental
-    idx_test 
+    idx_test
     json_value
     jwt
     operation_id

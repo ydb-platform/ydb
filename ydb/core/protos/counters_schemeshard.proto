@@ -72,7 +72,7 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxMergeTablePartition = 58      [(CounterOpts) = {Name: "InFlightOps/MergeTablePartition"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterExtSubDomain = 59        [(CounterOpts) = {Name: "InFlightOps/AlterExtSubDomain"}];
     COUNTER_IN_FLIGHT_OPS_TxForceDropExtSubDomain = 60    [(CounterOpts) = {Name: "InFlightOps/ForceDropExtSubDomain"}];
-    COUNTER_IN_FLIGHT_OPS_TxFillIndex = 61                [(CounterOpts) = {Name: "InFlightOps/FillIndex"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxFillIndex = 61                [(CounterOpts) = {Name: "InFlightOps/FillIndex"}];
     COUNTER_IN_FLIGHT_OPS_TxUpgradeSubDomain = 62         [(CounterOpts) = {Name: "InFlightOps/UpgradeSubDomain"}];
     COUNTER_IN_FLIGHT_OPS_TxUpgradeSubDomainDecision = 63 [(CounterOpts) = {Name: "InFlightOps/UpgradeSubDomainDecision"}];
     COUNTER_SUB_DOMAIN_HIVE_COUNT = 64                    [(CounterOpts) = {Name: "SubDomainsHives"}];
@@ -189,7 +189,7 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxMergeTablePartition = 33       [(CounterOpts) = {Name: "FinishedOps/MergeTablePartition"}];
     COUNTER_FINISHED_OPS_TxAlterExtSubDomain = 34         [(CounterOpts) = {Name: "FinishedOps/AlterExtSubDomain"}];
     COUNTER_FINISHED_OPS_TxForceDropExtSubDomain = 35     [(CounterOpts) = {Name: "FinishedOps/ForceDropExtSubDomain"}];
-    COUNTER_FINISHED_OPS_TxFillIndex = 36                 [(CounterOpts) = {Name: "FinishedOps/FillIndex"}]; 
+    COUNTER_FINISHED_OPS_TxFillIndex = 36                 [(CounterOpts) = {Name: "FinishedOps/FillIndex"}];
     COUNTER_FINISHED_OPS_TxUpgradeSubDomain = 37          [(CounterOpts) = {Name: "FinishedOps/UpgradeSubDomain"}];
     COUNTER_FINISHED_OPS_TxUpgradeSubDomainDecision = 38  [(CounterOpts) = {Name: "FinishedOps/UpgradeSubDomainDecision"}];
     COUNTER_FINISHED_OPS_TxInitializeBuildIndex = 39      [(CounterOpts) = {Name: "FinishedOps/InitializeBuildIndex"}];

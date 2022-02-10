@@ -66,7 +66,7 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
 } // namespace
 
 TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
-                   TIssues& issues) 
+                   TIssues& issues)
     : ClusterMapping(settings.ClusterMapping)
     , PathPrefix(settings.PathPrefix)
     , ClusterPathPrefixes(settings.ClusterPathPrefixes)
@@ -74,7 +74,7 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , Pool(new TMemoryPool(4096))
     , Issues(issues)
     , IncrementMonCounterFunction(settings.IncrementCounter)
-    , HasPendingErrors(false) 
+    , HasPendingErrors(false)
     , DqEngineEnable(Settings.DqDefaultAuto->Allow())
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
 {
@@ -139,7 +139,7 @@ IOutputStream& TContext::Error(NYql::TIssueCode code) {
 }
 
 IOutputStream& TContext::Error(NYql::TPosition pos, NYql::TIssueCode code) {
-    HasPendingErrors = true; 
+    HasPendingErrors = true;
     return MakeIssue(TSeverityIds::S_ERROR, code, pos);
 }
 

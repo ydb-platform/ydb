@@ -4,45 +4,45 @@
 #include <ydb/library/yql/public/issue/protos/issue_message.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
- 
+
 #include <google/protobuf/message.h>
 #include <google/protobuf/descriptor.h>
- 
-using namespace google::protobuf; 
+
+using namespace google::protobuf;
 using namespace NYql;
- 
-void ensureMessageTypesSame(const Descriptor* a, const Descriptor* b, THashSet<TString>* visitedTypes); 
-void ensureFieldDescriptorsSame(const FieldDescriptor* a, const FieldDescriptor* b, THashSet<TString>* visitedTypes) { 
-    UNIT_ASSERT(a); 
-    UNIT_ASSERT(b); 
- 
-    UNIT_ASSERT_VALUES_EQUAL(FieldDescriptor::TypeName(a->type()), FieldDescriptor::TypeName(b->type())); 
-    UNIT_ASSERT_VALUES_EQUAL((int)a->label(), (int)b->label()); 
-    UNIT_ASSERT_VALUES_EQUAL(a->name(), b->name()); 
-    UNIT_ASSERT_VALUES_EQUAL(a->number(), b->number()); 
-    UNIT_ASSERT_VALUES_EQUAL(a->is_repeated(), b->is_repeated()); 
-    UNIT_ASSERT_VALUES_EQUAL(a->is_packed(), b->is_packed()); 
-    UNIT_ASSERT_VALUES_EQUAL(a->index(), b->index()); 
-    if (a->type() == FieldDescriptor::TYPE_MESSAGE || a->type() == FieldDescriptor::TYPE_GROUP) { 
-        ensureMessageTypesSame(a->message_type(), b->message_type(), visitedTypes); 
-    } 
-} 
- 
-void ensureMessageTypesSame(const Descriptor* a, const Descriptor* b, THashSet<TString>* visitedTypes) { 
-    UNIT_ASSERT(a); 
-    UNIT_ASSERT(b); 
-    if (!visitedTypes->insert(a->name()).second) { 
-        return; 
-    } 
- 
-    UNIT_ASSERT_VALUES_EQUAL(a->name(), b->name()); 
-    UNIT_ASSERT_VALUES_EQUAL(a->field_count(), b->field_count()); 
- 
-    for (int i = 0; i < a->field_count(); i++) { 
-        ensureFieldDescriptorsSame(a->field(i), b->field(i), visitedTypes); 
-    } 
-} 
- 
+
+void ensureMessageTypesSame(const Descriptor* a, const Descriptor* b, THashSet<TString>* visitedTypes);
+void ensureFieldDescriptorsSame(const FieldDescriptor* a, const FieldDescriptor* b, THashSet<TString>* visitedTypes) {
+    UNIT_ASSERT(a);
+    UNIT_ASSERT(b);
+
+    UNIT_ASSERT_VALUES_EQUAL(FieldDescriptor::TypeName(a->type()), FieldDescriptor::TypeName(b->type()));
+    UNIT_ASSERT_VALUES_EQUAL((int)a->label(), (int)b->label());
+    UNIT_ASSERT_VALUES_EQUAL(a->name(), b->name());
+    UNIT_ASSERT_VALUES_EQUAL(a->number(), b->number());
+    UNIT_ASSERT_VALUES_EQUAL(a->is_repeated(), b->is_repeated());
+    UNIT_ASSERT_VALUES_EQUAL(a->is_packed(), b->is_packed());
+    UNIT_ASSERT_VALUES_EQUAL(a->index(), b->index());
+    if (a->type() == FieldDescriptor::TYPE_MESSAGE || a->type() == FieldDescriptor::TYPE_GROUP) {
+        ensureMessageTypesSame(a->message_type(), b->message_type(), visitedTypes);
+    }
+}
+
+void ensureMessageTypesSame(const Descriptor* a, const Descriptor* b, THashSet<TString>* visitedTypes) {
+    UNIT_ASSERT(a);
+    UNIT_ASSERT(b);
+    if (!visitedTypes->insert(a->name()).second) {
+        return;
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(a->name(), b->name());
+    UNIT_ASSERT_VALUES_EQUAL(a->field_count(), b->field_count());
+
+    for (int i = 0; i < a->field_count(); i++) {
+        ensureFieldDescriptorsSame(a->field(i), b->field(i), visitedTypes);
+    }
+}
+
 Y_UNIT_TEST_SUITE(IssueTest) {
     Y_UNIT_TEST(Ascii) {
         TIssue issue1("тест abc");
@@ -56,25 +56,25 @@ Y_UNIT_TEST_SUITE(IssueTest) {
     }
 }
 
-Y_UNIT_TEST_SUITE(IssueProtoTest) { 
-    Y_UNIT_TEST(KikimrYqlSameLayout) { 
-        Ydb::Issue::IssueMessage yqlIssue; 
-        NYql::NIssue::NProto::IssueMessage kikimrIssue; 
-        THashSet<TString> visitedTypes; 
-        ensureMessageTypesSame(yqlIssue.GetDescriptor(), kikimrIssue.GetDescriptor(), &visitedTypes); 
-    } 
- 
-    Y_UNIT_TEST(BinarySerialization) { 
-        TIssue issueTo("root_issue"); 
-        TString bin = IssueToBinaryMessage(issueTo); 
-        TIssue issueFrom = IssueFromBinaryMessage(bin); 
-        UNIT_ASSERT_EQUAL(issueTo, issueFrom); 
-    } 
- 
-    Y_UNIT_TEST(WrongBinStringException) { 
-        UNIT_ASSERT_EXCEPTION(IssueFromBinaryMessage("qqq"), yexception); 
-    } 
-} 
+Y_UNIT_TEST_SUITE(IssueProtoTest) {
+    Y_UNIT_TEST(KikimrYqlSameLayout) {
+        Ydb::Issue::IssueMessage yqlIssue;
+        NYql::NIssue::NProto::IssueMessage kikimrIssue;
+        THashSet<TString> visitedTypes;
+        ensureMessageTypesSame(yqlIssue.GetDescriptor(), kikimrIssue.GetDescriptor(), &visitedTypes);
+    }
+
+    Y_UNIT_TEST(BinarySerialization) {
+        TIssue issueTo("root_issue");
+        TString bin = IssueToBinaryMessage(issueTo);
+        TIssue issueFrom = IssueFromBinaryMessage(bin);
+        UNIT_ASSERT_EQUAL(issueTo, issueFrom);
+    }
+
+    Y_UNIT_TEST(WrongBinStringException) {
+        UNIT_ASSERT_EXCEPTION(IssueFromBinaryMessage("qqq"), yexception);
+    }
+}
 
 
 Y_UNIT_TEST_SUITE(TextWalkerTest) {

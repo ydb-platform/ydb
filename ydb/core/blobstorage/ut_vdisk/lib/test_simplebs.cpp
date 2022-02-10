@@ -42,7 +42,7 @@ private:
         if (finished) {
             if (WaitForCompaction) {
                 Become(&TThis::StateFuncWait);
-                ctx.RegisterWithSameMailbox(CreateWaitForCompaction(ctx.SelfID, VDiskInfo)); 
+                ctx.RegisterWithSameMailbox(CreateWaitForCompaction(ctx.SelfID, VDiskInfo));
             } else {
                 HandleWaitDone(ctx);
             }

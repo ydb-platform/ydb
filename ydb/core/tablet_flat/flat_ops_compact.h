@@ -96,7 +96,7 @@ namespace NTabletFlatExecutor {
 
         THello Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
         {
-            TActivationContext::AsActorContext().RegisterWithSameMailbox(this); 
+            TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
             Spent = new TSpent(TAppData::TimeProvider.Get());
             Registry = AppData()->TypeRegistry;

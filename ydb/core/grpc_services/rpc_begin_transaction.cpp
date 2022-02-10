@@ -2,7 +2,7 @@
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
-#include "rpc_common.h" 
+#include "rpc_common.h"
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -18,7 +18,7 @@ class TBeginTransactionRPC : public TRpcKqpRequestActor<TBeginTransactionRPC, TE
     using TBase = TRpcKqpRequestActor<TBeginTransactionRPC, TEvBeginTransactionRequest>;
 
 public:
-    using TResult = Ydb::Table::BeginTransactionResult; 
+    using TResult = Ydb::Table::BeginTransactionResult;
 
     TBeginTransactionRPC(TEvBeginTransactionRequest* msg)
         : TBase(msg) {}
@@ -39,14 +39,14 @@ public:
 
 private:
     void BeginTransactionImpl(const TActorContext &ctx) {
-        const auto req = GetProtoRequest(); 
+        const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
 
         TString sessionId;
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        SetAuthToken(ev, *Request_); 
-        SetDatabase(ev, *Request_); 
- 
+        SetAuthToken(ev, *Request_);
+        SetDatabase(ev, *Request_);
+
         NYql::TIssues issues;
         if (CheckSession(req->session_id(), issues)) {
             ev->Record.MutableRequest()->SetSessionId(req->session_id());
@@ -85,14 +85,14 @@ private:
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record.GetRef();
-        SetCost(record.GetConsumedRu()); 
+        SetCost(record.GetConsumedRu());
         AddServerHintsIfAny(record);
- 
+
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             const auto& kqpResponse = record.GetResponse();
             const auto& issueMessage = kqpResponse.GetQueryIssues();
 
-            auto beginTxResult = TEvBeginTransactionRequest::AllocateResult<Ydb::Table::BeginTransactionResult>(Request_); 
+            auto beginTxResult = TEvBeginTransactionRequest::AllocateResult<Ydb::Table::BeginTransactionResult>(Request_);
             if (kqpResponse.HasTxMeta()) {
                 beginTxResult->mutable_tx_meta()->CopyFrom(kqpResponse.GetTxMeta());
             }

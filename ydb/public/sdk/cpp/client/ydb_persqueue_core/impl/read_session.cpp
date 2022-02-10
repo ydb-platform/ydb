@@ -40,8 +40,8 @@ bool HasNullCounters(TReaderCounters& counters);
 
 class TErrorHandler : public IErrorHandler {
 public:
-    TErrorHandler(std::weak_ptr<TReadSession> session) 
-        : Session(std::move(session)) 
+    TErrorHandler(std::weak_ptr<TReadSession> session)
+        : Session(std::move(session))
     {
     }
 
@@ -91,8 +91,8 @@ Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest TReadSession::MakeClus
     return req;
 }
 
-void TReadSession::Start() { 
-    ErrorHandler = MakeIntrusive<TErrorHandler>(weak_from_this()); 
+void TReadSession::Start() {
+    ErrorHandler = MakeIntrusive<TErrorHandler>(weak_from_this());
     EventsQueue = std::make_shared<TReadSessionEventsQueue>(Settings, weak_from_this());
 
     if (!ValidateSettings()) {
@@ -150,7 +150,7 @@ void TReadSession::StartClusterDiscovery() {
         if (any) {
             any->UnpackTo(&result);
         }
-        TStatus st(std::move(status)); 
+        TStatus st(std::move(status));
         selfShared->OnClusterDiscovery(st, result);
     };
 
@@ -403,7 +403,7 @@ bool TReadSession::Close(TDuration timeout) {
 
         NYql::TIssues issues;
         issues.AddIssue("Session was gracefully closed");
-        EventsQueue->Close(TSessionClosedEvent(EStatus::SUCCESS, std::move(issues)), deferred); 
+        EventsQueue->Close(TSessionClosedEvent(EStatus::SUCCESS, std::move(issues)), deferred);
     } else {
         ++*Settings.Counters_->Errors;
         for (const auto& session : sessions) {
@@ -412,7 +412,7 @@ bool TReadSession::Close(TDuration timeout) {
 
         NYql::TIssues issues;
         issues.AddIssue(TStringBuilder() << "Session was closed after waiting " << timeout);
-        EventsQueue->Close(TSessionClosedEvent(EStatus::TIMEOUT, std::move(issues)), deferred); 
+        EventsQueue->Close(TSessionClosedEvent(EStatus::TIMEOUT, std::move(issues)), deferred);
     }
 
     with_lock (Lock) {
@@ -437,7 +437,7 @@ void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, TDeferredActions&
 }
 
 void TReadSession::AbortImpl(EStatus statusCode, NYql::TIssues&& issues, TDeferredActions& deferred) {
-    AbortImpl(TSessionClosedEvent(statusCode, std::move(issues)), deferred); 
+    AbortImpl(TSessionClosedEvent(statusCode, std::move(issues)), deferred);
 }
 
 void TReadSession::AbortImpl(EStatus statusCode, const TString& message, TDeferredActions& deferred) {
@@ -447,7 +447,7 @@ void TReadSession::AbortImpl(EStatus statusCode, const TString& message, TDeferr
 }
 
 void TReadSession::Abort(EStatus statusCode, NYql::TIssues&& issues) {
-    Abort(TSessionClosedEvent(statusCode, std::move(issues))); 
+    Abort(TSessionClosedEvent(statusCode, std::move(issues)));
 }
 
 void TReadSession::Abort(EStatus statusCode, const TString& message) {
@@ -1499,7 +1499,7 @@ TSingleClusterReadSessionImpl::TPartitionCookieMapping::TCookie::TPtr TSingleClu
         UncommittedOffsetToCookie.erase(cookieIt);
         return cookie;
     } else {
-        ThrowFatalError(TStringBuilder() << "Invalid offset " << offset << ". Partition stream id: " << partitionStreamId << Endl); 
+        ThrowFatalError(TStringBuilder() << "Invalid offset " << offset << ". Partition stream id: " << partitionStreamId << Endl);
     }
     // If offset wasn't found, there might be already hard released partition.
     // This situation is OK.
@@ -2221,7 +2221,7 @@ void TDeferredActions::DeferAbortSession(const IErrorHandler::TPtr& errorHandler
 }
 
 void TDeferredActions::DeferAbortSession(const IErrorHandler::TPtr& errorHandler, EStatus statusCode, NYql::TIssues&& issues) {
-    DeferAbortSession(errorHandler, TSessionClosedEvent(statusCode, std::move(issues))); 
+    DeferAbortSession(errorHandler, TSessionClosedEvent(statusCode, std::move(issues)));
 }
 
 void TDeferredActions::DeferAbortSession(const IErrorHandler::TPtr& errorHandler, EStatus statusCode, const TString& message) {
@@ -2231,7 +2231,7 @@ void TDeferredActions::DeferAbortSession(const IErrorHandler::TPtr& errorHandler
 }
 
 void TDeferredActions::DeferAbortSession(const IErrorHandler::TPtr& errorHandler, TPlainStatus&& status) {
-    DeferAbortSession(errorHandler, TSessionClosedEvent(std::move(status))); 
+    DeferAbortSession(errorHandler, TSessionClosedEvent(std::move(status)));
 }
 
 void TDeferredActions::DeferReconnection(std::shared_ptr<TSingleClusterReadSessionImpl> session, const IErrorHandler::TPtr& errorHandler, TPlainStatus&& status) {
@@ -2489,9 +2489,9 @@ void TDeferredCommit::TImpl::Add(const TReadSessionEvent::TDataReceivedEvent::TM
 
 void TDeferredCommit::TImpl::Add(const TPartitionStream::TPtr& partitionStream, TDisjointIntervalTree<ui64>& offsetSet, ui64 startOffset, ui64 endOffset) {
     if (offsetSet.Intersects(startOffset, endOffset)) {
-        ThrowFatalError(TStringBuilder() << "Commit set already has some offsets from half-interval [" 
-                                         << startOffset << "; " << endOffset 
-                                         << ") for partition stream with id " << partitionStream->GetPartitionStreamId()); 
+        ThrowFatalError(TStringBuilder() << "Commit set already has some offsets from half-interval ["
+                                         << startOffset << "; " << endOffset
+                                         << ") for partition stream with id " << partitionStream->GetPartitionStreamId());
     } else {
         offsetSet.InsertInterval(startOffset, endOffset);
     }
@@ -2506,8 +2506,8 @@ void TDeferredCommit::TImpl::Add(const TPartitionStream::TPtr& partitionStream, 
     Y_ASSERT(partitionStream);
     auto& offsetSet = Offsets[partitionStream];
     if (offsetSet.Has(offset)) {
-        ThrowFatalError(TStringBuilder() << "Commit set already has offset " << offset 
-                                         << " for partition stream with id " << partitionStream->GetPartitionStreamId()); 
+        ThrowFatalError(TStringBuilder() << "Commit set already has offset " << offset
+                                         << " for partition stream with id " << partitionStream->GetPartitionStreamId());
     } else {
         offsetSet.Insert(offset);
     }

@@ -75,20 +75,20 @@ public:
 
     template<typename TService>
     std::pair<std::unique_ptr<TServiceConnection<TService>>, TStringType> GetServiceConnection(
-        TDbDriverStatePtr dbState, const TStringType& preferredEndpoint, 
-        TRpcRequestSettings::TEndpointPolicy endpointPolicy) 
+        TDbDriverStatePtr dbState, const TStringType& preferredEndpoint,
+        TRpcRequestSettings::TEndpointPolicy endpointPolicy)
     {
         auto clientConfig = NGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint);
         clientConfig.EnableSsl = dbState->EnableSsl;
         clientConfig.SslCaCert = CaCert_;
-        clientConfig.MemQuota = MemoryQuota_; 
+        clientConfig.MemQuota = MemoryQuota_;
 
-        if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>() 
-            || dbState->Database.empty() 
-            || endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint) 
-        { 
-            SetGrpcKeepAlive(clientConfig, GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY, GRpcKeepAlivePermitWithoutCalls_); 
-        } else { 
+        if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>()
+            || dbState->Database.empty()
+            || endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint)
+        {
+            SetGrpcKeepAlive(clientConfig, GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY, GRpcKeepAlivePermitWithoutCalls_);
+        } else {
             auto endpoint = dbState->EndpointPool.GetEndpoint(preferredEndpoint);
             if (!endpoint) {
                 return {nullptr, ""};
@@ -154,8 +154,8 @@ public:
             });
         }
 
-        auto endpointPolicy = requestSettings.EndpointPolicy; 
- 
+        auto endpointPolicy = requestSettings.EndpointPolicy;
+
         WithServiceConnection<TService>(
             [this, request = std::move(request), userResponseCb = std::move(userResponseCb), rpc, requestSettings, context = std::move(context), clientTimeout, dbState]
             (TPlainStatus status, TConnection serviceConnection, TStringType endpoint) mutable -> void {
@@ -171,7 +171,7 @@ public:
         #ifndef YDB_GRPC_UNSECURE_AUTH
                 meta.CallCredentials = dbState->CallCredentials;
         #else
-                if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) { 
+                if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) {
                     try {
                         meta.Aux.push_back({ YDB_AUTH_TICKET_HEADER, GetAuthInfo(dbState) });
                     } catch (const yexception& e) {
@@ -256,7 +256,7 @@ public:
 
                 serviceConnection->DoAdvancedRequest(std::move(request), std::move(responseCbLow), rpc, meta,
                     context.get());
-            }, dbState, preferredEndpoint, endpointPolicy); 
+            }, dbState, preferredEndpoint, endpointPolicy);
     }
 
     template<typename TService, typename TRequest, typename TResponse>
@@ -316,36 +316,36 @@ public:
             std::move(context));
     }
 
-    // Run request using discovery endpoint. 
-    // Mostly usefull to make calls from credential provider 
+    // Run request using discovery endpoint.
+    // Mostly usefull to make calls from credential provider
     template<typename TService, typename TRequest, typename TResponse>
-    static void RunOnDiscoveryEndpoint( 
-        std::shared_ptr<ICoreFacility> facility, 
-        TRequest&& request, 
-        TResponseCb<TResponse>&& responseCb, 
-        TSimpleRpc<TService, TRequest, TResponse> rpc, 
-        TRpcRequestSettings requestSettings, 
-        TDuration clientTimeout) 
-    { 
-        requestSettings.EndpointPolicy = TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint; 
-        requestSettings.UseAuth = false; 
-        // TODO: Change implementation of Run, to use ICoreFacility and remove this cast 
-        auto dbState = std::dynamic_pointer_cast<TDbDriverState>(facility); 
-        Y_VERIFY(dbState); 
-        auto self = dynamic_cast<TGRpcConnectionsImpl*>(dbState->Client); 
-        Y_VERIFY(self); 
-        self->Run<TService, TRequest, TResponse>( 
-            std::move(request), 
-            std::move(responseCb), 
-            rpc, 
-            dbState, 
-            requestSettings, 
-            clientTimeout, 
-            TString(), 
-            nullptr); 
-    } 
- 
-    template<typename TService, typename TRequest, typename TResponse> 
+    static void RunOnDiscoveryEndpoint(
+        std::shared_ptr<ICoreFacility> facility,
+        TRequest&& request,
+        TResponseCb<TResponse>&& responseCb,
+        TSimpleRpc<TService, TRequest, TResponse> rpc,
+        TRpcRequestSettings requestSettings,
+        TDuration clientTimeout)
+    {
+        requestSettings.EndpointPolicy = TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint;
+        requestSettings.UseAuth = false;
+        // TODO: Change implementation of Run, to use ICoreFacility and remove this cast
+        auto dbState = std::dynamic_pointer_cast<TDbDriverState>(facility);
+        Y_VERIFY(dbState);
+        auto self = dynamic_cast<TGRpcConnectionsImpl*>(dbState->Client);
+        Y_VERIFY(self);
+        self->Run<TService, TRequest, TResponse>(
+            std::move(request),
+            std::move(responseCb),
+            rpc,
+            dbState,
+            requestSettings,
+            clientTimeout,
+            TString(),
+            nullptr);
+    }
+
+    template<typename TService, typename TRequest, typename TResponse>
     void RunDeferred(
         TRequest&& request,
         TDeferredResultCb&& userResponseCb,
@@ -358,12 +358,12 @@ public:
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
         auto operationCb = [userResponseCb = std::move(userResponseCb)](Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
-            if (operation) { 
-                status.SetCostInfo(std::move(*operation->mutable_cost_info())); 
-                userResponseCb(operation->mutable_result(), std::move(status)); 
-            } else { 
-                userResponseCb(nullptr, std::move(status)); 
-            } 
+            if (operation) {
+                status.SetCostInfo(std::move(*operation->mutable_cost_info()));
+                userResponseCb(operation->mutable_result(), std::move(status));
+            } else {
+                userResponseCb(nullptr, std::move(status));
+            }
         };
 
         RunDeferred<TService, TRequest, TResponse>(
@@ -404,8 +404,8 @@ public:
             return;
         }
 
-        auto endpointPolicy = requestSettings.EndpointPolicy; 
- 
+        auto endpointPolicy = requestSettings.EndpointPolicy;
+
         WithServiceConnection<TService>(
             [request, responseCb = std::move(responseCb), rpc, requestSettings, context = std::move(context), dbState]
             (TPlainStatus status, TConnection serviceConnection, TStringType endpoint) mutable {
@@ -418,7 +418,7 @@ public:
 #ifndef YDB_GRPC_UNSECURE_AUTH
                 meta.CallCredentials = dbState->CallCredentials;
 #else
-                if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) { 
+                if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) {
                     try {
                         meta.Aux.push_back({ YDB_AUTH_TICKET_HEADER, GetAuthInfo(dbState) });
                     } catch (const yexception& e) {
@@ -482,7 +482,7 @@ public:
                     std::move(rpc),
                     std::move(meta),
                     context.get());
-            }, dbState, TStringType(), endpointPolicy); 
+            }, dbState, TStringType(), endpointPolicy);
     }
 
     template<class TService, class TRequest, class TResponse, class TCallback>
@@ -502,8 +502,8 @@ public:
             return;
         }
 
-        auto endpointPolicy = requestSettings.EndpointPolicy; 
- 
+        auto endpointPolicy = requestSettings.EndpointPolicy;
+
         WithServiceConnection<TService>(
             [connectedCallback = std::move(connectedCallback), rpc, requestSettings, context = std::move(context), dbState]
             (TPlainStatus status, TConnection serviceConnection, TStringType endpoint) mutable {
@@ -516,7 +516,7 @@ public:
         #ifndef YDB_GRPC_UNSECURE_AUTH
                 meta.CallCredentials = dbState->CallCredentials;
         #else
-                if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) { 
+                if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) {
                     try {
                         meta.Aux.push_back({ YDB_AUTH_TICKET_HEADER, GetAuthInfo(dbState) });
                     } catch (const yexception& e) {
@@ -579,7 +579,7 @@ public:
                     std::move(rpc),
                     std::move(meta),
                     context.get());
-            }, dbState, TStringType(), endpointPolicy); 
+            }, dbState, TStringType(), endpointPolicy);
     }
 
     TAsyncListEndpointsResult GetEndpoints(TDbDriverStatePtr dbState) override;
@@ -604,32 +604,32 @@ public:
 
 private:
     template <typename TService, typename TCallback>
-    void WithServiceConnection(TCallback callback, TDbDriverStatePtr dbState, 
-        const TStringType& preferredEndpoint, TRpcRequestSettings::TEndpointPolicy endpointPolicy) 
-    { 
+    void WithServiceConnection(TCallback callback, TDbDriverStatePtr dbState,
+        const TStringType& preferredEndpoint, TRpcRequestSettings::TEndpointPolicy endpointPolicy)
+    {
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         TConnection serviceConnection;
         TStringType endpoint;
-        std::tie(serviceConnection, endpoint) = GetServiceConnection<TService>(dbState, preferredEndpoint, endpointPolicy); 
+        std::tie(serviceConnection, endpoint) = GetServiceConnection<TService>(dbState, preferredEndpoint, endpointPolicy);
         if (!serviceConnection) {
             if (dbState->DiscoveryMode == EDiscoveryMode::Sync) {
                 TStringStream errString;
                 errString << "Endpoint list is empty for database " << dbState->Database;
                 errString << ", cluster endpoint " << dbState->DiscoveryEndpoint;
-                TPlainStatus discoveryStatus; 
+                TPlainStatus discoveryStatus;
                 {
                     std::shared_lock guard(dbState->LastDiscoveryStatusRWLock);
-                    discoveryStatus = dbState->LastDiscoveryStatus; 
+                    discoveryStatus = dbState->LastDiscoveryStatus;
                 }
- 
-                // Discovery returns success but no serviceConnection - in this case we unable to continue processing 
-                if (discoveryStatus.Ok()) { 
-                    errString << " while last discovery returned success status. Unable to continue processing."; 
-                    discoveryStatus = TPlainStatus(EStatus::UNAVAILABLE, errString.Str()); 
-                } else { 
-                    errString <<"."; 
-                    discoveryStatus.Issues.AddIssues({NYql::TIssue(errString.Str())}); 
-                } 
+
+                // Discovery returns success but no serviceConnection - in this case we unable to continue processing
+                if (discoveryStatus.Ok()) {
+                    errString << " while last discovery returned success status. Unable to continue processing.";
+                    discoveryStatus = TPlainStatus(EStatus::UNAVAILABLE, errString.Str());
+                } else {
+                    errString <<".";
+                    discoveryStatus.Issues.AddIssues({NYql::TIssue(errString.Str())});
+                }
                 dbState->StatCollector.IncReqFailNoEndpoint();
                 callback(
                     discoveryStatus,
@@ -654,7 +654,7 @@ private:
                 // UpdateAsync guarantee one update in progress for state
                 auto asyncResult = dbState->EndpointPool.UpdateAsync();
                 const bool needUpdateChannels = asyncResult.second;
-                asyncResult.first.Subscribe([this, callback = std::move(callback), needUpdateChannels, dbState, preferredEndpoint, endpointPolicy] 
+                asyncResult.first.Subscribe([this, callback = std::move(callback), needUpdateChannels, dbState, preferredEndpoint, endpointPolicy]
                     (const NThreading::TFuture<TEndpointUpdateResult>& future) mutable {
                     --QueuedRequests_;
                     const auto& updateResult = future.GetValue();
@@ -665,7 +665,7 @@ private:
                     }
                     auto discoveryStatus = updateResult.DiscoveryStatus;
                     if (discoveryStatus.Status == EStatus::SUCCESS) {
-                        WithServiceConnection<TService>(std::move(callback), dbState, preferredEndpoint, endpointPolicy); 
+                        WithServiceConnection<TService>(std::move(callback), dbState, preferredEndpoint, endpointPolicy);
                     } else {
                         callback(
                             TPlainStatus(discoveryStatus.Status, std::move(discoveryStatus.Issues)),
@@ -703,7 +703,7 @@ private:
     const TBalancingSettings BalancingSettings_;
     const TDuration GRpcKeepAliveTimeout_;
     const bool GRpcKeepAlivePermitWithoutCalls_;
-    const ui64 MemoryQuota_; 
+    const ui64 MemoryQuota_;
 
     std::atomic_int64_t QueuedRequests_;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
@@ -712,8 +712,8 @@ private:
     // State for default database, token pair
     TDbDriverStatePtr DefaultState_;
 
-    std::vector<std::unique_ptr<IExtension>> Extensions_; 
-    std::vector<std::unique_ptr<IExtensionApi>> ExtensionApis_; 
+    std::vector<std::unique_ptr<IExtension>> Extensions_;
+    std::vector<std::unique_ptr<IExtensionApi>> ExtensionApis_;
 
     IDiscoveryMutatorApi::TMutatorCb DiscoveryMutatorCb;
 

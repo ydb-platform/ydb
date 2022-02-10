@@ -549,7 +549,7 @@ TMaybe<TIssue> TJoinLabels::Add(TExprContext& ctx, TExprNode& node, const TStruc
 
     for (auto& table : label.Tables) {
         if (!InputByTable.insert({ table, index }).second) {
-            return TIssue( 
+            return TIssue(
                 ctx.GetPosition(node.Pos()),
                 TStringBuilder() << "Duplication of table name " << table);
         }

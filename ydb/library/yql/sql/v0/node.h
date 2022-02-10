@@ -62,11 +62,11 @@ namespace NSQLTranslationV0 {
         DeleteOn,
     };
 
-    enum class EAlterTableIntentnt { 
-        AddColumn, 
-        DropColumn 
-    }; 
- 
+    enum class EAlterTableIntentnt {
+        AddColumn,
+        DropColumn
+    };
+
     class TContext;
     class ITableKeys;
     class ISource;

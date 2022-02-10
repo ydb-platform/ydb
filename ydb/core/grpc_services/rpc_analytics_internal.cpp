@@ -1,4 +1,4 @@
-#include "service_analytics_internal.h" 
+#include "service_analytics_internal.h"
 #include "rpc_common.h"
 #include "rpc_deferrable.h"
 
@@ -9,10 +9,10 @@
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/public/api/protos/draft/yq_private.pb.h>
- 
+
 namespace NKikimr {
 namespace NGRpcService {
- 
+
 using TEvYqPrivatePingTaskRequest =
     TGrpcRequestOperationCall<Yq::Private::PingTaskRequest, Yq::Private::PingTaskResponse>;
 using TEvYqPrivateGetTaskRequest =
@@ -21,7 +21,7 @@ using TEvYqPrivateWriteTaskResultRequest =
     TGrpcRequestOperationCall<Yq::Private::WriteTaskResultRequest, Yq::Private::WriteTaskResultResponse>;
 using TEvYqPrivateNodesHealthCheckRequest =
     TGrpcRequestOperationCall<Yq::Private::NodesHealthCheckRequest, Yq::Private::NodesHealthCheckResponse>;
- 
+
 namespace {
     template <typename TEv, typename TReq>
     void SendResponse(const TEv& ev, TReq& req) {

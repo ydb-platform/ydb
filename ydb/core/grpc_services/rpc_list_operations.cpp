@@ -1,5 +1,5 @@
 #include "grpc_request_proxy.h"
-#include "operation_helpers.h" 
+#include "operation_helpers.h"
 #include "rpc_export_base.h"
 #include "rpc_import_base.h"
 #include "rpc_calls.h"
@@ -34,9 +34,9 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
             return "[ListIndexBuilds]";
         default:
             return "[Untagged]";
-        } 
-    } 
- 
+        }
+    }
+
     IEventBase* MakeRequest() override {
         const auto& request = *Request->GetProtoRequest();
 
@@ -54,40 +54,40 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
 
     void Handle(TEvExport::TEvListExportsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
- 
+
         LOG_D("Handle TEvExport::TEvListExportsResponse"
             << ": record# " << record.ShortDebugString());
- 
+
         TResponse response;
         response.set_status(record.GetStatus());
         if (record.GetIssues().size()) {
             response.mutable_issues()->CopyFrom(record.GetIssues());
-        } 
+        }
         for (const auto& entry : record.GetEntries()) {
             *response.add_operations() = TExportConv::ToOperation(entry);
-        } 
+        }
         response.set_next_page_token(record.GetNextPageToken());
         Reply(response);
     }
- 
+
     void Handle(TEvImport::TEvListImportsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
- 
+
         LOG_D("Handle TEvImport::TEvListImportsResponse"
             << ": record# " << record.ShortDebugString());
- 
-        TResponse response; 
-        response.set_status(record.GetStatus()); 
-        if (record.GetIssues().size()) { 
-            response.mutable_issues()->CopyFrom(record.GetIssues()); 
-        } 
-        for (const auto& entry : record.GetEntries()) { 
+
+        TResponse response;
+        response.set_status(record.GetStatus());
+        if (record.GetIssues().size()) {
+            response.mutable_issues()->CopyFrom(record.GetIssues());
+        }
+        for (const auto& entry : record.GetEntries()) {
             *response.add_operations() = TImportConv::ToOperation(entry);
-        } 
-        response.set_next_page_token(record.GetNextPageToken()); 
-        Reply(response); 
-    } 
- 
+        }
+        response.set_next_page_token(record.GetNextPageToken());
+        Reply(response);
+    }
+
     void Handle(TEvIndexBuilder::TEvListResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 

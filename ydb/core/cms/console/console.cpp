@@ -26,12 +26,12 @@ void TConsole::OnActivateExecutor(const TActorContext &ctx)
     TValidatorsRegistry::Instance()->LockValidators();
 
     ConfigsManager = new TConfigsManager(*this);
-    ctx.RegisterWithSameMailbox(ConfigsManager); 
+    ctx.RegisterWithSameMailbox(ConfigsManager);
 
     TenantsManager = new TTenantsManager(*this, domains->Domains.at(domainId),
                                          Counters,
                                          AppData()->FeatureFlags);
-    ctx.RegisterWithSameMailbox(TenantsManager); 
+    ctx.RegisterWithSameMailbox(TenantsManager);
 
     if (AppData(ctx)->NetClassifierConfig.GetUpdaterConfig().GetNetDataSourceUrl()) {
         NetClassifierUpdaterId = ctx.Register(NNetClassifierUpdater::MakeNetClassifierUpdaterActor(SelfId()));

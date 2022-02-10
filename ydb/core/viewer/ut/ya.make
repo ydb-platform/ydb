@@ -14,8 +14,8 @@ SRCS(
     viewer_ut.cpp
 )
 
-PEERDIR( 
+PEERDIR(
     ydb/core/testlib
-) 
- 
+)
+
 END()

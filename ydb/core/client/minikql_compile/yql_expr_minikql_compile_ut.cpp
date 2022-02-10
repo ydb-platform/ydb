@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         UNIT_ASSERT_VALUES_EQUAL(res.size(), 1);
         UNIT_ASSERT_EQUAL(res[0].Status, IDbSchemeResolver::TTableResult::Ok);
         UNIT_ASSERT(!!res[0].TableId);
-        UNIT_ASSERT(res[0].TableId->HasSamePath(TTableId(1, 2))); 
+        UNIT_ASSERT(res[0].TableId->HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT_EQUAL(res[0].KeyColumnCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(res[0].Columns.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res[0].Columns["value"].Column, 56);

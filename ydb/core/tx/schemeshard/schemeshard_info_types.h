@@ -2083,8 +2083,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         TPtr alterData = result->CreateNextVersion();
         alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
         Y_VERIFY(alterData->IndexKeys.size());
-        alterData->IndexDataColumns.assign(config.GetDataColumnNames().begin(), config.GetDataColumnNames().end()); 
-        alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady; 
+        alterData->IndexDataColumns.assign(config.GetDataColumnNames().begin(), config.GetDataColumnNames().end());
+        alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
 
         return result;
     }
@@ -2094,7 +2094,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
     EState State;
 
     TVector<TString> IndexKeys;
-    TVector<TString> IndexDataColumns; 
+    TVector<TString> IndexDataColumns;
 
     TTableIndexInfo::TPtr AlterData = nullptr;
 };
@@ -2524,7 +2524,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TString IndexName;
     TVector<TString> IndexColumns;
-    TVector<TString> DataColumns; 
+    TVector<TString> DataColumns;
 
     TString ImplTablePath;
     NTableIndex::TTableColumns ImplTableColumns;
@@ -2629,15 +2629,15 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Y_VERIFY(!IsFinished());
         Subscribers.insert(actorID);
     }
- 
-    float CalcProgressPercent() const { 
-        if (Shards) { 
-            float totalShards = Shards.size(); 
-            return 100.0 * DoneShards.size() / totalShards; 
-        } 
-        // No shards - no progress 
-        return 0.0; 
-    } 
+
+    float CalcProgressPercent() const {
+        if (Shards) {
+            float totalShards = Shards.size();
+            return 100.0 * DoneShards.size() / totalShards;
+        }
+        // No shards - no progress
+        return 0.0;
+    }
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
@@ -2687,9 +2687,9 @@ inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
     for (const auto& x: info.IndexColumns) {
         o << ", IndexColumn: " << x;
     }
-    for (const auto& x: info.DataColumns) { 
-        o << ", DataColumns: " << x; 
-    } 
+    for (const auto& x: info.DataColumns) {
+        o << ", DataColumns: " << x;
+    }
 
     o << ", State: " << info.State;
     o << ", IsCancellationRequested: " << info.CancelRequested;

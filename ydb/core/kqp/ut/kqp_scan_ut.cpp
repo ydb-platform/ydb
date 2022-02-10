@@ -273,33 +273,33 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             [["ydb"];["ydb-1000"];["some very very very very long string"];[0]]])", StreamResultToYson(it));
     }
 
-    Y_UNIT_TEST(Order) { 
-        TKikimrRunner kikimr(AppCfg()); 
-        auto db = kikimr.GetTableClient(); 
- 
-        auto params = db.GetParamsBuilder() 
-            .AddParam("$items").BeginList() 
-                .AddListItem() 
-                    .BeginStruct() 
-                        .AddMember("key").Uint64(646464646464) 
-                        .AddMember("index_0").Utf8("SomeUtf8Data") 
-                        .AddMember("value").Uint32(323232) 
-                    .EndStruct() 
-                .EndList() 
-            .Build().Build(); 
- 
-        auto it = db.StreamExecuteScanQuery(R"( 
-            DECLARE $items AS List<Struct<'key':Uint64,'index_0':Utf8,'value':Uint32>>; 
-            SELECT * FROM AS_TABLE($items); 
-        )", params).GetValueSync(); 
- 
-        UNIT_ASSERT(it.IsSuccess()); 
- 
-        CompareYson(R"([ 
-            ["SomeUtf8Data";646464646464u;323232u] 
-        ])", StreamResultToYson(it)); 
-    } 
- 
+    Y_UNIT_TEST(Order) {
+        TKikimrRunner kikimr(AppCfg());
+        auto db = kikimr.GetTableClient();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$items").BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("key").Uint64(646464646464)
+                        .AddMember("index_0").Utf8("SomeUtf8Data")
+                        .AddMember("value").Uint32(323232)
+                    .EndStruct()
+                .EndList()
+            .Build().Build();
+
+        auto it = db.StreamExecuteScanQuery(R"(
+            DECLARE $items AS List<Struct<'key':Uint64,'index_0':Utf8,'value':Uint32>>;
+            SELECT * FROM AS_TABLE($items);
+        )", params).GetValueSync();
+
+        UNIT_ASSERT(it.IsSuccess());
+
+        CompareYson(R"([
+            ["SomeUtf8Data";646464646464u;323232u]
+        ])", StreamResultToYson(it));
+    }
+
     Y_UNIT_TEST(GrepRange) {
         TKikimrRunner kikimr(AppCfg());
         auto db = kikimr.GetTableClient();
@@ -1675,7 +1675,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 break;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::BAD_REQUEST, "ScanQuery with explicit index should fail"); 
+        UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::BAD_REQUEST, "ScanQuery with explicit index should fail");
     }
 
     Y_UNIT_TEST(BoolFlag) {

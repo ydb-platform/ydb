@@ -16,8 +16,8 @@
 namespace NYdb {
 namespace NOperation {
 
-constexpr TDuration OPERATION_CLIENT_TIMEOUT = TDuration::Seconds(5); 
- 
+constexpr TDuration OPERATION_CLIENT_TIMEOUT = TDuration::Seconds(5);
+
 using namespace NThreading;
 using namespace Ydb::Operation;
 using namespace Ydb::Operations;
@@ -30,15 +30,15 @@ class TOperationClient::TImpl : public TClientImplCommon<TOperationClient::TImpl
     TAsyncStatus Run(TRequest&& request, TSimpleRpc<TRequest, TResponse> rpc) {
         auto promise = NewPromise<TStatus>();
 
-        auto extractor = [promise] 
-            (TResponse* response, TPlainStatus status) mutable { 
+        auto extractor = [promise]
+            (TResponse* response, TPlainStatus status) mutable {
                 if (response) {
                     NYql::TIssues opIssues;
                     NYql::IssuesFromMessage(response->issues(), opIssues);
-                    TStatus st(static_cast<EStatus>(response->status()), std::move(opIssues)); 
+                    TStatus st(static_cast<EStatus>(response->status()), std::move(opIssues));
                     promise.SetValue(std::move(st));
                 } else {
-                    TStatus st(std::move(status)); 
+                    TStatus st(std::move(status));
                     promise.SetValue(std::move(st));
                 }
             };
@@ -47,17 +47,17 @@ class TOperationClient::TImpl : public TClientImplCommon<TOperationClient::TImpl
             std::move(request),
             extractor,
             rpc,
-            DbDriverState_, 
+            DbDriverState_,
             TRpcRequestSettings(),
-            OPERATION_CLIENT_TIMEOUT, 
-            TString()); 
+            OPERATION_CLIENT_TIMEOUT,
+            TString());
 
         return promise.GetFuture();
     }
 
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
-        : TClientImplCommon(std::move(connections), settings) 
+        : TClientImplCommon(std::move(connections), settings)
     {
     }
 
@@ -82,25 +82,25 @@ public:
     TFuture<TOperationsList<TOp>> List(ListOperationsRequest&& request) {
         auto promise = NewPromise<TOperationsList<TOp>>();
 
-        auto extractor = [promise] 
-            (ListOperationsResponse* response, TPlainStatus status) mutable { 
+        auto extractor = [promise]
+            (ListOperationsResponse* response, TPlainStatus status) mutable {
                 if (response) {
                     NYql::TIssues opIssues;
                     NYql::IssuesFromMessage(response->issues(), opIssues);
-                    TStatus st(static_cast<EStatus>(response->status()), std::move(opIssues)); 
+                    TStatus st(static_cast<EStatus>(response->status()), std::move(opIssues));
 
                     TVector<TOp> operations(Reserve(response->operations_size()));
                     for (auto& operation : *response->mutable_operations()) {
                         NYql::TIssues opIssues;
                         NYql::IssuesFromMessage(operation.issues(), opIssues);
                         operations.emplace_back(
-                            TStatus(static_cast<EStatus>(operation.status()), std::move(opIssues)), 
+                            TStatus(static_cast<EStatus>(operation.status()), std::move(opIssues)),
                             std::move(operation));
                     }
 
                     promise.SetValue(TOperationsList<TOp>(std::move(st), std::move(operations), response->next_page_token()));
                 } else {
-                    TStatus st(std::move(status)); 
+                    TStatus st(std::move(status));
                     promise.SetValue(TOperationsList<TOp>(std::move(st)));
                 }
             };
@@ -109,10 +109,10 @@ public:
             std::move(request),
             extractor,
             &V1::OperationService::Stub::AsyncListOperations,
-            DbDriverState_, 
+            DbDriverState_,
             TRpcRequestSettings(),
-            OPERATION_CLIENT_TIMEOUT, 
-            TString()); 
+            OPERATION_CLIENT_TIMEOUT,
+            TString());
 
         return promise.GetFuture();
     }
@@ -183,11 +183,11 @@ TFuture<TOperationsList<NImport::TImportFromS3Response>> TOperationClient::List(
     return List<NImport::TImportFromS3Response>("import/s3", pageSize, pageToken);
 }
 
-template TFuture<NTable::TBuildIndexOperation> TOperationClient::Get(const TOperation::TOperationId& id); 
-template <> 
-TFuture<TOperationsList<NTable::TBuildIndexOperation>> TOperationClient::List(ui64 pageSize, const TString& pageToken) { 
-    return List<NTable::TBuildIndexOperation>("buildindex", pageSize, pageToken); 
-} 
- 
+template TFuture<NTable::TBuildIndexOperation> TOperationClient::Get(const TOperation::TOperationId& id);
+template <>
+TFuture<TOperationsList<NTable::TBuildIndexOperation>> TOperationClient::List(ui64 pageSize, const TString& pageToken) {
+    return List<NTable::TBuildIndexOperation>("buildindex", pageSize, pageToken);
+}
+
 } // namespace NOperation
 } // namespace NYdb

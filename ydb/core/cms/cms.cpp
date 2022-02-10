@@ -1369,7 +1369,7 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
     }
 
     if (State->Config.SentinelConfig.Enable && !State->Sentinel)
-        State->Sentinel = RegisterWithSameMailbox(CreateSentinel(State)); 
+        State->Sentinel = RegisterWithSameMailbox(CreateSentinel(State));
 
     info->DebugDump(ctx);
 
@@ -1777,25 +1777,25 @@ void TCms::Handle(TEvCms::TEvManageNotificationRequest::TPtr &ev, const TActorCo
 void TCms::Handle(TEvCms::TEvWalleCreateTaskRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto adapter = CreateWalleAdapter(ev, SelfId());
-    ctx.RegisterWithSameMailbox(adapter); 
+    ctx.RegisterWithSameMailbox(adapter);
 }
 
 void TCms::Handle(TEvCms::TEvWalleListTasksRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto adapter = CreateWalleAdapter(ev, State);
-    ctx.RegisterWithSameMailbox(adapter); 
+    ctx.RegisterWithSameMailbox(adapter);
 }
 
 void TCms::Handle(TEvCms::TEvWalleCheckTaskRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto adapter = CreateWalleAdapter(ev, State, SelfId());
-    ctx.RegisterWithSameMailbox(adapter); 
+    ctx.RegisterWithSameMailbox(adapter);
 }
 
 void TCms::Handle(TEvCms::TEvWalleRemoveTaskRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto adapter = CreateWalleAdapter(ev, State, SelfId());
-    ctx.RegisterWithSameMailbox(adapter); 
+    ctx.RegisterWithSameMailbox(adapter);
 }
 
 void TCms::Handle(TEvCms::TEvStoreWalleTask::TPtr &ev, const TActorContext &ctx)

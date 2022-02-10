@@ -34,14 +34,14 @@ NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableInde
     operation->SetName(dst.LeafName());
 
     operation->SetType(indexInfo->Type);
-    for (const auto& keyName: indexInfo->IndexKeys) { 
+    for (const auto& keyName: indexInfo->IndexKeys) {
         *operation->MutableKeyColumnNames()->Add() = keyName;
     }
 
-    for (const auto& dataColumn: indexInfo->IndexDataColumns) { 
-        *operation->MutableDataColumnNames()->Add() = dataColumn; 
-    } 
- 
+    for (const auto& dataColumn: indexInfo->IndexDataColumns) {
+        *operation->MutableDataColumnNames()->Add() = dataColumn;
+    }
+
     return scheme;
 }
 

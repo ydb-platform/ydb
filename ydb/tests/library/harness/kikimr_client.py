@@ -19,7 +19,7 @@ from ydb.core.protos import flat_scheme_op_pb2 as flat_scheme_op
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from collections import namedtuple
 
- 
+
 class FlatTxId(namedtuple('FlatTxId', ['tx_id', 'schemeshard_tablet_id'])):
     @staticmethod
     def from_response(response):
@@ -172,20 +172,20 @@ class KiKiMRMessageBusClient(object):
     def ddl_exec_status(self, flat_tx_id):
         return self.flat_transaction_status(flat_tx_id.tx_id, flat_tx_id.schemeshard_tablet_id)
 
-    def add_attr(self, working_dir, name, attributes, token=None): 
-        request = msgbus.TSchemeOperation() 
-        request.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpAlterUserAttributes 
-        request.Transaction.ModifyScheme.WorkingDir = working_dir 
-        request.Transaction.ModifyScheme.AlterUserAttributes.PathName = name 
- 
-        if attributes is not None: 
-            for name, value in attributes.items(): 
-                request.Transaction.ModifyScheme.AlterUserAttributes.UserAttributes.add(Key=name, Value=value) 
- 
-        if token: 
-            request.SecurityToken = token 
-        return self.send_and_poll_request(request, 'SchemeOperation') 
- 
+    def add_attr(self, working_dir, name, attributes, token=None):
+        request = msgbus.TSchemeOperation()
+        request.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpAlterUserAttributes
+        request.Transaction.ModifyScheme.WorkingDir = working_dir
+        request.Transaction.ModifyScheme.AlterUserAttributes.PathName = name
+
+        if attributes is not None:
+            for name, value in attributes.items():
+                request.Transaction.ModifyScheme.AlterUserAttributes.UserAttributes.add(Key=name, Value=value)
+
+        if token:
+            request.SecurityToken = token
+        return self.send_and_poll_request(request, 'SchemeOperation')
+
     def upgrade_subdomain(self, working_dir, name, token=None):
         request = msgbus.TSchemeOperation()
         request.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpUpgradeSubDomain

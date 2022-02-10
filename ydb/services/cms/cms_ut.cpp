@@ -42,25 +42,25 @@ struct TCmsTestSettingsWithAuth : TCmsTestSettings {
 using TKikimrWithGrpcAndRootSchema = NYdb::TBasicKikimrWithGrpcAndRootSchema<TCmsTestSettings>;
 
 static Ydb::StatusIds::StatusCode WaitForOperationStatus(std::shared_ptr<grpc::Channel> channel, const TString& opId, const TString &token = "") {
-    std::unique_ptr<Ydb::Operation::V1::OperationService::Stub> stub; 
-    stub = Ydb::Operation::V1::OperationService::NewStub(channel); 
-    Ydb::Operations::GetOperationRequest request; 
+    std::unique_ptr<Ydb::Operation::V1::OperationService::Stub> stub;
+    stub = Ydb::Operation::V1::OperationService::NewStub(channel);
+    Ydb::Operations::GetOperationRequest request;
     request.set_id(opId);
-    Ydb::Operations::GetOperationResponse response; 
+    Ydb::Operations::GetOperationResponse response;
     bool run = true;
     while (run) {
         grpc::ClientContext context;
         if (token)
-            context.AddMetadata(YDB_AUTH_TICKET_HEADER, token); 
+            context.AddMetadata(YDB_AUTH_TICKET_HEADER, token);
         auto status = stub->GetOperation(&context, request, &response);
         UNIT_ASSERT(status.ok());  //GRpc layer - OK
-        if (response.operation().ready() == false) { 
+        if (response.operation().ready() == false) {
             Sleep(ITERATION_DURATION);
         } else {
             run = false;
         }
     }
-    return response.operation().status(); 
+    return response.operation().status();
 }
 
 static Ydb::Cms::GetDatabaseStatusResult WaitForTenantState(std::shared_ptr<grpc::Channel> channel, const TString& path, Ydb::Cms::GetDatabaseStatusResult::State state = Ydb::Cms::GetDatabaseStatusResult::RUNNING, const TString &token = "") {
@@ -72,7 +72,7 @@ static Ydb::Cms::GetDatabaseStatusResult WaitForTenantState(std::shared_ptr<grpc
     while (true) {
         grpc::ClientContext context;
         if (token)
-            context.AddMetadata(YDB_AUTH_TICKET_HEADER, token); 
+            context.AddMetadata(YDB_AUTH_TICKET_HEADER, token);
 
         auto status = stub->GetDatabaseStatus(&context, request, &response);
         UNIT_ASSERT(status.ok());
@@ -123,166 +123,166 @@ void InitConsoleConfig(TKikimrWithGrpcAndRootSchema &server)
     UNIT_ASSERT_VALUES_EQUAL(resp.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
 }
 
-template<typename TRequest> 
-static void SetSyncOperation(TRequest& req) { 
+template<typename TRequest>
+static void SetSyncOperation(TRequest& req) {
     req.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
-} 
+}
 
-static void doSimpleTenantsTest(bool sync) { 
-    TKikimrWithGrpcAndRootSchema server; 
+static void doSimpleTenantsTest(bool sync) {
+    TKikimrWithGrpcAndRootSchema server;
 
-    server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::CMS_TENANTS, NLog::PRI_TRACE); 
+    server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::CMS_TENANTS, NLog::PRI_TRACE);
 
-    ui16 grpc = server.GetPort(); 
-    TString id; 
+    ui16 grpc = server.GetPort();
+    TString id;
 
-    std::shared_ptr<grpc::Channel> channel; 
-    std::unique_ptr<Ydb::Cms::V1::CmsService::Stub> stub; 
-    channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials()); 
+    std::shared_ptr<grpc::Channel> channel;
+    std::unique_ptr<Ydb::Cms::V1::CmsService::Stub> stub;
+    channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
 
-    const TString tenant = "/Root/users/user-1"; 
-    // create tenant 
-    { 
-        stub = Ydb::Cms::V1::CmsService::NewStub(channel); 
-        grpc::ClientContext context; 
- 
-        Ydb::Cms::CreateDatabaseRequest request; 
-        request.set_path(tenant); 
-        if (sync) 
-            SetSyncOperation(request); 
-        auto unit = request.mutable_resources()->add_storage_units(); 
-        unit->set_unit_kind("hdd"); 
-        unit->set_count(1); 
- 
-        Ydb::Cms::CreateDatabaseResponse response; 
-        auto status = stub->CreateDatabase(&context, request, &response); 
-        UNIT_ASSERT(status.ok()); 
-        // ready flag true in sync mode 
-        UNIT_ASSERT(response.operation().ready() == sync); 
-        if (sync) { 
-            UNIT_ASSERT_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS); 
-        } else { 
-            id = response.operation().id(); 
+    const TString tenant = "/Root/users/user-1";
+    // create tenant
+    {
+        stub = Ydb::Cms::V1::CmsService::NewStub(channel);
+        grpc::ClientContext context;
+
+        Ydb::Cms::CreateDatabaseRequest request;
+        request.set_path(tenant);
+        if (sync)
+            SetSyncOperation(request);
+        auto unit = request.mutable_resources()->add_storage_units();
+        unit->set_unit_kind("hdd");
+        unit->set_count(1);
+
+        Ydb::Cms::CreateDatabaseResponse response;
+        auto status = stub->CreateDatabase(&context, request, &response);
+        UNIT_ASSERT(status.ok());
+        // ready flag true in sync mode
+        UNIT_ASSERT(response.operation().ready() == sync);
+        if (sync) {
+            UNIT_ASSERT_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+        } else {
+            id = response.operation().id();
         }
-    } 
+    }
 
     if (!sync) {
         auto status = WaitForOperationStatus(channel, id);
         UNIT_ASSERT_EQUAL(status, Ydb::StatusIds::SUCCESS);
     }
 
-    { 
-        server.Tenants_->Run(tenant); 
-        WaitForTenantState(channel, tenant, Ydb::Cms::GetDatabaseStatusResult::RUNNING); 
-    } 
-
-    // alter tenant 
-    { 
-        stub = Ydb::Cms::V1::CmsService::NewStub(channel); 
-        grpc::ClientContext context; 
-
-        Ydb::Cms::AlterDatabaseRequest request; 
-        request.set_path(tenant); 
-
-        auto unit = request.add_storage_units_to_add(); 
-        unit->set_unit_kind("hdd"); 
-        unit->set_count(1); 
-
-        Ydb::Cms::AlterDatabaseResponse response; 
-        auto status = stub->AlterDatabase(&context, request, &response); 
-        UNIT_ASSERT(status.ok()); 
-        UNIT_ASSERT(response.operation().ready()); 
-        UNIT_ASSERT_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS); 
-    } 
-
-    // get tenant status 
-    { 
-        Ydb::Cms::GetDatabaseStatusResult result = WaitForTenantState(channel, tenant, Ydb::Cms::GetDatabaseStatusResult::RUNNING); 
-        UNIT_ASSERT_VALUES_EQUAL(result.path(), tenant); 
-        UNIT_ASSERT_VALUES_EQUAL(result.state(), Ydb::Cms::GetDatabaseStatusResult::RUNNING); 
-        UNIT_ASSERT_VALUES_EQUAL(result.required_resources().storage_units_size(), 1); 
-        auto unit = result.required_resources().storage_units(0); 
-        UNIT_ASSERT_VALUES_EQUAL(unit.unit_kind(), "hdd"); 
-        UNIT_ASSERT_VALUES_EQUAL(unit.count(), 2); 
-    } 
-
-    // list tenants 
-    { 
-        stub = Ydb::Cms::V1::CmsService::NewStub(channel); 
-        grpc::ClientContext context; 
-
-        Ydb::Cms::ListDatabasesRequest request; 
-
-        Ydb::Cms::ListDatabasesResponse response; 
-        auto status = stub->ListDatabases(&context, request, &response); 
-        UNIT_ASSERT(status.ok()); 
-        UNIT_ASSERT(response.operation().ready()); 
-        UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS); 
-        Ydb::Cms::ListDatabasesResult result; 
-        auto res = response.operation().result().UnpackTo(&result); 
-        UNIT_ASSERT(res); 
-        UNIT_ASSERT_VALUES_EQUAL(result.paths_size(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(result.paths(0), tenant); 
-    } 
-
-    // remove tenants 
-    { 
-        stub = Ydb::Cms::V1::CmsService::NewStub(channel); 
-        grpc::ClientContext context; 
- 
-        Ydb::Cms::RemoveDatabaseRequest request; 
-        request.set_path("/Root/users/user-1"); 
-        if (sync) 
-            SetSyncOperation(request); 
- 
-        Ydb::Cms::RemoveDatabaseResponse response; 
-        auto status = stub->RemoveDatabase(&context, request, &response); 
-        UNIT_ASSERT(status.ok()); 
-        UNIT_ASSERT(response.operation().ready() == sync); 
-        if (sync) { 
-            UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS); 
-        } else { 
-            id = response.operation().id(); 
-        }
-    } 
-    if (!sync) { 
-        auto status = WaitForOperationStatus(channel, id); 
-        UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS); 
-    } 
-
-    // get tenant status 
-    { 
-        stub = Ydb::Cms::V1::CmsService::NewStub(channel); 
-        grpc::ClientContext context; 
-
-        Ydb::Cms::GetDatabaseStatusRequest request; 
-        request.set_path("/Root/users/user-1"); 
-
-        Ydb::Cms::GetDatabaseStatusResponse response; 
-        auto status = stub->GetDatabaseStatus(&context, request, &response); 
-        UNIT_ASSERT(status.ok()); 
-        UNIT_ASSERT(response.operation().ready()); 
-        UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::NOT_FOUND); 
-    } 
-
-    // list tenants 
-    { 
-        stub = Ydb::Cms::V1::CmsService::NewStub(channel); 
-        grpc::ClientContext context; 
-
-        Ydb::Cms::ListDatabasesRequest request; 
-
-        Ydb::Cms::ListDatabasesResponse response; 
-        auto status = stub->ListDatabases(&context, request, &response); 
-        UNIT_ASSERT(status.ok()); 
-        UNIT_ASSERT(response.operation().ready()); 
-        UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS); 
-        Ydb::Cms::ListDatabasesResult result; 
-        auto res = response.operation().result().UnpackTo(&result); 
-        UNIT_ASSERT(res); 
-        UNIT_ASSERT_VALUES_EQUAL(result.paths_size(), 0); 
+    {
+        server.Tenants_->Run(tenant);
+        WaitForTenantState(channel, tenant, Ydb::Cms::GetDatabaseStatusResult::RUNNING);
     }
-} 
+
+    // alter tenant
+    {
+        stub = Ydb::Cms::V1::CmsService::NewStub(channel);
+        grpc::ClientContext context;
+
+        Ydb::Cms::AlterDatabaseRequest request;
+        request.set_path(tenant);
+
+        auto unit = request.add_storage_units_to_add();
+        unit->set_unit_kind("hdd");
+        unit->set_count(1);
+
+        Ydb::Cms::AlterDatabaseResponse response;
+        auto status = stub->AlterDatabase(&context, request, &response);
+        UNIT_ASSERT(status.ok());
+        UNIT_ASSERT(response.operation().ready());
+        UNIT_ASSERT_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+    }
+
+    // get tenant status
+    {
+        Ydb::Cms::GetDatabaseStatusResult result = WaitForTenantState(channel, tenant, Ydb::Cms::GetDatabaseStatusResult::RUNNING);
+        UNIT_ASSERT_VALUES_EQUAL(result.path(), tenant);
+        UNIT_ASSERT_VALUES_EQUAL(result.state(), Ydb::Cms::GetDatabaseStatusResult::RUNNING);
+        UNIT_ASSERT_VALUES_EQUAL(result.required_resources().storage_units_size(), 1);
+        auto unit = result.required_resources().storage_units(0);
+        UNIT_ASSERT_VALUES_EQUAL(unit.unit_kind(), "hdd");
+        UNIT_ASSERT_VALUES_EQUAL(unit.count(), 2);
+    }
+
+    // list tenants
+    {
+        stub = Ydb::Cms::V1::CmsService::NewStub(channel);
+        grpc::ClientContext context;
+
+        Ydb::Cms::ListDatabasesRequest request;
+
+        Ydb::Cms::ListDatabasesResponse response;
+        auto status = stub->ListDatabases(&context, request, &response);
+        UNIT_ASSERT(status.ok());
+        UNIT_ASSERT(response.operation().ready());
+        UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS);
+        Ydb::Cms::ListDatabasesResult result;
+        auto res = response.operation().result().UnpackTo(&result);
+        UNIT_ASSERT(res);
+        UNIT_ASSERT_VALUES_EQUAL(result.paths_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.paths(0), tenant);
+    }
+
+    // remove tenants
+    {
+        stub = Ydb::Cms::V1::CmsService::NewStub(channel);
+        grpc::ClientContext context;
+
+        Ydb::Cms::RemoveDatabaseRequest request;
+        request.set_path("/Root/users/user-1");
+        if (sync)
+            SetSyncOperation(request);
+
+        Ydb::Cms::RemoveDatabaseResponse response;
+        auto status = stub->RemoveDatabase(&context, request, &response);
+        UNIT_ASSERT(status.ok());
+        UNIT_ASSERT(response.operation().ready() == sync);
+        if (sync) {
+            UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS);
+        } else {
+            id = response.operation().id();
+        }
+    }
+    if (!sync) {
+        auto status = WaitForOperationStatus(channel, id);
+        UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+    }
+
+    // get tenant status
+    {
+        stub = Ydb::Cms::V1::CmsService::NewStub(channel);
+        grpc::ClientContext context;
+
+        Ydb::Cms::GetDatabaseStatusRequest request;
+        request.set_path("/Root/users/user-1");
+
+        Ydb::Cms::GetDatabaseStatusResponse response;
+        auto status = stub->GetDatabaseStatus(&context, request, &response);
+        UNIT_ASSERT(status.ok());
+        UNIT_ASSERT(response.operation().ready());
+        UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::NOT_FOUND);
+    }
+
+    // list tenants
+    {
+        stub = Ydb::Cms::V1::CmsService::NewStub(channel);
+        grpc::ClientContext context;
+
+        Ydb::Cms::ListDatabasesRequest request;
+
+        Ydb::Cms::ListDatabasesResponse response;
+        auto status = stub->ListDatabases(&context, request, &response);
+        UNIT_ASSERT(status.ok());
+        UNIT_ASSERT(response.operation().ready());
+        UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS);
+        Ydb::Cms::ListDatabasesResult result;
+        auto res = response.operation().result().UnpackTo(&result);
+        UNIT_ASSERT(res);
+        UNIT_ASSERT_VALUES_EQUAL(result.paths_size(), 0);
+    }
+}
 
 template <typename TTestSettings>
 void CheckCreateDatabase(NYdb::TBasicKikimrWithGrpcAndRootSchema<TTestSettings> &server,
@@ -294,7 +294,7 @@ void CheckCreateDatabase(NYdb::TBasicKikimrWithGrpcAndRootSchema<TTestSettings> 
 {
     std::unique_ptr<Ydb::Cms::V1::CmsService::Stub> stub;
     TString id;
- 
+
     stub = Ydb::Cms::V1::CmsService::NewStub(channel);
     grpc::ClientContext context;
     if (token)
@@ -357,15 +357,15 @@ void CheckRemoveDatabase(std::shared_ptr<grpc::Channel> channel,
     }
 }
 
-Y_UNIT_TEST_SUITE(TGRpcCmsTest) { 
-    Y_UNIT_TEST(SimpleTenantsTest) { 
-        doSimpleTenantsTest(false); 
-    } 
- 
-    Y_UNIT_TEST(SimpleTenantsTestSyncOperation) { 
-        doSimpleTenantsTest(true); 
-    } 
- 
+Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
+    Y_UNIT_TEST(SimpleTenantsTest) {
+        doSimpleTenantsTest(false);
+    }
+
+    Y_UNIT_TEST(SimpleTenantsTestSyncOperation) {
+        doSimpleTenantsTest(true);
+    }
+
     Y_UNIT_TEST(AuthTokenTest) {
         NYdb::TBasicKikimrWithGrpcAndRootSchema<TCmsTestSettingsWithAuth> server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::CMS_TENANTS, NLog::PRI_TRACE);
@@ -373,7 +373,7 @@ Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
         TString id;
 
         std::shared_ptr<grpc::Channel> channel;
-        std::unique_ptr<Ydb::Cms::V1::CmsService::Stub> stub; 
+        std::unique_ptr<Ydb::Cms::V1::CmsService::Stub> stub;
         channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
 
         // create tenant
@@ -397,10 +397,10 @@ Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
         InitConsoleConfig(server);
 
         std::shared_ptr<grpc::Channel> channel;
-        std::unique_ptr<Ydb::Cms::V1::CmsService::Stub> stub; 
+        std::unique_ptr<Ydb::Cms::V1::CmsService::Stub> stub;
         channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
 
-        stub = Ydb::Cms::V1::CmsService::NewStub(channel); 
+        stub = Ydb::Cms::V1::CmsService::NewStub(channel);
         grpc::ClientContext context;
 
         Ydb::Cms::DescribeDatabaseOptionsRequest request;

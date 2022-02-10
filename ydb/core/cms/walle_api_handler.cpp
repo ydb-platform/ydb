@@ -340,7 +340,7 @@ private:
             .MinRetryTime = TDuration::MilliSeconds(10),
             .MaxRetryTime = TDuration::Seconds(10),
         };
-        CmsPipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(domain), pipeConfig)); 
+        CmsPipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(domain), pipeConfig));
         NTabletPipe::SendData(ctx, CmsPipe, ev);
     }
 

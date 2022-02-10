@@ -375,7 +375,7 @@ public:
     enum EAction {
         CREATE,
         CONFIGURE,
-        CONFIGURE_ATTR, 
+        CONFIGURE_ATTR,
         GET_KEY,
         REMOVE
     };
@@ -513,30 +513,30 @@ public:
         }
     }
 
-    void AlterUserAttribute(const TActorContext &ctx) { 
-        BLOG_D("TSubDomainManip(" << Tenant->Path << ") alter user attribute "); 
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
- 
-        request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first))); 
-        request->Record.SetExecTimeoutPeriod(Max<ui64>()); 
- 
-        if (Tenant->UserToken.GetUserSID()) 
-            request->Record.SetUserToken(Tenant->UserToken.SerializeAsString()); 
- 
-        auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme(); 
-        tx.SetWorkingDir(Subdomain.first); 
- 
+    void AlterUserAttribute(const TActorContext &ctx) {
+        BLOG_D("TSubDomainManip(" << Tenant->Path << ") alter user attribute ");
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+
+        request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
+        request->Record.SetExecTimeoutPeriod(Max<ui64>());
+
+        if (Tenant->UserToken.GetUserSID())
+            request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
+
+        auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+        tx.SetWorkingDir(Subdomain.first);
+
         tx.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
- 
-        tx.MutableAlterUserAttributes()->CopyFrom(Tenant->Attributes); 
-        tx.MutableAlterUserAttributes()->SetPathName(Subdomain.second); 
- 
-        BLOG_TRACE("TSubdomainManip(" << Tenant->Path << ") send alter user attribute cmd: " 
-                    << request->ToString()); 
- 
-        ctx.Send(MakeTxProxyID(), request.Release()); 
-    } 
- 
+
+        tx.MutableAlterUserAttributes()->CopyFrom(Tenant->Attributes);
+        tx.MutableAlterUserAttributes()->SetPathName(Subdomain.second);
+
+        BLOG_TRACE("TSubdomainManip(" << Tenant->Path << ") send alter user attribute cmd: "
+                    << request->ToString());
+
+        ctx.Send(MakeTxProxyID(), request.Release());
+    }
+
     void AlterSubdomain(const TActorContext &ctx)
     {
         BLOG_D("TSubDomainManip(" << Tenant->Path << ") alter subdomain version " << Version);
@@ -544,15 +544,15 @@ public:
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
         request->Record.SetExecTimeoutPeriod(Max<ui64>());
- 
+
         if (Tenant->UserToken.GetUserSID())
             request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
- 
+
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
-        tx.SetWorkingDir(Subdomain.first); 
- 
-        FillSubdomainAlterInfo(*tx.MutableSubDomain(), true); 
- 
+        tx.SetWorkingDir(Subdomain.first);
+
+        FillSubdomainAlterInfo(*tx.MutableSubDomain(), true);
+
         if (Tenant->IsExternalSubdomain) {
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterExtSubDomain);
         } else {
@@ -649,7 +649,7 @@ public:
         BLOG_D("TSubdomainManip(" << Tenant->Path << ") done");
         if (Action == CREATE)
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainCreated(Tenant, SchemeshardId, PathId), ctx);
-        else if (Action == CONFIGURE || Action == CONFIGURE_ATTR) 
+        else if (Action == CONFIGURE || Action == CONFIGURE_ATTR)
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainReady(Tenant, Version), ctx);
         else if (Action == GET_KEY)
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainKey(Tenant, SchemeshardId, PathId), ctx);
@@ -737,12 +737,12 @@ public:
         BLOG_D("TSubdomainManip(" << Tenant->Path << ") got TEvNotifyTxCompletionResult: "
                     << ev->Get()->Record.ShortDebugString());
 
-        if (Action == CONFIGURE && Tenant->Attributes.UserAttributesSize()) { 
-            AlterUserAttribute(ctx); 
-            Action = CONFIGURE_ATTR; 
-        } else { 
-            ActionFinished(ctx); 
-        } 
+        if (Action == CONFIGURE && Tenant->Attributes.UserAttributesSize()) {
+            AlterUserAttribute(ctx);
+            Action = CONFIGURE_ATTR;
+        } else {
+            ActionFinished(ctx);
+        }
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
@@ -764,12 +764,12 @@ public:
         switch (rec.GetStatus()) {
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete:
             TabletId = rec.GetSchemeShardTabletId();
-            if (Action == CONFIGURE && Tenant->Attributes.UserAttributesSize()) { 
-                AlterUserAttribute(ctx); 
-                Action = CONFIGURE_ATTR; 
-            } else { 
-                ActionFinished(ctx); 
-            } 
+            if (Action == CONFIGURE && Tenant->Attributes.UserAttributesSize()) {
+                AlterUserAttribute(ctx);
+                Action = CONFIGURE_ATTR;
+            } else {
+                ActionFinished(ctx);
+            }
             break;
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress:
             TxId = rec.GetTxId();
@@ -1762,7 +1762,7 @@ void TTenantsManager::AllocateTenantPools(TTenant::TPtr tenant, const TActorCont
 
     for (auto &pr : tenant->StoragePools) {
         if (pr.second->State != TStoragePool::ALLOCATED && !pr.second->Worker)
-            pr.second->Worker = ctx.RegisterWithSameMailbox(new TPoolManip(SelfId(), Domain, tenant, pr.second, TPoolManip::ALLOCATE)); 
+            pr.second->Worker = ctx.RegisterWithSameMailbox(new TPoolManip(SelfId(), Domain, tenant, pr.second, TPoolManip::ALLOCATE));
     }
 }
 
@@ -1775,7 +1775,7 @@ void TTenantsManager::DeleteTenantPools(TTenant::TPtr tenant, const TActorContex
 
     for (auto &pr : tenant->StoragePools) {
         if (pr.second->State != TStoragePool::DELETED)
-            pr.second->Worker = ctx.RegisterWithSameMailbox(new TPoolManip(SelfId(), Domain, tenant, pr.second, TPoolManip::DEALLOCATE)); 
+            pr.second->Worker = ctx.RegisterWithSameMailbox(new TPoolManip(SelfId(), Domain, tenant, pr.second, TPoolManip::DEALLOCATE));
     }
 }
 
@@ -1843,21 +1843,21 @@ void TTenantsManager::RetryResourcesRequests(const TActorContext &ctx)
     }
 }
 
-void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status) 
+void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status)
 {
     status.set_path(tenant->Path);
     if (tenant->IsRunning() && tenant->SubdomainVersion != tenant->ConfirmedSubdomain)
         status.set_state(Ydb::Cms::GetDatabaseStatusResult::CONFIGURING);
     else if (tenant->IsRunning())
-        status.set_state(Ydb::Cms::GetDatabaseStatusResult::RUNNING); 
+        status.set_state(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
     else if (tenant->IsConfiguring())
         status.set_state(Ydb::Cms::GetDatabaseStatusResult::PENDING_RESOURCES);
     else if (tenant->IsCreating())
-        status.set_state(Ydb::Cms::GetDatabaseStatusResult::CREATING); 
+        status.set_state(Ydb::Cms::GetDatabaseStatusResult::CREATING);
     else if (tenant->IsRemoving())
-        status.set_state(Ydb::Cms::GetDatabaseStatusResult::REMOVING); 
+        status.set_state(Ydb::Cms::GetDatabaseStatusResult::REMOVING);
     else
-        status.set_state(Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED); 
+        status.set_state(Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED);
 
     auto resources = tenant->AreResourcesShared ?
         status.mutable_required_shared_resources() :
@@ -1905,7 +1905,7 @@ void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDataba
     }
 }
 
-void TTenantsManager::FillTenantAllocatedSlots(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status, 
+void TTenantsManager::FillTenantAllocatedSlots(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status,
                                                const NKikimrTenantSlotBroker::TTenantState &slots)
 {
     THashMap<TSlotDescription, ui64> allocated;
@@ -1948,7 +1948,7 @@ void TTenantsManager::CheckSubDomainKey(TTenant::TPtr tenant,
         return;
 
     auto *actor = new TSubDomainManip(SelfId(), tenant, TSubDomainManip::GET_KEY);
-    tenant->Worker = ctx.RegisterWithSameMailbox(actor); 
+    tenant->Worker = ctx.RegisterWithSameMailbox(actor);
 }
 
 void TTenantsManager::ConfigureTenantSubDomain(TTenant::TPtr tenant, const TActorContext &ctx)
@@ -1958,7 +1958,7 @@ void TTenantsManager::ConfigureTenantSubDomain(TTenant::TPtr tenant, const TActo
         && !tenant->Worker) {
 
         auto *actor = new TSubDomainManip(SelfId(), tenant, TSubDomainManip::CONFIGURE, GetTenant(tenant->SharedDomainId));
-        tenant->Worker = ctx.RegisterWithSameMailbox(actor); 
+        tenant->Worker = ctx.RegisterWithSameMailbox(actor);
     }
 }
 
@@ -1967,7 +1967,7 @@ void TTenantsManager::CreateTenantSubDomain(TTenant::TPtr tenant, const TActorCo
     Y_VERIFY(tenant->State == TTenant::CREATING_SUBDOMAIN);
     Y_VERIFY(!tenant->Worker);
     auto *actor = new TSubDomainManip(SelfId(), tenant, TSubDomainManip::CREATE, GetTenant(tenant->SharedDomainId));
-    tenant->Worker = ctx.RegisterWithSameMailbox(actor); 
+    tenant->Worker = ctx.RegisterWithSameMailbox(actor);
 }
 
 void TTenantsManager::DeleteTenantSubDomain(TTenant::TPtr tenant, const TActorContext &ctx)
@@ -1975,7 +1975,7 @@ void TTenantsManager::DeleteTenantSubDomain(TTenant::TPtr tenant, const TActorCo
     Y_VERIFY(tenant->State == TTenant::REMOVING_SUBDOMAIN);
     if (!tenant->Worker) {
         auto *actor = new TSubDomainManip(SelfId(), tenant, TSubDomainManip::REMOVE);
-        tenant->Worker = ctx.RegisterWithSameMailbox(actor); 
+        tenant->Worker = ctx.RegisterWithSameMailbox(actor);
     }
 }
 
@@ -2010,7 +2010,7 @@ void TTenantsManager::ProcessTenantActions(TTenant::TPtr tenant, const TActorCon
 }
 
 TTenantsManager::TTenant::TPtr TTenantsManager::FillOperationStatus(const TString &id,
-                                                                    Ydb::Operations::Operation &operation) 
+                                                                    Ydb::Operations::Operation &operation)
 {
     operation.set_id(id);
 
@@ -2763,20 +2763,20 @@ void TTenantsManager::DbUpdateTenantAlterIdempotencyKey(TTenant::TPtr tenant,
         .Update<Schema::Tenants::AlterIdempotencyKey>(idempotencyKey);
 }
 
-void TTenantsManager::DbUpdateTenantUserAttributes(TTenant::TPtr tenant, 
+void TTenantsManager::DbUpdateTenantUserAttributes(TTenant::TPtr tenant,
                                                    const NKikimrSchemeOp::TAlterUserAttributes &attributes,
-                                                   TTransactionContext &txc, 
-                                                   const TActorContext &ctx) 
-{ 
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS, 
-                "Update alter user attributes for " << tenant->Path 
-                << " userAttributes=" << attributes.ShortDebugString()); 
- 
-    NIceDb::TNiceDb db(txc.DB); 
-    db.Table<Schema::Tenants>().Key(tenant->Path) 
-        .Update<Schema::Tenants::Attributes>(attributes); 
-} 
- 
+                                                   TTransactionContext &txc,
+                                                   const TActorContext &ctx)
+{
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
+                "Update alter user attributes for " << tenant->Path
+                << " userAttributes=" << attributes.ShortDebugString());
+
+    NIceDb::TNiceDb db(txc.DB);
+    db.Table<Schema::Tenants>().Key(tenant->Path)
+        .Update<Schema::Tenants::Attributes>(attributes);
+}
+
 void TTenantsManager::DbUpdateTenantGeneration(TTenant::TPtr tenant,
                                                ui64 generation,
                                                TTransactionContext &txc,
@@ -2997,7 +2997,7 @@ void TTenantsManager::Handle(TEvConsole::TEvGetTenantStatusRequest::TPtr &ev, co
     if (!tenant) {
         operation.set_status(Ydb::StatusIds::NOT_FOUND);
         auto issue = operation.add_issues();
-        issue->set_severity(NYql::TSeverityIds::S_ERROR); 
+        issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message(Sprintf("Unknown tenant %s", path.data()));
 
         LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
@@ -3009,7 +3009,7 @@ void TTenantsManager::Handle(TEvConsole::TEvGetTenantStatusRequest::TPtr &ev, co
         ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     } else if (!tenant->IsRunning()
                && !tenant->IsConfiguring()) {
-        Ydb::Cms::GetDatabaseStatusResult result; 
+        Ydb::Cms::GetDatabaseStatusResult result;
         FillTenantStatus(tenant, result);
 
         operation.set_status(Ydb::StatusIds::SUCCESS);
@@ -3034,7 +3034,7 @@ void TTenantsManager::Handle(TEvConsole::TEvListTenantsRequest::TPtr &ev, const 
 {
     Counters.Inc(COUNTER_LIST_REQUESTS);
 
-    Ydb::Cms::ListDatabasesResult result; 
+    Ydb::Cms::ListDatabasesResult result;
     for (auto &pr : Tenants)
         result.add_paths(pr.first);
 
@@ -3054,7 +3054,7 @@ void TTenantsManager::Handle(TEvConsole::TEvListTenantsRequest::TPtr &ev, const 
 void TTenantsManager::Handle(TEvConsole::TEvNotifyOperationCompletionRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
-    Ydb::Operations::Operation operation; 
+    Ydb::Operations::Operation operation;
     auto tenant = FillOperationStatus(rec.GetRequest().id(), operation);
 
     if (operation.ready() && operation.status() != Ydb::StatusIds::NOT_FOUND) {
@@ -3360,7 +3360,7 @@ void TTenantsManager::Handle(TEvTenantSlotBroker::TEvTenantState::TPtr &ev, cons
     }
 
     for (auto &req : tenant->StatusRequests) {
-        Ydb::Cms::GetDatabaseStatusResult result; 
+        Ydb::Cms::GetDatabaseStatusResult result;
         FillTenantStatus(tenant, result);
         FillTenantAllocatedSlots(tenant, result, rec);
 

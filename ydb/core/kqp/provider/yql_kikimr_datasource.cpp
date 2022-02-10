@@ -110,32 +110,32 @@ public:
                 std::make_shared<IKikimrGateway::TTableMetadataResult>());
 
             YQL_ENSURE(emplaceResult.second);
-            auto queryType = SessionCtx->Query().Type; 
+            auto queryType = SessionCtx->Query().Type;
             auto& result = emplaceResult.first->second;
 
-            auto future = Gateway->LoadTableMetadata(clusterName, tableName, 
-                IKikimrGateway::TLoadTableMetadataSettings().WithTableStats(table.GetNeedsStats())); 
- 
-            futures.push_back(future.Apply([result, queryType] 
+            auto future = Gateway->LoadTableMetadata(clusterName, tableName,
+                IKikimrGateway::TLoadTableMetadataSettings().WithTableStats(table.GetNeedsStats()));
+
+            futures.push_back(future.Apply([result, queryType]
                 (const NThreading::TFuture<IKikimrGateway::TTableMetadataResult>& future) {
                     YQL_ENSURE(!future.HasException());
-                    const auto& value = future.GetValue(); 
-                    switch (queryType) { 
+                    const auto& value = future.GetValue();
+                    switch (queryType) {
                         case EKikimrQueryType::Unspecified: {
-                            if (value.Metadata) { 
-                                if (!value.Metadata->Indexes.empty()) { 
+                            if (value.Metadata) {
+                                if (!value.Metadata->Indexes.empty()) {
                                     result->AddIssue(TIssue({}, TStringBuilder()
-                                        << "Using index tables unsupported for legacy or unspecified request type")); 
-                                    result->SetStatus(TIssuesIds::KIKIMR_INDEX_METADATA_LOAD_FAILED); 
-                                    return; 
-                                } 
-                            } 
-                        } 
-                        break; 
-                        default: 
-                        break; 
-                    } 
-                    *result = value; 
+                                        << "Using index tables unsupported for legacy or unspecified request type"));
+                                    result->SetStatus(TIssuesIds::KIKIMR_INDEX_METADATA_LOAD_FAILED);
+                                    return;
+                                }
+                            }
+                        }
+                        break;
+                        default:
+                        break;
+                    }
+                    *result = value;
                 }));
         }
 
@@ -168,14 +168,14 @@ public:
                 tableDesc.Metadata = res.Metadata;
 
                 bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
-                YQL_ENSURE(res.Metadata->Indexes.size() == res.Metadata->SecondaryGlobalIndexMetadata.size()); 
-                for (const auto& indexMeta : res.Metadata->SecondaryGlobalIndexMetadata) { 
-                    YQL_ENSURE(indexMeta); 
+                YQL_ENSURE(res.Metadata->Indexes.size() == res.Metadata->SecondaryGlobalIndexMetadata.size());
+                for (const auto& indexMeta : res.Metadata->SecondaryGlobalIndexMetadata) {
+                    YQL_ENSURE(indexMeta);
                     auto& desc = SessionCtx->Tables().GetOrAddTable(indexMeta->Cluster, SessionCtx->GetDatabase(), indexMeta->Name);
-                    desc.Metadata = indexMeta; 
+                    desc.Metadata = indexMeta;
                     desc.Load(ctx, sysColumnsEnabled);
-                } 
- 
+                }
+
                 if (!tableDesc.Load(ctx, sysColumnsEnabled)) {
                     LoadResults.clear();
                     return TStatus::Error;

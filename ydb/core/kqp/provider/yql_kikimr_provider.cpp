@@ -43,7 +43,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiUpdateTable::CallableName());
         DataSinkNames.insert(TKiDeleteTable::CallableName());
         DataSinkNames.insert(TKiCreateTable::CallableName());
-        DataSinkNames.insert(TKiAlterTable::CallableName()); 
+        DataSinkNames.insert(TKiAlterTable::CallableName());
         DataSinkNames.insert(TKiDropTable::CallableName());
         DataSinkNames.insert(TKiCreateUser::CallableName());
         DataSinkNames.insert(TKiAlterUser::CallableName());
@@ -57,7 +57,7 @@ struct TKikimrData {
 
         KqlNames.insert(TKiSelectRow::CallableName());
         KqlNames.insert(TKiSelectRange::CallableName());
-        KqlNames.insert(TKiSelectIndexRange::CallableName()); 
+        KqlNames.insert(TKiSelectIndexRange::CallableName());
         KqlNames.insert(TKiUpdateRow::CallableName());
         KqlNames.insert(TKiEraseRow::CallableName());
         KqlNames.insert(TKiSetResult::CallableName());
@@ -150,7 +150,7 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
 
 TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, const TString& table) {
     auto desc = Tables.FindPtr(std::make_pair(cluster, table));
-    YQL_ENSURE(desc, "Unexpected empty metadata, cluster '" << cluster << "', table '" << table << "'"); 
+    YQL_ENSURE(desc, "Unexpected empty metadata, cluster '" << cluster << "', table '" << table << "'");
 
     return *desc;
 }
@@ -355,44 +355,44 @@ bool TKikimrKey::Extract(const TExprNode& key) {
         return false;
     }
 
-    if (key.ChildrenSize() > 1) { 
-        for (ui32 i = 1; i < key.ChildrenSize(); ++i) { 
-            auto tag = key.Child(i)->Child(0); 
+    if (key.ChildrenSize() > 1) {
+        for (ui32 i = 1; i < key.ChildrenSize(); ++i) {
+            auto tag = key.Child(i)->Child(0);
             if (tag->Content() == TStringBuf("view")) {
-                const TExprNode* viewNode = key.Child(i)->Child(1); 
-                if (!viewNode->IsCallable("String")) { 
+                const TExprNode* viewNode = key.Child(i)->Child(1);
+                if (!viewNode->IsCallable("String")) {
                     Ctx.AddError(TIssue(Ctx.GetPosition(viewNode->Pos()), "Expected String"));
-                    return false; 
-                } 
- 
-                if (viewNode->ChildrenSize() != 1 || !EnsureAtom(*viewNode->Child(0), Ctx)) { 
+                    return false;
+                }
+
+                if (viewNode->ChildrenSize() != 1 || !EnsureAtom(*viewNode->Child(0), Ctx)) {
                     Ctx.AddError(TIssue(Ctx.GetPosition(viewNode->Child(0)->Pos()), "Dynamic views names are not supported"));
-                    return false; 
-                } 
+                    return false;
+                }
                 if (viewNode->Child(0)->Content().empty()) {
                     Ctx.AddError(TIssue(Ctx.GetPosition(viewNode->Child(0)->Pos()), "Secondary index name must not be empty"));
-                    return false; 
-                } 
-                View = viewNode->Child(0)->Content(); 
- 
-            } else { 
+                    return false;
+                }
+                View = viewNode->Child(0)->Content();
+
+            } else {
                 Ctx.AddError(TIssue(Ctx.GetPosition(tag->Pos()), TStringBuilder() << "Unexpected tag for kikimr key child: " << tag->Content()));
-                return false; 
-            } 
-        } 
-    } 
+                return false;
+            }
+        }
+    }
     return true;
 }
 
-NNodes::TKiVersionedTable BuildVersionedTable(const TKikimrTableMetadata& metadata, TPositionHandle pos, TExprContext& ctx) { 
-    return Build<TKiVersionedTable>(ctx, pos) 
+NNodes::TKiVersionedTable BuildVersionedTable(const TKikimrTableMetadata& metadata, TPositionHandle pos, TExprContext& ctx) {
+    return Build<TKiVersionedTable>(ctx, pos)
         .Path().Build(metadata.Name)
         .SchemaVersion().Build(ToString(metadata.SchemaVersion))
-        .PathId().Build(metadata.PathId.ToString()) 
-        .Done(); 
-} 
- 
-NNodes::TCoAtomList BuildColumnsList( 
+        .PathId().Build(metadata.PathId.ToString())
+        .Done();
+}
+
+NNodes::TCoAtomList BuildColumnsList(
     const TKikimrTableDescription& table,
     TPositionHandle pos,
     TExprContext& ctx,
@@ -417,73 +417,73 @@ NNodes::TCoAtomList BuildColumnsList(
         }
     }
 
-    return Build<TCoAtomList>(ctx, pos) 
+    return Build<TCoAtomList>(ctx, pos)
         .Add(columnsToSelect)
         .Done();
-} 
-
-NNodes::TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx) {
-    TVector<TExprBase> columnsToSelect; 
-    columnsToSelect.reserve(table.Metadata->KeyColumnNames.size()); 
-    for (auto key : table.Metadata->KeyColumnNames) { 
-        auto value = table.Metadata->Columns.at(key); 
-        auto atom = Build<TCoAtom>(ctx, pos) 
-            .Value(value.Name) 
-            .Done(); 
- 
-        columnsToSelect.push_back(atom); 
-    } 
- 
-    return Build<TCoAtomList>(ctx, pos) 
-        .Add(columnsToSelect) 
-        .Done(); 
 }
 
-NNodes::TCoAtomList MergeColumns(const NNodes::TCoAtomList& col1, const TVector<TString>& col2, TExprContext& ctx) { 
-    TVector<TCoAtom> columns; 
-    THashSet<TString> uniqColumns; 
-    columns.reserve(col1.Size() + col2.size()); 
- 
-    for (const auto& c : col1) { 
-        YQL_ENSURE(uniqColumns.emplace(c.StringValue()).second); 
-        columns.push_back(c); 
-    } 
- 
-    for (const auto& c : col2) { 
-        if (uniqColumns.emplace(c).second) { 
-            auto atom = Build<TCoAtom>(ctx, col1.Pos()) 
-                .Value(c) 
-                .Done(); 
-            columns.push_back(atom); 
-        } 
-    } 
- 
-    return Build<TCoAtomList>(ctx, col1.Pos()) 
-        .Add(columns) 
-        .Done(); 
-} 
- 
-TCoNameValueTupleList ExtractNamedKeyTuples(TCoArgument itemArg, const TKikimrTableDescription& tableDesc, 
-    TExprContext& ctx, const TString& tablePrefix) 
-{ 
-    TVector<TExprBase> keyTuples; 
-    for (TString& keyColumnName : tableDesc.Metadata->KeyColumnNames) { 
-        auto tuple = Build<TCoNameValueTuple>(ctx, itemArg.Pos()) 
-            .Name().Build(keyColumnName) 
-            .Value<TCoMember>() 
-                .Struct(itemArg) 
-                .Name().Build(tablePrefix.empty() ? keyColumnName : TString::Join(tablePrefix, ".", keyColumnName)) 
-                .Build() 
-            .Done(); 
- 
-        keyTuples.push_back(tuple); 
-    } 
- 
-    return Build<TCoNameValueTupleList>(ctx, itemArg.Pos()) 
-        .Add(keyTuples) 
-        .Done(); 
-} 
- 
+NNodes::TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx) {
+    TVector<TExprBase> columnsToSelect;
+    columnsToSelect.reserve(table.Metadata->KeyColumnNames.size());
+    for (auto key : table.Metadata->KeyColumnNames) {
+        auto value = table.Metadata->Columns.at(key);
+        auto atom = Build<TCoAtom>(ctx, pos)
+            .Value(value.Name)
+            .Done();
+
+        columnsToSelect.push_back(atom);
+    }
+
+    return Build<TCoAtomList>(ctx, pos)
+        .Add(columnsToSelect)
+        .Done();
+}
+
+NNodes::TCoAtomList MergeColumns(const NNodes::TCoAtomList& col1, const TVector<TString>& col2, TExprContext& ctx) {
+    TVector<TCoAtom> columns;
+    THashSet<TString> uniqColumns;
+    columns.reserve(col1.Size() + col2.size());
+
+    for (const auto& c : col1) {
+        YQL_ENSURE(uniqColumns.emplace(c.StringValue()).second);
+        columns.push_back(c);
+    }
+
+    for (const auto& c : col2) {
+        if (uniqColumns.emplace(c).second) {
+            auto atom = Build<TCoAtom>(ctx, col1.Pos())
+                .Value(c)
+                .Done();
+            columns.push_back(atom);
+        }
+    }
+
+    return Build<TCoAtomList>(ctx, col1.Pos())
+        .Add(columns)
+        .Done();
+}
+
+TCoNameValueTupleList ExtractNamedKeyTuples(TCoArgument itemArg, const TKikimrTableDescription& tableDesc,
+    TExprContext& ctx, const TString& tablePrefix)
+{
+    TVector<TExprBase> keyTuples;
+    for (TString& keyColumnName : tableDesc.Metadata->KeyColumnNames) {
+        auto tuple = Build<TCoNameValueTuple>(ctx, itemArg.Pos())
+            .Name().Build(keyColumnName)
+            .Value<TCoMember>()
+                .Struct(itemArg)
+                .Name().Build(tablePrefix.empty() ? keyColumnName : TString::Join(tablePrefix, ".", keyColumnName))
+                .Build()
+            .Done();
+
+        keyTuples.push_back(tuple);
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, itemArg.Pos())
+        .Add(keyTuples)
+        .Done();
+}
+
 TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TCoNameValueTupleList& operations, TExprContext& ctx) {
     TVector<NKqpProto::TKqpTableOp> protoOps;
     for (const auto& op : operations) {
@@ -505,37 +505,37 @@ TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TCoNameValueTupleLi
 
 TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TKiOperationList& operations, TExprContext& ctx) {
     TVector<NKqpProto::TKqpTableOp> protoOps;
-    for (const auto& op : operations) { 
-        auto table = TString(op.Table()); 
+    for (const auto& op : operations) {
+        auto table = TString(op.Table());
         auto tableOp = FromString<TYdbOperation>(TString(op.Operation()));
         auto pos = ctx.GetPosition(op.Pos());
- 
+
         NKqpProto::TKqpTableOp protoOp;
         protoOp.MutablePosition()->SetRow(pos.Row);
         protoOp.MutablePosition()->SetColumn(pos.Column);
-        protoOp.SetTable(table); 
-        protoOp.SetOperation((ui32)tableOp); 
- 
-        protoOps.push_back(protoOp); 
-    } 
- 
-    return protoOps; 
-} 
- 
+        protoOp.SetTable(table);
+        protoOp.SetOperation((ui32)tableOp);
+
+        protoOps.push_back(protoOp);
+    }
+
+    return protoOps;
+}
+
 void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, NKqpProto::TKqpTableInfo* info) {
-    YQL_ENSURE(desc.Metadata); 
-    info->SetTableName(desc.Metadata->Name); 
+    YQL_ENSURE(desc.Metadata);
+    info->SetTableName(desc.Metadata->Name);
     info->MutableTableId()->SetOwnerId(desc.Metadata->PathId.OwnerId());
     info->MutableTableId()->SetTableId(desc.Metadata->PathId.TableId());
-    info->SetSchemaVersion(desc.Metadata->SchemaVersion); 
-    if (desc.Metadata->Indexes) { 
-        info->SetHasIndexTables(true); 
-    } 
-} 
- 
+    info->SetSchemaVersion(desc.Metadata->SchemaVersion);
+    if (desc.Metadata->Indexes) {
+        info->SetHasIndexTables(true);
+    }
+}
+
 bool TKikimrTransactionContextBase::ApplyTableOperations(const TVector<NKqpProto::TKqpTableOp>& operations,
     const TVector<NKqpProto::TKqpTableInfo>& tableInfos, NKikimrKqp::EIsolationLevel isolationLevel, bool strictDml,
-    EKikimrQueryType queryType, TExprContext& ctx) 
+    EKikimrQueryType queryType, TExprContext& ctx)
 {
     if (IsClosed()) {
         TString message = TStringBuilder() << "Cannot perform operations on closed transaction.";
@@ -555,27 +555,27 @@ bool TKikimrTransactionContextBase::ApplyTableOperations(const TVector<NKqpProto
     }
 
     THashMap<TString, NKqpProto::TKqpTableInfo> tableInfoMap;
-    for (const auto& info : tableInfos) { 
-        tableInfoMap.insert(std::make_pair(info.GetTableName(), info)); 
+    for (const auto& info : tableInfos) {
+        tableInfoMap.insert(std::make_pair(info.GetTableName(), info));
 
         TKikimrPathId pathId(info.GetTableId().GetOwnerId(), info.GetTableId().GetTableId());
         TableByIdMap.insert(std::make_pair(pathId, info.GetTableName()));
-    } 
- 
+    }
+
     for (const auto& op : operations) {
-        const auto& table = op.GetTable(); 
- 
+        const auto& table = op.GetTable();
+
         auto newOp = TYdbOperation(op.GetOperation());
         TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
 
-        const auto info = tableInfoMap.FindPtr(table); 
-        if (!info) { 
-            TString message = TStringBuilder() 
-                << "Unable to find table info for table '" << table << "'"; 
-            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_SCHEME_ERROR, message)); 
-            return false; 
-        } 
- 
+        const auto info = tableInfoMap.FindPtr(table);
+        if (!info) {
+            TString message = TStringBuilder()
+                << "Unable to find table info for table '" << table << "'";
+            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_SCHEME_ERROR, message));
+            return false;
+        }
+
         if (queryType == EKikimrQueryType::Dml && (newOp & KikimrSchemeOps())) {
             TString message = TStringBuilder() << "Operation '" << newOp
                 << "' can't be performed in data query";
@@ -612,7 +612,7 @@ bool TKikimrTransactionContextBase::ApplyTableOperations(const TVector<NKqpProto
         }
 
         auto& currentOps = TableOperations[table];
- 
+
         if (currentOps & KikimrModifyOps()) {
             if (KikimrRequireUnmodifiedOps() & newOp) {
                 TString message = TStringBuilder() << "Operation '" << newOp
@@ -628,12 +628,12 @@ bool TKikimrTransactionContextBase::ApplyTableOperations(const TVector<NKqpProto
                     return false;
                 }
             }
- 
-            if (info->GetHasIndexTables()) { 
-                TString message = TStringBuilder() << "Multiple modification of table with secondary indexes is not supported yet"; 
-                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message)); 
-                return false; 
-            } 
+
+            if (info->GetHasIndexTables()) {
+                TString message = TStringBuilder() << "Multiple modification of table with secondary indexes is not supported yet";
+                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
+                return false;
+            }
         }
 
         if ((KikimrRequireUnmodifiedOps() & newOp) && isolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
@@ -720,15 +720,15 @@ bool IsKikimrSystemColumn(const TStringBuf columnName) {
     return KikimrSystemColumns().FindPtr(columnName);
 }
 
-bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos) { 
-    if (metadata->Indexes.empty()) { 
-        ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder() 
-                                  << "No global indexes for table " << metadata->Name)); 
-        return false; 
-    } 
-    return true; 
-} 
- 
+bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos) {
+    if (metadata->Indexes.empty()) {
+        ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
+                                  << "No global indexes for table " << metadata->Name));
+        return false;
+    }
+    return true;
+}
+
 bool AddDmlIssue(const TIssue& issue, bool strictDml, TExprContext& ctx) {
     if (strictDml) {
         TIssue newIssue;

@@ -14,8 +14,8 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-const ui64 NEW_TABLE_ALTER_VERSION = 1; 
- 
+const ui64 NEW_TABLE_ALTER_VERSION = 1;
+
 namespace {
 
 bool ResolvePoolNames(
@@ -1353,13 +1353,13 @@ void TSchemeShard::PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId)
 
         db.Table<Schema::TableIndexKeysAlterData>().Key(elemnt->PathId.LocalPathId, keyIdx).Delete();
     }
- 
-    for (ui32 dataColIdx = 0; dataColIdx < alterData->IndexDataColumns.size(); ++dataColIdx) { 
+
+    for (ui32 dataColIdx = 0; dataColIdx < alterData->IndexDataColumns.size(); ++dataColIdx) {
         db.Table<Schema::TableIndexDataColumns>().Key(elemnt->PathId.OwnerId, elemnt->PathId.LocalPathId, dataColIdx).Update(
-                    NIceDb::TUpdate<Schema::TableIndexDataColumns::DataColumnName>(alterData->IndexDataColumns[dataColIdx])); 
- 
+                    NIceDb::TUpdate<Schema::TableIndexDataColumns::DataColumnName>(alterData->IndexDataColumns[dataColIdx]));
+
         db.Table<Schema::TableIndexDataColumnsAlterData>().Key(elemnt->PathId.OwnerId, elemnt->PathId.LocalPathId, dataColIdx).Delete();
-    } 
+    }
 }
 
 void TSchemeShard::PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId& pathId) {
@@ -1384,11 +1384,11 @@ void TSchemeShard::PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId
         db.Table<Schema::TableIndexKeysAlterData>().Key(elemnt->PathId.LocalPathId, keyIdx).Update(
                     NIceDb::TUpdate<Schema::TableIndexKeysAlterData::KeyName>(alterData->IndexKeys[keyIdx]));
     }
- 
-    for (ui32 dataColIdx = 0; dataColIdx < alterData->IndexDataColumns.size(); ++dataColIdx) { 
+
+    for (ui32 dataColIdx = 0; dataColIdx < alterData->IndexDataColumns.size(); ++dataColIdx) {
         db.Table<Schema::TableIndexDataColumnsAlterData>().Key(elemnt->PathId.OwnerId, elemnt->PathId.LocalPathId, dataColIdx).Update(
-                    NIceDb::TUpdate<Schema::TableIndexDataColumnsAlterData::DataColumnName>(alterData->IndexDataColumns[dataColIdx])); 
-    } 
+                    NIceDb::TUpdate<Schema::TableIndexDataColumnsAlterData::DataColumnName>(alterData->IndexDataColumns[dataColIdx]));
+    }
 }
 
 void TSchemeShard::PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId) {
@@ -2170,7 +2170,7 @@ void TSchemeShard::PersistTableAlterVersion(NIceDb::TNiceDb& db, const TPathId p
 void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo) {
     TString partitionConfig;
     Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PartitionConfig().SerializeToString(&partitionConfig);
- 
+
     TString ttlSettings;
     if (tableInfo->HasTTLSettings()) {
         Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->TTLSettings().SerializeToString(&ttlSettings);
@@ -3272,20 +3272,20 @@ void TSchemeShard::PersistRemoveTableIndex(NIceDb::TNiceDb &db, TPathId pathId)
         db.Table<Schema::MigratedTableIndexKeys>().Key(pathId.OwnerId, pathId.LocalPathId, kNo).Delete();
     }
 
-    for (ui32 dNo = 0; dNo < index->IndexDataColumns.size(); ++dNo) { 
-        db.Table<Schema::TableIndexDataColumns>().Key(pathId.OwnerId, pathId.LocalPathId, dNo).Delete(); 
-    } 
- 
+    for (ui32 dNo = 0; dNo < index->IndexDataColumns.size(); ++dNo) {
+        db.Table<Schema::TableIndexDataColumns>().Key(pathId.OwnerId, pathId.LocalPathId, dNo).Delete();
+    }
+
     if (index->AlterData) {
         auto alterData = index->AlterData;
         for (ui32 kNo = 0; kNo < alterData->IndexKeys.size(); ++kNo) {
             db.Table<Schema::TableIndexKeysAlterData>().Key(pathId.LocalPathId, kNo).Delete();
         }
 
-        for (ui32 dNo = 0; dNo < alterData->IndexDataColumns.size(); ++dNo) { 
-            db.Table<Schema::TableIndexDataColumnsAlterData>().Key(pathId.OwnerId, pathId.LocalPathId, dNo).Delete(); 
-        } 
- 
+        for (ui32 dNo = 0; dNo < alterData->IndexDataColumns.size(); ++dNo) {
+            db.Table<Schema::TableIndexDataColumnsAlterData>().Key(pathId.OwnerId, pathId.LocalPathId, dNo).Delete();
+        }
+
         db.Table<Schema::TableIndexAlterData>().Key(pathId.LocalPathId).Delete();
     }
 
@@ -3640,7 +3640,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     , PipeTracker(*PipeClientCache)
     , CompactionStarter(this)
     , ShardDeleter(info->TabletID)
-    , AllowDataColumnForIndexTable(0, 0, 1) 
+    , AllowDataColumnForIndexTable(0, 0, 1)
     , EnableAsyncIndexes(0, 0, 1)
     , EnableSchemeTransactionsAtSchemeShard(0, 0, 1)
 {
@@ -3683,9 +3683,9 @@ NTabletPipe::TClientConfig TSchemeShard::GetPipeClientConfig() {
 }
 
 void TSchemeShard::FillTableSchemaVersion(ui64 tableSchemaVersion, NKikimrSchemeOp::TTableDescription* tableDescr) const {
-    tableDescr->SetTableSchemaVersion(tableSchemaVersion); 
-} 
- 
+    tableDescr->SetTableSchemaVersion(tableSchemaVersion);
+}
+
 void TSchemeShard::BreakTabletAndRestart(const TActorContext &ctx) {
     Become(&TThis::BrokenState);
     ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
@@ -3756,8 +3756,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     appData->Icb->RegisterSharedControl(AllowConditionalEraseOperations, "SchemeShard_AllowConditionalEraseOperations");
 
     AllowDataColumnForIndexTable = appData->FeatureFlags.GetEnableDataColumnForIndexTable();
-    appData->Icb->RegisterSharedControl(AllowDataColumnForIndexTable, "SchemeShard_AllowDataColumnForIndexTable"); 
- 
+    appData->Icb->RegisterSharedControl(AllowDataColumnForIndexTable, "SchemeShard_AllowDataColumnForIndexTable");
+
     EnableAsyncIndexes = appData->FeatureFlags.GetEnableAsyncIndexes();
     appData->Icb->RegisterSharedControl(EnableAsyncIndexes, "SchemeShard_EnableAsyncIndexes");
 
@@ -3771,7 +3771,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     AllowServerlessStorageBilling = appData->FeatureFlags.GetAllowServerlessStorageBillingForSchemeShard();
     appData->Icb->RegisterSharedControl(AllowServerlessStorageBilling, "SchemeShard_AllowServerlessStorageBilling");
 
-    TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(CollectTxAllocators(appData))); 
+    TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(CollectTxAllocators(appData)));
 
     SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector().Release());
 
@@ -5536,7 +5536,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
     NKikimrTxDataShard::TFlatSchemeTransaction tx;
     FillSeqNo(tx, seqNo);
     auto proto = tx.MutableAlterTable();
-    FillTableSchemaVersion(alterData->AlterVersion, proto); 
+    FillTableSchemaVersion(alterData->AlterVersion, proto);
     proto->SetName(path->Name);
 
     proto->SetId_Deprecated(pathId.LocalPathId);
@@ -5729,7 +5729,7 @@ void TSchemeShard::FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64
         std::move(rangeBegin),
         std::move(rangeEnd),
         true /* rangeBeginInclusive */, false /* rangeEndInclusive */, true /* newTable */);
-    FillTableSchemaVersion(schemaVersion, tableDescr); 
+    FillTableSchemaVersion(schemaVersion, tableDescr);
 }
 
 bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 keySize, NScheme::TTypeId firstKeyColType, ui32 partitionCount, const NScheme::TTypeRegistry* typeRegistry, TString& errStr) {

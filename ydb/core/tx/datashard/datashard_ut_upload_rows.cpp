@@ -1,26 +1,26 @@
-#include "defs.h" 
-#include "datashard_ut_common.h" 
+#include "defs.h"
+#include "datashard_ut_common.h"
 #include "datashard_ut_common_kqp.h"
- 
+
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
 using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
-using namespace Tests; 
- 
+using namespace Tests;
+
 namespace {
 
-using TRows = TVector<std::pair<TSerializedCellVec, TString>>; 
-using TRowTypes = TVector<std::pair<TString, Ydb::Type>>; 
- 
+using TRows = TVector<std::pair<TSerializedCellVec, TString>>;
+using TRowTypes = TVector<std::pair<TString, Ydb::Type>>;
+
 static void DoStartUploadTestRows(
         const Tests::TServer::TPtr& server,
         const TActorId& sender,
@@ -28,7 +28,7 @@ static void DoStartUploadTestRows(
         Ydb::Type::PrimitiveTypeId typeId)
 {
     auto& runtime = *server->GetRuntime();
- 
+
     std::shared_ptr<TRows> rows(new TRows);
     auto types = std::make_shared<TRowTypes>();
     Ydb::Type type;
@@ -42,11 +42,11 @@ static void DoStartUploadTestRows(
         TString serializedValue = TSerializedCellVec::Serialize(value);
         rows->emplace_back(serializedKey, serializedValue);
     }
- 
+
     auto actor = NTxProxy::CreateUploadRowsInternal(sender, tableName, types, rows);
     runtime.Register(actor);
-} 
- 
+}
+
 static void DoWaitUploadTestRows(
         const Tests::TServer::TPtr& server,
         const TActorId& sender,
@@ -74,19 +74,19 @@ static TActorId DoStartUploadRows(
 {
     auto sender = runtime.AllocateEdgeActor();
 
-    auto types = std::make_shared<TRowTypes>(); 
+    auto types = std::make_shared<TRowTypes>();
     Ydb::Type type;
     type.set_type_id(Ydb::Type::UINT32);
-    types->emplace_back("key", type); 
-    types->emplace_back("value", type); 
+    types->emplace_back("key", type);
+    types->emplace_back("value", type);
 
-    auto rows = std::make_shared<TRows>(); 
+    auto rows = std::make_shared<TRows>();
     for (const auto& kv : data) {
         auto key = TVector<TCell>{TCell::Make(kv.first)};
         auto value = TVector<TCell>{TCell::Make(kv.second)};
         TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
         TString serializedValue = TSerializedCellVec::Serialize(value);
-        rows->emplace_back(serializedKey, serializedValue); 
+        rows->emplace_back(serializedKey, serializedValue);
     }
 
     auto actor = NTxProxy::CreateUploadRowsInternal(
@@ -122,31 +122,31 @@ static void DoUploadRows(
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) { 
- 
+Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
+
     Y_UNIT_TEST_WITH_MVCC(TestUploadRows) {
-        TPortManager pm; 
-        TServerSettings serverSettings(pm.GetPort(2134)); 
-        serverSettings.SetDomainName("Root") 
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
             .SetEnableMvcc(WithMvcc)
-            .SetUseRealThreads(false); 
- 
-        Tests::TServer::TPtr server = new TServer(serverSettings); 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
- 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG); 
- 
-        InitRoot(server, sender); 
- 
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
         CreateShardedTable(server, sender, "/Root", "table-1", 4, false);
- 
-        DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::SUCCESS); 
- 
-        DoUploadTestRows(server, sender, "/Root/table-doesnt-exist", Ydb::Type::UINT32, Ydb::StatusIds::SCHEME_ERROR); 
- 
-        DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::INT32, Ydb::StatusIds::SCHEME_ERROR); 
-    } 
+
+        DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::SUCCESS);
+
+        DoUploadTestRows(server, sender, "/Root/table-doesnt-exist", Ydb::Type::UINT32, Ydb::StatusIds::SCHEME_ERROR);
+
+        DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::INT32, Ydb::StatusIds::SCHEME_ERROR);
+    }
 
     Y_UNIT_TEST_WITH_MVCC(TestUploadRowsDropColumnRace) {
         TPortManager pm;
@@ -287,25 +287,25 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         // Write shadow data: keys from 1 to 9 historically had value=key*10
         {
-            auto types = std::make_shared<TRowTypes>(); 
+            auto types = std::make_shared<TRowTypes>();
             Ydb::Type type;
             type.set_type_id(Ydb::Type::UINT32);
-            types->emplace_back("key", type); 
-            types->emplace_back("value", type); 
+            types->emplace_back("key", type);
+            types->emplace_back("value", type);
 
-            auto rows = std::make_shared<TRows>(); 
+            auto rows = std::make_shared<TRows>();
             for (ui32 i = 1; i <= 9; i++) {
                 auto key = TVector<TCell>{TCell::Make(ui32(i))};
                 auto value = TVector<TCell>{TCell::Make(ui32(i * 10))};
                 TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
                 TString serializedValue = TSerializedCellVec::Serialize(value);
-                rows->emplace_back(serializedKey, serializedValue); 
+                rows->emplace_back(serializedKey, serializedValue);
             }
             auto actor = NTxProxy::CreateUploadRowsInternal(
                     sender,
                     "/Root/table-1",
                     std::move(types),
-                    rows, 
+                    rows,
                     NTxProxy::EUploadRowsMode::WriteToTableShadow);
             runtime.Register(actor);
 
@@ -353,19 +353,19 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         // Write shadow data: keys from 1 to 9 historically had value=key*10
         {
-            auto types = std::make_shared<TRowTypes>(); 
+            auto types = std::make_shared<TRowTypes>();
             Ydb::Type type;
             type.set_type_id(Ydb::Type::UINT32);
-            types->emplace_back("key", type); 
-            types->emplace_back("value", type); 
+            types->emplace_back("key", type);
+            types->emplace_back("value", type);
 
-            auto rows = std::make_shared<TRows>(); 
+            auto rows = std::make_shared<TRows>();
             for (ui32 i = 1; i <= 9; i++) {
                 auto key = TVector<TCell>{TCell::Make(ui32(i))};
                 auto value = TVector<TCell>{TCell::Make(ui32(i * 10))};
                 TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
                 TString serializedValue = TSerializedCellVec::Serialize(value);
-                rows->emplace_back(serializedKey, serializedValue); 
+                rows->emplace_back(serializedKey, serializedValue);
             }
             auto actor = NTxProxy::CreateUploadRowsInternal(
                     sender,
@@ -434,19 +434,19 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         // Write shadow data: keys from 1 to 9 historically had value=key*10
         {
-            auto types = std::make_shared<TRowTypes>(); 
+            auto types = std::make_shared<TRowTypes>();
             Ydb::Type type;
             type.set_type_id(Ydb::Type::UINT32);
-            types->emplace_back("key", type); 
-            types->emplace_back("value", type); 
+            types->emplace_back("key", type);
+            types->emplace_back("value", type);
 
-            auto rows = std::make_shared<TRows>(); 
+            auto rows = std::make_shared<TRows>();
             for (ui32 i = 1; i <= 9; i++) {
                 auto key = TVector<TCell>{TCell::Make(ui32(i))};
                 auto value = TVector<TCell>{TCell::Make(ui32(i * 10))};
                 TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
                 TString serializedValue = TSerializedCellVec::Serialize(value);
-                rows->emplace_back(serializedKey, serializedValue); 
+                rows->emplace_back(serializedKey, serializedValue);
             }
             auto actor = NTxProxy::CreateUploadRowsInternal(
                     sender,
@@ -533,19 +533,19 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         // Write shadow data: keys from 1 to 9 historically had value=key*10
         {
-            auto types = std::make_shared<TRowTypes>(); 
+            auto types = std::make_shared<TRowTypes>();
             Ydb::Type type;
             type.set_type_id(Ydb::Type::UINT32);
-            types->emplace_back("key", type); 
-            types->emplace_back("value", type); 
+            types->emplace_back("key", type);
+            types->emplace_back("value", type);
 
-            auto rows = std::make_shared<TRows>(); 
+            auto rows = std::make_shared<TRows>();
             for (ui32 i = 1; i <= 9; i++) {
                 auto key = TVector<TCell>{TCell::Make(ui32(i))};
                 auto value = TVector<TCell>{TCell::Make(ui32(i * 10))};
                 TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
                 TString serializedValue = TSerializedCellVec::Serialize(value);
-                rows->emplace_back(serializedKey, serializedValue); 
+                rows->emplace_back(serializedKey, serializedValue);
             }
             auto actor = NTxProxy::CreateUploadRowsInternal(
                     sender,
@@ -635,19 +635,19 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         // Write shadow data: keys from 1 to 9 historically had value=key*10
         {
-            auto types = std::make_shared<TRowTypes>(); 
+            auto types = std::make_shared<TRowTypes>();
             Ydb::Type type;
             type.set_type_id(Ydb::Type::UINT32);
-            types->emplace_back("key", type); 
-            types->emplace_back("value", type); 
+            types->emplace_back("key", type);
+            types->emplace_back("value", type);
 
-            auto rows = std::make_shared<TRows>(); 
+            auto rows = std::make_shared<TRows>();
             for (ui32 i = 1; i <= 9; i++) {
                 auto key = TVector<TCell>{TCell::Make(ui32(i))};
                 auto value = TVector<TCell>{TCell::Make(ui32(i * 10))};
                 TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
                 TString serializedValue = TSerializedCellVec::Serialize(value);
-                rows->emplace_back(serializedKey, serializedValue); 
+                rows->emplace_back(serializedKey, serializedValue);
             }
             auto actor = NTxProxy::CreateUploadRowsInternal(
                     sender,
@@ -687,19 +687,19 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         // Write shadow data: keys from 1 to 9 historically had extra=key*10
         {
-            auto types = std::make_shared<TRowTypes>(); 
+            auto types = std::make_shared<TRowTypes>();
             Ydb::Type type;
             type.set_type_id(Ydb::Type::UINT32);
-            types->emplace_back("key", type); 
-            types->emplace_back("extra", type); 
+            types->emplace_back("key", type);
+            types->emplace_back("extra", type);
 
-            auto rows = std::make_shared<TRows>(); 
+            auto rows = std::make_shared<TRows>();
             for (ui32 i = 1; i <= 9; i++) {
                 auto key = TVector<TCell>{TCell::Make(ui32(i))};
                 auto extra = TVector<TCell>{TCell::Make(ui32(i * 10))};
                 TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
                 TString serializedExtra = TSerializedCellVec::Serialize(extra);
-                rows->emplace_back(serializedKey, serializedExtra); 
+                rows->emplace_back(serializedKey, serializedExtra);
             }
             auto actor = NTxProxy::CreateUploadRowsInternal(
                     sender,
@@ -738,6 +738,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
                 "key = 10, value = (empty maybe), extra = (empty maybe)\n");
     }
 
-} 
- 
-} // namespace NKikimr 
+}
+
+} // namespace NKikimr

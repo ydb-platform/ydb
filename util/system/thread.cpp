@@ -24,19 +24,19 @@
     #include <util/generic/scope.h>
 #else
     #error "FIXME"
-#endif 
- 
-bool SetHighestThreadPriority() { 
-#ifdef _win_ 
-    return SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST); 
-#else 
-    struct sched_param sch; 
-    memset(&sch, 0, sizeof(sch)); 
-    sch.sched_priority = 31; 
-    return pthread_setschedparam(pthread_self(), SCHED_RR, &sch) == 0; 
-#endif 
-} 
- 
+#endif
+
+bool SetHighestThreadPriority() {
+#ifdef _win_
+    return SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+#else
+    struct sched_param sch;
+    memset(&sch, 0, sizeof(sch));
+    sch.sched_priority = 31;
+    return pthread_setschedparam(pthread_self(), SCHED_RR, &sch) == 0;
+#endif
+}
+
 namespace {
     using TParams = TThread::TParams;
     using TId = TThread::TId;

@@ -566,9 +566,9 @@ void TPathDescriber::DescribeUserAttributes(TPathElement::TPtr pathEl) {
 }
 
 void TPathDescriber::DescribePathVersion(const TPath& path) {
-    const auto& version = Self->GetPathVersion(path); 
-    Result->Record.MutablePathDescription()->MutableSelf()->SetPathVersion(version.GetGeneralVersion()); 
-    Result->Record.MutablePathDescription()->MutableSelf()->MutableVersion()->CopyFrom(version); 
+    const auto& version = Self->GetPathVersion(path);
+    Result->Record.MutablePathDescription()->MutableSelf()->SetPathVersion(version.GetGeneralVersion());
+    Result->Record.MutablePathDescription()->MutableSelf()->MutableVersion()->CopyFrom(version);
 }
 
 void TPathDescriber::DescribeDomain(TPathElement::TPtr pathEl) {
@@ -899,7 +899,7 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
     THashMap<ui32, TString> familyNames;
     bool familyNamesBuilt = false;
 
-    entry->SetTableSchemaVersion(tableInfo->AlterVersion); 
+    entry->SetTableSchemaVersion(tableInfo->AlterVersion);
     entry->MutableColumns()->Reserve(tableInfo->Columns.size());
     for (auto col : tableInfo->Columns) {
         const auto& cinfo = col.second;
@@ -940,9 +940,9 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
         }
     }
     Y_VERIFY(!tableInfo->KeyColumnIds.empty());
- 
-    entry->MutableKeyColumnNames()->Reserve(tableInfo->KeyColumnIds.size()); 
-    entry->MutableKeyColumnIds()->Reserve(tableInfo->KeyColumnIds.size()); 
+
+    entry->MutableKeyColumnNames()->Reserve(tableInfo->KeyColumnIds.size());
+    entry->MutableKeyColumnIds()->Reserve(tableInfo->KeyColumnIds.size());
     for (ui32 keyColId : tableInfo->KeyColumnIds) {
         entry->AddKeyColumnNames(tableInfo->Columns[keyColId].Name);
         entry->AddKeyColumnIds(keyColId);

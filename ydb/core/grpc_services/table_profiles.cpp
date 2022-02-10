@@ -75,10 +75,10 @@ NKikimrSchemeOp::TStorageConfig *TTableProfiles::GetDefaultStorageConfig(NKikimr
     return GetDefaultFamilyDescription(policy)->MutableStorageConfig();
 }
 
-bool TTableProfiles::HasPresetName(const TString &presetName) const { 
+bool TTableProfiles::HasPresetName(const TString &presetName) const {
     return TableProfiles.contains(presetName);
-} 
- 
+}
+
 bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
                                        NKikimrSchemeOp::TTableDescription &tableDesc,
                                        Ydb::StatusIds::StatusCode &code,

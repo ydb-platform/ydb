@@ -262,7 +262,7 @@ namespace NTypeAnnImpl {
 
             const TTypeAnnotationNode* itemType = list.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
             if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
-                ctx.Expr.AddError(TIssue( 
+                ctx.Expr.AddError(TIssue(
                     ctx.Expr.GetPosition(list.Pos()),
                     TStringBuilder() << "Expected list of struct"
                     ));
@@ -288,7 +288,7 @@ namespace NTypeAnnImpl {
             }
             if (auto err = labels.Add(ctx.Expr, *listPair.Child(1), structType)) {
                 ctx.Expr.AddError(*err);
-                ctx.Expr.AddError(TIssue( 
+                ctx.Expr.AddError(TIssue(
                     ctx.Expr.GetPosition(input->Child(idx)->Pos()),
                     TStringBuilder() << "Failed to parse labels of struct as second element of " << idx << " argument"
                     ));

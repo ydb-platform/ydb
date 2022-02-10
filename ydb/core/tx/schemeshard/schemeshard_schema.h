@@ -837,7 +837,7 @@ struct Schema : NIceDb::Schema {
         struct VolumeConfig: Column<2, NScheme::NTypeIds::String> {};
         struct AlterVersion: Column<3, NScheme::NTypeIds::Uint64> {};
         struct MountToken: Column<4, NScheme::NTypeIds::Utf8> {};
-        struct TokenVersion: Column<5, NScheme::NTypeIds::Uint64> {}; 
+        struct TokenVersion: Column<5, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<PathId, VolumeConfig, AlterVersion, MountToken, TokenVersion>;
@@ -1289,14 +1289,14 @@ struct Schema : NIceDb::Schema {
         struct Id:         Column<1, NScheme::NTypeIds::Uint64> {using Type = TIndexBuildId;};
         struct ColumnNo:   Column<2, NScheme::NTypeIds::Uint32> {};
         struct ColumnName: Column<3, NScheme::NTypeIds::Utf8> {};
-        struct ColumnKind: Column<4, NScheme::NTypeIds::Uint8> {using Type = EIndexColumnKind;}; 
+        struct ColumnKind: Column<4, NScheme::NTypeIds::Uint8> {using Type = EIndexColumnKind;};
 
         using TKey = TableKey<Id, ColumnNo>;
         using TColumns = TableColumns<
             Id,
             ColumnNo,
-            ColumnName, 
-            ColumnKind 
+            ColumnName,
+            ColumnKind
             >;
     };
 
@@ -1369,26 +1369,26 @@ struct Schema : NIceDb::Schema {
             >;
     };
 
-    struct TableIndexDataColumns : Table<80> { 
-        struct PathOwnerId:       Column<1, NScheme::NTypeIds::Uint64> {using Type = TOwnerId;}; 
-        struct PathLocalId:       Column<2, NScheme::NTypeIds::Uint64> {using Type = TLocalPathId;}; 
-        struct DataColumnId:      Column<3, NScheme::NTypeIds::Uint32> {}; 
-        struct DataColumnName:    Column<4, NScheme::NTypeIds::Utf8> {}; 
- 
-        using TKey = TableKey<PathOwnerId, PathLocalId, DataColumnId>; 
-        using TColumns = TableColumns<PathOwnerId, PathLocalId, DataColumnId, DataColumnName>; 
-    }; 
- 
-    struct TableIndexDataColumnsAlterData : Table<81> { 
-        struct PathOwnerId:       Column<1, NScheme::NTypeIds::Uint64> {using Type = TOwnerId;}; 
-        struct PathLocalId:       Column<2, NScheme::NTypeIds::Uint64> {using Type = TLocalPathId;}; 
-        struct DataColumnId:      Column<3, NScheme::NTypeIds::Uint32> {}; 
-        struct DataColumnName:    Column<4, NScheme::NTypeIds::Utf8> {}; 
- 
-        using TKey = TableKey<PathOwnerId, PathLocalId, DataColumnId>; 
-        using TColumns = TableColumns<PathOwnerId, PathLocalId, DataColumnId, DataColumnName>; 
-    }; 
- 
+    struct TableIndexDataColumns : Table<80> {
+        struct PathOwnerId:       Column<1, NScheme::NTypeIds::Uint64> {using Type = TOwnerId;};
+        struct PathLocalId:       Column<2, NScheme::NTypeIds::Uint64> {using Type = TLocalPathId;};
+        struct DataColumnId:      Column<3, NScheme::NTypeIds::Uint32> {};
+        struct DataColumnName:    Column<4, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<PathOwnerId, PathLocalId, DataColumnId>;
+        using TColumns = TableColumns<PathOwnerId, PathLocalId, DataColumnId, DataColumnName>;
+    };
+
+    struct TableIndexDataColumnsAlterData : Table<81> {
+        struct PathOwnerId:       Column<1, NScheme::NTypeIds::Uint64> {using Type = TOwnerId;};
+        struct PathLocalId:       Column<2, NScheme::NTypeIds::Uint64> {using Type = TLocalPathId;};
+        struct DataColumnId:      Column<3, NScheme::NTypeIds::Uint32> {};
+        struct DataColumnName:    Column<4, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<PathOwnerId, PathLocalId, DataColumnId>;
+        using TColumns = TableColumns<PathOwnerId, PathLocalId, DataColumnId, DataColumnName>;
+    };
+
     struct RestoreTasks : Table<82> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId;};
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId;};
@@ -1633,7 +1633,7 @@ struct Schema : NIceDb::Schema {
         Exports,
         ExportItems,
         TableShardPartitionConfigs,
-        PublishingPaths, 
+        PublishingPaths,
         FillIndexDesc,
         MigratedPaths,
         MigratedUserAttributes,
@@ -1665,8 +1665,8 @@ struct Schema : NIceDb::Schema {
         TablePartitionStats,
         SubDomainSchemeQuotas,
         FileStoreInfos,
-        FileStoreAlters, 
-        TableIndexDataColumns, 
+        FileStoreAlters,
+        TableIndexDataColumns,
         TableIndexDataColumnsAlterData,
         RestoreTasks,
         MigratedKesusInfos,

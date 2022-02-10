@@ -157,7 +157,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoLambda> filter;
     TMaybeNode<TCoLambda> update;
     TVector<TCoNameValueTuple> other;
-    TVector<TCoIndex> indexes; 
+    TVector<TCoIndex> indexes;
     TVector<TCoChangefeed> changefeeds;
     TMaybeNode<TExprList> columnFamilies;
     TVector<TCoNameValueTuple> tableSettings;
@@ -188,24 +188,24 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
             } else if (name == "update") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoLambda>());
                 update = tuple.Value().Cast<TCoLambda>();
-            } else if (name == "index") { 
-                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>()); 
-                auto index = Build<TCoIndex>(ctx, node.Pos()); 
-                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) { 
-                    const auto& indexItemName = item.Name().Value(); 
-                    if (indexItemName == "indexName") { 
-                        index.Name(item.Value().Cast<TCoAtom>()); 
-                    } else if (indexItemName == "indexType") { 
-                        index.Type(item.Value().Cast<TCoAtom>()); 
-                    } else if (indexItemName == "indexColumns") { 
-                        index.Columns(item.Value().Cast<TCoAtomList>()); 
-                    } else if (indexItemName == "dataColumns") { 
-                        index.DataColumns(item.Value().Cast<TCoAtomList>()); 
-                    } else { 
-                        YQL_ENSURE(false, "unknown index item"); 
-                    } 
-                } 
-                indexes.push_back(index.Done()); 
+            } else if (name == "index") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
+                auto index = Build<TCoIndex>(ctx, node.Pos());
+                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
+                    const auto& indexItemName = item.Name().Value();
+                    if (indexItemName == "indexName") {
+                        index.Name(item.Value().Cast<TCoAtom>());
+                    } else if (indexItemName == "indexType") {
+                        index.Type(item.Value().Cast<TCoAtom>());
+                    } else if (indexItemName == "indexColumns") {
+                        index.Columns(item.Value().Cast<TCoAtomList>());
+                    } else if (indexItemName == "dataColumns") {
+                        index.DataColumns(item.Value().Cast<TCoAtomList>());
+                    } else {
+                        YQL_ENSURE(false, "unknown index item");
+                    }
+                }
+                indexes.push_back(index.Done());
             } else if (name == "changefeed") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
                 auto cf = Build<TCoChangefeed>(ctx, node.Pos());
@@ -242,14 +242,14 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
         }
     }
 
-    const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos()) 
+    const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
         .Add(other)
         .Done();
 
-    const auto& idx = Build<TCoIndexList>(ctx, node.Pos()) 
-        .Add(indexes) 
-        .Done(); 
- 
+    const auto& idx = Build<TCoIndexList>(ctx, node.Pos())
+        .Add(indexes)
+        .Done();
+
     const auto& cfs = Build<TCoChangefeedList>(ctx, node.Pos())
         .Add(changefeeds)
         .Done();
@@ -266,7 +266,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
         columnFamilies = Build<TExprList>(ctx, node.Pos()).Done();
     }
 
-    TWriteTableSettings ret(otherSettings); 
+    TWriteTableSettings ret(otherSettings);
     ret.Mode = mode;
     ret.Columns = columns;
     ret.PrimaryKey = primaryKey;
@@ -274,7 +274,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     ret.OrderBy = orderBy;
     ret.Filter = filter;
     ret.Update = update;
-    ret.Indexes = idx; 
+    ret.Indexes = idx;
     ret.Changefeeds = cfs;
     ret.ColumnFamilies = columnFamilies;
     ret.TableSettings = tableProfileSettings;
@@ -545,22 +545,22 @@ bool FillUsedFilesImpl(
     return childrenOk;
 }
 
-static void GetToken(const TString& string, TString& out, const TTypeAnnotationContext& type) { 
-    auto separator = string.find(":"); 
-    const auto p0 = string.substr(0, separator); 
-    if (p0 == "api") { 
-        const auto p1 = string.substr(separator + 1); 
-        if (p1 == "oauth") { 
-            out = type.UserCredentials.OauthToken; 
-        } else if (p1 == "cookie") { 
-            out = type.UserCredentials.BlackboxSessionIdCookie; 
-        } else { 
-            YQL_ENSURE(false, "unexpected token id"); 
-        } 
+static void GetToken(const TString& string, TString& out, const TTypeAnnotationContext& type) {
+    auto separator = string.find(":");
+    const auto p0 = string.substr(0, separator);
+    if (p0 == "api") {
+        const auto p1 = string.substr(separator + 1);
+        if (p1 == "oauth") {
+            out = type.UserCredentials.OauthToken;
+        } else if (p1 == "cookie") {
+            out = type.UserCredentials.BlackboxSessionIdCookie;
+        } else {
+            YQL_ENSURE(false, "unexpected token id");
+        }
     } else if (p0 == "token" || p0 == "cluster") {
-        const auto p1 = string.substr(separator + 1); 
-        auto cred = type.FindCredential(p1); 
-        if (cred == nullptr) { 
+        const auto p1 = string.substr(separator + 1);
+        auto cred = type.FindCredential(p1);
+        if (cred == nullptr) {
             if (p0 == "cluster") {
                 TStringBuf clusterName = p1;
                 if (clusterName.SkipPrefix("default_")) {
@@ -587,33 +587,33 @@ static void GetToken(const TString& string, TString& out, const TTypeAnnotationC
                 }
             }
 
-            YQL_ENSURE(false, "unexpected token id"); 
-        } 
+            YQL_ENSURE(false, "unexpected token id");
+        }
 
-        out = cred->Content; 
-    } else { 
-        YQL_ENSURE(false, "unexpected token prefix"); 
-    } 
-} 
- 
-void FillSecureParams( 
-    const TExprNode::TPtr& root, 
-    const TTypeAnnotationContext& types, 
-    THashMap<TString, TString>& secureParams) { 
- 
-    NYql::VisitExpr(root, [&secureParams](const TExprNode::TPtr& node) { 
-        if (auto maybeSecureParam = TMaybeNode<TCoSecureParam>(node)) { 
-            const auto& secureParamName = TString(maybeSecureParam.Cast().Name().Value()); 
-            secureParams.insert({secureParamName, TString()}); 
-        } 
-        return true; 
-    }); 
- 
-    for (auto& it : secureParams) { 
-        GetToken(it.first, it.second, types); 
-    } 
-} 
- 
+        out = cred->Content;
+    } else {
+        YQL_ENSURE(false, "unexpected token prefix");
+    }
+}
+
+void FillSecureParams(
+    const TExprNode::TPtr& root,
+    const TTypeAnnotationContext& types,
+    THashMap<TString, TString>& secureParams) {
+
+    NYql::VisitExpr(root, [&secureParams](const TExprNode::TPtr& node) {
+        if (auto maybeSecureParam = TMaybeNode<TCoSecureParam>(node)) {
+            const auto& secureParamName = TString(maybeSecureParam.Cast().Name().Value());
+            secureParams.insert({secureParamName, TString()});
+        }
+        return true;
+    });
+
+    for (auto& it : secureParams) {
+        GetToken(it.first, it.second, types);
+    }
+}
+
 bool FillUsedFiles(
     const TExprNode& node,
     TUserDataTable& files,

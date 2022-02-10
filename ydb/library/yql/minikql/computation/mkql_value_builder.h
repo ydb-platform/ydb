@@ -26,7 +26,7 @@ public:
     void SetSecureParamsProvider(const NUdf::ISecureParamsProvider* provider);
     void RethrowAtTerminate();
     void SetCalleePositionHolder(const NUdf::TSourcePosition*& position);
- 
+
     void Terminate(const char* message) const final;
 
     NUdf::TUnboxedValue NewStringNotFilled(ui32 size) const final;
@@ -54,13 +54,13 @@ public:
         return *this;
     }
 
-    bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef &value) const final; 
+    bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef &value) const final;
     const NUdf::TSourcePosition* CalleePosition() const final;
     NUdf::TUnboxedValue Run(const NUdf::TSourcePosition& callee, const NUdf::IBoxedValue& value, const NUdf::TUnboxedValuePod* args) const;
     NUdf::TFlatDataBlockPtr NewFlatDataBlock(ui32 initialSize, ui32 initialCapacity) const;
     NUdf::TFlatArrayBlockPtr NewFlatArrayBlock(ui32 count) const;
     NUdf::TSingleBlockPtr NewSingleBlock(const NUdf::TUnboxedValue& value) const;
- 
+
     bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) const final;
     bool SplitDate(ui16 value, ui32& year, ui32& month, ui32& day) const final;
 
@@ -89,7 +89,7 @@ public:
 private:
     const THolderFactory& HolderFactory_;
     NUdf::EValidatePolicy Policy_;
-    const NUdf::ISecureParamsProvider* SecureParamsProvider_ = nullptr; 
+    const NUdf::ISecureParamsProvider* SecureParamsProvider_ = nullptr;
     const NUdf::TSourcePosition** CalleePositionPtr_ = nullptr;
     mutable bool Rethrow_ = false;
 };

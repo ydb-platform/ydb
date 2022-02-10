@@ -45,7 +45,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
 } // namespace
 
 TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
-                   TIssues& issues) 
+                   TIssues& issues)
     : ClusterMapping(settings.ClusterMapping)
     , PathPrefix(settings.PathPrefix)
     , ClusterPathPrefixes(settings.ClusterPathPrefixes)
@@ -54,7 +54,7 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , Issues(issues)
     , IncrementMonCounterFunction(settings.IncrementCounter)
     , CurrCluster(settings.DefaultCluster)
-    , HasPendingErrors(false) 
+    , HasPendingErrors(false)
     , Libraries(settings.Libraries)
 {
     Position.File = settings.File;
@@ -97,7 +97,7 @@ IOutputStream& TContext::Error() {
 }
 
 IOutputStream& TContext::Error(NYql::TPosition pos) {
-    HasPendingErrors = true; 
+    HasPendingErrors = true;
     return MakeIssue(TSeverityIds::S_ERROR, TIssuesIds::DEFAULT_ERROR, pos);
 }
 

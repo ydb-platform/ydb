@@ -39,20 +39,20 @@
 
 #define Y_UNIT_TEST_NEW_ENGINE(N) Y_UNIT_TEST_TWIN(N, UseNewEngine)
 
-#define Y_UNIT_TEST_QUAD(N, OPT1, OPT2)                                                                                              \ 
-    template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \ 
-    struct TTestRegistration##N {                                                                                                    \ 
-        TTestRegistration##N() {                                                                                                     \ 
-            TCurrentTest::AddTest(#N "-" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, false>), false); \ 
-            TCurrentTest::AddTest(#N "+" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, false>), false);  \ 
-            TCurrentTest::AddTest(#N "-" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, true>), false);  \ 
-            TCurrentTest::AddTest(#N "+" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, true>), false);   \ 
-        }                                                                                                                            \ 
-    };                                                                                                                               \ 
-    static TTestRegistration##N testRegistration##N;                                                                                 \ 
-    template<bool OPT1, bool OPT2>                                                                                                   \ 
-    void N(NUnitTest::TTestContext&) 
- 
+#define Y_UNIT_TEST_QUAD(N, OPT1, OPT2)                                                                                              \
+    template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \
+    struct TTestRegistration##N {                                                                                                    \
+        TTestRegistration##N() {                                                                                                     \
+            TCurrentTest::AddTest(#N "-" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, false>), false); \
+            TCurrentTest::AddTest(#N "+" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, false>), false);  \
+            TCurrentTest::AddTest(#N "-" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, true>), false);  \
+            TCurrentTest::AddTest(#N "+" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, true>), false);   \
+        }                                                                                                                            \
+    };                                                                                                                               \
+    static TTestRegistration##N testRegistration##N;                                                                                 \
+    template<bool OPT1, bool OPT2>                                                                                                   \
+    void N(NUnitTest::TTestContext&)
+
 template <bool UseNewEngine, bool ForceVersionV1 = false>
 TString Query(const TString& tmpl) {
     return TStringBuilder()
@@ -70,8 +70,8 @@ namespace NKqp {
 
 const TString KikimrDefaultUtDomainRoot = "Root";
 
-TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings(); 
- 
+TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings();
+
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     NKikimrConfig::TAppConfig AppConfig;
     TVector<NKikimrKqp::TKqpSetting> KqpSettings;
@@ -80,7 +80,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     ui32 NodeCount = 1;
     bool WithSampleTables = true;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
-    IOutputStream* LogStream = nullptr; 
+    IOutputStream* LogStream = nullptr;
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
     TKikimrSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
@@ -121,7 +121,7 @@ public:
 
     const TString& GetEndpoint() const { return Endpoint; }
     const NYdb::TDriver& GetDriver() const { return *Driver; }
-    NYdb::NScheme::TSchemeClient GetSchemeClient() const { return NYdb::NScheme::TSchemeClient(*Driver); } 
+    NYdb::NScheme::TSchemeClient GetSchemeClient() const { return NYdb::NScheme::TSchemeClient(*Driver); }
     Tests::TClient& GetTestClient() const { return *Client; }
     Tests::TServer& GetTestServer() const { return *Server; }
 
@@ -225,14 +225,14 @@ TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it);
 ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
 NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
 
-TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table); 
- 
+TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table);
+
 inline void AssertSuccessResult(const NYdb::TStatus& result) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session); 
- 
+void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session);
+
 // KQP proxy needs to asynchronously receive tenants info before it is able to serve requests that have
 // database name specified. Before that it returns errors.
 // This method retries a simple query until it succeeds.

@@ -43,7 +43,7 @@ void SetProtoValue(Ydb::TypedValue& out, TValue&& in) {
 class TS3InternalClient::TImpl : public TClientImplCommon<TS3InternalClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
-        : TClientImplCommon(std::move(connections), settings) {} 
+        : TClientImplCommon(std::move(connections), settings) {}
 
     TAsyncS3ListingResult S3Listing(const TString& tableName,
                            TValue&& keyPrefix,
@@ -67,8 +67,8 @@ public:
 
         auto promise = NThreading::NewPromise<TS3ListingResult>();
 
-        auto extractor = [promise] 
-            (google::protobuf::Any* any, TPlainStatus status) mutable { 
+        auto extractor = [promise]
+            (google::protobuf::Any* any, TPlainStatus status) mutable {
                 Ydb::S3Internal::S3ListingResult result;
                 if (any) {
                     any->UnpackTo(&result);
@@ -77,7 +77,7 @@ public:
                 TResultSet contents(result.Getcontents());
 
                 TS3ListingResult val(std::move(commonPrefixes), std::move(contents), result.Getkey_suffix_size(),
-                    TStatus(std::move(status))); 
+                    TStatus(std::move(status)));
                 promise.SetValue(std::move(val));
             };
 
@@ -86,7 +86,7 @@ public:
             extractor,
             &Ydb::S3Internal::V1::S3InternalService::Stub::AsyncS3Listing,
             DbDriverState_,
-            INITIAL_DEFERRED_CALL_DELAY, 
+            INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
 

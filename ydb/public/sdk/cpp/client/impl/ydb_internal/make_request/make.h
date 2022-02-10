@@ -24,10 +24,10 @@ void FillOperationParams(const TRequestSettings& settings, TProtoRequest& params
     } else if (settings.ClientTimeout_ && settings.UseClientTimeoutForOperation_) {
         SetDuration(settings.ClientTimeout_, *operationParams.mutable_operation_timeout());
     }
- 
-    if (settings.ReportCostInfo_) { 
-        operationParams.set_report_cost_info(Ydb::FeatureFlag::ENABLED); 
-    } 
+
+    if (settings.ReportCostInfo_) {
+        operationParams.set_report_cost_info(Ydb::FeatureFlag::ENABLED);
+    }
 }
 
 template <typename TProtoRequest>

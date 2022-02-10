@@ -309,7 +309,7 @@ private:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request_);
         SetDatabase(ev, *Request_);
-        SetRlPath(ev, *Request_); 
+        SetRlPath(ev, *Request_);
 
         if (traceId) {
             ev->Record.SetTraceId(traceId.GetRef());

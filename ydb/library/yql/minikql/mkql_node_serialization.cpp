@@ -1225,7 +1225,7 @@ namespace {
         }
 
         TNode* ReadDataType() {
-            const auto schemeType = ReadVar32(); 
+            const auto schemeType = ReadVar32();
             if (NUdf::TDataType<NUdf::TDecimal>::Id == schemeType) {
                 const ui8 precision = Read();
                 const ui8 scale = Read();

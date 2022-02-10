@@ -4,7 +4,7 @@
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
- 
+
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 
@@ -77,7 +77,7 @@ std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const NKqpProto::
 
         const NYql::NDq::TMkqlValueRef* mkqlValue = stageInfo.Meta.Tx.Params.Values.FindPtr(name);
 
-        auto [type, value] = ImportValueFromProto(mkqlValue->GetType(), mkqlValue->GetValue(), typeEnv, holderFactory); 
+        auto [type, value] = ImportValueFromProto(mkqlValue->GetType(), mkqlValue->GetValue(), typeEnv, holderFactory);
 
         YQL_ENSURE(NYql::NArrow::IsArrowCompatible(type), "Incompatible parameter type. Can't convert to arrow");
 
@@ -104,25 +104,25 @@ std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const NKqpProto::
     );
 }
 
-TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken, 
-    const NKikimrKqp::TRlPath& path) 
-{ 
-    Ydb::RateLimiter::AcquireResourceRequest req; 
-    req.set_coordination_node_path(path.GetCoordinationNode()); 
-    req.set_resource_path(path.GetResourcePath()); 
-    req.set_used(ru); 
- 
-    // No need to handle result of rate limiter response on the response hook 
-    // just report ru usage 
-    auto noop = [](Ydb::RateLimiter::AcquireResourceResponse) {}; 
-    return NKikimr::NRpcService::RateLimiterAcquireUseSameMailbox( 
-        std::move(req), 
-        database, 
-        userToken, 
-        std::move(noop), 
-        TActivationContext::AsActorContext()); 
-} 
- 
+TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
+    const NKikimrKqp::TRlPath& path)
+{
+    Ydb::RateLimiter::AcquireResourceRequest req;
+    req.set_coordination_node_path(path.GetCoordinationNode());
+    req.set_resource_path(path.GetResourcePath());
+    req.set_used(ru);
+
+    // No need to handle result of rate limiter response on the response hook
+    // just report ru usage
+    auto noop = [](Ydb::RateLimiter::AcquireResourceResponse) {};
+    return NKikimr::NRpcService::RateLimiterAcquireUseSameMailbox(
+        std::move(req),
+        database,
+        userToken,
+        std::move(noop),
+        TActivationContext::AsActorContext());
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
@@ -131,7 +131,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
         YQL_ENSURE(request.EraseLocks);
-        return CreateKqpDataExecuter(std::move(request), database, userToken, counters); 
+        return CreateKqpDataExecuter(std::move(request), database, userToken, counters);
     }
 
     if (request.Locks.empty()) {
@@ -181,7 +181,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     }
 
     return data
-        ? CreateKqpDataExecuter(std::move(request), database, userToken, counters) 
+        ? CreateKqpDataExecuter(std::move(request), database, userToken, counters)
         : CreateKqpScanExecuter(std::move(request), database, userToken, counters);
 }
 

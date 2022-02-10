@@ -94,7 +94,7 @@ message Value {
     repeated Value items = 12; // Used for List, Tuple, Struct types
     repeated ValuePair pairs = 13; // Used for Dict type
     uint32 variant_index = 14; // Used for Variant type
-    fixed64 high_128 = 16; 
+    fixed64 high_128 = 16;
 }
 
 message ColumnMeta {

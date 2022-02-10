@@ -149,7 +149,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , BalancingSettings_(params->GetBalancingSettings())
     , GRpcKeepAliveTimeout_(params->GetGRpcKeepAliveTimeout())
     , GRpcKeepAlivePermitWithoutCalls_(params->GetGRpcKeepAlivePermitWithoutCalls())
-    , MemoryQuota_(params->GetMemoryQuota()) 
+    , MemoryQuota_(params->GetMemoryQuota())
     , QueuedRequests_(0)
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     , ChannelPool_(params->GetTcpKeepAliveSettings(), params->GetSocketIdleTimeout())
@@ -297,7 +297,7 @@ void TGRpcConnectionsImpl::WaitIdle() {
 }
 
 void TGRpcConnectionsImpl::Stop(bool wait) {
-    StateTracker_.SendNotification(TDbDriverState::ENotifyType::STOP).Wait(); 
+    StateTracker_.SendNotification(TDbDriverState::ENotifyType::STOP).Wait();
     GRpcClientLow_.Stop(wait);
 }
 
@@ -352,7 +352,7 @@ TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult 
         return result;
 
     auto endpoint = result.DiscoveryStatus.Endpoint;
-    auto ydbStatus = NYdb::TStatus(std::move(result.DiscoveryStatus)); 
+    auto ydbStatus = NYdb::TStatus(std::move(result.DiscoveryStatus));
 
     ydbStatus = DiscoveryMutatorCb(&result.Result, std::move(ydbStatus), database);
 

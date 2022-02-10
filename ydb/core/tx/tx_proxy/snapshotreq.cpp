@@ -76,7 +76,7 @@ public:
         , Cookie(ev->Cookie)
         , Request(ev->Release())
         , TxProxyMon(mon)
-        , DefaultTimeoutMs(60000, 0, 360000) 
+        , DefaultTimeoutMs(60000, 0, 360000)
         , SnapshotTxId(txid)
     { }
 
@@ -361,7 +361,7 @@ public:
         }
 
         SelectedCoordinator = SelectCoordinator(msg->FindDomainInfo(), ctx);
- 
+
         const auto& params = Request->Record.GetTransaction().GetCreateVolatileSnapshot();
 
         for (auto& kv : PerShardStates) {

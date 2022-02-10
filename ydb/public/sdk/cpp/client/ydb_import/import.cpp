@@ -97,9 +97,9 @@ public:
     TAsyncImportDataResult ImportData(ImportDataRequest&& request, const TSettings& settings) {
         auto promise = NThreading::NewPromise<TImportDataResult>();
 
-        auto extractor = [promise] 
+        auto extractor = [promise]
             (google::protobuf::Any*, TPlainStatus status) mutable {
-                TImportDataResult result(TStatus(std::move(status))); 
+                TImportDataResult result(TStatus(std::move(status)));
                 promise.SetValue(std::move(result));
             };
 

@@ -131,24 +131,24 @@ void ExpectError(TFuture<T>&& future, EStatus status) {
 }
 
 Y_UNIT_TEST_SUITE(TGRpcNewCoordinationClient) {
-    Y_UNIT_TEST(CheckUnauthorized) { 
-        TKikimrWithGrpcAndRootSchema server; 
-        TClientContext context(server, "bad@builtin"); 
- 
-        auto result = context.Client.CreateNode("/Root/node1").ExtractValueSync(); 
- 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::UNAUTHORIZED, TStatusDescription(result)); 
-        bool issueFound = false; 
-        for (auto& issue : result.GetIssues()) { 
-            NYql::WalkThroughIssues(issue, false, [&issueFound](const NYql::TIssue& issue, ui16){ 
-                if (issue.GetCode() == NKikimrIssues::TIssuesIds::ACCESS_DENIED) { 
-                    issueFound = true; 
-                } 
-            }); 
-        } 
-        UNIT_ASSERT_C(issueFound, TStatusDescription(result)); 
-    } 
- 
+    Y_UNIT_TEST(CheckUnauthorized) {
+        TKikimrWithGrpcAndRootSchema server;
+        TClientContext context(server, "bad@builtin");
+
+        auto result = context.Client.CreateNode("/Root/node1").ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::UNAUTHORIZED, TStatusDescription(result));
+        bool issueFound = false;
+        for (auto& issue : result.GetIssues()) {
+            NYql::WalkThroughIssues(issue, false, [&issueFound](const NYql::TIssue& issue, ui16){
+                if (issue.GetCode() == NKikimrIssues::TIssuesIds::ACCESS_DENIED) {
+                    issueFound = true;
+                }
+            });
+        }
+        UNIT_ASSERT_C(issueFound, TStatusDescription(result));
+    }
+
     Y_UNIT_TEST(CreateDropDescribe) {
         TKikimrWithGrpcAndRootSchema server;
         TClientContext context(server);

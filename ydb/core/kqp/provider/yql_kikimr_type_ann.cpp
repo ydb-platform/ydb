@@ -23,7 +23,7 @@ const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tab
         auto columnType = tableDesc.GetColumnType(column);
 
         if (!columnType) {
-            ctx.AddError(TIssue(pos, TStringBuilder() 
+            ctx.AddError(TIssue(pos, TStringBuilder()
                 << "No such column: " << column << ", table: "
                 << FullTableName(tableDesc.Metadata->Cluster, tableDesc.Metadata->Name)));
             return nullptr;
@@ -114,30 +114,30 @@ private:
 
         switch (key.GetKeyType()) {
             case TKikimrKey::Type::Table:
-            { 
+            {
                 auto readTable = node.Cast<TKiReadTable>();
- 
-                const TKikimrTableDescription* tableDesc; 
-                if ((tableDesc = SessionCtx->Tables().EnsureTableExists(cluster, key.GetTablePath(), node.Pos(), ctx)) == nullptr) { 
+
+                const TKikimrTableDescription* tableDesc;
+                if ((tableDesc = SessionCtx->Tables().EnsureTableExists(cluster, key.GetTablePath(), node.Pos(), ctx)) == nullptr) {
                     return TStatus::Error;
                 }
 
-                if (const auto& view = key.GetView()) { 
-                    if (!ValidateTableHasIndex(tableDesc->Metadata, ctx, node.Pos())) { 
-                        return TStatus::Error; 
-                    } 
-                    if (tableDesc->Metadata->GetIndexMetadata(view.GetRef()).first == nullptr) { 
+                if (const auto& view = key.GetView()) {
+                    if (!ValidateTableHasIndex(tableDesc->Metadata, ctx, node.Pos())) {
+                        return TStatus::Error;
+                    }
+                    if (tableDesc->Metadata->GetIndexMetadata(view.GetRef()).first == nullptr) {
                         ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
-                            << "Required global index not found, index name: " << view.GetRef())); 
-                        return TStatus::Error; 
-                    } 
-                } 
+                            << "Required global index not found, index name: " << view.GetRef()));
+                        return TStatus::Error;
+                    }
+                }
                 bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
                 auto selectType = GetReadTableRowType(
                     ctx, SessionCtx->Tables(), TString(readTable.DataSource().Cluster()), key.GetTablePath(),
                     readTable.GetSelectColumns(ctx, SessionCtx->Tables(), sysColumnsEnabled), sysColumnsEnabled
                 );
- 
+
                 if (!selectType) {
                     return TStatus::Error;
                 }
@@ -258,8 +258,8 @@ namespace {
         }
         return true;
     }
-} 
- 
+}
+
 class TKiSinkTypeAnnotationTransformer : public TKiSinkVisitorTransformer
 {
 public:
@@ -364,8 +364,8 @@ private:
         for (auto& keyColumnName : table->Metadata->KeyColumnNames) {
             if (!rowType->FindItem(keyColumnName)) {
                 ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                    << "Missing key column in input: " << keyColumnName 
-                    << " for table: " << table->Metadata->Name)); 
+                    << "Missing key column in input: " << keyColumnName
+                    << " for table: " << table->Metadata->Name));
                 return TStatus::Error;
             }
         }
@@ -554,7 +554,7 @@ private:
         TString cluster = TString(create.DataSink().Cluster());
         TString table = TString(create.Table());
 
-        auto columnTypeError = GetColumnTypeErrorFn(ctx); 
+        auto columnTypeError = GetColumnTypeErrorFn(ctx);
 
         TKikimrTableMetadataPtr meta = new TKikimrTableMetadata(cluster, table);
         meta->DoesExist = true;
@@ -612,7 +612,7 @@ private:
             }
         }
 
-        for (const auto& index : create.Indexes()) { 
+        for (const auto& index : create.Indexes()) {
             const auto type = index.Type().Value();
             TIndexDescription::EType indexType;
 
@@ -624,28 +624,28 @@ private:
                 YQL_ENSURE(false, "Unknown index type: " << type);
             }
 
-            TVector<TString> indexColums; 
-            TVector<TString> dataColums; 
- 
-            for (const auto& indexCol : index.Columns()) { 
-                if (!meta->Columns.contains(TString(indexCol.Value()))) { 
+            TVector<TString> indexColums;
+            TVector<TString> dataColums;
+
+            for (const auto& indexCol : index.Columns()) {
+                if (!meta->Columns.contains(TString(indexCol.Value()))) {
                     ctx.AddError(TIssue(ctx.GetPosition(indexCol.Pos()), TStringBuilder()
-                        << "Index column: " << indexCol.Value() << " was not found in the index table")); 
-                    return IGraphTransformer::TStatus::Error; 
-                } 
-                indexColums.emplace_back(TString(indexCol.Value())); 
-            } 
- 
-            for (const auto& dataCol : index.DataColumns()) { 
-                if (!meta->Columns.contains(TString(dataCol.Value()))) { 
-                    ctx.AddError(TIssue(ctx.GetPosition(dataCol.Pos()), TStringBuilder() 
-                        << "Data column: " << dataCol.Value() << " was not found in the index table")); 
-                    return IGraphTransformer::TStatus::Error; 
-                } 
-                dataColums.emplace_back(TString(dataCol.Value())); 
-            } 
- 
-            // IndexState and version, pathId are ignored for create table with index request 
+                        << "Index column: " << indexCol.Value() << " was not found in the index table"));
+                    return IGraphTransformer::TStatus::Error;
+                }
+                indexColums.emplace_back(TString(indexCol.Value()));
+            }
+
+            for (const auto& dataCol : index.DataColumns()) {
+                if (!meta->Columns.contains(TString(dataCol.Value()))) {
+                    ctx.AddError(TIssue(ctx.GetPosition(dataCol.Pos()), TStringBuilder()
+                        << "Data column: " << dataCol.Value() << " was not found in the index table"));
+                    return IGraphTransformer::TStatus::Error;
+                }
+                dataColums.emplace_back(TString(dataCol.Value()));
+            }
+
+            // IndexState and version, pathId are ignored for create table with index request
             TIndexDescription indexDesc(
                 TString(index.Name().Value()),
                 indexColums,
@@ -656,10 +656,10 @@ private:
                 0,
                 0
             );
- 
-            meta->Indexes.push_back(indexDesc); 
-        } 
- 
+
+            meta->Indexes.push_back(indexDesc);
+        }
+
         for (auto columnFamily : create.ColumnFamilies()) {
             if (auto maybeTupleList = columnFamily.Maybe<TCoNameValueTupleList>()) {
                 TColumnFamily family;
@@ -854,26 +854,26 @@ private:
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleAlterTable(TKiAlterTable node, TExprContext& ctx) override { 
+    virtual TStatus HandleAlterTable(TKiAlterTable node, TExprContext& ctx) override {
         auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);
-        if (!table) { 
-            return TStatus::Error; 
-        } 
- 
-        if (!table->Metadata) { 
-            return TStatus::Error; 
-        } 
- 
-        if (!EnsureModifyPermissions(table->Metadata->Cluster, table->Metadata->Name, node.Pos(), ctx)) { 
-            return TStatus::Error; 
-        } 
- 
+        if (!table) {
+            return TStatus::Error;
+        }
+
+        if (!table->Metadata) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureModifyPermissions(table->Metadata->Cluster, table->Metadata->Name, node.Pos(), ctx)) {
+            return TStatus::Error;
+        }
+
         if (!CheckDocApiModifiation(*table->Metadata, node.Pos(), ctx)) {
             return TStatus::Error;
         }
 
         YQL_ENSURE(!node.Actions().Empty());
- 
+
         for (const auto& action : node.Actions()) {
             auto name = action.Name().Value();
             if (name == "renameTo") {
@@ -910,7 +910,7 @@ private:
                         columnTypeError(typeNode.Pos(), name, "Only core YQL data types are currently supported");
                         return TStatus::Error;
                     }
- 
+
                     auto dataType = actualType->Cast<TDataExprType>();
 
                     if (!ValidateColumnDataType(dataType, typeNode, name, ctx)) {
@@ -927,7 +927,7 @@ private:
                             return TStatus::Error;
                         }
                     }
-                } 
+                }
             } else if (name == "dropColumns") {
                 auto listNode = action.Value().Cast<TCoAtomList>();
                 THashSet<TString> keyColumns;
@@ -936,21 +936,21 @@ private:
                 }
                 for (auto dropColumn : listNode) {
                     TString name(dropColumn.Value());
- 
+
                     if (!table->Metadata->Columns.FindPtr(name)) {
                         ctx.AddError(TIssue(ctx.GetPosition(dropColumn.Pos()), TStringBuilder()
                             << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
                             << " Column \"" << name << "\" does not exist"));
                         return TStatus::Error;
                     }
- 
+
                     if (keyColumns.find(name) != keyColumns.end()) {
                         ctx.AddError(TIssue(ctx.GetPosition(dropColumn.Pos()), TStringBuilder()
                             << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
                             << " Column: \"" << name << "\" is a key column. Key column drop is not supported"));
                         return TStatus::Error;
                     }
-                } 
+                }
             } else if (name == "alterColumns") {
                 auto listNode = action.Value().Cast<TExprList>();
                 for (size_t i = 0; i < listNode.Size(); ++i) {
@@ -972,56 +972,56 @@ private:
                             << "\". Several column families for a single column are not yet supported"));
                         return TStatus::Error;
                     }
-                } 
-            } else if (name == "addIndex") { 
-                auto listNode = action.Value().Cast<TExprList>(); 
-                for (size_t i = 0; i < listNode.Size(); ++i) { 
-                    auto item = listNode.Item(i); 
-                    auto columnTuple = item.Cast<TExprList>(); 
-                    auto nameNode = columnTuple.Item(0).Cast<TCoAtom>(); 
-                    auto name = TString(nameNode.Value()); 
-                    if (name == "indexColumns" || name == "dataColumns") { 
-                        auto columnList = columnTuple.Item(1).Cast<TCoAtomList>(); 
-                        for (auto column : columnList) { 
-                            TString columnName(column.Value()); 
-                            if (!table->Metadata->Columns.FindPtr(columnName)) { 
-                                ctx.AddError(TIssue(ctx.GetPosition(column.Pos()), TStringBuilder() 
-                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name) 
-                                    << " Column: \"" << columnName << "\" does not exist")); 
-                                return TStatus::Error; 
-                            } 
-                        } 
-                    } 
-                } 
-            } else if (name == "dropIndex") { 
-                auto nameNode = action.Value().Cast<TCoAtom>(); 
-                auto name = TString(nameNode.Value()); 
- 
-                const auto& indexes = table->Metadata->Indexes; 
- 
-                auto cmp = [name](const TIndexDescription& desc) { 
-                    return name == desc.Name; 
-                }; 
- 
-                if (std::find_if(indexes.begin(), indexes.end(), cmp) == indexes.end()) { 
-                    ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() 
-                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name) 
-                        << " Index: \"" << name << "\" does not exist")); 
-                    return TStatus::Error; 
-                } 
+                }
+            } else if (name == "addIndex") {
+                auto listNode = action.Value().Cast<TExprList>();
+                for (size_t i = 0; i < listNode.Size(); ++i) {
+                    auto item = listNode.Item(i);
+                    auto columnTuple = item.Cast<TExprList>();
+                    auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
+                    auto name = TString(nameNode.Value());
+                    if (name == "indexColumns" || name == "dataColumns") {
+                        auto columnList = columnTuple.Item(1).Cast<TCoAtomList>();
+                        for (auto column : columnList) {
+                            TString columnName(column.Value());
+                            if (!table->Metadata->Columns.FindPtr(columnName)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(column.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << columnName << "\" does not exist"));
+                                return TStatus::Error;
+                            }
+                        }
+                    }
+                }
+            } else if (name == "dropIndex") {
+                auto nameNode = action.Value().Cast<TCoAtom>();
+                auto name = TString(nameNode.Value());
+
+                const auto& indexes = table->Metadata->Indexes;
+
+                auto cmp = [name](const TIndexDescription& desc) {
+                    return name == desc.Name;
+                };
+
+                if (std::find_if(indexes.begin(), indexes.end(), cmp) == indexes.end()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                        << " Index: \"" << name << "\" does not exist"));
+                    return TStatus::Error;
+                }
             } else if (name != "addColumnFamilies" && name != "alterColumnFamilies"
                     && name != "setTableSettings")
             {
                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                     TStringBuilder() << "Unknown alter table action: " << name));
                 return TStatus::Error;
-            } 
-        } 
- 
+            }
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
-        return TStatus::Ok; 
-    } 
- 
+        return TStatus::Ok;
+    }
+
     virtual TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
         for (const auto& setting : node.Settings()) {
             auto name = setting.Name().Value();
@@ -1159,7 +1159,7 @@ private:
         switch (SessionCtx->Query().Type) {
             case EKikimrQueryType::YqlScript:
             case EKikimrQueryType::YqlScriptStreaming:
-            case EKikimrQueryType::YqlInternal: 
+            case EKikimrQueryType::YqlInternal:
                 break;
 
             default:
@@ -1249,7 +1249,7 @@ private:
             auto selectRow = call.Cast();
 
             auto selectType = GetReadTableRowType(ctx, SessionCtx->Tables(), TString(selectRow.Cluster()),
-                TString(selectRow.Table().Path()), selectRow.Select(), sysColumnsEnabled); 
+                TString(selectRow.Table().Path()), selectRow.Select(), sysColumnsEnabled);
             if (!selectType) {
                 return TStatus::Error;
             }
@@ -1265,14 +1265,14 @@ private:
             auto selectRange = call.Cast();
 
             auto selectType = GetReadTableRowType(ctx, SessionCtx->Tables(), TString(selectRange.Cluster()),
-                TString(selectRange.Table().Path()), selectRange.Select(), sysColumnsEnabled); 
+                TString(selectRange.Table().Path()), selectRange.Select(), sysColumnsEnabled);
             if (!selectType) {
                 return TStatus::Error;
             }
 
             auto listSelectType = ctx.MakeType<TListExprType>(selectType);
 
-            node.Ptr()->SetTypeAnn(listSelectType); 
+            node.Ptr()->SetTypeAnn(listSelectType);
 
             return TStatus::Ok;
         }

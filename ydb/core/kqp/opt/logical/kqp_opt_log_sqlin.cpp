@@ -40,24 +40,24 @@ TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, co
         return node;
     }
 
-    if (!flatMap.Input().Maybe<TKqlReadTable>() && !flatMap.Input().Maybe<TKqlReadTableIndex>()) { 
+    if (!flatMap.Input().Maybe<TKqlReadTable>() && !flatMap.Input().Maybe<TKqlReadTableIndex>()) {
         return node;
     }
 
-    const auto readTable = flatMap.Input().Cast<TKqlReadTableBase>(); 
- 
+    const auto readTable = flatMap.Input().Cast<TKqlReadTableBase>();
+
     if (!readTable.Table().SysView().Value().empty()) {
         return node;
     }
 
-    TString lookupTable; 
- 
-    if (auto indexRead = flatMap.Input().Maybe<TKqlReadTableIndex>()) { 
-        lookupTable = GetIndexMetadata(indexRead.Cast(), *kqpCtx.Tables, kqpCtx.Cluster)->Name; 
-    } else { 
-        lookupTable = readTable.Table().Path().StringValue(); 
-    } 
- 
+    TString lookupTable;
+
+    if (auto indexRead = flatMap.Input().Maybe<TKqlReadTableIndex>()) {
+        lookupTable = GetIndexMetadata(indexRead.Cast(), *kqpCtx.Tables, kqpCtx.Cluster)->Name;
+    } else {
+        lookupTable = readTable.Table().Path().StringValue();
+    }
+
     const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, lookupTable);
     const auto& rangeFrom = readTable.Range().From();
     const auto& rangeTo = readTable.Range().To();

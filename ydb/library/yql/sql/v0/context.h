@@ -23,7 +23,7 @@ namespace NSQLTranslationV0 {
     class TContext {
     public:
         TContext(const NSQLTranslation::TTranslationSettings& settings,
-                 NYql::TIssues& issues); 
+                 NYql::TIssues& issues);
 
         virtual ~TContext();
 
@@ -128,7 +128,7 @@ namespace NSQLTranslationV0 {
         THashMap<TString, TNodePtr> Variables;
         NSQLTranslation::TTranslationSettings Settings;
         std::unique_ptr<TMemoryPool> Pool;
-        NYql::TIssues& Issues; 
+        NYql::TIssues& Issues;
         TMap<TString, TStack<TNodePtr>> NamedNodes;
         TMap<TString, TNodePtr> UniversalAliases;
         THashSet<TString> Exports;
@@ -136,7 +136,7 @@ namespace NSQLTranslationV0 {
         TMap<TString, TString> SimpleUdfs;
         NSQLTranslation::TIncrementMonCounterFunction IncrementMonCounterFunction;
         TString CurrCluster;
-        bool HasPendingErrors; 
+        bool HasPendingErrors;
         THashMap<TString, ui32> GenIndexes;
         bool PragmaRefSelect = false;
         bool PragmaSampleSelect = false;

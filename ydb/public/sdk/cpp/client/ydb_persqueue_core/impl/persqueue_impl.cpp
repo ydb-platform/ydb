@@ -18,7 +18,7 @@ std::shared_ptr<IReadSession> TPersQueueClient::TImpl::CreateReadSession(const T
         }
     }
     auto session = std::make_shared<TReadSession>(maybeSettings.GetOrElse(settings), shared_from_this(), Connections_, DbDriverState_);
-    session->Start(); 
+    session->Start();
     return std::move(session);
 }
 
@@ -41,7 +41,7 @@ std::shared_ptr<IWriteSession> TPersQueueClient::TImpl::CreateWriteSession(
         }
     }
     auto session = std::make_shared<TWriteSession>(
-            maybeSettings.GetOrElse(settings), shared_from_this(), Connections_, DbDriverState_ 
+            maybeSettings.GetOrElse(settings), shared_from_this(), Connections_, DbDriverState_
     );
     session->Start(TDuration::Zero());
     return std::move(session);
@@ -59,7 +59,7 @@ std::shared_ptr<ISimpleBlockingWriteSession> TPersQueueClient::TImpl::CreateSimp
     }
 
     auto session = std::make_shared<TSimpleBlockingWriteSession>(
-            alteredSettings, shared_from_this(), Connections_, DbDriverState_ 
+            alteredSettings, shared_from_this(), Connections_, DbDriverState_
     );
     return std::move(session);
 }

@@ -1,5 +1,5 @@
 package NYql.NDqProto;
-option cc_enable_arenas = true; 
+option cc_enable_arenas = true;
 
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
@@ -78,13 +78,13 @@ message TEvAbortExecution {
     optional string Message = 2;
 }
 
-message TRlPath { 
-    optional string CoordinationNode = 1; 
-    optional string ResourcePath = 2; 
-    optional string Database = 3; 
-    optional string Token = 4; 
-} 
- 
+message TRlPath {
+    optional string CoordinationNode = 1;
+    optional string ResourcePath = 2;
+    optional string Database = 3;
+    optional string Token = 4;
+}
+
 message TComputeRuntimeSettings {
     optional uint32 TimeoutMs = 1;
 
@@ -100,7 +100,7 @@ message TComputeRuntimeSettings {
     optional bool UseLLVM = 4;
     optional bool UseSpilling = 6;
     optional uint32 TasksOnNodeCount = 5; // approx
-    optional TRlPath RlPath = 7; 
+    optional TRlPath RlPath = 7;
 }
 
 message TEvNewCheckpointCoordinator {

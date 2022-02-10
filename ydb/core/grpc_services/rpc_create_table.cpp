@@ -1,34 +1,34 @@
-#include "grpc_request_proxy.h" 
- 
-#include "rpc_calls.h" 
+#include "grpc_request_proxy.h"
+
+#include "rpc_calls.h"
 #include "rpc_scheme_base.h"
-#include "rpc_common.h" 
+#include "rpc_common.h"
 #include "table_profiles.h"
 #include "table_settings.h"
- 
+
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/table_description.h>
 
-namespace NKikimr { 
-namespace NGRpcService { 
- 
+namespace NKikimr {
+namespace NGRpcService {
+
 using namespace NSchemeShard;
-using namespace NActors; 
+using namespace NActors;
 using namespace NConsole;
 using namespace Ydb;
-using namespace Ydb::Table; 
- 
+using namespace Ydb::Table;
+
 class TCreateTableRPC : public TRpcSchemeRequestActor<TCreateTableRPC, TEvCreateTableRequest> {
     using TBase = TRpcSchemeRequestActor<TCreateTableRPC, TEvCreateTableRequest>;
 
-public: 
-    TCreateTableRPC(TEvCreateTableRequest* msg) 
+public:
+    TCreateTableRPC(TEvCreateTableRequest* msg)
         : TBase(msg) {}
- 
-    void Bootstrap(const TActorContext &ctx) { 
+
+    void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
 
         SendConfigRequest(ctx);
@@ -57,10 +57,10 @@ private:
         LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY,
                    "TCreateTableRPC: cannot deliver config request to Configs Dispatcher"
                    " (empty default profile is available only)");
-        SendProposeRequest(ctx); 
-        Become(&TCreateTableRPC::StateWork); 
-    } 
- 
+        SendProposeRequest(ctx);
+        Become(&TCreateTableRPC::StateWork);
+    }
+
     void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) {
         auto &config = ev->Get()->Config->GetTableProfilesConfig();
         Profiles.Load(config);
@@ -98,62 +98,62 @@ private:
         );
     }
 
-    void SendProposeRequest(const TActorContext &ctx) { 
-        const auto req = GetProtoRequest(); 
-        std::pair<TString, TString> pathPair; 
-        try { 
+    void SendProposeRequest(const TActorContext &ctx) {
+        const auto req = GetProtoRequest();
+        std::pair<TString, TString> pathPair;
+        try {
             pathPair = SplitPath(Request_->GetDatabaseName(), req->path());
-        } catch (const std::exception& ex) { 
-            Request_->RaiseIssue(NYql::ExceptionToIssue(ex)); 
-            return Reply(StatusIds::BAD_REQUEST, ctx); 
-        } 
- 
-        const auto& workingDir = pathPair.first; 
-        const auto& name = pathPair.second; 
-        if (!req->columnsSize()) { 
-            auto issue = NYql::TIssue("At least one column shoult be in table"); 
-            Request_->RaiseIssue(issue); 
-            return Reply(StatusIds::BAD_REQUEST, ctx); 
-        } 
- 
-        if (!req->primary_keySize()) { 
-            auto issue = NYql::TIssue("At least one primary key should be specified"); 
-            Request_->RaiseIssue(issue); 
-            return Reply(StatusIds::BAD_REQUEST, ctx); 
-        } 
- 
+        } catch (const std::exception& ex) {
+            Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
+            return Reply(StatusIds::BAD_REQUEST, ctx);
+        }
+
+        const auto& workingDir = pathPair.first;
+        const auto& name = pathPair.second;
+        if (!req->columnsSize()) {
+            auto issue = NYql::TIssue("At least one column shoult be in table");
+            Request_->RaiseIssue(issue);
+            return Reply(StatusIds::BAD_REQUEST, ctx);
+        }
+
+        if (!req->primary_keySize()) {
+            auto issue = NYql::TIssue("At least one primary key should be specified");
+            Request_->RaiseIssue(issue);
+            return Reply(StatusIds::BAD_REQUEST, ctx);
+        }
+
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
-        NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record; 
+        NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
         NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme->SetWorkingDir(workingDir); 
+        modifyScheme->SetWorkingDir(workingDir);
         NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
-        if (req->indexesSize()) { 
+        if (req->indexesSize()) {
             modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);
-            tableDesc = modifyScheme->MutableCreateIndexedTable()->MutableTableDescription(); 
-        } else { 
+            tableDesc = modifyScheme->MutableCreateIndexedTable()->MutableTableDescription();
+        } else {
             modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
-            tableDesc = modifyScheme->MutableCreateTable(); 
-        } 
- 
-        tableDesc->SetName(name); 
+            tableDesc = modifyScheme->MutableCreateTable();
+        }
+
+        tableDesc->SetName(name);
 
         StatusIds::StatusCode code = StatusIds::SUCCESS;
         TString error;
 
-        if (!FillColumnDescription(*tableDesc, req->columns(), code, error)) { 
+        if (!FillColumnDescription(*tableDesc, req->columns(), code, error)) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));
             return Reply(code, issues, ctx);
-        } 
- 
+        }
+
         tableDesc->MutableKeyColumnNames()->CopyFrom(req->primary_key());
- 
+
         if (!FillIndexDescription(*modifyScheme->MutableCreateIndexedTable(), *req, code, error)) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));
             return Reply(code, issues, ctx);
-        } 
- 
+        }
+
         bool tableProfileSet = false;
         if (req->has_profile()) {
             const auto& profile = req->profile();
@@ -162,11 +162,11 @@ private:
                 || profile.has_caching_policy();
         }
 
-        if (!Profiles.ApplyTableProfile(req->profile(), *tableDesc, code, error)) { 
-            NYql::TIssues issues; 
-            issues.AddIssue(NYql::TIssue(error)); 
-            return Reply(code, issues, ctx); 
-        } 
+        if (!Profiles.ApplyTableProfile(req->profile(), *tableDesc, code, error)) {
+            NYql::TIssues issues;
+            issues.AddIssue(NYql::TIssue(error));
+            return Reply(code, issues, ctx);
+        }
 
         TColumnFamilyManager families(tableDesc->MutablePartitionConfig());
 
@@ -219,16 +219,16 @@ private:
             );
         }
 
-        ctx.Send(MakeTxProxyID(), proposeRequest.release()); 
-    } 
+        ctx.Send(MakeTxProxyID(), proposeRequest.release());
+    }
 
 private:
     TTableProfiles Profiles;
-}; 
- 
-void TGRpcRequestProxy::Handle(TEvCreateTableRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Register(new TCreateTableRPC(ev->Release().Release())); 
-} 
- 
-} // namespace NGRpcService 
-} // namespace NKikimr 
+};
+
+void TGRpcRequestProxy::Handle(TEvCreateTableRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TCreateTableRPC(ev->Release().Release()));
+}
+
+} // namespace NGRpcService
+} // namespace NKikimr

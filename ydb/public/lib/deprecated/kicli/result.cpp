@@ -12,11 +12,11 @@ TResult::TResult(NBus::EMessageStatus transportStatus)
     : TransportStatus(transportStatus)
 {}
 
-TResult::TResult(NBus::EMessageStatus transportStatus, const TString& message) 
-    : TransportStatus(transportStatus) 
-    , TransportErrorMessage(message) 
-{} 
- 
+TResult::TResult(NBus::EMessageStatus transportStatus, const TString& message)
+    : TransportStatus(transportStatus)
+    , TransportErrorMessage(message)
+{}
+
 TResult::TResult(TAutoPtr<NBus::TBusMessage> reply)
     : TransportStatus(NBus::MESSAGE_OK)
     , Reply(reply.Release())
@@ -101,35 +101,35 @@ const YdbOld::ResultSet &TReadTableResult::GetResultSet() const {
 
 template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Value &value,
                                                                 const YdbOld::DataType &type) {
-    switch (type.id()) { 
+    switch (type.id()) {
     case NYql::NProto::Bool:
-        return value.bool_value() ? "true" : "false"; 
+        return value.bool_value() ? "true" : "false";
     case NYql::NProto::Uint64:
-        return ToString(value.uint64_value()); 
+        return ToString(value.uint64_value());
     case NScheme::NTypeIds::Int64:
-        return ToString(value.int64_value()); 
+        return ToString(value.int64_value());
     case NScheme::NTypeIds::Uint32:
-        return ToString(value.uint32_value()); 
+        return ToString(value.uint32_value());
     case NScheme::NTypeIds::Int32:
-        return ToString(value.int32_value()); 
+        return ToString(value.int32_value());
     case NScheme::NTypeIds::Uint16:
-        return ToString(static_cast<ui16>(value.uint32_value())); 
+        return ToString(static_cast<ui16>(value.uint32_value()));
     case NScheme::NTypeIds::Int16:
-        return ToString(static_cast<i16>(value.int32_value())); 
+        return ToString(static_cast<i16>(value.int32_value()));
     case NScheme::NTypeIds::Uint8:
-        return ToString(static_cast<ui8>(value.uint32_value())); 
+        return ToString(static_cast<ui8>(value.uint32_value()));
     case NScheme::NTypeIds::Int8:
-        return ToString(static_cast<i8>(value.int32_value())); 
+        return ToString(static_cast<i8>(value.int32_value()));
     case NScheme::NTypeIds::Double:
-        return ToString(value.double_value()); 
+        return ToString(value.double_value());
     case NScheme::NTypeIds::Float:
-        return ToString(value.float_value()); 
+        return ToString(value.float_value());
     case NScheme::NTypeIds::Utf8:
     case NScheme::NTypeIds::Json:
     case NScheme::NTypeIds::Yson:
-        return "\"" + TFormatCSV::EscapeString(value.text_value()) + "\""; 
+        return "\"" + TFormatCSV::EscapeString(value.text_value()) + "\"";
     case NScheme::NTypeIds::String:
-        return value.bytes_value(); 
+        return value.bytes_value();
     case NScheme::NTypeIds::Date:
         {
             auto val = TInstant::Days(value.uint32_value());
@@ -157,7 +157,7 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
             NYql::NDecimal::TInt128 val;
             auto p = reinterpret_cast<char*>(&val);
             reinterpret_cast<ui64*>(p)[0] = value.low_128();
-            reinterpret_cast<ui64*>(p)[1] = value.high_128(); 
+            reinterpret_cast<ui64*>(p)[1] = value.high_128();
             // In Kikimr the only decimal column type supported is Decimal(22,9).
             return NYql::NDecimal::ToString(val, NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
         }
@@ -170,20 +170,20 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
                                                                 const YdbOld::Type &type) {
     switch (type.type_type_case()) {
     case YdbOld::Type::kDataType:
-        return ValueToString<TFormatCSV>(value, type.data_type()); 
+        return ValueToString<TFormatCSV>(value, type.data_type());
     case YdbOld::Type::kOptionalType:
-        if (value.Hasnull_flag_value()) 
+        if (value.Hasnull_flag_value())
             return "NULL";
         // If we have Value field for optional type then it is always
         // should be followed (even for Optional<Variant<T>> case).
-        if (value.Hasnested_value()) 
-            return ValueToString<TFormatCSV>(value.nested_value(), type.optional_type().item()); 
-        return ValueToString<TFormatCSV>(value, type.optional_type().item()); 
+        if (value.Hasnested_value())
+            return ValueToString<TFormatCSV>(value.nested_value(), type.optional_type().item());
+        return ValueToString<TFormatCSV>(value, type.optional_type().item());
     case YdbOld::Type::kListType:
         {
             TString res = "[";
-            const auto &items = value.items(); 
-            const auto &itemType = type.list_type().item(); 
+            const auto &items = value.items();
+            const auto &itemType = type.list_type().item();
             for (auto it = items.begin(); it != items.end(); ++it) {
                 if (it != items.begin())
                     res += ",";
@@ -195,8 +195,8 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
     case YdbOld::Type::kTupleType:
         {
             TString res = "[";
-            const auto &items = value.items(); 
-            const auto &types = type.tuple_type().elements(); 
+            const auto &items = value.items();
+            const auto &types = type.tuple_type().elements();
             for (int i = 0; i < items.size(); ++i) {
                 if (i)
                     res += ",";
@@ -208,12 +208,12 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
     case YdbOld::Type::kStructType:
         {
             TString res = "{";
-            const auto &items = value.items(); 
-            const auto &members = type.struct_type().members(); 
+            const auto &items = value.items();
+            const auto &members = type.struct_type().members();
             for (int i = 0; i < members.size(); ++i) {
                 if (i)
                     res += ",";
-                res += ValueToString<TFormatCSV>(items[i], members[i].type()); 
+                res += ValueToString<TFormatCSV>(items[i], members[i].type());
             }
             res += "}";
             return res;
@@ -221,14 +221,14 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
     case YdbOld::Type::kDictType:
         {
             TString res = "[";
-            const auto &pairs = value.pairs(); 
-            const auto &dictType = type.dict_type(); 
+            const auto &pairs = value.pairs();
+            const auto &dictType = type.dict_type();
             for (int i = 0; i < pairs.size(); ++i) {
                 if (i)
                     res += ",";
-                res += ValueToString<TFormatCSV>(pairs[i].key(), dictType.key()); 
+                res += ValueToString<TFormatCSV>(pairs[i].key(), dictType.key());
                 res += ":";
-                res += ValueToString<TFormatCSV>(pairs[i].payload(), dictType.payload()); 
+                res += ValueToString<TFormatCSV>(pairs[i].payload(), dictType.payload());
             }
             res += "]";
             return res;
@@ -244,11 +244,11 @@ template <> TString TReadTableResult::GetTypeText<TFormatCSV>(const TFormatCSV &
     auto &proto = GetResultSet();
     TString res;
     bool first = true;
-    for (auto &meta : proto.column_meta()) { 
+    for (auto &meta : proto.column_meta()) {
         if (!first)
             res += format.Delim;
         first = false;
-        res += meta.name(); 
+        res += meta.name();
     }
     return res;
 }
@@ -262,16 +262,16 @@ template <> TString TReadTableResult::GetValueText<TFormatCSV>(const TFormatCSV 
         res += "\n";
     }
 
-    auto &colTypes = proto.column_meta(); 
+    auto &colTypes = proto.column_meta();
     bool first = true;
-    for (auto &row : proto.rows()) { 
+    for (auto &row : proto.rows()) {
         if (!first)
             res += "\n";
         first = false;
         for (int i = 0; i < colTypes.size(); ++i) {
             if (i)
                 res += format.Delim;
-            res += ValueToString<TFormatCSV>(row.items(i), colTypes[i].type()); 
+            res += ValueToString<TFormatCSV>(row.items(i), colTypes[i].type());
         }
     }
 
@@ -292,8 +292,8 @@ TPreparedQuery TPrepareResult::GetQuery() const {
     const auto& compileResult = response.GetMiniKQLCompileResults();
     Y_VERIFY(compileResult.HasCompiledProgram(), "Compile error (%" PRIu64 "): %" PRIu32 ":%" PRIu32 " %s",
         compileResult.ProgramCompileErrorsSize(),
-        (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).position().row() : 0u), 
-        (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).position().column() : 0u), 
+        (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).position().row() : 0u),
+        (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).position().column() : 0u),
         (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).message().data() : "")
     );
     return TPreparedQuery(*Query, compileResult.GetCompiledProgram());

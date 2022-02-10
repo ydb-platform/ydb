@@ -57,7 +57,7 @@ public:
         const TArrayRef<TKqpTableColumn>& keyColumns, const TArrayRef<TKqpTableColumn>& columns);
 
     TRuntimeNode KqpUpsertRows(const TTableId& tableId, const TRuntimeNode& rows,
-        const TArrayRef<TKqpTableColumn>& upsertColumns); 
+        const TArrayRef<TKqpTableColumn>& upsertColumns);
 
     TRuntimeNode KqpDeleteRows(const TTableId& tableId, const TRuntimeNode& rows);
 

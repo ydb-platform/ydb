@@ -137,7 +137,7 @@ namespace NActors {
         subactor->BindToTracker(this);
 
         // we create new actor and register it in local pool
-        TActorId subactorId = ctx.RegisterWithSameMailbox(subactor.Release()); 
+        TActorId subactorId = ctx.RegisterWithSameMailbox(subactor.Release());
 
         // send TEvTrackActor message to tracker actor
         Y_VERIFY(ActorId);

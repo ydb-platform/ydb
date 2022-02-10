@@ -13,7 +13,7 @@
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/node/node_builder.h>
-#include <library/cpp/yson/writer.h> 
+#include <library/cpp/yson/writer.h>
 
 #include <util/stream/str.h>
 
@@ -92,7 +92,7 @@ public:
                 TBase::SaveEmptyDictType();
                 break;
             case TType::EKind::Data: {
-                const auto schemeType = static_cast<const TDataType*>(type)->GetSchemeType(); 
+                const auto schemeType = static_cast<const TDataType*>(type)->GetSchemeType();
                 auto slot = NUdf::FindDataSlot(schemeType);
                 if (!slot) {
                     ythrow yexception() << "Unsupported data type: " << schemeType;
@@ -101,7 +101,7 @@ public:
                 auto dataType = NUdf::GetDataTypeInfo(*slot).Name;
                 if (NKikimr::NUdf::TDataType<NUdf::TDecimal>::Id == schemeType) {
                     const auto params = static_cast<const TDataDecimalType*>(type)->GetParams();
-                    TBase::SaveDataTypeParams(dataType, ToString(params.first), ToString(params.second)); 
+                    TBase::SaveDataTypeParams(dataType, ToString(params.first), ToString(params.second));
                 } else {
                     TBase::SaveDataType(dataType);
                 }

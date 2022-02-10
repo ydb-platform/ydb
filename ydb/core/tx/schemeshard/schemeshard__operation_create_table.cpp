@@ -186,10 +186,10 @@ public:
                         << " seqNo: " << seqNo);
 
             NKikimrTxDataShard::TFlatSchemeTransaction tx(txTemplate);
-            auto tableDesc = tx.MutableCreateTable(); 
+            auto tableDesc = tx.MutableCreateTable();
             context.SS->FillSeqNo(tx, seqNo);
-            context.SS->FillTableDescription(txState->TargetPathId, i, NEW_TABLE_ALTER_VERSION, tableDesc); 
- 
+            context.SS->FillTableDescription(txState->TargetPathId, i, NEW_TABLE_ALTER_VERSION, tableDesc);
+
             TString txBody;
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
 
@@ -271,7 +271,7 @@ public:
 
         TTableInfo::TPtr table = context.SS->Tables[pathId];
         Y_VERIFY(table);
-        table->AlterVersion = NEW_TABLE_ALTER_VERSION; 
+        table->AlterVersion = NEW_TABLE_ALTER_VERSION;
 
         if (table->IsTTLEnabled()) {
             context.SS->TTLEnabledTables[pathId] = table;

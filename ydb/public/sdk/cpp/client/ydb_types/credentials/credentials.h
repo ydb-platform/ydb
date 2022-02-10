@@ -15,16 +15,16 @@ public:
 
 using TCredentialsProviderPtr = std::shared_ptr<ICredentialsProvider>;
 
-class ICoreFacility; 
+class ICoreFacility;
 class ICredentialsProviderFactory {
 public:
     virtual ~ICredentialsProviderFactory() = default;
     virtual TCredentialsProviderPtr CreateProvider() const = 0;
-    // !!!Experimental!!! 
-    virtual TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const { 
-        Y_UNUSED(facility); 
-        return CreateProvider(); 
-    } 
+    // !!!Experimental!!!
+    virtual TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const {
+        Y_UNUSED(facility);
+        return CreateProvider();
+    }
     virtual TStringType GetClientIdentity() const = 0;
 };
 

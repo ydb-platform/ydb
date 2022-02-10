@@ -44,8 +44,8 @@ public:
 
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters)
-        : TBase(std::move(request), database, userToken, counters) 
-    { 
+        : TBase(std::move(request), database, userToken, counters)
+    {
         YQL_ENSURE(Request.Transactions.size() == 1);
         YQL_ENSURE(Request.Locks.empty());
         YQL_ENSURE(!Request.ValidateLocks);
@@ -178,8 +178,8 @@ private:
 
         LOG_D("Got execution state from compute actor: " << computeActor
             << ", task: " << taskId
-            << ", state: " << NDqProto::EComputeState_Name((NDqProto::EComputeState) state.GetState()) 
-            << ", stats: " << state.GetStats()); 
+            << ", state: " << NDqProto::EComputeState_Name((NDqProto::EComputeState) state.GetState())
+            << ", stats: " << state.GetStats());
 
         switch (state.GetState()) {
             case NDqProto::COMPUTE_STATE_UNKNOWN: {
@@ -196,26 +196,26 @@ private:
                 // initial TEvState event from Compute Actor
                 // there can be race with RM answer
                 if (PendingComputeTasks.erase(taskId)) {
-                    auto it = PendingComputeActors.emplace(computeActor, TProgressStat()); 
+                    auto it = PendingComputeActors.emplace(computeActor, TProgressStat());
                     YQL_ENSURE(it.second);
 
                     if (state.HasStats()) {
                         it.first->second.Set(state.GetStats());
-                    } 
- 
+                    }
+
                     auto& task = TasksGraph.GetTask(taskId);
                     task.ComputeActorId = computeActor;
 
                     THashMap<TActorId, THashSet<ui64>> updates;
                     CollectTaskChannelsUpdates(task, updates);
                     PropagateChannelsUpdates(updates);
-                } else { 
-                    auto it = PendingComputeActors.find(computeActor); 
-                    if (it != PendingComputeActors.end()) { 
+                } else {
+                    auto it = PendingComputeActors.find(computeActor);
+                    if (it != PendingComputeActors.end()) {
                         if (state.HasStats()) {
                             it->second.Set(state.GetStats());
-                        } 
-                    } 
+                        }
+                    }
                 }
                 break;
             }
@@ -225,8 +225,8 @@ private:
                     Stats->AddComputeActorStats(computeActor.NodeId(), std::move(*state.MutableStats()));
                 }
 
-                auto it = PendingComputeActors.find(computeActor); 
-                if (it == PendingComputeActors.end()) { 
+                auto it = PendingComputeActors.find(computeActor);
+                if (it == PendingComputeActors.end()) {
                     LOG_W("Got execution state for compute actor: " << computeActor
                         << ", task: " << taskId
                         << ", state: " << NDqProto::EComputeState_Name((NDqProto::EComputeState) state.GetState())
@@ -238,13 +238,13 @@ private:
                             << ", state: " << NDqProto::EComputeState_Name((NDqProto::EComputeState) state.GetState()));
                         return;
                     }
-                } else { 
+                } else {
                     if (state.HasStats()) {
                         it->second.Set(state.GetStats());
-                    } 
-                    LastStats.emplace_back(std::move(it->second)); 
-                    PendingComputeActors.erase(it); 
-                    YQL_ENSURE(PendingComputeTasks.find(taskId) == PendingComputeTasks.end()); 
+                    }
+                    LastStats.emplace_back(std::move(it->second));
+                    PendingComputeActors.erase(it);
+                    YQL_ENSURE(PendingComputeTasks.find(taskId) == PendingComputeTasks.end());
                 }
             }
         }
@@ -328,7 +328,7 @@ private:
             if (PendingComputeTasks.erase(taskId) == 0) {
                 LOG_D("Executing task: " << taskId << ", compute actor: " << task.ComputeActorId << ", already finished");
             } else {
-                auto result = PendingComputeActors.emplace(std::make_pair(task.ComputeActorId, TProgressStat())); 
+                auto result = PendingComputeActors.emplace(std::make_pair(task.ComputeActorId, TProgressStat()));
                 YQL_ENSURE(result.second);
 
                 CollectTaskChannelsUpdates(task, channelsUpdates);
@@ -357,7 +357,7 @@ private:
         LOG_N("Disconnected node " << nodeId);
 
         for (auto computeActor : PendingComputeActors) {
-            if (computeActor.first.NodeId() == nodeId) { 
+            if (computeActor.first.NodeId() == nodeId) {
                 return ReplyUnavailable(TStringBuilder() << "Connection with node " << nodeId << " lost.");
             }
         }
@@ -920,9 +920,9 @@ private:
 
         auto planner = CreateKqpPlanner(TxId, SelfId(), std::move(computeTasks),
             std::move(scanTasks), Request.Snapshot,
-            Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, 
+            Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
             Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling, Request.RlPath);
-        RegisterWithSameMailbox(planner); 
+        RegisterWithSameMailbox(planner);
     }
 
     void Finalize() {
@@ -1008,12 +1008,12 @@ private:
     bool CheckExecutionComplete() {
         if (PendingComputeActors.empty() && PendingComputeTasks.empty()) {
             Finalize();
-            UpdateResourcesUsage(true); 
+            UpdateResourcesUsage(true);
             return true;
         }
 
-        UpdateResourcesUsage(false); 
- 
+        UpdateResourcesUsage(false);
+
         if (IsDebugLogEnabled()) {
             TStringBuilder sb;
             sb << "Waiting for: ";
@@ -1021,7 +1021,7 @@ private:
                 sb << "CT " << ct << ", ";
             }
             for (auto ca : PendingComputeActors) {
-                sb << "CA " << ca.first << ", "; 
+                sb << "CA " << ca.first << ", ";
             }
             LOG_D(sb);
         }

@@ -109,7 +109,7 @@ const TExportToS3Response::TMetadata& TExportToS3Response::Metadata() const {
 class TExportClient::TImpl : public TClientImplCommon<TExportClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
-        : TClientImplCommon(std::move(connections), settings) 
+        : TClientImplCommon(std::move(connections), settings)
     {
     }
 

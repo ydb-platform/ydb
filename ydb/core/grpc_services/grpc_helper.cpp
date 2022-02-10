@@ -1,8 +1,8 @@
-#include "grpc_helper.h" 
- 
-namespace NKikimr { 
-namespace NGRpcService { 
- 
+#include "grpc_helper.h"
+
+namespace NKikimr {
+namespace NGRpcService {
+
 //using namespace NActors;
 
 NGrpc::IGRpcRequestLimiterPtr TCreateLimiterCB::operator()(const char* serviceName, const char* requestName, i64 limit) const {
@@ -41,5 +41,5 @@ NGrpc::IGRpcRequestLimiterPtr TInFlightLimiterRegistry::RegisterRequestType(TStr
     return PerTypeLimiters[name];
 }
 
-} // namespace NGRpcService 
-} // namespace NKikimr 
+} // namespace NGRpcService
+} // namespace NKikimr

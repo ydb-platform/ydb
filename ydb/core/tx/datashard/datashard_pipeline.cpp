@@ -781,7 +781,7 @@ void TPipeline::CompleteSchemaTx(NIceDb::TNiceDb& db, ui64 txId) {
     Y_VERIFY(txId == op->TxId);
     Y_VERIFY(op->Done);
 
-    Self->TransQueue.RemoveScanProgress(db, txId); 
+    Self->TransQueue.RemoveScanProgress(db, txId);
     Self->TransQueue.RemoveSchemaOperation(db, txId);
 }
 
@@ -1352,9 +1352,9 @@ EExecutionStatus TPipeline::RunExecutionUnit(TOperation::TPtr op, TTransactionCo
         return EExecutionStatus::Continue;
     }
 
-    NCpuTime::TCpuTimer timer; 
+    NCpuTime::TCpuTimer timer;
     auto status = unit.Execute(op, txc, ctx);
-    op->AddExecutionTime(timer.GetTime()); 
+    op->AddExecutionTime(timer.GetTime());
 
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Execution status for " << *op << " at " << Self->TabletID()
@@ -1401,9 +1401,9 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
             return EExecutionStatus::Reschedule;
         }
 
-        NCpuTime::TCpuTimer timer; 
+        NCpuTime::TCpuTimer timer;
         auto status = unit.Execute(op, txc, ctx);
-        op->AddExecutionTime(timer.GetTime()); 
+        op->AddExecutionTime(timer.GetTime());
 
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Execution status for " << *op << " at " << Self->TabletID()

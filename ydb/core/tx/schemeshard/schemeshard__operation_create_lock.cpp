@@ -204,8 +204,8 @@ public:
         }
 
         {
-            NTableIndex::TIndexColumns indexKeys = NTableIndex::ExtractInfo(indexSchema); 
-            if (indexKeys.KeyColumns.empty()) { 
+            NTableIndex::TIndexColumns indexKeys = NTableIndex::ExtractInfo(indexSchema);
+            if (indexKeys.KeyColumns.empty()) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, "no key colums in index creation config");
                 return result;
             }
@@ -230,7 +230,7 @@ public:
             if (impTableColumns.Keys.size() > tablePath.DomainInfo()->GetSchemeLimits().MaxTableKeyColumns) {
                 TString msg = TStringBuilder()
                     << "Too many key indexed, index table reaches the limit of the maximum keys colums count"
-                    << ": indexing colums: " << indexKeys.KeyColumns.size() 
+                    << ": indexing colums: " << indexKeys.KeyColumns.size()
                     << ": requested keys colums for index table: " << impTableColumns.Keys.size()
                     << ". Limit: " << tablePath.DomainInfo()->GetSchemeLimits().MaxTableKeyColumns;
                 result->SetError(NKikimrScheme::StatusSchemeError, msg);

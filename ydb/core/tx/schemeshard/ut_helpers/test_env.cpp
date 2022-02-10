@@ -494,7 +494,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
 
     TAppPrepare app(dsExportFactory ? dsExportFactory : static_cast<std::shared_ptr<NKikimr::NDataShard::IExportFactory>>(std::make_shared<TDataShardExportFactory>()));
 
-    app.SetEnableDataColumnForIndexTable(true); 
+    app.SetEnableDataColumnForIndexTable(true);
     app.SetEnableSystemViews(opts.EnableSystemViews_);
     app.SetEnablePersistentPartitionStats(opts.EnablePersistentPartitionStats_);
     app.SetEnableTtlOnAsyncIndexedTables(opts.EnableTtlOnAsyncIndexedTables_);
@@ -515,11 +515,11 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
 
     SetupLogging(runtime);
     SetupChannelProfiles(app, TTestTxConfig::DomainUid, ChannelsCount);
- 
-    for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) { 
+
+    for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
         SetupSchemeCache(runtime, node, app.Domains->GetDomain(TTestTxConfig::DomainUid).Name);
-    } 
- 
+    }
+
     SetupTabletServices(runtime, &app);
     if (opts.EnablePipeRetries_) {
         EnableSchemeshardPipeRetriesGuard = EnableSchemeshardPipeRetries(runtime);
@@ -534,12 +534,12 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
 
     InitRootStoragePools(runtime, schemeRoot, sender, TTestTxConfig::DomainUid);
 
-    for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) { 
-        IActor* txProxy = CreateTxProxy(runtime.GetTxAllocatorTabletIds()); 
+    for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+        IActor* txProxy = CreateTxProxy(runtime.GetTxAllocatorTabletIds());
         TActorId txProxyId = runtime.Register(txProxy, node);
-        runtime.RegisterService(MakeTxProxyID(), txProxyId, node); 
-    } 
- 
+        runtime.RegisterService(MakeTxProxyID(), txProxyId, node);
+    }
+
     //SetupBoxAndStoragePool(runtime, sender, TTestTxConfig::DomainUid);
 
     TxReliablePropose = runtime.Register(new TTxReliablePropose(schemeRoot));
@@ -653,8 +653,8 @@ TAutoPtr<ITabletScheduledEventsGuard> NSchemeShardUT_Private::TTestEnv::EnableSc
 }
 
 NActors::TActorId NSchemeShardUT_Private::CreateNotificationSubscriber(NActors::TTestActorRuntime &runtime, ui64 schemeshardId) {
-    return runtime.Register(new TTxNotificationSubscriber(schemeshardId)); 
-} 
+    return runtime.Register(new TTxNotificationSubscriber(schemeshardId));
+}
 
 NActors::TActorId NSchemeShardUT_Private::CreateFakeMetering(NActors::TTestActorRuntime &runtime) {
     NActors::TActorId actorId = runtime.Register(new TFakeMetering());
@@ -663,13 +663,13 @@ NActors::TActorId NSchemeShardUT_Private::CreateFakeMetering(NActors::TTestActor
 }
 
 void NSchemeShardUT_Private::TestWaitNotification(NActors::TTestActorRuntime &runtime, TSet<ui64> txIds, TActorId subscriberActorId) {
- 
+
     TActorId sender = runtime.AllocateEdgeActor();
 
     for (ui64 txId : txIds) {
         Cerr << Endl << "TestWaitNotification wait txId: " << txId << Endl;
         auto ev = new TEvSchemeShard::TEvNotifyTxCompletion(txId);
-        runtime.Send(new IEventHandle(subscriberActorId, sender, ev)); 
+        runtime.Send(new IEventHandle(subscriberActorId, sender, ev));
     }
 
     TAutoPtr<IEventHandle> handle;
@@ -683,14 +683,14 @@ void NSchemeShardUT_Private::TestWaitNotification(NActors::TTestActorRuntime &ru
     }
 }
 
-void NSchemeShardUT_Private::TTestEnv::TestWaitNotification(NActors::TTestActorRuntime &runtime, TSet<ui64> txIds, ui64 schemeshardId) { 
-    if (!TxNotificationSubcribers.contains(schemeshardId)) { 
-        TxNotificationSubcribers[schemeshardId] = CreateNotificationSubscriber(runtime, schemeshardId); 
-    } 
- 
-    NSchemeShardUT_Private::TestWaitNotification(runtime, txIds, TxNotificationSubcribers.at(schemeshardId)); 
-} 
- 
+void NSchemeShardUT_Private::TTestEnv::TestWaitNotification(NActors::TTestActorRuntime &runtime, TSet<ui64> txIds, ui64 schemeshardId) {
+    if (!TxNotificationSubcribers.contains(schemeshardId)) {
+        TxNotificationSubcribers[schemeshardId] = CreateNotificationSubscriber(runtime, schemeshardId);
+    }
+
+    NSchemeShardUT_Private::TestWaitNotification(runtime, txIds, TxNotificationSubcribers.at(schemeshardId));
+}
+
 void NSchemeShardUT_Private::TTestEnv::TestWaitNotification(TTestActorRuntime &runtime, int txId, ui64 schemeshardId) {
     TestWaitNotification(runtime, (ui64)txId, schemeshardId);
 }
@@ -936,10 +936,10 @@ void NSchemeShardUT_Private::TTestWithReboots::RestoreLogging() {
     TestEnv->SetupLogging(*Runtime);
 }
 
-NSchemeShardUT_Private::TTestEnv* NSchemeShardUT_Private::TTestWithReboots::CreateTestEnv() { 
+NSchemeShardUT_Private::TTestEnv* NSchemeShardUT_Private::TTestWithReboots::CreateTestEnv() {
     return new TTestEnv(*Runtime, GetTestEnvOptions());
-} 
- 
+}
+
 
 
 void NSchemeShardUT_Private::TTestWithReboots::Prepare(const TString &dispatchName, std::function<void (TTestActorRuntime &)> setup, bool &outActiveZone) {
@@ -952,7 +952,7 @@ void NSchemeShardUT_Private::TTestWithReboots::Prepare(const TString &dispatchNa
 
     //TestEnv.Reset(new TTestEnv(*Runtime, 4, false, SchemeShardFactory));
 
-    TestEnv.Reset(CreateTestEnv()); 
+    TestEnv.Reset(CreateTestEnv());
 
     RestoreLogging();
 

@@ -311,7 +311,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             }
 
             YQL_ENSURE(keySet.empty());
-            YQL_ENSURE(tableMeta.KeyColumnNames.size() + upsertSet.size() == upsertRows.Columns().Size()); 
+            YQL_ENSURE(tableMeta.KeyColumnNames.size() + upsertSet.size() == upsertRows.Columns().Size());
             TVector<TStringBuf> upsertColumns(upsertSet.begin(), upsertSet.end());
 
             auto result = ctx.PgmBuilder().KqpUpsertRows(MakeTableId(upsertRows.Table()), rows,

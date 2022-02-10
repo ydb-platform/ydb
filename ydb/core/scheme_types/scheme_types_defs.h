@@ -177,9 +177,9 @@ public:
 };
 
 class TJson : public TStringBase<TJson, NTypeIds::Json, NNames::Json> {
-public: 
-}; 
- 
+public:
+};
+
 class TJsonDocument : public TStringBase<TJsonDocument, NTypeIds::JsonDocument, NNames::JsonDocument> {
 public:
 };
@@ -247,7 +247,7 @@ class TInterval : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval, NNam
     xx(String2m, TLargeBoundedString, __VA_ARGS__) \
     xx(Utf8, TUtf8, __VA_ARGS__) \
     xx(Yson, TYson, __VA_ARGS__) \
-    xx(Json, TJson, __VA_ARGS__) \ 
+    xx(Json, TJson, __VA_ARGS__) \
     xx(JsonDocument, TJsonDocument, __VA_ARGS__) \
     xx(Decimal, TDecimal, __VA_ARGS__) \
     xx(Date, TDate, __VA_ARGS__) \

@@ -21,7 +21,7 @@ _stubs_list = (
 logger = logging.getLogger(__name__)
 DEFAULT_TIMEOUT = 600
 YDB_DATABASE_HEADER = "x-ydb-database"
-YDB_TRACE_ID_HEADER = "x-ydb-trace-id" 
+YDB_TRACE_ID_HEADER = "x-ydb-trace-id"
 YDB_REQUEST_TYPE_HEADER = "x-ydb-request-type"
 
 

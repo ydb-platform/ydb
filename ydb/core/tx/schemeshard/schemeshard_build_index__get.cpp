@@ -40,7 +40,7 @@ public:
         if (!database.IsResolved()) {
             return Reply(
                 std::move(response),
-                Ydb::StatusIds::BAD_REQUEST, 
+                Ydb::StatusIds::BAD_REQUEST,
                 TStringBuilder() << "Database <" << record.GetDatabaseName() << "> not found"
                 );
         }
@@ -51,7 +51,7 @@ public:
         if (!Self->IndexBuilds.contains(indexBuildId)) {
             return Reply(
                 std::move(response),
-                Ydb::StatusIds::PRECONDITION_FAILED, 
+                Ydb::StatusIds::PRECONDITION_FAILED,
                 TStringBuilder() << "Index build prcess with id <" << indexBuildId << "> not found"
                 );
         }
@@ -60,7 +60,7 @@ public:
         if (indexBuildInfo->DomainPathId != domainId) {
             return Reply(
                 std::move(response),
-                Ydb::StatusIds::BAD_REQUEST, 
+                Ydb::StatusIds::BAD_REQUEST,
                 TStringBuilder() << "Index build prcess with id <" << indexBuildId << "> not found in database <" << record.GetDatabaseName() << ">"
                 );
         }

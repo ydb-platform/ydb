@@ -6,9 +6,9 @@
 
 #include <library/cpp/string_utils/quote/quote.h>
 
-#include <thread> 
-#include <unordered_map> 
- 
+#include <thread>
+#include <unordered_map>
+
 namespace NYdb {
 
 constexpr int PESSIMIZATION_DISCOVERY_THRESHOLD = 50; // percent of endpoints pessimized by transport error to start recheck
@@ -36,12 +36,12 @@ TDbDriverState::TDbDriverState(
     , StatCollector(database, client->GetMetricRegistry())
     , Log(Client->GetLog())
 {
-    EndpointPool.SetStatCollector(StatCollector); 
-    Log.SetFormatter(GetPrefixLogFormatter(GetDatabaseLogPrefix(Database))); 
-} 
- 
-void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider) { 
-    CredentialsProvider = std::move(credentialsProvider); 
+    EndpointPool.SetStatCollector(StatCollector);
+    Log.SetFormatter(GetPrefixLogFormatter(GetDatabaseLogPrefix(Database)));
+}
+
+void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider) {
+    CredentialsProvider = std::move(credentialsProvider);
 #ifndef YDB_GRPC_UNSECURE_AUTH
     CallCredentials = grpc::MetadataCredentialsFromPlugin(
         std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(CredentialsProvider)));
@@ -133,12 +133,12 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
         clientIdentity = credentialsProviderFactory->GetClientIdentity();
     }
     Quote(database);
-    const TStateKey key{database, discoveryEndpoint, clientIdentity, discoveryMode, enableSsl}; 
+    const TStateKey key{database, discoveryEndpoint, clientIdentity, discoveryMode, enableSsl};
     {
         std::shared_lock lock(Lock_);
-        auto state = States_.find(key); 
-        if (state != States_.end()) { 
-            auto strong = state->second.lock(); 
+        auto state = States_.find(key);
+        if (state != States_.end()) {
+            auto strong = state->second.lock();
             if (strong) {
                 return strong;
             }
@@ -149,9 +149,9 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
     for (;;) {
         std::unique_lock lock(Lock_);
         {
-            auto state = States_.find(key); 
-            if (state != States_.end()) { 
-                auto strong = state->second.lock(); 
+            auto state = States_.find(key);
+            if (state != States_.end()) {
+                auto strong = state->second.lock();
                 if (strong) {
                     return strong;
                 } else {
@@ -161,7 +161,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                     // remove expired record from hashmap. So give him chance
                     // to do it after that we will be able to create new state
                     lock.unlock();
-                    std::this_thread::yield(); 
+                    std::this_thread::yield();
                     continue;
                 }
             }
@@ -182,41 +182,41 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                     enableSsl,
                     DiscoveryClient_),
                 deleter);
- 
-            strongState->SetCredentialsProvider( 
-                credentialsProviderFactory 
-                    ? credentialsProviderFactory->CreateProvider(strongState) 
-                    : CreateInsecureCredentialsProviderFactory()->CreateProvider(strongState)); 
- 
+
+            strongState->SetCredentialsProvider(
+                credentialsProviderFactory
+                    ? credentialsProviderFactory->CreateProvider(strongState)
+                    : CreateInsecureCredentialsProviderFactory()->CreateProvider(strongState));
+
             DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
             Y_VERIFY(States_.emplace(key, strongState).second);
             break;
         }
     }
     auto updateResult = strongState->EndpointPool.UpdateAsync();
- 
+
     if (strongState->DiscoveryMode == EDiscoveryMode::Sync) {
-        const auto& discoveryStatus = updateResult.first.GetValueSync().DiscoveryStatus; 
-        // Almost always true, except the situation when the current thread was 
-        // preempted just before UpdateAsync call and other one get 
-        // state from cache and call UpdateAsync before us. 
-        if (Y_LIKELY(updateResult.second)) { 
+        const auto& discoveryStatus = updateResult.first.GetValueSync().DiscoveryStatus;
+        // Almost always true, except the situation when the current thread was
+        // preempted just before UpdateAsync call and other one get
+        // state from cache and call UpdateAsync before us.
+        if (Y_LIKELY(updateResult.second)) {
             std::unique_lock guard(strongState->LastDiscoveryStatusRWLock);
-            strongState->LastDiscoveryStatus = discoveryStatus; 
-        } 
+            strongState->LastDiscoveryStatus = discoveryStatus;
+        }
     }
- 
+
     return strongState;
 }
 
-void TDbDriverState::AddPeriodicTask(TPeriodicCb&& cb, TDuration period) { 
-    Client->AddPeriodicTask(std::move(cb), period); 
-} 
- 
+void TDbDriverState::AddPeriodicTask(TPeriodicCb&& cb, TDuration period) {
+    Client->AddPeriodicTask(std::move(cb), period);
+}
+
 NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
-    TDbDriverState::ENotifyType type 
+    TDbDriverState::ENotifyType type
 ) {
-    std::vector<std::weak_ptr<TDbDriverState>> states; 
+    std::vector<std::weak_ptr<TDbDriverState>> states;
     {
         std::shared_lock lock(Lock_);
         states.reserve(States_.size());
@@ -224,7 +224,7 @@ NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
             states.push_back(weak.second);
         }
     }
-    std::vector<NThreading::TFuture<void>> results; 
+    std::vector<NThreading::TFuture<void>> results;
     for (auto& state : states) {
         auto strong = state.lock();
         if (strong) {
@@ -244,7 +244,7 @@ NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
 }
 
 void TDbDriverStateTracker::SetMetricRegistry(NMonitoring::TMetricRegistry *sensorsRegistry) {
-    std::vector<std::weak_ptr<TDbDriverState>> states; 
+    std::vector<std::weak_ptr<TDbDriverState>> states;
     {
         std::shared_lock lock(Lock_);
         states.reserve(States_.size());

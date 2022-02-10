@@ -1169,8 +1169,8 @@ Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
         const TFakeScanTx &scanTx = dynamic_cast<const TFakeScanTx &>(tx);
         YdbOld::ResultSet res = scanTx.GetScanResult();
         //Cerr << res.DebugString() << Endl;
-        for (auto &row : res.rows()) { 
-            auto &val = row.items(0).text_value(); 
+        for (auto &row : res.rows()) {
+            auto &val = row.items(0).text_value();
             UNIT_ASSERT(ref.contains(val));
             ref.erase(val);
         }

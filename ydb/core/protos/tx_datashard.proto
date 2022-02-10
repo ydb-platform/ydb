@@ -28,7 +28,7 @@ enum EDatashardState {
     Readonly = 3;
     Offline = 4;
     PreOffline = 5;     // Offline but waits for loaned snapshots to be returned and for SchemaChangedResult to be received
-    Frozen = 6; // Read only transactions are allowed. Scheme modification is forbiden 
+    Frozen = 6; // Read only transactions are allowed. Scheme modification is forbiden
 
     // Split/Merge Src states
     SplitSrcWaitForNoTxInFlight = 101;    // Temporary state: split src waits for all Tx to finish and then starts splitting
@@ -52,7 +52,7 @@ message TEvGetShardStateResult {
     optional uint64 DropTxId = 3;
 }
 
-message TShardOpResult { 
+message TShardOpResult {
     optional bool Success = 1;
     optional string Explain = 2;
     optional uint64 BytesProcessed = 3;
@@ -67,7 +67,7 @@ message TEvSchemaChanged {
     optional uint64 Step = 5;
     optional uint32 Generation = 6;
 
-    optional TShardOpResult OpResult = 7; 
+    optional TShardOpResult OpResult = 7;
 }
 
 message TEvSchemaChangedResult {
@@ -107,7 +107,7 @@ message TReadTableTransaction {
     optional TTableId TableId = 1;
     repeated TColumn Columns = 2;
     optional NKikimrTx.TKeyRange Range = 3;
-    optional uint32 ApiVersion = 4; 
+    optional uint32 ApiVersion = 4;
     optional uint64 SnapshotStep = 5;
     optional uint64 SnapshotTxId = 6;
 }
@@ -575,7 +575,7 @@ message TEvProposeTransactionResult {
     // For read table tx result holds offsets in TxResult to cut response
     repeated uint32 RowOffsets = 20;
     repeated fixed64 DomainCoordinators = 21;
-    optional uint32 ApiVersion = 22; // Version of TxResult response data 
+    optional uint32 ApiVersion = 22; // Version of TxResult response data
     optional NKikimrQueryStats.TTxStats TxStats = 23;
     optional uint64 DataSeqNo = 24; // Response data seqno (1, 2, ...)
     optional bytes DataLastKey = 25; // Response data last key (for retries)
@@ -858,7 +858,7 @@ message TEvGetInfoResponse {
         optional NKikimrSchemeOp.TTableDescription Description = 5;
         optional TStats Stats = 6;
         optional NKikimrTabletBase.TMetrics Metrics = 7;
-        optional uint64 SchemaVersion = 8; 
+        optional uint64 SchemaVersion = 8;
     }
 
     message TTabletInfo {
@@ -1323,7 +1323,7 @@ message TEvBuildIndexCreateRequest {
     optional uint64 PathId = 4;
 
     optional string TargetName = 5;
-    repeated string IndexColumns = 6;          // key columns that is needed to transer in terms of target table 
+    repeated string IndexColumns = 6;          // key columns that is needed to transer in terms of target table
 
     optional NKikimrTx.TKeyRange KeyRange = 7; // key range to transfer in term of source table
 
@@ -1337,8 +1337,8 @@ message TEvBuildIndexCreateRequest {
     optional uint64 SeqNoRound = 13;            // monotonically increasing sequence, second part
 
     optional uint64 MaxRetries = 14;
- 
-    repeated string DataColumns = 15; 
+
+    repeated string DataColumns = 15;
 }
 
 message TEvBuildIndexProgressResponse {

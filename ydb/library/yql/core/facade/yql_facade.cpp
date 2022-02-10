@@ -1363,12 +1363,12 @@ TFuture<void> TProgram::OpenSession(const TString& username)
 
 void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanPlan) {
     TVector<TTransformStage> printTransformers;
-    const auto issueCode = TIssuesIds::DEFAULT_ERROR; 
+    const auto issueCode = TIssuesIds::DEFAULT_ERROR;
     if (exprOut) {
         printTransformers.push_back(TTransformStage(
             TExprOutputTransformer::Sync(ExprRoot_, exprOut),
             "ExprOutput",
-            issueCode)); 
+            issueCode));
     }
     if (planOut) {
         if (cleanPlan) {
@@ -1377,10 +1377,10 @@ void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanP
         printTransformers.push_back(TTransformStage(
             TPlanOutputTransformer::Sync(planOut, GetPlanBuilder(), OutputFormat_),
             "PlanOutput",
-            issueCode)); 
+            issueCode));
     }
 
-    auto compositeTransformer = CreateCompositeGraphTransformer(printTransformers, false); 
+    auto compositeTransformer = CreateCompositeGraphTransformer(printTransformers, false);
     InstantTransform(*compositeTransformer, ExprRoot_, *ExprCtx_);
 }
 

@@ -121,8 +121,8 @@ void CheckAlterTenantSlots(TTenantTestRuntime &runtime, const TString &path,
                            ui64 generation, Ydb::StatusIds::StatusCode code,
                            TVector<TSlotRequest> add,
                            TVector<TSlotRequest> remove,
-                           const TString &idempotencyKey = TString(), 
-                           const TVector<std::pair<TString, TString>> attrs = {}) 
+                           const TString &idempotencyKey = TString(),
+                           const TVector<std::pair<TString, TString>> attrs = {})
 {
     auto *event = new TEvConsole::TEvAlterTenantRequest;
     event->Record.MutableRequest()->set_path(path);
@@ -139,9 +139,9 @@ void CheckAlterTenantSlots(TTenantTestRuntime &runtime, const TString &path,
         unit.set_availability_zone(slot.Zone);
         unit.set_count(slot.Count);
     }
-    for (const auto& [key, value] : attrs) { 
-        (*event->Record.MutableRequest()->mutable_alter_attributes())[key] = value; 
-    } 
+    for (const auto& [key, value] : attrs) {
+        (*event->Record.MutableRequest()->mutable_alter_attributes())[key] = value;
+    }
     if (idempotencyKey) {
         event->Record.MutableRequest()->set_idempotency_key(idempotencyKey);
     }
@@ -235,7 +235,7 @@ void CheckListTenants(TTenantTestRuntime &runtime, TVector<TString> tenants)
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
     auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvListTenantsResponse>(handle);
-    Ydb::Cms::ListDatabasesResult result; 
+    Ydb::Cms::ListDatabasesResult result;
     reply->Record.GetResponse().operation().result().UnpackTo(&result);
     for (auto &tenant : result.paths()) {
         UNIT_ASSERT(paths.contains(tenant));
@@ -666,7 +666,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                                    {TENANT1_1_NAME, 10, 10, 10}}});
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, shared, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
                           {{"hdd", 1, 1}, {"hdd-1", 2, 2}}, {},
                           SLOT1_TYPE, ZONE1, 3, 3,
                           SLOT2_TYPE, ZONE1, 2, 2,
@@ -844,7 +844,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
     void RunTestGetUnknownTenantStatus(TTenantTestRuntime& runtime) {
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::NOT_FOUND,
-                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {}); 
+                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {});
 
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_STATUS_REQUESTS, 1);
         CheckCounter(runtime, {{ {"status", "NOT_FOUND"} }}, TTenantsManager::COUNTER_STATUS_RESPONSES, 1);
@@ -879,7 +879,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                                    {TENANT1_1_NAME, 10, 10, 10}}});
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {}, 
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {},
                           SLOT2_TYPE, ZONE_ANY, 8, 5);
 
         RestartConsole(runtime);
@@ -891,7 +891,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                                    {TENANT1_1_NAME, 16, 16, 16}}});
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {}, 
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {},
                           SLOT2_TYPE, ZONE_ANY, 8, 8);
 
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_TENANTS, 1);
@@ -947,7 +947,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                                    {TENANT1_1_NAME, 45, 45, 45}}});
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {}, 
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {},
                           SLOT1_TYPE, ZONE1, 5, 5,
                           SLOT2_TYPE, ZONE1, 8, 8,
                           SLOT3_TYPE, ZONE1, 10, 8);
@@ -961,7 +961,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                                    {TENANT1_1_NAME, 27, 27, 27}}});
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {}, 
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {},
                           SLOT1_TYPE, ZONE1, 10, 8,
                           SLOT2_TYPE, ZONE1, 5, 5,
                           SLOT3_TYPE, ZONE1, 3, 3);
@@ -975,7 +975,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8}}});
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {}); 
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {});
 
         CheckAlterTenantSlots(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                               {{ {SLOT1_TYPE, ZONE1, 1},
@@ -987,7 +987,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                                    {TENANT1_1_NAME, 14, 14, 14}}});
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {}, 
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, {{"hdd", 1, 1}}, {},
                           SLOT1_TYPE, ZONE1, 1, 1,
                           SLOT2_TYPE, ZONE1, 2, 2,
                           SLOT3_TYPE, ZONE1, 3, 3);
@@ -1545,7 +1545,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::NOT_FOUND,
-                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {}); 
+                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {});
 
         CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::NOT_FOUND);
 
@@ -1863,7 +1863,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                                   {});
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
                           {{"hdd", 1, 1}, {"hdd-1", 1, 1}},
                           {{"host2", 2, "kind2"}},
                           SLOT1_TYPE, ZONE1, 1, 1);
@@ -2029,7 +2029,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     }
 
 
-    bool CheckAttrsPresent(TTenantTestRuntime& runtime, const TString& tenantName, THashMap<TString, TString> attrs, bool skipAbsent = false) { 
+    bool CheckAttrsPresent(TTenantTestRuntime& runtime, const TString& tenantName, THashMap<TString, TString> attrs, bool skipAbsent = false) {
         auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(tenantName);
         ForwardToTablet(runtime, SCHEME_SHARD1_ID, runtime.Sender, request.Release());
 
@@ -2037,33 +2037,33 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         auto reply = runtime.GrabEdgeEvent<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
         Cerr << "Reply: " << reply->GetRecord().DebugString() << "\n";
         for (auto &attr : reply->GetRecord().GetPathDescription().GetUserAttributes()) {
-            if (!skipAbsent) { 
-                UNIT_ASSERT(attrs.contains(attr.GetKey())); 
-                UNIT_ASSERT_VALUES_EQUAL(attrs.at(attr.GetKey()), attr.GetValue()); 
-            } 
+            if (!skipAbsent) {
+                UNIT_ASSERT(attrs.contains(attr.GetKey()));
+                UNIT_ASSERT_VALUES_EQUAL(attrs.at(attr.GetKey()), attr.GetValue());
+            }
             attrs.erase(attr.GetKey());
         }
-        return attrs.empty(); 
-    } 
+        return attrs.empty();
+    }
 
-    void RunTestAttributes(TTenantTestRuntime& runtime) { 
-        // Create tenant with attrs and check subdomain has them attached. 
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG); 
-        runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NActors::NLog::PRI_DEBUG); 
-        CheckCreateTenant(runtime, TENANT1_1_NAME, 
-                          Ydb::StatusIds::SUCCESS, 
-                          {{"hdd", 1}, {"hdd-1", 3}}, 
-                          TVector<std::pair<TString, TString>>({{"name1", "value1"}, {"name2", "value2"}}), 
-                          SLOT1_TYPE, ZONE1, 1); 
- 
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {}, 
-                          SLOT1_TYPE, ZONE1, 1, 1); 
- 
+    void RunTestAttributes(TTenantTestRuntime& runtime) {
+        // Create tenant with attrs and check subdomain has them attached.
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NActors::NLog::PRI_DEBUG);
+        CheckCreateTenant(runtime, TENANT1_1_NAME,
+                          Ydb::StatusIds::SUCCESS,
+                          {{"hdd", 1}, {"hdd-1", 3}},
+                          TVector<std::pair<TString, TString>>({{"name1", "value1"}, {"name2", "value2"}}),
+                          SLOT1_TYPE, ZONE1, 1);
 
-        UNIT_ASSERT(CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}, {"name2", "value2"}})); 
- 
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {},
+                          SLOT1_TYPE, ZONE1, 1, 1);
+
+
+        UNIT_ASSERT(CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}, {"name2", "value2"}}));
+
         // Requests with wrong attributes.
         CheckCreateTenant(runtime, TENANT1_2_NAME,
                           Ydb::StatusIds::BAD_REQUEST,
@@ -2073,57 +2073,57 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           Ydb::StatusIds::BAD_REQUEST,
                           {{"hdd", 1}, {"hdd-1", 3}},
                           TVector<std::pair<TString, TString>>({{"name1", ""}}));
- 
-        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 0, 
-                              Ydb::StatusIds::SUCCESS, {}, {}, 
-                              TString(), 
-                              TVector<std::pair<TString, TString>>({{"name2", "value2_2"},{"name3", "value3"}})); 
- 
-        int cnt = 1000; 
-        while (--cnt) { 
-            if (CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}, {"name3", "value3"}}, true)) 
-                break; 
-            TDispatchOptions options; 
-            runtime.DispatchEvents(options, TDuration::MilliSeconds(100)); 
-        } 
- 
-        UNIT_ASSERT_C(cnt, "attribute was has not been found"); 
- 
-        CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}, {"name2", "value2_2"}, {"name3", "value3"}}); 
-    } 
- 
-    void RunTestRemoveAttributes(TTenantTestRuntime& runtime) { 
-        // Create tenant with attrs and check subdomain has them attached. 
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG); 
-        runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NActors::NLog::PRI_DEBUG); 
-        CheckCreateTenant(runtime, TENANT1_1_NAME, 
-                          Ydb::StatusIds::SUCCESS, 
-                          {{"hdd", 1}, {"hdd-1", 3}},
-                          TVector<std::pair<TString, TString>>({{"name1", "value1"}, {"name2", "value2"}}), 
-                          SLOT1_TYPE, ZONE1, 1); 
- 
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {}, 
-                          SLOT1_TYPE, ZONE1, 1, 1); 
- 
 
-        UNIT_ASSERT(CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}, {"name2", "value2"}})); 
- 
-        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 0, 
-                              Ydb::StatusIds::SUCCESS, {}, {}, 
-                              TString(), 
-                              TVector<std::pair<TString, TString>>({{"name2", TString()}})); 
- 
-        int cnt = 1000; 
-        while (--cnt) { 
-            if (!CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}, {"name2", "value2"}}, true)) 
-                break; 
-            TDispatchOptions options; 
-            runtime.DispatchEvents(options, TDuration::MilliSeconds(100)); 
-        } 
- 
-        CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}}); 
+        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 0,
+                              Ydb::StatusIds::SUCCESS, {}, {},
+                              TString(),
+                              TVector<std::pair<TString, TString>>({{"name2", "value2_2"},{"name3", "value3"}}));
+
+        int cnt = 1000;
+        while (--cnt) {
+            if (CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}, {"name3", "value3"}}, true))
+                break;
+            TDispatchOptions options;
+            runtime.DispatchEvents(options, TDuration::MilliSeconds(100));
+        }
+
+        UNIT_ASSERT_C(cnt, "attribute was has not been found");
+
+        CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}, {"name2", "value2_2"}, {"name3", "value3"}});
+    }
+
+    void RunTestRemoveAttributes(TTenantTestRuntime& runtime) {
+        // Create tenant with attrs and check subdomain has them attached.
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NActors::NLog::PRI_DEBUG);
+        CheckCreateTenant(runtime, TENANT1_1_NAME,
+                          Ydb::StatusIds::SUCCESS,
+                          {{"hdd", 1}, {"hdd-1", 3}},
+                          TVector<std::pair<TString, TString>>({{"name1", "value1"}, {"name2", "value2"}}),
+                          SLOT1_TYPE, ZONE1, 1);
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {},
+                          SLOT1_TYPE, ZONE1, 1, 1);
+
+
+        UNIT_ASSERT(CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}, {"name2", "value2"}}));
+
+        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 0,
+                              Ydb::StatusIds::SUCCESS, {}, {},
+                              TString(),
+                              TVector<std::pair<TString, TString>>({{"name2", TString()}}));
+
+        int cnt = 1000;
+        while (--cnt) {
+            if (!CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}, {"name2", "value2"}}, true))
+                break;
+            TDispatchOptions options;
+            runtime.DispatchEvents(options, TDuration::MilliSeconds(100));
+        }
+
+        CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}});
     }
 
     Y_UNIT_TEST(TestAttributes) {
@@ -2136,16 +2136,16 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         RunTestAttributes(runtime);
     }
 
-    Y_UNIT_TEST(TestRemoveAttributes) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig()); 
-        RunTestRemoveAttributes(runtime); 
-    } 
- 
-    Y_UNIT_TEST(TestRemoveAttributesExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestRemoveAttributes(runtime); 
-    } 
- 
+    Y_UNIT_TEST(TestRemoveAttributes) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        RunTestRemoveAttributes(runtime);
+    }
+
+    Y_UNIT_TEST(TestRemoveAttributesExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestRemoveAttributes(runtime);
+    }
+
     Y_UNIT_TEST(TestTenantsQuota) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
 

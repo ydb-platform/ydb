@@ -38,7 +38,7 @@ public:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeConsoleID(group), pipeConfig);
-        CmsPipe = ctx.RegisterWithSameMailbox(pipe); 
+        CmsPipe = ctx.RegisterWithSameMailbox(pipe);
 
         SendRequest(ctx);
 
@@ -52,56 +52,56 @@ private:
         TBase::Die(ctx);
     }
 
-    template<typename T> 
-    void HandleWithOperationParams(T& ev, const TActorContext& ctx) 
+    template<typename T>
+    void HandleWithOperationParams(T& ev, const TActorContext& ctx)
     {
-        const auto& response = ev->Get()->Record.GetResponse(); 
-        if (response.operation().ready() == false 
-            && this->GetProtoRequest()->operation_params().operation_mode() == Ydb::Operations::OperationParams::SYNC) { 
-            auto request = MakeHolder<TEvConsole::TEvNotifyOperationCompletionRequest>(); 
-            request->Record.MutableRequest()->set_id(response.operation().id()); 
-            request->Record.SetUserToken(this->Request_->GetInternalToken()); 
- 
-            NTabletPipe::SendData(ctx, CmsPipe, request.Release()); 
-        } else { 
-            TProtoResponseHelper::SendProtoResponse(response, response.operation().status(), this->Request_); 
-            Die(ctx); 
-        } 
-    } 
- 
-    void Handle(TEvConsole::TEvCreateTenantResponse::TPtr& ev, const TActorContext& ctx) { 
-        HandleWithOperationParams(ev, ctx); 
-    } 
- 
-    void Handle(TEvConsole::TEvRemoveTenantResponse::TPtr& ev, const TActorContext& ctx) { 
-        HandleWithOperationParams(ev, ctx); 
-    } 
- 
-    template<typename T> 
-    void Handle(T& ev, const TActorContext& ctx) 
-    { 
+        const auto& response = ev->Get()->Record.GetResponse();
+        if (response.operation().ready() == false
+            && this->GetProtoRequest()->operation_params().operation_mode() == Ydb::Operations::OperationParams::SYNC) {
+            auto request = MakeHolder<TEvConsole::TEvNotifyOperationCompletionRequest>();
+            request->Record.MutableRequest()->set_id(response.operation().id());
+            request->Record.SetUserToken(this->Request_->GetInternalToken());
+
+            NTabletPipe::SendData(ctx, CmsPipe, request.Release());
+        } else {
+            TProtoResponseHelper::SendProtoResponse(response, response.operation().status(), this->Request_);
+            Die(ctx);
+        }
+    }
+
+    void Handle(TEvConsole::TEvCreateTenantResponse::TPtr& ev, const TActorContext& ctx) {
+        HandleWithOperationParams(ev, ctx);
+    }
+
+    void Handle(TEvConsole::TEvRemoveTenantResponse::TPtr& ev, const TActorContext& ctx) {
+        HandleWithOperationParams(ev, ctx);
+    }
+
+    template<typename T>
+    void Handle(T& ev, const TActorContext& ctx)
+    {
         auto& response = ev->Get()->Record.GetResponse();
-        TProtoResponseHelper::SendProtoResponse(response, response.operation().status(), this->Request_); 
+        TProtoResponseHelper::SendProtoResponse(response, response.operation().status(), this->Request_);
         Die(ctx);
     }
 
-    void Handle(TEvConsole::TEvOperationCompletionNotification::TPtr& ev, const TActorContext& ctx) 
-    { 
-        this->Request_->SendOperation(ev->Get()->Record.GetResponse().operation()); 
-        Die(ctx); 
-    } 
- 
-    void Handle(TEvConsole::TEvNotifyOperationCompletionResponse::TPtr& ev, const TActorContext& ctx) 
-    { 
-        if (ev->Get()->Record.GetResponse().operation().ready() == true) { 
-            this->Request_->SendOperation(ev->Get()->Record.GetResponse().operation()); 
-            Die(ctx); 
-        } 
-    } 
- 
+    void Handle(TEvConsole::TEvOperationCompletionNotification::TPtr& ev, const TActorContext& ctx)
+    {
+        this->Request_->SendOperation(ev->Get()->Record.GetResponse().operation());
+        Die(ctx);
+    }
+
+    void Handle(TEvConsole::TEvNotifyOperationCompletionResponse::TPtr& ev, const TActorContext& ctx)
+    {
+        if (ev->Get()->Record.GetResponse().operation().ready() == true) {
+            this->Request_->SendOperation(ev->Get()->Record.GetResponse().operation());
+            Die(ctx);
+        }
+    }
+
     void Undelivered(const TActorContext &ctx) {
-        this->Request_->RaiseIssue(NYql::TIssue("CMS is unavailable")); 
-        this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE); 
+        this->Request_->RaiseIssue(NYql::TIssue("CMS is unavailable"));
+        this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
         Die(ctx);
     }
 
@@ -116,8 +116,8 @@ private:
             HFunc(TCmsResponse, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvConsole::TEvOperationCompletionNotification, Handle); 
-            HFunc(TEvConsole::TEvNotifyOperationCompletionResponse, Handle); 
+            HFunc(TEvConsole::TEvOperationCompletionNotification, Handle);
+            HFunc(TEvConsole::TEvNotifyOperationCompletionResponse, Handle);
             default: TBase::StateFuncBase(ev, ctx);
         }
     }
@@ -125,7 +125,7 @@ private:
     void SendRequest(const TActorContext &ctx)
     {
         auto request = MakeHolder<TCmsRequest>();
-        request->Record.MutableRequest()->CopyFrom(*this->GetProtoRequest()); 
+        request->Record.MutableRequest()->CopyFrom(*this->GetProtoRequest());
         request->Record.SetUserToken(this->Request_->GetInternalToken());
         NTabletPipe::SendData(ctx, CmsPipe, request.Release());
     }

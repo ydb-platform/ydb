@@ -4,8 +4,8 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
-#include <cstdlib> 
- 
+#include <cstdlib>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -174,11 +174,11 @@ Y_UNIT_TEST(DeferredEffects) {
 
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
     UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 4);
- 
-    auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER); 
-    UNIT_ASSERT(ru != result.GetResponseMetadata().end()); 
- 
-    UNIT_ASSERT(std::atoi(ru->second.c_str()) > 1); 
+
+    auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);
+    UNIT_ASSERT(ru != result.GetResponseMetadata().end());
+
+    UNIT_ASSERT(std::atoi(ru->second.c_str()) > 1);
 }
 
 Y_UNIT_TEST(DataQueryWithEffects) {
@@ -248,58 +248,58 @@ Y_UNIT_TEST(DataQueryMulti) {
 }
 
 Y_UNIT_TEST_NEW_ENGINE(RequestUnitForBadRequestExecute) {
-    TKikimrRunner kikimr; 
-    auto db = kikimr.GetTableClient(); 
-    auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+    TKikimrRunner kikimr;
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
     auto result = session.ExecuteDataQuery(Q_(R"(
-            INCORRECT_STMT 
+            INCORRECT_STMT
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), TExecDataQuerySettings().ReportCostInfo(true))
-        .ExtractValueSync(); 
-    result.GetIssues().PrintTo(Cerr); 
- 
-    auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER); 
-    UNIT_ASSERT(ru != result.GetResponseMetadata().end()); 
-    UNIT_ASSERT_VALUES_EQUAL(ru->second, "1"); 
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR); 
-    UNIT_ASSERT(result.GetConsumedRu() > 0); 
-} 
- 
+        .ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+
+    auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);
+    UNIT_ASSERT(ru != result.GetResponseMetadata().end());
+    UNIT_ASSERT_VALUES_EQUAL(ru->second, "1");
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+    UNIT_ASSERT(result.GetConsumedRu() > 0);
+}
+
 Y_UNIT_TEST_NEW_ENGINE(RequestUnitForBadRequestExplicitPrepare) {
-    TKikimrRunner kikimr; 
-    auto db = kikimr.GetTableClient(); 
-    auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+    TKikimrRunner kikimr;
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
     auto result = session.PrepareDataQuery(Q_(R"(
-        INCORRECT_STMT 
+        INCORRECT_STMT
     )"), TPrepareDataQuerySettings().ReportCostInfo(true)).ExtractValueSync();
-    result.GetIssues().PrintTo(Cerr); 
- 
-    auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER); 
-    UNIT_ASSERT(ru != result.GetResponseMetadata().end()); 
-    UNIT_ASSERT_VALUES_EQUAL(ru->second, "1"); 
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR); 
-    UNIT_ASSERT(result.GetConsumedRu() > 0); 
-} 
- 
+    result.GetIssues().PrintTo(Cerr);
+
+    auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);
+    UNIT_ASSERT(ru != result.GetResponseMetadata().end());
+    UNIT_ASSERT_VALUES_EQUAL(ru->second, "1");
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+    UNIT_ASSERT(result.GetConsumedRu() > 0);
+}
+
 Y_UNIT_TEST_NEW_ENGINE(RequestUnitForSuccessExplicitPrepare) {
-    TKikimrRunner kikimr; 
-    auto db = kikimr.GetTableClient(); 
-    auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+    TKikimrRunner kikimr;
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
     auto result = session.PrepareDataQuery(Q_(R"(
-        SELECT 0; SELECT 1; SELECT 2; SELECT 3; SELECT 4; 
-        SELECT 5; SELECT 6; SELECT 7; SELECT 8; SELECT 9; 
+        SELECT 0; SELECT 1; SELECT 2; SELECT 3; SELECT 4;
+        SELECT 5; SELECT 6; SELECT 7; SELECT 8; SELECT 9;
     )"), TPrepareDataQuerySettings().ReportCostInfo(true)).ExtractValueSync();
-    result.GetIssues().PrintTo(Cerr); 
- 
-    auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER); 
-    UNIT_ASSERT(ru != result.GetResponseMetadata().end()); 
-    UNIT_ASSERT(atoi(ru->second.c_str()) > 1); 
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-    UNIT_ASSERT(result.GetConsumedRu() > 1); 
-} 
- 
+    result.GetIssues().PrintTo(Cerr);
+
+    auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);
+    UNIT_ASSERT(ru != result.GetResponseMetadata().end());
+    UNIT_ASSERT(atoi(ru->second.c_str()) > 1);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+    UNIT_ASSERT(result.GetConsumedRu() > 1);
+}
+
 } // suite
 
 } // namespace NKqp

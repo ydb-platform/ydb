@@ -18,7 +18,7 @@ namespace NMonitoring {
 
 namespace NYdb {
 
-class TDbDriverState; 
+class TDbDriverState;
 struct TListEndpointsResult;
 
 class IInternalClient {

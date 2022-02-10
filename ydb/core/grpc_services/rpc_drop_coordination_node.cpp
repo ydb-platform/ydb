@@ -26,12 +26,12 @@ public:
 
 private:
     void SendProposeRequest(const TActorContext &ctx) {
-        const auto req = GetProtoRequest(); 
+        const auto req = GetProtoRequest();
         std::pair<TString, TString> pathPair;
         try {
             pathPair = SplitPath(req->path());
-        } catch (const std::exception& ex) { 
-            Request_->RaiseIssue(NYql::ExceptionToIssue(ex)); 
+        } catch (const std::exception& ex) {
+            Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return ReplyWithResult(StatusIds::BAD_REQUEST, ctx);
         }
 
@@ -49,7 +49,7 @@ private:
     }
 
     void ReplyWithResult(StatusIds::StatusCode status, const TActorContext &ctx) {
-        Request_->ReplyWithYdbStatus(status); 
+        Request_->ReplyWithYdbStatus(status);
         Die(ctx);
     }
 };

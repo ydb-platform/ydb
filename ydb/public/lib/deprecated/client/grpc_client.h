@@ -10,13 +10,13 @@ namespace NKikimr {
 
         using TGRpcClientConfig = NGrpc::TGRpcClientConfig;
 
-        using TGrpcError = std::pair<TString, int>; 
- 
+        using TGrpcError = std::pair<TString, int>;
+
         template<typename T>
         using TSimpleCallback = std::function<void (const T&)>;
 
         template<typename T>
-        using TCallback = std::function<void (const TGrpcError*, const T&)>; 
+        using TCallback = std::function<void (const TGrpcError*, const T&)>;
 
         using TResponseCallback = TCallback<NKikimrClient::TResponse>;
         using TJSONCallback = TCallback<NKikimrClient::TJSON>;
@@ -26,7 +26,7 @@ namespace NKikimr {
         using TS3ListingResponseCallback = TCallback<NKikimrClient::TS3ListingResponse>;
         using TConsoleResponseCallback = TCallback<NKikimrClient::TConsoleResponse>;
 
-        using TFinishCallback = std::function<void (const TGrpcError*)>; 
+        using TFinishCallback = std::function<void (const TGrpcError*)>;
 
         class TGRpcClient {
             TGRpcClientConfig Config;

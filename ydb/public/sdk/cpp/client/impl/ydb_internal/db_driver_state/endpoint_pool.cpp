@@ -9,19 +9,19 @@ TEndpointPool::TEndpointPool(TListEndpointsResultProvider&& provider, const IInt
 {}
 
 TEndpointPool::~TEndpointPool() {
-    try { 
-        NThreading::TFuture<TEndpointUpdateResult> future; 
-        { 
-            std::lock_guard guard(Mutex_); 
-            if (DiscoveryPromise_.Initialized()) { 
-               future = DiscoveryPromise_.GetFuture(); 
-            } 
+    try {
+        NThreading::TFuture<TEndpointUpdateResult> future;
+        {
+            std::lock_guard guard(Mutex_);
+            if (DiscoveryPromise_.Initialized()) {
+               future = DiscoveryPromise_.GetFuture();
+            }
         }
-        if (future.Initialized()) { 
-            future.Wait(); 
-        } 
-    } catch (...) { 
-        Y_FAIL("Unexpected exception from endpoint pool dtor"); 
+        if (future.Initialized()) {
+            future.Wait();
+        }
+    } catch (...) {
+        Y_FAIL("Unexpected exception from endpoint pool dtor");
     }
 }
 
@@ -40,7 +40,7 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
         TListEndpointsResult result = future.GetValue();
         std::vector<TStringType> removed;
         if (result.DiscoveryStatus.Status == EStatus::SUCCESS) {
-            std::vector<TEndpointRecord> records; 
+            std::vector<TEndpointRecord> records;
             // Is used to convert float to integer load factor
             // same integer values will be selected randomly.
             const float multiplicator = 10.0;

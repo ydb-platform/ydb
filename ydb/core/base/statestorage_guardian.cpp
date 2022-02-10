@@ -381,7 +381,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
                 ReplicaGuardians[idx].second = TActorId();
             } else {
                 if (Info)
-                    updatedReplicaGuardians.emplace_back(replica, RegisterWithSameMailbox(new TReplicaGuardian(Info.Get(), replica, SelfId()))); 
+                    updatedReplicaGuardians.emplace_back(replica, RegisterWithSameMailbox(new TReplicaGuardian(Info.Get(), replica, SelfId())));
                 else
                     updatedReplicaGuardians.emplace_back(replica, RegisterWithSameMailbox(new TFollowerGuardian(FollowerInfo.Get(), replica, SelfId())));
             }

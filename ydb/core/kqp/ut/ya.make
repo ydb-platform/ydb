@@ -26,8 +26,8 @@ SRCS(
     kqp_explain_ut.cpp
     kqp_flip_join_ut.cpp
     kqp_index_lookup_join_ut.cpp
-    kqp_indexes_ut.cpp 
-    kqp_indexes_multishard_ut.cpp 
+    kqp_indexes_ut.cpp
+    kqp_indexes_multishard_ut.cpp
     kqp_join_ut.cpp
     kqp_limits_ut.cpp
     kqp_locks_ut.cpp
@@ -70,7 +70,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_proto
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 REQUIREMENTS(ram:12)
 

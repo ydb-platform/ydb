@@ -115,26 +115,26 @@ namespace NKikimr {
         TActiveActors activeActors;
 
         // actor for LogCutter Notifier
-        auto logNotifierAid = ctx.RegisterWithSameMailbox(CreateHullLogCutterNotifier(hullLogCtx->VCtx, logCutterId, HullDs)); 
+        auto logNotifierAid = ctx.RegisterWithSameMailbox(CreateHullLogCutterNotifier(hullLogCtx->VCtx, logCutterId, HullDs));
         activeActors.Insert(logNotifierAid);
         Fields->SetLogNotifierActorId(logNotifierAid);
         // actor for LogoBlobs DB
-        HullDs->LogoBlobs->LIActor = ctx.RegisterWithSameMailbox(CreateLogoBlobsActor(config, HullDs, hullLogCtx, loggerId, 
+        HullDs->LogoBlobs->LIActor = ctx.RegisterWithSameMailbox(CreateLogoBlobsActor(config, HullDs, hullLogCtx, loggerId,
             Fields->LogoBlobsRunTimeCtx, syncLogFirstLsnToKeep));
         activeActors.Insert(HullDs->LogoBlobs->LIActor);
         // actor for Blocks DB
-        HullDs->Blocks->LIActor = ctx.RegisterWithSameMailbox(CreateBlocksActor(config, HullDs, hullLogCtx, loggerId, 
+        HullDs->Blocks->LIActor = ctx.RegisterWithSameMailbox(CreateBlocksActor(config, HullDs, hullLogCtx, loggerId,
             Fields->BlocksRunTimeCtx, syncLogFirstLsnToKeep));
         activeActors.Insert(HullDs->Blocks->LIActor);
         // actor for Barriers DB
-        HullDs->Barriers->LIActor = ctx.RegisterWithSameMailbox(CreateBarriersActor(config, HullDs, hullLogCtx, loggerId, 
+        HullDs->Barriers->LIActor = ctx.RegisterWithSameMailbox(CreateBarriersActor(config, HullDs, hullLogCtx, loggerId,
             Fields->BarriersRunTimeCtx, syncLogFirstLsnToKeep));
         activeActors.Insert(HullDs->Barriers->LIActor);
 
         // create delayed huge blob deleter actor only for LogoBlobs level index as huge blobs are only possible
         // for that data
         auto& deleterInfo = HullDs->LogoBlobs->DelayedHugeBlobDeleterInfo;
-        auto hugeBlobDeleterAid = ctx.RegisterWithSameMailbox(CreateDelayedHugeBlobDeleterActor(hullLogCtx->HugeKeeperId, 
+        auto hugeBlobDeleterAid = ctx.RegisterWithSameMailbox(CreateDelayedHugeBlobDeleterActor(hullLogCtx->HugeKeeperId,
             deleterInfo));
         deleterInfo->SetActorId(hugeBlobDeleterAid);
         activeActors.Insert(hugeBlobDeleterAid);

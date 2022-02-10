@@ -163,11 +163,11 @@ TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString
     return pathPromise.GetFuture();
 }
 
-TString IKikimrGateway::CreateIndexTablePath(const TString& tableName, const TString& indexName) { 
-    return tableName + "/" + indexName + "/indexImplTable"; 
-} 
- 
- 
+TString IKikimrGateway::CreateIndexTablePath(const TString& tableName, const TString& indexName) {
+    return tableName + "/" + indexName + "/indexImplTable";
+}
+
+
 void IKikimrGateway::BuildIndexMetadata(TTableMetadataResult& loadTableMetadataResult) {
     auto tableMetadata = loadTableMetadataResult.Metadata;
     YQL_ENSURE(tableMetadata);
@@ -176,25 +176,25 @@ void IKikimrGateway::BuildIndexMetadata(TTableMetadataResult& loadTableMetadataR
         return;
     }
 
-    const auto& cluster = tableMetadata->Cluster; 
-    const auto& tableName = tableMetadata->Name; 
-    const size_t indexesCount = tableMetadata->Indexes.size(); 
- 
+    const auto& cluster = tableMetadata->Cluster;
+    const auto& tableName = tableMetadata->Name;
+    const size_t indexesCount = tableMetadata->Indexes.size();
+
     NKikimr::NTableIndex::TTableColumns tableColumns;
     tableColumns.Columns.reserve(tableMetadata->Columns.size());
     for (auto& column: tableMetadata->Columns) {
         tableColumns.Columns.insert_noresize(column.first);
     }
     tableColumns.Keys = tableMetadata->KeyColumnNames;
- 
+
     tableMetadata->SecondaryGlobalIndexMetadata.resize(indexesCount);
-    for (size_t i = 0; i < indexesCount; i++) { 
-        const auto& index = tableMetadata->Indexes[i]; 
+    for (size_t i = 0; i < indexesCount; i++) {
+        const auto& index = tableMetadata->Indexes[i];
         auto indexTablePath = CreateIndexTablePath(tableName, index.Name);
         NKikimr::NTableIndex::TTableColumns indexTableColumns = NKikimr::NTableIndex::CalcTableImplDescription(
-                    tableColumns, 
-                    NKikimr::NTableIndex::TIndexColumns{index.KeyColumns, {}}); 
- 
+                    tableColumns,
+                    NKikimr::NTableIndex::TIndexColumns{index.KeyColumns, {}});
+
         TKikimrTableMetadataPtr indexTableMetadata = new TKikimrTableMetadata(cluster, indexTablePath);
         indexTableMetadata->DoesExist = true;
         indexTableMetadata->KeyColumnNames = indexTableColumns.Keys;
@@ -203,9 +203,9 @@ void IKikimrGateway::BuildIndexMetadata(TTableMetadataResult& loadTableMetadataR
         }
 
         tableMetadata->SecondaryGlobalIndexMetadata[i] = indexTableMetadata;
-    } 
-} 
- 
+    }
+}
+
 bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error) {
     using namespace NNodes;
 
@@ -238,119 +238,119 @@ bool TTableSettings::IsSet() const {
         || ReadReplicasSettings || TtlSettings;
 }
 
-EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) { 
-    switch (ydbStatus) { 
-        case Ydb::StatusIds::SUCCESS: 
-            return TIssuesIds::SUCCESS; 
-        case Ydb::StatusIds::BAD_REQUEST: 
-            return TIssuesIds::KIKIMR_BAD_REQUEST; 
-        case Ydb::StatusIds::UNAUTHORIZED: 
-            return TIssuesIds::KIKIMR_ACCESS_DENIED; 
-        case Ydb::StatusIds::INTERNAL_ERROR: 
-            return TIssuesIds::DEFAULT_ERROR; 
-        case Ydb::StatusIds::ABORTED: 
-            return TIssuesIds::KIKIMR_OPERATION_ABORTED; 
-        case Ydb::StatusIds::UNAVAILABLE: 
-            return TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE; 
-        case Ydb::StatusIds::OVERLOADED: 
-            return TIssuesIds::KIKIMR_OVERLOADED; 
-        case Ydb::StatusIds::SCHEME_ERROR: 
-            return TIssuesIds::KIKIMR_SCHEME_ERROR; 
-        case Ydb::StatusIds::GENERIC_ERROR: 
-            return TIssuesIds::DEFAULT_ERROR; 
+EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
+    switch (ydbStatus) {
+        case Ydb::StatusIds::SUCCESS:
+            return TIssuesIds::SUCCESS;
+        case Ydb::StatusIds::BAD_REQUEST:
+            return TIssuesIds::KIKIMR_BAD_REQUEST;
+        case Ydb::StatusIds::UNAUTHORIZED:
+            return TIssuesIds::KIKIMR_ACCESS_DENIED;
+        case Ydb::StatusIds::INTERNAL_ERROR:
+            return TIssuesIds::DEFAULT_ERROR;
+        case Ydb::StatusIds::ABORTED:
+            return TIssuesIds::KIKIMR_OPERATION_ABORTED;
+        case Ydb::StatusIds::UNAVAILABLE:
+            return TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE;
+        case Ydb::StatusIds::OVERLOADED:
+            return TIssuesIds::KIKIMR_OVERLOADED;
+        case Ydb::StatusIds::SCHEME_ERROR:
+            return TIssuesIds::KIKIMR_SCHEME_ERROR;
+        case Ydb::StatusIds::GENERIC_ERROR:
+            return TIssuesIds::DEFAULT_ERROR;
         case Ydb::StatusIds::TIMEOUT:
             return TIssuesIds::KIKIMR_TIMEOUT;
-        case Ydb::StatusIds::BAD_SESSION: 
-            return TIssuesIds::KIKIMR_TOO_MANY_TRANSACTIONS; 
-        case Ydb::StatusIds::PRECONDITION_FAILED: 
-            return TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION; 
+        case Ydb::StatusIds::BAD_SESSION:
+            return TIssuesIds::KIKIMR_TOO_MANY_TRANSACTIONS;
+        case Ydb::StatusIds::PRECONDITION_FAILED:
+            return TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION;
         case Ydb::StatusIds::CANCELLED:
             return TIssuesIds::KIKIMR_OPERATION_CANCELLED;
         case Ydb::StatusIds::UNSUPPORTED:
             return TIssuesIds::KIKIMR_UNSUPPORTED;
-        default: 
-            return TIssuesIds::DEFAULT_ERROR; 
-    } 
-} 
- 
+        default:
+            return TIssuesIds::DEFAULT_ERROR;
+    }
+}
+
 void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull) {
-    NUdf::EDataSlot dataSlot = NUdf::GetDataSlot(typeName); 
-    if (dataSlot == NUdf::EDataSlot::Decimal) { 
+    NUdf::EDataSlot dataSlot = NUdf::GetDataSlot(typeName);
+    if (dataSlot == NUdf::EDataSlot::Decimal) {
         auto decimal = notNull ? protoType.mutable_decimal_type() :
             protoType.mutable_optional_type()->mutable_item()->mutable_decimal_type();
-        // We have no params right now 
-        // TODO: Fix decimal params support for kikimr 
-        decimal->set_precision(22); 
-        decimal->set_scale(9); 
-    } else { 
+        // We have no params right now
+        // TODO: Fix decimal params support for kikimr
+        decimal->set_precision(22);
+        decimal->set_scale(9);
+    } else {
         auto& primitive = notNull ? protoType : *protoType.mutable_optional_type()->mutable_item();
-        auto id = NUdf::GetDataTypeInfo(dataSlot).TypeId; 
+        auto id = NUdf::GetDataTypeInfo(dataSlot).TypeId;
         primitive.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
-    } 
-} 
- 
-bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto, 
-    Ydb::StatusIds::StatusCode& code, TString& error) 
-{ 
-    TVector<TString> azs = StringSplitter(to_lower(settings)).Split(',').SkipEmpty(); 
-    bool wrongFormat = false; 
-    if (azs) { 
-        for (const auto& az : azs) { 
-            TVector<TString> azSettings = StringSplitter(az).Split(':').SkipEmpty(); 
-            if (azSettings.size() != 2) { 
-                wrongFormat = true; 
-                break; 
-            } 
-            TVector<TString> valueString = StringSplitter(azSettings[1]).Split(' ').SkipEmpty(); 
-            TVector<TString> nameString = StringSplitter(azSettings[0]).Split(' ').SkipEmpty(); 
-            ui64 value; 
-            if (valueString.size() != 1 || !TryFromString<ui64>(valueString[0], value) || nameString.size() != 1) { 
-                wrongFormat = true; 
-                break; 
-            } 
-            if ("per_az" == nameString[0]) { 
-                if (azs.size() != 1) { 
-                    wrongFormat = true; 
-                    break; 
-                } 
-                proto.set_per_az_read_replicas_count(value); 
-            } else if ("any_az" == nameString[0]) { 
-                if (azs.size() != 1) { 
-                    wrongFormat = true; 
-                    break; 
-                } 
-                proto.set_any_az_read_replicas_count(value); 
-            } else { 
-                code = Ydb::StatusIds::UNSUPPORTED; 
-                error = "Specifying read replicas count for each AZ in cluster is not supported yet"; 
-                return false; 
-                //auto& clusterReplicasSettings = *proto.mutable_cluster_replicas_settings(); 
-                //auto& azDesc = *clusterReplicasSettings.add_az_read_replicas_settings(); 
-                //azDesc.set_name(nameString[0]); 
-                //azDesc.set_read_replicas_count(value); 
-            } 
-        } 
-    } else { 
-        wrongFormat = true; 
-    } 
-    if (wrongFormat) { 
-        code = Ydb::StatusIds::BAD_REQUEST; 
-        error = TStringBuilder() << "Wrong format for read replicas settings '" << settings 
-            << "'. It should be one of: " 
-            << "1) 'PER_AZ:<read_replicas_count>' to set equal read replicas count for every AZ; " 
-            << "2) 'ANY_AZ:<read_replicas_count>' to set total read replicas count between all AZs; " 
-            << "3) '<az1_name>:<read_replicas_count1>, <az2_name>:<read_replicas_count2>, ...' " 
-            << "to specify read replicas count for each AZ in cluster."; 
-        return false; 
-    } 
-    return true; 
-} 
- 
-void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto) { 
-    proto.mutable_date_type_column()->set_column_name(settings.ColumnName); 
-    proto.mutable_date_type_column()->set_expire_after_seconds(settings.ExpireAfter.Seconds()); 
-} 
- 
+    }
+}
+
+bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    TVector<TString> azs = StringSplitter(to_lower(settings)).Split(',').SkipEmpty();
+    bool wrongFormat = false;
+    if (azs) {
+        for (const auto& az : azs) {
+            TVector<TString> azSettings = StringSplitter(az).Split(':').SkipEmpty();
+            if (azSettings.size() != 2) {
+                wrongFormat = true;
+                break;
+            }
+            TVector<TString> valueString = StringSplitter(azSettings[1]).Split(' ').SkipEmpty();
+            TVector<TString> nameString = StringSplitter(azSettings[0]).Split(' ').SkipEmpty();
+            ui64 value;
+            if (valueString.size() != 1 || !TryFromString<ui64>(valueString[0], value) || nameString.size() != 1) {
+                wrongFormat = true;
+                break;
+            }
+            if ("per_az" == nameString[0]) {
+                if (azs.size() != 1) {
+                    wrongFormat = true;
+                    break;
+                }
+                proto.set_per_az_read_replicas_count(value);
+            } else if ("any_az" == nameString[0]) {
+                if (azs.size() != 1) {
+                    wrongFormat = true;
+                    break;
+                }
+                proto.set_any_az_read_replicas_count(value);
+            } else {
+                code = Ydb::StatusIds::UNSUPPORTED;
+                error = "Specifying read replicas count for each AZ in cluster is not supported yet";
+                return false;
+                //auto& clusterReplicasSettings = *proto.mutable_cluster_replicas_settings();
+                //auto& azDesc = *clusterReplicasSettings.add_az_read_replicas_settings();
+                //azDesc.set_name(nameString[0]);
+                //azDesc.set_read_replicas_count(value);
+            }
+        }
+    } else {
+        wrongFormat = true;
+    }
+    if (wrongFormat) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = TStringBuilder() << "Wrong format for read replicas settings '" << settings
+            << "'. It should be one of: "
+            << "1) 'PER_AZ:<read_replicas_count>' to set equal read replicas count for every AZ; "
+            << "2) 'ANY_AZ:<read_replicas_count>' to set total read replicas count between all AZs; "
+            << "3) '<az1_name>:<read_replicas_count1>, <az2_name>:<read_replicas_count2>, ...' "
+            << "to specify read replicas count for each AZ in cluster.";
+        return false;
+    }
+    return true;
+}
+
+void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto) {
+    proto.mutable_date_type_column()->set_column_name(settings.ColumnName);
+    proto.mutable_date_type_column()->set_expire_after_seconds(settings.ExpireAfter.Seconds());
+}
+
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value) {
     if (!value) {
         return Ydb::FeatureFlag::STATUS_UNSPECIFIED;

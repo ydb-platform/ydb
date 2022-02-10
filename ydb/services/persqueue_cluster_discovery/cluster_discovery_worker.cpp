@@ -160,7 +160,7 @@ public:
     }
 
     void Process() {
-        auto* result = TEvDiscoverPQClustersRequest::AllocateResult<DiscoverClustersResult>(Request); 
+        auto* result = TEvDiscoverPQClustersRequest::AllocateResult<DiscoverClustersResult>(Request);
 
         auto statusCode = Ydb::StatusIds::INTERNAL_ERROR;
 

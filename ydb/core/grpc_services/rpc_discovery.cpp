@@ -318,8 +318,8 @@ public:
             entries.emplace_back(&xpair.second.Payload);
         Shuffle(entries.begin(), entries.end());
 
-        auto *result = TEvListEndpointsRequest::AllocateResult<Ydb::Discovery::ListEndpointsResult>(Request); 
-        result->mutable_endpoints()->Reserve(LookupResponse->InfoEntries.size()); 
+        auto *result = TEvListEndpointsRequest::AllocateResult<Ydb::Discovery::ListEndpointsResult>(Request);
+        result->mutable_endpoints()->Reserve(LookupResponse->InfoEntries.size());
 
         const TSet<TString> services(Request->GetProtoRequest()->Getservice().begin(), Request->GetProtoRequest()->Getservice().end());
         const bool sslServer = Request->SslServer();
@@ -398,11 +398,11 @@ public:
         if (nodeInfo && nodeInfo->Location.GetDataCenterId()) {
             const auto &location = nodeInfo->Location.GetDataCenterId();
             if (IsSafeLocationMarker(location))
-                result->set_self_location(location); 
+                result->set_self_location(location);
         }
 
 
-        Request->SendResult(*result, Ydb::StatusIds::SUCCESS); 
+        Request->SendResult(*result, Ydb::StatusIds::SUCCESS);
         PassAway();
     }
 
@@ -476,11 +476,11 @@ public:
     }
 };
 
-void TGRpcRequestProxy::Handle(TEvListEndpointsRequest::TPtr& ev, const TActorContext& ctx) { 
+void TGRpcRequestProxy::Handle(TEvListEndpointsRequest::TPtr& ev, const TActorContext& ctx) {
     if (!DiscoveryCacheActorID)
-        DiscoveryCacheActorID = ctx.Register(new NDiscoveryPrivate::TDiscoveryCache()); 
+        DiscoveryCacheActorID = ctx.Register(new NDiscoveryPrivate::TDiscoveryCache());
 
-    ctx.Register(new TListEndpointsRPC(ev, DiscoveryCacheActorID)); 
+    ctx.Register(new TListEndpointsRPC(ev, DiscoveryCacheActorID));
 }
 
 } // namespace NGRpcService

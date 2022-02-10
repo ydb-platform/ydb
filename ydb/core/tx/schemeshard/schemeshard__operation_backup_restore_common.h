@@ -154,7 +154,7 @@ public:
     static void CollectStats(TOperationId operationId, const TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
         const auto& evRecord = ev->Get()->Record;
 
-        if (!evRecord.HasOpResult() || !evRecord.GetOpResult().HasSuccess()) { 
+        if (!evRecord.HasOpResult() || !evRecord.GetOpResult().HasSuccess()) {
             return;
         }
 

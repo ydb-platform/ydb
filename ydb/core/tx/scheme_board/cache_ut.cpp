@@ -50,7 +50,7 @@ public:
     UNIT_TEST(CheckSystemViewAccess);
     UNIT_TEST(SystemView);
     UNIT_TEST(SysLocks);
-    UNIT_TEST(TableSchemaVersion); 
+    UNIT_TEST(TableSchemaVersion);
     UNIT_TEST(MigrationCommon);
     UNIT_TEST(MigrationCommit);
     UNIT_TEST(MigrationLostMessage);
@@ -69,7 +69,7 @@ public:
     void CheckSystemViewAccess();
     void SystemView();
     void SysLocks();
-    void TableSchemaVersion(); 
+    void TableSchemaVersion();
     void MigrationCommon();
     void MigrationCommit();
     void MigrationLostMessage();
@@ -336,36 +336,36 @@ void TCacheTest::SysLocks() {
     }
 }
 
-void TCacheTest::TableSchemaVersion() { 
-    ui64 txId = 100; 
-    TestCreateTable(*Context, ++txId, "/Root", R"( 
-        Name: "Table1" 
-        Columns { Name: "key" Type: "Uint32" } 
-        KeyColumnNames: [ "key" ] 
-        PartitionConfig { 
-            CompactionPolicy { 
-            } 
-        } 
+void TCacheTest::TableSchemaVersion() {
+    ui64 txId = 100;
+    TestCreateTable(*Context, ++txId, "/Root", R"(
+        Name: "Table1"
+        Columns { Name: "key" Type: "Uint32" }
+        KeyColumnNames: [ "key" ]
+        PartitionConfig {
+            CompactionPolicy {
+            }
+        }
     )", {NKikimrScheme::StatusAccepted});
- 
+
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
-    { 
+    {
         auto entry = TestNavigate("/Root/Table1", TNavigate::EStatus::Ok);
-        UNIT_ASSERT_VALUES_EQUAL(entry.TableId.SchemaVersion, 1); 
-    } 
- 
-    TestAlterTable(*Context, ++txId, "/Root", R"( 
-        Name: "Table1" 
-        Columns { Name: "added"  Type: "Uint64"} 
-    )"); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(entry.TableId.SchemaVersion, 1);
+    }
+
+    TestAlterTable(*Context, ++txId, "/Root", R"(
+        Name: "Table1"
+        Columns { Name: "added"  Type: "Uint64"}
+    )");
+
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
-    { 
+    {
         auto entry = TestNavigate("/Root/Table1", TNavigate::EStatus::Ok);
-        UNIT_ASSERT_VALUES_EQUAL(entry.TableId.SchemaVersion, 2); 
-    } 
-} 
- 
+        UNIT_ASSERT_VALUES_EQUAL(entry.TableId.SchemaVersion, 2);
+    }
+}
+
 TNavigate::TEntry TCacheTest::TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus,
     const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired)
 {
@@ -387,7 +387,7 @@ TNavigate::TEntry TCacheTest::TestNavigateImpl(THolder<TNavigate> request, TNavi
 
     const TNavigate::TEntry result = ev->Get()->Request->ResultSet[0];
     UNIT_ASSERT_VALUES_EQUAL(result.Status, expectedStatus);
-    return result; 
+    return result;
 }
 
 TNavigate::TEntry TCacheTest::TestNavigate(const TString& path, TNavigate::EStatus expectedStatus,

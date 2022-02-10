@@ -1,27 +1,27 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_params)
- 
-OWNER( 
-    dcherednik 
-    g:kikimr 
-) 
- 
-IF (SANITIZER_TYPE) 
-    TIMEOUT(1200) 
-    SIZE(LARGE) 
+
+OWNER(
+    dcherednik
+    g:kikimr
+)
+
+IF (SANITIZER_TYPE)
+    TIMEOUT(1200)
+    SIZE(LARGE)
     TAG(ya:fat)
-ELSE() 
-    TIMEOUT(600) 
-    SIZE(MEDIUM) 
-ENDIF() 
- 
-FORK_SUBTESTS() 
- 
-PEERDIR( 
+ELSE()
+    TIMEOUT(600)
+    SIZE(MEDIUM)
+ENDIF()
+
+FORK_SUBTESTS()
+
+PEERDIR(
     ydb/public/lib/yson_value
-) 
- 
-SRCS( 
+)
+
+SRCS(
     params_ut.cpp
-) 
- 
-END() 
+)
+
+END()

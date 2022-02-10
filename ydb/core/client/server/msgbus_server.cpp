@@ -145,7 +145,7 @@ public:
 
     void ForgetRequest() {
         if (RequestContext) {
-            RequestContext->ReplyError("request wasn't processed properly"); 
+            RequestContext->ReplyError("request wasn't processed properly");
             RequestContext = nullptr;
         }
     }
@@ -181,7 +181,7 @@ public:
             default:
                 Y_FAIL("unexpected response type %" PRIu32, type);
         }
-        RequestContext = nullptr; 
+        RequestContext = nullptr;
     }
 
     void SendReplyMove(NBus::TBusMessageAutoPtr response) override {
@@ -311,14 +311,14 @@ public:
         Y_VERIFY(Context);
         Context->SendReply(resp);
 
-        auto context = std::move(Context); 
+        auto context = std::move(Context);
     }
 
     void SendReplyMove(NBus::TBusMessageAutoPtr resp) override {
         Y_VERIFY(Context);
         Context->SendReplyMove(resp);
 
-        auto context = std::move(Context); 
+        auto context = std::move(Context);
     }
 
     ui64 GetTotalTimeout() const override {

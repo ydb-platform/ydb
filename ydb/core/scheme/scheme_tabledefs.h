@@ -15,8 +15,8 @@
 
 namespace NKikimr {
 
-using TSchemaVersion = ui64; 
- 
+using TSchemaVersion = ui64;
+
 // ident for table, must be unique in selected scope
 // for global transactions ownerid is tabletid of owning schemeshard and tableid is counter designated by schemeshard
 // SysViewInfo is not empty for system views attached to corresponding table
@@ -24,7 +24,7 @@ using TSchemaVersion = ui64;
 struct TTableId {
     TPathId PathId;
     TString SysViewInfo;
-    TSchemaVersion SchemaVersion = 0; 
+    TSchemaVersion SchemaVersion = 0;
 
     TTableId() = default;
 
@@ -39,10 +39,10 @@ struct TTableId {
         : TTableId(ownerId, tableId, sysViewInfo, 0)
     {}
 
-    TTableId(ui64 ownerId, ui64 tableId, ui64 schemaVersion) 
+    TTableId(ui64 ownerId, ui64 tableId, ui64 schemaVersion)
         : TTableId(ownerId, tableId, TString(), schemaVersion)
-    {} 
- 
+    {}
+
     TTableId(ui64 ownerId, ui64 tableId)
         : TTableId(ownerId, tableId, TString(), 0)
     {}
@@ -68,7 +68,7 @@ struct TTableId {
         return bool(PathId);
     }
 
-    bool HasSamePath(const TTableId &x) const noexcept { 
+    bool HasSamePath(const TTableId &x) const noexcept {
         return PathId == x.PathId && SysViewInfo == x.SysViewInfo;
     }
 
@@ -96,7 +96,7 @@ struct TTableId {
         return hash;
     }
 
-    ui64 PathHash() const noexcept { 
+    ui64 PathHash() const noexcept {
         auto hash = PathId.Hash();
         if (SysViewInfo) {
             hash = CombineHashes(hash, THash<TString>()(SysViewInfo));
@@ -107,37 +107,37 @@ struct TTableId {
 };
 
 struct TIndexId {
-    TPathId PathId; 
-    TSchemaVersion SchemaVersion = 0; 
- 
-    TIndexId(const TPathId& pathId, TSchemaVersion schemaVersion) 
-        : PathId(pathId) 
-        , SchemaVersion(schemaVersion) 
-    {} 
- 
-    TIndexId(const TOwnerId ownerId, const TLocalPathId localPathId, TSchemaVersion schemaVersion) 
-        : PathId(ownerId, localPathId) 
-        , SchemaVersion(schemaVersion) 
-    {} 
-}; 
- 
-struct TTablePathHashFn { 
-    ui64 operator()(const NKikimr::TTableId &x) const noexcept { 
-        return x.PathHash(); 
-    } 
-}; 
- 
-struct TTablePathEqualFn { 
-    bool operator()(const NKikimr::TTableId &x, const NKikimr::TTableId &y) const noexcept { 
-        return x.HasSamePath(y); 
-    } 
-}; 
- 
-template <typename T> 
-using TTablePathHashMap = THashMap<TTableId, T, TTablePathHashFn, TTablePathEqualFn>; 
- 
-using TTablePathHashSet = THashSet<TTableId, TTablePathHashFn, TTablePathEqualFn>; 
- 
+    TPathId PathId;
+    TSchemaVersion SchemaVersion = 0;
+
+    TIndexId(const TPathId& pathId, TSchemaVersion schemaVersion)
+        : PathId(pathId)
+        , SchemaVersion(schemaVersion)
+    {}
+
+    TIndexId(const TOwnerId ownerId, const TLocalPathId localPathId, TSchemaVersion schemaVersion)
+        : PathId(ownerId, localPathId)
+        , SchemaVersion(schemaVersion)
+    {}
+};
+
+struct TTablePathHashFn {
+    ui64 operator()(const NKikimr::TTableId &x) const noexcept {
+        return x.PathHash();
+    }
+};
+
+struct TTablePathEqualFn {
+    bool operator()(const NKikimr::TTableId &x, const NKikimr::TTableId &y) const noexcept {
+        return x.HasSamePath(y);
+    }
+};
+
+template <typename T>
+using TTablePathHashMap = THashMap<TTableId, T, TTablePathHashFn, TTablePathEqualFn>;
+
+using TTablePathHashSet = THashSet<TTableId, TTablePathHashFn, TTablePathEqualFn>;
+
 // defines key range as low and high borders (possibly partial - w/o defined key values on tail)
 // missing values interpreted as infinity and mean "greater then any key with set prefix"
 // column order must match table key order
@@ -738,8 +738,8 @@ inline void Out<NKikimr::TTableId>(IOutputStream& o, const NKikimr::TTableId& x)
     }
     o << ']';
 }
- 
-template<> 
-inline void Out<NKikimr::TIndexId>(IOutputStream& o, const NKikimr::TIndexId& x) { 
-    o << '[' << x.PathId.OwnerId << ':' << x.PathId.LocalPathId << ':' << x.SchemaVersion << ']'; 
-} 
+
+template<>
+inline void Out<NKikimr::TIndexId>(IOutputStream& o, const NKikimr::TIndexId& x) {
+    o << '[' << x.PathId.OwnerId << ':' << x.PathId.LocalPathId << ':' << x.SchemaVersion << ']';
+}

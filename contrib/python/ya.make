@@ -82,7 +82,7 @@ RECURSE(
     asyncwhois
     atomicwrites
     atpublic
-    AttrDict 
+    AttrDict
     attrs
     Authlib
     autobahn
@@ -578,7 +578,7 @@ RECURSE(
     kubernetes
     langcodes
     lark-parser
-    lazy 
+    lazy
     lazy-object-proxy
     lcov_cobertura
     lcov_cobertura/bin

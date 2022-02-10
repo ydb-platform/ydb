@@ -1,6 +1,6 @@
 OWNER(g:kikimr)
-
-RECURSE(
-    surg
-    perf
-)
+ 
+RECURSE( 
+    surg 
+    perf 
+) 

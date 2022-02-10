@@ -33,13 +33,13 @@ bool TReadHTTPReplyProtocol::CatchReadDataComplete(
         /* Check if there no null char in data read from a socket */
         if (strlen(Buf.data()) != Filled) {
             /* got garbage from the socket */
-            CatchReadDataError("null char in HTTP reply");
+            CatchReadDataError("null char in HTTP reply"); 
             return true;
         }
 
         /* Check maximum size limit */
         if (Filled >= HTTPReplySizeLimit) {
-            CatchReadDataError("HTTP reply is too large");
+            CatchReadDataError("HTTP reply is too large"); 
             return true;
         }
 
@@ -59,9 +59,9 @@ bool TReadHTTPReplyProtocol::CatchReadDataComplete(
 }
 
 
-void TReadHTTPReplyProtocol::CatchReadDataClosed() noexcept
+void TReadHTTPReplyProtocol::CatchReadDataClosed() noexcept 
 {
-    CatchReadDataError("Socket closed prematurely");
+    CatchReadDataError("Socket closed prematurely"); 
 }
 
 }

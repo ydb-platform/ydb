@@ -10,7 +10,7 @@
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 
 namespace NKikimr {
-namespace NMiniKQL {
+namespace NMiniKQL { 
 
 struct TEngineHostCounters {
     ui64 NSelectRow = 0;
@@ -89,10 +89,10 @@ struct TEngineHostSettings {
     {}
 };
 
-class TEngineHost : public IEngineFlatHost {
+class TEngineHost : public IEngineFlatHost { 
 public:
-    using TScheme = NTable::TScheme;
-
+    using TScheme = NTable::TScheme; 
+ 
     explicit TEngineHost(NTable::TDatabase& db, TEngineHostCounters& counters,
         const TEngineHostSettings& settings = TEngineHostSettings());
     ui64 GetShardId() const override;
@@ -104,8 +104,8 @@ public:
     void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) override;
 
     NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
-        TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,
-        const THolderFactory& holderFactory) override;
+        TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget, 
+        const THolderFactory& holderFactory) override; 
 
     NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range,
         TStructLiteral* columnIds, TListLiteral* skipNullKeys, TStructType* returnType,
@@ -133,10 +133,10 @@ protected:
     virtual ui64 LocalTableId(const TTableId& tableId) const;
     void ConvertKeys(const TScheme::TTableInfo* tableInfo, const TArrayRef<const TCell>& row,
         TSmallVec<TRawTypeValue>& key) const;
-    void DoCalculateReadSize(const TKeyDesc& key, NTable::TSizeEnv& env) const;
+    void DoCalculateReadSize(const TKeyDesc& key, NTable::TSizeEnv& env) const; 
 
 protected:
-    NTable::TDatabase& Db;
+    NTable::TDatabase& Db; 
     const TScheme& Scheme;
     const TEngineHostSettings Settings;
     TEngineHostCounters& Counters;

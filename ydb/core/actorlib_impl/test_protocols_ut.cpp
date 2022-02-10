@@ -142,8 +142,8 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
 
     Y_UNIT_TEST(TestResolveProtocol) {
         for (size_t i = 0; i < 10; ++i) {
-            TTestBasicRuntime runtime(2);
-            runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+            TTestBasicRuntime runtime(2); 
+            runtime.Initialize(NKikimr::TAppPrepare().Unwrap()); 
 
             auto tester = new TResolveTester;
             tester->Edge = runtime.AllocateEdgeActor(0);
@@ -231,8 +231,8 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         THttpServer server(&serverImpl, mainWorkers, failWorkers, options);
         UNIT_ASSERT(server.Start());
 
-        TTestBasicRuntime runtime(2);
-        runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+        TTestBasicRuntime runtime(2); 
+        runtime.Initialize(NKikimr::TAppPrepare().Unwrap()); 
 
         auto tester = new TConnectTester;
         tester->Port = port;
@@ -309,16 +309,16 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
             SendData(this, ctx, Socket.Get(), request, strlen(request));
         }
 
-        void CatchSendDataError(TString error) noexcept override
+        void CatchSendDataError(TString error) noexcept override 
         {
             Error = std::move(error);
-            Send(Edge, new TEvents::TEvWakeup);
+            Send(Edge, new TEvents::TEvWakeup); 
         }
 
         void CatchReadDataError(TString error) noexcept override
         {
             Error = std::move(error);
-            Send(Edge, new TEvents::TEvWakeup);
+            Send(Edge, new TEvents::TEvWakeup); 
         }
 
         void CatchSendDataComplete(const TActorContext& ctx) noexcept override {
@@ -360,8 +360,8 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         THttpServer server(&serverImpl, mainWorkers, failWorkers, options);
         UNIT_ASSERT(server.Start());
 
-        TTestBasicRuntime runtime(2);
-        runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+        TTestBasicRuntime runtime(2); 
+        runtime.Initialize(NKikimr::TAppPrepare().Unwrap()); 
 
         auto tester = new THTTPTester;
         tester->Edge = runtime.AllocateEdgeActor(0);
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
             HTTPWriteContent(this, ctx, msg->Data, msg->Len,msg->Last);
         }
 
-        void CatchHTTPRequestError(TString error) noexcept override
+        void CatchHTTPRequestError(TString error) noexcept override 
         {
             Error = std::move(error);
             exit(1);
@@ -666,7 +666,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
             Send(Edge, msg);
         }
 
-        void CatchHTTPConnectionClosed() noexcept override {
+        void CatchHTTPConnectionClosed() noexcept override { 
             Ctest << "Connection closed prematurely" << Endl;
             exit(1);
         }
@@ -695,8 +695,8 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         THttpServer server(&serverImpl, mainWorkers, failWorkers, options);
         UNIT_ASSERT(server.Start());
 
-        TTestBasicRuntime runtime(2);
-        runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+        TTestBasicRuntime runtime(2); 
+        runtime.Initialize(NKikimr::TAppPrepare().Unwrap()); 
 
         auto tester = new THTTPRequestTester;
         tester->Edge = runtime.AllocateEdgeActor(0);

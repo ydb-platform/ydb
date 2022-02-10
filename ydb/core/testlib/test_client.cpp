@@ -157,7 +157,7 @@ namespace Tests {
         if (Settings->SupportsRedirect && IsServerRedirected())
             return;
 
-        TAppPrepare app; /* will cook TAppData */
+        TAppPrepare app; /* will cook TAppData */ 
         app.SetNetDataSourceUrl(Settings->NetClassifierConfig.GetUpdaterConfig().GetNetDataSourceUrl());
         app.SetEnableKqpSpilling(Settings->EnableKqpSpilling);
         app.SetKeepSnapshotTimeout(Settings->KeepSnapshotTimeout);
@@ -165,14 +165,14 @@ namespace Tests {
         app.SetChangesQueueBytesLimit(Settings->ChangesQueueBytesLimit);
         app.CompactionConfig = Settings->CompactionConfig;
         app.FeatureFlags = Settings->FeatureFlags;
-
+ 
         Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
 
         if (!Settings->UseRealThreads)
             Runtime->SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime, const TActorId&, const TActorId& actorId) {
                     runtime.EnableScheduleForActor(actorId);
                 });
-
+ 
         for (auto& it: Settings->NodeKeys)     {
             ui32 nodeId = it.first;
             const TString& keyValue = it.second;
@@ -189,23 +189,23 @@ namespace Tests {
         SetupLogging();
 
         SetupMessageBus(Settings->Port, Settings->TracePath);
-        SetupDomains(app);
-
+        SetupDomains(app); 
+ 
         app.AddHive(Settings->Domain, ChangeStateStorage(Hive, Settings->Domain));
-        app.SetFnRegistry(Settings->FrFactory);
+        app.SetFnRegistry(Settings->FrFactory); 
         app.SetFormatsFactory(Settings->Formats);
-
+ 
         if (Settings->Formats) {
             NKikHouse::RegisterFormat(*Settings->Formats);
         }
 
         NKikimr::SetupChannelProfiles(app, Settings->Domain);
-
+ 
         Runtime->SetupMonitoring();
-        Runtime->SetLogBackend(Settings->LogBackend);
-
+        Runtime->SetLogBackend(Settings->LogBackend); 
+ 
         SetupTabletServices(*Runtime, &app, (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode, Settings->CustomDiskParams);
-
+ 
         CreateBootstrapTablets();
         SetupStorage();
 
@@ -341,7 +341,7 @@ namespace Tests {
         );
     }
 
-    void TServer::SetupDomains(TAppPrepare &app) {
+    void TServer::SetupDomains(TAppPrepare &app) { 
         const ui32 domainId = Settings->Domain;
         ui64 planResolution = Settings->DomainPlanResolution;
         if (!planResolution) {
@@ -355,7 +355,7 @@ namespace Tests {
                                                                                   TVector<ui64>{TDomainsInfo::MakeTxMediatorIDFixed(domainId, 1)},
                                                                                   TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1)},
                                                                                   Settings->StoragePoolTypes);
-        app.AddDomain(domain.Release());
+        app.AddDomain(domain.Release()); 
     }
 
     void TServer::CreateBootstrapTablets() {
@@ -867,11 +867,11 @@ namespace Tests {
     }
 
     const NScheme::TTypeRegistry* TServer::GetTypeRegistry() {
-        return Runtime->GetAppData().TypeRegistry;
+        return Runtime->GetAppData().TypeRegistry; 
     }
 
     const NMiniKQL::IFunctionRegistry* TServer::GetFunctionRegistry() {
-        return Runtime->GetAppData().FunctionRegistry;
+        return Runtime->GetAppData().FunctionRegistry; 
     }
 
     TServer::~TServer() {
@@ -1407,8 +1407,8 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const TString& scheme, TDuration timeout) {
         NKikimrSchemeOp::TTableDescription table;
-        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &table);
-        UNIT_ASSERT(parseOk);
+        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &table); 
+        UNIT_ASSERT(parseOk); 
         return CreateTable(parent, table, timeout);
     }
 
@@ -1525,8 +1525,8 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::AlterTable(const TString& parent, const TString& alter) {
         NKikimrSchemeOp::TTableDescription table;
-        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(alter, &table);
-        UNIT_ASSERT(parseOk);
+        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(alter, &table); 
+        UNIT_ASSERT(parseOk); 
         return AlterTable(parent, table);
     }
 

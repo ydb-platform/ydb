@@ -9,12 +9,12 @@ namespace NKikimr {
     using namespace NActors;
 
 Y_UNIT_TEST_SUITE(TActorTest) {
-    TTestActorRuntime::TEgg MakeEgg()
-    {
-        return
+    TTestActorRuntime::TEgg MakeEgg() 
+    { 
+        return 
             { new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr };
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestHandleEvent) {
         class TMyActor : public TActor<TMyActor> {
         public:
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         };
 
         TTestActorRuntime runtime;
-        runtime.Initialize(MakeEgg());
+        runtime.Initialize(MakeEgg()); 
         TActorId sender = runtime.AllocateEdgeActor();
         TActorId actorId = runtime.Register(new TMyActor(sender));
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvWakeup));
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         };
 
         TTestActorRuntime runtime;
-        runtime.Initialize(MakeEgg());
+        runtime.Initialize(MakeEgg()); 
         TActorId sender = runtime.AllocateEdgeActor();
         TActorId actorId = runtime.Register(new TMyActor);
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPoisonPill));
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         };
 
         TTestActorRuntime runtime;
-        runtime.Initialize(MakeEgg());
+        runtime.Initialize(MakeEgg()); 
         TActorId sender = runtime.AllocateEdgeActor();
         auto actor = new TMyActor;
         TActorId actorId = runtime.Register(actor);
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         };
 
         TTestActorRuntime runtime;
-        runtime.Initialize(MakeEgg());
+        runtime.Initialize(MakeEgg()); 
         TActorId sender = runtime.AllocateEdgeActor();
         TActorId actorId = runtime.Register(new TMyActor);
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         };
 
         TTestActorRuntime runtime;
-        runtime.Initialize(MakeEgg());
+        runtime.Initialize(MakeEgg()); 
         runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
             Y_UNUSED(event);
             deadline = runtime.GetCurrentTime() + delay;
@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         };
 
         TTestActorRuntime runtime;
-        runtime.Initialize(MakeEgg());
+        runtime.Initialize(MakeEgg()); 
         TActorId sender = runtime.AllocateEdgeActor();
         auto actor = new TMyActor;
         TActorId actorId = runtime.Register(actor);
@@ -268,7 +268,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         };
 
         TTestActorRuntime runtime;
-        runtime.Initialize(MakeEgg());
+        runtime.Initialize(MakeEgg()); 
         try {
             TActorId sender = runtime.AllocateEdgeActor();
             auto myActor = new TMyActor(&syncMutex);
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         };
 
         TTestActorRuntime runtime;
-        runtime.Initialize(MakeEgg());
+        runtime.Initialize(MakeEgg()); 
         runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
             if (event->GetTypeRewrite() != TEvents::TSystem::Wakeup)
                 return true;
@@ -435,7 +435,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         };
 
         TTestActorRuntime runtime;
-        runtime.Initialize(MakeEgg());
+        runtime.Initialize(MakeEgg()); 
 
         try {
             TActorId sender = runtime.AllocateEdgeActor();
@@ -516,7 +516,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         };
 
         TTestActorRuntime runtime;
-        runtime.Initialize(MakeEgg());
+        runtime.Initialize(MakeEgg()); 
         TActorId sender = runtime.AllocateEdgeActor();
         TMyActor* myActor = new TMyActor;
         TActorId actorId = runtime.Register(myActor);
@@ -577,7 +577,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         };
 
         TTestActorRuntime runtime;
-        runtime.Initialize(MakeEgg());
+        runtime.Initialize(MakeEgg()); 
         TActorId edge1 = runtime.AllocateEdgeActor();
         TActorId edge2 = runtime.AllocateEdgeActor();
         TActorId edge3 = runtime.AllocateEdgeActor();

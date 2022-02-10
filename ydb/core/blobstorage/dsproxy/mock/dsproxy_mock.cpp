@@ -1,5 +1,5 @@
 #include "dsproxy_mock.h"
-#include "model.h"
+#include "model.h" 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/util/stlog.h>
@@ -15,43 +15,43 @@ namespace NKikimr {
 
             void Handle(TEvBlobStorage::TEvPut::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM01, "TEvPut", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, Model->Handle(ev->Get()),0, ev->Cookie);
+                Send(ev->Sender, Model->Handle(ev->Get()),0, ev->Cookie); 
             }
 
             void Handle(TEvBlobStorage::TEvGet::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM02, "TEvGet", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie);
+                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie); 
             }
 
             void Handle(TEvBlobStorage::TEvBlock::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM03, "TEvBlock", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie);
+                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie); 
             }
 
             void Handle(TEvBlobStorage::TEvDiscover::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM04, "TEvDiscover", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie);
+                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie); 
             }
 
             void Handle(TEvBlobStorage::TEvRange::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM05, "TEvRange", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie);
+                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie); 
             }
 
             void Handle(TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM06, "TEvCollectGarbage", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie);
+                Send(ev->Sender, Model->Handle(ev->Get()), 0, ev->Cookie); 
             }
 
             void Handle(TEvBlobStorage::TEvStatus::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM07, "TEvStatus", (Msg, ev->Get()->ToString()));
-                Send(ev->Sender, new TEvBlobStorage::TEvStatusResult(NKikimrProto::OK, Model->GetStorageStatusFlags()), 0,
+                Send(ev->Sender, new TEvBlobStorage::TEvStatusResult(NKikimrProto::OK, Model->GetStorageStatusFlags()), 0, 
                         ev->Cookie);
             }
 
             void HandlePoison(TEvents::TEvPoisonPill::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM08, "TEvPoisonPill");
-                Send(ev->Sender, new TEvents::TEvPoisonTaken);
+                Send(ev->Sender, new TEvents::TEvPoisonTaken); 
                 PassAway();
             }
 

@@ -90,12 +90,12 @@ enum EServiceKikimr {
     TABLET_FLATEX = 315;
     TABLET_FLATBOOT = 316;
     TABLET_AGGREGATOR = 317;
-    TABLET_OPS_HOST = 666;
-    OPS_COMPACT = 667;
-    OPS_BACKUP = 668;
-    SAUSAGE_BIO = 669;
-    FAKE_ENV = 670;
-
+    TABLET_OPS_HOST = 666; 
+    OPS_COMPACT = 667; 
+    OPS_BACKUP = 668; 
+    SAUSAGE_BIO = 669; 
+    FAKE_ENV = 670; 
+ 
     // PIPE section
     PIPE_CLIENT = 320;
     PIPE_SERVER = 321;

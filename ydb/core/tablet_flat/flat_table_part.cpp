@@ -1,18 +1,18 @@
-#include "flat_page_label.h"
-#include "flat_part_iface.h"
+#include "flat_page_label.h" 
+#include "flat_part_iface.h" 
 #include "flat_table_part.h"
 #include "util_basics.h"
-
+ 
 #include <ydb/core/util/pb.h>
 #include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/map.h>
 
 namespace NKikimr {
-namespace NTable {
+namespace NTable { 
 
-TPartScheme::TPartScheme(TArrayRef<const TColInfo> cols)
-{
+TPartScheme::TPartScheme(TArrayRef<const TColInfo> cols) 
+{ 
     ui32 maxGroup = 0;
     for (auto& col : cols) {
         maxGroup = Max(maxGroup, col.Group);
@@ -25,60 +25,60 @@ TPartScheme::TPartScheme(TArrayRef<const TColInfo> cols)
         Groups[col.Group].Columns.back().Pos = pos++;
     }
 
-    FillKeySlots();
+    FillKeySlots(); 
     FillHistoricSlots();
 }
 
 TIntrusiveConstPtr<TPartScheme> TPartScheme::Parse(TArrayRef<const char> raw, bool labeled)
-{
-    if (labeled) {
-        /* New styled scheme blob prepended with generic TLabel data */
-
-        auto got = NPage::THello().Read(raw, NPage::EPage::Schem2);
-
+{ 
+    if (labeled) { 
+        /* New styled scheme blob prepended with generic TLabel data */ 
+ 
+        auto got = NPage::THello().Read(raw, NPage::EPage::Schem2); 
+ 
         // Version 1 may have non-zero group columns
         Y_VERIFY(got.Version == 0 || got.Version == 1, "Unknown EPage::Schem2 version");
-
-        raw = got.Page;
-    }
-
-    TProtoBox<NProto::TPartScheme> proto(raw);
-
-    TMap<TTag, ui32> byTag;
-    TVector<TColInfo> cols;
-
-    for (size_t i = 0; i < proto.ColumnsSize(); i++) {
-        auto &one = proto.GetColumns(i);
-
-        cols.emplace_back();
-        cols.back().Tag = one.GetTag();
-        cols.back().TypeId = one.GetType();
-        cols.back().Pos = cols.size() - 1;
+ 
+        raw = got.Page; 
+    } 
+ 
+    TProtoBox<NProto::TPartScheme> proto(raw); 
+ 
+    TMap<TTag, ui32> byTag; 
+    TVector<TColInfo> cols; 
+ 
+    for (size_t i = 0; i < proto.ColumnsSize(); i++) { 
+        auto &one = proto.GetColumns(i); 
+ 
+        cols.emplace_back(); 
+        cols.back().Tag = one.GetTag(); 
+        cols.back().TypeId = one.GetType(); 
+        cols.back().Pos = cols.size() - 1; 
         cols.back().Group = one.GetGroup();
-
-        if (one.HasKey())
-            cols.back().Key = one.GetKey();
-
-        byTag[one.GetTag()] = cols.back().Pos;
-    }
-
-    /* Compatability with legacy schemes */
-    for (size_t pos = 0; pos < proto.KeyTagsSize(); pos++) {
-        auto it = byTag.find(proto.GetKeyTags(pos));
-
-        Y_VERIFY(it != byTag.end(), "Cannot find key tag plain scheme");
-
-        cols[it->second].Key = pos;
-    }
-
-    return new TPartScheme(cols);
+ 
+        if (one.HasKey()) 
+            cols.back().Key = one.GetKey(); 
+ 
+        byTag[one.GetTag()] = cols.back().Pos; 
+    } 
+ 
+    /* Compatability with legacy schemes */ 
+    for (size_t pos = 0; pos < proto.KeyTagsSize(); pos++) { 
+        auto it = byTag.find(proto.GetKeyTags(pos)); 
+ 
+        Y_VERIFY(it != byTag.end(), "Cannot find key tag plain scheme"); 
+ 
+        cols[it->second].Key = pos; 
+    } 
+ 
+    return new TPartScheme(cols); 
 }
 
-void TPartScheme::FillKeySlots()
-{
+void TPartScheme::FillKeySlots() 
+{ 
     for (auto& group : Groups) {
         InitGroup(group);
-
+ 
         for (const auto& col : group.Columns) {
             AllColumns.push_back(col);
         }
@@ -89,10 +89,10 @@ void TPartScheme::FillKeySlots()
     std::sort(AllColumns.begin(), AllColumns.end(), byPos);
 
     for (auto& col : AllColumns) {
-        Tag2DataInfo[col.Tag] = &col;
+        Tag2DataInfo[col.Tag] = &col; 
     }
 }
-
+ 
 void TPartScheme::FillHistoricSlots()
 {
     // Synthetic (rowid, step, txid) key used during history searches
@@ -131,7 +131,7 @@ void TPartScheme::FillHistoricSlots()
 
     // Remove incorrect key columns from history
     for (auto& col : HistoryColumns) {
-        if (col.IsKey()) {
+        if (col.IsKey()) { 
             col = { };
         }
     }
@@ -148,52 +148,52 @@ void TPartScheme::InitGroup(TGroupInfo& group)
             Y_VERIFY(col.Group == 0, "Key columns must be in the main column group");
 
             group.ColsKeyData.push_back(col);
-        }
-    }
-
+        } 
+    } 
+ 
     if (group.ColsKeyData) {
         auto byKey = NTable::TColInfo::TByKey();
-
+ 
         std::sort(group.ColsKeyData.begin(), group.ColsKeyData.end(), byKey);
-
+ 
         for (auto& col : group.ColsKeyData) {
             group.KeyTypes.push_back(col.TypeId);
         }
-
+ 
         group.ColsKeyIdx = group.ColsKeyData;
         group.IdxRecFixedSize = InitInfo(group.ColsKeyIdx, TPgSizeOf<TIndex::TItem>::Value);
     } else {
         group.IdxRecFixedSize = 0;
     }
-}
-
+} 
+ 
 size_t TPartScheme::InitInfo(TVector<TColumn>& cols, TPgSize headerSize)
-{
+{ 
     size_t offset = 0;
-
-    for (auto &col: cols) {
-        const ui32 fixed = NScheme::GetFixedSize(col.TypeId);
-
-        col.Offset = offset;
-        col.IsFixed = fixed > 0;
-        col.FixedSize = fixed > 0 ? fixed : sizeof(NPage::TDataRef);
-
-        offset += col.FixedSize + headerSize;
-    }
-
-    return offset;
-}
-
+ 
+    for (auto &col: cols) { 
+        const ui32 fixed = NScheme::GetFixedSize(col.TypeId); 
+ 
+        col.Offset = offset; 
+        col.IsFixed = fixed > 0; 
+        col.FixedSize = fixed > 0 ? fixed : sizeof(NPage::TDataRef); 
+ 
+        offset += col.FixedSize + headerSize; 
+    } 
+ 
+    return offset; 
+} 
+ 
 TSharedData TPartScheme::Serialize() const
-{
-    NProto::TPartScheme proto;
-
+{ 
+    NProto::TPartScheme proto; 
+ 
     for (const auto& col : AllColumns) {
-        auto* pb = proto.AddColumns();
+        auto* pb = proto.AddColumns(); 
         pb->SetTag(col.Tag);
         pb->SetType(col.TypeId);
         pb->SetGroup(col.Group);
-
+ 
         if (col.IsKey()) {
             pb->SetKey(col.Key);
         }
@@ -201,7 +201,7 @@ TSharedData TPartScheme::Serialize() const
 
     TStringStream ss;
     proto.SerializeToArcadiaStream(&ss);
-
+ 
     return NPage::THello::Wrap(ss.Str(), EPage::Schem2, Groups.size() > 1 ? 1 : 0);
 }
 

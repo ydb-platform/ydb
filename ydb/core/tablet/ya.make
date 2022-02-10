@@ -50,7 +50,7 @@ SRCS(
     tablet_setup.h
     tablet_sys.h
     tablet_sys.cpp
-    bootstrapper.cpp
+    bootstrapper.cpp 
 )
 
 PEERDIR(

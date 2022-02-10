@@ -16,15 +16,15 @@ namespace NActors {
     }
 
     void IActor::Registered(TActorSystem* sys, const TActorId& owner) {
-        // fallback to legacy method, do not use it anymore
-        if (auto eh = AfterRegister(SelfId(), owner))
-            sys->Send(eh);
-    }
-
-    void IActor::Describe(IOutputStream &out) const noexcept {
-        SelfActorId.Out(out);
-    }
-
+        // fallback to legacy method, do not use it anymore 
+        if (auto eh = AfterRegister(SelfId(), owner)) 
+            sys->Send(eh); 
+    } 
+ 
+    void IActor::Describe(IOutputStream &out) const noexcept { 
+        SelfActorId.Out(out); 
+    } 
+ 
     bool IActor::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const noexcept {
         return SelfActorId.Send(recipient, ev, flags, cookie, std::move(traceId));
     }
@@ -123,7 +123,7 @@ namespace NActors {
         TlsActivationContext->ExecutorThread.Schedule(deadline, new IEventHandle(SelfActorId, TActorId(), ev), cookie);
     }
 
-    void IActor::Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie) const noexcept {
+    void IActor::Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie) const noexcept { 
         TlsActivationContext->ExecutorThread.Schedule(delta, new IEventHandle(SelfActorId, TActorId(), ev), cookie);
     }
 

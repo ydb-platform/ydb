@@ -1,59 +1,59 @@
-#pragma once
-
+#pragma once 
+ 
 #include <ydb/core/base/logoblob.h>
 #include <ydb/core/base/shared_data.h>
-
-namespace NKikimr {
+ 
+namespace NKikimr { 
 namespace NPageCollection {
-
+ 
     struct TLargeGlobId {
-        /* ... is a piece of some data up to 4GiB placed on a continous
-            series of TLogoBlobs which IDs are differs only in cookie and
-            have the single upper chunk bytes limit. All blobs of span have
-            the same BS storage group.
-        */
-
+        /* ... is a piece of some data up to 4GiB placed on a continous 
+            series of TLogoBlobs which IDs are differs only in cookie and 
+            have the single upper chunk bytes limit. All blobs of span have 
+            the same BS storage group. 
+        */ 
+ 
         constexpr static ui32 InvalidGroup = (Max<ui32>() >> 1);
-
+ 
         TLargeGlobId() { };
-
+ 
         TLargeGlobId(ui32 group, TLogoBlobID single)
             : TLargeGlobId(group, single, single.BlobSize())
-        {
-
-        }
-
+        { 
+ 
+        } 
+ 
         TLargeGlobId(ui32 group, const TLogoBlobID &lead, ui64 bytes)
-            : Group(group)
-            , Bytes(bytes)
-            , Lead(lead)
-        {
+            : Group(group) 
+            , Bytes(bytes) 
+            , Lead(lead) 
+        { 
             //Y_VERIFY(Group != InvalidGroup, "Invalid TLargeGlobId storage group");
-            Y_VERIFY(Lead && Lead.BlobSize() && Lead.BlobSize() <= Bytes);
-        }
-
-        void Describe(IOutputStream &out) const noexcept
-        {
-            out
+            Y_VERIFY(Lead && Lead.BlobSize() && Lead.BlobSize() <= Bytes); 
+        } 
+ 
+        void Describe(IOutputStream &out) const noexcept 
+        { 
+            out 
                 << "TLargeGlobId{" << Lead << " ~" << Bytes
-                << "b, grp " << Group << "}";
-        }
-
-        explicit operator bool() const noexcept
-        {
-            return Bytes > 0;
-        }
-
+                << "b, grp " << Group << "}"; 
+        } 
+ 
+        explicit operator bool() const noexcept 
+        { 
+            return Bytes > 0; 
+        } 
+ 
         bool operator==(const TLargeGlobId &so) const noexcept
-        {
-            return Lead == so.Lead && Group == so.Group && Bytes == so.Bytes;
-        }
-
+        { 
+            return Lead == so.Lead && Group == so.Group && Bytes == so.Bytes; 
+        } 
+ 
         class TBlobsEndIterator {
         public:
             TBlobsEndIterator() = default;
         };
-
+ 
         class TBlobsIterator {
         public:
             TBlobsIterator(const TLogoBlobID& lead, ui32 bytes)
@@ -63,7 +63,7 @@ namespace NPageCollection {
 
             const TLogoBlobID& operator*() const {
                 return Current;
-            }
+            } 
 
             const TLogoBlobID* operator->() const {
                 return &Current;
@@ -120,82 +120,82 @@ namespace NPageCollection {
         TBlobsRange Blobs() const noexcept
         {
             return TBlobsRange(Lead, Bytes);
-        }
-
+        } 
+ 
         ui32 BlobCount() const noexcept
-        {
-            const auto limit = Lead.BlobSize();
-
-            return Bytes / limit + (Bytes % limit > 0);
-        }
-
-        template<typename TOut>
-        void MaterializeTo(TOut &out) const noexcept
-        {
+        { 
+            const auto limit = Lead.BlobSize(); 
+ 
+            return Bytes / limit + (Bytes % limit > 0); 
+        } 
+ 
+        template<typename TOut> 
+        void MaterializeTo(TOut &out) const noexcept 
+        { 
             for (auto blobId : Blobs()) {
                 out.emplace_back(blobId);
             }
-        }
-
+        } 
+ 
         ui32 Group = InvalidGroup;
-        ui32 Bytes = 0;     /* Total bytes in sequence  */
-        TLogoBlobID Lead;   /* First blob in sequence   */
-    };
-
-    struct TGlobId { /* Just single reference to TLogoBlob in group */
-        TGlobId() { };
-
-        TGlobId(const TLogoBlobID &logo, ui32 group)
-            : Logo(logo)
-            , Group(group)
-        {
-
-        }
-
-        explicit operator bool() const noexcept
-        {
-            return bool(Logo);
-        }
-
-        bool operator!=(const TGlobId &glob) const noexcept
-        {
-            return Group != glob.Group || Logo != glob.Logo;
-        }
-
-        bool operator==(const TGlobId &glob) const noexcept
-        {
-            return Group == glob.Group && Logo == glob.Logo;
-        }
-
-        ui32 Bytes() const noexcept
-        {
-            return Logo.BlobSize();
-        }
-
-        TLogoBlobID Logo;
+        ui32 Bytes = 0;     /* Total bytes in sequence  */ 
+        TLogoBlobID Lead;   /* First blob in sequence   */ 
+    }; 
+ 
+    struct TGlobId { /* Just single reference to TLogoBlob in group */ 
+        TGlobId() { }; 
+ 
+        TGlobId(const TLogoBlobID &logo, ui32 group) 
+            : Logo(logo) 
+            , Group(group) 
+        { 
+ 
+        } 
+ 
+        explicit operator bool() const noexcept 
+        { 
+            return bool(Logo); 
+        } 
+ 
+        bool operator!=(const TGlobId &glob) const noexcept 
+        { 
+            return Group != glob.Group || Logo != glob.Logo; 
+        } 
+ 
+        bool operator==(const TGlobId &glob) const noexcept 
+        { 
+            return Group == glob.Group && Logo == glob.Logo; 
+        } 
+ 
+        ui32 Bytes() const noexcept 
+        { 
+            return Logo.BlobSize(); 
+        } 
+ 
+        TLogoBlobID Logo; 
         ui32 Group = TLargeGlobId::InvalidGroup;
-        ui32 Pad0_ = 0; /* Padding to 32 byte boundary, unused */
-    };
-
+        ui32 Pad0_ = 0; /* Padding to 32 byte boundary, unused */ 
+    }; 
+ 
     /**
      * Large blob that is written to blobstorage
      *
      * Data is stored in TString so there are less copies and conversions.
      */
-    struct TGlob {
+    struct TGlob { 
         TGlob(const TGlobId& id, TString data)
-            : GId(id)
-            , Data(std::move(data))
-        {
-
-        }
-
-        ui32 Bytes() const noexcept
-        {
-            return GId.Logo.BlobSize();
-        }
-
-        TGlobId GId;
+            : GId(id) 
+            , Data(std::move(data)) 
+        { 
+ 
+        } 
+ 
+        ui32 Bytes() const noexcept 
+        { 
+            return GId.Logo.BlobSize(); 
+        } 
+ 
+        TGlobId GId; 
         TString Data;
     };
 
@@ -221,8 +221,8 @@ namespace NPageCollection {
 
         TGlobId GId;
         TSharedData Data;
-    };
-
+    }; 
+ 
     class TLargeGlobIdRestoreState {
         using TBlobs = TVector<TLogoBlobID>;
         using TBodies = TVector<TString>;
@@ -304,5 +304,5 @@ namespace NPageCollection {
         size_t BytesLoaded = 0;
     };
 
-}
-}
+} 
+} 

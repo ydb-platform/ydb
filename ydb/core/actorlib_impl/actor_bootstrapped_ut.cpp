@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(ActorBootstrapped) {
     template <typename TDerivedActor>
     void TestBootrappedActor() {
         TTestActorRuntime runtime;
-        runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+        runtime.Initialize(NKikimr::TAppPrepare().Unwrap()); 
         const auto edge = runtime.AllocateEdgeActor(0);
         auto actor = new TDerivedActor(edge);
         runtime.Register(actor);

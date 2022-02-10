@@ -438,7 +438,7 @@ public:
 
     TPersQueueReadBalancer(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
-        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
+        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory) 
         , Inited(false)
         , PathId(0)
         , Generation(0)

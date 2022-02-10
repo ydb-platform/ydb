@@ -8,7 +8,7 @@
 #include <util/generic/hash.h>
 #include <util/system/unaligned_mem.h>
 
-#include <type_traits>
+#include <type_traits> 
 
 namespace NKikimr {
 
@@ -17,9 +17,9 @@ namespace NKikimr {
 // Doesn't own the memory buffer that stores the actual value
 // Small values (<= 8 bytes) are stored inline
 struct TCell {
-    template<typename T>
-    using TStdLayout = std::enable_if_t<std::is_standard_layout<T>::value, T>;
-
+    template<typename T> 
+    using TStdLayout = std::enable_if_t<std::is_standard_layout<T>::value, T>; 
+ 
 private:
     ui32 DataSize_ : 30;
     ui32 IsInline_ : 1;
@@ -37,12 +37,12 @@ public:
         : TCell(nullptr, 0)
     {}
 
-    TCell(TArrayRef<const char> ref)
-        : TCell(ref.begin(), ui32(ref.size()))
-    {
+    TCell(TArrayRef<const char> ref) 
+        : TCell(ref.begin(), ui32(ref.size())) 
+    { 
         Y_VERIFY(ref.size() < Max<ui32>(), " Too large blob size for TCell");
-    }
-
+    } 
+ 
     TCell(const char* ptr, ui32 sz)
         : DataSize_(sz)
         , IsInline_(0)
@@ -62,26 +62,26 @@ public:
         : TCell((const char*)v->Data(), v->Size())
     {}
 
-    explicit operator bool() const
-    {
-        return !IsNull();
-    }
-
+    explicit operator bool() const 
+    { 
+        return !IsNull(); 
+    } 
+ 
     bool IsInline() const       { return IsInline_; }
     bool IsNull() const         { return IsNull_; }
     ui32 Size() const           { return DataSize_; }
 
-    TArrayRef<const char> AsRef() const noexcept
-    {
-        return { Data(), Size() };
+    TArrayRef<const char> AsRef() const noexcept 
+    { 
+        return { Data(), Size() }; 
     }
 
-    TStringBuf AsBuf() const noexcept
-    {
-        return { Data(), Size() };
-    }
-
-    template<typename T, typename = TStdLayout<T>>
+    TStringBuf AsBuf() const noexcept 
+    { 
+        return { Data(), Size() }; 
+    } 
+ 
+    template<typename T, typename = TStdLayout<T>> 
     T AsValue() const noexcept
     {
         Y_VERIFY(sizeof(T) == Size(), "AsValue<T>() type doesn't match TCell");
@@ -90,16 +90,16 @@ public:
     }
 
     template<typename T, typename = TStdLayout<T>>
-    static inline TCell Make(const T &val) noexcept
-    {
-        auto *ptr = static_cast<const char*>(static_cast<const void*>(&val));
-
-        return TCell{ ptr, sizeof(val) };
-    }
-
+    static inline TCell Make(const T &val) noexcept 
+    { 
+        auto *ptr = static_cast<const char*>(static_cast<const void*>(&val)); 
+ 
+        return TCell{ ptr, sizeof(val) }; 
+    } 
+ 
 #if 1
     // Optimization to store small values (<= 8 bytes) inplace
-    static constexpr bool CanInline(ui32 sz) { return sz <= 8; }
+    static constexpr bool CanInline(ui32 sz) { return sz <= 8; } 
     static constexpr size_t MaxInlineSize() { return 8; }
     const char* InlineData() const                  { Y_VERIFY_DEBUG(IsInline_); return IsNull_ ? nullptr : (char*)&IntVal; }
     const char* Data() const                        { return IsNull_ ? nullptr : (IsInline_ ? (char*)&IntVal : Ptr); }
@@ -287,10 +287,10 @@ struct TDbTupleRef {
     const TCell* Columns;
     ui32 ColumnCount;
 
-    TArrayRef<const TCell> Cells() const {
-        return { Columns, ColumnCount };
-    }
-
+    TArrayRef<const TCell> Cells() const { 
+        return { Columns, ColumnCount }; 
+    } 
+ 
     TDbTupleRef(const NScheme::TTypeId* types = nullptr, const TCell* storage = nullptr, ui32 colCnt = 0)
         : Types(types)
         , Columns(storage)
@@ -523,7 +523,7 @@ private:
     TVector<TCell> Cells;
 };
 
-void DbgPrintValue(TString&, const TCell&, ui32 type);
+void DbgPrintValue(TString&, const TCell&, ui32 type); 
 TString DbgPrintCell(const TCell& r, NScheme::TTypeId typeId, const NScheme::TTypeRegistry& typeRegistry);
 TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry);
 

@@ -56,8 +56,8 @@ namespace {
         template <typename TSchema>
         void AddShard(ui64 tabletId) {
             auto& db = Dbs[tabletId];
-
-            db.Reset(new NTable::TDatabase);
+ 
+            db.Reset(new NTable::TDatabase); 
             Steps[tabletId] = 0;
 
             { // Create tables
@@ -73,7 +73,7 @@ namespace {
         }
 
         void CommitTransaction(ui64 tabletId) {
-            Dbs[tabletId]->Commit(Steps[tabletId], true);
+            Dbs[tabletId]->Commit(Steps[tabletId], true); 
             Envs.erase(tabletId);
         }
     };

@@ -14,10 +14,10 @@
 #include <functional>
 
 namespace NKikimr {
-    struct TAppPrepare;
+    struct TAppPrepare; 
 
-    const TBlobStorageGroupType::EErasureSpecies DataGroupErasure = TBlobStorageGroupType::ErasureNone;
-
+    const TBlobStorageGroupType::EErasureSpecies DataGroupErasure = TBlobStorageGroupType::ErasureNone; 
+ 
     TActorId FollowerTablet(TTestActorRuntime &runtime, const TActorId &launcher, TTabletStorageInfo *info,
         std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op);
     TActorId ResolveTablet(TTestActorRuntime& runtime, ui64 tabletId, ui32 nodeIndex = 0, bool sysTablet = false);

@@ -24,10 +24,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     {}
 
     bool CreateScheme(TTransactionContext &txc) {
-        if (!txc.DB.GetScheme().IsEmpty())
+        if (!txc.DB.GetScheme().IsEmpty()) 
             return false;
 
-        NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
+        NIceDb::TNiceDb(txc.DB).Materialize<Schema>(); 
 
         return true;
     }

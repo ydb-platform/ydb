@@ -166,10 +166,10 @@ struct THash<NKikimr::TVDiskIdShort> {
     }
 };
 
-template<>
+template<> 
 inline void Out<NKikimr::TVDiskID>(IOutputStream& os, const NKikimr::TVDiskID& vdiskId) {
-    os << vdiskId.ToString();
-}
+    os << vdiskId.ToString(); 
+} 
 
 template<>
 inline void Out<NKikimr::TVDiskIdShort>(IOutputStream& os, const NKikimr::TVDiskIdShort& vdiskId) {

@@ -1,53 +1,53 @@
-#pragma once
-
-#include "flat_page_base.h"
-#include "flat_page_label.h"
-#include "flat_row_nulls.h"
+#pragma once 
+ 
+#include "flat_page_base.h" 
+#include "flat_page_label.h" 
+#include "flat_row_nulls.h" 
 #include "util_basics.h"
 #include "util_deref.h"
-
+ 
 #include <ydb/core/base/shared_data.h>
 
 #include <library/cpp/blockcodecs/codecs.h>
-#include <util/generic/buffer.h>
-
-namespace NKikimr {
-namespace NTable {
-namespace NPage {
-
-
+#include <util/generic/buffer.h> 
+ 
+namespace NKikimr { 
+namespace NTable { 
+namespace NPage { 
+ 
+ 
     struct TDataPage {
-
-        /*
-                TRecord binary layout v1
-            .-------------------------.
+ 
+        /* 
+                TRecord binary layout v1 
+            .-------------------------. 
             | ERowOp                  | header
-            .---------.---------------.       -.
-            | cell op | value OR offs | cell_1 |
-            .---------.---------------.        |
-            |       .    .    .       |        | fixed-size
-            .---------.---------------.        |
-            | cell op | value OR offs | cell_K |
-            .-.------.'-.-------.-----.       -'
-            | |      |  |       |     | var-size values
-            '-'------'--'-------'-----'
-        */
+            .---------.---------------.       -. 
+            | cell op | value OR offs | cell_1 | 
+            .---------.---------------.        | 
+            |       .    .    .       |        | fixed-size 
+            .---------.---------------.        | 
+            | cell op | value OR offs | cell_K | 
+            .-.------.'-.-------.-----.       -' 
+            | |      |  |       |     | var-size values 
+            '-'------'--'-------'-----' 
+        */ 
+ 
+#pragma pack(push,1) 
 
-#pragma pack(push,1)
-
-        struct TItem {
+        struct TItem { 
             TCellOp GetOp(bool key) const noexcept
-            {
-                return
+            { 
+                return 
                     key ? TCellOp(Null ? ECellOp::Null : ECellOp::Set) : TCellOp::By(Flg);
-            }
-
-            union {
-                bool Null;
-                ui8 Flg;
-            };
+            } 
+ 
+            union { 
+                bool Null; 
+                ui8 Flg; 
+            }; 
         } Y_PACKED;
-
+ 
         struct TVersion {
             ui64 Step_;
             ui64 TxId_;
@@ -142,95 +142,95 @@ namespace NPage {
                 }
             }
         } Y_PACKED;
-
-        struct TExtra {
-            TRowId BaseRow;
+ 
+        struct TExtra { 
+            TRowId BaseRow; 
         } Y_PACKED;
-
-#pragma pack(pop)
-
+ 
+#pragma pack(pop) 
+ 
         static_assert(sizeof(TItem) == 1, "Invalid TDataPage TItem size");
         static_assert(sizeof(TVersion) == 16, "Invalid TDataPage TVersion size");
         static_assert(sizeof(TRecord) == 1, "Invalid TDataPage TRecord size");
         static_assert(sizeof(TExtra) == 8, "Invalid TDataPage page extra chunk");
-
-        using TBlock = TBlockWithRecords<TRecord>;
-
-    public:
-        using TIter = TBlock::TIterator;
-
+ 
+        using TBlock = TBlockWithRecords<TRecord>; 
+ 
+    public: 
+        using TIter = TBlock::TIterator; 
+ 
         TDataPage(const TSharedData *raw = nullptr) noexcept
-        {
-            Set(raw);
-        }
-
-        const auto* Label() const noexcept
-        {
+        { 
+            Set(raw); 
+        } 
+ 
+        const auto* Label() const noexcept 
+        { 
             return TDeref<const NPage::TLabel>::At(Raw.data());
-        }
-
-        explicit operator bool() const noexcept
-        {
-            return bool(Raw);
-        }
-
-        const TBlock* operator->() const noexcept
-        {
-            return &Page;
-        }
-
-        TRowId BaseRow() const noexcept
-        {
-            return Raw ? BaseRow_ : Max<TRowId>();
-        }
-
+        } 
+ 
+        explicit operator bool() const noexcept 
+        { 
+            return bool(Raw); 
+        } 
+ 
+        const TBlock* operator->() const noexcept 
+        { 
+            return &Page; 
+        } 
+ 
+        TRowId BaseRow() const noexcept 
+        { 
+            return Raw ? BaseRow_ : Max<TRowId>(); 
+        } 
+ 
         TDataPage& Set(const TSharedData *raw = nullptr) noexcept
-        {
-            Page = { };
-
+        { 
+            Page = { }; 
+ 
             if (Raw = raw ? *raw : TSharedData{ }) {
                 const void* base = Raw.data();
                 auto got = NPage::THello().Read(Raw, EPage::DataPage);
-
+ 
                 Y_VERIFY(got.Version == 1, "Unknown EPage::DataPage version");
-
-                if (got.Codec != ECodec::Plain) {
-                    /* Compressed, should convert to regular page */
-
-                    Y_VERIFY(got == ECodec::LZ4, "Only LZ4 encoding allowed");
-
-                    Codec = Codec ? Codec : NBlockCodecs::Codec("lz4fast");
-                    auto size = Codec->DecompressedLength(got.Page);
-
+ 
+                if (got.Codec != ECodec::Plain) { 
+                    /* Compressed, should convert to regular page */ 
+ 
+                    Y_VERIFY(got == ECodec::LZ4, "Only LZ4 encoding allowed"); 
+ 
+                    Codec = Codec ? Codec : NBlockCodecs::Codec("lz4fast"); 
+                    auto size = Codec->DecompressedLength(got.Page); 
+ 
                     // We expect original page had the same label size as a compressed page
                     size_t labelSize = reinterpret_cast<const char*>(got.Page.data()) - reinterpret_cast<const char*>(base);
-
+ 
                     Decoded.Resize(labelSize + size);
-
+ 
                     size = Codec->Decompress(got.Page, Decoded.Begin() + labelSize);
-
+ 
                     Decoded.Resize(labelSize + size);
                     ::memset(Decoded.Begin(), 0, labelSize);
 
                     base = Decoded.Begin();
                     got.Page = { Decoded.Begin() + labelSize, Decoded.End() };
-                }
-
+                } 
+ 
                 auto *hdr = TDeref<TRecordsHeader>::At(got.Page.data(), 0);
                 auto skip = got.Page.size() - hdr->Records * sizeof(TPgSize);
-
+ 
                 BaseRow_ = TDeref<const TExtra>::At(hdr + 1, 0)->BaseRow;
                 Page.Base = base;
                 Page.Array = TDeref<const TRecordsEntry>::At(hdr, skip);
-                Page.Records = hdr->Records;
-            }
-
-            return *this;
-        }
-
+                Page.Records = hdr->Records; 
+            } 
+ 
+            return *this; 
+        } 
+ 
         TIter LookupKey(TCells key, const TPartScheme::TGroupInfo &group,
                         ESeek seek, const TKeyNulls *nulls) const noexcept
-        {
+        { 
             if (!key) {
                 switch (seek) {
                     case ESeek::Lower:
@@ -240,9 +240,9 @@ namespace NPage {
                         return Page.End();
                 }
             }
-
+ 
             TIter it;
-
+ 
             const auto cmp = TCompare<TRecord>(group.ColsKeyData, *nulls);
             switch (seek) {
                 case ESeek::Exact:
@@ -255,16 +255,16 @@ namespace NPage {
                 case ESeek::Lower: {
                     it = std::lower_bound(Page.Begin(), Page.End(), key, cmp);
                     break;
-                }
+                } 
                 case ESeek::Upper: {
                     it = std::upper_bound(Page.Begin(), Page.End(), key, cmp);
                     break;
                 }
-            }
-
+            } 
+ 
             return it;
-        }
-
+        } 
+ 
         TIter LookupKeyReverse(TCells key, const TPartScheme::TGroupInfo &group,
                         ESeek seek, const TKeyNulls *nulls) const noexcept
         {
@@ -306,15 +306,15 @@ namespace NPage {
             return it;
         }
 
-    private:
-        using ICodec = NBlockCodecs::ICodec;
-
-        TBuffer Decoded;
+    private: 
+        using ICodec = NBlockCodecs::ICodec; 
+ 
+        TBuffer Decoded; 
         TSharedData Raw;
-        TBlock Page;
-        TRowId BaseRow_ = Max<TRowId>();
-        const ICodec *Codec = nullptr;
-    };
-}
-}
-}
+        TBlock Page; 
+        TRowId BaseRow_ = Max<TRowId>(); 
+        const ICodec *Codec = nullptr; 
+    }; 
+} 
+} 
+} 

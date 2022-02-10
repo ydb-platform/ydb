@@ -1,19 +1,19 @@
-#pragma once
-#include "defs.h"
-#include "flat_table_misc.h"
-#include "flat_part_store.h"
-#include "flat_store_hotdog.h"
+#pragma once 
+#include "defs.h" 
+#include "flat_table_misc.h" 
+#include "flat_part_store.h" 
+#include "flat_store_hotdog.h" 
 #include "flat_store_solid.h"
-#include "flat_sausagecache.h"
-#include "tablet_flat_executor.h"
-#include "flat_executor_snapshot.h"
+#include "flat_sausagecache.h" 
+#include "tablet_flat_executor.h" 
+#include "flat_executor_snapshot.h" 
 #include <ydb/core/util/pb.h>
-#include <util/generic/hash_set.h>
+#include <util/generic/hash_set.h> 
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
-
-namespace NKikimr {
-namespace NTabletFlatExecutor {
-
+ 
+namespace NKikimr { 
+namespace NTabletFlatExecutor { 
+ 
     struct TPageCollectionReadEnv : public NTable::IPages {
         TPageCollectionReadEnv(TPrivatePageCache& cache)
             : Cache(cache)
@@ -67,35 +67,35 @@ namespace NTabletFlatExecutor {
     };
 
     struct TPageCollectionTxEnv : public TPageCollectionReadEnv, public IExecuting {
-        using TLogoId = TLogoBlobID;
-
-        struct TBorrowSnap {
+        using TLogoId = TLogoBlobID; 
+ 
+        struct TBorrowSnap { 
             TIntrusivePtr<TTableSnapshotContext> SnapContext;
-        };
-
-        struct TBorrowUpdate {
-            TDeque<ui64> StoppedLoans;
-        };
-
-        struct TLoanConfirmation {
-            const TLogoId BorrowId;
-        };
-
-        struct TLoanBundle {
+        }; 
+ 
+        struct TBorrowUpdate { 
+            TDeque<ui64> StoppedLoans; 
+        }; 
+ 
+        struct TLoanConfirmation { 
+            const TLogoId BorrowId; 
+        }; 
+ 
+        struct TLoanBundle { 
             TLoanBundle(ui32 sourceTableId, ui32 localTableId, ui64 lender, NTable::TPartComponents&& pc)
-                : SourceTableId(sourceTableId)
-                , LocalTableId(localTableId)
-                , Lender(lender)
+                : SourceTableId(sourceTableId) 
+                , LocalTableId(localTableId) 
+                , Lender(lender) 
                 , PartComponents(std::move(pc))
-            {}
-
-            const ui32 SourceTableId;
-            const ui32 LocalTableId;
-            const ui64 Lender;
-
+            {} 
+ 
+            const ui32 SourceTableId; 
+            const ui32 LocalTableId; 
+            const ui64 Lender; 
+ 
             NTable::TPartComponents PartComponents;
-        };
-
+        }; 
+ 
         struct TLoanTxStatus {
             TLoanTxStatus(ui32 sourceTableId, ui32 localTableId, ui64 lender,
                           const NPageCollection::TLargeGlobId& dataId, NTable::TEpoch epoch,
@@ -118,61 +118,61 @@ namespace NTabletFlatExecutor {
 
         struct TSnapshot {
             TVector<TIntrusivePtr<TTableSnapshotContext>> Context;
-        };
-
+        }; 
+ 
         using TPageCollectionReadEnv::TPageCollectionReadEnv;
-
-        bool HasChanges() const noexcept
-        {
-            return
-                DropSnap
-                || MakeSnap
-                || LoanBundle
+ 
+        bool HasChanges() const noexcept 
+        { 
+            return 
+                DropSnap 
+                || MakeSnap 
+                || LoanBundle 
                 || LoanTxStatus
-                || BorrowUpdates
-                || LoanConfirmation;
-        }
-
-    protected: /* IExecuting, tx stage func implementation */
+                || BorrowUpdates 
+                || LoanConfirmation; 
+        } 
+ 
+    protected: /* IExecuting, tx stage func implementation */ 
         void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext> snap) override
-        {
-            Y_VERIFY(snap->TablesToSnapshot());
-
-            for (ui32 table : snap->TablesToSnapshot())
-                MakeSnap[table].Context.push_back(snap);
-        }
-
+        { 
+            Y_VERIFY(snap->TablesToSnapshot()); 
+ 
+            for (ui32 table : snap->TablesToSnapshot()) 
+                MakeSnap[table].Context.push_back(snap); 
+        } 
+ 
         void DropSnapshot(TIntrusivePtr<TTableSnapshotContext> snap) override
-        {
-            Y_VERIFY(!DropSnap, "only one snapshot per transaction");
-
-            DropSnap.Reset(new TBorrowSnap{ snap });
-        }
-
+        { 
+            Y_VERIFY(!DropSnap, "only one snapshot per transaction"); 
+ 
+            DropSnap.Reset(new TBorrowSnap{ snap }); 
+        } 
+ 
         void MoveSnapshot(const TTableSnapshotContext &snap, ui32 src, ui32 dst) override
         {
             snap.Impl->Moved(src, dst);
         }
 
-        void ClearSnapshot(const TTableSnapshotContext &snap) override
-        {
-            snap.Impl->Clear();
-        }
-
-        // NOTE: It's allowed to add parts in the same Tx where the table gets created (and is not visible yet)
-        void LoanTable(ui32 tableId, const TString &raw) override
-        {
-            TProtoBox<NKikimrExecutorFlat::TDatabaseBorrowPart> proto(raw);
-
-            const ui64 lender = proto.GetLenderTablet();
-            const ui32 source = proto.GetSourceTable();
-
-            for (auto &part : proto.GetParts()) {
+        void ClearSnapshot(const TTableSnapshotContext &snap) override 
+        { 
+            snap.Impl->Clear(); 
+        } 
+ 
+        // NOTE: It's allowed to add parts in the same Tx where the table gets created (and is not visible yet) 
+        void LoanTable(ui32 tableId, const TString &raw) override 
+        { 
+            TProtoBox<NKikimrExecutorFlat::TDatabaseBorrowPart> proto(raw); 
+ 
+            const ui64 lender = proto.GetLenderTablet(); 
+            const ui32 source = proto.GetSourceTable(); 
+ 
+            for (auto &part : proto.GetParts()) { 
                 Y_VERIFY(part.HasBundle(), "Cannot find attached hotdogs in borrow");
-
+ 
                 LoanBundle.emplace_back(new TLoanBundle(source, tableId, lender,
                         TPageCollectionProtoHelper::MakePageCollectionComponents(part.GetBundle(), /* unsplit */ true)));
-            }
+            } 
 
             for (auto &part : proto.GetTxStatusParts()) {
                 LoanTxStatus.emplace_back(new TLoanTxStatus(
@@ -181,32 +181,32 @@ namespace NTabletFlatExecutor {
                     NTable::TEpoch(part.GetEpoch()),
                     part.GetData()));
             }
-        }
-
-        void CleanupLoan(const TLogoId &bundle, ui64 from) override
-        {
-            Y_VERIFY(!DropSnap, "must not drop snapshot and update loan in same transaction");
-            BorrowUpdates[bundle].StoppedLoans.push_back(from);
-        }
-
-        void ConfirmLoan(const TLogoId &bundle, const TLogoId &borrow) override
-        {
-            LoanConfirmation.insert(std::make_pair(bundle, TLoanConfirmation{borrow}));
-        }
-
-    public:
-        /*_ Pending database shanshots      */
-
+        } 
+ 
+        void CleanupLoan(const TLogoId &bundle, ui64 from) override 
+        { 
+            Y_VERIFY(!DropSnap, "must not drop snapshot and update loan in same transaction"); 
+            BorrowUpdates[bundle].StoppedLoans.push_back(from); 
+        } 
+ 
+        void ConfirmLoan(const TLogoId &bundle, const TLogoId &borrow) override 
+        { 
+            LoanConfirmation.insert(std::make_pair(bundle, TLoanConfirmation{borrow})); 
+        } 
+ 
+    public: 
+        /*_ Pending database shanshots      */ 
+ 
         TMap<ui32, TSnapshot> MakeSnap;
-
-        /*_ In tx tables borrow proto API   */
-
-        THolder<TBorrowSnap> DropSnap;
-        THashMap<TLogoId, TBorrowUpdate> BorrowUpdates;
+ 
+        /*_ In tx tables borrow proto API   */ 
+ 
+        THolder<TBorrowSnap> DropSnap; 
+        THashMap<TLogoId, TBorrowUpdate> BorrowUpdates; 
         TVector<THolder<TLoanBundle>> LoanBundle;
         TVector<THolder<TLoanTxStatus>> LoanTxStatus;
-        THashMap<TLogoId, TLoanConfirmation> LoanConfirmation;
-    };
-
-}
-}
+        THashMap<TLogoId, TLoanConfirmation> LoanConfirmation; 
+    }; 
+ 
+} 
+} 

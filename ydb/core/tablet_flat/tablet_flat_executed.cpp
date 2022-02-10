@@ -1,5 +1,5 @@
 #include "tablet_flat_executed.h"
-#include "flat_executor.h"
+#include "flat_executor.h" 
 #include "flat_executor_counters.h"
 #include <ydb/core/base/appdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -7,16 +7,16 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-using IExecutor = NFlatExecutorSetup::IExecutor;
-
+using IExecutor = NFlatExecutorSetup::IExecutor; 
+ 
 TTabletExecutedFlat::TTabletExecutedFlat(TTabletStorageInfo *info, const TActorId &tablet, IMiniKQLFactory *factory)
     : ITablet(info, tablet)
-    , Factory(factory)
+    , Factory(factory) 
     , Executor0(nullptr)
     , StartTime0(TAppData::TimeProvider->Now())
 {}
 
-IExecutor* TTabletExecutedFlat::CreateExecutor(const TActorContext &ctx) {
+IExecutor* TTabletExecutedFlat::CreateExecutor(const TActorContext &ctx) { 
     if (!Executor()) {
         IActor *executor = NFlatExecutorSetup::CreateExecutor(this, ctx.SelfID);
         const TActorId executorID = ctx.RegisterWithSameMailbox(executor);
@@ -35,10 +35,10 @@ void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction, const TAct
 }
 
 void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction) {
-    if (transaction)
+    if (transaction) 
         static_cast<TExecutor*>(Executor())->Execute(transaction, ExecutorCtx(*TlsActivationContext));
-}
-
+} 
+ 
 const NTable::TScheme& TTabletExecutedFlat::Scheme() const noexcept {
     return static_cast<TExecutor*>(Executor())->Scheme();
 }
@@ -88,9 +88,9 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvFollowerGcApplied::TPtr &ev) {
     Executor()->FollowerGcApplied(msg->Step, msg->FollowerSyncDelay);
 }
 
-void TTabletExecutedFlat::Handle(TEvTablet::TEvUpdateConfig::TPtr &ev) {
+void TTabletExecutedFlat::Handle(TEvTablet::TEvUpdateConfig::TPtr &ev) { 
     if (Executor())
-        Executor()->UpdateConfig(ev);
+        Executor()->UpdateConfig(ev); 
 }
 
 void TTabletExecutedFlat::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) {
@@ -117,15 +117,15 @@ void TTabletExecutedFlat::HandleTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, c
 }
 
 void TTabletExecutedFlat::HandleLocalMKQL(TEvTablet::TEvLocalMKQL::TPtr &ev, const TActorContext &ctx) {
-    Y_VERIFY(Factory, "Need IMiniKQLFactory to execute MKQL query");
-
-    Execute(Factory->Make(ev), ctx);
+    Y_VERIFY(Factory, "Need IMiniKQLFactory to execute MKQL query"); 
+ 
+    Execute(Factory->Make(ev), ctx); 
 }
 
 void TTabletExecutedFlat::HandleLocalSchemeTx(TEvTablet::TEvLocalSchemeTx::TPtr &ev, const TActorContext &ctx) {
-    Y_VERIFY(Factory, "Need IMiniKQLFactory to execute scheme query");
-
-    Execute(Factory->Make(ev), ctx);
+    Y_VERIFY(Factory, "Need IMiniKQLFactory to execute scheme query"); 
+ 
+    Execute(Factory->Make(ev), ctx); 
 }
 
 void TTabletExecutedFlat::HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns::TPtr &ev, const TActorContext &ctx) {
@@ -154,7 +154,7 @@ void TTabletExecutedFlat::ActivateExecutor(const TActorContext &ctx) {
 
 void TTabletExecutedFlat::Detach(const TActorContext &ctx) {
     Executor0 = nullptr;
-    ctx.Send(Tablet(), new TEvents::TEvPoison());
+    ctx.Send(Tablet(), new TEvents::TEvPoison()); 
     OnDetach(ctx);
 }
 
@@ -177,10 +177,10 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
         OnRenderAppHtmlPage(ev, ctx);
         return;
     } else if (path == "/executorInternals") {
-        Executor()->RenderHtmlPage(ev);
+        Executor()->RenderHtmlPage(ev); 
         return;
     } else if (path == "/counters") {
-        Executor()->RenderHtmlCounters(ev);
+        Executor()->RenderHtmlCounters(ev); 
         return;
     } else if (path == "/db") {
         Executor()->RenderHtmlDb(ev, ExecutorCtx(ctx));
@@ -236,8 +236,8 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
     }
 }
 
-void TTabletExecutedFlat::HandleGetCounters(TEvTablet::TEvGetCounters::TPtr &ev) {
-    Executor()->GetTabletCounters(ev);
+void TTabletExecutedFlat::HandleGetCounters(TEvTablet::TEvGetCounters::TPtr &ev) { 
+    Executor()->GetTabletCounters(ev); 
 }
 
 bool TTabletExecutedFlat::HandleDefaultEvents(STFUNC_SIG) {
@@ -255,8 +255,8 @@ bool TTabletExecutedFlat::HandleDefaultEvents(STFUNC_SIG) {
         HFunc(TEvTablet::TEvLocalMKQL, HandleLocalMKQL);
         HFunc(TEvTablet::TEvLocalSchemeTx, HandleLocalSchemeTx);
         HFunc(TEvTablet::TEvLocalReadColumns, HandleLocalReadColumns);
-        hFunc(TEvTablet::TEvGetCounters, HandleGetCounters);
-        hFunc(TEvTablet::TEvUpdateConfig, Handle);
+        hFunc(TEvTablet::TEvGetCounters, HandleGetCounters); 
+        hFunc(TEvTablet::TEvUpdateConfig, Handle); 
         HFunc(NMon::TEvRemoteHttpInfo, RenderHtmlPage);
     default:
         return false;
@@ -275,7 +275,7 @@ void TTabletExecutedFlat::StateInitImpl(STFUNC_SIG) {
         HFunc(TEvTablet::TEvTabletStop, HandleTabletStop);
         HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
         hFunc(TEvTablet::TEvFollowerSyncComplete, Handle);
-        hFunc(TEvTablet::TEvUpdateConfig, Handle);
+        hFunc(TEvTablet::TEvUpdateConfig, Handle); 
         HFunc(NMon::TEvRemoteHttpInfo, RenderHtmlPage);
     default:
         return Enqueue(ev, ctx);

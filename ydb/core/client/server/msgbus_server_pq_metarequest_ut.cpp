@@ -41,7 +41,7 @@ protected:
         //TTestActorRuntime::SetVerbose(true); // debug events
 
         // Initialize runtime
-        Runtime = MakeHolder<TTestBasicRuntime>();
+        Runtime = MakeHolder<TTestBasicRuntime>(); 
         Runtime->SetObserverFunc([this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
             return EventsObserver(event);
         });

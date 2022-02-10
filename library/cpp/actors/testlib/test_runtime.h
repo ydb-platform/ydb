@@ -39,8 +39,8 @@ const TDuration DEFAULT_DISPATCH_TIMEOUT = NSan::PlainOrUnderSanitizer(
 
 
 namespace NActors {
-    struct THeSingleSystemEnv { };
-
+    struct THeSingleSystemEnv { }; 
+ 
     struct TEventMailboxId {
         TEventMailboxId()
             : NodeId(0)
@@ -200,7 +200,7 @@ namespace NActors {
         typedef std::function<bool(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event)> TEventFilter;
         typedef std::function<bool(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline)> TScheduledEventFilter;
         typedef std::function<void(TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId)> TRegistrationObserver;
-
+ 
 
         TTestActorRuntimeBase(THeSingleSystemEnv);
         TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads);
@@ -284,7 +284,7 @@ namespace NActors {
             return Nodes[FirstNodeId + nodeIdx]->LogSettings;
         }
 
-        TActorSystem* SingleSys() const;
+        TActorSystem* SingleSys() const; 
         TActorSystem* GetAnyNodeActorSystem();
         TActorSystem* GetActorSystem(ui32 nodeId);
         template <typename TEvent>
@@ -471,12 +471,12 @@ namespace NActors {
             UseRealInterconnect = true;
         }
 
-    protected:
+    protected: 
         struct TNodeDataBase;
         TNodeDataBase* GetRawNode(ui32 node) const {
-            return Nodes.at(FirstNodeId + node).Get();
-        }
-
+            return Nodes.at(FirstNodeId + node).Get(); 
+        } 
+ 
         static IExecutorPool* CreateExecutorPoolStub(TTestActorRuntimeBase* runtime, ui32 nodeIndex, TNodeDataBase* node, ui32 poolId);
         virtual TIntrusivePtr<NMonitoring::TDynamicCounters> GetCountersForComponent(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const char* component) {
             Y_UNUSED(counters);
@@ -492,7 +492,7 @@ namespace NActors {
             Y_UNUSED(setup);
         }
 
-   private:
+   private: 
         IActor* FindActor(const TActorId& actorId, TNodeDataBase* node) const;
         void SendInternal(IEventHandle* ev, ui32 nodeIndex, bool viaActorSystem);
         TEventMailBox& GetMailbox(ui32 nodeId, ui32 hint);
@@ -507,12 +507,12 @@ namespace NActors {
         THolder<TTempDir> TmpDir;
         const TThread::TId MainThreadId;
 
-    protected:
+    protected: 
         bool UseRealInterconnect = false;
         TInterconnectMock InterconnectMock;
         bool IsInitialized = false;
         bool SingleSysEnv = false;
-        const TString ClusterUUID;
+        const TString ClusterUUID; 
         const ui32 FirstNodeId;
         const ui32 NodeCount;
         const ui32 DataCenterCount;
@@ -535,7 +535,7 @@ namespace NActors {
         TIntrusivePtr<IRandomProvider> RandomProvider;
         TIntrusivePtr<ITimeProvider> TimeProvider;
 
-    protected:
+    protected: 
         struct TNodeDataBase: public TThrRefBase {
             TNodeDataBase();
             void Stop();
@@ -598,7 +598,7 @@ namespace NActors {
     protected:
         THolder<INodeFactory> NodeFactory{new TDefaultNodeFactory};
 
-    private:
+    private: 
         void InitNode(TNodeDataBase* node, size_t idx);
 
         struct TDispatchContext {

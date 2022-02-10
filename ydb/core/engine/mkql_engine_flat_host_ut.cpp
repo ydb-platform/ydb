@@ -40,21 +40,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
 
 
     Y_UNIT_TEST(ShardId) {
-        NTable::TDatabase DB;
+        NTable::TDatabase DB; 
         TEngineHostCounters hostCounters;
         TUnversionedEngineHost host(DB, hostCounters, TEngineHostSettings(100));
         UNIT_ASSERT_VALUES_EQUAL(host.GetShardId(), 100);
     }
 
     Y_UNIT_TEST(Basic) {
-        NTable::TDatabase DB;
+        NTable::TDatabase DB; 
         NIceDb::TNiceDb db(DB);
 
         { // Create tables
             NTable::TDummyEnv env;
             DB.Begin(1, env);
             db.Materialize<Schema>();
-            DB.Commit(1, true);
+            DB.Commit(1, true); 
         }
 
         { // Fill tables with some stuff
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
                                                             NIceDb::TUpdate<Schema::TestTable::Name>(ToString(i)),
                                                             NIceDb::TUpdate<Schema::TestTable::BoolValue>(i % 2 == 0));
             }
-            DB.Commit(2, true);
+            DB.Commit(2, true); 
         }
 
         { // Execute some minikql
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
             // TODO: ... MINIKQL ...
 
             Y_UNUSED(host);
-            DB.Commit(3, true);
+            DB.Commit(3, true); 
         }
 
         { // Check data
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
                 UNIT_ASSERT(ToString(value) == name);
                 UNIT_ASSERT(boolValue == (i % 2 == 0));
             }
-            DB.Commit(4, true);
+            DB.Commit(4, true); 
         }
     }
 }

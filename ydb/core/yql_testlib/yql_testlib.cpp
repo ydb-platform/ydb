@@ -155,17 +155,17 @@ void TYqlServer::Initialize() {
     ResumeYqlExecutionPromise = NThreading::NewPromise<void>();
 
     Runtime.Reset(new TTestActorRuntime(StaticNodes() + DynamicNodes(), true));
-
+ 
     Runtime->SetupMonitoring();
-    Runtime->SetLogBackend(GetSettings().LogBackend);
-
-    TAppPrepare app;
-
-    SetupDomains(app);
-    SetupChannelProfiles(app);
-
+    Runtime->SetLogBackend(GetSettings().LogBackend); 
+ 
+    TAppPrepare app; 
+ 
+    SetupDomains(app); 
+    SetupChannelProfiles(app); 
+ 
     app.AddHive(Settings->Domain, ChangeStateStorage(Hive, Settings->Domain));
-    app.SetFnRegistry([this](const NKikimr::NScheme::TTypeRegistry& typeRegistry) -> NKikimr::NMiniKQL::IFunctionRegistry* {
+    app.SetFnRegistry([this](const NKikimr::NScheme::TTypeRegistry& typeRegistry) -> NKikimr::NMiniKQL::IFunctionRegistry* { 
             Y_UNUSED(typeRegistry);
             // register test UDFs
             auto freg = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone();
@@ -173,11 +173,11 @@ void TYqlServer::Initialize() {
             return freg.Release();
         }
     );
-
-    SetupMessageBus(GetSettings().Port, GetSettings().TracePath);
-
+ 
+    SetupMessageBus(GetSettings().Port, GetSettings().TracePath); 
+ 
     SetupTabletServices(*Runtime, &app, StaticNodes() == 1 && Settings->EnableMockOnSingleNode, Settings->CustomDiskParams);
-
+ 
     CreateBootstrapTablets();
     SetupStorage();
 

@@ -36,9 +36,9 @@ void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) {
 
     ui32 domainId = 0;
     ui32 planResolution = 500;
-
-    TAppPrepare app;
-
+ 
+    TAppPrepare app; 
+ 
     app.SetEnableMvcc(opts.Mvcc);
 
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
@@ -279,7 +279,7 @@ TRuntimeNode TEngineHolder::ProgramText2Bin(TTester& tester, const TString& prog
     auto expr = NYql::ParseText(programText);
 
     auto resFuture = NYql::ConvertToMiniKQL(
-        expr, tester.Runtime.GetAppData().FunctionRegistry,
+        expr, tester.Runtime.GetAppData().FunctionRegistry, 
         &Env, &tester.DbSchemeResolver
     );
 
@@ -307,7 +307,7 @@ ui32 TFakeProxyTx::SetProgram(TTester& tester) {
 
 ui32 TFakeProxyTx::SetProgram(TTester& tester, const TString& programText) {
     TEngineFlatSettings settings(IEngineFlat::EProtocol::V1,
-                                 tester.Runtime.GetAppData().FunctionRegistry,
+                                 tester.Runtime.GetAppData().FunctionRegistry, 
                                  *TAppData::RandomProvider, *TAppData::TimeProvider);
 
     NMiniKQL::TRuntimeNode pgm = ProgramText2Bin(tester, programText);
@@ -988,7 +988,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
 //
 
 TKeyExtractor::TKeyExtractor(TTester& tester, TString programText) {
-    Engine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1, tester.Runtime.GetAppData().FunctionRegistry,
+    Engine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1, tester.Runtime.GetAppData().FunctionRegistry, 
                                 *TAppData::RandomProvider, *TAppData::TimeProvider));
 
     NMiniKQL::TRuntimeNode pgm = ProgramText2Bin(tester, programText);

@@ -78,7 +78,7 @@ public:
 
     const char* Name;
 
-    TAtomic RunningState;
+    TAtomic RunningState; 
     TAtomic StopSignal;
     TSystemEvent StoppedEvent;
     TData Data;
@@ -143,7 +143,7 @@ void TEventLoop::Stop() {
 }
 
 bool TEventLoop::IsRunning() {
-    return AtomicGet(Impl->RunningState) == EVENT_LOOP_RUNNING;
+    return AtomicGet(Impl->RunningState) == EVENT_LOOP_RUNNING; 
 }
 
 TChannelPtr TEventLoop::Register(TSocket socket, TEventHandlerPtr eventHandler, void* cookie) {
@@ -277,7 +277,7 @@ TEventLoop::TImpl::TImpl(const char* name)
 }
 
 void TEventLoop::TImpl::Run() {
-    bool res = AtomicCas(&RunningState, EVENT_LOOP_RUNNING, EVENT_LOOP_CREATED);
+    bool res = AtomicCas(&RunningState, EVENT_LOOP_RUNNING, EVENT_LOOP_CREATED); 
     Y_VERIFY(res, "Invalid mbus event loop state");
 
     if (!!Name) {
@@ -320,21 +320,21 @@ void TEventLoop::TImpl::Run() {
         Data.clear();
     }
 
-    res = AtomicCas(&RunningState, EVENT_LOOP_STOPPED, EVENT_LOOP_RUNNING);
+    res = AtomicCas(&RunningState, EVENT_LOOP_STOPPED, EVENT_LOOP_RUNNING); 
 
     Y_VERIFY(res);
-
+ 
     StoppedEvent.Signal();
 }
 
 void TEventLoop::TImpl::Stop() {
     AtomicSet(StopSignal, 1);
 
-    if (AtomicGet(RunningState) == EVENT_LOOP_RUNNING) {
-        Wakeup();
+    if (AtomicGet(RunningState) == EVENT_LOOP_RUNNING) { 
+        Wakeup(); 
 
-        StoppedEvent.WaitI();
-    }
+        StoppedEvent.WaitI(); 
+    } 
 }
 
 TChannelPtr TEventLoop::TImpl::Register(TSocket socket, TEventHandlerPtr eventHandler, void* cookie) {

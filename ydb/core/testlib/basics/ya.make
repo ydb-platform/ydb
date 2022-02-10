@@ -1,15 +1,15 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:kikimr)
-
-SRCS(
+ 
+SRCS( 
     appdata.cpp
-    helpers.cpp
-    runtime.cpp
+    helpers.cpp 
+    runtime.cpp 
     services.cpp
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     library/cpp/actors/dnsresolver
     library/cpp/regex/pcre
     library/cpp/testing/unittest
@@ -30,14 +30,14 @@ PEERDIR(
     ydb/core/util
     ydb/library/yql/minikql/invoke_builtins
     ydb/library/yql/public/udf/service/exception_policy
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
-IF (GCC)
+IF (GCC) 
     CFLAGS(
         -fno-devirtualize-speculatively
     )
-ENDIF()
-
-END()
+ENDIF() 
+ 
+END() 

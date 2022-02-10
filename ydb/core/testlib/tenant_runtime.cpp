@@ -802,10 +802,10 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         SetupMonitoring();
     }
 
-    TAppPrepare app;
-
+    TAppPrepare app; 
+ 
     app.FeatureFlags = Extension.GetFeatureFlags();
-    app.ClearDomainsAndHive();
+    app.ClearDomainsAndHive(); 
 
     ui32 planResolution = 500;
     // Add domains info.
@@ -834,8 +834,8 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         ids.insert(ids.end(), domainPtr->TxAllocators.begin(), domainPtr->TxAllocators.end());
         SetTxAllocatorTabletIds(ids);
 
-        app.AddDomain(domainPtr.Release());
-        app.AddHive(i, Config.HiveId);
+        app.AddDomain(domainPtr.Release()); 
+        app.AddHive(i, Config.HiveId); 
     }
 
     for (size_t i = 0; i< Config.Nodes.size(); ++i) {
@@ -1120,7 +1120,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 TTenantTestRuntime::TTenantTestRuntime(const TTenantTestConfig &config,
                                        const NKikimrConfig::TAppConfig &extension,
                                        bool createTenantPools)
-    : TTestBasicRuntime(config.Nodes.size(), config.DataCenterCount, false)
+    : TTestBasicRuntime(config.Nodes.size(), config.DataCenterCount, false) 
     , Config(config)
     , Extension(extension)
 {

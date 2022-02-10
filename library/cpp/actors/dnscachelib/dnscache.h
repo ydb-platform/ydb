@@ -5,7 +5,7 @@
 #include <util/generic/vector.h>
 #include <util/network/address.h>
 #include <util/system/mutex.h>
-#include <util/datetime/base.h>
+#include <util/datetime/base.h> 
 
 /** Asynchronous DNS resolver.
  *
@@ -19,7 +19,7 @@
 class TDnsCache {
 public:
     TDnsCache(bool allowIpv4 = true, bool allowIpv6 = true, time_t entry_lifetime = 1800, time_t neg_lifetime = 1, ui32 request_timeout = 500000);
-    ~TDnsCache();
+    ~TDnsCache(); 
 
     TString GetHostByAddr(const NAddr::IRemoteAddr&);
 
@@ -37,9 +37,9 @@ public:
     void GetStats(ui64& a_cache_hits, ui64& a_cache_misses,
                   ui64& ptr_cache_hits, ui64& ptr_cache_misses);
 
-protected:
+protected: 
     bool ValidateHName(const TString& host) const noexcept;
-
+ 
 private:
     struct TGHBNContext {
         TDnsCache* Owner;
@@ -52,7 +52,7 @@ private:
         in6_addr Addr;
     };
 
-    struct THost {
+    struct THost { 
         THost() noexcept {
         }
 
@@ -73,8 +73,8 @@ private:
     };
 
     typedef TMap<TString, THost> THostCache;
-
-    struct TAddr {
+ 
+    struct TAddr { 
         TString Hostname;
         time_t Resolved = 0;
         time_t NotFound = 0;
@@ -112,7 +112,7 @@ private:
 
     const time_t EntryLifetime;
     const time_t NegativeLifetime;
-    const TDuration Timeout;
+    const TDuration Timeout; 
     const bool AllowIpV4;
     const bool AllowIpV6;
 
@@ -124,8 +124,8 @@ private:
     ui64 PtrCacheHits;
     ui64 PtrCacheMisses;
 
-    const static THost NullHost;
-
+    const static THost NullHost; 
+ 
     TMutex AresMtx;
     void* Channel;
 

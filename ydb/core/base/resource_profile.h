@@ -15,16 +15,16 @@ namespace NKikimr {
 class TResourceProfiles : public TThrRefBase {
 public:
     using TResourceProfile = NKikimrSchemeOp::TResourceProfile;
-    using TPtr = std::shared_ptr<TResourceProfile>;
+    using TPtr = std::shared_ptr<TResourceProfile>; 
 
 private:
     using TTabletType = NKikimrTabletBase::TTabletTypes::EType;
 
     using TKey = std::pair<TTabletType, TString>;
-    using TProfiles = THashMap<TKey, TPtr>;
+    using TProfiles = THashMap<TKey, TPtr>; 
 
     TProfiles Profiles;
-    const TPtr DefaultProfile = std::make_shared<TResourceProfile>();
+    const TPtr DefaultProfile = std::make_shared<TResourceProfile>(); 
 
     const TString DefaultProfileName = "default";
     const TTabletType DefaultTabletType = NKikimrTabletBase::TTabletTypes::Unknown;
@@ -38,7 +38,7 @@ public:
         Profiles[key] = std::make_shared<TResourceProfile>(profile);
     }
 
-    const TPtr GetProfile(TTabletType type, const TString &name) const
+    const TPtr GetProfile(TTabletType type, const TString &name) const 
     {
         auto it = Profiles.find(std::make_pair(type, name));
         if (it != Profiles.end())

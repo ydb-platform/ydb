@@ -1,26 +1,26 @@
 #pragma once
 #include "defs.h"
-#include "tablet_flat_executor.h"
+#include "tablet_flat_executor.h" 
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-class TExecutor;
-
-struct IMiniKQLFactory {
-    virtual ~IMiniKQLFactory() = default;
-
+class TExecutor; 
+ 
+struct IMiniKQLFactory { 
+    virtual ~IMiniKQLFactory() = default; 
+ 
     virtual TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalMKQL::TPtr&) = 0;
     virtual TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalSchemeTx::TPtr&) = 0;
     virtual TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalReadColumns::TPtr&) = 0;
-};
-
+}; 
+ 
 class TTabletExecutedFlat : public NFlatExecutorSetup::ITablet {
 protected:
-    using IExecutor = NFlatExecutorSetup::IExecutor;
-
+    using IExecutor = NFlatExecutorSetup::IExecutor; 
+ 
     TTabletExecutedFlat(TTabletStorageInfo *info, const TActorId &tablet, IMiniKQLFactory *factory);
-    IExecutor* Executor() const { return Executor0; }
+    IExecutor* Executor() const { return Executor0; } 
     const TInstant StartTime() const { return StartTime0; }
 
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx);
@@ -51,14 +51,14 @@ protected:
     void Handle(TEvTablet::TEvFAuxUpdate::TPtr&);
     void Handle(TEvTablet::TEvFollowerGcApplied::TPtr&);
     void Handle(TEvTablet::TEvNewFollowerAttached::TPtr&);
-    void Handle(TEvTablet::TEvUpdateConfig::TPtr&);
+    void Handle(TEvTablet::TEvUpdateConfig::TPtr&); 
 
     void HandleTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx);
     void HandleTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx);
     void HandleLocalMKQL(TEvTablet::TEvLocalMKQL::TPtr &ev, const TActorContext &ctx);
     void HandleLocalSchemeTx(TEvTablet::TEvLocalSchemeTx::TPtr &ev, const TActorContext &ctx);
     void HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns::TPtr &ev, const TActorContext &ctx);
-    void HandleGetCounters(TEvTablet::TEvGetCounters::TPtr &ev);
+    void HandleGetCounters(TEvTablet::TEvGetCounters::TPtr &ev); 
 
     STFUNC(StateInitImpl);
 
@@ -66,7 +66,7 @@ protected:
     void Detach(const TActorContext &ctx) override; // executor is dead after this point
 
     bool HandleDefaultEvents(STFUNC_SIG);
-    virtual void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr&, const TActorContext &ctx);
+    virtual void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr&, const TActorContext &ctx); 
 
     bool TryCaptureTxCache(ui64 size) {
         if (!TxCacheQuota)
@@ -79,12 +79,12 @@ protected:
     }
 
 private:
-    IExecutor* CreateExecutor(const TActorContext &ctx);
+    IExecutor* CreateExecutor(const TActorContext &ctx); 
 
-private:
+private: 
     TAutoPtr<IMiniKQLFactory> Factory;
-
-    IExecutor *Executor0;
+ 
+    IExecutor *Executor0; 
     TInstant StartTime0;
     TSharedQuotaPtr TxCacheQuota;
 };

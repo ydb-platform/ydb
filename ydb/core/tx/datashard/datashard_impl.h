@@ -2340,7 +2340,7 @@ protected:
         if (LastDbStatsReportTime + gDbStatsReportInterval > now)
             return;
 
-        auto* resourceMetrics = Executor()->GetResourceMetrics();
+        auto* resourceMetrics = Executor()->GetResourceMetrics(); 
 
         for (const auto& t : TableInfos) {
             ui64 tableId = t.first;

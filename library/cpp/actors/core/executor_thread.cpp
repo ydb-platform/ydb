@@ -67,10 +67,10 @@ namespace NActors {
         DyingActors.push_back(THolder(actor));
     }
 
-    void TExecutorThread::DropUnregistered() {
-        DyingActors.clear(); // here is actual destruction of actors
-    }
-
+    void TExecutorThread::DropUnregistered() { 
+        DyingActors.clear(); // here is actual destruction of actors 
+    } 
+ 
     void TExecutorThread::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
         ++CurrentActorScheduledEventsCounter;
         Ctx.Executor->Schedule(deadline, ev, cookie, Ctx.WorkerId);
@@ -181,7 +181,7 @@ namespace NActors {
                     size_t dyingActorsCnt = DyingActors.size();
                     Ctx.UpdateActorsStats(dyingActorsCnt);
                     if (dyingActorsCnt) {
-                        DropUnregistered();
+                        DropUnregistered(); 
                         actor = nullptr;
                     }
 

@@ -319,7 +319,7 @@ private:
 public:
     TNodeBroker(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
-        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
+        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory) 
         , EpochDuration(TDuration::Hours(1))
         , ConfigSubscriptionId(0)
         , TxProcessor(new TTxProcessor(*this, "root", NKikimrServices::NODE_BROKER))

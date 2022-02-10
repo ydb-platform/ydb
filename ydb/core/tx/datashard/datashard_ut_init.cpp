@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
     }
 
     Y_UNIT_TEST(TestGetShardStateAfterInitialization) {
-        TTestBasicRuntime runtime;
+        TTestBasicRuntime runtime; 
         TTester::Setup(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();

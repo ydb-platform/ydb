@@ -7,28 +7,28 @@ namespace NTabletFlatExecutor {
 
 #define FLAT_EXECUTOR_SIMPLE_COUNTERS_MAP(XX) \
     XX(DB_TX_IN_FLY, "ExecutorTxInFly") \
-    XX(LOG_REDO_COUNT, "LogRedoItems") \
-    XX(LOG_REDO_MEMORY, "LogRedoMemory") \
+    XX(LOG_REDO_COUNT, "LogRedoItems") \ 
+    XX(LOG_REDO_MEMORY, "LogRedoMemory") \ 
     XX(LOG_REDO_SOLIDS, "LogRedoLargeGlobIds") \
-    XX(LOG_ALTER_BYTES, "LogAlterBytes") \
-    XX(LOG_SNAP_BYTES, "LogSnapBytes") \
-    XX(LOG_RIVER_LEVEL, "LogRiverLevel") \
+    XX(LOG_ALTER_BYTES, "LogAlterBytes") \ 
+    XX(LOG_SNAP_BYTES, "LogSnapBytes") \ 
+    XX(LOG_RIVER_LEVEL, "LogRiverLevel") \ 
     XX(DB_WARM_OPS, "DbMemTableOps") \
     XX(DB_WARM_BYTES, "DbMemTableBytes") \
-    XX(DB_ROWS_ERASE, "DbRowsErase") \
-    XX(DB_ROWS_TOTAL, "DbRowsTotal") \
-    XX(DB_META_BYTES, "DbMetaBytes") \
-    XX(DB_INDEX_BYTES, "DbIndexBytes") \
-    XX(DB_OTHER_BYTES, "DbOtherBytes") \
-    XX(DB_BYKEY_BYTES, "DbByKeyBytes") \
-    XX(DB_PLAIN_BYTES, "DbPlainBytes") \
-    XX(DB_CODED_BYTES, "DbCodedBytes") \
+    XX(DB_ROWS_ERASE, "DbRowsErase") \ 
+    XX(DB_ROWS_TOTAL, "DbRowsTotal") \ 
+    XX(DB_META_BYTES, "DbMetaBytes") \ 
+    XX(DB_INDEX_BYTES, "DbIndexBytes") \ 
+    XX(DB_OTHER_BYTES, "DbOtherBytes") \ 
+    XX(DB_BYKEY_BYTES, "DbByKeyBytes") \ 
+    XX(DB_PLAIN_BYTES, "DbPlainBytes") \ 
+    XX(DB_CODED_BYTES, "DbCodedBytes") \ 
     XX(DB_ELOBS_BYTES, "DbELargeObjsBytes") \
     XX(DB_ELOBS_ITEMS, "DbELargeObjsItems") \
-    XX(DB_OUTER_BYTES, "DbOuterBytes") \
-    XX(DB_OUTER_ITEMS, "DbOuterItems") \
-    XX(DB_DATA_BYTES, "DbDataBytes") \
-    XX(DB_PARTS_COUNT, "DbPartsCount") \
+    XX(DB_OUTER_BYTES, "DbOuterBytes") \ 
+    XX(DB_OUTER_ITEMS, "DbOuterItems") \ 
+    XX(DB_DATA_BYTES, "DbDataBytes") \ 
+    XX(DB_PARTS_COUNT, "DbPartsCount") \ 
     XX(DB_UNIQUE_DATA_BYTES, "DbUniqueDataBytes") \
     XX(DB_UNIQUE_PARTS_COUNT, "DbUniquePartsCount") \
     XX(DB_UNIQUE_ROWS_ERASE, "DbUniqueRowsErase") \
@@ -63,48 +63,48 @@ namespace NTabletFlatExecutor {
     XX(COMPACTION_READ_IN_FLY, "CompactionReadInFly") \
 
 #define FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(XX) \
-    XX(LOG_COMMITS, "LogCommits") \
-    XX(LOG_WRITTEN, "LogWritten") \
-    XX(LOG_EMBEDDED, "LogEmbedded" ) \
-    XX(LOG_REDO_WRITTEN, "LogRedoWritten") \
+    XX(LOG_COMMITS, "LogCommits") \ 
+    XX(LOG_WRITTEN, "LogWritten") \ 
+    XX(LOG_EMBEDDED, "LogEmbedded" ) \ 
+    XX(LOG_REDO_WRITTEN, "LogRedoWritten") \ 
     XX(TABLET_BYTES_WRITTEN, "TabletBytesWritten") \
     XX(TABLET_BLOBS_WRITTEN, "TabletBlobsWritten") \
     XX(TABLET_BYTES_READ, "TabletBytesRead") \
     XX(TABLET_BLOBS_READ, "TabletBlobsRead") \
-    XX(COMP_BYTES_WRITTEN, "CompactionBytesWritten") \
+    XX(COMP_BYTES_WRITTEN, "CompactionBytesWritten") \ 
     XX(COMP_BLOBS_WRITTEN, "CompactionBlobsWritten") \
-    XX(COMP_BYTES_READ, "CompactionBytesRead") \
+    XX(COMP_BYTES_READ, "CompactionBytesRead") \ 
     XX(COMP_BLOBS_READ, "CompactionBlobsRead") \
-    XX(DB_ANNEX_ITEMS_GROW, "DbAnnexItemsGrow") \
+    XX(DB_ANNEX_ITEMS_GROW, "DbAnnexItemsGrow") \ 
     XX(DB_ELOBS_ITEMS_GROW, "DbELargeObjsItemsGrow") \
     XX(DB_ELOBS_ITEMS_GONE, "DbELargeObjsItemsGone") \
-    XX(DB_REDO_WRITTEN_BYTES, "DbRedoWrittenBytes") \
-    XX(DB_ANNEX_WRITTEN_BYTES, "DbAnnexWrittenBytes") \
+    XX(DB_REDO_WRITTEN_BYTES, "DbRedoWrittenBytes") \ 
+    XX(DB_ANNEX_WRITTEN_BYTES, "DbAnnexWrittenBytes") \ 
     XX(TX_COUNT_ALL, "Tx(all)") \
-    XX(TX_QUEUED, "TxQueued") \
-    XX(TX_RETRIED, "TxRetried") \
-    XX(TX_FINISHED, "TxFinished") \
+    XX(TX_QUEUED, "TxQueued") \ 
+    XX(TX_RETRIED, "TxRetried") \ 
+    XX(TX_FINISHED, "TxFinished") \ 
     XX(TX_POSTPONED, "TxPostponed") \
-    XX(TX_MEM_REQUESTS, "TxMemoryRequests") \
-    XX(TX_MEM_CAPTURES, "TxMemoryCaptures") \
-    XX(TX_MEM_ATTACHES, "TxMemoryAttaches") \
-    XX(TX_DATA_RELEASES, "TxDataReleases") \
+    XX(TX_MEM_REQUESTS, "TxMemoryRequests") \ 
+    XX(TX_MEM_CAPTURES, "TxMemoryCaptures") \ 
+    XX(TX_MEM_ATTACHES, "TxMemoryAttaches") \ 
+    XX(TX_DATA_RELEASES, "TxDataReleases") \ 
     XX(TX_RO_COMPLETED, "Tx(ro complete)") \
     XX(TX_RW_COMPLETED, "Tx(rw complete)") \
     XX(TX_TERMINATED, "Tx(terminated)") \
-    XX(TX_CHARGE_WEEDED, "TxKeyChargeWeeded") \
-    XX(TX_CHARGE_SIEVED, "TxKeyChargeSieved") \
-    XX(TX_SELECT_WEEDED, "TxKeySelectWeeded") \
-    XX(TX_SELECT_SIEVED, "TxKeySelectSieved") \
-    XX(TX_SELECT_NO_KEY, "TxKeySelectNoKey") \
-    XX(TX_BYTES_READ, "TxReadBytes") \
-    XX(TX_CACHE_HITS, "TxPageCacheHits") \
-    XX(TX_CACHE_MISSES, "TxPageCacheMisses") \
+    XX(TX_CHARGE_WEEDED, "TxKeyChargeWeeded") \ 
+    XX(TX_CHARGE_SIEVED, "TxKeyChargeSieved") \ 
+    XX(TX_SELECT_WEEDED, "TxKeySelectWeeded") \ 
+    XX(TX_SELECT_SIEVED, "TxKeySelectSieved") \ 
+    XX(TX_SELECT_NO_KEY, "TxKeySelectNoKey") \ 
+    XX(TX_BYTES_READ, "TxReadBytes") \ 
+    XX(TX_CACHE_HITS, "TxPageCacheHits") \ 
+    XX(TX_CACHE_MISSES, "TxPageCacheMisses") \ 
     XX(GC_DISCOVERED, "GcBlobsDiscovered") \
     XX(GC_DISCARDED, "GcBlobsDiscarded") \
     XX(GC_FORGOTTEN, "GcBlobsForgotten") \
     XX(GC_KEEPSET, "GcKeepFlagsSet") \
-    XX(GC_NOTKEEPSET, "GcNotKeepFlagsSet") \
+    XX(GC_NOTKEEPSET, "GcNotKeepFlagsSet") \ 
     XX(CONSUMED_CPU, "ConsumedCPU") \
     XX(COMPACTION_READ_POSTPONED, "CompactionReadPostponed") \
     XX(COMPACTION_READ_CACHE_HITS, "CompactionReadCacheHits") \

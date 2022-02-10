@@ -85,23 +85,23 @@ namespace NActors {
                 Unsubscribe, // generic unsubscribe from something
                 Delivered,   // event delivered
                 Undelivered, // event undelivered
-                Poison,      // request actor to shutdown
+                Poison,      // request actor to shutdown 
                 Completed,   // generic async job result event
-                PoisonTaken, // generic Poison taken (reply to PoisonPill event, i.e. died completely)
+                PoisonTaken, // generic Poison taken (reply to PoisonPill event, i.e. died completely) 
                 FlushLog,
                 CallbackCompletion,
                 CallbackException,
-                Gone,        // Generic notification of actor death
+                Gone,        // Generic notification of actor death 
                 TrackActor,
                 UntrackActor,
                 InvokeResult,
                 CoroTimeout,
                 InvokeQuery,
-                End,
-
+                End, 
+ 
                 // Compatibility section
-                PoisonPill = Poison,
-                ActorDied = Gone,
+                PoisonPill = Poison, 
+                ActorDied = Gone, 
             };
 
             static_assert(End < EventSpaceEnd(ES_SYSTEM), "expect End < EventSpaceEnd(ES_SYSTEM)");
@@ -111,16 +111,16 @@ namespace NActors {
             DEFINE_SIMPLE_LOCAL_EVENT(TEvBootstrap, "System: TEvBootstrap")
         };
 
-        struct TEvPoison : public TEventBase<TEvPoison, TSystem::Poison> {
-            DEFINE_SIMPLE_NONLOCAL_EVENT(TEvPoison, "System: TEvPoison")
+        struct TEvPoison : public TEventBase<TEvPoison, TSystem::Poison> { 
+            DEFINE_SIMPLE_NONLOCAL_EVENT(TEvPoison, "System: TEvPoison") 
         };
 
         struct TEvWakeup: public TEventBase<TEvWakeup, TSystem::Wakeup> {
             DEFINE_SIMPLE_LOCAL_EVENT(TEvWakeup, "System: TEvWakeup")
-
-            TEvWakeup(ui64 tag = 0) : Tag(tag) { }
-
-            const ui64 Tag = 0;
+ 
+            TEvWakeup(ui64 tag = 0) : Tag(tag) { } 
+ 
+            const ui64 Tag = 0; 
         };
 
         struct TEvSubscribe: public TEventBase<TEvSubscribe, TSystem::Subscribe> {
@@ -205,14 +205,14 @@ namespace NActors {
             }
         };
 
-        struct TEvGone: public TEventBase<TEvGone, TSystem::Gone> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvGone, "System: TEvGone")
+        struct TEvGone: public TEventBase<TEvGone, TSystem::Gone> { 
+            DEFINE_SIMPLE_LOCAL_EVENT(TEvGone, "System: TEvGone") 
         };
-
+ 
         struct TEvInvokeResult;
 
-        using TEvPoisonPill = TEvPoison; // Legacy name, deprecated
-        using TEvActorDied = TEvGone;
+        using TEvPoisonPill = TEvPoison; // Legacy name, deprecated 
+        using TEvActorDied = TEvGone; 
     };
 }
 

@@ -1,7 +1,7 @@
-#include "helpers.h"
-#include "storage.h"
-#include "appdata.h"
-#include "runtime.h"
+#include "helpers.h" 
+#include "storage.h" 
+#include "appdata.h" 
+#include "runtime.h" 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/quoter.h>
@@ -27,19 +27,19 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
-
-#include <util/system/env.h>
-
-static constexpr TDuration DISK_DISPATCH_TIMEOUT = NSan::PlainOrUnderSanitizer(TDuration::Seconds(10), TDuration::Seconds(20));
-
-namespace NKikimr {
+ 
+#include <util/system/env.h> 
+ 
+static constexpr TDuration DISK_DISPATCH_TIMEOUT = NSan::PlainOrUnderSanitizer(TDuration::Seconds(10), TDuration::Seconds(20)); 
+ 
+namespace NKikimr { 
 
 namespace NPDisk {
     extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000;
 }
 
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig)
-    {
+    { 
         runtime.AddLocalService(MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)),
             TActorSetupCmd(CreateBSNodeWarden(nodeWardenConfig), TMailboxType::Revolving, 0),
             nodeIndex);
@@ -239,22 +239,22 @@ namespace NPDisk {
     void SetupBasicServices(TTestActorRuntime& runtime, TAppPrepare& app, bool mock,
                             NFake::INode* factory, NFake::TStorage storage, NFake::TCaches caches)
     {
-        runtime.SetDispatchTimeout(storage.UseDisk ? DISK_DISPATCH_TIMEOUT : DEFAULT_DISPATCH_TIMEOUT);
-
+        runtime.SetDispatchTimeout(storage.UseDisk ? DISK_DISPATCH_TIMEOUT : DEFAULT_DISPATCH_TIMEOUT); 
+ 
         TTestStorageFactory disk(runtime, storage, mock);
-
+ 
         {
             NKikimrBlobStorage::TNodeWardenServiceSet bsConfig;
-            Y_VERIFY(google::protobuf::TextFormat::ParseFromString(disk.MakeTextConf(*app.Domains), &bsConfig));
-            app.SetBSConf(std::move(bsConfig));
+            Y_VERIFY(google::protobuf::TextFormat::ParseFromString(disk.MakeTextConf(*app.Domains), &bsConfig)); 
+            app.SetBSConf(std::move(bsConfig)); 
         }
-
-        if (app.Domains->Domains.empty()) {
-            app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release());
-            app.AddHive(0, 0);
-        }
-
-        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+ 
+        if (app.Domains->Domains.empty()) { 
+            app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release()); 
+            app.AddHive(0, 0); 
+        } 
+ 
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) { 
             SetupStateStorageGroups(runtime, nodeIndex, app);
             NKikimrProto::TKeyConfig keyConfig;
             if (const auto it = app.Keys.find(nodeIndex); it != app.Keys.end()) {
@@ -269,12 +269,12 @@ namespace NPDisk {
             SetupBlobCache(runtime, nodeIndex);
             SetupQuoterService(runtime, nodeIndex);
 
-            if (factory)
-                factory->Birth(nodeIndex);
-        }
-
-        runtime.Initialize(app.Unwrap());
-
+            if (factory) 
+                factory->Birth(nodeIndex); 
+        } 
+ 
+        runtime.Initialize(app.Unwrap()); 
+ 
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
             // NodeWarden (and its actors) relies on timers to work correctly
             auto actorId = runtime.GetLocalServiceId(
@@ -284,12 +284,12 @@ namespace NPDisk {
             runtime.EnableScheduleForActor(actorId);
         }
 
-        if (!mock && !runtime.IsRealThreads()) {
+        if (!mock && !runtime.IsRealThreads()) { 
             ui32 evNum = disk.DomainsNum * disk.DisksInDomain;
-            TDispatchOptions options;
+            TDispatchOptions options; 
             options.FinalEvents.push_back(
                 TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvLocalRecoveryDone, evNum));
-            runtime.DispatchEvents(options);
-        }
-    }
-}
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+} 

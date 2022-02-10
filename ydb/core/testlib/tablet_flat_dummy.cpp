@@ -1,4 +1,4 @@
-#include "tablet_helpers.h"
+#include "tablet_helpers.h" 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -10,7 +10,7 @@ namespace NKikimr {
 
 namespace {
 
-class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExecutor::TTabletExecutedFlat { 
 
     struct Schema : NIceDb::Schema {
         struct Snaps : Table<1> {
@@ -116,7 +116,7 @@ public:
 
     TDummyFlatTablet(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
-        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
+        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory) 
     {}
 
     STFUNC(StateInit) {

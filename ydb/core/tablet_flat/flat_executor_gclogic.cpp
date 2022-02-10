@@ -1,14 +1,14 @@
 #include "flat_executor_gclogic.h"
-#include "flat_bio_eggs.h"
+#include "flat_bio_eggs.h" 
 #include <ydb/core/base/tablet.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
 TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies)
-    : TabletStorageInfo(std::move(info))
-    , Cookies(cookies)
-    , Generation(Cookies->Gen)
+    : TabletStorageInfo(std::move(info)) 
+    , Cookies(cookies) 
+    , Generation(Cookies->Gen) 
     , Slicer(1, Cookies.Get(), NBlockIO::BlockSize)
     , SnapshotStep(0)
     , PrevSnapshotStep(0)
@@ -17,33 +17,33 @@ TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, 
 {
 }
 
-void TExecutorGCLogic::WriteToLog(TLogCommit &commit) {
-    TGCTime time(Generation, commit.Step);
+void TExecutorGCLogic::WriteToLog(TLogCommit &commit) { 
+    TGCTime time(Generation, commit.Step); 
     TGCLogEntry& uncommittedDelta = UncommittedDeltaLog[time];
     uncommittedDelta.Time = time;
 
     const ui32 gcEntriesInBatch = 250000; // ~7mb rawsize
 
-    Cookies->Switch(commit.Step, true /* require step switch */);
+    Cookies->Switch(commit.Step, true /* require step switch */); 
 
-    const ui32 gcGrowSize = commit.GcDelta.Created.size();
-    const ui32 gcLeftSize = commit.GcDelta.Deleted.size();
-
-    if (commit.Type == ECommit::Snap || gcGrowSize + gcLeftSize < gcEntriesInBatch) {
-        uncommittedDelta.Delta = commit.GcDelta; /* preserve for embedding  */
+    const ui32 gcGrowSize = commit.GcDelta.Created.size(); 
+    const ui32 gcLeftSize = commit.GcDelta.Deleted.size(); 
+ 
+    if (commit.Type == ECommit::Snap || gcGrowSize + gcLeftSize < gcEntriesInBatch) { 
+        uncommittedDelta.Delta = commit.GcDelta; /* preserve for embedding  */ 
     } else {
         ui32 placedDiscovered = 0;
         ui32 placedLeft = 0;
 
-        uncommittedDelta.Delta = std::exchange(commit.GcDelta, { });
-
-        while (placedDiscovered < gcGrowSize || placedLeft < gcLeftSize) {
-            NKikimrExecutorFlat::TExternalGcEntry proto;
-
+        uncommittedDelta.Delta = std::exchange(commit.GcDelta, { }); 
+ 
+        while (placedDiscovered < gcGrowSize || placedLeft < gcLeftSize) { 
+            NKikimrExecutorFlat::TExternalGcEntry proto; 
+ 
             ui32 leftInBatch = gcEntriesInBatch;
-            if (placedDiscovered < gcGrowSize) {
-                const ui32 toMove = Min(leftInBatch, gcGrowSize - placedDiscovered);
-                auto it = uncommittedDelta.Delta.Created.begin() + placedDiscovered;
+            if (placedDiscovered < gcGrowSize) { 
+                const ui32 toMove = Min(leftInBatch, gcGrowSize - placedDiscovered); 
+                auto it = uncommittedDelta.Delta.Created.begin() + placedDiscovered; 
                 LogoBlobIDRepatedFromLogoBlobIDVector(proto.MutableGcDiscovered(), it, it + toMove);
                 placedDiscovered += toMove;
                 leftInBatch -= toMove;
@@ -51,12 +51,12 @@ void TExecutorGCLogic::WriteToLog(TLogCommit &commit) {
 
             if (leftInBatch && placedLeft < gcLeftSize) {
                 const ui32 toMove = Min(leftInBatch, gcLeftSize - placedLeft);
-                auto it = uncommittedDelta.Delta.Deleted.begin() + placedLeft;
+                auto it = uncommittedDelta.Delta.Deleted.begin() + placedLeft; 
                 LogoBlobIDRepatedFromLogoBlobIDVector(proto.MutableGcLeft(), it, it + toMove);
                 placedLeft += toMove;
             }
 
-            Slicer.One(commit.Refs, proto.SerializeAsString(), true);
+            Slicer.One(commit.Refs, proto.SerializeAsString(), true); 
         }
     }
 }
@@ -67,14 +67,14 @@ TGCLogEntry TExecutorGCLogic::SnapshotLog(ui32 step) {
     for (const auto& chIt : ChannelInfo) {
         for (const auto& le : chIt.second.CommittedDelta) {
             Y_VERIFY(le.first <= snapshotTime);
-            TExecutorGCLogic::MergeVectors(snapshot.Delta.Created, le.second.Created);
-            TExecutorGCLogic::MergeVectors(snapshot.Delta.Deleted, le.second.Deleted);
+            TExecutorGCLogic::MergeVectors(snapshot.Delta.Created, le.second.Created); 
+            TExecutorGCLogic::MergeVectors(snapshot.Delta.Deleted, le.second.Deleted); 
         }
     }
 
     for (const auto &it : UncommittedDeltaLog) {
-        TExecutorGCLogic::MergeVectors(snapshot.Delta.Created, it.second.Delta.Created);
-        TExecutorGCLogic::MergeVectors(snapshot.Delta.Deleted, it.second.Delta.Deleted);
+        TExecutorGCLogic::MergeVectors(snapshot.Delta.Created, it.second.Delta.Created); 
+        TExecutorGCLogic::MergeVectors(snapshot.Delta.Deleted, it.second.Delta.Deleted); 
     }
 
     PrevSnapshotStep = SnapshotStep;
@@ -82,22 +82,22 @@ TGCLogEntry TExecutorGCLogic::SnapshotLog(ui32 step) {
     return snapshot;
 }
 
-void TExecutorGCLogic::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap, ui32 step) {
+void TExecutorGCLogic::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap, ui32 step) { 
     TGCLogEntry gcLogEntry = SnapshotLog(step);
-    auto *gcSnapDiscovered = snap.MutableGcSnapDiscovered();
-    auto *gcSnapLeft = snap.MutableGcSnapLeft();
+    auto *gcSnapDiscovered = snap.MutableGcSnapDiscovered(); 
+    auto *gcSnapLeft = snap.MutableGcSnapLeft(); 
 
-    gcSnapDiscovered->Reserve(gcLogEntry.Delta.Created.size());
-    for (const TLogoBlobID &x : gcLogEntry.Delta.Created)
+    gcSnapDiscovered->Reserve(gcLogEntry.Delta.Created.size()); 
+    for (const TLogoBlobID &x : gcLogEntry.Delta.Created) 
         LogoBlobIDFromLogoBlobID(x, gcSnapDiscovered->Add());
 
-    gcSnapLeft->Reserve(gcLogEntry.Delta.Deleted.size());
-    for (const TLogoBlobID &x : gcLogEntry.Delta.Deleted)
+    gcSnapLeft->Reserve(gcLogEntry.Delta.Deleted.size()); 
+    for (const TLogoBlobID &x : gcLogEntry.Delta.Deleted) 
         LogoBlobIDFromLogoBlobID(x, gcSnapLeft->Add());
 
     for (const auto &chIt : ChannelInfo) {
         if (chIt.second.CommitedGcBarrier) {
-            auto *x = snap.AddGcBarrierInfo();
+            auto *x = snap.AddGcBarrierInfo(); 
             x->SetChannel(chIt.first);
             x->SetSetToGeneration(chIt.second.CommitedGcBarrier.Generation);
             x->SetSetToStep(chIt.second.CommitedGcBarrier.Step);
@@ -145,7 +145,7 @@ void TExecutorGCLogic::HoldBarrier(ui32 step) {
     Y_VERIFY(true == HoldBarriersSet.insert(TGCTime(Generation, step)).second);
 }
 
-void TExecutorGCLogic::ReleaseBarrier(ui32 step) {
+void TExecutorGCLogic::ReleaseBarrier(ui32 step) { 
     Y_VERIFY(1 == HoldBarriersSet.erase(TGCTime(Generation, step)));
 }
 
@@ -161,16 +161,16 @@ void TExecutorGCLogic::FollowersSyncComplete(bool isBoot) {
 }
 
 void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
-    for (const TLogoBlobID &blobId : delta.Created) {
+    for (const TLogoBlobID &blobId : delta.Created) { 
         auto &channel = ChannelInfo[blobId.Channel()];
         TGCTime gcTime(blobId.Generation(), blobId.Step());
         Y_VERIFY(channel.KnownGcBarrier < gcTime);
-        channel.CommittedDelta[gcTime].Created.push_back(blobId);
+        channel.CommittedDelta[gcTime].Created.push_back(blobId); 
     }
 
-    for (const TLogoBlobID &blobId : delta.Deleted) {
+    for (const TLogoBlobID &blobId : delta.Deleted) { 
         auto &channel = ChannelInfo[blobId.Channel()];
-        channel.CommittedDelta[time].Deleted.push_back(blobId);
+        channel.CommittedDelta[time].Deleted.push_back(blobId); 
     }
 }
 
@@ -197,8 +197,8 @@ TExecutorGCLogic::TChannelInfo::TChannelInfo()
 
 void TExecutorGCLogic::TChannelInfo::ApplyDelta(TGCTime time, TGCBlobDelta& delta) {
     TGCBlobDelta& committedDelta = CommittedDelta[time];
-    DoSwap(committedDelta, delta);
-    Y_VERIFY_DEBUG(delta.Created.empty() && delta.Deleted.empty());
+    DoSwap(committedDelta, delta); 
+    Y_VERIFY_DEBUG(delta.Created.empty() && delta.Deleted.empty()); 
 }
 
 void TExecutorGCLogic::MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source) {
@@ -297,7 +297,7 @@ TExecutorGCLogic::TIntrospection TExecutorGCLogic::IntrospectStateSize() const {
 
      for (auto &xpair : UncommittedDeltaLog) {
          ++ret.UncommitedEntries;
-         ret.UncommitedBlobIds += xpair.second.Delta.Created.size() + xpair.second.Delta.Deleted.size();
+         ret.UncommitedBlobIds += xpair.second.Delta.Created.size() + xpair.second.Delta.Deleted.size(); 
      }
      ret.UncommitedEntriesBytes += ret.UncommitedBlobIds * sizeof(TLogoBlobID) + 96;
      ret.BarriersSetSize += HoldBarriersSet.size();
@@ -305,8 +305,8 @@ TExecutorGCLogic::TIntrospection TExecutorGCLogic::IntrospectStateSize() const {
      for (auto xchannelp : ChannelInfo) {
          for (auto &xpair : xchannelp.second.CommittedDelta) {
              ++ret.CommitedEntries;
-             ret.CommitedBlobIdsKnown += xpair.second.Created.size();
-             ret.CommitedBlobIdsLeft += xpair.second.Deleted.size();
+             ret.CommitedBlobIdsKnown += xpair.second.Created.size(); 
+             ret.CommitedBlobIdsLeft += xpair.second.Deleted.size(); 
          }
          ret.CommitedEntriesBytes += sizeof(TLogoBlobID) *(ret.CommitedBlobIdsKnown + ret.CommitedBlobIdsLeft) + 96;
      }

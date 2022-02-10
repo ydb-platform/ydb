@@ -23,18 +23,18 @@ public:
     }
 
     ~TTempTlsVector() {
-        Clear();
-    }
-
-    void Clear() {
+        Clear(); 
+    } 
+ 
+    void Clear() { 
         Vector->clear();
     }
-
+ 
     size_t Capacity() const noexcept {
-        return Vector->capacity();
-    }
-
-    void Shrink() {
-        Vector->shrink_to_fit();
-    }
+        return Vector->capacity(); 
+    } 
+ 
+    void Shrink() { 
+        Vector->shrink_to_fit(); 
+    } 
 };

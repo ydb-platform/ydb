@@ -596,15 +596,15 @@ public:
         THolder<TEvTablet::TEvGetCountersResponse> response = AggregateWhiteboardResponses(TabletCountersResults);
 
         ui64 dataSize = 0;
-        dataSize += GetCounterValue(response->Record.GetTabletCounters().GetExecutorCounters().GetSimpleCounters(), "LogRedoMemory");
-        dataSize += GetCounterValue(response->Record.GetTabletCounters().GetExecutorCounters().GetSimpleCounters(), "DbIndexBytes");
-        dataSize += GetCounterValue(response->Record.GetTabletCounters().GetExecutorCounters().GetSimpleCounters(), "DbDataBytes");
+        dataSize += GetCounterValue(response->Record.GetTabletCounters().GetExecutorCounters().GetSimpleCounters(), "LogRedoMemory"); 
+        dataSize += GetCounterValue(response->Record.GetTabletCounters().GetExecutorCounters().GetSimpleCounters(), "DbIndexBytes"); 
+        dataSize += GetCounterValue(response->Record.GetTabletCounters().GetExecutorCounters().GetSimpleCounters(), "DbDataBytes"); 
         dataSize += GetCounterValue(response->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters(), "KV/RecordBytes");
         dataSize += GetCounterValue(response->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters(), "KV/TrashBytes");
         pbCommon.SetDataSize(dataSize);
 
         ui64 memSize = 0;
-        memSize += GetCounterValue(response->Record.GetTabletCounters().GetExecutorCounters().GetSimpleCounters(), "DbWarmBytes"); // not cache
+        memSize += GetCounterValue(response->Record.GetTabletCounters().GetExecutorCounters().GetSimpleCounters(), "DbWarmBytes"); // not cache 
         memSize += GetCounterValue(response->Record.GetTabletCounters().GetExecutorCounters().GetSimpleCounters(), "CacheFreshSize"); // cache
         memSize += GetCounterValue(response->Record.GetTabletCounters().GetExecutorCounters().GetSimpleCounters(), "CacheStagingSize"); // cache
         memSize += GetCounterValue(response->Record.GetTabletCounters().GetExecutorCounters().GetSimpleCounters(), "CacheWarmSize"); // cache

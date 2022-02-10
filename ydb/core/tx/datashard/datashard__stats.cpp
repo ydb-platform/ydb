@@ -331,7 +331,7 @@ public:
         for (ui32 sysTableId : Self->SysTablesToTransferAtSplit) {
             THashSet<ui64> sysPartOwners;
             auto subset = txc.DB.Subset(sysTableId, NTable::TEpoch::Max(), { }, { });
-            NTable::GetPartOwners(*subset, sysPartOwners);
+            NTable::GetPartOwners(*subset, sysPartOwners); 
             Self->SysTablesPartOnwers.insert(sysPartOwners.begin(), sysPartOwners.end());
         }
         return true;

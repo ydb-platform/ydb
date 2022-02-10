@@ -48,7 +48,7 @@ namespace NTest {
         template <typename T> void IncCounter(T, const TDuration&) const {}
 
     private:
-        NTable::TScheme Schema;
+        NTable::TScheme Schema; 
 
         static ui32 NumSysTables() { return 10; }
 
@@ -57,20 +57,20 @@ namespace NTest {
             TableInfos[EUserTableId].Name = "user____Table";
             TableInfos[EUserTableId].KeyColumnTypes.push_back(NScheme::NTypeIds::Uint32);
 
-            NTable::TAlter delta;
+            NTable::TAlter delta; 
 
             for (ui32 tableId = 0; tableId < NumSysTables(); ++tableId) {
-                delta.AddTable(TString("Table") + ('A'+tableId), tableId);
+                delta.AddTable(TString("Table") + ('A'+tableId), tableId); 
                 delta.AddColumn(tableId, "key", 0, NScheme::NTypeIds::Uint32, false);
-                delta.AddColumnToKey(tableId, 0);
+                delta.AddColumnToKey(tableId, 0); 
             }
 
-            delta.AddTable("user____Table", EUserTableId);
+            delta.AddTable("user____Table", EUserTableId); 
             delta.AddColumn(EUserTableId, "key", 0, NScheme::NTypeIds::Uint32, false);
-            delta.AddColumnToKey(EUserTableId, 0);
-
-
-            NTable::TSchemeModifier(Schema).Apply(*delta.Flush());
+            delta.AddColumnToKey(EUserTableId, 0); 
+ 
+ 
+            NTable::TSchemeModifier(Schema).Apply(*delta.Flush()); 
         }
 
     public:

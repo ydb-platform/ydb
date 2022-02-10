@@ -15,7 +15,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <google/protobuf/text_format.h>
 #include <util/generic/xrange.h>
-#include <util/random/mersenne.h>
+#include <util/random/mersenne.h> 
 #include <util/system/sanitizers.h>
 
 namespace NKikimr {
@@ -1437,7 +1437,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
 
-        NFake::TStorage diskParams;
+        NFake::TStorage diskParams; 
         diskParams.DiskSize = 500ull*1024*1024;
         diskParams.SectorSize = 512;
         diskParams.ChunkSize = 50ull*1024*1024;
@@ -1728,20 +1728,20 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(response.GetExecutionEngineResponseStatus(), (ui32)NMiniKQL::IEngineFlat::EStatus::Complete, "Failed to write row");
     }
 
-    void WriteRow(TFlatMsgBusClient& annoyingClient, TString table, ui32 key, TString value, TArrayRef<const char> large) {
-        TString insertRowQuery = "("
-                "(let key '('('Key (Uint32 '%u))))"
-                "(let value '('Value (Utf8 '%s)))"
-                "(let large '('Large (String '%s)))"
-                "(let ret_ (AsList"
-                "    (UpdateRow '/dc-1/Dir/%s key '(value large))"
-                "))"
-                "(return ret_)"
-                ")";
-
+    void WriteRow(TFlatMsgBusClient& annoyingClient, TString table, ui32 key, TString value, TArrayRef<const char> large) { 
+        TString insertRowQuery = "(" 
+                "(let key '('('Key (Uint32 '%u))))" 
+                "(let value '('Value (Utf8 '%s)))" 
+                "(let large '('Large (String '%s)))" 
+                "(let ret_ (AsList" 
+                "    (UpdateRow '/dc-1/Dir/%s key '(value large))" 
+                "))" 
+                "(return ret_)" 
+                ")"; 
+ 
         RunWriteQueryRetryOverloads(annoyingClient, Sprintf(insertRowQuery.data(), key, value.data(), large.data(), table.data()));
-    }
-
+    } 
+ 
     void WriteRow(TFlatMsgBusClient& annoyingClient, TString table, ui32 key, TString value) {
         TString insertRowQuery = "("
                 "(let key '('('Key (Uint32 '%u))))"
@@ -1755,15 +1755,15 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         RunWriteQueryRetryOverloads(annoyingClient, Sprintf(insertRowQuery.data(), key, value.data(), table.data()));
     }
 
-    void WriteRandomRows(TFlatMsgBusClient &client, TString table, ui64 seed, ui32 rows) {
-        TMersenne<ui64> rnd(seed);
-        NTable::NTest::TRandomString<decltype(rnd)> blobs(rnd);
-
-        for (auto seq : xrange(rows)) {
+    void WriteRandomRows(TFlatMsgBusClient &client, TString table, ui64 seed, ui32 rows) { 
+        TMersenne<ui64> rnd(seed); 
+        NTable::NTest::TRandomString<decltype(rnd)> blobs(rnd); 
+ 
+        for (auto seq : xrange(rows)) { 
             WriteRow(client, table, seq, blobs.Do(rnd.Uniform(4, 1600)));
-        }
-    }
-
+        } 
+    } 
+ 
     TString ReadRow(TFlatMsgBusClient& annoyingClient, TString table, ui32 key) {
         TString query =
                     R"(
@@ -1793,7 +1793,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                 Name: "TableOld"
                 Columns { Name: "Key"    Type: "Uint32"}
                 Columns { Name: "Value"  Type: "Utf8"}
-                Columns { Name: "Large"  Type: "String" Family: 0 }
+                Columns { Name: "Large"  Type: "String" Family: 0 } 
                 Columns { Name: "unused001"  Type: "Bool"}
                 Columns { Name: "unused002"  Type: "Uint32"}
                 Columns { Name: "unused003"  Type: "Int64"}
@@ -1823,12 +1823,12 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                             KeepInCache: true
                         }
                     }
-                    ColumnFamilies {
-                        Id: 0
-                        Storage: ColumnStorageTest_1_2_1k
-                        ColumnCache: ColumnCacheNone
-                    }
-                    EnableFilterByKey: true
+                    ColumnFamilies { 
+                        Id: 0 
+                        Storage: ColumnStorageTest_1_2_1k 
+                        ColumnCache: ColumnCacheNone 
+                    } 
+                    EnableFilterByKey: true 
                 }
             )___";
 
@@ -1836,20 +1836,20 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.MkDir("/dc-1", "Dir");
         annoyingClient.CreateTable("/dc-1/Dir", Sprintf(table, withFollowers ? 2 : 0));
 
-        TMersenne<ui64> rnd;
-        NTable::NTest::TRandomString<decltype(rnd)> blobs(rnd);
-
-        for (ui32 i = 0; i < 8; ++i) {
-            WriteRow(annoyingClient, "TableOld", i, "AAA", blobs.Do(rnd.Uniform(512, 1536)));
-            WriteRow(annoyingClient, "TableOld", 0x80000000 + i, "BBB", blobs.Do(rnd.Uniform(512, 1536)));
+        TMersenne<ui64> rnd; 
+        NTable::NTest::TRandomString<decltype(rnd)> blobs(rnd); 
+ 
+        for (ui32 i = 0; i < 8; ++i) { 
+            WriteRow(annoyingClient, "TableOld", i, "AAA", blobs.Do(rnd.Uniform(512, 1536))); 
+            WriteRow(annoyingClient, "TableOld", 0x80000000 + i, "BBB", blobs.Do(rnd.Uniform(512, 1536))); 
         }
     }
 
     TString ReadFromTable(TFlatMsgBusClient& annoyingClient, TString table, ui32 fromKey = 0, bool follower = false) {
         const char* readQuery =
                 "("
-                "(let range1 '('IncFrom '('Key (Uint32 '%d) (Void) )))"
-                "(let select '('Key 'Value 'Large))"
+                "(let range1 '('IncFrom '('Key (Uint32 '%d) (Void) )))" 
+                "(let select '('Key 'Value 'Large))" 
                 "(let options '())"
                 "(let pgmReturn (AsList"
                 "    (SetResult 'range1 (SelectRange '%s range1 select options (Uint32 '%d)))"
@@ -1892,8 +1892,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         TServer cleverServer = TServer(TServerSettings(port));
 
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
 
         PrepareSourceTable(annoyingClient);
@@ -1902,13 +1902,13 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
         Cerr << "Copy TableOld to Table" << Endl;
-
+ 
         annoyingClient.CreateTable("/dc-1/Dir", " Name: \"Table\" CopyFromTable: \"/dc-1/Dir/TableOld\"");
 
         TString strResultOld = ReadFromTable(annoyingClient, "/dc-1/Dir/TableOld");
         TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/Table");
 
-        Cout << strResultOld << Endl;
+        Cout << strResultOld << Endl; 
         UNIT_ASSERT_NO_DIFF(strResult, strResultOld);
 
         // Make second copy of the old table
@@ -1978,8 +1978,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
 
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
 
         PrepareSourceTable(annoyingClient);
@@ -2007,8 +2007,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
 
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
 
         PrepareSourceTable(annoyingClient);
@@ -2016,7 +2016,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         // Copy the table
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
-
+ 
         Cerr << "Copy TableOld to Table" << Endl;
         annoyingClient.CreateTable("/dc-1/Dir", " Name: \"Table\" CopyFromTable: \"/dc-1/Dir/TableOld\""
                         " PartitionConfig { FollowerCount: 1 }");
@@ -2053,8 +2053,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
 
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
 
         PrepareSourceTable(annoyingClient);
@@ -2102,8 +2102,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
 
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
 
         PrepareSourceTable(annoyingClient);
@@ -2140,8 +2140,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
 
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
 
         PrepareSourceTable(annoyingClient);
@@ -2153,7 +2153,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         // Copy the table
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
-
+ 
         Cerr << "Copy TableOld to Table" << Endl;
         annoyingClient.CreateTable("/dc-1/Dir", R"___(
                 Name: "Table"
@@ -2180,11 +2180,11 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                             KeepInCache: true
                         }
                     }
-                    ColumnFamilies {
-                        Id: 0
-                        Storage: ColumnStorageTest_1_2_1k
-                        ColumnCache: ColumnCacheNone
-                    }
+                    ColumnFamilies { 
+                        Id: 0 
+                        Storage: ColumnStorageTest_1_2_1k 
+                        ColumnCache: ColumnCacheNone 
+                    } 
                 }
             )___");
 
@@ -2192,7 +2192,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         datashards.insert(partitions.begin(), partitions.end());
 
         // Write new rows to the copy in order to trigger compaction
-        WriteRandomRows(annoyingClient, "Table", 666, 100);
+        WriteRandomRows(annoyingClient, "Table", 666, 100); 
         TString strResult = ReadFromTable(annoyingClient, "/dc-1/Dir/Table");
 
         // Delete original table
@@ -2212,8 +2212,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
 
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
 
         PrepareSourceTable(annoyingClient);
@@ -2225,7 +2225,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         // Copy the table
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
-
+ 
         Cerr << "Copy TableOld to Table" << Endl;
         annoyingClient.CreateTable("/dc-1/Dir", R"___(
                 Name: "Table"
@@ -2257,11 +2257,11 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                             UpliftPartSize: 0
                         }
                     }
-                    ColumnFamilies {
-                        Id: 0
-                        Storage: ColumnStorageTest_1_2_1k
-                        ColumnCache: ColumnCacheNone
-                    }
+                    ColumnFamilies { 
+                        Id: 0 
+                        Storage: ColumnStorageTest_1_2_1k 
+                        ColumnCache: ColumnCacheNone 
+                    } 
                 }
             )___");
 
@@ -2269,8 +2269,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.DeleteTable("/dc-1/Dir", "TableOld");
 
         // Write new rows to the copy in order to trigger compaction
-        WriteRandomRows(annoyingClient, "Table", 666, 100);
-
+        WriteRandomRows(annoyingClient, "Table", 666, 100); 
+ 
         // Check that first partition of the original table is deleted after part is returned
         WaitForTabletsToBeDeletedInHive(annoyingClient, cleverServer.GetRuntime(), THashSet<ui64>({partitions[0]}));
 
@@ -2294,8 +2294,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
 
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
 
         PrepareSourceTable(annoyingClient);
@@ -2413,8 +2413,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
 
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
         PrepareSourceTable(annoyingClient);
 //        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
@@ -2473,9 +2473,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
-
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+ 
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
         PrepareSourceTable(annoyingClient);
 
@@ -2510,9 +2510,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
-
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+ 
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
         PrepareSourceTable(annoyingClient);
 
@@ -2546,9 +2546,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
-
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+ 
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
         PrepareSourceTable(annoyingClient);
 
@@ -2639,9 +2639,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
-
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+ 
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
         PrepareSourceTable(annoyingClient);
 
@@ -2677,9 +2677,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
-
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+ 
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
         PrepareSourceTable(annoyingClient);
 
@@ -2717,9 +2717,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port).SetNodeCount(2));
         DisableSplitMergePartCountLimit(cleverServer);
-
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+ 
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
         PrepareSourceTable(annoyingClient, true);
 
@@ -2769,61 +2769,61 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     Y_UNIT_TEST(WriteSplitKillRead) {
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
+        TPortManager pm; 
+        ui16 port = pm.GetPort(2134); 
         TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
+ 
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
+        TFlatMsgBusClient annoyingClient(port); 
+        PrepareSourceTable(annoyingClient); 
 
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
-        TFlatMsgBusClient annoyingClient(port);
-        PrepareSourceTable(annoyingClient);
-
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
-
-        // Write new rows to the copy in order to trigger compaction
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG); 
+ 
+        // Write new rows to the copy in order to trigger compaction 
         TMap<ui32, TString> rows1 = {
-            {1, "AAA"},
-            {101, "BBB"},
-            {201, "CCC"}
-        };
-        for (const auto& r : rows1) {
-            WriteRow(annoyingClient, "TableOld", r.first, r.second);
-        }
-
-        SplitTable(annoyingClient, "/dc-1/Dir/TableOld", 0, {100, 200});
-
+            {1, "AAA"}, 
+            {101, "BBB"}, 
+            {201, "CCC"} 
+        }; 
+        for (const auto& r : rows1) { 
+            WriteRow(annoyingClient, "TableOld", r.first, r.second); 
+        } 
+ 
+        SplitTable(annoyingClient, "/dc-1/Dir/TableOld", 0, {100, 200}); 
+ 
         TMap<ui32, TString> rows2 = {
-            {2, "2222AAA"},
-            {102, "2222BBB"},
-            {202, "2222CCC"}
-        };
-        for (const auto& r : rows2) {
-            WriteRow(annoyingClient, "TableOld", r.first, r.second);
-        }
-
-        for (auto tableId: annoyingClient.GetTablePartitions("/dc-1/Dir/TableOld"))
-            annoyingClient.KillTablet(cleverServer, tableId);
-
+            {2, "2222AAA"}, 
+            {102, "2222BBB"}, 
+            {202, "2222CCC"} 
+        }; 
+        for (const auto& r : rows2) { 
+            WriteRow(annoyingClient, "TableOld", r.first, r.second); 
+        } 
+ 
+        for (auto tableId: annoyingClient.GetTablePartitions("/dc-1/Dir/TableOld")) 
+            annoyingClient.KillTablet(cleverServer, tableId); 
+ 
         TMap<ui32, TString> rows = rows1;
-        rows.insert(rows2.begin(), rows2.end());
-        for (const auto& r : rows) {
-            TString val = ReadRow(annoyingClient, "TableOld", r.first);
-            UNIT_ASSERT_VALUES_EQUAL(val, r.second);
-        }
-
-        annoyingClient.DeleteTable("/dc-1/Dir", "TableOld");
-        annoyingClient.Ls("/dc-1/Dir/TableOld");
-    }
-
+        rows.insert(rows2.begin(), rows2.end()); 
+        for (const auto& r : rows) { 
+            TString val = ReadRow(annoyingClient, "TableOld", r.first); 
+            UNIT_ASSERT_VALUES_EQUAL(val, r.second); 
+        } 
+ 
+        annoyingClient.DeleteTable("/dc-1/Dir", "TableOld"); 
+        annoyingClient.Ls("/dc-1/Dir/TableOld"); 
+    } 
+ 
     Y_UNIT_TEST(SplitBoundaryRead) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
-
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+ 
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
         PrepareSourceTable(annoyingClient);
 
@@ -2840,9 +2840,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
-
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+ 
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
         PrepareSourceTable(annoyingClient);
 
@@ -2888,9 +2888,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
-
-        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
-
+ 
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO); 
+ 
         TFlatMsgBusClient annoyingClient(port);
 
         const char * tableDescr = R"___(
@@ -3259,12 +3259,12 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT(res->Record.HasTabletCounters());
         bool found = false;
         for (const auto& sc : res->Record.GetTabletCounters().GetExecutorCounters().GetSimpleCounters()) {
-            if (sc.GetName() == "DbDataBytes") {
+            if (sc.GetName() == "DbDataBytes") { 
                 found = true;
                 break;
             }
         }
-        UNIT_ASSERT_C(found, "DbDataBytes counter not found");
+        UNIT_ASSERT_C(found, "DbDataBytes counter not found"); 
     }
 
     void LargeDatashardReplyRO(TFlatMsgBusClient& client) {
@@ -3505,7 +3505,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         TFlatMsgBusClient annoyingClient(port);
 
-        const char * table = R"(Name: "TableWithFilter"
+        const char * table = R"(Name: "TableWithFilter" 
             Columns { Name: "key1"   Type: "Uint32" }
             Columns { Name: "value" Type: "Uint32" }
             KeyColumnNames: ["key1"]
@@ -3529,13 +3529,13 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                             KeepInCache: false
                       }
                 }
-                EnableFilterByKey: true
+                EnableFilterByKey: true 
             }
             )";
 
         annoyingClient.InitRoot();
-        auto res = annoyingClient.CreateTable("/dc-1", table);
-        UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK);
+        auto res = annoyingClient.CreateTable("/dc-1", table); 
+        UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK); 
 
         const ui32 ROW_COUNT = 30;
 
@@ -3545,18 +3545,18 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             annoyingClient.FlatQuery(Sprintf(R"((
                 (let row_ '('('key1 (Uint32 '%u))))
                 (let cols_ '('('value (Uint32 '%u))))
-                (let insert (UpdateRow '/dc-1/TableWithFilter row_ cols_))
+                (let insert (UpdateRow '/dc-1/TableWithFilter row_ cols_)) 
                 (let ret_ (AsList insert))
                 (return ret_)
             ))", i, i));
         }
 
-        Cout << "SELECT value FROM TableWithFilter WHERE key = i" << Endl;
+        Cout << "SELECT value FROM TableWithFilter WHERE key = i" << Endl; 
         for (ui32 i = 0; i < ROW_COUNT; ++i) {
             auto res = annoyingClient.FlatQuery(Sprintf(R"((
                 (let row_ '('('key1 (Uint32 '%u))))
                 (let cols_ '('value))
-                (let select_ (SelectRow '/dc-1/TableWithFilter row_ cols_))
+                (let select_ (SelectRow '/dc-1/TableWithFilter row_ cols_)) 
                 (let ret_ (AsList (SetResult 'ret0 select_)))
                 (return ret_)
             ))", i));
@@ -3570,12 +3570,12 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         // Extend the key
         Cout << "ALTER TABLE Table DROP PRIMARY KEY, ADD COLUMN key2 ADD PRIMARY KEY(key1, key2)" << Endl;
-        res = annoyingClient.AlterTable("/dc-1", R"(
-            Name: "TableWithFilter"
+        res = annoyingClient.AlterTable("/dc-1", R"( 
+            Name: "TableWithFilter" 
             Columns { Name: "key2" Type: "Uint64" }
             KeyColumnNames: ["key1", "key2"]
         )");
-        UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(res, NMsgBusProxy::MSTATUS_OK); 
 
         // Read old rows
         Cout << "SELECT value FROM Table WHERE key1 = i AND key2 is NULL" << Endl;
@@ -3583,7 +3583,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             auto res = annoyingClient.FlatQuery(Sprintf(R"((
                 (let row_ '('('key1 (Uint32 '%u)) '('key2 (Null))))
                 (let cols_ '('value))
-                (let select_ (SelectRow '/dc-1/TableWithFilter row_ cols_))
+                (let select_ (SelectRow '/dc-1/TableWithFilter row_ cols_)) 
                 (let ret_ (AsList (SetResult 'ret0 select_)))
                 (return ret_)
             ))", i));

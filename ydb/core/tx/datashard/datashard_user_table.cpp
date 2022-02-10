@@ -367,7 +367,7 @@ void TUserTable::DoApplyCreate(
 
     Y_VERIFY(tid != 0 && tid != Max<ui32>(), "Creating table %s with bad id %" PRIu32, tableName.c_str(), tid);
 
-    auto &alter = txc.DB.Alter();
+    auto &alter = txc.DB.Alter(); 
     alter.AddTable(tableName, tid);
 
     THashSet<ui32> appliedRooms;
@@ -403,10 +403,10 @@ void TUserTable::DoApplyCreate(
         alter.SetCompactionPolicy(tid, *NLocalDb::CreateDefaultUserTablePolicy());
     }
 
-    if (partConfig.HasEnableFilterByKey()) {
+    if (partConfig.HasEnableFilterByKey()) { 
         alter.SetByKeyFilter(tid, partConfig.GetEnableFilterByKey());
-    }
-
+    } 
+ 
     // N.B. some settings only apply to the main table
 
     if (!shadow) {
@@ -434,13 +434,13 @@ void TUserTable::ApplyAlter(
         TTransactionContext& txc, const TUserTable& oldTable,
         const NKikimrSchemeOp::TTableDescription& delta, TString& strError)
 {
-    const auto& configDelta = delta.GetPartitionConfig();
+    const auto& configDelta = delta.GetPartitionConfig(); 
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
     auto& config = *schema.MutablePartitionConfig();
 
-    auto &alter = txc.DB.Alter();
-
+    auto &alter = txc.DB.Alter(); 
+ 
     // Check if we need to drop shadow table first
     if (configDelta.HasShadowData()) {
         if (configDelta.GetShadowData()) {
@@ -499,7 +499,7 @@ void TUserTable::ApplyAlter(
         }
     }
 
-    for (const auto& col : delta.GetDropColumns()) {
+    for (const auto& col : delta.GetDropColumns()) { 
         ui32 colId = col.GetId();
         const TUserTable::TUserColumn * oldCol = oldTable.Columns.FindPtr(colId);
         Y_VERIFY(oldCol);
@@ -544,12 +544,12 @@ void TUserTable::ApplyAlter(
 
     if (configDelta.HasExecutorCacheSize()) {
         config.SetExecutorCacheSize(configDelta.GetExecutorCacheSize());
-        alter.SetExecutorCacheSize(configDelta.GetExecutorCacheSize());
+        alter.SetExecutorCacheSize(configDelta.GetExecutorCacheSize()); 
     }
 
     if (configDelta.HasResourceProfile() && configDelta.GetResourceProfile()) {
         config.SetResourceProfile(configDelta.GetResourceProfile());
-        alter.SetExecutorResourceProfile(configDelta.GetResourceProfile());
+        alter.SetExecutorResourceProfile(configDelta.GetResourceProfile()); 
     }
 
     if (configDelta.HasExecutorFastLogPolicy()) {

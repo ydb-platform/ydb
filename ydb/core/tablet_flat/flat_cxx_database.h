@@ -16,9 +16,9 @@
 namespace NKikimr {
 namespace NIceDb {
 
-using TToughDb = NTable::TDatabase;
-using NTable::TUpdateOp;
-using NTable::ELookup;
+using TToughDb = NTable::TDatabase; 
+using NTable::TUpdateOp; 
+using NTable::ELookup; 
 
 class TTypeValue : public TRawTypeValue {
 public:
@@ -826,7 +826,7 @@ struct Schema {
             template <typename T>
             struct TableKeyMaterializer<T> {
                 static void Materialize(TToughDb& database) {
-                    database.Alter().AddColumnToKey(TableId, T::ColumnId);
+                    database.Alter().AddColumnToKey(TableId, T::ColumnId); 
                 }
             };
 
@@ -972,12 +972,12 @@ struct Schema {
                 KeyIterator& operator =(KeyIterator&&) = default;
 
                 void Init() {
-                    if (Iterator)
+                    if (Iterator) 
                         Next(); /* should invoke for the first key */
                 }
 
                 bool IsReady() const {
-                    return Iterator && Iterator->Last() != NTable::EReady::Page;
+                    return Iterator && Iterator->Last() != NTable::EReady::Page; 
                 }
 
                 bool IsValid() const {
@@ -990,7 +990,7 @@ struct Schema {
 
                 bool Next() {
                     while (Iterator->Next(NTable::ENext::Data) == NTable::EReady::Data && IsDeleted()) { }
-                    return IsReady();
+                    return IsReady(); 
                 }
 
                 TDbTupleRef GetValues() const {
@@ -1177,7 +1177,7 @@ struct Schema {
                 {
                     TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> maxKey(keyValues);
                     if (!Precharger<typename TableType::Precharge>::Precharge(database, TableId, {}, maxKey, columns, IteratorType::Direction)) {
-                        return nullptr;
+                        return nullptr; 
                     }
                     NTable::TKeyRange range;
                     range.MinKey = { };
@@ -1820,7 +1820,7 @@ struct Schema {
     template <bool Allow = false>
     struct ExecutorLogBatching {
         static void Materialize(TToughDb& database) {
-            database.Alter().SetExecutorAllowLogBatching(Allow);
+            database.Alter().SetExecutorAllowLogBatching(Allow); 
         }
     };
 
@@ -1834,14 +1834,14 @@ struct Schema {
     template <ui32 LimitTxInFly = 0>
     struct ExecutorLimitInFlyTx {
         static void Materialize(TToughDb& database) {
-            database.Alter().SetExecutorLimitInFlyTx(LimitTxInFly);
+            database.Alter().SetExecutorLimitInFlyTx(LimitTxInFly); 
         }
     };
 
     template <ui64 CacheSize>
     struct ExecutorCacheSize {
         static void Materialize(TToughDb& database) {
-            database.Alter().SetExecutorCacheSize(CacheSize);
+            database.Alter().SetExecutorCacheSize(CacheSize); 
         }
     };
 
@@ -1892,17 +1892,17 @@ struct Schema {
                 break;
             }
 
-            database.Alter().AddTable(GetTableName(TypeName<Type>()), Type::TableId);
+            database.Alter().AddTable(GetTableName(TypeName<Type>()), Type::TableId); 
             Type::TColumns::Materialize(database);
             Type::TKey::Materialize(database);
         }
 
         static void Cleanup(TToughDb& database) {
-            auto* table = database.GetScheme().GetTableInfo(Type::TableId);
-            if (table != nullptr) {
-                for (const auto& column : table->Columns) {
-                    if (!Type::TColumns::HaveColumn(column.first)) {
-                        database.Alter().DropColumn(Type::TableId, column.first);
+            auto* table = database.GetScheme().GetTableInfo(Type::TableId); 
+            if (table != nullptr) { 
+                for (const auto& column : table->Columns) { 
+                    if (!Type::TColumns::HaveColumn(column.first)) { 
+                        database.Alter().DropColumn(Type::TableId, column.first); 
                     }
                 }
             }
@@ -1971,10 +1971,10 @@ public:
     template <typename SchemaType>
     void Cleanup() {
         SchemaType::TTables::Cleanup(Database);
-
-        for (const auto& table : Database.GetScheme().Tables) {
-            if (!SchemaType::TTables::HaveTable(table.first)) {
-                Database.Alter().DropTable(table.first);
+ 
+        for (const auto& table : Database.GetScheme().Tables) { 
+            if (!SchemaType::TTables::HaveTable(table.first)) { 
+                Database.Alter().DropTable(table.first); 
             }
         }
     }

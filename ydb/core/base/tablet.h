@@ -142,12 +142,12 @@ struct TEvTablet {
             : Snapshot(snap)
         {}
 
-        void Describe(IOutputStream &out) const noexcept {
-            out
-                << "Deps{" << Snapshot.first << ":" << Snapshot.second
-                << " entries " << Entries.size() << "}";
-        }
-
+        void Describe(IOutputStream &out) const noexcept { 
+            out 
+                << "Deps{" << Snapshot.first << ":" << Snapshot.second 
+                << " entries " << Entries.size() << "}"; 
+        } 
+ 
         void AddEntry(const std::pair<ui32, ui32> &id, TVector<TLogoBlobID> &references, bool isSnapshot, TVector<TLogoBlobID> &gcDiscovered, TVector<TLogoBlobID> &gcLeft) {
             if (isSnapshot) {
                 Snapshot = id;

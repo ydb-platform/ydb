@@ -565,7 +565,7 @@ public:
         prevGroup = Max<ui32>();
         for (const auto& rq : request.ReadQueue) {
             const auto& readItem = *rq.ReadItem;
-            readQueries[queryIdx].Set(readItem.LogoBlobId, readItem.BlobOffset, readItem.BlobSize);
+            readQueries[queryIdx].Set(readItem.LogoBlobId, readItem.BlobOffset, readItem.BlobSize); 
             ++queryIdx;
 
             const ui32 group = TabletInfo->GroupFor(readItem.LogoBlobId.Channel(), readItem.LogoBlobId.Generation());

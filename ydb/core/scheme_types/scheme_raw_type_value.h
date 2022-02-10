@@ -2,7 +2,7 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <util/generic/array_ref.h>
+#include <util/generic/array_ref.h> 
 #include <util/string/builder.h>
 
 namespace NKikimr {
@@ -17,18 +17,18 @@ public:
         , ValueType(0)
     {}
 
-    TRawTypeValue(TArrayRef<const char> ref, NScheme::TTypeId vtype)
-        : TRawTypeValue((void*)ref.data(), ref.size(), vtype)
-    {
-
-    }
-
+    TRawTypeValue(TArrayRef<const char> ref, NScheme::TTypeId vtype) 
+        : TRawTypeValue((void*)ref.data(), ref.size(), vtype) 
+    { 
+ 
+    } 
+ 
     TRawTypeValue(const void* buf, ui32 bufSize, NScheme::TTypeId vtype)
         : Buffer(buf)
         , BufferSize(bufSize)
         , ValueType(vtype)
     {
-        Y_VERIFY_DEBUG(!buf || vtype);
+        Y_VERIFY_DEBUG(!buf || vtype); 
     }
 
     const void* Data() const { return Buffer; }
@@ -54,10 +54,10 @@ public:
         return TStringBuf((const char*)Buffer, BufferSize);
     }
 
-    TArrayRef<const char> AsRef() const noexcept {
-        return { static_cast<const char*>(Data()), Size() };
-    }
-
+    TArrayRef<const char> AsRef() const noexcept { 
+        return { static_cast<const char*>(Data()), Size() }; 
+    } 
+ 
 private:
     const void* Buffer;
     ui32 BufferSize;

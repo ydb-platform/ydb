@@ -24,10 +24,10 @@ TPrivatePageCache::TInfo::TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollect
 }
 
 TPrivatePageCache::TInfo::TInfo(const TInfo &info)
-    : Id(info.Id)
+    : Id(info.Id) 
     , PageCollection(info.PageCollection)
     , Users(info.Users)
-{
+{ 
     PageMap.resize(info.PageMap.size());
     for (const auto& kv : info.PageMap) {
         auto* src = kv.second.Get();
@@ -40,8 +40,8 @@ TPrivatePageCache::TInfo::TInfo(const TInfo &info)
             dst->Sticky = src->Sticky;
         }
     }
-}
-
+} 
+ 
 TPrivatePageCache::TPrivatePageCache(const TCacheCacheConfig &cacheConfig, bool prepareForSharedCache)
     : Cache(cacheConfig)
     , PrepareForSharedCache(prepareForSharedCache)
@@ -254,9 +254,9 @@ std::pair<ui32, ui64> TPrivatePageCache::Load(TVector<ui32> &pages, TPrivatePage
     ui32 blocksToRequest = 0;
     ui64 bytesToRequest = 0;
 
-    auto it = pages.begin();
-    auto end = pages.end();
-
+    auto it = pages.begin(); 
+    auto end = pages.end(); 
+ 
     while (it != end) {
         TPage *page = info->EnsurePage(*it);
         switch (page->LoadState) {
@@ -265,12 +265,12 @@ std::pair<ui32, ui64> TPrivatePageCache::Load(TVector<ui32> &pages, TPrivatePage
             [[fallthrough]];
         case TPage::LoadStateRequestedAsync:
             page->LoadState = TPage::LoadStateRequested;
-            bytesToRequest += page->Size;
+            bytesToRequest += page->Size; 
 
             Y_VERIFY(!page->WaitQueue);
-            page->WaitQueue = new TPage::TWaitQueue();
-            page->WaitQueue->Push(waitPad);
-            waitPad->Inc();
+            page->WaitQueue = new TPage::TWaitQueue(); 
+            page->WaitQueue->Push(waitPad); 
+            waitPad->Inc(); 
 
             ++blocksToRequest;
             ++it;
@@ -278,11 +278,11 @@ std::pair<ui32, ui64> TPrivatePageCache::Load(TVector<ui32> &pages, TPrivatePage
         case TPage::LoadStateLoaded:
             Y_FAIL("must not request already loaded pages");
         case TPage::LoadStateRequested:
-            if (!page->WaitQueue)
-                page->WaitQueue = new TPage::TWaitQueue();
+            if (!page->WaitQueue) 
+                page->WaitQueue = new TPage::TWaitQueue(); 
 
-            page->WaitQueue->Push(waitPad);
-            waitPad->Inc();
+            page->WaitQueue->Push(waitPad); 
+            waitPad->Inc(); 
 
             --end;
             if (end != it)
@@ -290,7 +290,7 @@ std::pair<ui32, ui64> TPrivatePageCache::Load(TVector<ui32> &pages, TPrivatePage
             break;
         }
     }
-    pages.erase(end, pages.end());
+    pages.erase(end, pages.end()); 
     return std::make_pair(blocksToRequest, bytesToRequest);
 }
 
@@ -396,7 +396,7 @@ THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> TPrivatePageCache
     THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> ret;
 
     for (const auto &xpair : PageCollections) {
-        TIntrusivePtr<TInfo> info(new TInfo(*xpair.second));
+        TIntrusivePtr<TInfo> info(new TInfo(*xpair.second)); 
         ret.insert(std::make_pair(xpair.first, info));
     }
 

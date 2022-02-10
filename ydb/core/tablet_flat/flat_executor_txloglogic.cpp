@@ -1,11 +1,11 @@
 #include "flat_executor_txloglogic.h"
-#include "flat_executor_counters.h"
-#include "flat_exec_seat.h"
+#include "flat_executor_counters.h" 
+#include "flat_exec_seat.h" 
 #include "flat_exec_commit_mgr.h"
-#include "flat_bio_eggs.h"
-#include "logic_redo_batch.h"
-#include "logic_redo_entry.h"
-#include "logic_redo_queue.h"
+#include "flat_bio_eggs.h" 
+#include "logic_redo_batch.h" 
+#include "logic_redo_entry.h" 
+#include "logic_redo_queue.h" 
 #include "probes.h"
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
 #include <util/system/sanitizers.h>
@@ -16,56 +16,56 @@ namespace NTabletFlatExecutor {
 LWTRACE_USING(TABLET_FLAT_PROVIDER)
 
 const static ui64 MaxSizeToEmbedInLog = 2048;
-const static ui64 MaxBytesToBatch = 2 * 1024 * 1024;
-const static ui64 MaxItemsToBatch = 64;
+const static ui64 MaxBytesToBatch = 2 * 1024 * 1024; 
+const static ui64 MaxItemsToBatch = 64; 
 
 TLogicRedo::TCompletionEntry::TCompletionEntry(TAutoPtr<TSeat> seat, ui32 step)
     : Step(step)
-    , InFlyRWTransaction(seat)
+    , InFlyRWTransaction(seat) 
 {}
 
 TLogicRedo::TLogicRedo(TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies, TCommitManager *commitManager, TAutoPtr<NRedo::TQueue> queue)
     : CommitManager(commitManager)
-    , Cookies(cookies)
-    , Batch(new NRedo::TBatch)
-    , Queue(queue)
+    , Cookies(cookies) 
+    , Batch(new NRedo::TBatch) 
+    , Queue(queue) 
     , Slicer(1, Cookies.Get(), NBlockIO::BlockSize)
 {}
 
-TLogicRedo::~TLogicRedo()
+TLogicRedo::~TLogicRedo() 
 {}
 
-void TLogicRedo::Describe(IOutputStream &out) const noexcept
-{
-    return Queue->Describe(out);
-}
-
-void TLogicRedo::InstallCounters(TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters) {
+void TLogicRedo::Describe(IOutputStream &out) const noexcept 
+{ 
+    return Queue->Describe(out); 
+} 
+ 
+void TLogicRedo::InstallCounters(TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters) { 
     Counters = counters;
     AppTxCounters = appTxCounters;
 }
 
-NRedo::TStats TLogicRedo::LogStats() const noexcept
-{
+NRedo::TStats TLogicRedo::LogStats() const noexcept 
+{ 
     return { Queue->Items, Queue->Memory, Queue->LargeGlobIdsBytes };
-}
-
-TArrayRef<const NRedo::TUsage> TLogicRedo::GrabLogUsage() const noexcept
-{
-    return Queue->GrabUsage();
-}
-
+} 
+ 
+TArrayRef<const NRedo::TUsage> TLogicRedo::GrabLogUsage() const noexcept 
+{ 
+    return Queue->GrabUsage(); 
+} 
+ 
 bool TLogicRedo::TerminateTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx, const TActorId &ownerID) {
     if (CompletionQueue.empty()) {
-        const TTxType txType = seat->Self->GetTxType();
+        const TTxType txType = seat->Self->GetTxType(); 
 
-        seat->Self->Terminate(seat->TerminationReason, ctx.MakeFor(ownerID));
+        seat->Self->Terminate(seat->TerminationReason, ctx.MakeFor(ownerID)); 
         Counters->Cumulative()[TExecutorCounters::TX_TERMINATED].Increment(1);
         if (AppTxCounters && txType != UnknownTxType)
             AppTxCounters->TxCumulative(txType, COUNTER_TT_TERMINATED).Increment(1);
         return true;
     } else {
-        CompletionQueue.back().WaitingTerminatedTransactions.push_back(seat);
+        CompletionQueue.back().WaitingTerminatedTransactions.push_back(seat); 
         return false;
     }
 }
@@ -98,133 +98,133 @@ bool TLogicRedo::CommitROTransaction(TAutoPtr<TSeat> seat, const TActorContext &
         return true;
     } else {
         LWTRACK(TransactionReadOnlyWait, seat->Self->Orbit, seat->UniqID, CompletionQueue.back().Step);
-        CompletionQueue.back().WaitingROTransactions.push_back(seat);
+        CompletionQueue.back().WaitingROTransactions.push_back(seat); 
         return false;
     }
 }
 
-void TLogicRedo::FlushBatchedLog()
-{
+void TLogicRedo::FlushBatchedLog() 
+{ 
     if (TAutoPtr<TLogCommit> commit = Batch->Commit) {
-        auto affects = Batch->Affects();
-        MakeLogEntry(*commit, Batch->Flush(), affects, true);
+        auto affects = Batch->Affects(); 
+        MakeLogEntry(*commit, Batch->Flush(), affects, true); 
         CommitManager->Commit(commit);
     }
 
-    Y_VERIFY(Batch->Commit == nullptr, "Batch still has acquired commit");
+    Y_VERIFY(Batch->Commit == nullptr, "Batch still has acquired commit"); 
 }
 
-TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
+TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction( 
                 TAutoPtr<TSeat> seat, NTable::TChange &change, bool force)
-{
-    seat->CommitTimer.Reset();
+{ 
+    seat->CommitTimer.Reset(); 
 
-    Y_VERIFY(force || !(change.Scheme || change.Annex));
-
+    Y_VERIFY(force || !(change.Scheme || change.Annex)); 
+ 
     const TTxType txType = seat->Self->GetTxType();
 
-    if (auto bytes = change.Redo.size()) {
-        Counters->Cumulative()[TMonCo::DB_REDO_WRITTEN_BYTES].Increment(bytes);
+    if (auto bytes = change.Redo.size()) { 
+        Counters->Cumulative()[TMonCo::DB_REDO_WRITTEN_BYTES].Increment(bytes); 
         if (AppTxCounters && txType != UnknownTxType)
-            AppTxCounters->TxCumulative(txType, COUNTER_TT_REDO_WRITTEN_BYTES).Increment(bytes);
+            AppTxCounters->TxCumulative(txType, COUNTER_TT_REDO_WRITTEN_BYTES).Increment(bytes); 
     }
 
-    if (change.Annex) {
-        ui64 bytes = 0;
-        for (const auto &one : change.Annex) {
-            bytes += one.Data.size();
+    if (change.Annex) { 
+        ui64 bytes = 0; 
+        for (const auto &one : change.Annex) { 
+            bytes += one.Data.size(); 
         }
-
+ 
         Counters->Cumulative()[TMonCo::DB_ANNEX_ITEMS_GROW].Increment(change.Annex.size());
-        Counters->Cumulative()[TMonCo::DB_ANNEX_WRITTEN_BYTES].Increment(bytes);
+        Counters->Cumulative()[TMonCo::DB_ANNEX_WRITTEN_BYTES].Increment(bytes); 
         if (AppTxCounters && txType != UnknownTxType)
-            AppTxCounters->TxCumulative(txType, COUNTER_TT_ANNEX_WRITTEN_BYTES).Increment(bytes);
+            AppTxCounters->TxCumulative(txType, COUNTER_TT_ANNEX_WRITTEN_BYTES).Increment(bytes); 
     }
 
-    if (force || MaxItemsToBatch < 2 || change.Redo.size() > MaxBytesToBatch) {
-        FlushBatchedLog();
+    if (force || MaxItemsToBatch < 2 || change.Redo.size() > MaxBytesToBatch) { 
+        FlushBatchedLog(); 
 
         auto commit = CommitManager->Begin(true, ECommit::Redo);
 
         commit->PushTx(seat.Get());
-        CompletionQueue.push_back({ seat, commit->Step });
-        MakeLogEntry(*commit, std::move(change.Redo), change.Affects, !force);
+        CompletionQueue.push_back({ seat, commit->Step }); 
+        MakeLogEntry(*commit, std::move(change.Redo), change.Affects, !force); 
+ 
+        const auto was = commit->GcDelta.Created.size(); 
 
-        const auto was = commit->GcDelta.Created.size();
-
-        for (auto &one: change.Annex) {
-            if (one.GId.Logo.Step() != commit->Step) {
-                Y_Fail(
+        for (auto &one: change.Annex) { 
+            if (one.GId.Logo.Step() != commit->Step) { 
+                Y_Fail( 
                     "Leader{" << Cookies->Tablet << ":" << Cookies->Gen << "}"
-                    << " got for " << NFmt::Do(*commit) << " annex blob "
-                    << one.GId.Logo << " out of step order");
-            }
-
-            commit->GcDelta.Created.emplace_back(one.GId.Logo);
+                    << " got for " << NFmt::Do(*commit) << " annex blob " 
+                    << one.GId.Logo << " out of step order"); 
+            } 
+ 
+            commit->GcDelta.Created.emplace_back(one.GId.Logo); 
             commit->Refs.emplace_back(one.GId.Logo, one.Data.ToString());
-        }
-
-        /* Sometimes clang drops the last emplace_back above if move was used
-            before for data field. This hacky Y_VERIFY prevents this and check
-            that emplace always happens.
-         */
-
-        Y_VERIFY(was + change.Annex.size() == commit->GcDelta.Created.size());
-
-        return { commit, false };
+        } 
+ 
+        /* Sometimes clang drops the last emplace_back above if move was used 
+            before for data field. This hacky Y_VERIFY prevents this and check 
+            that emplace always happens. 
+         */ 
+ 
+        Y_VERIFY(was + change.Annex.size() == commit->GcDelta.Created.size()); 
+ 
+        return { commit, false }; 
     } else {
-        if (Batch->Bytes + change.Redo.size() > MaxBytesToBatch)
-            FlushBatchedLog();
+        if (Batch->Bytes + change.Redo.size() > MaxBytesToBatch) 
+            FlushBatchedLog(); 
 
-        if (!Batch->Commit)
+        if (!Batch->Commit) 
             Batch->Commit = CommitManager->Begin(false, ECommit::Redo);
 
         Batch->Commit->PushTx(seat.Get());
-        CompletionQueue.push_back({ seat, Batch->Commit->Step });
+        CompletionQueue.push_back({ seat, Batch->Commit->Step }); 
 
-        Batch->Add(std::move(change.Redo), change.Affects);
-
-        if (Batch->Bodies.size() >= MaxItemsToBatch)
-            FlushBatchedLog();
-
-        return { nullptr, bool(Batch->Commit) };
+        Batch->Add(std::move(change.Redo), change.Affects); 
+ 
+        if (Batch->Bodies.size() >= MaxItemsToBatch) 
+            FlushBatchedLog(); 
+ 
+        return { nullptr, bool(Batch->Commit) }; 
     }
 }
 
-void TLogicRedo::MakeLogEntry(TLogCommit &commit, TString redo, TArrayRef<const ui32> affects, bool embed)
-{
-    if (redo) {
+void TLogicRedo::MakeLogEntry(TLogCommit &commit, TString redo, TArrayRef<const ui32> affects, bool embed) 
+{ 
+    if (redo) { 
         NSan::CheckMemIsInitialized(redo.data(), redo.size());
 
-        Cookies->Switch(commit.Step, true /* require step switch */);
-
+        Cookies->Switch(commit.Step, true /* require step switch */); 
+ 
         auto coded = NPageCollection::TSlicer::Lz4()->Encode(redo);
-
+ 
         Counters->Cumulative()[TMonCo::LOG_REDO_WRITTEN].Increment(coded.size());
-
-        if (embed && coded.size() <= MaxSizeToEmbedInLog) {
-            commit.Embedded = std::move(coded);
-            Queue->Push({ Cookies->Gen, commit.Step }, affects, commit.Embedded);
-        } else {
+ 
+        if (embed && coded.size() <= MaxSizeToEmbedInLog) { 
+            commit.Embedded = std::move(coded); 
+            Queue->Push({ Cookies->Gen, commit.Step }, affects, commit.Embedded); 
+        } else { 
             auto largeGlobId = Slicer.Do(commit.Refs, std::move(coded), false);
             largeGlobId.MaterializeTo(commit.GcDelta.Created);
-
+ 
             Queue->Push({ Cookies->Gen, commit.Step }, affects, largeGlobId);
-        }
+        } 
     }
 }
 
 ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ownerId) {
     Y_VERIFY(!CompletionQueue.empty(), "t: %" PRIu64
         " non-expected confirmation %" PRIu32
-        ", prev %" PRIu32, Cookies->Tablet, step, PrevConfirmedStep);
+        ", prev %" PRIu32, Cookies->Tablet, step, PrevConfirmedStep); 
 
     Y_VERIFY(CompletionQueue[0].Step == step, "t: %" PRIu64
         " inconsistent confirmation head: %" PRIu32
         ", step: %" PRIu32
         ", queue size: %" PRISZT
         ", prev confimed: %" PRIu32
-        , Cookies->Tablet, CompletionQueue[0].Step, step, CompletionQueue.size(), PrevConfirmedStep);
+        , Cookies->Tablet, CompletionQueue[0].Step, step, CompletionQueue.size(), PrevConfirmedStep); 
 
     PrevConfirmedStep = step;
 
@@ -262,7 +262,7 @@ ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ow
         }
 
         for (auto &x : entry.WaitingTerminatedTransactions) {
-            const TTxType roTxType = x->Self->GetTxType();
+            const TTxType roTxType = x->Self->GetTxType(); 
             x->Self->Terminate(x->TerminationReason, ownerCtx);
 
             Counters->Cumulative()[TExecutorCounters::TX_TERMINATED].Increment(1);
@@ -278,15 +278,15 @@ ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ow
     return confirmedTransactions;
 }
 
-void TLogicRedo::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap)
-{
-    Y_VERIFY(Batch->Commit == nullptr);
+void TLogicRedo::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap) 
+{ 
+    Y_VERIFY(Batch->Commit == nullptr); 
 
-    Queue->Flush(snap);
+    Queue->Flush(snap); 
 
-    for (auto &xpair : Queue->Edges) {
-        auto genstep = ExpandGenStepPair(xpair.second.TxStamp);
-        auto *x = snap.AddTableSnapshoted();
+    for (auto &xpair : Queue->Edges) { 
+        auto genstep = ExpandGenStepPair(xpair.second.TxStamp); 
+        auto *x = snap.AddTableSnapshoted(); 
         x->SetTable(xpair.first);
         x->SetGeneration(genstep.first);
         x->SetStep(genstep.second);
@@ -294,9 +294,9 @@ void TLogicRedo::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap)
     }
 }
 
-void TLogicRedo::CutLog(ui32 table, NTable::TSnapEdge edge, TGCBlobDelta &gc)
-{
-    Queue->Cut(table, edge, gc);
+void TLogicRedo::CutLog(ui32 table, NTable::TSnapEdge edge, TGCBlobDelta &gc) 
+{ 
+    Queue->Cut(table, edge, gc); 
 }
 
 }}

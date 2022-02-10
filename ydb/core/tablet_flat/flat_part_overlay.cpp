@@ -1,5 +1,5 @@
 #include "flat_part_overlay.h"
-#include "util_fmt_abort.h"
+#include "util_fmt_abort.h" 
 
 #include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
 #include <ydb/core/util/pb.h>
@@ -7,9 +7,9 @@
 namespace NKikimr {
 namespace NTable {
 
-namespace {
+namespace { 
     TVector<TSlice> SlicesFromProto(const NProtoBuf::RepeatedPtrField<NProto::TSliceBounds>& protos)
-    {
+    { 
         TVector<TSlice> slices;
         slices.reserve(protos.size());
 
@@ -21,13 +21,13 @@ namespace {
                 proto.GetLastRowId(),
                 proto.GetFirstInclusive(),
                 proto.GetLastInclusive());
-        }
+        } 
 
         return slices;
-    }
-
+    } 
+ 
     void SlicesToProto(TConstArrayRef<TSlice> slices, NProtoBuf::RepeatedPtrField<NProto::TSliceBounds>* protos)
-    {
+    { 
         protos->Reserve(protos->size() + slices.size());
 
         for (const auto& slice : slices) {
@@ -38,25 +38,25 @@ namespace {
             proto->SetLastRowId(slice.LastRowId);
             proto->SetFirstInclusive(slice.FirstInclusive);
             proto->SetLastInclusive(slice.LastInclusive);
-        }
-    }
-}
-
-TString TOverlay::Encode() const noexcept
+        } 
+    } 
+} 
+ 
+TString TOverlay::Encode() const noexcept 
 {
     if (!Screen && !Slices) {
         return { };
     }
 
-    NProto::TOverlay plain;
+    NProto::TOverlay plain; 
 
-    if (Screen) {
-        Y_VERIFY(Screen->Size() > 0,
+    if (Screen) { 
+        Y_VERIFY(Screen->Size() > 0, 
             "Cannot serialize a screen with 0 holes");
 
-        Screen->Validate();
+        Screen->Validate(); 
 
-        for (auto &hole: *Screen) {
+        for (auto &hole: *Screen) { 
             plain.AddScreen(hole.Begin);
             plain.AddScreen(hole.End);
         }
@@ -78,7 +78,7 @@ TString TOverlay::Encode() const noexcept
 
 TOverlay TOverlay::Decode(TArrayRef<const char> opaque, TArrayRef<const char> opaqueExt) noexcept
 {
-    TOverlay overlay;
+    TOverlay overlay; 
 
     if (opaque || opaqueExt) {
         bool ok = true;
@@ -123,54 +123,54 @@ TOverlay TOverlay::Decode(TArrayRef<const char> opaque, TArrayRef<const char> op
     return overlay;
 }
 
-void TOverlay::Validate() const noexcept
-{
+void TOverlay::Validate() const noexcept 
+{ 
     if (Screen) {
         Screen->Validate();
     }
-
+ 
     if (Slices) {
         Slices->Validate();
-    }
-
+    } 
+ 
     if (!Screen || !Slices) {
-        // Cannot compare screen and bounds when one is missing
-        return;
-    }
-
+        // Cannot compare screen and bounds when one is missing 
+        return; 
+    } 
+ 
     auto screen = TScreenRowsIterator(*Screen);
     auto slices = TSlicesRowsIterator(*Slices);
-
+ 
     while (screen) {
         if (!slices) {
             Y_FAIL("Found screen hole [%lu,%lu) that has no matching slices", screen->Begin, screen->End);
-        }
-
+        } 
+ 
         if (screen->End == Max<TRowId>()) {
             if (slices.HasNext()) {
                 auto mid = *slices;
                 ++slices;
-                Y_FAIL("Found screen hole [%lu,+inf) that does not match slices [%lu,%lu) and [%lu,%lu)",
+                Y_FAIL("Found screen hole [%lu,+inf) that does not match slices [%lu,%lu) and [%lu,%lu)", 
                     screen->Begin, mid.Begin, mid.End, slices->Begin, slices->End);
-            }
+            } 
             if (screen->Begin != slices->Begin) {
-                Y_FAIL("Found screen hole [%lu,+inf) that does not match slice [%lu,%lu)",
+                Y_FAIL("Found screen hole [%lu,+inf) that does not match slice [%lu,%lu)", 
                     screen->Begin, slices->Begin, slices->End);
-            }
+            } 
         } else if (!(*screen == *slices)) {
-            Y_FAIL("Found screen hole [%lu,%lu) that does not match slice [%lu,%lu)",
+            Y_FAIL("Found screen hole [%lu,%lu) that does not match slice [%lu,%lu)", 
                 screen->Begin, screen->End, slices->Begin, slices->End);
-        }
+        } 
 
         ++screen;
         ++slices;
-    }
-
+    } 
+ 
     if (slices) {
         Y_FAIL("Found slice [%lu,%lu) that has no matching screen holes", slices->Begin, slices->End);
-    }
+    } 
 }
-
+ 
 void TOverlay::ApplyDelta(TArrayRef<const char> rawDelta) noexcept
 {
     NProto::TOverlayDelta plain;
@@ -210,7 +210,7 @@ TString TOverlay::EncodeRemoveSlices(const TIntrusiveConstPtr<TSlices>& slices) 
     TString encoded;
     Y_PROTOBUF_SUPPRESS_NODISCARD plain.SerializeToString(&encoded);
     return encoded;
-}
+} 
 
 TString TOverlay::EncodeChangeSlices(TConstArrayRef<TSlice> slices) noexcept
 {

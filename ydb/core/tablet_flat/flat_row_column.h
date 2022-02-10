@@ -1,31 +1,31 @@
-#pragma once
-
-#include "flat_row_eggs.h"
+#pragma once 
+ 
+#include "flat_row_eggs.h" 
 #include <ydb/core/scheme/scheme_type_id.h>
-
-namespace NKikimr {
-namespace NTable {
-
-    struct TColInfo {
-        struct TByTag {
-            bool operator()(const TColInfo &le, const TColInfo &ri) const
-            {
-                return le.Tag < ri.Tag;
-            }
-
-            bool operator()(const TColInfo *le, const TColInfo *ri) const
-            {
-                return le->Tag < ri->Tag;
-            }
-        };
-
-        struct TByKey {
-            bool operator()(const TColInfo &le, const TColInfo &ri) const
-            {
-                return le.Key < ri.Key;
-            }
-        };
-
+ 
+namespace NKikimr { 
+namespace NTable { 
+ 
+    struct TColInfo { 
+        struct TByTag { 
+            bool operator()(const TColInfo &le, const TColInfo &ri) const 
+            { 
+                return le.Tag < ri.Tag; 
+            } 
+ 
+            bool operator()(const TColInfo *le, const TColInfo *ri) const 
+            { 
+                return le->Tag < ri->Tag; 
+            } 
+        }; 
+ 
+        struct TByKey { 
+            bool operator()(const TColInfo &le, const TColInfo &ri) const 
+            { 
+                return le.Key < ri.Key; 
+            } 
+        }; 
+ 
         struct TByPos {
             bool operator()(const TColInfo& a, const TColInfo& b) const
             {
@@ -33,19 +33,19 @@ namespace NTable {
             }
         };
 
-        TColInfo() = default;
-
-        TColInfo(const TColInfo&) = default;
-
-        bool IsKey() const noexcept {
-            return Key != Max<TPos>();
-        }
-
-        NScheme::TTypeId TypeId = 0;
-        TTag Tag = Max<TTag>();
-        TPos Pos = Max<TPos>(); /* Position in physical layout */
-        TPos Key = Max<TPos>(); /* key column sequence number */
+        TColInfo() = default; 
+ 
+        TColInfo(const TColInfo&) = default; 
+ 
+        bool IsKey() const noexcept { 
+            return Key != Max<TPos>(); 
+        } 
+ 
+        NScheme::TTypeId TypeId = 0; 
+        TTag Tag = Max<TTag>(); 
+        TPos Pos = Max<TPos>(); /* Position in physical layout */ 
+        TPos Key = Max<TPos>(); /* key column sequence number */ 
         TGroup Group = 0; /* Column group */
-    };
-}
-}
+    }; 
+} 
+} 

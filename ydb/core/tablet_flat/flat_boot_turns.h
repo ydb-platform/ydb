@@ -1,86 +1,86 @@
-#pragma once
-
-#include "flat_boot_iface.h"
-#include "flat_boot_back.h"
-#include "flat_boot_blobs.h"
-#include "flat_boot_switch.h"
-
+#pragma once 
+ 
+#include "flat_boot_iface.h" 
+#include "flat_boot_back.h" 
+#include "flat_boot_blobs.h" 
+#include "flat_boot_switch.h" 
+ 
 #include <ydb/core/util/pb.h>
-#include <util/generic/xrange.h>
-
-namespace NKikimr {
-namespace NTabletFlatExecutor {
-namespace NBoot {
-
-    class TTurns final: public NBoot::IStep {
-    public:
-        TTurns(IStep *owner)
-            : IStep(owner, NBoot::EStep::Turns)
-            , Codec(NBlockCodecs::Codec("lz4fast"))
-        {
-
-        }
-
-    private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
-        {
-            for (auto slot: xrange(Back->Switches.size()))
+#include <util/generic/xrange.h> 
+ 
+namespace NKikimr { 
+namespace NTabletFlatExecutor { 
+namespace NBoot { 
+ 
+    class TTurns final: public NBoot::IStep { 
+    public: 
+        TTurns(IStep *owner) 
+            : IStep(owner, NBoot::EStep::Turns) 
+            , Codec(NBlockCodecs::Codec("lz4fast")) 
+        { 
+ 
+        } 
+ 
+    private: /* IStep, boot logic DSL actor interface   */ 
+        void Start() noexcept override 
+        { 
+            for (auto slot: xrange(Back->Switches.size())) 
                 if (const auto &largeGlobId = Back->Switches[slot].LargeGlobId)
                     Pending += Spawn<TLoadBlobs>(largeGlobId, slot);
-
-            Flush();
-        }
-
+ 
+            Flush(); 
+        } 
+ 
         void HandleStep(TIntrusivePtr<IStep> step) noexcept override
-        {
-            auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
-
-            Assign(load->Cookie, load->Plain());
-            Flush();
-        }
-
-    private:
-        void Flush() noexcept
-        {
-            Process();
-
+        { 
+            auto *load = step->ConsumeAs<TLoadBlobs>(Pending); 
+ 
+            Assign(load->Cookie, load->Plain()); 
+            Flush(); 
+        } 
+ 
+    private: 
+        void Flush() noexcept 
+        { 
+            Process(); 
+ 
             if (!Pending && Handled >= Back->Switches.size()) Env->Finish(this);
-        }
-
+        } 
+ 
         void Assign(ui32 slot, TArrayRef<const char> body) noexcept
-        {
-            Y_VERIFY(slot < Back->Switches.size(), "Invalid switch index");
-
-            auto &entry = Back->Switches[slot];
+        { 
+            Y_VERIFY(slot < Back->Switches.size(), "Invalid switch index"); 
+ 
+            auto &entry = Back->Switches[slot]; 
             auto index = TCookie(entry.LargeGlobId.Lead.Cookie()).Index();
-
+ 
             Y_VERIFY(entry.LargeGlobId, "Assigning TSwitch entry w/o valid TLargeGlobId");
-
-            if (index != TCookie::EIdx::TurnLz4) {
-                Apply(entry, body);
-            } else {
-                Apply(entry, Codec->Decode(body));
-            }
-        }
-
+ 
+            if (index != TCookie::EIdx::TurnLz4) { 
+                Apply(entry, body); 
+            } else { 
+                Apply(entry, Codec->Decode(body)); 
+            } 
+        } 
+ 
         void Apply(TSwitch &entry, TArrayRef<const char> body) noexcept
-        {
-            TProtoBox<NKikimrExecutorFlat::TTablePartSwitch> proto(body);
-
+        { 
+            TProtoBox<NKikimrExecutorFlat::TTablePartSwitch> proto(body); 
+ 
             entry.Init(proto);
-
-            if (auto logl = Env->Logger()->Log(ELnLev::Debug)) {
-                logl
-                    << NFmt::Do(*Back) << " switching packs"
-                    << ", table " << entry.Table << ", bundles [";
-
+ 
+            if (auto logl = Env->Logger()->Log(ELnLev::Debug)) { 
+                logl 
+                    << NFmt::Do(*Back) << " switching packs" 
+                    << ", table " << entry.Table << ", bundles ["; 
+ 
                 for (const auto &one : entry.Bundles) {
                     logl << " " << one.LargeGlobIds[0].Lead;
                     if (one.Epoch != NTable::TEpoch::Max()) {
                         logl << "{epoch " << one.Epoch << "}";
                     }
                 }
-
+ 
                 for (const auto &one : entry.Moves) {
                     logl << " " << one.Label;
                     if (one.RebasedEpoch != NTable::TEpoch::Max()) {
@@ -89,21 +89,21 @@ namespace NBoot {
                     logl << " from table " << one.SourceTable;
                 }
 
-                logl << " ]";
-            }
-
-            if (proto.HasTableSnapshoted())
-                Back->SetTableEdge(proto.GetTableSnapshoted());
-        }
-
-        void Process() noexcept
-        {
-            for (; Handled < Back->Switches.size(); Handled++) {
-                auto &front = Back->Switches[Handled];
-
-                if (!front.Loaded())
-                    return;
-
+                logl << " ]"; 
+            } 
+ 
+            if (proto.HasTableSnapshoted()) 
+                Back->SetTableEdge(proto.GetTableSnapshoted()); 
+        } 
+ 
+        void Process() noexcept 
+        { 
+            for (; Handled < Back->Switches.size(); Handled++) { 
+                auto &front = Back->Switches[Handled]; 
+ 
+                if (!front.Loaded()) 
+                    return; 
+ 
                 for (auto &txStatusId : front.LeavingTxStatus) {
                     auto it = TxStatus.find(txStatusId);
                     if (it == TxStatus.end()) {
@@ -132,22 +132,22 @@ namespace NBoot {
                     auto it = Bundles.find(bundleId);
                     if (it == Bundles.end()) {
                         Y_Fail("Part switch has removal for an unknown bundle " << bundleId);
-                    }
+                    } 
                     it->second->Load = false;
                     Bundles.erase(it);
                     Leaving.insert(bundleId);
-                }
-
+                } 
+ 
                 for (auto &change : front.Changes) {
                     auto *bundle = Bundles.Value(change.Label, nullptr);
                     if (!bundle) {
                         Y_Fail("Part switch has changes for an unknown bundle " << change.Label);
-                    }
+                    } 
                     bundle->Legacy = std::move(change.Legacy);
                     bundle->Opaque = std::move(change.Opaque);
                     bundle->Deltas.clear();
-                }
-
+                } 
+ 
                 for (auto &delta : front.Deltas) {
                     auto *bundle = Bundles.Value(delta.Label, nullptr);
                     if (!bundle) {
@@ -156,19 +156,19 @@ namespace NBoot {
                     bundle->Deltas.push_back(std::move(delta.Delta));
                 }
 
-                for (auto &bundle : front.Bundles) {
+                for (auto &bundle : front.Bundles) { 
                     if (!bundle.LargeGlobIds) {
                         Y_Fail("Part switch has bundle without page collections");
-                    }
+                    } 
                     const auto &bundleId = bundle.LargeGlobIds[0].Lead;
                     if (Bundles.contains(bundleId)) {
-                        Y_Fail("Part switch has a duplicate bundle " << bundleId);
-                    }
+                        Y_Fail("Part switch has a duplicate bundle " << bundleId); 
+                    } 
                     if (Leaving.contains(bundleId)) {
-                        Y_Fail("Part switch has a removed bundle" << bundleId);
-                    }
-                    Bundles[bundleId] = &bundle;
-                }
+                        Y_Fail("Part switch has a removed bundle" << bundleId); 
+                    } 
+                    Bundles[bundleId] = &bundle; 
+                } 
 
                 auto *compaction = Logic->Result().Comp.Get();
 
@@ -235,18 +235,18 @@ namespace NBoot {
                 std::exchange(front.Changes, { });
                 std::exchange(front.Deltas, { });
                 std::exchange(front.Moves, { });
-            }
-        }
-
-    private:
-        const NBlockCodecs::ICodec *Codec = nullptr;
-        TLeft Pending;
-        ui64 Handled = 0;
-        THashSet<TLogoBlobID> Leaving; /* Dropped bundles */
-        THashMap<TLogoBlobID, TSwitch::TBundle*> Bundles;
+            } 
+        } 
+ 
+    private: 
+        const NBlockCodecs::ICodec *Codec = nullptr; 
+        TLeft Pending; 
+        ui64 Handled = 0; 
+        THashSet<TLogoBlobID> Leaving; /* Dropped bundles */ 
+        THashMap<TLogoBlobID, TSwitch::TBundle*> Bundles; 
         THashSet<TLogoBlobID> LeavingTxStatus; /* Dropped tx status */
         THashMap<TLogoBlobID, TSwitch::TTxStatus*> TxStatus;
-    };
-}
-}
-}
+    }; 
+} 
+} 
+} 

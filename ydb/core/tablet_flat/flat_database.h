@@ -1,35 +1,35 @@
 #pragma once
-#include "flat_row_eggs.h"
+#include "flat_row_eggs.h" 
 #include "flat_row_versions.h"
 #include "flat_update_op.h"
-#include "flat_dbase_scheme.h"
-#include "flat_dbase_change.h"
-#include "flat_dbase_misc.h"
+#include "flat_dbase_scheme.h" 
+#include "flat_dbase_change.h" 
+#include "flat_dbase_misc.h" 
 #include "flat_iterator.h"
 #include "util_basics.h"
 
 namespace NKikimr {
-
+ 
 namespace NPageCollection {
     class TCookieAllocator;
     struct TMemGlob;
-}
-
-namespace NTable {
-
-    struct TStats;
-    struct TSizeEnv;
-    class TRowState;
-    struct TChange;
+} 
+ 
+namespace NTable { 
+ 
+    struct TStats; 
+    struct TSizeEnv; 
+    class TRowState; 
+    struct TChange; 
     class TDatabaseImpl;
-    class TAnnex;
-    class TTable;
+    class TAnnex; 
+    class TTable; 
     class TKeyRangeCache;
-
-    namespace NRedo {
-        class TWriter;
-    }
-
+ 
+    namespace NRedo { 
+        class TWriter; 
+    } 
+ 
 struct TKeyRange {
     TRawVals MinKey;
     TRawVals MaxKey;
@@ -37,36 +37,36 @@ struct TKeyRange {
     bool MaxInclusive = true;
 };
 
-class TDatabase {
+class TDatabase { 
 public:
     using TMemGlobs = TVector<NPageCollection::TMemGlob>;
     using TCookieAllocator = NPageCollection::TCookieAllocator;
-    using TCounters = TDbStats;
+    using TCounters = TDbStats; 
 
-    struct TProd {
+    struct TProd { 
         THolder<TChange> Change;
-    };
-
-    struct TChg {
-        ui64 Serial;
+    }; 
+ 
+    struct TChg { 
+        ui64 Serial; 
         TEpoch Epoch;
-    };
-
-    TDatabase(const TDatabase&) = delete;
+    }; 
+ 
+    TDatabase(const TDatabase&) = delete; 
     TDatabase(TDatabaseImpl *databaseImpl = nullptr) noexcept;
     ~TDatabase();
 
-    /* Returns durable monotonic change number for table or entire database
-        on default (table = Max<ui32>()). Serial is incremented for each
-        successful Commit(). AHTUNG: Serial may go to the past in case of
-        migration to older db versions with (Evolution < 18). Thus do not
-        rely on durability until of kikimr stable 18-08.
-     */
-
-    TChg Head(ui32 table = Max<ui32>()) const noexcept;
-
-    /*_ Call Next() before accessing each row including the 1st row. */
-
+    /* Returns durable monotonic change number for table or entire database 
+        on default (table = Max<ui32>()). Serial is incremented for each 
+        successful Commit(). AHTUNG: Serial may go to the past in case of 
+        migration to older db versions with (Evolution < 18). Thus do not 
+        rely on durability until of kikimr stable 18-08. 
+     */ 
+ 
+    TChg Head(ui32 table = Max<ui32>()) const noexcept; 
+ 
+    /*_ Call Next() before accessing each row including the 1st row. */ 
+ 
     TAutoPtr<TTableIt> Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup) const noexcept;
     TAutoPtr<TTableIt> IterateExact(ui32 table, TRawVals key, TTagsRef tags, TRowVersion snapshot = TRowVersion::Max()) const noexcept;
     TAutoPtr<TTableIt> IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot = TRowVersion::Max()) const noexcept;
@@ -93,7 +93,7 @@ public:
                         TRowVersion snapshot = TRowVersion::Max());
 
     void Update(ui32 table, ERowOp, TRawVals key, TArrayRef<const TUpdateOp>, TRowVersion rowVersion = TRowVersion::Min());
-
+ 
     void UpdateTx(ui32 table, ERowOp, TRawVals key, TArrayRef<const TUpdateOp>, ui64 txId);
     void RemoveTx(ui32 table, ui64 txId);
     void CommitTx(ui32 table, ui64 txId, TRowVersion rowVersion = TRowVersion::Min());
@@ -116,11 +116,11 @@ public:
 
     void NoMoreReadsForTx();
 
-    TAlter& Alter(); /* Begin DDL ALTER script */
-
-    ui32 TxSnapTable(ui32 table);
-
-    const TScheme& GetScheme() const noexcept;
+    TAlter& Alter(); /* Begin DDL ALTER script */ 
+ 
+    ui32 TxSnapTable(ui32 table); 
+ 
+    const TScheme& GetScheme() const noexcept; 
 
     TIntrusiveConstPtr<TRowScheme> GetRowScheme(ui32 table) const noexcept;
 
@@ -133,16 +133,16 @@ public:
     void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
     ui64 GetTableMemSize(ui32 table, TEpoch epoch = TEpoch::Max()) const;
     ui64 GetTableMemRowCount(ui32 tableId) const;
-    ui64 GetTableIndexSize(ui32 table) const;
+    ui64 GetTableIndexSize(ui32 table) const; 
     ui64 GetTableSearchHeight(ui32 table) const;
-    ui64 EstimateRowSize(ui32 table) const;
-    const TCounters& Counters() const noexcept;
-    TString SnapshotToLog(ui32 table, TTxStamp);
+    ui64 EstimateRowSize(ui32 table) const; 
+    const TCounters& Counters() const noexcept; 
+    TString SnapshotToLog(ui32 table, TTxStamp); 
 
     TAutoPtr<TSubset> Subset(ui32 table, TArrayRef<const TLogoBlobID> bundle, TEpoch before) const;
     TAutoPtr<TSubset> Subset(ui32 table, TEpoch before, TRawVals from, TRawVals to) const;
     TAutoPtr<TSubset> ScanSnapshot(ui32 table, TRowVersion snapshot = TRowVersion::Max());
-
+ 
     TBundleSlicesMap LookupSlices(ui32 table, TArrayRef<const TLogoBlobID> bundles) const;
     void ReplaceSlices(ui32 table, TBundleSlicesMap slices);
 
@@ -152,7 +152,7 @@ public:
     void Merge(ui32 table, TIntrusiveConstPtr<TColdPart>);
     void Merge(ui32 table, TIntrusiveConstPtr<TTxStatusPart>);
 
-    void DebugDumpTable(ui32 table, IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const;
+    void DebugDumpTable(ui32 table, IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const; 
     void DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const;
 
     TKeyRangeCache* DebugGetTableErasedKeysCache(ui32 table) const;
@@ -169,12 +169,12 @@ public:
     TCompactionStats GetCompactionStats(ui32 table) const;
 
 private:
-    TTable* Require(ui32 tableId) const noexcept;
-
+    TTable* Require(ui32 tableId) const noexcept; 
+ 
 private:
     const THolder<TDatabaseImpl> DatabaseImpl;
 
-    ui64 Stamp = Max<ui64>();
+    ui64 Stamp = Max<ui64>(); 
     bool NoMoreReadsFlag;
     IPages* Env = nullptr;
     THolder<TChange> Change;

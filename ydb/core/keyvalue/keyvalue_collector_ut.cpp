@@ -31,9 +31,9 @@ public:
     }
 
     void Setup() {
-        Runtime.Reset(new TTestBasicRuntime(1, false));
+        Runtime.Reset(new TTestBasicRuntime(1, false)); 
         //Runtime->SetLogPriority(NKikimrServices::BS_QUEUE, NLog::PRI_CRIT);
-        Runtime->Initialize(TAppPrepare().Unwrap());
+        Runtime->Initialize(TAppPrepare().Unwrap()); 
         TabletInfo.Reset(MakeTabletInfo());
 
         Sender = Runtime->AllocateEdgeActor(NodeIndex);

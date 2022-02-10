@@ -1,13 +1,13 @@
-#pragma once
-
-#include "test_pretty.h"
-#include "test_part.h"
-
+#pragma once 
+ 
+#include "test_pretty.h" 
+#include "test_part.h" 
+ 
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 #include <ydb/core/tablet_flat/test/libs/rows/tool.h>
 #include <ydb/core/tablet_flat/test/libs/rows/mass.h>
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
-
+ 
 #include <ydb/core/tablet_flat/flat_sausage_grind.h>
 #include <ydb/core/tablet_flat/flat_abi_check.h>
 #include <ydb/core/tablet_flat/flat_table_part.h>
@@ -15,100 +15,100 @@
 #include <ydb/core/tablet_flat/flat_part_scheme.h>
 #include <ydb/core/tablet_flat/flat_part_writer.h>
 #include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
-
-#include <util/generic/cast.h>
-#include <util/stream/mem.h>
-
-namespace NKikimr {
-namespace NTable {
-namespace NTest {
-
-    class TLoader { /* Test env clone for NTable::TLoader */
-    public:
+ 
+#include <util/generic/cast.h> 
+#include <util/stream/mem.h> 
+ 
+namespace NKikimr { 
+namespace NTable { 
+namespace NTest { 
+ 
+    class TLoader { /* Test env clone for NTable::TLoader */ 
+    public: 
         TLoader(TIntrusiveConstPtr<TStore> store, TString overlay)
             : Store(std::move(store))
-            , Overlay(std::move(overlay))
-        {
-
-        }
-
+            , Overlay(std::move(overlay)) 
+        { 
+ 
+        } 
+ 
         TIntrusiveConstPtr<TPartStore> Load(const TLogoBlobID token) noexcept
-        {
-            using NPage::TFrames;
+        { 
+            using NPage::TFrames; 
             using NPage::TExtBlobs;
-            using NPage::TBloom;
-
+            using NPage::TBloom; 
+ 
             Y_VERIFY(Store, "Cannot load from an empty store");
 
             if (Store->PageCollectionPagesCount(0 /* primary room */) == 0) {
                 return nullptr;
             }
 
-            NProto::TRoot root;
-
+            NProto::TRoot root; 
+ 
             if (auto *raw = Store->GetMeta()) {
                 TMemoryInput stream(raw->data(), raw->size());
                 Y_VERIFY(root.ParseFromArcadiaStream(&stream));
-            } else {
-                root.SetEpoch(0); /* for loading from abi blobs */
-            }
-
-            if (auto *abi = root.HasEvol() ? &root.GetEvol() : nullptr)
-                TAbi().Check(abi->GetTail(), abi->GetHead(), "part");
-
+            } else { 
+                root.SetEpoch(0); /* for loading from abi blobs */ 
+            } 
+ 
+            if (auto *abi = root.HasEvol() ? &root.GetEvol() : nullptr) 
+                TAbi().Check(abi->GetTail(), abi->GetHead(), "part"); 
+ 
             TStore::TEggs eggs;
 
             if (auto *lay = (root.HasLayout() ? &root.GetLayout() : nullptr)) {
-                eggs = RootedEggs(*lay);
+                eggs = RootedEggs(*lay); 
             } else {
                 eggs = Store->LegacyEggs();
             }
-
+ 
             auto run = TOverlay::Decode({ }, Overlay).Slices;
-
-            const auto &stat = root.GetStat();
-
+ 
+            const auto &stat = root.GetStat(); 
+ 
             const auto &minRowVersion = root.GetMinRowVersion();
             const auto &maxRowVersion = root.GetMaxRowVersion();
 
             TEpoch epoch = TEpoch(root.GetEpoch());
 
-            return
+            return 
                 new TPartStore(
-                    std::move(Store),
-                    token,
-                    {
+                    std::move(Store), 
+                    token, 
+                    { 
                         epoch,
-                        TPartScheme::Parse(*eggs.Scheme, eggs.Rooted),
-                        *eggs.Index,
+                        TPartScheme::Parse(*eggs.Scheme, eggs.Rooted), 
+                        *eggs.Index, 
                         eggs.Blobs ? new TExtBlobs(*eggs.Blobs, { }) : nullptr,
-                        eggs.ByKey ? new TBloom(*eggs.ByKey) : nullptr,
-                        eggs.Large ? new TFrames(*eggs.Large) : nullptr,
-                        eggs.Small ? new TFrames(*eggs.Small) : nullptr,
+                        eggs.ByKey ? new TBloom(*eggs.ByKey) : nullptr, 
+                        eggs.Large ? new TFrames(*eggs.Large) : nullptr, 
+                        eggs.Small ? new TFrames(*eggs.Small) : nullptr, 
                         std::move(eggs.GroupIndexes),
                         std::move(eggs.HistoricIndexes),
                         TRowVersion(minRowVersion.GetStep(), minRowVersion.GetTxId()),
                         TRowVersion(maxRowVersion.GetStep(), maxRowVersion.GetTxId()),
                         eggs.GarbageStats ? new NPage::TGarbageStats(*eggs.GarbageStats) : nullptr,
                         eggs.TxIdStats ? new NPage::TTxIdStatsPage(*eggs.TxIdStats) : nullptr,
-                    },
-                    {
-                        stat.HasBytes() ? stat.GetBytes() : 0,
-                        stat.HasCoded() ? stat.GetCoded() : 0,
-                        stat.HasDrops() ? stat.GetDrops() : 0,
-                        stat.HasRows() ? stat.GetRows() : 0,
+                    }, 
+                    { 
+                        stat.HasBytes() ? stat.GetBytes() : 0, 
+                        stat.HasCoded() ? stat.GetCoded() : 0, 
+                        stat.HasDrops() ? stat.GetDrops() : 0, 
+                        stat.HasRows() ? stat.GetRows() : 0, 
                         stat.HasHiddenRows() ? stat.GetHiddenRows() : 0,
                         stat.HasHiddenDrops() ? stat.GetHiddenDrops() : 0,
-                    },
+                    }, 
                     run ? std::move(run) : TSlices::All()
-                );
-        }
-
-    private:
-        TStore::TEggs RootedEggs(const NProto::TLayout &lay) const noexcept
-        {
-            const auto undef = Max<NPage::TPageId>();
-
+                ); 
+        } 
+ 
+    private: 
+        TStore::TEggs RootedEggs(const NProto::TLayout &lay) const noexcept 
+        { 
+            const auto undef = Max<NPage::TPageId>(); 
+ 
             TVector<TSharedData> groupIndexes;
             for (ui32 pageId : lay.GetGroupIndexes()) {
                 groupIndexes.emplace_back(*Store->GetPage(0, pageId));
@@ -119,7 +119,7 @@ namespace NTest {
                 historicIndexes.emplace_back(*Store->GetPage(0, pageId));
             }
 
-            return {
+            return { 
                 true /* rooted page collection */,
                 Store->GetPage(0, lay.HasIndex() ? lay.GetIndex() : undef),
                 Store->GetPage(0, lay.HasScheme() ? lay.GetScheme() : undef),
@@ -131,22 +131,22 @@ namespace NTest {
                 std::move(historicIndexes),
                 Store->GetPage(0, lay.HasGarbageStats() ? lay.GetGarbageStats() : undef),
                 Store->GetPage(0, lay.HasTxIdStats() ? lay.GetTxIdStats() : undef),
-            };
-        }
-
-    private:
+            }; 
+        } 
+ 
+    private: 
         TIntrusiveConstPtr<TStore> Store;
-        const TString Overlay;
+        const TString Overlay; 
     };
 
-    class TWriterBundle : public IPageWriter {
+    class TWriterBundle : public IPageWriter { 
     public:
         TWriterBundle(size_t groups, const TLogoBlobID token)
             : Groups(groups)
             , CookieAllocator(new NPageCollection::TCookieAllocator(token.TabletID(),
-                        (ui64(token.Generation()) << 32) | token.Step(),
-                        { token.Cookie(), token.Cookie() + 1000 },
-                        {{ ui8(0) /* channel */, ui32(0) /* grpup*/ }} ))
+                        (ui64(token.Generation()) << 32) | token.Step(), 
+                        { token.Cookie(), token.Cookie() + 1000 }, 
+                        {{ ui8(0) /* channel */, ui32(0) /* grpup*/ }} )) 
         {
 
         }
@@ -154,10 +154,10 @@ namespace NTest {
         TPartEggs Flush(TIntrusiveConstPtr<TRowScheme> scheme, const TWritten &written)
         {
             Y_VERIFY(!Store, "Writer has not been flushed");
-            Y_VERIFY(written.Parts == Parts.size());
-
-            return
-                { new TWritten(written), std::move(scheme), std::move(Parts) };
+            Y_VERIFY(written.Parts == Parts.size()); 
+ 
+            return 
+                { new TWritten(written), std::move(scheme), std::move(Parts) }; 
         }
 
     private:
@@ -182,20 +182,20 @@ namespace NTest {
             return Back().WriteLarge(TSharedData::Copy(blob));
         }
 
-        TStore& Back() noexcept
-        {
+        TStore& Back() noexcept 
+        { 
             return Store ? *Store : *(Store = new TStore(Groups, NextGlobOffset));
-        }
-
+        } 
+ 
         void Finish(TString overlay) noexcept override
         {
             Y_VERIFY(Store, "Finish called without any writes");
 
-            Growth->Unwrap();
+            Growth->Unwrap(); 
             Store->Finish();
             NextGlobOffset = Store->NextGlobOffset();
 
-            NTest::TLoader loader(std::exchange(Store,{ }), std::move(overlay));
+            NTest::TLoader loader(std::exchange(Store,{ }), std::move(overlay)); 
 
             Parts.emplace_back(loader.Load(CookieAllocator->Do(0 /* channel */, 0).Logo));
         }
@@ -207,44 +207,44 @@ namespace NTest {
         TAutoPtr<NPageCollection::TCookieAllocator> CookieAllocator;
         TAutoPtr<TScreen::TCook> Growth = new TScreen::TCook;
         TVector<TIntrusiveConstPtr<TPartStore>> Parts;
-    };
-
-    class TPartCook {
-    public:
-        TPartCook() = delete;
-
+    }; 
+ 
+    class TPartCook { 
+    public: 
+        TPartCook() = delete; 
+ 
         TPartCook(
                 const TLayoutCook &lay,
                 const NPage::TConf &opts,
                 const TLogoBlobID &token = TLogoBlobID(1, 2, 3, 1, 0, 0),
                 TEpoch epoch = TEpoch::Zero())
             : TPartCook(lay.RowScheme(), opts, token, epoch)
-        {
-
-        }
-
+        { 
+ 
+        } 
+ 
         NPageCollection::TGlobId PutBlob(TString data, ui64 ref)
-        {
+        { 
             return static_cast<IPageWriter&>(Pages).WriteLarge(std::move(data), ref);
-        }
-
+        } 
+ 
         TPartCook(
                 TIntrusiveConstPtr<TRowScheme> rows,
                 const NPage::TConf &opts,
                 const TLogoBlobID &token = TLogoBlobID(1, 2, 3, 1, 0, 0),
                 TEpoch epoch = TEpoch::Zero())
-            : Scheme(rows)
+            : Scheme(rows) 
             , Pages(Scheme->Families.size(), token)
-        {
-            auto tags = Scheme->Tags();
-            auto *scheme = new TPartScheme(Scheme->Cols);
-
+        { 
+            auto tags = Scheme->Tags(); 
+            auto *scheme = new TPartScheme(Scheme->Cols); 
+ 
             Writer = new TPartWriter(scheme, tags, Pages, opts, epoch);
-
-            for (TPos on = 0; on < tags.size(); on++)
-                Remap[tags[on]] = on;
-        }
-
+ 
+            for (TPos on = 0; on < tags.size(); on++) 
+                Remap[tags[on]] = on; 
+        } 
+ 
         static TPartEggs Make(
                 const TMass &mass,
                 NPage::TConf conf = { },
@@ -252,20 +252,20 @@ namespace NTest {
                 TEpoch epoch = TEpoch::Zero(),
                 TRowVersion rowVersion = TRowVersion::Min(),
                 ERowOp op = ERowOp::Upsert)
-        {
+        { 
             TPartCook cook(mass.Model->Scheme, conf, token, epoch);
-
+ 
             auto eggs = cook.Ver(rowVersion).AddOp(op, mass.Saved.begin(), mass.Saved.end()).Finish();
-
-            if (const auto *written = eggs.Written.Get()) {
-                mass.Model->Check({ &written->Rows, 1 });
-            } else {
-                Y_FAIL("Got part eggs without TWritten result");
-            }
-
-            return eggs;
-        }
-
+ 
+            if (const auto *written = eggs.Written.Get()) { 
+                mass.Model->Check({ &written->Rows, 1 }); 
+            } else { 
+                Y_FAIL("Got part eggs without TWritten result"); 
+            } 
+ 
+            return eggs; 
+        } 
+ 
         inline TPartCook& Ver(TRowVersion rowVersion = TRowVersion::Min())
         {
             NextVersion = rowVersion;
@@ -282,23 +282,23 @@ namespace NTest {
             return *this;
         }
 
-        template<typename ...TArgs>
+        template<typename ...TArgs> 
         inline TPartCook& AddOpN(ERowOp op, TArgs&&...args)
-        {
-            auto row = *TNatural(*Scheme).Col(std::forward<TArgs>(args)...);
-
-            return Add(std::move(row), op);
-        }
-
-        template<typename ...TArgs>
+        { 
+            auto row = *TNatural(*Scheme).Col(std::forward<TArgs>(args)...); 
+ 
+            return Add(std::move(row), op); 
+        } 
+ 
+        template<typename ...TArgs> 
         inline TPartCook& AddN(TArgs&&...args)
-        {
-            auto row = *TNatural(*Scheme).Col(std::forward<TArgs>(args)...);
-
+        { 
+            auto row = *TNatural(*Scheme).Col(std::forward<TArgs>(args)...); 
+ 
             return Add(std::move(row), ERowOp::Upsert);
-        }
-
-        template<typename TIter>
+        } 
+ 
+        template<typename TIter> 
         TPartCook& AddOp(ERowOp op, TIter it, const TIter end)
         {
             while (it != end) Add(*it++, op);
@@ -308,28 +308,28 @@ namespace NTest {
 
         template<typename TIter>
         TPartCook& Add(TIter it, const TIter end)
-        {
+        { 
             while (it != end) Add(*it++, ERowOp::Upsert);
-
-            return *this;
-        }
-
+ 
+            return *this; 
+        } 
+ 
         TPartCook& Add(const TRow &tagged, ERowOp rop = ERowOp::Upsert)
-        {
+        { 
             TVector<TCell> key(Scheme->Keys->Types.size());
-            TRowState row(Remap.size());
-            row.Touch(rop);
-
-            for (auto &value: *tagged) {
-                auto *info = TRowTool(*Scheme).ColFor(value);
-
-                if (info->IsKey()) {
-                    key[info->Key] = value.Cell;
-                } else {
-                    row.Set(Remap.at(value.Tag), value.Op, value.Cell);
-                }
-            }
-
+            TRowState row(Remap.size()); 
+            row.Touch(rop); 
+ 
+            for (auto &value: *tagged) { 
+                auto *info = TRowTool(*Scheme).ColFor(value); 
+ 
+                if (info->IsKey()) { 
+                    key[info->Key] = value.Cell; 
+                } else { 
+                    row.Set(Remap.at(value.Tag), value.Op, value.Cell); 
+                } 
+            } 
+ 
             if (LastKey &&
                 CompareTypedCellVectors(
                     LastKey.data(), key.data(),
@@ -358,22 +358,22 @@ namespace NTest {
             }
 
             return *this;
-        }
-
+        } 
+ 
         TPartEggs Finish()
-        {
+        { 
             if (LastKey) {
                 // End the last key before finishing
                 Writer->EndKey();
                 LastKey = { };
             }
 
-            return Pages.Flush(std::move(Scheme), Writer->Finish());
-        }
-
-    private:
+            return Pages.Flush(std::move(Scheme), Writer->Finish()); 
+        } 
+ 
+    private: 
         TIntrusiveConstPtr<TRowScheme> Scheme;
-        TWriterBundle Pages;
+        TWriterBundle Pages; 
         TMap<TTag, TPos> Remap;
         TAutoPtr<TPartWriter> Writer;
         TOwnedCellVec LastKey;
@@ -381,5 +381,5 @@ namespace NTest {
         ui64 NextTxId = 0;
         ui64 CurrentDeltas = 0;
         ui64 CurrentVersions = 0;
-    };
-}}}
+    }; 
+}}} 

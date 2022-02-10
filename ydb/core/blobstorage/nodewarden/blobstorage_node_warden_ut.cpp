@@ -110,9 +110,9 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
 
     const ui32 domainId = DOMAIN_ID;
     const ui32 stateStorageGroup = domainId;
-
-    TAppPrepare app;
-
+ 
+    TAppPrepare app; 
+ 
     {
         TString baseDir = runtime.GetTempDir();
         TString keyfile = Sprintf("%s/key.txt", baseDir.data());
@@ -123,7 +123,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
     }
 
     { // setup domain info
-        app.ClearDomainsAndHive();
+        app.ClearDomainsAndHive(); 
         auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds("dc-1", domainId, 0,
                                                                                   domainId, domainId, TVector<ui32>{domainId},
                                                                                   domainId, TVector<ui32>{domainId},
@@ -133,7 +133,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
                                                                                   TVector<ui64>{},
                                                                                   DefaultPoolKinds(2));
         app.AddDomain(domain.Release());
-        app.AddHive(domainId, MakeDefaultHiveID(stateStorageGroup));
+        app.AddHive(domainId, MakeDefaultHiveID(stateStorageGroup)); 
     }
 
     SetupChannelProfiles(app, domainId);
@@ -147,7 +147,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
                 TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::ErasureMirror3, 0,
                     NKikimrBlobStorage::TVDiskKind::Default));
         }
-        app.SetChannels(std::move(channelProfiles));
+        app.SetChannels(std::move(channelProfiles)); 
     }
 
     ui32 groupId = TGroupID(GroupConfigurationTypeStatic, DOMAIN_ID, 0).GetRaw();
@@ -240,7 +240,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
         SetupTabletResolver(runtime, nodeIndex);
     }
 
-    runtime.Initialize(app.Unwrap());
+    runtime.Initialize(app.Unwrap()); 
 
     for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
         TActorId localActor = runtime.GetLocalServiceId(
@@ -643,7 +643,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
     CUSTOM_UNIT_TEST(TestGivenPDiskFormatedWithGuid1AndCreatedWithGuid2WhenYardInitThenError) {
         TTempDir tempDir;
-        TTestBasicRuntime runtime(2, false);
+        TTestBasicRuntime runtime(2, false); 
         TIntrusivePtr<NPDisk::TSectorMap> sectorMap(new NPDisk::TSectorMap(32ull << 30ull));
         Setup(runtime, "SectorMap:new_pdisk", sectorMap);
         TActorId sender0 = runtime.AllocateEdgeActor(0);

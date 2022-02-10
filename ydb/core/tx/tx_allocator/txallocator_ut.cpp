@@ -9,18 +9,18 @@ using namespace NTxAllocatorUT_Private;
 
 Y_UNIT_TEST_SUITE(TTxLocatorTest) {
     Y_UNIT_TEST(Boot) {
-        TTestBasicRuntime runtime;
+        TTestBasicRuntime runtime; 
         TTestEnv env(runtime);
     }
 
     Y_UNIT_TEST(TestZeroRange) {
-        TTestBasicRuntime runtime;
+        TTestBasicRuntime runtime; 
         TTestEnv env(runtime);
         AllocateAndCheck(runtime, 0, NKikimrTx::TEvTxAllocateResult::SUCCESS);
     }
 
     Y_UNIT_TEST(TestImposibleSize) {
-        TTestBasicRuntime runtime;
+        TTestBasicRuntime runtime; 
         TTestEnv env(runtime);
         const ui64 capacity = NTxAllocator::TTxAllocator::MaxCapacity;
         const ui64 requestSize = 123456;
@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TTxLocatorTest) {
     }
 
     Y_UNIT_TEST(TestAllocateAll) {
-        TTestBasicRuntime runtime;
+        TTestBasicRuntime runtime; 
         TTestEnv env(runtime);
         const ui64 capacity = NTxAllocator::TTxAllocator::MaxCapacity;
         AllocateAndCheck(runtime, capacity, NKikimrTx::TEvTxAllocateResult::SUCCESS);
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TTxLocatorTest) {
     }
 
     Y_UNIT_TEST(TestAllocateAllByPieces) {
-        TTestBasicRuntime runtime;
+        TTestBasicRuntime runtime; 
         TTestEnv env(runtime);
         const ui64 capacity = NTxAllocator::TTxAllocator::MaxCapacity;
         const ui64 pieces = 1u << 5;
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TTxLocatorTest) {
     }
 
     void DoSignificantRequests(const bool restartsEnable) {
-        TTestBasicRuntime runtime;
+        TTestBasicRuntime runtime; 
         TTestEnv env(runtime);
 
         const ui64 rounds = 10;

@@ -103,8 +103,8 @@ Y_UNIT_TEST_SUITE(TActorTracker) {
 
     Y_UNIT_TEST(Basic) {
         {
-            TTestBasicRuntime runtime;
-            runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+            TTestBasicRuntime runtime; 
+            runtime.Initialize(NKikimr::TAppPrepare().Unwrap()); 
             TActorId managerId = runtime.Register(new TManagerActor);
             TActorId edge = runtime.AllocateEdgeActor();
             runtime.Schedule(new IEventHandle(managerId, edge, new TEvents::TEvPoisonPill), TDuration::Seconds(1));

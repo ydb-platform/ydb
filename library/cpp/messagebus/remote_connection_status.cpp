@@ -180,15 +180,15 @@ TString TRemoteConnectionStatus::PrintToString() const {
         p.AddRow("connect syscalls", WriterStatus.ConnectSyscalls);
     }
 
-    p.AddRow("send queue", LeftPad(WriterStatus.SendQueueSize, 6));
-
+    p.AddRow("send queue", LeftPad(WriterStatus.SendQueueSize, 6)); 
+ 
     if (Server) {
-        p.AddRow("quota msg", LeftPad(ReaderStatus.QuotaMsg, 6));
-        p.AddRow("quota bytes", LeftPad(ReaderStatus.QuotaBytes, 6));
-        p.AddRow("quota exhausted", LeftPad(ReaderStatus.QuotaExhausted, 6));
-        p.AddRow("reader wakeups", LeftPad(WriterStatus.ReaderWakeups, 6));
-    } else {
-        p.AddRow("ack messages", LeftPad(WriterStatus.AckMessagesSize, 6));
+        p.AddRow("quota msg", LeftPad(ReaderStatus.QuotaMsg, 6)); 
+        p.AddRow("quota bytes", LeftPad(ReaderStatus.QuotaBytes, 6)); 
+        p.AddRow("quota exhausted", LeftPad(ReaderStatus.QuotaExhausted, 6)); 
+        p.AddRow("reader wakeups", LeftPad(WriterStatus.ReaderWakeups, 6)); 
+    } else { 
+        p.AddRow("ack messages", LeftPad(WriterStatus.AckMessagesSize, 6)); 
     }
 
     p.AddRow("written", WriterStatus.Incremental.MessageCounter.ToString(false));

@@ -36,12 +36,12 @@ public:
     {}
 
     STFUNC(StateWaitingBrowse) {
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             HFunc(NViewerEvents::TEvBrowseResponse, HandleBrowseResponse);
             CFunc(TEvents::TSystem::Wakeup, HandleBrowseTimeout);
-        }
-    }
-
+        } 
+    } 
+ 
 public:
     void Bootstrap(const TActorContext& ctx) {
         BuildRequestContext(&Event->Get()->Request, ContentRequestContext);
@@ -58,7 +58,7 @@ public:
             new TEvents::TEvWakeup());
     }
 
-private:
+private: 
     static void BuildRequestContext(
         const NMonitoring::IMonHttpRequest* httpRequest,
         IViewer::TContentRequestContext& reqCtx) {
@@ -94,11 +94,11 @@ private:
 
     void HandleBrowseResponse(NViewerEvents::TEvBrowseResponse::TPtr &ev, const TActorContext &ctx) {
         NViewerEvents::TEvBrowseResponse& event = *ev->Get();
-
+ 
         if (!event.Error.empty()) {
             return SendErrorReplyAndDie(event.Error, ctx);
         }
-
+ 
         auto type = event.BrowseInfo.GetType();
         auto contentHandler = Viewer->GetContentHandler(type);
         if (!contentHandler) {

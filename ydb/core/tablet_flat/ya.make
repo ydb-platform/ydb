@@ -7,7 +7,7 @@ OWNER(
 
 SRCS(
     defs.h
-    flat_boot_misc.cpp
+    flat_boot_misc.cpp 
     flat_comp.cpp
     flat_comp_create.cpp
     flat_comp_gen.cpp
@@ -15,8 +15,8 @@ SRCS(
     flat_cxx_database.h
     flat_database.cpp
     flat_database.h
-    flat_dbase_scheme.cpp
-    flat_dbase_apply.cpp
+    flat_dbase_scheme.cpp 
+    flat_dbase_apply.cpp 
     flat_exec_broker.cpp
     flat_exec_commit.cpp
     flat_exec_commit_mgr.cpp
@@ -34,18 +34,18 @@ SRCS(
     flat_executor_db_mon.cpp
     flat_executor_gclogic.cpp
     flat_executor_gclogic.h
-    flat_bio_actor.cpp
+    flat_bio_actor.cpp 
     flat_executor_snapshot.cpp
     flat_executor_txloglogic.cpp
     flat_executor_txloglogic.h
     flat_iterator.h
     flat_load_blob_queue.cpp
-    flat_mem_warm.cpp
+    flat_mem_warm.cpp 
     flat_sausagecache.cpp
     flat_sausagecache.h
-    flat_sausage_meta.cpp
-    flat_page_label.cpp
-    flat_part_dump.cpp
+    flat_sausage_meta.cpp 
+    flat_page_label.cpp 
+    flat_part_dump.cpp 
     flat_part_iter_multi.cpp
     flat_part_loader.cpp
     flat_part_overlay.cpp
@@ -57,12 +57,12 @@ SRCS(
     flat_stat_part.h
     flat_stat_table.h
     flat_stat_table.cpp
-    flat_store_hotdog.cpp
+    flat_store_hotdog.cpp 
     flat_table.cpp
     flat_table.h
     flat_table_part.cpp
     flat_table_part.h
-    flat_table_misc.cpp
+    flat_table_misc.cpp 
     flat_update_op.h
     probes.cpp
     shared_handle.cpp

@@ -1,12 +1,12 @@
-#pragma once
-
-#include "events.h"
-#include "event_local.h"
-
-namespace NActors {
+#pragma once 
+ 
+#include "events.h" 
+#include "event_local.h" 
+ 
+namespace NActors { 
     namespace NLog {
         using EComponent = int;
-
+ 
         enum EPriority : ui16 { // migrate it to EPrio whenever possible
             PRI_EMERG,
             PRI_ALERT,
@@ -18,7 +18,7 @@ namespace NActors {
             PRI_DEBUG,
             PRI_TRACE
         };
-
+ 
         enum class EPrio : ui16 {
             Emerg = 0,
             Alert = 1,
@@ -30,39 +30,39 @@ namespace NActors {
             Debug = 7,
             Trace = 8,
         };
-
+ 
         struct TLevel {
             TLevel(ui32 raw)
                 : Raw(raw)
             {
             }
-
+ 
             TLevel(EPrio prio)
                 : Raw((ui16(prio) + 1) << 8)
             {
             }
-
+ 
             EPrio ToPrio() const noexcept {
                 const auto major = Raw >> 8;
-
+ 
                 return major > 0 ? EPrio(major - 1) : EPrio::Emerg;
             }
-
+ 
             bool IsUrgentAbortion() const noexcept {
                 return (Raw >> 8) == 0;
             }
-
+ 
             /* Generalized monotonic level value composed with major and minor
-            levels. Minor is used for verbosity within major, basic EPrio
-            mapped to (EPrio + 1, 0) and Major = 0 is reserved as special
-            space with meaning like EPrio::Emerg but with extened actions.
-            Thus logger should map Major = 0 to EPrio::Emerg if it have no
-            idea how to handle special emergency actions.
-         */
-
+            levels. Minor is used for verbosity within major, basic EPrio 
+            mapped to (EPrio + 1, 0) and Major = 0 is reserved as special 
+            space with meaning like EPrio::Emerg but with extened actions. 
+            Thus logger should map Major = 0 to EPrio::Emerg if it have no 
+            idea how to handle special emergency actions. 
+         */ 
+ 
             ui32 Raw = 0; // ((ui16(EPrio) + 1) << 8) | ui8(minor)
         };
-
+ 
         enum class EEv {
             Log = EventSpaceBegin(TEvents::ES_LOGGER),
             LevelReq,
@@ -70,9 +70,9 @@ namespace NActors {
             Ignored,
             End
         };
-
+ 
         static_assert(int(EEv::End) < EventSpaceEnd(TEvents::ES_LOGGER), "");
-
+ 
         class TEvLog: public TEventLocal<TEvLog, int(EEv::Log)> {
         public:
             TEvLog(TInstant stamp, TLevel level, EComponent comp, const TString &line)
@@ -90,7 +90,7 @@ namespace NActors {
                 , Line(std::move(line))
             {
             }
-
+ 
             TEvLog(EPriority prio, EComponent comp, TString line, TInstant time = TInstant::Now())
                 : Stamp(time)
                 , Level(EPrio(prio))
@@ -98,12 +98,12 @@ namespace NActors {
                 , Line(std::move(line))
             {
             }
-
+ 
             const TInstant Stamp = TInstant::Max();
             const TLevel Level;
             const EComponent Component = 0;
             TString Line;
         };
-
+ 
     }
-}
+} 

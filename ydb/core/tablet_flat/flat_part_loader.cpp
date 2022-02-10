@@ -1,10 +1,10 @@
 #include "flat_part_loader.h"
-#include "flat_abi_check.h"
-#include "flat_part_overlay.h"
-#include "flat_part_keys.h"
-#include "util_fmt_abort.h"
+#include "flat_abi_check.h" 
+#include "flat_part_overlay.h" 
+#include "flat_part_keys.h" 
+#include "util_fmt_abort.h" 
 
-#include <typeinfo>
+#include <typeinfo> 
 
 namespace NKikimr {
 namespace NTable {
@@ -15,32 +15,32 @@ TLoader::TLoader(TVector<TIntrusivePtr<TCache>> pageCollections,
         TVector<TString> deltas,
         TEpoch epoch)
     : Packs(std::move(pageCollections))
-    , Legacy(std::move(legacy))
-    , Opaque(std::move(opaque))
+    , Legacy(std::move(legacy)) 
+    , Opaque(std::move(opaque)) 
     , Deltas(std::move(deltas))
     , Epoch(epoch)
-{
+{ 
     if (Packs.size() < 1) {
         Y_Fail("Cannot load TPart from " << Packs.size() << " page collections");
     }
-}
-
-TLoader::~TLoader() { }
-
+} 
+ 
+TLoader::~TLoader() { } 
+ 
 void TLoader::StageParseMeta() noexcept
 {
     auto* metaPacket = dynamic_cast<const NPageCollection::TPageCollection*>(Packs.at(0)->PageCollection.Get());
     if (!metaPacket) {
         Y_Fail("Unexpected IPageCollection type " << TypeName(*Packs.at(0)->PageCollection));
-    }
+    } 
 
     auto &meta = metaPacket->Meta;
 
-    TPageId pageId = meta.TotalPages();
+    TPageId pageId = meta.TotalPages(); 
 
     Y_VERIFY(pageId > 0, "Got page collection without pages");
 
-    if (EPage(meta.Page(pageId - 1).Type) == EPage::Schem2) {
+    if (EPage(meta.Page(pageId - 1).Type) == EPage::Schem2) { 
         /* New styled page collection with layout meta. Later root meta will
             be placed in page collection metablob, now it is placed as inplace
             data for EPage::Schem2, have to be the last page.
@@ -48,12 +48,12 @@ void TLoader::StageParseMeta() noexcept
 
         Rooted = true, SchemeId = pageId - 1;
 
-        ParseMeta(meta.GetPageInplaceData(SchemeId));
+        ParseMeta(meta.GetPageInplaceData(SchemeId)); 
 
         Y_VERIFY(Root.HasLayout(), "Rooted page collection has no layout");
 
         if (auto *abi = Root.HasEvol() ? &Root.GetEvol() : nullptr)
-            TAbi().Check(abi->GetTail(), abi->GetHead(), "part");
+            TAbi().Check(abi->GetTail(), abi->GetHead(), "part"); 
 
         const auto &layout = Root.GetLayout();
 
@@ -79,7 +79,7 @@ void TLoader::StageParseMeta() noexcept
     } else { /* legacy page collection w/o layout data, (Evolution < 14) */
         do {
             pageId--;
-            auto type = EPage(meta.Page(pageId).Type);
+            auto type = EPage(meta.Page(pageId).Type); 
 
             switch (type) {
             case EPage::Scheme: SchemeId = pageId; break;
@@ -94,7 +94,7 @@ void TLoader::StageParseMeta() noexcept
             }
         } while (pageId && !HasBasics());
 
-        ParseMeta(meta.GetPageInplaceData(SchemeId));
+        ParseMeta(meta.GetPageInplaceData(SchemeId)); 
     }
 
     MinRowVersion.Step = Root.GetMinRowVersion().GetStep();
@@ -103,7 +103,7 @@ void TLoader::StageParseMeta() noexcept
     MaxRowVersion.Step = Root.GetMaxRowVersion().GetStep();
     MaxRowVersion.TxId = Root.GetMaxRowVersion().GetTxId();
 
-    if (!HasBasics() || (Rooted && SchemeId != meta.TotalPages() - 1)
+    if (!HasBasics() || (Rooted && SchemeId != meta.TotalPages() - 1) 
         || (LargeId == Max<TPageId>()) != (GlobsId == Max<TPageId>())
         || (1 + GroupIndexesIds.size() + (SmallId == Max<TPageId>() ? 0 : 1)) != Packs.size())
     {
@@ -121,13 +121,13 @@ void TLoader::StageParseMeta() noexcept
 TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
 {
     Y_VERIFY(!PartView, "PartView already initialized in CreatePartView stage");
-    Y_VERIFY(Packs && Packs.front());
+    Y_VERIFY(Packs && Packs.front()); 
 
     TVector<TPageId> load;
     for (auto page: { SchemeId, IndexId, GlobsId,
                         SmallId, LargeId, ByKeyId,
                         GarbageStatsId, TxIdStatsId }) {
-        if (page != Max<TPageId>() && !Packs[0]->Lookup(page))
+        if (page != Max<TPageId>() && !Packs[0]->Lookup(page)) 
             load.push_back(page);
     }
     for (auto page : GroupIndexesIds) {
@@ -225,12 +225,12 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
         partStore->Pseudo = new TCache(partStore->Blobs);
     }
 
-    auto overlay = TOverlay::Decode(Legacy, Opaque);
+    auto overlay = TOverlay::Decode(Legacy, Opaque); 
 
     PartView = { partStore, std::move(overlay.Screen), std::move(overlay.Slices) };
 
     KeysEnv = new TKeysEnv(PartView.Part.Get(), TPartStore::Storages(PartView).at(0));
-
+ 
     return nullptr;
 }
 
@@ -243,22 +243,22 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept
         return nullptr;
     }
 
-    KeysEnv->Check(false); /* ensure there is no pending pages to load */
+    KeysEnv->Check(false); /* ensure there is no pending pages to load */ 
 
     TKeysLoader loader(PartView.Part.Get(), KeysEnv.Get());
 
     if (auto run = loader.Do(PartView.Screen)) {
-        KeysEnv->Check(false); /* On success there shouldn't be left loads */
+        KeysEnv->Check(false); /* On success there shouldn't be left loads */ 
         PartView.Slices = std::move(run);
         TOverlay{ PartView.Screen, PartView.Slices }.Validate();
 
-        return nullptr;
-    } else if (auto fetches = KeysEnv->GetFetches()) {
-        return fetches;
-    } else {
-        Y_FAIL("Screen keys loader stalled withoud result");
+        return nullptr; 
+    } else if (auto fetches = KeysEnv->GetFetches()) { 
+        return fetches; 
+    } else { 
+        Y_FAIL("Screen keys loader stalled withoud result"); 
     }
-}
+} 
 
 void TLoader::StageDeltas() noexcept
 {
@@ -276,19 +276,19 @@ void TLoader::StageDeltas() noexcept
 }
 
 void TLoader::Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded> blocks) noexcept
-{
-    Y_VERIFY(cookie == 0, "Only the leader pack is used on load");
+{ 
+    Y_VERIFY(cookie == 0, "Only the leader pack is used on load"); 
 
     if (Stage == EStage::PartView) {
         for (auto& loaded : blocks) {
             Packs[0]->Fill(std::move(loaded), true);
         }
-    } else if (Stage == EStage::Slice) {
+    } else if (Stage == EStage::Slice) { 
         for (auto& loaded : blocks) {
             KeysEnv->Save(cookie, std::move(loaded));
         }
     } else {
-        Y_Fail("Unexpected pages save on stage " << int(Stage));
+        Y_Fail("Unexpected pages save on stage " << int(Stage)); 
     }
 }
 

@@ -121,11 +121,11 @@ namespace NKikimr {
             nodeIndex);
     }
 
-    struct TUltimateNodes : public NFake::INode {
+    struct TUltimateNodes : public NFake::INode { 
         TUltimateNodes(TTestActorRuntime &runtime, const TAppPrepare *app)
-            : Runtime(runtime)
-        {
-
+            : Runtime(runtime) 
+        { 
+ 
             if (runtime.IsRealThreads()) {
                 return;
             }
@@ -140,10 +140,10 @@ namespace NKikimr {
                 const TDomainsInfo::TDomain *domain = xpair.second.Get();
                 UseFakeTimeCast |= domain->Mediators.size() == 0;
             }
-        }
-
-        void Birth(ui32 node) noexcept override
-        {
+        } 
+ 
+        void Birth(ui32 node) noexcept override 
+        { 
             SetupMediatorTimecastProxy(Runtime, node, UseFakeTimeCast);
             SetupMonitoringProxy(Runtime, node);
             SetupTabletCountersAggregator(Runtime, node);
@@ -151,12 +151,12 @@ namespace NKikimr {
             SetupNodeWhiteboard(Runtime, node);
             SetupNodeTabletMonitor(Runtime, node);
             SetupPQNodeCache(Runtime, node);
-        }
-
-        TTestActorRuntime &Runtime;
+        } 
+ 
+        TTestActorRuntime &Runtime; 
         bool UseFakeTimeCast = false;
-    };
-
+    }; 
+ 
     class TTabletTracer : TNonCopyable {
     public:
         TTabletTracer(bool& tracingActive, const TVector<ui64>& tabletIds)
@@ -617,8 +617,8 @@ namespace NKikimr {
     }
 
     void SetupTabletServices(TTestActorRuntime &runtime, TAppPrepare *app, bool mockDisk, NFake::TStorage storage,
-                            NFake::TCaches caches) {
-        TAutoPtr<TAppPrepare> dummy;
+                            NFake::TCaches caches) { 
+        TAutoPtr<TAppPrepare> dummy; 
         if (app == nullptr) {
             dummy = app = new TAppPrepare;
         }
@@ -658,7 +658,7 @@ namespace NKikimr {
 
     void SetupChannelProfiles(TAppPrepare &app, ui32 domainId, ui32 nchannels) {
         Y_VERIFY(app.Domains && app.Domains->Domains.contains(domainId));
-        auto& poolKinds = app.Domains->GetDomain(domainId).StoragePoolTypes;
+        auto& poolKinds = app.Domains->GetDomain(domainId).StoragePoolTypes; 
         Y_VERIFY(!poolKinds.empty());
 
         TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
@@ -700,7 +700,7 @@ namespace NKikimr {
             }
         }
 
-        app.SetChannels(std::move(channelProfiles));
+        app.SetChannels(std::move(channelProfiles)); 
     }
 
     void SetupBoxAndStoragePool(TTestActorRuntime &runtime, const TActorId& sender, ui32 domainId, ui32 nGroups) {
@@ -1092,7 +1092,7 @@ namespace NKikimr {
         TFakeHive(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state,
                   TGetTabletCreationFunc getTabletCreationFunc)
             : TActor<TFakeHive>(&TFakeHive::StateInit)
-            , NTabletFlatExecutor::TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
+            , NTabletFlatExecutor::TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory) 
             , State(state)
             , GetTabletCreationFunc(getTabletCreationFunc)
         {

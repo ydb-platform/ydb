@@ -55,6 +55,6 @@ namespace NBus {
 
             TGranStatus GranStatus;
         };
-
+ 
     }
 }

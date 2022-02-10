@@ -21,12 +21,12 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         TStringStream str;
-        {
-            const auto &scheme = txc.DB.GetScheme();
+        { 
+            const auto &scheme = txc.DB.GetScheme(); 
             TCgiParameters cgi(Event->Get()->Cgi());
             if (cgi.Has("TableID")) {
                 ui32 tableId = FromStringWithDefault<ui32>(cgi.Get("TableID"));
-                const auto *tableInfo = scheme.GetTableInfo(tableId);
+                const auto *tableInfo = scheme.GetTableInfo(tableId); 
                 if (tableInfo != nullptr) {
                     str << "<script>$('.container').toggleClass('container container-fluid').css('padding-left','5%').css('padding-right','5%');</script>";
                     str << "<h3>" << tableInfo->Id << ":" << tableInfo->Name << "</h3>";
@@ -127,7 +127,7 @@ public:
                     str << "<thead>";
                     str << "<tr>";
                     for (ui32 column : columns) {
-                        const auto &columnInfo = tableInfo->Columns.find(column)->second;
+                        const auto &columnInfo = tableInfo->Columns.find(column)->second; 
                         str << "<th>" << column << ":" << columnInfo.Name << "</th>";
                     }
                     str << "</tr>";
@@ -142,7 +142,7 @@ public:
                             ++rowCount;
                             if (rowCount > rowOffset) {
                                 str << "<tr>";
-                                TDbTupleRef tuple = result->GetValues();
+                                TDbTupleRef tuple = result->GetValues(); 
                                 for (size_t i = 0; i < columns.size(); ++i) {
                                     const void *data = tuple.Columns[i].Data();
                                     ui32 size = tuple.Columns[i].Size();
@@ -234,9 +234,9 @@ public:
                     str << "</tbody>";
                     str << "</table>";
 
-                    if (result->Last() == NTable::EReady::Page)
-                        return false;
-
+                    if (result->Last() == NTable::EReady::Page) 
+                        return false; 
+ 
                     auto fnPrintLink = [this, &str, tableId, &cgi] (ssize_t offset, ssize_t limit, TString caption) {
                         str << "<a href='db?TabletID=" << Self->TabletId()
                             << "&TableID=" << tableId;

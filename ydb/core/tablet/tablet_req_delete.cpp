@@ -69,10 +69,10 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
         SendToBSProxy(ctx, info.GroupId, event.Release(), numRequest);
     }
 
-    void Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext &ctx) {
-        return ReplyAndDie(NKikimrProto::ERROR, ctx);
-    }
-
+    void Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext &ctx) { 
+        return ReplyAndDie(NKikimrProto::ERROR, ctx); 
+    } 
+ 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx) {
         const TEvBlobStorage::TEvCollectGarbageResult* msg = ev->Get();
         switch (msg->Status) {
@@ -108,7 +108,7 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             HFunc(TEvStateStorage::TEvDeleteResult, Handle);
-            HFunc(TEvents::TEvUndelivered, Handle);
+            HFunc(TEvents::TEvUndelivered, Handle); 
         }
     }
 

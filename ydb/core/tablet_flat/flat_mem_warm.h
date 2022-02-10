@@ -1,56 +1,56 @@
-#pragma once
-#include "defs.h"
-#include "flat_update_op.h"
-#include "flat_mem_eggs.h"
-#include "flat_mem_blobs.h"
-#include "flat_row_scheme.h"
-#include "flat_row_nulls.h"
-#include "flat_row_celled.h"
-#include "flat_page_blobs.h"
-#include "flat_sausage_solid.h"
+#pragma once 
+#include "defs.h" 
+#include "flat_update_op.h" 
+#include "flat_mem_eggs.h" 
+#include "flat_mem_blobs.h" 
+#include "flat_row_scheme.h" 
+#include "flat_row_nulls.h" 
+#include "flat_row_celled.h" 
+#include "flat_page_blobs.h" 
+#include "flat_sausage_solid.h" 
 #include "flat_table_committed.h"
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_id.h>
 #include <ydb/core/util/btree_cow.h>
 #include <ydb/core/util/yverify_stream.h>
-
+ 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
-#include <util/generic/vector.h>
-#include <util/memory/pool.h>
-
-namespace NKikimr {
-namespace NTable {
-namespace NMem {
-
-    struct TPoint {
-        TArrayRef<const TCell> Key;
+#include <util/generic/vector.h> 
+#include <util/memory/pool.h> 
+ 
+namespace NKikimr { 
+namespace NTable { 
+namespace NMem { 
+ 
+    struct TPoint { 
+        TArrayRef<const TCell> Key; 
         const TKeyNulls &Nulls;
-    };
-
+    }; 
+ 
     struct TCandidate {
         const TCell* Key;
     };
 
-    struct TKeyCmp {
+    struct TKeyCmp { 
         const NScheme::TTypeIdOrder* Types;
-        const ui32 Count;
-
-        explicit TKeyCmp(const TRowScheme& rowScheme)
-            : Types(&rowScheme.Keys->Types[0])
-            , Count(rowScheme.Keys->Types.size())
-        {
-
-        }
-
+        const ui32 Count; 
+ 
+        explicit TKeyCmp(const TRowScheme& rowScheme) 
+            : Types(&rowScheme.Keys->Types[0]) 
+            , Count(rowScheme.Keys->Types.size()) 
+        { 
+ 
+        } 
+ 
         bool operator()(const TTreeKey& a, const TTreeKey& b) const {
             return CompareTypedCellVectors(a.KeyCells, b.KeyCells, Types, Count) < 0;
-        }
-
+        } 
+ 
         bool operator()(const TTreeKey& a, const TCandidate& b) const {
             return CompareTypedCellVectors(a.KeyCells, b.Key, Types, Count) < 0;
         }
-
+ 
         bool operator()(const TCandidate& a, const TTreeKey& b) const {
             return CompareTypedCellVectors(a.Key, b.KeyCells, Types, Count) < 0;
         }
@@ -62,12 +62,12 @@ namespace NMem {
                 const TCell& left = i < Count ? a[i] : b.Nulls[i];
 
                 if (int cmp = CompareTypedCells(left, b.Key[i], b.Nulls.Types[i]))
-                    return cmp;
-            }
-
+                    return cmp; 
+            } 
+ 
             // Missing point cells are filled with a virtual +inf
             return b.Key.size() < b.Nulls->size() ? -1 : 0;
-        }
+        } 
 
         bool operator()(const TTreeKey& a, const TPoint& b) const {
             return DoCompare(a.KeyCells, b) < 0;
@@ -76,41 +76,41 @@ namespace NMem {
         bool operator()(const TPoint& a, const TTreeKey& b) const {
             return DoCompare(b.KeyCells, a) > 0;
         }
-    };
-
+    }; 
+ 
     using TTree = TCowBTree<TTreeKey, TTreeValue, TKeyCmp>;
-
+ 
     class TTreeIterator;
     class TTreeSnapshot;
-
+ 
 } // namespace NMem
 
-    class TMemIt;
-
+    class TMemIt; 
+ 
     struct TMemTableSnapshot;
 
     class TMemTable : public TThrRefBase {
-        friend class TMemIt;
-
-        template <size_t SizeCap = 512*1024, size_t Overhead = 64>
-        class TMyPolicy : public TMemoryPool::IGrowPolicy {
-        public:
-            size_t Next(size_t prev) const noexcept override
-            {
-                if (prev >= SizeCap - Overhead)
-                    return SizeCap - Overhead;
-
-                // Use same buckets as LF-alloc (4KB, 6KB, 8KB, 12KB, 16KB ...)
-                size_t size = FastClp2(prev);
-
-                if (size < prev + prev/3)
-                    size += size/2;
-
-                return size - Overhead;
-            }
-        };
-
-    public:
+        friend class TMemIt; 
+ 
+        template <size_t SizeCap = 512*1024, size_t Overhead = 64> 
+        class TMyPolicy : public TMemoryPool::IGrowPolicy { 
+        public: 
+            size_t Next(size_t prev) const noexcept override 
+            { 
+                if (prev >= SizeCap - Overhead) 
+                    return SizeCap - Overhead; 
+ 
+                // Use same buckets as LF-alloc (4KB, 6KB, 8KB, 12KB, 16KB ...) 
+                size_t size = FastClp2(prev); 
+ 
+                if (size < prev + prev/3) 
+                    size += size/2; 
+ 
+                return size - Overhead; 
+            } 
+        }; 
+ 
+    public: 
         struct TTxIdStat {
             ui64 OpsCount = 0;
         };
@@ -119,27 +119,27 @@ namespace NMem {
 
     public:
         using TTree = NMem::TTree;
-        using TOpsRef = TArrayRef<const TUpdateOp>;
+        using TOpsRef = TArrayRef<const TUpdateOp>; 
         using TMemGlob = NPageCollection::TMemGlob;
-
+ 
         TMemTable(TIntrusiveConstPtr<TRowScheme> scheme, TEpoch epoch, ui64 annex, ui64 chunk = 4032)
-            : Epoch(epoch)
-            , Scheme(scheme)
+            : Epoch(epoch) 
+            , Scheme(scheme) 
             , Blobs(annex)
-            , Comparator(*Scheme)
-            , Pool(chunk, &Policy)
+            , Comparator(*Scheme) 
+            , Pool(chunk, &Policy) 
             , Tree(Comparator) // TODO: support TMemoryPool with caching
-        {}
-
+        {} 
+ 
         void Update(ERowOp rop, TRawVals key_, TOpsRef ops, TArrayRef<TMemGlob> pages, TRowVersion rowVersion,
                     const NTable::TTransactionMap<TRowVersion>& committed)
-        {
+        { 
             Y_VERIFY_DEBUG(
                 rop == ERowOp::Upsert || rop == ERowOp::Erase || rop == ERowOp::Reset,
                 "Unexpected row operation");
 
-            Y_VERIFY(ops.size() < Max<ui16>(), "Too large update ops array");
-
+            Y_VERIFY(ops.size() < Max<ui16>(), "Too large update ops array"); 
+ 
             // Filter legacy empty values and re-order them in tag order
             ScratchUpdateTags.clear();
             for (ui32 it = 0; it < ops.size(); ++it) {
@@ -168,13 +168,13 @@ namespace NMem {
             }
 
             // Find possible existing update for the same key
-            const TCelled key(key_, *Scheme->Keys, true);
+            const TCelled key(key_, *Scheme->Keys, true); 
             const NMem::TTreeValue* const current = Tree.Find(NMem::TCandidate{ key.Cells });
             const NMem::TUpdate* next = current ? current->GetFirst() : nullptr;
-
+ 
             ScratchMergeTags.clear();
             ScratchMergeTagsLast.clear();
-
+ 
             // When writing a committed row we need to create a fully merged row state
             if (rowVersion.Step != Max<ui64>()) {
                 // Search for the first committed row version we would need to merge from
@@ -269,10 +269,10 @@ namespace NMem {
             update->Next = next;
             update->RowVersion = rowVersion;
             update->Items = mergedSize;
-            update->Rop = rop;
-
+            update->Rop = rop; 
+ 
             ui32 dstIndex = 0;
-
+ 
             auto missing = ScratchMergeTags.begin();
             for (const TTagWithPos& src : ScratchUpdateTags) {
                 const TTag tag = src.first;
@@ -284,35 +284,35 @@ namespace NMem {
                 const ui32 it = src.second;
                 const auto *info = Scheme->ColInfo(tag);
 
-                if (info == nullptr) {
-                    /* Redo log rolling on bootstap happens with the last
-                        actual row scheme that may have some columns already
-                        be deleted. So cannot differ here error and booting.
-                     */
+                if (info == nullptr) { 
+                    /* Redo log rolling on bootstap happens with the last 
+                        actual row scheme that may have some columns already 
+                        be deleted. So cannot differ here error and booting. 
+                     */ 
                 } else if (TCellOp::HaveNoPayload(ops[it].NormalizedCellOp())) {
                     /* Payloadless ECellOp types may have zero type value */
-                } else if (info->TypeId != ops[it].Value.Type()) {
-                    Y_FAIL("Got un unexpected column type in cell update ops");
-                }
-
-                auto cell = ops[it].AsCell();
-
+                } else if (info->TypeId != ops[it].Value.Type()) { 
+                    Y_FAIL("Got un unexpected column type in cell update ops"); 
+                } 
+ 
+                auto cell = ops[it].AsCell(); 
+ 
                 if (ops[it].Op == ELargeObj::Extern) {
                     /* Transformation REDO ELargeObj to TBlobs reference */
-
+ 
                     const auto ref = Blobs.Push(pages.at(cell.AsValue<ui32>()));
-
-                    cell = TCell::Make<ui64>(ref);
-
+ 
+                    cell = TCell::Make<ui64>(ref); 
+ 
                 } else if (ops[it].Op != ELargeObj::Inline) {
                     Y_FAIL("Got an unexpected ELargeObj reference in update ops");
-                } else if (!cell.IsInline()) {
-                    cell = Clone(cell.Data(), cell.Size());
-                }
-
+                } else if (!cell.IsInline()) { 
+                    cell = Clone(cell.Data(), cell.Size()); 
+                } 
+ 
                 update->Ops()[dstIndex++] = { ops[it].Tag, ops[it].Op, cell };
-            }
-
+            } 
+ 
             while (missing != ScratchMergeTags.end()) {
                 update->Ops()[dstIndex++] = **missing;
                 ++missing;
@@ -324,7 +324,7 @@ namespace NMem {
                 Tree.EmplaceUnsafe(NewKey(key.Cells), update);
                 ++RowCount;
             }
-
+ 
             ++OpsCount;
 
             if (rowVersion.Step == Max<ui64>()) {
@@ -335,31 +335,31 @@ namespace NMem {
                 MinRowVersion = Min(MinRowVersion, rowVersion);
                 MaxRowVersion = Max(MaxRowVersion, rowVersion);
             }
-        }
-
+        } 
+ 
         size_t GetUsedMem() const noexcept
-        {
-            return
-                Pool.MemoryAllocated()
+        { 
+            return 
+                Pool.MemoryAllocated() 
                 + (Tree.AllocatedPages() - Tree.DroppedPages()) * TTree::PageSize
                 + Blobs.GetBytes();
-        }
-
+        } 
+ 
         size_t GetWastedMem() const noexcept
         {
             return Pool.MemoryWaste();
         }
 
-        ui64 GetOpsCount() const noexcept { return OpsCount; }
-
-        ui64 GetRowCount() const noexcept { return RowCount; }
-
+        ui64 GetOpsCount() const noexcept { return OpsCount; } 
+ 
+        ui64 GetRowCount() const noexcept { return RowCount; } 
+ 
         TRowVersion GetMinRowVersion() const noexcept { return MinRowVersion; }
         TRowVersion GetMaxRowVersion() const noexcept { return MaxRowVersion; }
 
         static TIntrusiveConstPtr<NPage::TExtBlobs> MakeBlobsPage(TArrayRef<const TMemTableSnapshot>);
-        void DebugDump(IOutputStream&, const NScheme::TTypeRegistry&) const;
-
+        void DebugDump(IOutputStream&, const NScheme::TTypeRegistry&) const; 
+ 
         NMem::TTreeSnapshot Snapshot();
 
         NMem::TTreeSnapshot Immediate() const;
@@ -397,50 +397,50 @@ namespace NMem {
             return Removed;
         }
 
-    private:
+    private: 
         NMem::TTreeKey NewKey(const TCell* src) noexcept {
             const size_t items = Scheme->Keys->Size();
             const size_t bytes = sizeof(TCell) * items;
-
+ 
             void* base = Pool.Allocate(bytes);
             auto* key = reinterpret_cast<TCell*>(base);
-
+ 
             TCell* dst = key;
             for (size_t i = 0; i < items; ++i, ++src, ++dst) {
                 new (dst) TCell(Clone(src->Data(), src->Size()));
             }
-
+ 
             return NMem::TTreeKey(key);
-        }
-
-        NMem::TUpdate* NewUpdate(ui32 cols) noexcept
-        {
+        } 
+ 
+        NMem::TUpdate* NewUpdate(ui32 cols) noexcept 
+        { 
             const size_t bytes = sizeof(NMem::TUpdate) + cols * sizeof(NMem::TColumnUpdate);
-
-            return (NMem::TUpdate*)Pool.Allocate(bytes);
-        }
-
-        TCell Clone(const char *data, ui32 size) noexcept
-        {
-            const bool small = TCell::CanInline(size);
-
-            return { small ? data : Pool.Append(data, size), size };
-        }
-
-        void DebugDump() const;
-
-    public:
+ 
+            return (NMem::TUpdate*)Pool.Allocate(bytes); 
+        } 
+ 
+        TCell Clone(const char *data, ui32 size) noexcept 
+        { 
+            const bool small = TCell::CanInline(size); 
+ 
+            return { small ? data : Pool.Append(data, size), size }; 
+        } 
+ 
+        void DebugDump() const; 
+ 
+    public: 
         const TEpoch Epoch;
         const TIntrusiveConstPtr<TRowScheme> Scheme;
-
-    private:
+ 
+    private: 
         NMem::TBlobs Blobs;
-        const NMem::TKeyCmp Comparator;
-        TMyPolicy<> Policy;
-        TMemoryPool Pool;
+        const NMem::TKeyCmp Comparator; 
+        TMyPolicy<> Policy; 
+        TMemoryPool Pool; 
         TTree Tree;
-        ui64 OpsCount = 0;
-        ui64 RowCount = 0;
+        ui64 OpsCount = 0; 
+        ui64 RowCount = 0; 
         TRowVersion MinRowVersion = TRowVersion::Max();
         TRowVersion MaxRowVersion = TRowVersion::Min();
         TTxIdStats TxIdStats;
@@ -453,7 +453,7 @@ namespace NMem {
         TSmallVec<TTagWithPos> ScratchUpdateTags;
         std::vector<const NMem::TColumnUpdate*> ScratchMergeTags;
         std::vector<const NMem::TColumnUpdate*> ScratchMergeTagsLast;
-    };
-
-}
-}
+    }; 
+ 
+} 
+} 

@@ -1,4 +1,4 @@
-#include "test_runtime.h"
+#include "test_runtime.h" 
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/callstack.h>
@@ -22,16 +22,16 @@
 bool VERBOSE = false;
 const bool PRINT_EVENT_BODY = false;
 
-namespace {
+namespace { 
 
-    TString MakeClusterId() {
-        pid_t pid = getpid();
-        TStringBuilder uuid;
-        uuid << "Cluster for process with id: " << pid;
-        return uuid;
-    }
-}
-
+    TString MakeClusterId() { 
+        pid_t pid = getpid(); 
+        TStringBuilder uuid; 
+        uuid << "Cluster for process with id: " << pid; 
+        return uuid; 
+    } 
+} 
+ 
 namespace NActors {
     ui64 TScheduledEventQueueItem::NextUniqueId = 0;
 
@@ -80,7 +80,7 @@ namespace NActors {
     TTestActorRuntimeBase::TNodeDataBase::~TNodeDataBase() {
         Stop();
     }
-
+ 
 
     class TTestActorRuntimeBase::TEdgeActor : public TActor<TEdgeActor> {
     public:
@@ -326,7 +326,7 @@ namespace NActors {
             }
             TDuration delay = (deadline - now);
 
-            if (Runtime->SingleSysEnv || !Runtime->ScheduledEventFilterFunc(*Runtime, ev, delay, deadline)) {
+            if (Runtime->SingleSysEnv || !Runtime->ScheduledEventFilterFunc(*Runtime, ev, delay, deadline)) { 
                 ui32 mailboxHint = ev->GetRecipientRewrite().Hint();
                 Runtime->GetMailbox(Runtime->FirstNodeId + NodeIndex, mailboxHint).Schedule(TScheduledEventQueueItem(deadline, ev, cookie));
                 Runtime->MailboxesHasEvents.Signal();
@@ -365,7 +365,7 @@ namespace NActors {
                 }
 
                 ui32 mailboxHint = ev->GetRecipientRewrite().Hint();
-                if (ev->GetTypeRewrite() == ui32(NActors::NLog::EEv::Log)) {
+                if (ev->GetTypeRewrite() == ui32(NActors::NLog::EEv::Log)) { 
                     const NActors::TActorId loggerActorId = NActors::TActorId(nodeId, "logger");
                     TActorId logger = node->ActorSystem->LookupLocalService(loggerActorId);
                     if (ev->GetRecipientRewrite() == logger) {
@@ -451,15 +451,15 @@ namespace NActors {
 
     TTestActorRuntimeBase::TTestActorRuntimeBase(THeSingleSystemEnv)
         : TTestActorRuntimeBase(1, 1, false)
-    {
-        SingleSysEnv = true;
-    }
-
+    { 
+        SingleSysEnv = true; 
+    } 
+ 
     TTestActorRuntimeBase::TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads)
         : ScheduledCount(0)
         , ScheduledLimit(100000)
         , MainThreadId(TThread::CurrentThreadId())
-        , ClusterUUID(MakeClusterId())
+        , ClusterUUID(MakeClusterId()) 
         , FirstNodeId(NextNodeId)
         , NodeCount(nodeCount)
         , DataCenterCount(dataCenterCount)
@@ -741,7 +741,7 @@ namespace NActors {
     void TTestActorRuntimeBase::InitNodes() {
         NextNodeId += NodeCount;
         Y_VERIFY(NodeCount > 0);
-
+ 
         for (ui32 nodeIndex = 0; nodeIndex < NodeCount; ++nodeIndex) {
             auto nodeIt = Nodes.emplace(FirstNodeId + nodeIndex, GetNodeFactory().CreateNode()).first;
             TNodeDataBase* node = nodeIt->second.Get();
@@ -900,7 +900,7 @@ namespace NActors {
         const TActorId actorId(FirstNodeId + nodeIndex, poolId, localActorId, hint);
         ActorNames[actorId] = TypeName(*actor);
         RegistrationObserver(*this, parentId ? parentId : CurrentRecipient, actorId);
-        DoActorInit(node->ActorSystem.Get(), actor, actorId, parentId ? parentId : CurrentRecipient);
+        DoActorInit(node->ActorSystem.Get(), actor, actorId, parentId ? parentId : CurrentRecipient); 
 
         switch (mailboxType) {
         case TMailboxType::Simple:
@@ -944,7 +944,7 @@ namespace NActors {
         const TActorId actorId(FirstNodeId + nodeIndex, poolId, localActorId, hint);
         ActorNames[actorId] = TypeName(*actor);
         RegistrationObserver(*this, parentId ? parentId : CurrentRecipient, actorId);
-        DoActorInit(node->ActorSystem.Get(), actor, actorId, parentId ? parentId : CurrentRecipient);
+        DoActorInit(node->ActorSystem.Get(), actor, actorId, parentId ? parentId : CurrentRecipient); 
 
         return actorId;
     }
@@ -1583,7 +1583,7 @@ namespace NActors {
                 TCallstack::GetTlsCallstack().SetLinesToSkip();
 #endif
                 recipientActor->Receive(evHolder, ctx);
-                node->ExecutorThread->DropUnregistered();
+                node->ExecutorThread->DropUnregistered(); 
             }
             CurrentRecipient = TActorId();
             TlsActivationContext = prevTlsActivationContext;
@@ -1683,24 +1683,24 @@ namespace NActors {
                 NActors::TMailboxType::Simple, InterconnectPoolId()));
         }
 
-        if (!SingleSysEnv) { // Single system env should do this self
-            TAutoPtr<TLogBackend> logBackend = LogBackend ? LogBackend : NActors::CreateStderrBackend();
-            NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(node->LogSettings,
+        if (!SingleSysEnv) { // Single system env should do this self 
+            TAutoPtr<TLogBackend> logBackend = LogBackend ? LogBackend : NActors::CreateStderrBackend(); 
+            NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(node->LogSettings, 
                 logBackend, GetCountersForComponent(node->DynamicCounters, "utils"));
             NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, node->GetLoggerPoolId());
             std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(node->LogSettings->LoggerActorId, loggerActorCmd);
-            setup->LocalServices.push_back(loggerActorPair);
-        }
+            setup->LocalServices.push_back(loggerActorPair); 
+        } 
 
         return THolder<TActorSystem>(new TActorSystem(setup, node->GetAppData(), node->LogSettings));
     }
 
     TActorSystem* TTestActorRuntimeBase::SingleSys() const {
-        Y_VERIFY(Nodes.size() == 1, "Works only for single system env");
-
-        return Nodes.begin()->second->ActorSystem.Get();
-    }
-
+        Y_VERIFY(Nodes.size() == 1, "Works only for single system env"); 
+ 
+        return Nodes.begin()->second->ActorSystem.Get(); 
+    } 
+ 
     TActorSystem* TTestActorRuntimeBase::GetAnyNodeActorSystem() {
         for (auto& x : Nodes) {
             return x.second->ActorSystem.Get();

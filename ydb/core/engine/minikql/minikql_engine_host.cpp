@@ -10,10 +10,10 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 namespace NKikimr {
-namespace NMiniKQL {
+namespace NMiniKQL { 
 
-using TScheme = NTable::TScheme;
-
+using TScheme = NTable::TScheme; 
+ 
 void ConvertTableKeys(const TScheme& scheme, const TScheme::TTableInfo* tableInfo,
     const TArrayRef<const TCell>& row,  TSmallVec<TRawTypeValue>& key, ui64* keyDataBytes)
 {
@@ -37,7 +37,7 @@ void ConvertTableKeys(const TScheme& scheme, const TScheme::TTableInfo* tableInf
 
 TEngineHost::TEngineHost(NTable::TDatabase& db, TEngineHostCounters& counters, const TEngineHostSettings& settings)
     : Db(db)
-    , Scheme(db.GetScheme())
+    , Scheme(db.GetScheme()) 
     , Settings(settings)
     , Counters(counters)
 {}
@@ -120,7 +120,7 @@ bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTi
 }
 
 ui64 TEngineHost::CalculateReadSize(const TVector<const TKeyDesc*>& keys) const {
-    NTable::TSizeEnv env;
+    NTable::TSizeEnv env; 
 
     for (const TKeyDesc* ki : keys) {
         DoCalculateReadSize(*ki, env);
@@ -129,7 +129,7 @@ ui64 TEngineHost::CalculateReadSize(const TVector<const TKeyDesc*>& keys) const 
     return env.GetSize();
 }
 
-void TEngineHost::DoCalculateReadSize(const TKeyDesc& key, NTable::TSizeEnv& env) const {
+void TEngineHost::DoCalculateReadSize(const TKeyDesc& key, NTable::TSizeEnv& env) const { 
     if (TSysTables::IsSystemTable(key.TableId))
         return;
     if (key.RowOperation != TKeyDesc::ERowOperation::Read)
@@ -167,7 +167,7 @@ ui64 TEngineHost::CalculateResultSize(const TKeyDesc& key) const {
     if (key.Range.Point) {
         return Db.EstimateRowSize(localTid);
     } else {
-        NTable::TSizeEnv env;
+        NTable::TSizeEnv env; 
         DoCalculateReadSize(key, env);
         ui64 size = env.GetSize();
 
@@ -244,7 +244,7 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
         }
 
         bool ready =  Db.Precharge(localTid,
-                                   keyFrom,
+                                   keyFrom, 
                                    key.Range.Point ? keyFrom : keyTo,
                                    tags,
                                    Settings.DisableByKeyFilter ? (ui64)NTable::NoByKey : 0,
@@ -278,7 +278,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     TSmallVec<TRawTypeValue> key;
     ConvertKeys(tableInfo, row, key);
 
-    TSmallVec<NTable::TTag> tags;
+    TSmallVec<NTable::TTag> tags; 
     TSmallVec<NTable::TTag> systemColumnTags;
     AnalyzeRowType(columnIds, tags, systemColumnTags);
 
@@ -287,9 +287,9 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     for (size_t i = 0; i < tags.size(); ++i)
         cellTypes.emplace_back(tableInfo->Columns.at(tags[i]).PType);
 
-    NTable::TRowState dbRow;
-
-    if (key.size() != Db.GetScheme().GetTableInfo(localTid)->KeyColumns.size())
+    NTable::TRowState dbRow; 
+ 
+    if (key.size() != Db.GetScheme().GetTableInfo(localTid)->KeyColumns.size()) 
         throw TSchemeErrorTabletException();
 
     Counters.NSelectRow++;
@@ -305,7 +305,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
         if (auto collector = GetChangeCollector(tableId)) {
             collector->Reset();
         }
-        throw TNotReadyTabletException();
+        throw TNotReadyTabletException(); 
     }
 
     if (NTable::EReady::Gone == ready) {
@@ -491,16 +491,16 @@ public:
         bool Next(NUdf::TUnboxedValue& value) override {
             bool truncated = false;
 
-            Clear();
+            Clear(); 
 
             while (Iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
-                TDbTupleRef tuple = Iter->GetKey();
+                TDbTupleRef tuple = Iter->GetKey(); 
 
                 ++Iterations;
                 if (Iterations % PeriodicCallbackIterations == 0) {
                     List.EngineHost.ExecPeriodicCallback();
                 }
-
+ 
                 List.EngineHost.GetCounters().SelectRangeDeletedRowSkips
                     += std::exchange(Iter->Stats.DeletedRowSkips, 0);
 
@@ -543,7 +543,7 @@ public:
                     }
                 }
 
-                TDbTupleRef rowValues = Iter->GetValues();
+                TDbTupleRef rowValues = Iter->GetValues(); 
                 ui64 rowSize = 0;
                 for (ui32 i = 0; i < rowValues.ColumnCount; ++i) {
                     rowSize += rowValues.Columns[i].IsNull() ? 1 : rowValues.Columns[i].Size();
@@ -575,9 +575,9 @@ public:
                 if (auto collector = List.EngineHost.GetChangeCollector(List.TableId)) {
                     collector->Reset();
                 }
-                throw TNotReadyTabletException();
+                throw TNotReadyTabletException(); 
             }
-
+ 
             if (List.Truncated || List.SizeBytes) {
                 Y_VERIFY_DEBUG(List.Truncated && *List.Truncated == truncated);
                 Y_VERIFY_DEBUG(List.SizeBytes && *List.SizeBytes == Bytes);
@@ -705,12 +705,12 @@ public:
     }
 
 private:
-    NTable::TDatabase& Db;
+    NTable::TDatabase& Db; 
     const TScheme& Scheme;
     const THolderFactory& HolderFactory;
     TTableId TableId;
     ui64 LocalTid;
-    TSmallVec<NTable::TTag> Tags;
+    TSmallVec<NTable::TTag> Tags; 
     TSmallVec<NTable::TTag> SystemColumnTags;
     ui64 ShardId;
     TSmallVec<bool> SkipNullKeys;
@@ -816,7 +816,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
     Y_VERIFY_DEBUG(outerStructType->GetMemberName(1) == "Truncated",
         "Unexpected type structure of returnType in TEngineHost::SelectRange()");
 
-    TSmallVec<NTable::TTag> tags;
+    TSmallVec<NTable::TTag> tags; 
     TSmallVec<NTable::TTag> systemColumnTags;
     AnalyzeRowType(columnIds, tags, systemColumnTags);
 
@@ -859,7 +859,7 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
     ConvertTableKeys(Scheme, tableInfo, row, key, &keyBytes);
 
     ui64 valueBytes = 0;
-    TSmallVec<NTable::TUpdateOp> ops;
+    TSmallVec<NTable::TUpdateOp> ops; 
     for (size_t i = 0; i < commands.size(); i++) {
         const TUpdateCommand& upd = commands[i];
         Y_VERIFY(upd.Operation == TKeyDesc::EColumnOperation::Set); // TODO[serxa]: support inplace update in update row

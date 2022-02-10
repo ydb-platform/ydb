@@ -8,7 +8,7 @@ namespace NKikimr {
 namespace NKeyValue {
 
 
-TSimpleDbFlat::TSimpleDbFlat(NTable::TDatabase &db)
+TSimpleDbFlat::TSimpleDbFlat(NTable::TDatabase &db) 
     : Db(db)
 {}
 

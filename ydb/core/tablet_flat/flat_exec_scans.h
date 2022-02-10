@@ -1,23 +1,23 @@
-#pragma once
-
-#include "flat_scan_eggs.h"
+#pragma once 
+ 
+#include "flat_scan_eggs.h" 
 #include "flat_scan_actor.h"
 #include "flat_exec_broker.h"
-#include "util_fmt_line.h"
+#include "util_fmt_line.h" 
 #include "util_fmt_abort.h"
 #include "flat_util_misc.h"
 #include "tablet_flat_executor.h"
-
-namespace NKikimr {
-namespace NTabletFlatExecutor {
-
+ 
+namespace NKikimr { 
+namespace NTabletFlatExecutor { 
+ 
     struct TScanOutcome {
         bool System;
         bool Cancelled;
     };
 
-    class TScans { /* NOps state tracker */
-
+    class TScans { /* NOps state tracker */ 
+ 
         using IScan = NTable::IScan;
         using EAbort = NTable::EAbort;
         using IOps = NActors::IActorOps;
@@ -49,8 +49,8 @@ namespace NTabletFlatExecutor {
             const ui64 Serial;
         };
 
-        struct TOne : public TIntrusiveListItem<TOne> {
-
+        struct TOne : public TIntrusiveListItem<TOne> { 
+ 
             TOne(ui64 serial, ui32 table, const TScanOptions& options, THolder<TScanSnapshot> snapshot)
                 : Serial(serial)
                 , Table(table)
@@ -86,8 +86,8 @@ namespace NTabletFlatExecutor {
             TAutoPtr<IScan> Scan;   /* Valid before EState::Scan    */
             ui64 Cookie = Max<ui64>();
             ui64 TaskId = 0;    /* Task number in res. broker   */
-        };
-
+        }; 
+ 
         struct TTable {
             ui32 Prio = 0;      /* Scan task priotity in broker */
             TString Type;       /* Resource broker task type    */
@@ -116,34 +116,34 @@ namespace NTabletFlatExecutor {
             }
         };
 
-    public:
+    public: 
         TScans(NUtil::ILogger *logger, IOps *ops, TIntrusivePtr<TIdEmitter> emitter,
                     ITablet *owner, const TActorId& ownerActorId)
-            : Logger(logger)
-            , Ops(ops)
+            : Logger(logger) 
+            , Ops(ops) 
             , Owner(owner)
             , OwnerActorId(ownerActorId)
             , Tablet(Owner->TabletID())
             , Emitter(std::move(emitter))
-        {
-
-        }
-
-        void Describe(IOutputStream &out) const noexcept
-        {
-            out
-                << "Scans{serial " << Serial << ", " << Tables.size() << " tbl"
+        { 
+ 
+        } 
+ 
+        void Describe(IOutputStream &out) const noexcept 
+        { 
+            out 
+                << "Scans{serial " << Serial << ", " << Tables.size() << " tbl" 
                 << ", " << Scans.size() << " ~" <<  CounterAlive << " scn}";
-        }
-
+        } 
+ 
         void Configure(ui32 table, ui64 aLo, ui64 aHi, ui32 prio, TString type)
-        {
+        { 
             Tables[table].AheadLo = aLo;
             Tables[table].AheadHi = aHi;
-
+ 
             Tables[table].Prio = prio;
             Tables[table].Type = std::move(type);
-
+ 
             if (Y_UNLIKELY(NLocalDb::IsLegacyQueueIdTaskName(Tables[table].Type))) {
                 // There are a lot of legacy tablets where old config has scans
                 // and gen1 compaction on the same queue. It causes delayed
@@ -153,13 +153,13 @@ namespace NTabletFlatExecutor {
                 ++Tables[table].Prio;
             }
         }
-
+ 
         ui64 Queue(ui32 table, TAutoPtr<IScan> scan, ui64 cookie, const TScanOptions& options, THolder<TScanSnapshot> snapshot)
         {
             auto &one = Make(table, scan, EType::Client, options, std::move(snapshot));
-
+ 
             one.Cookie = cookie;
-
+ 
             if (options.IsResourceBrokerDisabled()) {
                 // A call to Start is expected now
                 one.State = EState::Ready;
@@ -168,7 +168,7 @@ namespace NTabletFlatExecutor {
                 // A call to Acquired is expected later
                 one.State = EState::Task;
                 one.TaskId = Emitter->Do();
-
+ 
                 const auto* overrides = std::get_if<TScanOptions::TResourceBrokerOptions>(&options.ResourceBroker);
 
                 ToBroker(new TEvResourceBroker::TEvSubmitTask(
@@ -181,11 +181,11 @@ namespace NTabletFlatExecutor {
 
             return one.Serial;
         }
-
+ 
         TAcquired Acquired(ui64 task, TResource *cookie) noexcept
         {
             auto *one = Lookup(CheckedCast<TCookie*>(cookie)->Serial, false);
-
+ 
             if (one == nullptr) {
                 ToBroker(new TEvResourceBroker::TEvFinishTask(task));
 
@@ -198,8 +198,8 @@ namespace NTabletFlatExecutor {
 
                 return { one->Serial, one->Table };
             }
-        }
-
+        } 
+ 
         void Start(ui64 serial)
         {
             auto &one = *Lookup(serial, true);
@@ -214,15 +214,15 @@ namespace NTabletFlatExecutor {
             return Start(one, conf);
         }
 
-        void Drop() noexcept
-        {
+        void Drop() noexcept 
+        { 
             while (Tables) {
                 Drop(Tables.begin()->first);
             }
-        }
-
+        } 
+ 
         TVector<THolder<TScanSnapshot>> Drop(ui32 table) noexcept
-        {
+        { 
             TVector<THolder<TScanSnapshot>> snapshots;
 
             if (auto *entry = Tables.FindPtr(table)) {
@@ -233,17 +233,17 @@ namespace NTabletFlatExecutor {
                     }
                     Cancel(*one, EState::Gone);
                 }
-
-                Tables.erase(table);
-            }
+ 
+                Tables.erase(table); 
+            } 
 
             return snapshots;
-        }
-
+        } 
+ 
         TCancelled Cancel(ui64 serial) noexcept
-        {
+        { 
             auto *one = Lookup(serial, false);
-
+ 
             if (serial & 0x1 /* system scan */) {
                 Y_Fail(NFmt::If(one) << " is system (" << serial << "), cannot be cancelled this way");
             }
@@ -253,16 +253,16 @@ namespace NTabletFlatExecutor {
             }
 
             TCancelled cancelled{ one->Serial, one->Table, std::move(one->Options), std::move(one->Snapshot) };
-
+ 
             if (!Cancel(*one, EState::Forget)) {
                 return { };
             }
-
+ 
             return cancelled;
-        }
-
+        } 
+ 
         bool CancelSystem(ui64 serial) noexcept
-        {
+        { 
             auto *one = Lookup(serial, false);
 
             if (!(serial & 0x1 /* system scan */)) {
@@ -279,7 +279,7 @@ namespace NTabletFlatExecutor {
         TScanOutcome Release(ui64 serial, EAbort &code, TAutoPtr<IDestructable> &result) noexcept
         {
             auto *one = Lookup(serial, true);
-
+ 
             if (one->State < EState::Scan) {
                 Y_Fail(NFmt::Do(*one) << " got unexpected scan result");
             } else {
@@ -291,13 +291,13 @@ namespace NTabletFlatExecutor {
 
                 return Throw(*one, one->State, code, result);
             }
-        }
-
-    private:
+        } 
+ 
+    private: 
         TOne& Make(ui32 table, TAutoPtr<IScan> scan, EType type, const TScanOptions& options, THolder<TScanSnapshot> snapshot) noexcept
-        {
+        { 
             /* odd NOps used to mark compactions (system scans) */
-
+ 
             const ui64 token = (Serial += 2) - (type == EType::System ? 1 : 0);
 
             auto got = Scans.emplace(
@@ -319,8 +319,8 @@ namespace NTabletFlatExecutor {
         {
             if (one.State != EState::None && one.State != EState::Ready) {
                 Y_Fail(NFmt::Do(one) << " is not in start condition");
-            }
-
+            } 
+ 
             switch (one.Options.ReadPrio) {
                 case TScanOptions::EReadPrio::Default:
                     break;
@@ -359,8 +359,8 @@ namespace NTabletFlatExecutor {
             one.Actor = Ops->Register(actor, TMailboxType::HTSwap, pool);
 
             return one.Serial;
-        }
-
+        } 
+ 
         bool Cancel(TOne &one, EState state) noexcept
         {
             if (one.State == EState::Task || one.State == EState::Ready) {
@@ -438,19 +438,19 @@ namespace NTabletFlatExecutor {
             Ops->Send(MakeResourceBrokerID(), event.Release(), 0);
         }
 
-    private:
+    private: 
         NUtil::ILogger * const Logger;
         IOps * const Ops;
         ITablet * const Owner;
         const TActorId OwnerActorId;
         const ui64 Tablet;
-
-        ui64 Serial = 0;
-
+ 
+        ui64 Serial = 0; 
+ 
         const TIntrusivePtr<TIdEmitter> Emitter;
         ui32 CounterAlive = 0;
         THashMap<ui64, TOne> Scans;
         THashMap<ui32, TTable> Tables;  /* only alive scans */
-    };
-}
-}
+    }; 
+} 
+} 

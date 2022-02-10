@@ -200,12 +200,12 @@ struct TBusWww::TImpl {
         Queues.Add(s->GetQueue());
     }
 
-    void RegisterQueue(TBusMessageQueuePtr q) {
+    void RegisterQueue(TBusMessageQueuePtr q) { 
         Y_VERIFY(!!q);
-        TGuard<TMutex> g(Mutex);
-        Queues.Add(q);
-    }
-
+        TGuard<TMutex> g(Mutex); 
+        Queues.Add(q); 
+    } 
+ 
     void RegisterModule(TBusModule* module) {
         Y_VERIFY(!!module);
         TGuard<TMutex> g(Mutex);
@@ -824,10 +824,10 @@ void TBusWww::RegisterServerSession(TBusServerSessionPtr s) {
     Impl->RegisterServerSession(s);
 }
 
-void TBusWww::RegisterQueue(TBusMessageQueuePtr q) {
-    Impl->RegisterQueue(q);
-}
-
+void TBusWww::RegisterQueue(TBusMessageQueuePtr q) { 
+    Impl->RegisterQueue(q); 
+} 
+ 
 void TBusWww::RegisterModule(TBusModule* module) {
     Impl->RegisterModule(module);
 }

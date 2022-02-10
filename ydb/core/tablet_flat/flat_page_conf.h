@@ -1,16 +1,16 @@
-#pragma once
-
-#include "flat_page_iface.h"
+#pragma once 
+ 
+#include "flat_page_iface.h" 
 #include "flat_row_eggs.h"
-
+ 
 #include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <util/generic/ylimits.h>
 
-namespace NKikimr {
-namespace NTable {
-namespace NPage {
-
+namespace NKikimr { 
+namespace NTable { 
+namespace NPage { 
+ 
     /**
      * Used for checking if keys belong to a key space
      */
@@ -64,25 +64,25 @@ namespace NPage {
         ui32 IndexMin = 32 * 1024;      /* Index initial buffer size    */
     };
 
-    struct TConf {
+    struct TConf { 
         TConf() {
             // There should always be at least 1 group
             Groups.emplace_back();
         }
-
-        TConf(bool fin, ui32 page, ui32 large = Max<ui32>())
-            : Final(fin)
-            , LargeEdge(large)
+ 
+        TConf(bool fin, ui32 page, ui32 large = Max<ui32>()) 
+            : Final(fin) 
+            , LargeEdge(large) 
         {
             Group(0).PageSize = page;
         }
-
-        bool Final = true;
+ 
+        bool Final = true; 
         ui32 MaxLargeBlob = 8 * 1024 * 1024 - 8; /* Maximum large blob size */
-        ui32 LargeEdge = Max<ui32>();   /* External blob edge size      */
-        ui32 SmallEdge = Max<ui32>();   /* Outer blobs edge bytes limit */
-        bool ByKeyFilter = false;       /* Per-part bloom filter        */
-        ui64 MaxRows = 0;               /* Used to set up bloom filter size */
+        ui32 LargeEdge = Max<ui32>();   /* External blob edge size      */ 
+        ui32 SmallEdge = Max<ui32>();   /* Outer blobs edge bytes limit */ 
+        bool ByKeyFilter = false;       /* Per-part bloom filter        */ 
+        ui64 MaxRows = 0;               /* Used to set up bloom filter size */ 
         ui64 SliceSize = Max<ui64>();   /* Data size for slice creation */
         ui64 MainPageCollectionEdge = Max<ui64>();
         ui64 SmallPageCollectionEdge = Max<ui64>();
@@ -98,8 +98,8 @@ namespace NPage {
             }
             return Groups[index];
         }
-    };
-
-}
-}
-}
+    }; 
+ 
+} 
+} 
+} 

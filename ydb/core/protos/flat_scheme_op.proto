@@ -55,7 +55,7 @@ enum EColumnStorage {
     ColumnStorage2Ext2 = 5;
     ColumnStorage1Med2Ext2 = 6;
     ColumnStorage2Med2Ext2 = 7;
-    ColumnStorageTest_1_2_1k = 999;
+    ColumnStorageTest_1_2_1k = 999; 
 }
 
 enum EFreezeState {
@@ -75,7 +75,7 @@ message TColumnDescription {
     optional string Type = 2;
     optional uint32 TypeId = 3;
     optional uint32 Id = 4;
-    optional uint32 Family = 5; // On default place column to default(0) family
+    optional uint32 Family = 5; // On default place column to default(0) family 
     optional string FamilyName = 6; // set Family by name (0 - "default")
     oneof DefaultValue {
         string DefaultFromSequence = 7; // Path to sequence for default values
@@ -97,8 +97,8 @@ message TStorageConfig {
     optional uint32 ExternalThreshold = 6;
 }
 
-message TFamilyDescription {
-    optional uint32 Id = 1;
+message TFamilyDescription { 
+    optional uint32 Id = 1; 
     optional uint32 Room = 2; // Used by datashard, must not be used by users
     optional uint32 Codec = 3; // DEPRECATED: use ColumnCodec
     optional bool InMemory = 4; // DEPRECATED: use ColumnCache
@@ -107,8 +107,8 @@ message TFamilyDescription {
     optional EColumnCache ColumnCache = 7;
     optional EColumnStorage Storage = 8; // DEPRECATED: use StorageConfig
     optional TStorageConfig StorageConfig = 9;
-}
-
+} 
+ 
 enum ECompactionStrategy {
     CompactionStrategyUnset = 0;
     CompactionStrategyGenerational = 1;
@@ -196,8 +196,8 @@ message TCompactionPolicy {
     optional uint32 InMemForceStepsToSnapshot = 3; // OR steps passed
     optional uint64 InMemForceSizeToSnapshot = 4; // OR size reached
     optional uint32 InMemCompactionBrokerQueue = 5 [default = 0]; // DEPRECATED
-    optional uint64 ReadAheadHiThreshold = 6 [default = 67108864];
-    optional uint64 ReadAheadLoThreshold = 7 [default = 16777216];
+    optional uint64 ReadAheadHiThreshold = 6 [default = 67108864]; 
+    optional uint64 ReadAheadLoThreshold = 7 [default = 16777216]; 
     optional uint32 MinDataPageSize = 8 [default = 7168];   // 7KB is smallest optimal for 512 byte sectors
     optional uint32 SnapBrokerQueue = 9 [default = 0]; // DEPRECATED
     optional uint32 BackupBrokerQueue = 11 [default = 1]; // DEPRECATED
@@ -262,7 +262,7 @@ message TPartitionConfig {
     repeated TFamilyDescription ColumnFamilies = 12;
     optional string ResourceProfile = 13;
     optional bool DisableStatisticsCalculation = 14; // KIKIMR-3861 hotfix
-    optional bool EnableFilterByKey = 15 [default = false]; // Build and use per-part bloom filter for fast key non-existence check
+    optional bool EnableFilterByKey = 15 [default = false]; // Build and use per-part bloom filter for fast key non-existence check 
     optional bool ExecutorFastLogPolicy = 16 [default  = true]; // Commit log faster at the expense of bandwidth for cross-DC
     repeated NKikimrStorageSettings.TStorageRoom StorageRooms = 17;
     optional bool EnableEraseCache = 18 [default = true]; // Use erase cache for faster iteration over erased rows

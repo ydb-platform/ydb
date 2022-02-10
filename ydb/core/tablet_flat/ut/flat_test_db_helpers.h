@@ -10,7 +10,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
-namespace NTable {
+namespace NTable { 
 
 struct TFakeTableCell {
 private:
@@ -43,11 +43,11 @@ public:
         Op = op;
     }
 
-    TCell operator*() const
-    {
-        return TCell((const char*)Val.Data(), Val.Size());
-    }
-
+    TCell operator*() const 
+    { 
+        return TCell((const char*)Val.Data(), Val.Size()); 
+    } 
+ 
     const TRawTypeValue& Get() const {
         return Val;
     }
@@ -82,10 +82,10 @@ inline TFakeTableCell MakeNull(ECellOp op) {
     return c;
 }
 
-inline TFakeTableCell FromVal(NScheme::TTypeId, std::nullptr_t) {
+inline TFakeTableCell FromVal(NScheme::TTypeId, std::nullptr_t) { 
     return MakeNull(ECellOp::Set);
-}
-
+} 
+ 
 inline TFakeTableCell FromVal(NScheme::TTypeId t, TString val) {
     TFakeTableCell c;
     c.Set(TRawTypeValue(val.data(), val.size(), t));
@@ -144,7 +144,7 @@ public:
         Y_VERIFY(tableInfo, "Unknown table id %u", GetRoot());
         const ui32* tagId = tableInfo->ColumnNames.FindPtr(tagName);
         Y_VERIFY(tagId, "Unknown column \"%s\" in table %u", tagName.data(), GetRoot());
-        const auto *colInfo = Scheme.GetColumnInfo(GetRoot(), *tagId);
+        const auto *colInfo = Scheme.GetColumnInfo(GetRoot(), *tagId); 
         Y_VERIFY(colInfo, "Column info not found for table id %u, column id %u", GetRoot(), *tagId);
         NScheme::TTypeId type = colInfo->PType;
         TagOps[*tagId] = FromVal(type, val);
@@ -156,7 +156,7 @@ public:
         Y_VERIFY(tableInfo, "Unknown table id %u", GetRoot());
         const ui32* tagId = tableInfo->ColumnNames.FindPtr(tagName);
         Y_VERIFY(tagId, "Unknown column \"%s\" in table %u", tagName.data(), GetRoot());
-        const auto * colInfo = Scheme.GetColumnInfo(GetRoot(), *tagId);
+        const auto * colInfo = Scheme.GetColumnInfo(GetRoot(), *tagId); 
         Y_VERIFY(colInfo, "Column info not found for table id %u, column id %u", GetRoot(), *tagId);
         TagOps[*tagId] = MakeNull(ECellOp::Null);
         return *this;
@@ -194,25 +194,25 @@ void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& 
 // Helps to simplify test code that deals with ITestDb
 class TDbWrapper {
     ITestDb& Db;
-    TScheme Scheme;
+    TScheme Scheme; 
 
 public:
-    using ECodec = NPage::ECodec;
-    using ECache = NPage::ECache;
-
+    using ECodec = NPage::ECodec; 
+    using ECache = NPage::ECache; 
+ 
     explicit TDbWrapper(ITestDb& db)
         : Db(db)
-        , Scheme(Db.GetScheme())
+        , Scheme(Db.GetScheme()) 
     {}
 
-    ITestDb* operator->() const { return &Db; }
-
+    ITestDb* operator->() const { return &Db; } 
+ 
     TDbRowUpdate Update(ui32 root) {
-        return TDbRowUpdate(Scheme, root);
+        return TDbRowUpdate(Scheme, root); 
     }
 
     TDbRowErase Erase(ui32 root) {
-        return TDbRowErase(Scheme, root);
+        return TDbRowErase(Scheme, root); 
     }
 
     void Apply(const TDbRowUpdate& update) {
@@ -222,9 +222,9 @@ public:
             key.push_back(col.Get());
         }
 
-        TVector<TUpdateOp> ops;
+        TVector<TUpdateOp> ops; 
         for (const auto& op : update.GetTagOps()) {
-            ops.push_back(TUpdateOp(op.first, op.second.GetOp(), op.second.Get()));
+            ops.push_back(TUpdateOp(op.first, op.second.GetOp(), op.second.Get())); 
         }
 
         Db.Update(update.GetRoot(), ERowOp::Upsert, key, ops);
@@ -240,15 +240,15 @@ public:
         Db.Update(erase.GetRoot(), ERowOp::Erase, key, { });
     }
 
-    void Apply(const TSchemeChanges &delta)
-    {
-        Db.Apply(delta);
-        TSchemeModifier(Scheme).Apply(delta);
-    }
-
+    void Apply(const TSchemeChanges &delta) 
+    { 
+        Db.Apply(delta); 
+        TSchemeModifier(Scheme).Apply(delta); 
+    } 
+ 
     void FinishTransaction(bool commit) {
         Db.FinishTransaction(commit);
-        Scheme = Db.GetScheme();
+        Scheme = Db.GetScheme(); 
     }
 
 };

@@ -3,91 +3,91 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-    struct TRowsModel {
-        enum : ui32  {
-            TableId = 101,
-            ColumnKeyId = 1,
-            ColumnValueId = 20,
+    struct TRowsModel { 
+        enum : ui32  { 
+            TableId = 101, 
+            ColumnKeyId = 1, 
+            ColumnValueId = 20, 
             AltFamilyId = 1,
-        };
-
-        struct TTxSchema : public ITransaction {
-
+        }; 
+ 
+        struct TTxSchema : public ITransaction { 
+ 
             TTxSchema(TIntrusiveConstPtr<TCompactionPolicy> policy, bool groups = false)
                 : Policy(std::move(policy))
                 , Groups(groups)
             { }
-
-            bool Execute(TTransactionContext &txc, const TActorContext &) override
-            {
-                if (txc.DB.GetScheme().GetTableInfo(TableId))
-                    return true;
-
-                txc.DB.Alter()
-                    .AddTable("test" + ToString(ui32(TableId)), TableId)
+ 
+            bool Execute(TTransactionContext &txc, const TActorContext &) override 
+            { 
+                if (txc.DB.GetScheme().GetTableInfo(TableId)) 
+                    return true; 
+ 
+                txc.DB.Alter() 
+                    .AddTable("test" + ToString(ui32(TableId)), TableId) 
                     .AddColumn(TableId, "key", ColumnKeyId, NScheme::TInt64::TypeId, false)
                     .AddColumn(TableId, "value", ColumnValueId, NScheme::TString::TypeId, false)
-                    .AddColumnToKey(TableId, ColumnKeyId)
-                    .SetCompactionPolicy(TableId, *Policy);
-
+                    .AddColumnToKey(TableId, ColumnKeyId) 
+                    .SetCompactionPolicy(TableId, *Policy); 
+ 
                 if (Groups) {
                     txc.DB.Alter()
                         .SetFamily(TableId, AltFamilyId, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain)
                         .AddColumnToFamily(TableId, ColumnValueId, AltFamilyId);
                 }
 
-                return true;
-            }
-
-            void Complete(const TActorContext &ctx) override
-            {
-                ctx.Send(ctx.SelfID, new NFake::TEvReturn);
-            }
-
+                return true; 
+            } 
+ 
+            void Complete(const TActorContext &ctx) override 
+            { 
+                ctx.Send(ctx.SelfID, new NFake::TEvReturn); 
+            } 
+ 
             TIntrusiveConstPtr<TCompactionPolicy> Policy;
             const bool Groups;
-        };
-
-        struct TTxAddRows : public ITransaction {
-
+        }; 
+ 
+        struct TTxAddRows : public ITransaction { 
+ 
             TTxAddRows(ui64 key, ui64 rows, ui64 pack, ui32 bytes, TRowVersion writeVersion)
                 : Key(key), Rows(rows), Pack(pack), Bytes(bytes), WriteVersion(writeVersion)
             {}
-
-            bool Execute(TTransactionContext &txc, const TActorContext &) override
-            {
-                for (auto end = Key + Min(Pack, Rows); Key < end; Key++, Rows--) {
-                    const auto key = NScheme::TInt64::TInstance(Key);
-
-                    TString str = Bytes ? TString(Bytes, (char)Key) : "value";
+ 
+            bool Execute(TTransactionContext &txc, const TActorContext &) override 
+            { 
+                for (auto end = Key + Min(Pack, Rows); Key < end; Key++, Rows--) { 
+                    const auto key = NScheme::TInt64::TInstance(Key); 
+ 
+                    TString str = Bytes ? TString(Bytes, (char)Key) : "value"; 
                     const auto val = NScheme::TString::TInstance(str);
                     NTable::TUpdateOp ops{ ColumnValueId, NTable::ECellOp::Set, val };
-
+ 
                     txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { ops }, WriteVersion);
-                }
-
-                return true;
-            }
-
-            void Complete(const TActorContext &ctx) override
-            {
-                if (Rows > 0) {
+                } 
+ 
+                return true; 
+            } 
+ 
+            void Complete(const TActorContext &ctx) override 
+            { 
+                if (Rows > 0) { 
                     auto *next = new TTxAddRows(Key, Rows, Pack, Bytes, WriteVersion);
-
-                    ctx.Send(ctx.SelfID, new NFake::TEvExecute{ next });
-                } else {
-                    ctx.Send(ctx.SelfID, new NFake::TEvReturn);
-                }
-            }
-
-        private:
-            ui64 Key = 0;
-            ui64 Rows = 0;
-            const ui64 Pack = 1;
-            const ui32 Bytes = 0;
+ 
+                    ctx.Send(ctx.SelfID, new NFake::TEvExecute{ next }); 
+                } else { 
+                    ctx.Send(ctx.SelfID, new NFake::TEvReturn); 
+                } 
+            } 
+ 
+        private: 
+            ui64 Key = 0; 
+            ui64 Rows = 0; 
+            const ui64 Pack = 1; 
+            const ui32 Bytes = 0; 
             const TRowVersion WriteVersion;
-        };
-
+        }; 
+ 
         struct TTxEraseRows : public ITransaction {
             TTxEraseRows(ui64 key, ui64 rows, ui64 pack, TRowVersion writeVersion)
                 : Key(key), Rows(rows), Pack(pack), WriteVersion(writeVersion)
@@ -123,18 +123,18 @@ namespace NTabletFlatExecutor {
         };
 
         NFake::TEvExecute* MakeScheme(TIntrusiveConstPtr<TCompactionPolicy> policy, bool groups = false)
-        {
+        { 
             return new NFake::TEvExecute{ new TTxSchema(std::move(policy), groups) };
-        }
-
-        NFake::TEvExecute* MakeRows(ui32 rows, ui32 bytes = 0, ui32 pack = 1)
-        {
-            auto key = std::exchange(Key, Key + rows);
-
-            return
+        } 
+ 
+        NFake::TEvExecute* MakeRows(ui32 rows, ui32 bytes = 0, ui32 pack = 1) 
+        { 
+            auto key = std::exchange(Key, Key + rows); 
+ 
+            return 
                 new NFake::TEvExecute{ new TTxAddRows(key, rows, pack, bytes, WriteVersion) };
-        }
-
+        } 
+ 
         NFake::TEvExecute* MakeErase(ui32 rows, ui32 pack = 1)
         {
             auto key = std::exchange(Key, Key + rows);
@@ -143,23 +143,23 @@ namespace NTabletFlatExecutor {
                 new NFake::TEvExecute{ new TTxEraseRows(key, rows, pack, WriteVersion) };
         }
 
-        TRowsModel& RowTo(ui64 key) noexcept
-        {
-            return Key = key, *this;
-        }
-
+        TRowsModel& RowTo(ui64 key) noexcept 
+        { 
+            return Key = key, *this; 
+        } 
+ 
         TRowsModel& VersionTo(TRowVersion writeVersion) noexcept
         {
             WriteVersion = writeVersion;
             return *this;
         }
 
-        ui64 Rows() const { return Key - 1; };
-
-        ui64 Key = 1;
+        ui64 Rows() const { return Key - 1; }; 
+ 
+        ui64 Key = 1; 
         TRowVersion WriteVersion = TRowVersion::Min();
-    };
-
+    }; 
+ 
     class TSnapshotModel : public NFake::TDummySnapshotContext {
     public:
         static TIntrusivePtr<TSnapshotModel> Create(ui32 tableId = TRowsModel::TableId) {
@@ -238,12 +238,12 @@ namespace NTabletFlatExecutor {
     };
 
 struct TDummyResult: public IDestructable {
-    TDummyResult(ui64 count, ui64 expect)
-        : Count(count), Expect(expect)
+    TDummyResult(ui64 count, ui64 expect) 
+        : Count(count), Expect(expect) 
     {}
 
-    ui64 Count = 0;
-    ui64 Expect = 0;
+    ui64 Count = 0; 
+    ui64 Expect = 0; 
 };
 
 class TDummyScan : public TActor<TDummyScan>, public NTable::IScan {
@@ -251,8 +251,8 @@ public:
     TDummyScan(TActorId tablet, bool postponed, EAbort abort, ui32 rows)
         : TActor(&TThis::StateWork)
         , Tablet(tablet)
-        , ExpectedRows(rows)
-        , Postponed(postponed)
+        , ExpectedRows(rows) 
+        , Postponed(postponed) 
         , Abort(abort)
     {}
     ~TDummyScan() {}
@@ -284,11 +284,11 @@ private:
         auto ctx = TActivationContext::AsActorContext();
         ctx.RegisterWithSameMailbox(this);
 
-        if (Postponed) {
-            ctx.Send(Tablet, new NFake::TEvReturn);
-            return { EScan::Sleep, { } };
+        if (Postponed) { 
+            ctx.Send(Tablet, new NFake::TEvReturn); 
+            return { EScan::Sleep, { } }; 
         } else {
-            return { EScan::Feed, { } };
+            return { EScan::Feed, { } }; 
         }
     }
 
@@ -297,7 +297,7 @@ private:
         if (seq && Abort == EAbort::None)
             return EScan::Final;
 
-        lead.To(Scheme->Tags(), { }, NTable::ESeek::Lower);
+        lead.To(Scheme->Tags(), { }, NTable::ESeek::Lower); 
         return EScan::Feed;
     }
 
@@ -315,22 +315,22 @@ private:
 
         auto ctx = TActivationContext::ActorContextFor(SelfId());
         if (abort == EAbort::None) {
-            UNIT_ASSERT_VALUES_EQUAL(ExpectedRows, StoredRows);
-        }
-
+            UNIT_ASSERT_VALUES_EQUAL(ExpectedRows, StoredRows); 
+        } 
+ 
         Die(ctx);
 
-        return new TDummyResult(StoredRows, ExpectedRows);
+        return new TDummyResult(StoredRows, ExpectedRows); 
     }
 
 private:
     TActorId Tablet;
-    IDriver *Driver = nullptr;
+    IDriver *Driver = nullptr; 
     TIntrusiveConstPtr<TScheme> Scheme;
-    ui64 StoredRows = 0;
-    ui64 ExpectedRowId = 1;
-    ui64 ExpectedRows = 0;
-    bool Postponed = false;
+    ui64 StoredRows = 0; 
+    ui64 ExpectedRowId = 1; 
+    ui64 ExpectedRows = 0; 
+    bool Postponed = false; 
     EAbort Abort;
 };
 
@@ -348,12 +348,12 @@ struct TEvTestFlatTablet {
 
     struct TEvScanFinished : public TEventLocal<TEvScanFinished, EvScanFinished> {};
     struct TEvQueueScan : public TEventLocal<TEvQueueScan, EvQueueScan> {
-        TEvQueueScan(ui32 rows, bool postponed = false, bool snap = false, NTable::EAbort abort = NTable::EAbort::None)
-            : Postponed(postponed)
-            , UseSnapshot(snap)
+        TEvQueueScan(ui32 rows, bool postponed = false, bool snap = false, NTable::EAbort abort = NTable::EAbort::None) 
+            : Postponed(postponed) 
+            , UseSnapshot(snap) 
             , Abort(abort)
             , ReadVersion(TRowVersion::Max())
-            , ExpectRows(rows)
+            , ExpectRows(rows) 
         {}
 
         TEvQueueScan(ui32 rows, TRowVersion snapshot, bool postponed = false, NTable::EAbort abort = NTable::EAbort::None)
@@ -364,11 +364,11 @@ struct TEvTestFlatTablet {
             , ExpectRows(rows)
         {}
 
-        bool Postponed;
+        bool Postponed; 
         bool UseSnapshot;
         NTable::EAbort Abort;
         const TRowVersion ReadVersion;
-        const ui32 ExpectRows = 0;
+        const ui32 ExpectRows = 0; 
     };
     struct TEvStartQueuedScan : public TEventLocal<TEvStartQueuedScan, EvStartQueuedScan> {};
     struct TEvMakeScanSnapshot : public TEventLocal<TEvMakeScanSnapshot, EvMakeScanSnapshot> {};
@@ -381,7 +381,7 @@ struct TEvTestFlatTablet {
             : SnapContext(std::move(snapContext))
         { }
     };
-};
+}; 
 
 class TTestTableSnapshotContext : public TTableSnapshotContext {
 public:
@@ -422,26 +422,26 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
     void ScanComplete(NTable::EAbort, TAutoPtr<IDestructable>, ui64 cookie, const TActorContext&) override
     {
         UNIT_ASSERT_VALUES_EQUAL(cookie, ScanCookie);
-        Send(Sender, new TEvTestFlatTablet::TEvScanFinished);
+        Send(Sender, new TEvTestFlatTablet::TEvScanFinished); 
     }
 
-    void Handle(TEvTestFlatTablet::TEvMakeScanSnapshot::TPtr&) {
-        SnapshotId = Executor()->MakeScanSnapshot(TRowsModel::TableId);
+    void Handle(TEvTestFlatTablet::TEvMakeScanSnapshot::TPtr&) { 
+        SnapshotId = Executor()->MakeScanSnapshot(TRowsModel::TableId); 
         UNIT_ASSERT(SnapshotId);
-        Send(Sender, new TEvents::TEvWakeup);
+        Send(Sender, new TEvents::TEvWakeup); 
     }
 
     void Handle(TEvTestFlatTablet::TEvCancelScan::TPtr &/*ev*/, const TActorContext &ctx) {
-        Executor()->CancelScan(TRowsModel::TableId, ScanTaskId);
+        Executor()->CancelScan(TRowsModel::TableId, ScanTaskId); 
         ctx.Send(Sender, new TEvents::TEvWakeup);
     }
 
-    void Handle(TEvTestFlatTablet::TEvQueueScan::TPtr &ev) {
-        bool postpone = ev->Get()->Postponed;
+    void Handle(TEvTestFlatTablet::TEvQueueScan::TPtr &ev) { 
+        bool postpone = ev->Get()->Postponed; 
         ui64 snap = ev->Get()->UseSnapshot ? SnapshotId : 0;
         auto abort = ev->Get()->Abort;
-        auto rows = abort != NTable::EAbort::None ? 0 : ev->Get()->ExpectRows;
-        Scan = new TDummyScan(SelfId(), postpone, abort, rows);
+        auto rows = abort != NTable::EAbort::None ? 0 : ev->Get()->ExpectRows; 
+        Scan = new TDummyScan(SelfId(), postpone, abort, rows); 
         TScanOptions options;
         if (snap) {
             Y_VERIFY(ev->Get()->ReadVersion.IsMax(), "Cannot combine multiple snapshot techniques");
@@ -456,7 +456,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
         ctx.Send(Scan->SelfId(), new TEvents::TEvWakeup);
     }
 
-    void Handle(NFake::TEvExecute::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NFake::TEvExecute::TPtr &ev, const TActorContext &ctx) { 
         for (auto& f : ev->Get()->Funcs) {
             if (auto* tx = dynamic_cast<ITransactionWithExecutor*>(f.Get())) {
                 tx->Executor = Executor();
@@ -474,19 +474,19 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
         Send(Sender, new TEvents::TEvWakeup);
     }
 
-    void Handle(NFake::TEvReturn::TPtr&, const TActorContext&) {
-        Send(Sender, new TEvents::TEvWakeup);
+    void Handle(NFake::TEvReturn::TPtr&, const TActorContext&) { 
+        Send(Sender, new TEvents::TEvWakeup); 
     }
 
-    void Handle(TEvents::TEvPoison::TPtr &, const TActorContext &ctx) {
+    void Handle(TEvents::TEvPoison::TPtr &, const TActorContext &ctx) { 
         Become(&TThis::StateBroken);
-        Executor()->DetachTablet(ctx), Detach(ctx); /* see TDummy tablet */
-        ctx.Send(Sender, new TEvents::TEvGone);
+        Executor()->DetachTablet(ctx), Detach(ctx); /* see TDummy tablet */ 
+        ctx.Send(Sender, new TEvents::TEvGone); 
     }
 
-    void OnActivateExecutor(const TActorContext&) override {
+    void OnActivateExecutor(const TActorContext&) override { 
         Become(&TThis::StateWork);
-        Send(Sender, new TEvents::TEvWakeup);
+        Send(Sender, new TEvents::TEvWakeup); 
     }
 
     void OnDetach(const TActorContext &ctx) override {
@@ -500,7 +500,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
 public:
     TTestFlatTablet(const TActorId &sender, const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
-        , TTabletExecutedFlat(info, tablet, nullptr)
+        , TTabletExecutedFlat(info, tablet, nullptr) 
         , Scan(nullptr)
         , ScanTaskId(0)
         , ScanCookie(123)
@@ -514,15 +514,15 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTestFlatTablet::TEvQueueScan, Handle);
+            hFunc(TEvTestFlatTablet::TEvQueueScan, Handle); 
             HFunc(TEvTestFlatTablet::TEvStartQueuedScan, Handle);
-            hFunc(TEvTestFlatTablet::TEvMakeScanSnapshot, Handle);
+            hFunc(TEvTestFlatTablet::TEvMakeScanSnapshot, Handle); 
             HFunc(TEvTestFlatTablet::TEvCancelScan, Handle);
-            HFunc(NFake::TEvExecute, Handle);
+            HFunc(NFake::TEvExecute, Handle); 
             HFunc(NFake::TEvCompact, Handle);
             HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
-            HFunc(NFake::TEvReturn, Handle);
-            HFunc(TEvents::TEvPoison, Handle);
+            HFunc(NFake::TEvReturn, Handle); 
+            HFunc(TEvents::TEvPoison, Handle); 
         default:
             HandleDefaultEvents(ev, ctx);
             break;
@@ -548,17 +548,17 @@ public:
  */
 Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
     Y_UNIT_TEST(TestCompactionScan) {
-        TMyEnvBase env;
-        TRowsModel data;
+        TMyEnvBase env; 
+        TRowsModel data; 
 
-        env->SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
-
+        env->SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG); 
+ 
         env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
-            return new TTestFlatTablet(env.Edge, tablet, info);
-        });
-
-        env.WaitForWakeUp();
-
+            return new TTestFlatTablet(env.Edge, tablet, info); 
+        }); 
+ 
+        env.WaitForWakeUp(); 
+ 
         TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
         policy->InMemSizeToSnapshot = 40 * 1024 *1024;
         policy->InMemStepsToSnapshot = 10;
@@ -577,189 +577,189 @@ Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
             gen.UpliftPartSize = 0;
         }
 
-        env.SendSync(data.MakeScheme(std::move(policy)));
-        env.SendAsync(data.MakeRows(249));
+        env.SendSync(data.MakeScheme(std::move(policy))); 
+        env.SendAsync(data.MakeRows(249)); 
         env.WaitFor<NFake::TEvCompacted>(28);
-        env.WaitForWakeUp();
+        env.WaitForWakeUp(); 
 
-        env.SendSync(new TEvTestFlatTablet::TEvQueueScan(data.Rows(), true));
-        env.SendAsync(data.MakeRows(1));
+        env.SendSync(new TEvTestFlatTablet::TEvQueueScan(data.Rows(), true)); 
+        env.SendAsync(data.MakeRows(1)); 
         env.WaitFor<NFake::TEvCompacted>(3);
-        env.WaitForWakeUp();
-        env.SendAsync(new TEvTestFlatTablet::TEvStartQueuedScan());
-        TAutoPtr<IEventHandle> handle;
-        env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
-        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForWakeUp(); 
+        env.SendAsync(new TEvTestFlatTablet::TEvStartQueuedScan()); 
+        TAutoPtr<IEventHandle> handle; 
+        env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle); 
+        env.SendSync(new TEvents::TEvPoison, false, true); 
     }
 }
 
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutorTxLimit) {
 
-    struct TTxSchema : public ITransaction {
+    struct TTxSchema : public ITransaction { 
         TTxSchema(TActorId owner) : Owner(owner) { }
 
-        bool Execute(TTransactionContext &txc, const TActorContext&) override
-        {
-            txc.DB.Alter().SetExecutorLimitInFlyTx(2);
+        bool Execute(TTransactionContext &txc, const TActorContext&) override 
+        { 
+            txc.DB.Alter().SetExecutorLimitInFlyTx(2); 
 
-            return true;
-        }
+            return true; 
+        } 
 
-        void Complete(const TActorContext &ctx) override
-        {
-            ctx.Send(Owner, new NFake::TEvResult);
-        }
+        void Complete(const TActorContext &ctx) override 
+        { 
+            ctx.Send(Owner, new NFake::TEvResult); 
+        } 
 
         const TActorId Owner;
-    };
+    }; 
 
-    struct TTxNoop : public ITransaction {
+    struct TTxNoop : public ITransaction { 
         TTxNoop(TActorId owner) : Owner(owner) { }
 
-        bool Execute(TTransactionContext&, const TActorContext&) override
-        {
-            return true;
-        }
+        bool Execute(TTransactionContext&, const TActorContext&) override 
+        { 
+            return true; 
+        } 
 
-        void Complete(const TActorContext &ctx) override
-        {
-            ctx.Send(Owner, new NFake::TEvResult);
-        }
+        void Complete(const TActorContext &ctx) override 
+        { 
+            ctx.Send(Owner, new NFake::TEvResult); 
+        } 
 
         const TActorId Owner;
-    };
+    }; 
 
-    Y_UNIT_TEST(TestExecutorTxLimit) {
-        TMyEnvBase env;
+    Y_UNIT_TEST(TestExecutorTxLimit) { 
+        TMyEnvBase env; 
 
-        env.FireDummyTablet();
-        env.SendAsync(new NFake::TEvExecute{ new TTxSchema(env.Edge) });
-        env.WaitFor<NFake::TEvResult>();
+        env.FireDummyTablet(); 
+        env.SendAsync(new NFake::TEvExecute{ new TTxSchema(env.Edge) }); 
+        env.WaitFor<NFake::TEvResult>(); 
 
-        for (size_t seq = 0; seq++ < 5;)
-           env.SendAsync(new NFake::TEvExecute{ new TTxNoop(env.Edge) });
+        for (size_t seq = 0; seq++ < 5;) 
+           env.SendAsync(new NFake::TEvExecute{ new TTxNoop(env.Edge) }); 
 
-        env.WaitFor<NFake::TEvResult>(5);
-        env.SendSync(new TEvents::TEvPoison, false, true);
-    }
-}
+        env.WaitFor<NFake::TEvResult>(5); 
+        env.SendSync(new TEvents::TEvPoison, false, true); 
+    } 
+} 
 
 
-Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
+Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) { 
 
-    using namespace NKikimrResourceBroker;
-    using namespace NResourceBroker;
+    using namespace NKikimrResourceBroker; 
+    using namespace NResourceBroker; 
 
-    struct TIsTaskSubmission {
-        TIsTaskSubmission(const TString &type, ui32 maxPriority = Max<ui32>())
-            : Type(type)
-            , MaxPriority(maxPriority)
-        {}
+    struct TIsTaskSubmission { 
+        TIsTaskSubmission(const TString &type, ui32 maxPriority = Max<ui32>()) 
+            : Type(type) 
+            , MaxPriority(maxPriority) 
+        {} 
 
-        bool operator()(IEventHandle &ev) {
-            if (ev.GetTypeRewrite() == NResourceBroker::TEvResourceBroker::EvSubmitTask) {
-                auto *e = ev.Get<NResourceBroker::TEvResourceBroker::TEvSubmitTask>();
-                if (e->Task.Type == Type && e->Task.Priority <= MaxPriority) {
-                    return true;
-                }
+        bool operator()(IEventHandle &ev) { 
+            if (ev.GetTypeRewrite() == NResourceBroker::TEvResourceBroker::EvSubmitTask) { 
+                auto *e = ev.Get<NResourceBroker::TEvResourceBroker::TEvSubmitTask>(); 
+                if (e->Task.Type == Type && e->Task.Priority <= MaxPriority) { 
+                    return true; 
+                } 
             }
 
-            return false;
+            return false; 
         }
 
-        TString Type;
-        ui32 MaxPriority;
-    };
+        TString Type; 
+        ui32 MaxPriority; 
+    }; 
 
-    struct TIsTaskUpdate {
-        TIsTaskUpdate(const TString &type, ui32 maxPriority = Max<ui32>())
-            : Type(type)
-            , MaxPriority(maxPriority)
+    struct TIsTaskUpdate { 
+        TIsTaskUpdate(const TString &type, ui32 maxPriority = Max<ui32>()) 
+            : Type(type) 
+            , MaxPriority(maxPriority) 
+        {} 
+
+        bool operator()(IEventHandle &ev) { 
+            if (ev.GetTypeRewrite() == NResourceBroker::TEvResourceBroker::EvUpdateTask) { 
+                auto *e = ev.Get<NResourceBroker::TEvResourceBroker::TEvUpdateTask>(); 
+                if (e->Type == Type && e->Priority <= MaxPriority) 
+                    return true; 
+            } 
+
+            return false; 
+        }
+
+        TString Type; 
+        ui32 MaxPriority; 
+    }; 
+
+    struct TIsResourceAllocation { 
+        TIsResourceAllocation() 
         {}
 
-        bool operator()(IEventHandle &ev) {
-            if (ev.GetTypeRewrite() == NResourceBroker::TEvResourceBroker::EvUpdateTask) {
-                auto *e = ev.Get<NResourceBroker::TEvResourceBroker::TEvUpdateTask>();
-                if (e->Type == Type && e->Priority <= MaxPriority)
-                    return true;
-            }
+        bool operator()(IEventHandle &ev) { 
+            if (ev.GetTypeRewrite() == NResourceBroker::TEvResourceBroker::EvResourceAllocated) 
+                return true; 
 
-            return false;
-        }
-
-        TString Type;
-        ui32 MaxPriority;
-    };
-
-    struct TIsResourceAllocation {
-        TIsResourceAllocation()
-        {}
-
-        bool operator()(IEventHandle &ev) {
-            if (ev.GetTypeRewrite() == NResourceBroker::TEvResourceBroker::EvResourceAllocated)
-                return true;
-
-            return false;
+            return false; 
         }
     };
 
-    struct TMyEnvCompaction : public TMyEnvBase {
-        TMyEnvCompaction()
-        {
-            Env.SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
-            FireDummyTablet();
-            SendSync(Rows.MakeScheme(MakeCompactionPolicy()));
+    struct TMyEnvCompaction : public TMyEnvBase { 
+        TMyEnvCompaction() 
+        { 
+            Env.SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG); 
+            FireDummyTablet(); 
+            SendSync(Rows.MakeScheme(MakeCompactionPolicy())); 
         }
 
-        ~TMyEnvCompaction()
-        {
-            SendSync(new TEvents::TEvPoison, false, true);
-        }
+        ~TMyEnvCompaction() 
+        { 
+            SendSync(new TEvents::TEvPoison, false, true); 
+        } 
+ 
+        void BlockBackgroundQueue(ui64 block = 0, ui64 level = 0, bool instant = true) 
+        { 
+            ui64 id = 987987987987 + block; 
+            TAutoPtr<TEvResourceBroker::TEvSubmitTask> event 
+                = new TEvResourceBroker::TEvSubmitTask(id, 
+                                                       "bckg-block", 
+                                                       {{1, 0}}, 
+                                                       "background_compaction", 
+                                                       level, 
+                                                       nullptr); 
+            SendEv(MakeResourceBrokerID(), event.Release()); 
 
-        void BlockBackgroundQueue(ui64 block = 0, ui64 level = 0, bool instant = true)
-        {
-            ui64 id = 987987987987 + block;
-            TAutoPtr<TEvResourceBroker::TEvSubmitTask> event
-                = new TEvResourceBroker::TEvSubmitTask(id,
-                                                       "bckg-block",
-                                                       {{1, 0}},
-                                                       "background_compaction",
-                                                       level,
-                                                       nullptr);
-            SendEv(MakeResourceBrokerID(), event.Release());
+            if (instant) { 
+                TAutoPtr<IEventHandle> handle; 
+                auto reply = Env.GrabEdgeEventRethrow<TEvResourceBroker::TEvResourceAllocated>(handle); 
+                UNIT_ASSERT_VALUES_EQUAL(reply->TaskId, id); 
+            } 
+        } 
 
-            if (instant) {
-                TAutoPtr<IEventHandle> handle;
-                auto reply = Env.GrabEdgeEventRethrow<TEvResourceBroker::TEvResourceAllocated>(handle);
-                UNIT_ASSERT_VALUES_EQUAL(reply->TaskId, id);
-            }
-        }
+        void UnblockBackgroundQueue(ui64 block = 0) 
+        { 
+            ui64 id = 987987987987 + block; 
+            TAutoPtr<TEvResourceBroker::TEvFinishTask> event 
+                = new TEvResourceBroker::TEvFinishTask(id); 
+            SendEv(MakeResourceBrokerID(), event.Release()); 
+        } 
 
-        void UnblockBackgroundQueue(ui64 block = 0)
-        {
-            ui64 id = 987987987987 + block;
-            TAutoPtr<TEvResourceBroker::TEvFinishTask> event
-                = new TEvResourceBroker::TEvFinishTask(id);
-            SendEv(MakeResourceBrokerID(), event.Release());
-        }
-
-        static TCompactionPolicy* MakeCompactionPolicy() noexcept
-        {
-            auto *policy = new TCompactionPolicy();
-            policy->InMemSizeToSnapshot = 40 * 1024 *1024;
-            policy->InMemStepsToSnapshot = 10;
-            policy->InMemForceStepsToSnapshot = 10;
-            policy->InMemForceSizeToSnapshot = 64 * 1024 * 1024;
-            policy->InMemResourceBrokerTask = NLocalDb::LegacyQueueIdToTaskName(0);
-            policy->ReadAheadHiThreshold = 100000;
-            policy->ReadAheadLoThreshold = 50000;
-            policy->BackgroundSnapshotPolicy.Threshold = 50;
-            policy->BackgroundSnapshotPolicy.ResourceBrokerTask = "background_compaction_gen0";
-            policy->Generations.push_back({100 * 1024 * 1024, 10, 10, 200 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true,
-                        {50, 100, 0.0, "background_compaction_gen1"}});
-            policy->Generations.push_back({400 * 1024 * 1024, 10, 10, 800 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(2), false,
-                        {50, 200, 1.0, "background_compaction_gen2"}});
+        static TCompactionPolicy* MakeCompactionPolicy() noexcept 
+        { 
+            auto *policy = new TCompactionPolicy(); 
+            policy->InMemSizeToSnapshot = 40 * 1024 *1024; 
+            policy->InMemStepsToSnapshot = 10; 
+            policy->InMemForceStepsToSnapshot = 10; 
+            policy->InMemForceSizeToSnapshot = 64 * 1024 * 1024; 
+            policy->InMemResourceBrokerTask = NLocalDb::LegacyQueueIdToTaskName(0); 
+            policy->ReadAheadHiThreshold = 100000; 
+            policy->ReadAheadLoThreshold = 50000; 
+            policy->BackgroundSnapshotPolicy.Threshold = 50; 
+            policy->BackgroundSnapshotPolicy.ResourceBrokerTask = "background_compaction_gen0"; 
+            policy->Generations.push_back({100 * 1024 * 1024, 10, 10, 200 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true, 
+                        {50, 100, 0.0, "background_compaction_gen1"}}); 
+            policy->Generations.push_back({400 * 1024 * 1024, 10, 10, 800 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(2), false, 
+                        {50, 200, 1.0, "background_compaction_gen2"}}); 
             for (auto& gen : policy->Generations) {
                 gen.ExtraCompactionPercent = 0;
                 gen.ExtraCompactionMinSize = 0;
@@ -767,120 +767,120 @@ Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
                 gen.ExtraCompactionExpMaxSize = 0;
                 gen.UpliftPartSize = 0;
             }
-            return policy;
-        }
-
-        TRowsModel Rows;
-    };
+            return policy; 
+        } 
+ 
+        TRowsModel Rows; 
+    }; 
 
     Y_UNIT_TEST(TestRunBackgroundSnapshot) {
-        TMyEnvCompaction env;
+        TMyEnvCompaction env; 
 
-        env.SendAsync(env.Rows.MakeRows(5));
+        env.SendAsync(env.Rows.MakeRows(5)); 
         TDispatchOptions options;
         options.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen0"));
-        env->DispatchEvents(options);
+        env->DispatchEvents(options); 
     }
 
     Y_UNIT_TEST(TestChangeBackgroundSnapshotToRegular) {
-        TMyEnvCompaction env;
+        TMyEnvCompaction env; 
 
-        env.BlockBackgroundQueue();
+        env.BlockBackgroundQueue(); 
 
-        env.SendAsync(env.Rows.MakeRows(5));
+        env.SendAsync(env.Rows.MakeRows(5)); 
         TDispatchOptions options1;
         options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen0"));
-        env->DispatchEvents(options1);
+        env->DispatchEvents(options1); 
 
-        env.SendAsync(env.Rows.MakeRows(5));
+        env.SendAsync(env.Rows.MakeRows(5)); 
         TDispatchOptions options2;
         options2.FinalEvents.emplace_back(TIsTaskUpdate("compaction_gen0", 5));
-        env->DispatchEvents(options2);
+        env->DispatchEvents(options2); 
     }
 
     Y_UNIT_TEST(TestRunBackgroundCompactionGen1) {
-        TMyEnvCompaction env;
+        TMyEnvCompaction env; 
 
-        env.BlockBackgroundQueue();
-        env.SendAsync(env.Rows.MakeRows(50));
+        env.BlockBackgroundQueue(); 
+        env.SendAsync(env.Rows.MakeRows(50)); 
         TDispatchOptions options;
         options.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen1"));
-        env->DispatchEvents(options);
+        env->DispatchEvents(options); 
     }
 
     Y_UNIT_TEST(TestChangeBackgroundCompactionToRegular) {
-        TMyEnvCompaction env;
+        TMyEnvCompaction env; 
 
-        env.BlockBackgroundQueue();
-        env.SendAsync(env.Rows.MakeRows(50));
+        env.BlockBackgroundQueue(); 
+        env.SendAsync(env.Rows.MakeRows(50)); 
 
         TDispatchOptions options1;
         options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen1"));
-        env->DispatchEvents(options1);
+        env->DispatchEvents(options1); 
 
-        env.SendAsync(env.Rows.MakeRows(50));
-
+        env.SendAsync(env.Rows.MakeRows(50)); 
+ 
         TDispatchOptions options2;
         options2.FinalEvents.emplace_back(TIsTaskUpdate("compaction_gen1", 5));
-        env->DispatchEvents(options2);
+        env->DispatchEvents(options2); 
     }
 
     Y_UNIT_TEST(TestRunBackgroundCompactionGen2) {
-        TMyEnvCompaction env;
+        TMyEnvCompaction env; 
 
-        env.BlockBackgroundQueue();
-        env.SendAsync(env.Rows.MakeRows(500));
+        env.BlockBackgroundQueue(); 
+        env.SendAsync(env.Rows.MakeRows(500)); 
 
         TDispatchOptions options;
         options.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen2"));
-        env->DispatchEvents(options);
+        env->DispatchEvents(options); 
     }
 
     Y_UNIT_TEST(TestChangeBackgroundSnapshotPriorityByTime) {
-        TMyEnvCompaction env;
+        TMyEnvCompaction env; 
 
-        env.BlockBackgroundQueue();
-        env.SendAsync(env.Rows.MakeRows(5));
+        env.BlockBackgroundQueue(); 
+        env.SendAsync(env.Rows.MakeRows(5)); 
 
         TDispatchOptions options1;
         options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen0"));
-        env->DispatchEvents(options1);
+        env->DispatchEvents(options1); 
 
         TDispatchOptions options2;
         options2.FinalEvents.emplace_back(TIsTaskUpdate("background_compaction_gen0", 50));
-        env->SetDispatchTimeout(TDuration::Minutes(1));
-        env->DispatchEvents(options2);
+        env->SetDispatchTimeout(TDuration::Minutes(1)); 
+        env->DispatchEvents(options2); 
     }
 
     Y_UNIT_TEST(TestChangeBackgroundCompactionPriorityByTime) {
-        TMyEnvCompaction env;
+        TMyEnvCompaction env; 
 
-        env.BlockBackgroundQueue();
-        env.SendAsync(env.Rows.MakeRows(550));
+        env.BlockBackgroundQueue(); 
+        env.SendAsync(env.Rows.MakeRows(550)); 
 
         TDispatchOptions options1;
         options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen1"), 6);
         options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen2"));
-        env->DispatchEvents(options1);
+        env->DispatchEvents(options1); 
 
         TDispatchOptions options2;
         options2.FinalEvents.emplace_back(TIsTaskUpdate("background_compaction_gen2", 100));
 
-        env->SetDispatchTimeout(TDuration::Minutes(1));
-        env->DispatchEvents(options2);
-
+        env->SetDispatchTimeout(TDuration::Minutes(1)); 
+        env->DispatchEvents(options2); 
+ 
         // GEN2 compaction should become more prioritized due to time factor.
         TDispatchOptions options3;
-        env.BlockBackgroundQueue(1, 150, false);
-        env.UnblockBackgroundQueue();
+        env.BlockBackgroundQueue(1, 150, false); 
+        env.UnblockBackgroundQueue(); 
         options3.FinalEvents.emplace_back(TIsResourceAllocation());
-        env->DispatchEvents(options3);
+        env->DispatchEvents(options3); 
 
-        env.SendAsync(env.Rows.MakeRows(10));
-
+        env.SendAsync(env.Rows.MakeRows(10)); 
+ 
         TDispatchOptions options4;
         options4.FinalEvents.emplace_back(TIsTaskUpdate("background_compaction_gen1", 170));
-        env->DispatchEvents(options4);
+        env->DispatchEvents(options4); 
     }
 }
 
@@ -890,54 +890,54 @@ Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
     using namespace NKikimrResourceBroker;
     using namespace NResourceBroker;
 
-    struct TMyEnvScans : public TMyEnvBase {
-
-        TMyEnvScans()
-        {
-            Env.SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_INFO);
-            Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_INFO);
-            Env.SetLogPriority(NKikimrServices::TABLET_OPS_HOST, NActors::NLog::PRI_INFO);
+    struct TMyEnvScans : public TMyEnvBase { 
+ 
+        TMyEnvScans() 
+        { 
+            Env.SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_INFO); 
+            Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_INFO); 
+            Env.SetLogPriority(NKikimrServices::TABLET_OPS_HOST, NActors::NLog::PRI_INFO); 
 
             FireTablet(Edge, Tablet, [this](const TActorId &tablet, TTabletStorageInfo *info) {
-                return new TTestFlatTablet(Edge, tablet, info);
+                return new TTestFlatTablet(Edge, tablet, info); 
             });
 
-            WaitForWakeUp();
+            WaitForWakeUp(); 
+ 
+            SendSync(Rows.MakeScheme(MakeCompactionPolicy())); 
+        } 
 
-            SendSync(Rows.MakeScheme(MakeCompactionPolicy()));
-        }
-
-        ~TMyEnvScans()
-        {
-            SendSync(new TEvents::TEvPoison, false, true);
-        }
-
-        static TCompactionPolicy* MakeCompactionPolicy() noexcept
-        {
-            auto *policy = new TCompactionPolicy();
-            policy->InMemSizeToSnapshot = 40 * 1024 *1024;
-            policy->InMemStepsToSnapshot = 10;
-            policy->InMemForceStepsToSnapshot = 10;
-            policy->InMemForceSizeToSnapshot = 64 * 1024 * 1024;
-            policy->InMemResourceBrokerTask = NLocalDb::LegacyQueueIdToTaskName(0);
-            policy->ReadAheadHiThreshold = 100000;
-            policy->ReadAheadLoThreshold = 50000;
-            policy->Generations.push_back({100 * 1024 * 1024, 10, 10, 200 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true});
-            return policy;
-        }
-
-        TRowsModel Rows;
-    };
+        ~TMyEnvScans() 
+        { 
+            SendSync(new TEvents::TEvPoison, false, true); 
+        } 
+ 
+        static TCompactionPolicy* MakeCompactionPolicy() noexcept 
+        { 
+            auto *policy = new TCompactionPolicy(); 
+            policy->InMemSizeToSnapshot = 40 * 1024 *1024; 
+            policy->InMemStepsToSnapshot = 10; 
+            policy->InMemForceStepsToSnapshot = 10; 
+            policy->InMemForceSizeToSnapshot = 64 * 1024 * 1024; 
+            policy->InMemResourceBrokerTask = NLocalDb::LegacyQueueIdToTaskName(0); 
+            policy->ReadAheadHiThreshold = 100000; 
+            policy->ReadAheadLoThreshold = 50000; 
+            policy->Generations.push_back({100 * 1024 * 1024, 10, 10, 200 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true}); 
+            return policy; 
+        } 
+ 
+        TRowsModel Rows; 
+    }; 
 
     Y_UNIT_TEST(TestPostponedScan) {
-        TMyEnvScans env;
-        TAutoPtr<IEventHandle> handle;
+        TMyEnvScans env; 
+        TAutoPtr<IEventHandle> handle; 
 
-        env.SendSync(env.Rows.MakeRows(111));
-        env.SendSync(new TEvTestFlatTablet::TEvMakeScanSnapshot);
-        env.SendSync(env.Rows.MakeRows(111));
-        env.SendAsync(new TEvTestFlatTablet::TEvQueueScan(111, false, true));
-        env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
+        env.SendSync(env.Rows.MakeRows(111)); 
+        env.SendSync(new TEvTestFlatTablet::TEvMakeScanSnapshot); 
+        env.SendSync(env.Rows.MakeRows(111)); 
+        env.SendAsync(new TEvTestFlatTablet::TEvQueueScan(111, false, true)); 
+        env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle); 
     }
 
     Y_UNIT_TEST(TestCancelFinishedScan) {
@@ -953,14 +953,14 @@ Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
     }
 
     Y_UNIT_TEST(TestCancelRunningPostponedScan) {
-        TMyEnvScans env;
-        TAutoPtr<IEventHandle> handle;
+        TMyEnvScans env; 
+        TAutoPtr<IEventHandle> handle; 
 
-        env.SendSync(env.Rows.MakeRows(111));
-        env.SendSync(new TEvTestFlatTablet::TEvMakeScanSnapshot);
-        env.SendSync(new TEvTestFlatTablet::TEvQueueScan(111, true, true, NTable::EAbort::Term));
+        env.SendSync(env.Rows.MakeRows(111)); 
+        env.SendSync(new TEvTestFlatTablet::TEvMakeScanSnapshot); 
+        env.SendSync(new TEvTestFlatTablet::TEvQueueScan(111, true, true, NTable::EAbort::Term)); 
         env.SendSync(new TEvTestFlatTablet::TEvCancelScan);
-//        env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
+//        env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle); 
     }
 
     Y_UNIT_TEST(TestPostponedScanSnapshotMVCC) {
@@ -977,54 +977,54 @@ Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
 
-    struct TTaskSequence {
-        struct TEvent {
-            ui32 EventType;
-            TString TaskType;
-        };
-
-        TTaskSequence()
-        {}
-
-        void Add(ui32 event, const TString &task = "")
-        {
-            Events.push_back({event, task});
-        }
-
-        bool operator()(IEventHandle &ev) {
-            if (Current == Events.size())
-                return false;
-
-            auto &event = Events[Current];
-            bool match = false;
-            if (ev.GetTypeRewrite() == event.EventType) {
-                if (ev.GetTypeRewrite() == NResourceBroker::TEvResourceBroker::EvSubmitTask) {
-                    auto *e = ev.Get<NResourceBroker::TEvResourceBroker::TEvSubmitTask>();
-                    if (e->Task.Type == event.TaskType) {
-                        match = true;
-                    }
-                } else if (ev.GetTypeRewrite() == NResourceBroker::TEvResourceBroker::EvUpdateTask) {
-                    auto *e = ev.Get<NResourceBroker::TEvResourceBroker::TEvUpdateTask>();
-                    if (e->Type == event.TaskType) {
-                        match = true;
-                    }
-                } else {
-                    Y_VERIFY(!event.TaskType);
-                    match = true;
-                }
-            }
-
-            if (match) {
-                ++Current;
-            }
-
-            return Current == Events.size();
-        }
-
-        TVector<TEvent> Events;
-        size_t Current = 0;
-    };
-
+    struct TTaskSequence { 
+        struct TEvent { 
+            ui32 EventType; 
+            TString TaskType; 
+        }; 
+ 
+        TTaskSequence() 
+        {} 
+ 
+        void Add(ui32 event, const TString &task = "") 
+        { 
+            Events.push_back({event, task}); 
+        } 
+ 
+        bool operator()(IEventHandle &ev) { 
+            if (Current == Events.size()) 
+                return false; 
+ 
+            auto &event = Events[Current]; 
+            bool match = false; 
+            if (ev.GetTypeRewrite() == event.EventType) { 
+                if (ev.GetTypeRewrite() == NResourceBroker::TEvResourceBroker::EvSubmitTask) { 
+                    auto *e = ev.Get<NResourceBroker::TEvResourceBroker::TEvSubmitTask>(); 
+                    if (e->Task.Type == event.TaskType) { 
+                        match = true; 
+                    } 
+                } else if (ev.GetTypeRewrite() == NResourceBroker::TEvResourceBroker::EvUpdateTask) { 
+                    auto *e = ev.Get<NResourceBroker::TEvResourceBroker::TEvUpdateTask>(); 
+                    if (e->Type == event.TaskType) { 
+                        match = true; 
+                    } 
+                } else { 
+                    Y_VERIFY(!event.TaskType); 
+                    match = true; 
+                } 
+            } 
+ 
+            if (match) { 
+                ++Current; 
+            } 
+ 
+            return Current == Events.size(); 
+        } 
+ 
+        TVector<TEvent> Events; 
+        size_t Current = 0; 
+    }; 
+ 
     struct TMemoryCheckEntry {
         struct TEntryEvents {
             TString MergeTask;
@@ -1139,233 +1139,233 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
         {}
     };
 
-    struct TTxSetResourceProfile : public ITransaction {
-        TString ProfileName;
-
-        TTxSetResourceProfile(const TString &name) : ProfileName(name) {}
-
-        bool Execute(TTransactionContext &txc, const TActorContext &) override {
-            txc.DB.Alter().SetExecutorResourceProfile(ProfileName);
-            return true;
-        }
-
-        void Complete(const TActorContext &ctx) override {
-            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
-        }
-    };
-
-    struct TTxCheckResourceProfile : public ITransaction {
-        TString ProfileName;
-
-        TTxCheckResourceProfile(const TString &name) : ProfileName(name) {}
-
-        bool Execute(TTransactionContext &txc, const TActorContext&) override {
-            UNIT_ASSERT_VALUES_EQUAL(txc.DB.GetScheme().Executor.ResourceProfile, ProfileName);
-            return true;
-        }
-
-        void Complete(const TActorContext &ctx) override {
-            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
-        }
-    };
-
-    struct TTxRequestMemory : public ITransaction {
-        struct TRequest {
-            TVector<ui64> Keys;
-            ui64 TxDataSize;
-            bool StaticResult;
-            bool OutOfMemoryResult;
-            bool Hold;
-            bool Use;
-            ui64 HoldSize;
-            bool Finish;
-        };
-
-        using TRequests = TVector<TRequest>;
-
-        struct TCfg {
-            bool Static = false;
-            bool Dynamic = false;
-        };
-
-        const TCfg Cfg;
-        TRequests Requests;
-        size_t ReqNo = 0;
-        TAutoPtr<TMemoryToken> Token;
-
+    struct TTxSetResourceProfile : public ITransaction { 
+        TString ProfileName; 
+ 
+        TTxSetResourceProfile(const TString &name) : ProfileName(name) {} 
+ 
+        bool Execute(TTransactionContext &txc, const TActorContext &) override { 
+            txc.DB.Alter().SetExecutorResourceProfile(ProfileName); 
+            return true; 
+        } 
+ 
+        void Complete(const TActorContext &ctx) override { 
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn); 
+        } 
+    }; 
+ 
+    struct TTxCheckResourceProfile : public ITransaction { 
+        TString ProfileName; 
+ 
+        TTxCheckResourceProfile(const TString &name) : ProfileName(name) {} 
+ 
+        bool Execute(TTransactionContext &txc, const TActorContext&) override { 
+            UNIT_ASSERT_VALUES_EQUAL(txc.DB.GetScheme().Executor.ResourceProfile, ProfileName); 
+            return true; 
+        } 
+ 
+        void Complete(const TActorContext &ctx) override { 
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn); 
+        } 
+    }; 
+ 
+    struct TTxRequestMemory : public ITransaction { 
+        struct TRequest { 
+            TVector<ui64> Keys; 
+            ui64 TxDataSize; 
+            bool StaticResult; 
+            bool OutOfMemoryResult; 
+            bool Hold; 
+            bool Use; 
+            ui64 HoldSize; 
+            bool Finish; 
+        }; 
+ 
+        using TRequests = TVector<TRequest>; 
+ 
+        struct TCfg { 
+            bool Static = false; 
+            bool Dynamic = false; 
+        }; 
+ 
+        const TCfg Cfg; 
+        TRequests Requests; 
+        size_t ReqNo = 0; 
+        TAutoPtr<TMemoryToken> Token; 
+ 
         TTxRequestMemory(TRequests requests, size_t reqNo, TAutoPtr<TMemoryToken> token, TCfg cfg)
-            : Cfg(cfg)
-            , Requests(requests)
-            , ReqNo(reqNo)
-            , Token(token)
-        {}
+            : Cfg(cfg) 
+            , Requests(requests) 
+            , ReqNo(reqNo) 
+            , Token(token) 
+        {} 
+ 
+        bool Execute(TTransactionContext &txc, const TActorContext &/*ctx*/) override { 
+            if (ReqNo) { 
+                auto &prev = Requests[ReqNo - 1]; 
+ 
+                if (!prev.Finish) { 
+                    UNIT_ASSERT(!prev.OutOfMemoryResult); 
+                    UNIT_ASSERT(Cfg.Dynamic || Cfg.Static || prev.TxDataSize <= txc.GetMemoryLimit()); 
+                    if (prev.StaticResult) 
+                        UNIT_ASSERT_VALUES_EQUAL(txc.GetTaskId(), 0); 
+                    else 
+                        UNIT_ASSERT(txc.GetTaskId() > 0); 
+                } 
+            } 
+ 
+            if (ReqNo == Requests.size()) 
+                return true; 
+ 
+            auto &req = Requests[ReqNo++]; 
+            ui64 mem = txc.GetMemoryLimit(); 
+ 
+            if (req.Use) { 
+                UNIT_ASSERT(Token); 
+                mem = Token->GCToken->Size; 
+                txc.UseMemoryToken(std::move(Token)); 
+                Token = nullptr; 
+            } 
+ 
+            if (req.Hold) { 
+                if (req.HoldSize) { 
+                    Token = txc.HoldMemory(req.HoldSize); 
+                    if (!req.Use) 
+                        mem -= req.HoldSize; 
+                } else { 
+                    Token = txc.HoldMemory(); 
+                    if (!req.Use) 
+                        mem = 0; 
+                } 
+            } 
+ 
+            if (req.Finish) 
+                return true; 
+ 
+            if (req.TxDataSize) { 
+                UNIT_ASSERT(req.TxDataSize >= mem); 
+                txc.RequestMemory(req.TxDataSize - mem); 
+            } else { 
+                txc.RequestMemory(1); 
+            } 
+ 
+            if (!req.Keys.empty()) { 
+                for (auto val : req.Keys) { 
+                    ui64 key1 = val; 
+                    TRawTypeValue key[] = {TRawTypeValue(&key1, sizeof(key1), NScheme::NTypeIds::Int64)}; 
+                    NTable::TTag tags[] = {TRowsModel::ColumnKeyId}; 
+                    NTable::TRowState row; 
+                    txc.DB.Select(TRowsModel::TableId, {key, 1}, {tags, 1}, row); 
+                } 
+            } 
+ 
+            return false; 
+        } 
+ 
+        void Complete(const TActorContext &ctx) override { 
+            if (ReqNo) 
+                UNIT_ASSERT(!Requests[ReqNo - 1].OutOfMemoryResult); 
+            if (ReqNo == Requests.size()) 
+                ctx.Send(ctx.SelfID, new NFake::TEvReturn); 
+            else 
+                ctx.Send(ctx.SelfID, new NFake::TEvExecute{ new TTxRequestMemory(Requests, ReqNo, std::move(Token), Cfg) }); 
+        } 
+ 
+        void Terminate(ETerminationReason reason, const TActorContext &ctx) override { 
+            UNIT_ASSERT_EQUAL(reason, ETerminationReason::MemoryLimitExceeded); 
+            UNIT_ASSERT(ReqNo); 
+            UNIT_ASSERT(Requests[ReqNo - 1].OutOfMemoryResult); 
+ 
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn); 
+        } 
+ 
+        void ReleaseTxData(TTxMemoryProvider &provider, const TActorContext &/*ctx*/) override { 
+            if ((provider.GetTaskId() && Cfg.Dynamic) 
+                || (!provider.GetTaskId() && Cfg.Static)) 
+                Token = provider.HoldMemory(); 
+        } 
+    }; 
+ 
+    struct TMyEnvProfiles : public TMyEnvBase { 
 
-        bool Execute(TTransactionContext &txc, const TActorContext &/*ctx*/) override {
-            if (ReqNo) {
-                auto &prev = Requests[ReqNo - 1];
-
-                if (!prev.Finish) {
-                    UNIT_ASSERT(!prev.OutOfMemoryResult);
-                    UNIT_ASSERT(Cfg.Dynamic || Cfg.Static || prev.TxDataSize <= txc.GetMemoryLimit());
-                    if (prev.StaticResult)
-                        UNIT_ASSERT_VALUES_EQUAL(txc.GetTaskId(), 0);
-                    else
-                        UNIT_ASSERT(txc.GetTaskId() > 0);
-                }
-            }
-
-            if (ReqNo == Requests.size())
-                return true;
-
-            auto &req = Requests[ReqNo++];
-            ui64 mem = txc.GetMemoryLimit();
-
-            if (req.Use) {
-                UNIT_ASSERT(Token);
-                mem = Token->GCToken->Size;
-                txc.UseMemoryToken(std::move(Token));
-                Token = nullptr;
-            }
-
-            if (req.Hold) {
-                if (req.HoldSize) {
-                    Token = txc.HoldMemory(req.HoldSize);
-                    if (!req.Use)
-                        mem -= req.HoldSize;
-                } else {
-                    Token = txc.HoldMemory();
-                    if (!req.Use)
-                        mem = 0;
-                }
-            }
-
-            if (req.Finish)
-                return true;
-
-            if (req.TxDataSize) {
-                UNIT_ASSERT(req.TxDataSize >= mem);
-                txc.RequestMemory(req.TxDataSize - mem);
-            } else {
-                txc.RequestMemory(1);
-            }
-
-            if (!req.Keys.empty()) {
-                for (auto val : req.Keys) {
-                    ui64 key1 = val;
-                    TRawTypeValue key[] = {TRawTypeValue(&key1, sizeof(key1), NScheme::NTypeIds::Int64)};
-                    NTable::TTag tags[] = {TRowsModel::ColumnKeyId};
-                    NTable::TRowState row;
-                    txc.DB.Select(TRowsModel::TableId, {key, 1}, {tags, 1}, row);
-                }
-            }
-
-            return false;
+        TMyEnvProfiles() 
+        { 
+            Env.SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG); 
+            Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG); 
+            SetupProfile("profile1"); 
+            FireDummyTablet(); 
+            SendSync(Rows.MakeScheme(MakeCompactionPolicy())); 
+            SendSync(new NFake::TEvExecute(new TTxSetResourceProfile("profile1"))); 
+ 
+            Profile = Env.GetAppData().ResourceProfiles->GetProfile(NKikimrTabletBase::TTabletTypes::Unknown, "profile1"); 
         }
 
-        void Complete(const TActorContext &ctx) override {
-            if (ReqNo)
-                UNIT_ASSERT(!Requests[ReqNo - 1].OutOfMemoryResult);
-            if (ReqNo == Requests.size())
-                ctx.Send(ctx.SelfID, new NFake::TEvReturn);
-            else
-                ctx.Send(ctx.SelfID, new NFake::TEvExecute{ new TTxRequestMemory(Requests, ReqNo, std::move(Token), Cfg) });
+        ~TMyEnvProfiles() 
+        { 
+            SendSync(new TEvents::TEvPoison, false, true); 
+        } 
+ 
+        static TCompactionPolicy* MakeCompactionPolicy() noexcept 
+        { 
+            auto *policy = new TCompactionPolicy(); 
+            policy->InMemSizeToSnapshot = 40 * 1024 *1024; 
+            policy->InMemStepsToSnapshot = 5; 
+            policy->InMemForceStepsToSnapshot = 5; 
+            policy->InMemForceSizeToSnapshot = 64 * 1024 * 1024; 
+            policy->InMemResourceBrokerTask = NLocalDb::LegacyQueueIdToTaskName(0); 
+            policy->ReadAheadHiThreshold = 100000; 
+            policy->ReadAheadLoThreshold = 50000; 
+            policy->Generations.push_back({100 * 1024 * 1024, 100, 100, 200 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true}); 
+            return policy; 
+        } 
+
+        void SetupProfile(const TString profileName) 
+        { 
+            auto &appData = Env.GetAppData(); 
+            appData.ResourceProfiles = new TResourceProfiles; 
+
+            TResourceProfiles::TResourceProfile profile; 
+            profile.SetTabletType(NKikimrTabletBase::TTabletTypes::Unknown); 
+            profile.SetName(profileName); 
+            profile.SetStaticTabletTxMemoryLimit(100 << 20); 
+            profile.SetStaticTxMemoryLimit(15 << 10); 
+            profile.SetTxMemoryLimit(300 << 20); 
+            profile.SetInitialTxMemory(1 << 10); 
+            profile.SetSmallTxMemoryLimit(40 << 10); 
+            profile.SetMediumTxMemoryLimit(100 << 10); 
+            profile.SetSmallTxTaskType("small_transaction"); 
+            profile.SetMediumTxTaskType("medium_transaction"); 
+            profile.SetLargeTxTaskType("large_transaction"); 
+            appData.ResourceProfiles->AddProfile(profile); 
         }
 
-        void Terminate(ETerminationReason reason, const TActorContext &ctx) override {
-            UNIT_ASSERT_EQUAL(reason, ETerminationReason::MemoryLimitExceeded);
-            UNIT_ASSERT(ReqNo);
-            UNIT_ASSERT(Requests[ReqNo - 1].OutOfMemoryResult);
-
-            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
-        }
-
-        void ReleaseTxData(TTxMemoryProvider &provider, const TActorContext &/*ctx*/) override {
-            if ((provider.GetTaskId() && Cfg.Dynamic)
-                || (!provider.GetTaskId() && Cfg.Static))
-                Token = provider.HoldMemory();
-        }
-    };
-
-    struct TMyEnvProfiles : public TMyEnvBase {
-
-        TMyEnvProfiles()
-        {
-            Env.SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
-            Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
-            SetupProfile("profile1");
-            FireDummyTablet();
-            SendSync(Rows.MakeScheme(MakeCompactionPolicy()));
-            SendSync(new NFake::TEvExecute(new TTxSetResourceProfile("profile1")));
-
-            Profile = Env.GetAppData().ResourceProfiles->GetProfile(NKikimrTabletBase::TTabletTypes::Unknown, "profile1");
-        }
-
-        ~TMyEnvProfiles()
-        {
-            SendSync(new TEvents::TEvPoison, false, true);
-        }
-
-        static TCompactionPolicy* MakeCompactionPolicy() noexcept
-        {
-            auto *policy = new TCompactionPolicy();
-            policy->InMemSizeToSnapshot = 40 * 1024 *1024;
-            policy->InMemStepsToSnapshot = 5;
-            policy->InMemForceStepsToSnapshot = 5;
-            policy->InMemForceSizeToSnapshot = 64 * 1024 * 1024;
-            policy->InMemResourceBrokerTask = NLocalDb::LegacyQueueIdToTaskName(0);
-            policy->ReadAheadHiThreshold = 100000;
-            policy->ReadAheadLoThreshold = 50000;
-            policy->Generations.push_back({100 * 1024 * 1024, 100, 100, 200 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true});
-            return policy;
-        }
-
-        void SetupProfile(const TString profileName)
-        {
-            auto &appData = Env.GetAppData();
-            appData.ResourceProfiles = new TResourceProfiles;
-
-            TResourceProfiles::TResourceProfile profile;
-            profile.SetTabletType(NKikimrTabletBase::TTabletTypes::Unknown);
-            profile.SetName(profileName);
-            profile.SetStaticTabletTxMemoryLimit(100 << 20);
-            profile.SetStaticTxMemoryLimit(15 << 10);
-            profile.SetTxMemoryLimit(300 << 20);
-            profile.SetInitialTxMemory(1 << 10);
-            profile.SetSmallTxMemoryLimit(40 << 10);
-            profile.SetMediumTxMemoryLimit(100 << 10);
-            profile.SetSmallTxTaskType("small_transaction");
-            profile.SetMediumTxTaskType("medium_transaction");
-            profile.SetLargeTxTaskType("large_transaction");
-            appData.ResourceProfiles->AddProfile(profile);
-        }
-
-        void CheckMemoryRequest(std::initializer_list<TMemoryCheckEntry> list,
+        void CheckMemoryRequest(std::initializer_list<TMemoryCheckEntry> list, 
                                     TTxRequestMemory::TCfg cfg = { },
                                     bool follower = false)
-        {
+        { 
             TAutoPtr<TTxRequestMemory> event = new TTxRequestMemory({ }, 0, nullptr, cfg);
+ 
+            TTaskSequence sequence; 
 
-            TTaskSequence sequence;
-
-            for (auto &entry : list) {
-                event->Requests.push_back({entry.Keys, entry.NewSize, entry.Static, entry.OutOfMemory,
-                            entry.Hold, entry.Use, entry.HoldSize, entry.Finish});
-                if (entry.Events.MergeTask) {
-                    sequence.Add(NResourceBroker::TEvResourceBroker::EvUpdateTask, entry.Events.MergeTask);
-                    sequence.Add(NResourceBroker::TEvResourceBroker::EvFinishTask);
-                }
-                if (entry.Events.UpdateTask) {
-                    sequence.Add(NResourceBroker::TEvResourceBroker::EvUpdateTask, entry.Events.UpdateTask);
-                    sequence.Add(NResourceBroker::TEvResourceBroker::EvResourceAllocated);
-                }
-                if (entry.Events.SubmitTask) {
-                    sequence.Add(NResourceBroker::TEvResourceBroker::EvSubmitTask, entry.Events.SubmitTask);
-                    sequence.Add(NResourceBroker::TEvResourceBroker::EvResourceAllocated);
-                }
-                for (ui32 i = 0; i < entry.Events.FinishTasks; ++i) {
-                    sequence.Add(NResourceBroker::TEvResourceBroker::EvFinishTask);
-                }
-            }
+            for (auto &entry : list) { 
+                event->Requests.push_back({entry.Keys, entry.NewSize, entry.Static, entry.OutOfMemory, 
+                            entry.Hold, entry.Use, entry.HoldSize, entry.Finish}); 
+                if (entry.Events.MergeTask) { 
+                    sequence.Add(NResourceBroker::TEvResourceBroker::EvUpdateTask, entry.Events.MergeTask); 
+                    sequence.Add(NResourceBroker::TEvResourceBroker::EvFinishTask); 
+                } 
+                if (entry.Events.UpdateTask) { 
+                    sequence.Add(NResourceBroker::TEvResourceBroker::EvUpdateTask, entry.Events.UpdateTask); 
+                    sequence.Add(NResourceBroker::TEvResourceBroker::EvResourceAllocated); 
+                } 
+                if (entry.Events.SubmitTask) { 
+                    sequence.Add(NResourceBroker::TEvResourceBroker::EvSubmitTask, entry.Events.SubmitTask); 
+                    sequence.Add(NResourceBroker::TEvResourceBroker::EvResourceAllocated); 
+                } 
+                for (ui32 i = 0; i < entry.Events.FinishTasks; ++i) { 
+                    sequence.Add(NResourceBroker::TEvResourceBroker::EvFinishTask); 
+                } 
+            } 
 
             if (follower) {
                 SendFollowerAsync(new NFake::TEvExecute{ event.Release() });
@@ -1373,52 +1373,52 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
                 SendAsync(new NFake::TEvExecute{ event.Release() });
             }
 
-            if (!sequence.Events.empty()) {
-                TDispatchOptions options;
-                options.FinalEvents.emplace_back(sequence);
-                Env.DispatchEvents(options);
-            }
+            if (!sequence.Events.empty()) { 
+                TDispatchOptions options; 
+                options.FinalEvents.emplace_back(sequence); 
+                Env.DispatchEvents(options); 
+            } 
 
-            WaitForWakeUp();
-        }
-
+            WaitForWakeUp(); 
+        } 
+ 
         void CheckMemoryRequestFollower(std::initializer_list<TMemoryCheckEntry> list,
                                      TTxRequestMemory::TCfg cfg = { })
         {
             return CheckMemoryRequest(list, std::move(cfg), /* follower */ true);
         }
 
-        TResourceProfiles::TPtr Profile;
-        TRowsModel Rows;
-    };
-
-
+        TResourceProfiles::TPtr Profile; 
+        TRowsModel Rows; 
+    }; 
+ 
+ 
     Y_UNIT_TEST(TestExecutorSetResourceProfile) {
-        TMyEnvProfiles env;
-
-        env.SendSync(new NFake::TEvExecute{ new TTxCheckResourceProfile("profile1") });
-        env.SendSync(new TEvents::TEvPoison(), false, true);
-        env.FireDummyTablet();
-        env.SendSync(new NFake::TEvExecute{ new TTxCheckResourceProfile("profile1") }, true);
+        TMyEnvProfiles env; 
+ 
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckResourceProfile("profile1") }); 
+        env.SendSync(new TEvents::TEvPoison(), false, true); 
+        env.FireDummyTablet(); 
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckResourceProfile("profile1") }, true); 
     }
 
     Y_UNIT_TEST(TestExecutorRequestTxData) {
-        TMyEnvProfiles env;
+        TMyEnvProfiles env; 
 
         // Request static memory.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{10 << 10, {}, true}});
         // Request dynamic memory (small task).
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{20 << 10, {"small_transaction"}}});
         // Request dynamic memory (medium task).
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{50 << 10, {"medium_transaction"}}});
         // Request dynamic memory (large task).
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{110 << 10, {"large_transaction"}}});
         // Request static memory, into small task, into medium task, into large task.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{10 << 10, {}, true},
                             {20 << 10, {"small_transaction"}},
                             {50 << 10, {"", "medium_transaction"}},
@@ -1426,63 +1426,63 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
     }
 
     Y_UNIT_TEST(TestExecutorStaticMemoryLimits) {
-        TMyEnvProfiles env;
+        TMyEnvProfiles env; 
 
-        const ui64 limit = env.Profile->GetStaticTabletTxMemoryLimit();
+        const ui64 limit = env.Profile->GetStaticTabletTxMemoryLimit(); 
 
         // Check static tablet limit has priority over tx limits.
-        env.Profile->SetStaticTxMemoryLimit(limit * 2);
-        env.CheckMemoryRequest({{limit + 1, {"large_transaction"}}});
-
+        env.Profile->SetStaticTxMemoryLimit(limit * 2); 
+        env.CheckMemoryRequest({{limit + 1, {"large_transaction"}}}); 
+ 
         // Check unlimited tablet memory.
-        env.Profile->SetStaticTabletTxMemoryLimit(0);
-        env.CheckMemoryRequest({{limit + 1, {}, true}});
-        env.CheckMemoryRequest({{limit * 2 + 1, {"large_transaction"}}});
-
+        env.Profile->SetStaticTabletTxMemoryLimit(0); 
+        env.CheckMemoryRequest({{limit + 1, {}, true}}); 
+        env.CheckMemoryRequest({{limit * 2 + 1, {"large_transaction"}}}); 
+ 
         // Check unlimited tx memory.
-        env.Profile->SetStaticTxMemoryLimit(0);
-        env.CheckMemoryRequest({{limit * 2 + 1, {}, true}});
+        env.Profile->SetStaticTxMemoryLimit(0); 
+        env.CheckMemoryRequest({{limit * 2 + 1, {}, true}}); 
     }
 
     Y_UNIT_TEST(TestExecutorReuseStaticMemory) {
-        TMyEnvProfiles env;
+        TMyEnvProfiles env; 
 
-        env.Profile->SetStaticTxMemoryLimit(100 << 20);
+        env.Profile->SetStaticTxMemoryLimit(100 << 20); 
         // Check static tablet memory is freed and reused by transactions.
         for (int i = 0; i < 100; ++i) {
             if (i % 2) {
-                env.CheckMemoryRequest(
+                env.CheckMemoryRequest( 
                                    {{50 << 20, {}, true},
                                     {150 << 20, {"large_transaction"}}});
             } else {
-                env.CheckMemoryRequest(
+                env.CheckMemoryRequest( 
                                    {{50 << 20, {}, true}});
             }
         }
     }
 
     Y_UNIT_TEST(TestExecutorTxDataLimitExceeded) {
-        TMyEnvProfiles().CheckMemoryRequest({{500 << 20, {}, false, true}});
+        TMyEnvProfiles().CheckMemoryRequest({{500 << 20, {}, false, true}}); 
     }
 
     Y_UNIT_TEST(TestExecutorRequestPages) {
-        TMyEnvProfiles env;
+        TMyEnvProfiles env; 
 
-        env.SendSync(env.Rows.MakeRows(100, 2 << 10));
+        env.SendSync(env.Rows.MakeRows(100, 2 << 10)); 
 
         // Static memory for pages.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{{1}, 0, {}, true}});
         // Dynamic memory for pages.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, 0, {"small_transaction"}}});
         // Dynamic memory for pages.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
                               16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30},
                              0, {"medium_transaction"}}});
         // Dynamic memory for pages.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
                               11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
                               21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
@@ -1496,32 +1496,32 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
     }
 
     Y_UNIT_TEST(TestExecutorPageLimitExceeded) {
-        TMyEnvProfiles env;
+        TMyEnvProfiles env; 
 
-        env.Profile->SetTxMemoryLimit(50 << 10);
-        env.SendSync(env.Rows.MakeRows(20, 10 << 10));
+        env.Profile->SetTxMemoryLimit(50 << 10); 
+        env.SendSync(env.Rows.MakeRows(20, 10 << 10)); 
 
         // Pages are out of tx limit.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, 0, {}, false, true}});
     }
 
     Y_UNIT_TEST(TestExecutorRequestMemory) {
-        TMyEnvProfiles env;
+        TMyEnvProfiles env; 
 
-        env.SendSync(env.Rows.MakeRows(100, 2 << 10));
+        env.SendSync(env.Rows.MakeRows(100, 2 << 10)); 
 
         // Static memory.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{{1}, 4 << 10, {}, true}});
         // Dynamic memory.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{{1, 2, 3, 4, 5}, 14 << 10, {"small_transaction"}}});
         // Dynamic memory.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 35 << 10, {"medium_transaction"}}});
         // Dynamic memory.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 95 << 10, {"large_transaction"}}});
     }
 
@@ -1547,88 +1547,88 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
     }
 
     Y_UNIT_TEST(TestExecutorMemoryLimitExceeded) {
-        TMyEnvProfiles env;
+        TMyEnvProfiles env; 
 
-        env.Profile->SetTxMemoryLimit(50 << 10);
-        env.SendSync(env.Rows.MakeRows(20, 2 << 10));
+        env.Profile->SetTxMemoryLimit(50 << 10); 
+        env.SendSync(env.Rows.MakeRows(20, 2 << 10)); 
 
         // Memory is out of tx limit.
-        env.CheckMemoryRequest({{{1, 2, 3, 4, 5}, 45 << 10, {}, false, true}});
+        env.CheckMemoryRequest({{{1, 2, 3, 4, 5}, 45 << 10, {}, false, true}}); 
     }
 
     Y_UNIT_TEST(TestExecutorPreserveTxData) {
-        TMyEnvProfiles env;
+        TMyEnvProfiles env; 
 
         // Preserved static replaces static.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{10 << 10, {}, true},
                             {true, 0, {}, true},
                             {12 << 10, {}, true},
                             {false, true, 0, {}, true}});
         // Preserved static replaces dynamic.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{10 << 10, {}, true},
                             {true, 0, {}, true},
                             {20 << 10, {"small_transaction"}},
                             {false, true, 0, {}}});
         // Preserved dynamic replaces static.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{20 << 10, {"small_transaction"}},
                             {true, 0, {}},
                             {10 << 10, {}, true},
                             {false, true, 0, {}}});
         // Preserved dynamic replaces dynamic.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{20 << 10, {"small_transaction"}},
                             {true, 0, {}},
                             {20 << 10, {"small_transaction"}},
                             {false, true, 0, {}}});
 
         // Preserved static replaces static.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{10 << 10, {}, true},
                             {true, 0, {}, true},
                             {12 << 10, {}, true},
                             {false, true, 11 << 10, {}, true}});
         // Preserved static replaces dynamic.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{10 << 10, {}, true},
                             {true, 0, {}, true},
                             {20 << 10, {"small_transaction"}},
                             {false, true, 30 << 10, {}}});
         // Preserved dynamic replaces static.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{20 << 10, {"small_transaction"}},
                             {true, 0, {}},
                             {10 << 10, {}, true},
                             {false, true, 50 << 10, {"", "medium_transaction"}}});
         // Preserved dynamic replaces dynamic.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{20 << 10, {"small_transaction"}},
                             {true, 0, {}, true},
                             {20 << 10, {"small_transaction"}},
                             {false, true, 50 << 10, {"", "medium_transaction", "small_transaction"}}});
 
         // Preserved static replaces static.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{10 << 10, {}, true},
                             {true, 0, {}, true},
                             {12 << 10, {}, true},
                             {false, true, 500 << 20, {}, true, true}});
         // Preserved static replaces dynamic.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{10 << 10, {}, true},
                             {true, 0, {}, true},
                             {20 << 10, {"small_transaction"}},
                             {false, true, 500 << 20, {}, false, true}});
         // Preserved dynamic replaces static.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{20 << 10, {"small_transaction"}},
                             {true, 0, {}},
                             {10 << 10, {}, true},
                             {false, true, 500 << 20, {}, false, true}});
         // Preserved dynamic replaces dynamic.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{20 << 10, {"small_transaction"}},
                             {true, 0, {}, true},
                             {20 << 10, {"small_transaction"}},
@@ -1636,39 +1636,39 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
     }
 
     Y_UNIT_TEST(TestExecutorTxDataGC) {
-        TMyEnvProfiles env;
+        TMyEnvProfiles env; 
 
         // Preserve dynamic and drop it.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{50 << 20, {"large_transaction"}},
                             {true, 0, {}}});
     }
 
     Y_UNIT_TEST(TestExecutorTxPartialDataHold) {
-        TMyEnvProfiles env;
+        TMyEnvProfiles env; 
 
         // Hold part of static data.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{10 << 10, {}, true},
                             {(ui64)(5 << 10), 0, {}, true},
                             {false, true, 0, {}, true}});
         // Hold part of dynamic data.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{20 << 10, {"small_transaction"}},
                             {(ui64)(10 << 10), 0, {}},
                             {false, true, 0, {}}});
     }
 
     Y_UNIT_TEST(TestExecutorTxHoldAndUse) {
-        TMyEnvProfiles env;
+        TMyEnvProfiles env; 
 
         // Hold part of static data.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{10 << 10, {}, true},
                             {(ui64)(5 << 10), 0, {}, true},
                             {true, true, 0, {}, true}});
         // Hold part of dynamic data. Merge two small tasks into one medium.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{20 << 10, {"small_transaction"}},
                             {(ui64)(15 << 10), 0, {}},
                             {30 << 10, {"small_transaction"}},
@@ -1678,68 +1678,68 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
     }
 
     Y_UNIT_TEST(TestExecutorTxHoldOnRelease) {
-        TMyEnvProfiles env;
+        TMyEnvProfiles env; 
 
         // Hold dynamic data on task extend. Merge two small tasks into one medium.
-        env.CheckMemoryRequest(
+        env.CheckMemoryRequest( 
                            {{20 << 10, {"small_transaction"}},
                             // 20KB is captured on ReleaseTxData -> small task is requested.
                             {30 << 10, {"small_transaction"}},
-                            {false, true, 0, {"", "", "medium_transaction", 1}}},
-                            { false /* static */, true /* dynamic */ });
+                            {false, true, 0, {"", "", "medium_transaction", 1}}}, 
+                            { false /* static */, true /* dynamic */ }); 
     }
 
     Y_UNIT_TEST(TestUpdateConfig) {
-        TMyEnvProfiles env;
+        TMyEnvProfiles env; 
 
         // Request dynamic memory (large task).
-        env.CheckMemoryRequest({{110 << 10, {"large_transaction"}}});
+        env.CheckMemoryRequest({{110 << 10, {"large_transaction"}}}); 
 
         // Gen new profile with no required profile. EvUpdateConfig should cause
         // default profile to be chosen then.
-        env.SetupProfile("profile2");
-        env.SendAsync(new TEvTablet::TEvUpdateConfig(env->GetAppData().ResourceProfiles));
+        env.SetupProfile("profile2"); 
+        env.SendAsync(new TEvTablet::TEvUpdateConfig(env->GetAppData().ResourceProfiles)); 
 
         // Profile name in schema is unmodified.
-        env.SendSync(new NFake::TEvExecute{ new TTxCheckResourceProfile("profile1") });
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckResourceProfile("profile1") }); 
 
         // But default profile is actually used now.
-        env.CheckMemoryRequest({{200 << 20, {}, true}});
+        env.CheckMemoryRequest({{200 << 20, {}, true}}); 
     }
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutorSliceOverlapScan) {
 
-    Y_UNIT_TEST(TestSliceOverlapScan) {
-        TMyEnvBase env;
-        TRowsModel rows;
+    Y_UNIT_TEST(TestSliceOverlapScan) { 
+        TMyEnvBase env; 
+        TRowsModel rows; 
 
-        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp)); 
 
         TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
-        policy->InMemForceSizeToSnapshot = 4 * 1024 * 1024;
-        policy->Generations.push_back({0, 2, 2, ui64(-1),
-            NLocalDb::LegacyQueueIdToTaskName(1), false});
-        {
-            // Don't allow any extras during compaction
-            auto &gen = policy->Generations.back();
-            gen.ExtraCompactionMinSize = 0;
-            gen.ExtraCompactionPercent = 0;
-            gen.ExtraCompactionExpPercent = 0;
-            gen.ExtraCompactionExpMaxSize = 0;
+        policy->InMemForceSizeToSnapshot = 4 * 1024 * 1024; 
+        policy->Generations.push_back({0, 2, 2, ui64(-1), 
+            NLocalDb::LegacyQueueIdToTaskName(1), false}); 
+        { 
+            // Don't allow any extras during compaction 
+            auto &gen = policy->Generations.back(); 
+            gen.ExtraCompactionMinSize = 0; 
+            gen.ExtraCompactionPercent = 0; 
+            gen.ExtraCompactionExpPercent = 0; 
+            gen.ExtraCompactionExpMaxSize = 0; 
         }
 
-        env.SendSync(rows.MakeScheme(std::move(policy)));
-        // Insert ~32MB of data, this will generate ~4x8MB slices
-        env.SendSync(rows.RowTo(1000000).MakeRows(32768, 1024, 32768));
-        env.WaitFor<NFake::TEvCompacted>();
-        // Insert 32MB more data, ~4x8MB slices will half-overlap
-        env.SendSync(rows.RowTo(1000000 - 16384).MakeRows(32768, 1024, 32768));
-        // Don't do anything, this new part will trigger final compaction
-        env.WaitFor<NFake::TEvCompacted>();
-        // If we didn't crash, then traced scan worked correctly
-        env.WaitFor<NFake::TEvCompacted>();
-        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.SendSync(rows.MakeScheme(std::move(policy))); 
+        // Insert ~32MB of data, this will generate ~4x8MB slices 
+        env.SendSync(rows.RowTo(1000000).MakeRows(32768, 1024, 32768)); 
+        env.WaitFor<NFake::TEvCompacted>(); 
+        // Insert 32MB more data, ~4x8MB slices will half-overlap 
+        env.SendSync(rows.RowTo(1000000 - 16384).MakeRows(32768, 1024, 32768)); 
+        // Don't do anything, this new part will trigger final compaction 
+        env.WaitFor<NFake::TEvCompacted>(); 
+        // If we didn't crash, then traced scan worked correctly 
+        env.WaitFor<NFake::TEvCompacted>(); 
+        env.SendSync(new TEvents::TEvPoison, false, true); 
     }
 
 }

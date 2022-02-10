@@ -24,9 +24,9 @@ TRemoteServerSession::TRemoteServerSession(TBusMessageQueue* queue,
 {
     if (config.PerConnectionMaxInFlightBySize > 0) {
         if (config.PerConnectionMaxInFlightBySize < config.MaxMessageSize)
-            ythrow yexception()
-                << "too low PerConnectionMaxInFlightBySize value";
-    }
+            ythrow yexception() 
+                << "too low PerConnectionMaxInFlightBySize value"; 
+    } 
 }
 
 namespace NBus {
@@ -87,7 +87,7 @@ void TRemoteServerSession::OnMessageReceived(TRemoteConnection* c, TVectorSwaps<
 
 void TRemoteServerSession::InvokeOnMessage(TBusMessagePtrAndHeader& request, TIntrusivePtr<TRemoteServerConnection>& conn) {
     if (Y_UNLIKELY(AtomicGet(Down))) {
-        ReleaseInWorkRequests(*conn.Get(), request.MessagePtr.Get());
+        ReleaseInWorkRequests(*conn.Get(), request.MessagePtr.Get()); 
         InvokeOnError(request.MessagePtr.Release(), MESSAGE_SHUTDOWN);
     } else {
         TWhatThreadDoesPushPop pp("OnMessage");
@@ -167,19 +167,19 @@ void TRemoteServerSession::ReleaseInWorkResponses(TArrayRef<const TBusMessagePtr
 
 void TRemoteServerSession::ReleaseInWorkRequests(TRemoteConnection& con, TBusMessage* request) {
     Y_ASSERT((request->LocalFlags & MESSAGE_IN_WORK));
-    request->LocalFlags &= ~MESSAGE_IN_WORK;
+    request->LocalFlags &= ~MESSAGE_IN_WORK; 
 
-    const size_t size = request->GetHeader()->Size;
-
-    con.QuotaReturnAside(1, size);
-    ServerOwnedMessages.ReleaseMultiple(1, size);
+    const size_t size = request->GetHeader()->Size; 
+ 
+    con.QuotaReturnAside(1, size); 
+    ServerOwnedMessages.ReleaseMultiple(1, size); 
 }
 
 void TRemoteServerSession::ReleaseInWork(TBusIdentity& ident) {
-    ident.SetInWork(false);
-    ident.Connection->QuotaReturnAside(1, ident.Size);
+    ident.SetInWork(false); 
+    ident.Connection->QuotaReturnAside(1, ident.Size); 
 
-    ServerOwnedMessages.ReleaseMultiple(1, ident.Size);
+    ServerOwnedMessages.ReleaseMultiple(1, ident.Size); 
 }
 
 void TRemoteServerSession::ConvertInWork(TBusIdentity& req, TBusMessage* reply) {

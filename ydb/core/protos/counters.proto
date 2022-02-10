@@ -69,7 +69,7 @@ enum ETxTypeSimpleCounters {
 enum ETxTypeCumulativeCounters {
     COUNTER_TT_CULUMATIVE_IGNORE = 0;
 
-    COUNTER_TT_POSTPONED = 1                             [(CounterOpts) = {Name: "Postponed"}]; // Total restarts
+    COUNTER_TT_POSTPONED = 1                             [(CounterOpts) = {Name: "Postponed"}]; // Total restarts 
     COUNTER_TT_RO_COMPLETED = 2                          [(CounterOpts) = {Name: "RoCompleted"}];
     COUNTER_TT_RW_COMPLETED = 3                          [(CounterOpts) = {Name: "RwCompleted"}];
     COUNTER_TT_WRITES = 4                                [(CounterOpts) = {Name: "Writes"}];

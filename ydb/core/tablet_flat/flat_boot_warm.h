@@ -1,29 +1,29 @@
-#pragma once
-
-#include "flat_boot_iface.h"
-#include "flat_boot_back.h"
-#include "flat_bio_events.h"
-#include "flat_dbase_naked.h"
+#pragma once 
+ 
+#include "flat_boot_iface.h" 
+#include "flat_boot_back.h" 
+#include "flat_bio_events.h" 
+#include "flat_dbase_naked.h" 
 #include "flat_mem_blobs.h"
-#include "flat_sausage_fetch.h"
-
-namespace NKikimr {
-namespace NTabletFlatExecutor {
-namespace NBoot {
-
+#include "flat_sausage_fetch.h" 
+ 
+namespace NKikimr { 
+namespace NTabletFlatExecutor { 
+namespace NBoot { 
+ 
     class TMemTable final: public NBoot::IStep {
         using TBlobs = NTable::NMem::TBlobs;
         using TLargeGlobId = NPageCollection::TLargeGlobId;
-
-    public:
+ 
+    public: 
         TMemTable(IStep *owner) : IStep(owner, NBoot::EStep::MemTable) { }
-
-    private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
-        {
+ 
+    private: /* IStep, boot logic DSL actor interface   */ 
+        void Start() noexcept override 
+        { 
             for (auto it: Back->DatabaseImpl->Scheme->Tables) {
                 const auto &wrap = Back->DatabaseImpl->Get(it.first, true);
-
+ 
                 for (auto &mem : wrap->GetMemTables()) {
                     size_t size = mem->GetBlobs()->Size();
                     if (size > 0) {
@@ -39,19 +39,19 @@ namespace NBoot {
                             Pending += Spawn<TLoadBlobs>(TLargeGlobId(it->GId.Group, it->GId.Logo), cookie);
                             ++state.Pending;
                         }
-                    }
+                    } 
                 }
-            }
-
+            } 
+ 
             if (!Pending) {
                 Env->Finish(this);
             }
-        }
-
+        } 
+ 
         void HandleStep(TIntrusivePtr<IStep> step) noexcept override
-        {
+        { 
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
-
+ 
             size_t index = load->Cookie >> 32;
             Y_VERIFY(index < States.size());
             auto& state = States[index];
@@ -68,14 +68,14 @@ namespace NBoot {
                 state.Blobs->Assign(state.Pages);
                 state.Blobs = nullptr;
                 state.Pages.clear();
-            }
-
+            } 
+ 
             if (!Pending) {
                 Env->Finish(this);
             }
-        }
-
-    private:
+        } 
+ 
+    private: 
         struct TLoadState {
             TBlobs* Blobs;
             TVector<NPageCollection::TLoadedPage> Pages;
@@ -84,8 +84,8 @@ namespace NBoot {
 
     private:
         TDeque<TLoadState> States;
-        TLeft Pending;
-    };
-}
-}
-}
+        TLeft Pending; 
+    }; 
+} 
+} 
+} 

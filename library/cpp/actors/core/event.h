@@ -59,11 +59,11 @@ namespace NActors {
     public:
         template <typename TEv>
         inline TEv* CastAsLocal() const noexcept {
-            auto fits = GetTypeRewrite() == TEv::EventType;
-
-            return fits ? static_cast<TEv*>(Event.Get()) : nullptr;
-        }
-
+            auto fits = GetTypeRewrite() == TEv::EventType; 
+ 
+            return fits ? static_cast<TEv*>(Event.Get()) : nullptr; 
+        } 
+ 
         template <typename TEventType>
         TEventType* Get() {
             if (Type != TEventType::EventType)

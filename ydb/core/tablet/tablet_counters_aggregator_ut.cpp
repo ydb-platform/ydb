@@ -90,9 +90,9 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TVector<TActorId> cc;
         TActorId aggregatorId;
 
-        TTestBasicRuntime runtime(1);
+        TTestBasicRuntime runtime(1); 
 
-        runtime.Initialize(TAppPrepare().Unwrap());
+        runtime.Initialize(TAppPrepare().Unwrap()); 
         TActorId edge = runtime.AllocateEdgeActor();
 
         IActor* aggregator = CreateClusterLabeledCountersAggregatorActor(edge, TTabletTypes::PersQueue, 2, TString(), 3);

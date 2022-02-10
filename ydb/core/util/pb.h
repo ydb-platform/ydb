@@ -3,7 +3,7 @@
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/text_format.h>
 #include <util/stream/file.h>
-#include <util/generic/array_ref.h>
+#include <util/generic/array_ref.h> 
 #include <util/system/type_name.h>
 
 namespace NKikimr {
@@ -30,20 +30,20 @@ bool ParseBinPBFromFile(const TString &path, T *pb) {
 
 // Deserialize persisted protobuf without checking size limit (size should have checked before saving)
 template <class TProto>
-bool ParseFromStringNoSizeLimit(TProto& proto, TArrayRef<const char> str) {
+bool ParseFromStringNoSizeLimit(TProto& proto, TArrayRef<const char> str) { 
     google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(str.data()), str.size());
     input.SetTotalBytesLimit(str.size());
     return proto.ParseFromCodedStream(&input) && input.ConsumedEntireMessage();
 }
 
-template<typename TProto>
-struct TProtoBox : public TProto {
-    TProtoBox(TArrayRef<const char> plain) {
-        bool ok = ParseFromStringNoSizeLimit(*this, plain);
-        Y_VERIFY(ok, "Cannot parse proto %s", TypeName<TProto>().c_str());
-    }
-};
-
+template<typename TProto> 
+struct TProtoBox : public TProto { 
+    TProtoBox(TArrayRef<const char> plain) { 
+        bool ok = ParseFromStringNoSizeLimit(*this, plain); 
+        Y_VERIFY(ok, "Cannot parse proto %s", TypeName<TProto>().c_str()); 
+    } 
+}; 
+ 
 // Deserialized and merge persisted protobuf without checking size limit
 template <class TProto>
 bool MergeFromStringNoSizeLimit(TProto& proto, TArrayRef<const char> str) {

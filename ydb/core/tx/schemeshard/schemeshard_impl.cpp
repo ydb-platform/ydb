@@ -3626,7 +3626,7 @@ TActorId TSchemeShard::TPipeClientFactory::CreateClient(const TActorContext& ctx
 
 TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     : TActor(&TThis::StateInit)
-    , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
+    , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory) 
     , AllowConditionalEraseOperations(1, 0, 1)
     , AllowServerlessStorageBilling(0, 0, 1)
     , SplitSettings()

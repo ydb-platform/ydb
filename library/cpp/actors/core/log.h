@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include "log_iface.h"
+#include "log_iface.h" 
 #include "log_settings.h"
 #include "actorsystem.h"
 #include "events.h"
@@ -122,7 +122,7 @@ namespace NActors {
     ////////////////////////////////////////////////////////////////////////////////
     // SET LOG LEVEL FOR A COMPONENT
     ////////////////////////////////////////////////////////////////////////////////
-    class TLogComponentLevelRequest: public TEventLocal<TLogComponentLevelRequest, int(NLog::EEv::LevelReq)> {
+    class TLogComponentLevelRequest: public TEventLocal<TLogComponentLevelRequest, int(NLog::EEv::LevelReq)> { 
     public:
         // set given priority for the component
         TLogComponentLevelRequest(NLog::EPriority priority, NLog::EComponent component)
@@ -145,7 +145,7 @@ namespace NActors {
         friend class TLoggerActor;
     };
 
-    class TLogComponentLevelResponse: public TEventLocal<TLogComponentLevelResponse, int(NLog::EEv::LevelResp)> {
+    class TLogComponentLevelResponse: public TEventLocal<TLogComponentLevelResponse, int(NLog::EEv::LevelResp)> { 
     public:
         TLogComponentLevelResponse(int code, const TString& explanation)
             : Code(code)
@@ -166,7 +166,7 @@ namespace NActors {
         TString Explanation;
     };
 
-    class TLogIgnored: public TEventLocal<TLogIgnored, int(NLog::EEv::Ignored)> {
+    class TLogIgnored: public TEventLocal<TLogIgnored, int(NLog::EEv::Ignored)> { 
     public:
         TLogIgnored() {
         }
@@ -213,7 +213,7 @@ namespace NActors {
         void StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TLogIgnored, HandleIgnoredEvent);
-                HFunc(NLog::TEvLog, HandleLogEvent);
+                HFunc(NLog::TEvLog, HandleLogEvent); 
                 HFunc(TLogComponentLevelRequest, HandleLogComponentLevelRequest);
                 HFunc(NMon::TEvHttpInfo, HandleMonInfo);
             }
@@ -246,7 +246,7 @@ namespace NActors {
         void BecomeDefunct();
         void HandleIgnoredEvent(TLogIgnored::TPtr& ev, const NActors::TActorContext& ctx);
         void HandleIgnoredEventDrop();
-        void HandleLogEvent(NLog::TEvLog::TPtr& ev, const TActorContext& ctx);
+        void HandleLogEvent(NLog::TEvLog::TPtr& ev, const TActorContext& ctx); 
         void HandleLogEventDrop(const NLog::TEvLog::TPtr& ev);
         void HandleLogComponentLevelRequest(TLogComponentLevelRequest::TPtr& ev, const TActorContext& ctx);
         void HandleMonInfo(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx);

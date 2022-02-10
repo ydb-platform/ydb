@@ -25,10 +25,10 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
 
         auto subset = TMake(mass).Mixed(0, 19, NTest::TMixerRnd(19));
         auto eggs = TCompaction(nullptr, conf).Do(*subset);
-        UNIT_ASSERT_C(eggs.Parts.size() > 3,
-            "Compaction produced " << eggs.Parts.size() << " parts");
+        UNIT_ASSERT_C(eggs.Parts.size() > 3, 
+            "Compaction produced " << eggs.Parts.size() << " parts"); 
 
-        TCheckIt(eggs, { }).IsTheSame(mass.Saved);
+        TCheckIt(eggs, { }).IsTheSame(mass.Saved); 
     }
 
     void RunMainEdgeTest(
@@ -42,10 +42,10 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
             TPartCook(scheme, initialConf)
                 .Add(rows.begin(), rows.end())
                 .Finish();
-        UNIT_ASSERT_C(initial.Parts.size() == 1,
-            "Unexpected " << initial.Parts.size() << " results");
+        UNIT_ASSERT_C(initial.Parts.size() == 1, 
+            "Unexpected " << initial.Parts.size() << " results"); 
 
-        auto* initialPart = initial.Parts.at(0).Get();
+        auto* initialPart = initial.Parts.at(0).Get(); 
 
         auto fullPageSize = initialPart->Store->GetPage(0, 0)->size();
         auto fullPartSize = initialPart->Store->PageCollectionBytes(0);
@@ -70,37 +70,37 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
             // Verify we produce part with the exact same size
             {
                 auto born = TCompaction(nullptr, conf).Do(initial);
-                UNIT_ASSERT_VALUES_EQUAL(born.Parts.size(), attempt ? 2u : 1u);
+                UNIT_ASSERT_VALUES_EQUAL(born.Parts.size(), attempt ? 2u : 1u); 
                 UNIT_ASSERT_VALUES_EQUAL(born.At(0)->Store->PageCollectionBytes(0), lastPartSize);
 
-                TCheckIt(born, { }).IsTheSame(rows).Is(EReady::Gone);
+                TCheckIt(born, { }).IsTheSame(rows).Is(EReady::Gone); 
             }
 
             --conf.MainPageCollectionEdge;
 
             // Verify we produce part that is slightly smaller when not enough space
             {
-                const auto born = TCompaction(nullptr, conf).Do(initial);
-                UNIT_ASSERT_VALUES_EQUAL(born.Parts.size(), 2u);
+                const auto born = TCompaction(nullptr, conf).Do(initial); 
+                UNIT_ASSERT_VALUES_EQUAL(born.Parts.size(), 2u); 
 
                 lastPartSize = born.At(0)->Store->PageCollectionBytes(0);
                 UNIT_ASSERT_C(lastPartSize <= conf.MainPageCollectionEdge,
                     "Produced part with size " << lastPartSize
                     << " expected no more than " << conf.MainPageCollectionEdge);
 
-                TCheckIt(born, { }).IsTheSame(rows).Is(EReady::Gone);
+                TCheckIt(born, { }).IsTheSame(rows).Is(EReady::Gone); 
 
                 // The first part must gen one less row than the last time
                 auto size = rows.end() - rows.begin();
                 auto split = size - attempt - 1;
 
                 // The first part must get one less row than the last time
-                TPartEggs egg1{ nullptr, born.Scheme, { born.At(0) } };
-                TPartEggs egg2{ nullptr, born.Scheme, { born.At(1) } };
-                TCheckIt(egg1, { })
+                TPartEggs egg1{ nullptr, born.Scheme, { born.At(0) } }; 
+                TPartEggs egg2{ nullptr, born.Scheme, { born.At(1) } }; 
+                TCheckIt(egg1, { }) 
                     .IsTheSame(rows.begin(), rows.begin() + split)
                     .Is(EReady::Gone);
-                TCheckIt(egg2, { })
+                TCheckIt(egg2, { }) 
                     .IsTheSame(rows.begin() + split, rows.end())
                     .Is(EReady::Gone);
 
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
                     for (auto it : xrange(size)) {
                         const auto key = tool.KeyCells(rows[it]);
                         const NBloom::TPrefix prefix(key);
-                        auto* part = born.At(it >= split ? 1 : 0).Get();
+                        auto* part = born.At(it >= split ? 1 : 0).Get(); 
                         UNIT_ASSERT_C(part->ByKey, "Part is missing a bloom filter");
                         UNIT_ASSERT_C(
                             part->MightHaveKey(prefix.Get(key.size())),
@@ -149,8 +149,8 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
             TPartCook(mass.Model->Scheme, initialConf)
                 .Add(mass.Saved.begin(), mass.Saved.end())
                 .Finish();
-        UNIT_ASSERT_C(initial.Parts.size() == 1,
-            "Unexpected " << initial.Parts.size() << " results");
+        UNIT_ASSERT_C(initial.Parts.size() == 1, 
+            "Unexpected " << initial.Parts.size() << " results"); 
 
         auto fullPartSize = initial.Parts.at(0)->Store->PageCollectionBytes(0);
 
@@ -158,17 +158,17 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         conf.MainPageCollectionEdge = fullPartSize / 4;
 
         auto born = TCompaction(nullptr, conf).Do(initial);
-        UNIT_ASSERT_C(born.Parts.size() >= 4,
-            "Unexpected " << born.Parts.size() << " results after compaction");
+        UNIT_ASSERT_C(born.Parts.size() >= 4, 
+            "Unexpected " << born.Parts.size() << " results after compaction"); 
 
-        for (auto &part : born.Parts) {
+        for (auto &part : born.Parts) { 
             auto partSize = part->Store->PageCollectionBytes(0);
             UNIT_ASSERT_C(partSize <= conf.MainPageCollectionEdge,
                 "Unexpected main page collection with " << partSize << " bytes,"
                 << " maximum of " << conf.MainPageCollectionEdge << " allowed");
         }
 
-        TCheckIt(born, { }).IsTheSame(mass.Saved).Is(EReady::Gone);
+        TCheckIt(born, { }).IsTheSame(mass.Saved).Is(EReady::Gone); 
     }
 
     Y_UNIT_TEST(MainPageCollectionOverflow)
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
             rows.Put(*TNatural(*lay).Col(ui64(i), ui64(i * 10)));
         }
 
-        auto initialConf = NPage::TConf{ false, 2044 };
+        auto initialConf = NPage::TConf{ false, 2044 }; 
         initialConf.ByKeyFilter = true;
         initialConf.MaxRows = rows.Size();
 
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
             }
         }
 
-        auto initialConf = NPage::TConf{ false, 2044 };
+        auto initialConf = NPage::TConf{ false, 2044 }; 
         initialConf.ByKeyFilter = true;
         initialConf.MaxRows = rows.Size();
         initialConf.SmallEdge = 13;
@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
             }
         }
 
-        auto initialConf = NPage::TConf{ false, 2044 };
+        auto initialConf = NPage::TConf{ false, 2044 }; 
         initialConf.ByKeyFilter = true;
         initialConf.MaxRows = rows.Size();
         initialConf.LargeEdge = 13;

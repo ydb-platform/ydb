@@ -15,10 +15,10 @@ class DeltaTypes(IntEnum):
     DropColumn = 4,
     AddColumnToKey = 5,
     AddColumnToFamily = 6,
-    AddFamily = 7,
+    AddFamily = 7, 
     UpdateExecutorInfo = 8,
     SetCompactionPolicy = 9,
-    SetRoom = 10,
+    SetRoom = 10, 
     SetFamily = 11,
     SetRedo = 12,
     SetTable = 13

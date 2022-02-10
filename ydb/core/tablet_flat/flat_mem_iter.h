@@ -1,41 +1,41 @@
-#pragma once
-
-#include "flat_update_op.h"
-#include "flat_row_scheme.h"
-#include "flat_row_remap.h"
-#include "flat_row_state.h"
-#include "flat_mem_warm.h"
+#pragma once 
+ 
+#include "flat_update_op.h" 
+#include "flat_row_scheme.h" 
+#include "flat_row_remap.h" 
+#include "flat_row_state.h" 
+#include "flat_mem_warm.h" 
 #include "flat_mem_snapshot.h"
-#include "flat_part_iface.h"
-#include "flat_page_label.h"
+#include "flat_part_iface.h" 
+#include "flat_page_label.h" 
 #include "flat_table_committed.h"
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_id.h>
-
-namespace NKikimr {
-namespace NTable {
-
-    class TMemIt {
-    public:
-        using TCells = TArrayRef<const TCell>;
-
+ 
+namespace NKikimr { 
+namespace NTable { 
+ 
+    class TMemIt { 
+    public: 
+        using TCells = TArrayRef<const TCell>; 
+ 
         TMemIt(const TMemTable* memTable,
                 TIntrusiveConstPtr<TKeyNulls> nulls,
                 const TRemap* remap,
                 IPages *env,
                 NMem::TTreeIterator iterator)
             : MemTable(memTable)
-            , Nulls(std::move(nulls))
-            , Remap(remap)
-            , Env(env)
+            , Nulls(std::move(nulls)) 
+            , Remap(remap) 
+            , Env(env) 
             , RowIt(std::move(iterator))
-        {
-            Key.reserve(Nulls->Size());
-
-            Y_VERIFY(Key.capacity() > 0, "No key cells in part scheme");
-            Y_VERIFY(Remap, "Remap cannot be NULL");
-        }
-
+        { 
+            Key.reserve(Nulls->Size()); 
+ 
+            Y_VERIFY(Key.capacity() > 0, "No key cells in part scheme"); 
+            Y_VERIFY(Remap, "Remap cannot be NULL"); 
+        } 
+ 
         static TAutoPtr<TMemIt> Make(
                 const TMemTable& memTable,
                 const NMem::TTreeSnapshot& snapshot,
@@ -45,9 +45,9 @@ namespace NTable {
                 const TRemap *remap,
                 IPages *env,
                 EDirection direction = EDirection::Forward) noexcept
-        {
+        { 
             auto *iter = new TMemIt(&memTable, std::move(nulls), remap, env, snapshot.Iterator());
-
+ 
             switch (direction) {
                 case EDirection::Forward:
                     iter->Seek(key, seek);
@@ -56,18 +56,18 @@ namespace NTable {
                     iter->SeekReverse(key, seek);
                     break;
             }
-
-            return iter;
-        }
-
-        void Seek(TCells key, ESeek seek) noexcept
-        {
-            Key.clear();
+ 
+            return iter; 
+        } 
+ 
+        void Seek(TCells key, ESeek seek) noexcept 
+        { 
+            Key.clear(); 
             CurrentVersion = nullptr;
-
-            if (key) {
-                NMem::TPoint search{ key, *Nulls };
-
+ 
+            if (key) { 
+                NMem::TPoint search{ key, *Nulls }; 
+ 
                 switch (seek) {
                     case ESeek::Lower:
                         RowIt.SeekLowerBound(search);
@@ -78,7 +78,7 @@ namespace NTable {
                     case ESeek::Upper:
                         RowIt.SeekUpperBound(search);
                         break;
-                }
+                } 
             } else {
                 switch (seek) {
                     case ESeek::Lower:
@@ -89,9 +89,9 @@ namespace NTable {
                         RowIt.Invalidate();
                         break;
                 }
-            }
-        }
-
+            } 
+        } 
+ 
         void SeekReverse(TCells key, ESeek seek) noexcept
         {
             Key.clear();
@@ -124,28 +124,28 @@ namespace NTable {
             }
         }
 
-        TDbTupleRef GetKey() const
-        {
-            Y_VERIFY_DEBUG(IsValid());
-
+        TDbTupleRef GetKey() const 
+        { 
+            Y_VERIFY_DEBUG(IsValid()); 
+ 
             const ui32 len = MemTable->Scheme->Keys->Size();
             const auto *key = RowIt.GetKey();
-
+ 
             if (len >= Nulls->BasicTypes().size()) {
                 return { Nulls->BasicTypes().begin(), key, len };
-            } else if (!Key) {
-                Key.insert(Key.end(), key, key + len);
-                Key.insert(Key.end(), (**Nulls).begin() + len, (**Nulls).end());
-            }
-
+            } else if (!Key) { 
+                Key.insert(Key.end(), key, key + len); 
+                Key.insert(Key.end(), (**Nulls).begin() + len, (**Nulls).end()); 
+            } 
+ 
             return { Nulls->BasicTypes().begin(), Key.begin(), ui32(Key.size()) };
-        }
-
+        } 
+ 
         bool IsDelta() const noexcept
-        {
+        { 
             auto* update = GetCurrentVersion();
             Y_VERIFY(update);
-
+ 
             return update->RowVersion.Step == Max<ui64>();
         }
 
@@ -154,7 +154,7 @@ namespace NTable {
             auto* update = GetCurrentVersion();
             Y_VERIFY(update);
             Y_VERIFY(update->RowVersion.Step == Max<ui64>());
-
+ 
             return update->RowVersion.TxId;
         }
 
@@ -172,7 +172,7 @@ namespace NTable {
                 }
             }
         }
-
+ 
         bool SkipDelta() noexcept
         {
             auto* update = GetCurrentVersion();
@@ -218,7 +218,7 @@ namespace NTable {
             Y_VERIFY(update->RowVersion.Step != Max<ui64>(), "GetRowVersion cannot be called on deltas");
             return update->RowVersion;
         }
-
+ 
         /**
          * Skips to row at the current key as seen at row version rowVersion
          *
@@ -274,28 +274,28 @@ namespace NTable {
                         // Only committed deltas increment InvisibleRowSkips
                         InvisibleRowSkips++;
                     }
-                }
-            }
+                } 
+            } 
 
             CurrentVersion = nullptr;
             return false;
-        }
-
-        bool IsValid() const
-        {
-            return RowIt.IsValid();
-        }
-
+        } 
+ 
+        bool IsValid() const 
+        { 
+            return RowIt.IsValid(); 
+        } 
+ 
         void Next()
-        {
+        { 
             Y_VERIFY_DEBUG(IsValid(), "Calling Next on an exhausted iterator");
 
-            Key.clear();
+            Key.clear(); 
             CurrentVersion = nullptr;
 
-            RowIt.Next();
-        }
-
+            RowIt.Next(); 
+        } 
+ 
         void Prev()
         {
             Y_VERIFY_DEBUG(IsValid(), "Calling Prev on an exhausted iterator");
@@ -306,35 +306,35 @@ namespace NTable {
             RowIt.Prev();
         }
 
-    private:
+    private: 
         void ApplyColumn(TRowState& row, const NMem::TColumnUpdate &up) const noexcept
-        {
-            const auto pos = Remap->Has(up.Tag);
+        { 
+            const auto pos = Remap->Has(up.Tag); 
             auto op = TCellOp::By(up.Op);
-
-            if (!pos || row.IsFinalized(pos)) {
-                /* Out of remap or row slot is already filled */
+ 
+            if (!pos || row.IsFinalized(pos)) { 
+                /* Out of remap or row slot is already filled */ 
             } else if (op == ELargeObj::Inline) {
-                row.Set(pos, op, up.Value);
+                row.Set(pos, op, up.Value); 
             } else if (op != ELargeObj::Extern) {
                 Y_FAIL("Got an unknown ELargeObj reference type");
-            } else {
+            } else { 
                 const auto ref = up.Value.AsValue<ui64>();
-
+ 
                 if (auto blob = Env->Locate(MemTable, ref, up.Tag)) {
-                    const auto got = NPage::THello().Read(**blob);
-
-                    Y_VERIFY(got == NPage::ECodec::Plain && got.Version == 0);
-
+                    const auto got = NPage::THello().Read(**blob); 
+ 
+                    Y_VERIFY(got == NPage::ECodec::Plain && got.Version == 0); 
+ 
                     row.Set(pos, { ECellOp(op), ELargeObj::Inline }, TCell(*got));
-                } else {
+                } else { 
                     op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId);
-
+ 
                     row.Set(pos, op, TCell::Make(MemTable->GetBlobs()->Get(ref).GId));
-                }
-            }
-        }
-
+                } 
+            } 
+        } 
+ 
         const NMem::TUpdate* GetCurrentVersion() const noexcept
         {
             Y_VERIFY_DEBUG(IsValid(), "Attempt to access an invalid row");
@@ -347,18 +347,18 @@ namespace NTable {
             return CurrentVersion;
         }
 
-    public:
+    public: 
         const TMemTable *MemTable = nullptr;
         const TIntrusiveConstPtr<TKeyNulls> Nulls;
-        const TRemap* Remap = nullptr;
-        IPages * const Env = nullptr;
+        const TRemap* Remap = nullptr; 
+        IPages * const Env = nullptr; 
         ui64 InvisibleRowSkips = 0;
-
-    private:
+ 
+    private: 
         NMem::TTreeIterator RowIt;
-        mutable TSmallVec<TCell> Key;
+        mutable TSmallVec<TCell> Key; 
         mutable const NMem::TUpdate* CurrentVersion = nullptr;
-    };
-
-}
-}
+    }; 
+ 
+} 
+} 

@@ -389,14 +389,14 @@ void TBusSessionImpl::StatusUpdateCachedDump() {
 
         for (TVector<TAcceptorPtr>::const_iterator acceptor = acceptors.begin();
              acceptor != acceptors.end(); ++acceptor) {
-            const TAcceptorStatus status = (*acceptor)->GranStatus.Listen.Get();
-
-            acceptorStatusSummary += status;
-
+            const TAcceptorStatus status = (*acceptor)->GranStatus.Listen.Get(); 
+ 
+            acceptorStatusSummary += status; 
+ 
             if (acceptor != acceptors.begin()) {
                 ss << "\n";
             }
-            ss << status.PrintToString();
+            ss << status.PrintToString(); 
         }
 
         r.Acceptors = ss.Str();
@@ -410,19 +410,19 @@ void TBusSessionImpl::StatusUpdateCachedDump() {
             if (connection != connections.begin()) {
                 ss << "\n";
             }
-
+ 
             TRemoteConnectionStatus status;
             status.Server = !IsSource_;
-            status.ReaderStatus = (*connection)->GranStatus.Reader.Get();
-            status.WriterStatus = (*connection)->GranStatus.Writer.Get();
-
+            status.ReaderStatus = (*connection)->GranStatus.Reader.Get(); 
+            status.WriterStatus = (*connection)->GranStatus.Writer.Get(); 
+ 
             ss << status.PrintToString();
-
-            r.ConnectionStatusSummary.ReaderStatus += status.ReaderStatus;
-            r.ConnectionStatusSummary.WriterStatus += status.WriterStatus;
+ 
+            r.ConnectionStatusSummary.ReaderStatus += status.ReaderStatus; 
+            r.ConnectionStatusSummary.WriterStatus += status.WriterStatus; 
         }
 
-        r.ConnectionsSummary = r.ConnectionStatusSummary.PrintToString();
+        r.ConnectionsSummary = r.ConnectionStatusSummary.PrintToString(); 
         r.Connections = ss.Str();
     }
 

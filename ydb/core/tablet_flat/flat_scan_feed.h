@@ -1,52 +1,52 @@
-#pragma once
-
-#include "flat_scan_iface.h"
-#include "flat_scan_lead.h"
-#include "flat_part_iface.h"
-#include "flat_iterator.h"
-#include "flat_table_subset.h"
-
-namespace NKikimr {
-namespace NTable {
-
-    class TFeed {
-    public:
+#pragma once 
+ 
+#include "flat_scan_iface.h" 
+#include "flat_scan_lead.h" 
+#include "flat_part_iface.h" 
+#include "flat_iterator.h" 
+#include "flat_table_subset.h" 
+ 
+namespace NKikimr { 
+namespace NTable { 
+ 
+    class TFeed { 
+    public: 
         TFeed(IScan *scan, const TSubset &subset, TRowVersion snapshot = TRowVersion::Max())
             : Scan(scan)
             , Subset(subset)
             , SnapshotVersion(snapshot)
             , VersionScan(dynamic_cast<IVersionScan*>(scan))
-        {
-
-        }
-
+        { 
+ 
+        } 
+ 
         void Resume(EScan op) noexcept
-        {
+        { 
             Y_VERIFY_DEBUG(op == EScan::Feed || op == EScan::Reset);
-
+ 
             OnPause = false;
 
             if (op == EScan::Reset) {
                 Iter = nullptr;
             }
-        }
-
-        EReady Process() noexcept
-        {
-            if (OnPause) {
-                return EReady::Page;
-            } else if (Iter == nullptr) {
-                Lead.Clear();
-
+        } 
+ 
+        EReady Process() noexcept 
+        { 
+            if (OnPause) { 
+                return EReady::Page; 
+            } else if (Iter == nullptr) { 
+                Lead.Clear(); 
+ 
                 if (Seeks == Max<ui64>()) {
                     Seeks = 0;
                 }
-
+ 
                 auto op = Scan->Seek(Lead, Seeks);
                 VersionState = EVersionState::BeginKey;
-
-                OnPause = (op == EScan::Sleep);
-
+ 
+                OnPause = (op == EScan::Sleep); 
+ 
                 switch (op) {
                     case EScan::Feed:
                         if (!Reset()) {
@@ -65,14 +65,14 @@ namespace NTable {
 
                     case EScan::Reset:
                         Y_FAIL("Unexpected EScan::Reset from IScan::Seek(...)");
-                }
+                } 
 
                 Y_FAIL("Unexpected EScan result from IScan::Seek(...)");
-            } else if (Seek()) {
+            } else if (Seek()) { 
                 return NotifyPageFault();
-            } else {
+            } else { 
                 EReady ready;
-
+ 
                 switch (VersionState) {
                     case EVersionState::BeginKey:
                         ready = Iter->Next(Conf.NoErased ? ENext::Data : VersionScan ? ENext::Uncommitted : ENext::All);
@@ -127,11 +127,11 @@ namespace NTable {
                         break;
                 }
 
-                if (ready == EReady::Page) {
+                if (ready == EReady::Page) { 
                     return NotifyPageFault();
-                } else if (ready == EReady::Gone) {
+                } else if (ready == EReady::Gone) { 
                     return NotifyExhausted();
-                } else {
+                } else { 
                     EScan op;
                     switch (VersionState) {
                         case EVersionState::BeginKey:
@@ -148,7 +148,7 @@ namespace NTable {
                                 }
                             }
                             break;
-
+ 
                         case EVersionState::BeginDeltas:
                             Y_VERIFY_DEBUG(Iter->IsUncommitted());
                             op = VersionScan->BeginDeltas();
@@ -167,7 +167,7 @@ namespace NTable {
                             VersionState = EVersionState::SkipUncommitted;
                             break;
                         }
-
+ 
                         case EVersionState::EndDeltasThenFeed:
                             op = VersionScan->EndDeltas();
                             VersionState = EVersionState::Feed;
@@ -202,12 +202,12 @@ namespace NTable {
                             Y_FAIL("Unexpected callback state SkipVersion");
                     }
 
-                    OnPause = (op == EScan::Sleep);
-
+                    OnPause = (op == EScan::Sleep); 
+ 
                     switch (op) {
                         case EScan::Feed:
                             return EReady::Data;
-
+ 
                         case EScan::Sleep:
                             return EReady::Page;
 
@@ -218,13 +218,13 @@ namespace NTable {
 
                         case EScan::Final:
                             return EReady::Gone;
-                    }
+                    } 
 
                     Y_FAIL("Unexpected EScan result from IScan::Feed(...)");
-                }
-            }
-        }
-
+                } 
+            } 
+        } 
+ 
     protected:
         IScan* DetachScan() noexcept
         {
@@ -249,9 +249,9 @@ namespace NTable {
             return EReady::Data;
         }
 
-    private:
-        virtual IPages* MakeEnv() noexcept = 0;
-
+    private: 
+        virtual IPages* MakeEnv() noexcept = 0; 
+ 
         virtual TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>& part) noexcept = 0;
 
         EReady NotifyPageFault() noexcept
@@ -302,15 +302,15 @@ namespace NTable {
         }
 
         bool Reset() noexcept
-        {
-            Seeks++;
-
-            Y_VERIFY(Lead, "Cannot seek with invalid lead");
-
+        { 
+            Seeks++; 
+ 
+            Y_VERIFY(Lead, "Cannot seek with invalid lead"); 
+ 
             auto nulls = Subset.Scheme->Keys;
-
+ 
             Y_VERIFY(Lead.Key.GetCells().size() <= nulls->Size(), "TLead key is too large");
-
+ 
             Iter = new TTableIt(Subset.Scheme.Get(), Lead.Tags, -1, SnapshotVersion, Subset.CommittedTransactions);
 
             CurrentEnv = MakeEnv();
@@ -392,16 +392,16 @@ namespace NTable {
                         MakeHolder<TRunIt>(run, Lead.Tags, nulls, CurrentEnv));
                 }
             }
-        }
-
+        } 
+ 
         bool SeekBoots() noexcept
-        {
-            if (Boots) {
+        { 
+            if (Boots) { 
                 auto saved = Boots.begin();
                 auto current = Boots.begin();
                 while (current != Boots.end()) {
                     auto *iter = current->Get();
-
+ 
                     switch (iter->Seek(Lead.Key.GetCells(), Lead.Relation)) {
                         case EReady::Page:
                             if (saved != current) {
@@ -410,7 +410,7 @@ namespace NTable {
                             ++saved;
                             ++current;
                             break;
-
+ 
                         case EReady::Data:
                             Iter->Push(std::move(*current));
                             ++current;
@@ -422,17 +422,17 @@ namespace NTable {
 
                         default:
                             Y_FAIL("Unexpected Seek result");
-                    }
-                }
+                    } 
+                } 
 
                 if (saved != Boots.end()) {
                     Boots.erase(saved, Boots.end());
                 }
-            }
-
+            } 
+ 
             return Boots.empty();
-        }
-
+        } 
+ 
         bool Seek() noexcept
         {
             switch (SeekState) {
@@ -461,15 +461,15 @@ namespace NTable {
             return false;
         }
 
-    protected:
+    protected: 
         IScan * const Scan;
-        ui64 Seen = 0;
+        ui64 Seen = 0; 
         ui64 Skipped = 0;
         IScan::TConf Conf;
         const TSubset &Subset;
         const TRowVersion SnapshotVersion;
-
-    private:
+ 
+    private: 
         enum class ESeekState {
             LoadColdParts,
             PrepareBoots,
@@ -495,20 +495,20 @@ namespace NTable {
 
     private:
         using TBoots = TVector<THolder<TRunIt>>;
-
+ 
         IPages* CurrentEnv = nullptr;
 
         TVector<TPartView> LoadedParts;
         size_t LoadingParts = 0;
 
         THolder<TLevels> Levels;
-        TLead Lead;
-        TBoots Boots;
+        TLead Lead; 
+        TBoots Boots; 
         TAutoPtr<TTableIt> Iter;
-        ui64 Seeks = Max<ui64>();
+        ui64 Seeks = Max<ui64>(); 
         ESeekState SeekState;
-        bool OnPause = false;
-    };
-
-}
-}
+        bool OnPause = false; 
+    }; 
+ 
+} 
+} 

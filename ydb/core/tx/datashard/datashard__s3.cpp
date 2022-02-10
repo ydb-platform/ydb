@@ -1,5 +1,5 @@
 #include "datashard_impl.h"
-#include <util/string/vector.h>
+#include <util/string/vector.h> 
 
 namespace NKikimr {
 namespace NDataShard {
@@ -79,7 +79,7 @@ public:
         TString startAfterPath;
         if (Ev->Get()->Record.GetSerializedStartAfterKeySuffix().empty()) {
             key.emplace_back(pathPrefix.data(), pathPrefix.size(), NScheme::NTypeIds::Utf8);
-            key.resize(txc.DB.GetScheme().GetTableInfo(localTableId)->KeyColumns.size());
+            key.resize(txc.DB.GetScheme().GetTableInfo(localTableId)->KeyColumns.size()); 
         } else {
             suffixColumns.Parse(Ev->Get()->Record.GetSerializedStartAfterKeySuffix());
             size_t prefixSize = prefixColumns.GetCells().size();
@@ -229,7 +229,7 @@ public:
             }
         }
 
-        return iter->Last() != NTable::EReady::Page;
+        return iter->Last() != NTable::EReady::Page; 
     }
 
     void Complete(const TActorContext& ctx) override {

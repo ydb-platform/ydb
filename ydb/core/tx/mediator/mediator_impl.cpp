@@ -1,7 +1,7 @@
 #include "mediator_impl.h"
 
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
-
+ 
 namespace NKikimr {
 namespace NTxMediator {
 
@@ -314,7 +314,7 @@ void TTxMediator::Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &
 
 TTxMediator::TTxMediator(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
-    , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
+    , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory) 
 {}
 
 }

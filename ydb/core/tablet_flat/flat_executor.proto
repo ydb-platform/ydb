@@ -6,59 +6,59 @@ package NKikimrExecutorFlat;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TLargeGlobId {
-    // This is the correct way of doing for what StorageInfo is now used.
-
-    required uint32 Group = 1;
-    required uint32 Bytes = 2;
-    required NKikimrProto.TLogoBlobID Lead = 3;
-}
-
+    // This is the correct way of doing for what StorageInfo is now used. 
+ 
+    required uint32 Group = 1; 
+    required uint32 Bytes = 2; 
+    required NKikimrProto.TLogoBlobID Lead = 3; 
+} 
+ 
 message TPageCollection {
-    message TPage {
-        required uint32 Id = 1;
-        required bytes Body = 2;
-    }
-
+    message TPage { 
+        required uint32 Id = 1; 
+        required bytes Body = 2; 
+    } 
+ 
     repeated NKikimrProto.TLogoBlobID MetaId = 1; // Replaced by TLargeGlobId
-
+ 
     optional TLargeGlobId LargeGlobId = 6;
-
+ 
     // Page collection may be serialized with some meta blobs (its meanings is defined
-    // at application level), may be used for quick cooking on a receiver side,
+    // at application level), may be used for quick cooking on a receiver side, 
     // i.e. without extra blob loadings at page collection warming stage. This kind of
     // packed page collection is called HotBundle.
-
-    optional bytes Meta = 2;
-    repeated TPage Pages = 5;
-}
-
-message TBundle {
+ 
+    optional bytes Meta = 2; 
+    repeated TPage Pages = 5; 
+} 
+ 
+message TBundle { 
     // Bundle, a generic page collections ordered sequence with properties:
-    //
+    // 
     // * PageCollections bundle have to be composed at least with one page collection.
     // * Bundle Id is TLogoBlobID of first meta blob of first page collection.
     // * Bundle holds an opaque entity in general indivisible by page collections to
-    //      two or more bundles producing new valid entities of the same kind.
-
+    //      two or more bundles producing new valid entities of the same kind. 
+ 
     repeated TPageCollection PageCollections = 2;
+ 
+    // Legacy opaque can only be used for non-empty screen in TPart bundles, 
+ 
+    optional bytes Legacy = 3; 
 
-    // Legacy opaque can only be used for non-empty screen in TPart bundles,
+    // Attached to bundle app. defined data that cannot be placed within parts. 
 
-    optional bytes Legacy = 3;
-
-    // Attached to bundle app. defined data that cannot be placed within parts.
-
-    optional bytes Opaque = 4;
+    optional bytes Opaque = 4; 
 
     // An optional epoch used for ordering bundles in logical time
 
     optional int64 Epoch = 5;
-}
-
+} 
+ 
 message TBundleChange {
     optional NKikimrProto.TLogoBlobID Label = 1;
-    optional bytes Legacy = 2;
-    optional bytes Opaque = 3;
+    optional bytes Legacy = 2; 
+    optional bytes Opaque = 3; 
 }
 
 message TBundleDelta {
@@ -83,22 +83,22 @@ message TTxStatus {
     optional bytes Data = 3;
 }
 
-message TEvolution {
-    required uint32 Tail  = 1;
-    required uint32 Head  = 2;
-}
-
+message TEvolution { 
+    required uint32 Tail  = 1; 
+    required uint32 Head  = 2; 
+} 
+ 
 message TLogTableSnap {
     optional uint32 Table = 1;
-    repeated NKikimrProto.TLogoBlobID DbPartMetaInfoBody = 2; // Legacy, replaced with Bundles
-    optional uint32 Legacy0_ = 3;
-    optional uint32 Legacy1_ = 4;
-    optional uint32 Legacy2_ = 5;
-    optional uint32 Legacy3_ = 6;
+    repeated NKikimrProto.TLogoBlobID DbPartMetaInfoBody = 2; // Legacy, replaced with Bundles 
+    optional uint32 Legacy0_ = 3; 
+    optional uint32 Legacy1_ = 4; 
+    optional uint32 Legacy2_ = 5; 
+    optional uint32 Legacy3_ = 6; 
 
     optional uint32 CompactionLevel = 7;
-
-    repeated TBundle Bundles = 8;
+ 
+    repeated TBundle Bundles = 8; 
 }
 
 message TLogTxStatusSnap {
@@ -143,13 +143,13 @@ message TBorrowedPart {
     repeated NKikimrProto.TLogoBlobID LoanKeepList = 13;
 }
 
-message TSnapWaste {
-    optional uint64 Since = 1;  // Stamp of waste accounting age
-    optional uint64 Level = 2;  // Total bytes keeping by tablet
-    optional uint64 Keep = 3;   // Total bytes designed for KEEP flag
-    optional uint64 Drop = 4;   // Total dropped blobs designed for KEEP.
-}
-
+message TSnapWaste { 
+    optional uint64 Since = 1;  // Stamp of waste accounting age 
+    optional uint64 Level = 2;  // Total bytes keeping by tablet 
+    optional uint64 Keep = 3;   // Total bytes designed for KEEP flag 
+    optional uint64 Drop = 4;   // Total dropped blobs designed for KEEP. 
+} 
+ 
 message TCompactionState {
     message TKeyValue {
         optional uint64 Key = 1;
@@ -182,11 +182,11 @@ message TLogSnapshot {
     repeated NKikimrProto.TLogoBlobID GcSnapDiscovered = 12;
     repeated NKikimrProto.TLogoBlobID GcSnapLeft = 13;
     repeated TGcChannelBarrierInfo GcBarrierInfo = 14;
-
-    optional bytes Legacy0_ = 15;
-    optional TEvolution Version = 16;
-    optional uint64 Serial = 17; // db change serial at moment of snapshot
-    optional TSnapWaste Waste = 18;
+ 
+    optional bytes Legacy0_ = 15; 
+    optional TEvolution Version = 16; 
+    optional uint64 Serial = 17; // db change serial at moment of snapshot 
+    optional TSnapWaste Waste = 18; 
 
     repeated TCompactionState CompactionStates = 19;
     repeated TRowVersionState RowVersionStates = 20;
@@ -198,7 +198,7 @@ message TTablePartSwitch {
     optional TLogMemSnap TableSnapshoted = 2;
     optional uint32 TableId = 3;
 
-    repeated NKikimrProto.TLogoBlobID LeavingBundles = 10;
+    repeated NKikimrProto.TLogoBlobID LeavingBundles = 10; 
     repeated TBundleChange ChangedBundles = 11;
     optional TCompactionState CompactionChanges = 12;
     repeated TBundleDelta BundleDeltas = 13;

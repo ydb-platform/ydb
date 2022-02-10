@@ -1,35 +1,35 @@
-#pragma once
-
-#include "flat_part_iface.h"
-#include "flat_writer_conf.h"
-#include "flat_writer_banks.h"
-#include "flat_writer_blocks.h"
+#pragma once 
+ 
+#include "flat_part_iface.h" 
+#include "flat_writer_conf.h" 
+#include "flat_writer_banks.h" 
+#include "flat_writer_blocks.h" 
 #include "util_basics.h"
-
-namespace NKikimr {
-namespace NTabletFlatExecutor {
-namespace NWriter {
-
-    class TBundle : public NTable::IPageWriter, protected ICone {
-    public:
-        struct TResult {
+ 
+namespace NKikimr { 
+namespace NTabletFlatExecutor { 
+namespace NWriter { 
+ 
+    class TBundle : public NTable::IPageWriter, protected ICone { 
+    public: 
+        struct TResult { 
             using TCache = TPrivatePageCache::TInfo;
-
+ 
             TVector<TIntrusivePtr<TCache>> PageCollections;
             TDeque<NTable::TScreen::THole> Growth;
             TString Overlay;
-        };
-
-        TBundle(const TLogoBlobID &base, const TConf &conf)
+        }; 
+ 
+        TBundle(const TLogoBlobID &base, const TConf &conf) 
             : Groups(conf.Groups)
             , BlobsChannel(conf.BlobsChannel)
             , ExtraChannel(conf.ExtraChannel)
-            , Banks(base, conf.Slots)
-        {
+            , Banks(base, conf.Slots) 
+        { 
             Y_VERIFY(Groups.size() >= 1, "There must be at least one page collection group");
 
-            const auto none = NTable::NPage::ECache::None;
-
+            const auto none = NTable::NPage::ECache::None; 
+ 
             Blocks.resize(Groups.size() + 1);
             for (size_t group : xrange(Groups.size())) {
                 Blocks[group].Reset(new TBlocks(this, Groups[group].Channel, Groups[group].Cache, Groups[group].Block));
@@ -37,59 +37,59 @@ namespace NWriter {
             Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, Groups[0].Block));
 
             Growth = new NTable::TScreen::TCook;
-        }
-
-        ~TBundle()
-        {
+        } 
+ 
+        ~TBundle() 
+        { 
             Y_VERIFY(!Blobs, "Bundle writer still has some blobs");
-        }
-
+        } 
+ 
         TVector<NPageCollection::TGlob> GetBlobsToSave() noexcept
-        {
-            return std::exchange(Blobs, { });
-        }
-
+        { 
+            return std::exchange(Blobs, { }); 
+        } 
+ 
         TVector<TResult> Results() noexcept
-        {
+        { 
             for (auto &blocks : Blocks) {
                 Y_VERIFY(!*blocks, "Bundle writer has unflushed data");
-            }
-
+            } 
+ 
             return std::move(Results_);
-        }
-
+        } 
+ 
         NPageCollection::TLargeGlobId WriteExtra(TArrayRef<const char> body) noexcept
         {
             return Put(/* data cookieRange */ 1, ExtraChannel, body, Groups[0].Block);
         }
 
-    private:
+    private: 
         TPageId Write(TSharedData page, EPage type, ui32 group) override
-        {
+        { 
             return Blocks.at(group)->Write(std::move(page), type);
-        }
-
+        } 
+ 
         TPageId WriteOuter(TSharedData page) noexcept override
-        {
+        { 
             return
                 Blocks.back()->Write(std::move(page), EPage::Opaque);
-        }
-
+        } 
+ 
         void WriteInplace(TPageId page, TArrayRef<const char> body) override
         {
             Blocks[0]->WriteInplace(page, body);
         }
 
         NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept override
-        {
+        { 
             auto glob = Banks.Data.Do(BlobsChannel, blob.size());
-
-            Blobs.emplace_back(glob, std::move(blob));
+ 
+            Blobs.emplace_back(glob, std::move(blob)); 
             Growth->Pass(ref);
-
-            return glob;
-        }
-
+ 
+            return glob; 
+        } 
+ 
         void Finish(TString overlay) noexcept override
         {
             auto &result = Results_.emplace_back();
@@ -111,17 +111,17 @@ namespace NWriter {
         }
 
         NPageCollection::TCookieAllocator& CookieRange(ui32 cookieRange) noexcept override
-        {
+        { 
             Y_VERIFY(cookieRange == 0 || cookieRange == 1, "Invalid cookieRange requested");
-
+ 
             return cookieRange == 0 ? Banks.Meta : Banks.Data;
-        }
-
+        } 
+ 
         void Put(NPageCollection::TGlob&& glob) noexcept override
-        {
-            Blobs.emplace_back(std::move(glob));
-        }
-
+        { 
+            Blobs.emplace_back(std::move(glob)); 
+        } 
+ 
         NPageCollection::TLargeGlobId Put(ui32 cookieRange, ui8 channel, TArrayRef<const char> body, ui32 block) noexcept override
         {
             const auto largeGlobId = CookieRange(cookieRange).Do(channel, body.size(), block);
@@ -146,17 +146,17 @@ namespace NWriter {
             return largeGlobId;
         }
 
-    private:
+    private: 
         const TVector<TConf::TGroup> Groups;
         const ui8 BlobsChannel;
         const ui8 ExtraChannel;
-        TBanks Banks;
+        TBanks Banks; 
         TVector<NPageCollection::TGlob> Blobs;
         TVector<THolder<TBlocks>> Blocks;
         TAutoPtr<NTable::TScreen::TCook> Growth;
         TVector<TResult> Results_;
-    };
-
-}
-}
-}
+    }; 
+ 
+} 
+} 
+} 

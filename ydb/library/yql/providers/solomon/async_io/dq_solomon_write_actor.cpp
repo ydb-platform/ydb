@@ -101,7 +101,7 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvHttpBase::TEvSendResult, Handle);
+        hFunc(TEvHttpBase::TEvSendResult, Handle); 
     )
 
 public:
@@ -205,7 +205,7 @@ private:
         size_t InflightRequestsHistoryMin = 0;
     };
 
-    void Handle(TEvHttpBase::TEvSendResult::TPtr& ev) {
+    void Handle(TEvHttpBase::TEvSendResult::TPtr& ev) { 
         const auto* res = ev->Get();
         const TString& error = res->HttpIncomingResponse->Get()->GetError();
 

@@ -2,7 +2,7 @@ LIBRARY()
 
 YQL_ABI_VERSION(
     2
-    23
+    23 
     0
 )
 
@@ -14,7 +14,7 @@ OWNER(
 SRCS(
     url_base_udf.cpp
     url_parse.cpp
-    url_query.cpp
+    url_query.cpp 
 )
 
 PEERDIR(

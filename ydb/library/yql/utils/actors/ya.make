@@ -2,9 +2,9 @@ LIBRARY()
 
 OWNER(g:yql)
 
-SRCS(
+SRCS( 
     rich_actor.cpp
-    http_sender_actor.cpp
+    http_sender_actor.cpp 
 )
 
 PEERDIR(

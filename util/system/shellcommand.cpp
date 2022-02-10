@@ -226,7 +226,7 @@ private:
     TShellCommandOptions::TUserOptions User;
     THashMap<TString, TString> Environment;
     int Nice = 0;
-    std::function<void()> FuncAfterFork = {}; 
+    std::function<void()> FuncAfterFork = {};
 
     struct TProcessInfo {
         TImpl* Parent;
@@ -274,7 +274,7 @@ private:
     };
 
 #if defined(_unix_)
-    void OnFork(TPipes& pipes, sigset_t oldmask, char* const* argv, char* const* envp, const std::function<void()>& afterFork) const; 
+    void OnFork(TPipes& pipes, sigset_t oldmask, char* const* argv, char* const* envp, const std::function<void()>& afterFork) const;
 #else
     void StartProcess(TPipes& pipes);
 #endif
@@ -306,7 +306,7 @@ public:
         , User(options.User)
         , Environment(options.Environment)
         , Nice(options.Nice)
-        , FuncAfterFork(options.FuncAfterFork) 
+        , FuncAfterFork(options.FuncAfterFork)
     {
         if (InputStream) {
             // TODO change usages to call SetInputStream instead of directly assigning to InputStream
@@ -665,7 +665,7 @@ TString TShellCommand::TImpl::GetQuotedCommand() const {
 }
 
 #if defined(_unix_)
-void TShellCommand::TImpl::OnFork(TPipes& pipes, sigset_t oldmask, char* const* argv, char* const* envp, const std::function<void()>& afterFork) const { 
+void TShellCommand::TImpl::OnFork(TPipes& pipes, sigset_t oldmask, char* const* argv, char* const* envp, const std::function<void()>& afterFork) const {
     try {
         if (DetachSession) {
             setsid();
@@ -734,9 +734,9 @@ void TShellCommand::TImpl::OnFork(TPipes& pipes, sigset_t oldmask, char* const* 
             // Don't verify Nice() call - it does not work properly with WSL https://github.com/Microsoft/WSL/issues/1838
             ::Nice(Nice);
         }
-        if (afterFork) { 
-            afterFork(); 
-        } 
+        if (afterFork) {
+            afterFork();
+        }
 
         if (envp == nullptr) {
             execvp(argv[0], argv);
@@ -824,9 +824,9 @@ void TShellCommand::TImpl::Run() {
         ythrow TSystemError() << "Cannot fork";
     } else if (pid == 0) { // child
         if (envp.size() != 0) {
-            OnFork(pipes, oldmask, qargv.data(), envp.data(), FuncAfterFork); 
+            OnFork(pipes, oldmask, qargv.data(), envp.data(), FuncAfterFork);
         } else {
-            OnFork(pipes, oldmask, qargv.data(), nullptr, FuncAfterFork); 
+            OnFork(pipes, oldmask, qargv.data(), nullptr, FuncAfterFork);
         }
     } else { // parent
         // restore signal mask

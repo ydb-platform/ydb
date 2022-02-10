@@ -167,8 +167,8 @@ char* TCgiParameters::Print(char* res) const {
     }
 
     return res;
-} 
- 
+}
+
 size_t TCgiParameters::PrintSize() const noexcept {
     size_t res = size(); // for '&'
 
@@ -177,8 +177,8 @@ size_t TCgiParameters::PrintSize() const noexcept {
     }
 
     return res;
-} 
- 
+}
+
 TString TCgiParameters::QuotedPrint(const char* safe) const {
     if (empty()) {
         return TString();

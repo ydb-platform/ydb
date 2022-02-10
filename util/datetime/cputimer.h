@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "base.h"
 
 #include <util/system/rusage.h>
@@ -11,11 +11,11 @@ private:
     TInstant Start_;
     TStringStream Message_;
 
-public: 
+public:
     TTimer(const TStringBuf message = TStringBuf(" took: "));
     ~TTimer();
-}; 
- 
+};
+
 class TSimpleTimer {
     TInstant T;
 

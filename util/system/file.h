@@ -127,7 +127,7 @@ public:
 
     //very low-level methods
     bool SetDirect();
-    void ResetDirect(); 
+    void ResetDirect();
 
     /* Manual file cache management, length = 0 means "as much as possible" */
 
@@ -197,8 +197,8 @@ public:
     void Flock(int op);
 
     //do not use, their meaning very platform-dependant
-    void SetDirect(); 
-    void ResetDirect(); 
+    void SetDirect();
+    void ResetDirect();
 
     /* Manual file cache management, length = 0 means "as much as possible" */
 

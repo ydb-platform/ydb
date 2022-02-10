@@ -15,7 +15,7 @@
 #elif defined(_win_)
     #include <util/system/winint.h>
 #endif
- 
+
 TTimer::TTimer(const TStringBuf message) {
     static const int SMALL_DURATION_CHAR_LENGTH = 9;                     // strlen("0.123456s")
     Message_.Reserve(message.length() + SMALL_DURATION_CHAR_LENGTH + 1); // +"\n"

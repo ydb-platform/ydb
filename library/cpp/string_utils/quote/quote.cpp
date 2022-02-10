@@ -119,7 +119,7 @@ static inline It1 Escape(It1 to, It2 from, It3 end, const bool* escape_map = cha
 
     *to = 0;
 
-    return to; 
+    return to;
 }
 
 template <class It1, class It2, class It3, class FromHex>

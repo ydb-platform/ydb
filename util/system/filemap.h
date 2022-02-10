@@ -314,7 +314,7 @@ public:
     char* End() const noexcept {
         return Begin() + MappedSize();
     }
-    size_t MappedSize() const { 
+    size_t MappedSize() const {
         return Size_;
     }
     void swap(TMappedAllocation& with);
@@ -342,7 +342,7 @@ public:
     }
     T* Create(size_t siz) {
         Y_ASSERT(MappedSize() == 0 && Ptr() == nullptr);
-        T* arr = (T*)Alloc((sizeof(T) * siz)); 
+        T* arr = (T*)Alloc((sizeof(T) * siz));
         if (!arr)
             return nullptr;
         Y_ASSERT(MappedSize() == sizeof(T) * siz);

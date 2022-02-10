@@ -13,14 +13,14 @@
 
 #include <library/cpp/yt/misc/enum.h>
 
-#include <cctype> 
+#include <cctype>
 #include <optional>
- 
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const char GenericSpecSymbol = 'v'; 
+static const char GenericSpecSymbol = 'v';
 
 inline bool IsQuotationSpecSymbol(char symbol)
 {
@@ -67,22 +67,22 @@ inline void FormatValue(TStringBuilderBase* builder, TStringBuf value, TStringBu
         padRight = alignLeft;
     }
 
-    bool singleQuotes = false; 
-    bool doubleQuotes = false; 
-    while (current < format.end()) { 
-        if (*current == 'q') { 
-            singleQuotes = true; 
-        } else if (*current == 'Q') { 
-            doubleQuotes = true; 
-        } 
-        ++current; 
-    } 
- 
+    bool singleQuotes = false;
+    bool doubleQuotes = false;
+    while (current < format.end()) {
+        if (*current == 'q') {
+            singleQuotes = true;
+        } else if (*current == 'Q') {
+            doubleQuotes = true;
+        }
+        ++current;
+    }
+
     if (padLeft) {
         builder->AppendChar(' ', padding);
     }
- 
-    if (singleQuotes || doubleQuotes) { 
+
+    if (singleQuotes || doubleQuotes) {
         for (const char* valueCurrent = value.begin(); valueCurrent < value.end(); ++valueCurrent) {
             char ch = *valueCurrent;
             if (ch == '\n') {
@@ -90,20 +90,20 @@ inline void FormatValue(TStringBuilderBase* builder, TStringBuf value, TStringBu
             } else if (ch == '\t') {
                 builder->AppendString("\\t");
             } else if (ch < PrintableASCIILow || ch > PrintableASCIIHigh) {
-                builder->AppendString("\\x"); 
-                builder->AppendChar(Int2Hex[static_cast<ui8>(ch) >> 4]); 
-                builder->AppendChar(Int2Hex[static_cast<ui8>(ch) & 0xf]); 
+                builder->AppendString("\\x");
+                builder->AppendChar(Int2Hex[static_cast<ui8>(ch) >> 4]);
+                builder->AppendChar(Int2Hex[static_cast<ui8>(ch) & 0xf]);
             } else if ((singleQuotes && ch == '\'') || (doubleQuotes && ch == '\"')) {
-                builder->AppendChar('\\'); 
+                builder->AppendChar('\\');
                 builder->AppendChar(ch);
-            } else { 
+            } else {
                 builder->AppendChar(ch);
-            } 
-        } 
-    } else { 
-        builder->AppendString(value); 
-    } 
- 
+            }
+        }
+    } else {
+        builder->AppendString(value);
+    }
+
     if (padRight) {
         builder->AppendChar(' ', padding);
     }
@@ -121,12 +121,12 @@ inline void FormatValue(TStringBuilderBase* builder, const char* value, TStringB
     FormatValue(builder, TStringBuf(value), format);
 }
 
-// char 
+// char
 inline void FormatValue(TStringBuilderBase* builder, char value, TStringBuf format)
-{ 
-    FormatValue(builder, TStringBuf(&value, 1), format); 
-} 
- 
+{
+    FormatValue(builder, TStringBuf(&value, 1), format);
+}
+
 // bool
 inline void FormatValue(TStringBuilderBase* builder, bool value, TStringBuf format)
 {
@@ -138,7 +138,7 @@ inline void FormatValue(TStringBuilderBase* builder, bool value, TStringBuf form
             ++current;
             lowercase = true;
         } else if (IsQuotationSpecSymbol(*current)) {
-            ++current; 
+            ++current;
         } else
             break;
     }
@@ -179,7 +179,7 @@ struct TValueFormatter<TEnum, typename std::enable_if<TEnumTraits<TEnum>::IsEnum
                 ++current;
                 lowercase = true;
             } else if (IsQuotationSpecSymbol(*current)) {
-                ++current; 
+                ++current;
             } else {
                 break;
             }
@@ -389,7 +389,7 @@ struct TValueFormatter<TEnumIndexedVector<E, T>>
             if (!firstItem) {
                 builder->AppendString(DefaultJoinToStringDelimiter);
             }
-            FormatValue(builder, index, format); 
+            FormatValue(builder, index, format);
             builder->AppendString(": ");
             FormatValue(builder, collection[index], format);
             firstItem = false;
@@ -587,9 +587,9 @@ void FormatImpl(
             // Scan format part until stop symbol.
             auto argFormatBegin = current;
             auto argFormatEnd = argFormatBegin;
-            bool singleQuotes = false; 
-            bool doubleQuotes = false; 
- 
+            bool singleQuotes = false;
+            bool doubleQuotes = false;
+
             while (
                 argFormatEnd != format.end() &&
                 *argFormatEnd != GenericSpecSymbol &&     // value in generic format
@@ -612,11 +612,11 @@ void FormatImpl(
                 *argFormatEnd != 'p' &&
                 *argFormatEnd != 'n')
             {
-                if (*argFormatEnd == 'q') { 
-                    singleQuotes = true; 
-                } else if (*argFormatEnd == 'Q') { 
-                    doubleQuotes = true; 
-                } 
+                if (*argFormatEnd == 'q') {
+                    singleQuotes = true;
+                } else if (*argFormatEnd == 'Q') {
+                    doubleQuotes = true;
+                }
                 ++argFormatEnd;
             }
 

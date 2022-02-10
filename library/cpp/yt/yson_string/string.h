@@ -17,7 +17,7 @@ class TYsonStringBuf
 public:
     //! Constructs a null instance.
     TYsonStringBuf();
- 
+
     //! Constructs an instance from TYsonString.
     TYsonStringBuf(const TYsonString& ysonString);
 

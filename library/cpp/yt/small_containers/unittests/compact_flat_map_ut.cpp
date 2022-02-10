@@ -129,24 +129,24 @@ TEST(CompactFlatMapTest, Insert)
     EXPECT_EQ(m.find("and")->second, "trunkless");
 }
 
-TEST(CompactFlatMapTest, Emplace) 
-{ 
-    auto m = CreateMap(); 
- 
-    auto [it, inserted] = m.emplace("Far", "place"); 
-    EXPECT_TRUE(inserted); 
-    EXPECT_EQ(m.ssize(), 5); 
-    EXPECT_NE(it, m.end()); 
-    EXPECT_EQ(it, m.find("Far")); 
-    EXPECT_EQ(it->second, "place"); 
- 
-    auto [it2, inserted2] = m.emplace("Far", "behind"); 
-    EXPECT_FALSE(inserted2); 
-    EXPECT_EQ(m.ssize(), 5); 
-    EXPECT_EQ(it2, it); 
-    EXPECT_EQ(it->second, "place"); 
-} 
- 
+TEST(CompactFlatMapTest, Emplace)
+{
+    auto m = CreateMap();
+
+    auto [it, inserted] = m.emplace("Far", "place");
+    EXPECT_TRUE(inserted);
+    EXPECT_EQ(m.ssize(), 5);
+    EXPECT_NE(it, m.end());
+    EXPECT_EQ(it, m.find("Far"));
+    EXPECT_EQ(it->second, "place");
+
+    auto [it2, inserted2] = m.emplace("Far", "behind");
+    EXPECT_FALSE(inserted2);
+    EXPECT_EQ(m.ssize(), 5);
+    EXPECT_EQ(it2, it);
+    EXPECT_EQ(it->second, "place");
+}
+
 TEST(CompactFlatMapTest, Subscript)
 {
     auto m = CreateMap();

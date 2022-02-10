@@ -157,9 +157,9 @@ public:
     //! Creates a TSharedRef for a part of existing range.
     TSharedRef Slice(const void* begin, const void* end) const;
 
-    //! Creates a vector of slices with specified size. 
+    //! Creates a vector of slices with specified size.
     std::vector<TSharedRef> Split(size_t partSize) const;
- 
+
 private:
     friend class TSharedRefArrayImpl;
 };

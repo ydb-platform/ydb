@@ -107,9 +107,9 @@ Y_WEAK void EnableLogging(TLogHandler /*logHandler*/)
 Y_WEAK void SetBacktraceProvider(TBacktraceProvider /*provider*/)
 { }
 
-Y_WEAK void SetBacktraceFormatter(TBacktraceFormatter /*formatter*/) 
-{ } 
- 
+Y_WEAK void SetBacktraceFormatter(TBacktraceFormatter /*formatter*/)
+{ }
+
 ////////////////////////////////////////////////////////////////////////////////
 
 Y_WEAK void EnableStockpile()

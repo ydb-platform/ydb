@@ -1,16 +1,16 @@
 #pragma once
 
 #include "ref.h"
-#include "ref_counted.h" 
+#include "ref_counted.h"
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Default memory tag for TBlob. 
+//! Default memory tag for TBlob.
 struct TDefaultBlobTag
 { };
- 
+
 //! A home-grown optimized replacement for |std::vector<char>| suitable for carrying
 //! large chunks of data.
 /*!
@@ -20,27 +20,27 @@ struct TDefaultBlobTag
 class TBlob
 {
 public:
-    //! Constructs a blob with a given size. 
+    //! Constructs a blob with a given size.
     TBlob(
         TRefCountedTypeCookie tagCookie,
         size_t size,
         bool initiailizeStorage = true,
         bool pageAligned = false);
- 
-    //! Copies a chunk of memory into a new instance. 
+
+    //! Copies a chunk of memory into a new instance.
     TBlob(
         TRefCountedTypeCookie tagCookie,
         TRef data,
         bool pageAligned = false);
- 
+
     //! Constructs an empty blob.
-    template <class TTag = TDefaultBlobTag> 
+    template <class TTag = TDefaultBlobTag>
     explicit TBlob(TTag tag = {})
         : TBlob(tag, 0, true, false)
-    { } 
+    { }
 
     //! Constructs a blob with a given size.
-    template <class TTag> 
+    template <class TTag>
     explicit TBlob(
         TTag,
         size_t size,
@@ -51,10 +51,10 @@ public:
             size,
             initiailizeStorage,
             pageAligned)
-    { } 
+    { }
 
-    //! Copies a chunk of memory into a new instance. 
-    template <class TTag> 
+    //! Copies a chunk of memory into a new instance.
+    template <class TTag>
     TBlob(
         TTag,
         TRef data,
@@ -63,21 +63,21 @@ public:
             GetRefCountedTypeCookie<TTag>(),
             data,
             pageAligned)
-    { } 
- 
-    //! Remind user about the tag argument. 
-    TBlob(i32 size, bool initiailizeStorage = true) = delete; 
-    TBlob(i64 size, bool initiailizeStorage = true) = delete; 
-    TBlob(ui32 size, bool initiailizeStorage = true) = delete; 
-    TBlob(ui64 size, bool initiailizeStorage = true) = delete; 
+    { }
+
+    //! Remind user about the tag argument.
+    TBlob(i32 size, bool initiailizeStorage = true) = delete;
+    TBlob(i64 size, bool initiailizeStorage = true) = delete;
+    TBlob(ui32 size, bool initiailizeStorage = true) = delete;
+    TBlob(ui64 size, bool initiailizeStorage = true) = delete;
     template <typename T, typename U>
     TBlob(const T*, U) = delete;
- 
+
     //! Copies the data.
     TBlob(const TBlob& other);
 
     //! Moves the data (takes the ownership).
-    TBlob(TBlob&& other) noexcept; 
+    TBlob(TBlob&& other) noexcept;
 
     //! Reclaims the memory.
     ~TBlob();
@@ -176,7 +176,7 @@ public:
     TBlob& operator = (const TBlob& rhs);
 
     //! Takes the ownership.
-    TBlob& operator = (TBlob&& rhs) noexcept; 
+    TBlob& operator = (TBlob&& rhs) noexcept;
 
     //! Appends a chunk of memory to the end.
     void Append(const void* data, size_t size);
@@ -198,15 +198,15 @@ private:
     size_t Capacity_ = 0;
     bool PageAligned_ = false;
 
-#ifdef YT_ENABLE_REF_COUNTED_TRACKING 
+#ifdef YT_ENABLE_REF_COUNTED_TRACKING
     TRefCountedTypeCookie TagCookie_ = NullRefCountedTypeCookie;
-#endif 
- 
+#endif
+
     char* DoAllocate(size_t newCapacity);
-    void Allocate(size_t newCapacity); 
-    void Reallocate(size_t newCapacity); 
-    void Free(); 
- 
+    void Allocate(size_t newCapacity);
+    void Reallocate(size_t newCapacity);
+    void Free();
+
     void Reset();
 
     void SetTagCookie(TRefCountedTypeCookie tagCookie);

@@ -160,11 +160,11 @@ public:
         return Length_;
     }
 
-    size_t size() const 
-    { 
-        return Size(); 
-    } 
- 
+    size_t size() const
+    {
+        return Size();
+    }
+
     const T& operator[](size_t index) const
     {
         YT_ASSERT(index < Size());

@@ -24,7 +24,7 @@
 #ifndef PIRE_SCANNERS_SIMPLE_H
 #define PIRE_SCANNERS_SIMPLE_H
 
-#include <contrib/libs/pire/pire/approx_matching.h> 
+#include <contrib/libs/pire/pire/approx_matching.h>
 #include <contrib/libs/pire/pire/stub/stl.h>
 #include <contrib/libs/pire/pire/stub/defaults.h>
 #include <contrib/libs/pire/pire/stub/saveload.h>
@@ -49,7 +49,7 @@ public:
 
 	SimpleScanner()	{ Alias(Null()); }
 
-	explicit SimpleScanner(Fsm& fsm, size_t distance = 0); 
+	explicit SimpleScanner(Fsm& fsm, size_t distance = 0);
 
 	size_t Size() const { return m.statesCount; }
 	bool Empty() const { return m_transitions == Null().m_transitions; }
@@ -229,11 +229,11 @@ protected:
 	}
 
 };
-inline SimpleScanner::SimpleScanner(Fsm& fsm, size_t distance) 
+inline SimpleScanner::SimpleScanner(Fsm& fsm, size_t distance)
 {
-	if (distance) { 
-		fsm = CreateApproxFsm(fsm, distance); 
-	} 
+	if (distance) {
+		fsm = CreateApproxFsm(fsm, distance);
+	}
 	fsm.Canonize();
 
 	m.statesCount = fsm.Size();

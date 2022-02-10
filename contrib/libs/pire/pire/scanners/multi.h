@@ -26,7 +26,7 @@
 
 #include <cstring>
 #include <string.h>
-#include <contrib/libs/pire/pire/approx_matching.h> 
+#include <contrib/libs/pire/pire/approx_matching.h>
 #include <contrib/libs/pire/pire/fsm.h>
 #include <contrib/libs/pire/pire/partition.h>
 #include <contrib/libs/pire/pire/run.h>
@@ -121,11 +121,11 @@ public:
 
 	Scanner() { Alias(Null()); }
 
-	explicit Scanner(Fsm& fsm, size_t distance = 0) 
+	explicit Scanner(Fsm& fsm, size_t distance = 0)
 	{
-		if (distance) { 
-			fsm = CreateApproxFsm(fsm, distance); 
-		} 
+		if (distance) {
+			fsm = CreateApproxFsm(fsm, distance);
+		}
 		fsm.Canonize();
 		Init(fsm.Size(), fsm.Letters(), fsm.Finals().size(), fsm.Initial(), 1);
 		BuildScanner(fsm, *this);

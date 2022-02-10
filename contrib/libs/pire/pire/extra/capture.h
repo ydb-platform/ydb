@@ -25,7 +25,7 @@
 #define PIRE_EXTRA_CAPTURE_H
 
 
-#include <contrib/libs/pire/pire/approx_matching.h> 
+#include <contrib/libs/pire/pire/approx_matching.h>
 #include <contrib/libs/pire/pire/scanners/loaded.h>
 #include <contrib/libs/pire/pire/scanners/multi.h>
 #include <contrib/libs/pire/pire/scanners/slow.h>
@@ -139,11 +139,11 @@ public:
 
 	CapturingScanner() {}
 	CapturingScanner(const CapturingScanner& s): LoadedScanner(s) {}
-	explicit CapturingScanner(Fsm& fsm, size_t distance = 0) 
+	explicit CapturingScanner(Fsm& fsm, size_t distance = 0)
 	{
-		if (distance) { 
-			fsm = CreateApproxFsm(fsm, distance); 
-		} 
+		if (distance) {
+			fsm = CreateApproxFsm(fsm, distance);
+		}
 		fsm.Canonize();
 		Init(fsm.Size(), fsm.Letters(), fsm.Initial());
 		BuildScanner(fsm, *this);
@@ -576,8 +576,8 @@ public:
 	{
 	}
 
-	SlowCapturingScanner(Fsm& fsm, size_t distance = 0) 
-		: SlowScanner(fsm, true, false, distance) 
+	SlowCapturingScanner(Fsm& fsm, size_t distance = 0)
+		: SlowScanner(fsm, true, false, distance)
 	{
 	}
 };

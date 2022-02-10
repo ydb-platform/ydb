@@ -291,7 +291,7 @@ RECURSE(
     django-reversion
     django-select2-forms
     django-sentinel
-    django-simple-history
+    django-simple-history 
     django-siteforms
     django-sitemessage
     django-sitetree

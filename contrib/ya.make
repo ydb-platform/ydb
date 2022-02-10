@@ -5,7 +5,7 @@ RECURSE(
     java
     libs
     nginx
-    node_modules
+    node_modules 
     phantom/pd/ssl
     python
     restricted

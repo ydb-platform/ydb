@@ -156,9 +156,9 @@ def split(data, func):
         else:
             r.append(e)
     return l, r
- 
- 
-def flatten_dict(dd, separator='.', prefix=''): 
+
+
+def flatten_dict(dd, separator='.', prefix=''):
     return (
         {
             prefix + separator + k if prefix else k: v

@@ -730,7 +730,7 @@ RECURSE(
     pdfminer.six
     pecan
     peewee
-    peewee/playhouse 
+    peewee/playhouse
     pefile
     pem
     pexpect

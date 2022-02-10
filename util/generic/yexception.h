@@ -86,34 +86,34 @@ Y_DECLARE_OUT_SPEC(inline, yexception, stream, value) {
     stream << value.AsStrBuf();
 }
 
-class TSystemError: public yexception {
+class TSystemError: public yexception { 
 public:
-    TSystemError(int status)
-        : Status_(status)
+    TSystemError(int status) 
+        : Status_(status) 
     {
         Init();
     }
 
-    TSystemError()
-        : TSystemError(LastSystemError())
+    TSystemError() 
+        : TSystemError(LastSystemError()) 
     {
     }
-
-    int Status() const noexcept {
-        return Status_;
+ 
+    int Status() const noexcept { 
+        return Status_; 
     }
 
 private:
     void Init();
-
-private:
-    int Status_;
+ 
+private: 
+    int Status_; 
 };
 
-class TIoException: public TSystemError {
+class TIoException: public TSystemError { 
 };
 
-class TIoSystemError: public TIoException {
+class TIoSystemError: public TIoException { 
 };
 
 class TFileError: public TIoSystemError {

@@ -177,22 +177,22 @@ message TWithJsonName {
     optional int32 Def_upper = 3; // json_name = "DefUpper"
     optional int32 def_lower = 4; // json_name = "defLower"
 }
-
-message TSingleRequiredString {
-    required string String = 1;
-}
-
-message TSingleDefaultString {
-    optional string String = 1 [default = "value"];
-}
-
-message TSingleRepeatedString {
-    repeated string RepeatedString = 1;
-}
-
-message TSingleRepeatedInt {
-    repeated int32 RepeatedInt = 1;
-}
+ 
+message TSingleRequiredString { 
+    required string String = 1; 
+} 
+ 
+message TSingleDefaultString { 
+    optional string String = 1 [default = "value"]; 
+} 
+ 
+message TSingleRepeatedString { 
+    repeated string RepeatedString = 1; 
+} 
+ 
+message TSingleRepeatedInt { 
+    repeated int32 RepeatedInt = 1; 
+} 
 
 message TExtensionField {
 	extensions 100 to 199;

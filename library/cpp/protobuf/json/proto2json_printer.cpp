@@ -205,18 +205,18 @@ namespace NProtobufJson {
 
         const Reflection* reflection = proto.GetReflection();
 
-        bool shouldPrintField = reflection->HasField(proto, &field);
-        if (!shouldPrintField && GetConfig().MissingSingleKeyMode == TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired) {
-            if (field.has_default_value()) {
-                shouldPrintField = true;
-            } else if (field.is_required()) {
-                ythrow yexception() << "Empty required protobuf field: "
-                                    << field.full_name() << ".";
-            }
-        }
-        shouldPrintField = shouldPrintField || GetConfig().MissingSingleKeyMode == TProto2JsonConfig::MissingKeyDefault;
-
-        if (shouldPrintField) {
+        bool shouldPrintField = reflection->HasField(proto, &field); 
+        if (!shouldPrintField && GetConfig().MissingSingleKeyMode == TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired) { 
+            if (field.has_default_value()) { 
+                shouldPrintField = true; 
+            } else if (field.is_required()) { 
+                ythrow yexception() << "Empty required protobuf field: " 
+                                    << field.full_name() << "."; 
+            } 
+        } 
+        shouldPrintField = shouldPrintField || GetConfig().MissingSingleKeyMode == TProto2JsonConfig::MissingKeyDefault; 
+ 
+        if (shouldPrintField) { 
             switch (field.cpp_type()) {
                 INT_FIELD_TO_JSON(CPPTYPE_INT32, GetInt32);
                 INT_FIELD_TO_JSON(CPPTYPE_INT64, GetInt64);
@@ -256,7 +256,7 @@ namespace NProtobufJson {
                 }
 
                 case TProto2JsonConfig::MissingKeySkip:
-                case TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired:
+                case TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired: 
                 default:
                     break;
             }
@@ -358,7 +358,7 @@ namespace NProtobufJson {
                 }
 
                 case TProto2JsonConfig::MissingKeySkip:
-                case TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired:
+                case TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired: 
                 default:
                     break;
             }

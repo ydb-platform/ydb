@@ -297,7 +297,7 @@ public:
     void Evict(void* ptr, size_t len) {
         MadviseEvict(ptr, len);
     }
-
+ 
     void Evict() {
 #if defined(_unix_)
 //        Evict(PtrStart_, Length_);
@@ -309,7 +309,7 @@ public:
         if (Mapping_) {
             ::CloseHandle(Mapping_); // != FALSE
             Mapping_ = nullptr;
-        }
+        } 
 #elif defined(_unix_)
         if (PtrStart_) {
             munmap((caddr_t)PtrStart_, Length_);
@@ -411,14 +411,14 @@ void TMemoryMap::SetSequential() {
     Impl_->SetSequential();
 }
 
-void TMemoryMap::Evict(void* ptr, size_t len) {
-    Impl_->Evict(ptr, len);
-}
-
-void TMemoryMap::Evict() {
-    Impl_->Evict();
-}
-
+void TMemoryMap::Evict(void* ptr, size_t len) { 
+    Impl_->Evict(ptr, len); 
+} 
+ 
+void TMemoryMap::Evict() { 
+    Impl_->Evict(); 
+} 
+ 
 i64 TMemoryMap::Length() const noexcept {
     return Impl_->Length();
 }

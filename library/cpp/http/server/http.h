@@ -64,7 +64,7 @@ public:
     typedef THttpServerOptions TOptions;
     typedef TSimpleSharedPtr<IThreadPool> TMtpQueueRef;
 
-    THttpServer(ICallBack* cb, const TOptions& options = TOptions(), IThreadFactory* pool = nullptr);
+    THttpServer(ICallBack* cb, const TOptions& options = TOptions(), IThreadFactory* pool = nullptr); 
     THttpServer(ICallBack* cb, TMtpQueueRef mainWorkers, TMtpQueueRef failWorkers, const TOptions& options = TOptions());
     virtual ~THttpServer();
 

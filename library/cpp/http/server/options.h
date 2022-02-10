@@ -124,13 +124,13 @@ public:
         return *this;
     }
 
-    /// Use TElasticQueue instead of TThreadPool for request queues
-    inline THttpServerOptions& EnableElasticQueues(bool enable) noexcept {
-        UseElasticQueues = enable;
-
-        return *this;
-    }
-
+    /// Use TElasticQueue instead of TThreadPool for request queues 
+    inline THttpServerOptions& EnableElasticQueues(bool enable) noexcept { 
+        UseElasticQueues = enable; 
+ 
+        return *this; 
+    } 
+ 
     inline THttpServerOptions& SetThreadsName(const TString& listenThreadName, const TString& requestsThreadName, const TString& failRequestsThreadName) noexcept {
         ListenThreadName = listenThreadName;
         RequestsThreadName = requestsThreadName;
@@ -165,7 +165,7 @@ public:
     size_t OutputBufferSize = 0;
     ui64 MaxInputContentLength = sizeof(size_t) <= 4 ? 2_GB : 64_GB;
     size_t MaxRequestsPerConnection = 0;  // If keep-alive is enabled, request limit before connection is closed
-    bool UseElasticQueues = false;
+    bool UseElasticQueues = false; 
 
     TDuration PollTimeout; // timeout of TSocketPoller::WaitT call
     TDuration ExpirationTimeout; // drop inactive connections after ExpirationTimeout (should be > 0)

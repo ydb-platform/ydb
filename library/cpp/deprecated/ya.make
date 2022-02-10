@@ -23,11 +23,11 @@ RECURSE(
     mapped_file
     mapped_file/ut
     mbitmap
-    omni
+    omni 
     text_norm
-    omni/print_omni
-    omni/usage
-    omni/ut
+    omni/print_omni 
+    omni/usage 
+    omni/ut 
     prog_options
     prog_options/ut
     sgi_hash

@@ -33,7 +33,7 @@ SRCS(
     GLOBAL rotating_file_creator.cpp
     stream.cpp
     GLOBAL stream_creator.cpp
-    sync_page_cache_file.cpp
+    sync_page_cache_file.cpp 
     GLOBAL sync_page_cache_file_creator.cpp
     system.cpp
     GLOBAL system_creator.cpp

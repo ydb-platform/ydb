@@ -51,57 +51,57 @@ private:
     int Value_ = 0;
 };
 
-class TOperationsChecker {
-public:
-    TOperationsChecker() {
+class TOperationsChecker { 
+public: 
+    TOperationsChecker() { 
         ++DefaultCtor_;
-    }
-
-    TOperationsChecker(TOperationsChecker&&) {
+    } 
+ 
+    TOperationsChecker(TOperationsChecker&&) { 
         ++MoveCtor_;
-    }
-
-    TOperationsChecker(const TOperationsChecker&) {
+    } 
+ 
+    TOperationsChecker(const TOperationsChecker&) { 
         ++CopyCtor_;
-    }
-
-    TOperationsChecker& operator=(TOperationsChecker&&) {
+    } 
+ 
+    TOperationsChecker& operator=(TOperationsChecker&&) { 
         ++MoveAssign_;
-        return *this;
-    }
-
-    TOperationsChecker& operator=(const TOperationsChecker&) {
+        return *this; 
+    } 
+ 
+    TOperationsChecker& operator=(const TOperationsChecker&) { 
         ++CopyAssign_;
-        return *this;
-    }
-
-    static void Check(int defaultCtor, int moveCtor, int copyCtor, int moveAssign, int copyAssign) {
-        UNIT_ASSERT_VALUES_EQUAL(defaultCtor, DefaultCtor_);
-        UNIT_ASSERT_VALUES_EQUAL(moveCtor, MoveCtor_);
-        UNIT_ASSERT_VALUES_EQUAL(copyCtor, CopyCtor_);
-        UNIT_ASSERT_VALUES_EQUAL(moveAssign, MoveAssign_);
-        UNIT_ASSERT_VALUES_EQUAL(copyAssign, CopyAssign_);
-        Clear();
-    }
-
-private:
-    static void Clear() {
-        DefaultCtor_ = MoveCtor_ = CopyCtor_ = MoveAssign_ = CopyAssign_ = 0;
-    }
-
-    static int DefaultCtor_;
-    static int MoveCtor_;
-    static int CopyCtor_;
-    static int MoveAssign_;
-    static int CopyAssign_;
-};
-
-int TOperationsChecker::DefaultCtor_ = 0;
-int TOperationsChecker::MoveCtor_ = 0;
-int TOperationsChecker::CopyCtor_ = 0;
-int TOperationsChecker::MoveAssign_ = 0;
-int TOperationsChecker::CopyAssign_ = 0;
-
+        return *this; 
+    } 
+ 
+    static void Check(int defaultCtor, int moveCtor, int copyCtor, int moveAssign, int copyAssign) { 
+        UNIT_ASSERT_VALUES_EQUAL(defaultCtor, DefaultCtor_); 
+        UNIT_ASSERT_VALUES_EQUAL(moveCtor, MoveCtor_); 
+        UNIT_ASSERT_VALUES_EQUAL(copyCtor, CopyCtor_); 
+        UNIT_ASSERT_VALUES_EQUAL(moveAssign, MoveAssign_); 
+        UNIT_ASSERT_VALUES_EQUAL(copyAssign, CopyAssign_); 
+        Clear(); 
+    } 
+ 
+private: 
+    static void Clear() { 
+        DefaultCtor_ = MoveCtor_ = CopyCtor_ = MoveAssign_ = CopyAssign_ = 0; 
+    } 
+ 
+    static int DefaultCtor_; 
+    static int MoveCtor_; 
+    static int CopyCtor_; 
+    static int MoveAssign_; 
+    static int CopyAssign_; 
+}; 
+ 
+int TOperationsChecker::DefaultCtor_ = 0; 
+int TOperationsChecker::MoveCtor_ = 0; 
+int TOperationsChecker::CopyCtor_ = 0; 
+int TOperationsChecker::MoveAssign_ = 0; 
+int TOperationsChecker::CopyAssign_ = 0; 
+ 
 Y_UNIT_TEST_SUITE(TLockFreeQueueTests) {
     Y_UNIT_TEST(TestMoveEnqueue) {
         TMoveTest value(0xFF, 0xAA);
@@ -317,17 +317,17 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, p.RefCount());
     }
-
+ 
     Y_UNIT_TEST(CheckOperationsCount) {
-        TOperationsChecker o;
-        o.Check(1, 0, 0, 0, 0);
-        TLockFreeQueue<TOperationsChecker> queue;
-        o.Check(0, 0, 0, 0, 0);
-        queue.Enqueue(std::move(o));
-        o.Check(0, 1, 0, 0, 0);
-        queue.Enqueue(o);
-        o.Check(0, 0, 1, 0, 0);
-        queue.Dequeue(&o);
-        o.Check(0, 0, 2, 1, 0);
-    }
+        TOperationsChecker o; 
+        o.Check(1, 0, 0, 0, 0); 
+        TLockFreeQueue<TOperationsChecker> queue; 
+        o.Check(0, 0, 0, 0, 0); 
+        queue.Enqueue(std::move(o)); 
+        o.Check(0, 1, 0, 0, 0); 
+        queue.Enqueue(o); 
+        o.Check(0, 0, 1, 0, 0); 
+        queue.Dequeue(&o); 
+        o.Check(0, 0, 2, 1, 0); 
+    } 
 }

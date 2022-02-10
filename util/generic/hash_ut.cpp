@@ -15,7 +15,7 @@ class THashTest: public TTestBase {
     UNIT_TEST_SUITE(THashTest);
     UNIT_TEST(TestHMapConstructorsAndAssignments);
     UNIT_TEST(TestHMap1);
-    UNIT_TEST(TestHMapEqualityOperator);
+    UNIT_TEST(TestHMapEqualityOperator); 
     UNIT_TEST(TestHMMapEqualityOperator);
     UNIT_TEST(TestHMMapConstructorsAndAssignments);
     UNIT_TEST(TestHMMap1);
@@ -23,11 +23,11 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestHSetConstructorsAndAssignments);
     UNIT_TEST(TestHSetSize);
     UNIT_TEST(TestHSet2);
-    UNIT_TEST(TestHSetEqualityOperator);
+    UNIT_TEST(TestHSetEqualityOperator); 
     UNIT_TEST(TestHMSetConstructorsAndAssignments);
     UNIT_TEST(TestHMSetSize);
     UNIT_TEST(TestHMSet1);
-    UNIT_TEST(TestHMSetEqualityOperator);
+    UNIT_TEST(TestHMSetEqualityOperator); 
     UNIT_TEST(TestHMSetEmplace);
     UNIT_TEST(TestInsertErase);
     UNIT_TEST(TestResizeOnInsertSmartPtrBug)
@@ -66,7 +66,7 @@ class THashTest: public TTestBase {
 protected:
     void TestHMapConstructorsAndAssignments();
     void TestHMap1();
-    void TestHMapEqualityOperator();
+    void TestHMapEqualityOperator(); 
     void TestHMMapEqualityOperator();
     void TestHMMapConstructorsAndAssignments();
     void TestHMMap1();
@@ -74,11 +74,11 @@ protected:
     void TestHSetConstructorsAndAssignments();
     void TestHSetSize();
     void TestHSet2();
-    void TestHSetEqualityOperator();
+    void TestHSetEqualityOperator(); 
     void TestHMSetConstructorsAndAssignments();
     void TestHMSetSize();
     void TestHMSet1();
-    void TestHMSetEqualityOperator();
+    void TestHMSetEqualityOperator(); 
     void TestHMSetEmplace();
     void TestInsertErase();
     void TestResizeOnInsertSmartPtrBug();
@@ -202,29 +202,29 @@ void THashTest::TestHMap1() {
     UNIT_ASSERT(!(cite != (maptype::const_iterator)ite));
 }
 
-void THashTest::TestHMapEqualityOperator() {
+void THashTest::TestHMapEqualityOperator() { 
     using container = THashMap<TString, int>;
-
-    container base;
-    base["one"] = 1;
-    base["two"] = 2;
-
-    container c1(base);
-    UNIT_ASSERT(c1 == base);
-
-    container c2;
-    c2["two"] = 2;
-    c2["one"] = 1;
-    UNIT_ASSERT(c2 == base);
-
-    c2["three"] = 3;
+ 
+    container base; 
+    base["one"] = 1; 
+    base["two"] = 2; 
+ 
+    container c1(base); 
+    UNIT_ASSERT(c1 == base); 
+ 
+    container c2; 
+    c2["two"] = 2; 
+    c2["one"] = 1; 
+    UNIT_ASSERT(c2 == base); 
+ 
+    c2["three"] = 3; 
     UNIT_ASSERT(c2 != base);
-
-    container c3(base);
-    c3["one"] = 0;
+ 
+    container c3(base); 
+    c3["one"] = 0; 
     UNIT_ASSERT(c3 != base);
-}
-
+} 
+ 
 void THashTest::TestHMMapEqualityOperator() {
     using container = THashMultiMap<TString, int>;
     using value = container::value_type;
@@ -431,32 +431,32 @@ void THashTest::TestHSet2() {
     UNIT_ASSERT(!p.second);
 }
 
-void THashTest::TestHSetEqualityOperator() {
+void THashTest::TestHSetEqualityOperator() { 
     using container = THashSet<int>;
-
-    container base;
-    base.insert(1);
-    base.insert(2);
-
-    container c1(base);
-    UNIT_ASSERT(c1 == base);
-
-    c1.insert(1);
-    UNIT_ASSERT(c1 == base);
-
-    c1.insert(3);
+ 
+    container base; 
+    base.insert(1); 
+    base.insert(2); 
+ 
+    container c1(base); 
+    UNIT_ASSERT(c1 == base); 
+ 
+    c1.insert(1); 
+    UNIT_ASSERT(c1 == base); 
+ 
+    c1.insert(3); 
     UNIT_ASSERT(c1 != base);
-
-    container c2;
-    c2.insert(2);
-    c2.insert(1);
-    UNIT_ASSERT(c2 == base);
-
-    container c3;
-    c3.insert(1);
+ 
+    container c2; 
+    c2.insert(2); 
+    c2.insert(1); 
+    UNIT_ASSERT(c2 == base); 
+ 
+    container c3; 
+    c3.insert(1); 
     UNIT_ASSERT(c3 != base);
-}
-
+} 
+ 
 void THashTest::TestHMSetConstructorsAndAssignments() {
     using container = THashMultiSet<int>;
 
@@ -522,38 +522,38 @@ void THashTest::TestHMSet1() {
     UNIT_ASSERT(s.erase(star) == 2);
 }
 
-void THashTest::TestHMSetEqualityOperator() {
+void THashTest::TestHMSetEqualityOperator() { 
     using container = THashMultiSet<int>;
-
-    container base;
-    base.insert(1);
-    base.insert(1);
-    base.insert(2);
-
-    container c1(base);
-    UNIT_ASSERT(c1 == base);
-
-    c1.insert(1);
-    UNIT_ASSERT(!(c1 == base));
-
-    container c2;
-    c2.insert(2);
-    c2.insert(1);
-    c2.insert(1);
-    UNIT_ASSERT(c2 == base);
-
-    container c3;
-    c3.insert(1);
-    c3.insert(2);
-    UNIT_ASSERT(!(c3 == base));
-
-    c3.insert(1);
-    UNIT_ASSERT(c3 == base);
-
-    c3.insert(3);
-    UNIT_ASSERT(!(c3 == base));
-}
-
+ 
+    container base; 
+    base.insert(1); 
+    base.insert(1); 
+    base.insert(2); 
+ 
+    container c1(base); 
+    UNIT_ASSERT(c1 == base); 
+ 
+    c1.insert(1); 
+    UNIT_ASSERT(!(c1 == base)); 
+ 
+    container c2; 
+    c2.insert(2); 
+    c2.insert(1); 
+    c2.insert(1); 
+    UNIT_ASSERT(c2 == base); 
+ 
+    container c3; 
+    c3.insert(1); 
+    c3.insert(2); 
+    UNIT_ASSERT(!(c3 == base)); 
+ 
+    c3.insert(1); 
+    UNIT_ASSERT(c3 == base); 
+ 
+    c3.insert(3); 
+    UNIT_ASSERT(!(c3 == base)); 
+} 
+ 
 void THashTest::TestHMSetEmplace() {
     class TKey: public NTesting::TProbe {
     public:

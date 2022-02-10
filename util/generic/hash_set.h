@@ -262,15 +262,15 @@ public:
 
 template <class Value, class HashFcn, class EqualKey, class Alloc>
 inline bool operator==(const THashSet<Value, HashFcn, EqualKey, Alloc>& hs1, const THashSet<Value, HashFcn, EqualKey, Alloc>& hs2) {
-    if (hs1.size() != hs2.size()) {
-        return false;
-    }
-    for (const auto& it : hs1) {
+    if (hs1.size() != hs2.size()) { 
+        return false; 
+    } 
+    for (const auto& it : hs1) { 
         if (!hs2.contains(it)) {
-            return false;
-        }
-    }
-    return true;
+            return false; 
+        } 
+    } 
+    return true; 
 }
 
 template <class Value, class HashFcn, class EqualKey, class Alloc>
@@ -465,21 +465,21 @@ public:
 
 template <class Val, class HashFcn, class EqualKey, class Alloc>
 inline bool operator==(const THashMultiSet<Val, HashFcn, EqualKey, Alloc>& hs1, const THashMultiSet<Val, HashFcn, EqualKey, Alloc>& hs2) {
-    if (hs1.size() != hs2.size()) {
-        return false;
-    }
-    EqualKey equalKey;
-    auto it = hs1.begin();
-    while (it != hs1.end()) {
-        const auto& value = *it;
-        size_t count = 0;
-        for (; (it != hs1.end()) && (equalKey(*it, value)); ++it, ++count) {
-        }
-        if (hs2.count(value) != count) {
-            return false;
-        }
-    }
-    return true;
+    if (hs1.size() != hs2.size()) { 
+        return false; 
+    } 
+    EqualKey equalKey; 
+    auto it = hs1.begin(); 
+    while (it != hs1.end()) { 
+        const auto& value = *it; 
+        size_t count = 0; 
+        for (; (it != hs1.end()) && (equalKey(*it, value)); ++it, ++count) { 
+        } 
+        if (hs2.count(value) != count) { 
+            return false; 
+        } 
+    } 
+    return true; 
 }
 
 template <class Val, class HashFcn, class EqualKey, class Alloc>

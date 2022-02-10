@@ -7,8 +7,8 @@
 #include <util/generic/intrlist.h>
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>
-#include <util/generic/ymath.h>
-#include <util/string/printf.h>
+#include <util/generic/ymath.h> 
+#include <util/string/printf.h> 
 
 namespace {
     struct TEmpty {
@@ -97,11 +97,11 @@ namespace NKiwiAggr {
     }
 
     void TBlockHistogram::Clear() {
-        PrevSize = 0;
-        Sum = 0.0;
-        MinValue = 0.0;
-        MaxValue = 0.0;
-        Bins.clear();
+        PrevSize = 0; 
+        Sum = 0.0; 
+        MinValue = 0.0; 
+        MaxValue = 0.0; 
+        Bins.clear(); 
     }
 
     void TBlockHistogram::Add(const THistoRec& rec) {
@@ -111,10 +111,10 @@ namespace NKiwiAggr {
     }
 
     void TBlockHistogram::Add(double value, double weight) {
-        if (!IsValidFloat(value) || !IsValidFloat(weight)) {
+        if (!IsValidFloat(value) || !IsValidFloat(weight)) { 
             ythrow yexception() << Sprintf("Histogram id %lu: bad value %f weight %f", Id, value, weight);
-        }
-
+        } 
+ 
         if (weight <= 0.0) {
             return; // all zero-weighted values should be skipped because they don't affect the distribution, negative weights are forbidden
         }
@@ -129,9 +129,9 @@ namespace NKiwiAggr {
 
         Sum += weight;
 
-        if (Bins.size() > ShrinkSize) {
+        if (Bins.size() > ShrinkSize) { 
             SortAndShrink(Intervals * SHRINK_MULTIPLIER);
-        }
+        } 
 
         Bins.push_back(TWeightedValue(value, weight));
     }
@@ -156,7 +156,7 @@ namespace NKiwiAggr {
                 if (!IsValidFloat(value) || !IsValidFloat(weight)) {
                     fprintf(stderr, "Merging in histogram id %lu: skip bad value %f weight %f\n", Id, value, weight);
                     continue;
-                }
+                } 
                 Add(value, weight * multiplier);
             }
 
@@ -168,20 +168,20 @@ namespace NKiwiAggr {
                 double weight = histo.GetFreq(j);
                 if (!IsValidFloat(pos) || !IsValidFloat(weight)) {
                     fprintf(stderr, "Merging in histogram id %lu: skip bad value %f weight %f\n", Id, pos, weight);
-                    pos += histo.GetBinRange();
+                    pos += histo.GetBinRange(); 
                     continue;
-                }
+                } 
                 Add(pos, weight * multiplier);
                 pos += histo.GetBinRange();
             }
-
+ 
             MinValue = Min(MinValue, histo.GetMinValue());
             MaxValue = Max(MaxValue, histo.GetMaxValue());
         } else {
             ythrow yexception() << "Unknown THistogram type";
-        }
-    }
-
+        } 
+    } 
+ 
     void TBlockHistogram::Merge(const TVector<THistogram>& histogramsToMerge) {
         for (size_t i = 0; i < histogramsToMerge.size(); ++i) {
             Merge(histogramsToMerge[i], 1.0);
@@ -191,18 +191,18 @@ namespace NKiwiAggr {
     void TBlockHistogram::Merge(TVector<IHistogramPtr> histogramsToMerge) {
         Y_UNUSED(histogramsToMerge);
         ythrow yexception() << "IHistogram::Merge(TVector<IHistogramPtr>) is not defined for TBlockHistogram";
-    }
-
+    } 
+ 
     void TBlockHistogram::Multiply(double factor) {
-        if (!IsValidFloat(factor) || factor <= 0) {
-            ythrow yexception() << "Not valid factor in IHistogram::Multiply(): " << factor;
-        }
-        Sum *= factor;
+        if (!IsValidFloat(factor) || factor <= 0) { 
+            ythrow yexception() << "Not valid factor in IHistogram::Multiply(): " << factor; 
+        } 
+        Sum *= factor; 
         for (TVector<TWeightedValue>::iterator it = Bins.begin(); it != Bins.end(); ++it) {
-            it->second *= factor;
-        }
-    }
-
+            it->second *= factor; 
+        } 
+    } 
+ 
     void TBlockHistogram::FromProto(const THistogram& histo) {
         Y_VERIFY(histo.HasType(), "Attempt to parse TBlockHistogram from THistogram protobuf with no Type field set");
         ;
@@ -226,20 +226,20 @@ namespace NKiwiAggr {
         Bins.resize(histo.FreqSize());
         PrevSize = Bins.size();
         for (size_t i = 0; i < histo.FreqSize(); ++i) {
-            double value = histo.GetPosition(i);
-            double weight = histo.GetFreq(i);
-            if (!IsValidFloat(value) || !IsValidFloat(weight)) {
+            double value = histo.GetPosition(i); 
+            double weight = histo.GetFreq(i); 
+            if (!IsValidFloat(value) || !IsValidFloat(weight)) { 
                 fprintf(stderr, "FromProto in histogram id %lu: skip bad value %f weight %f\n", Id, value, weight);
-                continue;
-            }
-            Bins[i].first = value;
-            Bins[i].second = weight;
+                continue; 
+            } 
+            Bins[i].first = value; 
+            Bins[i].second = weight; 
             Sum += Bins[i].second;
         }
-
-        if (!IsValidFloat(histo.GetMinValue()) || !IsValidFloat(histo.GetMaxValue())) {
+ 
+        if (!IsValidFloat(histo.GetMinValue()) || !IsValidFloat(histo.GetMaxValue())) { 
             ythrow yexception() << Sprintf("FromProto in histogram id %lu: skip bad histo with minvalue %f maxvalue %f", Id, histo.GetMinValue(), histo.GetMaxValue());
-        }
+        } 
         MinValue = histo.GetMinValue();
         MaxValue = histo.GetMaxValue();
     }
@@ -262,9 +262,9 @@ namespace NKiwiAggr {
     }
 
     void TBlockHistogram::SetId(ui64 id) {
-        Id = id;
-    }
-
+        Id = id; 
+    } 
+ 
     ui64 TBlockHistogram::GetId() {
         return Id;
     }
@@ -274,11 +274,11 @@ namespace NKiwiAggr {
     }
 
     double TBlockHistogram::GetMinValue() {
-        return MinValue;
+        return MinValue; 
     }
 
     double TBlockHistogram::GetMaxValue() {
-        return MaxValue;
+        return MaxValue; 
     }
 
     double TBlockHistogram::GetSum() {
@@ -288,9 +288,9 @@ namespace NKiwiAggr {
     void TBlockHistogram::SortAndShrink(size_t intervals, bool final) {
         Y_VERIFY(intervals > 0);
 
-        if (Bins.size() <= intervals) {
+        if (Bins.size() <= intervals) { 
             return;
-        }
+        } 
 
         if (Bins.size() >= Intervals * GREEDY_SHRINK_MULTIPLIER) {
             SortBins();
@@ -301,7 +301,7 @@ namespace NKiwiAggr {
                 SlowShrink(intervals);
             }
 
-        } else {
+        } else { 
             SortBins();
             UniquifyBins();
             SlowShrink(intervals);
@@ -351,9 +351,9 @@ namespace NKiwiAggr {
             PrevSize = pos + 1;
         }
 
-        if (Bins.size() <= intervals) {
+        if (Bins.size() <= intervals) { 
             return;
-        }
+        } 
 
         typedef TIntrusiveListItem<TEmpty> TListItem;
 
@@ -363,15 +363,15 @@ namespace NKiwiAggr {
         TArrayHolder<TListItem> listElementsHolder(new TListItem[end + 1]);
         TListItem* const bins = listElementsHolder.Get();
 
-        for (ui32 i = 1; i <= end; ++i) {
+        for (ui32 i = 1; i <= end; ++i) { 
             bins[i].LinkAfter(&bins[i - 1]);
-        }
+        } 
 
         TVector<double> pairWeights(n);
 
-        for (ui32 i = 0; i < n; ++i) {
+        for (ui32 i = 0; i < n; ++i) { 
             pairWeights[i] = CalcQuality(Bins[i], Bins[i + 1]).first;
-        }
+        } 
 
         TSmartHeap heap(pairWeights);
 

@@ -573,38 +573,38 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
 Y_UNIT_TEST_SUITE(TDurationParseTest) {
     Y_UNIT_TEST(TestParse) {
         UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(60 * 60 * 24 * 7), TDuration::Parse("1w"));
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(60), TDuration::Parse("1m")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(90), TDuration::Parse("1.5m")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(102), TDuration::Parse("1.7m")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(119400), TDuration::Parse("1.99m")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(119940), TDuration::Parse("1.999m")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(119994), TDuration::Parse("1.9999m")); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Minutes(60), TDuration::Parse("1h")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Minutes(90), TDuration::Parse("1.5h")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Minutes(102), TDuration::Parse("1.7h")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(7164), TDuration::Parse("1.99h")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(7196400), TDuration::Parse("1.999h")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(7199640), TDuration::Parse("1.9999h")); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(60), TDuration::Parse("1m"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(90), TDuration::Parse("1.5m"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(102), TDuration::Parse("1.7m"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(119400), TDuration::Parse("1.99m"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(119940), TDuration::Parse("1.999m"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(119994), TDuration::Parse("1.9999m"));
+
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Minutes(60), TDuration::Parse("1h"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Minutes(90), TDuration::Parse("1.5h"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Minutes(102), TDuration::Parse("1.7h"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(7164), TDuration::Parse("1.99h"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(7196400), TDuration::Parse("1.999h"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(7199640), TDuration::Parse("1.9999h"));
+
         UNIT_ASSERT_EQUAL(TDuration::Minutes(15), TDuration::Parse("15m"));
         UNIT_ASSERT_EQUAL(TDuration::Hours(10), TDuration::Parse("10h"));
         UNIT_ASSERT_EQUAL(TDuration::Days(365), TDuration::Parse("365d"));
         UNIT_ASSERT_EQUAL(TDuration::Hours(36), TDuration::Parse("1.5d"));
 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Hours(24), TDuration::Parse("1d")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Hours(36), TDuration::Parse("1.5d")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Minutes(2448), TDuration::Parse("1.7d")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(171936), TDuration::Parse("1.99d")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(172713600), TDuration::Parse("1.999d")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(172791360), TDuration::Parse("1.9999d")); 
- 
-#if 0 // not implemented 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(90), TDuration::Parse("1m30s")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Minutes(90), TDuration::Parse("1h30m")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Hours(36), TDuration::Parse("1d12h")); 
-#endif 
- 
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Hours(24), TDuration::Parse("1d"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Hours(36), TDuration::Parse("1.5d"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Minutes(2448), TDuration::Parse("1.7d"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(171936), TDuration::Parse("1.99d"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(172713600), TDuration::Parse("1.999d"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(172791360), TDuration::Parse("1.9999d"));
+
+#if 0 // not implemented
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(90), TDuration::Parse("1m30s"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Minutes(90), TDuration::Parse("1h30m"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Hours(36), TDuration::Parse("1d12h"));
+#endif
+
         UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(10), TDuration::Parse("10s"));
         UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(10), TDuration::Parse("10.000s"));
         UNIT_ASSERT_VALUES_EQUAL(TDuration::MicroSeconds(4), TDuration::Parse("0.000004s"));

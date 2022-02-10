@@ -176,7 +176,7 @@ RECURSE(
     webxmltest
     wizard_yt
     ygetparam
-    ylzocat 
+    ylzocat
     yson_pp
     zk_client
     idx_print

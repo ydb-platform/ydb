@@ -89,17 +89,17 @@ using TSimpleCounter = TSimpleCounterTemplate<TCheckPolicy>;
 // Use this one if you do want to share the pointer between threads, omit thread checks and do the synchronization yourself
 using TExplicitSimpleCounter = TSimpleCounterTemplate<TNoCheckPolicy>;
 
-template <class TCounterCheckPolicy> 
-struct TCommonLockOps<TSimpleCounterTemplate<TCounterCheckPolicy>> { 
+template <class TCounterCheckPolicy>
+struct TCommonLockOps<TSimpleCounterTemplate<TCounterCheckPolicy>> {
     static inline void Acquire(TSimpleCounterTemplate<TCounterCheckPolicy>* t) noexcept {
-        t->Inc(); 
-    } 
- 
+        t->Inc();
+    }
+
     static inline void Release(TSimpleCounterTemplate<TCounterCheckPolicy>* t) noexcept {
-        t->Dec(); 
-    } 
-}; 
- 
+        t->Dec();
+    }
+};
+
 class TAtomicCounter {
 public:
     inline TAtomicCounter(long initial = 0) noexcept

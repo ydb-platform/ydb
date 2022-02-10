@@ -30,10 +30,10 @@ struct TIp6 {
     bool operator==(const TIp6& rhs) const {
         return memcmp(Data, rhs.Data, sizeof(Data)) == 0;
     }
- 
-    bool operator<(const TIp6& rhs) const { 
-        return memcmp(Data, rhs.Data, sizeof(Data)) < 0; 
-    } 
+
+    bool operator<(const TIp6& rhs) const {
+        return memcmp(Data, rhs.Data, sizeof(Data)) < 0;
+    }
 };
 
 template <>
@@ -43,15 +43,15 @@ struct THash<TIp6> {
     }
 };
 
-static inline TIp6 Ip6FromIp4(TIp4 addr) { 
-    TIp6 res; 
-    memset(res.Data, 0, sizeof(res.Data)); 
+static inline TIp6 Ip6FromIp4(TIp4 addr) {
+    TIp6 res;
+    memset(res.Data, 0, sizeof(res.Data));
     res.Data[10] = '\xFF';
     res.Data[11] = '\xFF';
-    memcpy(res.Data + 12, &addr, 4); 
-    return res; 
-} 
- 
+    memcpy(res.Data + 12, &addr, 4);
+    return res;
+}
+
 static inline TIp6 Ip6FromString(const char* ipStr) {
     TIp6 res;
 
@@ -86,11 +86,11 @@ static inline TString Ip6ToString(const TIp6& ip) {
     return TString(Ip6ToString(ip, buf, sizeof(buf)));
 }
 
-template <> 
+template <>
 inline void Out<TIp6>(IOutputStream& os, const TIp6& a) {
-    os << Ip6ToString(a); 
-} 
- 
+    os << Ip6ToString(a);
+}
+
 using TIp4Or6 = std::variant<TIp4, TIp6>;
 
 static inline TIp4Or6 Ip4Or6FromString(const char* ipStr) {

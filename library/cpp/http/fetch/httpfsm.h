@@ -8,13 +8,13 @@
 #include <time.h>
 
 struct THttpHeaderParser {
-    static constexpr int ErrFirstlineTypeMismatch = -3; 
-    static constexpr int ErrHeader = -2; 
-    static constexpr int Err = -1; 
-    static constexpr int Final = 0; 
-    static constexpr int NeedMore = 1; 
-    static constexpr int Accepted = 2; 
- 
+    static constexpr int ErrFirstlineTypeMismatch = -3;
+    static constexpr int ErrHeader = -2;
+    static constexpr int Err = -1;
+    static constexpr int Final = 0;
+    static constexpr int NeedMore = 1;
+    static constexpr int Accepted = 2;
+
     int Execute(const void* inBuf, size_t len) {
         return execute((unsigned char*)inBuf, (int)len);
     }

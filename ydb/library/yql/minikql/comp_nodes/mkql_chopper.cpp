@@ -109,9 +109,9 @@ private:
         const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(ItemArg);
         const auto codegenKeyArg = dynamic_cast<ICodegeneratorExternalNode*>(KeyArg);
 
-        MKQL_ENSURE(codegenItemArg, "Item arg must be codegenerator node."); 
-        MKQL_ENSURE(codegenKeyArg, "Key arg must be codegenerator node."); 
- 
+        MKQL_ENSURE(codegenItemArg, "Item arg must be codegenerator node.");
+        MKQL_ENSURE(codegenKeyArg, "Key arg must be codegenerator node.");
+
         const auto valueType = Type::getInt128Ty(context);
         const auto funcType = FunctionType::get(valueType, {PointerType::getUnqual(GetCompContextType(context))}, false);
 
@@ -178,10 +178,10 @@ public:
         const auto codegenKeyArg = dynamic_cast<ICodegeneratorExternalNode*>(KeyArg);
         const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input);
 
-        MKQL_ENSURE(codegenItemArg, "Item arg must be codegenerator node."); 
-        MKQL_ENSURE(codegenKeyArg, "Key arg must be codegenerator node."); 
-        MKQL_ENSURE(codegenInput, "Input arg must be codegenerator node."); 
- 
+        MKQL_ENSURE(codegenItemArg, "Item arg must be codegenerator node.");
+        MKQL_ENSURE(codegenKeyArg, "Key arg must be codegenerator node.");
+        MKQL_ENSURE(codegenInput, "Input arg must be codegenerator node.");
+
         codegenInput->SetValueGetter(GenerateHandler(ctx.Codegen));
 
         auto& context = ctx.Codegen->GetContext();
@@ -404,7 +404,7 @@ private:
                             case NUdf::EFetchStatus::Finish:
                                 return status;
                         } while (!Chop->GetValue(Ctx).Get<bool>());
-                        [[fallthrough]]; 
+                        [[fallthrough]];
                     case EState::Chop:
                         state = EState::Next;
                         KeyArg->SetValue(Ctx, Key->GetValue(Ctx));
@@ -544,9 +544,9 @@ private:
         const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(ItemArg);
         const auto codegenKeyArg = dynamic_cast<ICodegeneratorExternalNode*>(KeyArg);
 
-        MKQL_ENSURE(codegenItemArg, "Item arg must be codegenerator node."); 
-        MKQL_ENSURE(codegenKeyArg, "Key arg must be codegenerator node."); 
- 
+        MKQL_ENSURE(codegenItemArg, "Item arg must be codegenerator node.");
+        MKQL_ENSURE(codegenKeyArg, "Key arg must be codegenerator node.");
+
         const auto valueType = Type::getInt128Ty(context);
         const auto containerType = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
@@ -637,10 +637,10 @@ private:
         const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(ItemArg);
         const auto codegenKeyArg = dynamic_cast<ICodegeneratorExternalNode*>(KeyArg);
 
-        MKQL_ENSURE(codegenItemArg, "Item arg must be codegenerator node."); 
-        MKQL_ENSURE(codegenKeyArg, "Key arg must be codegenerator node."); 
-        MKQL_ENSURE(codegenInput, "Input arg must be codegenerator node."); 
- 
+        MKQL_ENSURE(codegenItemArg, "Item arg must be codegenerator node.");
+        MKQL_ENSURE(codegenKeyArg, "Key arg must be codegenerator node.");
+        MKQL_ENSURE(codegenInput, "Input arg must be codegenerator node.");
+
         const auto valueType = Type::getInt128Ty(context);
         const auto containerType = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);

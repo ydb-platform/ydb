@@ -161,9 +161,9 @@ private:
     static void DoTagged(const NMiniKQL::TTaggedType* tt, NUdf::ITypeVisitor* v);
 };
 
-NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type); 
-NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type); 
-NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type); 
- 
+NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type);
+NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type);
+NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type);
+
 } // namespace NMiniKQL
 } // namespace Nkikimr

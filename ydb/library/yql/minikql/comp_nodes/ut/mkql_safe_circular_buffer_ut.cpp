@@ -55,61 +55,61 @@ Y_UNIT_TEST_SUITE(TMiniKQLSafeCircularBuffer) {
         }
     }
 
-    Y_UNIT_TEST(TestOverflowNoInitSize) { 
-        TBufUnboxed buffer(3, TUnboxedValuePod(), 0); 
-        buffer.PushBack(TUnboxedValue::Embedded("1")); 
-        buffer.PushBack(TUnboxedValue::Embedded("2")); 
-        buffer.PushBack(TUnboxedValue::Embedded("3")); 
-        UNIT_ASSERT_EXCEPTION(buffer.PushBack(TUnboxedValue::Embedded("4")), yexception); 
-    } 
- 
-    Y_UNIT_TEST(TestOverflowWithInitSize) { 
-        TBufUnboxed buffer(3, TUnboxedValuePod(), 3); 
-        buffer.PopFront(); 
-        buffer.PushBack(TUnboxedValue::Embedded("1")); 
-        buffer.PopFront(); 
-        buffer.PushBack(TUnboxedValue::Embedded("2")); 
-        UNIT_ASSERT_EQUAL(buffer.UsedSize(), 3); 
-        UNIT_ASSERT_EQUAL(buffer.Get(1).AsStringRef(), "1"); 
-        UNIT_ASSERT_EXCEPTION(buffer.PushBack(TUnboxedValue::Embedded("3")), yexception); 
-    } 
- 
-    Y_UNIT_TEST(TestOverflowOnEmpty) { 
-        TBufUnboxed buffer(0, TUnboxedValuePod()); 
-        buffer.PopFront(); 
-        UNIT_ASSERT_EXCEPTION(buffer.PushBack(TUnboxedValue::Embedded("1")), yexception); 
-    } 
- 
-    Y_UNIT_TEST(TestUnbounded) { 
-        TBufUnboxed buffer({}, TUnboxedValuePod(), 3); 
-        for (size_t i = 0; i < 100; ++i) { 
-            buffer.PushBack(TUnboxedValue::Embedded(ToString(i))); 
-        } 
- 
-        UNIT_ASSERT(!buffer.Get(0)); 
-        UNIT_ASSERT(!buffer.Get(1)); 
-        UNIT_ASSERT(!buffer.Get(2)); 
- 
-        for (size_t i = 0; i < 100; ++i) { 
+    Y_UNIT_TEST(TestOverflowNoInitSize) {
+        TBufUnboxed buffer(3, TUnboxedValuePod(), 0);
+        buffer.PushBack(TUnboxedValue::Embedded("1"));
+        buffer.PushBack(TUnboxedValue::Embedded("2"));
+        buffer.PushBack(TUnboxedValue::Embedded("3"));
+        UNIT_ASSERT_EXCEPTION(buffer.PushBack(TUnboxedValue::Embedded("4")), yexception);
+    }
+
+    Y_UNIT_TEST(TestOverflowWithInitSize) {
+        TBufUnboxed buffer(3, TUnboxedValuePod(), 3);
+        buffer.PopFront();
+        buffer.PushBack(TUnboxedValue::Embedded("1"));
+        buffer.PopFront();
+        buffer.PushBack(TUnboxedValue::Embedded("2"));
+        UNIT_ASSERT_EQUAL(buffer.UsedSize(), 3);
+        UNIT_ASSERT_EQUAL(buffer.Get(1).AsStringRef(), "1");
+        UNIT_ASSERT_EXCEPTION(buffer.PushBack(TUnboxedValue::Embedded("3")), yexception);
+    }
+
+    Y_UNIT_TEST(TestOverflowOnEmpty) {
+        TBufUnboxed buffer(0, TUnboxedValuePod());
+        buffer.PopFront();
+        UNIT_ASSERT_EXCEPTION(buffer.PushBack(TUnboxedValue::Embedded("1")), yexception);
+    }
+
+    Y_UNIT_TEST(TestUnbounded) {
+        TBufUnboxed buffer({}, TUnboxedValuePod(), 3);
+        for (size_t i = 0; i < 100; ++i) {
+            buffer.PushBack(TUnboxedValue::Embedded(ToString(i)));
+        }
+
+        UNIT_ASSERT(!buffer.Get(0));
+        UNIT_ASSERT(!buffer.Get(1));
+        UNIT_ASSERT(!buffer.Get(2));
+
+        for (size_t i = 0; i < 100; ++i) {
             UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(i + 3).AsStringRef()), ToString(i));
-        } 
- 
-        for (size_t i = 0; i < 100; ++i) { 
-            buffer.PopFront(); 
-        } 
- 
-        UNIT_ASSERT_EQUAL(buffer.UsedSize(), 3); 
+        }
+
+        for (size_t i = 0; i < 100; ++i) {
+            buffer.PopFront();
+        }
+
+        UNIT_ASSERT_EQUAL(buffer.UsedSize(), 3);
         UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(0).AsStringRef()), ToString(97));
         UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(1).AsStringRef()), ToString(98));
         UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(2).AsStringRef()), ToString(99));
- 
-        buffer.PopFront(); 
-        buffer.PopFront(); 
-        buffer.PopFront(); 
-        UNIT_ASSERT_EQUAL(buffer.UsedSize(), 0); 
-        UNIT_ASSERT_EQUAL(buffer.Size(), 103); 
-    } 
- 
+
+        buffer.PopFront();
+        buffer.PopFront();
+        buffer.PopFront();
+        UNIT_ASSERT_EQUAL(buffer.UsedSize(), 0);
+        UNIT_ASSERT_EQUAL(buffer.Size(), 103);
+    }
+
     Y_UNIT_TEST(TestUnboxedFewCycles) {
         const auto multFillLevel = 0.6;
         const auto multPopLevel = 0.5;

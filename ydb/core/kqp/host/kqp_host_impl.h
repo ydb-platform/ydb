@@ -85,7 +85,7 @@ protected:
     virtual void FillResult(TResult& result) const = 0;
 
     NYql::TExprNode::TPtr GetExprRoot() const { return ExprRoot; }
-    NYql::TExprContext& GetExprContext() const { return ExprCtx; } 
+    NYql::TExprContext& GetExprContext() const { return ExprCtx; }
     NYql::IGraphTransformer& GetTransformer() const { return Transformer; }
 
 private:

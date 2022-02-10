@@ -9,7 +9,7 @@ TClickHouseConfiguration::TClickHouseConfiguration()
 }
 
 TClickHouseSettings::TConstPtr TClickHouseConfiguration::Snapshot() const {
-    return std::make_shared<const TClickHouseSettings>(*this); 
+    return std::make_shared<const TClickHouseSettings>(*this);
 }
 
 bool TClickHouseConfiguration::HasCluster(TStringBuf cluster) const {

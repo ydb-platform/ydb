@@ -34,7 +34,7 @@ namespace NTypeAnnImpl {
 
         auto joinKind = input->Child(4)->Content();
         if (joinKind != "Inner" && joinKind != "Left" && joinKind != "Right" && joinKind != "Full") {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(4)->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind 
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(4)->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind
                 << ", supported: Inner, Right, Left, Full"));
             return IGraphTransformer::TStatus::Error;
         }
@@ -106,7 +106,7 @@ namespace NTypeAnnImpl {
         }
 
         if (!IsSameAnnotation(*lambda1->GetTypeAnn(), *lambda2->GetTypeAnn())) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "mismatch of key extractors types, " 
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "mismatch of key extractors types, "
                 << *lambda1->GetTypeAnn() << " != " << *lambda2->GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
         }
@@ -240,9 +240,9 @@ namespace NTypeAnnImpl {
         }
         const size_t numLists = input->ChildrenSize() - 2;
 
-        auto optionsNode = input->Child(input->ChildrenSize() - 1); 
-        TJoinOptions options; 
-        auto status = ValidateEquiJoinOptions(input->Pos(), *optionsNode, options, ctx.Expr); 
+        auto optionsNode = input->Child(input->ChildrenSize() - 1);
+        TJoinOptions options;
+        auto status = ValidateEquiJoinOptions(input->Pos(), *optionsNode, options, ctx.Expr);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -263,14 +263,14 @@ namespace NTypeAnnImpl {
             const TTypeAnnotationNode* itemType = list.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
             if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
                 ctx.Expr.AddError(TIssue(
-                    ctx.Expr.GetPosition(list.Pos()), 
+                    ctx.Expr.GetPosition(list.Pos()),
                     TStringBuilder() << "Expected list of struct"
                     ));
                 return IGraphTransformer::TStatus::Error;
             }
 
             auto structType = itemType->Cast<TStructExprType>();
-            if (!options.KeepSysColumns && AnyOf(structType->GetItems(), [](const TItemExprType* structItem) { return structItem->GetName().StartsWith("_yql_sys_"); })) { 
+            if (!options.KeepSysColumns && AnyOf(structType->GetItems(), [](const TItemExprType* structItem) { return structItem->GetName().StartsWith("_yql_sys_"); })) {
                 if (updatedChildren.empty()) {
                     updatedChildren = input->ChildrenList();
                 }
@@ -286,10 +286,10 @@ namespace NTypeAnnImpl {
                     );
                 continue;
             }
-            if (auto err = labels.Add(ctx.Expr, *listPair.Child(1), structType)) { 
+            if (auto err = labels.Add(ctx.Expr, *listPair.Child(1), structType)) {
                 ctx.Expr.AddError(*err);
                 ctx.Expr.AddError(TIssue(
-                    ctx.Expr.GetPosition(input->Child(idx)->Pos()), 
+                    ctx.Expr.GetPosition(input->Child(idx)->Pos()),
                     TStringBuilder() << "Failed to parse labels of struct as second element of " << idx << " argument"
                     ));
                 return IGraphTransformer::TStatus::Error;
@@ -302,7 +302,7 @@ namespace NTypeAnnImpl {
 
         auto joins = input->Child(input->ChildrenSize() - 2);
         const TStructExprType* resultType = nullptr;
-        status = EquiJoinAnnotation(input->Pos(), resultType, labels, *joins, options, ctx.Expr); 
+        status = EquiJoinAnnotation(input->Pos(), resultType, labels, *joins, options, ctx.Expr);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -335,7 +335,7 @@ namespace NTypeAnnImpl {
 
         const auto joinKind = input->Child(2)->Content();
         if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly") {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind 
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind
                 << ", supported: Inner, Left, LeftSemi, LeftOnly"));
             return IGraphTransformer::TStatus::Error;
         }
@@ -399,12 +399,12 @@ namespace NTypeAnnImpl {
 
             const auto oldPos = GetFieldPosition(leftItemType, oldName->Content());
             if (!oldPos) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(oldName->Pos()), TStringBuilder() << "Unknown column: " << oldName->Content())); 
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(oldName->Pos()), TStringBuilder() << "Unknown column: " << oldName->Content()));
                 return IGraphTransformer::TStatus::Error;
             }
 
             if (newName->Content().empty()) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), "Empty column is not allowed")); 
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), "Empty column is not allowed"));
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -443,12 +443,12 @@ namespace NTypeAnnImpl {
 
                 const auto oldPos = rightStructType ? GetFieldPosition(*rightStructType, oldName->Content()) : GetFieldPosition(*rightTupleType, oldName->Content());
                 if (!oldPos) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(oldName->Pos()), TStringBuilder() << "Unknown column: " << oldName->Content())); 
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(oldName->Pos()), TStringBuilder() << "Unknown column: " << oldName->Content()));
                     return IGraphTransformer::TStatus::Error;
                 }
 
                 if (newName->Content().empty()) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), "Empty column is not allowed")); 
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), "Empty column is not allowed"));
                     return IGraphTransformer::TStatus::Error;
                 }
 
@@ -458,7 +458,7 @@ namespace NTypeAnnImpl {
                 }
 
                 auto columnType = rightStructType ? GetFieldType(*rightStructType, *oldPos) : GetFieldType(*rightTupleType, *oldPos);
-                if (joinKind == "Left" && !columnType->IsOptionalOrNull()) { 
+                if (joinKind == "Left" && !columnType->IsOptionalOrNull()) {
                     columnType = ctx.Expr.MakeType<TOptionalExprType>(columnType);
                 }
 
@@ -530,7 +530,7 @@ namespace NTypeAnnImpl {
         if (joinKind != "Inner" && joinKind != "Left" && joinKind != "Right" && joinKind != "Full"
             && joinKind != "LeftOnly" && joinKind != "RightOnly" && joinKind != "Exclusion"
             && joinKind != "LeftSemi" && joinKind != "RightSemi" && joinKind != "Cross") {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind 
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind
                 << ", supported: Inner, Right, Left, Full, LeftOnly, RightOnly, Exclusion, LeftSemi, RightSemi, Cross"));
             return IGraphTransformer::TStatus::Error;
         }
@@ -565,17 +565,17 @@ namespace NTypeAnnImpl {
 
                 const auto pos = GetFieldPosition(inputItemType, child->Content());
                 if (!pos) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Unknown column: " << child->Content())); 
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Unknown column: " << child->Content()));
                     return IGraphTransformer::TStatus::Error;
                 }
 
                 if (!leftColumns.insert(child->Content()).second || !fullColumns.insert(child->Content()).second) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Duplication of column: " << child->Content())); 
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Duplication of column: " << child->Content()));
                     return IGraphTransformer::TStatus::Error;
                 }
 
                 if (const auto inputColumnType = GetFieldType(inputItemType, *pos); !inputColumnType->IsOptionalOrNull()) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Expected optional or null type for column: " << child->Content() << ", but got: " << *inputColumnType)); 
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Expected optional or null type for column: " << child->Content() << ", but got: " << *inputColumnType));
                     return IGraphTransformer::TStatus::Error;
                 }
             }
@@ -597,17 +597,17 @@ namespace NTypeAnnImpl {
 
                 const auto pos = GetFieldPosition(inputItemType, child->Content());
                 if (!pos) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Unknown column: " << child->Content())); 
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Unknown column: " << child->Content()));
                     return IGraphTransformer::TStatus::Error;
                 }
 
                 if (!rightColumns.insert(child->Content()).second || !fullColumns.insert(child->Content()).second) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Duplication of column: " << child->Content())); 
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Duplication of column: " << child->Content()));
                     return IGraphTransformer::TStatus::Error;
                 }
 
                 if (const auto inputColumnType = GetFieldType(inputItemType, *pos); !inputColumnType->IsOptionalOrNull()) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Expected optional or null type for column: " << child->Content() << ", but got: " << *inputColumnType)); 
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Expected optional or null type for column: " << child->Content() << ", but got: " << *inputColumnType));
                     return IGraphTransformer::TStatus::Error;
                 }
             }
@@ -623,23 +623,23 @@ namespace NTypeAnnImpl {
             }
 
             if (!fullColumns.contains(child->Content())) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Unknown column: " << child->Content())); 
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Unknown column: " << child->Content()));
                 return IGraphTransformer::TStatus::Error;
             }
 
             if (!requiredColumns.insert(child->Content()).second) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Duplication of column: " << child->Content())); 
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Duplication of column: " << child->Content()));
                 return IGraphTransformer::TStatus::Error;
             }
 
             if (leftColumns.contains(child->Content())) {
                 if (IsLeftJoinSideOptional(joinKind)) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Required column " << child->Content() << " cannot be at the left side for the join kind: " << joinKind)); 
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Required column " << child->Content() << " cannot be at the left side for the join kind: " << joinKind));
                     return IGraphTransformer::TStatus::Error;
                 }
             } else {
                 if (IsRightJoinSideOptional(joinKind)) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Required column " << child->Content() << " cannot be at the right side for the join kind: " << joinKind)); 
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Required column " << child->Content() << " cannot be at the right side for the join kind: " << joinKind));
                     return IGraphTransformer::TStatus::Error;
                 }
             }
@@ -655,7 +655,7 @@ namespace NTypeAnnImpl {
             }
 
             if (const auto pos = GetFieldPosition(inputItemType, child->Content()); !pos) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Unknown column: " << child->Content())); 
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Unknown column: " << child->Content()));
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -664,7 +664,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        TSet<TStringBuf> seenOptions; 
+        TSet<TStringBuf> seenOptions;
         for (const auto& child : input->Child(6)->Children()) {
             if (!EnsureTupleMinSize(*child, 1, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -676,9 +676,9 @@ namespace NTypeAnnImpl {
 
             if (const auto optionName = child->Head().Content(); !seenOptions.insert(optionName).second) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Head().Pos()), TStringBuilder() <<
-                    "Duplicate option: " << optionName)); 
-                return IGraphTransformer::TStatus::Error; 
-            } 
+                    "Duplicate option: " << optionName));
+                return IGraphTransformer::TStatus::Error;
+            }
             else if (optionName == "sorted") {
                 if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
@@ -689,7 +689,7 @@ namespace NTypeAnnImpl {
                 }
 
                 if (const auto side = child->Child(1)->Content(); side != "left" && side != "right") {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Child(1)->Pos()), TStringBuilder() << 
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Child(1)->Pos()), TStringBuilder() <<
                         "Unknown sorted side, expected left or right, but got: " << side));
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -704,41 +704,41 @@ namespace NTypeAnnImpl {
                 }
 
                 if (ui64 memLimit = 0ULL; !TryFromString(child->Child(1)->Content(), memLimit)) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Child(1)->Pos()), TStringBuilder() << 
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Child(1)->Pos()), TStringBuilder() <<
                         "Bad memLimit value: " << child->Child(1)->Content()));
                     return IGraphTransformer::TStatus::Error;
                 }
             }
-            else if (optionName == "any") { 
-                if (!EnsureTupleSize(*child, 2, ctx.Expr)) { 
-                    return IGraphTransformer::TStatus::Error; 
-                } 
- 
-                if (!EnsureTuple(*child->Child(1), ctx.Expr)) { 
-                    return IGraphTransformer::TStatus::Error; 
-                } 
- 
-                for (auto sideNode : child->Child(1)->Children()) { 
-                    if (!EnsureAtom(*sideNode, ctx.Expr)) { 
-                        return IGraphTransformer::TStatus::Error; 
-                    } 
- 
-                    auto side = sideNode->Content(); 
-                    if (side != "left" && side != "right") { 
-                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(sideNode->Pos()), TStringBuilder() << 
-                            "Unknown any side, expected left or right, but got: " << side)); 
-                        return IGraphTransformer::TStatus::Error; 
-                    } 
-                } 
-            } 
-            else if (optionName == "forceSortedMerge") { 
-                if (!EnsureTupleSize(*child, 1, ctx.Expr)) { 
-                    return IGraphTransformer::TStatus::Error; 
-                } 
- 
-            } 
+            else if (optionName == "any") {
+                if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                if (!EnsureTuple(*child->Child(1), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                for (auto sideNode : child->Child(1)->Children()) {
+                    if (!EnsureAtom(*sideNode, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    auto side = sideNode->Content();
+                    if (side != "left" && side != "right") {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(sideNode->Pos()), TStringBuilder() <<
+                            "Unknown any side, expected left or right, but got: " << side));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                }
+            }
+            else if (optionName == "forceSortedMerge") {
+                if (!EnsureTupleSize(*child, 1, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+            }
             else {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << 
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() <<
                     "Unknown option name: " << optionName));
                 return IGraphTransformer::TStatus::Error;
             }

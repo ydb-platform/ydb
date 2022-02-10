@@ -13,7 +13,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/utility.h>
 #include <util/system/file.h>
-#include <util/system/file_lock.h> 
+#include <util/system/file_lock.h>
 #include <util/system/fs.h>
 #include <util/system/maxlen.h>
 #include <util/system/mutex.h>
@@ -162,11 +162,11 @@ public:
 
         StorageDir.MkDirs(MODE0711);
         ProcessTempDir.MkDirs(MODE0711);
-#ifdef _linux_ 
-        ProcessTempDirLock.Reset(new TFileLock(ProcessTempDir / ".lockfile")); 
-        ProcessTempDirLock->Acquire(); 
-        // We never explicitly release this lock. It will be released when all file handles (including those in child processes) will be closed 
-#endif 
+#ifdef _linux_
+        ProcessTempDirLock.Reset(new TFileLock(ProcessTempDir / ".lockfile"));
+        ProcessTempDirLock->Acquire();
+        // We never explicitly release this lock. It will be released when all file handles (including those in child processes) will be closed
+#endif
 
         if (!IsTemp) {
             LoadStats();
@@ -340,18 +340,18 @@ private:
                 if (!IsProcessAlive(oldPid)) {
                     // cleanup of previously not cleaned hardlinks directory
                     try {
-#ifdef _linux_ 
-                        TFileLock childLock(childPath / ".lockfile"); 
-                        TTryGuard guard(childLock); 
-#else 
-                        bool guard = true; 
-#endif 
-                        if (guard) { 
-                            childPath.ForceDelete(); 
-                        } else { 
-                            YQL_LOG(WARN) << "Not cleaning dead process dir " << childPath 
-                                << ": " << "directory is still locked, skipping"; 
-                        } 
+#ifdef _linux_
+                        TFileLock childLock(childPath / ".lockfile");
+                        TTryGuard guard(childLock);
+#else
+                        bool guard = true;
+#endif
+                        if (guard) {
+                            childPath.ForceDelete();
+                        } else {
+                            YQL_LOG(WARN) << "Not cleaning dead process dir " << childPath
+                                << ": " << "directory is still locked, skipping";
+                        }
                     } catch (...) {
                         YQL_LOG(WARN) << "Error cleaning dead process dir " << childPath
                              << ": " << CurrentExceptionMessage();
@@ -436,7 +436,7 @@ private:
     TMutex CleanupLock;
     const TFsPath StorageDir;
     const TFsPath ProcessTempDir;
-    THolder<TFileLock> ProcessTempDirLock; 
+    THolder<TFileLock> ProcessTempDirLock;
     const bool IsTemp;
     const ui64 MaxFiles;
     const ui64 MaxSize;

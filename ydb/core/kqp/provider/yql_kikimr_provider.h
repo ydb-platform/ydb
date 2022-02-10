@@ -215,7 +215,7 @@ public:
     TKikimrTableDescription& GetTable(const TString& cluster, const TString& table);
 
     const TKikimrTableDescription* EnsureTableExists(const TString& cluster, const TString& table,
-        TPositionHandle pos, TExprContext& ctx) const; 
+        TPositionHandle pos, TExprContext& ctx) const;
 
     const TKikimrTableDescription& ExistingTable(const TStringBuf& cluster, const TStringBuf& table) const;
 

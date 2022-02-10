@@ -22,8 +22,8 @@ inline void SplitTableName(const TStringBuf& fullName, TStringBuf& table, TStrin
 }
 
 struct TJoinLabel {
-    TMaybe<TIssue> Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType); 
-    TMaybe<TIssue> ValidateLabel(TExprContext& ctx, const NNodes::TCoAtom& label); 
+    TMaybe<TIssue> Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType);
+    TMaybe<TIssue> ValidateLabel(TExprContext& ctx, const NNodes::TCoAtom& label);
     TString FullName(const TStringBuf& column) const;
     TStringBuf ColumnName(const TStringBuf& column) const;
     TStringBuf TableName(const TStringBuf& column) const;
@@ -39,7 +39,7 @@ struct TJoinLabel {
 };
 
 struct TJoinLabels {
-    TMaybe<TIssue> Add(TExprContext& ctx, TExprNode& node, const TStructExprType* structType); 
+    TMaybe<TIssue> Add(TExprContext& ctx, TExprNode& node, const TStructExprType* structType);
     TMaybe<const TJoinLabel*> FindInput(const TStringBuf& table) const;
     TMaybe<ui32> FindInputIndex(const TStringBuf& table) const;
     TMaybe<const TTypeAnnotationNode*> FindColumn(const TStringBuf& table, const TStringBuf& column) const;
@@ -50,42 +50,42 @@ struct TJoinLabels {
     THashMap<TStringBuf, ui32> InputByTable;
 };
 
-struct TJoinOptions { 
-    THashMap<TStringBuf, TVector<TStringBuf>> RenameMap; 
-    TSet<TVector<TStringBuf>> PreferredSortSets; 
- 
-    bool Flatten = false; 
-    bool KeepSysColumns = false; 
-    bool StrictKeys = false; 
-}; 
- 
+struct TJoinOptions {
+    THashMap<TStringBuf, TVector<TStringBuf>> RenameMap;
+    TSet<TVector<TStringBuf>> PreferredSortSets;
+
+    bool Flatten = false;
+    bool KeepSysColumns = false;
+    bool StrictKeys = false;
+};
+
 IGraphTransformer::TStatus ValidateEquiJoinOptions(
     TPositionHandle positionHandle,
-    const TExprNode& optionsNode, 
-    TJoinOptions& options, 
+    const TExprNode& optionsNode,
+    TJoinOptions& options,
     TExprContext& ctx
 );
 
-IGraphTransformer::TStatus EquiJoinAnnotation( 
-    TPositionHandle position, 
-    const TStructExprType*& resultType, 
-    const TJoinLabels& labels, 
-    const TExprNode& joins, 
-    const TJoinOptions& options, 
-    TExprContext& ctx 
-); 
- 
-THashMap<TStringBuf, THashSet<TStringBuf>> CollectEquiJoinKeyColumnsByLabel(const TExprNode& joinTree); 
- 
+IGraphTransformer::TStatus EquiJoinAnnotation(
+    TPositionHandle position,
+    const TStructExprType*& resultType,
+    const TJoinLabels& labels,
+    const TExprNode& joins,
+    const TJoinOptions& options,
+    TExprContext& ctx
+);
+
+THashMap<TStringBuf, THashSet<TStringBuf>> CollectEquiJoinKeyColumnsByLabel(const TExprNode& joinTree);
+
 bool IsLeftJoinSideOptional(const TStringBuf& joinType);
 bool IsRightJoinSideOptional(const TStringBuf& joinType);
 
-TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::TPtr& input, 
+TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::TPtr& input,
     const TJoinLabel& label, const TSet<TString>& optionalKeyColumns, TExprContext& ctx);
 
 TMap<TStringBuf, TVector<TStringBuf>> LoadJoinRenameMap(const TExprNode& settings);
-TSet<TVector<TStringBuf>> LoadJoinSortSets(const TExprNode& settings); 
- 
+TSet<TVector<TStringBuf>> LoadJoinSortSets(const TExprNode& settings);
+
 THashMap<TString, const TTypeAnnotationNode*> GetJoinColumnTypes(const TExprNode& joins,
     const TJoinLabels& labels, TExprContext& ctx);
 
@@ -96,47 +96,47 @@ bool AreSameJoinKeys(const TExprNode& joins, const TStringBuf& table1, const TSt
 // returns (is required side + allow skip nulls);
 std::pair<bool, bool> IsRequiredSide(const TExprNode::TPtr& joinTree, const TJoinLabels& labels, ui32 inputIndex);
 
-void AppendEquiJoinRenameMap(TPositionHandle pos, const TMap<TStringBuf, TVector<TStringBuf>>& newRenameMap, 
+void AppendEquiJoinRenameMap(TPositionHandle pos, const TMap<TStringBuf, TVector<TStringBuf>>& newRenameMap,
     TExprNode::TListType& joinSettingNodes, TExprContext& ctx);
 
-void AppendEquiJoinSortSets(TPositionHandle pos, const TSet<TVector<TStringBuf>>& newSortSets, 
-    TExprNode::TListType& joinSettingNodes, TExprContext& ctx); 
- 
+void AppendEquiJoinSortSets(TPositionHandle pos, const TSet<TVector<TStringBuf>>& newSortSets,
+    TExprNode::TListType& joinSettingNodes, TExprContext& ctx);
+
 TMap<TStringBuf, TVector<TStringBuf>> UpdateUsedFieldsInRenameMap(
     const TMap<TStringBuf, TVector<TStringBuf>>& renameMap,
     const TSet<TStringBuf>& usedFields,
     const TStructExprType* structType
 );
 
- 
-struct TEquiJoinParent { 
-    TEquiJoinParent(const TExprNode* node, ui32 index, const TExprNode* extractedMembers) 
-        : Node(node) 
-        , Index(index) 
-        , ExtractedMembers(extractedMembers) 
-    { 
-    } 
-    const TExprNode* Node; 
-    ui32 Index; 
-    const TExprNode* ExtractedMembers; 
-}; 
- 
-TVector<TEquiJoinParent> CollectEquiJoinOnlyParents(const NNodes::TCoFlatMapBase& flatMap, const TParentsMap& parents); 
- 
-struct TEquiJoinLinkSettings { 
-    TPositionHandle Pos; 
-    TSet<TString> LeftHints; 
-    TSet<TString> RightHints; 
-    // JOIN implementation may ignore this flags if SortedMerge strategy is not supported 
-    bool ForceSortedMerge = true; 
-}; 
- 
-TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings); 
-TExprNode::TPtr BuildEquiJoinLinkSettings(const TEquiJoinLinkSettings& linkSettings, TExprContext& ctx); 
- 
-TExprNode::TPtr RemapNonConvertibleMemberForJoin(TPositionHandle pos, const TExprNode::TPtr& memberValue, 
-    const TTypeAnnotationNode& memberType, const TTypeAnnotationNode& unifiedType, TExprContext& ctx); 
- 
+
+struct TEquiJoinParent {
+    TEquiJoinParent(const TExprNode* node, ui32 index, const TExprNode* extractedMembers)
+        : Node(node)
+        , Index(index)
+        , ExtractedMembers(extractedMembers)
+    {
+    }
+    const TExprNode* Node;
+    ui32 Index;
+    const TExprNode* ExtractedMembers;
+};
+
+TVector<TEquiJoinParent> CollectEquiJoinOnlyParents(const NNodes::TCoFlatMapBase& flatMap, const TParentsMap& parents);
+
+struct TEquiJoinLinkSettings {
+    TPositionHandle Pos;
+    TSet<TString> LeftHints;
+    TSet<TString> RightHints;
+    // JOIN implementation may ignore this flags if SortedMerge strategy is not supported
+    bool ForceSortedMerge = true;
+};
+
+TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings);
+TExprNode::TPtr BuildEquiJoinLinkSettings(const TEquiJoinLinkSettings& linkSettings, TExprContext& ctx);
+
+TExprNode::TPtr RemapNonConvertibleMemberForJoin(TPositionHandle pos, const TExprNode::TPtr& memberValue,
+    const TTypeAnnotationNode& memberType, const TTypeAnnotationNode& unifiedType, TExprContext& ctx);
+
 TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNode::TListType& keyTypes, TExprNode::TListType& keys, TExprNode::TListType& payloads, bool payload, bool optional, bool filter, TExprContext& ctx);
 
 template<bool Squeeze = false>

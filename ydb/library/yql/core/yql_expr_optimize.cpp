@@ -83,10 +83,10 @@ namespace {
 
         settings.Types->ExpectedTypes.emplace(dst.UniqueId(), src.GetTypeAnn());
         settings.Types->ExpectedConstraints.emplace(dst.UniqueId(), src.GetAllConstraints());
-        auto columnOrder = settings.Types->LookupColumnOrder(src); 
-        if (columnOrder) { 
-            settings.Types->ExpectedColumnOrders.emplace(dst.UniqueId(), *columnOrder); 
-        } 
+        auto columnOrder = settings.Types->LookupColumnOrder(src);
+        if (columnOrder) {
+            settings.Types->ExpectedColumnOrders.emplace(dst.UniqueId(), *columnOrder);
+        }
     }
 
     template<typename TContext>
@@ -263,11 +263,11 @@ namespace {
             TExprNode::TListType newChildren;
             newChildren.reserve(node->ChildrenSize());
             bool hasRenames = false;
- 
-            for (auto& child : node->Children()) { 
+
+            for (auto& child : node->Children()) {
                 bool childChanged = false;
-                auto newChild = OptimizeNode(child, childChanged, ctx, level + 1); 
- 
+                auto newChild = OptimizeNode(child, childChanged, ctx, level + 1);
+
                 if (!newChild)
                     return nullptr;
 
@@ -586,7 +586,7 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
             }
 
             if (!node->Child(2)->IsCallable("AsStruct") || node->Child(2)->ChildrenSize() != 0) {
-                ctx.AddError(TIssue(ctx.GetPosition(node->Child(2)->Pos()), "Expected empty AsStruct in NamedApply")); 
+                ctx.AddError(TIssue(ctx.GetPosition(node->Child(2)->Pos()), "Expected empty AsStruct in NamedApply"));
                 return nullptr;
             }
 
@@ -596,7 +596,7 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
                 }
 
                 if (!node->Child(i)->IsCallable("DependsOn")) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node->Child(i)->Pos()), "Expected DependsOn")); 
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Child(i)->Pos()), "Expected DependsOn"));
                     return nullptr;
                 }
             }
@@ -660,7 +660,7 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
                     const auto f = child->Flags();
 
                     if ((TNodeFlags::MultilineContent | TNodeFlags::BinaryContent) & f) {
-                        ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), "Can't combine binary or multiline atoms.")); 
+                        ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), "Can't combine binary or multiline atoms."));
                         return nullptr;
                     }
 
@@ -685,7 +685,7 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
 
                 ui32 index = 0U;
                 if (const auto& indexValue = node->Tail().Content(); !TryFromString(indexValue, index)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node->Child(1)->Pos()), TStringBuilder() << "Index '" << indexValue << "' isn't UI32.")); 
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Child(1)->Pos()), TStringBuilder() << "Index '" << indexValue << "' isn't UI32."));
                     return nullptr;
                 }
 
@@ -709,7 +709,7 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
                     return nullptr;
                 }
 
-                if (node->Tail().IsCallable("Apply")) { 
+                if (node->Tail().IsCallable("Apply")) {
                     return node;
                 }
 

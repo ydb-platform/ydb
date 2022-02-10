@@ -525,7 +525,7 @@ private:
         auto optimizedQuery = query;
         auto status = InstantTransform(*PhysicalOptimizeTransformer, optimizedQuery, ctx);
         if (status != IGraphTransformer::TStatus::Ok) {
-            ctx.AddError(TIssue(ctx.GetPosition(query->Pos()), "Failed to optimize query.")); 
+            ctx.AddError(TIssue(ctx.GetPosition(query->Pos()), "Failed to optimize query."));
             return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
         }
 
@@ -536,7 +536,7 @@ private:
         auto builtQuery = optimizedQuery;
         status = InstantTransform(*PhysicalBuildQueryTransformer, builtQuery, ctx);
         if (status != IGraphTransformer::TStatus::Ok) {
-            ctx.AddError(TIssue(ctx.GetPosition(query->Pos()), "Failed to build physical query.")); 
+            ctx.AddError(TIssue(ctx.GetPosition(query->Pos()), "Failed to build physical query."));
             return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
         }
 

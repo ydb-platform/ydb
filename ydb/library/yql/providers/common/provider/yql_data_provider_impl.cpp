@@ -58,21 +58,21 @@ TString TPlanFormatterBase::GetOperationDisplayName(const TExprNode& node) {
     return TString(node.Content());
 }
 
-void TTrackableNodeProcessorBase::GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) { 
-    Y_UNUSED(node); 
-    usedNodeIds.clear(); 
-} 
- 
-void TTrackableNodeProcessorBase::GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) { 
-    Y_UNUSED(node); 
-    Y_UNUSED(ctx); 
-    createdNodes.clear(); 
-} 
- 
-IGraphTransformer& TTrackableNodeProcessorBase::GetCleanupTransformer() { 
-    return NullTransformer_; 
-} 
- 
+void TTrackableNodeProcessorBase::GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) {
+    Y_UNUSED(node);
+    usedNodeIds.clear();
+}
+
+void TTrackableNodeProcessorBase::GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) {
+    Y_UNUSED(node);
+    Y_UNUSED(ctx);
+    createdNodes.clear();
+}
+
+IGraphTransformer& TTrackableNodeProcessorBase::GetCleanupTransformer() {
+    return NullTransformer_;
+}
+
 bool TDataProviderBase::Initialize(TExprContext& ctx) {
     Y_UNUSED(ctx);
     return true;
@@ -278,10 +278,10 @@ IPlanFormatter& TDataProviderBase::GetPlanFormatter() {
     return *this;
 }
 
-ITrackableNodeProcessor& TDataProviderBase::GetTrackableNodeProcessor() { 
-    return NullTrackableNodeProcessor_; 
-} 
- 
+ITrackableNodeProcessor& TDataProviderBase::GetTrackableNodeProcessor() {
+    return NullTrackableNodeProcessor_;
+}
+
 IGraphTransformer& TDataProviderBase::GetPlanInfoTransformer() {
     return NullTransformer_;
 }

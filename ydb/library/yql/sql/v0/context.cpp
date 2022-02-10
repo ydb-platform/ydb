@@ -39,7 +39,7 @@ TNodePtr AddTablePathPrefix(TContext &ctx, TStringBuf prefixPath, const TDeferre
 typedef bool TContext::*TPragmaField;
 
 THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
-    {"PullUpFlatMapOverJoin", &TContext::PragmaPullUpFlatMapOverJoin}, 
+    {"PullUpFlatMapOverJoin", &TContext::PragmaPullUpFlatMapOverJoin},
 };
 
 } // namespace
@@ -67,9 +67,9 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
             value = false;
             ptr = CTX_PRAGMA_FIELDS.FindPtr(key);
         }
-        if (ptr) { 
-            this->*(*ptr) = value; 
-        } 
+        if (ptr) {
+            this->*(*ptr) = value;
+        }
     }
 }
 
@@ -111,12 +111,12 @@ IOutputStream& TContext::Info(NYql::TPosition pos) {
 
 IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TPosition pos) {
     if (severity == TSeverityIds::S_WARNING) {
-        auto action = WarningPolicy.GetAction(code); 
-        if (action == EWarningAction::ERROR) { 
-            severity = TSeverityIds::S_ERROR; 
-            HasPendingErrors = true; 
-        } else if (action == EWarningAction::DISABLE) { 
-            return Cnull; 
+        auto action = WarningPolicy.GetAction(code);
+        if (action == EWarningAction::ERROR) {
+            severity = TSeverityIds::S_ERROR;
+            HasPendingErrors = true;
+        } else if (action == EWarningAction::DISABLE) {
+            return Cnull;
         }
     }
 

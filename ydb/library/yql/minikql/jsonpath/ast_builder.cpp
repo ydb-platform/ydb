@@ -315,7 +315,7 @@ TAstNodePtr TAstBuilder::BuildPredicateExpr(const TRule_predicate_expr& node) {
                 case TRule_predicate_expr_TAlt1_TBlock1_TBlock2::ALT_NOT_SET:
                     Y_FAIL("Alternative for inner block of 'predicate_expr' rule is not set");
             }
-            Y_UNREACHABLE(); 
+            Y_UNREACHABLE();
         }
         case TRule_predicate_expr::kAltPredicateExpr2: {
             const auto& predicate = node.GetAlt_predicate_expr2().GetBlock1();
@@ -325,7 +325,7 @@ TAstNodePtr TAstBuilder::BuildPredicateExpr(const TRule_predicate_expr& node) {
         case TRule_predicate_expr::ALT_NOT_SET:
             Y_FAIL("Alternative for 'predicate' rule is not set");
     }
-    Y_UNREACHABLE(); 
+    Y_UNREACHABLE();
 }
 
 TAstNodePtr TAstBuilder::BuildUnaryExpr(const TRule_unary_expr& node) {

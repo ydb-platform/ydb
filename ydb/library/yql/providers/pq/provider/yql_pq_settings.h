@@ -13,7 +13,7 @@
 namespace NYql {
 
 struct TPqSettings {
-    using TConstPtr = std::shared_ptr<const TPqSettings>; 
+    using TConstPtr = std::shared_ptr<const TPqSettings>;
 
     NCommon::TConfSetting<TString, false> Consumer;
     NCommon::TConfSetting<TString, false> Database; // It is needed in case of Cloud.LB for external users, but can be taken from config for internal LB.

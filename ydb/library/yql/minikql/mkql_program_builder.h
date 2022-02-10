@@ -39,13 +39,13 @@ enum class EDictItems {
     Payloads = 2
 };
 
-enum class EAnyJoinSettings { 
-    None  = 0, 
-    Left  = 1, 
-    Right = 2, 
-    Both  = 1 | 2, 
-}; 
- 
+enum class EAnyJoinSettings {
+    None  = 0,
+    Left  = 1,
+    Right = 2,
+    Both  = 1 | 2,
+};
+
 inline EJoinKind GetJoinKind(ui32 kind) {
     MKQL_ENSURE(kind >= (ui32)EJoinKind::Min && kind <= (ui32)EJoinKind::Max ||
         kind == (ui32)EJoinKind::LeftSemi || kind == (ui32)EJoinKind::RightSemi ||
@@ -65,25 +65,25 @@ constexpr bool IsSemiJoin(EJoinKind kind) {
     return ((ui32)EJoinKind::SemiMask & (ui32)kind) != 0;
 }
 
-inline EAnyJoinSettings GetAnyJoinSettings(ui32 settings) { 
-    MKQL_ENSURE(settings <= (ui32)EAnyJoinSettings::Both, "Bad AnyJoin settings: " << settings); 
-    return (EAnyJoinSettings)settings; 
-} 
- 
-inline bool IsAnyJoinLeft(EAnyJoinSettings settings) { 
-    return ((ui32)settings & (ui32)EAnyJoinSettings::Left) != 0; 
-} 
- 
-inline bool IsAnyJoinRight(EAnyJoinSettings settings) { 
-    return ((ui32)settings & (ui32)EAnyJoinSettings::Right) != 0; 
-} 
- 
-inline void AddAnyJoinSide(EAnyJoinSettings& combined, EAnyJoinSettings value) { 
-    ui32 combinedVal = (ui32)combined; 
-    combinedVal |= (ui32)value; 
-    combined = (EAnyJoinSettings)combinedVal; 
-} 
- 
+inline EAnyJoinSettings GetAnyJoinSettings(ui32 settings) {
+    MKQL_ENSURE(settings <= (ui32)EAnyJoinSettings::Both, "Bad AnyJoin settings: " << settings);
+    return (EAnyJoinSettings)settings;
+}
+
+inline bool IsAnyJoinLeft(EAnyJoinSettings settings) {
+    return ((ui32)settings & (ui32)EAnyJoinSettings::Left) != 0;
+}
+
+inline bool IsAnyJoinRight(EAnyJoinSettings settings) {
+    return ((ui32)settings & (ui32)EAnyJoinSettings::Right) != 0;
+}
+
+inline void AddAnyJoinSide(EAnyJoinSettings& combined, EAnyJoinSettings value) {
+    ui32 combinedVal = (ui32)combined;
+    combinedVal |= (ui32)value;
+    combined = (EAnyJoinSettings)combinedVal;
+}
+
 #define MKQL_SCRIPT_TYPES(xx) \
     xx(Unknown, 0, unknown) \
     xx(Python, 1, python) \
@@ -584,12 +584,12 @@ public:
     TRuntimeNode QueuePush(TRuntimeNode resource, TRuntimeNode value);
     TRuntimeNode QueuePop(TRuntimeNode resource);
     TRuntimeNode QueuePeek(TRuntimeNode resource, TRuntimeNode index, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType);
-    TRuntimeNode QueueRange(TRuntimeNode resource, TRuntimeNode begin, TRuntimeNode end, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType); 
+    TRuntimeNode QueueRange(TRuntimeNode resource, TRuntimeNode begin, TRuntimeNode end, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType);
 
     TRuntimeNode PreserveStream(TRuntimeNode stream, TRuntimeNode preserve, TRuntimeNode outpace);
 
-    TRuntimeNode Seq(const TArrayRef<const TRuntimeNode>& items, TType* returnType); 
- 
+    TRuntimeNode Seq(const TArrayRef<const TRuntimeNode>& items, TType* returnType);
+
     TRuntimeNode FromYsonSimpleType(TRuntimeNode input, NUdf::TDataTypeId schemeType);
     TRuntimeNode TryWeakMemberFromDict(TRuntimeNode other, TRuntimeNode rest, NUdf::TDataTypeId schemeType, const std::string_view& memberName);
 
@@ -604,16 +604,16 @@ public:
     TRuntimeNode Cast(TRuntimeNode data, TType* type);
     TRuntimeNode Default(TType* type);
 
-    TRuntimeNode RangeCreate(TRuntimeNode list); 
-    TRuntimeNode RangeUnion(const TArrayRef<const TRuntimeNode>& lists); 
-    TRuntimeNode RangeIntersect(const TArrayRef<const TRuntimeNode>& lists); 
-    TRuntimeNode RangeMultiply(const TArrayRef<const TRuntimeNode>& args); 
-    TRuntimeNode RangeFinalize(TRuntimeNode list); 
- 
-    TRuntimeNode Round(const std::string_view& callableName, TRuntimeNode source, TType* targetType); 
- 
-    TRuntimeNode NextValue(TRuntimeNode value); 
- 
+    TRuntimeNode RangeCreate(TRuntimeNode list);
+    TRuntimeNode RangeUnion(const TArrayRef<const TRuntimeNode>& lists);
+    TRuntimeNode RangeIntersect(const TArrayRef<const TRuntimeNode>& lists);
+    TRuntimeNode RangeMultiply(const TArrayRef<const TRuntimeNode>& args);
+    TRuntimeNode RangeFinalize(TRuntimeNode list);
+
+    TRuntimeNode Round(const std::string_view& callableName, TRuntimeNode source, TType* targetType);
+
+    TRuntimeNode NextValue(TRuntimeNode value);
+
     typedef TRuntimeNode (TProgramBuilder::*UnaryFunctionMethod)(TRuntimeNode);
     typedef TRuntimeNode (TProgramBuilder::*BinaryFunctionMethod)(TRuntimeNode, TRuntimeNode);
     typedef TRuntimeNode (TProgramBuilder::*TernaryFunctionMethod)(TRuntimeNode, TRuntimeNode, TRuntimeNode);
@@ -675,8 +675,8 @@ private:
     TRuntimeNode AggrCompare(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode DataCompare(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2);
 
-    TRuntimeNode BuildRangeLogical(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists); 
- 
+    TRuntimeNode BuildRangeLogical(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists);
+
     template<bool Default>
     TRuntimeNode DefaultResult(TRuntimeNode data);
 

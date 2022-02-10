@@ -8,45 +8,45 @@ namespace NMiniKQL {
 
 namespace {
 
-template<typename T> 
-ui64 ShiftByMaxNegative(T value) { 
-    if (std::is_signed<T>()) { 
-        if (value < 0) { 
-            return ui64(value + std::numeric_limits<T>::max() + T(1)); 
-        } 
-        return ui64(value) + ui64(std::numeric_limits<T>::max() + 1ul); 
-    } 
-    return ui64(value); 
-} 
- 
-ui64 GetElementsCount(ui64 start, ui64 end, ui64 step) { 
-    if (step == 0 || start >= end) { 
-        return 0; 
-    } 
- 
-    ui64 diff = end - start; 
-    ui64 div = diff / step; 
-    ui64 rem = diff % step; 
- 
-    return rem ? (div + 1) : div; 
-} 
- 
+template<typename T>
+ui64 ShiftByMaxNegative(T value) {
+    if (std::is_signed<T>()) {
+        if (value < 0) {
+            return ui64(value + std::numeric_limits<T>::max() + T(1));
+        }
+        return ui64(value) + ui64(std::numeric_limits<T>::max() + 1ul);
+    }
+    return ui64(value);
+}
+
+ui64 GetElementsCount(ui64 start, ui64 end, ui64 step) {
+    if (step == 0 || start >= end) {
+        return 0;
+    }
+
+    ui64 diff = end - start;
+    ui64 div = diff / step;
+    ui64 rem = diff % step;
+
+    return rem ? (div + 1) : div;
+}
+
 template<typename T, typename TStep>
 ui64 GetElementsCount(T start, T end, TStep step) {
-    ui64 newStart = ShiftByMaxNegative(start); 
-    ui64 newEnd = ShiftByMaxNegative(end); 
-    ui64 newStep; 
- 
-    if (step < 0) { 
+    ui64 newStart = ShiftByMaxNegative(start);
+    ui64 newEnd = ShiftByMaxNegative(end);
+    ui64 newStep;
+
+    if (step < 0) {
         newStep = (step == std::numeric_limits<TStep>::min()) ? (ui64(std::numeric_limits<TStep>::max()) + 1ul) : ui64(TStep(0) - step);
-        std::swap(newStart, newEnd); 
-    } else { 
-        newStep = ui64(step); 
-    } 
- 
-    return GetElementsCount(newStart, newEnd, newStep); 
-} 
- 
+        std::swap(newStart, newEnd);
+    } else {
+        newStep = ui64(step);
+    }
+
+    return GetElementsCount(newStart, newEnd, newStep);
+}
+
 template <typename T, typename TStep = std::make_signed_t<T>, std::conditional_t<std::is_floating_point_v<TStep>, i8, TStep> TConstFactor = 1, ui64 TConstLimit = std::numeric_limits<ui64>::max(), bool TzDate = false>
 class TListFromRangeWrapper : public TMutableCodegeneratorNode<TListFromRangeWrapper<T, TStep, TConstFactor, TConstLimit, TzDate>> {
 private:
@@ -62,35 +62,35 @@ private:
         public:
             TIterator(TMemoryUsageInfo* memInfo, T start, T end, TStep step)
                 : TComputationValue<TIterator>(memInfo)
-                , Current(start) 
+                , Current(start)
                 , Step(step)
                 , Count(GetElementsCount<T, TStep>(start, end, step))
             {}
 
         protected:
             bool Skip() final {
-                if (!Count) { 
-                    return false; 
+                if (!Count) {
+                    return false;
                 }
-                Current += Step; 
-                --Count; 
-                return true; 
+                Current += Step;
+                --Count;
+                return true;
             }
 
             bool Next(NUdf::TUnboxedValue& value) override {
-                if (!Count) { 
+                if (!Count) {
                     return false;
                 }
 
                 value = NUdf::TUnboxedValuePod(Current);
-                Current += Step; 
-                --Count; 
+                Current += Step;
+                --Count;
                 return true;
             }
 
             T Current;
             const TStep Step;
-            ui64 Count; 
+            ui64 Count;
         };
 
         template <bool Asc>
@@ -150,10 +150,10 @@ private:
         }
 
         ui64 GetListLength() const final {
-            if (std::is_integral<T>()) { 
+            if (std::is_integral<T>()) {
                 return GetElementsCount<T, TStep>(Start, End, Step);
-            } 
- 
+            }
+
             if (Step > T(0) && Start < End) {
                 ui64 len = 0ULL;
                 for (T i = 0; i * Step < End - Start; i += T(1)) {

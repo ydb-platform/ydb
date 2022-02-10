@@ -20,8 +20,8 @@
 
 #include <util/generic/xrange.h>
 
-#include <library/cpp/yson/writer.h> 
- 
+#include <library/cpp/yson/writer.h>
+
 namespace NYql {
 
 namespace {
@@ -34,7 +34,7 @@ using TPeepHoleOptimizerMap = std::unordered_map<std::string_view, TPeepHoleOpti
 using TNonDeterministicOptimizerPtr = TExprNode::TPtr (*const)(const TExprNode::TPtr&, TExprContext&, TTypeAnnotationContext& types);
 using TNonDeterministicOptimizerMap = std::unordered_map<std::string_view, TNonDeterministicOptimizerPtr>;
 
-TExprNode::TPtr MakeNothing(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx) { 
+TExprNode::TPtr MakeNothing(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx) {
     return ctx.NewCallable(pos, "Nothing", {ExpandType(pos, *ctx.MakeType<TOptionalExprType>(&type), ctx)});
 }
 
@@ -591,10 +591,10 @@ TExprNode::TPtr PeepHoleDictFromKeysToDict(const TExprNode::TPtr& node, TExprCon
 }
 
 TExprNode::TPtr ExpandEquiJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
-    YQL_ENSURE(input->ChildrenSize() >= 4); 
+    YQL_ENSURE(input->ChildrenSize() >= 4);
     return ExpandEquiJoinImpl(*input, ctx);
-} 
- 
+}
+
 template <bool Strong>
 bool CastMayFail(const TTypeAnnotationNode* source, const TTypeAnnotationNode* target) {
     return NUdf::ECastOptions::MayFail & CastResult<Strong>(source, target);
@@ -1591,262 +1591,262 @@ TExprNode::TPtr ExpandAlterTo(const TExprNode::TPtr& node, TExprContext& ctx) {
     return ctx.ReplaceNode(node->Child(2)->TailPtr(), node->Child(2)->Head().Head(), std::move(casted));
 }
 
-TExprNode::TPtr BuildDictOverListOfStructs(TPositionHandle pos, const TExprNode::TPtr& collection, 
-    const TTypeAnnotationNode*& dictKeyType, TExprContext& ctx) 
-{ 
-    auto collectionType = collection->GetTypeAnn(); 
-    YQL_ENSURE(collectionType->GetKind() == ETypeAnnotationKind::List); 
- 
-    auto listItemType = collectionType->Cast<TListExprType>()->GetItemType(); 
-    YQL_ENSURE(listItemType->GetKind() == ETypeAnnotationKind::Struct); 
- 
-    auto structType = listItemType->Cast<TStructExprType>(); 
-    YQL_ENSURE(structType->GetSize() == 1); 
-    auto memberName = structType->GetItems()[0]->GetName(); 
-    dictKeyType = structType->GetItems()[0]->GetItemType(); 
- 
-    return ctx.Builder(pos) 
-        .Callable("ToDict") 
-            .Add(0, collection) 
-            .Lambda(1) // keyExtractor 
-                .Param("item") 
-                .Callable("Member") 
-                    .Arg(0, "item") 
-                    .Atom(1, memberName) 
-                .Seal() 
-            .Seal() 
-            .Lambda(2) // payloadExtractor 
-                .Param("item") 
-                .Callable("Void") 
-                .Seal() 
-            .Seal() 
-            .List(3) 
+TExprNode::TPtr BuildDictOverListOfStructs(TPositionHandle pos, const TExprNode::TPtr& collection,
+    const TTypeAnnotationNode*& dictKeyType, TExprContext& ctx)
+{
+    auto collectionType = collection->GetTypeAnn();
+    YQL_ENSURE(collectionType->GetKind() == ETypeAnnotationKind::List);
+
+    auto listItemType = collectionType->Cast<TListExprType>()->GetItemType();
+    YQL_ENSURE(listItemType->GetKind() == ETypeAnnotationKind::Struct);
+
+    auto structType = listItemType->Cast<TStructExprType>();
+    YQL_ENSURE(structType->GetSize() == 1);
+    auto memberName = structType->GetItems()[0]->GetName();
+    dictKeyType = structType->GetItems()[0]->GetItemType();
+
+    return ctx.Builder(pos)
+        .Callable("ToDict")
+            .Add(0, collection)
+            .Lambda(1) // keyExtractor
+                .Param("item")
+                .Callable("Member")
+                    .Arg(0, "item")
+                    .Atom(1, memberName)
+                .Seal()
+            .Seal()
+            .Lambda(2) // payloadExtractor
+                .Param("item")
+                .Callable("Void")
+                .Seal()
+            .Seal()
+            .List(3)
                 .Atom(0, "Hashed", TNodeFlags::Default)
                 .Atom(1, "One", TNodeFlags::Default)
                 .Atom(2, "Compact", TNodeFlags::Default)
-            .Seal() 
-        .Seal() 
-        .Build(); 
-} 
- 
-TExprNode::TPtr BuildDictOverList(TPositionHandle pos, const TExprNode::TPtr& collection, TExprContext& ctx) { 
-    auto collectionType = collection->GetTypeAnn(); 
-    YQL_ENSURE(collectionType->GetKind() == ETypeAnnotationKind::List); 
- 
-    return ctx.Builder(pos) 
-        .Callable("ToDict") 
-            .Add(0, collection) 
-            .Lambda(1) // keyExtractor 
-                .Param("item") 
-                .Arg("item") 
-            .Seal() 
-            .Lambda(2) // payloadExtractor 
-                .Param("item") 
-                .Callable("Void") 
-                .Seal() 
-            .Seal() 
-            .List(3) 
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr BuildDictOverList(TPositionHandle pos, const TExprNode::TPtr& collection, TExprContext& ctx) {
+    auto collectionType = collection->GetTypeAnn();
+    YQL_ENSURE(collectionType->GetKind() == ETypeAnnotationKind::List);
+
+    return ctx.Builder(pos)
+        .Callable("ToDict")
+            .Add(0, collection)
+            .Lambda(1) // keyExtractor
+                .Param("item")
+                .Arg("item")
+            .Seal()
+            .Lambda(2) // payloadExtractor
+                .Param("item")
+                .Callable("Void")
+                .Seal()
+            .Seal()
+            .List(3)
                 .Atom(0, "Hashed", TNodeFlags::Default)
                 .Atom(1, "One", TNodeFlags::Default)
                 .Atom(2, "Compact", TNodeFlags::Default)
-            .Seal() 
-        .Seal() 
-        .Build(); 
-} 
- 
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnnotationNode*& dictKeyType, TExprContext& ctx)
-{ 
+{
     if (!collection->GetTypeAnn()->Cast<TTupleExprType>()->GetSize()) {
         dictKeyType = nullptr;
-        return nullptr; 
-    } 
- 
+        return nullptr;
+    }
+
     dictKeyType = CommonTypeForChildren(*collection, ctx);
     YQL_ENSURE(dictKeyType, "Uncompatible colllection elements.");
     const auto pos = collection->Pos();
     return ctx.NewCallable(pos, "DictFromKeys", {ExpandType(pos, *dictKeyType, ctx), std::move(collection)});
-} 
- 
-TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) { 
-    auto collection = input->HeadPtr(); 
-    auto lookup = input->ChildPtr(1); 
-    auto options = input->ChildPtr(2); 
- 
-    const bool ansiIn = HasSetting(*options, "ansi"); 
- 
-    auto collectionType = collection->GetTypeAnn(); 
-    TExprNode::TPtr dict; 
-    const TTypeAnnotationNode* dictKeyType = nullptr; 
-    if (collectionType->GetKind() == ETypeAnnotationKind::List) 
-    { 
-        if (collectionType->Cast<TListExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Struct) { 
+}
+
+TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto collection = input->HeadPtr();
+    auto lookup = input->ChildPtr(1);
+    auto options = input->ChildPtr(2);
+
+    const bool ansiIn = HasSetting(*options, "ansi");
+
+    auto collectionType = collection->GetTypeAnn();
+    TExprNode::TPtr dict;
+    const TTypeAnnotationNode* dictKeyType = nullptr;
+    if (collectionType->GetKind() == ETypeAnnotationKind::List)
+    {
+        if (collectionType->Cast<TListExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Struct) {
             YQL_CLOG(DEBUG, CorePeepHole) << "IN List of Structs";
-            dict = BuildDictOverListOfStructs(input->Pos(), collection, dictKeyType, ctx); 
-        } else { 
+            dict = BuildDictOverListOfStructs(input->Pos(), collection, dictKeyType, ctx);
+        } else {
             YQL_CLOG(DEBUG, CorePeepHole) << "IN List";
-            dict = BuildDictOverList(input->Pos(), collection, ctx); 
-            dictKeyType = collectionType->Cast<TListExprType>()->GetItemType(); 
-        } 
-    } else if (collectionType->GetKind() == ETypeAnnotationKind::Tuple) { 
-        if (ansiIn && collectionType->Cast<TTupleExprType>()->GetSize()) { 
-            return ctx.Builder(input->Pos()) 
-                .Callable("SqlIn") 
+            dict = BuildDictOverList(input->Pos(), collection, ctx);
+            dictKeyType = collectionType->Cast<TListExprType>()->GetItemType();
+        }
+    } else if (collectionType->GetKind() == ETypeAnnotationKind::Tuple) {
+        if (ansiIn && collectionType->Cast<TTupleExprType>()->GetSize()) {
+            return ctx.Builder(input->Pos())
+                .Callable("SqlIn")
                     .Callable(0, "AsListStrict")
                         .Add(collection->ChildrenList())
                     .Seal()
                     .Add(1, std::move(lookup))
                     .Add(2, std::move(options))
-                .Seal() 
-                .Build(); 
-        } 
+                .Seal()
+                .Build();
+        }
         YQL_CLOG(DEBUG, CorePeepHole) << "IN Tuple";
         dict = BuildDictOverTuple(std::move(collection), dictKeyType, ctx);
     } else if (collectionType->GetKind() == ETypeAnnotationKind::EmptyDict) {
         YQL_CLOG(DEBUG, CorePeepHole) << "IN EmptyDict";
     } else if (collectionType->GetKind() == ETypeAnnotationKind::EmptyList) {
         YQL_CLOG(DEBUG, CorePeepHole) << "IN EmptyList";
-    } else { 
-        YQL_ENSURE(collectionType->GetKind() == ETypeAnnotationKind::Dict); 
+    } else {
+        YQL_ENSURE(collectionType->GetKind() == ETypeAnnotationKind::Dict);
         YQL_CLOG(DEBUG, CorePeepHole) << "IN Dict";
-        dict = collection; 
-        dictKeyType = collectionType->Cast<TDictExprType>()->GetKeyType(); 
-    } 
- 
+        dict = collection;
+        dictKeyType = collectionType->Cast<TDictExprType>()->GetKeyType();
+    }
+
     const auto lookupType = lookup->GetTypeAnn();
     const auto falseNode = MakeBool<false>(input->Pos(), ctx);
-    const auto justFalseNode = ctx.NewCallable(input->Pos(), "Just", { falseNode }); 
- 
-    if (ansiIn && !dict) { 
+    const auto justFalseNode = ctx.NewCallable(input->Pos(), "Just", { falseNode });
+
+    if (ansiIn && !dict) {
         YQL_CLOG(DEBUG, CorePeepHole) << "ANSI IN: with statically deduced empty collection";
-        return lookupType->HasOptionalOrNull() ? justFalseNode: falseNode; 
-    } 
- 
-    TExprNode::TPtr contains = falseNode; 
-    if (!dictKeyType) { 
+        return lookupType->HasOptionalOrNull() ? justFalseNode: falseNode;
+    }
+
+    TExprNode::TPtr contains = falseNode;
+    if (!dictKeyType) {
         YQL_CLOG(DEBUG, CorePeepHole) << "IN: Trivial Contains() due to statically deduced empty collection";
     } else if (NUdf::ECastOptions::Impossible & CastResult<true>(lookupType, dictKeyType)) {
         YQL_CLOG(DEBUG, CorePeepHole) << "IN: Trivial Contains() due to uncompatible type of lookup (" << *lookupType
-                              << ") and collection item (" << *dictKeyType << ")"; 
-    } else { 
-        YQL_ENSURE(dict); 
-        contains = ctx.Builder(input->Pos()) 
+                              << ") and collection item (" << *dictKeyType << ")";
+    } else {
+        YQL_ENSURE(dict);
+        contains = ctx.Builder(input->Pos())
             .Callable("Contains")
-                .Add(0, dict) 
-                .Add(1, lookup) 
-            .Seal() 
-            .Build(); 
-    } 
- 
-    const bool nullableCollectionItems = IsSqlInCollectionItemsNullable(NNodes::TCoSqlIn(input)); 
-    if (ansiIn && (nullableCollectionItems || lookupType->HasOptionalOrNull())) { 
+                .Add(0, dict)
+                .Add(1, lookup)
+            .Seal()
+            .Build();
+    }
+
+    const bool nullableCollectionItems = IsSqlInCollectionItemsNullable(NNodes::TCoSqlIn(input));
+    if (ansiIn && (nullableCollectionItems || lookupType->HasOptionalOrNull())) {
         YQL_CLOG(DEBUG, CorePeepHole) << "ANSI IN: with nullable items in collection or lookup";
-        YQL_ENSURE(dict); 
-        const auto trueNode = MakeBool(input->Pos(), true, ctx); 
-        const auto nullNode = MakeNull(input->Pos(), ctx); 
- 
-        const auto nakedLookupType = RemoveAllOptionals(lookupType); 
-        if (nakedLookupType->GetKind() == ETypeAnnotationKind::Data || 
-            nakedLookupType->GetKind() == ETypeAnnotationKind::Null) 
-        { 
-            return ctx.Builder(input->Pos()) 
-                .Callable("If") 
-                    .Callable(0, "HasNull") 
-                        .Add(0, lookup) 
-                    .Seal() 
-                    .Callable(1, "If") 
-                        .Callable(0, "Not") 
-                            .Callable(0, "HasItems") 
-                                .Add(0, dict) 
-                            .Seal() 
-                        .Seal() 
-                        .Add(1, falseNode) 
-                        .Add(2, nullNode) 
-                    .Seal() 
-                    .Callable(2, "If") 
-                        .Add(0, contains) 
-                        .Add(1, trueNode) 
-                        .Callable(2, "If") 
-                            .Callable(0, "HasNull") 
-                                .Callable(0, "DictKeys") 
-                                    .Add(0, dict) 
-                                .Seal() 
-                            .Seal() 
-                            .Add(1, nullNode) 
-                            .Add(2, falseNode) 
-                        .Seal() 
-                    .Seal() 
-                .Seal() 
-                .Build(); 
-        } 
- 
-        // a IN (b1, b2, ...) -> false OR (a == b1 OR a == b2 OR ...) 
-        auto inViaEqualChain = ctx.Builder(input->Pos()) 
-            .Callable("Fold") 
-                .Callable(0, "TakeWhileInclusive") 
-                    .Callable(0, "DictKeys") 
-                        .Add(0, dict) 
-                    .Seal() 
-                    .Lambda(1) 
-                        .Param("collectionItem") 
-                        .Callable("Coalesce") 
-                            .Callable(0, "!=") 
-                                .Arg(0, "collectionItem") 
-                                .Add(1, lookup) 
-                            .Seal() 
-                            .Add(1, trueNode) 
-                        .Seal() 
-                    .Seal() 
-                .Seal() 
-                .Add(1, justFalseNode) 
-                .Lambda(2) 
-                    .Param("collectionItem") 
-                    .Param("result") 
-                    .Callable("Or") 
-                        .Arg(0, "result") 
-                        .Callable(1, "==") 
-                            .Arg(0, "collectionItem") 
-                            .Add(1, lookup) 
-                        .Seal() 
-                    .Seal() 
-                .Seal() 
-            .Seal() 
-            .Build(); 
- 
-        return ctx.Builder(input->Pos()) 
-            .Callable("If") 
-                .Callable(0, "Or") 
-                    .Callable(0, "HasNull") 
-                        .Add(0, lookup) 
-                    .Seal() 
-                    .Callable(1, "HasNull") 
-                        .Callable(0, "DictKeys") 
-                            .Add(0, dict) 
-                        .Seal() 
-                    .Seal() 
-                .Seal() 
-                .Add(1, inViaEqualChain) 
-                .Add(2, contains) 
-            .Seal() 
-            .Build(); 
-    } 
- 
-    auto result = contains; 
-    if (lookupType->HasOptionalOrNull()) { 
-        result = ctx.Builder(input->Pos()) 
-            .Callable("If") 
-                .Callable(0, "HasNull") 
-                    .Add(0, lookup) 
-                .Seal() 
-                .Callable(1, "Null") 
-                .Seal() 
-                .Add(2, result) 
-            .Seal() 
-            .Build(); 
-    } 
- 
-    return result; 
-} 
- 
+        YQL_ENSURE(dict);
+        const auto trueNode = MakeBool(input->Pos(), true, ctx);
+        const auto nullNode = MakeNull(input->Pos(), ctx);
+
+        const auto nakedLookupType = RemoveAllOptionals(lookupType);
+        if (nakedLookupType->GetKind() == ETypeAnnotationKind::Data ||
+            nakedLookupType->GetKind() == ETypeAnnotationKind::Null)
+        {
+            return ctx.Builder(input->Pos())
+                .Callable("If")
+                    .Callable(0, "HasNull")
+                        .Add(0, lookup)
+                    .Seal()
+                    .Callable(1, "If")
+                        .Callable(0, "Not")
+                            .Callable(0, "HasItems")
+                                .Add(0, dict)
+                            .Seal()
+                        .Seal()
+                        .Add(1, falseNode)
+                        .Add(2, nullNode)
+                    .Seal()
+                    .Callable(2, "If")
+                        .Add(0, contains)
+                        .Add(1, trueNode)
+                        .Callable(2, "If")
+                            .Callable(0, "HasNull")
+                                .Callable(0, "DictKeys")
+                                    .Add(0, dict)
+                                .Seal()
+                            .Seal()
+                            .Add(1, nullNode)
+                            .Add(2, falseNode)
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
+        // a IN (b1, b2, ...) -> false OR (a == b1 OR a == b2 OR ...)
+        auto inViaEqualChain = ctx.Builder(input->Pos())
+            .Callable("Fold")
+                .Callable(0, "TakeWhileInclusive")
+                    .Callable(0, "DictKeys")
+                        .Add(0, dict)
+                    .Seal()
+                    .Lambda(1)
+                        .Param("collectionItem")
+                        .Callable("Coalesce")
+                            .Callable(0, "!=")
+                                .Arg(0, "collectionItem")
+                                .Add(1, lookup)
+                            .Seal()
+                            .Add(1, trueNode)
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Add(1, justFalseNode)
+                .Lambda(2)
+                    .Param("collectionItem")
+                    .Param("result")
+                    .Callable("Or")
+                        .Arg(0, "result")
+                        .Callable(1, "==")
+                            .Arg(0, "collectionItem")
+                            .Add(1, lookup)
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+
+        return ctx.Builder(input->Pos())
+            .Callable("If")
+                .Callable(0, "Or")
+                    .Callable(0, "HasNull")
+                        .Add(0, lookup)
+                    .Seal()
+                    .Callable(1, "HasNull")
+                        .Callable(0, "DictKeys")
+                            .Add(0, dict)
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Add(1, inViaEqualChain)
+                .Add(2, contains)
+            .Seal()
+            .Build();
+    }
+
+    auto result = contains;
+    if (lookupType->HasOptionalOrNull()) {
+        result = ctx.Builder(input->Pos())
+            .Callable("If")
+                .Callable(0, "HasNull")
+                    .Add(0, lookup)
+                .Seal()
+                .Callable(1, "Null")
+                .Seal()
+                .Add(2, result)
+            .Seal()
+            .Build();
+    }
+
+    return result;
+}
+
 template <ui8 FirstLambdaIndex = 1u, ui8 LastLambdaIndex = FirstLambdaIndex>
 TExprNode::TPtr CleckClosureOnUpperLambdaOverList(const TExprNode::TPtr& input, TExprContext& ctx) {
     if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
@@ -1912,20 +1912,20 @@ TExprNode::TPtr ExpandFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
     return input;
 }
 
-IGraphTransformer::TStatus PeepHoleCommonStage(const TExprNode::TPtr& input, TExprNode::TPtr& output, 
+IGraphTransformer::TStatus PeepHoleCommonStage(const TExprNode::TPtr& input, TExprNode::TPtr& output,
                                                TExprContext& ctx, TTypeAnnotationContext& types, const TPeepHoleOptimizerMap& optimizers)
-{ 
-    TOptimizeExprSettings settings(&types); 
-    settings.CustomInstantTypeTransformer = types.CustomInstantTypeTransformer.Get(); 
- 
+{
+    TOptimizeExprSettings settings(&types);
+    settings.CustomInstantTypeTransformer = types.CustomInstantTypeTransformer.Get();
+
     return OptimizeExpr(input, output, [&optimizers](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (const auto rule = optimizers.find(node->Content()); optimizers.cend() != rule)
             return (rule->second)(node, ctx);
         return node;
-    }, ctx, settings); 
-} 
- 
-IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExprNode::TPtr& output, 
+    }, ctx, settings);
+}
+
+IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions,
     const TPeepHoleOptimizerMap& optimizers, const TNonDeterministicOptimizerMap& nonDetOptimizers)
 {
@@ -1947,19 +1947,19 @@ IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExp
 }
 
 void AddStandardTransformers(TTransformationPipeline& pipelene, IGraphTransformer* typeAnnotator) {
-    auto issueCode = TIssuesIds::CORE_EXEC; 
+    auto issueCode = TIssuesIds::CORE_EXEC;
     pipelene.AddServiceTransformers(issueCode);
     if (typeAnnotator) {
         pipelene.Add(*typeAnnotator, "TypeAnnotation", issueCode);
     } else {
         pipelene.AddTypeAnnotationTransformer(issueCode);
     }
- 
+
     pipelene.AddPostTypeAnnotation(true, issueCode);
     pipelene.Add(TExprLogTransformer::Sync("PeepHoleOpt", NLog::EComponent::CorePeepHole, NLog::ELevel::TRACE),
         "PeepHoleOptTrace", issueCode, "PeepHoleOptTrace");
 }
- 
+
 template<bool FlatOrMulti>
 TExprNode::TPtr FuseNarrowMap(const TExprNode& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node.Content() << " with " << node.Head().Content();
@@ -2499,9 +2499,9 @@ TExprNode::TPtr ExpandAggrMinMax(const TExprNode::TPtr& node, TExprContext& ctx)
 
 template <bool Ordered, bool EnableNewOptimizers>
 TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
-    const auto& arg = node->Tail().Head().Head(); 
+    const auto& arg = node->Tail().Head().Head();
     if constexpr (EnableNewOptimizers) {
-        if (!arg.IsUsedInDependsOn() && ETypeAnnotationKind::Optional == node->GetTypeAnn()->GetKind()) { 
+        if (!arg.IsUsedInDependsOn() && ETypeAnnotationKind::Optional == node->GetTypeAnn()->GetKind()) {
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over Optional";
             return ctx.Builder(node->Pos())
                 .Callable("IfPresent")
@@ -2519,10 +2519,10 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
                 .Build();
         }
 
-        if (const auto& input = node->Head(); !arg.IsUsedInDependsOn() && input.IsCallable("AsList")) { 
+        if (const auto& input = node->Head(); !arg.IsUsedInDependsOn() && input.IsCallable("AsList")) {
             TNodeSet uniqueItems(input.ChildrenSize());
             input.ForEachChild([&uniqueItems](const TExprNode& item){ uniqueItems.emplace(&item); });
-            if (uniqueItems.size() < 0x10U) { 
+            if (uniqueItems.size() < 0x10U) {
                 YQL_CLOG(DEBUG, CorePeepHole) << "Eliminate " << node->Content() << " over list of " << uniqueItems.size();
                 auto list = input.ChildrenList();
                 for (auto& item : list) {
@@ -2552,7 +2552,7 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
         }
     }
 
-    if (1U == node->Head().UseCount() && !arg.IsUsedInDependsOn()) { 
+    if (1U == node->Head().UseCount() && !arg.IsUsedInDependsOn()) {
         if (node->Head().IsCallable({"Map", "OrderedMap"})) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " over " << node->Head().Content();
             auto lambda = ctx.Builder(node->Pos())
@@ -4433,22 +4433,22 @@ TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& 
     return node;
 }
 
-TExprNode::TPtr ExpandConstraintsOf(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content(); 
- 
+TExprNode::TPtr ExpandConstraintsOf(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+
     TString json;
     TStringOutput out(json);
     NJson::TJsonWriter jsonWriter(&out, true);
     node->Head().GetConstraintSet().ToJson(jsonWriter);
     jsonWriter.Flush();
- 
-    return ctx.Builder(node->Pos()) 
+
+    return ctx.Builder(node->Pos())
         .Callable("Json")
             .Atom(0, json, TNodeFlags::MultilineContent)
-        .Seal() 
-        .Build(); 
-} 
- 
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr OptimizeMapJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap") && input.Tail().Tail().IsCallable("AsStruct")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
@@ -4509,19 +4509,19 @@ TExprNode::TPtr OptimizeCommonJoinCore(const TExprNode::TPtr& node, TExprContext
     return node;
 }
 
-TExprNode::TPtr DoBuildTablePath(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    YQL_ENSURE(node->Head().IsCallable("String"), 
-        "BuildTablePath: expecting string literal as first argument, got: " << node->Head().Content()); 
-    YQL_ENSURE(node->Tail().IsCallable("String"), 
-               "BuildTablePath: expecting string literal as second argument, got: " << node->Tail().Content()); 
- 
-    return ctx.Builder(node->Pos()) 
-        .Callable("String") 
-            .Atom(0, BuildTablePath(node->Head().Head().Content(), node->Tail().Head().Content())) 
-        .Seal() 
-        .Build(); 
-} 
- 
+TExprNode::TPtr DoBuildTablePath(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_ENSURE(node->Head().IsCallable("String"),
+        "BuildTablePath: expecting string literal as first argument, got: " << node->Head().Content());
+    YQL_ENSURE(node->Tail().IsCallable("String"),
+               "BuildTablePath: expecting string literal as second argument, got: " << node->Tail().Content());
+
+    return ctx.Builder(node->Pos())
+        .Callable("String")
+            .Atom(0, BuildTablePath(node->Head().Head().Content(), node->Tail().Head().Content()))
+        .Seal()
+        .Build();
+}
+
 template <bool Equality>
 TExprNode::TPtr ReduceBothArgs(const TExprNode& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand '" << node.Content() << "' with both Optionals.";
@@ -4696,36 +4696,36 @@ TExprNode::TPtr SqlEqualTuples(const TExprNode& node, TExprContext& ctx) {
 
     const auto lSize = node.Head().GetTypeAnn()->Cast<TTupleExprType>()->GetSize();
     const auto rSize = node.Tail().GetTypeAnn()->Cast<TTupleExprType>()->GetSize();
-    const auto size = std::max(lSize, rSize); 
+    const auto size = std::max(lSize, rSize);
 
     TExprNode::TListType compares;
-    compares.reserve(size); 
+    compares.reserve(size);
 
-    TExprNode::TPtr nullNode = MakeNull(node.Pos(), ctx); 
+    TExprNode::TPtr nullNode = MakeNull(node.Pos(), ctx);
     for (ui32 i = 0U; i < size; ++i) {
-        TExprNode::TPtr left = (i >= lSize) ? nullNode : ctx.Builder(node.Pos()) 
-            .Callable("Nth") 
-                .Add(0, node.HeadPtr()) 
-                .Atom(1, ToString(i), TNodeFlags::Default) 
-                .Seal() 
-            .Build(); 
- 
-        TExprNode::TPtr right = (i >= rSize) ? nullNode : ctx.Builder(node.Pos()) 
-            .Callable("Nth") 
-                .Add(0, node.TailPtr()) 
-                .Atom(1, ToString(i), TNodeFlags::Default) 
-            .Seal() 
-            .Build(); 
- 
+        TExprNode::TPtr left = (i >= lSize) ? nullNode : ctx.Builder(node.Pos())
+            .Callable("Nth")
+                .Add(0, node.HeadPtr())
+                .Atom(1, ToString(i), TNodeFlags::Default)
+                .Seal()
+            .Build();
+
+        TExprNode::TPtr right = (i >= rSize) ? nullNode : ctx.Builder(node.Pos())
+            .Callable("Nth")
+                .Add(0, node.TailPtr())
+                .Atom(1, ToString(i), TNodeFlags::Default)
+            .Seal()
+            .Build();
+
         compares.emplace_back(ctx.Builder(node.Pos())
             .Callable(node.Content())
-                .Add(0, left) 
-                .Add(1, right) 
+                .Add(0, left)
+                .Add(1, right)
             .Seal()
         .Build());
     }
 
-    if (compares.empty()) { 
+    if (compares.empty()) {
         return MakeBool<Equals>(node.Pos(), ctx);
     }
 
@@ -4890,43 +4890,43 @@ TExprNode::TPtr SqlEqualStructs(const TExprNode& node, TExprContext& ctx) {
     TExprNode::TListType compares;
     compares.reserve(std::max(lType->GetSize(), rType->GetSize()));
 
-    TExprNode::TPtr nullNode = MakeNull(node.Pos(), ctx); 
+    TExprNode::TPtr nullNode = MakeNull(node.Pos(), ctx);
     for (const auto& item : lType->GetItems()) {
-        const auto& name = item->GetName(); 
-        TExprNode::TPtr right = !rType->FindItem(name) ? nullNode : ctx.Builder(node.Pos()) 
-            .Callable("Member") 
-                .Add(0, node.TailPtr()) 
-                .Atom(1, name) 
-            .Seal() 
-            .Build(); 
- 
-        compares.emplace_back(ctx.Builder(node.Pos()) 
-            .Callable(node.Content()) 
-                .Callable(0, "Member") 
-                    .Add(0, node.HeadPtr()) 
-                    .Atom(1, name) 
-                .Seal() 
-                .Add(1, right) 
-            .Seal() 
-            .Build()); 
-    } 
- 
-    for (const auto& item : rType->GetItems()) { 
-        const auto& name = item->GetName(); 
-        if (!lType->FindItem(name)) { 
+        const auto& name = item->GetName();
+        TExprNode::TPtr right = !rType->FindItem(name) ? nullNode : ctx.Builder(node.Pos())
+            .Callable("Member")
+                .Add(0, node.TailPtr())
+                .Atom(1, name)
+            .Seal()
+            .Build();
+
+        compares.emplace_back(ctx.Builder(node.Pos())
+            .Callable(node.Content())
+                .Callable(0, "Member")
+                    .Add(0, node.HeadPtr())
+                    .Atom(1, name)
+                .Seal()
+                .Add(1, right)
+            .Seal()
+            .Build());
+    }
+
+    for (const auto& item : rType->GetItems()) {
+        const auto& name = item->GetName();
+        if (!lType->FindItem(name)) {
             compares.emplace_back(ctx.Builder(node.Pos())
                 .Callable(node.Content())
-                    .Add(0, nullNode) 
+                    .Add(0, nullNode)
                     .Callable(1, "Member")
                         .Add(0, node.TailPtr())
                         .Atom(1, name)
                     .Seal()
                 .Seal()
-                .Build()); 
+                .Build());
         }
     }
 
-    if (compares.empty()) { 
+    if (compares.empty()) {
         return MakeBool<Equals>(node.Pos(), ctx);
     }
 
@@ -5354,7 +5354,7 @@ TExprNode::TPtr SqlCompareVariants(const TExprNode& node, TExprContext& ctx) {
             const auto& lItems = lTuple->GetItems();
             const auto& rItems = rTuple->GetItems();
             for (ui32 i = 0U; i < tupleType->GetSize(); ++i) {
-                variants.emplace_back(ctx.NewAtom(node.Pos(), ToString(i), TNodeFlags::Default), 
+                variants.emplace_back(ctx.NewAtom(node.Pos(), ToString(i), TNodeFlags::Default),
                     !IsDistinct && ECompareOptions::Optional == CanCompare<true>(lItems[i], rItems[i]));
             }
 
@@ -5696,7 +5696,7 @@ struct TPeepHoleRules {
         {"SafeCast", &ExpandCast<false>},
         {"StrictCast", &ExpandCast<true>},
         {"AlterTo", &ExpandAlterTo},
-        {"SqlIn", &ExpandSqlIn}, 
+        {"SqlIn", &ExpandSqlIn},
         {"Lookup", &RewriteSearchByKeyForTypesMismatch<false>},
         {"Contains", &RewriteSearchByKeyForTypesMismatch<true>},
         {"ListHas", &ExpandListHas},
@@ -5714,8 +5714,8 @@ struct TPeepHoleRules {
         {"Fold1Map", &CleckClosureOnUpperLambdaOverList<1U, 2U>},
         {"Chain1Map", &CleckClosureOnUpperLambdaOverList<1U, 2U>},
         {"CalcOverWindow", &ExpandCalcOverWindow},
-        {"CalcOverSessionWindow", &ExpandCalcOverWindow}, 
-        {"CalcOverWindowGroup", &ExpandCalcOverWindow}, 
+        {"CalcOverSessionWindow", &ExpandCalcOverWindow},
+        {"CalcOverWindowGroup", &ExpandCalcOverWindow},
         {"PartitionsByKeys", &ExpandPartitionsByKeys},
         {"DictItems", &MapForOptionalContainer},
         {"DictKeys", &MapForOptionalContainer},
@@ -5737,7 +5737,7 @@ struct TPeepHoleRules {
         {"CombineByKey", &ExpandCombineByKey},
         {"SkipNullMembers", &ExpandSkipNullFields<EnableNewOptimizers, false>},
         {"SkipNullElements", &ExpandSkipNullFields<EnableNewOptimizers, true>},
-        {"ConstraintsOf", &ExpandConstraintsOf}, 
+        {"ConstraintsOf", &ExpandConstraintsOf},
         {"==", &ExpandSqlEqual<true, false>},
         {"!=", &ExpandSqlEqual<false, false>},
         {"IsNotDistinctFrom", &ExpandSqlEqual<true, true>},
@@ -5752,9 +5752,9 @@ struct TPeepHoleRules {
         {"AggrGreater", &ExpandAggrCompare<false, false>},
         {"AggrLessOrEqual", &ExpandAggrCompare<true, true>},
         {"AggrGreaterOrEqual", &ExpandAggrCompare<false, true>},
-        {"RangeEmpty", &ExpandRangeEmpty}, 
-        {"AsRange", &ExpandAsRange}, 
-        {"RangeFor", &ExpandRangeFor}, 
+        {"RangeEmpty", &ExpandRangeEmpty},
+        {"AsRange", &ExpandAsRange},
+        {"RangeFor", &ExpandRangeFor},
         {"PgCall", &ExpandPgCall},
     };
 
@@ -5788,7 +5788,7 @@ struct TPeepHoleRules {
         {"FlattenMembers", &ExpandFlattenMembers},
         {"FlattenStructs", &ExpandFlattenStructs},
         {"FlattenByColumns", &ExpandFlattenByColumns},
-        {"CastStruct", &ExpandCastStruct}, 
+        {"CastStruct", &ExpandCastStruct},
         {"Filter", &ExpandFilter},
         {"OrderedFilter", &ExpandFilter},
         {"TakeWhile", &ExpandFilter<false>},
@@ -5811,7 +5811,7 @@ struct TPeepHoleRules {
         {"NarrowFlatMap", &OptimizeNarrowFlatMap},
         {"NarrowMultiMap", &OptimizeWideMaps},
         {"MapJoinCore", &OptimizeMapJoinCore},
-        {"CommonJoinCore", &OptimizeCommonJoinCore}, 
+        {"CommonJoinCore", &OptimizeCommonJoinCore},
         {"BuildTablePath", &DoBuildTablePath},
         {"Exists", &OptimizeExists},
         {"SqueezeToDict", &OptimizeSqueezeToDict}
@@ -5847,55 +5847,55 @@ struct TPeepHoleRules {
 template <bool EnableNewOptimizers>
 THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationContext& types,
     IGraphTransformer* typeAnnotator, const TPeepholeSettings& peepholeSettings)
-{ 
+{
     TTransformationPipeline pipeline(&types);
     if (peepholeSettings.CommonConfig) {
         peepholeSettings.CommonConfig->AfterCreate(&pipeline);
     }
- 
+
     AddStandardTransformers(pipeline, typeAnnotator);
     if (peepholeSettings.CommonConfig) {
         peepholeSettings.CommonConfig->AfterTypeAnnotation(&pipeline);
     }
- 
-    auto issueCode = TIssuesIds::CORE_EXEC; 
- 
+
+    auto issueCode = TIssuesIds::CORE_EXEC;
+
     pipeline.AddCommonOptimization(issueCode);
     pipeline.Add(CreateFunctorTransformer(
             [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 return PeepHoleCommonStage(input, output, ctx, types, TPeepHoleRules<EnableNewOptimizers>::Instance().CommonStageRules);
-            } 
-        ), 
-        "PeepHoleCommon", 
+            }
+        ),
+        "PeepHoleCommon",
         issueCode);
- 
+
     if (peepholeSettings.CommonConfig) {
         peepholeSettings.CommonConfig->AfterOptimize(&pipeline);
     }
 
     return pipeline.BuildWithNoArgChecks(false);
-} 
- 
+}
+
 template <bool EnableNewOptimizers>
 THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationContext& types,
                                                                IGraphTransformer* typeAnnotator,
                                                                bool* hasNonDeterministicFunctions,
                                                                const TPeepholeSettings& peepholeSettings)
-{ 
+{
     TTransformationPipeline pipeline(&types);
     if (peepholeSettings.FinalConfig) {
         peepholeSettings.FinalConfig->AfterCreate(&pipeline);
     }
- 
+
     AddStandardTransformers(pipeline, typeAnnotator);
     if (peepholeSettings.FinalConfig) {
         peepholeSettings.FinalConfig->AfterTypeAnnotation(&pipeline);
     }
- 
-    auto issueCode = TIssuesIds::CORE_EXEC; 
- 
+
+    auto issueCode = TIssuesIds::CORE_EXEC;
+
     pipeline.Add(
-        CreateFunctorTransformer( 
+        CreateFunctorTransformer(
             [&types, hasNonDeterministicFunctions, withFinalRules = peepholeSettings.WithFinalStageRules,
             withNonDeterministicRules = peepholeSettings.WithNonDeterministicRules](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 auto stageRules = TPeepHoleRules<EnableNewOptimizers>::Instance().SimplifyStageRules;
@@ -5908,41 +5908,41 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
                     TPeepHoleRules<EnableNewOptimizers>::Instance().FinalStageNonDetRules : TNonDeterministicOptimizerMap{};
 
                 return PeepHoleFinalStage(input, output, ctx, types, hasNonDeterministicFunctions, stageRules, nonDetStageRules);
-            } 
-        ), 
-        "PeepHoleFinal", 
+            }
+        ),
+        "PeepHoleFinal",
         issueCode);
- 
+
     if (peepholeSettings.FinalConfig) {
         peepholeSettings.FinalConfig->AfterOptimize(&pipeline);
     }
 
     return pipeline.BuildWithNoArgChecks(false);
-} 
- 
-} 
- 
+}
+
+}
+
 IGraphTransformer::TStatus DoPeepHoleOptimizeNode(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
     IGraphTransformer& commonTransformer, IGraphTransformer& finalTransformer)
-{ 
-    output = input; 
- 
+{
+    output = input;
+
     for (bool isFinal = false;;) {
         const auto status = InstantTransform(isFinal ? finalTransformer : commonTransformer, output, ctx, input->IsLambda());
         if (status == IGraphTransformer::TStatus::Error || (status.HasRestart && input->IsLambda())) {
-            return status; 
-        } 
-        if (status == IGraphTransformer::TStatus::Ok) { 
-            if (isFinal) { 
-                break; 
-            } 
-            isFinal = true; 
-        } 
-    } 
- 
-    return IGraphTransformer::TStatus::Ok; 
-} 
- 
+            return status;
+        }
+        if (status == IGraphTransformer::TStatus::Ok) {
+            if (isFinal) {
+                break;
+            }
+            isFinal = true;
+        }
+    }
+
+    return IGraphTransformer::TStatus::Ok;
+}
+
 template <bool EnableNewOptimizers>
 IGraphTransformer::TStatus PeepHoleOptimizeNode(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,
@@ -5964,7 +5964,7 @@ THolder<IGraphTransformer> MakePeepholeOptimization(TTypeAnnotationContextPtr ty
             [common = std::move(commonTransformer), final = std::move(finalTransformer)](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                 return DoPeepHoleOptimizeNode(input, output, ctx, *common, *final);
             });
-} 
+}
 
 template IGraphTransformer::TStatus PeepHoleOptimizeNode<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,

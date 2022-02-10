@@ -80,7 +80,7 @@ public:
             if (srcLength == -1) {
                 ythrow TSystemError() << "cannot get file length: " << file;
             }
- 
+
             YQL_ENSURE(srcLength == length);
             return std::make_pair(static_cast<ui64>(length), md5);
         });
@@ -138,12 +138,12 @@ public:
             TUnbufferedFileOutput out(outFile);
             auto result = std::make_pair(TransferData(&in, &out), md5);
             outFile.Close();
- 
+
             i64 length = GetFileLength(dstFile.c_str());
             if (length == -1) {
                 ythrow TSystemError() << "cannot get file length: " << dstFile;
             }
- 
+
             YQL_ENSURE(data.size() == static_cast<ui64>(length));
             return result;
         });

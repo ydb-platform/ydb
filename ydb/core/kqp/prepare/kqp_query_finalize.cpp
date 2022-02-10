@@ -41,7 +41,7 @@ TExprBase GetDeferredEffectsList(const TDeferredEffects& effects, TPositionHandl
         .Done();
 }
 
-TExprBase GetEraseLocksEffects(const TString& cluster, TPositionHandle pos, TCoParameter locksList, TExprContext& ctx) { 
+TExprBase GetEraseLocksEffects(const TString& cluster, TPositionHandle pos, TCoParameter locksList, TExprContext& ctx) {
     return Build<TKiMapParameter>(ctx, pos)
         .Input(locksList)
         .Lambda()
@@ -147,7 +147,7 @@ public:
                 }
 
                 if (TxState->Tx().IsInvalidated()) {
-                    ctx.AddError(YqlIssue(ctx.GetPosition(input->Pos()), TIssuesIds::KIKIMR_OPERATION_ABORTED, TStringBuilder() 
+                    ctx.AddError(YqlIssue(ctx.GetPosition(input->Pos()), TIssuesIds::KIKIMR_OPERATION_ABORTED, TStringBuilder()
                         << "Failed to commit transaction due to previous errors."));
                     return RollbackOnError(ctx);
                 }
@@ -293,10 +293,10 @@ private:
             << ", deferred effects count: " << TxState->Tx().DeferredEffects.Size()
             << ", locks count: " << TxState->Tx().Locks.Size();
 
-        auto program = Build<TKiProgram>(ctx, TPositionHandle()) 
+        auto program = Build<TKiProgram>(ctx, TPositionHandle())
             .Results()
                 .Build()
-            .Effects(GetRollbackEffects(TPositionHandle(), ctx)) 
+            .Effects(GetRollbackEffects(TPositionHandle(), ctx))
             .Done();
 
         if (!HasEffects(program)) {
@@ -325,8 +325,8 @@ private:
     }
 
     bool CheckCommitEffects(TExprBase effects, TExprContext& ctx) const {
-        TIssueScopeGuard issueScope(ctx.IssueManager, [effects, &ctx]() { 
-            return MakeIntrusive<TIssue>(YqlIssue(ctx.GetPosition(effects.Pos()), TIssuesIds::DEFAULT_ERROR, 
+        TIssueScopeGuard issueScope(ctx.IssueManager, [effects, &ctx]() {
+            return MakeIntrusive<TIssue>(YqlIssue(ctx.GetPosition(effects.Pos()), TIssuesIds::DEFAULT_ERROR,
                 "Failed to commit transaction"));
         });
 
@@ -356,14 +356,14 @@ private:
         });
 
         if (blackistedNode) {
-            ctx.AddError(TIssue(ctx.GetPosition(blackistedNode.Cast().Pos()), TStringBuilder() 
+            ctx.AddError(TIssue(ctx.GetPosition(blackistedNode.Cast().Pos()), TStringBuilder()
                 << "Callable not expected in commit tx: " << blackistedNode.Cast<TCallable>().CallableName()));
             return false;
         }
 
         ui32 maxReadsCount = TransformCtx->Config->_CommitReadsLimit.Get().GetRef();
         if (readsCount > maxReadsCount) {
-            ctx.AddError(TIssue(ctx.GetPosition(effects.Pos()), TStringBuilder() 
+            ctx.AddError(TIssue(ctx.GetPosition(effects.Pos()), TStringBuilder()
                 << "Reads limit exceeded in commit tx: " << readsCount << " > " << maxReadsCount));
             return false;
         }
@@ -409,7 +409,7 @@ private:
         TxState->Tx().Finish();
     }
 
-    TExprBase GetRollbackEffects(TPositionHandle pos, TExprContext& ctx) { 
+    TExprBase GetRollbackEffects(TPositionHandle pos, TExprContext& ctx) {
         if (!TxState->Tx().Locks.HasLocks()) {
             return GetEmptyEffectsList(pos, ctx);
         }
@@ -426,7 +426,7 @@ private:
         return GetEraseLocksEffects(Cluster, pos, locksParamNode, ctx);
     }
 
-    TExprBase GetCommitEffects(TPositionHandle pos, TExprContext& ctx, bool& hasDataEffects) { 
+    TExprBase GetCommitEffects(TPositionHandle pos, TExprContext& ctx, bool& hasDataEffects) {
         hasDataEffects = !TxState->Tx().DeferredEffects.Empty();
 
         Y_VERIFY_DEBUG(!hasDataEffects || !TxState->Tx().Locks.Broken());
@@ -603,7 +603,7 @@ private:
 
 } // namespace
 
-TCoList GetEmptyEffectsList(const TPositionHandle pos, TExprContext& ctx) { 
+TCoList GetEmptyEffectsList(const TPositionHandle pos, TExprContext& ctx) {
     return Build<TCoList>(ctx, pos)
         .ListType<TCoListType>()
             .ItemType<TCoVoidType>()

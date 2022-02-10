@@ -458,7 +458,7 @@ private:
         }
 
         i64 dataLimit = static_cast<i64>(4_GB);
-        bool fallbackFlag = false; 
+        bool fallbackFlag = false;
         if (sizeSum > dataLimit) {
             YQL_LOG(INFO) << "Too much data: " << sizeSum << " > " << dataLimit;
             fallbackFlag = true;
@@ -922,7 +922,7 @@ private:
 
         executionPlanner->SetPublicIds(stage2publicId);
 
-        auto settings = std::make_shared<TDqSettings>(*State->Settings); 
+        auto settings = std::make_shared<TDqSettings>(*State->Settings);
         auto tasksPerStage = settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
         const auto maxTasksPerOperation = State->Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 

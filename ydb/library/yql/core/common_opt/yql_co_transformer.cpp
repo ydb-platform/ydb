@@ -19,7 +19,7 @@ namespace {
 
 class TCommonOptTransformer final : public TSyncTransformerBase {
 public:
-    TCommonOptTransformer(TTypeAnnotationContext* typeCtx, bool final) 
+    TCommonOptTransformer(TTypeAnnotationContext* typeCtx, bool final)
         : TypeCtx(typeCtx)
         , Final(final)
     {}
@@ -37,29 +37,29 @@ private:
 private:
     TProcessedNodesSet SimpleProcessedNodes[TCoCallableRules::SIMPLE_STEPS];
     TProcessedNodesSet FlowProcessedNodes[TCoCallableRules::FLOW_STEPS];
-    TProcessedNodesSet FinalProcessedNodes; 
+    TProcessedNodesSet FinalProcessedNodes;
     TTypeAnnotationContext* TypeCtx;
-    const bool Final; 
+    const bool Final;
 };
 
 }
 
 TAutoPtr<IGraphTransformer> CreateCommonOptTransformer(TTypeAnnotationContext* typeCtx) {
-    return new TCommonOptTransformer(typeCtx, false); 
+    return new TCommonOptTransformer(typeCtx, false);
 }
 
-TAutoPtr<IGraphTransformer> CreateCommonOptFinalTransformer(TTypeAnnotationContext* typeCtx) { 
-    return new TCommonOptTransformer(typeCtx, true); 
-} 
- 
+TAutoPtr<IGraphTransformer> CreateCommonOptFinalTransformer(TTypeAnnotationContext* typeCtx) {
+    return new TCommonOptTransformer(typeCtx, true);
+}
+
 IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Ok;
     output = std::move(input);
- 
-    if (Final) { 
-        return DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().FinalCallables, FinalProcessedNodes, true); 
-    } 
- 
+
+    if (Final) {
+        return DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().FinalCallables, FinalProcessedNodes, true);
+    }
+
     for (ui32 i = 0; i < TCoCallableRules::SIMPLE_STEPS; ++i) {
         status = DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().SimpleCallables[i], SimpleProcessedNodes[i], true);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
@@ -110,24 +110,24 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(
         optCtx.ParentsMap = &parentsMap;
     }
 
-    TCallableOptimizerExt defaultOpt; 
-    auto defaultIt = callables.find(""); 
-    if (defaultIt != callables.end()) { 
-        defaultOpt = defaultIt->second; 
-    } 
- 
-    return OptimizeExpr(input, output, [&callables, &optCtx, defaultOpt](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr { 
+    TCallableOptimizerExt defaultOpt;
+    auto defaultIt = callables.find("");
+    if (defaultIt != callables.end()) {
+        defaultOpt = defaultIt->second;
+    }
+
+    return OptimizeExpr(input, output, [&callables, &optCtx, defaultOpt](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         const auto rule = callables.find(node->Content());
-        TExprNode::TPtr result = node; 
-        if (rule != callables.cend()) { 
-            result = (rule->second)(node, ctx, optCtx); 
-        } 
- 
-        if (defaultOpt && result == node) { 
-            result = defaultOpt(node, ctx, optCtx); 
-        } 
- 
-        return result; 
+        TExprNode::TPtr result = node;
+        if (rule != callables.cend()) {
+            result = (rule->second)(node, ctx, optCtx);
+        }
+
+        if (defaultOpt && result == node) {
+            result = defaultOpt(node, ctx, optCtx);
+        }
+
+        return result;
     }, ctx, settings);
 }
 
@@ -177,7 +177,7 @@ TCoCallableRules::TCoCallableRules() {
     RegisterCoFlowCallables1(FlowCallables[FLOW_STEP_1]);
     RegisterCoFlowCallables2(FlowCallables[FLOW_STEP_2]);
     RegisterCoFinalizers(Finalizers);
-    RegisterCoFinalCallables(FinalCallables); 
+    RegisterCoFinalCallables(FinalCallables);
 }
 
 }

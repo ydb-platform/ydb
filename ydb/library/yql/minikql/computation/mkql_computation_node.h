@@ -255,7 +255,7 @@ using TComputationNodeFactory = std::function<IComputationNode* (TCallable&, con
 using TStreamEmitter = std::function<void(NUdf::TUnboxedValue&&)>;
 
 struct TComputationPatternOpts {
-    TComputationPatternOpts(const std::shared_ptr<TInjectedAlloc>& cacheAlloc, const std::shared_ptr<TTypeEnvironment>& cacheEnv) 
+    TComputationPatternOpts(const std::shared_ptr<TInjectedAlloc>& cacheAlloc, const std::shared_ptr<TTypeEnvironment>& cacheEnv)
         : CacheAlloc(std::move(cacheAlloc))
         , CacheEnv(std::move(cacheEnv))
         , AllocState(CacheAlloc->InjectedState())
@@ -305,8 +305,8 @@ struct TComputationPatternOpts {
         SecureParamsProvider = secureParamsProvider;
     }
 
-    mutable std::shared_ptr<TInjectedAlloc> CacheAlloc; 
-    mutable std::shared_ptr<TTypeEnvironment> CacheEnv; 
+    mutable std::shared_ptr<TInjectedAlloc> CacheAlloc;
+    mutable std::shared_ptr<TTypeEnvironment> CacheEnv;
     TAllocState& AllocState;
     const TTypeEnvironment& Env;
 

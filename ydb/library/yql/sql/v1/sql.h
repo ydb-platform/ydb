@@ -15,7 +15,7 @@ namespace NSQLTranslation {
 namespace NSQLTranslationV1 {
 
     NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules = nullptr);
-    google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, NYql::TIssues& err, size_t maxErrors, bool ansiLexer, google::protobuf::Arena* arena = nullptr); 
+    google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, NYql::TIssues& err, size_t maxErrors, bool ansiLexer, google::protobuf::Arena* arena = nullptr);
     NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst, const NSQLTranslation::TTranslationSettings& settings);
 
 }  // namespace NSQLTranslationV1

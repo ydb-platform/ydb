@@ -2,15 +2,15 @@ grammar SQLv1;
 
 options {
     language = Cpp;
-    memoize = true; 
+    memoize = true;
 }
 
 // Input is a list of statements.
 sql_query: sql_stmt_list | (PRAGMA ANSI DIGITS ansi_sql_stmt_list);
-sql_stmt_list: SEMICOLON* sql_stmt (SEMICOLON+ sql_stmt)* SEMICOLON* EOF; 
-ansi_sql_stmt_list: SEMICOLON* EOF; 
+sql_stmt_list: SEMICOLON* sql_stmt (SEMICOLON+ sql_stmt)* SEMICOLON* EOF;
+ansi_sql_stmt_list: SEMICOLON* EOF;
 
-lambda_body: SEMICOLON* (lambda_stmt SEMICOLON+)* RETURN expr SEMICOLON*; 
+lambda_body: SEMICOLON* (lambda_stmt SEMICOLON+)* RETURN expr SEMICOLON*;
 lambda_stmt:
     named_nodes_stmt
   | import_stmt
@@ -38,17 +38,17 @@ sql_stmt_core:
   | define_action_or_subquery_stmt
   | if_stmt
   | for_stmt
-  | values_stmt 
-  | create_user_stmt 
-  | alter_user_stmt 
-  | create_group_stmt 
-  | alter_group_stmt 
-  | drop_role_stmt 
+  | values_stmt
+  | create_user_stmt
+  | alter_user_stmt
+  | create_group_stmt
+  | alter_group_stmt
+  | drop_role_stmt
 ;
 
 expr:
     or_subexpr (OR or_subexpr)*
-  | type_name_composite; 
+  | type_name_composite;
 
 or_subexpr: and_subexpr (AND and_subexpr)*;
 
@@ -56,14 +56,14 @@ and_subexpr: xor_subexpr (XOR xor_subexpr)*;
 
 xor_subexpr: eq_subexpr cond_expr?;
 
-distinct_from_op: IS NOT? DISTINCT FROM; 
- 
+distinct_from_op: IS NOT? DISTINCT FROM;
+
 cond_expr:
     NOT? match_op eq_subexpr (ESCAPE eq_subexpr)?
-  | NOT? IN COMPACT? in_expr 
-  | (ISNULL | NOTNULL | IS NULL | (IS)? NOT NULL) 
+  | NOT? IN COMPACT? in_expr
+  | (ISNULL | NOTNULL | IS NULL | (IS)? NOT NULL)
   | NOT? BETWEEN eq_subexpr AND eq_subexpr
-  | ((EQUALS | EQUALS2 | NOT_EQUALS | NOT_EQUALS2 | distinct_from_op) eq_subexpr)+ /* order of the eq subexpressions is reversed! */ 
+  | ((EQUALS | EQUALS2 | NOT_EQUALS | NOT_EQUALS2 | distinct_from_op) eq_subexpr)+ /* order of the eq subexpressions is reversed! */
 ;
 
 match_op: LIKE | ILIKE | GLOB | REGEXP | RLIKE | MATCH;
@@ -75,9 +75,9 @@ shift_right: GREATER GREATER;
 rot_right: GREATER GREATER PIPE;
 double_question: QUESTION QUESTION;
 
-neq_subexpr: bit_subexpr ((SHIFT_LEFT | shift_right | ROT_LEFT | rot_right | AMPERSAND | PIPE | CARET) bit_subexpr)* 
-  // trailing QUESTIONs are used in optional simple types (String?) and optional lambda args: ($x, $y?) -> ($x) 
-  ((double_question neq_subexpr) => double_question neq_subexpr | QUESTION+)?; 
+neq_subexpr: bit_subexpr ((SHIFT_LEFT | shift_right | ROT_LEFT | rot_right | AMPERSAND | PIPE | CARET) bit_subexpr)*
+  // trailing QUESTIONs are used in optional simple types (String?) and optional lambda args: ($x, $y?) -> ($x)
+  ((double_question neq_subexpr) => double_question neq_subexpr | QUESTION+)?;
 
 bit_subexpr: add_subexpr ((PLUS | MINUS) add_subexpr)*;
 
@@ -92,12 +92,12 @@ unary_op: PLUS | MINUS | TILDA | NOT;
 unary_subexpr_suffix: (key_expr | invoke_expr |(DOT (bind_parameter | DIGITS | an_id_or_type)))* (COLLATE an_id)?;
 
 unary_casual_subexpr: (id_expr | atom_expr) unary_subexpr_suffix;
- 
-in_unary_casual_subexpr: (id_expr_in | in_atom_expr) unary_subexpr_suffix; 
+
+in_unary_casual_subexpr: (id_expr_in | in_atom_expr) unary_subexpr_suffix;
 
 unary_subexpr:    unary_casual_subexpr | json_api_expr;
 
-in_unary_subexpr: in_unary_casual_subexpr | json_api_expr; 
+in_unary_subexpr: in_unary_casual_subexpr | json_api_expr;
 
 list_literal: LBRACE_SQUARE expr_list? COMMA? RBRACE_SQUARE;
 
@@ -113,10 +113,10 @@ atom_expr:
     literal_value
   | bind_parameter
   | lambda
-  | cast_expr 
-  | exists_expr 
-  | case_expr 
-  | an_id_or_type NAMESPACE (id_or_type | STRING_VALUE) 
+  | cast_expr
+  | exists_expr
+  | case_expr
+  | an_id_or_type NAMESPACE (id_or_type | STRING_VALUE)
   | value_constructor
   | bitcast_expr
   | list_literal
@@ -124,39 +124,39 @@ atom_expr:
   | struct_literal
 ;
 
-in_atom_expr: 
-    literal_value 
-  | bind_parameter 
+in_atom_expr:
+    literal_value
+  | bind_parameter
   | lambda
-  | cast_expr 
-  | case_expr 
-  | an_id_or_type NAMESPACE (id_or_type | STRING_VALUE) 
-  | LPAREN select_stmt RPAREN 
-// TODO: resolve ANTLR error: rule in_atom_expr has non-LL(*) decision due to recursive rule invocations reachable from alts 3,8 
-//  | LPAREN values_stmt RPAREN 
+  | cast_expr
+  | case_expr
+  | an_id_or_type NAMESPACE (id_or_type | STRING_VALUE)
+  | LPAREN select_stmt RPAREN
+// TODO: resolve ANTLR error: rule in_atom_expr has non-LL(*) decision due to recursive rule invocations reachable from alts 3,8
+//  | LPAREN values_stmt RPAREN
   | value_constructor
   | bitcast_expr
   | list_literal
   | dict_literal
   | struct_literal
-; 
- 
+;
+
 cast_expr: CAST LPAREN expr AS type_name_or_bind RPAREN;
- 
+
 bitcast_expr: BITCAST LPAREN expr AS type_name_simple RPAREN;
 
-exists_expr: EXISTS LPAREN (select_stmt | values_stmt) RPAREN; 
- 
-case_expr: CASE expr? when_expr+ (ELSE expr)? END; 
- 
+exists_expr: EXISTS LPAREN (select_stmt | values_stmt) RPAREN;
+
+case_expr: CASE expr? when_expr+ (ELSE expr)? END;
+
 lambda: smart_parenthesis (ARROW ((LPAREN expr RPAREN) | (LBRACE_CURLY lambda_body RBRACE_CURLY)) )?;
 
-in_expr: in_unary_subexpr; 
+in_expr: in_unary_subexpr;
 
 // ANSI SQL JSON support
 json_api_expr: json_value | json_exists | json_query;
 
-jsonpath_spec: STRING_VALUE; 
+jsonpath_spec: STRING_VALUE;
 
 json_variable_name: id_expr | STRING_VALUE;
 
@@ -196,31 +196,31 @@ smart_parenthesis: LPAREN named_expr_list? COMMA? RPAREN;
 
 expr_list: expr (COMMA expr)*;
 
-pure_column_list: LPAREN an_id (COMMA an_id)* RPAREN; 
+pure_column_list: LPAREN an_id (COMMA an_id)* RPAREN;
 
-pure_column_or_named: bind_parameter | an_id; 
+pure_column_or_named: bind_parameter | an_id;
 pure_column_or_named_list: LPAREN pure_column_or_named (COMMA pure_column_or_named)* RPAREN;
 
-column_name: opt_id_prefix an_id; 
-without_column_name: (an_id DOT an_id) | an_id_without; 
+column_name: opt_id_prefix an_id;
+without_column_name: (an_id DOT an_id) | an_id_without;
 
-column_list: column_name (COMMA column_name)* COMMA?; 
-without_column_list: without_column_name (COMMA without_column_name)* COMMA?; 
+column_list: column_name (COMMA column_name)* COMMA?;
+without_column_list: without_column_name (COMMA without_column_name)* COMMA?;
 
-named_expr: expr (AS an_id_or_type)?; 
+named_expr: expr (AS an_id_or_type)?;
 
 named_expr_list: named_expr (COMMA named_expr)*;
 
-invoke_expr: LPAREN (opt_set_quantifier named_expr_list COMMA? | ASTERISK)? RPAREN invoke_expr_tail; 
+invoke_expr: LPAREN (opt_set_quantifier named_expr_list COMMA? | ASTERISK)? RPAREN invoke_expr_tail;
 
-// null_treatment can only happen after window functions LAG/LEAD/NTH/FIRST_VALUE/LAST_VALUE 
-// filter_clause can only happen after aggregation functions 
-invoke_expr_tail: 
-    (null_treatment | filter_clause)? (OVER window_name_or_specification)? 
-; 
- 
+// null_treatment can only happen after window functions LAG/LEAD/NTH/FIRST_VALUE/LAST_VALUE
+// filter_clause can only happen after aggregation functions
+invoke_expr_tail:
+    (null_treatment | filter_clause)? (OVER window_name_or_specification)?
+;
+
 using_call_expr: ((an_id_or_type NAMESPACE an_id_or_type) | an_id_expr | bind_parameter | (EXTERNAL FUNCTION)) invoke_expr;
- 
+
 key_expr: LBRACE_SQUARE expr RBRACE_SQUARE;
 
 when_expr: WHEN expr THEN expr;
@@ -238,8 +238,8 @@ literal_value:
   | EMPTY_ACTION
 ;
 
-bind_parameter: DOLLAR an_id_or_type; 
-opt_bind_parameter: bind_parameter QUESTION?; 
+bind_parameter: DOLLAR an_id_or_type;
+opt_bind_parameter: bind_parameter QUESTION?;
 
 bind_parameter_list: bind_parameter (COMMA bind_parameter)*;
 named_bind_parameter: bind_parameter (AS bind_parameter)?;
@@ -247,34 +247,34 @@ named_bind_parameter_list: named_bind_parameter (COMMA named_bind_parameter)*;
 
 signed_number: (PLUS | MINUS)? (integer | real);
 
-type_name_simple: an_id_pure; 
+type_name_simple: an_id_pure;
 
 integer_or_bind: integer | bind_parameter;
 type_name_tag: id | STRING_VALUE | bind_parameter;
 
 struct_arg: type_name_tag COLON type_name_or_bind;
-struct_arg_as: type_name_or_bind AS type_name_tag; 
+struct_arg_as: type_name_or_bind AS type_name_tag;
 variant_arg: (type_name_tag COLON)? type_name_or_bind;
 callable_arg: variant_arg (LBRACE_CURLY AUTOMAP RBRACE_CURLY)?;
 callable_arg_list: callable_arg (COMMA callable_arg)*;
 
 type_name_decimal: DECIMAL LPAREN integer_or_bind COMMA integer_or_bind RPAREN;
 type_name_optional: OPTIONAL LESS type_name_or_bind GREATER;
-type_name_tuple: TUPLE (LESS (type_name_or_bind (COMMA type_name_or_bind)* COMMA?)? GREATER | NOT_EQUALS2); 
-type_name_struct: STRUCT (LESS (struct_arg (COMMA struct_arg)* COMMA?)? GREATER | NOT_EQUALS2); 
-type_name_variant: VARIANT LESS variant_arg (COMMA variant_arg)* COMMA? GREATER; 
+type_name_tuple: TUPLE (LESS (type_name_or_bind (COMMA type_name_or_bind)* COMMA?)? GREATER | NOT_EQUALS2);
+type_name_struct: STRUCT (LESS (struct_arg (COMMA struct_arg)* COMMA?)? GREATER | NOT_EQUALS2);
+type_name_variant: VARIANT LESS variant_arg (COMMA variant_arg)* COMMA? GREATER;
 type_name_list: LIST LESS type_name_or_bind GREATER;
 type_name_stream: STREAM LESS type_name_or_bind GREATER;
 type_name_flow: FLOW LESS type_name_or_bind GREATER;
 type_name_dict: DICT LESS type_name_or_bind COMMA type_name_or_bind GREATER;
 type_name_set: SET LESS type_name_or_bind GREATER;
-type_name_enum: ENUM LESS type_name_tag (COMMA type_name_tag)* COMMA? GREATER; 
+type_name_enum: ENUM LESS type_name_tag (COMMA type_name_tag)* COMMA? GREATER;
 type_name_resource: RESOURCE LESS type_name_tag GREATER;
 type_name_tagged: TAGGED LESS type_name_or_bind COMMA type_name_tag GREATER;
 type_name_callable: CALLABLE LESS LPAREN callable_arg_list? COMMA? (LBRACE_SQUARE callable_arg_list RBRACE_SQUARE)? RPAREN ARROW type_name_or_bind GREATER;
 
-type_name_composite: 
-  ( type_name_optional 
+type_name_composite:
+  ( type_name_optional
   | type_name_tuple
   | type_name_struct
   | type_name_variant
@@ -289,29 +289,29 @@ type_name_composite:
   | type_name_callable
   ) QUESTION*;
 
-type_name: 
-    type_name_composite 
-  | (type_name_decimal | type_name_simple) QUESTION*; 
- 
+type_name:
+    type_name_composite
+  | (type_name_decimal | type_name_simple) QUESTION*;
+
 type_name_or_bind: type_name | bind_parameter;
 
-value_constructor_literal: STRING_VALUE; 
+value_constructor_literal: STRING_VALUE;
 value_constructor:
-    VARIANT LPAREN expr COMMA expr COMMA expr RPAREN 
+    VARIANT LPAREN expr COMMA expr COMMA expr RPAREN
   | ENUM LPAREN expr COMMA expr RPAREN
   | CALLABLE LPAREN expr COMMA expr RPAREN
 ;
 
 declare_stmt: DECLARE bind_parameter AS type_name (EQUALS literal_value)?;
 
-module_path: DOT? an_id (DOT an_id)*; 
+module_path: DOT? an_id (DOT an_id)*;
 import_stmt: IMPORT module_path SYMBOLS named_bind_parameter_list;
 export_stmt: EXPORT bind_parameter_list;
 
 call_action: (bind_parameter | EMPTY_ACTION) LPAREN expr_list? RPAREN;
-inline_action: BEGIN define_action_or_subquery_body END DO; 
+inline_action: BEGIN define_action_or_subquery_body END DO;
 do_stmt: DO (call_action | inline_action);
-pragma_stmt: PRAGMA opt_id_prefix_or_type an_id (EQUALS pragma_value | LPAREN pragma_value (COMMA pragma_value)* RPAREN)?; 
+pragma_stmt: PRAGMA opt_id_prefix_or_type an_id (EQUALS pragma_value | LPAREN pragma_value (COMMA pragma_value)* RPAREN)?;
 
 pragma_value:
     signed_number
@@ -341,7 +341,7 @@ select_kind_partial: select_kind
 select_kind: (DISCARD)? (process_core | reduce_core | select_core) (INTO RESULT pure_column_or_named)?;
 
 process_core:
-  PROCESS STREAM? named_single_source (COMMA named_single_source)* (USING using_call_expr (AS an_id)? 
+  PROCESS STREAM? named_single_source (COMMA named_single_source)* (USING using_call_expr (AS an_id)?
   (WITH external_call_settings)?
   (WHERE expr)? (HAVING expr)? (ASSUME order_by_clause)?)?
 ;
@@ -351,14 +351,14 @@ external_call_settings: external_call_param (COMMA external_call_param)*;
 
 reduce_core:
   REDUCE named_single_source (COMMA named_single_source)* (PRESORT sort_specification_list)?
-  ON column_list USING ALL? using_call_expr (AS an_id)? 
+  ON column_list USING ALL? using_call_expr (AS an_id)?
   (WHERE expr)? (HAVING expr)? (ASSUME order_by_clause)?
 ;
 
 opt_set_quantifier: (ALL | DISTINCT)?;
 
 select_core:
-  (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* COMMA? (WITHOUT without_column_list)? (FROM join_source)? (WHERE expr)? 
+  (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* COMMA? (WITHOUT without_column_list)? (FROM join_source)? (WHERE expr)?
   group_by_clause? (HAVING expr)? window_clause? ext_order_by_clause?
 ;
 
@@ -366,7 +366,7 @@ order_by_clause: ORDER BY sort_specification_list;
 
 ext_order_by_clause: ASSUME? order_by_clause;
 
-group_by_clause: GROUP COMPACT? BY opt_set_quantifier grouping_element_list; 
+group_by_clause: GROUP COMPACT? BY opt_set_quantifier grouping_element_list;
 
 grouping_element_list: grouping_element (COMMA grouping_element)*;
 
@@ -396,23 +396,23 @@ result_column:
   | expr ((AS an_id_or_type) | an_id_pure)?
 ;
 
-join_source: ANY? flatten_source (join_op ANY? flatten_source join_constraint?)*; 
+join_source: ANY? flatten_source (join_op ANY? flatten_source join_constraint?)*;
 
-named_column: column_name (AS an_id)?; 
- 
-flatten_by_arg: 
+named_column: column_name (AS an_id)?;
+
+flatten_by_arg:
     named_column
-  | LPAREN named_expr_list COMMA? RPAREN 
+  | LPAREN named_expr_list COMMA? RPAREN
 ;
 
-flatten_source: named_single_source (FLATTEN ((OPTIONAL|LIST|DICT)? BY flatten_by_arg | COLUMNS))?; 
+flatten_source: named_single_source (FLATTEN ((OPTIONAL|LIST|DICT)? BY flatten_by_arg | COLUMNS))?;
 
-named_single_source: single_source (((AS an_id) | an_id_pure) pure_column_list?)? (sample_clause | tablesample_clause)?; 
+named_single_source: single_source (((AS an_id) | an_id_pure) pure_column_list?)? (sample_clause | tablesample_clause)?;
 
 single_source:
     table_ref
   | LPAREN select_stmt RPAREN
-  | LPAREN values_stmt RPAREN 
+  | LPAREN values_stmt RPAREN
 ;
 
 sample_clause: SAMPLE expr;
@@ -425,7 +425,7 @@ repeatable_clause: REPEATABLE LPAREN expr RPAREN;
 
 join_op:
     COMMA
-  | (NATURAL)? ((LEFT (ONLY | SEMI)? | RIGHT (ONLY | SEMI)? | EXCLUSION | FULL)? (OUTER)? | INNER | CROSS) SORTED? JOIN 
+  | (NATURAL)? ((LEFT (ONLY | SEMI)? | RIGHT (ONLY | SEMI)? | EXCLUSION | FULL)? (OUTER)? | INNER | CROSS) SORTED? JOIN
 ;
 
 join_constraint:
@@ -440,9 +440,9 @@ into_values_source:
   | DEFAULT VALUES
 ;
 
-values_stmt: VALUES values_source_row_list; 
- 
-values_source: values_stmt | select_stmt; 
+values_stmt: VALUES values_source_row_list;
+
+values_source: values_stmt | select_stmt;
 values_source_row_list: values_source_row (COMMA values_source_row)*;
 values_source_row: LPAREN expr_list RPAREN;
 
@@ -480,7 +480,7 @@ alter_table_action:
 ;
 
 alter_table_add_column: ADD COLUMN? column_schema;
-alter_table_drop_column: DROP COLUMN? an_id; 
+alter_table_drop_column: DROP COLUMN? an_id;
 alter_table_alter_column: ALTER COLUMN an_id SET family_relation;
 alter_table_add_column_family: ADD family_entry;
 alter_table_alter_column_family: ALTER FAMILY an_id SET an_id family_setting_value;
@@ -496,18 +496,18 @@ alter_table_drop_changefeed: DROP CHANGEFEED an_id;
 
 column_schema: an_id_schema type_name_or_bind family_relation? (NOT? NULL)?;
 family_relation: FAMILY an_id;
-column_order_by_specification: an_id (ASC | DESC)?; 
+column_order_by_specification: an_id (ASC | DESC)?;
 
 table_constraint:
-    PRIMARY KEY LPAREN an_id (COMMA an_id)* RPAREN 
-  | PARTITION BY LPAREN an_id (COMMA an_id)* RPAREN 
+    PRIMARY KEY LPAREN an_id (COMMA an_id)* RPAREN
+  | PARTITION BY LPAREN an_id (COMMA an_id)* RPAREN
   | ORDER BY LPAREN column_order_by_specification (COMMA column_order_by_specification)* RPAREN
 ;
 
 table_index: INDEX an_id table_index_type
-    (WITH LPAREN an_id EQUALS an_id COMMA (an_id EQUALS an_id)* RPAREN)? 
-    ON LPAREN an_id_schema (COMMA an_id_schema)* RPAREN 
-    (COVER LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?; 
+    (WITH LPAREN an_id EQUALS an_id COMMA (an_id EQUALS an_id)* RPAREN)?
+    ON LPAREN an_id_schema (COMMA an_id_schema)* RPAREN
+    (COVER LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?;
 
 table_index_type:
       global_index
@@ -549,36 +549,36 @@ split_boundaries:
 literal_value_list: LPAREN literal_value (COMMA literal_value)* RPAREN;
 
 drop_table_stmt: DROP TABLE (IF EXISTS)? simple_table_ref;
- 
-create_user_stmt: CREATE USER role_name create_user_option?; 
-alter_user_stmt: ALTER USER role_name (WITH? create_user_option | RENAME TO role_name); 
- 
-create_group_stmt: CREATE GROUP role_name; 
-alter_group_stmt: ALTER GROUP role_name ((ADD|DROP) USER role_name (COMMA role_name)* COMMA? | RENAME TO role_name); 
- 
-drop_role_stmt: DROP (USER|GROUP) (IF EXISTS)? role_name (COMMA role_name)* COMMA?; 
- 
-role_name: an_id_or_type | bind_parameter; 
-create_user_option: ENCRYPTED? PASSWORD expr; 
- 
-action_or_subquery_args: opt_bind_parameter (COMMA opt_bind_parameter)*; 
- 
-define_action_or_subquery_stmt: DEFINE (ACTION|SUBQUERY) bind_parameter LPAREN action_or_subquery_args? RPAREN AS define_action_or_subquery_body END DEFINE; 
-define_action_or_subquery_body: SEMICOLON* (sql_stmt_core (SEMICOLON+ sql_stmt_core)* SEMICOLON*)?; 
+
+create_user_stmt: CREATE USER role_name create_user_option?;
+alter_user_stmt: ALTER USER role_name (WITH? create_user_option | RENAME TO role_name);
+
+create_group_stmt: CREATE GROUP role_name;
+alter_group_stmt: ALTER GROUP role_name ((ADD|DROP) USER role_name (COMMA role_name)* COMMA? | RENAME TO role_name);
+
+drop_role_stmt: DROP (USER|GROUP) (IF EXISTS)? role_name (COMMA role_name)* COMMA?;
+
+role_name: an_id_or_type | bind_parameter;
+create_user_option: ENCRYPTED? PASSWORD expr;
+
+action_or_subquery_args: opt_bind_parameter (COMMA opt_bind_parameter)*;
+
+define_action_or_subquery_stmt: DEFINE (ACTION|SUBQUERY) bind_parameter LPAREN action_or_subquery_args? RPAREN AS define_action_or_subquery_body END DEFINE;
+define_action_or_subquery_body: SEMICOLON* (sql_stmt_core (SEMICOLON+ sql_stmt_core)* SEMICOLON*)?;
 
 if_stmt: EVALUATE? IF expr do_stmt (ELSE do_stmt)?;
 for_stmt: EVALUATE? FOR bind_parameter IN expr do_stmt (ELSE do_stmt)?;
 
-table_ref: (cluster_expr DOT)? AT? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW an_id)?) table_hints?; 
+table_ref: (cluster_expr DOT)? AT? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW an_id)?) table_hints?;
 
 table_key: id_table_or_type (VIEW an_id)?;
-table_arg: AT? named_expr (VIEW an_id)?; 
+table_arg: AT? named_expr (VIEW an_id)?;
 table_hints: WITH (table_hint | LPAREN table_hint (COMMA table_hint)* RPAREN);
-table_hint: 
-      an_id_hint 
-    | (SCHEMA | COLUMNS) type_name_or_bind 
-    | SCHEMA LPAREN (struct_arg_as (COMMA struct_arg_as)*)? COMMA? RPAREN 
-; 
+table_hint:
+      an_id_hint
+    | (SCHEMA | COLUMNS) type_name_or_bind
+    | SCHEMA LPAREN (struct_arg_as (COMMA struct_arg_as)*)? COMMA? RPAREN
+;
 
 simple_table_ref: (((cluster_expr DOT)? id_or_at) | AT? bind_parameter) table_hints?;
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
@@ -599,11 +599,11 @@ set_target_list: LPAREN set_target (COMMA set_target)* RPAREN;
 // differ from 2003 for resolve conflict
 null_treatment: RESPECT NULLS | IGNORE NULLS;
 
-filter_clause: FILTER LPAREN WHERE expr RPAREN; 
- 
-window_name_or_specification: window_name | window_specification; 
+filter_clause: FILTER LPAREN WHERE expr RPAREN;
 
-window_name: an_id_window; 
+window_name_or_specification: window_name | window_specification;
+
+window_name: an_id_window;
 
 window_clause: WINDOW window_definition_list;
 
@@ -623,19 +623,19 @@ window_specification_details:
 ;
 
 existing_window_name: window_name;
-window_partition_clause: PARTITION COMPACT? BY named_expr_list; 
-window_order_clause: order_by_clause; 
- 
+window_partition_clause: PARTITION COMPACT? BY named_expr_list;
+window_order_clause: order_by_clause;
+
 window_frame_clause: window_frame_units window_frame_extent window_frame_exclusion?;
-window_frame_units: ROWS | RANGE | GROUPS; 
+window_frame_units: ROWS | RANGE | GROUPS;
 
-window_frame_extent: window_frame_bound | window_frame_between; 
+window_frame_extent: window_frame_bound | window_frame_between;
 
-window_frame_between: BETWEEN window_frame_bound AND window_frame_bound; 
- 
-window_frame_bound: 
-    CURRENT ROW 
-  | (expr | UNBOUNDED) (PRECEDING | FOLLOWING) 
+window_frame_between: BETWEEN window_frame_bound AND window_frame_bound;
+
+window_frame_bound:
+    CURRENT ROW
+  | (expr | UNBOUNDED) (PRECEDING | FOLLOWING)
 ;
 
 window_frame_exclusion: EXCLUDE CURRENT ROW | EXCLUDE GROUP | EXCLUDE TIES | EXCLUDE NO OTHERS;
@@ -645,8 +645,8 @@ use_stmt: USE cluster_expr;
 
 subselect_stmt: (LPAREN select_stmt RPAREN | select_unparenthesized_stmt);
 
-// TODO: [fatal] rule named_nodes_stmt has non-LL(*) decision due to recursive rule invocations reachable from alts 1,3 
-// named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt | values_stmt | LPAREN values_stmt RPAREN); 
+// TODO: [fatal] rule named_nodes_stmt has non-LL(*) decision due to recursive rule invocations reachable from alts 1,3
+// named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt | values_stmt | LPAREN values_stmt RPAREN);
 named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt);
 
 commit_stmt: COMMIT;
@@ -654,136 +654,136 @@ commit_stmt: COMMIT;
 rollback_stmt: ROLLBACK;
 
 // Special rules that allow to use certain keywords as identifiers.
-identifier: ID_PLAIN | ID_QUOTED; 
-id: identifier | keyword; 
+identifier: ID_PLAIN | ID_QUOTED;
+id: identifier | keyword;
 
-id_schema: 
-    identifier 
-  | keyword_compat 
-  | keyword_expr_uncompat 
-//  | keyword_table_uncompat 
-  | keyword_select_uncompat 
-//  | keyword_alter_uncompat 
-  | keyword_in_uncompat 
-  | keyword_window_uncompat 
-  | keyword_hint_uncompat 
-//  | keyword_schema_uncompat 
-; 
- 
-id_expr: 
-    identifier 
-  | keyword_compat 
-//  | keyword_expr_uncompat 
-//  | keyword_table_uncompat 
-//  | keyword_select_uncompat 
-  | keyword_alter_uncompat 
-  | keyword_in_uncompat 
-  | keyword_window_uncompat 
-  | keyword_hint_uncompat 
-  | keyword_schema_uncompat 
-; 
- 
-id_expr_in: 
-    identifier 
-  | keyword_compat 
-//  | keyword_expr_uncompat 
-//  | keyword_table_uncompat 
-//  | keyword_select_uncompat 
-  | keyword_alter_uncompat 
-//  | keyword_in_uncompat 
-  | keyword_window_uncompat 
-  | keyword_hint_uncompat 
-  | keyword_schema_uncompat 
-; 
- 
-id_window: 
-    identifier 
-  | keyword_compat 
-  | keyword_expr_uncompat 
-  | keyword_table_uncompat 
-  | keyword_select_uncompat 
-  | keyword_alter_uncompat 
-  | keyword_in_uncompat 
-//  | keyword_window_uncompat 
-  | keyword_hint_uncompat 
-  | keyword_schema_uncompat 
-; 
- 
-id_table: 
-    identifier 
-  | keyword_compat 
-  | keyword_expr_uncompat 
-//  | keyword_table_uncompat 
-  | keyword_select_uncompat 
-//  | keyword_alter_uncompat 
-  | keyword_in_uncompat 
-  | keyword_window_uncompat 
-  | keyword_hint_uncompat 
-  | keyword_schema_uncompat 
-; 
- 
-id_without: 
-    identifier 
-  | keyword_compat 
-//  | keyword_expr_uncompat 
-  | keyword_table_uncompat 
-//  | keyword_select_uncompat 
-  | keyword_alter_uncompat 
-  | keyword_in_uncompat 
-  | keyword_window_uncompat 
-  | keyword_hint_uncompat 
-  | keyword_schema_uncompat 
-; 
- 
-id_hint: 
-    identifier 
-  | keyword_compat 
-  | keyword_expr_uncompat 
-  | keyword_table_uncompat 
-  | keyword_select_uncompat 
-  | keyword_alter_uncompat 
-  | keyword_in_uncompat 
-  | keyword_window_uncompat 
-//  | keyword_hint_uncompat 
-  | keyword_schema_uncompat 
-; 
- 
-// ANSI-aware versions of various identifiers with support double-quoted identifiers when PRAGMA AnsiQuotedIdentifiers; is present 
-an_id: id | STRING_VALUE; 
-an_id_or_type: id_or_type | STRING_VALUE; 
-an_id_schema: id_schema | STRING_VALUE; 
-an_id_expr: id_expr | STRING_VALUE; 
-an_id_expr_in: id_expr_in | STRING_VALUE; 
-an_id_window: id_window | STRING_VALUE; 
-an_id_table: id_table | STRING_VALUE; 
-an_id_without: id_without | STRING_VALUE; 
-an_id_hint: id_hint | STRING_VALUE; 
-an_id_pure: identifier | STRING_VALUE; 
- 
-opt_id_prefix: (an_id DOT)?; 
-cluster_expr: (an_id COLON)? (pure_column_or_named | ASTERISK); 
- 
+id_schema:
+    identifier
+  | keyword_compat
+  | keyword_expr_uncompat
+//  | keyword_table_uncompat
+  | keyword_select_uncompat
+//  | keyword_alter_uncompat
+  | keyword_in_uncompat
+  | keyword_window_uncompat
+  | keyword_hint_uncompat
+//  | keyword_schema_uncompat
+;
+
+id_expr:
+    identifier
+  | keyword_compat
+//  | keyword_expr_uncompat
+//  | keyword_table_uncompat
+//  | keyword_select_uncompat
+  | keyword_alter_uncompat
+  | keyword_in_uncompat
+  | keyword_window_uncompat
+  | keyword_hint_uncompat
+  | keyword_schema_uncompat
+;
+
+id_expr_in:
+    identifier
+  | keyword_compat
+//  | keyword_expr_uncompat
+//  | keyword_table_uncompat
+//  | keyword_select_uncompat
+  | keyword_alter_uncompat
+//  | keyword_in_uncompat
+  | keyword_window_uncompat
+  | keyword_hint_uncompat
+  | keyword_schema_uncompat
+;
+
+id_window:
+    identifier
+  | keyword_compat
+  | keyword_expr_uncompat
+  | keyword_table_uncompat
+  | keyword_select_uncompat
+  | keyword_alter_uncompat
+  | keyword_in_uncompat
+//  | keyword_window_uncompat
+  | keyword_hint_uncompat
+  | keyword_schema_uncompat
+;
+
+id_table:
+    identifier
+  | keyword_compat
+  | keyword_expr_uncompat
+//  | keyword_table_uncompat
+  | keyword_select_uncompat
+//  | keyword_alter_uncompat
+  | keyword_in_uncompat
+  | keyword_window_uncompat
+  | keyword_hint_uncompat
+  | keyword_schema_uncompat
+;
+
+id_without:
+    identifier
+  | keyword_compat
+//  | keyword_expr_uncompat
+  | keyword_table_uncompat
+//  | keyword_select_uncompat
+  | keyword_alter_uncompat
+  | keyword_in_uncompat
+  | keyword_window_uncompat
+  | keyword_hint_uncompat
+  | keyword_schema_uncompat
+;
+
+id_hint:
+    identifier
+  | keyword_compat
+  | keyword_expr_uncompat
+  | keyword_table_uncompat
+  | keyword_select_uncompat
+  | keyword_alter_uncompat
+  | keyword_in_uncompat
+  | keyword_window_uncompat
+//  | keyword_hint_uncompat
+  | keyword_schema_uncompat
+;
+
+// ANSI-aware versions of various identifiers with support double-quoted identifiers when PRAGMA AnsiQuotedIdentifiers; is present
+an_id: id | STRING_VALUE;
+an_id_or_type: id_or_type | STRING_VALUE;
+an_id_schema: id_schema | STRING_VALUE;
+an_id_expr: id_expr | STRING_VALUE;
+an_id_expr_in: id_expr_in | STRING_VALUE;
+an_id_window: id_window | STRING_VALUE;
+an_id_table: id_table | STRING_VALUE;
+an_id_without: id_without | STRING_VALUE;
+an_id_hint: id_hint | STRING_VALUE;
+an_id_pure: identifier | STRING_VALUE;
+
+opt_id_prefix: (an_id DOT)?;
+cluster_expr: (an_id COLON)? (pure_column_or_named | ASTERISK);
+
 id_or_type: id | type_id;
-opt_id_prefix_or_type: (an_id_or_type DOT)?; 
-id_or_at: AT? an_id_or_type; 
-id_table_or_type: an_id_table | type_id; 
+opt_id_prefix_or_type: (an_id_or_type DOT)?;
+id_or_at: AT? an_id_or_type;
+id_table_or_type: an_id_table | type_id;
 id_table_or_at: AT? id_table_or_type;
 
-keyword: 
-    keyword_compat 
-  | keyword_expr_uncompat 
-  | keyword_table_uncompat 
-  | keyword_select_uncompat 
-  | keyword_alter_uncompat 
-  | keyword_in_uncompat 
-  | keyword_window_uncompat 
-  | keyword_hint_uncompat 
-  | keyword_schema_uncompat 
-; 
+keyword:
+    keyword_compat
+  | keyword_expr_uncompat
+  | keyword_table_uncompat
+  | keyword_select_uncompat
+  | keyword_alter_uncompat
+  | keyword_in_uncompat
+  | keyword_window_uncompat
+  | keyword_hint_uncompat
+  | keyword_schema_uncompat
+;
 
 keyword_expr_uncompat:
-    BETWEEN 
-  | BITCAST 
+    BETWEEN
+  | BITCAST
   | CASE
   | CAST
   | CUBE
@@ -806,54 +806,54 @@ keyword_expr_uncompat:
   | RETURN
   | ROLLUP
   | SELECT
-  | UNBOUNDED 
+  | UNBOUNDED
   | WHEN
   | WHERE
 ;
 
 keyword_table_uncompat:
-    ANY 
-  | ERASE 
+    ANY
+  | ERASE
   | STREAM
 ;
 
 keyword_select_uncompat:
     ALL
   | AS
-  | ASSUME 
+  | ASSUME
   | DISTINCT
-  | EXCEPT 
+  | EXCEPT
   | HAVING
-  | INTERSECT 
-  | LIMIT 
-  | UNION 
-  | WINDOW 
-  | WITHOUT 
+  | INTERSECT
+  | LIMIT
+  | UNION
+  | WINDOW
+  | WITHOUT
 ;
 
 keyword_alter_uncompat:
     COLUMN
 ;
 
-keyword_in_uncompat: 
-    COMPACT 
-; 
- 
-keyword_window_uncompat: 
-    GROUPS 
-  | RANGE 
-  | ROWS 
-; 
- 
-keyword_hint_uncompat: 
-    SCHEMA 
-  | COLUMNS 
-; 
- 
-keyword_schema_uncompat: 
-    FAMILY 
-; 
- 
+keyword_in_uncompat:
+    COMPACT
+;
+
+keyword_window_uncompat:
+    GROUPS
+  | RANGE
+  | ROWS
+;
+
+keyword_hint_uncompat:
+    SCHEMA
+  | COLUMNS
+;
+
+keyword_schema_uncompat:
+    FAMILY
+;
+
 keyword_compat: (
     ABORT
   | ACTION
@@ -885,7 +885,7 @@ keyword_compat: (
   | CROSS
   | CURRENT
   | DATABASE
-  | DECIMAL 
+  | DECIMAL
   | DECLARE
   | DEFAULT
   | DEFERRABLE
@@ -901,7 +901,7 @@ keyword_compat: (
   | EACH
   | ELSE
   | EMPTY
-  | ENCRYPTED 
+  | ENCRYPTED
   | END
   | ERROR
   | ESCAPE
@@ -913,7 +913,7 @@ keyword_compat: (
   | EXPORT
   | EXTERNAL
   | FAIL
-  | FILTER 
+  | FILTER
   | FLATTEN
   | FOLLOWING
   | FOR
@@ -958,7 +958,7 @@ keyword_compat: (
   | OVER
   | PARTITION
   | PASSING
-  | PASSWORD 
+  | PASSWORD
   | PLAN
   | PRAGMA
   | PRECEDING
@@ -984,16 +984,16 @@ keyword_compat: (
   | ROW
   | SAMPLE
   | SAVEPOINT
-  | SEMI 
+  | SEMI
   | SETS
-  | SORTED 
+  | SORTED
   | SUBQUERY
   | SYMBOLS
   | SYNC
   | SYSTEM
   | TABLE
   | TABLESAMPLE
-  | TEMP 
+  | TEMP
   | TEMPORARY
   | THEN
   | TIES
@@ -1005,7 +1005,7 @@ keyword_compat: (
   | UNKNOWN
   | UPDATE
   | UPSERT
-  | USER 
+  | USER
   | USING
   | VACUUM
   | VALUES
@@ -1017,7 +1017,7 @@ keyword_compat: (
   );
 
 type_id:
-    OPTIONAL 
+    OPTIONAL
   | TUPLE
   | STRUCT
   | VARIANT
@@ -1033,8 +1033,8 @@ type_id:
 ;
 
 bool_value: (TRUE | FALSE);
-real: REAL; 
-integer: DIGITS | INTEGER_VALUE; 
+real: REAL;
+integer: DIGITS | INTEGER_VALUE;
 
 //
 // Lexer
@@ -1062,7 +1062,7 @@ ASTERISK:      '*';
 SLASH:         '/';
 BACKSLASH:     '\\';
 PERCENT:       '%';
-SEMICOLON:     ';'; 
+SEMICOLON:     ';';
 DOT:           '.';
 COMMA:         ',';
 LPAREN:        '(';
@@ -1120,7 +1120,7 @@ ALTER: A L T E R;
 ANALYZE: A N A L Y Z E;
 AND: A N D;
 ANSI: A N S I;
-ANY: A N Y; 
+ANY: A N Y;
 ARRAY: A R R A Y;
 AS: A S;
 ASC: A S C;
@@ -1145,7 +1145,7 @@ COLLATE: C O L L A T E;
 COLUMN: C O L U M N;
 COLUMNS: C O L U M N S;
 COMMIT: C O M M I T;
-COMPACT: C O M P A C T; 
+COMPACT: C O M P A C T;
 CONDITIONAL: C O N D I T I O N A L;
 CONFLICT: C O N F L I C T;
 CONSTRAINT: C O N S T R A I N T;
@@ -1178,7 +1178,7 @@ ELSE: E L S E;
 ERROR: E R R O R;
 EMPTY: E M P T Y;
 EMPTY_ACTION: E M P T Y '_' A C T I O N;
-ENCRYPTED: E N C R Y P T E D; 
+ENCRYPTED: E N C R Y P T E D;
 END: E N D;
 ENUM: E N U M;
 ERASE: E R A S E;
@@ -1194,7 +1194,7 @@ EXPORT: E X P O R T;
 EXTERNAL: E X T E R N A L;
 FAIL: F A I L;
 FAMILY: F A M I L Y;
-FILTER: F I L T E R; 
+FILTER: F I L T E R;
 FLATTEN: F L A T T E N;
 FLOW: F L O W;
 FOLLOWING: F O L L O W I N G;
@@ -1207,7 +1207,7 @@ GLOB: G L O B;
 GLOBAL: G L O B A L;
 GROUP: G R O U P;
 GROUPING: G R O U P I N G;
-GROUPS: G R O U P S; 
+GROUPS: G R O U P S;
 HAVING: H A V I N G;
 HOP: H O P;
 IF: I F;
@@ -1227,9 +1227,9 @@ INTO: I N T O;
 IS: I S;
 ISNULL: I S N U L L;
 JOIN: J O I N;
-JSON_EXISTS: J S O N '_' E X I S T S; 
-JSON_VALUE: J S O N '_' V A L U E; 
-JSON_QUERY: J S O N '_' Q U E R Y; 
+JSON_EXISTS: J S O N '_' E X I S T S;
+JSON_VALUE: J S O N '_' V A L U E;
+JSON_QUERY: J S O N '_' Q U E R Y;
 KEY: K E Y;
 LEFT: L E F T;
 LIKE: L I K E;
@@ -1256,7 +1256,7 @@ OUTER: O U T E R;
 OVER: O V E R;
 PARTITION: P A R T I T I O N;
 PASSING: P A S S I N G;
-PASSWORD: P A S S W O R D; 
+PASSWORD: P A S S W O R D;
 PLAN: P L A N;
 PRAGMA: P R A G M A;
 PRECEDING: P R E C E D I N G;
@@ -1292,21 +1292,21 @@ SAMPLE: S A M P L E;
 SAVEPOINT: S A V E P O I N T;
 SCHEMA: S C H E M A;
 SELECT: S E L E C T;
-SEMI: S E M I; 
+SEMI: S E M I;
 SET: S E T;
 SETS: S E T S;
-SORTED: S O R T E D; 
+SORTED: S O R T E D;
 STREAM: S T R E A M;
 STRUCT: S T R U C T;
-SUBQUERY: S U B Q U E R Y; 
+SUBQUERY: S U B Q U E R Y;
 SYMBOLS: S Y M B O L S;
 SYNC: S Y N C;
 SYSTEM: S Y S T E M;
 TABLE: T A B L E;
 TABLESAMPLE: T A B L E S A M P L E;
 TAGGED: T A G G E D;
-TEMP: T E M P; 
-TEMPORARY: T E M P O R A R Y; 
+TEMP: T E M P;
+TEMPORARY: T E M P O R A R Y;
 THEN: T H E N;
 TIES: T I E S;
 TO: T O;
@@ -1321,7 +1321,7 @@ UNKNOWN: U N K N O W N;
 UPDATE: U P D A T E;
 UPSERT: U P S E R T;
 USE: U S E;
-USER: U S E R; 
+USER: U S E R;
 USING: U S I N G;
 VACUUM: V A C U U M;
 VALUES: V A L U E S;
@@ -1338,27 +1338,27 @@ XOR: X O R;
 TRUE: T R U E;
 FALSE: F A L S E;
 
-// YQL Default Lexer: 
-// GRAMMAR_STRING_CORE_SINGLE = ~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .) 
-// GRAMMAR_STRING_CORE_DOUBLE = ~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .) 
- 
-// ANSI Lexer: 
-// GRAMMAR_STRING_CORE_SINGLE = ~QUOTE_SINGLE | (QUOTE_SINGLE QUOTE_SINGLE) 
-// GRAMMAR_STRING_CORE_DOUBLE = ~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE) 
- 
-fragment STRING_CORE_SINGLE: @GRAMMAR_STRING_CORE_SINGLE@; 
-fragment STRING_CORE_DOUBLE: @GRAMMAR_STRING_CORE_DOUBLE@; 
- 
-fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE); 
-fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE); 
-fragment STRING_MULTILINE: (DOUBLE_AT .* DOUBLE_AT)+ AT?; 
+// YQL Default Lexer:
+// GRAMMAR_STRING_CORE_SINGLE = ~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)
+// GRAMMAR_STRING_CORE_DOUBLE = ~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)
+
+// ANSI Lexer:
+// GRAMMAR_STRING_CORE_SINGLE = ~QUOTE_SINGLE | (QUOTE_SINGLE QUOTE_SINGLE)
+// GRAMMAR_STRING_CORE_DOUBLE = ~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE)
+
+fragment STRING_CORE_SINGLE: @GRAMMAR_STRING_CORE_SINGLE@;
+fragment STRING_CORE_DOUBLE: @GRAMMAR_STRING_CORE_DOUBLE@;
+
+fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE);
+fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE);
+fragment STRING_MULTILINE: (DOUBLE_AT .* DOUBLE_AT)+ AT?;
 
 STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (U | Y | J)?);
 
-ID_PLAIN: ('a'..'z' | 'A'..'Z' | '_') ('a'..'z' | 'A'..'Z' | '_' | DIGIT)*; 
+ID_PLAIN: ('a'..'z' | 'A'..'Z' | '_') ('a'..'z' | 'A'..'Z' | '_' | DIGIT)*;
 
-fragment ID_QUOTED_CORE: '``' | '\\`' | ~'`'; 
-ID_QUOTED: BACKTICK ID_QUOTED_CORE* BACKTICK; 
+fragment ID_QUOTED_CORE: '``' | '\\`' | ~'`';
+ID_QUOTED: BACKTICK ID_QUOTED_CORE* BACKTICK;
 
 fragment DIGIT: '0'..'9';
 fragment HEXDIGIT: '0'..'9' | 'a'..'f' | 'A'..'F';
@@ -1379,12 +1379,12 @@ REAL:
 
 BLOB: X QUOTE_SINGLE HEXDIGIT+ QUOTE_SINGLE;
 
-// YQL Default Lexer: 
-// GRAMMAR_MULTILINE_COMMENT_CORE = . 
-// ANSI Lexer: 
-// GRAMMAR_MULTILINE_COMMENT_CORE = MULTILINE_COMMENT | . 
- 
-fragment MULTILINE_COMMENT: '/*' ( options {greedy=false;} : @GRAMMAR_MULTILINE_COMMENT_CORE@ )* '*/'; 
-fragment LINE_COMMENT: '--' ~('\n'|'\r')* ('\r' '\n'? | '\n' | EOF); 
-WS: (' '|'\r'|'\t'|'\u000C'|'\n') {$channel=HIDDEN;}; 
-COMMENT: (MULTILINE_COMMENT|LINE_COMMENT) {$channel=HIDDEN;}; 
+// YQL Default Lexer:
+// GRAMMAR_MULTILINE_COMMENT_CORE = .
+// ANSI Lexer:
+// GRAMMAR_MULTILINE_COMMENT_CORE = MULTILINE_COMMENT | .
+
+fragment MULTILINE_COMMENT: '/*' ( options {greedy=false;} : @GRAMMAR_MULTILINE_COMMENT_CORE@ )* '*/';
+fragment LINE_COMMENT: '--' ~('\n'|'\r')* ('\r' '\n'? | '\n' | EOF);
+WS: (' '|'\r'|'\t'|'\u000C'|'\n') {$channel=HIDDEN;};
+COMMENT: (MULTILINE_COMMENT|LINE_COMMENT) {$channel=HIDDEN;};

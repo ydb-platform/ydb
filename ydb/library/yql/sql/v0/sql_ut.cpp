@@ -34,7 +34,7 @@ NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ES
     settings.Mode = mode;
     settings.Arena = &arena;
     settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;
-    settings.WarnOnV0 = false; 
+    settings.WarnOnV0 = false;
     auto res = SqlToYql(query, settings);
     if (debug == EDebugOutput::ToCerr) {
         Err2Str(res, debug);
@@ -103,61 +103,61 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input WITH (INFER_SCHEME)").IsOk());
     }
 
-    Y_UNIT_TEST(InNoHints) { 
-        NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input WHERE key IN (1,2,3)"); 
-        UNIT_ASSERT(res.Root); 
- 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
-            Y_UNUSED(word); 
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'()")); 
-        }; 
-        TWordCountHive elementStat = {{TString("SqlIn"), 0}}; 
-        VerifyProgram(res, elementStat, verifyLine); 
-    } 
- 
-    Y_UNIT_TEST(InHintCompact) { 
-        // should parse COMPACT as hint 
-        NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input WHERE key IN COMPACT(1, 2, 3)"); 
-        UNIT_ASSERT(res.Root); 
- 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
-            Y_UNUSED(word); 
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('('isCompact))")); 
-        }; 
-        TWordCountHive elementStat = {{TString("SqlIn"), 0}}; 
-        VerifyProgram(res, elementStat, verifyLine); 
-    } 
- 
-    Y_UNIT_TEST(InHintTableSource) { 
-        // should add tableSource as a hint 
-        NYql::TAstParseResult res = SqlToYql("$subq = (SELECT key FROM plato.Input); SELECT * FROM plato.Input WHERE key IN $subq"); 
-        UNIT_ASSERT(res.Root); 
- 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
-            Y_UNUSED(word); 
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('('tableSource))")); 
-        }; 
-        TWordCountHive elementStat = {{TString("SqlIn"), 0}}; 
-        VerifyProgram(res, elementStat, verifyLine); 
-    } 
- 
-    Y_UNIT_TEST(InHintCompactAndTableSource) { 
-        NYql::TAstParseResult res = SqlToYql("$subq = (SELECT key FROM plato.Input); SELECT * FROM plato.Input WHERE key IN COMPACT $subq"); 
-        UNIT_ASSERT(res.Root); 
- 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
-            Y_UNUSED(word); 
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('('isCompact) '('tableSource))")); 
-        }; 
-        TWordCountHive elementStat = {{TString("SqlIn"), 0}}; 
-        VerifyProgram(res, elementStat, verifyLine); 
-    } 
- 
-    Y_UNIT_TEST(CompactKeywordNotReservedForNames) { 
-        UNIT_ASSERT(SqlToYql("SELECT COMPACT FROM plato.Input WHERE COMPACT IN COMPACT(1, 2, 3)").IsOk()); 
-        UNIT_ASSERT(SqlToYql("USE plato; SELECT * FROM COMPACT").IsOk()); 
-    } 
- 
+    Y_UNIT_TEST(InNoHints) {
+        NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input WHERE key IN (1,2,3)");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'()"));
+        };
+        TWordCountHive elementStat = {{TString("SqlIn"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+    }
+
+    Y_UNIT_TEST(InHintCompact) {
+        // should parse COMPACT as hint
+        NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input WHERE key IN COMPACT(1, 2, 3)");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('('isCompact))"));
+        };
+        TWordCountHive elementStat = {{TString("SqlIn"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+    }
+
+    Y_UNIT_TEST(InHintTableSource) {
+        // should add tableSource as a hint
+        NYql::TAstParseResult res = SqlToYql("$subq = (SELECT key FROM plato.Input); SELECT * FROM plato.Input WHERE key IN $subq");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('('tableSource))"));
+        };
+        TWordCountHive elementStat = {{TString("SqlIn"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+    }
+
+    Y_UNIT_TEST(InHintCompactAndTableSource) {
+        NYql::TAstParseResult res = SqlToYql("$subq = (SELECT key FROM plato.Input); SELECT * FROM plato.Input WHERE key IN COMPACT $subq");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('('isCompact) '('tableSource))"));
+        };
+        TWordCountHive elementStat = {{TString("SqlIn"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+    }
+
+    Y_UNIT_TEST(CompactKeywordNotReservedForNames) {
+        UNIT_ASSERT(SqlToYql("SELECT COMPACT FROM plato.Input WHERE COMPACT IN COMPACT(1, 2, 3)").IsOk());
+        UNIT_ASSERT(SqlToYql("USE plato; SELECT * FROM COMPACT").IsOk());
+    }
+
     Y_UNIT_TEST(Jubilee) {
         NYql::TAstParseResult res = SqlToYql("USE plato; INSERT INTO Arcadia (r2000000) VALUES (\"2M GET!!!\");");
         UNIT_ASSERT(res.Root);
@@ -832,70 +832,70 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         )", 10, TString(NYql::KikimrProviderName));
         UNIT_ASSERT(res.Root);
     }
- 
-    Y_UNIT_TEST(WarnMissingIsBeforeNotNull) { 
-        NYql::TAstParseResult res = SqlToYql("select 1 NOT NULL"); 
-        UNIT_ASSERT(res.Root); 
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Warning: Missing IS keyword before NOT NULL, code: 4507\n"); 
-    } 
- 
-    Y_UNIT_TEST(WarnLegacySuffixForTinyIntLiteral) { 
-        NYql::TAstParseResult res = SqlToYql("select 1b, 0ub, 0b0b;"); 
-        UNIT_ASSERT(res.Root); 
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), 
-            "<main>:1:8: Warning: Deprecated suffix 'b' - please use 't' suffix for 8-bit integers, code: 4508\n" 
-            "<main>:1:12: Warning: Deprecated suffix 'b' - please use 't' suffix for 8-bit integers, code: 4508\n" 
-            "<main>:1:17: Warning: Deprecated suffix 'b' - please use 't' suffix for 8-bit integers, code: 4508\n" 
-        ); 
-    } 
- 
-    Y_UNIT_TEST(WarnMultiWayJoinWithUsing) { 
-        NYql::TAstParseResult res = SqlToYql( 
-            "USE plato;\n" 
-            "PRAGMA DisableSimpleColumns;\n" 
-            "SELECT *\n" 
-            "FROM Input1 AS a\n" 
-            "JOIN Input2 AS b USING(key)\n" 
-            "JOIN Input3 AS c ON a.key = c.key;\n" 
-        ); 
-        UNIT_ASSERT(res.Root); 
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), 
-            "<main>:5:24: Warning: Multi-way JOINs should be connected with ON clause instead of USING clause, code: 4514\n" 
-        ); 
-    } 
- 
-    Y_UNIT_TEST(StringLiteralWithEscapedBackslash) { 
-        NYql::TAstParseResult res1 = SqlToYql(R"foo(SELECT 'a\\';)foo"); 
-        NYql::TAstParseResult res2 = SqlToYql(R"foo(SELECT "a\\";)foo"); 
-        UNIT_ASSERT(res1.Root); 
-        UNIT_ASSERT(res2.Root); 
- 
-        TWordCountHive elementStat = {{TString("a\\"), 0}}; 
- 
-        VerifyProgram(res1, elementStat); 
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["a\\"]); 
- 
-        VerifyProgram(res2, elementStat); 
-        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["a\\"]); 
-    } 
- 
-    Y_UNIT_TEST(StringMultiLineLiteralWithEscapes) { 
-        UNIT_ASSERT(SqlToYql("SELECT @@@foo@@@@bar@@@").IsOk()); 
-        UNIT_ASSERT(SqlToYql("SELECT @@@@@@@@@").IsOk()); 
-    } 
- 
-    Y_UNIT_TEST(StringMultiLineLiteralConsequitiveAt) { 
-        UNIT_ASSERT(!SqlToYql("SELECT @").IsOk()); 
-        UNIT_ASSERT(!SqlToYql("SELECT @@").IsOk()); 
-        UNIT_ASSERT(!SqlToYql("SELECT @@@").IsOk()); 
-        UNIT_ASSERT( SqlToYql("SELECT @@@@").IsOk()); 
-        UNIT_ASSERT( SqlToYql("SELECT @@@@@").IsOk()); 
-        UNIT_ASSERT(!SqlToYql("SELECT @@@@@@").IsOk()); 
-        UNIT_ASSERT(!SqlToYql("SELECT @@@@@@@").IsOk()); 
-        UNIT_ASSERT( SqlToYql("SELECT @@@@@@@@").IsOk()); 
-        UNIT_ASSERT( SqlToYql("SELECT @@@@@@@@@").IsOk()); 
-        UNIT_ASSERT(!SqlToYql("SELECT @@@@@@@@@@").IsOk()); 
-    } 
+
+    Y_UNIT_TEST(WarnMissingIsBeforeNotNull) {
+        NYql::TAstParseResult res = SqlToYql("select 1 NOT NULL");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Warning: Missing IS keyword before NOT NULL, code: 4507\n");
+    }
+
+    Y_UNIT_TEST(WarnLegacySuffixForTinyIntLiteral) {
+        NYql::TAstParseResult res = SqlToYql("select 1b, 0ub, 0b0b;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res),
+            "<main>:1:8: Warning: Deprecated suffix 'b' - please use 't' suffix for 8-bit integers, code: 4508\n"
+            "<main>:1:12: Warning: Deprecated suffix 'b' - please use 't' suffix for 8-bit integers, code: 4508\n"
+            "<main>:1:17: Warning: Deprecated suffix 'b' - please use 't' suffix for 8-bit integers, code: 4508\n"
+        );
+    }
+
+    Y_UNIT_TEST(WarnMultiWayJoinWithUsing) {
+        NYql::TAstParseResult res = SqlToYql(
+            "USE plato;\n"
+            "PRAGMA DisableSimpleColumns;\n"
+            "SELECT *\n"
+            "FROM Input1 AS a\n"
+            "JOIN Input2 AS b USING(key)\n"
+            "JOIN Input3 AS c ON a.key = c.key;\n"
+        );
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res),
+            "<main>:5:24: Warning: Multi-way JOINs should be connected with ON clause instead of USING clause, code: 4514\n"
+        );
+    }
+
+    Y_UNIT_TEST(StringLiteralWithEscapedBackslash) {
+        NYql::TAstParseResult res1 = SqlToYql(R"foo(SELECT 'a\\';)foo");
+        NYql::TAstParseResult res2 = SqlToYql(R"foo(SELECT "a\\";)foo");
+        UNIT_ASSERT(res1.Root);
+        UNIT_ASSERT(res2.Root);
+
+        TWordCountHive elementStat = {{TString("a\\"), 0}};
+
+        VerifyProgram(res1, elementStat);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["a\\"]);
+
+        VerifyProgram(res2, elementStat);
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["a\\"]);
+    }
+
+    Y_UNIT_TEST(StringMultiLineLiteralWithEscapes) {
+        UNIT_ASSERT(SqlToYql("SELECT @@@foo@@@@bar@@@").IsOk());
+        UNIT_ASSERT(SqlToYql("SELECT @@@@@@@@@").IsOk());
+    }
+
+    Y_UNIT_TEST(StringMultiLineLiteralConsequitiveAt) {
+        UNIT_ASSERT(!SqlToYql("SELECT @").IsOk());
+        UNIT_ASSERT(!SqlToYql("SELECT @@").IsOk());
+        UNIT_ASSERT(!SqlToYql("SELECT @@@").IsOk());
+        UNIT_ASSERT( SqlToYql("SELECT @@@@").IsOk());
+        UNIT_ASSERT( SqlToYql("SELECT @@@@@").IsOk());
+        UNIT_ASSERT(!SqlToYql("SELECT @@@@@@").IsOk());
+        UNIT_ASSERT(!SqlToYql("SELECT @@@@@@@").IsOk());
+        UNIT_ASSERT( SqlToYql("SELECT @@@@@@@@").IsOk());
+        UNIT_ASSERT( SqlToYql("SELECT @@@@@@@@@").IsOk());
+        UNIT_ASSERT(!SqlToYql("SELECT @@@@@@@@@@").IsOk());
+    }
 }
 
 
@@ -915,49 +915,49 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         UNIT_ASSERT_NO_DIFF(a1, a2);
     }
 
-    Y_UNIT_TEST(IvalidStringLiteralWithEscapedBackslash) { 
-        NYql::TAstParseResult res1 = SqlToYql(R"foo($bar = 'a\\'b';)foo"); 
-        NYql::TAstParseResult res2 = SqlToYql(R"foo($bar = "a\\"b";)foo"); 
-        UNIT_ASSERT(!res1.Root); 
-        UNIT_ASSERT(!res2.Root); 
- 
-        TString header = "<main>:1:15: Error: Unexpected character : syntax error...\n\n"; 
-        TString err1 = "<main>:1:7: Error: Unexpected token '\'a\\\\\'' : cannot match to any predicted input...\n\n"; 
-        TString err2 = "<main>:1:7: Error: Unexpected token '\"a\\\\\"' : cannot match to any predicted input...\n\n"; 
-        UNIT_ASSERT_NO_DIFF(Err2Str(res1), header + err1); 
-        UNIT_ASSERT_NO_DIFF(Err2Str(res2), header + err2); 
-    } 
- 
-    Y_UNIT_TEST(InvalidHexInStringLiteral) { 
-        NYql::TAstParseResult res = SqlToYql("select \"foo\\x1\\xfe\""); 
-        UNIT_ASSERT(!res.Root); 
-        TString a1 = Err2Str(res); 
-        TString a2 = "<main>:1:15: Error: Failed to parse string literal: Invalid hexadecimal value\n"; 
- 
-        UNIT_ASSERT_NO_DIFF(a1, a2); 
-    } 
- 
-    Y_UNIT_TEST(InvalidOctalInMultilineStringLiteral) { 
-        NYql::TAstParseResult res = SqlToYql("select \"foo\n" 
-                                             "bar\n" 
-                                             "\\01\""); 
-        UNIT_ASSERT(!res.Root); 
-        TString a1 = Err2Str(res); 
-        TString a2 = "<main>:3:4: Error: Failed to parse string literal: Invalid octal value\n"; 
- 
-        UNIT_ASSERT_NO_DIFF(a1, a2); 
-    } 
- 
-    Y_UNIT_TEST(InvalidOctalInMultilineStringIdentifier) { 
-        NYql::TAstParseResult res = SqlToYql("use plato; select * from `In\\0123\n\n" 
-                                             "\\`\\01put`"); 
-        UNIT_ASSERT(!res.Root); 
-        TString a1 = Err2Str(res); 
-        TString a2 = "<main>:3:6: Error: Cannot parse broken identifier: Invalid octal value\n"; 
- 
-        UNIT_ASSERT_NO_DIFF(a1, a2); 
-    } 
- 
+    Y_UNIT_TEST(IvalidStringLiteralWithEscapedBackslash) {
+        NYql::TAstParseResult res1 = SqlToYql(R"foo($bar = 'a\\'b';)foo");
+        NYql::TAstParseResult res2 = SqlToYql(R"foo($bar = "a\\"b";)foo");
+        UNIT_ASSERT(!res1.Root);
+        UNIT_ASSERT(!res2.Root);
+
+        TString header = "<main>:1:15: Error: Unexpected character : syntax error...\n\n";
+        TString err1 = "<main>:1:7: Error: Unexpected token '\'a\\\\\'' : cannot match to any predicted input...\n\n";
+        TString err2 = "<main>:1:7: Error: Unexpected token '\"a\\\\\"' : cannot match to any predicted input...\n\n";
+        UNIT_ASSERT_NO_DIFF(Err2Str(res1), header + err1);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res2), header + err2);
+    }
+
+    Y_UNIT_TEST(InvalidHexInStringLiteral) {
+        NYql::TAstParseResult res = SqlToYql("select \"foo\\x1\\xfe\"");
+        UNIT_ASSERT(!res.Root);
+        TString a1 = Err2Str(res);
+        TString a2 = "<main>:1:15: Error: Failed to parse string literal: Invalid hexadecimal value\n";
+
+        UNIT_ASSERT_NO_DIFF(a1, a2);
+    }
+
+    Y_UNIT_TEST(InvalidOctalInMultilineStringLiteral) {
+        NYql::TAstParseResult res = SqlToYql("select \"foo\n"
+                                             "bar\n"
+                                             "\\01\"");
+        UNIT_ASSERT(!res.Root);
+        TString a1 = Err2Str(res);
+        TString a2 = "<main>:3:4: Error: Failed to parse string literal: Invalid octal value\n";
+
+        UNIT_ASSERT_NO_DIFF(a1, a2);
+    }
+
+    Y_UNIT_TEST(InvalidOctalInMultilineStringIdentifier) {
+        NYql::TAstParseResult res = SqlToYql("use plato; select * from `In\\0123\n\n"
+                                             "\\`\\01put`");
+        UNIT_ASSERT(!res.Root);
+        TString a1 = Err2Str(res);
+        TString a2 = "<main>:3:6: Error: Cannot parse broken identifier: Invalid octal value\n";
+
+        UNIT_ASSERT_NO_DIFF(a1, a2);
+    }
+
     Y_UNIT_TEST(WrongTokenTrivial) {
         NYql::TAstParseResult res = SqlToYql("foo");
         UNIT_ASSERT(!res.Root);
@@ -967,16 +967,16 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(InvalidDoubleAtString) {
         NYql::TAstParseResult res = SqlToYql("select @@@@@@");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:13: Error: Unexpected character : syntax error...\n\n" 
-                                          "<main>:1:0: Error: Unexpected token absence : cannot match to any predicted input...\n\n"    ); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:13: Error: Unexpected character : syntax error...\n\n"
+                                          "<main>:1:0: Error: Unexpected token absence : cannot match to any predicted input...\n\n"    );
     }
 
-    Y_UNIT_TEST(InvalidDoubleAtStringWhichWasAcceptedEarlier) { 
-        NYql::TAstParseResult res = SqlToYql("SELECT @@foo@@ @ @@bar@@"); 
-        UNIT_ASSERT(!res.Root); 
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:7: Error: Unexpected token '@@foo@@' : cannot match to any predicted input...\n\n"); 
-    } 
- 
+    Y_UNIT_TEST(InvalidDoubleAtStringWhichWasAcceptedEarlier) {
+        NYql::TAstParseResult res = SqlToYql("SELECT @@foo@@ @ @@bar@@");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:7: Error: Unexpected token '@@foo@@' : cannot match to any predicted input...\n\n");
+    }
+
     Y_UNIT_TEST(InvalidStringFromTable) {
         NYql::TAstParseResult res = SqlToYql("select \"FOO\"\"BAR from plato.foo");
         UNIT_ASSERT(!res.Root);
@@ -986,8 +986,8 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(InvalidDoubleAtStringFromTable) {
         NYql::TAstParseResult res = SqlToYql("select @@@@@@ from plato.foo");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:28: Error: Unexpected character : syntax error...\n\n" 
-                                          "<main>:1:0: Error: Unexpected token absence : cannot match to any predicted input...\n\n"); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:28: Error: Unexpected character : syntax error...\n\n"
+                                          "<main>:1:0: Error: Unexpected token absence : cannot match to any predicted input...\n\n");
     }
 
     Y_UNIT_TEST(SelectInvalidSyntax) {
@@ -1429,23 +1429,23 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(UseInOnStrings) {
         NYql::TAstParseResult res = SqlToYql("select * from plato.Input where \"foo\" in \"foovalue\";");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:42: Error: Unable to use IN predicate with string argument, it won't search substring - " 
-                                          "expecting tuple, list, dict or single column table source\n"); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:42: Error: Unable to use IN predicate with string argument, it won't search substring - "
+                                          "expecting tuple, list, dict or single column table source\n");
     }
 
-    Y_UNIT_TEST(UseSubqueryInScalarContextInsideIn) { 
-        NYql::TAstParseResult res = SqlToYql("$q = (select key from plato.Input); select * from plato.Input where subkey in ($q);"); 
-        UNIT_ASSERT(res.Root); 
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:79: Warning: Using subrequest in scalar context after IN, perhaps you should remove parenthesis here, code: 4501\n"); 
-    } 
- 
-    Y_UNIT_TEST(InHintsWithKeywordClash) { 
-        NYql::TAstParseResult res = SqlToYql("SELECT COMPACT FROM plato.Input WHERE COMPACT IN COMPACT [COMPACT](1,2,3)"); 
-        UNIT_ASSERT(!res.Root); 
-        // should try to parse last compact as call expression 
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:58: Error: Unknown builtin: COMPACT, to use YQL functions, try YQL::COMPACT\n"); 
-    } 
- 
+    Y_UNIT_TEST(UseSubqueryInScalarContextInsideIn) {
+        NYql::TAstParseResult res = SqlToYql("$q = (select key from plato.Input); select * from plato.Input where subkey in ($q);");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:79: Warning: Using subrequest in scalar context after IN, perhaps you should remove parenthesis here, code: 4501\n");
+    }
+
+    Y_UNIT_TEST(InHintsWithKeywordClash) {
+        NYql::TAstParseResult res = SqlToYql("SELECT COMPACT FROM plato.Input WHERE COMPACT IN COMPACT [COMPACT](1,2,3)");
+        UNIT_ASSERT(!res.Root);
+        // should try to parse last compact as call expression
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:58: Error: Unknown builtin: COMPACT, to use YQL functions, try YQL::COMPACT\n");
+    }
+
     Y_UNIT_TEST(ErrorColumnPosition) {
         NYql::TAstParseResult res = SqlToYql(
             "USE plato;\n"
@@ -1616,15 +1616,15 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:50: Error: ROLLBACK isn't supported for provider: yt\n");
     }
 
-    Y_UNIT_TEST(ShouldFailAsTruncatedBinaryNotSucceedAsLegacyTinyZeroInt) { 
-        NYql::TAstParseResult res = SqlToYql("select 0b;"); 
-        UNIT_ASSERT(!res.Root); 
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), 
-            "<main>:1:9: Error: Unexpected character ';' (Unicode character <59>) : missing elements...\n\n" 
-            "<main>:1:0: Error: Unexpected token absence : cannot match to any predicted input...\n\n" 
-        ); 
-    } 
- 
+    Y_UNIT_TEST(ShouldFailAsTruncatedBinaryNotSucceedAsLegacyTinyZeroInt) {
+        NYql::TAstParseResult res = SqlToYql("select 0b;");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res),
+            "<main>:1:9: Error: Unexpected character ';' (Unicode character <59>) : missing elements...\n\n"
+            "<main>:1:0: Error: Unexpected token absence : cannot match to any predicted input...\n\n"
+        );
+    }
+
     Y_UNIT_TEST(ConvertNumberFailed0) {
         NYql::TAstParseResult res = SqlToYql("select 0o80l;");
         UNIT_ASSERT(!res.Root);

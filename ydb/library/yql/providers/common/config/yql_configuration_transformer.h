@@ -20,9 +20,9 @@ public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
 
 protected:
-    virtual bool HandleAttr(TPositionHandle pos, const TString& cluster, const TString& name, 
+    virtual bool HandleAttr(TPositionHandle pos, const TString& cluster, const TString& name,
         const TMaybe<TString>& value, TExprContext& ctx);
-    virtual bool HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias, TExprContext& ctx); 
+    virtual bool HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias, TExprContext& ctx);
 
 protected:
     TSettingDispatcher::TPtr Dispatcher;

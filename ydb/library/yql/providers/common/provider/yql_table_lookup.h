@@ -97,14 +97,14 @@ private:
 
 class TKeyTuple {
 public:
-    TKeyTuple(TExprContext* ctx, const TVector<NNodes::TMaybeNode<NNodes::TExprBase>>& values, bool isFrom, bool isInclusive) 
-        : Ctx(ctx) 
-        , Values(values) 
+    TKeyTuple(TExprContext* ctx, const TVector<NNodes::TMaybeNode<NNodes::TExprBase>>& values, bool isFrom, bool isInclusive)
+        : Ctx(ctx)
+        , Values(values)
         , From(isFrom)
         , Inclusive(isInclusive) {}
 
     TKeyTuple()
-        : TKeyTuple(nullptr, {}, false, false) {} 
+        : TKeyTuple(nullptr, {}, false, false) {}
 
     size_t Size() const { return Values.size(); }
     bool IsFrom() const { return From; }
@@ -114,7 +114,7 @@ public:
     void Print(IOutputStream& output) const;
 
 private:
-    TExprContext* Ctx; 
+    TExprContext* Ctx;
     TVector<NNodes::TMaybeNode<NNodes::TExprBase>> Values;
     bool From;
     bool Inclusive;
@@ -122,10 +122,10 @@ private:
 
 class TKeyRange {
 public:
-    TKeyRange(TExprContext& ctx, const TVector<TColumnRange>& columnRanges, NNodes::TMaybeNode<NNodes::TExprBase> residualPredicate); 
+    TKeyRange(TExprContext& ctx, const TVector<TColumnRange>& columnRanges, NNodes::TMaybeNode<NNodes::TExprBase> residualPredicate);
 
-    TKeyRange(TExprContext& ctx, size_t keySize, NNodes::TMaybeNode<NNodes::TExprBase> residualPredicate) 
-        : TKeyRange(ctx, TVector<TColumnRange>(keySize, TColumnRange()), residualPredicate) {} 
+    TKeyRange(TExprContext& ctx, size_t keySize, NNodes::TMaybeNode<NNodes::TExprBase> residualPredicate)
+        : TKeyRange(ctx, TVector<TColumnRange>(keySize, TColumnRange()), residualPredicate) {}
 
     size_t GetColumnRangesCount() const {
         return ColumnRanges.size();
@@ -170,7 +170,7 @@ public:
     void Print(IOutputStream& output) const;
 
 private:
-    TExprContext* Ctx; 
+    TExprContext* Ctx;
     TVector<TColumnRange> ColumnRanges;
     NNodes::TMaybeNode<NNodes::TExprBase> ResidualPredicate;
     bool EquiRange;

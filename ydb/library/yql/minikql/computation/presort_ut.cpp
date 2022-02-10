@@ -487,33 +487,33 @@ Y_UNIT_TEST(GenericOptional) {
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00"sv));
 }
 
-Y_UNIT_TEST(NestedOptional) { 
-    TScopedAlloc alloc; 
-    TTypeEnvironment env(alloc); 
-    // Int32??? 
-    auto type = 
-        TOptionalType::Create(TOptionalType::Create(TOptionalType::Create(TDataType::Create(NUdf::TDataType<i32>::Id, env), env), env), env); 
-    TGenericPresortEncoder encoder(type); 
- 
-    NUdf::TUnboxedValue null = {}; 
-    auto buf = encoder.Encode(null, false); 
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00"sv)); 
- 
-    auto justNull = null.MakeOptional(); 
-    buf = encoder.Encode(justNull, false); 
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00"sv)); 
- 
-    auto justJustNull = justNull.MakeOptional(); 
-    buf = encoder.Encode(justJustNull, false); 
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01\x00"sv)); 
- 
- 
-    auto zero = NUdf::TUnboxedValuePod(0).MakeOptional().MakeOptional().MakeOptional(); 
-    buf = encoder.Encode(zero, false); 
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01\x01\x80\x00\x00\x00"sv)); 
-} 
- 
- 
+Y_UNIT_TEST(NestedOptional) {
+    TScopedAlloc alloc;
+    TTypeEnvironment env(alloc);
+    // Int32???
+    auto type =
+        TOptionalType::Create(TOptionalType::Create(TOptionalType::Create(TDataType::Create(NUdf::TDataType<i32>::Id, env), env), env), env);
+    TGenericPresortEncoder encoder(type);
+
+    NUdf::TUnboxedValue null = {};
+    auto buf = encoder.Encode(null, false);
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00"sv));
+
+    auto justNull = null.MakeOptional();
+    buf = encoder.Encode(justNull, false);
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00"sv));
+
+    auto justJustNull = justNull.MakeOptional();
+    buf = encoder.Encode(justJustNull, false);
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01\x00"sv));
+
+
+    auto zero = NUdf::TUnboxedValuePod(0).MakeOptional().MakeOptional().MakeOptional();
+    buf = encoder.Encode(zero, false);
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01\x01\x80\x00\x00\x00"sv));
+}
+
+
 Y_UNIT_TEST(GenericList) {
     TScopedAlloc alloc;
     TTypeEnvironment env(alloc);

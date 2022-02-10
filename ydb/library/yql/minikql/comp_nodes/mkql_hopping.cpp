@@ -213,7 +213,7 @@ public:
 
         std::vector<TBucket> Buckets; // circular buffer
         std::deque<NUdf::TUnboxedValue> Ready; // buffer for fetching results
-        ui64 HopIndex = 0; 
+        ui64 HopIndex = 0;
         bool Started = false;
         bool Finished = false;
 

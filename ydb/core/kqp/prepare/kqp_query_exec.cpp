@@ -112,7 +112,7 @@ bool ProcessEffect(TExprBase& effect, const THashMap<TString, NKikimrKqp::TParam
                 auto predicateValue = GetPredicateValue(revert, transformCtx, bindingsMap);
 
                 if (predicateValue) {
-                    ctx.AddWarning(YqlIssue(ctx.GetPosition(revert.Pos()), TIssuesIds::KIKIMR_OPERATION_REVERTED, TStringBuilder() 
+                    ctx.AddWarning(YqlIssue(ctx.GetPosition(revert.Pos()), TIssuesIds::KIKIMR_OPERATION_REVERTED, TStringBuilder()
                         << "Operation reverted due to constraint violation: " << revert.Constraint().Value()));
 
                     return GetEmptyEffectsList(revert.Pos(), ctx).Ptr();
@@ -126,7 +126,7 @@ bool ProcessEffect(TExprBase& effect, const THashMap<TString, NKikimrKqp::TParam
                 auto predicateValue = GetPredicateValue(abort, transformCtx, bindingsMap);
 
                 if (predicateValue) {
-                    ctx.AddError(YqlIssue(ctx.GetPosition(abort.Pos()), TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, TStringBuilder() 
+                    ctx.AddError(YqlIssue(ctx.GetPosition(abort.Pos()), TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, TStringBuilder()
                         << "Operation aborted due to constraint violation: " << abort.Constraint().Value()));
 
                     return TExprNode::TPtr();
@@ -247,7 +247,7 @@ public:
         TVector<TExprBase> results;
         for (auto& root : analyzeResults.ExecutionRoots) {
             if (root.Scope) {
-                ctx.AddError(TIssue(ctx.GetPosition(root.Node.Pos()), TStringBuilder() 
+                ctx.AddError(TIssue(ctx.GetPosition(root.Node.Pos()), TStringBuilder()
                     << "Unexpected nested execution roots in rewritten program."));
                 return TStatus::Error;
             }
@@ -488,10 +488,10 @@ TMkqlExecuteResult ExecuteMkql(TKiProgram program, TIntrusivePtr<IKqpGateway> ga
     auto mkqlProgram = TranslateToMkql(program, ctx, TString(ReadTargetParamName));
     if (!mkqlProgram) {
         return TMkqlExecuteResult(MakeFuture(ResultFromError<IKqpGateway::TMkqlResult>(
-            "Mkql translation failed.", ctx.GetPosition(program.Pos())))); 
+            "Mkql translation failed.", ctx.GetPosition(program.Pos()))));
     }
 
-    auto mkqlProgramText = NCommon::SerializeExpr(ctx, mkqlProgram.Cast().Ref()); 
+    auto mkqlProgramText = NCommon::SerializeExpr(ctx, mkqlProgram.Cast().Ref());
     TFuture<IKqpGateway::TMkqlResult> future;
 
     auto paramBindings = CollectParams(mkqlProgram.Cast());
@@ -537,7 +537,7 @@ bool AddDeferredEffect(NNodes::TExprBase effect, const TVector<NKikimrKqp::TPara
 {
     if (transformCtx.QueryCtx->PrepareOnly) {
         auto& newEffect = *transformCtx.GetPreparingKql().AddEffects();
-        newEffect.SetNodeAst(NCommon::SerializeExpr(ctx, effect.Ref())); 
+        newEffect.SetNodeAst(NCommon::SerializeExpr(ctx, effect.Ref()));
         for (auto& binding : bindings) {
             newEffect.AddBindings()->CopyFrom(binding);
         }

@@ -94,7 +94,7 @@ bool ExtractParameterTypes(const TExprNode::TPtr& input, TTypeAnnotationContext&
 
         auto name = param->Child(0)->Content();
         if (!param->GetTypeAnn()) {
-            ctx.AddError(TIssue(ctx.GetPosition(param->Pos()), TStringBuilder() << "Failed to type check parameter: " << name)); 
+            ctx.AddError(TIssue(ctx.GetPosition(param->Pos()), TStringBuilder() << "Failed to type check parameter: " << name));
             return nullptr;
         }
 
@@ -102,7 +102,7 @@ bool ExtractParameterTypes(const TExprNode::TPtr& input, TTypeAnnotationContext&
         if (!type) {
             type = param->GetTypeAnn();
         } else if (!IsSameAnnotation(*type, *param->GetTypeAnn())) {
-            ctx.AddError(TIssue(ctx.GetPosition(param->Pos()), TStringBuilder() << "Mismatch of types: " << *type << " != " << *param->GetTypeAnn() 
+            ctx.AddError(TIssue(ctx.GetPosition(param->Pos()), TStringBuilder() << "Mismatch of types: " << *type << " != " << *param->GetTypeAnn()
                 << " for parameter: " << name));
             return nullptr;
         }

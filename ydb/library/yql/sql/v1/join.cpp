@@ -25,7 +25,7 @@ TString NormalizeJoinOp(const TString& joinOp) {
 
 struct TJoinDescr {
     TString Op;
-    TJoinLinkSettings LinkSettings; 
+    TJoinLinkSettings LinkSettings;
 
     struct TFullColumn {
         ui32 Source;
@@ -34,27 +34,27 @@ struct TJoinDescr {
 
     TVector<std::pair<TFullColumn, TFullColumn>> Keys;
 
-    explicit TJoinDescr(const TString& op) 
+    explicit TJoinDescr(const TString& op)
         : Op(op)
     {}
 };
 
 class TJoinBase: public IJoin {
 public:
-    TJoinBase(TPosition pos, TVector<TSourcePtr>&& sources, TVector<bool>&& anyFlags) 
+    TJoinBase(TPosition pos, TVector<TSourcePtr>&& sources, TVector<bool>&& anyFlags)
         : IJoin(pos)
         , Sources(std::move(sources))
-        , AnyFlags(std::move(anyFlags)) 
+        , AnyFlags(std::move(anyFlags))
     {
-        YQL_ENSURE(Sources.size() == AnyFlags.size()); 
+        YQL_ENSURE(Sources.size() == AnyFlags.size());
     }
 
-    void AllColumns() override { 
-        for (auto& source: Sources) { 
-            source->AllColumns(); 
-        } 
-    } 
- 
+    void AllColumns() override {
+        for (auto& source: Sources) {
+            source->AllColumns();
+        }
+    }
+
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
         ISource* srcByName = nullptr;
         if (column.IsArtificial()) {
@@ -174,26 +174,26 @@ public:
             if (!lhs || !rhs) {
                 return nullptr;
             }
-            TNodePtr eq(BuildBinaryOp(ctx, pos, "==", lhs, rhs)); 
+            TNodePtr eq(BuildBinaryOp(ctx, pos, "==", lhs, rhs));
             if (expr) {
-                expr = BuildBinaryOp(ctx, pos, "And", expr, eq); 
+                expr = BuildBinaryOp(ctx, pos, "And", expr, eq);
             } else {
                 expr = eq;
             }
         }
-        if (expr && Sources.size() > 2) { 
-            ctx.Error() << "Multi-way JOINs should be connected with ON clause instead of USING clause"; 
-            return nullptr; 
-        } 
+        if (expr && Sources.size() > 2) {
+            ctx.Error() << "Multi-way JOINs should be connected with ON clause instead of USING clause";
+            return nullptr;
+        }
         return expr;
     }
 
     bool DoInit(TContext& ctx, ISource* src) override;
 
-    void SetupJoin(const TString& opName, TNodePtr expr, const TJoinLinkSettings& linkSettings) override { 
+    void SetupJoin(const TString& opName, TNodePtr expr, const TJoinLinkSettings& linkSettings) override {
         JoinOps.push_back(opName);
         JoinExprs.push_back(expr);
-        JoinLinkSettings.push_back(linkSettings); 
+        JoinLinkSettings.push_back(linkSettings);
     }
 
     bool IsStream() const override {
@@ -209,7 +209,7 @@ protected:
 
     bool InitKeysOrFilters(TContext& ctx, ui32 joinIdx, TNodePtr expr) {
         const TString joinOp(JoinOps[joinIdx]);
-        const TJoinLinkSettings linkSettings(JoinLinkSettings[joinIdx]); 
+        const TJoinLinkSettings linkSettings(JoinLinkSettings[joinIdx]);
         const TCallNode* op = nullptr;
         if (expr) {
             const TString opName(expr->GetOpName());
@@ -226,11 +226,11 @@ protected:
         ui32 idx = 0;
         THashMap<TString, ui32> sources;
         for (auto& source: Sources) {
-            auto label = source->GetLabel(); 
-            if (!label) { 
-                ctx.Error(source->GetPos()) << "JOIN: missing correlation name for source"; 
-                return false; 
-            } 
+            auto label = source->GetLabel();
+            if (!label) {
+                ctx.Error(source->GetPos()) << "JOIN: missing correlation name for source";
+                return false;
+            }
             sources.insert({ source->GetLabel(), idx });
             ++idx;
         }
@@ -253,7 +253,7 @@ protected:
             for (auto& arg : op->GetArgs()) {
                 const auto sourceNamePtr = arg->GetSourceName();
                 if (!sourceNamePtr) {
-                    ctx.Error(expr->GetPos()) << "JOIN: each equality predicate argument must depend on exactly one JOIN input"; 
+                    ctx.Error(expr->GetPos()) << "JOIN: each equality predicate argument must depend on exactly one JOIN input";
                     return false;
                 }
                 const auto sourceName = *sourceNamePtr;
@@ -340,9 +340,9 @@ protected:
         }
 
         if (joinIdx == JoinDescrs.size()) {
-            TJoinDescr newDescr(joinOp); 
-            newDescr.LinkSettings = linkSettings; 
-            JoinDescrs.push_back(std::move(newDescr)); 
+            TJoinDescr newDescr(joinOp);
+            newDescr.LinkSettings = linkSettings;
+            JoinDescrs.push_back(std::move(newDescr));
         }
 
         JoinDescrs.back().Keys.push_back({ { leftSourceIdx, op ? op->GetArgs()[leftArg] : nullptr},
@@ -358,11 +358,11 @@ protected:
 protected:
     TVector<TString> JoinOps;
     TVector<TNodePtr> JoinExprs;
-    TVector<TJoinLinkSettings> JoinLinkSettings; 
+    TVector<TJoinLinkSettings> JoinLinkSettings;
     TVector<TJoinDescr> JoinDescrs;
     THashMap<TString, THashSet<TString>> SameKeyMap;
-    const TVector<TSourcePtr> Sources; 
-    const TVector<bool> AnyFlags; 
+    const TVector<TSourcePtr> Sources;
+    const TVector<bool> AnyFlags;
     TColumns JoinedColumns;
     bool KeysInitializing = false;
     bool IsColumnDone = false;
@@ -405,24 +405,24 @@ protected:
     }
 };
 
-bool TJoinBase::DoInit(TContext& ctx, ISource* initSrc) { 
+bool TJoinBase::DoInit(TContext& ctx, ISource* initSrc) {
     for (auto& source: Sources) {
-        if (!source->Init(ctx, initSrc)) { 
+        if (!source->Init(ctx, initSrc)) {
             return false;
         }
- 
-        auto src = source.Get(); 
-        if (src->IsFlattenByExprs()) { 
-            for (auto& expr : static_cast<ISource const*>(src)->Expressions(EExprSeat::FlattenByExpr)) { 
-                if (!expr->Init(ctx, src)) { 
-                    return false; 
-                } 
-            } 
-        } 
+
+        auto src = source.Get();
+        if (src->IsFlattenByExprs()) {
+            for (auto& expr : static_cast<ISource const*>(src)->Expressions(EExprSeat::FlattenByExpr)) {
+                if (!expr->Init(ctx, src)) {
+                    return false;
+                }
+            }
+        }
     }
 
     YQL_ENSURE(JoinOps.size() == JoinExprs.size(), "Invalid join exprs number");
-    YQL_ENSURE(JoinOps.size() == JoinLinkSettings.size()); 
+    YQL_ENSURE(JoinOps.size() == JoinLinkSettings.size());
 
     const TSet<TString> allowedJoinOps = {"Inner", "Left", "Right", "Full", "LeftOnly", "RightOnly", "Exclusion", "LeftSemi", "RightSemi", "Cross"};
     for (auto& opName: JoinOps) {
@@ -470,14 +470,14 @@ bool TJoinBase::DoInit(TContext& ctx, ISource* initSrc) {
         }
     }
 
-    return ISource::DoInit(ctx, initSrc); 
+    return ISource::DoInit(ctx, initSrc);
 }
 
 class TEquiJoin: public TJoinBase {
 public:
-    TEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources, TVector<bool>&& anyFlags, bool strictJoinKeyTypes) 
-        : TJoinBase(pos, std::move(sources), std::move(anyFlags)) 
-        , StrictJoinKeyTypes(strictJoinKeyTypes) 
+    TEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources, TVector<bool>&& anyFlags, bool strictJoinKeyTypes)
+        : TJoinBase(pos, std::move(sources), std::move(anyFlags))
+        , StrictJoinKeyTypes(strictJoinKeyTypes)
     {
     }
 
@@ -486,43 +486,43 @@ public:
         TNodePtr joinTree;
         for (auto& descr: JoinDescrs) {
             auto leftBranch = joinTree;
-            bool leftAny = false; 
+            bool leftAny = false;
             if (!leftBranch) {
                 leftBranch = BuildQuotedAtom(Pos, Sources[descr.Keys[0].first.Source]->GetLabel());
-                leftAny = AnyFlags[descr.Keys[0].first.Source]; 
+                leftAny = AnyFlags[descr.Keys[0].first.Source];
             }
-            bool rightAny = AnyFlags[descr.Keys[0].second.Source]; 
+            bool rightAny = AnyFlags[descr.Keys[0].second.Source];
             auto leftKeys = GetColumnNames(ctx, extraColumns, descr.Keys, true);
             auto rightKeys = GetColumnNames(ctx, extraColumns, descr.Keys, false);
             if (!leftKeys || !rightKeys) {
                 return nullptr;
             }
 
-            TNodePtr linkOptions = Y(); 
-            if (descr.LinkSettings.ForceSortedMerge) { 
-                linkOptions = L(linkOptions, Q(Y(Q("forceSortedMerge")))); 
-            } 
-            if (leftAny) { 
-                linkOptions = L(linkOptions, Q(Y(Q("left"), Q("any")))); 
-            } 
-            if (rightAny) { 
-                linkOptions = L(linkOptions, Q(Y(Q("right"), Q("any")))); 
-            } 
- 
+            TNodePtr linkOptions = Y();
+            if (descr.LinkSettings.ForceSortedMerge) {
+                linkOptions = L(linkOptions, Q(Y(Q("forceSortedMerge"))));
+            }
+            if (leftAny) {
+                linkOptions = L(linkOptions, Q(Y(Q("left"), Q("any"))));
+            }
+            if (rightAny) {
+                linkOptions = L(linkOptions, Q(Y(Q("right"), Q("any"))));
+            }
+
             joinTree = Q(Y(
                 Q(descr.Op),
                 leftBranch,
                 BuildQuotedAtom(Pos, Sources[descr.Keys[0].second.Source]->GetLabel()),
                 leftKeys,
                 rightKeys,
-                Q(linkOptions) 
+                Q(linkOptions)
             ));
         }
 
         TNodePtr equiJoin(Y("EquiJoin"));
         bool ordered = false;
-        for (size_t i = 0; i < Sources.size(); ++i) { 
-            auto& source = Sources[i]; 
+        for (size_t i = 0; i < Sources.size(); ++i) {
+            auto& source = Sources[i];
             auto sourceNode = source->Build(ctx);
             if (!sourceNode) {
                 return nullptr;
@@ -538,16 +538,16 @@ public:
                     return nullptr;
                 }
                 auto block = Y(Y("let", "flatten", sourceNode));
- 
-                if (source->IsFlattenByExprs()) { 
-                    auto premap = source->BuildPreFlattenMap(ctx); 
-                    if (!premap) { 
-                        return nullptr; 
-                    } 
- 
-                    block = L(block, Y("let", "flatten", Y(useOrderedForSource ? "OrderedFlatMap" : "FlatMap", "flatten", BuildLambda(Pos, Y("row"), premap)))); 
-                } 
- 
+
+                if (source->IsFlattenByExprs()) {
+                    auto premap = source->BuildPreFlattenMap(ctx);
+                    if (!premap) {
+                        return nullptr;
+                    }
+
+                    block = L(block, Y("let", "flatten", Y(useOrderedForSource ? "OrderedFlatMap" : "FlatMap", "flatten", BuildLambda(Pos, Y("row"), premap))));
+                }
+
                 block = L(block, Y("let", "flatten", Y(useOrderedForSource ? "OrderedFlatMap" : "FlatMap", "flatten", BuildLambda(Pos, Y("row"), flatten, "res"))));
                 sourceNode = Y("block", Q(L(block, Y("return", "flatten"))));
             }
@@ -557,7 +557,7 @@ public:
                     break;
                 }
                 if (!extraMembers) {
-                    extraMembers = Y(); 
+                    extraMembers = Y();
                 }
                 extraMembers = L(
                     extraMembers,
@@ -583,9 +583,9 @@ public:
             );
         }
         auto options = Y();
-        if (StrictJoinKeyTypes) { 
-            options = L(options,  Q(Y(Q("strict_keys")))); 
-        } 
+        if (StrictJoinKeyTypes) {
+            options = L(options,  Q(Y(Q("strict_keys"))));
+        }
         equiJoin = L(equiJoin, joinTree, Q(options));
         if (removeMembers) {
             equiJoin = Y(ordered ? "OrderedMap" : "Map", equiJoin, BuildLambda(Pos, Y("row"), removeMembers, "row"));
@@ -597,12 +597,12 @@ public:
         return SameKeyMap;
     }
 
-    TVector<TString> GetJoinLabels() const override { 
-        TVector<TString> labels; 
+    TVector<TString> GetJoinLabels() const override {
+        TVector<TString> labels;
         for (auto& source: Sources) {
             const auto label = source->GetLabel();
             YQL_ENSURE(label);
-            labels.push_back(label); 
+            labels.push_back(label);
         }
         return labels;
     }
@@ -612,10 +612,10 @@ public:
         for (auto& cur: Sources) {
             clonedSources.push_back(cur->CloneSource());
         }
-        auto newSource = MakeIntrusive<TEquiJoin>(Pos, std::move(clonedSources), TVector<bool>(AnyFlags), StrictJoinKeyTypes); 
+        auto newSource = MakeIntrusive<TEquiJoin>(Pos, std::move(clonedSources), TVector<bool>(AnyFlags), StrictJoinKeyTypes);
         newSource->JoinOps = JoinOps;
         newSource->JoinExprs = CloneContainer(JoinExprs);
-        newSource->JoinLinkSettings = JoinLinkSettings; 
+        newSource->JoinLinkSettings = JoinLinkSettings;
         return newSource;
     }
 
@@ -651,12 +651,12 @@ private:
 
         return Q(res);
     }
- 
-    const bool StrictJoinKeyTypes; 
+
+    const bool StrictJoinKeyTypes;
 };
 
-TSourcePtr BuildEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources, TVector<bool>&& anyFlags, bool strictJoinKeyTypes) { 
-    return new TEquiJoin(pos, std::move(sources), std::move(anyFlags), strictJoinKeyTypes); 
+TSourcePtr BuildEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources, TVector<bool>&& anyFlags, bool strictJoinKeyTypes) {
+    return new TEquiJoin(pos, std::move(sources), std::move(anyFlags), strictJoinKeyTypes);
 }
 
 } // namespace NSQLTranslationV1

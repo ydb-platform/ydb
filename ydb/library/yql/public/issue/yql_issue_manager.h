@@ -28,8 +28,8 @@ public:
 
     void Reset(const TIssues& issues);
     void Reset();
- 
-    void AddWarningRule(const TWarningRule &rule); 
+
+    void AddWarningRule(const TWarningRule &rule);
     void SetWarningToErrorTreatMessage(const TString& msg);
 
     void SetIssueCountLimit(size_t limit) {
@@ -52,7 +52,7 @@ private:
     TStack<std::pair<TMaybe<TIssuePtr>, std::function<TIssuePtr()>>> RawIssues_;
     TIssues CompletedIssues_;
     TMaybe<TString> WarningToErrorTreatMessage_;
-    TWarningPolicy WarningPolicy_; 
+    TWarningPolicy WarningPolicy_;
     std::array<TIssuePtr, NYql::TSeverityIds::ESeverityId_ARRAYSIZE> OverflowIssues_;
     std::array<THashSet<TIssuePtr, TIssueHash, TIssueEqual>, NYql::TSeverityIds::ESeverityId_ARRAYSIZE> UniqueIssues_;
     size_t IssueLimit_ = 0;

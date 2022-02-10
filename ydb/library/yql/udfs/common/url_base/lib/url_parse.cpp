@@ -35,7 +35,7 @@ namespace NUrlUdf {
         if (Name() == name) {
             TUrlParseIndexes urlParseIndexes;
 
-            builder.Args(1)->Add<TAutoMap<char*>>(); 
+            builder.Args(1)->Add<TAutoMap<char*>>();
             const auto optionalStringType = builder.Optional()->Item<char*>().Build();
             const auto structBuilder = builder.Struct(FieldsCount);
             structBuilder->AddField("ParseError", optionalStringType, &urlParseIndexes.ParseError);

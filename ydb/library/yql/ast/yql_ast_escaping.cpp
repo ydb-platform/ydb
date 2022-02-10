@@ -111,27 +111,27 @@ static bool IsValidUtf8Rune(wchar32 value) {
     return value <= 0x10ffff && (value < 0xd800 || value > 0xdfff);
 }
 
-TStringBuf UnescapeResultToString(EUnescapeResult result) 
-{ 
-    switch (result) { 
-        case EUnescapeResult::OK: 
-            return "OK"; 
-        case EUnescapeResult::INVALID_ESCAPE_SEQUENCE: 
-            return "Expected escape sequence"; 
-        case EUnescapeResult::INVALID_BINARY: 
-            return "Invalid binary value"; 
-        case EUnescapeResult::INVALID_OCTAL: 
-            return "Invalid octal value"; 
-        case EUnescapeResult::INVALID_HEXADECIMAL: 
-            return "Invalid hexadecimal value"; 
-        case EUnescapeResult::INVALID_UNICODE: 
-            return "Invalid unicode value"; 
-        case EUnescapeResult::INVALID_END: 
-            return "Unexpected end of atom"; 
-    } 
-    return "Unknown unescape error"; 
-} 
- 
+TStringBuf UnescapeResultToString(EUnescapeResult result)
+{
+    switch (result) {
+        case EUnescapeResult::OK:
+            return "OK";
+        case EUnescapeResult::INVALID_ESCAPE_SEQUENCE:
+            return "Expected escape sequence";
+        case EUnescapeResult::INVALID_BINARY:
+            return "Invalid binary value";
+        case EUnescapeResult::INVALID_OCTAL:
+            return "Invalid octal value";
+        case EUnescapeResult::INVALID_HEXADECIMAL:
+            return "Invalid hexadecimal value";
+        case EUnescapeResult::INVALID_UNICODE:
+            return "Invalid unicode value";
+        case EUnescapeResult::INVALID_END:
+            return "Unexpected end of atom";
+    }
+    return "Unknown unescape error";
+}
+
 void EscapeArbitraryAtom(TStringBuf atom, char quoteChar, IOutputStream* out)
 {
     out->Write(quoteChar);

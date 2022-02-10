@@ -81,11 +81,11 @@ public:
         , SubGraph(subGraph)
     {
         Functions["Unordered"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
-        Functions["UnorderedSubquery"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>; 
+        Functions["UnorderedSubquery"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["Sort"] = &TCallableConstraintTransformer::SortWrap;
         Functions["AssumeSorted"] = &TCallableConstraintTransformer::AssumeSortedWrap;
         Functions["AssumeUnique"] = &TCallableConstraintTransformer::AssumeUniqueWrap;
-        Functions["AssumeColumnOrder"] = &TCallableConstraintTransformer::CopyAllFrom<0>; 
+        Functions["AssumeColumnOrder"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["AssumeAllMembersNullableAtOnce"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["Top"] = &TCallableConstraintTransformer::TopWrap<false>;
         Functions["TopSort"] = &TCallableConstraintTransformer::TopWrap<true>;
@@ -1046,7 +1046,7 @@ private:
         }
 
         if (const auto status = UpdateLambdaConstraints(input->TailRef(), ctx, {argConstraints}); status != TStatus::Ok) {
-            return status; 
+            return status;
         }
 
         TSet<TStringBuf> except;
@@ -1512,7 +1512,7 @@ private:
         std::transform(optionals.cbegin(), optionals.cend(), std::back_inserter(constraints), [](const TExprNode::TPtr& node){ return node->GetAllConstraints(); });
 
         if (const auto status = UpdateLambdaConstraints(input->ChildRef(lambdaIndex), ctx, constraints); status != TStatus::Ok) {
-            return status; 
+            return status;
         }
 
         if (std::any_of(optionals.cbegin(), optionals.cend(), [] (const TExprNode::TPtr& node) { return bool(node->GetConstraint<TEmptyConstraintNode>()); })) {
@@ -2006,7 +2006,7 @@ private:
             if (inputPassthrough)
                 argConstraints.emplace_back(inputPassthrough);
             if (const auto status = UpdateLambdaConstraints(input->ChildRef(1), ctx, {argConstraints}); status != TStatus::Ok) {
-                return status; 
+                return status;
             }
         }
 
@@ -2097,7 +2097,7 @@ private:
         }
 
         if (const auto status = UpdateLambdaConstraints(input->ChildRef(1), ctx, argConstraints); status != TStatus::Ok) {
-            return status; 
+            return status;
         }
 
         const auto initLambda = input->Child(1);
@@ -2116,7 +2116,7 @@ private:
 
         if (const auto status = UpdateLambdaConstraints(input->ChildRef(2), ctx, argConstraints)
             .Combine(UpdateLambdaConstraints(input->TailRef(), ctx, argConstraints)); status != TStatus::Ok) {
-            return status; 
+            return status;
         }
 
         const TPassthroughConstraintNode* commonPassthrough = nullptr;
@@ -2238,7 +2238,7 @@ private:
         }
 
         if (const auto status = UpdateLambdaConstraints(input->ChildRef(TCoPartitionByKeyBase::idx_ListHandlerLambda), ctx, {argConstraints}); status != TStatus::Ok) {
-            return status; 
+            return status;
         }
 
         const auto handlerLambda = input->Child(TCoPartitionByKeyBase::idx_ListHandlerLambda);
@@ -2455,7 +2455,7 @@ private:
             if (inputPassthrough)
                 argConstraints.emplace_back(inputPassthrough);
             if (const auto status = UpdateLambdaConstraints(input->ChildRef(1), ctx, {argConstraints}); status != TStatus::Ok) {
-                return status; 
+                return status;
             }
         }
 
@@ -2777,7 +2777,7 @@ public:
         output = input;
         TStatus combinedStatus = TStatus::Ok;
         for (const auto& callable : CallableInputs) {
-            callable->SetState(TExprNode::EState::ConstrPending); 
+            callable->SetState(TExprNode::EState::ConstrPending);
             TExprNode::TPtr callableOutput;
             auto status = CallableTransformer->ApplyAsyncChanges(callable, callableOutput, ctx);
             Y_VERIFY(callableOutput);
@@ -2785,7 +2785,7 @@ public:
             YQL_ENSURE(callableOutput == callable);
             combinedStatus = combinedStatus.Combine(status);
             if (status.Level == TStatus::Error) {
-                callable->SetState(TExprNode::EState::Error); 
+                callable->SetState(TExprNode::EState::Error);
             }
         }
 
@@ -2807,7 +2807,7 @@ private:
                 return TStatus::Repeat;
             }
 
-            switch (start->GetState()) { 
+            switch (start->GetState()) {
             case TExprNode::EState::Initial:
             case TExprNode::EState::TypeInProgress:
             case TExprNode::EState::TypePending:
@@ -2818,7 +2818,7 @@ private:
                 return IGraphTransformer::TStatus::Async;
             case TExprNode::EState::ConstrPending:
                 if (start->Type() == TExprNode::Lambda) {
-                    if (start->Child(0)->GetState() != TExprNode::EState::ConstrComplete) { 
+                    if (start->Child(0)->GetState() != TExprNode::EState::ConstrComplete) {
                         return TStatus::Ok;
                     } else if (start->Child(0)->ChildrenSize() == 0) {
                         break;
@@ -2845,7 +2845,7 @@ private:
 
         auto input = start;
         for (;;) {
-            TIssueScopeGuard issueScope(ctx.IssueManager, [this, input, &ctx]() -> TIssuePtr { 
+            TIssueScopeGuard issueScope(ctx.IssueManager, [this, input, &ctx]() -> TIssuePtr {
                 TStringBuilder str;
                 str << "At ";
                 switch (input->Type()) {
@@ -2884,7 +2884,7 @@ private:
                     str << "unknown";
                 }
 
-                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), str); 
+                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), str);
             });
 
             if (input->Type() == TExprNode::Callable) {
@@ -2900,7 +2900,7 @@ private:
             };
 
             TStatus retStatus = TStatus::Error;
-            switch (input->GetState()) { 
+            switch (input->GetState()) {
             case TExprNode::EState::Initial:
             case TExprNode::EState::TypeInProgress:
             case TExprNode::EState::TypePending:
@@ -2922,11 +2922,11 @@ private:
                 YQL_ENSURE(false, "Unknown state");
             }
 
-            input->SetState(TExprNode::EState::ConstrPending); 
+            input->SetState(TExprNode::EState::ConstrPending);
             switch (input->Type()) {
             case TExprNode::Atom:
             case TExprNode::World:
-                input->SetState(TExprNode::EState::ConstrComplete); 
+                input->SetState(TExprNode::EState::ConstrComplete);
                 CheckExpected(*input);
                 return TStatus::Ok;
 
@@ -2955,7 +2955,7 @@ private:
                 auto argStatus = TransformNode(input->HeadPtr(), out, ctx);
                 UpdateStatusIfChanged(argStatus, input->HeadPtr(), out);
                 if (argStatus.Level == TStatus::Error) {
-                    input->SetState(TExprNode::EState::Error); 
+                    input->SetState(TExprNode::EState::Error);
                     return argStatus;
                 }
 
@@ -2979,7 +2979,7 @@ private:
                 retStatus = argStatus.Combine(bodyStatus);
                 if (retStatus != TStatus::Ok) {
                     if (retStatus.Level == TStatus::Error) {
-                        input->SetState(TExprNode::EState::Error); 
+                        input->SetState(TExprNode::EState::Error);
                     }
                     else if (updatedChildren) {
                         output = ctx.DeepCopyLambda(*input, std::move(newBody));
@@ -2997,7 +2997,7 @@ private:
             }
 
             case TExprNode::Argument:
-                if (input->GetState() != TExprNode::EState::ConstrComplete) { 
+                if (input->GetState() != TExprNode::EState::ConstrComplete) {
                     return TStatus::Repeat;
                 }
 
@@ -3006,7 +3006,7 @@ private:
             case TExprNode::Arguments:
             {
                 if (input->Children().empty()) {
-                    if (TExprNode::EState::ConstrComplete == input->GetState()) { 
+                    if (TExprNode::EState::ConstrComplete == input->GetState()) {
                         return TStatus::Ok;
                     }
                     return TStatus::Repeat;
@@ -3023,10 +3023,10 @@ private:
 
                 if (retStatus != TStatus::Ok) {
                     if (retStatus.Level == TStatus::Error) {
-                        input->SetState(TExprNode::EState::Error); 
+                        input->SetState(TExprNode::EState::Error);
                     }
                 } else {
-                    input->SetState(TExprNode::EState::ConstrComplete); 
+                    input->SetState(TExprNode::EState::ConstrComplete);
                 }
                 return retStatus;
             }
@@ -3044,18 +3044,18 @@ private:
                 CurrentFunctions.top().second = true;
                 retStatus = CallableTransformer->Transform(input, output, ctx);
                 if (retStatus == TStatus::Error) {
-                    input->SetState(TExprNode::EState::Error); 
+                    input->SetState(TExprNode::EState::Error);
                 } else if (retStatus == TStatus::Ok) {
                     // Sanity check
                     for (size_t i = 0; i < input->ChildrenSize(); ++i) {
-                        YQL_ENSURE(input->Child(i)->GetState() >= TExprNode::EState::ConstrComplete, 
+                        YQL_ENSURE(input->Child(i)->GetState() >= TExprNode::EState::ConstrComplete,
                             "Child with index " << i << " of callable " << TString{input->Content()}.Quote() << " has bad state after constraint transform");
                     }
-                    input->SetState(TExprNode::EState::ConstrComplete); 
+                    input->SetState(TExprNode::EState::ConstrComplete);
                     CheckExpected(*input);
                 } else if (retStatus == TStatus::Async) {
                     CallableInputs.push_back(input);
-                    input->SetState(TExprNode::EState::ConstrInProgress); 
+                    input->SetState(TExprNode::EState::ConstrInProgress);
                 } else {
                     if (output != input.Get()) {
                         processedPair.first->second = output;
@@ -3092,7 +3092,7 @@ private:
 
         if (combinedStatus != TStatus::Ok) {
             if (combinedStatus.Level == TStatus::Error) {
-                input->SetState(TExprNode::EState::Error); 
+                input->SetState(TExprNode::EState::Error);
             }
             else if (updatedChildren) {
                 output = ctx.ChangeChildren(*input, std::move(newChildren));
@@ -3111,7 +3111,7 @@ private:
     void CheckExpected(const TExprNode& input) {
         if (const auto it = Types.ExpectedConstraints.find(input.UniqueId()); it != Types.ExpectedConstraints.cend()) {
             for (const TConstraintNode* expectedConstr: it->second) {
-                if (!Types.DisableConstraintCheck.contains(expectedConstr->GetName())) { 
+                if (!Types.DisableConstraintCheck.contains(expectedConstr->GetName())) {
                     const auto newConstr = input.GetConstraint(expectedConstr->GetName());
                     // Constraint Multi(0:{Empty},1:{Empty}, ..., N:{Empty}) can be reduced to Empty
                     if (expectedConstr->GetName() == TMultiConstraintNode::Name()) {
@@ -3154,17 +3154,17 @@ TAutoPtr<IGraphTransformer> CreateDefCallableConstraintTransformer() {
 IGraphTransformer::TStatus UpdateLambdaConstraints(const TExprNode& lambda) {
     auto args = lambda.Child(0);
     for (const auto& arg: args->Children()) {
-        if (arg->GetState() == TExprNode::EState::TypeComplete || arg->GetState() == TExprNode::EState::ConstrPending) { 
-            arg->SetState(TExprNode::EState::ConstrComplete); 
+        if (arg->GetState() == TExprNode::EState::TypeComplete || arg->GetState() == TExprNode::EState::ConstrPending) {
+            arg->SetState(TExprNode::EState::ConstrComplete);
         }
         YQL_ENSURE(arg->GetAllConstraints().empty());
     }
 
-    if (args->GetState() == TExprNode::EState::TypeComplete || args->GetState() == TExprNode::EState::ConstrPending) { 
-        args->SetState(TExprNode::EState::ConstrComplete); 
+    if (args->GetState() == TExprNode::EState::TypeComplete || args->GetState() == TExprNode::EState::ConstrPending) {
+        args->SetState(TExprNode::EState::ConstrComplete);
     }
 
-    if (lambda.GetState() != TExprNode::EState::ConstrComplete) { 
+    if (lambda.GetState() != TExprNode::EState::ConstrComplete) {
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -3179,11 +3179,11 @@ IGraphTransformer::TStatus UpdateLambdaConstraints(TExprNode::TPtr& lambda, TExp
     size_t i = 0;
     for (const auto constrList: constraints) {
         const auto arg = args->Child(i++);
-        if (arg->GetState() == TExprNode::EState::TypeComplete || arg->GetState() == TExprNode::EState::ConstrPending) { 
+        if (arg->GetState() == TExprNode::EState::TypeComplete || arg->GetState() == TExprNode::EState::ConstrPending) {
             for (const auto c: constrList) {
                 arg->AddConstraint(c);
             }
-            arg->SetState(TExprNode::EState::ConstrComplete); 
+            arg->SetState(TExprNode::EState::ConstrComplete);
         } else {
             if (constrList.size() != arg->GetAllConstraints().size() || !AllOf(constrList, [arg] (const TConstraintNode* c) { return arg->GetConstraint(c->GetName()) == c; })) {
                 updateArgs = true;
@@ -3210,7 +3210,7 @@ IGraphTransformer::TStatus UpdateLambdaConstraints(TExprNode::TPtr& lambda, TExp
 
         auto newArgs = ctx.NewArguments(args->Pos(), std::move(argsChildren));
         newArgs->SetTypeAnn(ctx.MakeType<TUnitExprType>());
-        newArgs->SetState(TExprNode::EState::ConstrComplete); 
+        newArgs->SetState(TExprNode::EState::ConstrComplete);
         const auto type = lambda->GetTypeAnn();
         lambda = ctx.NewLambda(lambda->Pos(), std::move(newArgs), ctx.ReplaceNodes<true>(GetLambdaBody(*lambda), replaces));
         lambda->SetTypeAnn(type);
@@ -3218,11 +3218,11 @@ IGraphTransformer::TStatus UpdateLambdaConstraints(TExprNode::TPtr& lambda, TExp
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    if (args->GetState() == TExprNode::EState::TypeComplete || args->GetState() == TExprNode::EState::ConstrPending) { 
-        args->SetState(TExprNode::EState::ConstrComplete); 
+    if (args->GetState() == TExprNode::EState::TypeComplete || args->GetState() == TExprNode::EState::ConstrPending) {
+        args->SetState(TExprNode::EState::ConstrComplete);
     }
 
-    if (lambda->GetState() != TExprNode::EState::ConstrComplete) { 
+    if (lambda->GetState() != TExprNode::EState::ConstrComplete) {
         return IGraphTransformer::TStatus::Repeat;
     }
 

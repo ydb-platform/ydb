@@ -104,22 +104,22 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: CORE_LEGACY_IN_FOR_EMPTY_OR_NULLABLE 
-  severity: S_WARNING 
-} 
-ids { 
-  code: CORE_LEGACY_RANK_FOR_NULLABLE_KEYS 
-  severity: S_WARNING 
-} 
-ids { 
+  code: CORE_LEGACY_IN_FOR_EMPTY_OR_NULLABLE
+  severity: S_WARNING
+}
+ids {
+  code: CORE_LEGACY_RANK_FOR_NULLABLE_KEYS
+  severity: S_WARNING
+}
+ids {
   code: CORE_LEGACY_REGEX_ENGINE
   severity: S_WARNING
 }
 ids {
-  code: CORE_ALIAS_SHADOWS_COLUMN 
-  severity: S_WARNING 
-} 
-ids { 
+  code: CORE_ALIAS_SHADOWS_COLUMN
+  severity: S_WARNING
+}
+ids {
   code: CORE_GC_NODES_LIMIT_EXCEEDED
   severity: S_ERROR
 }
@@ -320,15 +320,15 @@ ids {
   code: YQL_DEPRECATED_JSON_UDF
   severity: S_WARNING
 }
-ids { 
-  code: YQL_MISSING_IS_BEFORE_NOT_NULL 
-  severity: S_WARNING 
-} 
 ids {
-  code: YQL_DEPRECATED_TINY_INT_LITERAL_SUFFIX 
-  severity: S_WARNING 
-} 
-ids { 
+  code: YQL_MISSING_IS_BEFORE_NOT_NULL
+  severity: S_WARNING
+}
+ids {
+  code: YQL_DEPRECATED_TINY_INT_LITERAL_SUFFIX
+  severity: S_WARNING
+}
+ids {
   code: YQL_DEPRECATED_INTERVAL_CONSTANT
   severity: S_WARNING
 }
@@ -389,10 +389,10 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: YT_MAX_DATAWEIGHT_PER_JOB_EXCEEDED 
-  severity: S_ERROR 
-} 
-ids { 
+  code: YT_MAX_DATAWEIGHT_PER_JOB_EXCEEDED
+  severity: S_ERROR
+}
+ids {
   code: YT_WARN_TABLE_DOES_NOT_EXIST
   severity: S_WARNING
 }
@@ -420,21 +420,21 @@ ids {
   code: YQL_DEPRECATED_FUNCTION_OR_SIGNATURE
   severity: S_WARNING
 }
-ids { 
-  code: YQL_DEPRECATED_INLINE_ACTION_TERMINATOR 
-  severity: S_WARNING 
-} 
-ids { 
-  code: YQL_MULTIWAY_JOIN_WITH_USING 
-  severity: S_WARNING 
-} 
-ids { 
-  code: YQL_DEPRECATED_V0_SYNTAX 
-  severity: S_WARNING 
-} 
-ids { 
-  code: YQL_UNNAMED_COLUMN 
-  severity: S_WARNING 
+ids {
+  code: YQL_DEPRECATED_INLINE_ACTION_TERMINATOR
+  severity: S_WARNING
+}
+ids {
+  code: YQL_MULTIWAY_JOIN_WITH_USING
+  severity: S_WARNING
+}
+ids {
+  code: YQL_DEPRECATED_V0_SYNTAX
+  severity: S_WARNING
+}
+ids {
+  code: YQL_UNNAMED_COLUMN
+  severity: S_WARNING
 }
 ids {
   code: YQL_SOURCE_SELECT_COLUMN_MISMATCH
@@ -496,7 +496,7 @@ ids {
   code: JSONPATH_DIVISION_BY_ZERO
   severity: S_ERROR
 }
-ids { 
+ids {
   code: JSONPATH_BINARY_OPERATION_RESULT_INFINITY
   severity: S_ERROR
 }
@@ -541,45 +541,45 @@ ids {
   severity: S_ERROR
 }
 ids {
-  code: YQL_EMPTY_WINDOW_FRAME 
-  severity: S_WARNING 
-} 
-ids { 
-  code: YQL_RANK_WITHOUT_ORDER_BY 
-  severity: S_WARNING 
-} 
-ids { 
-  code: YQL_LIMIT_ORDER_BY_WITH_UNION 
-  severity: S_WARNING 
-} 
-ids { 
-  code: YQL_DISCARD_INTO_RESULT_BY_WITH_UNION 
-  severity: S_WARNING 
+  code: YQL_EMPTY_WINDOW_FRAME
+  severity: S_WARNING
+}
+ids {
+  code: YQL_RANK_WITHOUT_ORDER_BY
+  severity: S_WARNING
+}
+ids {
+  code: YQL_LIMIT_ORDER_BY_WITH_UNION
+  severity: S_WARNING
+}
+ids {
+  code: YQL_DISCARD_INTO_RESULT_BY_WITH_UNION
+  severity: S_WARNING
 }
 ids {
   code: YQL_DEPRECATED_UDF_FUNCTION
   severity: S_WARNING
 }
-ids { 
-  code: YQL_EMPTY_TABLENAME_RESULT 
-  severity: S_WARNING 
-} 
-ids { 
-  code: YQL_HAVING_WITHOUT_AGGREGATION_IN_SELECT_DISTINCT 
-  severity: S_WARNING 
-} 
-ids { 
-  code: YQL_UNUSED_SYMBOL 
-  severity: S_WARNING 
+ids {
+  code: YQL_EMPTY_TABLENAME_RESULT
+  severity: S_WARNING
+}
+ids {
+  code: YQL_HAVING_WITHOUT_AGGREGATION_IN_SELECT_DISTINCT
+  severity: S_WARNING
+}
+ids {
+  code: YQL_UNUSED_SYMBOL
+  severity: S_WARNING
 }
 ids {
   code: YQL_MIXED_TZ
   severity: S_WARNING
 }
-ids { 
-  code: YQL_OPERATION_WILL_RETURN_NULL 
-  severity: S_WARNING 
-} 
+ids {
+  code: YQL_OPERATION_WILL_RETURN_NULL
+  severity: S_WARNING
+}
 ids {
   code: YQL_JSON_QUERY_RETURNING_JSON_IS_DEPRECATED
   severity: S_WARNING
@@ -589,14 +589,14 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: YQL_PROJECTION_ALIAS_IS_REFERENCED_IN_GROUP_BY 
-  severity: S_WARNING 
-} 
-ids { 
-  code: YQL_TABLE_BINDING_DUPLICATE 
-  severity: S_WARNING 
-} 
-ids { 
+  code: YQL_PROJECTION_ALIAS_IS_REFERENCED_IN_GROUP_BY
+  severity: S_WARNING
+}
+ids {
+  code: YQL_TABLE_BINDING_DUPLICATE
+  severity: S_WARNING
+}
+ids {
   code: DQ_GATEWAY_ERROR
   severity: S_ERROR
 }

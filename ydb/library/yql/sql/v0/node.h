@@ -833,7 +833,7 @@ namespace NSQLTranslationV0 {
     public:
         TLiteralNode(TPosition pos, bool isNull);
         TLiteralNode(TPosition pos, const TString& type, const TString& value);
-        TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags); 
+        TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags);
         bool IsNull() const override;
         const TString* GetLiteral(const TString& type) const override;
         void DoUpdateState() const override;
@@ -861,8 +861,8 @@ namespace NSQLTranslationV0 {
         TString View;
     };
 
-    TString StringContent(TContext& ctx, const TString& str); 
-    bool TryStringContent(const TString& input, TString& result, ui32& flags, TString& error, TPosition& pos); 
+    TString StringContent(TContext& ctx, const TString& str);
+    bool TryStringContent(const TString& input, TString& result, ui32& flags, TString& error, TPosition& pos);
     TString IdContent(TContext& ctx, const TString& str);
     TVector<TString> GetContextHints(TContext& ctx);
 
@@ -874,7 +874,7 @@ namespace NSQLTranslationV0 {
     TNodePtr BuildLiteralNull(TPosition pos);
     TNodePtr BuildLiteralVoid(TPosition pos);
     /// String is checked as quotable, support escaping and multiline
-    TNodePtr BuildLiteralSmartString(TContext& ctx, const TString& value); 
+    TNodePtr BuildLiteralSmartString(TContext& ctx, const TString& value);
     TNodePtr BuildLiteralRawString(TPosition pos, const TString& value);
     TNodePtr BuildLiteralBool(TPosition pos, const TString& value);
     TNodePtr BuildEmptyAction(TPosition pos);

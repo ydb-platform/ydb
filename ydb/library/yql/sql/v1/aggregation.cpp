@@ -14,18 +14,18 @@ using namespace NYql;
 namespace NSQLTranslationV1 {
 
 namespace {
-    bool BlockWindowAggregationWithoutFrameSpec(TPosition pos, TStringBuf name, ISource* src, TContext& ctx) { 
+    bool BlockWindowAggregationWithoutFrameSpec(TPosition pos, TStringBuf name, ISource* src, TContext& ctx) {
         if (src) {
             auto winNamePtr = src->GetWindowName();
             if (winNamePtr) {
                 auto winSpecPtr = src->FindWindowSpecification(ctx, *winNamePtr);
                 if (!winSpecPtr) {
-                    ctx.Error(pos) << "Failed to use aggregation function " << name << " without window specification or in wrong place"; 
-                    return true; 
+                    ctx.Error(pos) << "Failed to use aggregation function " << name << " without window specification or in wrong place";
+                    return true;
                 }
             }
         }
-        return false; 
+        return false;
     }
 }
 
@@ -54,7 +54,7 @@ protected:
             return false;
         }
 
-        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) { 
+        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
             return false;
         }
 
@@ -73,9 +73,9 @@ protected:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
-            if (IsOverWindow()) { 
-                src->AddTmpWindowColumn(Name); 
-            } 
+            if (IsOverWindow()) {
+                src->AddTmpWindowColumn(Name);
+            }
         }
 
         return true;
@@ -111,10 +111,10 @@ protected:
         }
         if (AggMode == EAggregateMode::Distinct) {
             const auto column = Expr->GetColumnName();
-            YQL_ENSURE(column); 
+            YQL_ENSURE(column);
             DistinctKey = *column;
-            YQL_ENSURE(src); 
-            if (!IsGeneratedKeyColumn && src->GetJoin()) { 
+            YQL_ENSURE(src);
+            if (!IsGeneratedKeyColumn && src->GetJoin()) {
                 const auto sourcePtr = Expr->GetSourceName();
                 if (!sourcePtr || !*sourcePtr) {
                     if (!src->IsGroupByColumn(DistinctKey)) {
@@ -145,8 +145,8 @@ protected:
                         Y("NthArg", Q("1"), "x"),
                         Y("NthArg", Q("2"), "x"),
                         BuildLambda(Pos, Y("value", "state"), Y("Void")),
-                        Y("NthArg", Q("6"), "x"), 
-                        Y("NthArg", Q("7"), "x") 
+                        Y("NthArg", Q("6"), "x"),
+                        Y("NthArg", Q("7"), "x")
                     ))
                 ))));
             }
@@ -194,7 +194,7 @@ private:
                 << adjustArgsCount << " or " << (1 + adjustArgsCount) << " arguments, given: " << exprs.size();
             return false;
         }
-        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) { 
+        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
             return false;
         }
 
@@ -224,9 +224,9 @@ private:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
-            if (IsOverWindow()) { 
-                src->AddTmpWindowColumn(Name); 
-            } 
+            if (IsOverWindow()) {
+                src->AddTmpWindowColumn(Name);
+            }
         }
 
         return true;
@@ -298,7 +298,7 @@ private:
             return false;
         }
 
-        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) { 
+        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
             return false;
         }
 
@@ -314,9 +314,9 @@ private:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
-            if (IsOverWindow()) { 
-                src->AddTmpWindowColumn(Name); 
-            } 
+            if (IsOverWindow()) {
+                src->AddTmpWindowColumn(Name);
+            }
         }
 
         return true;
@@ -376,7 +376,7 @@ private:
             return false;
         }
 
-        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) { 
+        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
             return false;
         }
 
@@ -392,9 +392,9 @@ private:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
-            if (IsOverWindow()) { 
-                src->AddTmpWindowColumn(Name); 
-            } 
+            if (IsOverWindow()) {
+                src->AddTmpWindowColumn(Name);
+            }
         }
 
         return true;
@@ -717,7 +717,7 @@ private:
     TSourcePtr FakeSource;
     std::multimap<TString, TNodePtr> Percentiles;
     TNodePtr FactoryPercentile;
-    const TString* Column = nullptr; 
+    const TString* Column = nullptr;
 };
 
 TAggregationPtr BuildPercentileFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
@@ -866,7 +866,7 @@ private:
             return false;
         }
 
-        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) { 
+        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
             return false;
         }
 
@@ -889,9 +889,9 @@ private:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
-            if (IsOverWindow()) { 
-                src->AddTmpWindowColumn(Name); 
-            } 
+            if (IsOverWindow()) {
+                src->AddTmpWindowColumn(Name);
+            }
         }
 
         return true;
@@ -1001,9 +1001,9 @@ private:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
-            if (IsOverWindow()) { 
-                src->AddTmpWindowColumn(Name); 
-            } 
+            if (IsOverWindow()) {
+                src->AddTmpWindowColumn(Name);
+            }
         }
 
         return true;
@@ -1050,7 +1050,7 @@ private:
             return false;
         }
 
-        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) { 
+        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
             return false;
         }
 
@@ -1074,9 +1074,9 @@ private:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
-            if (IsOverWindow()) { 
-                src->AddTmpWindowColumn(Name); 
-            } 
+            if (IsOverWindow()) {
+                src->AddTmpWindowColumn(Name);
+            }
         }
 
         return true;

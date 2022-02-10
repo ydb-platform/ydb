@@ -43,8 +43,8 @@ TMaybe<TVector<ui32>> CreateStructPositions(
     const TVector<TString>* columns = nullptr
 );
 
-NYT::TNode ValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TType* type); 
-TExprNode::TPtr NodeToExprLiteral(TPositionHandle pos, const TTypeAnnotationNode& type, const NYT::TNode& node, TExprContext& ctx); 
+NYT::TNode ValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TType* type);
+TExprNode::TPtr NodeToExprLiteral(TPositionHandle pos, const TTypeAnnotationNode& type, const NYT::TNode& node, TExprContext& ctx);
 
 struct TCodecContext {
     const NKikimr::NMiniKQL::TTypeEnvironment& Env;
@@ -98,7 +98,7 @@ extern "C" void WriteContainerNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64
 void WriteYsonValueInTableFormat(TOutputBuf& buf, NKikimr::NMiniKQL::TType* type, const NKikimr::NUdf::TUnboxedValuePod& value, bool topLevel);
 
 TExprNode::TPtr ValueToExprLiteral(const TTypeAnnotationNode* type, const NKikimr::NUdf::TUnboxedValuePod& value, TExprContext& ctx,
-    TPositionHandle pos = {}); 
+    TPositionHandle pos = {});
 
 } // namespace NCommon
 } // namespace NYql

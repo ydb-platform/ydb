@@ -11,7 +11,7 @@ TPqConfiguration::TPqConfiguration() {
 }
 
 TPqSettings::TConstPtr TPqConfiguration::Snapshot() const {
-    return std::make_shared<const TPqSettings>(*this); 
+    return std::make_shared<const TPqSettings>(*this);
 }
 
 void TPqConfiguration::Init(

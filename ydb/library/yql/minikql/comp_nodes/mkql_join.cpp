@@ -60,7 +60,7 @@ public:
         , IsSealed(false)
 #endif
         , Index(ui64(-1))
-        , SingleShot(singleShot) 
+        , SingleShot(singleShot)
     {}
 
     TSpillList(TSpillList&& rhs) = delete;
@@ -112,11 +112,11 @@ public:
 #ifndef NDEBUG
         Y_VERIFY_DEBUG(!IsSealed);
 #endif
-        if (SingleShot && Count > 0) { 
-            MKQL_ENSURE(Count == 1, "Counter inconsistent"); 
-            return; 
-        } 
- 
+        if (SingleShot && Count > 0) {
+            MKQL_ENSURE(Count == 1, "Counter inconsistent");
+            return;
+        }
+
         if (FileState) {
             Write(std::move(value));
         } else {
@@ -175,12 +175,12 @@ public:
                 return std::move(LiveValue);
             }
 
-            auto value = LiveFlow->GetValue(ctx); 
-            while (SingleShot && !value.IsSpecial()) { 
-                // skip all remaining values 
-                value = LiveFlow->GetValue(ctx); 
-            } 
- 
+            auto value = LiveFlow->GetValue(ctx);
+            while (SingleShot && !value.IsSpecial()) {
+                // skip all remaining values
+                value = LiveFlow->GetValue(ctx);
+            }
+
             if (!value.IsSpecial()) {
                 ++Index;
             }
@@ -247,7 +247,7 @@ public:
     }
 
     void Rewind() {
-        Y_VERIFY_DEBUG(!IsLive()); 
+        Y_VERIFY_DEBUG(!IsLive());
 #ifndef NDEBUG
         Y_VERIFY_DEBUG(IsSealed);
 #endif
@@ -309,7 +309,7 @@ private:
     bool IsSealed;
 #endif
     ui64 Index;
-    const bool SingleShot; 
+    const bool SingleShot;
     struct TFileState {
         TFileState()
             : File(TTempFileHandle::InCurrentDir())
@@ -324,7 +324,7 @@ private:
     };
 
     std::unique_ptr<TFileState> FileState;
-    IComputationNode* LiveFlow = nullptr; 
+    IComputationNode* LiveFlow = nullptr;
     TLiveFetcher Fetcher;
     NUdf::TUnboxedValue LiveValue;
     NUdf::TUnboxedValue* LiveValues = nullptr;
@@ -344,8 +344,8 @@ public:
         TValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TSelf* self)
             : TBase(memInfo)
             , Self(self)
-            , List1(Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinLeft(Self->AnyJoinSettings)) 
-            , List2(Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinRight(Self->AnyJoinSettings)) 
+            , List1(Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinLeft(Self->AnyJoinSettings))
+            , List2(Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinRight(Self->AnyJoinSettings))
         {
             Init();
         }
@@ -683,7 +683,7 @@ public:
     TCommonJoinCoreWrapper(TComputationMutables& mutables, IComputationNode* flow, const TType* inputStructType, ui32 inputWidth, ui32 tableIndexPos,
         std::vector<ui32>&& leftInputColumns, std::vector<ui32>&& rightInputColumns, std::vector<ui32>&& requiredColumns,
         std::vector<ui32>&& leftOutputColumns, std::vector<ui32>&& rightOutputColumns, ui64 memLimit,
-        std::optional<ui32> sortedTableOrder, std::vector<ui32>&& keyColumns, EAnyJoinSettings anyJoinSettings) 
+        std::optional<ui32> sortedTableOrder, std::vector<ui32>&& keyColumns, EAnyJoinSettings anyJoinSettings)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
         , Flow(flow)
         , InputStructType(inputStructType)
@@ -700,7 +700,7 @@ public:
         , IsRequiredColumn(FillRequiredStructColumn(inputWidth, RequiredColumns))
         , ResStruct(mutables)
         , ResStreamIndex(mutables.CurValueIndex++)
-        , AnyJoinSettings(anyJoinSettings) 
+        , AnyJoinSettings(anyJoinSettings)
     {
     }
 
@@ -733,7 +733,7 @@ private:
 
     const TContainerCacheOnContext ResStruct;
     const ui32 ResStreamIndex;
-    const EAnyJoinSettings AnyJoinSettings; 
+    const EAnyJoinSettings AnyJoinSettings;
 };
 
 template <EJoinKind Kind, bool TTrackRss>
@@ -1364,7 +1364,7 @@ namespace NStream {
 
 class TSpillList {
 public:
-    TSpillList(TValuePacker& itemPacker, bool singleShot) 
+    TSpillList(TValuePacker& itemPacker, bool singleShot)
         : ItemPacker(itemPacker)
         , Ctx(nullptr)
         , Count(0)
@@ -1372,7 +1372,7 @@ public:
         , IsSealed(false)
 #endif
         , Index(ui64(-1))
-        , SingleShot(singleShot) 
+        , SingleShot(singleShot)
     {}
 
     TSpillList(TSpillList&& rhs) = delete;
@@ -1422,11 +1422,11 @@ public:
 #ifndef NDEBUG
         Y_VERIFY_DEBUG(!IsSealed);
 #endif
-        if (SingleShot && Count > 0) { 
-            MKQL_ENSURE(Count == 1, "Counter inconsistent"); 
-            return; 
-        } 
- 
+        if (SingleShot && Count > 0) {
+            MKQL_ENSURE(Count == 1, "Counter inconsistent");
+            return;
+        }
+
         if (FileState) {
             Write(std::move(value));
         } else {
@@ -1480,23 +1480,23 @@ public:
         Y_VERIFY_DEBUG(IsSealed);
 #endif
         if (IsLive()) {
-            auto status = NUdf::EFetchStatus::Ok; 
+            auto status = NUdf::EFetchStatus::Ok;
             NUdf::TUnboxedValue value;
             if ((Index + 1) == 0) {
                 value = std::move(LiveValue);
             } else {
-                status = LiveStream.Fetch(value); 
-                while (SingleShot && status == NUdf::EFetchStatus::Ok) { 
-                    // skip all remaining values 
-                    status = LiveStream.Fetch(value); 
+                status = LiveStream.Fetch(value);
+                while (SingleShot && status == NUdf::EFetchStatus::Ok) {
+                    // skip all remaining values
+                    status = LiveStream.Fetch(value);
                 }
             }
 
-            if (status == NUdf::EFetchStatus::Ok) { 
-                result = std::move(value); 
-                ++Index; 
-            } 
-            return status; 
+            if (status == NUdf::EFetchStatus::Ok) {
+                result = std::move(value);
+                ++Index;
+            }
+            return status;
         }
 
         if ((Index + 1) == Count) {
@@ -1518,7 +1518,7 @@ public:
     }
 
     void Rewind() {
-        Y_VERIFY_DEBUG(!IsLive()); 
+        Y_VERIFY_DEBUG(!IsLive());
 #ifndef NDEBUG
         Y_VERIFY_DEBUG(IsSealed);
 #endif
@@ -1579,7 +1579,7 @@ private:
     bool IsSealed;
 #endif
     ui64 Index;
-    const bool SingleShot; 
+    const bool SingleShot;
     struct TFileState {
         TFileState()
             : File(TTempFileHandle::InCurrentDir())
@@ -1614,8 +1614,8 @@ public:
             , Stream(std::move(stream))
             , Ctx(ctx)
             , Self(self)
-            , List1(Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinLeft(Self->AnyJoinSettings)) 
-            , List2(Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinRight(Self->AnyJoinSettings)) 
+            , List1(Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinLeft(Self->AnyJoinSettings))
+            , List2(Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinRight(Self->AnyJoinSettings))
         {
             Init();
         }
@@ -1978,7 +1978,7 @@ public:
     TCommonJoinCoreWrapper(TComputationMutables& mutables, IComputationNode* stream, const TType* inputStructType, ui32 inputWidth, ui32 tableIndexPos,
         std::vector<ui32>&& leftInputColumns, std::vector<ui32>&& rightInputColumns, std::vector<ui32>&& requiredColumns,
         std::vector<ui32>&& leftOutputColumns, std::vector<ui32>&& rightOutputColumns, ui64 memLimit,
-        std::optional<ui32> sortedTableOrder, std::vector<ui32>&& keyColumns, EAnyJoinSettings anyJoinSettings) 
+        std::optional<ui32> sortedTableOrder, std::vector<ui32>&& keyColumns, EAnyJoinSettings anyJoinSettings)
         : TBaseComputation(mutables)
         , Stream(stream)
         , InputStructType(inputStructType)
@@ -1995,7 +1995,7 @@ public:
         , IsRequiredColumn(FillRequiredStructColumn(inputWidth, RequiredColumns))
         , ResStruct(mutables)
         , ResStreamIndex(mutables.CurValueIndex++)
-        , AnyJoinSettings(anyJoinSettings) 
+        , AnyJoinSettings(anyJoinSettings)
     {
     }
 
@@ -2031,7 +2031,7 @@ private:
 
     const TContainerCacheOnContext ResStruct;
     const ui32 ResStreamIndex;
-    const EAnyJoinSettings AnyJoinSettings; 
+    const EAnyJoinSettings AnyJoinSettings;
 };
 
 }
@@ -2143,8 +2143,8 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
         MKQL_ENSURE(*sortedTableOrder < 2, "Bad sorted table order");
     }
 
-    const EAnyJoinSettings anyJoinSettings = GetAnyJoinSettings(AS_VALUE(TDataLiteral, callable.GetInput(10))->AsValue().Get<ui32>()); 
- 
+    const EAnyJoinSettings anyJoinSettings = GetAnyJoinSettings(AS_VALUE(TDataLiteral, callable.GetInput(10))->AsValue().Get<ui32>());
+
     const auto tableIndexPos = 12U == callable.GetInputsCount() ?
         AS_VALUE(TDataLiteral, callable.GetInput(11U))->AsValue().Get<ui32>():
         AS_TYPE(TStructType, inputRowType)->GetMemberIndex("_yql_table_index");
@@ -2180,11 +2180,11 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
         if (trackRss) \
             return new NStream::TCommonJoinCoreWrapper<EJoinKind::KIND, true>(ctx.Mutables, flow, inputRowType, inputRepresentations.size(), tableIndexPos, \
                 std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns), \
-                std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings); \ 
+                std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings); \
         else \
             return new NStream::TCommonJoinCoreWrapper<EJoinKind::KIND, false>(ctx.Mutables, flow, inputRowType, inputRepresentations.size(), tableIndexPos, \
                 std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns), \
-                std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings); \ 
+                std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings); \
     }
 
     switch (kind) {

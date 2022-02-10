@@ -65,7 +65,7 @@
 
 # list_type:type
 # support optional values
-(let count_if_traits_factory_opt (lambda '(list_type) (Apply count_traits_factory list_type (lambda '(value) (If (Coalesce value (Bool '0)) (Uint64 '1) (Uint64 '0)))))) 
+(let count_if_traits_factory_opt (lambda '(list_type) (Apply count_traits_factory list_type (lambda '(value) (If (Coalesce value (Bool '0)) (Uint64 '1) (Uint64 '0))))))
 (let count_all_traits_factory_opt (lambda '(list_type) (Apply count_traits_factory list_type (lambda '(value) (Uint64 '1)))))
 
 # list_type:type

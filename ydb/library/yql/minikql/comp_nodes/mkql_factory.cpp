@@ -53,20 +53,20 @@
 #include "mkql_map_join.h"
 #include "mkql_multihopping.h"
 #include "mkql_multimap.h"
-#include "mkql_next_value.h" 
+#include "mkql_next_value.h"
 #include "mkql_now.h"
 #include "mkql_null.h"
 #include "mkql_pickle.h"
 #include "mkql_prepend.h"
 #include "mkql_queue.h"
 #include "mkql_random.h"
-#include "mkql_range.h" 
+#include "mkql_range.h"
 #include "mkql_reduce.h"
 #include "mkql_removemember.h"
 #include "mkql_replicate.h"
 #include "mkql_reverse.h"
-#include "mkql_round.h" 
-#include "mkql_seq.h" 
+#include "mkql_round.h"
+#include "mkql_seq.h"
 #include "mkql_size.h"
 #include "mkql_skip.h"
 #include "mkql_sort.h"
@@ -244,8 +244,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"QueuePush", &WrapQueuePush},
         {"QueuePop", &WrapQueuePop},
         {"QueuePeek", &WrapQueuePeek},
-        {"QueueRange", &WrapQueueRange}, 
-        {"Seq", &WrapSeq}, 
+        {"QueueRange", &WrapQueueRange},
+        {"Seq", &WrapSeq},
         {"PreserveStream", &WrapPreserveStream},
         {"FromYsonSimpleType", &WrapFromYsonSimpleType},
         {"TryWeakMemberFromDict", &WrapTryWeakMemberFromDict},
@@ -292,14 +292,14 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideChopper", &WrapWideChopper},
         {"WideFlowArg", &WrapWideFlowArg},
         {"Source", &WrapSource},
-        {"RangeCreate", &WrapRangeCreate}, 
-        {"RangeUnion", &WrapRangeUnion}, 
-        {"RangeIntersect", &WrapRangeIntersect}, 
-        {"RangeMultiply", &WrapRangeMultiply}, 
-        {"RangeFinalize", &WrapRangeFinalize}, 
-        {"RoundUp", &WrapRound}, 
-        {"RoundDown", &WrapRound}, 
-        {"NextValue", &WrapNextValue}, 
+        {"RangeCreate", &WrapRangeCreate},
+        {"RangeUnion", &WrapRangeUnion},
+        {"RangeIntersect", &WrapRangeIntersect},
+        {"RangeMultiply", &WrapRangeMultiply},
+        {"RangeFinalize", &WrapRangeFinalize},
+        {"RoundUp", &WrapRound},
+        {"RoundDown", &WrapRound},
+        {"NextValue", &WrapNextValue},
     };
 };
 

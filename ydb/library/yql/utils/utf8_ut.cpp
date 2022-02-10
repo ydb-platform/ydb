@@ -24,76 +24,76 @@ Y_UNIT_TEST_SUITE(TUtf8Tests) {
         UNIT_ASSERT_VALUES_EQUAL(NYql::WideCharSize('\xF0'), 4);
         UNIT_ASSERT_VALUES_EQUAL(NYql::WideCharSize('\xFF'), 0);
     }
- 
-    Y_UNIT_TEST(RoundingDown) { 
-        auto checkDown = [](std::string_view in, std::string_view out) { 
-            auto res = NYql::RoundToNearestValidUtf8(in, true); 
-            UNIT_ASSERT(res); 
-            UNIT_ASSERT(NYql::IsUtf8(*res)); 
-            UNIT_ASSERT_VALUES_EQUAL(*res, out); 
-            UNIT_ASSERT(*res <= in); 
-        }; 
-        checkDown("привет", "привет"); 
-        checkDown("тест\x80", "тест\x7f"); 
-        checkDown("привет\xf5", "привет\xf4\x8f\xbf\xbf"); 
-        checkDown("тест2\xee\x80\x7f", "тест2\xed\x9f\xbf"); 
-        checkDown("ага\xf0\xaa\xaa\xff", "ага\xf0\xaa\xaa\xbf"); 
-    } 
- 
-    Y_UNIT_TEST(RoundingUp) { 
-        auto checkUp = [](std::string_view in, std::string_view out) { 
-            auto res = NYql::RoundToNearestValidUtf8(in, false); 
-            UNIT_ASSERT(res); 
-            UNIT_ASSERT(NYql::IsUtf8(*res)); 
-            UNIT_ASSERT_VALUES_EQUAL(*res, out); 
-            UNIT_ASSERT(*res >= in); 
-        }; 
- 
-        checkUp("", ""); 
-        checkUp("привет", "привет"); 
-        checkUp("а\xf6", "б"); 
-        checkUp("\xf4\x8f\xbf\xbfа\xf4\x8f\xbf\xbf\xf5", "\xf4\x8f\xbf\xbfб"); 
-        UNIT_ASSERT(!NYql::RoundToNearestValidUtf8("\xf4\x8f\xbf\xbf\xf5", false)); 
-        UNIT_ASSERT(!NYql::RoundToNearestValidUtf8("\xf5", false)); 
-        checkUp("тест\x80", "тест\xc2\x80"); 
-        checkUp("тест\xdf", "тест\xdf\x80"); 
-        checkUp("тест\xf0\x90\xff", "тест\xf0\x91\x80\x80"); 
-        checkUp("ааа\xff", "ааб"); 
-    } 
- 
-    Y_UNIT_TEST(NextValid) { 
-        auto checkNext = [](std::string_view in, std::string_view out) { 
-            auto res = NYql::NextValidUtf8(in); 
-            UNIT_ASSERT(res); 
-            UNIT_ASSERT(NYql::IsUtf8(*res)); 
-            UNIT_ASSERT_VALUES_EQUAL(*res, out); 
-            UNIT_ASSERT(*res > in); 
-        }; 
- 
-        UNIT_ASSERT(!NYql::NextValidUtf8("")); 
-        checkNext("привет", "привеу"); 
-        checkNext("а", "б"); 
-        checkNext(std::string_view("\x00", 1), "\x01"); 
-        checkNext("\xf4\x8f\xbf\xbfа\xf4\x8f\xbf\xbf", "\xf4\x8f\xbf\xbfб"); 
-        UNIT_ASSERT(!NYql::NextValidUtf8("\xf4\x8f\xbf\xbf")); 
-        UNIT_ASSERT(!NYql::NextValidUtf8("\xf4\x8f\xbf\xbf\xf4\x8f\xbf\xbf")); 
-    } 
- 
-    Y_UNIT_TEST(NextValidString) { 
-        auto checkNext = [](std::string_view in, std::string_view out) { 
-            auto res = NYql::NextLexicographicString(in); 
-            UNIT_ASSERT(res); 
-            UNIT_ASSERT_VALUES_EQUAL(*res, out); 
-            UNIT_ASSERT(*res > in); 
-        }; 
- 
-        UNIT_ASSERT(!NYql::NextLexicographicString("")); 
-        checkNext("привет", "привеу"); 
-        checkNext("а", "б"); 
-        checkNext(std::string_view("\x00", 1), "\x01"); 
-        checkNext("\xf4\x8f\xbf\xbfа\xf4\x8f\xbf\xbf", "\xf4\x8f\xbf\xbfа\xf4\x8f\xbf\xc0"); 
-        UNIT_ASSERT(!NYql::NextLexicographicString("\xff")); 
-        UNIT_ASSERT(!NYql::NextLexicographicString("\xff\xff")); 
-        checkNext(std::string_view("x\x00\xff\xff", 4), "x\x01"); 
-    } 
+
+    Y_UNIT_TEST(RoundingDown) {
+        auto checkDown = [](std::string_view in, std::string_view out) {
+            auto res = NYql::RoundToNearestValidUtf8(in, true);
+            UNIT_ASSERT(res);
+            UNIT_ASSERT(NYql::IsUtf8(*res));
+            UNIT_ASSERT_VALUES_EQUAL(*res, out);
+            UNIT_ASSERT(*res <= in);
+        };
+        checkDown("привет", "привет");
+        checkDown("тест\x80", "тест\x7f");
+        checkDown("привет\xf5", "привет\xf4\x8f\xbf\xbf");
+        checkDown("тест2\xee\x80\x7f", "тест2\xed\x9f\xbf");
+        checkDown("ага\xf0\xaa\xaa\xff", "ага\xf0\xaa\xaa\xbf");
+    }
+
+    Y_UNIT_TEST(RoundingUp) {
+        auto checkUp = [](std::string_view in, std::string_view out) {
+            auto res = NYql::RoundToNearestValidUtf8(in, false);
+            UNIT_ASSERT(res);
+            UNIT_ASSERT(NYql::IsUtf8(*res));
+            UNIT_ASSERT_VALUES_EQUAL(*res, out);
+            UNIT_ASSERT(*res >= in);
+        };
+
+        checkUp("", "");
+        checkUp("привет", "привет");
+        checkUp("а\xf6", "б");
+        checkUp("\xf4\x8f\xbf\xbfа\xf4\x8f\xbf\xbf\xf5", "\xf4\x8f\xbf\xbfб");
+        UNIT_ASSERT(!NYql::RoundToNearestValidUtf8("\xf4\x8f\xbf\xbf\xf5", false));
+        UNIT_ASSERT(!NYql::RoundToNearestValidUtf8("\xf5", false));
+        checkUp("тест\x80", "тест\xc2\x80");
+        checkUp("тест\xdf", "тест\xdf\x80");
+        checkUp("тест\xf0\x90\xff", "тест\xf0\x91\x80\x80");
+        checkUp("ааа\xff", "ааб");
+    }
+
+    Y_UNIT_TEST(NextValid) {
+        auto checkNext = [](std::string_view in, std::string_view out) {
+            auto res = NYql::NextValidUtf8(in);
+            UNIT_ASSERT(res);
+            UNIT_ASSERT(NYql::IsUtf8(*res));
+            UNIT_ASSERT_VALUES_EQUAL(*res, out);
+            UNIT_ASSERT(*res > in);
+        };
+
+        UNIT_ASSERT(!NYql::NextValidUtf8(""));
+        checkNext("привет", "привеу");
+        checkNext("а", "б");
+        checkNext(std::string_view("\x00", 1), "\x01");
+        checkNext("\xf4\x8f\xbf\xbfа\xf4\x8f\xbf\xbf", "\xf4\x8f\xbf\xbfб");
+        UNIT_ASSERT(!NYql::NextValidUtf8("\xf4\x8f\xbf\xbf"));
+        UNIT_ASSERT(!NYql::NextValidUtf8("\xf4\x8f\xbf\xbf\xf4\x8f\xbf\xbf"));
+    }
+
+    Y_UNIT_TEST(NextValidString) {
+        auto checkNext = [](std::string_view in, std::string_view out) {
+            auto res = NYql::NextLexicographicString(in);
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_VALUES_EQUAL(*res, out);
+            UNIT_ASSERT(*res > in);
+        };
+
+        UNIT_ASSERT(!NYql::NextLexicographicString(""));
+        checkNext("привет", "привеу");
+        checkNext("а", "б");
+        checkNext(std::string_view("\x00", 1), "\x01");
+        checkNext("\xf4\x8f\xbf\xbfа\xf4\x8f\xbf\xbf", "\xf4\x8f\xbf\xbfа\xf4\x8f\xbf\xc0");
+        UNIT_ASSERT(!NYql::NextLexicographicString("\xff"));
+        UNIT_ASSERT(!NYql::NextLexicographicString("\xff\xff"));
+        checkNext(std::string_view("x\x00\xff\xff", 4), "x\x01");
+    }
 }

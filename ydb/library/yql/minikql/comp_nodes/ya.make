@@ -116,8 +116,8 @@ SRCS(
     mkql_multihopping.h
     mkql_multimap.cpp
     mkql_multimap.h
-    mkql_next_value.cpp 
-    mkql_next_value.h 
+    mkql_next_value.cpp
+    mkql_next_value.h
     mkql_now.cpp
     mkql_now.h
     mkql_null.cpp
@@ -130,8 +130,8 @@ SRCS(
     mkql_queue.h
     mkql_random.cpp
     mkql_random.h
-    mkql_range.cpp 
-    mkql_range.h 
+    mkql_range.cpp
+    mkql_range.h
     mkql_reduce.cpp
     mkql_reduce.h
     mkql_removemember.cpp
@@ -140,13 +140,13 @@ SRCS(
     mkql_replicate.h
     mkql_reverse.cpp
     mkql_reverse.h
-    mkql_round.cpp 
-    mkql_round.h 
+    mkql_round.cpp
+    mkql_round.h
     mkql_safe_circular_buffer.cpp
     mkql_safe_circular_buffer.h
     mkql_saveload.h
-    mkql_seq.cpp 
-    mkql_seq.h 
+    mkql_seq.cpp
+    mkql_seq.h
     mkql_size.cpp
     mkql_size.h
     mkql_skip.cpp

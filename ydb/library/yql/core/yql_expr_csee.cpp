@@ -6,7 +6,7 @@
 
 #include <util/generic/hash_set.h>
 #include <util/digest/murmur.h>
-#include <util/system/env.h> 
+#include <util/system/env.h>
 #include <tuple>
 
 namespace NYql {
@@ -14,43 +14,43 @@ namespace NYql {
 namespace {
     static constexpr bool UseDeterminsticHash = false;
 
-    ui64 CseeHash(const void* data, size_t size, ui64 initHash) { 
-        return MurmurHash<ui64>(data, size, initHash); 
-    } 
- 
-    template<typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr> 
-    ui64 CseeHash(T value, ui64 initHash) { 
-        // workaround Coverity warning for Murmur when sizeof(T) < 8 
-        ui64 val = static_cast<ui64>(value); 
-        return MurmurHash<ui64>(&val, sizeof(val), initHash); 
-    } 
- 
-    struct TLambdaFrame { 
+    ui64 CseeHash(const void* data, size_t size, ui64 initHash) {
+        return MurmurHash<ui64>(data, size, initHash);
+    }
+
+    template<typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
+    ui64 CseeHash(T value, ui64 initHash) {
+        // workaround Coverity warning for Murmur when sizeof(T) < 8
+        ui64 val = static_cast<ui64>(value);
+        return MurmurHash<ui64>(&val, sizeof(val), initHash);
+    }
+
+    struct TLambdaFrame {
         TLambdaFrame(const TExprNode* lambda, const TLambdaFrame* prev)
-            : Lambda(lambda) 
-            , Prev(prev) 
-        {} 
- 
-        TLambdaFrame() = default; 
- 
-        const TExprNode* Lambda = nullptr; 
+            : Lambda(lambda)
+            , Prev(prev)
+        {}
+
+        TLambdaFrame() = default;
+
+        const TExprNode* Lambda = nullptr;
         const TLambdaFrame* Prev = nullptr;
-    }; 
- 
-    bool IsArgInScope(const TLambdaFrame& frame, const TExprNode& arg) { 
+    };
+
+    bool IsArgInScope(const TLambdaFrame& frame, const TExprNode& arg) {
         for (auto curr = &frame; curr; curr = curr->Prev) {
             if (const auto lambda = curr->Lambda) {
-                YQL_ENSURE(lambda->IsLambda()); 
+                YQL_ENSURE(lambda->IsLambda());
                 for (ui32 i = 0U; i < lambda->Head().ChildrenSize(); ++i) {
                     if (lambda->Head().Child(i) == &arg) {
-                        return true; 
-                    } 
-                } 
-            } 
-        } 
-        return false; 
-    } 
- 
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     ui16 GetDependencyLevel(const TExprNode& node) {
         if (const auto lambda = node.GetDependencyScope()->first) {
             return 1 + GetDependencyLevel(*lambda);
@@ -90,7 +90,7 @@ namespace {
         return EDependencyScope::None;
     }
 
-    ui64 CalculateHash(ui16 depth, TExprNode& node, const TLambdaFrame& currFrame, const TColumnOrderStorage& coStore) { 
+    ui64 CalculateHash(ui16 depth, TExprNode& node, const TLambdaFrame& currFrame, const TColumnOrderStorage& coStore) {
         const auto dependency = CheckDependencyScope(currFrame, node);
         switch (dependency) {
             case EDependencyScope::None:
@@ -113,91 +113,91 @@ namespace {
         }
 
         ui64 hash = node.GetTypeAnn()->GetHash();
-        hash = CseeHash(ui32(node.Type()), hash); 
+        hash = CseeHash(ui32(node.Type()), hash);
         for (auto c: node.GetAllConstraints()) {
-            hash = CseeHash(c->GetHash(), hash); 
+            hash = CseeHash(c->GetHash(), hash);
         }
-        hash = AddColumnOrderHash(coStore.Lookup(node.UniqueId()), hash); 
+        hash = AddColumnOrderHash(coStore.Lookup(node.UniqueId()), hash);
 
         switch (node.Type()) {
         case TExprNode::Atom: {
             if constexpr (UseDeterminsticHash) {
-                hash = CseeHash(node.Content().data(), node.Content().size(), hash); 
+                hash = CseeHash(node.Content().data(), node.Content().size(), hash);
             } else {
                 // can hash ptr due to intern
                 const char* ptr = node.Content().data();
-                hash = CseeHash(&ptr, sizeof(ptr), hash); 
+                hash = CseeHash(&ptr, sizeof(ptr), hash);
             }
 
-            hash = CseeHash(node.GetFlagsToCompare(), hash); 
+            hash = CseeHash(node.GetFlagsToCompare(), hash);
             break;
         }
         case TExprNode::Callable:
             if constexpr (UseDeterminsticHash) {
-                hash = CseeHash(node.Content().data(), node.Content().size(), hash); 
+                hash = CseeHash(node.Content().data(), node.Content().size(), hash);
             } else {
                 // can hash ptr due to intern
                 const char* ptr = node.Content().data();
-                hash = CseeHash(&ptr, sizeof(ptr), hash); 
+                hash = CseeHash(&ptr, sizeof(ptr), hash);
             }
-            [[fallthrough]]; 
+            [[fallthrough]];
         case TExprNode::List: {
             const auto size = node.ChildrenSize();
-            hash = CseeHash(size, hash); 
+            hash = CseeHash(size, hash);
 
             if (node.UnorderedChildren()) {
                 TSmallVec<ui64> hashes;
                 hashes.reserve(size);
                 for (ui32 i = 0U; i < node.ChildrenSize(); ++i) {
-                    hashes.emplace_back(CalculateHash(depth, *node.Child(i), currFrame, coStore)); 
+                    hashes.emplace_back(CalculateHash(depth, *node.Child(i), currFrame, coStore));
                 };
                 std::sort(hashes.begin(), hashes.end());
                 hash = std::accumulate(hashes.cbegin(), hashes.cend(), ~hash, [] (ui64 hash, ui64 childHash) {
-                    return CseeHash(childHash, hash); 
+                    return CseeHash(childHash, hash);
                 });
             } else {
                 for (ui32 i = 0U; i < node.ChildrenSize(); ++i) {
-                    const auto childHash = CalculateHash(depth, *node.Child(i), currFrame, coStore); 
-                    hash = CseeHash(childHash, hash); 
+                    const auto childHash = CalculateHash(depth, *node.Child(i), currFrame, coStore);
+                    hash = CseeHash(childHash, hash);
                 }
             }
             break;
         }
         case TExprNode::Lambda: {
             if (const ui32 size = node.ChildrenSize())
-                hash = CseeHash(size, hash); 
+                hash = CseeHash(size, hash);
 
             const auto& args = node.Head();
-            hash = CseeHash(args.ChildrenSize(), hash); 
+            hash = CseeHash(args.ChildrenSize(), hash);
 
             for (ui32 i = 0; i < args.ChildrenSize(); ++i) {
                 const auto& arg = *args.Child(i);
-                hash = CseeHash(arg.GetTypeAnn()->GetHash(), hash); 
+                hash = CseeHash(arg.GetTypeAnn()->GetHash(), hash);
                 for (auto c: arg.GetAllConstraints()) {
-                    hash = CseeHash(c->GetHash(), hash); 
+                    hash = CseeHash(c->GetHash(), hash);
                 }
             }
 
-            TLambdaFrame newFrame(&node, &currFrame); 
+            TLambdaFrame newFrame(&node, &currFrame);
             for (ui32 i = 1U; i < node.ChildrenSize(); ++i) {
-                const auto lambdaHash = CalculateHash(depth + 1, *node.Child(i), newFrame, coStore); 
-                hash = CseeHash(lambdaHash, hash); 
+                const auto lambdaHash = CalculateHash(depth + 1, *node.Child(i), newFrame, coStore);
+                hash = CseeHash(lambdaHash, hash);
             }
             break;
         }
         case TExprNode::Argument:
             switch (dependency) {
                 case EDependencyScope::Inner: {
-                    hash = CseeHash(GetDependencyLevel(node), hash); 
-                    hash = CseeHash(node.GetArgIndex(), hash); 
+                    hash = CseeHash(GetDependencyLevel(node), hash);
+                    hash = CseeHash(node.GetArgIndex(), hash);
                     break;
                 }
                 case EDependencyScope::Outer: {
                     if constexpr (UseDeterminsticHash) {
-                        hash = CseeHash(node.UniqueId(), hash); 
+                        hash = CseeHash(node.UniqueId(), hash);
                     } else {
                         const auto ptr = &node;
-                        hash = CseeHash(&ptr, sizeof(ptr), hash); 
+                        hash = CseeHash(&ptr, sizeof(ptr), hash);
                     }
                     break;
                 }
@@ -232,9 +232,9 @@ namespace {
         return hash;
     }
 
-    bool EqualNodes(const TExprNode& left, TLambdaFrame& currLeftFrame, const TExprNode& right, TLambdaFrame& currRightFrame, 
-        TNodeSet& visited, const TColumnOrderStorage& coStore) 
-    { 
+    bool EqualNodes(const TExprNode& left, TLambdaFrame& currLeftFrame, const TExprNode& right, TLambdaFrame& currRightFrame,
+        TNodeSet& visited, const TColumnOrderStorage& coStore)
+    {
         if (&left == &right) {
             return true;
         }
@@ -255,10 +255,10 @@ namespace {
             return false;
         }
 
-        if (coStore.Lookup(left.UniqueId()) != coStore.Lookup(right.UniqueId())) { 
-            return false; 
-        } 
- 
+        if (coStore.Lookup(left.UniqueId()) != coStore.Lookup(right.UniqueId())) {
+            return false;
+        }
+
         switch (left.Type()) {
         case TExprNode::Atom:
             // compare pointers due to intern
@@ -277,10 +277,10 @@ namespace {
 
             if (left.UnorderedChildren() && right.UnorderedChildren()) {
                 if (2U == left.ChildrenSize()) {
-                    return EqualNodes(left.Head(), currLeftFrame, right.Head(), currRightFrame, visited, coStore) 
-                        && EqualNodes(left.Tail(), currLeftFrame, right.Tail(), currRightFrame, visited, coStore) 
-                        || EqualNodes(left.Head(), currLeftFrame, right.Tail(), currRightFrame, visited, coStore) 
-                        && EqualNodes(left.Tail(), currLeftFrame, right.Head(), currRightFrame, visited, coStore); 
+                    return EqualNodes(left.Head(), currLeftFrame, right.Head(), currRightFrame, visited, coStore)
+                        && EqualNodes(left.Tail(), currLeftFrame, right.Tail(), currRightFrame, visited, coStore)
+                        || EqualNodes(left.Head(), currLeftFrame, right.Tail(), currRightFrame, visited, coStore)
+                        && EqualNodes(left.Tail(), currLeftFrame, right.Head(), currRightFrame, visited, coStore);
                 } else {
                     TSmallVec<const TExprNode*> lNodes, rNodes;
                     lNodes.reserve(left.ChildrenSize());
@@ -294,14 +294,14 @@ namespace {
                     std::sort(rNodes.begin(), rNodes.end(), order);
 
                     for (ui32 i = 0; i < lNodes.size(); ++i) {
-                        if (!EqualNodes(*lNodes[i], currLeftFrame, *rNodes[i], currRightFrame, visited, coStore)) { 
+                        if (!EqualNodes(*lNodes[i], currLeftFrame, *rNodes[i], currRightFrame, visited, coStore)) {
                             return false;
                         }
                     }
                 }
             } else {
                 for (ui32 i = 0; i < left.ChildrenSize(); ++i) {
-                    if (!EqualNodes(*left.Child(i), currLeftFrame, *right.Child(i), currRightFrame, visited, coStore)) { 
+                    if (!EqualNodes(*left.Child(i), currLeftFrame, *right.Child(i), currRightFrame, visited, coStore)) {
                         return false;
                     }
                 }
@@ -334,11 +334,11 @@ namespace {
                 }
             }
 
-            TLambdaFrame newLeftFrame(&left, &currLeftFrame); 
-            TLambdaFrame newRightFrame(&right, &currRightFrame); 
- 
+            TLambdaFrame newLeftFrame(&left, &currLeftFrame);
+            TLambdaFrame newRightFrame(&right, &currRightFrame);
+
             for (ui32 i = 1U; i < left.ChildrenSize(); ++i) {
-                if (!EqualNodes(*left.Child(i), newLeftFrame, *right.Child(i), newRightFrame, visited, coStore)) 
+                if (!EqualNodes(*left.Child(i), newLeftFrame, *right.Child(i), newRightFrame, visited, coStore))
                     return false;
             }
             return true;
@@ -347,7 +347,7 @@ namespace {
             if (currLeftFrame.Lambda && currRightFrame.Lambda && IsArgInScope(currLeftFrame, left) && IsArgInScope(currRightFrame, right)) {
                 const ui16 leftRelativeLevel = GetDependencyLevel(left);
                 const ui16 rightRelativeLevel = GetDependencyLevel(right);
-                return leftRelativeLevel == rightRelativeLevel && left.GetArgIndex() == right.GetArgIndex(); 
+                return leftRelativeLevel == rightRelativeLevel && left.GetArgIndex() == right.GetArgIndex();
             } else {
                 return &left == &right;
             }
@@ -401,7 +401,7 @@ namespace {
                 }
             }
 
-            [[fallthrough]]; 
+            [[fallthrough]];
         case TExprNode::List:
             if (left.ChildrenSize() != right.ChildrenSize()) {
                 return (int)left.ChildrenSize() - (int)right.ChildrenSize();
@@ -432,8 +432,8 @@ namespace {
             return 0;
         }
         case TExprNode::Argument:
-            if (left.GetArgIndex() != right.GetArgIndex()) { 
-                return (int)left.GetArgIndex() - (int)right.GetArgIndex(); 
+            if (left.GetArgIndex() != right.GetArgIndex()) {
+                return (int)left.GetArgIndex() - (int)right.GetArgIndex();
             }
 
             return (int)left.GetDependencyScope()->first->GetLambdaLevel() - (int)right.GetDependencyScope()->first->GetLambdaLevel();
@@ -460,8 +460,8 @@ namespace {
                 }
                 return;
             default: break;
-        } 
- 
+        }
+
         const auto ins = (insideDependsOn ? visitedInsideDependsOn : visited).emplace(&node, TNodeSet{});
         if (!ins.second) {
             closures.insert(ins.first->second.cbegin(), ins.first->second.cend());
@@ -478,7 +478,7 @@ namespace {
             }
             internal.erase(&node);
         } else {
-            insideDependsOn = insideDependsOn || node.IsCallable("DependsOn"); 
+            insideDependsOn = insideDependsOn || node.IsCallable("DependsOn");
             node.ForEachChild(std::bind(&CalculateCompletness, std::placeholders::_1, insideDependsOn, level, std::ref(internal),
                 std::ref(visited), std::ref(visitedInsideDependsOn)));
         }
@@ -498,21 +498,21 @@ namespace {
         closures.insert(internal.cbegin(), internal.cend());
     }
 
-    ui64 CalcHash(TExprNode& node, const TColumnOrderStorage& coStore) { 
+    ui64 CalcHash(TExprNode& node, const TColumnOrderStorage& coStore) {
         TLambdaFrame frame;
-        return CalculateHash(0, node, frame, coStore); 
+        return CalculateHash(0, node, frame, coStore);
     }
 
-    bool EqualNodes(const TExprNode& left, const TExprNode& right, const TColumnOrderStorage& coStore) { 
+    bool EqualNodes(const TExprNode& left, const TExprNode& right, const TColumnOrderStorage& coStore) {
         TNodeSet visited;
         TLambdaFrame frame;
-        return EqualNodes(left, frame, right, frame, visited, coStore); 
+        return EqualNodes(left, frame, right, frame, visited, coStore);
     }
 
     TExprNode::TPtr VisitNode(TExprNode& node, TExprNode* currentLambda, ui16 level,
         std::unordered_multimap<ui64, TExprNode*>& uniqueNodes,
         std::unordered_multimap<ui64, TExprNode*>& incompleteNodes,
-        TNodeMap<TExprNode*>& renames, const TColumnOrderStorage& coStore) { 
+        TNodeMap<TExprNode*>& renames, const TColumnOrderStorage& coStore) {
 
         if (node.Type() == TExprNode::Argument) {
             return nullptr;
@@ -523,17 +523,17 @@ namespace {
             return find.first->second;
         }
 
-        const auto hash = CalcHash(node, coStore); 
+        const auto hash = CalcHash(node, coStore);
 
         if (node.Type() == TExprNode::Lambda) {
             for (ui32 i = 1U; i < node.ChildrenSize(); ++i) {
-                if (auto newNode = VisitNode(*node.Child(i), &node, level + 1U, uniqueNodes, incompleteNodes, renames, coStore)) { 
+                if (auto newNode = VisitNode(*node.Child(i), &node, level + 1U, uniqueNodes, incompleteNodes, renames, coStore)) {
                     node.ChildRef(i) = std::move(newNode);
                 }
             }
         } else {
             for (ui32 i = 0; i < node.ChildrenSize(); ++i) {
-                if (auto newNode = VisitNode(*node.Child(i), currentLambda, level, uniqueNodes, incompleteNodes, renames, coStore)) { 
+                if (auto newNode = VisitNode(*node.Child(i), currentLambda, level, uniqueNodes, incompleteNodes, renames, coStore)) {
                     node.ChildRef(i) = std::move(newNode);
                 }
             }
@@ -551,8 +551,8 @@ namespace {
                     continue;
                 }
 
-                if (!EqualNodes(node, *iter->second, coStore)) { 
-#ifndef NDEBUG 
+                if (!EqualNodes(node, *iter->second, coStore)) {
+#ifndef NDEBUG
                     if (!GetEnv("YQL_ALLOW_CSEE_HASH_COLLISION")) {
                         YQL_ENSURE(false, "Node -BEGIN-\n" << node.Dump() << "-END-" << " has same hash as -BEGIN-\n"
                                                         << iter->second->Dump() << "-END-");
@@ -591,15 +591,15 @@ IGraphTransformer::TStatus UpdateCompletness(const TExprNode::TPtr& input, TExpr
 }
 
 IGraphTransformer::TStatus EliminateCommonSubExpressions(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-    TExprContext& ctx, bool forSubGraph, const TColumnOrderStorage& coStore) 
+    TExprContext& ctx, bool forSubGraph, const TColumnOrderStorage& coStore)
 {
-    YQL_PROFILE_SCOPE(DEBUG, forSubGraph ? "EliminateCommonSubExpressionsForSubGraph" : "EliminateCommonSubExpressions"); 
+    YQL_PROFILE_SCOPE(DEBUG, forSubGraph ? "EliminateCommonSubExpressionsForSubGraph" : "EliminateCommonSubExpressions");
     output = input;
     TNodeMap<TExprNode*> renames;
     //Cerr << "INPUT\n" << output->Dump() << "\n";
     std::unordered_multimap<ui64, TExprNode*> incompleteNodes;
-    const auto newNode = VisitNode(*output, nullptr, 0, ctx.UniqueNodes, incompleteNodes, renames, coStore); 
-    YQL_ENSURE(forSubGraph || !newNode); 
+    const auto newNode = VisitNode(*output, nullptr, 0, ctx.UniqueNodes, incompleteNodes, renames, coStore);
+    YQL_ENSURE(forSubGraph || !newNode);
     //Cerr << "OUTPUT\n" << output->Dump() << "\n";
     return IGraphTransformer::TStatus::Ok;
 }

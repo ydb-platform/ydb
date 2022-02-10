@@ -109,10 +109,10 @@ bool TListCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
     return true;
 }
 
-void TListCreateBuiltin::DoUpdateState() const { 
-    State.Set(ENodeState::Const); 
-} 
- 
+void TListCreateBuiltin::DoUpdateState() const {
+    State.Set(ENodeState::Const);
+}
+
 bool TDictCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (Args.size() != 2) {
         ctx.Error(Pos) << OpName << " requires two parameters";
@@ -129,10 +129,10 @@ bool TDictCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
     return true;
 }
 
-void TDictCreateBuiltin::DoUpdateState() const { 
-    State.Set(ENodeState::Const); 
-} 
- 
+void TDictCreateBuiltin::DoUpdateState() const {
+    State.Set(ENodeState::Const);
+}
+
 bool TSetCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (Args.size() != 1) {
         ctx.Error(Pos) << OpName << " requires one parameter";
@@ -147,8 +147,8 @@ bool TSetCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
     return true;
 }
 
-void TSetCreateBuiltin::DoUpdateState() const { 
-    State.Set(ENodeState::Const); 
-} 
- 
+void TSetCreateBuiltin::DoUpdateState() const {
+    State.Set(ENodeState::Const);
+}
+
 } // namespace NSQLTranslationV1

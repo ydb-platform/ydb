@@ -70,16 +70,16 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
 
     THashSet<TString> possibleKeys;
-    TPredicateExtractorSettings settings; 
+    TPredicateExtractorSettings settings;
     settings.MergeAdjacentPointRanges = true;
-    auto extractor = MakePredicateRangeExtractor(settings); 
-    YQL_ENSURE(tableDesc.SchemeNode); 
+    auto extractor = MakePredicateRangeExtractor(settings);
+    YQL_ENSURE(tableDesc.SchemeNode);
 
-    bool prepareSuccess = extractor->Prepare(flatmap.Lambda().Ptr(), *tableDesc.SchemeNode, possibleKeys, ctx, typesCtx); 
+    bool prepareSuccess = extractor->Prepare(flatmap.Lambda().Ptr(), *tableDesc.SchemeNode, possibleKeys, ctx, typesCtx);
     YQL_ENSURE(prepareSuccess);
 
-    auto buildResult = extractor->BuildComputeNode(tableDesc.Metadata->KeyColumnNames, ctx); 
-    TExprNode::TPtr ranges = buildResult.ComputeNode; 
+    auto buildResult = extractor->BuildComputeNode(tableDesc.Metadata->KeyColumnNames, ctx);
+    TExprNode::TPtr ranges = buildResult.ComputeNode;
 
     if (!ranges) {
         return node;

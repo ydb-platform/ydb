@@ -62,7 +62,7 @@ struct TWriteRoleSettings {
 
 struct TCommitSettings
 {
-    TPositionHandle Pos; 
+    TPositionHandle Pos;
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtom> Epoch;
     NNodes::TCoNameValueTupleList Other;
@@ -79,7 +79,7 @@ struct TCommitSettings
 
 const TStructExprType* BuildCommonTableListType(TExprContext& ctx);
 
-TExprNode::TPtr BuildTypeExpr(TPositionHandle pos, const TTypeAnnotationNode& ann, TExprContext& ctx); 
+TExprNode::TPtr BuildTypeExpr(TPositionHandle pos, const TTypeAnnotationNode& ann, TExprContext& ctx);
 
 bool HasResOrPullOption(const TExprNode& node, const TStringBuf& option);
 
@@ -110,13 +110,13 @@ bool FreezeUsedFilesSync(const TExprNode& node, TUserDataTable& files, const TTy
 
 void WriteColumns(NYson::TYsonWriter& writer, const NNodes::TExprBase& columns);
 
-TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes = false); 
-TString ExprToPrettyString(TExprContext& ctx, const TExprNode& expr); 
+TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes = false);
+TString ExprToPrettyString(TExprContext& ctx, const TExprNode& expr);
 
 void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprNode* source);
 void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const NNodes::TCoLambda& lambda);
 
-double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx); 
+double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx);
 
 void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics);
 

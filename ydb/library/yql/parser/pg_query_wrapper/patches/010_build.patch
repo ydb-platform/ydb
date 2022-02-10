@@ -1,1152 +1,1152 @@
-diff -ruN original/pg_query.h my/pg_query.h 
---- original/pg_query.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/pg_query.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -57,29 +57,29 @@ 
-   PgQueryError* error; 
- } PgQueryPlpgsqlParseResult; 
-  
--typedef struct { 
-+/*typedef struct { 
-   uint64_t fingerprint; 
-   char* fingerprint_str; 
-   char* stderr_buffer; 
-   PgQueryError* error; 
--} PgQueryFingerprintResult; 
-+} PgQueryFingerprintResult;*/ 
-  
--typedef struct { 
-+/*typedef struct { 
-   char* normalized_query; 
-   PgQueryError* error; 
--} PgQueryNormalizeResult; 
-+} PgQueryNormalizeResult;*/ 
-  
- #ifdef __cplusplus 
- extern "C" { 
- #endif 
-  
--PgQueryNormalizeResult pg_query_normalize(const char* input); 
-+//PgQueryNormalizeResult pg_query_normalize(const char* input); 
- PgQueryScanResult pg_query_scan(const char* input); 
- PgQueryParseResult pg_query_parse(const char* input); 
- PgQueryProtobufParseResult pg_query_parse_protobuf(const char* input); 
--PgQueryPlpgsqlParseResult pg_query_parse_plpgsql(const char* input); 
-+//PgQueryPlpgsqlParseResult pg_query_parse_plpgsql(const char* input); 
-  
--PgQueryFingerprintResult pg_query_fingerprint(const char* input); 
-+//PgQueryFingerprintResult pg_query_fingerprint(const char* input); 
-  
- // Use pg_query_split_with_scanner when you need to split statements that may 
- // contain parse errors, otherwise pg_query_split_with_parser is recommended 
-@@ -93,14 +93,14 @@ 
-  
- PgQueryDeparseResult pg_query_deparse_protobuf(PgQueryProtobuf parse_tree); 
-  
--void pg_query_free_normalize_result(PgQueryNormalizeResult result); 
-+//void pg_query_free_normalize_result(PgQueryNormalizeResult result); 
- void pg_query_free_scan_result(PgQueryScanResult result); 
- void pg_query_free_parse_result(PgQueryParseResult result); 
- void pg_query_free_split_result(PgQuerySplitResult result); 
- void pg_query_free_deparse_result(PgQueryDeparseResult result); 
- void pg_query_free_protobuf_parse_result(PgQueryProtobufParseResult result); 
--void pg_query_free_plpgsql_parse_result(PgQueryPlpgsqlParseResult result); 
--void pg_query_free_fingerprint_result(PgQueryFingerprintResult result); 
-+//void pg_query_free_plpgsql_parse_result(PgQueryPlpgsqlParseResult result); 
-+//void pg_query_free_fingerprint_result(PgQueryFingerprintResult result); 
-  
- // Optional, cleans up the top-level memory context (automatically done for threads that exit) 
- void pg_query_exit(void); 
-diff -ruN original/src/pg_query.c my/src/pg_query.c 
---- original/src/pg_query.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/pg_query.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -5,15 +5,19 @@ 
- #include <utils/memutils.h> 
- #include <utils/memdebug.h> 
-  
-+#ifndef WIN32 
- #include <pthread.h> 
-+#endif 
- #include <signal.h> 
-  
- const char* progname = "pg_query"; 
-  
--__thread sig_atomic_t pg_query_initialized = 0; 
-+__thread volatile sig_atomic_t pg_query_initialized = 0; 
-  
-+#ifndef WIN32 
- static pthread_key_t pg_query_thread_exit_key; 
- static void pg_query_thread_exit(void *key); 
-+#endif 
-  
- void pg_query_init(void) 
- { 
-@@ -23,8 +27,10 @@ 
- 	MemoryContextInit(); 
- 	SetDatabaseEncoding(PG_UTF8); 
-  
-+#ifndef WIN32 
- 	pthread_key_create(&pg_query_thread_exit_key, pg_query_thread_exit); 
- 	pthread_setspecific(pg_query_thread_exit_key, TopMemoryContext); 
-+#endif 
- } 
-  
- void pg_query_free_top_memory_context(MemoryContext context) 
-@@ -55,11 +61,13 @@ 
- 	ErrorContext = NULL; 
- } 
-  
-+#ifndef WIN32 
- static void pg_query_thread_exit(void *key) 
- { 
- 	MemoryContext context = (MemoryContext) key; 
- 	pg_query_free_top_memory_context(context); 
- } 
-+#endif 
-  
- void pg_query_exit(void) 
- { 
-diff -ruN original/src/pg_query_parse.c my/src/pg_query_parse.c 
---- original/src/pg_query_parse.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/pg_query_parse.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -6,7 +6,7 @@ 
- #include "parser/scanner.h" 
- #include "parser/scansup.h" 
-  
--#include <unistd.h> 
-+//#include <unistd.h> 
- #include <fcntl.h> 
-  
- PgQueryInternalParsetreeAndError pg_query_raw_parse(const char* input) 
-@@ -111,8 +111,10 @@ 
- { 
- 	MemoryContext ctx = NULL; 
- 	PgQueryInternalParsetreeAndError parsetree_and_error; 
--	PgQueryProtobufParseResult result = {}; 
-+	PgQueryProtobufParseResult result; 
-+	memset(&result, 0, sizeof(result)); 
-  
-+ 
- 	ctx = pg_query_enter_memory_context(); 
-  
- 	parsetree_and_error = pg_query_raw_parse(input); 
-diff -ruN original/src/postgres/include/access/xlog.h my/src/postgres/include/access/xlog.h 
---- original/src/postgres/include/access/xlog.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/access/xlog.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -18,7 +18,7 @@ 
- #include "datatype/timestamp.h" 
- #include "lib/stringinfo.h" 
- #include "nodes/pg_list.h" 
--#include "storage/fd.h" 
-+//#include "storage/fd.h" 
-  
-  
- /* Sync methods */ 
-diff -ruN original/src/postgres/include/c.h my/src/postgres/include/c.h 
---- original/src/postgres/include/c.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/c.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -62,7 +62,7 @@ 
- #include <stddef.h> 
- #include <stdarg.h> 
- #ifdef HAVE_STRINGS_H 
--#include <strings.h> 
-+//#include <strings.h> 
- #endif 
- #include <stdint.h> 
- #include <sys/types.h> 
-@@ -135,8 +135,10 @@ 
-  
- /* GCC and XLC support format attributes */ 
- #if defined(__GNUC__) || defined(__IBMC__) 
--#define pg_attribute_format_arg(a) __attribute__((format_arg(a))) 
--#define pg_attribute_printf(f,a) __attribute__((format(PG_PRINTF_ATTRIBUTE, f, a))) 
-+#define pg_attribute_format_arg(a)  
-+// __attribute__((format_arg(a))) 
-+#define pg_attribute_printf(f,a) 
-+// __attribute__((format(PG_PRINTF_ATTRIBUTE, f, a))) 
- #else 
- #define pg_attribute_format_arg(a) 
- #define pg_attribute_printf(f,a) 
-diff -ruN original/src/postgres/include/getaddrinfo.h my/src/postgres/include/getaddrinfo.h 
---- original/src/postgres/include/getaddrinfo.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/getaddrinfo.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -22,8 +22,8 @@ 
- #ifndef GETADDRINFO_H 
- #define GETADDRINFO_H 
-  
--#include <sys/socket.h> 
--#include <netdb.h> 
-+//#include <sys/socket.h> 
-+//#include <netdb.h> 
-  
-  
- /* Various macros that ought to be in <netdb.h>, but might not be */ 
-diff -ruN original/src/postgres/include/libpq/libpq-be.h my/src/postgres/include/libpq/libpq-be.h 
---- original/src/postgres/include/libpq/libpq-be.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/libpq/libpq-be.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -18,10 +18,10 @@ 
- #ifndef LIBPQ_BE_H 
- #define LIBPQ_BE_H 
-  
--#include <sys/time.h> 
-+//#include <sys/time.h> 
- #ifdef USE_OPENSSL 
--#include <openssl/ssl.h> 
--#include <openssl/err.h> 
-+//#include <openssl/ssl.h> 
-+//#include <openssl/err.h> 
- #endif 
- #ifdef HAVE_NETINET_TCP_H 
- #include <netinet/tcp.h> 
-diff -ruN original/src/postgres/include/libpq/libpq.h my/src/postgres/include/libpq/libpq.h 
---- original/src/postgres/include/libpq/libpq.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/libpq/libpq.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -14,7 +14,7 @@ 
- #ifndef LIBPQ_H 
- #define LIBPQ_H 
-  
--#include <netinet/in.h> 
-+//#include <netinet/in.h> 
-  
- #include "lib/stringinfo.h" 
- #include "libpq/libpq-be.h" 
-diff -ruN original/src/postgres/include/libpq/pqcomm.h my/src/postgres/include/libpq/pqcomm.h 
---- original/src/postgres/include/libpq/pqcomm.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/libpq/pqcomm.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -16,12 +16,12 @@ 
- #ifndef PQCOMM_H 
- #define PQCOMM_H 
-  
--#include <sys/socket.h> 
--#include <netdb.h> 
-+//#include <sys/socket.h> 
-+//#include <netdb.h> 
- #ifdef HAVE_SYS_UN_H 
- #include <sys/un.h> 
- #endif 
--#include <netinet/in.h> 
-+//#include <netinet/in.h> 
-  
- #ifdef HAVE_STRUCT_SOCKADDR_STORAGE 
-  
-diff -ruN original/src/postgres/include/miscadmin.h my/src/postgres/include/miscadmin.h 
---- original/src/postgres/include/miscadmin.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/miscadmin.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -94,7 +94,7 @@ 
- /* in tcop/postgres.c */ 
- extern void ProcessInterrupts(void); 
-  
--#ifndef WIN32 
-+#if 1 
-  
- #define CHECK_FOR_INTERRUPTS() \ 
- do { \ 
-diff -ruN original/src/postgres/include/nodes/execnodes.h my/src/postgres/include/nodes/execnodes.h 
---- original/src/postgres/include/nodes/execnodes.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/nodes/execnodes.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -26,7 +26,7 @@ 
- #include "utils/hsearch.h" 
- #include "utils/queryenvironment.h" 
- #include "utils/reltrigger.h" 
--#include "utils/sharedtuplestore.h" 
-+//#include "utils/sharedtuplestore.h" 
- #include "utils/snapshot.h" 
- #include "utils/sortsupport.h" 
- #include "utils/tuplesort.h" 
-diff -ruN original/src/postgres/include/pg_getopt.h my/src/postgres/include/pg_getopt.h 
---- original/src/postgres/include/pg_getopt.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/pg_getopt.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -19,7 +19,7 @@ 
- #define PG_GETOPT_H 
-  
- /* POSIX says getopt() is provided by unistd.h */ 
--#include <unistd.h> 
-+//#include <unistd.h> 
-  
- /* rely on the system's getopt.h if present */ 
- #ifdef HAVE_GETOPT_H 
-diff -ruN original/src/postgres/include/port/atomics.h my/src/postgres/include/port/atomics.h 
---- original/src/postgres/include/port/atomics.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/port/atomics.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -65,15 +65,15 @@ 
-  */ 
- #if defined(__arm__) || defined(__arm) || \ 
- 	defined(__aarch64__) || defined(__aarch64) 
--#include "port/atomics/arch-arm.h" 
-+//#include "port/atomics/arch-arm.h" 
- #elif defined(__i386__) || defined(__i386) || defined(__x86_64__) 
--#include "port/atomics/arch-x86.h" 
-+//#include "port/atomics/arch-x86.h" 
- #elif defined(__ia64__) || defined(__ia64) 
--#include "port/atomics/arch-ia64.h" 
-+//#include "port/atomics/arch-ia64.h" 
- #elif defined(__ppc__) || defined(__powerpc__) || defined(__ppc64__) || defined(__powerpc64__) 
--#include "port/atomics/arch-ppc.h" 
-+//#include "port/atomics/arch-ppc.h" 
- #elif defined(__hppa) || defined(__hppa__) 
--#include "port/atomics/arch-hppa.h" 
-+//#include "port/atomics/arch-hppa.h" 
- #endif 
-  
- /* 
-@@ -94,11 +94,11 @@ 
- #if (defined(__GNUC__) || defined(__INTEL_COMPILER)) && !(defined(__IBMC__) || defined(__IBMCPP__)) 
- #include "port/atomics/generic-gcc.h" 
- #elif defined(_MSC_VER) 
--#include "port/atomics/generic-msvc.h" 
-+//#include "port/atomics/generic-msvc.h" 
- #elif defined(__hpux) && defined(__ia64) && !defined(__GNUC__) 
--#include "port/atomics/generic-acc.h" 
-+//#include "port/atomics/generic-acc.h" 
- #elif defined(__SUNPRO_C) && !defined(__GNUC__) 
--#include "port/atomics/generic-sunpro.h" 
-+//#include "port/atomics/generic-sunpro.h" 
- #else 
- /* 
-  * Unsupported compiler, we'll likely use slower fallbacks... At least 
-diff -ruN original/src/postgres/include/port/pg_bitutils.h my/src/postgres/include/port/pg_bitutils.h 
---- original/src/postgres/include/port/pg_bitutils.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/port/pg_bitutils.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -207,10 +207,18 @@ 
- 		return pg_leftmost_one_pos64(num - 1) + 1; 
- } 
-  
--/* Count the number of one-bits in a uint32 or uint64 */ 
-+#ifdef TRY_POPCNT_FAST 
-+/* Attempt to use the POPCNT instruction, but perform a runtime check first */ 
- extern int	(*pg_popcount32) (uint32 word); 
- extern int	(*pg_popcount64) (uint64 word); 
-  
-+#else 
-+/* Use a portable implementation -- no need for a function pointer. */ 
-+extern int	pg_popcount32(uint32 word); 
-+extern int	pg_popcount64(uint64 word); 
-+ 
-+#endif	 
-+ 
- /* Count the number of one-bits in a byte array */ 
- extern uint64 pg_popcount(const char *buf, int bytes); 
-  
-diff -ruN original/src/postgres/include/port.h my/src/postgres/include/port.h 
---- original/src/postgres/include/port.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/port.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -14,8 +14,8 @@ 
- #define PG_PORT_H 
-  
- #include <ctype.h> 
--#include <netdb.h> 
--#include <pwd.h> 
-+//#include <netdb.h> 
-+//#include <pwd.h> 
-  
- /* 
-  * Windows has enough specialized port stuff that we push most of it off 
-@@ -23,7 +23,7 @@ 
-  * Note: Some CYGWIN includes might #define WIN32. 
-  */ 
- #if defined(WIN32) && !defined(__CYGWIN__) 
--#include "port/win32_port.h" 
-+//#include "port/win32_port.h" 
- #endif 
-  
- /* socket has a different definition on WIN32 */ 
-@@ -32,6 +32,7 @@ 
-  
- #define PGINVALID_SOCKET (-1) 
- #else 
-+#include <winsock2.h> 
- typedef SOCKET pgsocket; 
-  
- #define PGINVALID_SOCKET INVALID_SOCKET 
-@@ -462,15 +463,15 @@ 
-  
- /* thread.h */ 
- #ifndef WIN32 
--extern int	pqGetpwuid(uid_t uid, struct passwd *resultbuf, char *buffer, 
--					   size_t buflen, struct passwd **result); 
-+//extern int	pqGetpwuid(uid_t uid, struct passwd *resultbuf, char *buffer, 
-+//					   size_t buflen, struct passwd **result); 
- #endif 
-  
--extern int	pqGethostbyname(const char *name, 
-+/*extern int	pqGethostbyname(const char *name, 
- 							struct hostent *resultbuf, 
- 							char *buffer, size_t buflen, 
- 							struct hostent **result, 
--							int *herrno); 
-+							int *herrno);*/ 
-  
- extern void pg_qsort(void *base, size_t nel, size_t elsize, 
- 					 int (*cmp) (const void *, const void *)); 
-diff -ruN original/src/postgres/include/storage/pmsignal.h my/src/postgres/include/storage/pmsignal.h 
---- original/src/postgres/include/storage/pmsignal.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/storage/pmsignal.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -21,7 +21,7 @@ 
- #endif 
-  
- #ifdef HAVE_SYS_PROCCTL_H 
--#include "sys/procctl.h" 
-+//#include "sys/procctl.h" 
- #endif 
-  
- /* 
-diff -ruN original/src/postgres/include/storage/s_lock.h my/src/postgres/include/storage/s_lock.h 
---- original/src/postgres/include/storage/s_lock.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/storage/s_lock.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -676,7 +676,7 @@ 
- #if defined(__m32r__) && defined(HAVE_SYS_TAS_H)	/* Renesas' M32R */ 
- #define HAS_TEST_AND_SET 
-  
--#include <sys/tas.h> 
-+//#include <sys/tas.h> 
-  
- typedef int slock_t; 
-  
-@@ -837,7 +837,7 @@ 
-  
- typedef unsigned int slock_t; 
-  
--#include <ia64/sys/inline.h> 
-+//#include <ia64/sys/inline.h> 
- #define TAS(lock) _Asm_xchg(_SZ_W, lock, 1, _LDHINT_NONE) 
- /* On IA64, it's a win to use a non-locking test before the xchg proper */ 
- #define TAS_SPIN(lock)	(*(lock) ? 1 : TAS(lock)) 
-diff -ruN original/src/postgres/include/utils/elog.h my/src/postgres/include/utils/elog.h 
---- original/src/postgres/include/utils/elog.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/utils/elog.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -40,6 +40,9 @@ 
- #define WARNING		19			/* Warnings.  NOTICE is for expected messages 
- 								 * like implicit sequence creation by SERIAL. 
- 								 * WARNING is for unexpected messages. */ 
-+#ifdef ERROR 
-+#undef ERROR 
-+#endif 
- #define ERROR		20			/* user error - abort transaction; return to 
- 								 * known state */ 
- /* Save ERROR value in PGERROR so it can be restored when Win32 includes 
-diff -ruN original/src/postgres/include/utils/pg_locale.h my/src/postgres/include/utils/pg_locale.h 
---- original/src/postgres/include/utils/pg_locale.h	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/include/utils/pg_locale.h	2021-11-14 20:05:00.000000000 +0300 
-@@ -16,7 +16,7 @@ 
- #include <xlocale.h> 
- #endif 
- #ifdef USE_ICU 
--#include <unicode/ucol.h> 
-+//#include <unicode/ucol.h> 
- #endif 
-  
- #include "utils/guc.h" 
-diff -ruN original/src/postgres/src_backend_nodes_copyfuncs.c my/src/postgres/src_backend_nodes_copyfuncs.c 
---- original/src/postgres/src_backend_nodes_copyfuncs.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_backend_nodes_copyfuncs.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -6011,3 +6011,5 @@ 
-  
- 	return retval; 
- } 
-+ 
-+PGDLLIMPORT Node *newNodeMacroHolder; 
-diff -ruN original/src/postgres/src_backend_parser_scan.c my/src/postgres/src_backend_parser_scan.c 
---- original/src/postgres/src_backend_parser_scan.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_backend_parser_scan.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -79,7 +79,7 @@ 
- #include "postgres.h" 
-  
- #include <ctype.h> 
--#include <unistd.h> 
-+//#include <unistd.h> 
-  
- #include "common/string.h" 
- #include "parser/gramparse.h" 
-@@ -4603,7 +4603,7 @@ 
-  * down here because we want the user's section 1 to have been scanned first. 
-  * The user has a chance to override it with an option. 
-  */ 
--#include <unistd.h> 
-+//#include <unistd.h> 
- #endif 
-  
- #ifndef YY_EXTRA_TYPE 
-diff -ruN original/src/postgres/src_backend_storage_ipc_ipc.c my/src/postgres/src_backend_storage_ipc_ipc.c 
---- original/src/postgres/src_backend_storage_ipc_ipc.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_backend_storage_ipc_ipc.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -27,7 +27,7 @@ 
- #include "postgres.h" 
-  
- #include <signal.h> 
--#include <unistd.h> 
-+//#include <unistd.h> 
- #include <sys/stat.h> 
-  
- #include "miscadmin.h" 
-diff -ruN original/src/postgres/src_backend_storage_lmgr_s_lock.c my/src/postgres/src_backend_storage_lmgr_s_lock.c 
---- original/src/postgres/src_backend_storage_lmgr_s_lock.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_backend_storage_lmgr_s_lock.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -58,7 +58,7 @@ 
- #include "postgres.h" 
-  
- #include <time.h> 
--#include <unistd.h> 
-+//#include <unistd.h> 
-  
- #include "port/atomics.h" 
- #include "storage/s_lock.h" 
-diff -ruN original/src/postgres/src_backend_tcop_postgres.c my/src/postgres/src_backend_tcop_postgres.c 
---- original/src/postgres/src_backend_tcop_postgres.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_backend_tcop_postgres.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -35,18 +35,18 @@ 
- #include <fcntl.h> 
- #include <limits.h> 
- #include <signal.h> 
--#include <unistd.h> 
--#include <sys/socket.h> 
-+//#include <unistd.h> 
-+//#include <sys/socket.h> 
- #ifdef HAVE_SYS_SELECT_H 
- #include <sys/select.h> 
- #endif 
- #ifdef HAVE_SYS_RESOURCE_H 
--#include <sys/time.h> 
-+//#include <sys/time.h> 
- #include <sys/resource.h> 
- #endif 
-  
- #ifndef HAVE_GETRUSAGE 
--#include "rusagestub.h" 
-+//#include "rusagestub.h" 
- #endif 
-  
- #include "access/parallel.h" 
-@@ -57,7 +57,7 @@ 
- #include "commands/prepare.h" 
- #include "executor/spi.h" 
- #include "jit/jit.h" 
--#include "libpq/libpq.h" 
-+//#include "libpq/libpq.h" 
- #include "libpq/pqformat.h" 
- #include "libpq/pqsignal.h" 
- #include "mb/pg_wchar.h" 
-@@ -69,7 +69,7 @@ 
- #include "parser/parser.h" 
- #include "pg_getopt.h" 
- #include "pg_trace.h" 
--#include "pgstat.h" 
-+//#include "pgstat.h" 
- #include "postmaster/autovacuum.h" 
- #include "postmaster/interrupt.h" 
- #include "postmaster/postmaster.h" 
-@@ -538,11 +538,11 @@ 
-  
- #if defined(__hpux) && !defined(__GNUC__) && !defined(__INTEL_COMPILER) 
- /* Assume it's HP-UX native compiler */ 
--#include <ia64/sys/inline.h> 
-+//#include <ia64/sys/inline.h> 
- #define ia64_get_bsp() ((char *) (_Asm_mov_from_ar(_AREG_BSP, _NO_FENCE))) 
- #elif defined(__INTEL_COMPILER) 
- /* icc */ 
--#include <asm/ia64regs.h> 
-+//#include <asm/ia64regs.h> 
- #define ia64_get_bsp() ((char *) __getReg(_IA64_REG_AR_BSP)) 
- #else 
- /* gcc */ 
-diff -ruN original/src/postgres/src_backend_utils_adt_ruleutils.c my/src/postgres/src_backend_utils_adt_ruleutils.c 
---- original/src/postgres/src_backend_utils_adt_ruleutils.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_backend_utils_adt_ruleutils.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -23,7 +23,7 @@ 
- #include "postgres.h" 
-  
- #include <ctype.h> 
--#include <unistd.h> 
-+//#include <unistd.h> 
- #include <fcntl.h> 
-  
- #include "access/amapi.h" 
-diff -ruN original/src/postgres/src_backend_utils_error_assert.c my/src/postgres/src_backend_utils_error_assert.c 
---- original/src/postgres/src_backend_utils_error_assert.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_backend_utils_error_assert.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -23,7 +23,7 @@ 
-  */ 
- #include "postgres.h" 
-  
--#include <unistd.h> 
-+//#include <unistd.h> 
- #ifdef HAVE_EXECINFO_H 
- #include <execinfo.h> 
- #endif 
-diff -ruN original/src/postgres/src_backend_utils_error_elog.c my/src/postgres/src_backend_utils_error_elog.c 
---- original/src/postgres/src_backend_utils_error_elog.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_backend_utils_error_elog.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -94,7 +94,7 @@ 
-  
- #include <fcntl.h> 
- #include <time.h> 
--#include <unistd.h> 
-+//#include <unistd.h> 
- #include <signal.h> 
- #include <ctype.h> 
- #ifdef HAVE_SYSLOG 
-@@ -106,11 +106,11 @@ 
-  
- #include "access/transam.h" 
- #include "access/xact.h" 
--#include "libpq/libpq.h" 
-+//#include "libpq/libpq.h" 
- #include "libpq/pqformat.h" 
- #include "mb/pg_wchar.h" 
- #include "miscadmin.h" 
--#include "postmaster/bgworker.h" 
-+//#include "postmaster/bgworker.h" 
- #include "postmaster/postmaster.h" 
- #include "postmaster/syslogger.h" 
- #include "storage/ipc.h" 
-@@ -132,6 +132,7 @@ 
-  
- __thread sigjmp_buf *PG_exception_stack = NULL; 
-  
-+__thread bool		ClientAuthInProgress = false; 
-  
- extern bool redirection_done; 
-  
-@@ -553,8 +554,8 @@ 
- 	 * what we want for NOTICE messages, but not for fatal exits.) This hack 
- 	 * is necessary because of poor design of old-style copy protocol. 
- 	 */ 
--	if (elevel >= FATAL && whereToSendOutput == DestRemote) 
--		pq_endcopyout(true); 
-+	//if (elevel >= FATAL && whereToSendOutput == DestRemote) 
-+	//	pq_endcopyout(true); 
-  
- 	/* Emit the message to the right places */ 
- 	EmitErrorReport(); 
-@@ -1505,8 +1506,8 @@ 
- 	 * to error messages thrown deep inside pgwin32_message_to_UTF16(). 
- 	 */ 
- 	if (!in_error_recursion_trouble() && 
--		CurrentMemoryContext != NULL && 
--		GetMessageEncoding() != GetACPEncoding()) 
-+		CurrentMemoryContext != NULL /*&& 
-+		GetMessageEncoding() != GetACPEncoding()*/) 
- 	{ 
- 		utf16 = pgwin32_message_to_UTF16(line, len, NULL); 
- 		if (utf16) 
-@@ -1675,7 +1676,7 @@ 
- 	fmt = _(fmt); 
-  
- 	va_start(ap, fmt); 
--#ifndef WIN32 
-+#if 1 
- 	/* On Unix, we just fprintf to stderr */ 
- 	vfprintf(stderr, fmt, ap); 
- 	fflush(stderr); 
-@@ -1686,7 +1687,7 @@ 
- 	 * On Win32, we print to stderr if running on a console, or write to 
- 	 * eventlog if running as a service 
- 	 */ 
--	if (pgwin32_is_service())	/* Running as a service */ 
-+	if (false /*pgwin32_is_service()*/)	/* Running as a service */ 
- 	{ 
- 		write_eventlog(ERROR, errbuf, strlen(errbuf)); 
- 	} 
-diff -ruN original/src/postgres/src_backend_utils_fmgr_fmgr.c my/src/postgres/src_backend_utils_fmgr_fmgr.c 
---- original/src/postgres/src_backend_utils_fmgr_fmgr.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_backend_utils_fmgr_fmgr.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -30,7 +30,7 @@ 
- #include "miscadmin.h" 
- #include "nodes/makefuncs.h" 
- #include "nodes/nodeFuncs.h" 
--#include "pgstat.h" 
-+//#include "pgstat.h" 
- #include "utils/acl.h" 
- #include "utils/builtins.h" 
- #include "utils/fmgrtab.h" 
-diff -ruN original/src/postgres/src_backend_utils_init_globals.c my/src/postgres/src_backend_utils_init_globals.c 
---- original/src/postgres/src_backend_utils_init_globals.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_backend_utils_init_globals.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -30,14 +30,13 @@ 
- #include "postgres.h" 
-  
- #include "common/file_perm.h" 
--#include "libpq/libpq-be.h" 
--#include "libpq/pqcomm.h" 
-+//#include "libpq/libpq-be.h" 
-+//#include "libpq/pqcomm.h" 
- #include "miscadmin.h" 
- #include "storage/backendid.h" 
-  
-  
-  
-- 
- __thread volatile sig_atomic_t InterruptPending = false; 
-  
-  
-diff -ruN original/src/postgres/src_backend_utils_mb_mbutils.c my/src/postgres/src_backend_utils_mb_mbutils.c 
---- original/src/postgres/src_backend_utils_mb_mbutils.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_backend_utils_mb_mbutils.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -516,7 +516,7 @@ 
- #ifdef WIN32 
- 	if (!raw_pg_bind_textdomain_codeset(domainname, new_msgenc)) 
- 		/* On failure, the old message encoding remains valid. */ 
--		return GetMessageEncoding(); 
-+		return PG_SQL_ASCII;//GetMessageEncoding(); 
- #endif 
-  
- 	return new_msgenc; 
-@@ -775,7 +775,7 @@ 
- WCHAR * 
- pgwin32_message_to_UTF16(const char *str, int len, int *utf16len) 
- { 
--	int			msgenc = GetMessageEncoding(); 
-+	int			msgenc = PG_SQL_ASCII;//GetMessageEncoding(); 
- 	WCHAR	   *utf16; 
- 	int			dstlen; 
- 	UINT		codepage; 
-@@ -805,14 +805,14 @@ 
- 		 * XXX pg_do_encoding_conversion() requires a transaction.  In the 
- 		 * absence of one, hope for the input to be valid UTF8. 
- 		 */ 
--		if (IsTransactionState()) 
-+		if (false /*IsTransactionState()*/) 
- 		{ 
--			utf8 = (char *) pg_do_encoding_conversion((unsigned char *) str, 
-+			/*utf8 = (char *) pg_do_encoding_conversion((unsigned char *) str, 
- 													  len, 
- 													  msgenc, 
- 													  PG_UTF8); 
- 			if (utf8 != str) 
--				len = strlen(utf8); 
-+				len = strlen(utf8);*/ 
- 		} 
- 		else 
- 			utf8 = (char *) str; 
-diff -ruN original/src/postgres/src_backend_utils_misc_guc.c my/src/postgres/src_backend_utils_misc_guc.c 
---- original/src/postgres/src_backend_utils_misc_guc.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_backend_utils_misc_guc.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -30,7 +30,7 @@ 
- #include <float.h> 
- #include <math.h> 
- #include <limits.h> 
--#include <unistd.h> 
-+//#include <unistd.h> 
- #include <sys/stat.h> 
- #ifdef HAVE_SYSLOG 
- #include <syslog.h> 
-@@ -56,8 +56,8 @@ 
- #include "common/string.h" 
- #include "funcapi.h" 
- #include "jit/jit.h" 
--#include "libpq/auth.h" 
--#include "libpq/libpq.h" 
-+//#include "libpq/auth.h" 
-+//#include "libpq/libpq.h" 
- #include "libpq/pqformat.h" 
- #include "miscadmin.h" 
- #include "optimizer/cost.h" 
-@@ -69,7 +69,7 @@ 
- #include "parser/parse_type.h" 
- #include "parser/parser.h" 
- #include "parser/scansup.h" 
--#include "pgstat.h" 
-+//#include "pgstat.h" 
- #include "postmaster/autovacuum.h" 
- #include "postmaster/bgworker_internals.h" 
- #include "postmaster/bgwriter.h" 
-@@ -84,7 +84,7 @@ 
- #include "replication/walsender.h" 
- #include "storage/bufmgr.h" 
- #include "storage/dsm_impl.h" 
--#include "storage/fd.h" 
-+//#include "storage/fd.h" 
- #include "storage/large_object.h" 
- #include "storage/pg_shmem.h" 
- #include "storage/predicate.h" 
-@@ -1359,7 +1359,7 @@ 
- 	/* 
- 	 * Open file 
- 	 */ 
--	fp = AllocateFile(CONFIG_EXEC_PARAMS_NEW, "w"); 
-+	fp = 0;//AllocateFile(CONFIG_EXEC_PARAMS_NEW, "w"); 
- 	if (!fp) 
- 	{ 
- 		ereport(elevel, 
-@@ -1374,7 +1374,7 @@ 
- 		write_one_nondefault_variable(fp, guc_variables[i]); 
- 	} 
-  
--	if (FreeFile(fp)) 
-+	if (false/*FreeFile(fp)*/) 
- 	{ 
- 		ereport(elevel, 
- 				(errcode_for_file_access(), 
-@@ -1448,7 +1448,7 @@ 
- 	/* 
- 	 * Open file 
- 	 */ 
--	fp = AllocateFile(CONFIG_EXEC_PARAMS, "r"); 
-+	fp = 0;//AllocateFile(CONFIG_EXEC_PARAMS, "r"); 
- 	if (!fp) 
- 	{ 
- 		/* File not found is fine */ 
-@@ -1492,7 +1492,7 @@ 
- 		free(varsourcefile); 
- 	} 
-  
--	FreeFile(fp); 
-+	//FreeFile(fp); 
- } 
- #endif							/* EXEC_BACKEND */ 
-  
-diff -ruN original/src/postgres/src_common_encnames.c my/src/postgres/src_common_encnames.c 
---- original/src/postgres/src_common_encnames.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_common_encnames.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -19,7 +19,7 @@ 
- #include "c.h" 
-  
- #include <ctype.h> 
--#include <unistd.h> 
-+//#include <unistd.h> 
-  
- #include "mb/pg_wchar.h" 
-  
-diff -ruN original/src/postgres/src_common_psprintf.c my/src/postgres/src_common_psprintf.c 
---- original/src/postgres/src_common_psprintf.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_common_psprintf.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -29,7 +29,7 @@ 
-  
- #else 
-  
--#include "postgres_fe.h" 
-+//#include "postgres_fe.h" 
-  
- /* It's possible we could use a different value for this in frontend code */ 
- #define MaxAllocSize	((Size) 0x3fffffff) /* 1 gigabyte - 1 */ 
-diff -ruN original/src/postgres/src_common_string.c my/src/postgres/src_common_string.c 
---- original/src/postgres/src_common_string.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_common_string.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -24,7 +24,7 @@ 
- #ifndef FRONTEND 
- #include "postgres.h" 
- #else 
--#include "postgres_fe.h" 
-+//#include "postgres_fe.h" 
- #endif 
-  
- #include "common/string.h" 
-diff -ruN original/src/postgres/src_common_stringinfo.c my/src/postgres/src_common_stringinfo.c 
---- original/src/postgres/src_common_stringinfo.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_common_stringinfo.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -36,7 +36,7 @@ 
-  
- #else 
-  
--#include "postgres_fe.h" 
-+//#include "postgres_fe.h" 
-  
- /* It's possible we could use a different value for this in frontend code */ 
- #define MaxAllocSize	((Size) 0x3fffffff) /* 1 gigabyte - 1 */ 
-diff -ruN original/src/postgres/src_port_pg_bitutils.c my/src/postgres/src_port_pg_bitutils.c 
---- original/src/postgres/src_port_pg_bitutils.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_port_pg_bitutils.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -1,23 +1,9 @@ 
--/*-------------------------------------------------------------------- 
-- * Symbols referenced in this file: 
-- * - pg_popcount64 
-- * - pg_popcount64_choose 
-- * - pg_popcount32 
-- * - pg_popcount32_choose 
-- * - pg_popcount_available 
-- * - pg_popcount32_asm 
-- * - pg_popcount64_asm 
-- * - pg_popcount32_slow 
-- * - pg_popcount64_slow 
-- *-------------------------------------------------------------------- 
-- */ 
-- 
- /*------------------------------------------------------------------------- 
-  * 
-  * pg_bitutils.c 
-  *	  Miscellaneous functions for bit-wise operations. 
-  * 
-- * Copyright (c) 2019-2020, PostgreSQL Global Development Group 
-+ * Copyright (c) 2019-2021, PostgreSQL Global Development Group 
-  * 
-  * IDENTIFICATION 
-  *	  src/port/pg_bitutils.c 
-@@ -45,7 +31,24 @@ 
-  * HAVE__BUILTIN_CLZ is defined, but we provide it anyway, so that 
-  * extensions possibly compiled with a different compiler can use it. 
-  */ 
-- 
-+const uint8 pg_leftmost_one_pos[256] = { 
-+	0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 
-+	4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-+	5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
-+	5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
-+	6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 
-+	6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 
-+	6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 
-+	6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 
-+	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
-+	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
-+	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
-+	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
-+	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
-+	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
-+	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
-+	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7 
-+}; 
-  
- /* 
-  * Array giving the position of the right-most set bit for each possible 
-@@ -56,7 +59,24 @@ 
-  * HAVE__BUILTIN_CTZ is defined, but we provide it anyway, so that 
-  * extensions possibly compiled with a different compiler can use it. 
-  */ 
-- 
-+const uint8 pg_rightmost_one_pos[256] = { 
-+	0, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	5, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	6, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	5, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	7, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	5, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	6, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	5, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 
-+	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0 
-+}; 
-  
- /* 
-  * Array giving the number of 1-bits in each possible byte value. 
-@@ -64,39 +84,40 @@ 
-  * Note: we export this for use by functions in which explicit use 
-  * of the popcount functions seems unlikely to be a win. 
-  */ 
-- 
-- 
--/* 
-- * On x86_64, we can use the hardware popcount instruction, but only if 
-- * we can verify that the CPU supports it via the cpuid instruction. 
-- * 
-- * Otherwise, we fall back to __builtin_popcount if the compiler has that, 
-- * or a hand-rolled implementation if not. 
-- */ 
--#ifdef HAVE_X86_64_POPCNTQ 
--#if defined(HAVE__GET_CPUID) || defined(HAVE__CPUID) 
--#define USE_POPCNT_ASM 1 
--#endif 
--#endif 
-+const uint8 pg_number_of_ones[256] = { 
-+	0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 
-+	1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 
-+	1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 
-+	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
-+	1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 
-+	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
-+	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
-+	3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 
-+	1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 
-+	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
-+	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
-+	3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 
-+	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
-+	3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 
-+	3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 
-+	4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8 
-+}; 
-  
- static int	pg_popcount32_slow(uint32 word); 
- static int	pg_popcount64_slow(uint64 word); 
-  
--#ifdef USE_POPCNT_ASM 
-+#ifdef TRY_POPCNT_FAST 
- static bool pg_popcount_available(void); 
- static int	pg_popcount32_choose(uint32 word); 
- static int	pg_popcount64_choose(uint64 word); 
--static int	pg_popcount32_asm(uint32 word); 
--static int	pg_popcount64_asm(uint64 word); 
-+static int	pg_popcount32_fast(uint32 word); 
-+static int	pg_popcount64_fast(uint64 word); 
-  
- int			(*pg_popcount32) (uint32 word) = pg_popcount32_choose; 
- int			(*pg_popcount64) (uint64 word) = pg_popcount64_choose; 
--#else 
--int			(*pg_popcount32) (uint32 word) = pg_popcount32_slow; 
--int			(*pg_popcount64) (uint64 word) = pg_popcount64_slow; 
--#endif							/* USE_POPCNT_ASM */ 
-+#endif							/* TRY_POPCNT_FAST */ 
-  
--#ifdef USE_POPCNT_ASM 
-+#ifdef TRY_POPCNT_FAST 
-  
- /* 
-  * Return true if CPUID indicates that the POPCNT instruction is available. 
-@@ -128,8 +149,8 @@ 
- { 
- 	if (pg_popcount_available()) 
- 	{ 
--		pg_popcount32 = pg_popcount32_asm; 
--		pg_popcount64 = pg_popcount64_asm; 
-+		pg_popcount32 = pg_popcount32_fast; 
-+		pg_popcount64 = pg_popcount64_fast; 
- 	} 
- 	else 
- 	{ 
-@@ -145,8 +166,8 @@ 
- { 
- 	if (pg_popcount_available()) 
- 	{ 
--		pg_popcount32 = pg_popcount32_asm; 
--		pg_popcount64 = pg_popcount64_asm; 
-+		pg_popcount32 = pg_popcount32_fast; 
-+		pg_popcount64 = pg_popcount64_fast; 
- 	} 
- 	else 
- 	{ 
-@@ -158,32 +179,40 @@ 
- } 
-  
- /* 
-- * pg_popcount32_asm 
-+ * pg_popcount32_fast 
-  *		Return the number of 1 bits set in word 
-  */ 
- static int 
--pg_popcount32_asm(uint32 word) 
-+pg_popcount32_fast(uint32 word) 
- { 
-+#ifdef _MSC_VER 
-+	return __popcnt(word); 
-+#else 
- 	uint32		res; 
-  
- __asm__ __volatile__(" popcntl %1,%0\n":"=q"(res):"rm"(word):"cc"); 
- 	return (int) res; 
-+#endif 
- } 
-  
- /* 
-- * pg_popcount64_asm 
-+ * pg_popcount64_fast 
-  *		Return the number of 1 bits set in word 
-  */ 
- static int 
--pg_popcount64_asm(uint64 word) 
-+pg_popcount64_fast(uint64 word) 
- { 
-+#ifdef _MSC_VER 
-+	return __popcnt64(word); 
-+#else 
- 	uint64		res; 
-  
- __asm__ __volatile__(" popcntq %1,%0\n":"=q"(res):"rm"(word):"cc"); 
- 	return (int) res; 
-+#endif 
- } 
-  
--#endif							/* USE_POPCNT_ASM */ 
-+#endif							/* TRY_POPCNT_FAST */ 
-  
-  
- /* 
-@@ -236,11 +265,71 @@ 
- #endif							/* HAVE__BUILTIN_POPCOUNT */ 
- } 
-  
-+#ifndef TRY_POPCNT_FAST 
-+ 
-+/* 
-+ * When the POPCNT instruction is not available, there's no point in using 
-+ * function pointers to vary the implementation between the fast and slow 
-+ * method.  We instead just make these actual external functions when 
-+ * TRY_POPCNT_FAST is not defined.  The compiler should be able to inline 
-+ * the slow versions here. 
-+ */ 
-+int 
-+pg_popcount32(uint32 word) 
-+{ 
-+	return pg_popcount32_slow(word); 
-+} 
-+ 
-+int 
-+pg_popcount64(uint64 word) 
-+{ 
-+	return pg_popcount64_slow(word); 
-+} 
-+ 
-+#endif							/* !TRY_POPCNT_FAST */ 
-  
- /* 
-  * pg_popcount 
-  *		Returns the number of 1-bits in buf 
-  */ 
-+uint64 
-+pg_popcount(const char *buf, int bytes) 
-+{ 
-+	uint64		popcnt = 0; 
-+ 
- #if SIZEOF_VOID_P >= 8 
-+	/* Process in 64-bit chunks if the buffer is aligned. */ 
-+	if (buf == (const char *) TYPEALIGN(8, buf)) 
-+	{ 
-+		const uint64 *words = (const uint64 *) buf; 
-+ 
-+		while (bytes >= 8) 
-+		{ 
-+			popcnt += pg_popcount64(*words++); 
-+			bytes -= 8; 
-+		} 
-+ 
-+		buf = (const char *) words; 
-+	} 
- #else 
-+	/* Process in 32-bit chunks if the buffer is aligned. */ 
-+	if (buf == (const char *) TYPEALIGN(4, buf)) 
-+	{ 
-+		const uint32 *words = (const uint32 *) buf; 
-+ 
-+		while (bytes >= 4) 
-+		{ 
-+			popcnt += pg_popcount32(*words++); 
-+			bytes -= 4; 
-+		} 
-+ 
-+		buf = (const char *) words; 
-+	} 
- #endif 
-+ 
-+	/* Process any remaining bytes */ 
-+	while (bytes--) 
-+		popcnt += pg_number_of_ones[(unsigned char) *buf++]; 
-+ 
-+	return popcnt; 
-+} 
-\ No newline at end of file 
-diff -ruN original/src/postgres/src_port_pgsleep.c my/src/postgres/src_port_pgsleep.c 
---- original/src/postgres/src_port_pgsleep.c	2021-11-14 19:42:26.000000000 +0300 
-+++ contrib/src/postgres/src_port_pgsleep.c	2021-11-14 20:05:00.000000000 +0300 
-@@ -18,8 +18,8 @@ 
-  */ 
- #include "c.h" 
-  
--#include <unistd.h> 
--#include <sys/time.h> 
-+//#include <unistd.h> 
-+//#include <sys/time.h> 
- #ifdef HAVE_SYS_SELECT_H 
- #include <sys/select.h> 
- #endif 
-@@ -28,7 +28,8 @@ 
-  * In a Windows backend, we don't use this implementation, but rather 
-  * the signal-aware version in src/backend/port/win32/signal.c. 
-  */ 
--#if defined(FRONTEND) || !defined(WIN32) 
-+#if 1 
-+//defined(FRONTEND) || !defined(WIN32) 
-  
- /* 
-  * pg_usleep --- delay the specified number of microseconds. 
+diff -ruN original/pg_query.h my/pg_query.h
+--- original/pg_query.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/pg_query.h	2021-11-14 20:05:00.000000000 +0300
+@@ -57,29 +57,29 @@
+   PgQueryError* error;
+ } PgQueryPlpgsqlParseResult;
  
+-typedef struct {
++/*typedef struct {
+   uint64_t fingerprint;
+   char* fingerprint_str;
+   char* stderr_buffer;
+   PgQueryError* error;
+-} PgQueryFingerprintResult;
++} PgQueryFingerprintResult;*/
+ 
+-typedef struct {
++/*typedef struct {
+   char* normalized_query;
+   PgQueryError* error;
+-} PgQueryNormalizeResult;
++} PgQueryNormalizeResult;*/
+ 
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+ 
+-PgQueryNormalizeResult pg_query_normalize(const char* input);
++//PgQueryNormalizeResult pg_query_normalize(const char* input);
+ PgQueryScanResult pg_query_scan(const char* input);
+ PgQueryParseResult pg_query_parse(const char* input);
+ PgQueryProtobufParseResult pg_query_parse_protobuf(const char* input);
+-PgQueryPlpgsqlParseResult pg_query_parse_plpgsql(const char* input);
++//PgQueryPlpgsqlParseResult pg_query_parse_plpgsql(const char* input);
+ 
+-PgQueryFingerprintResult pg_query_fingerprint(const char* input);
++//PgQueryFingerprintResult pg_query_fingerprint(const char* input);
+ 
+ // Use pg_query_split_with_scanner when you need to split statements that may
+ // contain parse errors, otherwise pg_query_split_with_parser is recommended
+@@ -93,14 +93,14 @@
+ 
+ PgQueryDeparseResult pg_query_deparse_protobuf(PgQueryProtobuf parse_tree);
+ 
+-void pg_query_free_normalize_result(PgQueryNormalizeResult result);
++//void pg_query_free_normalize_result(PgQueryNormalizeResult result);
+ void pg_query_free_scan_result(PgQueryScanResult result);
+ void pg_query_free_parse_result(PgQueryParseResult result);
+ void pg_query_free_split_result(PgQuerySplitResult result);
+ void pg_query_free_deparse_result(PgQueryDeparseResult result);
+ void pg_query_free_protobuf_parse_result(PgQueryProtobufParseResult result);
+-void pg_query_free_plpgsql_parse_result(PgQueryPlpgsqlParseResult result);
+-void pg_query_free_fingerprint_result(PgQueryFingerprintResult result);
++//void pg_query_free_plpgsql_parse_result(PgQueryPlpgsqlParseResult result);
++//void pg_query_free_fingerprint_result(PgQueryFingerprintResult result);
+ 
+ // Optional, cleans up the top-level memory context (automatically done for threads that exit)
+ void pg_query_exit(void);
+diff -ruN original/src/pg_query.c my/src/pg_query.c
+--- original/src/pg_query.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/pg_query.c	2021-11-14 20:05:00.000000000 +0300
+@@ -5,15 +5,19 @@
+ #include <utils/memutils.h>
+ #include <utils/memdebug.h>
+ 
++#ifndef WIN32
+ #include <pthread.h>
++#endif
+ #include <signal.h>
+ 
+ const char* progname = "pg_query";
+ 
+-__thread sig_atomic_t pg_query_initialized = 0;
++__thread volatile sig_atomic_t pg_query_initialized = 0;
+ 
++#ifndef WIN32
+ static pthread_key_t pg_query_thread_exit_key;
+ static void pg_query_thread_exit(void *key);
++#endif
+ 
+ void pg_query_init(void)
+ {
+@@ -23,8 +27,10 @@
+ 	MemoryContextInit();
+ 	SetDatabaseEncoding(PG_UTF8);
+ 
++#ifndef WIN32
+ 	pthread_key_create(&pg_query_thread_exit_key, pg_query_thread_exit);
+ 	pthread_setspecific(pg_query_thread_exit_key, TopMemoryContext);
++#endif
+ }
+ 
+ void pg_query_free_top_memory_context(MemoryContext context)
+@@ -55,11 +61,13 @@
+ 	ErrorContext = NULL;
+ }
+ 
++#ifndef WIN32
+ static void pg_query_thread_exit(void *key)
+ {
+ 	MemoryContext context = (MemoryContext) key;
+ 	pg_query_free_top_memory_context(context);
+ }
++#endif
+ 
+ void pg_query_exit(void)
+ {
+diff -ruN original/src/pg_query_parse.c my/src/pg_query_parse.c
+--- original/src/pg_query_parse.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/pg_query_parse.c	2021-11-14 20:05:00.000000000 +0300
+@@ -6,7 +6,7 @@
+ #include "parser/scanner.h"
+ #include "parser/scansup.h"
+ 
+-#include <unistd.h>
++//#include <unistd.h>
+ #include <fcntl.h>
+ 
+ PgQueryInternalParsetreeAndError pg_query_raw_parse(const char* input)
+@@ -111,8 +111,10 @@
+ {
+ 	MemoryContext ctx = NULL;
+ 	PgQueryInternalParsetreeAndError parsetree_and_error;
+-	PgQueryProtobufParseResult result = {};
++	PgQueryProtobufParseResult result;
++	memset(&result, 0, sizeof(result));
+ 
++
+ 	ctx = pg_query_enter_memory_context();
+ 
+ 	parsetree_and_error = pg_query_raw_parse(input);
+diff -ruN original/src/postgres/include/access/xlog.h my/src/postgres/include/access/xlog.h
+--- original/src/postgres/include/access/xlog.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/access/xlog.h	2021-11-14 20:05:00.000000000 +0300
+@@ -18,7 +18,7 @@
+ #include "datatype/timestamp.h"
+ #include "lib/stringinfo.h"
+ #include "nodes/pg_list.h"
+-#include "storage/fd.h"
++//#include "storage/fd.h"
+ 
+ 
+ /* Sync methods */
+diff -ruN original/src/postgres/include/c.h my/src/postgres/include/c.h
+--- original/src/postgres/include/c.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/c.h	2021-11-14 20:05:00.000000000 +0300
+@@ -62,7 +62,7 @@
+ #include <stddef.h>
+ #include <stdarg.h>
+ #ifdef HAVE_STRINGS_H
+-#include <strings.h>
++//#include <strings.h>
+ #endif
+ #include <stdint.h>
+ #include <sys/types.h>
+@@ -135,8 +135,10 @@
+ 
+ /* GCC and XLC support format attributes */
+ #if defined(__GNUC__) || defined(__IBMC__)
+-#define pg_attribute_format_arg(a) __attribute__((format_arg(a)))
+-#define pg_attribute_printf(f,a) __attribute__((format(PG_PRINTF_ATTRIBUTE, f, a)))
++#define pg_attribute_format_arg(a) 
++// __attribute__((format_arg(a)))
++#define pg_attribute_printf(f,a)
++// __attribute__((format(PG_PRINTF_ATTRIBUTE, f, a)))
+ #else
+ #define pg_attribute_format_arg(a)
+ #define pg_attribute_printf(f,a)
+diff -ruN original/src/postgres/include/getaddrinfo.h my/src/postgres/include/getaddrinfo.h
+--- original/src/postgres/include/getaddrinfo.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/getaddrinfo.h	2021-11-14 20:05:00.000000000 +0300
+@@ -22,8 +22,8 @@
+ #ifndef GETADDRINFO_H
+ #define GETADDRINFO_H
+ 
+-#include <sys/socket.h>
+-#include <netdb.h>
++//#include <sys/socket.h>
++//#include <netdb.h>
+ 
+ 
+ /* Various macros that ought to be in <netdb.h>, but might not be */
+diff -ruN original/src/postgres/include/libpq/libpq-be.h my/src/postgres/include/libpq/libpq-be.h
+--- original/src/postgres/include/libpq/libpq-be.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/libpq/libpq-be.h	2021-11-14 20:05:00.000000000 +0300
+@@ -18,10 +18,10 @@
+ #ifndef LIBPQ_BE_H
+ #define LIBPQ_BE_H
+ 
+-#include <sys/time.h>
++//#include <sys/time.h>
+ #ifdef USE_OPENSSL
+-#include <openssl/ssl.h>
+-#include <openssl/err.h>
++//#include <openssl/ssl.h>
++//#include <openssl/err.h>
+ #endif
+ #ifdef HAVE_NETINET_TCP_H
+ #include <netinet/tcp.h>
+diff -ruN original/src/postgres/include/libpq/libpq.h my/src/postgres/include/libpq/libpq.h
+--- original/src/postgres/include/libpq/libpq.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/libpq/libpq.h	2021-11-14 20:05:00.000000000 +0300
+@@ -14,7 +14,7 @@
+ #ifndef LIBPQ_H
+ #define LIBPQ_H
+ 
+-#include <netinet/in.h>
++//#include <netinet/in.h>
+ 
+ #include "lib/stringinfo.h"
+ #include "libpq/libpq-be.h"
+diff -ruN original/src/postgres/include/libpq/pqcomm.h my/src/postgres/include/libpq/pqcomm.h
+--- original/src/postgres/include/libpq/pqcomm.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/libpq/pqcomm.h	2021-11-14 20:05:00.000000000 +0300
+@@ -16,12 +16,12 @@
+ #ifndef PQCOMM_H
+ #define PQCOMM_H
+ 
+-#include <sys/socket.h>
+-#include <netdb.h>
++//#include <sys/socket.h>
++//#include <netdb.h>
+ #ifdef HAVE_SYS_UN_H
+ #include <sys/un.h>
+ #endif
+-#include <netinet/in.h>
++//#include <netinet/in.h>
+ 
+ #ifdef HAVE_STRUCT_SOCKADDR_STORAGE
+ 
+diff -ruN original/src/postgres/include/miscadmin.h my/src/postgres/include/miscadmin.h
+--- original/src/postgres/include/miscadmin.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/miscadmin.h	2021-11-14 20:05:00.000000000 +0300
+@@ -94,7 +94,7 @@
+ /* in tcop/postgres.c */
+ extern void ProcessInterrupts(void);
+ 
+-#ifndef WIN32
++#if 1
+ 
+ #define CHECK_FOR_INTERRUPTS() \
+ do { \
+diff -ruN original/src/postgres/include/nodes/execnodes.h my/src/postgres/include/nodes/execnodes.h
+--- original/src/postgres/include/nodes/execnodes.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/nodes/execnodes.h	2021-11-14 20:05:00.000000000 +0300
+@@ -26,7 +26,7 @@
+ #include "utils/hsearch.h"
+ #include "utils/queryenvironment.h"
+ #include "utils/reltrigger.h"
+-#include "utils/sharedtuplestore.h"
++//#include "utils/sharedtuplestore.h"
+ #include "utils/snapshot.h"
+ #include "utils/sortsupport.h"
+ #include "utils/tuplesort.h"
+diff -ruN original/src/postgres/include/pg_getopt.h my/src/postgres/include/pg_getopt.h
+--- original/src/postgres/include/pg_getopt.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/pg_getopt.h	2021-11-14 20:05:00.000000000 +0300
+@@ -19,7 +19,7 @@
+ #define PG_GETOPT_H
+ 
+ /* POSIX says getopt() is provided by unistd.h */
+-#include <unistd.h>
++//#include <unistd.h>
+ 
+ /* rely on the system's getopt.h if present */
+ #ifdef HAVE_GETOPT_H
+diff -ruN original/src/postgres/include/port/atomics.h my/src/postgres/include/port/atomics.h
+--- original/src/postgres/include/port/atomics.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/port/atomics.h	2021-11-14 20:05:00.000000000 +0300
+@@ -65,15 +65,15 @@
+  */
+ #if defined(__arm__) || defined(__arm) || \
+ 	defined(__aarch64__) || defined(__aarch64)
+-#include "port/atomics/arch-arm.h"
++//#include "port/atomics/arch-arm.h"
+ #elif defined(__i386__) || defined(__i386) || defined(__x86_64__)
+-#include "port/atomics/arch-x86.h"
++//#include "port/atomics/arch-x86.h"
+ #elif defined(__ia64__) || defined(__ia64)
+-#include "port/atomics/arch-ia64.h"
++//#include "port/atomics/arch-ia64.h"
+ #elif defined(__ppc__) || defined(__powerpc__) || defined(__ppc64__) || defined(__powerpc64__)
+-#include "port/atomics/arch-ppc.h"
++//#include "port/atomics/arch-ppc.h"
+ #elif defined(__hppa) || defined(__hppa__)
+-#include "port/atomics/arch-hppa.h"
++//#include "port/atomics/arch-hppa.h"
+ #endif
+ 
+ /*
+@@ -94,11 +94,11 @@
+ #if (defined(__GNUC__) || defined(__INTEL_COMPILER)) && !(defined(__IBMC__) || defined(__IBMCPP__))
+ #include "port/atomics/generic-gcc.h"
+ #elif defined(_MSC_VER)
+-#include "port/atomics/generic-msvc.h"
++//#include "port/atomics/generic-msvc.h"
+ #elif defined(__hpux) && defined(__ia64) && !defined(__GNUC__)
+-#include "port/atomics/generic-acc.h"
++//#include "port/atomics/generic-acc.h"
+ #elif defined(__SUNPRO_C) && !defined(__GNUC__)
+-#include "port/atomics/generic-sunpro.h"
++//#include "port/atomics/generic-sunpro.h"
+ #else
+ /*
+  * Unsupported compiler, we'll likely use slower fallbacks... At least
+diff -ruN original/src/postgres/include/port/pg_bitutils.h my/src/postgres/include/port/pg_bitutils.h
+--- original/src/postgres/include/port/pg_bitutils.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/port/pg_bitutils.h	2021-11-14 20:05:00.000000000 +0300
+@@ -207,10 +207,18 @@
+ 		return pg_leftmost_one_pos64(num - 1) + 1;
+ }
+ 
+-/* Count the number of one-bits in a uint32 or uint64 */
++#ifdef TRY_POPCNT_FAST
++/* Attempt to use the POPCNT instruction, but perform a runtime check first */
+ extern int	(*pg_popcount32) (uint32 word);
+ extern int	(*pg_popcount64) (uint64 word);
+ 
++#else
++/* Use a portable implementation -- no need for a function pointer. */
++extern int	pg_popcount32(uint32 word);
++extern int	pg_popcount64(uint64 word);
++
++#endif	
++
+ /* Count the number of one-bits in a byte array */
+ extern uint64 pg_popcount(const char *buf, int bytes);
+ 
+diff -ruN original/src/postgres/include/port.h my/src/postgres/include/port.h
+--- original/src/postgres/include/port.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/port.h	2021-11-14 20:05:00.000000000 +0300
+@@ -14,8 +14,8 @@
+ #define PG_PORT_H
+ 
+ #include <ctype.h>
+-#include <netdb.h>
+-#include <pwd.h>
++//#include <netdb.h>
++//#include <pwd.h>
+ 
+ /*
+  * Windows has enough specialized port stuff that we push most of it off
+@@ -23,7 +23,7 @@
+  * Note: Some CYGWIN includes might #define WIN32.
+  */
+ #if defined(WIN32) && !defined(__CYGWIN__)
+-#include "port/win32_port.h"
++//#include "port/win32_port.h"
+ #endif
+ 
+ /* socket has a different definition on WIN32 */
+@@ -32,6 +32,7 @@
+ 
+ #define PGINVALID_SOCKET (-1)
+ #else
++#include <winsock2.h>
+ typedef SOCKET pgsocket;
+ 
+ #define PGINVALID_SOCKET INVALID_SOCKET
+@@ -462,15 +463,15 @@
+ 
+ /* thread.h */
+ #ifndef WIN32
+-extern int	pqGetpwuid(uid_t uid, struct passwd *resultbuf, char *buffer,
+-					   size_t buflen, struct passwd **result);
++//extern int	pqGetpwuid(uid_t uid, struct passwd *resultbuf, char *buffer,
++//					   size_t buflen, struct passwd **result);
+ #endif
+ 
+-extern int	pqGethostbyname(const char *name,
++/*extern int	pqGethostbyname(const char *name,
+ 							struct hostent *resultbuf,
+ 							char *buffer, size_t buflen,
+ 							struct hostent **result,
+-							int *herrno);
++							int *herrno);*/
+ 
+ extern void pg_qsort(void *base, size_t nel, size_t elsize,
+ 					 int (*cmp) (const void *, const void *));
+diff -ruN original/src/postgres/include/storage/pmsignal.h my/src/postgres/include/storage/pmsignal.h
+--- original/src/postgres/include/storage/pmsignal.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/storage/pmsignal.h	2021-11-14 20:05:00.000000000 +0300
+@@ -21,7 +21,7 @@
+ #endif
+ 
+ #ifdef HAVE_SYS_PROCCTL_H
+-#include "sys/procctl.h"
++//#include "sys/procctl.h"
+ #endif
+ 
+ /*
+diff -ruN original/src/postgres/include/storage/s_lock.h my/src/postgres/include/storage/s_lock.h
+--- original/src/postgres/include/storage/s_lock.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/storage/s_lock.h	2021-11-14 20:05:00.000000000 +0300
+@@ -676,7 +676,7 @@
+ #if defined(__m32r__) && defined(HAVE_SYS_TAS_H)	/* Renesas' M32R */
+ #define HAS_TEST_AND_SET
+ 
+-#include <sys/tas.h>
++//#include <sys/tas.h>
+ 
+ typedef int slock_t;
+ 
+@@ -837,7 +837,7 @@
+ 
+ typedef unsigned int slock_t;
+ 
+-#include <ia64/sys/inline.h>
++//#include <ia64/sys/inline.h>
+ #define TAS(lock) _Asm_xchg(_SZ_W, lock, 1, _LDHINT_NONE)
+ /* On IA64, it's a win to use a non-locking test before the xchg proper */
+ #define TAS_SPIN(lock)	(*(lock) ? 1 : TAS(lock))
+diff -ruN original/src/postgres/include/utils/elog.h my/src/postgres/include/utils/elog.h
+--- original/src/postgres/include/utils/elog.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/utils/elog.h	2021-11-14 20:05:00.000000000 +0300
+@@ -40,6 +40,9 @@
+ #define WARNING		19			/* Warnings.  NOTICE is for expected messages
+ 								 * like implicit sequence creation by SERIAL.
+ 								 * WARNING is for unexpected messages. */
++#ifdef ERROR
++#undef ERROR
++#endif
+ #define ERROR		20			/* user error - abort transaction; return to
+ 								 * known state */
+ /* Save ERROR value in PGERROR so it can be restored when Win32 includes
+diff -ruN original/src/postgres/include/utils/pg_locale.h my/src/postgres/include/utils/pg_locale.h
+--- original/src/postgres/include/utils/pg_locale.h	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/include/utils/pg_locale.h	2021-11-14 20:05:00.000000000 +0300
+@@ -16,7 +16,7 @@
+ #include <xlocale.h>
+ #endif
+ #ifdef USE_ICU
+-#include <unicode/ucol.h>
++//#include <unicode/ucol.h>
+ #endif
+ 
+ #include "utils/guc.h"
+diff -ruN original/src/postgres/src_backend_nodes_copyfuncs.c my/src/postgres/src_backend_nodes_copyfuncs.c
+--- original/src/postgres/src_backend_nodes_copyfuncs.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_backend_nodes_copyfuncs.c	2021-11-14 20:05:00.000000000 +0300
+@@ -6011,3 +6011,5 @@
+ 
+ 	return retval;
+ }
++
++PGDLLIMPORT Node *newNodeMacroHolder;
+diff -ruN original/src/postgres/src_backend_parser_scan.c my/src/postgres/src_backend_parser_scan.c
+--- original/src/postgres/src_backend_parser_scan.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_backend_parser_scan.c	2021-11-14 20:05:00.000000000 +0300
+@@ -79,7 +79,7 @@
+ #include "postgres.h"
+ 
+ #include <ctype.h>
+-#include <unistd.h>
++//#include <unistd.h>
+ 
+ #include "common/string.h"
+ #include "parser/gramparse.h"
+@@ -4603,7 +4603,7 @@
+  * down here because we want the user's section 1 to have been scanned first.
+  * The user has a chance to override it with an option.
+  */
+-#include <unistd.h>
++//#include <unistd.h>
+ #endif
+ 
+ #ifndef YY_EXTRA_TYPE
+diff -ruN original/src/postgres/src_backend_storage_ipc_ipc.c my/src/postgres/src_backend_storage_ipc_ipc.c
+--- original/src/postgres/src_backend_storage_ipc_ipc.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_backend_storage_ipc_ipc.c	2021-11-14 20:05:00.000000000 +0300
+@@ -27,7 +27,7 @@
+ #include "postgres.h"
+ 
+ #include <signal.h>
+-#include <unistd.h>
++//#include <unistd.h>
+ #include <sys/stat.h>
+ 
+ #include "miscadmin.h"
+diff -ruN original/src/postgres/src_backend_storage_lmgr_s_lock.c my/src/postgres/src_backend_storage_lmgr_s_lock.c
+--- original/src/postgres/src_backend_storage_lmgr_s_lock.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_backend_storage_lmgr_s_lock.c	2021-11-14 20:05:00.000000000 +0300
+@@ -58,7 +58,7 @@
+ #include "postgres.h"
+ 
+ #include <time.h>
+-#include <unistd.h>
++//#include <unistd.h>
+ 
+ #include "port/atomics.h"
+ #include "storage/s_lock.h"
+diff -ruN original/src/postgres/src_backend_tcop_postgres.c my/src/postgres/src_backend_tcop_postgres.c
+--- original/src/postgres/src_backend_tcop_postgres.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_backend_tcop_postgres.c	2021-11-14 20:05:00.000000000 +0300
+@@ -35,18 +35,18 @@
+ #include <fcntl.h>
+ #include <limits.h>
+ #include <signal.h>
+-#include <unistd.h>
+-#include <sys/socket.h>
++//#include <unistd.h>
++//#include <sys/socket.h>
+ #ifdef HAVE_SYS_SELECT_H
+ #include <sys/select.h>
+ #endif
+ #ifdef HAVE_SYS_RESOURCE_H
+-#include <sys/time.h>
++//#include <sys/time.h>
+ #include <sys/resource.h>
+ #endif
+ 
+ #ifndef HAVE_GETRUSAGE
+-#include "rusagestub.h"
++//#include "rusagestub.h"
+ #endif
+ 
+ #include "access/parallel.h"
+@@ -57,7 +57,7 @@
+ #include "commands/prepare.h"
+ #include "executor/spi.h"
+ #include "jit/jit.h"
+-#include "libpq/libpq.h"
++//#include "libpq/libpq.h"
+ #include "libpq/pqformat.h"
+ #include "libpq/pqsignal.h"
+ #include "mb/pg_wchar.h"
+@@ -69,7 +69,7 @@
+ #include "parser/parser.h"
+ #include "pg_getopt.h"
+ #include "pg_trace.h"
+-#include "pgstat.h"
++//#include "pgstat.h"
+ #include "postmaster/autovacuum.h"
+ #include "postmaster/interrupt.h"
+ #include "postmaster/postmaster.h"
+@@ -538,11 +538,11 @@
+ 
+ #if defined(__hpux) && !defined(__GNUC__) && !defined(__INTEL_COMPILER)
+ /* Assume it's HP-UX native compiler */
+-#include <ia64/sys/inline.h>
++//#include <ia64/sys/inline.h>
+ #define ia64_get_bsp() ((char *) (_Asm_mov_from_ar(_AREG_BSP, _NO_FENCE)))
+ #elif defined(__INTEL_COMPILER)
+ /* icc */
+-#include <asm/ia64regs.h>
++//#include <asm/ia64regs.h>
+ #define ia64_get_bsp() ((char *) __getReg(_IA64_REG_AR_BSP))
+ #else
+ /* gcc */
+diff -ruN original/src/postgres/src_backend_utils_adt_ruleutils.c my/src/postgres/src_backend_utils_adt_ruleutils.c
+--- original/src/postgres/src_backend_utils_adt_ruleutils.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_backend_utils_adt_ruleutils.c	2021-11-14 20:05:00.000000000 +0300
+@@ -23,7 +23,7 @@
+ #include "postgres.h"
+ 
+ #include <ctype.h>
+-#include <unistd.h>
++//#include <unistd.h>
+ #include <fcntl.h>
+ 
+ #include "access/amapi.h"
+diff -ruN original/src/postgres/src_backend_utils_error_assert.c my/src/postgres/src_backend_utils_error_assert.c
+--- original/src/postgres/src_backend_utils_error_assert.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_backend_utils_error_assert.c	2021-11-14 20:05:00.000000000 +0300
+@@ -23,7 +23,7 @@
+  */
+ #include "postgres.h"
+ 
+-#include <unistd.h>
++//#include <unistd.h>
+ #ifdef HAVE_EXECINFO_H
+ #include <execinfo.h>
+ #endif
+diff -ruN original/src/postgres/src_backend_utils_error_elog.c my/src/postgres/src_backend_utils_error_elog.c
+--- original/src/postgres/src_backend_utils_error_elog.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_backend_utils_error_elog.c	2021-11-14 20:05:00.000000000 +0300
+@@ -94,7 +94,7 @@
+ 
+ #include <fcntl.h>
+ #include <time.h>
+-#include <unistd.h>
++//#include <unistd.h>
+ #include <signal.h>
+ #include <ctype.h>
+ #ifdef HAVE_SYSLOG
+@@ -106,11 +106,11 @@
+ 
+ #include "access/transam.h"
+ #include "access/xact.h"
+-#include "libpq/libpq.h"
++//#include "libpq/libpq.h"
+ #include "libpq/pqformat.h"
+ #include "mb/pg_wchar.h"
+ #include "miscadmin.h"
+-#include "postmaster/bgworker.h"
++//#include "postmaster/bgworker.h"
+ #include "postmaster/postmaster.h"
+ #include "postmaster/syslogger.h"
+ #include "storage/ipc.h"
+@@ -132,6 +132,7 @@
+ 
+ __thread sigjmp_buf *PG_exception_stack = NULL;
+ 
++__thread bool		ClientAuthInProgress = false;
+ 
+ extern bool redirection_done;
+ 
+@@ -553,8 +554,8 @@
+ 	 * what we want for NOTICE messages, but not for fatal exits.) This hack
+ 	 * is necessary because of poor design of old-style copy protocol.
+ 	 */
+-	if (elevel >= FATAL && whereToSendOutput == DestRemote)
+-		pq_endcopyout(true);
++	//if (elevel >= FATAL && whereToSendOutput == DestRemote)
++	//	pq_endcopyout(true);
+ 
+ 	/* Emit the message to the right places */
+ 	EmitErrorReport();
+@@ -1505,8 +1506,8 @@
+ 	 * to error messages thrown deep inside pgwin32_message_to_UTF16().
+ 	 */
+ 	if (!in_error_recursion_trouble() &&
+-		CurrentMemoryContext != NULL &&
+-		GetMessageEncoding() != GetACPEncoding())
++		CurrentMemoryContext != NULL /*&&
++		GetMessageEncoding() != GetACPEncoding()*/)
+ 	{
+ 		utf16 = pgwin32_message_to_UTF16(line, len, NULL);
+ 		if (utf16)
+@@ -1675,7 +1676,7 @@
+ 	fmt = _(fmt);
+ 
+ 	va_start(ap, fmt);
+-#ifndef WIN32
++#if 1
+ 	/* On Unix, we just fprintf to stderr */
+ 	vfprintf(stderr, fmt, ap);
+ 	fflush(stderr);
+@@ -1686,7 +1687,7 @@
+ 	 * On Win32, we print to stderr if running on a console, or write to
+ 	 * eventlog if running as a service
+ 	 */
+-	if (pgwin32_is_service())	/* Running as a service */
++	if (false /*pgwin32_is_service()*/)	/* Running as a service */
+ 	{
+ 		write_eventlog(ERROR, errbuf, strlen(errbuf));
+ 	}
+diff -ruN original/src/postgres/src_backend_utils_fmgr_fmgr.c my/src/postgres/src_backend_utils_fmgr_fmgr.c
+--- original/src/postgres/src_backend_utils_fmgr_fmgr.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_backend_utils_fmgr_fmgr.c	2021-11-14 20:05:00.000000000 +0300
+@@ -30,7 +30,7 @@
+ #include "miscadmin.h"
+ #include "nodes/makefuncs.h"
+ #include "nodes/nodeFuncs.h"
+-#include "pgstat.h"
++//#include "pgstat.h"
+ #include "utils/acl.h"
+ #include "utils/builtins.h"
+ #include "utils/fmgrtab.h"
+diff -ruN original/src/postgres/src_backend_utils_init_globals.c my/src/postgres/src_backend_utils_init_globals.c
+--- original/src/postgres/src_backend_utils_init_globals.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_backend_utils_init_globals.c	2021-11-14 20:05:00.000000000 +0300
+@@ -30,14 +30,13 @@
+ #include "postgres.h"
+ 
+ #include "common/file_perm.h"
+-#include "libpq/libpq-be.h"
+-#include "libpq/pqcomm.h"
++//#include "libpq/libpq-be.h"
++//#include "libpq/pqcomm.h"
+ #include "miscadmin.h"
+ #include "storage/backendid.h"
+ 
+ 
+ 
+-
+ __thread volatile sig_atomic_t InterruptPending = false;
+ 
+ 
+diff -ruN original/src/postgres/src_backend_utils_mb_mbutils.c my/src/postgres/src_backend_utils_mb_mbutils.c
+--- original/src/postgres/src_backend_utils_mb_mbutils.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_backend_utils_mb_mbutils.c	2021-11-14 20:05:00.000000000 +0300
+@@ -516,7 +516,7 @@
+ #ifdef WIN32
+ 	if (!raw_pg_bind_textdomain_codeset(domainname, new_msgenc))
+ 		/* On failure, the old message encoding remains valid. */
+-		return GetMessageEncoding();
++		return PG_SQL_ASCII;//GetMessageEncoding();
+ #endif
+ 
+ 	return new_msgenc;
+@@ -775,7 +775,7 @@
+ WCHAR *
+ pgwin32_message_to_UTF16(const char *str, int len, int *utf16len)
+ {
+-	int			msgenc = GetMessageEncoding();
++	int			msgenc = PG_SQL_ASCII;//GetMessageEncoding();
+ 	WCHAR	   *utf16;
+ 	int			dstlen;
+ 	UINT		codepage;
+@@ -805,14 +805,14 @@
+ 		 * XXX pg_do_encoding_conversion() requires a transaction.  In the
+ 		 * absence of one, hope for the input to be valid UTF8.
+ 		 */
+-		if (IsTransactionState())
++		if (false /*IsTransactionState()*/)
+ 		{
+-			utf8 = (char *) pg_do_encoding_conversion((unsigned char *) str,
++			/*utf8 = (char *) pg_do_encoding_conversion((unsigned char *) str,
+ 													  len,
+ 													  msgenc,
+ 													  PG_UTF8);
+ 			if (utf8 != str)
+-				len = strlen(utf8);
++				len = strlen(utf8);*/
+ 		}
+ 		else
+ 			utf8 = (char *) str;
+diff -ruN original/src/postgres/src_backend_utils_misc_guc.c my/src/postgres/src_backend_utils_misc_guc.c
+--- original/src/postgres/src_backend_utils_misc_guc.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_backend_utils_misc_guc.c	2021-11-14 20:05:00.000000000 +0300
+@@ -30,7 +30,7 @@
+ #include <float.h>
+ #include <math.h>
+ #include <limits.h>
+-#include <unistd.h>
++//#include <unistd.h>
+ #include <sys/stat.h>
+ #ifdef HAVE_SYSLOG
+ #include <syslog.h>
+@@ -56,8 +56,8 @@
+ #include "common/string.h"
+ #include "funcapi.h"
+ #include "jit/jit.h"
+-#include "libpq/auth.h"
+-#include "libpq/libpq.h"
++//#include "libpq/auth.h"
++//#include "libpq/libpq.h"
+ #include "libpq/pqformat.h"
+ #include "miscadmin.h"
+ #include "optimizer/cost.h"
+@@ -69,7 +69,7 @@
+ #include "parser/parse_type.h"
+ #include "parser/parser.h"
+ #include "parser/scansup.h"
+-#include "pgstat.h"
++//#include "pgstat.h"
+ #include "postmaster/autovacuum.h"
+ #include "postmaster/bgworker_internals.h"
+ #include "postmaster/bgwriter.h"
+@@ -84,7 +84,7 @@
+ #include "replication/walsender.h"
+ #include "storage/bufmgr.h"
+ #include "storage/dsm_impl.h"
+-#include "storage/fd.h"
++//#include "storage/fd.h"
+ #include "storage/large_object.h"
+ #include "storage/pg_shmem.h"
+ #include "storage/predicate.h"
+@@ -1359,7 +1359,7 @@
+ 	/*
+ 	 * Open file
+ 	 */
+-	fp = AllocateFile(CONFIG_EXEC_PARAMS_NEW, "w");
++	fp = 0;//AllocateFile(CONFIG_EXEC_PARAMS_NEW, "w");
+ 	if (!fp)
+ 	{
+ 		ereport(elevel,
+@@ -1374,7 +1374,7 @@
+ 		write_one_nondefault_variable(fp, guc_variables[i]);
+ 	}
+ 
+-	if (FreeFile(fp))
++	if (false/*FreeFile(fp)*/)
+ 	{
+ 		ereport(elevel,
+ 				(errcode_for_file_access(),
+@@ -1448,7 +1448,7 @@
+ 	/*
+ 	 * Open file
+ 	 */
+-	fp = AllocateFile(CONFIG_EXEC_PARAMS, "r");
++	fp = 0;//AllocateFile(CONFIG_EXEC_PARAMS, "r");
+ 	if (!fp)
+ 	{
+ 		/* File not found is fine */
+@@ -1492,7 +1492,7 @@
+ 		free(varsourcefile);
+ 	}
+ 
+-	FreeFile(fp);
++	//FreeFile(fp);
+ }
+ #endif							/* EXEC_BACKEND */
+ 
+diff -ruN original/src/postgres/src_common_encnames.c my/src/postgres/src_common_encnames.c
+--- original/src/postgres/src_common_encnames.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_common_encnames.c	2021-11-14 20:05:00.000000000 +0300
+@@ -19,7 +19,7 @@
+ #include "c.h"
+ 
+ #include <ctype.h>
+-#include <unistd.h>
++//#include <unistd.h>
+ 
+ #include "mb/pg_wchar.h"
+ 
+diff -ruN original/src/postgres/src_common_psprintf.c my/src/postgres/src_common_psprintf.c
+--- original/src/postgres/src_common_psprintf.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_common_psprintf.c	2021-11-14 20:05:00.000000000 +0300
+@@ -29,7 +29,7 @@
+ 
+ #else
+ 
+-#include "postgres_fe.h"
++//#include "postgres_fe.h"
+ 
+ /* It's possible we could use a different value for this in frontend code */
+ #define MaxAllocSize	((Size) 0x3fffffff) /* 1 gigabyte - 1 */
+diff -ruN original/src/postgres/src_common_string.c my/src/postgres/src_common_string.c
+--- original/src/postgres/src_common_string.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_common_string.c	2021-11-14 20:05:00.000000000 +0300
+@@ -24,7 +24,7 @@
+ #ifndef FRONTEND
+ #include "postgres.h"
+ #else
+-#include "postgres_fe.h"
++//#include "postgres_fe.h"
+ #endif
+ 
+ #include "common/string.h"
+diff -ruN original/src/postgres/src_common_stringinfo.c my/src/postgres/src_common_stringinfo.c
+--- original/src/postgres/src_common_stringinfo.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_common_stringinfo.c	2021-11-14 20:05:00.000000000 +0300
+@@ -36,7 +36,7 @@
+ 
+ #else
+ 
+-#include "postgres_fe.h"
++//#include "postgres_fe.h"
+ 
+ /* It's possible we could use a different value for this in frontend code */
+ #define MaxAllocSize	((Size) 0x3fffffff) /* 1 gigabyte - 1 */
+diff -ruN original/src/postgres/src_port_pg_bitutils.c my/src/postgres/src_port_pg_bitutils.c
+--- original/src/postgres/src_port_pg_bitutils.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_port_pg_bitutils.c	2021-11-14 20:05:00.000000000 +0300
+@@ -1,23 +1,9 @@
+-/*--------------------------------------------------------------------
+- * Symbols referenced in this file:
+- * - pg_popcount64
+- * - pg_popcount64_choose
+- * - pg_popcount32
+- * - pg_popcount32_choose
+- * - pg_popcount_available
+- * - pg_popcount32_asm
+- * - pg_popcount64_asm
+- * - pg_popcount32_slow
+- * - pg_popcount64_slow
+- *--------------------------------------------------------------------
+- */
+-
+ /*-------------------------------------------------------------------------
+  *
+  * pg_bitutils.c
+  *	  Miscellaneous functions for bit-wise operations.
+  *
+- * Copyright (c) 2019-2020, PostgreSQL Global Development Group
++ * Copyright (c) 2019-2021, PostgreSQL Global Development Group
+  *
+  * IDENTIFICATION
+  *	  src/port/pg_bitutils.c
+@@ -45,7 +31,24 @@
+  * HAVE__BUILTIN_CLZ is defined, but we provide it anyway, so that
+  * extensions possibly compiled with a different compiler can use it.
+  */
+-
++const uint8 pg_leftmost_one_pos[256] = {
++	0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,
++	4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
++	5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
++	5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
++	6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
++	6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
++	6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
++	6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
++	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
++	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
++	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
++	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
++	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
++	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
++	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
++	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7
++};
+ 
+ /*
+  * Array giving the position of the right-most set bit for each possible
+@@ -56,7 +59,24 @@
+  * HAVE__BUILTIN_CTZ is defined, but we provide it anyway, so that
+  * extensions possibly compiled with a different compiler can use it.
+  */
+-
++const uint8 pg_rightmost_one_pos[256] = {
++	0, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	5, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	6, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	5, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	7, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	5, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	6, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	5, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0,
++	4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0
++};
+ 
+ /*
+  * Array giving the number of 1-bits in each possible byte value.
+@@ -64,39 +84,40 @@
+  * Note: we export this for use by functions in which explicit use
+  * of the popcount functions seems unlikely to be a win.
+  */
+-
+-
+-/*
+- * On x86_64, we can use the hardware popcount instruction, but only if
+- * we can verify that the CPU supports it via the cpuid instruction.
+- *
+- * Otherwise, we fall back to __builtin_popcount if the compiler has that,
+- * or a hand-rolled implementation if not.
+- */
+-#ifdef HAVE_X86_64_POPCNTQ
+-#if defined(HAVE__GET_CPUID) || defined(HAVE__CPUID)
+-#define USE_POPCNT_ASM 1
+-#endif
+-#endif
++const uint8 pg_number_of_ones[256] = {
++	0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
++	1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
++	1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
++	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
++	1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
++	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
++	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
++	3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
++	1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
++	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
++	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
++	3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
++	2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
++	3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
++	3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
++	4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8
++};
+ 
+ static int	pg_popcount32_slow(uint32 word);
+ static int	pg_popcount64_slow(uint64 word);
+ 
+-#ifdef USE_POPCNT_ASM
++#ifdef TRY_POPCNT_FAST
+ static bool pg_popcount_available(void);
+ static int	pg_popcount32_choose(uint32 word);
+ static int	pg_popcount64_choose(uint64 word);
+-static int	pg_popcount32_asm(uint32 word);
+-static int	pg_popcount64_asm(uint64 word);
++static int	pg_popcount32_fast(uint32 word);
++static int	pg_popcount64_fast(uint64 word);
+ 
+ int			(*pg_popcount32) (uint32 word) = pg_popcount32_choose;
+ int			(*pg_popcount64) (uint64 word) = pg_popcount64_choose;
+-#else
+-int			(*pg_popcount32) (uint32 word) = pg_popcount32_slow;
+-int			(*pg_popcount64) (uint64 word) = pg_popcount64_slow;
+-#endif							/* USE_POPCNT_ASM */
++#endif							/* TRY_POPCNT_FAST */
+ 
+-#ifdef USE_POPCNT_ASM
++#ifdef TRY_POPCNT_FAST
+ 
+ /*
+  * Return true if CPUID indicates that the POPCNT instruction is available.
+@@ -128,8 +149,8 @@
+ {
+ 	if (pg_popcount_available())
+ 	{
+-		pg_popcount32 = pg_popcount32_asm;
+-		pg_popcount64 = pg_popcount64_asm;
++		pg_popcount32 = pg_popcount32_fast;
++		pg_popcount64 = pg_popcount64_fast;
+ 	}
+ 	else
+ 	{
+@@ -145,8 +166,8 @@
+ {
+ 	if (pg_popcount_available())
+ 	{
+-		pg_popcount32 = pg_popcount32_asm;
+-		pg_popcount64 = pg_popcount64_asm;
++		pg_popcount32 = pg_popcount32_fast;
++		pg_popcount64 = pg_popcount64_fast;
+ 	}
+ 	else
+ 	{
+@@ -158,32 +179,40 @@
+ }
+ 
+ /*
+- * pg_popcount32_asm
++ * pg_popcount32_fast
+  *		Return the number of 1 bits set in word
+  */
+ static int
+-pg_popcount32_asm(uint32 word)
++pg_popcount32_fast(uint32 word)
+ {
++#ifdef _MSC_VER
++	return __popcnt(word);
++#else
+ 	uint32		res;
+ 
+ __asm__ __volatile__(" popcntl %1,%0\n":"=q"(res):"rm"(word):"cc");
+ 	return (int) res;
++#endif
+ }
+ 
+ /*
+- * pg_popcount64_asm
++ * pg_popcount64_fast
+  *		Return the number of 1 bits set in word
+  */
+ static int
+-pg_popcount64_asm(uint64 word)
++pg_popcount64_fast(uint64 word)
+ {
++#ifdef _MSC_VER
++	return __popcnt64(word);
++#else
+ 	uint64		res;
+ 
+ __asm__ __volatile__(" popcntq %1,%0\n":"=q"(res):"rm"(word):"cc");
+ 	return (int) res;
++#endif
+ }
+ 
+-#endif							/* USE_POPCNT_ASM */
++#endif							/* TRY_POPCNT_FAST */
+ 
+ 
+ /*
+@@ -236,11 +265,71 @@
+ #endif							/* HAVE__BUILTIN_POPCOUNT */
+ }
+ 
++#ifndef TRY_POPCNT_FAST
++
++/*
++ * When the POPCNT instruction is not available, there's no point in using
++ * function pointers to vary the implementation between the fast and slow
++ * method.  We instead just make these actual external functions when
++ * TRY_POPCNT_FAST is not defined.  The compiler should be able to inline
++ * the slow versions here.
++ */
++int
++pg_popcount32(uint32 word)
++{
++	return pg_popcount32_slow(word);
++}
++
++int
++pg_popcount64(uint64 word)
++{
++	return pg_popcount64_slow(word);
++}
++
++#endif							/* !TRY_POPCNT_FAST */
+ 
+ /*
+  * pg_popcount
+  *		Returns the number of 1-bits in buf
+  */
++uint64
++pg_popcount(const char *buf, int bytes)
++{
++	uint64		popcnt = 0;
++
+ #if SIZEOF_VOID_P >= 8
++	/* Process in 64-bit chunks if the buffer is aligned. */
++	if (buf == (const char *) TYPEALIGN(8, buf))
++	{
++		const uint64 *words = (const uint64 *) buf;
++
++		while (bytes >= 8)
++		{
++			popcnt += pg_popcount64(*words++);
++			bytes -= 8;
++		}
++
++		buf = (const char *) words;
++	}
+ #else
++	/* Process in 32-bit chunks if the buffer is aligned. */
++	if (buf == (const char *) TYPEALIGN(4, buf))
++	{
++		const uint32 *words = (const uint32 *) buf;
++
++		while (bytes >= 4)
++		{
++			popcnt += pg_popcount32(*words++);
++			bytes -= 4;
++		}
++
++		buf = (const char *) words;
++	}
+ #endif
++
++	/* Process any remaining bytes */
++	while (bytes--)
++		popcnt += pg_number_of_ones[(unsigned char) *buf++];
++
++	return popcnt;
++}
+\ No newline at end of file
+diff -ruN original/src/postgres/src_port_pgsleep.c my/src/postgres/src_port_pgsleep.c
+--- original/src/postgres/src_port_pgsleep.c	2021-11-14 19:42:26.000000000 +0300
++++ contrib/src/postgres/src_port_pgsleep.c	2021-11-14 20:05:00.000000000 +0300
+@@ -18,8 +18,8 @@
+  */
+ #include "c.h"
+ 
+-#include <unistd.h>
+-#include <sys/time.h>
++//#include <unistd.h>
++//#include <sys/time.h>
+ #ifdef HAVE_SYS_SELECT_H
+ #include <sys/select.h>
+ #endif
+@@ -28,7 +28,8 @@
+  * In a Windows backend, we don't use this implementation, but rather
+  * the signal-aware version in src/backend/port/win32/signal.c.
+  */
+-#if defined(FRONTEND) || !defined(WIN32)
++#if 1
++//defined(FRONTEND) || !defined(WIN32)
+ 
+ /*
+  * pg_usleep --- delay the specified number of microseconds.
+

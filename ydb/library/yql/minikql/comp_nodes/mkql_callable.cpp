@@ -131,7 +131,7 @@ private:
         for (const auto node : ArgNodes) {
             const auto arg = ExtractValueInst::Create(arguments, {i++}, "arg", block);
             const auto codegenArgNode = dynamic_cast<ICodegeneratorExternalNode*>(node);
-            MKQL_ENSURE(codegenArgNode, "Argument must be codegenerator node."); 
+            MKQL_ENSURE(codegenArgNode, "Argument must be codegenerator node.");
             codegenArgNode->CreateSetValue(ctx, block, arg);
         }
 

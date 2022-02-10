@@ -91,9 +91,9 @@ struct TExecuteContext : TThrRefBase {
     }
 };
 
-void FillAstAndPlan(IKqpHost::TQueryResult& queryResult, TExprNode* queryRoot, TExprContext& ctx, IPlanBuilder& planBuilder) { 
+void FillAstAndPlan(IKqpHost::TQueryResult& queryResult, TExprNode* queryRoot, TExprContext& ctx, IPlanBuilder& planBuilder) {
     TStringStream astStream;
-    auto ast = ConvertToAst(*queryRoot, ctx, TExprAnnotationFlags::None, true); 
+    auto ast = ConvertToAst(*queryRoot, ctx, TExprAnnotationFlags::None, true);
     ast.Root->PrettyPrintTo(astStream, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
     queryResult.QueryAst = astStream.Str();
 
@@ -224,7 +224,7 @@ public:
             }
         }
 
-        FillAstAndPlan(queryResult, GetExprRoot().Get(), GetExprContext(), PlanBuilder); 
+        FillAstAndPlan(queryResult, GetExprRoot().Get(), GetExprContext(), PlanBuilder);
         queryResult.SqlVersion = SqlVersion;
         queryResult.QueryPlan = SerializeScriptPlan(queryPlans);
     }
@@ -549,7 +549,7 @@ public:
                         auto& paramDesc = *queryCtx->PreparingQuery->AddParameters();
                         paramDesc.SetName(TString(name));
                         if (!ExportTypeToKikimrProto(*expectedType, *paramDesc.MutableType(), ctx)) {
-                            ctx.AddError(TIssue(ctx.GetPosition(parameter.Pos()), TStringBuilder() 
+                            ctx.AddError(TIssue(ctx.GetPosition(parameter.Pos()), TStringBuilder()
                                 << "Failed to export parameter type: " << name));
                             return nullptr;
                         }
@@ -557,7 +557,7 @@ public:
                         return ret;
                     }
 
-                    auto parameterValue = ValidateParameter(TString(name), *expectedType, ctx.GetPosition(parameter.Pos()), 
+                    auto parameterValue = ValidateParameter(TString(name), *expectedType, ctx.GetPosition(parameter.Pos()),
                         queryCtx->Parameters, ctx);
                     if (!parameterValue) {
                         return nullptr;
@@ -571,8 +571,8 @@ public:
 
                     TExprNode::TPtr valueExpr;
                     {
-                        TIssueScopeGuard issueScope(ctx.IssueManager, [parameter, name, &ctx]() { 
-                            return MakeIntrusive<TIssue>(YqlIssue(ctx.GetPosition(parameter.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, 
+                        TIssueScopeGuard issueScope(ctx.IssueManager, [parameter, name, &ctx]() {
+                            return MakeIntrusive<TIssue>(YqlIssue(ctx.GetPosition(parameter.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
                                 TStringBuilder() << "Failed to parse parameter value: " << name));
                         });
 
@@ -613,8 +613,8 @@ public:
         output = input;
 
         for (const auto& paramDesc : QueryCtx->PreparedQuery->GetParameters()) {
-            TIssueScopeGuard issueScope(ctx.IssueManager, [input, &paramDesc, &ctx]() { 
-                return MakeIntrusive<TIssue>(YqlIssue(ctx.GetPosition(input->Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() 
+            TIssueScopeGuard issueScope(ctx.IssueManager, [input, &paramDesc, &ctx]() {
+                return MakeIntrusive<TIssue>(YqlIssue(ctx.GetPosition(input->Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
                     << "Failed to parse parameter type: " << paramDesc.GetName()));
             });
 
@@ -834,7 +834,7 @@ public:
                 YQL_ENSURE(TMaybeNode<TKiDataQuery>(query));
                 TKiDataQuery dataQuery(query);
 
-                auto queryAstStr = SerializeExpr(ctx, *query); 
+                auto queryAstStr = SerializeExpr(ctx, *query);
 
                 bool useScanQuery = ShouldUseScanQuery(dataQuery, settings);
 
@@ -1062,14 +1062,14 @@ public:
         TypesCtx->AddDataSink(ResultProviderName, resultProvider);
         TypesCtx->AvailablePureResultDataSources = TVector<TString>(1, TString(KikimrProviderName));
 
-        // Config provider 
-        const TGatewaysConfig* gatewaysConfig = nullptr; // TODO: can we get real gatewaysConfig here? 
-        auto allowSettings = [](TStringBuf settingName) { 
-            return settingName == "OrderedColumns" || settingName == "DisableOrderedColumns"; 
-        }; 
-        auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, allowSettings); 
-        TypesCtx->AddDataSource(ConfigProviderName, configProvider); 
- 
+        // Config provider
+        const TGatewaysConfig* gatewaysConfig = nullptr; // TODO: can we get real gatewaysConfig here?
+        auto allowSettings = [](TStringBuf settingName) {
+            return settingName == "OrderedColumns" || settingName == "DisableOrderedColumns";
+        };
+        auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, allowSettings);
+        TypesCtx->AddDataSource(ConfigProviderName, configProvider);
+
         YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));
 
         YqlTransformer = TTransformationPipeline(TypesCtx)
@@ -1427,8 +1427,8 @@ private:
             }
 
             settings.InferSyntaxVersion = true;
-            settings.V0ForceDisable = false; 
-            settings.WarnOnV0 = false; 
+            settings.V0ForceDisable = false;
+            settings.WarnOnV0 = false;
             settings.DefaultCluster = Cluster;
             settings.ClusterMapping = ClustersMap;
             auto tablePathPrefix = SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef();

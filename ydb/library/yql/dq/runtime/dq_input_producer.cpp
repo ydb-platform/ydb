@@ -73,7 +73,7 @@ public:
             for (auto& sortCol : SortCols) {
                 TMaybe<EDataSlot> maybeDataSlot = FindDataSlot(sortCol.TypeId);
                 YQL_ENSURE(maybeDataSlot, "Trying to compare columns with unknown type id: " << sortCol.TypeId);
-                YQL_ENSURE(IsTypeSupportedInMergeCn(*maybeDataSlot), "Column '" << sortCol.Name << 
+                YQL_ENSURE(IsTypeSupportedInMergeCn(*maybeDataSlot), "Column '" << sortCol.Name <<
                     "' has unsupported type for Merge connection: " << *maybeDataSlot);
                 SortColTypes[sortCol.Index] = *maybeDataSlot;
             }
@@ -107,8 +107,8 @@ private:
                 chosenIndex = i;
             }
         }
-        YQL_ENSURE(chosenIndex < InputsSize); 
-        YQL_ENSURE(res); 
+        YQL_ENSURE(chosenIndex < InputsSize);
+        YQL_ENSURE(res);
         ++CurrentItemIndexes[chosenIndex];
         return *res;
     }
@@ -118,7 +118,7 @@ private:
         for (auto sortCol = SortCols.begin(); sortCol != SortCols.end() && compRes == 0; ++sortCol) {
             auto lhsColValue = lhs.GetElement(sortCol->Index);
             auto rhsColValue = rhs.GetElement(sortCol->Index);
-            compRes = NKikimr::NMiniKQL::CompareValues(SortColTypes[sortCol->Index], 
+            compRes = NKikimr::NMiniKQL::CompareValues(SortColTypes[sortCol->Index],
                 sortCol->Ascending, /* isOptional */ true, lhsColValue, rhsColValue);
         }
         return compRes;

@@ -133,7 +133,7 @@ outputFile( LEXER,
  * Include the ANTLR3 generated header file.
  */
 <if(PARSER)>
-#include \<@PROTOBUF_HEADER_PATH@/<name>.pb.h> 
+#include \<@PROTOBUF_HEADER_PATH@/<name>.pb.h>
 <endif>
 
 #include "<recognizer.grammar.name>Lexer.h"
@@ -148,8 +148,8 @@ outputFile( LEXER,
 <recognizer.grammar.delegators: {g|#include "<g.recognizerName>.hpp" }; separator="\n">
 <endif>
 
-namespace @LEXER_PARSER_NAMESPACE@ { 
- 
+namespace @LEXER_PARSER_NAMESPACE@ {
+
 /* ----------------------------------------- */
 
 <docComment>
@@ -178,8 +178,8 @@ namespace @LEXER_PARSER_NAMESPACE@ {
 
 <recognizer>
 
-} // namespace @LEXER_PARSER_NAMESPACE@ 
- 
+} // namespace @LEXER_PARSER_NAMESPACE@
+
 /* End of code
  * =============================================================================
  */
@@ -340,8 +340,8 @@ headerFile( LEXER,
 
 #include \<ydb/library/yql/parser/proto_ast/proto_ast.h>
 
-namespace @LEXER_PARSER_NAMESPACE@ { 
- 
+namespace @LEXER_PARSER_NAMESPACE@ {
+
 <if(LEXER)>
 template \<class ImplTraits>
 class <name>Traits : public antlr3::CustomTraitsBase\<ImplTraits> {
@@ -359,14 +359,14 @@ typedef antlr3::Traits\<<recognizer.grammar.name>Lexer, <recognizer.grammar.name
 #undef TOKEN_QUERY
 #endif
 
-namespace { 
- 
-inline bool IsBetween(ANTLR_UINT32 value, ANTLR_UINT32 lower, ANTLR_UINT32 upper) { 
-    return value >= lower && value \<= upper; 
-} 
- 
-} 
- 
+namespace {
+
+inline bool IsBetween(ANTLR_UINT32 value, ANTLR_UINT32 lower, ANTLR_UINT32 upper) {
+    return value >= lower && value \<= upper;
+}
+
+}
+
 class <name>Tokens {
 public:
     /** Symbolic definitions of all the tokens that the <grammarType()> will work with.
@@ -433,9 +433,9 @@ private:
     NProtoAST::IErrorCollector* Errors = nullptr;
     ui32 FollowDepth_ = 0;
     google::protobuf::Arena* Arena = nullptr;
-    static inline bool IsHiddenToken(ANTLR_UINT32 token) { 
-        return token == TOKEN_WS || token == TOKEN_COMMENT; 
-    } 
+    static inline bool IsHiddenToken(ANTLR_UINT32 token) {
+        return token == TOKEN_WS || token == TOKEN_COMMENT;
+    }
 
 public:
     <name>(InputType* instream<recognizer.grammar.delegators:{g|, <g.recognizerName>* <g:delegateName()>}>, google::protobuf::Arena* arena);
@@ -514,8 +514,8 @@ extern ANTLR_UINT8*   <recognizer.grammar.composite.rootGrammar.recognizerName>T
  * =============================================================================
  */
 
-} // namespace @LEXER_PARSER_NAMESPACE@ 
- 
+} // namespace @LEXER_PARSER_NAMESPACE@
+
 <endNamespace(actions)>
 
 /* END - Note:Keep extra line feed to satisfy UNIX systems */
@@ -1457,7 +1457,7 @@ void <name>::m<ruleName>(<ruleDescriptor.parameterScope:parameterScope()>)
 
     <block>
     // TODO: FIX
-    if (IsHiddenToken(_type)) { 
+    if (IsHiddenToken(_type)) {
         this->get_lexstate()->set_channel(HIDDEN);
     }
     this->get_lexstate()->set_type(_type);
@@ -1597,7 +1597,7 @@ positiveClosureBlock(alts,decls,decision,enclosingBlockLevel,blockLevel,decision
     }
     loop<decisionNumber>: ;    /* Jump to here if this rule does not match */
     <if(PARSER)>
-    Y_VERIFY(parentBlock<enclosingBlockLevel>, "parentBlock is null"); 
+    Y_VERIFY(parentBlock<enclosingBlockLevel>, "parentBlock is null");
     if (!parentBlock<enclosingBlockLevel>->Block<elemId>Size()) {
         <ruleBacktrackFailure()>
         <earlyExitEx()>
@@ -1711,7 +1711,7 @@ alt(elements,altNum,description,autoAST,outerAlt,treeLevel,rew) ::= <<
     <@initializations()>
     <if(PARSER)>
     <if(!ruleDescriptor.isSynPred)>
-    Y_VERIFY(parent, "Parent is null"); 
+    Y_VERIFY(parent, "Parent is null");
     parent->SetDescr("<description>");
     <endif>
     <endif>
@@ -1739,7 +1739,7 @@ tokenRef(token,label,elementIndex,terminalOptions) ::= <<
     auto token = matchToken(TOKEN_<token>, &FOLLOW_<token>_in_<ruleName><elementIndex>);
     if (token) {
         <if(!ruleDescriptor.isSynPred)>
-        Y_VERIFY(parent, "Parent is null"); 
+        Y_VERIFY(parent, "Parent is null");
         parent->MutableToken<elemId>()->SetId(token->get_type());
         parent->MutableToken<elemId>()->SetLine(token->get_line());
         parent->MutableToken<elemId>()->SetColumn(token->get_charPositionInLine());
@@ -1797,7 +1797,7 @@ matchSet(s,label,elementIndex,terminalOptions,postmatchCode="") ::= <<
         <if(PARSER)>
         if (token) {
             <if(!ruleDescriptor.isSynPred)>
-            Y_VERIFY(parent, "Parent is null"); 
+            Y_VERIFY(parent, "Parent is null");
             parent->MutableToken<elemId>()->SetId(token->get_type());
             parent->MutableToken<elemId>()->SetLine(token->get_line());
             parent->MutableToken<elemId>()->SetColumn(token->get_charPositionInLine());
@@ -1919,7 +1919,7 @@ Y_ASSERT(dynamic_cast\<@ANTLR_PACKAGE_NAME@::TRule_<rule.name>* >(res));
 
 ruleResult() ::= <<
 <if(!ruleDescriptor.isSynPred)>
-Y_VERIFY(parent, "Parent is null"); 
+Y_VERIFY(parent, "Parent is null");
 parent->unsafe_arena_set_allocated_rule_<rule.name><elemId>(static_cast\<@ANTLR_PACKAGE_NAME@::TRule_<rule.name>* >(res));
 <endif>
 >>
@@ -2347,9 +2347,9 @@ cyclicDFAState(decisionNumber,stateNumber,edges,needErrorClause,semPredState) ::
     ctx->rewindLast();<\n>
     <endif>
     s = -1;
-    [&]() -> void { 
-        <edges; separator="\nelse "> 
-    }(); 
+    [&]() -> void {
+        <edges; separator="\nelse ">
+    }();
     <if(semPredState)> <! return input cursor to state before we rewound !>
     ctx->seek(index<decisionNumber>_<stateNumber>);<\n>
     <endif>
@@ -2399,10 +2399,10 @@ lookaheadTest(atom,k,atomAsInt) ::= "LA<decisionNumber>_<stateNumber> == <if(PAR
 isolatedLookaheadTest(atom,k,atomAsInt) ::= "this->LA(<k>) == <if(PARSER)>TOKEN_<endif><atom>"
 
 lookaheadRangeTest(lower,upper,k,rangeNumber,lowerAsInt,upperAsInt) ::= <%
-IsBetween(LA<decisionNumber>_<stateNumber>, <if(PARSER)>TOKEN_<endif><lower>, <if(PARSER)>TOKEN_<endif><upper>) 
+IsBetween(LA<decisionNumber>_<stateNumber>, <if(PARSER)>TOKEN_<endif><lower>, <if(PARSER)>TOKEN_<endif><upper>)
 %>
 
-isolatedLookaheadRangeTest(lower,upper,k,rangeNumber,lowerAsInt,upperAsInt) ::= "IsBetween(this->LA(<k>), <if(PARSER)>TOKEN_<endif><lower>, <if(PARSER)>TOKEN_<endif><upper>)" 
+isolatedLookaheadRangeTest(lower,upper,k,rangeNumber,lowerAsInt,upperAsInt) ::= "IsBetween(this->LA(<k>), <if(PARSER)>TOKEN_<endif><lower>, <if(PARSER)>TOKEN_<endif><upper>)"
 
 setTest(ranges) ::= "<ranges; separator=\" || \">"
 

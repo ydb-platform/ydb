@@ -125,7 +125,7 @@ public:
 
         block = good;
 
-        if (IsOptional || !IsStrict) { 
+        if (IsOptional || !IsStrict) {
             phi->addIncoming(SetterForInt128(decimal, block), block);
             BranchInst::Create(last, block);
 
@@ -228,7 +228,7 @@ public:
         if (Data->IsTemporaryValue())
             ValueCleanup(Data->GetRepresentation(), value, ctx, block);
 
-        if (IsOptional) { 
+        if (IsOptional) {
             phi->addIncoming(data, block);
         }
 
@@ -241,15 +241,15 @@ public:
             const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(FunctionType::get(Type::getVoidTy(context), {valType, slotType}, false)), "thrower", block);
             CallInst::Create(doFuncPtr, { value, slot }, "", block);
             new UnreachableInst(context, block);
-        } else if (IsOptional) { 
+        } else if (IsOptional) {
             BranchInst::Create(last, block);
         }
 
-        if (IsOptional || IsStrict) { 
+        if (IsOptional || IsStrict) {
             block = last;
         }
 
-        return IsOptional ? phi : data; 
+        return IsOptional ? phi : data;
     }
 #endif
 private:

@@ -71,7 +71,7 @@ TVector<TExprBase> ConvertToAtoms(const TSet<TString>& columns, TExprContext& ct
 
 
 TMaybeNode<TExprBase> EquiJoinGetIdxLookupValue(const TStringBuf& leftDataName, const TStringBuf& rightDataName,
-    TExprBase leftRow, const TString& leftMemberName, TPositionHandle pos, TExprContext& ctx) 
+    TExprBase leftRow, const TString& leftMemberName, TPositionHandle pos, TExprContext& ctx)
 {
     auto leftMember = Build<TCoMember>(ctx, pos)
         .Struct(leftRow)
@@ -134,8 +134,8 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
         return false;
     }
 
-    auto linkSettings = GetEquiJoinLinkSettings(joinTuple.Options().Ref()); 
-    if (linkSettings.LeftHints.contains("any") || linkSettings.RightHints.contains("any")) { 
+    auto linkSettings = GetEquiJoinLinkSettings(joinTuple.Options().Ref());
+    if (linkSettings.LeftHints.contains("any") || linkSettings.RightHints.contains("any")) {
         return false;
     }
 
@@ -190,7 +190,7 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
     const TStringBuf lookupTable = indexTable ? indexTable.Cast().Value() : selectRange.Table().Path().Value();
     const TKikimrTableDescription& lookupTableDesc = tablesData.ExistingTable(cluster, lookupTable);
 
-    auto rightKeyRange = TKikimrKeyRange::GetPointKeyRange(ctx, lookupTableDesc, selectRange.Range()); 
+    auto rightKeyRange = TKikimrKeyRange::GetPointKeyRange(ctx, lookupTableDesc, selectRange.Range());
     if (!rightKeyRange) {
         // Don't rewrite join with arbitrary range
         return false;
@@ -315,7 +315,7 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
         ? BuildKeyColumnsList(lookupTableDesc, selectRange.Pos(), ctx)
         : lookupColumns;
 
-    auto lookup = TKikimrKeyRange::BuildReadRangeExpr(lookupTableDesc, TKeyRange(ctx, keyColumnRanges, {}), 
+    auto lookup = TKikimrKeyRange::BuildReadRangeExpr(lookupTableDesc, TKeyRange(ctx, keyColumnRanges, {}),
                                                       selectedColumns, false /* allowNulls */, ctx);
 
     // Skip null keys in lookup part as for equijoin semantics null != null,
@@ -669,7 +669,7 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
     return false;
 }
 
-TExprBase GetEquiJoinLabelsNode(const TVector<TString>& labels, TPositionHandle pos, TExprContext& ctx) { 
+TExprBase GetEquiJoinLabelsNode(const TVector<TString>& labels, TPositionHandle pos, TExprContext& ctx) {
     TVector<TExprBase> labelAtoms;
     for (auto& label : labels) {
         auto atom = Build<TCoAtom>(ctx, pos)
@@ -903,7 +903,7 @@ TExprNode::TPtr KiRewriteEquiJoin(TExprBase node, const TKikimrTablesData& table
         joinInputs.push_back(input);
 
         auto itemType = input.List().Ptr()->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-        joinLabels.Add(ctx, *input.Scope().Ptr(), itemType->Cast<TStructExprType>()); 
+        joinLabels.Add(ctx, *input.Scope().Ptr(), itemType->Cast<TStructExprType>());
     }
 
     TMaybeNode<TExprBase> rewrittenJoin;

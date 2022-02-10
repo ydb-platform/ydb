@@ -274,7 +274,7 @@ public:
         NYql::NLog::EComponent component = NYql::NLog::EComponent::ProviderKqp,
         NYql::NLog::ELevel level = NYql::NLog::ELevel::INFO);
 
-    static void LogExpr(const NYql::TExprNode& input, NYql::TExprContext& ctx, const TString& description, 
+    static void LogExpr(const NYql::TExprNode& input, NYql::TExprContext& ctx, const TString& description,
         NYql::NLog::EComponent component = NYql::NLog::EComponent::ProviderKqp,
         NYql::NLog::ELevel level = NYql::NLog::ELevel::INFO);
 

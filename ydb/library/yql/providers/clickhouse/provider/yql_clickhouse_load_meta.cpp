@@ -162,7 +162,7 @@ public:
                                 .Columns<TCoVoid>().Build()
                                 .Timezone().Value(parse.second).Build()
                             .Done().Ptr();
-                        State_->Tables.emplace(it->first, meta); 
+                        State_->Tables.emplace(it->first, meta);
                     } else
                         bad = true;
                     break;

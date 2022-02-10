@@ -1,12 +1,12 @@
 #pragma once
 
 #include <ydb/library/yql/parser/lexer_common/lexer.h>
- 
+
 #include <contrib/libs/antlr3_cpp_runtime/include/antlr3.hpp>
 
 #include <google/protobuf/message.h>
 #include <util/generic/ptr.h>
-#include <util/generic/vector.h> 
+#include <util/generic/vector.h>
 #include <util/charset/utf8.h>
 
 namespace NProtoAST {
@@ -100,52 +100,52 @@ namespace NProtoAST {
         typename TParser::TokenStreamType TokenStream;
         TParser Parser;
     };
- 
-    template <typename TLexer> 
-    class TLexerTokensCollector { 
-        typedef ANTLR_UINT8 TChar; 
- 
-    public: 
-        TLexerTokensCollector(TStringBuf data, const char** tokenNames, const TString& queryName = "query") 
-            : TokenNames(tokenNames) 
-            , QueryName(queryName) 
-            , InputStream((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName.begin()) 
-            , Lexer(&InputStream, static_cast<google::protobuf::Arena*>(nullptr)) 
-        { 
-        } 
- 
-        NSQLTranslation::TParsedTokenList CollectTokens(IErrorCollector& errors) { 
-            NSQLTranslation::TParsedTokenList result; 
-            try { 
-                Lexer.ReportErrors(&errors); 
-                auto src = Lexer.get_tokSource(); 
-                for (;;) { 
-                    auto token = src->nextToken(); 
-                    auto type = token->getType(); 
-                    const bool isEOF = type == TLexer::CommonTokenType::TOKEN_EOF; 
-                    result.emplace_back(); 
-                    NSQLTranslation::TParsedToken& last = result.back(); 
-                    last.Name = isEOF ? "EOF" : TokenNames[type]; 
-                    last.Content = token->getText(); 
-                    last.Line = token->get_line(); 
-                    last.LinePos = token->get_charPositionInLine(); 
-                    if (isEOF) { 
-                        break; 
-                    } 
-                } 
-                return result; 
-            } catch (const TTooManyErrors&) { 
-                return result; 
-            } catch (const yexception& e) { 
-                errors.Error(0, 0, e.what()); 
-                return result; 
-            } 
-        } 
- 
-    private: 
-        const char** TokenNames; 
-        TString QueryName; 
-        typename TLexer::InputStreamType InputStream; 
-        TLexer Lexer; 
-    }; 
+
+    template <typename TLexer>
+    class TLexerTokensCollector {
+        typedef ANTLR_UINT8 TChar;
+
+    public:
+        TLexerTokensCollector(TStringBuf data, const char** tokenNames, const TString& queryName = "query")
+            : TokenNames(tokenNames)
+            , QueryName(queryName)
+            , InputStream((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName.begin())
+            , Lexer(&InputStream, static_cast<google::protobuf::Arena*>(nullptr))
+        {
+        }
+
+        NSQLTranslation::TParsedTokenList CollectTokens(IErrorCollector& errors) {
+            NSQLTranslation::TParsedTokenList result;
+            try {
+                Lexer.ReportErrors(&errors);
+                auto src = Lexer.get_tokSource();
+                for (;;) {
+                    auto token = src->nextToken();
+                    auto type = token->getType();
+                    const bool isEOF = type == TLexer::CommonTokenType::TOKEN_EOF;
+                    result.emplace_back();
+                    NSQLTranslation::TParsedToken& last = result.back();
+                    last.Name = isEOF ? "EOF" : TokenNames[type];
+                    last.Content = token->getText();
+                    last.Line = token->get_line();
+                    last.LinePos = token->get_charPositionInLine();
+                    if (isEOF) {
+                        break;
+                    }
+                }
+                return result;
+            } catch (const TTooManyErrors&) {
+                return result;
+            } catch (const yexception& e) {
+                errors.Error(0, 0, e.what());
+                return result;
+            }
+        }
+
+    private:
+        const char** TokenNames;
+        TString QueryName;
+        typename TLexer::InputStreamType InputStream;
+        TLexer Lexer;
+    };
 } // namespace NProtoAST

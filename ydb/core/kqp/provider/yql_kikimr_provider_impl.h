@@ -102,18 +102,18 @@ struct TKiExecDataQuerySettings {
     TMaybe<bool> UseNewEngine;
     TVector<NNodes::TCoNameValueTuple> Other;
 
-    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const; 
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 
     static TKiExecDataQuerySettings Parse(NNodes::TKiExecDataQuery exec);
 };
 
 class TKikimrKeyRange {
 public:
-    TKikimrKeyRange(TExprContext& ctx, const TKikimrTableDescription& table); 
+    TKikimrKeyRange(TExprContext& ctx, const TKikimrTableDescription& table);
     TKikimrKeyRange(const TKikimrTableDescription& table, const NCommon::TKeyRange& keyRange);
 
     static bool IsFull(NNodes::TExprList list);
-    static TMaybe<NCommon::TKeyRange> GetPointKeyRange(TExprContext& ctx, const TKikimrTableDescription& table, NNodes::TExprList range); 
+    static TMaybe<NCommon::TKeyRange> GetPointKeyRange(TExprContext& ctx, const TKikimrTableDescription& table, NNodes::TExprList range);
     static NNodes::TExprBase BuildReadRangeExpr(const TKikimrTableDescription& tableDesc,
         const NCommon::TKeyRange& keyRange, NNodes::TCoAtomList select,  bool allowNulls,
         TExprContext& ctx);

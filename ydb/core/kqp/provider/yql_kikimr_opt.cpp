@@ -155,7 +155,7 @@ TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
 
     auto selectRange = read.Cast<TKiSelectRange>();
 
-    if (HasSetting(selectRange.Settings().Ref(), "Reverse")) { 
+    if (HasSetting(selectRange.Settings().Ref(), "Reverse")) {
         // N.B. when SelectRange has a Reverse option we cannot optimize
         // sort without complex analysis of how it interacts with sorting
         return node.Ptr();
@@ -292,7 +292,7 @@ TExprNode::TPtr KiTopSort(TExprBase node, TExprContext& ctx, const TOptimizeCont
 
     auto take = node.Cast<TCoTake>();
     TCoInputBase top = take;
-    if (!optCtx.IsSingleUsage(take.Input().Ref())) { 
+    if (!optCtx.IsSingleUsage(take.Input().Ref())) {
         return node.Ptr();
     }
 
@@ -302,7 +302,7 @@ TExprNode::TPtr KiTopSort(TExprBase node, TExprContext& ctx, const TOptimizeCont
 
     auto skip = take.Input().Maybe<TCoSkip>();
     if (skip) {
-        if (!optCtx.IsSingleUsage(skip.Cast().Input().Ref())) { 
+        if (!optCtx.IsSingleUsage(skip.Cast().Input().Ref())) {
             return node.Ptr();
         }
 
@@ -315,7 +315,7 @@ TExprNode::TPtr KiTopSort(TExprBase node, TExprContext& ctx, const TOptimizeCont
 
     auto sort = top.Input().Maybe<TCoSort>();
     if (sort) {
-        if (!optCtx.IsSingleUsage(sort.Cast().Input().Ref())) { 
+        if (!optCtx.IsSingleUsage(sort.Cast().Input().Ref())) {
             return node.Ptr();
         }
 
@@ -347,7 +347,7 @@ TExprNode::TPtr KiTopSort(TExprBase node, TExprContext& ctx, const TOptimizeCont
         auto read = input;
         if (auto maybeFlatmap = input.Maybe<TCoFlatMap>()) {
             auto flatmap = maybeFlatmap.Cast();
-            if (!optCtx.IsSingleUsage(flatmap.Input().Ref())) { 
+            if (!optCtx.IsSingleUsage(flatmap.Input().Ref())) {
                 return node.Ptr();
             }
 
@@ -648,7 +648,7 @@ TExprNode::TPtr KiApplyExtractMembersToSelectRange(TExprBase node, TExprContext&
             .IndexName(range.IndexName())
             .Done().Ptr();
     } else {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Unexpected callable")); 
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Unexpected callable"));
         return nullptr;
     }
 }

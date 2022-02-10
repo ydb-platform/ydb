@@ -345,7 +345,7 @@ TExprNode::TPtr KiApplyLimitToSelectRange(TExprBase node, TExprContext& ctx) {
 
     auto select = input.Cast<TKiSelectRangeBase>();
 
-    if (HasSetting(select.Settings().Ref(), "ItemsLimit")) { 
+    if (HasSetting(select.Settings().Ref(), "ItemsLimit")) {
         return node.Ptr();
     }
 
@@ -642,7 +642,7 @@ TExprNode::TPtr KiApplyExtractMembersToSelectRow(TExprBase node, TExprContext& c
         .Done().Ptr();
 }
 
-TKikimrKeyRange::TKikimrKeyRange(TExprContext& ctx, const TKikimrTableDescription& table) 
+TKikimrKeyRange::TKikimrKeyRange(TExprContext& ctx, const TKikimrTableDescription& table)
     : Table(table)
     , KeyRange(ctx, Table.Metadata->KeyColumnNames.size(), TMaybeNode<TExprBase>())
 {}
@@ -680,7 +680,7 @@ bool TKikimrKeyRange::IsFull(TExprList list) {
     return true;
 }
 
-TMaybe<TKeyRange> TKikimrKeyRange::GetPointKeyRange(TExprContext& ctx, const TKikimrTableDescription& table, TExprList range) { 
+TMaybe<TKeyRange> TKikimrKeyRange::GetPointKeyRange(TExprContext& ctx, const TKikimrTableDescription& table, TExprList range) {
     size_t keyColumnsCount = table.Metadata->KeyColumnNames.size();
     TVector<TMaybeNode<TExprBase>> fromValues(keyColumnsCount);
     TVector<TMaybeNode<TExprBase>> toValues(keyColumnsCount);
@@ -734,7 +734,7 @@ TMaybe<TKeyRange> TKikimrKeyRange::GetPointKeyRange(TExprContext& ctx, const TKi
         }
     }
 
-    return TKeyRange(ctx, columnRanges, {}); 
+    return TKeyRange(ctx, columnRanges, {});
 }
 
 TExprList TKikimrKeyRange::ToRangeExpr(TExprBase owner, TExprContext& ctx) {
@@ -1034,8 +1034,8 @@ TExprNode::TPtr KiSqlInToEquiJoin(NNodes::TExprBase node, const TKikimrTablesDat
         return CanRewriteSqlInToEquiJoin(sqlIn.Lookup().Ref().GetTypeAnn(), sqlIn.Collection().Ref().GetTypeAnn());
     };
 
-    const bool prefixOnly = true; 
-    if (auto ret = TryConvertSqlInPredicatesToJoins(flatMap, shouldConvertSqlInToJoin, ctx, prefixOnly)) { 
+    const bool prefixOnly = true;
+    if (auto ret = TryConvertSqlInPredicatesToJoins(flatMap, shouldConvertSqlInToJoin, ctx, prefixOnly)) {
         YQL_CLOG(INFO, ProviderKikimr) << "KiSqlInToEquiJoin";
         return ret;
     }

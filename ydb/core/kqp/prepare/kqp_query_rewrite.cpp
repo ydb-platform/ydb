@@ -321,7 +321,7 @@ TExprNode::TPtr UnnestExecutionRoots(TExprBase node, TExprContext& ctx, const TK
         return SplitMap(node, ctx, *execRoots, analyzeResults);
     }
 
-    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
+    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
         << "Can't rewrite callable for KQP execution: " << node.Ptr()->Content()));
     YQL_ENSURE(false);
     return nullptr;

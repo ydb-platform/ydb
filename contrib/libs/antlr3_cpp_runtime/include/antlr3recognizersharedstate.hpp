@@ -73,7 +73,7 @@ public:
 	typedef typename AllocPolicyType::template VectorType<RewriteStreamType> RewriteStreamsType;
 
 	typedef IntTrie<ImplTraits, ANTLR_MARKER> RuleListType;
-	typedef IntTrie<ImplTraits, std::shared_ptr<RuleListType>> RuleMemoType; 
+	typedef IntTrie<ImplTraits, std::shared_ptr<RuleListType>> RuleMemoType;
 
 private:
 	/** Points to the first in a possible chain of exceptions that the

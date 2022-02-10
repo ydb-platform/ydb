@@ -1,21 +1,21 @@
-PROTO_LIBRARY() 
- 
-OWNER(g:yql g:yql_ydb_core) 
- 
+PROTO_LIBRARY()
+
+OWNER(g:yql g:yql_ydb_core)
+
 IF (GEN_PROTO)
     SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
     SET(antlr_templates ${antlr_output}/org/antlr/codegen/templates)
     SET(sql_grammar ${antlr_output}/SQLv1.g)
- 
+
     SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
- 
+
     SET(GRAMMAR_STRING_CORE_SINGLE "\"~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)\"")
     SET(GRAMMAR_STRING_CORE_DOUBLE "\"~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)\"")
     SET(GRAMMAR_MULTILINE_COMMENT_CORE       "\".\"")
- 
+
     CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in ${antlr_templates}/protobuf/protobuf.stg)
     CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv1.g.in ${sql_grammar})
- 
+
     RUN_ANTLR(
         ${sql_grammar}
         -lib .
@@ -26,9 +26,9 @@ IF (GEN_PROTO)
         CWD ${antlr_output}
     )
 ENDIF()
- 
+
 SRCS(SQLv1Parser.proto)
 
 EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
- 
-END() 
+
+END()

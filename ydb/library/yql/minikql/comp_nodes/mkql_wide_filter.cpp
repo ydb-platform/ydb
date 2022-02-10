@@ -4,12 +4,12 @@
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/utils/cast.h>
 
- 
+
 namespace NKikimr {
 namespace NMiniKQL {
 
-using NYql::EnsureDynamicCast; 
- 
+using NYql::EnsureDynamicCast;
+
 namespace {
 
 class TBaseWideFilterWrapper {
@@ -42,7 +42,7 @@ protected:
 
         for (auto i = 0U; i < Items.size(); ++i)
             if (Predicate == Items[i] || Items[i]->GetDependencesCount() > 0U) {
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getters[i](ctx, block)); 
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getters[i](ctx, block));
                 if constexpr (ReplaceOriginalGetter)
                     getters[i] = [node=Items[i]](const TCodegenContext& ctx, BasicBlock*& block){ return GetNodeValue(node, ctx, block); };
             }

@@ -8,7 +8,7 @@
 namespace NYql {
 namespace NCommon {
 
-TVector<TString> ExtractColumnOrderFromYsonStructType(const NYT::TNode& node); 
+TVector<TString> ExtractColumnOrderFromYsonStructType(const NYT::TNode& node);
 bool EqualsYsonTypesIgnoreStructOrder(const NYT::TNode& left, const NYT::TNode& right);
 
 } // namespace NCommon

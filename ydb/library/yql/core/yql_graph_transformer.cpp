@@ -5,14 +5,14 @@
 
 namespace NYql {
 
-namespace { 
- 
+namespace {
+
 class TCompositeGraphTransformer : public TGraphTransformerBase {
 public:
-    TCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes, bool doCheckArguments) 
+    TCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes, bool doCheckArguments)
         : Stages(stages)
         , UseIssueScopes(useIssueScopes)
-        , DoCheckArguments(doCheckArguments) 
+        , DoCheckArguments(doCheckArguments)
     {
         if (UseIssueScopes) {
             for (const auto& stage : Stages) {
@@ -23,12 +23,12 @@ public:
 
     void Rewind() override {
         for (auto& stage : Stages) {
-            stage.GetTransformer().Rewind(); 
+            stage.GetTransformer().Rewind();
         }
 
         Index = 0;
         LastIssueScope = Nothing();
-        CheckArgumentsCount = 0; 
+        CheckArgumentsCount = 0;
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
@@ -52,21 +52,21 @@ public:
         if (UseIssueScopes) {
             UpdateIssueScope(ctx.IssueManager);
         }
-        auto status = Stages[Index].GetTransformer().Transform(input, output, ctx); 
-#ifndef NDEBUG 
-        if (DoCheckArguments && output && output != input) { 
-            try { 
-                CheckArguments(*output); 
-                ++CheckArgumentsCount; 
-            } catch (yexception& e) { 
-                e << "at CheckArguments() pass #" << CheckArgumentsCount 
-                  << ", stage '" << Stages[Index].Name << "'"; 
-                throw; 
-            } 
-        } 
-#else 
-        Y_UNUSED(DoCheckArguments); 
-        Y_UNUSED(CheckArgumentsCount); 
+        auto status = Stages[Index].GetTransformer().Transform(input, output, ctx);
+#ifndef NDEBUG
+        if (DoCheckArguments && output && output != input) {
+            try {
+                CheckArguments(*output);
+                ++CheckArgumentsCount;
+            } catch (yexception& e) {
+                e << "at CheckArguments() pass #" << CheckArgumentsCount
+                  << ", stage '" << Stages[Index].Name << "'";
+                throw;
+            }
+        }
+#else
+        Y_UNUSED(DoCheckArguments);
+        Y_UNUSED(CheckArgumentsCount);
 #endif
         status = HandleStatus(status);
         return status;
@@ -74,12 +74,12 @@ public:
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) override {
         YQL_ENSURE(Index < Stages.size());
-        return Stages[Index].GetTransformer().GetAsyncFuture(input); 
+        return Stages[Index].GetTransformer().GetAsyncFuture(input);
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         YQL_ENSURE(Index < Stages.size());
-        const auto status = Stages[Index].GetTransformer().ApplyAsyncChanges(input, output, ctx); 
+        const auto status = Stages[Index].GetTransformer().ApplyAsyncChanges(input, output, ctx);
         return HandleStatus(status);
     }
 
@@ -92,7 +92,7 @@ public:
         for (size_t i = 0; i < Stages.size(); ++i) {
             auto& stagePair = Statistics.Stages[i];
             stagePair.first = Stages[i].Name;
-            stagePair.second =  Stages[i].GetTransformer().GetStatistics(); 
+            stagePair.second =  Stages[i].GetTransformer().GetStatistics();
         }
 
         return Statistics;
@@ -136,29 +136,29 @@ private:
 protected:
     TVector<TTransformStage> Stages;
     const bool UseIssueScopes;
-    const bool DoCheckArguments; 
+    const bool DoCheckArguments;
     size_t Index = 0;
     TMaybe<EYqlIssueCode> LastIssueScope;
-    ui64 CheckArgumentsCount = 0; 
+    ui64 CheckArgumentsCount = 0;
 };
 
-void AddTooManyTransformationsError(TPositionHandle pos, const TStringBuf& where, TExprContext& ctx) { 
-    ctx.AddError(TIssue(ctx.GetPosition(pos), 
-                        TStringBuilder() << "YQL: Internal core error! " << where << " take too much iteration: " 
-                                         << ctx.RepeatTransformLimit 
-                                         << ". You may set RepeatTransformLimit as flags for config provider.")); 
-} 
- 
-} 
- 
-TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes) {
-    return new TCompositeGraphTransformer(stages, useIssueScopes, /* doCheckArguments = */ true); 
+void AddTooManyTransformationsError(TPositionHandle pos, const TStringBuf& where, TExprContext& ctx) {
+    ctx.AddError(TIssue(ctx.GetPosition(pos),
+                        TStringBuilder() << "YQL: Internal core error! " << where << " take too much iteration: "
+                                         << ctx.RepeatTransformLimit
+                                         << ". You may set RepeatTransformLimit as flags for config provider."));
 }
 
-TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformerWithNoArgChecks(const TVector<TTransformStage>& stages, bool useIssueScopes) { 
-    return new TCompositeGraphTransformer(stages, useIssueScopes, /* doCheckArguments = */ false); 
-} 
- 
+}
+
+TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes) {
+    return new TCompositeGraphTransformer(stages, useIssueScopes, /* doCheckArguments = */ true);
+}
+
+TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformerWithNoArgChecks(const TVector<TTransformStage>& stages, bool useIssueScopes) {
+    return new TCompositeGraphTransformer(stages, useIssueScopes, /* doCheckArguments = */ false);
+}
+
 namespace {
 
 class TChoiceGraphTransformer : public TCompositeGraphTransformer {
@@ -230,7 +230,7 @@ TAutoPtr<IGraphTransformer> CreateChoiceGraphTransformer(
 
 IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx) {
     try {
-        for (; ctx.RepeatTransformCounter < ctx.RepeatTransformLimit; ++ctx.RepeatTransformCounter) { 
+        for (; ctx.RepeatTransformCounter < ctx.RepeatTransformLimit; ++ctx.RepeatTransformCounter) {
             TExprNode::TPtr newRoot;
             auto status = transformer.Transform(root, newRoot, ctx);
             if (newRoot) {
@@ -271,17 +271,17 @@ IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNo
                 YQL_ENSURE(false, "Unknown status");
             }
         }
-        AddTooManyTransformationsError(root->Pos(), "SyncTransform", ctx); 
+        AddTooManyTransformationsError(root->Pos(), "SyncTransform", ctx);
     }
     catch (const std::exception& e) {
         ctx.AddError(ExceptionToIssue(e));
     }
-    return IGraphTransformer::TStatus::Error; 
+    return IGraphTransformer::TStatus::Error;
 }
 
 IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool breakOnRestart) {
     try {
-        for (; ctx.RepeatTransformCounter < ctx.RepeatTransformLimit; ++ctx.RepeatTransformCounter) { 
+        for (; ctx.RepeatTransformCounter < ctx.RepeatTransformLimit; ++ctx.RepeatTransformCounter) {
             TExprNode::TPtr newRoot;
             auto status = transformer.Transform(root, newRoot, ctx);
             if (newRoot) {
@@ -299,18 +299,18 @@ IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExp
 
                 continue;
             case IGraphTransformer::TStatus::Async:
-                ctx.AddError(TIssue(ctx.GetPosition(root->Pos()), "Instant transform can not be delayed")); 
+                ctx.AddError(TIssue(ctx.GetPosition(root->Pos()), "Instant transform can not be delayed"));
                 return IGraphTransformer::TStatus::Error;
             default:
                 YQL_ENSURE(false, "Unknown status");
             }
         }
-        AddTooManyTransformationsError(root->Pos(), "InstantTransform", ctx); 
+        AddTooManyTransformationsError(root->Pos(), "InstantTransform", ctx);
     }
     catch (const std::exception& e) {
         ctx.AddError(ExceptionToIssue(e));
     }
-    return IGraphTransformer::TStatus::Error; 
+    return IGraphTransformer::TStatus::Error;
 }
 
 NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx,
@@ -338,7 +338,7 @@ NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer
             }
             return NThreading::MakeFuture(status);
         }
-        for (; ctx.RepeatTransformCounter < ctx.RepeatTransformLimit; ++ctx.RepeatTransformCounter) { 
+        for (; ctx.RepeatTransformCounter < ctx.RepeatTransformLimit; ++ctx.RepeatTransformCounter) {
             TExprNode::TPtr newRoot;
             auto status = transformer.Transform(root, newRoot, ctx);
             if (newRoot) {
@@ -359,8 +359,8 @@ NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer
             }
             break;
         }
-        if (ctx.RepeatTransformCounter >= ctx.RepeatTransformLimit) { 
-            AddTooManyTransformationsError(root->Pos(), "AsyncTransform", ctx); 
+        if (ctx.RepeatTransformCounter >= ctx.RepeatTransformLimit) {
+            AddTooManyTransformationsError(root->Pos(), "AsyncTransform", ctx);
             return NThreading::MakeFuture(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error));
         }
     }

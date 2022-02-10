@@ -10,7 +10,7 @@ namespace NYql {
 
 namespace {
 
-bool ReplaceNodes(TExprNode& node, const TNodeOnNodeOwnedMap& replaces, bool& hasChanges, TNodeSet& visited, TNodeSet& parents) 
+bool ReplaceNodes(TExprNode& node, const TNodeOnNodeOwnedMap& replaces, bool& hasChanges, TNodeSet& visited, TNodeSet& parents)
 {
     if (!node.ChildrenSize()) {
         return true;
@@ -33,7 +33,7 @@ bool ReplaceNodes(TExprNode& node, const TNodeOnNodeOwnedMap& replaces, bool& ha
             hasChanges = true;
         }
 
-        if (!ReplaceNodes(*node.Child(i), replaces, hasChanges, visited, parents)) { 
+        if (!ReplaceNodes(*node.Child(i), replaces, hasChanges, visited, parents)) {
             child.Reset();
             return false;
         }
@@ -42,12 +42,12 @@ bool ReplaceNodes(TExprNode& node, const TNodeOnNodeOwnedMap& replaces, bool& ha
     return true;
 }
 
-bool ReplaceNodes(TExprNode& node, const TNodeOnNodeOwnedMap& replaces, bool& hasChanges) { 
-    TNodeSet visited; 
-    TNodeSet parents; 
-    return ReplaceNodes(node, replaces, hasChanges, visited, parents); 
-} 
- 
+bool ReplaceNodes(TExprNode& node, const TNodeOnNodeOwnedMap& replaces, bool& hasChanges) {
+    TNodeSet visited;
+    TNodeSet parents;
+    return ReplaceNodes(node, replaces, hasChanges, visited, parents);
+}
+
 TString Load(const TString& path)
 {
     TFile file(path, EOpenModeFlag::RdOnly);
@@ -62,11 +62,11 @@ TString Load(const TString& path)
 
 bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx) {
     TExprNode::TListType tupleItems;
-    for (const auto& x : cohesion.Exports.Symbols()) { 
+    for (const auto& x : cohesion.Exports.Symbols()) {
         tupleItems.push_back(x.second);
     }
 
-    auto root = ctx.NewList(TPositionHandle(), std::move(tupleItems)); 
+    auto root = ctx.NewList(TPositionHandle(), std::move(tupleItems));
     for (;;) {
         auto status = ExpandApply(root, root, ctx);
         if (status == IGraphTransformer::TStatus::Error) {
@@ -80,7 +80,7 @@ bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx) {
     }
 
     ui32 index = 0;
-    for (auto& x : cohesion.Exports.Symbols(ctx)) { 
+    for (auto& x : cohesion.Exports.Symbols(ctx)) {
         x.second = root->ChildPtr(index++);
     }
 
@@ -133,7 +133,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
             }
 
             if (import.second.first == lib.first) {
-                ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()), 
+                ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()),
                     TStringBuilder() << "Library '" << lib.first << "' tries to import itself."));
                 return false;
             }
@@ -148,7 +148,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
             }
 
             if (!exportTable) {
-                ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()), 
+                ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()),
                     TStringBuilder() << "Library '" << lib.first << "' has unresolved dependency from '" << import.second.first << "'."));
                 return false;
             }
@@ -156,7 +156,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
             if (const auto ex = exportTable->Symbols().find(import.second.second); exportTable->Symbols().cend() != ex) {
                 replaces[import.first] = externalModule ? ctxToClone.DeepCopy(*ex->second, exportTable->ExprCtx(), clones, true, false) : ex->second;
             } else {
-                ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()), 
+                ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()),
                     TStringBuilder() << "Library '" << lib.first << "' has unresolved symbol '" << import.second.second << "' from '" << import.second.first << "'."));
                 return false;
             }
@@ -175,9 +175,9 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
     for (bool hasChanges = !replaces.empty(); hasChanges;) {
         hasChanges = false;
         for (const auto& lib : libs) {
-            for (const auto& expo : lib.second.Exports.Symbols()) { 
+            for (const auto& expo : lib.second.Exports.Symbols()) {
                 if (!ReplaceNodes(*expo.second, replaces, hasChanges)) {
-                    ctx.AddError(TIssue(ctxToClone.GetPosition(expo.second->Pos()), 
+                    ctx.AddError(TIssue(ctxToClone.GetPosition(expo.second->Pos()),
                         TStringBuilder() << "Cross reference detected under '" << expo.first << "' in '" << lib.first << "'."));
                     return false;
                 }

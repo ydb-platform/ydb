@@ -9,7 +9,7 @@ TSolomonConfiguration::TSolomonConfiguration()
 }
 
 TSolomonSettings::TConstPtr TSolomonConfiguration::Snapshot() const {
-    return std::make_shared<const TSolomonSettings>(*this); 
+    return std::make_shared<const TSolomonSettings>(*this);
 }
 
 } // NYql

@@ -63,10 +63,10 @@ struct TAstNode {
         return Type == List;
     }
 
-    inline bool IsListOfSize(ui32 len) const { 
-        return Type == List && ListCount == len; 
-    } 
- 
+    inline bool IsListOfSize(ui32 len) const {
+        return Type == List && ListCount == len;
+    }
+
     inline TPosition GetPosition() const {
         return Position;
     }
@@ -76,41 +76,41 @@ struct TAstNode {
     }
 
     inline TStringBuf GetContent() const {
-        Y_VERIFY(IsAtom()); 
+        Y_VERIFY(IsAtom());
         return TStringBuf(Data.A.Content, Data.A.Size);
     }
 
     inline void SetContent(TStringBuf newContent, TMemoryPool& pool) {
-        Y_VERIFY(IsAtom()); 
+        Y_VERIFY(IsAtom());
         auto poolContent = pool.AppendString(newContent);
         Data.A.Content = poolContent.data();
         Data.A.Size = poolContent.size();
     }
 
     inline void SetLiteralContent(TStringBuf newContent) {
-        Y_VERIFY(IsAtom()); 
+        Y_VERIFY(IsAtom());
         Data.A.Content = newContent.data();
         Data.A.Size = newContent.size();
     }
 
     inline ui32 GetFlags() const {
-        Y_VERIFY(IsAtom()); 
+        Y_VERIFY(IsAtom());
         return Data.A.Flags;
     }
 
     inline void SetFlags(ui32 flags) {
-        Y_VERIFY(IsAtom()); 
+        Y_VERIFY(IsAtom());
         Data.A.Flags = flags;
     }
 
     inline ui32 GetChildrenCount() const {
-        Y_VERIFY(IsList()); 
+        Y_VERIFY(IsList());
         return ListCount;
     }
 
     inline const TAstNode* GetChild(ui32 index) const {
-        Y_VERIFY(IsList()); 
-        Y_VERIFY(index < ListCount); 
+        Y_VERIFY(IsList());
+        Y_VERIFY(index < ListCount);
         if (ListCount <= SmallListCount) {
             return Data.S.Children[index];
         } else {
@@ -119,8 +119,8 @@ struct TAstNode {
     }
 
     inline TAstNode* GetChild(ui32 index) {
-        Y_VERIFY(IsList()); 
-        Y_VERIFY(index < ListCount); 
+        Y_VERIFY(IsList());
+        Y_VERIFY(index < ListCount);
         if (ListCount <= SmallListCount) {
             return Data.S.Children[index];
         } else {
@@ -153,7 +153,7 @@ struct TAstNode {
             }
 
             for (ui32 index = 0; index < childrenCount; ++index) {
-                Y_VERIFY(poolChildren[index]); 
+                Y_VERIFY(poolChildren[index]);
             }
         }
 

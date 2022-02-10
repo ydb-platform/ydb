@@ -53,31 +53,31 @@ struct TPosition {
     }
 };
 
-class TTextWalker { 
-public: 
-    TTextWalker(TPosition& position) 
-        : Position(position) 
-        , HaveCr(false) 
-        , LfCount(0) 
-    { 
-    } 
- 
-    template<typename T> 
-    TTextWalker& Advance(const T& buf) { 
-        for (char c : buf) { 
-            Advance(c); 
-        } 
-        return *this; 
-    } 
- 
-    TTextWalker& Advance(char c); 
- 
-private: 
-    TPosition& Position; 
-    bool HaveCr; 
-    ui32 LfCount; 
-}; 
- 
+class TTextWalker {
+public:
+    TTextWalker(TPosition& position)
+        : Position(position)
+        , HaveCr(false)
+        , LfCount(0)
+    {
+    }
+
+    template<typename T>
+    TTextWalker& Advance(const T& buf) {
+        for (char c : buf) {
+            Advance(c);
+        }
+        return *this;
+    }
+
+    TTextWalker& Advance(char c);
+
+private:
+    TPosition& Position;
+    bool HaveCr;
+    ui32 LfCount;
+};
+
 struct TRange {
     TPosition Position;
     TPosition EndPosition;

@@ -10,10 +10,10 @@ extern const char YqlTypeResourceTag[] = "_Type";
 extern const char YqlCodeResourceTag[] = "_Expr";
 extern const char YqlExprContextResourceTag[] = "_ExprContext";
 
-std::shared_ptr<NYql::TExprContext> GetExprContextPtr(TComputationContext& ctx, ui32 index) { 
+std::shared_ptr<NYql::TExprContext> GetExprContextPtr(TComputationContext& ctx, ui32 index) {
     auto& value = ctx.MutableValues[index];
     if (value.IsInvalid()) {
-        value = NUdf::TUnboxedValuePod(new TYqlExprContextResource(std::make_shared<NYql::TExprContext>())); 
+        value = NUdf::TUnboxedValuePod(new TYqlExprContextResource(std::make_shared<NYql::TExprContext>()));
     }
 
     return *dynamic_cast<TYqlExprContextResource*>(value.AsBoxed().Get())->Get();

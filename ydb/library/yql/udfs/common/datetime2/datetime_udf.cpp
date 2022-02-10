@@ -221,7 +221,7 @@ namespace {
     }
 
     inline bool ValidateMonthShortName(const std::string_view& monthName, ui8& month) {
-        static constexpr auto cmp = [](const std::string_view& a, const std::string_view& b) { 
+        static constexpr auto cmp = [](const std::string_view& a, const std::string_view& b) {
             int cmp = strnicmp(a.data(), b.data(), std::min(a.size(), b.size()));
             if (cmp == 0)
                 return a.size() < b.size();
@@ -250,7 +250,7 @@ namespace {
     }
 
     inline bool ValidateMonthFullName(const std::string_view& monthName, ui8& month) {
-        static constexpr auto cmp = [](const std::string_view& a, const std::string_view& b) { 
+        static constexpr auto cmp = [](const std::string_view& a, const std::string_view& b) {
             int cmp = strnicmp(a.data(), b.data(), std::min(a.size(), b.size()));
             if (cmp == 0)
                 return a.size() < b.size();
@@ -311,7 +311,7 @@ namespace {
             bool typesOnly)
         {
             builder.UserType(userType);
-            builder.Args()->Add<TUserDataType>().Flags(ICallablePayload::TArgumentFlags::AutoMap); 
+            builder.Args()->Add<TUserDataType>().Flags(ICallablePayload::TArgumentFlags::AutoMap);
             builder.Returns(builder.Resource(TMResourceName));
 
             if (!typesOnly) {
@@ -662,7 +662,7 @@ namespace {
                 .Add(builder.Optional()->Item<ui8>().Build()).Name("Minute")
                 .Add(builder.Optional()->Item<ui8>().Build()).Name("Second")
                 .Add(builder.Optional()->Item<ui32>().Build()).Name("Microsecond")
-                .Add(builder.Optional()->Item<ui16>().Build()).Name("TimezoneId"); 
+                .Add(builder.Optional()->Item<ui16>().Build()).Name("TimezoneId");
 
             builder.Returns(optionalResourceType);
 
@@ -1052,7 +1052,7 @@ namespace {
 
             auto resourceType = builder.Resource(TMResourceName);
 
-            builder.Args()->Add(resourceType).Flags(ICallablePayload::TArgumentFlags::AutoMap); 
+            builder.Args()->Add(resourceType).Flags(ICallablePayload::TArgumentFlags::AutoMap);
             builder.RunConfig<char*>().Returns<char*>();
 
             if (!typesOnly) {
@@ -1239,8 +1239,8 @@ namespace {
                         static constexpr std::string_view mp[] {
                             "Jan",
                             "Feb",
-                            "Mar", 
-                            "Apr", 
+                            "Mar",
+                            "Apr",
                             "May",
                             "Jun",
                             "Jul",
@@ -1250,9 +1250,9 @@ namespace {
                             "Nov",
                             "Dec"
                         };
-                        auto month = GetMonth(value); 
-                        Y_ENSURE(month > 0 && month <= sizeof(mp) / sizeof(mp[0]), "Invalid month value"); 
-                        std::memcpy(out, mp[month - 1].data(), size); 
+                        auto month = GetMonth(value);
+                        Y_ENSURE(month > 0 && month <= sizeof(mp) / sizeof(mp[0]), "Invalid month value");
+                        std::memcpy(out, mp[month - 1].data(), size);
                         return size;
                     });
                     ReservedSize_ += size;
@@ -1263,8 +1263,8 @@ namespace {
                         static constexpr std::string_view mp[] {
                             "January",
                             "February",
-                            "March", 
-                            "April", 
+                            "March",
+                            "April",
                             "May",
                             "June",
                             "July",
@@ -1274,9 +1274,9 @@ namespace {
                             "November",
                             "December"
                         };
-                        auto month = GetMonth(value); 
-                        Y_ENSURE(month > 0 && month <= sizeof(mp) / sizeof(mp[0]), "Invalid month value"); 
-                        const std::string_view monthFullName = mp[month - 1]; 
+                        auto month = GetMonth(value);
+                        Y_ENSURE(month > 0 && month <= sizeof(mp) / sizeof(mp[0]), "Invalid month value");
+                        const std::string_view monthFullName = mp[month - 1];
                         std::memcpy(out, monthFullName.data(), monthFullName.size());
                         return monthFullName.size();
                     });

@@ -36,7 +36,7 @@ public:
         auto& context = ctx.Codegen->GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
-        MKQL_ENSURE(codegenItem, "Item must be codegenerator node."); 
+        MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
         const auto previous = codegenItem->CreateGetValue(ctx, block);
 
         const auto fast = BasicBlock::Create(context, "fast", ctx.Func);
@@ -118,7 +118,7 @@ public:
         auto& context = ctx.Codegen->GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
-        MKQL_ENSURE(codegenItem, "Item must be codegenerator node."); 
+        MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
         const auto previous = codegenItem->CreateGetValue(ctx, block);
 
         const auto fast = BasicBlock::Create(context, "fast", ctx.Func);
@@ -200,7 +200,7 @@ public:
         auto& context = ctx.Codegen->GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
-        MKQL_ENSURE(codegenItem, "Item must be codegenerator node."); 
+        MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
         const auto previous = codegenItem->CreateGetValue(ctx, block);
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);

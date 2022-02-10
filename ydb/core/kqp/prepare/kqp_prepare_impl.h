@@ -24,7 +24,7 @@ enum class ETableWriteType {
 bool HasEffects(const NYql::NNodes::TKiProgram& program);
 bool HasResults(const NYql::NNodes::TKiProgram& program);
 
-NYql::NNodes::TCoList GetEmptyEffectsList(NYql::TPositionHandle pos, NYql::TExprContext& ctx); 
+NYql::NNodes::TCoList GetEmptyEffectsList(NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 TMkqlExecuteResult ExecuteMkql(NYql::NNodes::TKiProgram program, TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, NYql::TExprContext& ctx, TIntrusivePtr<TKqpTransactionState> txState,

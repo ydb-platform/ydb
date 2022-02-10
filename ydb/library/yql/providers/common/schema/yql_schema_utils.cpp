@@ -5,30 +5,30 @@
 namespace NYql {
 namespace NCommon {
 
-TVector<TString> ExtractColumnOrderFromYsonStructType(const NYT::TNode& node) { 
-    if (!node.IsList() || node.Size() < 1 || !node[0].IsString()) { 
-        YQL_ENSURE(!"Invalid type scheme"); 
-    } 
- 
-    auto typeName = node[0].AsString(); 
-    YQL_ENSURE(typeName == "StructType"); 
- 
-    if (node.Size() != 2 || !node[1].IsList()) { 
-        YQL_ENSURE(!"Invalid struct type scheme"); 
-    } 
- 
-    TVector<TString> columns; 
-    for (auto& member : node[1].AsList()) { 
-        if (!member.IsList() || member.Size() != 2 || !member[0].IsString()) { 
-            YQL_ENSURE(!"Invalid struct type scheme"); 
-        } 
- 
-        columns.push_back(member[0].AsString()); 
-    } 
- 
-    return columns; 
-} 
- 
+TVector<TString> ExtractColumnOrderFromYsonStructType(const NYT::TNode& node) {
+    if (!node.IsList() || node.Size() < 1 || !node[0].IsString()) {
+        YQL_ENSURE(!"Invalid type scheme");
+    }
+
+    auto typeName = node[0].AsString();
+    YQL_ENSURE(typeName == "StructType");
+
+    if (node.Size() != 2 || !node[1].IsList()) {
+        YQL_ENSURE(!"Invalid struct type scheme");
+    }
+
+    TVector<TString> columns;
+    for (auto& member : node[1].AsList()) {
+        if (!member.IsList() || member.Size() != 2 || !member[0].IsString()) {
+            YQL_ENSURE(!"Invalid struct type scheme");
+        }
+
+        columns.push_back(member[0].AsString());
+    }
+
+    return columns;
+}
+
 bool EqualsYsonTypesIgnoreStructOrder(const NYT::TNode& left, const NYT::TNode& right) {
     auto typeName = left[0].AsString();
     if (typeName != right[0].AsString()) {

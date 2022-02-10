@@ -1,28 +1,28 @@
-Index: contrib/src/postgres/src_backend_utils_mb_mbutils.c 
-=================================================================== 
---- contrib/src/postgres/src_backend_utils_mb_mbutils.c	(revision 8880671) 
-+++ contrib/src/postgres/src_backend_utils_mb_mbutils.c	(working copy) 
-@@ -619,7 +619,11 @@ 
- int 
- pg_database_encoding_max_length(void) 
- { 
--	return pg_wchar_table[GetDatabaseEncoding()].maxmblen; 
-+	int encoding = GetDatabaseEncoding(); 
-+	if (!PG_VALID_ENCODING(encoding)) { 
-+		pg_unreachable(); 
-+	} 
-+	return pg_wchar_table[encoding].maxmblen; 
- } 
-  
- /* 
-@@ -656,7 +660,9 @@ 
- 	mbverifier	mbverify; 
- 	int			mb_len; 
-  
--	Assert(PG_VALID_ENCODING(encoding)); 
-+	if (!PG_VALID_ENCODING(encoding)) { 
-+		pg_unreachable(); 
-+	} 
-  
- 	/* 
- 	 * In single-byte encodings, we need only reject nulls (\0). 
+Index: contrib/src/postgres/src_backend_utils_mb_mbutils.c
+===================================================================
+--- contrib/src/postgres/src_backend_utils_mb_mbutils.c	(revision 8880671)
++++ contrib/src/postgres/src_backend_utils_mb_mbutils.c	(working copy)
+@@ -619,7 +619,11 @@
+ int
+ pg_database_encoding_max_length(void)
+ {
+-	return pg_wchar_table[GetDatabaseEncoding()].maxmblen;
++	int encoding = GetDatabaseEncoding();
++	if (!PG_VALID_ENCODING(encoding)) {
++		pg_unreachable();
++	}
++	return pg_wchar_table[encoding].maxmblen;
+ }
+ 
+ /*
+@@ -656,7 +660,9 @@
+ 	mbverifier	mbverify;
+ 	int			mb_len;
+ 
+-	Assert(PG_VALID_ENCODING(encoding));
++	if (!PG_VALID_ENCODING(encoding)) {
++		pg_unreachable();
++	}
+ 
+ 	/*
+ 	 * In single-byte encodings, we need only reject nulls (\0).

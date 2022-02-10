@@ -133,7 +133,7 @@ public:
         : OldTlsAllocState(TlsAllocState)
     {
         TlsAllocState = nullptr;
-        InjectedAlloc = std::make_shared<TScopedAlloc>(counters, supportsSizedAllocators); 
+        InjectedAlloc = std::make_shared<TScopedAlloc>(counters, supportsSizedAllocators);
         AcquireOriginal();
     }
 
@@ -149,7 +149,7 @@ public:
         return InjectedAlloc->Ref();
     }
 
-    std::shared_ptr<TScopedAlloc> InjectedScopeAlloc() { 
+    std::shared_ptr<TScopedAlloc> InjectedScopeAlloc() {
         return InjectedAlloc;
     }
 
@@ -164,7 +164,7 @@ public:
     }
 private:
     TAllocState* OldTlsAllocState;
-    std::shared_ptr<TScopedAlloc> InjectedAlloc; 
+    std::shared_ptr<TScopedAlloc> InjectedAlloc;
 };
 
 class TInjectFreeGuard: TNonCopyable {

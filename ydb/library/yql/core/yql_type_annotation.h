@@ -125,7 +125,7 @@ struct TCredential {
 };
 
 using TCredentialTable = THashMap<TString, TCredential>;
-using TCredentialTablePtr = std::shared_ptr<TCredentialTable>; 
+using TCredentialTablePtr = std::shared_ptr<TCredentialTable>;
 
 struct TUserCredentials {
     TString OauthToken;
@@ -148,30 +148,30 @@ struct TYqlOperationOptions {
     TMaybe<NYT::TNode> ParametersYson;
 };
 
-using TColumnOrder = TVector<TString>; 
-TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder); 
-ui64 AddColumnOrderHash(const TMaybe<TColumnOrder>& columnOrder, ui64 hash); 
- 
-class TColumnOrderStorage: public TThrRefBase { 
-public: 
-    using TPtr = TIntrusivePtr<TColumnOrderStorage>; 
-    TColumnOrderStorage() = default; 
- 
-    TMaybe<TColumnOrder> Lookup(ui64 uniqueId) const { 
-        auto it = Storage.find(uniqueId); 
-        if (it == Storage.end()) { 
-            return {}; 
-        } 
-        return it->second; 
-    } 
- 
-    void Set(ui64 uniqueId, const TColumnOrder& order) { 
-        Storage[uniqueId] = order; 
-    } 
-private: 
-    THashMap<ui64, TColumnOrder> Storage; 
-}; 
- 
+using TColumnOrder = TVector<TString>;
+TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder);
+ui64 AddColumnOrderHash(const TMaybe<TColumnOrder>& columnOrder, ui64 hash);
+
+class TColumnOrderStorage: public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<TColumnOrderStorage>;
+    TColumnOrderStorage() = default;
+
+    TMaybe<TColumnOrder> Lookup(ui64 uniqueId) const {
+        auto it = Storage.find(uniqueId);
+        if (it == Storage.end()) {
+            return {};
+        }
+        return it->second;
+    }
+
+    void Set(ui64 uniqueId, const TColumnOrder& order) {
+        Storage[uniqueId] = order;
+    }
+private:
+    THashMap<ui64, TColumnOrder> Storage;
+};
+
 struct TTypeAnnotationContext: public TThrRefBase {
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
@@ -203,12 +203,12 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool EvaluationInProgress = false;
     THashMap<ui64, const TTypeAnnotationNode*> ExpectedTypes;
     THashMap<ui64, std::vector<const TConstraintNode*>> ExpectedConstraints;
-    THashMap<ui64, TColumnOrder> ExpectedColumnOrders; 
+    THashMap<ui64, TColumnOrder> ExpectedColumnOrders;
     THashSet<TString> DisableConstraintCheck;
     bool UdfSupportsYield = false;
     ui32 EvaluateForLimit = 500;
     ui32 EvaluateOrderByColumnLimit = 100;
-    bool PullUpFlatMapOverJoin = true; 
+    bool PullUpFlatMapOverJoin = true;
     bool DeprecatedSQL = false;
     THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>,
         std::tuple<const TTypeAnnotationNode*, const TTypeAnnotationNode*, const TTypeAnnotationNode*>>
@@ -222,13 +222,13 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool JsonQueryReturnsJsonDocument = false;
     ui32 FolderSubDirsLimit = 1000;
 
-    // compatibility with v0 or raw s-expression code 
-    bool OrderedColumns = false; 
-    TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage; 
- 
-    TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const; 
-    IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx); 
- 
+    // compatibility with v0 or raw s-expression code
+    bool OrderedColumns = false;
+    TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
+
+    TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
+    IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);
+
     // cached constants
     std::optional<ui64> CachedNow;
     std::tuple<std::optional<ui64>, std::optional<double>, std::optional<TGUID>> CachedRandom;

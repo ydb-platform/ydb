@@ -132,7 +132,7 @@ private:
                 NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(
                     TExprList(node.Ref().ChildPtr(4)), ctx);
                 if (!settings.Mode) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                         << "Mode option is required for Kikimr table writes."));
                     return TStatus::Error;
                 }
@@ -152,29 +152,29 @@ private:
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "insert_ignore") {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                         << "INSERT OR IGNORE is not yet supported for Kikimr."));
                     return TStatus::Error;
                 } else if (mode == "update") {
                     if (!settings.Filter) {
-                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table update.")); 
+                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table update."));
                         return TStatus::Error;
                     }
                     if (!settings.Update) {
-                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Update option is required for table update.")); 
+                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Update option is required for table update."));
                         return TStatus::Error;
                     }
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "delete") {
                     if (!settings.Filter) {
-                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table delete.")); 
+                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table delete."));
                         return TStatus::Error;
                     }
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                         << "Unsupported Kikimr table write mode: " << settings.Mode.Cast().Value()));
                     return TStatus::Error;
                 }
@@ -184,7 +184,7 @@ private:
                 NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(
                     TExprList(node.Ref().ChildPtr(4)), ctx);
                 if (!settings.Mode) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                         << "Mode option is required for Kikimr scheme writes."));
                     return TStatus::Error;
                 }
@@ -192,7 +192,7 @@ private:
                 auto mode = settings.Mode.Cast();
                 if (mode == "create") {
                     if (!settings.Columns) {
-                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
+                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                             << "No columns provided for create mode."));
                         return TStatus::Error;
                     }
@@ -201,7 +201,7 @@ private:
                     return TStatus::Ok;
                 } else if (mode == "alter") {
                     if (!settings.AlterActions) {
-                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
+                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                             << "No actions provided for alter mode."));
                         return TStatus::Error;
                     }
@@ -210,7 +210,7 @@ private:
                     return TStatus::Ok;
                 }
 
-                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
+                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                     << "Unsupported Kikimr scheme write mode: " << settings.Mode.Cast().Value()));
                 return TStatus::Error;
             }
@@ -222,7 +222,7 @@ private:
                 return TStatus::Ok;
         }
 
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid table key type.")); 
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid table key type."));
         return TStatus::Error;
     }
 
@@ -338,7 +338,7 @@ public:
             return {};
         }
 
-        TPositionHandle pos; 
+        TPositionHandle pos;
 
         TVector<TExprBase> locators;
         auto& grpcData = config->GetGrpc();
@@ -390,7 +390,7 @@ public:
         if (node.IsCallable(TCoDataSink::CallableName())) {
             if (node.Child(0)->Content() == KikimrProviderName) {
                 if (node.Child(1)->Content().empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), "Empty cluster name")); 
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), "Empty cluster name"));
                     return false;
                 }
 
@@ -399,7 +399,7 @@ public:
             }
         }
 
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid Kikimr DataSink parameters.")); 
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid Kikimr DataSink parameters."));
         return false;
     }
 
@@ -539,7 +539,7 @@ public:
                     YQL_ENSURE(!settings.Columns.Cast().Empty());
 
                     if (!settings.PrimaryKey) {
-                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Primary key is required for ydb tables.")); 
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Primary key is required for ydb tables."));
                         return nullptr;
                     }
 
@@ -647,7 +647,7 @@ public:
             }
         }
 
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Failed to rewrite IO.")); 
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Failed to rewrite IO."));
         return nullptr;
     }
 
@@ -774,7 +774,7 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleKql(callable, ctx);
     }
 
-    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: " 
+    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "
         << callable.CallableName()));
     return TStatus::Error;
 }

@@ -57,7 +57,7 @@ bool CheckPendingArgs(const TExprNode& root, TNodeSet& visited, TNodeMap<const T
                     hasUnresolvedTypes = true;
                 }
             } else if (!externalWorlds.count(&root)) {
-                ctx.AddError(TIssue(ctx.GetPosition(root.Pos()), TStringBuilder() << "Failed to evaluate unresolved argument: " << root.Content() << ". Did you use a column?")); 
+                ctx.AddError(TIssue(ctx.GetPosition(root.Pos()), TStringBuilder() << "Failed to evaluate unresolved argument: " << root.Content() << ". Did you use a column?"));
                 return false;
             }
         }
@@ -376,7 +376,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         [&](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
         output = input;
         if (!input->GetTypeAnn()) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Lambda is not allowed as argument for function: " << input->Content())); 
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Lambda is not allowed as argument for function: " << input->Content()));
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -405,8 +405,8 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
 
         return IGraphTransformer::TStatus::Ok;
     }), "TopLevelType", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, "Ensure type of expression is correct");
-    const bool forSubGraph = true; 
-    pipeline.AddPostTypeAnnotation(forSubGraph); 
+    const bool forSubGraph = true;
+    pipeline.AddPostTypeAnnotation(forSubGraph);
     pipeline.Add(TExprLogTransformer::Sync("EvalExpressionOpt", NLog::EComponent::CoreEval, NLog::ELevel::TRACE),
         "EvalOptTrace", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, "EvalOptTrace");
     pipeline.AddOptimization(false);
@@ -468,14 +468,14 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             }
 
             if (!calcProvider) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Only pure expressions are supported")); 
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Only pure expressions are supported"));
                 return IGraphTransformer::TStatus::Error;
             }
 
             if (!calcWorldRoot) {
                 calcWorldRoot = ctx.NewWorld(input->Pos());
                 calcWorldRoot->SetTypeAnn(ctx.MakeType<TUnitExprType>());
-                calcWorldRoot->SetState(TExprNode::EState::ConstrComplete); 
+                calcWorldRoot->SetState(TExprNode::EState::ConstrComplete);
             }
         }
 
@@ -503,7 +503,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     settings.VisitChanges = true;
     auto status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx)->TExprNode::TPtr {
         TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-            return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()), TStringBuilder() << "At function: " << node->Content()); 
+            return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()), TStringBuilder() << "At function: " << node->Content());
         });
 
         if (node->IsCallable("EvaluateIf!")) {
@@ -530,7 +530,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             }
 
             if (!node->Child(1)->IsCallable("Bool") || node->Child(1)->ChildrenSize() != 1) {
-                ctx.AddError(TIssue(ctx.GetPosition(node->Child(1)->Pos()), TStringBuilder() << "Expected literal bool")); 
+                ctx.AddError(TIssue(ctx.GetPosition(node->Child(1)->Pos()), TStringBuilder() << "Expected literal bool"));
                 return nullptr;
             }
 
@@ -538,7 +538,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             ui8 predValue;
             if (predAtom->Flags() & TNodeFlags::BinaryContent) {
                 if (predAtom->Content().size() != 1) {
-                    ctx.AddError(TIssue(ctx.GetPosition(predAtom->Pos()), TStringBuilder() << "Incorrect literal bool value")); 
+                    ctx.AddError(TIssue(ctx.GetPosition(predAtom->Pos()), TStringBuilder() << "Incorrect literal bool value"));
                     return nullptr;
                 }
 
@@ -616,13 +616,13 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             }
 
             if (!list->IsCallable("List") && !list->IsCallable("AsList")) {
-                ctx.AddError(TIssue(ctx.GetPosition(list->Pos()), TStringBuilder() << "Expected (optional) literal list")); 
+                ctx.AddError(TIssue(ctx.GetPosition(list->Pos()), TStringBuilder() << "Expected (optional) literal list"));
                 return nullptr;
             }
 
             auto itemsCount = list->ChildrenSize() - (list->IsCallable("List") ? 1 : 0);
             if (itemsCount > types.EvaluateForLimit) {
-                ctx.AddError(TIssue(ctx.GetPosition(list->Pos()), TStringBuilder() << "Too large list for EVALUATE FOR, allowed: " << 
+                ctx.AddError(TIssue(ctx.GetPosition(list->Pos()), TStringBuilder() << "Too large list for EVALUATE FOR, allowed: " <<
                     types.EvaluateForLimit << ", got: " << itemsCount));
                 return nullptr;
             }
@@ -799,7 +799,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             TExprNode::TListType keys;
             for (const auto& eachKey : node->Children()) {
                 if (!eachKey->IsCallable("Key")) {
-                    ctx.AddError(TIssue(ctx.GetPosition(eachKey->Pos()), TStringBuilder() << "Expected Key")); 
+                    ctx.AddError(TIssue(ctx.GetPosition(eachKey->Pos()), TStringBuilder() << "Expected Key"));
                     return nullptr;
                 }
 
@@ -809,7 +809,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
 
                 if (!eachKey->Child(0)->IsList() || eachKey->Child(0)->ChildrenSize() != 2 ||
                     !eachKey->Child(0)->Child(0)->IsAtom() || eachKey->Child(0)->Child(0)->Content() != "table") {
-                    ctx.AddError(TIssue(ctx.GetPosition(eachKey->Pos()), TStringBuilder() << "Invalid Key")); 
+                    ctx.AddError(TIssue(ctx.GetPosition(eachKey->Pos()), TStringBuilder() << "Invalid Key"));
                     return nullptr;
                 }
 
@@ -819,19 +819,19 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 }
 
                 if (list->IsCallable("List") && list->ChildrenSize() == 0) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Invalid literal list value")); 
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Invalid literal list value"));
                     return nullptr;
                 }
 
                 if (!list->IsCallable("List") && !list->IsCallable("AsList")) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Expected literal list")); 
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Expected literal list"));
                     return nullptr;
                 }
 
                 for (ui32 i = list->IsCallable("List") ? 1 : 0; i < list->ChildrenSize(); ++i) {
                     auto name = list->ChildPtr(i);
                     if (!name->IsCallable("String")) {
-                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Expected literal string as table name")); 
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Expected literal string as table name"));
                         return nullptr;
                     }
 
@@ -1005,7 +1005,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         if (isAtomPipeline) {
             if (isOptionalAtom) {
                 if (dataNode.IsEntity() || dataNode.AsList().empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to get atom from an empty optional")); 
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to get atom from an empty optional"));
                     return nullptr;
                 }
 
@@ -1027,7 +1027,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         TProgramBuilder pgmBuilder(env, functionRegistry);
         TType* mkqlType = NCommon::BuildType(*clonedArg->GetTypeAnn(), pgmBuilder, err);
         if (!mkqlType) {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to process type: " << err.Str())); 
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to process type: " << err.Str()));
             return nullptr;
         }
 
@@ -1035,13 +1035,13 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         THolderFactory holderFactory(alloc.Ref(), memInfo);
         auto value = NCommon::ParseYsonNodeInResultFormat(holderFactory, dataNode, mkqlType, &err);
         if (!value) {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to parse data: " << err.Str())); 
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to parse data: " << err.Str()));
             return nullptr;
         }
 
         if (isTypePipeline) {
             auto yson = TStringBuf(value->AsStringRef());
-            auto type = NCommon::ParseTypeFromYson(yson, ctx, ctx.GetPosition(node->Pos())); 
+            auto type = NCommon::ParseTypeFromYson(yson, ctx, ctx.GetPosition(node->Pos()));
             if (!type) {
                 return nullptr;
             }

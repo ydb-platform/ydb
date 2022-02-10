@@ -40,12 +40,12 @@ public:
     }
 
     bool AddAggregation(TContext& ctx, TAggregationPtr aggr) override {
-        YQL_ENSURE(aggr); 
-        ctx.Error(aggr->GetPos()) << "Source does not allow aggregation"; 
+        YQL_ENSURE(aggr);
+        ctx.Error(aggr->GetPos()) << "Source does not allow aggregation";
         return false;
     }
 
-    TNodePtr BuildFilter(TContext& ctx, const TString& label) override { 
+    TNodePtr BuildFilter(TContext& ctx, const TString& label) override {
         Y_UNUSED(ctx);
         Y_UNUSED(label);
         return nullptr;
@@ -146,7 +146,7 @@ public:
         Y_UNUSED(ctx);
         auto tuple = Y();
         for (const auto& row: Values) {
-            auto rowValues = Y("AsStruct"); // ordered struct 
+            auto rowValues = Y("AsStruct"); // ordered struct
             auto column = ColumnsHint.begin();
             for (auto value: row) {
                 rowValues = L(rowValues, Q(Y(BuildQuotedAtom(Pos, *column), value)));
@@ -226,7 +226,7 @@ public:
             return input;
         }
         auto srcColumn = Source->GetColumns()->List.begin();
-        auto structObj = Y("AsStruct"); // ordered struct 
+        auto structObj = Y("AsStruct"); // ordered struct
         for (auto column: ColumnsHint) {
             structObj = L(structObj, Q(Y(BuildQuotedAtom(Pos, column),
                 Y("Member", "row", BuildQuotedAtom(Pos, *srcColumn))
@@ -300,7 +300,7 @@ public:
             if (!TableSource->Init(ctx, src) || !TableSource->InitFilters(ctx)) {
                 return false;
             }
-            options = L(options, Q(Y(Q("filter"), TableSource->BuildFilterLambda()))); 
+            options = L(options, Q(Y(Q("filter"), TableSource->BuildFilterLambda())));
         }
 
         bool unordered = false;

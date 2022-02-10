@@ -1,7 +1,7 @@
 #include "yql_opt_utils.h"
 #include "yql_expr_optimize.h"
 #include "yql_expr_type_annotation.h"
-#include "yql_type_annotation.h" 
+#include "yql_type_annotation.h"
 #include "yql_type_helpers.h"
 
 #include <ydb/library/yql/ast/yql_constraint.h>
@@ -47,19 +47,19 @@ TExprNode::TPtr MakeBool(TPositionHandle position, bool value, TExprContext& ctx
     return value ? MakeBool<true>(position, ctx) : MakeBool<false>(position, ctx);
 }
 
-TExprNode::TPtr MakeOptionalBool(TPositionHandle position, bool value, TExprContext& ctx) { 
-    return ctx.NewCallable(position, "Just", { MakeBool(position, value, ctx)}); 
-} 
- 
-TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx) { 
-    return ctx.Builder(position) 
-        .Lambda() 
-            .Param("arg") 
-            .Arg("arg") 
-        .Seal() 
-        .Build(); 
-} 
- 
+TExprNode::TPtr MakeOptionalBool(TPositionHandle position, bool value, TExprContext& ctx) {
+    return ctx.NewCallable(position, "Just", { MakeBool(position, value, ctx)});
+}
+
+TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx) {
+    return ctx.Builder(position)
+        .Lambda()
+            .Param("arg")
+            .Arg("arg")
+        .Seal()
+        .Build();
+}
+
 bool IsJustOrSingleAsList(const TExprNode& node) {
     return node.ChildrenSize() == 1U && node.IsCallable({"Just", "AsList"});
 }
@@ -111,13 +111,13 @@ bool IsRenameFlatMap(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& struct
 }
 
 bool IsPassthroughFlatMap(const TCoFlatMapBase& flatmap, TMaybe<THashSet<TStringBuf>>* passthroughFields, bool analyzeJustMember) {
-    return IsPassthroughLambda(flatmap.Lambda(), passthroughFields, analyzeJustMember); 
-} 
+    return IsPassthroughLambda(flatmap.Lambda(), passthroughFields, analyzeJustMember);
+}
 
-bool IsPassthroughLambda(const TCoLambda& lambda, TMaybe<THashSet<TStringBuf>>* passthroughFields, bool analyzeJustMember) { 
-    auto body = lambda.Body(); 
-    auto arg = lambda.Args().Arg(0); 
- 
+bool IsPassthroughLambda(const TCoLambda& lambda, TMaybe<THashSet<TStringBuf>>* passthroughFields, bool analyzeJustMember) {
+    auto body = lambda.Body();
+    auto arg = lambda.Args().Arg(0);
+
     TMaybeNode<TExprBase> outItem;
     if (IsJustOrSingleAsList(body.Ref())) {
         outItem = body.Ref().Child(0);
@@ -173,38 +173,38 @@ bool IsPassthroughLambda(const TCoLambda& lambda, TMaybe<THashSet<TStringBuf>>* 
     return false;
 }
 
-bool IsTablePropsDependent(const TExprNode& node) { 
-    bool found = false; 
-    VisitExpr(node, [&found](const TExprNode& n) { 
+bool IsTablePropsDependent(const TExprNode& node) {
+    bool found = false;
+    VisitExpr(node, [&found](const TExprNode& n) {
         found = found || TCoTablePropBase::Match(&n) || (TCoMember::Match(&n) && TCoMember(&n).Name().Value().StartsWith("_yql_sys_"));
-        return !found; 
-    }); 
-    return found; 
-} 
- 
-TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) { 
-    auto columnOrder = typeCtx.LookupColumnOrder(src); 
-    if (!columnOrder) { 
-        return node; 
-    } 
- 
-    return ctx.Builder(node->Pos()) 
-        .Callable("AssumeColumnOrder") 
-            .Add(0, node) 
-            .List(1) 
-                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
-                    size_t index = 0; 
-                    for (auto& col : *columnOrder) { 
-                        parent 
-                            .Atom(index++, col); 
-                    } 
-                    return parent; 
-                }) 
-            .Seal() 
-        .Seal() 
-        .Build(); 
-} 
- 
+        return !found;
+    });
+    return found;
+}
+
+TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
+    auto columnOrder = typeCtx.LookupColumnOrder(src);
+    if (!columnOrder) {
+        return node;
+    }
+
+    return ctx.Builder(node->Pos())
+        .Callable("AssumeColumnOrder")
+            .Add(0, node)
+            .List(1)
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    size_t index = 0;
+                    for (auto& col : *columnOrder) {
+                        parent
+                            .Atom(index++, col);
+                    }
+                    return parent;
+                })
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 template<class TFieldsSet>
 bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TFieldsSet& usedFields, const TParentsMap& parentsMap, bool allowDependsOn) {
     if (arg.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Struct) {
@@ -314,21 +314,21 @@ bool IsEmptyContainer(const TExprNode& node) {
         || (1U == node.ChildrenSize() && node.IsCallable({"List", "Nothing", "EmptyIterator", "Dict"}));
 }
 
-const TTypeAnnotationNode* RemoveOptionalType(const TTypeAnnotationNode* type) { 
-    if (!type || type->GetKind() != ETypeAnnotationKind::Optional) { 
-        return type; 
-    } 
- 
-    return type->Cast<TOptionalExprType>()->GetItemType(); 
-} 
- 
-const TTypeAnnotationNode* RemoveAllOptionals(const TTypeAnnotationNode* type) { 
-    while (type && type->GetKind() == ETypeAnnotationKind::Optional) { 
-        type = type->Cast<TOptionalExprType>()->GetItemType(); 
-    } 
-    return type; 
-} 
- 
+const TTypeAnnotationNode* RemoveOptionalType(const TTypeAnnotationNode* type) {
+    if (!type || type->GetKind() != ETypeAnnotationKind::Optional) {
+        return type;
+    }
+
+    return type->Cast<TOptionalExprType>()->GetItemType();
+}
+
+const TTypeAnnotationNode* RemoveAllOptionals(const TTypeAnnotationNode* type) {
+    while (type && type->GetKind() == ETypeAnnotationKind::Optional) {
+        type = type->Cast<TOptionalExprType>()->GetItemType();
+    }
+    return type;
+}
+
 const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* type) {
     switch (type->GetKind()) {
         case ETypeAnnotationKind::List: return type->Cast<TListExprType>()->GetItemType();
@@ -350,23 +350,23 @@ TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name) {
     return nullptr;
 }
 
-bool HasSetting(const TExprNode& settings, const TStringBuf& name) { 
-    return GetSetting(settings, name) != nullptr; 
-} 
- 
-bool HasAnySetting(const TExprNode& settings, const THashSet<TString>& names) { 
-    for (auto& setting : settings.Children()) { 
-        if (setting->ChildrenSize() != 0 && names.contains(setting->Head().Content())) { 
-            return true; 
-        } 
-    } 
-    return false; 
-} 
- 
-TExprNode::TPtr RemoveSetting(const TExprNode& settings, const TStringBuf& name, TExprContext& ctx) { 
+bool HasSetting(const TExprNode& settings, const TStringBuf& name) {
+    return GetSetting(settings, name) != nullptr;
+}
+
+bool HasAnySetting(const TExprNode& settings, const THashSet<TString>& names) {
+    for (auto& setting : settings.Children()) {
+        if (setting->ChildrenSize() != 0 && names.contains(setting->Head().Content())) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TExprNode::TPtr RemoveSetting(const TExprNode& settings, const TStringBuf& name, TExprContext& ctx) {
     TExprNode::TListType children;
     for (auto setting : settings.Children()) {
-        if (setting->ChildrenSize() != 0 && setting->Head().Content() == name) { 
+        if (setting->ChildrenSize() != 0 && setting->Head().Content() == name) {
             continue;
         }
 
@@ -392,80 +392,80 @@ TExprNode::TPtr ReplaceSetting(const TExprNode& settings, TPositionHandle pos, c
     return ret;
 }
 
-TExprNode::TPtr AddSetting(const TExprNode& settings, TPositionHandle pos, const TString& name, const TExprNode::TPtr& value, TExprContext& ctx) { 
-    auto newChildren = settings.ChildrenList(); 
-    newChildren.push_back(value ? ctx.NewList(pos, { ctx.NewAtom(pos, name), value }) : ctx.NewList(pos, { ctx.NewAtom(pos, name) })); 
- 
-    auto ret = ctx.NewList(settings.Pos(), std::move(newChildren)); 
-    return ret; 
-} 
- 
+TExprNode::TPtr AddSetting(const TExprNode& settings, TPositionHandle pos, const TString& name, const TExprNode::TPtr& value, TExprContext& ctx) {
+    auto newChildren = settings.ChildrenList();
+    newChildren.push_back(value ? ctx.NewList(pos, { ctx.NewAtom(pos, name), value }) : ctx.NewList(pos, { ctx.NewAtom(pos, name) }));
 
-TExprNode::TPtr MergeSettings(const TExprNode& settings1, const TExprNode& settings2, TExprContext& ctx) { 
-    auto newChildren = settings1.ChildrenList(); 
-    newChildren.insert( 
-        newChildren.cend(), 
-        settings2.Children().begin(), 
-        settings2.Children().end()); 
-    auto ret = ctx.NewList(settings1.Pos(), std::move(newChildren)); 
-    return ret; 
-} 
- 
-TMaybe<TIssue> ParseToDictSettings(const TExprNode& input, TExprContext& ctx, TMaybe<bool>& isMany, TMaybe<bool>& isHashed, TMaybe<ui64>& itemsCount, bool& isCompact) { 
-    isCompact = false; 
-    auto settings = input.Child(3); 
-    if (settings->Type() != TExprNode::List) { 
-        return TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder() << "Expected tuple, but got: " << input.Type()); 
-    } 
- 
-    for (auto& child : settings->Children()) { 
-        if (child->Type() == TExprNode::Atom) { 
-            if (child->Content() == "One") { 
-                isMany = false; 
-            } 
-            else if (child->Content() == "Many") { 
-                isMany = true; 
-            } 
-            else if (child->Content() == "Sorted") { 
-                isHashed = false; 
-            } 
-            else if (child->Content() == "Hashed") { 
-                isHashed = true; 
-            } 
-            else if (child->Content() == "Compact") { 
-                isCompact = true; 
-            } 
-            else { 
-                return TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Unsupported option: " << child->Content()); 
-            } 
-        } else if (child->Type() == TExprNode::List) { 
-            if (child->ChildrenSize() != 2) { 
-                return TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Expected list with 2 elemenst"); 
-            } 
-            if (child->Child(0)->Content() == "ItemsCount") { 
-                ui64 count = 0; 
-                if (TryFromString(child->Child(1)->Content(), count)) { 
-                    itemsCount = count; 
-                } else { 
-                    return TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Bad 'ItemsCount' value: " << child->Child(1)->Content()); 
-                } 
-            } 
-            else { 
-                return TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Bad option: " << child->Child(0)->Content()); 
-            } 
-        } else { 
-            return TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Expected atom or list, but got: " << input.Type()); 
-        } 
- 
-    } 
- 
-    if (!isHashed || !isMany) { 
-        return TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Both options must be specified: Sorted/Hashed and Many/One"); 
-    } 
- 
-    return TMaybe<TIssue>(); 
-} 
- 
+    auto ret = ctx.NewList(settings.Pos(), std::move(newChildren));
+    return ret;
+}
+
+
+TExprNode::TPtr MergeSettings(const TExprNode& settings1, const TExprNode& settings2, TExprContext& ctx) {
+    auto newChildren = settings1.ChildrenList();
+    newChildren.insert(
+        newChildren.cend(),
+        settings2.Children().begin(),
+        settings2.Children().end());
+    auto ret = ctx.NewList(settings1.Pos(), std::move(newChildren));
+    return ret;
+}
+
+TMaybe<TIssue> ParseToDictSettings(const TExprNode& input, TExprContext& ctx, TMaybe<bool>& isMany, TMaybe<bool>& isHashed, TMaybe<ui64>& itemsCount, bool& isCompact) {
+    isCompact = false;
+    auto settings = input.Child(3);
+    if (settings->Type() != TExprNode::List) {
+        return TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder() << "Expected tuple, but got: " << input.Type());
+    }
+
+    for (auto& child : settings->Children()) {
+        if (child->Type() == TExprNode::Atom) {
+            if (child->Content() == "One") {
+                isMany = false;
+            }
+            else if (child->Content() == "Many") {
+                isMany = true;
+            }
+            else if (child->Content() == "Sorted") {
+                isHashed = false;
+            }
+            else if (child->Content() == "Hashed") {
+                isHashed = true;
+            }
+            else if (child->Content() == "Compact") {
+                isCompact = true;
+            }
+            else {
+                return TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Unsupported option: " << child->Content());
+            }
+        } else if (child->Type() == TExprNode::List) {
+            if (child->ChildrenSize() != 2) {
+                return TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Expected list with 2 elemenst");
+            }
+            if (child->Child(0)->Content() == "ItemsCount") {
+                ui64 count = 0;
+                if (TryFromString(child->Child(1)->Content(), count)) {
+                    itemsCount = count;
+                } else {
+                    return TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Bad 'ItemsCount' value: " << child->Child(1)->Content());
+                }
+            }
+            else {
+                return TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Bad option: " << child->Child(0)->Content());
+            }
+        } else {
+            return TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Expected atom or list, but got: " << input.Type());
+        }
+
+    }
+
+    if (!isHashed || !isMany) {
+        return TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Both options must be specified: Sorted/Hashed and Many/One");
+    }
+
+    return TMaybe<TIssue>();
+}
+
 TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TPtr reduced, TExprContext& ctx) {
     auto pos = aggregateNode.Pos();
     auto aggregatedColumns = aggregateNode.Child(2);
@@ -781,10 +781,10 @@ TExprNode::TPtr ExpandFlattenStructs(const TExprNode::TPtr& node, TExprContext& 
 }
 
 TExprNode::TPtr ExpandDivePrefixMembers(const TExprNode::TPtr& node, TExprContext& ctx) {
-    auto prefixes = node->Child(1)->Children(); 
+    auto prefixes = node->Child(1)->Children();
     MemberUpdaterFunc filterAndCutByPrefixFunc = [&prefixes](TString& memberName, const TTypeAnnotationNode*) {
-        for (const auto& p : prefixes) { 
-            auto prefix = p->Content(); 
+        for (const auto& p : prefixes) {
+            auto prefix = p->Content();
             if (memberName.StartsWith(prefix)) {
                 memberName = memberName.substr(prefix.length());
                 return true;
@@ -928,20 +928,20 @@ TExprNode::TPtr ExpandFlattenByColumns(const TExprNode::TPtr& node, TExprContext
     return internalResult;
 }
 
-TExprNode::TPtr ExpandCastStruct(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    YQL_CLOG(DEBUG, Core) << "Expand " << node->Content(); 
-    auto targetType = node->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>(); 
-    TExprNode::TListType items; 
-    for (auto item : targetType->GetItems()) { 
-        auto nameAtom = ctx.NewAtom(node->Pos(), item->GetName()); 
-        auto tuple = ctx.NewList(node->Pos(), { 
-            nameAtom, ctx.NewCallable(node->Pos(), "Member", { node->HeadPtr(), nameAtom }) }); 
-        items.push_back(std::move(tuple)); 
-    } 
- 
-    return ctx.NewCallable(node->Pos(), "AsStruct", std::move(items)); 
-} 
- 
+TExprNode::TPtr ExpandCastStruct(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, Core) << "Expand " << node->Content();
+    auto targetType = node->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+    TExprNode::TListType items;
+    for (auto item : targetType->GetItems()) {
+        auto nameAtom = ctx.NewAtom(node->Pos(), item->GetName());
+        auto tuple = ctx.NewList(node->Pos(), {
+            nameAtom, ctx.NewCallable(node->Pos(), "Member", { node->HeadPtr(), nameAtom }) });
+        items.push_back(std::move(tuple));
+    }
+
+    return ctx.NewCallable(node->Pos(), "AsStruct", std::move(items));
+}
+
 void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySelectorArg, TVector<TStringBuf>& columns) {
     if (keySelectorBody->IsList()) {
         for (auto& child: keySelectorBody->Children()) {
@@ -1009,97 +1009,97 @@ const TExprNode& SkipCallables(const TExprNode& node, const std::initializer_lis
     }
     return *p;
 }
- 
-namespace { 
-TExprNode::TPtr ApplyWithCastStructForFirstArg(const TExprNode::TPtr& node, const TTypeAnnotationNode& targetType, TExprContext& ctx) { 
-    YQL_ENSURE(node->IsLambda()); 
-    TCoLambda lambda(node); 
-    YQL_ENSURE(lambda.Args().Size() >= 1); 
- 
-    TPositionHandle pos = lambda.Pos(); 
- 
-    TExprNodeList args = lambda.Args().Ref().ChildrenList(); 
-    TExprNode::TPtr body = lambda.Body().Ptr(); 
- 
-    auto newArg = ctx.NewArgument(pos, "row"); 
-    auto cast = ctx.NewCallable(pos, "CastStruct", { newArg, ExpandType(pos, targetType, ctx) }); 
- 
-    body = ctx.ReplaceNodes(std::move(body), {{ args.front().Get(), cast }}); 
-    args.front() = newArg; 
- 
-    auto result = ctx.NewLambda(pos, ctx.NewArguments(pos, std::move(args)), std::move(body)); 
-    return ctx.DeepCopyLambda(*result); 
+
+namespace {
+TExprNode::TPtr ApplyWithCastStructForFirstArg(const TExprNode::TPtr& node, const TTypeAnnotationNode& targetType, TExprContext& ctx) {
+    YQL_ENSURE(node->IsLambda());
+    TCoLambda lambda(node);
+    YQL_ENSURE(lambda.Args().Size() >= 1);
+
+    TPositionHandle pos = lambda.Pos();
+
+    TExprNodeList args = lambda.Args().Ref().ChildrenList();
+    TExprNode::TPtr body = lambda.Body().Ptr();
+
+    auto newArg = ctx.NewArgument(pos, "row");
+    auto cast = ctx.NewCallable(pos, "CastStruct", { newArg, ExpandType(pos, targetType, ctx) });
+
+    body = ctx.ReplaceNodes(std::move(body), {{ args.front().Get(), cast }});
+    args.front() = newArg;
+
+    auto result = ctx.NewLambda(pos, ctx.NewArguments(pos, std::move(args)), std::move(body));
+    return ctx.DeepCopyLambda(*result);
 }
- 
-} 
- 
-void ExtractSortKeyAndOrder(TPositionHandle pos, const TExprNode::TPtr& sortTraitsNode, TExprNode::TPtr& sortKey, TExprNode::TPtr& sortOrder, TExprContext& ctx) { 
-    if (sortTraitsNode->IsCallable("SortTraits")) { 
-        TCoSortTraits sortTraits(sortTraitsNode); 
-        auto lambdaInputType = 
-            sortTraits.ListType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()->GetItemType(); 
-        sortOrder = sortTraits.SortDirections().Ptr(); 
-        sortKey = ApplyWithCastStructForFirstArg(sortTraits.SortKeySelectorLambda().Ptr(), *lambdaInputType, ctx); 
-    } else { 
-        YQL_ENSURE(sortTraitsNode->IsCallable("Void")); 
-        sortOrder = sortKey = ctx.NewCallable(pos, "Void", {}); 
-    } 
-} 
- 
-void ExtractSessionWindowParams(TPositionHandle pos, const TExprNode::TPtr& sessionTraits, TExprNode::TPtr& sessionKey, 
-    const TTypeAnnotationNode*& sessionKeyType, const TTypeAnnotationNode*& sessionParamsType, TExprNode::TPtr& sessionSortTraits, TExprNode::TPtr& sessionInit, 
-    TExprNode::TPtr& sessionUpdate, TExprContext& ctx) 
-{ 
-    sessionKey = sessionSortTraits = sessionInit = sessionUpdate = {}; 
-    sessionKeyType = nullptr; 
-    sessionParamsType = nullptr; 
- 
-    if (sessionTraits && sessionTraits->IsCallable("SessionWindowTraits")) { 
-        TCoSessionWindowTraits swt(sessionTraits); 
-        auto lambdaInputType = 
-            swt.ListType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()->GetItemType(); 
- 
-        sessionKeyType = swt.Calculate().Ref().GetTypeAnn(); 
- 
-        TVector<const TItemExprType*> sessionParamItems; 
-        sessionParamItems.push_back(ctx.MakeType<TItemExprType>("start",  sessionKeyType)); 
-        sessionParamItems.push_back(ctx.MakeType<TItemExprType>("state",  swt.InitState().Ref().GetTypeAnn())); 
-        sessionParamsType = ctx.MakeType<TStructExprType>(sessionParamItems); 
- 
-        sessionSortTraits = swt.SortSpec().Ptr(); 
-        sessionKey = ApplyWithCastStructForFirstArg(swt.Calculate().Ptr(), *lambdaInputType, ctx); 
-        sessionInit = ApplyWithCastStructForFirstArg(swt.InitState().Ptr(), *lambdaInputType, ctx); 
-        sessionUpdate = ApplyWithCastStructForFirstArg(swt.UpdateState().Ptr(), *lambdaInputType, ctx); 
-    } else { 
-        YQL_ENSURE(!sessionTraits || sessionTraits->IsCallable("Void")); 
-        sessionSortTraits = ctx.NewCallable(pos, "Void", {}); 
-    } 
-} 
- 
-TExprNode::TPtr BuildKeySelector(TPositionHandle pos, const TStructExprType& rowType, const TExprNode::TPtr& keyColumns, TExprContext& ctx) { 
-    auto keyExtractorArg = ctx.NewArgument(pos, "item"); 
-    TExprNode::TListType tupleItems; 
-    for (auto column : keyColumns->Children()) { 
-        auto itemType = rowType.GetItems()[*rowType.FindItem(column->Content())]->GetItemType(); 
-        auto keyValue = ctx.NewCallable(pos, "Member", { keyExtractorArg, column }); 
-        if (RemoveOptionalType(itemType)->GetKind() != ETypeAnnotationKind::Data) { 
-            keyValue = ctx.NewCallable(pos, "StablePickle", { keyValue }); 
-        } 
- 
-        tupleItems.push_back(keyValue); 
-    } 
- 
-    TExprNode::TPtr tuple; 
-    if (tupleItems.size() == 0) { 
-        tuple = ctx.Builder(pos).Callable("Uint32").Atom(0, "0").Seal().Build(); 
-    } else if (tupleItems.size() == 1) { 
-        tuple = tupleItems[0]; 
-    } else { 
-        tuple = ctx.NewList(pos, std::move(tupleItems)); 
-    } 
-    return ctx.NewLambda(pos, ctx.NewArguments(pos, {keyExtractorArg}), std::move(tuple)); 
-} 
- 
+
+}
+
+void ExtractSortKeyAndOrder(TPositionHandle pos, const TExprNode::TPtr& sortTraitsNode, TExprNode::TPtr& sortKey, TExprNode::TPtr& sortOrder, TExprContext& ctx) {
+    if (sortTraitsNode->IsCallable("SortTraits")) {
+        TCoSortTraits sortTraits(sortTraitsNode);
+        auto lambdaInputType =
+            sortTraits.ListType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()->GetItemType();
+        sortOrder = sortTraits.SortDirections().Ptr();
+        sortKey = ApplyWithCastStructForFirstArg(sortTraits.SortKeySelectorLambda().Ptr(), *lambdaInputType, ctx);
+    } else {
+        YQL_ENSURE(sortTraitsNode->IsCallable("Void"));
+        sortOrder = sortKey = ctx.NewCallable(pos, "Void", {});
+    }
+}
+
+void ExtractSessionWindowParams(TPositionHandle pos, const TExprNode::TPtr& sessionTraits, TExprNode::TPtr& sessionKey,
+    const TTypeAnnotationNode*& sessionKeyType, const TTypeAnnotationNode*& sessionParamsType, TExprNode::TPtr& sessionSortTraits, TExprNode::TPtr& sessionInit,
+    TExprNode::TPtr& sessionUpdate, TExprContext& ctx)
+{
+    sessionKey = sessionSortTraits = sessionInit = sessionUpdate = {};
+    sessionKeyType = nullptr;
+    sessionParamsType = nullptr;
+
+    if (sessionTraits && sessionTraits->IsCallable("SessionWindowTraits")) {
+        TCoSessionWindowTraits swt(sessionTraits);
+        auto lambdaInputType =
+            swt.ListType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()->GetItemType();
+
+        sessionKeyType = swt.Calculate().Ref().GetTypeAnn();
+
+        TVector<const TItemExprType*> sessionParamItems;
+        sessionParamItems.push_back(ctx.MakeType<TItemExprType>("start",  sessionKeyType));
+        sessionParamItems.push_back(ctx.MakeType<TItemExprType>("state",  swt.InitState().Ref().GetTypeAnn()));
+        sessionParamsType = ctx.MakeType<TStructExprType>(sessionParamItems);
+
+        sessionSortTraits = swt.SortSpec().Ptr();
+        sessionKey = ApplyWithCastStructForFirstArg(swt.Calculate().Ptr(), *lambdaInputType, ctx);
+        sessionInit = ApplyWithCastStructForFirstArg(swt.InitState().Ptr(), *lambdaInputType, ctx);
+        sessionUpdate = ApplyWithCastStructForFirstArg(swt.UpdateState().Ptr(), *lambdaInputType, ctx);
+    } else {
+        YQL_ENSURE(!sessionTraits || sessionTraits->IsCallable("Void"));
+        sessionSortTraits = ctx.NewCallable(pos, "Void", {});
+    }
+}
+
+TExprNode::TPtr BuildKeySelector(TPositionHandle pos, const TStructExprType& rowType, const TExprNode::TPtr& keyColumns, TExprContext& ctx) {
+    auto keyExtractorArg = ctx.NewArgument(pos, "item");
+    TExprNode::TListType tupleItems;
+    for (auto column : keyColumns->Children()) {
+        auto itemType = rowType.GetItems()[*rowType.FindItem(column->Content())]->GetItemType();
+        auto keyValue = ctx.NewCallable(pos, "Member", { keyExtractorArg, column });
+        if (RemoveOptionalType(itemType)->GetKind() != ETypeAnnotationKind::Data) {
+            keyValue = ctx.NewCallable(pos, "StablePickle", { keyValue });
+        }
+
+        tupleItems.push_back(keyValue);
+    }
+
+    TExprNode::TPtr tuple;
+    if (tupleItems.size() == 0) {
+        tuple = ctx.Builder(pos).Callable("Uint32").Atom(0, "0").Seal().Build();
+    } else if (tupleItems.size() == 1) {
+        tuple = tupleItems[0];
+    } else {
+        tuple = ctx.NewList(pos, std::move(tupleItems));
+    }
+    return ctx.NewLambda(pos, ctx.NewArguments(pos, {keyExtractorArg}), std::move(tuple));
+}
+
 template <bool Cannonize, bool EnableNewOptimizers>
 TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto optionals = node->ChildrenList();
@@ -1249,7 +1249,7 @@ TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx
     }
 
     return node;
-} 
+}
 
 template TExprNode::TPtr OptimizeIfPresent<true, true>(const TExprNode::TPtr& node, TExprContext& ctx);
 template TExprNode::TPtr OptimizeIfPresent<false, true>(const TExprNode::TPtr& node, TExprContext& ctx);
@@ -1291,21 +1291,21 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx)  
     }
 
     return node;
-} 
-
-bool WarnUnroderedSubquery(const TExprNode& unourderedSubquery, TExprContext& ctx) { 
-    YQL_ENSURE(unourderedSubquery.IsCallable("UnorderedSubquery")); 
- 
-    auto issueCode = EYqlIssueCode::TIssuesIds_EIssueCode_YQL_ORDER_BY_WITHOUT_LIMIT_IN_SUBQUERY; 
-    auto issue = TIssue(ctx.GetPosition(unourderedSubquery.Head().Pos()), "ORDER BY in subquery will be ignored"); 
-    auto subIssue = TIssue(ctx.GetPosition(unourderedSubquery.Pos()), "When used here"); 
-    SetIssueCode(issueCode, issue); 
-    SetIssueCode(issueCode, subIssue); 
-    issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue)); 
- 
-    return ctx.AddWarning(issue); 
 }
- 
+
+bool WarnUnroderedSubquery(const TExprNode& unourderedSubquery, TExprContext& ctx) {
+    YQL_ENSURE(unourderedSubquery.IsCallable("UnorderedSubquery"));
+
+    auto issueCode = EYqlIssueCode::TIssuesIds_EIssueCode_YQL_ORDER_BY_WITHOUT_LIMIT_IN_SUBQUERY;
+    auto issue = TIssue(ctx.GetPosition(unourderedSubquery.Head().Pos()), "ORDER BY in subquery will be ignored");
+    auto subIssue = TIssue(ctx.GetPosition(unourderedSubquery.Pos()), "When used here");
+    SetIssueCode(issueCode, issue);
+    SetIssueCode(issueCode, subIssue);
+    issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
+
+    return ctx.AddWarning(issue);
+}
+
 TExprNode::TPtr DuplicateIndependentStreams(TExprNode::TPtr lambda, const std::function<bool(const TExprNode*)>& stopTraverse, TExprContext& ctx) {
     TNodeOnNodeOwnedMap replaces;
     const auto isStream = [] (const TTypeAnnotationNode* type) {
@@ -1325,7 +1325,7 @@ TExprNode::TPtr DuplicateIndependentStreams(TExprNode::TPtr lambda, const std::f
         return true;
     });
     return ctx.ReplaceNodes(std::move(lambda), replaces);
-} 
+}
 
 IGraphTransformer::TStatus LocalUnorderedOptimize(TExprNode::TPtr input, TExprNode::TPtr& output, const std::function<bool(const TExprNode*)>& stopTraverse, TExprContext& ctx, TTypeAnnotationContext* typeCtx) {
     output = input;

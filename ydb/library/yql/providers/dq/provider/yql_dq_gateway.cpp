@@ -347,7 +347,7 @@ public:
             if (status.Ok()) {
                 TGuard<TMutex> lock(ProgressMutex);
                 TString stage;
-                TDqProgressWriter* dqProgressWriter = nullptr; 
+                TDqProgressWriter* dqProgressWriter = nullptr;
                 auto it = RunningQueries.find(sessionId);
                 if (it != RunningQueries.end()) {
                     dqProgressWriter = &it->second.first;

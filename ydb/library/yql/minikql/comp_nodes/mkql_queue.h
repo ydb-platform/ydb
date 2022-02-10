@@ -11,7 +11,7 @@ IComputationNode* WrapQueueCreate(TCallable& callable, const TComputationNodeFac
 IComputationNode* WrapQueuePush(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapQueuePop(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapQueuePeek(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-IComputationNode* WrapQueueRange(TCallable& callable, const TComputationNodeFactoryContext& ctx); 
+IComputationNode* WrapQueueRange(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapPreserveStream(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
 }

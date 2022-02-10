@@ -18,5 +18,5 @@ END()
 
 RECURSE(
     gen
-    collect_issues 
+    collect_issues
 )

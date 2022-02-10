@@ -513,18 +513,18 @@ TExprNode::TPtr ApplyExtractMembersToMapJoinCore(const TExprNode::TPtr& node, co
 }
 
 TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
-    YQL_ENSURE(node->IsCallable({"CalcOverWindow", "CalcOverSessionWindow", "CalcOverWindowGroup"})); 
- 
-    auto input = node->ChildPtr(0); 
- 
+    YQL_ENSURE(node->IsCallable({"CalcOverWindow", "CalcOverSessionWindow", "CalcOverWindowGroup"}));
+
+    auto input = node->ChildPtr(0);
+
     // window output = input fields + payload fields
     TSet<TStringBuf> outMembers;
     for (const auto& x : members->ChildrenList()) {
         outMembers.insert(x->Content());
     }
 
-    auto inputStructType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(); 
-    auto outputStructType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(); 
+    auto inputStructType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto outputStructType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     TSet<TStringBuf> toDrop;
     for (const auto& out : outputStructType->GetItems()) {
         if (!outMembers.contains(out->GetName())) {
@@ -532,106 +532,106 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
         }
     }
 
-    TSet<TStringBuf> usedFields; 
+    TSet<TStringBuf> usedFields;
     TSet<TStringBuf> payloadFields;
-    TExprNodeList newCalcs; 
-    auto calcs = ExtractCalcsOverWindow(node, ctx); 
-    bool dropped = false; 
-    for (auto& calcNode : calcs) { 
-        TCoCalcOverWindowTuple calc(calcNode); 
- 
-        // all partition keys will be used 
-        for (const auto& key : calc.Keys()) { 
-            usedFields.insert(key.Value()); 
+    TExprNodeList newCalcs;
+    auto calcs = ExtractCalcsOverWindow(node, ctx);
+    bool dropped = false;
+    for (auto& calcNode : calcs) {
+        TCoCalcOverWindowTuple calc(calcNode);
+
+        // all partition keys will be used
+        for (const auto& key : calc.Keys()) {
+            usedFields.insert(key.Value());
         }
 
-        auto processListType = [&](TExprBase typeNode) { 
-            auto structType = typeNode.Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()-> 
-                Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(); 
-            for (const auto& item : structType->GetItems()) { 
-                usedFields.insert(item->GetName()); 
-            } 
-        }; 
+        auto processListType = [&](TExprBase typeNode) {
+            auto structType = typeNode.Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->
+                Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            for (const auto& item : structType->GetItems()) {
+                usedFields.insert(item->GetName());
+            }
+        };
 
-        auto processSortTraits = [&](TExprBase node) { 
-            if (auto maybeSortTraits = node.Maybe<TCoSortTraits>()) { 
-                processListType(maybeSortTraits.Cast().ListType()); 
-            } else { 
-                YQL_ENSURE(node.Maybe<TCoVoid>()); 
-            } 
-        }; 
- 
-        // all sort keys will be used 
-        processSortTraits(calc.SortSpec()); 
- 
-        // all session keys + session sort keys will be used 
-        if (auto maybeSwt = calc.SessionSpec().Maybe<TCoSessionWindowTraits>()) { 
-            processListType(maybeSwt.Cast().ListType()); 
-            processSortTraits(maybeSwt.Cast().SortSpec()); 
-        } else { 
-            YQL_ENSURE(calc.SessionSpec().Maybe<TCoVoid>()); 
-        } 
- 
-        TExprNodeList newSessionColumns; 
-        for (auto& sessionColumn : calc.SessionColumns().Ref().ChildrenList()) { 
-            TStringBuf columnName = sessionColumn->Content(); 
-            if (toDrop.contains(columnName)) { 
-                dropped = true; 
-                continue; 
-            } 
-            payloadFields.insert(columnName); 
-            newSessionColumns.push_back(sessionColumn); 
-        } 
- 
-        TExprNodeList newFrames; 
-        for (const auto& winOnRows : calc.Frames().Ref().ChildrenList()) { 
-            YQL_ENSURE(winOnRows->IsCallable("WinOnRows")); 
+        auto processSortTraits = [&](TExprBase node) {
+            if (auto maybeSortTraits = node.Maybe<TCoSortTraits>()) {
+                processListType(maybeSortTraits.Cast().ListType());
+            } else {
+                YQL_ENSURE(node.Maybe<TCoVoid>());
+            }
+        };
 
-            TExprNodeList newFrameItems; 
-            newFrameItems.push_back(winOnRows->ChildPtr(0)); 
- 
-            for (ui32 i = 1; i < winOnRows->ChildrenSize(); ++i) { 
-                auto field = winOnRows->Child(i)->Child(0)->Content(); 
-                if (toDrop.contains(field)) { 
-                    dropped = true; 
-                    continue; 
-                } 
- 
-                payloadFields.insert(field); 
-                newFrameItems.push_back(winOnRows->ChildPtr(i)); 
-                auto payload = winOnRows->Child(i)->Child(1); 
-                const TStructExprType* structType; 
-                if (payload->IsCallable("WindowTraits")) { 
-                    structType = payload->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>(); 
-                } 
-                else if (payload->IsCallable({"Lead", "Lag", "Rank", "DenseRank"})) { 
-                    structType = payload->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>() 
-                        ->GetItemType()->Cast<TStructExprType>(); 
-                } else { 
-                    continue; 
-                } 
- 
-                for (const auto& item : structType->GetItems()) { 
-                    usedFields.insert(item->GetName()); 
-                } 
+        // all sort keys will be used
+        processSortTraits(calc.SortSpec());
+
+        // all session keys + session sort keys will be used
+        if (auto maybeSwt = calc.SessionSpec().Maybe<TCoSessionWindowTraits>()) {
+            processListType(maybeSwt.Cast().ListType());
+            processSortTraits(maybeSwt.Cast().SortSpec());
+        } else {
+            YQL_ENSURE(calc.SessionSpec().Maybe<TCoVoid>());
+        }
+
+        TExprNodeList newSessionColumns;
+        for (auto& sessionColumn : calc.SessionColumns().Ref().ChildrenList()) {
+            TStringBuf columnName = sessionColumn->Content();
+            if (toDrop.contains(columnName)) {
+                dropped = true;
+                continue;
+            }
+            payloadFields.insert(columnName);
+            newSessionColumns.push_back(sessionColumn);
+        }
+
+        TExprNodeList newFrames;
+        for (const auto& winOnRows : calc.Frames().Ref().ChildrenList()) {
+            YQL_ENSURE(winOnRows->IsCallable("WinOnRows"));
+
+            TExprNodeList newFrameItems;
+            newFrameItems.push_back(winOnRows->ChildPtr(0));
+
+            for (ui32 i = 1; i < winOnRows->ChildrenSize(); ++i) {
+                auto field = winOnRows->Child(i)->Child(0)->Content();
+                if (toDrop.contains(field)) {
+                    dropped = true;
+                    continue;
+                }
+
+                payloadFields.insert(field);
+                newFrameItems.push_back(winOnRows->ChildPtr(i));
+                auto payload = winOnRows->Child(i)->Child(1);
+                const TStructExprType* structType;
+                if (payload->IsCallable("WindowTraits")) {
+                    structType = payload->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                }
+                else if (payload->IsCallable({"Lead", "Lag", "Rank", "DenseRank"})) {
+                    structType = payload->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()
+                        ->GetItemType()->Cast<TStructExprType>();
+                } else {
+                    continue;
+                }
+
+                for (const auto& item : structType->GetItems()) {
+                    usedFields.insert(item->GetName());
+                }
             }
 
-            if (newFrameItems.size() == 1) { 
+            if (newFrameItems.size() == 1) {
                 continue;
             }
 
-            newFrames.push_back(ctx.ChangeChildren(*winOnRows, std::move(newFrameItems))); 
+            newFrames.push_back(ctx.ChangeChildren(*winOnRows, std::move(newFrameItems)));
         }
 
-        newCalcs.emplace_back( 
-            Build<TCoCalcOverWindowTuple>(ctx, calc.Pos()) 
-                .Keys(calc.Keys()) 
-                .SortSpec(calc.SortSpec()) 
-                .Frames(ctx.NewList(calc.Frames().Pos(), std::move(newFrames))) 
-                .SessionSpec(calc.SessionSpec()) 
-                .SessionColumns(ctx.NewList(calc.SessionColumns().Pos(), std::move(newSessionColumns))) 
-                .Done().Ptr() 
-        ); 
+        newCalcs.emplace_back(
+            Build<TCoCalcOverWindowTuple>(ctx, calc.Pos())
+                .Keys(calc.Keys())
+                .SortSpec(calc.SortSpec())
+                .Frames(ctx.NewList(calc.Frames().Pos(), std::move(newFrames)))
+                .SessionSpec(calc.SessionSpec())
+                .SessionColumns(ctx.NewList(calc.SessionColumns().Pos(), std::move(newSessionColumns)))
+                .Done().Ptr()
+        );
     }
 
     // keep input fields
@@ -641,29 +641,29 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
         }
     }
 
-    if (usedFields.size() == inputStructType->GetSize() && !dropped) { 
+    if (usedFields.size() == inputStructType->GetSize() && !dropped) {
         return {};
     }
 
     TExprNode::TListType usedExprList;
     for (const auto& x : usedFields) {
-        usedExprList.push_back(ctx.NewAtom(node->Pos(), x)); 
+        usedExprList.push_back(ctx.NewAtom(node->Pos(), x));
     }
 
-    auto newInput = Build<TCoExtractMembers>(ctx, node->Pos()) 
-        .Input(input) 
-        .Members(ctx.NewList(node->Pos(), std::move(usedExprList))) 
+    auto newInput = Build<TCoExtractMembers>(ctx, node->Pos())
+        .Input(input)
+        .Members(ctx.NewList(node->Pos(), std::move(usedExprList)))
         .Done()
         .Ptr();
 
-    auto calcOverWindow = Build<TCoCalcOverWindowGroup>(ctx, node->Pos()) 
-        .Input(newInput) 
-        .Calcs(ctx.NewList(node->Pos(), std::move(newCalcs))) 
-        .Done().Ptr(); 
- 
+    auto calcOverWindow = Build<TCoCalcOverWindowGroup>(ctx, node->Pos())
+        .Input(newInput)
+        .Calcs(ctx.NewList(node->Pos(), std::move(newCalcs)))
+        .Done().Ptr();
+
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
-    return Build<TCoExtractMembers>(ctx, node->Pos()) 
-        .Input(calcOverWindow) 
+    return Build<TCoExtractMembers>(ctx, node->Pos())
+        .Input(calcOverWindow)
         .Members(members)
         .Done()
         .Ptr();
@@ -676,19 +676,19 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
         outMembers.insert(x->Content());
     }
 
-    TMaybe<TStringBuf> sessionColumn; 
-    const auto sessionSetting = GetSetting(aggr.Settings().Ref(), "session"); 
-    if (sessionSetting) { 
-        YQL_ENSURE(sessionSetting->Child(1)->Child(0)->IsAtom()); 
-        sessionColumn = sessionSetting->Child(1)->Child(0)->Content(); 
-    } 
- 
+    TMaybe<TStringBuf> sessionColumn;
+    const auto sessionSetting = GetSetting(aggr.Settings().Ref(), "session");
+    if (sessionSetting) {
+        YQL_ENSURE(sessionSetting->Child(1)->Child(0)->IsAtom());
+        sessionColumn = sessionSetting->Child(1)->Child(0)->Content();
+    }
+
     TSet<TStringBuf> usedFields;
-    // all actual (non-session) keys will be used 
+    // all actual (non-session) keys will be used
     for (const auto& key : aggr.Keys()) {
-        if (key.Value() != sessionColumn) { 
-            usedFields.insert(key.Value()); 
-        } 
+        if (key.Value() != sessionColumn) {
+            usedFields.insert(key.Value());
+        }
     }
 
     TExprNode::TListType newHandlers;
@@ -742,19 +742,19 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
         }
     }
 
-    if (sessionSetting) { 
-        TCoSessionWindowTraits traits(sessionSetting->Child(1)->ChildPtr(1)); 
- 
-        // TODO: same should be done for hopping 
-        auto usedType = traits.ListType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()-> 
-            GetItemType()->Cast<TStructExprType>(); 
-        for (const auto& item : usedType->GetItems()) { 
-            usedFields.insert(item->GetName()); 
-        } 
-    } 
- 
+    if (sessionSetting) {
+        TCoSessionWindowTraits traits(sessionSetting->Child(1)->ChildPtr(1));
+
+        // TODO: same should be done for hopping
+        auto usedType = traits.ListType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()->
+            GetItemType()->Cast<TStructExprType>();
+        for (const auto& item : usedType->GetItems()) {
+            usedFields.insert(item->GetName());
+        }
+    }
+
     auto inputStructType = aggr.Input().Ptr()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    YQL_ENSURE(usedFields.size() <= inputStructType->GetSize()); 
+    YQL_ENSURE(usedFields.size() <= inputStructType->GetSize());
     if (usedFields.size() == inputStructType->GetSize()) {
         return {};
     }
@@ -783,15 +783,15 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
         .Ptr();
 }
 
-TExprNode::TPtr ApplyExtractMembersToCollect(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) { 
-    TCoCollect collect(node); 
-    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix; 
-    return Build<TCoCollect>(ctx, node->Pos()) 
-        .Input<TCoExtractMembers>() 
-            .Input(collect.Input()) 
-            .Members(members) 
-        .Build() 
-        .Done().Ptr(); 
-} 
- 
+TExprNode::TPtr ApplyExtractMembersToCollect(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+    TCoCollect collect(node);
+    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
+    return Build<TCoCollect>(ctx, node->Pos())
+        .Input<TCoExtractMembers>()
+            .Input(collect.Input())
+            .Members(members)
+        .Build()
+        .Done().Ptr();
+}
+
 } // NYql

@@ -517,7 +517,7 @@ TExprNode::TPtr FuseFlatMapOverByKey(const TExprNode& node, TExprContext& ctx) {
         ctx.Builder(node.Pos())
             .Lambda()
                 .Param("list")
-                .Callable(node.Content()) 
+                .Callable(node.Content())
                     .Apply(0, node.Head().Tail())
                         .With(0, "list")
                     .Seal()
@@ -528,7 +528,7 @@ TExprNode::TPtr FuseFlatMapOverByKey(const TExprNode& node, TExprContext& ctx) {
             .Lambda()
                 .Param("key")
                 .Param("state")
-                .Callable(node.Content()) 
+                .Callable(node.Content())
                     .Apply(0, node.Head().Tail())
                         .With(0, "key")
                         .With(1, "state")
@@ -1293,11 +1293,11 @@ TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ct
         return node.Ptr();
     }
 
-    if (GetSetting(settings.Ref(), "session")) { 
-        // TODO: support 
-        return node.Ptr(); 
-    } 
- 
+    if (GetSetting(settings.Ref(), "session")) {
+        // TODO: support
+        return node.Ptr();
+    }
+
     auto aggregatedColumn = aggregatedColumns.Item(0);
     const bool isDistinct = (aggregatedColumn.Ref().ChildrenSize() == 3);
 
@@ -1549,7 +1549,7 @@ TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ct
 }
 
 TExprNode::TPtr OptimizeReverse(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    if (optCtx.IsSingleUsage(node->Head()) && node->Head().IsCallable({"Sort", "AssumeSorted"})) { 
+    if (optCtx.IsSingleUsage(node->Head()) && node->Head().IsCallable({"Sort", "AssumeSorted"})) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
         auto asc = node->Head().ChildPtr(1);
         if (asc->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
@@ -1588,7 +1588,7 @@ TExprNode::TPtr OptimizeReverse(const TExprNode::TPtr& node, TExprContext& ctx, 
 }
 
 TExprNode::TPtr OptimizeLookup(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-     if (optCtx.IsSingleUsage(node->Head()) && node->Head().IsCallable("ToIndexDict") && TMaybeNode<TCoIntegralCtor>(node->TailPtr())) { 
+     if (optCtx.IsSingleUsage(node->Head()) && node->Head().IsCallable("ToIndexDict") && TMaybeNode<TCoIntegralCtor>(node->TailPtr())) {
         const auto& atom = node->Tail().Head();
         if (atom.Content() == "0" && !(TNodeFlags::BinaryContent & atom.Flags())) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " zero item over " << node->Head().Content();
@@ -1617,7 +1617,7 @@ constexpr std::initializer_list<std::string_view> FlowPriority = {
 };
 
 TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    if (!optCtx.IsSingleUsage(node->Head())) { 
+    if (!optCtx.IsSingleUsage(node->Head())) {
         return node;
     }
 
@@ -1706,7 +1706,7 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
     if (node->Head().IsCallable({"PartitionByKey", "PartitionsByKeys"})) {
         return FuseFlatMapOverByKey<true>(*node, ctx);
     }
- 
+
     if (node->Head().IsCallable("ForwardList")) {
         if (ETypeAnnotationKind::List == node->GetTypeAnn()->GetKind()) {
             YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
@@ -1771,11 +1771,11 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
 
     map["FlatMap"] = std::bind(&OptimizeFlatMap<false>, _1, _2, _3);
     map["OrderedFlatMap"] = std::bind(&OptimizeFlatMap<true>, _1, _2, _3);
- 
+
     map["Lookup"] = std::bind(&OptimizeLookup, _1, _2, _3);
 
     map["Skip"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (!optCtx.IsSingleUsage(node->Head()) && !optCtx.IsPersistentNode(node->Head())) { 
+        if (!optCtx.IsSingleUsage(node->Head()) && !optCtx.IsPersistentNode(node->Head())) {
             return node;
         }
 
@@ -1800,7 +1800,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Take"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (!optCtx.IsSingleUsage(node->Head()) && !optCtx.IsPersistentNode(node->Head())) { 
+        if (!optCtx.IsSingleUsage(node->Head()) && !optCtx.IsPersistentNode(node->Head())) {
             return node;
         }
 /*TODO: Enable later. Providers is not ready right now.
@@ -1838,7 +1838,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Length"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (!optCtx.IsSingleUsage(node->Head()) && !optCtx.IsPersistentNode(node->Head())) { 
+        if (!optCtx.IsSingleUsage(node->Head()) && !optCtx.IsPersistentNode(node->Head())) {
             return node;
         }
 
@@ -1883,7 +1883,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     };
 
     map["HasItems"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (!optCtx.IsSingleUsage(node->Head()) && !optCtx.IsPersistentNode(node->Head())) { 
+        if (!optCtx.IsSingleUsage(node->Head()) && !optCtx.IsPersistentNode(node->Head())) {
             return node;
         }
 
@@ -1901,7 +1901,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Fold"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (!optCtx.IsSingleUsage(node->Head())) { 
+        if (!optCtx.IsSingleUsage(node->Head())) {
             return node;
         }
 
@@ -1929,7 +1929,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Fold1"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (!optCtx.IsSingleUsage(node->Head())) { 
+        if (!optCtx.IsSingleUsage(node->Head())) {
             return node;
         }
 
@@ -1957,7 +1957,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Condense"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (!optCtx.IsSingleUsage(node->Head())) { 
+        if (!optCtx.IsSingleUsage(node->Head())) {
             return node;
         }
 
@@ -1974,16 +1974,16 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             return PropagateMapToCondense(*node, ctx);
         }
 
-        if (node->Head().IsCallable({"ForwardList", "FromFlow"})) { 
-            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content(); 
-            return ctx.SwapWithHead(*node); 
-        } 
- 
+        if (node->Head().IsCallable({"ForwardList", "FromFlow"})) {
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+            return ctx.SwapWithHead(*node);
+        }
+
         return node;
     };
 
     map["Condense1"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (!optCtx.IsSingleUsage(node->Head())) { 
+        if (!optCtx.IsSingleUsage(node->Head())) {
             return node;
         }
 
@@ -2000,16 +2000,16 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             return PropagateMapToCondense1(*node, ctx);
         }
 
-        if (node->Head().IsCallable({"ForwardList", "FromFlow"})) { 
-            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content(); 
-            return ctx.SwapWithHead(*node); 
-        } 
- 
+        if (node->Head().IsCallable({"ForwardList", "FromFlow"})) {
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+            return ctx.SwapWithHead(*node);
+        }
+
         return node;
     };
 
     map["CombineByKey"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (!optCtx.IsSingleUsage(node->Head())) { 
+        if (!optCtx.IsSingleUsage(node->Head())) {
             return node;
         }
 
@@ -2048,7 +2048,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Aggregate"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (!optCtx.IsSingleUsage(node->Head()) && !optCtx.IsPersistentNode(node->Head())) { 
+        if (!optCtx.IsSingleUsage(node->Head()) && !optCtx.IsPersistentNode(node->Head())) {
             return node;
         }
 
@@ -2065,7 +2065,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     map["Reverse"] = std::bind(&OptimizeReverse, _1, _2, _3);
 
     map["Visit"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (!optCtx.IsSingleUsage(node->Head())) { 
+        if (!optCtx.IsSingleUsage(node->Head())) {
             return node;
         }
 
@@ -2187,7 +2187,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     };
 
     map["VariantItem"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (!optCtx.IsSingleUsage(node->Head())) { 
+        if (!optCtx.IsSingleUsage(node->Head())) {
             return node;
         }
 
@@ -2238,7 +2238,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     };
 
     map["SkipNullMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (!optCtx.IsSingleUsage(node->Head())) { 
+        if (!optCtx.IsSingleUsage(node->Head())) {
             return node;
         }
 
@@ -2281,16 +2281,16 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             }
         }
 
-        if (node->Head().IsCallable({"ForwardList", "FromFlow"})) { 
-            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content(); 
-            return ctx.SwapWithHead(*node); 
-        } 
- 
+        if (node->Head().IsCallable({"ForwardList", "FromFlow"})) {
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+            return ctx.SwapWithHead(*node);
+        }
+
         return node;
     };
 
     map["Exists"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (!optCtx.IsSingleUsage(node->Head())) { 
+        if (!optCtx.IsSingleUsage(node->Head())) {
             return node;
         }
 
@@ -2301,40 +2301,40 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
 
         return node;
     };
- 
+
     map["Sort"] = map["Top"] = map["TopSort"] =
-    map["TakeWhile"] = map["SkipWhile"] = map["TakeWhileInclusive"] = map["SkipWhileInclusive"] = 
-    map["SkipNullElements"] = map["FilterNullMembers"] = map["FilterNullElements"] = map["ExtractMembers"] = 
+    map["TakeWhile"] = map["SkipWhile"] = map["TakeWhileInclusive"] = map["SkipWhileInclusive"] =
+    map["SkipNullElements"] = map["FilterNullMembers"] = map["FilterNullElements"] = map["ExtractMembers"] =
     map["Chain1Map"] = map["Fold1Map"] = map["FoldMap"] =
     map["Map"] = map["OrderedMap"] = map["MultiMap"] = map["OrderedMultiMap"] =
-        [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) 
-    { 
-        if (!optCtx.IsSingleUsage(node->Head())) { 
-            return node; 
-        } 
- 
-        if (node->Head().IsCallable({"ForwardList", "FromFlow"})) { 
-            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content(); 
-            return ctx.SwapWithHead(*node); 
-        } 
- 
-        return node; 
-    }; 
- 
- 
-    map["ForwardList"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) { 
-        if (optCtx.HasParent(*node) && !optCtx.IsSingleUsage(*node)) { 
-            YQL_ENSURE(optCtx.ParentsMap); 
-            auto parentsIt = optCtx.ParentsMap->find(node.Get()); 
-            YQL_ENSURE(parentsIt != optCtx.ParentsMap->cend()); 
-            if (AnyOf(parentsIt->second, [](const TExprNode* parent) { return !parent->IsCallable({"Length", "HasItems"}); })) { 
-                YQL_CLOG(DEBUG, Core) << "Collect list instead of " << node->Content(); 
-                return ctx.RenameNode(*node, "Collect"); 
-            } 
-        } 
- 
-        return node; 
-    }; 
+        [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx)
+    {
+        if (!optCtx.IsSingleUsage(node->Head())) {
+            return node;
+        }
+
+        if (node->Head().IsCallable({"ForwardList", "FromFlow"})) {
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+            return ctx.SwapWithHead(*node);
+        }
+
+        return node;
+    };
+
+
+    map["ForwardList"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (optCtx.HasParent(*node) && !optCtx.IsSingleUsage(*node)) {
+            YQL_ENSURE(optCtx.ParentsMap);
+            auto parentsIt = optCtx.ParentsMap->find(node.Get());
+            YQL_ENSURE(parentsIt != optCtx.ParentsMap->cend());
+            if (AnyOf(parentsIt->second, [](const TExprNode* parent) { return !parent->IsCallable({"Length", "HasItems"}); })) {
+                YQL_CLOG(DEBUG, Core) << "Collect list instead of " << node->Content();
+                return ctx.RenameNode(*node, "Collect");
+            }
+        }
+
+        return node;
+    };
 }
 
 }

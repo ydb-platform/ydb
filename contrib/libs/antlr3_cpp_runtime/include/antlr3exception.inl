@@ -307,7 +307,7 @@ void ANTLR_Exception<ImplTraits, Ex, StreamType>::displayRecognitionError( ANTLR
 			// possible tokens at this point, but we did not see any
 			// member of that set.
 			//
-			str_stream << " : unexpected input :"; 
+			str_stream << " : unexpected input :";
 
 			// What tokens could we have accepted at this point in the
 			// parse?
@@ -327,7 +327,7 @@ void ANTLR_Exception<ImplTraits, Ex, StreamType>::displayRecognitionError( ANTLR
 				// here, but you should do whatever makes sense for you of course.
 				// No token number 0, so look for bit 1 and on.
 				//
-                str_stream << " expected one of : "; 
+                str_stream << " expected one of : ";
 				for	(bit = 1; bit < numbits && count < 8 && count < size; bit++)
 				{
 					// TODO: This doesn;t look right - should be asking if the bit is set!!
@@ -343,7 +343,7 @@ void ANTLR_Exception<ImplTraits, Ex, StreamType>::displayRecognitionError( ANTLR
 			}
 			else
 			{
-                str_stream << " nothing is expected here\n"; 
+                str_stream << " nothing is expected here\n";
 			}
 		}
 		break;

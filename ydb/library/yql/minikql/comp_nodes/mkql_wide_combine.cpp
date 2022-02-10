@@ -12,8 +12,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-using NYql::EnsureDynamicCast; 
- 
+using NYql::EnsureDynamicCast;
+
 extern TStatKey Combine_FlushesCount;
 extern TStatKey Combine_MaxRowsCount;
 
@@ -257,7 +257,7 @@ public:
                 return EFetchResult::One;
             }
         }
-        Y_UNREACHABLE(); 
+        Y_UNREACHABLE();
     }
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
@@ -368,7 +368,7 @@ public:
             std::vector<Value*> items(Nodes.ItemNodes.size(), nullptr);
             for (ui32 i = 0U; i < items.size(); ++i) {
                 if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U)
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block)); 
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block));
                 else if (Nodes.PasstroughtItems[i])
                     items[i] = getres.second[i](ctx, block);
             }
@@ -390,7 +390,7 @@ public:
                 }
 
                 if (Nodes.KeyNodes[i]->GetDependencesCount() > 0U)
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.KeyNodes[i])->CreateSetValue(ctx, block, key); 
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.KeyNodes[i])->CreateSetValue(ctx, block, key);
 
                 new StoreInst(key, keyPtr, block);
             }
@@ -448,10 +448,10 @@ public:
                     if (hasDependency || i != *map) {
                         stored[i] = new LoadInst(pointers[i], (TString("state_") += ToString(i)).c_str(), block);
                         if (hasDependency)
-                            EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.StateNodes[i])->CreateSetValue(ctx, block, stored[i]); 
+                            EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.StateNodes[i])->CreateSetValue(ctx, block, stored[i]);
                     }
                 } else if (hasDependency) {
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.StateNodes[i])->CreateSetValue(ctx, block, pointers[i]); 
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.StateNodes[i])->CreateSetValue(ctx, block, pointers[i]);
                 } else {
                     ValueUnRef(Nodes.StateNodes[i]->GetRepresentation(), pointers[i], ctx, block);
                 }
@@ -520,7 +520,7 @@ public:
             for (ui32 i = 0U; i < Nodes.FinishNodes.size(); ++i) {
                 const auto ptr = GetElementPtrInst::CreateInBounds(out, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("out_key_") += ToString(i)).c_str(), block);
                 if (Nodes.FinishNodes[i]->GetDependencesCount() > 0 || Nodes.ItemsOnResult[i])
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.FinishNodes[i])->CreateSetValue(ctx, block, ptr); 
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.FinishNodes[i])->CreateSetValue(ctx, block, ptr);
                 else
                     ValueUnRef(Nodes.FinishNodes[i]->GetRepresentation(), ptr, ctx, block);
             }

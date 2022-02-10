@@ -184,7 +184,7 @@ TUnboxedValuePod MakeStub(const ITypeInfoHelper::TPtr typeHelper, const TType* s
         case ETypeKind::Resource:
             if (const auto inspector = TResourceTypeInspector(*typeHelper, shape); TStringBuf(inspector.GetTag()) == NodeResourceName)
                 return MakeEntity();
-            [[fallthrough]]; 
+            [[fallthrough]];
         default:
             UdfTerminate((::TStringBuilder() << "Unsupported data kind: " << kind).c_str());
     }

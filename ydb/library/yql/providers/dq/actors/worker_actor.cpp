@@ -187,21 +187,21 @@ private:
                     } else if (line.Contains("Container killed by OOM")) {
                         // temporary workaround for YQL-12066
                         *fallbackFlag = true;
-                    } else if (line.Contains("Expected data or optional of data, actual:")) { 
+                    } else if (line.Contains("Expected data or optional of data, actual:")) {
                         // temporary workaround for YQL-12835
                         *fallbackFlag = true;
-                    } else if (line.Contains("Cannot create Skiff writer for ")) { 
-                        // temporary workaround for YQL-12986 
-                        *fallbackFlag = true; 
+                    } else if (line.Contains("Cannot create Skiff writer for ")) {
+                        // temporary workaround for YQL-12986
+                        *fallbackFlag = true;
                     } else if (line.Contains("Skiff format expected")) {
                         // temporary workaround for YQL-12986
                         *fallbackFlag = true;
-                    } else if (line.Contains("Pattern nodes can not get computation node by index:")) { 
-                        // temporary workaround for YQL-12987 
-                        *fallbackFlag = true; 
-                    } else if (line.Contains("contrib/libs/protobuf/src/google/protobuf/messagext.cc") && line.Contains("Message size") && line.Contains("exceeds")) { 
-                        // temporary workaround for YQL-12988 
-                        *fallbackFlag = true; 
+                    } else if (line.Contains("Pattern nodes can not get computation node by index:")) {
+                        // temporary workaround for YQL-12987
+                        *fallbackFlag = true;
+                    } else if (line.Contains("contrib/libs/protobuf/src/google/protobuf/messagext.cc") && line.Contains("Message size") && line.Contains("exceeds")) {
+                        // temporary workaround for YQL-12988
+                        *fallbackFlag = true;
                     } else if (line.Contains("Cannot start container")) {
                         // temporary workaround for YQL-14221
                         *retriableFlag = true;
@@ -799,7 +799,7 @@ private:
     TActorId TaskRunnerActor;
 
     NDqProto::TDqTask Task;
-    ui64 StageId = 0; 
+    ui64 StageId = 0;
     bool TaskRunnerPrepared = false;
 
     THashMap<NActors::TActorId, TInputChannel> InputMap;

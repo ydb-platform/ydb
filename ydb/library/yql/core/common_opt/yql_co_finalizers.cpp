@@ -169,10 +169,10 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         );
     };
 
-    map[TCoCalcOverWindowGroup::CallableName()] = map[TCoCalcOverWindow::CallableName()] = 
-    map[TCoCalcOverSessionWindow::CallableName()] = 
-        [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) 
-    { 
+    map[TCoCalcOverWindowGroup::CallableName()] = map[TCoCalcOverWindow::CallableName()] =
+    map[TCoCalcOverSessionWindow::CallableName()] =
+        [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx)
+    {
         SubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToCalcOverWindow(input, members, ctx, " with multi-usage");
@@ -195,14 +195,14 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
             }
         );
     };
- 
-    map[TCoCollect::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) { 
-        SubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx, 
-            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) { 
-                return ApplyExtractMembersToCollect(input, members, ctx, " with multi-usage"); 
-            } 
-        ); 
-    }; 
+
+    map[TCoCollect::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+        SubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
+            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
+                return ApplyExtractMembersToCollect(input, members, ctx, " with multi-usage");
+            }
+        );
+    };
 }
 
 } // NYql

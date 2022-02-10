@@ -61,7 +61,7 @@ public:
                 return list;
             }
         }
-        Y_UNREACHABLE(); 
+        Y_UNREACHABLE();
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {

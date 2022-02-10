@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <array>
- 
+
 namespace NYql {
 namespace NCommon {
 
@@ -289,7 +289,7 @@ public:
 
     TKeyRange BuildKeyRange(TExprBase row, TExprContext& ctx) const {
         if (IsFullScan()) {
-            return TKeyRange(ctx, KeyColumns.size(), ResidualPredicate); 
+            return TKeyRange(ctx, KeyColumns.size(), ResidualPredicate);
         }
 
         auto newResidualPredicate = ResidualPredicate;
@@ -311,7 +311,7 @@ public:
             }
         }
 
-        return TKeyRange(ctx, newColumnRanges, newResidualPredicate); 
+        return TKeyRange(ctx, newColumnRanges, newResidualPredicate);
     }
 
 private:
@@ -436,7 +436,7 @@ private:
                 : predicate;
 
             if (i == keyRanges.size() - 1 || less(keyRanges[i], keyRanges[i + 1])) {
-                TKeyRange keyRange(ctx.ExprCtx, keyRanges[i].GetColumnRanges(), residualPredicate); 
+                TKeyRange keyRange(ctx.ExprCtx, keyRanges[i].GetColumnRanges(), residualPredicate);
                 keyRanges[curIndex] = keyRange;
                 ++curIndex;
 
@@ -487,7 +487,7 @@ private:
             });
 
         // TODO: Compute actual bounding range.
-        return TKeyRange(ctx, KeyColumns.size(), residualPredicate); 
+        return TKeyRange(ctx, KeyColumns.size(), residualPredicate);
     }
 
 private:
@@ -747,46 +747,46 @@ TTableLookupBuilder CollectLookups(TExprBase row, TExprBase predicate,
         }
     }
 
-    auto maybeLookup = TMaybeNode<TCoLookupBase>(); 
-    if (auto maybeLiteral = predicate.Maybe<TCoCoalesce>().Value().Maybe<TCoBool>().Literal()) { 
-        if (maybeLiteral.Cast().Value() == "false") { 
-            maybeLookup = predicate.Maybe<TCoCoalesce>().Predicate().Maybe<TCoLookupBase>(); 
+    auto maybeLookup = TMaybeNode<TCoLookupBase>();
+    if (auto maybeLiteral = predicate.Maybe<TCoCoalesce>().Value().Maybe<TCoBool>().Literal()) {
+        if (maybeLiteral.Cast().Value() == "false") {
+            maybeLookup = predicate.Maybe<TCoCoalesce>().Predicate().Maybe<TCoLookupBase>();
         }
-    } else { 
-        maybeLookup = predicate.Maybe<TCoLookupBase>(); 
-    } 
+    } else {
+        maybeLookup = predicate.Maybe<TCoLookupBase>();
+    }
 
-    if (maybeLookup) { 
-        auto lookup = maybeLookup.Cast(); 
- 
-        if (!lookup.Lookup().Maybe<TCoMember>()) { 
+    if (maybeLookup) {
+        auto lookup = maybeLookup.Cast();
+
+        if (!lookup.Lookup().Maybe<TCoMember>()) {
             return fullScan;
         }
 
-        auto member = lookup.Lookup().Cast<TCoMember>(); 
+        auto member = lookup.Lookup().Cast<TCoMember>();
         auto column = member.Name().Value();
         if (member.Struct().Raw() != row.Raw()) {
             return fullScan;
         }
 
-        TExprNode::TPtr collection; 
-        if (lookup.Collection().Ref().IsList()) { 
-            collection = lookup.Collection().Ptr(); 
-        } else if (auto maybeDictFromKeys = lookup.Collection().Maybe<TCoDictFromKeys>()) { 
-            collection = maybeDictFromKeys.Cast().Keys().Ptr(); 
-        } else { 
-            return fullScan; 
-        } 
- 
-        auto size = collection->ChildrenSize(); 
-        if (!size) { 
-            return fullScan; 
-        } 
- 
+        TExprNode::TPtr collection;
+        if (lookup.Collection().Ref().IsList()) {
+            collection = lookup.Collection().Ptr();
+        } else if (auto maybeDictFromKeys = lookup.Collection().Maybe<TCoDictFromKeys>()) {
+            collection = maybeDictFromKeys.Cast().Keys().Ptr();
+        } else {
+            return fullScan;
+        }
+
+        auto size = collection->ChildrenSize();
+        if (!size) {
+            return fullScan;
+        }
+
         TVector<TKeyRangeBuilder> keyRanges;
-        keyRanges.reserve(size); 
-        for (const auto& key : collection->Children()) { 
-            auto maybeValue = ctx.GetValueFunc(TExprBase(key), member.Ref().GetTypeAnn(), ctx.ExprCtx); 
+        keyRanges.reserve(size);
+        for (const auto& key : collection->Children()) {
+            auto maybeValue = ctx.GetValueFunc(TExprBase(key), member.Ref().GetTypeAnn(), ctx.ExprCtx);
             if (!maybeValue) {
                 return fullScan;
             }
@@ -844,15 +844,15 @@ TTableLookupBuilder CollectLookups(TExprBase row, TExprBase predicate,
 } // namespace
 
 TColumnRange TColumnRange::MakeNull(TExprContext& ctx) {
-    auto nullValue = Build<TCoNull>(ctx, TPositionHandle()).Done(); 
+    auto nullValue = Build<TCoNull>(ctx, TPositionHandle()).Done();
     TColumnRange range = MakePoint(nullValue);
     range.Null = true;
     return range;
 }
 
-TKeyRange::TKeyRange(TExprContext& ctx, const TVector<TColumnRange>& columnRanges, TMaybeNode<NNodes::TExprBase> residualPredicate) 
-    : Ctx(&ctx) 
-    , ColumnRanges(columnRanges) 
+TKeyRange::TKeyRange(TExprContext& ctx, const TVector<TColumnRange>& columnRanges, TMaybeNode<NNodes::TExprBase> residualPredicate)
+    : Ctx(&ctx)
+    , ColumnRanges(columnRanges)
     , ResidualPredicate(residualPredicate)
     , NumDefined(0)
 {
@@ -890,8 +890,8 @@ TKeyRange::TKeyRange(TExprContext& ctx, const TVector<TColumnRange>& columnRange
         }
     }
 
-    FromTuple = TKeyTuple(Ctx, fromValues, true, fromInclusive); 
-    ToTuple = TKeyTuple(Ctx, toValues, false, toInclusive); 
+    FromTuple = TKeyTuple(Ctx, fromValues, true, fromInclusive);
+    ToTuple = TKeyTuple(Ctx, toValues, false, toInclusive);
 }
 
 void TTableLookup::Print(IOutputStream& output) const {
@@ -903,8 +903,8 @@ void TTableLookup::Print(IOutputStream& output) const {
 }
 
 void TKeyRange::Print(IOutputStream& output) const {
-    auto printExpr = [ctx = Ctx] (TExprBase node, IOutputStream& output) { 
-        auto ast = ConvertToAst(node.Ref(), *ctx, TExprAnnotationFlags::None, true); 
+    auto printExpr = [ctx = Ctx] (TExprBase node, IOutputStream& output) {
+        auto ast = ConvertToAst(node.Ref(), *ctx, TExprAnnotationFlags::None, true);
         ast.Root->PrintTo(output);
     };
 
@@ -960,8 +960,8 @@ void TKeyRange::Print(IOutputStream& output) const {
 }
 
 void TKeyTuple::Print(IOutputStream& output) const {
-    auto printExpr = [] (TExprContext& ctx, TExprBase node, IOutputStream& output) { 
-        auto ast = ConvertToAst(node.Ref(), ctx, TExprAnnotationFlags::None, true); 
+    auto printExpr = [] (TExprContext& ctx, TExprBase node, IOutputStream& output) {
+        auto ast = ConvertToAst(node.Ref(), ctx, TExprAnnotationFlags::None, true);
         ast.Root->PrintTo(output);
     };
 
@@ -974,8 +974,8 @@ void TKeyTuple::Print(IOutputStream& output) const {
     for (size_t i = 0; i < Size(); ++i) {
         auto value = GetValue(i);
         if (value) {
-            YQL_ENSURE(Ctx); 
-            printExpr(*Ctx, value.Cast(), output); 
+            YQL_ENSURE(Ctx);
+            printExpr(*Ctx, value.Cast(), output);
         } else {
             output << (IsFrom()
                 ? IsInclusive() ? "-Inf" : "+Inf"

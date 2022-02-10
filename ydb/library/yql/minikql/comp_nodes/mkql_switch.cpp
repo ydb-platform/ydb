@@ -9,8 +9,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-using NYql::EnsureDynamicCast; 
- 
+using NYql::EnsureDynamicCast;
+
 namespace {
 
 static const TStatKey Switch_FlushesCount("Switch_FlushesCount", true);
@@ -169,7 +169,7 @@ public:
 
             return childRes.Release();
         }
-        Y_UNREACHABLE(); 
+        Y_UNREACHABLE();
     }
 #ifndef MKQL_DISABLE_CODEGEN
 private:
@@ -283,7 +283,7 @@ private:
 public:
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         for (ui32 i = 0U; i < Handlers.size(); ++i) {
-            EnsureDynamicCast<ICodegeneratorExternalNode*>(Handlers[i].Item)->SetValueGetter(GenerateHandler(i, ctx.Codegen)); 
+            EnsureDynamicCast<ICodegeneratorExternalNode*>(Handlers[i].Item)->SetValueGetter(GenerateHandler(i, ctx.Codegen));
         }
 
         auto& context = ctx.Codegen->GetContext();

@@ -13,7 +13,7 @@
 namespace NYql {
 
 struct TYdbSettings {
-    using TConstPtr = std::shared_ptr<const TYdbSettings>; 
+    using TConstPtr = std::shared_ptr<const TYdbSettings>;
 };
 
 struct TClusterMainSettings {

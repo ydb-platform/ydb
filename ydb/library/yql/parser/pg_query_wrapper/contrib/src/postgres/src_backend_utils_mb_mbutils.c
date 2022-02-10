@@ -619,11 +619,11 @@ GetDatabaseEncodingName(void)
 int
 pg_database_encoding_max_length(void)
 {
-	int encoding = GetDatabaseEncoding(); 
-	if (!PG_VALID_ENCODING(encoding)) { 
-		pg_unreachable(); 
-	} 
-	return pg_wchar_table[encoding].maxmblen; 
+	int encoding = GetDatabaseEncoding();
+	if (!PG_VALID_ENCODING(encoding)) {
+		pg_unreachable();
+	}
+	return pg_wchar_table[encoding].maxmblen;
 }
 
 /*
@@ -660,9 +660,9 @@ pg_verify_mbstr_len(int encoding, const char *mbstr, int len, bool noError)
 	mbverifier	mbverify;
 	int			mb_len;
 
-	if (!PG_VALID_ENCODING(encoding)) { 
-		pg_unreachable(); 
-	} 
+	if (!PG_VALID_ENCODING(encoding)) {
+		pg_unreachable();
+	}
 
 	/*
 	 * In single-byte encodings, we need only reject nulls (\0).

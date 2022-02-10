@@ -985,7 +985,7 @@ public:
                 return true;
             }
 
-            builder.Args()->Add(builder.Resource(NodeResourceName)).Flags(ICallablePayload::TArgumentFlags::AutoMap).Add(optionsType); 
+            builder.Args()->Add(builder.Resource(NodeResourceName)).Flags(ICallablePayload::TArgumentFlags::AutoMap).Add(optionsType);
             builder.Returns(resultType);
 
             if (!typesOnly) {

@@ -9,8 +9,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-using NYql::EnsureDynamicCast; 
- 
+using NYql::EnsureDynamicCast;
+
 namespace {
 
 class TFlowMultiMapWrapper : public TStatefulFlowCodegeneratorNode<TFlowMultiMapWrapper> {
@@ -485,7 +485,7 @@ public:
             Value* head = nullptr;
             for (auto i = 0U; i < Items.size(); ++i) {
                 if (Items[i]->GetDependencesCount() > 0U || PasstroughtMap[i]) {
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, NewItems.front() == Items[i] ? (head = getres.second[i](ctx, block)) : getres.second[i](ctx, block)); 
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, NewItems.front() == Items[i] ? (head = getres.second[i](ctx, block)) : getres.second[i](ctx, block));
                 }
             }
 

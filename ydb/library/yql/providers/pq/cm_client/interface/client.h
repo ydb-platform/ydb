@@ -184,7 +184,7 @@ struct TClientOptions {
     OPTION(TString, Endpoint, );
     OPTION(std::shared_ptr<NYdb::ICredentialsProviderFactory>, CredentialsProviderFactory, );
     OPTION(TDuration, RequestTimeout, = TDuration::Seconds(10));
-    OPTION(bool, EnableSsl, = false); 
+    OPTION(bool, EnableSsl, = false);
 };
 
 #undef OPTION

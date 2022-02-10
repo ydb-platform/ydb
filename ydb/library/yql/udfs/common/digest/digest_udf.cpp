@@ -91,7 +91,7 @@ namespace {
             Y_UNUSED(userType);
             if (Name() == name) {
                 auto type = builder.Tuple(2)->Add<ui64>().Add<ui64>().Build();
-                builder.Args(1)->Add<TAutoMap<char*>>(); 
+                builder.Args(1)->Add<TAutoMap<char*>>();
                 builder.Returns(type);
                 if (!typesOnly) {
                     builder.Implementation(new TCityHash128);
@@ -202,21 +202,21 @@ namespace {
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(TFarmHashFingerprint, ui64(TAutoMap<ui64>)) { 
-        Y_UNUSED(valueBuilder); 
-        ui64 input = args[0].Get<ui64>(); 
-        ui64 hash = util::Fingerprint(input); 
-        return TUnboxedValuePod(hash); 
-    } 
- 
-    SIMPLE_UDF(TFarmHashFingerprint2, ui64(TAutoMap<ui64>, TAutoMap<ui64>)) { 
-        Y_UNUSED(valueBuilder); 
-        ui64 low  = args[0].Get<ui64>(); 
-        ui64 high = args[1].Get<ui64>(); 
-        ui64 hash = util::Fingerprint(util::Uint128(low, high)); 
-        return TUnboxedValuePod(hash); 
-    } 
- 
+    SIMPLE_UDF(TFarmHashFingerprint, ui64(TAutoMap<ui64>)) {
+        Y_UNUSED(valueBuilder);
+        ui64 input = args[0].Get<ui64>();
+        ui64 hash = util::Fingerprint(input);
+        return TUnboxedValuePod(hash);
+    }
+
+    SIMPLE_UDF(TFarmHashFingerprint2, ui64(TAutoMap<ui64>, TAutoMap<ui64>)) {
+        Y_UNUSED(valueBuilder);
+        ui64 low  = args[0].Get<ui64>();
+        ui64 high = args[1].Get<ui64>();
+        ui64 hash = util::Fingerprint(util::Uint128(low, high));
+        return TUnboxedValuePod(hash);
+    }
+
     SIMPLE_UDF(TFarmHashFingerprint32, ui32(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
@@ -246,7 +246,7 @@ namespace {
             Y_UNUSED(userType);
             if (Name() == name) {
                 auto type = builder.Tuple(2)->Add<ui64>().Add<ui64>().Build();
-                builder.Args(1)->Add<TAutoMap<char*>>(); 
+                builder.Args(1)->Add<TAutoMap<char*>>();
                 builder.Returns(type);
                 if (!typesOnly) {
                     builder.Implementation(new TFarmHashFingerprint128);
@@ -327,7 +327,7 @@ namespace {
         static bool DeclareSignature(const TStringRef& name, TType*, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
             if (Name() == name) {
                 const auto type = builder.Tuple(2)->Add<ui64>().Add<ui64>().Build();
-                builder.Args(1)->Add<TAutoMap<char*>>(); 
+                builder.Args(1)->Add<TAutoMap<char*>>();
                 builder.Returns(type);
                 if (!typesOnly) {
                     builder.Implementation(new TXXH3_128);
@@ -367,8 +367,8 @@ namespace {
                   TBlake2B,
                   TSipHash,
                   THighwayHash,
-                  TFarmHashFingerprint, 
-                  TFarmHashFingerprint2, 
+                  TFarmHashFingerprint,
+                  TFarmHashFingerprint2,
                   TFarmHashFingerprint32,
                   TFarmHashFingerprint64,
                   TFarmHashFingerprint128,

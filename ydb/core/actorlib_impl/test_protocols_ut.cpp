@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
                 const TActorContext& ctx,
                 NAddr::IRemoteAddrPtr address) noexcept override
         {
-            Address = std::move(address);
+            Address = std::move(address); 
             ConnectSocket(this, ctx, Address);
         }
 
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
                 const TActorContext& ctx,
                 NAddr::IRemoteAddrPtr address) noexcept override
         {
-            ConnectSocket(this, ctx, std::move(address));
+            ConnectSocket(this, ctx, std::move(address)); 
         }
 
         void CatchResolveError(

@@ -331,14 +331,14 @@ namespace NXml {
         SaveInternal(stream, enc, options);
     }
 
-    TConstNodes::TConstNodes(const TConstNodes& nodes)
+    TConstNodes::TConstNodes(const TConstNodes& nodes) 
         : SizeValue(nodes.Size())
         , Doc(nodes.Doc)
         , Obj(nodes.Obj)
     {
     }
 
-    TConstNodes& TConstNodes::operator=(const TConstNodes& nodes) {
+    TConstNodes& TConstNodes::operator=(const TConstNodes& nodes) { 
         if (this != &nodes) {
             SizeValue = nodes.Size();
             Doc = nodes.Doc;

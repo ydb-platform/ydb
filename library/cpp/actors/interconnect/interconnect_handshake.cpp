@@ -8,8 +8,8 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <variant>
-
+#include <variant> 
+ 
 namespace NActors {
     static constexpr size_t StackSize = 64 * 1024; // 64k should be enough
 

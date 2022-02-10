@@ -44,7 +44,7 @@ namespace NAccessors {
                     }
                 };
 
-                using TGet = std::conditional_t<THasBegin<Tb>::value, TByBegin<Tb>, TBybegin<Tb>>;
+                using TGet = std::conditional_t<THasBegin<Tb>::value, TByBegin<Tb>, TBybegin<Tb>>; 
 
                 static const TElementType* Get(const Tb& b) {
                     return TGet::Get(b);
@@ -94,7 +94,7 @@ namespace NAccessors {
                     }
                 };
 
-                using TGet = std::conditional_t<THasEnd<Tb>::value, TByEnd<Tb>, TByend<Tb>>;
+                using TGet = std::conditional_t<THasEnd<Tb>::value, TByEnd<Tb>, TByend<Tb>>; 
 
                 static const TElementType* Get(const Tb& b) {
                     return TGet::Get(b);
@@ -151,10 +151,10 @@ namespace NAccessors {
                 };
 
                 using TDo = std::conditional_t<
-                    THasClear<Tb>::value,
+                    THasClear<Tb>::value, 
                     TByClear<Tb>,
                     std::conditional_t<
-                        THasclear<Tb>::value,
+                        THasclear<Tb>::value, 
                         TByclear<Tb>,
                         TByNone<Tb>>>;
 
@@ -196,10 +196,10 @@ namespace NAccessors {
             };
 
             using TDo = std::conditional_t<
-                THasReserve<Tb>::value,
+                THasReserve<Tb>::value, 
                 TByReserve<Tb>,
                 std::conditional_t<
-                    THasreserve<Tb>::value,
+                    THasreserve<Tb>::value, 
                     TByreserve<Tb>,
                     TByNone<Tb>>>;
 
@@ -227,7 +227,7 @@ namespace NAccessors {
                 }
             };
 
-            using TDo = std::conditional_t<THasResize<Tb>::value, TByResize<Tb>, TByresize<Tb>>;
+            using TDo = std::conditional_t<THasResize<Tb>::value, TByResize<Tb>, TByresize<Tb>>; 
 
             static void Do(Tb& b, size_t sz) {
                 TDo::Do(b, sz);
@@ -268,10 +268,10 @@ namespace NAccessors {
             };
 
             using TDo = std::conditional_t<
-                THasAppend<Tb>::value,
+                THasAppend<Tb>::value, 
                 TByAppend<Tb>,
                 std::conditional_t<
-                    THasappend<Tb>::value,
+                    THasappend<Tb>::value, 
                     TByappend<Tb>,
                     TBypush_back<Tb>>>;
 
@@ -326,13 +326,13 @@ namespace NAccessors {
             };
 
             using TDo = std::conditional_t<
-                THasAppend<Tb>::value,
+                THasAppend<Tb>::value, 
                 TByAppend<Tb>,
                 std::conditional_t<
-                    THasappend<Tb>::value,
+                    THasappend<Tb>::value, 
                     TByappend<Tb>,
                     std::conditional_t<
-                        THasinsert<Tb>::value,
+                        THasinsert<Tb>::value, 
                         TByinsert<Tb>,
                         TByNone<Tb>>>>;
 
@@ -395,10 +395,10 @@ namespace NAccessors {
                 };
 
                 using TDo = std::conditional_t<
-                    THasAssign<Tb>::value,
+                    THasAssign<Tb>::value, 
                     TByAssign<Tb>,
                     std::conditional_t<
-                        THasassign<Tb>::value,
+                        THasassign<Tb>::value, 
                         TByassign<Tb>,
                         std::conditional_t<
                             TMemoryTraits<Tb>::OwnsMemory,

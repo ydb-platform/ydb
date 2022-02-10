@@ -294,18 +294,18 @@ public:
     /// @details The input object becomes empty.
     static TBlob FromBuffer(TBuffer& in);
 
-    /// Creates a blob from TString with a single-threaded (non atomic) refcounter.
+    /// Creates a blob from TString with a single-threaded (non atomic) refcounter. 
     static TBlob FromStringSingleThreaded(const TString& s);
 
-    /// Creates a blob from TString with a single-threaded (non atomic) refcounter. Doesn't copy its content.
-    static TBlob FromStringSingleThreaded(TString&& s);
-
-    /// Creates a blob from TString with a multi-threaded (atomic) refcounter.
+    /// Creates a blob from TString with a single-threaded (non atomic) refcounter. Doesn't copy its content. 
+    static TBlob FromStringSingleThreaded(TString&& s); 
+ 
+    /// Creates a blob from TString with a multi-threaded (atomic) refcounter. 
     static TBlob FromString(const TString& s);
 
-    /// Creates a blob from TString with a multi-threaded (atomic) refcounter. Doesn't copy its content.
-    static TBlob FromString(TString&& s);
-
+    /// Creates a blob from TString with a multi-threaded (atomic) refcounter. Doesn't copy its content. 
+    static TBlob FromString(TString&& s); 
+ 
 private:
     inline void Ref() noexcept {
         if (S_.Base) {

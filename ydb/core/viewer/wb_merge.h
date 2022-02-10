@@ -18,7 +18,7 @@ template <typename ResponseType>
 struct TWhiteboardInfo;
 
 template <typename ResponseType>
-struct TWhiteboardMergerComparator {
+struct TWhiteboardMergerComparator { 
     bool operator ()(const ResponseType& a, const ResponseType& b) const {
         return a.GetChangeTime() < b.GetChangeTime();
     }

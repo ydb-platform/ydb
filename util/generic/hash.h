@@ -615,10 +615,10 @@ public:
         deinitialize_buckets(buckets);
     }
 
-    size_type size() const noexcept {
+    size_type size() const noexcept { 
         return num_elements;
     }
-    size_type max_size() const noexcept {
+    size_type max_size() const noexcept { 
         return size_type(-1);
     }
 
@@ -1521,13 +1521,13 @@ public:
     // See hash_ut.cpp
 
 public:
-    size_type size() const noexcept {
+    size_type size() const noexcept { 
         return rep.size();
     }
-    yssize_t ysize() const noexcept {
+    yssize_t ysize() const noexcept { 
         return (yssize_t)rep.size();
     }
-    size_type max_size() const noexcept {
+    size_type max_size() const noexcept { 
         return rep.max_size();
     }
 

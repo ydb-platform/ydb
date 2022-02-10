@@ -29,7 +29,7 @@ private:
         TRunAble r;
 
         {
-            THolder<IThreadFactory::IThread> thr = SystemThreadFactory()->Run(&r);
+            THolder<IThreadFactory::IThread> thr = SystemThreadFactory()->Run(&r); 
 
             thr->Join();
         }
@@ -45,7 +45,7 @@ private:
 
             pool.Start(0);
 
-            THolder<IThreadFactory::IThread> thr = pool.Run(&r);
+            THolder<IThreadFactory::IThread> thr = pool.Run(&r); 
 
             thr->Join();
         }

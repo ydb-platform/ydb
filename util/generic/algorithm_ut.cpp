@@ -696,12 +696,12 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         MinElementBy(empty, functor);
     }
 
-    Y_UNIT_TEST(TestApplyToMany) {
-        int res = 0;
-        ApplyToMany([&res](auto v) { res += v; }, 1, 2, 3, 4, 5);
-        UNIT_ASSERT_EQUAL(res, 15);
-
-        struct TVisitor {
+    Y_UNIT_TEST(TestApplyToMany) { 
+        int res = 0; 
+        ApplyToMany([&res](auto v) { res += v; }, 1, 2, 3, 4, 5); 
+        UNIT_ASSERT_EQUAL(res, 15); 
+ 
+        struct TVisitor { 
             TVisitor(int& acc)
                 : Acc(acc)
             {
@@ -712,20 +712,20 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
             void operator()(int v) {
                 Acc += v * 2;
             };
-            int& Acc;
-        };
+            int& Acc; 
+        }; 
         TString s{"8-800-555-35-35"};
         ApplyToMany(TVisitor{res = 0}, 1, s, 5, s);
-        UNIT_ASSERT_EQUAL(res, 12 + 2 * static_cast<int>(s.size()));
-    }
-
-    Y_UNIT_TEST(TestTupleForEach) {
+        UNIT_ASSERT_EQUAL(res, 12 + 2 * static_cast<int>(s.size())); 
+    } 
+ 
+    Y_UNIT_TEST(TestTupleForEach) { 
         ForEach(std::tuple<>{}, [&](auto) { UNIT_ASSERT(false); });
-        auto t = std::make_tuple(5, 6, 2, 3, 6);
-        ForEach(t, [](auto& v) { v *= -1; });
-        UNIT_ASSERT_EQUAL(t, std::make_tuple(-5, -6, -2, -3, -6));
-    }
-
+        auto t = std::make_tuple(5, 6, 2, 3, 6); 
+        ForEach(t, [](auto& v) { v *= -1; }); 
+        UNIT_ASSERT_EQUAL(t, std::make_tuple(-5, -6, -2, -3, -6)); 
+    } 
+ 
     Y_UNIT_TEST(TestTupleAllOf) {
         UNIT_ASSERT(AllOf(std::tuple<>{}, [](auto) { return false; }));
         UNIT_ASSERT(!AllOf(std::make_tuple(1, 2, 0, 4, 5), [&](auto v) { UNIT_ASSERT_LT(v, 3); return 0 != v; }));

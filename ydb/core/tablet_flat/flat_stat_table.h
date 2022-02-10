@@ -18,8 +18,8 @@ public:
         , Heap(TIterKeyGreater{ this })
     {}
 
-    void Add(THolder<TScreenedPartIndexIterator> pi) {
-        Iterators.PushBack(std::move(pi));
+    void Add(THolder<TScreenedPartIndexIterator> pi) { 
+        Iterators.PushBack(std::move(pi)); 
         TScreenedPartIndexIterator* it = Iterators.back();
         if (it->IsValid()) {
             NextRowCount += it->GetRowCountDelta();

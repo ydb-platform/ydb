@@ -188,10 +188,10 @@ public:
     }
 
     inline ~TAvlTree() noexcept {
-        Clear();
-    }
-
-    inline void Clear() noexcept {
+        Clear(); 
+    } 
+ 
+    inline void Clear() noexcept { 
         for (iterator it = Begin(); it != End();) {
             (it++)->TTreeItem::Unlink();
         }

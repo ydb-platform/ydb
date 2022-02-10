@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(THolderVectorTest) {
         ints.Resize(2);
 
         THolder<int> holder(new int(1));
-        ints.Reset(0, std::move(holder));
+        ints.Reset(0, std::move(holder)); 
         UNIT_ASSERT_VALUES_EQUAL(*ints[0], 1);
         UNIT_ASSERT(!holder);
     }

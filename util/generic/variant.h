@@ -13,11 +13,11 @@ public:
             v.valueless_by_exception() ? 0 : std::visit([](const auto& value) { return ComputeHash(value); }, v));
     }
 };
-
-template <>
+ 
+template <> 
 struct THash<std::monostate> {
-public:
+public: 
     constexpr size_t operator()(std::monostate) const noexcept {
         return 1;
     }
-};
+}; 

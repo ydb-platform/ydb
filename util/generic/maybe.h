@@ -1,8 +1,8 @@
 #pragma once
 
 #include <utility>
-
-#include "maybe_traits.h"
+ 
+#include "maybe_traits.h" 
 #include "yexception.h"
 
 #include <util/system/align.h>
@@ -37,17 +37,17 @@ constexpr bool operator==(TNothing, TNothing) noexcept {
 template <class T, class Policy /*= ::NMaybe::TPolicyUndefinedExcept*/>
 class TMaybe: private TMaybeBase<T> {
 public:
-    using TInPlace = NMaybe::TInPlace;
+    using TInPlace = NMaybe::TInPlace; 
 
-private:
-    static_assert(!std::is_same<std::remove_cv_t<T>, TNothing>::value,
-                  "Instantiation of TMaybe with a TNothing type is ill-formed");
-    static_assert(!std::is_same<std::remove_cv_t<T>, TInPlace>::value,
-                  "Instantiation of TMaybe with a TInPlace type is ill-formed");
-    static_assert(!std::is_reference<T>::value,
-                  "Instantiation of TMaybe with reference type is ill-formed");
-    static_assert(std::is_destructible<T>::value,
-                  "Instantiation of TMaybe with non-destructible type is ill-formed");
+private: 
+    static_assert(!std::is_same<std::remove_cv_t<T>, TNothing>::value, 
+                  "Instantiation of TMaybe with a TNothing type is ill-formed"); 
+    static_assert(!std::is_same<std::remove_cv_t<T>, TInPlace>::value, 
+                  "Instantiation of TMaybe with a TInPlace type is ill-formed"); 
+    static_assert(!std::is_reference<T>::value, 
+                  "Instantiation of TMaybe with reference type is ill-formed"); 
+    static_assert(std::is_destructible<T>::value, 
+                  "Instantiation of TMaybe with non-destructible type is ill-formed"); 
 
     template <class U>
     struct TConstructibleFromMaybeSomehow {
@@ -72,66 +72,66 @@ private:
                                       std::is_assignable<T&, const TMaybe<U, Policy>&&>::value;
     };
 
-    template <class U>
+    template <class U> 
     struct TImplicitCopyCtor {
     public:
         static constexpr bool value = std::is_constructible<T, const U&>::value &&
                                       std::is_convertible<const U&, T>::value &&
                                       !TConstructibleFromMaybeSomehow<U>::value;
     };
-
-    template <class U>
+ 
+    template <class U> 
     struct TExplicitCopyCtor {
     public:
         static constexpr bool value = std::is_constructible<T, const U&>::value &&
                                       !std::is_convertible<const U&, T>::value &&
                                       !TConstructibleFromMaybeSomehow<U>::value;
     };
-
-    template <class U>
+ 
+    template <class U> 
     struct TImplicitMoveCtor {
     public:
         static constexpr bool value = std::is_constructible<T, U&&>::value &&
                                       std::is_convertible<U&&, T>::value &&
                                       !TConstructibleFromMaybeSomehow<U>::value;
     };
-
-    template <class U>
+ 
+    template <class U> 
     struct TExplicitMoveCtor {
     public:
         static constexpr bool value = std::is_constructible<T, U&&>::value &&
                                       !std::is_convertible<U&&, T>::value &&
                                       !TConstructibleFromMaybeSomehow<U>::value;
     };
-
-    template <class U>
+ 
+    template <class U> 
     struct TCopyAssignable {
     public:
         static constexpr bool value = std::is_constructible<T, const U&>::value &&
                                       std::is_assignable<T&, const U&>::value &&
                                       !TAssignableFromMaybeSomehow<U>::value;
     };
-
-    template <class U>
+ 
+    template <class U> 
     struct TMoveAssignable {
     public:
         static constexpr bool value = std::is_constructible<T, U&&>::value &&
                                       std::is_assignable<T&, U&&>::value &&
                                       !TAssignableFromMaybeSomehow<U>::value;
     };
-
+ 
     template <class U>
     struct TImplicitAnyCtor {
     public:
         using UDec = std::decay_t<U>;
-
+ 
         static constexpr bool value = std::is_constructible<T, U>::value &&
                                       std::is_convertible<U, T>::value &&
                                       !std::is_same<UDec, TInPlace>::value &&
                                       !std::is_same<UDec, TMaybe>::value;
     };
-
-    template <class U>
+ 
+    template <class U> 
     struct TExplicitAnyCtor {
     public:
         using UDec = std::decay_t<U>;
@@ -140,7 +140,7 @@ private:
                                       !std::is_same<UDec, TInPlace>::value &&
                                       !std::is_same<UDec, TMaybe>::value;
     };
-
+ 
     template <class U>
     struct TAssignableFromAny {
     public:
@@ -151,23 +151,23 @@ private:
                                       (!std::is_scalar<T>::value || !std::is_same<UDec, T>::value);
     };
 
-    using TBase = TMaybeBase<T>;
+    using TBase = TMaybeBase<T>; 
 
-public:
-    using value_type = T;
-    using TValueType = value_type;
+public: 
+    using value_type = T; 
+    using TValueType = value_type; 
 
-    TMaybe() noexcept = default;
+    TMaybe() noexcept = default; 
 
-    constexpr TMaybe(const TMaybe&) = default;
-    constexpr TMaybe(TMaybe&&) = default;
-
-    template <class... Args>
-    constexpr explicit TMaybe(TInPlace, Args&&... args)
+    constexpr TMaybe(const TMaybe&) = default; 
+    constexpr TMaybe(TMaybe&&) = default; 
+ 
+    template <class... Args> 
+    constexpr explicit TMaybe(TInPlace, Args&&... args) 
         : TBase(TInPlace{}, std::forward<Args>(args)...)
     {
     }
-
+ 
     template <class U, class... TArgs>
     constexpr explicit TMaybe(TInPlace, std::initializer_list<U> il, TArgs&&... args)
         : TBase(TInPlace{}, il, std::forward<TArgs>(args)...)
@@ -177,77 +177,77 @@ public:
     constexpr TMaybe(TNothing) noexcept {
     }
 
-    template <class U, class = std::enable_if_t<TImplicitCopyCtor<U>::value>>
-    TMaybe(const TMaybe<U, Policy>& right) {
-        if (right.Defined()) {
+    template <class U, class = std::enable_if_t<TImplicitCopyCtor<U>::value>> 
+    TMaybe(const TMaybe<U, Policy>& right) { 
+        if (right.Defined()) { 
             new (Data()) T(right.GetRef());
-            this->Defined_ = true;
+            this->Defined_ = true; 
         }
     }
 
-    template <class U, std::enable_if_t<TExplicitCopyCtor<U>::value, bool> = false>
-    explicit TMaybe(const TMaybe<U, Policy>& right) {
-        if (right.Defined()) {
+    template <class U, std::enable_if_t<TExplicitCopyCtor<U>::value, bool> = false> 
+    explicit TMaybe(const TMaybe<U, Policy>& right) { 
+        if (right.Defined()) { 
             new (Data()) T(right.GetRef());
-            this->Defined_ = true;
+            this->Defined_ = true; 
         }
     }
 
-    template <class U, class = std::enable_if_t<TImplicitMoveCtor<U>::value>>
-    TMaybe(TMaybe<U, Policy>&& right) noexcept(std::is_nothrow_constructible<T, U&&>::value) {
-        if (right.Defined()) {
+    template <class U, class = std::enable_if_t<TImplicitMoveCtor<U>::value>> 
+    TMaybe(TMaybe<U, Policy>&& right) noexcept(std::is_nothrow_constructible<T, U&&>::value) { 
+        if (right.Defined()) { 
             new (Data()) T(std::move(right.GetRef()));
-            this->Defined_ = true;
+            this->Defined_ = true; 
         }
     }
 
-    template <class U, std::enable_if_t<TExplicitMoveCtor<U>::value, bool> = false>
-    explicit TMaybe(TMaybe<U, Policy>&& right) noexcept(std::is_nothrow_constructible<T, U&&>::value) {
-        if (right.Defined()) {
+    template <class U, std::enable_if_t<TExplicitMoveCtor<U>::value, bool> = false> 
+    explicit TMaybe(TMaybe<U, Policy>&& right) noexcept(std::is_nothrow_constructible<T, U&&>::value) { 
+        if (right.Defined()) { 
             new (Data()) T(std::move(right.GetRef()));
-            this->Defined_ = true;
+            this->Defined_ = true; 
         }
     }
 
-    template <class U = T, class = std::enable_if_t<TImplicitAnyCtor<U>::value>>
-    constexpr TMaybe(U&& right)
+    template <class U = T, class = std::enable_if_t<TImplicitAnyCtor<U>::value>> 
+    constexpr TMaybe(U&& right) 
         : TBase(TInPlace{}, std::forward<U>(right))
     {
     }
-
-    template <class U = T, std::enable_if_t<TExplicitAnyCtor<U>::value, bool> = false>
-    constexpr explicit TMaybe(U&& right)
+ 
+    template <class U = T, std::enable_if_t<TExplicitAnyCtor<U>::value, bool> = false> 
+    constexpr explicit TMaybe(U&& right) 
         : TBase(TInPlace{}, std::forward<U>(right))
     {
     }
+ 
+    ~TMaybe() = default; 
 
-    ~TMaybe() = default;
+    constexpr TMaybe& operator=(const TMaybe&) = default; 
+    constexpr TMaybe& operator=(TMaybe&&) = default; 
 
-    constexpr TMaybe& operator=(const TMaybe&) = default;
-    constexpr TMaybe& operator=(TMaybe&&) = default;
-
-    TMaybe& operator=(TNothing) noexcept {
+    TMaybe& operator=(TNothing) noexcept { 
         Clear();
         return *this;
     }
 
-    template <class U = T>
-    std::enable_if_t<TAssignableFromAny<U>::value, TMaybe&> operator=(U&& right) {
+    template <class U = T> 
+    std::enable_if_t<TAssignableFromAny<U>::value, TMaybe&> operator=(U&& right) { 
         if (Defined()) {
-            *Data() = std::forward<U>(right);
+            *Data() = std::forward<U>(right); 
         } else {
-            Init(std::forward<U>(right));
+            Init(std::forward<U>(right)); 
         }
         return *this;
     }
 
-    template <class U>
-    std::enable_if_t<TCopyAssignable<U>::value,
+    template <class U> 
+    std::enable_if_t<TCopyAssignable<U>::value, 
                      TMaybe&>
     operator=(const TMaybe<U, Policy>& right) {
         if (right.Defined()) {
             if (Defined()) {
-                *Data() = right.GetRef();
+                *Data() = right.GetRef(); 
             } else {
                 Init(right.GetRef());
             }
@@ -258,15 +258,15 @@ public:
         return *this;
     }
 
-    template <class U>
-    std::enable_if_t<TMoveAssignable<U>::value,
+    template <class U> 
+    std::enable_if_t<TMoveAssignable<U>::value, 
                      TMaybe&>
     operator=(TMaybe<U, Policy>&& right) noexcept(
         std::is_nothrow_assignable<T&, U&&>::value&& std::is_nothrow_constructible<T, U&&>::value)
-    {
+    { 
         if (right.Defined()) {
             if (Defined()) {
-                *Data() = std::move(right.GetRef());
+                *Data() = std::move(right.GetRef()); 
             } else {
                 Init(std::move(right.GetRef()));
             }
@@ -277,39 +277,39 @@ public:
         return *this;
     }
 
-    template <typename... Args>
-    T& ConstructInPlace(Args&&... args) {
-        Clear();
-        Init(std::forward<Args>(args)...);
-        return *Data();
-    }
-
-    void Clear() noexcept {
+    template <typename... Args> 
+    T& ConstructInPlace(Args&&... args) { 
+        Clear(); 
+        Init(std::forward<Args>(args)...); 
+        return *Data(); 
+    } 
+ 
+    void Clear() noexcept { 
         if (Defined()) {
-            this->Defined_ = false;
+            this->Defined_ = false; 
             Data()->~T();
         }
     }
 
-    constexpr bool Defined() const noexcept {
-        return this->Defined_;
+    constexpr bool Defined() const noexcept { 
+        return this->Defined_; 
     }
 
     Y_PURE_FUNCTION constexpr bool Empty() const noexcept {
         return !Defined();
     }
 
-    void CheckDefined() const {
+    void CheckDefined() const { 
         if (Y_UNLIKELY(!Defined())) {
             Policy::OnEmpty(typeid(TValueType));
         }
     }
 
-    const T* Get() const noexcept {
+    const T* Get() const noexcept { 
         return Defined() ? Data() : nullptr;
     }
 
-    T* Get() noexcept {
+    T* Get() noexcept { 
         return Defined() ? Data() : nullptr;
     }
 
@@ -353,27 +353,27 @@ public:
         return std::move(GetRef());
     }
 
-    constexpr const T* operator->() const {
+    constexpr const T* operator->() const { 
         return &GetRef();
     }
 
-    constexpr T* operator->() {
+    constexpr T* operator->() { 
         return &GetRef();
     }
 
-    constexpr const T& GetOrElse(const T& elseValue) const {
+    constexpr const T& GetOrElse(const T& elseValue) const { 
         return Defined() ? *Data() : elseValue;
     }
 
-    constexpr T& GetOrElse(T& elseValue) {
+    constexpr T& GetOrElse(T& elseValue) { 
         return Defined() ? *Data() : elseValue;
     }
 
-    constexpr const TMaybe& OrElse(const TMaybe& elseValue) const noexcept {
+    constexpr const TMaybe& OrElse(const TMaybe& elseValue) const noexcept { 
         return Defined() ? *this : elseValue;
     }
 
-    constexpr TMaybe& OrElse(TMaybe& elseValue) {
+    constexpr TMaybe& OrElse(TMaybe& elseValue) { 
         return Defined() ? *this : elseValue;
     }
 
@@ -383,7 +383,7 @@ public:
     }
 
     constexpr explicit operator bool() const noexcept {
-        return Defined();
+        return Defined(); 
     }
 
     void Save(IOutputStream* out) const {
@@ -392,7 +392,7 @@ public:
         ::Save<bool>(out, defined);
 
         if (defined) {
-            ::Save(out, *Data());
+            ::Save(out, *Data()); 
         }
     }
 
@@ -406,13 +406,13 @@ public:
                 ConstructInPlace();
             }
 
-            ::Load(in, *Data());
+            ::Load(in, *Data()); 
         } else {
             Clear();
         }
     }
 
-    void Swap(TMaybe& other) {
+    void Swap(TMaybe& other) { 
         if (this->Defined_ == other.Defined_) {
             if (this->Defined_) {
                 ::DoSwap(this->Data_, other.Data_);
@@ -428,23 +428,23 @@ public:
         }
     }
 
-    void swap(TMaybe& other) {
+    void swap(TMaybe& other) { 
         Swap(other);
     }
 
 private:
-    constexpr const T* Data() const noexcept {
-        return std::addressof(this->Data_);
+    constexpr const T* Data() const noexcept { 
+        return std::addressof(this->Data_); 
     }
 
-    constexpr T* Data() noexcept {
-        return std::addressof(this->Data_);
+    constexpr T* Data() noexcept { 
+        return std::addressof(this->Data_); 
     }
 
     template <typename... Args>
-    void Init(Args&&... args) {
+    void Init(Args&&... args) { 
         new (Data()) T(std::forward<Args>(args)...);
-        this->Defined_ = true;
+        this->Defined_ = true; 
     }
 };
 
@@ -712,7 +712,7 @@ constexpr bool operator>=(const U& value, const TMaybe<T, TPolicy>& maybe) {
 class IOutputStream;
 
 template <class T, class TPolicy>
-inline IOutputStream& operator<<(IOutputStream& out, const TMaybe<T, TPolicy>& maybe) {
+inline IOutputStream& operator<<(IOutputStream& out, const TMaybe<T, TPolicy>& maybe) { 
     if (maybe.Defined()) {
         out << *maybe;
     } else {

@@ -317,7 +317,7 @@ public:
     template<typename TUdfType>
     void GetAllFunctionsImpl(IFunctionNamesSink& names) const {
         auto r = names.Add(TUdfType::Name());
-        if (THasTTypeAwareMarker<TUdfType>::value) {
+        if (THasTTypeAwareMarker<TUdfType>::value) { 
             r->SetTypeAwareness();
         }
     }

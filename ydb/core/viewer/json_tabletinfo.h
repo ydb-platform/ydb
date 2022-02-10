@@ -43,7 +43,7 @@ struct TWhiteboardInfo<TEvWhiteboard::TEvTabletStateResponse> {
 };
 
 template <>
-struct TWhiteboardMergerComparator<NKikimrWhiteboard::TTabletStateInfo> {
+struct TWhiteboardMergerComparator<NKikimrWhiteboard::TTabletStateInfo> { 
     bool operator ()(const NKikimrWhiteboard::TTabletStateInfo& a, const NKikimrWhiteboard::TTabletStateInfo& b) const {
         return std::make_tuple(a.GetGeneration(), a.GetChangeTime()) < std::make_tuple(b.GetGeneration(), b.GetChangeTime());
     }

@@ -204,9 +204,9 @@ void TPointerTest::TestMakeHolder() {
     {
         struct TRec {
             int X, Y;
-            TRec(int x, int y)
-                : X(x)
-                , Y(y)
+            TRec(int x, int y) 
+                : X(x) 
+                , Y(y) 
             {
             }
         };

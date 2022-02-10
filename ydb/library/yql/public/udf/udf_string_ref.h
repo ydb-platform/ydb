@@ -166,10 +166,10 @@ private:
     };
 
     template<typename TStringType>
-    using TGetData = std::conditional_t<THasData<TStringType>::value, TByData<TStringType>, TBydata<TStringType>>;
+    using TGetData = std::conditional_t<THasData<TStringType>::value, TByData<TStringType>, TBydata<TStringType>>; 
 
     template<typename TStringType>
-    using TGetSize = std::conditional_t<THasSize<TStringType>::value, TBySize<TStringType>, TBysize<TStringType>>;
+    using TGetSize = std::conditional_t<THasSize<TStringType>::value, TBySize<TStringType>, TBysize<TStringType>>; 
 };
 
 UDF_ASSERT_TYPE_SIZE(TStringRef, 16);

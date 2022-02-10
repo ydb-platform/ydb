@@ -99,8 +99,8 @@ namespace NXml {
         };
 
     public:
-        TConstNodes(const TConstNodes& nodes);
-        TConstNodes& operator=(const TConstNodes& nodes);
+        TConstNodes(const TConstNodes& nodes); 
+        TConstNodes& operator=(const TConstNodes& nodes); 
 
         TConstNodes(TConstNodesRef ref);
         TConstNodes& operator=(TConstNodesRef ref);

@@ -556,7 +556,7 @@ public:
         return CopyImpl(pc, n, pos);
     }
 
-    inline size_t copy(TCharType* pc, size_t n) const noexcept {
+    inline size_t copy(TCharType* pc, size_t n) const noexcept { 
         return CopyImpl(pc, n, 0);
     }
 

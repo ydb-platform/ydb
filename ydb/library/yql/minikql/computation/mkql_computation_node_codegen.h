@@ -790,7 +790,7 @@ public:
         auto& context = ctx.Codegen->GetContext();
         const auto type = Type::getInt128Ty(context);
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
-        static_assert(std::is_same<std::invoke_result_t<decltype(&TDerived::DoCalculate), TDerived, TComputationContext&>, NUdf::TUnboxedValuePod>(), "DoCalculate must return pod!");
+        static_assert(std::is_same<std::invoke_result_t<decltype(&TDerived::DoCalculate), TDerived, TComputationContext&>, NUdf::TUnboxedValuePod>(), "DoCalculate must return pod!"); 
         const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TDerived::DoCalculate));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {

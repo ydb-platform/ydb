@@ -44,7 +44,7 @@ RECURSE(
     alabaster
     alembic
     allpairspy
-    amqp
+    amqp 
     aniso8601
     annoy
     antlr4
@@ -105,7 +105,7 @@ RECURSE(
     behave
     betamax
     betamax-serializers
-    billiard
+    billiard 
     binaryornot
     bincopy
     biplist
@@ -119,8 +119,8 @@ RECURSE(
     boolean.py
     bootstrapped
     boto
-    boto3
-    botocore
+    boto3 
+    botocore 
     braceexpand
     bravado
     bravado-core
@@ -134,7 +134,7 @@ RECURSE(
     cattrs
     cbor2
     cchardet
-    celery
+    celery 
     celery-mock
     Cerberus
     certifi
@@ -548,7 +548,7 @@ RECURSE(
     jinja2-time
     jmespath
     joblib
-    jmespath
+    jmespath 
     json-rpc
     json2html
     jsondiff
@@ -573,7 +573,7 @@ RECURSE(
     kazoo
     Keras-Preprocessing
     kiwisolver
-    kombu
+    kombu 
     korean-lunar-calendar
     kubernetes
     langcodes

@@ -1,11 +1,11 @@
 import warnings
 import sys
-from jmespath import parser
-from jmespath.visitor import Options
-
+from jmespath import parser 
+from jmespath.visitor import Options 
+ 
 __version__ = '0.10.0'
-
-
+ 
+ 
 if sys.version_info[:2] <= (2, 6) or ((3, 0) <= sys.version_info[:2] <= (3, 3)):
     python_ver = '.'.join(str(x) for x in sys.version_info[:3])
 
@@ -15,9 +15,9 @@ if sys.version_info[:2] <= (2, 6) or ((3, 0) <= sys.version_info[:2] <= (3, 3)):
         DeprecationWarning)
 
 
-def compile(expression):
-    return parser.Parser().parse(expression)
-
-
-def search(expression, data, options=None):
-    return parser.Parser().parse(expression).search(data, options=options)
+def compile(expression): 
+    return parser.Parser().parse(expression) 
+ 
+ 
+def search(expression, data, options=None): 
+    return parser.Parser().parse(expression).search(data, options=options) 

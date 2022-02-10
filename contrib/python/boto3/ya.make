@@ -1,11 +1,11 @@
 PY23_LIBRARY()
-
+ 
 OWNER(g:python-contrib)
 
 VERSION(1.17.112)
-
+ 
 LICENSE(Apache-2.0)
-
+ 
 PEERDIR(
     contrib/python/botocore
     contrib/python/jmespath
@@ -14,20 +14,20 @@ PEERDIR(
 
 NO_LINT()
 
-PY_SRCS(
-    TOP_LEVEL
-    boto3/__init__.py
+PY_SRCS( 
+    TOP_LEVEL 
+    boto3/__init__.py 
     boto3/compat.py
     boto3/docs/__init__.py
     boto3/docs/action.py
     boto3/docs/attr.py
-    boto3/docs/base.py
+    boto3/docs/base.py 
     boto3/docs/client.py
-    boto3/docs/collection.py
+    boto3/docs/collection.py 
     boto3/docs/docstring.py
-    boto3/docs/method.py
+    boto3/docs/method.py 
     boto3/docs/resource.py
-    boto3/docs/service.py
+    boto3/docs/service.py 
     boto3/docs/subresource.py
     boto3/docs/utils.py
     boto3/docs/waiter.py
@@ -42,19 +42,19 @@ PY_SRCS(
     boto3/exceptions.py
     boto3/resources/__init__.py
     boto3/resources/action.py
-    boto3/resources/base.py
-    boto3/resources/collection.py
-    boto3/resources/factory.py
+    boto3/resources/base.py 
+    boto3/resources/collection.py 
+    boto3/resources/factory.py 
     boto3/resources/model.py
-    boto3/resources/params.py
-    boto3/resources/response.py
+    boto3/resources/params.py 
+    boto3/resources/response.py 
     boto3/s3/__init__.py
     boto3/s3/inject.py
     boto3/s3/transfer.py
-    boto3/session.py
+    boto3/session.py 
     boto3/utils.py
-)
-
+) 
+ 
 RESOURCE_FILES(
     PREFIX contrib/python/boto3/
     .dist-info/METADATA
@@ -79,4 +79,4 @@ RESOURCE_FILES(
     boto3/examples/s3.rst
 )
 
-END()
+END() 

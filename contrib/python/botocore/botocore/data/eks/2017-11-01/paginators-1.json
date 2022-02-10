@@ -1,4 +1,4 @@
-{
+{ 
   "pagination": {
     "ListClusters": {
       "input_token": "nextToken",
@@ -43,4 +43,4 @@
       "result_key": "identityProviderConfigs"
     }
   }
-}
+} 

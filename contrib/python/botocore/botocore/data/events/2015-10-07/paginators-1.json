@@ -1,4 +1,4 @@
-{
+{ 
   "pagination": {
     "ListRuleNamesByTarget": {
       "input_token": "NextToken",
@@ -19,4 +19,4 @@
       "result_key": "Targets"
     }
   }
-}
+} 

@@ -1,4 +1,4 @@
-{
+{ 
   "pagination": {
     "ListDeadLetterSourceQueues": {
       "input_token": "NextToken",
@@ -13,4 +13,4 @@
       "result_key": "QueueUrls"
     }
   }
-}
+} 

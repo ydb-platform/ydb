@@ -1,4 +1,4 @@
-{
+{ 
   "pagination": {
     "ListPlacements": {
       "input_token": "nextToken",
@@ -13,4 +13,4 @@
       "result_key": "projects"
     }
   }
-}
+} 

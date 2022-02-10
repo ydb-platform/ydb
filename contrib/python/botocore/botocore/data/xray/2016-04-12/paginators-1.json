@@ -1,31 +1,31 @@
-{
-  "pagination": {
-    "BatchGetTraces": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
+{ 
+  "pagination": { 
+    "BatchGetTraces": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
       "result_key": "Traces",
       "non_aggregate_keys": [
         "UnprocessedTraceIds"
       ]
-    },
-    "GetServiceGraph": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
+    }, 
+    "GetServiceGraph": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
       "result_key": "Services",
       "non_aggregate_keys": [
         "StartTime",
         "EndTime",
         "ContainsOldGroupVersions"
       ]
-    },
-    "GetTraceGraph": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "result_key": "Services"
-    },
-    "GetTraceSummaries": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
+    }, 
+    "GetTraceGraph": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "result_key": "Services" 
+    }, 
+    "GetTraceSummaries": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
       "result_key": "TraceSummaries",
       "non_aggregate_keys": [
         "TracesProcessedCount",
@@ -54,6 +54,6 @@
       ],
       "output_token": "NextToken",
       "result_key": "TimeSeriesServiceStatistics"
-    }
-  }
-}
+    } 
+  } 
+} 

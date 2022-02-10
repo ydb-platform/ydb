@@ -1,30 +1,30 @@
-{
-  "version":"2.0",
-  "metadata":{
-    "apiVersion":"2016-10-06",
-    "endpointPrefix":"codebuild",
-    "jsonVersion":"1.1",
-    "protocol":"json",
-    "serviceFullName":"AWS CodeBuild",
-    "serviceId":"CodeBuild",
-    "signatureVersion":"v4",
-    "targetPrefix":"CodeBuild_20161006",
-    "uid":"codebuild-2016-10-06"
-  },
-  "operations":{
-    "BatchDeleteBuilds":{
-      "name":"BatchDeleteBuilds",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"BatchDeleteBuildsInput"},
-      "output":{"shape":"BatchDeleteBuildsOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"}
-      ],
-      "documentation":"<p>Deletes one or more builds.</p>"
-    },
+{ 
+  "version":"2.0", 
+  "metadata":{ 
+    "apiVersion":"2016-10-06", 
+    "endpointPrefix":"codebuild", 
+    "jsonVersion":"1.1", 
+    "protocol":"json", 
+    "serviceFullName":"AWS CodeBuild", 
+    "serviceId":"CodeBuild", 
+    "signatureVersion":"v4", 
+    "targetPrefix":"CodeBuild_20161006", 
+    "uid":"codebuild-2016-10-06" 
+  }, 
+  "operations":{ 
+    "BatchDeleteBuilds":{ 
+      "name":"BatchDeleteBuilds", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"BatchDeleteBuildsInput"}, 
+      "output":{"shape":"BatchDeleteBuildsOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"} 
+      ], 
+      "documentation":"<p>Deletes one or more builds.</p>" 
+    }, 
     "BatchGetBuildBatches":{
       "name":"BatchGetBuildBatches",
       "http":{
@@ -38,32 +38,32 @@
       ],
       "documentation":"<p>Retrieves information about one or more batch builds.</p>"
     },
-    "BatchGetBuilds":{
-      "name":"BatchGetBuilds",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"BatchGetBuildsInput"},
-      "output":{"shape":"BatchGetBuildsOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"}
-      ],
+    "BatchGetBuilds":{ 
+      "name":"BatchGetBuilds", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"BatchGetBuildsInput"}, 
+      "output":{"shape":"BatchGetBuildsOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"} 
+      ], 
       "documentation":"<p>Gets information about one or more builds.</p>"
-    },
-    "BatchGetProjects":{
-      "name":"BatchGetProjects",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"BatchGetProjectsInput"},
-      "output":{"shape":"BatchGetProjectsOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"}
-      ],
+    }, 
+    "BatchGetProjects":{ 
+      "name":"BatchGetProjects", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"BatchGetProjectsInput"}, 
+      "output":{"shape":"BatchGetProjectsOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"} 
+      ], 
       "documentation":"<p>Gets information about one or more build projects.</p>"
-    },
+    }, 
     "BatchGetReportGroups":{
       "name":"BatchGetReportGroups",
       "http":{
@@ -90,21 +90,21 @@
       ],
       "documentation":"<p> Returns an array of reports. </p>"
     },
-    "CreateProject":{
-      "name":"CreateProject",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"CreateProjectInput"},
-      "output":{"shape":"CreateProjectOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"},
-        {"shape":"ResourceAlreadyExistsException"},
-        {"shape":"AccountLimitExceededException"}
-      ],
-      "documentation":"<p>Creates a build project.</p>"
-    },
+    "CreateProject":{ 
+      "name":"CreateProject", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"CreateProjectInput"}, 
+      "output":{"shape":"CreateProjectOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"}, 
+        {"shape":"ResourceAlreadyExistsException"}, 
+        {"shape":"AccountLimitExceededException"} 
+      ], 
+      "documentation":"<p>Creates a build project.</p>" 
+    }, 
     "CreateReportGroup":{
       "name":"CreateReportGroup",
       "http":{
@@ -120,22 +120,22 @@
       ],
       "documentation":"<p> Creates a report group. A report group contains a collection of reports. </p>"
     },
-    "CreateWebhook":{
-      "name":"CreateWebhook",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"CreateWebhookInput"},
-      "output":{"shape":"CreateWebhookOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"},
-        {"shape":"OAuthProviderException"},
-        {"shape":"ResourceAlreadyExistsException"},
-        {"shape":"ResourceNotFoundException"}
-      ],
+    "CreateWebhook":{ 
+      "name":"CreateWebhook", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"CreateWebhookInput"}, 
+      "output":{"shape":"CreateWebhookOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"}, 
+        {"shape":"OAuthProviderException"}, 
+        {"shape":"ResourceAlreadyExistsException"}, 
+        {"shape":"ResourceNotFoundException"} 
+      ], 
       "documentation":"<p>For an existing CodeBuild build project that has its source code stored in a GitHub or Bitbucket repository, enables CodeBuild to start rebuilding the source code every time a code change is pushed to the repository.</p> <important> <p>If you enable webhooks for an CodeBuild project, and the project is used as a build step in CodePipeline, then two identical builds are created for each commit. One build is triggered through webhooks, and one through CodePipeline. Because billing is on a per-build basis, you are billed for both builds. Therefore, if you are using CodePipeline, we recommend that you disable webhooks in CodeBuild. In the CodeBuild console, clear the Webhook box. For more information, see step 5 in <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/change-project.html#change-project-console\">Change a Build Project's Settings</a>.</p> </important>"
-    },
+    }, 
     "DeleteBuildBatch":{
       "name":"DeleteBuildBatch",
       "http":{
@@ -149,19 +149,19 @@
       ],
       "documentation":"<p>Deletes a batch build.</p>"
     },
-    "DeleteProject":{
-      "name":"DeleteProject",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"DeleteProjectInput"},
-      "output":{"shape":"DeleteProjectOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"}
-      ],
+    "DeleteProject":{ 
+      "name":"DeleteProject", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"DeleteProjectInput"}, 
+      "output":{"shape":"DeleteProjectOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"} 
+      ], 
       "documentation":"<p> Deletes a build project. When you delete a project, its builds are not deleted. </p>"
-    },
+    }, 
     "DeleteReport":{
       "name":"DeleteReport",
       "http":{
@@ -215,21 +215,21 @@
       ],
       "documentation":"<p> Deletes a set of GitHub, GitHub Enterprise, or Bitbucket source credentials. </p>"
     },
-    "DeleteWebhook":{
-      "name":"DeleteWebhook",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"DeleteWebhookInput"},
-      "output":{"shape":"DeleteWebhookOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"OAuthProviderException"}
-      ],
+    "DeleteWebhook":{ 
+      "name":"DeleteWebhook", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"DeleteWebhookInput"}, 
+      "output":{"shape":"DeleteWebhookOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"}, 
+        {"shape":"ResourceNotFoundException"}, 
+        {"shape":"OAuthProviderException"} 
+      ], 
       "documentation":"<p>For an existing CodeBuild build project that has its source code stored in a GitHub or Bitbucket repository, stops CodeBuild from rebuilding the source code every time a code change is pushed to the repository.</p>"
-    },
+    }, 
     "DescribeCodeCoverages":{
       "name":"DescribeCodeCoverages",
       "http":{
@@ -300,20 +300,20 @@
       ],
       "documentation":"<p> Imports the source repository credentials for an CodeBuild project that has its source code stored in a GitHub, GitHub Enterprise, or Bitbucket repository. </p>"
     },
-    "InvalidateProjectCache":{
-      "name":"InvalidateProjectCache",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"InvalidateProjectCacheInput"},
-      "output":{"shape":"InvalidateProjectCacheOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"},
-        {"shape":"ResourceNotFoundException"}
-      ],
-      "documentation":"<p>Resets the cache for a project.</p>"
-    },
+    "InvalidateProjectCache":{ 
+      "name":"InvalidateProjectCache", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"InvalidateProjectCacheInput"}, 
+      "output":{"shape":"InvalidateProjectCacheOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"}, 
+        {"shape":"ResourceNotFoundException"} 
+      ], 
+      "documentation":"<p>Resets the cache for a project.</p>" 
+    }, 
     "ListBuildBatches":{
       "name":"ListBuildBatches",
       "http":{
@@ -341,56 +341,56 @@
       ],
       "documentation":"<p>Retrieves the identifiers of the build batches for a specific project.</p>"
     },
-    "ListBuilds":{
-      "name":"ListBuilds",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"ListBuildsInput"},
-      "output":{"shape":"ListBuildsOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"}
-      ],
-      "documentation":"<p>Gets a list of build IDs, with each build ID representing a single build.</p>"
-    },
-    "ListBuildsForProject":{
-      "name":"ListBuildsForProject",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"ListBuildsForProjectInput"},
-      "output":{"shape":"ListBuildsForProjectOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"},
-        {"shape":"ResourceNotFoundException"}
-      ],
+    "ListBuilds":{ 
+      "name":"ListBuilds", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"ListBuildsInput"}, 
+      "output":{"shape":"ListBuildsOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"} 
+      ], 
+      "documentation":"<p>Gets a list of build IDs, with each build ID representing a single build.</p>" 
+    }, 
+    "ListBuildsForProject":{ 
+      "name":"ListBuildsForProject", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"ListBuildsForProjectInput"}, 
+      "output":{"shape":"ListBuildsForProjectOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"}, 
+        {"shape":"ResourceNotFoundException"} 
+      ], 
       "documentation":"<p>Gets a list of build identifiers for the specified build project, with each build identifier representing a single build.</p>"
-    },
-    "ListCuratedEnvironmentImages":{
-      "name":"ListCuratedEnvironmentImages",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"ListCuratedEnvironmentImagesInput"},
-      "output":{"shape":"ListCuratedEnvironmentImagesOutput"},
+    }, 
+    "ListCuratedEnvironmentImages":{ 
+      "name":"ListCuratedEnvironmentImages", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"ListCuratedEnvironmentImagesInput"}, 
+      "output":{"shape":"ListCuratedEnvironmentImagesOutput"}, 
       "documentation":"<p>Gets information about Docker images that are managed by CodeBuild.</p>"
-    },
-    "ListProjects":{
-      "name":"ListProjects",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"ListProjectsInput"},
-      "output":{"shape":"ListProjectsOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"}
-      ],
-      "documentation":"<p>Gets a list of build project names, with each build project name representing a single build project.</p>"
-    },
+    }, 
+    "ListProjects":{ 
+      "name":"ListProjects", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"ListProjectsInput"}, 
+      "output":{"shape":"ListProjectsOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"} 
+      ], 
+      "documentation":"<p>Gets a list of build project names, with each build project name representing a single build project.</p>" 
+    }, 
     "ListReportGroups":{
       "name":"ListReportGroups",
       "http":{
@@ -513,21 +513,21 @@
       ],
       "documentation":"<p>Restarts a failed batch build. Only batch builds that have failed can be retried.</p>"
     },
-    "StartBuild":{
-      "name":"StartBuild",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"StartBuildInput"},
-      "output":{"shape":"StartBuildOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"AccountLimitExceededException"}
-      ],
-      "documentation":"<p>Starts running a build.</p>"
-    },
+    "StartBuild":{ 
+      "name":"StartBuild", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"StartBuildInput"}, 
+      "output":{"shape":"StartBuildOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"}, 
+        {"shape":"ResourceNotFoundException"}, 
+        {"shape":"AccountLimitExceededException"} 
+      ], 
+      "documentation":"<p>Starts running a build.</p>" 
+    }, 
     "StartBuildBatch":{
       "name":"StartBuildBatch",
       "http":{
@@ -542,20 +542,20 @@
       ],
       "documentation":"<p>Starts a batch build for a project.</p>"
     },
-    "StopBuild":{
-      "name":"StopBuild",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"StopBuildInput"},
-      "output":{"shape":"StopBuildOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"},
-        {"shape":"ResourceNotFoundException"}
-      ],
-      "documentation":"<p>Attempts to stop running a build.</p>"
-    },
+    "StopBuild":{ 
+      "name":"StopBuild", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"StopBuildInput"}, 
+      "output":{"shape":"StopBuildOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"}, 
+        {"shape":"ResourceNotFoundException"} 
+      ], 
+      "documentation":"<p>Attempts to stop running a build.</p>" 
+    }, 
     "StopBuildBatch":{
       "name":"StopBuildBatch",
       "http":{
@@ -570,20 +570,20 @@
       ],
       "documentation":"<p>Stops a running batch build.</p>"
     },
-    "UpdateProject":{
-      "name":"UpdateProject",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"UpdateProjectInput"},
-      "output":{"shape":"UpdateProjectOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"},
-        {"shape":"ResourceNotFoundException"}
-      ],
-      "documentation":"<p>Changes the settings of a build project.</p>"
-    },
+    "UpdateProject":{ 
+      "name":"UpdateProject", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"UpdateProjectInput"}, 
+      "output":{"shape":"UpdateProjectOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"}, 
+        {"shape":"ResourceNotFoundException"} 
+      ], 
+      "documentation":"<p>Changes the settings of a build project.</p>" 
+    }, 
     "UpdateReportGroup":{
       "name":"UpdateReportGroup",
       "http":{
@@ -598,52 +598,52 @@
       ],
       "documentation":"<p> Updates a report group. </p>"
     },
-    "UpdateWebhook":{
-      "name":"UpdateWebhook",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"UpdateWebhookInput"},
-      "output":{"shape":"UpdateWebhookOutput"},
-      "errors":[
-        {"shape":"InvalidInputException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"OAuthProviderException"}
-      ],
+    "UpdateWebhook":{ 
+      "name":"UpdateWebhook", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"UpdateWebhookInput"}, 
+      "output":{"shape":"UpdateWebhookOutput"}, 
+      "errors":[ 
+        {"shape":"InvalidInputException"}, 
+        {"shape":"ResourceNotFoundException"}, 
+        {"shape":"OAuthProviderException"} 
+      ], 
       "documentation":"<p> Updates the webhook associated with an CodeBuild build project. </p> <note> <p> If you use Bitbucket for your repository, <code>rotateSecret</code> is ignored. </p> </note>"
-    }
-  },
-  "shapes":{
-    "AccountLimitExceededException":{
-      "type":"structure",
-      "members":{
-      },
+    } 
+  }, 
+  "shapes":{ 
+    "AccountLimitExceededException":{ 
+      "type":"structure", 
+      "members":{ 
+      }, 
       "documentation":"<p>An Amazon Web Services service limit was exceeded for the calling Amazon Web Services account.</p>",
-      "exception":true
-    },
-    "ArtifactNamespace":{
-      "type":"string",
-      "enum":[
-        "NONE",
-        "BUILD_ID"
-      ]
-    },
-    "ArtifactPackaging":{
-      "type":"string",
-      "enum":[
-        "NONE",
-        "ZIP"
-      ]
-    },
-    "ArtifactsType":{
-      "type":"string",
-      "enum":[
-        "CODEPIPELINE",
-        "S3",
-        "NO_ARTIFACTS"
-      ]
-    },
+      "exception":true 
+    }, 
+    "ArtifactNamespace":{ 
+      "type":"string", 
+      "enum":[ 
+        "NONE", 
+        "BUILD_ID" 
+      ] 
+    }, 
+    "ArtifactPackaging":{ 
+      "type":"string", 
+      "enum":[ 
+        "NONE", 
+        "ZIP" 
+      ] 
+    }, 
+    "ArtifactsType":{ 
+      "type":"string", 
+      "enum":[ 
+        "CODEPIPELINE", 
+        "S3", 
+        "NO_ARTIFACTS" 
+      ] 
+    }, 
     "AuthType":{
       "type":"string",
       "enum":[
@@ -652,29 +652,29 @@
         "PERSONAL_ACCESS_TOKEN"
       ]
     },
-    "BatchDeleteBuildsInput":{
-      "type":"structure",
-      "required":["ids"],
-      "members":{
-        "ids":{
-          "shape":"BuildIds",
-          "documentation":"<p>The IDs of the builds to delete.</p>"
-        }
-      }
-    },
-    "BatchDeleteBuildsOutput":{
-      "type":"structure",
-      "members":{
-        "buildsDeleted":{
-          "shape":"BuildIds",
-          "documentation":"<p>The IDs of the builds that were successfully deleted.</p>"
-        },
-        "buildsNotDeleted":{
-          "shape":"BuildsNotDeleted",
-          "documentation":"<p>Information about any builds that could not be successfully deleted.</p>"
-        }
-      }
-    },
+    "BatchDeleteBuildsInput":{ 
+      "type":"structure", 
+      "required":["ids"], 
+      "members":{ 
+        "ids":{ 
+          "shape":"BuildIds", 
+          "documentation":"<p>The IDs of the builds to delete.</p>" 
+        } 
+      } 
+    }, 
+    "BatchDeleteBuildsOutput":{ 
+      "type":"structure", 
+      "members":{ 
+        "buildsDeleted":{ 
+          "shape":"BuildIds", 
+          "documentation":"<p>The IDs of the builds that were successfully deleted.</p>" 
+        }, 
+        "buildsNotDeleted":{ 
+          "shape":"BuildsNotDeleted", 
+          "documentation":"<p>Information about any builds that could not be successfully deleted.</p>" 
+        } 
+      } 
+    }, 
     "BatchGetBuildBatchesInput":{
       "type":"structure",
       "required":["ids"],
@@ -698,52 +698,52 @@
         }
       }
     },
-    "BatchGetBuildsInput":{
-      "type":"structure",
-      "required":["ids"],
-      "members":{
-        "ids":{
-          "shape":"BuildIds",
-          "documentation":"<p>The IDs of the builds.</p>"
-        }
-      }
-    },
-    "BatchGetBuildsOutput":{
-      "type":"structure",
-      "members":{
-        "builds":{
-          "shape":"Builds",
-          "documentation":"<p>Information about the requested builds.</p>"
-        },
-        "buildsNotFound":{
-          "shape":"BuildIds",
-          "documentation":"<p>The IDs of builds for which information could not be found.</p>"
-        }
-      }
-    },
-    "BatchGetProjectsInput":{
-      "type":"structure",
-      "required":["names"],
-      "members":{
-        "names":{
-          "shape":"ProjectNames",
+    "BatchGetBuildsInput":{ 
+      "type":"structure", 
+      "required":["ids"], 
+      "members":{ 
+        "ids":{ 
+          "shape":"BuildIds", 
+          "documentation":"<p>The IDs of the builds.</p>" 
+        } 
+      } 
+    }, 
+    "BatchGetBuildsOutput":{ 
+      "type":"structure", 
+      "members":{ 
+        "builds":{ 
+          "shape":"Builds", 
+          "documentation":"<p>Information about the requested builds.</p>" 
+        }, 
+        "buildsNotFound":{ 
+          "shape":"BuildIds", 
+          "documentation":"<p>The IDs of builds for which information could not be found.</p>" 
+        } 
+      } 
+    }, 
+    "BatchGetProjectsInput":{ 
+      "type":"structure", 
+      "required":["names"], 
+      "members":{ 
+        "names":{ 
+          "shape":"ProjectNames", 
           "documentation":"<p>The names or ARNs of the build projects. To get information about a project shared with your Amazon Web Services account, its ARN must be specified. You cannot specify a shared project using its name.</p>"
-        }
-      }
-    },
-    "BatchGetProjectsOutput":{
-      "type":"structure",
-      "members":{
-        "projects":{
-          "shape":"Projects",
-          "documentation":"<p>Information about the requested build projects.</p>"
-        },
-        "projectsNotFound":{
-          "shape":"ProjectNames",
-          "documentation":"<p>The names of build projects for which information could not be found.</p>"
-        }
-      }
-    },
+        } 
+      } 
+    }, 
+    "BatchGetProjectsOutput":{ 
+      "type":"structure", 
+      "members":{ 
+        "projects":{ 
+          "shape":"Projects", 
+          "documentation":"<p>Information about the requested build projects.</p>" 
+        }, 
+        "projectsNotFound":{ 
+          "shape":"ProjectNames", 
+          "documentation":"<p>The names of build projects for which information could not be found.</p>" 
+        } 
+      } 
+    }, 
     "BatchGetReportGroupsInput":{
       "type":"structure",
       "required":["reportGroupArns"],
@@ -804,58 +804,58 @@
       },
       "documentation":"<p>Specifies restrictions for the batch build.</p>"
     },
-    "Boolean":{"type":"boolean"},
-    "Build":{
-      "type":"structure",
-      "members":{
-        "id":{
-          "shape":"NonEmptyString",
-          "documentation":"<p>The unique ID for the build.</p>"
-        },
-        "arn":{
-          "shape":"NonEmptyString",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the build.</p>"
-        },
+    "Boolean":{"type":"boolean"}, 
+    "Build":{ 
+      "type":"structure", 
+      "members":{ 
+        "id":{ 
+          "shape":"NonEmptyString", 
+          "documentation":"<p>The unique ID for the build.</p>" 
+        }, 
+        "arn":{ 
+          "shape":"NonEmptyString", 
+          "documentation":"<p>The Amazon Resource Name (ARN) of the build.</p>" 
+        }, 
         "buildNumber":{
           "shape":"WrapperLong",
           "documentation":"<p>The number of the build. For each project, the <code>buildNumber</code> of its first build is <code>1</code>. The <code>buildNumber</code> of each subsequent build is incremented by <code>1</code>. If a build is deleted, the <code>buildNumber</code> of other builds does not change.</p>"
         },
-        "startTime":{
-          "shape":"Timestamp",
-          "documentation":"<p>When the build process started, expressed in Unix time format.</p>"
-        },
-        "endTime":{
-          "shape":"Timestamp",
-          "documentation":"<p>When the build process ended, expressed in Unix time format.</p>"
-        },
-        "currentPhase":{
-          "shape":"String",
-          "documentation":"<p>The current build phase.</p>"
-        },
-        "buildStatus":{
-          "shape":"StatusType",
-          "documentation":"<p>The current status of the build. Valid values include:</p> <ul> <li> <p> <code>FAILED</code>: The build failed.</p> </li> <li> <p> <code>FAULT</code>: The build faulted.</p> </li> <li> <p> <code>IN_PROGRESS</code>: The build is still in progress.</p> </li> <li> <p> <code>STOPPED</code>: The build stopped.</p> </li> <li> <p> <code>SUCCEEDED</code>: The build succeeded.</p> </li> <li> <p> <code>TIMED_OUT</code>: The build timed out.</p> </li> </ul>"
-        },
-        "sourceVersion":{
-          "shape":"NonEmptyString",
+        "startTime":{ 
+          "shape":"Timestamp", 
+          "documentation":"<p>When the build process started, expressed in Unix time format.</p>" 
+        }, 
+        "endTime":{ 
+          "shape":"Timestamp", 
+          "documentation":"<p>When the build process ended, expressed in Unix time format.</p>" 
+        }, 
+        "currentPhase":{ 
+          "shape":"String", 
+          "documentation":"<p>The current build phase.</p>" 
+        }, 
+        "buildStatus":{ 
+          "shape":"StatusType", 
+          "documentation":"<p>The current status of the build. Valid values include:</p> <ul> <li> <p> <code>FAILED</code>: The build failed.</p> </li> <li> <p> <code>FAULT</code>: The build faulted.</p> </li> <li> <p> <code>IN_PROGRESS</code>: The build is still in progress.</p> </li> <li> <p> <code>STOPPED</code>: The build stopped.</p> </li> <li> <p> <code>SUCCEEDED</code>: The build succeeded.</p> </li> <li> <p> <code>TIMED_OUT</code>: The build timed out.</p> </li> </ul>" 
+        }, 
+        "sourceVersion":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>Any version identifier for the version of the source code to be built. If <code>sourceVersion</code> is specified at the project level, then this <code>sourceVersion</code> (at the build level) takes precedence. </p> <p> For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/sample-source-version.html\">Source Version Sample with CodeBuild</a> in the <i>CodeBuild User Guide</i>. </p>"
-        },
+        }, 
         "resolvedSourceVersion":{
           "shape":"NonEmptyString",
           "documentation":"<p> An identifier for the version of this build's source code. </p> <ul> <li> <p> For CodeCommit, GitHub, GitHub Enterprise, and BitBucket, the commit ID. </p> </li> <li> <p> For CodePipeline, the source revision provided by CodePipeline. </p> </li> <li> <p> For Amazon S3, this does not apply. </p> </li> </ul>"
         },
-        "projectName":{
-          "shape":"NonEmptyString",
+        "projectName":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>The name of the CodeBuild project.</p>"
-        },
-        "phases":{
-          "shape":"BuildPhases",
+        }, 
+        "phases":{ 
+          "shape":"BuildPhases", 
           "documentation":"<p>Information about all previous build phases that are complete and information about any current build phase that is not yet complete.</p>"
-        },
-        "source":{
-          "shape":"ProjectSource",
-          "documentation":"<p>Information about the source code to be built.</p>"
-        },
+        }, 
+        "source":{ 
+          "shape":"ProjectSource", 
+          "documentation":"<p>Information about the source code to be built.</p>" 
+        }, 
         "secondarySources":{
           "shape":"ProjectSources",
           "documentation":"<p> An array of <code>ProjectSource</code> objects. </p>"
@@ -864,53 +864,53 @@
           "shape":"ProjectSecondarySourceVersions",
           "documentation":"<p> An array of <code>ProjectSourceVersion</code> objects. Each <code>ProjectSourceVersion</code> must be one of: </p> <ul> <li> <p>For CodeCommit: the commit ID, branch, or Git tag to use.</p> </li> <li> <p>For GitHub: the commit ID, pull request ID, branch name, or tag name that corresponds to the version of the source code you want to build. If a pull request ID is specified, it must use the format <code>pr/pull-request-ID</code> (for example, <code>pr/25</code>). If a branch name is specified, the branch's HEAD commit ID is used. If not specified, the default branch's HEAD commit ID is used.</p> </li> <li> <p>For Bitbucket: the commit ID, branch name, or tag name that corresponds to the version of the source code you want to build. If a branch name is specified, the branch's HEAD commit ID is used. If not specified, the default branch's HEAD commit ID is used.</p> </li> <li> <p>For Amazon S3: the version ID of the object that represents the build input ZIP file to use.</p> </li> </ul>"
         },
-        "artifacts":{
-          "shape":"BuildArtifacts",
-          "documentation":"<p>Information about the output artifacts for the build.</p>"
-        },
+        "artifacts":{ 
+          "shape":"BuildArtifacts", 
+          "documentation":"<p>Information about the output artifacts for the build.</p>" 
+        }, 
         "secondaryArtifacts":{
           "shape":"BuildArtifactsList",
           "documentation":"<p> An array of <code>ProjectArtifacts</code> objects. </p>"
         },
-        "cache":{
-          "shape":"ProjectCache",
-          "documentation":"<p>Information about the cache for the build.</p>"
-        },
-        "environment":{
-          "shape":"ProjectEnvironment",
-          "documentation":"<p>Information about the build environment for this build.</p>"
-        },
-        "serviceRole":{
-          "shape":"NonEmptyString",
-          "documentation":"<p>The name of a service role used for this build.</p>"
-        },
-        "logs":{
-          "shape":"LogsLocation",
+        "cache":{ 
+          "shape":"ProjectCache", 
+          "documentation":"<p>Information about the cache for the build.</p>" 
+        }, 
+        "environment":{ 
+          "shape":"ProjectEnvironment", 
+          "documentation":"<p>Information about the build environment for this build.</p>" 
+        }, 
+        "serviceRole":{ 
+          "shape":"NonEmptyString", 
+          "documentation":"<p>The name of a service role used for this build.</p>" 
+        }, 
+        "logs":{ 
+          "shape":"LogsLocation", 
           "documentation":"<p>Information about the build's logs in CloudWatch Logs.</p>"
-        },
-        "timeoutInMinutes":{
-          "shape":"WrapperInt",
+        }, 
+        "timeoutInMinutes":{ 
+          "shape":"WrapperInt", 
           "documentation":"<p>How long, in minutes, for CodeBuild to wait before timing out this build if it does not get marked as completed.</p>"
-        },
+        }, 
         "queuedTimeoutInMinutes":{
           "shape":"WrapperInt",
           "documentation":"<p> The number of minutes a build is allowed to be queued before it times out. </p>"
         },
-        "buildComplete":{
-          "shape":"Boolean",
+        "buildComplete":{ 
+          "shape":"Boolean", 
           "documentation":"<p>Whether the build is complete. True if complete; otherwise, false.</p>"
-        },
-        "initiator":{
-          "shape":"String",
+        }, 
+        "initiator":{ 
+          "shape":"String", 
           "documentation":"<p>The entity that started the build. Valid values include:</p> <ul> <li> <p>If CodePipeline started the build, the pipeline's name (for example, <code>codepipeline/my-demo-pipeline</code>).</p> </li> <li> <p>If an Identity and Access Management user started the build, the user's name (for example, <code>MyUserName</code>).</p> </li> <li> <p>If the Jenkins plugin for CodeBuild started the build, the string <code>CodeBuild-Jenkins-Plugin</code>.</p> </li> </ul>"
-        },
-        "vpcConfig":{
-          "shape":"VpcConfig",
+        }, 
+        "vpcConfig":{ 
+          "shape":"VpcConfig", 
           "documentation":"<p>If your CodeBuild project accesses resources in an Amazon VPC, you provide this parameter that identifies the VPC ID and the list of security group IDs and subnet IDs. The security groups and subnets must belong to the same VPC. You must provide at least one security group and one subnet ID.</p>"
-        },
-        "networkInterface":{
-          "shape":"NetworkInterface",
-          "documentation":"<p>Describes a network interface.</p>"
+        }, 
+        "networkInterface":{ 
+          "shape":"NetworkInterface", 
+          "documentation":"<p>Describes a network interface.</p>" 
         },
         "encryptionKey":{
           "shape":"NonEmptyString",
@@ -935,23 +935,23 @@
         "buildBatchArn":{
           "shape":"String",
           "documentation":"<p>The ARN of the batch build that this build is a member of, if applicable.</p>"
-        }
-      },
-      "documentation":"<p>Information about a build.</p>"
-    },
-    "BuildArtifacts":{
-      "type":"structure",
-      "members":{
-        "location":{
-          "shape":"String",
-          "documentation":"<p>Information about the location of the build artifacts.</p>"
-        },
-        "sha256sum":{
-          "shape":"String",
+        } 
+      }, 
+      "documentation":"<p>Information about a build.</p>" 
+    }, 
+    "BuildArtifacts":{ 
+      "type":"structure", 
+      "members":{ 
+        "location":{ 
+          "shape":"String", 
+          "documentation":"<p>Information about the location of the build artifacts.</p>" 
+        }, 
+        "sha256sum":{ 
+          "shape":"String", 
           "documentation":"<p>The SHA-256 hash of the build artifact.</p> <p>You can use this hash along with a checksum tool to confirm file integrity and authenticity.</p> <note> <p>This value is available only if the build project's <code>packaging</code> value is set to <code>ZIP</code>.</p> </note>"
-        },
-        "md5sum":{
-          "shape":"String",
+        }, 
+        "md5sum":{ 
+          "shape":"String", 
           "documentation":"<p>The MD5 hash of the build artifact.</p> <p>You can use this hash along with a checksum tool to confirm file integrity and authenticity.</p> <note> <p>This value is available only if the build project's <code>packaging</code> value is set to <code>ZIP</code>.</p> </note>"
         },
         "overrideArtifactName":{
@@ -965,10 +965,10 @@
         "artifactIdentifier":{
           "shape":"String",
           "documentation":"<p> An identifier for this artifact definition. </p>"
-        }
-      },
-      "documentation":"<p>Information about build output artifacts.</p>"
-    },
+        } 
+      }, 
+      "documentation":"<p>Information about build output artifacts.</p>" 
+    }, 
     "BuildArtifactsList":{
       "type":"list",
       "member":{"shape":"BuildArtifacts"},
@@ -1181,76 +1181,76 @@
       "type":"list",
       "member":{"shape":"BuildGroup"}
     },
-    "BuildIds":{
-      "type":"list",
-      "member":{"shape":"NonEmptyString"},
-      "max":100,
-      "min":1
-    },
-    "BuildNotDeleted":{
-      "type":"structure",
-      "members":{
-        "id":{
-          "shape":"NonEmptyString",
-          "documentation":"<p>The ID of the build that could not be successfully deleted.</p>"
-        },
-        "statusCode":{
-          "shape":"String",
-          "documentation":"<p>Additional information about the build that could not be successfully deleted.</p>"
-        }
-      },
-      "documentation":"<p>Information about a build that could not be successfully deleted.</p>"
-    },
-    "BuildPhase":{
-      "type":"structure",
-      "members":{
-        "phaseType":{
-          "shape":"BuildPhaseType",
+    "BuildIds":{ 
+      "type":"list", 
+      "member":{"shape":"NonEmptyString"}, 
+      "max":100, 
+      "min":1 
+    }, 
+    "BuildNotDeleted":{ 
+      "type":"structure", 
+      "members":{ 
+        "id":{ 
+          "shape":"NonEmptyString", 
+          "documentation":"<p>The ID of the build that could not be successfully deleted.</p>" 
+        }, 
+        "statusCode":{ 
+          "shape":"String", 
+          "documentation":"<p>Additional information about the build that could not be successfully deleted.</p>" 
+        } 
+      }, 
+      "documentation":"<p>Information about a build that could not be successfully deleted.</p>" 
+    }, 
+    "BuildPhase":{ 
+      "type":"structure", 
+      "members":{ 
+        "phaseType":{ 
+          "shape":"BuildPhaseType", 
           "documentation":"<p>The name of the build phase. Valid values include:</p> <ul> <li> <p> <code>BUILD</code>: Core build activities typically occur in this build phase.</p> </li> <li> <p> <code>COMPLETED</code>: The build has been completed.</p> </li> <li> <p> <code>DOWNLOAD_SOURCE</code>: Source code is being downloaded in this build phase.</p> </li> <li> <p> <code>FINALIZING</code>: The build process is completing in this build phase.</p> </li> <li> <p> <code>INSTALL</code>: Installation activities typically occur in this build phase.</p> </li> <li> <p> <code>POST_BUILD</code>: Post-build activities typically occur in this build phase.</p> </li> <li> <p> <code>PRE_BUILD</code>: Pre-build activities typically occur in this build phase.</p> </li> <li> <p> <code>PROVISIONING</code>: The build environment is being set up.</p> </li> <li> <p> <code>QUEUED</code>: The build has been submitted and is queued behind other submitted builds.</p> </li> <li> <p> <code>SUBMITTED</code>: The build has been submitted.</p> </li> <li> <p> <code>UPLOAD_ARTIFACTS</code>: Build output artifacts are being uploaded to the output location.</p> </li> </ul>"
-        },
-        "phaseStatus":{
-          "shape":"StatusType",
+        }, 
+        "phaseStatus":{ 
+          "shape":"StatusType", 
           "documentation":"<p>The current status of the build phase. Valid values include:</p> <dl> <dt>FAILED</dt> <dd> <p>The build phase failed.</p> </dd> <dt>FAULT</dt> <dd> <p>The build phase faulted.</p> </dd> <dt>IN_PROGRESS</dt> <dd> <p>The build phase is still in progress.</p> </dd> <dt>QUEUED</dt> <dd> <p>The build has been submitted and is queued behind other submitted builds.</p> </dd> <dt>STOPPED</dt> <dd> <p>The build phase stopped.</p> </dd> <dt>SUCCEEDED</dt> <dd> <p>The build phase succeeded.</p> </dd> <dt>TIMED_OUT</dt> <dd> <p>The build phase timed out.</p> </dd> </dl>"
-        },
-        "startTime":{
-          "shape":"Timestamp",
-          "documentation":"<p>When the build phase started, expressed in Unix time format.</p>"
-        },
-        "endTime":{
-          "shape":"Timestamp",
-          "documentation":"<p>When the build phase ended, expressed in Unix time format.</p>"
-        },
-        "durationInSeconds":{
-          "shape":"WrapperLong",
-          "documentation":"<p>How long, in seconds, between the starting and ending times of the build's phase.</p>"
-        },
-        "contexts":{
-          "shape":"PhaseContexts",
-          "documentation":"<p>Additional information about a build phase, especially to help troubleshoot a failed build.</p>"
-        }
-      },
-      "documentation":"<p>Information about a stage for a build.</p>"
-    },
-    "BuildPhaseType":{
-      "type":"string",
-      "enum":[
-        "SUBMITTED",
+        }, 
+        "startTime":{ 
+          "shape":"Timestamp", 
+          "documentation":"<p>When the build phase started, expressed in Unix time format.</p>" 
+        }, 
+        "endTime":{ 
+          "shape":"Timestamp", 
+          "documentation":"<p>When the build phase ended, expressed in Unix time format.</p>" 
+        }, 
+        "durationInSeconds":{ 
+          "shape":"WrapperLong", 
+          "documentation":"<p>How long, in seconds, between the starting and ending times of the build's phase.</p>" 
+        }, 
+        "contexts":{ 
+          "shape":"PhaseContexts", 
+          "documentation":"<p>Additional information about a build phase, especially to help troubleshoot a failed build.</p>" 
+        } 
+      }, 
+      "documentation":"<p>Information about a stage for a build.</p>" 
+    }, 
+    "BuildPhaseType":{ 
+      "type":"string", 
+      "enum":[ 
+        "SUBMITTED", 
         "QUEUED",
-        "PROVISIONING",
-        "DOWNLOAD_SOURCE",
-        "INSTALL",
-        "PRE_BUILD",
-        "BUILD",
-        "POST_BUILD",
-        "UPLOAD_ARTIFACTS",
-        "FINALIZING",
-        "COMPLETED"
-      ]
-    },
-    "BuildPhases":{
-      "type":"list",
-      "member":{"shape":"BuildPhase"}
-    },
+        "PROVISIONING", 
+        "DOWNLOAD_SOURCE", 
+        "INSTALL", 
+        "PRE_BUILD", 
+        "BUILD", 
+        "POST_BUILD", 
+        "UPLOAD_ARTIFACTS", 
+        "FINALIZING", 
+        "COMPLETED" 
+      ] 
+    }, 
+    "BuildPhases":{ 
+      "type":"list", 
+      "member":{"shape":"BuildPhase"} 
+    }, 
     "BuildReportArns":{
       "type":"list",
       "member":{"shape":"String"}
@@ -1299,14 +1299,14 @@
       },
       "documentation":"<p>Contains summary information about a batch build group.</p>"
     },
-    "Builds":{
-      "type":"list",
-      "member":{"shape":"Build"}
-    },
-    "BuildsNotDeleted":{
-      "type":"list",
-      "member":{"shape":"BuildNotDeleted"}
-    },
+    "Builds":{ 
+      "type":"list", 
+      "member":{"shape":"Build"} 
+    }, 
+    "BuildsNotDeleted":{ 
+      "type":"list", 
+      "member":{"shape":"BuildNotDeleted"} 
+    }, 
     "CacheMode":{
       "type":"string",
       "enum":[
@@ -1315,14 +1315,14 @@
         "LOCAL_CUSTOM_CACHE"
       ]
     },
-    "CacheType":{
-      "type":"string",
-      "enum":[
-        "NO_CACHE",
+    "CacheType":{ 
+      "type":"string", 
+      "enum":[ 
+        "NO_CACHE", 
         "S3",
         "LOCAL"
-      ]
-    },
+      ] 
+    }, 
     "CloudWatchLogsConfig":{
       "type":"structure",
       "required":["status"],
@@ -1422,41 +1422,41 @@
       "type":"list",
       "member":{"shape":"CodeCoverage"}
     },
-    "ComputeType":{
-      "type":"string",
-      "enum":[
-        "BUILD_GENERAL1_SMALL",
-        "BUILD_GENERAL1_MEDIUM",
+    "ComputeType":{ 
+      "type":"string", 
+      "enum":[ 
+        "BUILD_GENERAL1_SMALL", 
+        "BUILD_GENERAL1_MEDIUM", 
         "BUILD_GENERAL1_LARGE",
         "BUILD_GENERAL1_2XLARGE"
-      ]
-    },
+      ] 
+    }, 
     "ComputeTypesAllowed":{
       "type":"list",
       "member":{"shape":"NonEmptyString"}
     },
-    "CreateProjectInput":{
-      "type":"structure",
-      "required":[
-        "name",
-        "source",
-        "artifacts",
+    "CreateProjectInput":{ 
+      "type":"structure", 
+      "required":[ 
+        "name", 
+        "source", 
+        "artifacts", 
         "environment",
         "serviceRole"
-      ],
-      "members":{
-        "name":{
-          "shape":"ProjectName",
-          "documentation":"<p>The name of the build project.</p>"
-        },
-        "description":{
-          "shape":"ProjectDescription",
-          "documentation":"<p>A description that makes the build project easy to identify.</p>"
-        },
-        "source":{
-          "shape":"ProjectSource",
-          "documentation":"<p>Information about the build input source code for the build project.</p>"
-        },
+      ], 
+      "members":{ 
+        "name":{ 
+          "shape":"ProjectName", 
+          "documentation":"<p>The name of the build project.</p>" 
+        }, 
+        "description":{ 
+          "shape":"ProjectDescription", 
+          "documentation":"<p>A description that makes the build project easy to identify.</p>" 
+        }, 
+        "source":{ 
+          "shape":"ProjectSource", 
+          "documentation":"<p>Information about the build input source code for the build project.</p>" 
+        }, 
         "secondarySources":{
           "shape":"ProjectSources",
           "documentation":"<p>An array of <code>ProjectSource</code> objects. </p>"
@@ -1469,48 +1469,48 @@
           "shape":"ProjectSecondarySourceVersions",
           "documentation":"<p>An array of <code>ProjectSourceVersion</code> objects. If <code>secondarySourceVersions</code> is specified at the build level, then they take precedence over these <code>secondarySourceVersions</code> (at the project level). </p>"
         },
-        "artifacts":{
-          "shape":"ProjectArtifacts",
-          "documentation":"<p>Information about the build output artifacts for the build project.</p>"
-        },
+        "artifacts":{ 
+          "shape":"ProjectArtifacts", 
+          "documentation":"<p>Information about the build output artifacts for the build project.</p>" 
+        }, 
         "secondaryArtifacts":{
           "shape":"ProjectArtifactsList",
           "documentation":"<p>An array of <code>ProjectArtifacts</code> objects. </p>"
         },
-        "cache":{
-          "shape":"ProjectCache",
-          "documentation":"<p>Stores recently used information so that it can be quickly accessed at a later time.</p>"
-        },
-        "environment":{
-          "shape":"ProjectEnvironment",
-          "documentation":"<p>Information about the build environment for the build project.</p>"
-        },
-        "serviceRole":{
-          "shape":"NonEmptyString",
+        "cache":{ 
+          "shape":"ProjectCache", 
+          "documentation":"<p>Stores recently used information so that it can be quickly accessed at a later time.</p>" 
+        }, 
+        "environment":{ 
+          "shape":"ProjectEnvironment", 
+          "documentation":"<p>Information about the build environment for the build project.</p>" 
+        }, 
+        "serviceRole":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>The ARN of the Identity and Access Management role that enables CodeBuild to interact with dependent Amazon Web Services services on behalf of the Amazon Web Services account.</p>"
-        },
-        "timeoutInMinutes":{
-          "shape":"TimeOut",
+        }, 
+        "timeoutInMinutes":{ 
+          "shape":"TimeOut", 
           "documentation":"<p>How long, in minutes, from 5 to 480 (8 hours), for CodeBuild to wait before it times out any build that has not been marked as completed. The default is 60 minutes.</p>"
-        },
+        }, 
         "queuedTimeoutInMinutes":{
           "shape":"TimeOut",
           "documentation":"<p>The number of minutes a build is allowed to be queued before it times out. </p>"
         },
-        "encryptionKey":{
-          "shape":"NonEmptyString",
+        "encryptionKey":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>The Key Management Service customer master key (CMK) to be used for encrypting the build output artifacts.</p> <note> <p>You can use a cross-account KMS key to encrypt the build output artifacts if your service role has permission to that key. </p> </note> <p>You can specify either the Amazon Resource Name (ARN) of the CMK or, if available, the CMK's alias (using the format <code>alias/&lt;alias-name&gt;</code>). </p>"
-        },
-        "tags":{
-          "shape":"TagList",
+        }, 
+        "tags":{ 
+          "shape":"TagList", 
           "documentation":"<p>A list of tag key and value pairs associated with this build project.</p> <p>These tags are available for use by Amazon Web Services services that support CodeBuild build project tags.</p>"
-        },
-        "vpcConfig":{
-          "shape":"VpcConfig",
+        }, 
+        "vpcConfig":{ 
+          "shape":"VpcConfig", 
           "documentation":"<p>VpcConfig enables CodeBuild to access resources in an Amazon VPC.</p>"
-        },
-        "badgeEnabled":{
-          "shape":"WrapperBoolean",
+        }, 
+        "badgeEnabled":{ 
+          "shape":"WrapperBoolean", 
           "documentation":"<p>Set this to true to generate a publicly accessible URL for your project's build badge.</p>"
         },
         "logsConfig":{
@@ -1528,18 +1528,18 @@
         "concurrentBuildLimit":{
           "shape":"WrapperInt",
           "documentation":"<p>The maximum number of concurrent builds that are allowed for this project.</p> <p>New builds are only started if the current number of builds is less than or equal to this limit. If the current build count meets this limit, new builds are throttled and are not run.</p>"
-        }
-      }
-    },
-    "CreateProjectOutput":{
-      "type":"structure",
-      "members":{
-        "project":{
-          "shape":"Project",
-          "documentation":"<p>Information about the build project that was created.</p>"
-        }
-      }
-    },
+        } 
+      } 
+    }, 
+    "CreateProjectOutput":{ 
+      "type":"structure", 
+      "members":{ 
+        "project":{ 
+          "shape":"Project", 
+          "documentation":"<p>Information about the build project that was created.</p>" 
+        } 
+      } 
+    }, 
     "CreateReportGroupInput":{
       "type":"structure",
       "required":[
@@ -1575,16 +1575,16 @@
         }
       }
     },
-    "CreateWebhookInput":{
-      "type":"structure",
-      "required":["projectName"],
-      "members":{
-        "projectName":{
-          "shape":"ProjectName",
+    "CreateWebhookInput":{ 
+      "type":"structure", 
+      "required":["projectName"], 
+      "members":{ 
+        "projectName":{ 
+          "shape":"ProjectName", 
           "documentation":"<p>The name of the CodeBuild project.</p>"
-        },
-        "branchFilter":{
-          "shape":"String",
+        }, 
+        "branchFilter":{ 
+          "shape":"String", 
           "documentation":"<p>A regular expression used to determine which repository branches are built when a webhook is triggered. If the name of a branch matches the regular expression, then it is built. If <code>branchFilter</code> is empty, then all branches are built.</p> <note> <p>It is recommended that you use <code>filterGroups</code> instead of <code>branchFilter</code>. </p> </note>"
         },
         "filterGroups":{
@@ -1594,18 +1594,18 @@
         "buildType":{
           "shape":"WebhookBuildType",
           "documentation":"<p>Specifies the type of build this webhook will trigger.</p>"
-        }
-      }
-    },
-    "CreateWebhookOutput":{
-      "type":"structure",
-      "members":{
-        "webhook":{
-          "shape":"Webhook",
+        } 
+      } 
+    }, 
+    "CreateWebhookOutput":{ 
+      "type":"structure", 
+      "members":{ 
+        "webhook":{ 
+          "shape":"Webhook", 
           "documentation":"<p>Information about a webhook that connects repository events to a build project in CodeBuild.</p>"
-        }
-      }
-    },
+        } 
+      } 
+    }, 
     "CredentialProviderType":{
       "type":"string",
       "enum":["SECRETS_MANAGER"]
@@ -1651,21 +1651,21 @@
         }
       }
     },
-    "DeleteProjectInput":{
-      "type":"structure",
-      "required":["name"],
-      "members":{
-        "name":{
-          "shape":"NonEmptyString",
-          "documentation":"<p>The name of the build project.</p>"
-        }
-      }
-    },
-    "DeleteProjectOutput":{
-      "type":"structure",
-      "members":{
-      }
-    },
+    "DeleteProjectInput":{ 
+      "type":"structure", 
+      "required":["name"], 
+      "members":{ 
+        "name":{ 
+          "shape":"NonEmptyString", 
+          "documentation":"<p>The name of the build project.</p>" 
+        } 
+      } 
+    }, 
+    "DeleteProjectOutput":{ 
+      "type":"structure", 
+      "members":{ 
+      } 
+    }, 
     "DeleteReportGroupInput":{
       "type":"structure",
       "required":["arn"],
@@ -1734,21 +1734,21 @@
         }
       }
     },
-    "DeleteWebhookInput":{
-      "type":"structure",
-      "required":["projectName"],
-      "members":{
-        "projectName":{
-          "shape":"ProjectName",
+    "DeleteWebhookInput":{ 
+      "type":"structure", 
+      "required":["projectName"], 
+      "members":{ 
+        "projectName":{ 
+          "shape":"ProjectName", 
           "documentation":"<p>The name of the CodeBuild project.</p>"
-        }
-      }
-    },
-    "DeleteWebhookOutput":{
-      "type":"structure",
-      "members":{
-      }
-    },
+        } 
+      } 
+    }, 
+    "DeleteWebhookOutput":{ 
+      "type":"structure", 
+      "members":{ 
+      } 
+    }, 
     "DescribeCodeCoveragesInput":{
       "type":"structure",
       "required":["reportArn"],
@@ -1831,108 +1831,108 @@
         }
       }
     },
-    "EnvironmentImage":{
-      "type":"structure",
-      "members":{
-        "name":{
-          "shape":"String",
-          "documentation":"<p>The name of the Docker image.</p>"
-        },
-        "description":{
-          "shape":"String",
-          "documentation":"<p>The description of the Docker image.</p>"
-        },
-        "versions":{
-          "shape":"ImageVersions",
-          "documentation":"<p>A list of environment image versions.</p>"
-        }
-      },
+    "EnvironmentImage":{ 
+      "type":"structure", 
+      "members":{ 
+        "name":{ 
+          "shape":"String", 
+          "documentation":"<p>The name of the Docker image.</p>" 
+        }, 
+        "description":{ 
+          "shape":"String", 
+          "documentation":"<p>The description of the Docker image.</p>" 
+        }, 
+        "versions":{ 
+          "shape":"ImageVersions", 
+          "documentation":"<p>A list of environment image versions.</p>" 
+        } 
+      }, 
       "documentation":"<p>Information about a Docker image that is managed by CodeBuild.</p>"
-    },
-    "EnvironmentImages":{
-      "type":"list",
-      "member":{"shape":"EnvironmentImage"}
-    },
-    "EnvironmentLanguage":{
-      "type":"structure",
-      "members":{
-        "language":{
-          "shape":"LanguageType",
-          "documentation":"<p>The programming language for the Docker images.</p>"
-        },
-        "images":{
-          "shape":"EnvironmentImages",
-          "documentation":"<p>The list of Docker images that are related by the specified programming language.</p>"
-        }
-      },
+    }, 
+    "EnvironmentImages":{ 
+      "type":"list", 
+      "member":{"shape":"EnvironmentImage"} 
+    }, 
+    "EnvironmentLanguage":{ 
+      "type":"structure", 
+      "members":{ 
+        "language":{ 
+          "shape":"LanguageType", 
+          "documentation":"<p>The programming language for the Docker images.</p>" 
+        }, 
+        "images":{ 
+          "shape":"EnvironmentImages", 
+          "documentation":"<p>The list of Docker images that are related by the specified programming language.</p>" 
+        } 
+      }, 
       "documentation":"<p>A set of Docker images that are related by programming language and are managed by CodeBuild.</p>"
-    },
-    "EnvironmentLanguages":{
-      "type":"list",
-      "member":{"shape":"EnvironmentLanguage"}
-    },
-    "EnvironmentPlatform":{
-      "type":"structure",
-      "members":{
-        "platform":{
-          "shape":"PlatformType",
-          "documentation":"<p>The platform's name.</p>"
-        },
-        "languages":{
-          "shape":"EnvironmentLanguages",
-          "documentation":"<p>The list of programming languages that are available for the specified platform.</p>"
-        }
-      },
+    }, 
+    "EnvironmentLanguages":{ 
+      "type":"list", 
+      "member":{"shape":"EnvironmentLanguage"} 
+    }, 
+    "EnvironmentPlatform":{ 
+      "type":"structure", 
+      "members":{ 
+        "platform":{ 
+          "shape":"PlatformType", 
+          "documentation":"<p>The platform's name.</p>" 
+        }, 
+        "languages":{ 
+          "shape":"EnvironmentLanguages", 
+          "documentation":"<p>The list of programming languages that are available for the specified platform.</p>" 
+        } 
+      }, 
       "documentation":"<p>A set of Docker images that are related by platform and are managed by CodeBuild.</p>"
-    },
-    "EnvironmentPlatforms":{
-      "type":"list",
-      "member":{"shape":"EnvironmentPlatform"}
-    },
-    "EnvironmentType":{
-      "type":"string",
-      "enum":[
-        "WINDOWS_CONTAINER",
+    }, 
+    "EnvironmentPlatforms":{ 
+      "type":"list", 
+      "member":{"shape":"EnvironmentPlatform"} 
+    }, 
+    "EnvironmentType":{ 
+      "type":"string", 
+      "enum":[ 
+        "WINDOWS_CONTAINER", 
         "LINUX_CONTAINER",
         "LINUX_GPU_CONTAINER",
         "ARM_CONTAINER",
         "WINDOWS_SERVER_2019_CONTAINER"
-      ]
-    },
-    "EnvironmentVariable":{
-      "type":"structure",
-      "required":[
-        "name",
-        "value"
-      ],
-      "members":{
-        "name":{
-          "shape":"NonEmptyString",
-          "documentation":"<p>The name or key of the environment variable.</p>"
-        },
-        "value":{
-          "shape":"String",
+      ] 
+    }, 
+    "EnvironmentVariable":{ 
+      "type":"structure", 
+      "required":[ 
+        "name", 
+        "value" 
+      ], 
+      "members":{ 
+        "name":{ 
+          "shape":"NonEmptyString", 
+          "documentation":"<p>The name or key of the environment variable.</p>" 
+        }, 
+        "value":{ 
+          "shape":"String", 
           "documentation":"<p>The value of the environment variable.</p> <important> <p>We strongly discourage the use of <code>PLAINTEXT</code> environment variables to store sensitive values, especially Amazon Web Services secret key IDs and secret access keys. <code>PLAINTEXT</code> environment variables can be displayed in plain text using the CodeBuild console and the AWS Command Line Interface (AWS CLI). For sensitive values, we recommend you use an environment variable of type <code>PARAMETER_STORE</code> or <code>SECRETS_MANAGER</code>. </p> </important>"
-        },
-        "type":{
-          "shape":"EnvironmentVariableType",
+        }, 
+        "type":{ 
+          "shape":"EnvironmentVariableType", 
           "documentation":"<p>The type of environment variable. Valid values include:</p> <ul> <li> <p> <code>PARAMETER_STORE</code>: An environment variable stored in Systems Manager Parameter Store. To learn how to specify a parameter store environment variable, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html#build-spec.env.parameter-store\">env/parameter-store</a> in the <i>CodeBuild User Guide</i>.</p> </li> <li> <p> <code>PLAINTEXT</code>: An environment variable in plain text format. This is the default value.</p> </li> <li> <p> <code>SECRETS_MANAGER</code>: An environment variable stored in Secrets Manager. To learn how to specify a secrets manager environment variable, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html#build-spec.env.secrets-manager\">env/secrets-manager</a> in the <i>CodeBuild User Guide</i>.</p> </li> </ul>"
-        }
-      },
-      "documentation":"<p>Information about an environment variable for a build project or a build.</p>"
-    },
-    "EnvironmentVariableType":{
-      "type":"string",
-      "enum":[
-        "PLAINTEXT",
+        } 
+      }, 
+      "documentation":"<p>Information about an environment variable for a build project or a build.</p>" 
+    }, 
+    "EnvironmentVariableType":{ 
+      "type":"string", 
+      "enum":[ 
+        "PLAINTEXT", 
         "PARAMETER_STORE",
         "SECRETS_MANAGER"
-      ]
-    },
-    "EnvironmentVariables":{
-      "type":"list",
-      "member":{"shape":"EnvironmentVariable"}
-    },
+      ] 
+    }, 
+    "EnvironmentVariables":{ 
+      "type":"list", 
+      "member":{"shape":"EnvironmentVariable"} 
+    }, 
     "ExportedEnvironmentVariable":{
       "type":"structure",
       "members":{
@@ -2016,10 +2016,10 @@
         }
       }
     },
-    "GitCloneDepth":{
-      "type":"integer",
-      "min":0
-    },
+    "GitCloneDepth":{ 
+      "type":"integer", 
+      "min":0 
+    }, 
     "GitSubmodulesConfig":{
       "type":"structure",
       "required":["fetchSubmodules"],
@@ -2042,10 +2042,10 @@
         "SERVICE_ROLE"
       ]
     },
-    "ImageVersions":{
-      "type":"list",
-      "member":{"shape":"String"}
-    },
+    "ImageVersions":{ 
+      "type":"list", 
+      "member":{"shape":"String"} 
+    }, 
     "ImportSourceCredentialsInput":{
       "type":"structure",
       "required":[
@@ -2085,49 +2085,49 @@
         }
       }
     },
-    "InvalidInputException":{
-      "type":"structure",
-      "members":{
-      },
-      "documentation":"<p>The input value that was provided is not valid.</p>",
-      "exception":true
-    },
-    "InvalidateProjectCacheInput":{
-      "type":"structure",
-      "required":["projectName"],
-      "members":{
-        "projectName":{
-          "shape":"NonEmptyString",
+    "InvalidInputException":{ 
+      "type":"structure", 
+      "members":{ 
+      }, 
+      "documentation":"<p>The input value that was provided is not valid.</p>", 
+      "exception":true 
+    }, 
+    "InvalidateProjectCacheInput":{ 
+      "type":"structure", 
+      "required":["projectName"], 
+      "members":{ 
+        "projectName":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>The name of the CodeBuild build project that the cache is reset for.</p>"
-        }
-      }
-    },
-    "InvalidateProjectCacheOutput":{
-      "type":"structure",
-      "members":{
-      }
-    },
-    "KeyInput":{
-      "type":"string",
-      "max":127,
-      "min":1,
+        } 
+      } 
+    }, 
+    "InvalidateProjectCacheOutput":{ 
+      "type":"structure", 
+      "members":{ 
+      } 
+    }, 
+    "KeyInput":{ 
+      "type":"string", 
+      "max":127, 
+      "min":1, 
       "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=@+\\-]*)$"
-    },
-    "LanguageType":{
-      "type":"string",
-      "enum":[
-        "JAVA",
-        "PYTHON",
-        "NODE_JS",
-        "RUBY",
-        "GOLANG",
-        "DOCKER",
-        "ANDROID",
-        "DOTNET",
+    }, 
+    "LanguageType":{ 
+      "type":"string", 
+      "enum":[ 
+        "JAVA", 
+        "PYTHON", 
+        "NODE_JS", 
+        "RUBY", 
+        "GOLANG", 
+        "DOCKER", 
+        "ANDROID", 
+        "DOTNET", 
         "BASE",
         "PHP"
-      ]
-    },
+      ] 
+    }, 
     "ListBuildBatchesForProjectInput":{
       "type":"structure",
       "members":{
@@ -2200,107 +2200,107 @@
         }
       }
     },
-    "ListBuildsForProjectInput":{
-      "type":"structure",
-      "required":["projectName"],
-      "members":{
-        "projectName":{
-          "shape":"NonEmptyString",
+    "ListBuildsForProjectInput":{ 
+      "type":"structure", 
+      "required":["projectName"], 
+      "members":{ 
+        "projectName":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>The name of the CodeBuild project.</p>"
-        },
-        "sortOrder":{
-          "shape":"SortOrderType",
+        }, 
+        "sortOrder":{ 
+          "shape":"SortOrderType", 
           "documentation":"<p>The order to list results in. The results are sorted by build number, not the build identifier.</p> <p>Valid values include:</p> <ul> <li> <p> <code>ASCENDING</code>: List the build IDs in ascending order by build ID.</p> </li> <li> <p> <code>DESCENDING</code>: List the build IDs in descending order by build ID.</p> </li> </ul> <p>If the project has more than 100 builds, setting the sort order will result in an error. </p>"
-        },
-        "nextToken":{
-          "shape":"String",
+        }, 
+        "nextToken":{ 
+          "shape":"String", 
           "documentation":"<p>During a previous call, if there are more than 100 items in the list, only the first 100 items are returned, along with a unique string called a <i>nextToken</i>. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned.</p>"
-        }
-      }
-    },
-    "ListBuildsForProjectOutput":{
-      "type":"structure",
-      "members":{
-        "ids":{
-          "shape":"BuildIds",
-          "documentation":"<p>A list of build IDs for the specified build project, with each build ID representing a single build.</p>"
-        },
-        "nextToken":{
-          "shape":"String",
+        } 
+      } 
+    }, 
+    "ListBuildsForProjectOutput":{ 
+      "type":"structure", 
+      "members":{ 
+        "ids":{ 
+          "shape":"BuildIds", 
+          "documentation":"<p>A list of build IDs for the specified build project, with each build ID representing a single build.</p>" 
+        }, 
+        "nextToken":{ 
+          "shape":"String", 
           "documentation":"<p>If there are more than 100 items in the list, only the first 100 items are returned, along with a unique string called a <i>nextToken</i>. To get the next batch of items in the list, call this operation again, adding the next token to the call.</p>"
-        }
-      }
-    },
-    "ListBuildsInput":{
-      "type":"structure",
-      "members":{
-        "sortOrder":{
-          "shape":"SortOrderType",
-          "documentation":"<p>The order to list build IDs. Valid values include:</p> <ul> <li> <p> <code>ASCENDING</code>: List the build IDs in ascending order by build ID.</p> </li> <li> <p> <code>DESCENDING</code>: List the build IDs in descending order by build ID.</p> </li> </ul>"
-        },
-        "nextToken":{
-          "shape":"String",
+        } 
+      } 
+    }, 
+    "ListBuildsInput":{ 
+      "type":"structure", 
+      "members":{ 
+        "sortOrder":{ 
+          "shape":"SortOrderType", 
+          "documentation":"<p>The order to list build IDs. Valid values include:</p> <ul> <li> <p> <code>ASCENDING</code>: List the build IDs in ascending order by build ID.</p> </li> <li> <p> <code>DESCENDING</code>: List the build IDs in descending order by build ID.</p> </li> </ul>" 
+        }, 
+        "nextToken":{ 
+          "shape":"String", 
           "documentation":"<p>During a previous call, if there are more than 100 items in the list, only the first 100 items are returned, along with a unique string called a <i>nextToken</i>. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned.</p>"
-        }
-      }
-    },
-    "ListBuildsOutput":{
-      "type":"structure",
-      "members":{
-        "ids":{
-          "shape":"BuildIds",
-          "documentation":"<p>A list of build IDs, with each build ID representing a single build.</p>"
-        },
-        "nextToken":{
-          "shape":"String",
+        } 
+      } 
+    }, 
+    "ListBuildsOutput":{ 
+      "type":"structure", 
+      "members":{ 
+        "ids":{ 
+          "shape":"BuildIds", 
+          "documentation":"<p>A list of build IDs, with each build ID representing a single build.</p>" 
+        }, 
+        "nextToken":{ 
+          "shape":"String", 
           "documentation":"<p>If there are more than 100 items in the list, only the first 100 items are returned, along with a unique string called a <i>nextToken</i>. To get the next batch of items in the list, call this operation again, adding the next token to the call.</p>"
-        }
-      }
-    },
-    "ListCuratedEnvironmentImagesInput":{
-      "type":"structure",
-      "members":{
-      }
-    },
-    "ListCuratedEnvironmentImagesOutput":{
-      "type":"structure",
-      "members":{
-        "platforms":{
-          "shape":"EnvironmentPlatforms",
+        } 
+      } 
+    }, 
+    "ListCuratedEnvironmentImagesInput":{ 
+      "type":"structure", 
+      "members":{ 
+      } 
+    }, 
+    "ListCuratedEnvironmentImagesOutput":{ 
+      "type":"structure", 
+      "members":{ 
+        "platforms":{ 
+          "shape":"EnvironmentPlatforms", 
           "documentation":"<p>Information about supported platforms for Docker images that are managed by CodeBuild.</p>"
-        }
-      }
-    },
-    "ListProjectsInput":{
-      "type":"structure",
-      "members":{
-        "sortBy":{
-          "shape":"ProjectSortByType",
+        } 
+      } 
+    }, 
+    "ListProjectsInput":{ 
+      "type":"structure", 
+      "members":{ 
+        "sortBy":{ 
+          "shape":"ProjectSortByType", 
           "documentation":"<p>The criterion to be used to list build project names. Valid values include:</p> <ul> <li> <p> <code>CREATED_TIME</code>: List based on when each build project was created.</p> </li> <li> <p> <code>LAST_MODIFIED_TIME</code>: List based on when information about each build project was last changed.</p> </li> <li> <p> <code>NAME</code>: List based on each build project's name.</p> </li> </ul> <p>Use <code>sortOrder</code> to specify in what order to list the build project names based on the preceding criteria.</p>"
-        },
-        "sortOrder":{
-          "shape":"SortOrderType",
+        }, 
+        "sortOrder":{ 
+          "shape":"SortOrderType", 
           "documentation":"<p>The order in which to list build projects. Valid values include:</p> <ul> <li> <p> <code>ASCENDING</code>: List in ascending order.</p> </li> <li> <p> <code>DESCENDING</code>: List in descending order.</p> </li> </ul> <p>Use <code>sortBy</code> to specify the criterion to be used to list build project names.</p>"
-        },
-        "nextToken":{
-          "shape":"NonEmptyString",
+        }, 
+        "nextToken":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>During a previous call, if there are more than 100 items in the list, only the first 100 items are returned, along with a unique string called a <i>nextToken</i>. To get the next batch of items in the list, call this operation again, adding the next token to the call. To get all of the items in the list, keep calling this operation with each subsequent next token that is returned, until no more next tokens are returned.</p>"
-        }
-      }
-    },
-    "ListProjectsOutput":{
-      "type":"structure",
-      "members":{
-        "nextToken":{
-          "shape":"String",
+        } 
+      } 
+    }, 
+    "ListProjectsOutput":{ 
+      "type":"structure", 
+      "members":{ 
+        "nextToken":{ 
+          "shape":"String", 
           "documentation":"<p>If there are more than 100 items in the list, only the first 100 items are returned, along with a unique string called a <i>nextToken</i>. To get the next batch of items in the list, call this operation again, adding the next token to the call.</p>"
-        },
-        "projects":{
-          "shape":"ProjectNames",
-          "documentation":"<p>The list of build project names, with each build project name representing a single build project.</p>"
-        }
-      }
-    },
+        }, 
+        "projects":{ 
+          "shape":"ProjectNames", 
+          "documentation":"<p>The list of build project names, with each build project name representing a single build project.</p>" 
+        } 
+      } 
+    }, 
     "ListReportGroupsInput":{
       "type":"structure",
       "members":{
@@ -2511,19 +2511,19 @@
         "DISABLED"
       ]
     },
-    "LogsLocation":{
-      "type":"structure",
-      "members":{
-        "groupName":{
-          "shape":"String",
+    "LogsLocation":{ 
+      "type":"structure", 
+      "members":{ 
+        "groupName":{ 
+          "shape":"String", 
           "documentation":"<p>The name of the CloudWatch Logs group for the build logs.</p>"
-        },
-        "streamName":{
-          "shape":"String",
+        }, 
+        "streamName":{ 
+          "shape":"String", 
           "documentation":"<p>The name of the CloudWatch Logs stream for the build logs.</p>"
-        },
-        "deepLink":{
-          "shape":"String",
+        }, 
+        "deepLink":{ 
+          "shape":"String", 
           "documentation":"<p>The URL to an individual build log in CloudWatch Logs.</p>"
         },
         "s3DeepLink":{
@@ -2545,39 +2545,39 @@
         "s3Logs":{
           "shape":"S3LogsConfig",
           "documentation":"<p> Information about S3 logs for a build project. </p>"
-        }
-      },
+        } 
+      }, 
       "documentation":"<p>Information about build logs in CloudWatch Logs.</p>"
-    },
-    "NetworkInterface":{
-      "type":"structure",
-      "members":{
-        "subnetId":{
-          "shape":"NonEmptyString",
-          "documentation":"<p>The ID of the subnet.</p>"
-        },
-        "networkInterfaceId":{
-          "shape":"NonEmptyString",
-          "documentation":"<p>The ID of the network interface.</p>"
-        }
-      },
-      "documentation":"<p>Describes a network interface.</p>"
-    },
-    "NonEmptyString":{
-      "type":"string",
-      "min":1
-    },
+    }, 
+    "NetworkInterface":{ 
+      "type":"structure", 
+      "members":{ 
+        "subnetId":{ 
+          "shape":"NonEmptyString", 
+          "documentation":"<p>The ID of the subnet.</p>" 
+        }, 
+        "networkInterfaceId":{ 
+          "shape":"NonEmptyString", 
+          "documentation":"<p>The ID of the network interface.</p>" 
+        } 
+      }, 
+      "documentation":"<p>Describes a network interface.</p>" 
+    }, 
+    "NonEmptyString":{ 
+      "type":"string", 
+      "min":1 
+    }, 
     "NonNegativeInt":{
       "type":"integer",
       "min":0
     },
-    "OAuthProviderException":{
-      "type":"structure",
-      "members":{
-      },
-      "documentation":"<p>There was a problem with the underlying OAuth provider.</p>",
-      "exception":true
-    },
+    "OAuthProviderException":{ 
+      "type":"structure", 
+      "members":{ 
+      }, 
+      "documentation":"<p>There was a problem with the underlying OAuth provider.</p>", 
+      "exception":true 
+    }, 
     "PageSize":{
       "type":"integer",
       "max":100,
@@ -2588,52 +2588,52 @@
       "max":100,
       "min":0
     },
-    "PhaseContext":{
-      "type":"structure",
-      "members":{
-        "statusCode":{
-          "shape":"String",
-          "documentation":"<p>The status code for the context of the build phase.</p>"
-        },
-        "message":{
-          "shape":"String",
+    "PhaseContext":{ 
+      "type":"structure", 
+      "members":{ 
+        "statusCode":{ 
+          "shape":"String", 
+          "documentation":"<p>The status code for the context of the build phase.</p>" 
+        }, 
+        "message":{ 
+          "shape":"String", 
           "documentation":"<p>An explanation of the build phase's context. This might include a command ID and an exit code.</p>"
-        }
-      },
+        } 
+      }, 
       "documentation":"<p>Additional information about a build phase that has an error. You can use this information for troubleshooting.</p>"
-    },
-    "PhaseContexts":{
-      "type":"list",
-      "member":{"shape":"PhaseContext"}
-    },
-    "PlatformType":{
-      "type":"string",
-      "enum":[
-        "DEBIAN",
-        "AMAZON_LINUX",
-        "UBUNTU",
-        "WINDOWS_SERVER"
-      ]
-    },
-    "Project":{
-      "type":"structure",
-      "members":{
-        "name":{
-          "shape":"ProjectName",
-          "documentation":"<p>The name of the build project.</p>"
-        },
-        "arn":{
-          "shape":"String",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the build project.</p>"
-        },
-        "description":{
-          "shape":"ProjectDescription",
-          "documentation":"<p>A description that makes the build project easy to identify.</p>"
-        },
-        "source":{
-          "shape":"ProjectSource",
-          "documentation":"<p>Information about the build input source code for this build project.</p>"
-        },
+    }, 
+    "PhaseContexts":{ 
+      "type":"list", 
+      "member":{"shape":"PhaseContext"} 
+    }, 
+    "PlatformType":{ 
+      "type":"string", 
+      "enum":[ 
+        "DEBIAN", 
+        "AMAZON_LINUX", 
+        "UBUNTU", 
+        "WINDOWS_SERVER" 
+      ] 
+    }, 
+    "Project":{ 
+      "type":"structure", 
+      "members":{ 
+        "name":{ 
+          "shape":"ProjectName", 
+          "documentation":"<p>The name of the build project.</p>" 
+        }, 
+        "arn":{ 
+          "shape":"String", 
+          "documentation":"<p>The Amazon Resource Name (ARN) of the build project.</p>" 
+        }, 
+        "description":{ 
+          "shape":"ProjectDescription", 
+          "documentation":"<p>A description that makes the build project easy to identify.</p>" 
+        }, 
+        "source":{ 
+          "shape":"ProjectSource", 
+          "documentation":"<p>Information about the build input source code for this build project.</p>" 
+        }, 
         "secondarySources":{
           "shape":"ProjectSources",
           "documentation":"<p>An array of <code>ProjectSource</code> objects. </p>"
@@ -2646,61 +2646,61 @@
           "shape":"ProjectSecondarySourceVersions",
           "documentation":"<p>An array of <code>ProjectSourceVersion</code> objects. If <code>secondarySourceVersions</code> is specified at the build level, then they take over these <code>secondarySourceVersions</code> (at the project level). </p>"
         },
-        "artifacts":{
-          "shape":"ProjectArtifacts",
-          "documentation":"<p>Information about the build output artifacts for the build project.</p>"
-        },
+        "artifacts":{ 
+          "shape":"ProjectArtifacts", 
+          "documentation":"<p>Information about the build output artifacts for the build project.</p>" 
+        }, 
         "secondaryArtifacts":{
           "shape":"ProjectArtifactsList",
           "documentation":"<p>An array of <code>ProjectArtifacts</code> objects. </p>"
         },
-        "cache":{
-          "shape":"ProjectCache",
-          "documentation":"<p>Information about the cache for the build project.</p>"
-        },
-        "environment":{
-          "shape":"ProjectEnvironment",
-          "documentation":"<p>Information about the build environment for this build project.</p>"
-        },
-        "serviceRole":{
-          "shape":"NonEmptyString",
+        "cache":{ 
+          "shape":"ProjectCache", 
+          "documentation":"<p>Information about the cache for the build project.</p>" 
+        }, 
+        "environment":{ 
+          "shape":"ProjectEnvironment", 
+          "documentation":"<p>Information about the build environment for this build project.</p>" 
+        }, 
+        "serviceRole":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>The ARN of the Identity and Access Management role that enables CodeBuild to interact with dependent Amazon Web Services services on behalf of the Amazon Web Services account.</p>"
-        },
-        "timeoutInMinutes":{
-          "shape":"TimeOut",
+        }, 
+        "timeoutInMinutes":{ 
+          "shape":"TimeOut", 
           "documentation":"<p>How long, in minutes, from 5 to 480 (8 hours), for CodeBuild to wait before timing out any related build that did not get marked as completed. The default is 60 minutes.</p>"
-        },
+        }, 
         "queuedTimeoutInMinutes":{
           "shape":"TimeOut",
           "documentation":"<p>The number of minutes a build is allowed to be queued before it times out. </p>"
         },
-        "encryptionKey":{
-          "shape":"NonEmptyString",
+        "encryptionKey":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>The Key Management Service customer master key (CMK) to be used for encrypting the build output artifacts.</p> <note> <p>You can use a cross-account KMS key to encrypt the build output artifacts if your service role has permission to that key. </p> </note> <p>You can specify either the Amazon Resource Name (ARN) of the CMK or, if available, the CMK's alias (using the format <code>alias/&lt;alias-name&gt;</code>). If you don't specify a value, CodeBuild uses the managed CMK for Amazon Simple Storage Service (Amazon S3). </p>"
-        },
-        "tags":{
-          "shape":"TagList",
+        }, 
+        "tags":{ 
+          "shape":"TagList", 
           "documentation":"<p>A list of tag key and value pairs associated with this build project.</p> <p>These tags are available for use by Amazon Web Services services that support CodeBuild build project tags.</p>"
-        },
-        "created":{
-          "shape":"Timestamp",
-          "documentation":"<p>When the build project was created, expressed in Unix time format.</p>"
-        },
-        "lastModified":{
-          "shape":"Timestamp",
-          "documentation":"<p>When the build project's settings were last modified, expressed in Unix time format.</p>"
-        },
-        "webhook":{
-          "shape":"Webhook",
+        }, 
+        "created":{ 
+          "shape":"Timestamp", 
+          "documentation":"<p>When the build project was created, expressed in Unix time format.</p>" 
+        }, 
+        "lastModified":{ 
+          "shape":"Timestamp", 
+          "documentation":"<p>When the build project's settings were last modified, expressed in Unix time format.</p>" 
+        }, 
+        "webhook":{ 
+          "shape":"Webhook", 
           "documentation":"<p>Information about a webhook that connects repository events to a build project in CodeBuild.</p>"
-        },
-        "vpcConfig":{
-          "shape":"VpcConfig",
+        }, 
+        "vpcConfig":{ 
+          "shape":"VpcConfig", 
           "documentation":"<p>Information about the VPC configuration that CodeBuild accesses.</p>"
-        },
-        "badge":{
-          "shape":"ProjectBadge",
-          "documentation":"<p>Information about the build badge for the build project.</p>"
+        }, 
+        "badge":{ 
+          "shape":"ProjectBadge", 
+          "documentation":"<p>Information about the build badge for the build project.</p>" 
         },
         "logsConfig":{
           "shape":"LogsConfig",
@@ -2717,42 +2717,42 @@
         "concurrentBuildLimit":{
           "shape":"WrapperInt",
           "documentation":"<p>The maximum number of concurrent builds that are allowed for this project.</p> <p>New builds are only started if the current number of builds is less than or equal to this limit. If the current build count meets this limit, new builds are throttled and are not run.</p>"
-        }
-      },
-      "documentation":"<p>Information about a build project.</p>"
-    },
+        } 
+      }, 
+      "documentation":"<p>Information about a build project.</p>" 
+    }, 
     "ProjectArns":{
       "type":"list",
       "member":{"shape":"NonEmptyString"},
       "max":100,
       "min":1
     },
-    "ProjectArtifacts":{
-      "type":"structure",
-      "required":["type"],
-      "members":{
-        "type":{
-          "shape":"ArtifactsType",
+    "ProjectArtifacts":{ 
+      "type":"structure", 
+      "required":["type"], 
+      "members":{ 
+        "type":{ 
+          "shape":"ArtifactsType", 
           "documentation":"<p>The type of build output artifact. Valid values include:</p> <ul> <li> <p> <code>CODEPIPELINE</code>: The build project has build output generated through CodePipeline. </p> <note> <p>The <code>CODEPIPELINE</code> type is not supported for <code>secondaryArtifacts</code>.</p> </note> </li> <li> <p> <code>NO_ARTIFACTS</code>: The build project does not produce any build output.</p> </li> <li> <p> <code>S3</code>: The build project stores build output in Amazon S3.</p> </li> </ul>"
-        },
-        "location":{
-          "shape":"String",
+        }, 
+        "location":{ 
+          "shape":"String", 
           "documentation":"<p>Information about the build output artifact location:</p> <ul> <li> <p>If <code>type</code> is set to <code>CODEPIPELINE</code>, CodePipeline ignores this value if specified. This is because CodePipeline manages its build output locations instead of CodeBuild.</p> </li> <li> <p>If <code>type</code> is set to <code>NO_ARTIFACTS</code>, this value is ignored if specified, because no build output is produced.</p> </li> <li> <p>If <code>type</code> is set to <code>S3</code>, this is the name of the output bucket.</p> </li> </ul>"
-        },
-        "path":{
-          "shape":"String",
+        }, 
+        "path":{ 
+          "shape":"String", 
           "documentation":"<p>Along with <code>namespaceType</code> and <code>name</code>, the pattern that CodeBuild uses to name and store the output artifact:</p> <ul> <li> <p>If <code>type</code> is set to <code>CODEPIPELINE</code>, CodePipeline ignores this value if specified. This is because CodePipeline manages its build output names instead of CodeBuild.</p> </li> <li> <p>If <code>type</code> is set to <code>NO_ARTIFACTS</code>, this value is ignored if specified, because no build output is produced.</p> </li> <li> <p>If <code>type</code> is set to <code>S3</code>, this is the path to the output artifact. If <code>path</code> is not specified, <code>path</code> is not used.</p> </li> </ul> <p>For example, if <code>path</code> is set to <code>MyArtifacts</code>, <code>namespaceType</code> is set to <code>NONE</code>, and <code>name</code> is set to <code>MyArtifact.zip</code>, the output artifact is stored in the output bucket at <code>MyArtifacts/MyArtifact.zip</code>.</p>"
-        },
-        "namespaceType":{
-          "shape":"ArtifactNamespace",
+        }, 
+        "namespaceType":{ 
+          "shape":"ArtifactNamespace", 
           "documentation":"<p>Along with <code>path</code> and <code>name</code>, the pattern that CodeBuild uses to determine the name and location to store the output artifact:</p> <ul> <li> <p>If <code>type</code> is set to <code>CODEPIPELINE</code>, CodePipeline ignores this value if specified. This is because CodePipeline manages its build output names instead of CodeBuild.</p> </li> <li> <p>If <code>type</code> is set to <code>NO_ARTIFACTS</code>, this value is ignored if specified, because no build output is produced.</p> </li> <li> <p>If <code>type</code> is set to <code>S3</code>, valid values include:</p> <ul> <li> <p> <code>BUILD_ID</code>: Include the build ID in the location of the build output artifact.</p> </li> <li> <p> <code>NONE</code>: Do not include the build ID. This is the default if <code>namespaceType</code> is not specified.</p> </li> </ul> </li> </ul> <p>For example, if <code>path</code> is set to <code>MyArtifacts</code>, <code>namespaceType</code> is set to <code>BUILD_ID</code>, and <code>name</code> is set to <code>MyArtifact.zip</code>, the output artifact is stored in <code>MyArtifacts/&lt;build-ID&gt;/MyArtifact.zip</code>.</p>"
-        },
-        "name":{
-          "shape":"String",
+        }, 
+        "name":{ 
+          "shape":"String", 
           "documentation":"<p>Along with <code>path</code> and <code>namespaceType</code>, the pattern that CodeBuild uses to name and store the output artifact:</p> <ul> <li> <p>If <code>type</code> is set to <code>CODEPIPELINE</code>, CodePipeline ignores this value if specified. This is because CodePipeline manages its build output names instead of CodeBuild.</p> </li> <li> <p>If <code>type</code> is set to <code>NO_ARTIFACTS</code>, this value is ignored if specified, because no build output is produced.</p> </li> <li> <p>If <code>type</code> is set to <code>S3</code>, this is the name of the output artifact object. If you set the name to be a forward slash (\"/\"), the artifact is stored in the root of the output bucket.</p> </li> </ul> <p>For example:</p> <ul> <li> <p> If <code>path</code> is set to <code>MyArtifacts</code>, <code>namespaceType</code> is set to <code>BUILD_ID</code>, and <code>name</code> is set to <code>MyArtifact.zip</code>, then the output artifact is stored in <code>MyArtifacts/&lt;build-ID&gt;/MyArtifact.zip</code>. </p> </li> <li> <p> If <code>path</code> is empty, <code>namespaceType</code> is set to <code>NONE</code>, and <code>name</code> is set to \"<code>/</code>\", the output artifact is stored in the root of the output bucket. </p> </li> <li> <p> If <code>path</code> is set to <code>MyArtifacts</code>, <code>namespaceType</code> is set to <code>BUILD_ID</code>, and <code>name</code> is set to \"<code>/</code>\", the output artifact is stored in <code>MyArtifacts/&lt;build-ID&gt;</code>. </p> </li> </ul>"
-        },
-        "packaging":{
-          "shape":"ArtifactPackaging",
+        }, 
+        "packaging":{ 
+          "shape":"ArtifactPackaging", 
           "documentation":"<p>The type of build output artifact to create:</p> <ul> <li> <p>If <code>type</code> is set to <code>CODEPIPELINE</code>, CodePipeline ignores this value if specified. This is because CodePipeline manages its build output artifacts instead of CodeBuild.</p> </li> <li> <p>If <code>type</code> is set to <code>NO_ARTIFACTS</code>, this value is ignored if specified, because no build output is produced.</p> </li> <li> <p>If <code>type</code> is set to <code>S3</code>, valid values include:</p> <ul> <li> <p> <code>NONE</code>: CodeBuild creates in the output bucket a folder that contains the build output. This is the default if <code>packaging</code> is not specified.</p> </li> <li> <p> <code>ZIP</code>: CodeBuild creates in the output bucket a ZIP file that contains the build output.</p> </li> </ul> </li> </ul>"
         },
         "overrideArtifactName":{
@@ -2766,30 +2766,30 @@
         "artifactIdentifier":{
           "shape":"String",
           "documentation":"<p> An identifier for this artifact definition. </p>"
-        }
-      },
-      "documentation":"<p>Information about the build output artifacts for the build project.</p>"
-    },
+        } 
+      }, 
+      "documentation":"<p>Information about the build output artifacts for the build project.</p>" 
+    }, 
     "ProjectArtifactsList":{
       "type":"list",
       "member":{"shape":"ProjectArtifacts"},
       "max":12,
       "min":0
     },
-    "ProjectBadge":{
-      "type":"structure",
-      "members":{
-        "badgeEnabled":{
-          "shape":"Boolean",
+    "ProjectBadge":{ 
+      "type":"structure", 
+      "members":{ 
+        "badgeEnabled":{ 
+          "shape":"Boolean", 
           "documentation":"<p>Set this to true to generate a publicly accessible URL for your project's build badge.</p>"
-        },
-        "badgeRequestUrl":{
-          "shape":"String",
+        }, 
+        "badgeRequestUrl":{ 
+          "shape":"String", 
           "documentation":"<p>The publicly-accessible URL through which you can access the build badge for your project. </p>"
-        }
-      },
-      "documentation":"<p>Information about the build badge for the build project.</p>"
-    },
+        } 
+      }, 
+      "documentation":"<p>Information about the build badge for the build project.</p>" 
+    }, 
     "ProjectBuildBatchConfig":{
       "type":"structure",
       "members":{
@@ -2812,64 +2812,64 @@
       },
       "documentation":"<p>Contains configuration information about a batch build project.</p>"
     },
-    "ProjectCache":{
-      "type":"structure",
-      "required":["type"],
-      "members":{
-        "type":{
-          "shape":"CacheType",
+    "ProjectCache":{ 
+      "type":"structure", 
+      "required":["type"], 
+      "members":{ 
+        "type":{ 
+          "shape":"CacheType", 
           "documentation":"<p>The type of cache used by the build project. Valid values include:</p> <ul> <li> <p> <code>NO_CACHE</code>: The build project does not use any cache.</p> </li> <li> <p> <code>S3</code>: The build project reads and writes from and to S3.</p> </li> <li> <p> <code>LOCAL</code>: The build project stores a cache locally on a build host that is only available to that build host.</p> </li> </ul>"
-        },
-        "location":{
-          "shape":"String",
+        }, 
+        "location":{ 
+          "shape":"String", 
           "documentation":"<p>Information about the cache location: </p> <ul> <li> <p> <code>NO_CACHE</code> or <code>LOCAL</code>: This value is ignored.</p> </li> <li> <p> <code>S3</code>: This is the S3 bucket name/prefix.</p> </li> </ul>"
         },
         "modes":{
           "shape":"ProjectCacheModes",
           "documentation":"<p>An array of strings that specify the local cache modes. You can use one or more local cache modes at the same time. This is only used for <code>LOCAL</code> cache types.</p> <p>Possible values are:</p> <dl> <dt>LOCAL_SOURCE_CACHE</dt> <dd> <p>Caches Git metadata for primary and secondary sources. After the cache is created, subsequent builds pull only the change between commits. This mode is a good choice for projects with a clean working directory and a source that is a large Git repository. If you choose this option and your project does not use a Git repository (GitHub, GitHub Enterprise, or Bitbucket), the option is ignored. </p> </dd> <dt>LOCAL_DOCKER_LAYER_CACHE</dt> <dd> <p>Caches existing Docker layers. This mode is a good choice for projects that build or pull large Docker images. It can prevent the performance issues caused by pulling large Docker images down from the network. </p> <note> <ul> <li> <p>You can use a Docker layer cache in the Linux environment only. </p> </li> <li> <p>The <code>privileged</code> flag must be set so that your project has the required Docker permissions. </p> </li> <li> <p>You should consider the security implications before you use a Docker layer cache. </p> </li> </ul> </note> </dd> <dt>LOCAL_CUSTOM_CACHE</dt> <dd> <p>Caches directories you specify in the buildspec file. This mode is a good choice if your build scenario is not suited to one of the other three local cache modes. If you use a custom cache: </p> <ul> <li> <p>Only directories can be specified for caching. You cannot specify individual files. </p> </li> <li> <p>Symlinks are used to reference cached directories. </p> </li> <li> <p>Cached directories are linked to your build before it downloads its project sources. Cached items are overridden if a source item has the same name. Directories are specified using cache paths in the buildspec file. </p> </li> </ul> </dd> </dl>"
-        }
-      },
-      "documentation":"<p>Information about the cache for the build project.</p>"
-    },
+        } 
+      }, 
+      "documentation":"<p>Information about the cache for the build project.</p>" 
+    }, 
     "ProjectCacheModes":{
       "type":"list",
       "member":{"shape":"CacheMode"}
     },
-    "ProjectDescription":{
-      "type":"string",
-      "max":255,
-      "min":0
-    },
-    "ProjectEnvironment":{
-      "type":"structure",
-      "required":[
-        "type",
-        "image",
-        "computeType"
-      ],
-      "members":{
-        "type":{
-          "shape":"EnvironmentType",
+    "ProjectDescription":{ 
+      "type":"string", 
+      "max":255, 
+      "min":0 
+    }, 
+    "ProjectEnvironment":{ 
+      "type":"structure", 
+      "required":[ 
+        "type", 
+        "image", 
+        "computeType" 
+      ], 
+      "members":{ 
+        "type":{ 
+          "shape":"EnvironmentType", 
           "documentation":"<p>The type of build environment to use for related builds.</p> <ul> <li> <p>The environment type <code>ARM_CONTAINER</code> is available only in regions US East (N. Virginia), US East (Ohio), US West (Oregon), EU (Ireland), Asia Pacific (Mumbai), Asia Pacific (Tokyo), Asia Pacific (Sydney), and EU (Frankfurt).</p> </li> <li> <p>The environment type <code>LINUX_CONTAINER</code> with compute type <code>build.general1.2xlarge</code> is available only in regions US East (N. Virginia), US East (Ohio), US West (Oregon), Canada (Central), EU (Ireland), EU (London), EU (Frankfurt), Asia Pacific (Tokyo), Asia Pacific (Seoul), Asia Pacific (Singapore), Asia Pacific (Sydney), China (Beijing), and China (Ningxia).</p> </li> <li> <p>The environment type <code>LINUX_GPU_CONTAINER</code> is available only in regions US East (N. Virginia), US East (Ohio), US West (Oregon), Canada (Central), EU (Ireland), EU (London), EU (Frankfurt), Asia Pacific (Tokyo), Asia Pacific (Seoul), Asia Pacific (Singapore), Asia Pacific (Sydney) , China (Beijing), and China (Ningxia).</p> </li> </ul> <ul> <li> <p>The environment types <code>WINDOWS_CONTAINER</code> and <code>WINDOWS_SERVER_2019_CONTAINER</code> are available only in regions US East (N. Virginia), US East (Ohio), US West (Oregon), and EU (Ireland).</p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html\">Build environment compute types</a> in the <i>CodeBuild user guide</i>.</p>"
-        },
-        "image":{
-          "shape":"NonEmptyString",
+        }, 
+        "image":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>The image tag or image digest that identifies the Docker image to use for this build project. Use the following formats:</p> <ul> <li> <p>For an image tag: <code>&lt;registry&gt;/&lt;repository&gt;:&lt;tag&gt;</code>. For example, in the Docker repository that CodeBuild uses to manage its Docker images, this would be <code>aws/codebuild/standard:4.0</code>. </p> </li> <li> <p>For an image digest: <code>&lt;registry&gt;/&lt;repository&gt;@&lt;digest&gt;</code>. For example, to specify an image with the digest \"sha256:cbbf2f9a99b47fc460d422812b6a5adff7dfee951d8fa2e4a98caa0382cfbdbf,\" use <code>&lt;registry&gt;/&lt;repository&gt;@sha256:cbbf2f9a99b47fc460d422812b6a5adff7dfee951d8fa2e4a98caa0382cfbdbf</code>.</p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-available.html\">Docker images provided by CodeBuild</a> in the <i>CodeBuild user guide</i>.</p>"
-        },
-        "computeType":{
-          "shape":"ComputeType",
+        }, 
+        "computeType":{ 
+          "shape":"ComputeType", 
           "documentation":"<p>Information about the compute resources the build project uses. Available values include:</p> <ul> <li> <p> <code>BUILD_GENERAL1_SMALL</code>: Use up to 3 GB memory and 2 vCPUs for builds.</p> </li> <li> <p> <code>BUILD_GENERAL1_MEDIUM</code>: Use up to 7 GB memory and 4 vCPUs for builds.</p> </li> <li> <p> <code>BUILD_GENERAL1_LARGE</code>: Use up to 16 GB memory and 8 vCPUs for builds, depending on your environment type.</p> </li> <li> <p> <code>BUILD_GENERAL1_2XLARGE</code>: Use up to 145 GB memory, 72 vCPUs, and 824 GB of SSD storage for builds. This compute type supports Docker images up to 100 GB uncompressed.</p> </li> </ul> <p> If you use <code>BUILD_GENERAL1_LARGE</code>: </p> <ul> <li> <p> For environment type <code>LINUX_CONTAINER</code>, you can use up to 15 GB memory and 8 vCPUs for builds. </p> </li> <li> <p> For environment type <code>LINUX_GPU_CONTAINER</code>, you can use up to 255 GB memory, 32 vCPUs, and 4 NVIDIA Tesla V100 GPUs for builds.</p> </li> <li> <p> For environment type <code>ARM_CONTAINER</code>, you can use up to 16 GB memory and 8 vCPUs on ARM-based processors for builds.</p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html\">Build Environment Compute Types</a> in the <i>CodeBuild User Guide.</i> </p>"
-        },
-        "environmentVariables":{
-          "shape":"EnvironmentVariables",
-          "documentation":"<p>A set of environment variables to make available to builds for this build project.</p>"
-        },
-        "privilegedMode":{
-          "shape":"WrapperBoolean",
+        }, 
+        "environmentVariables":{ 
+          "shape":"EnvironmentVariables", 
+          "documentation":"<p>A set of environment variables to make available to builds for this build project.</p>" 
+        }, 
+        "privilegedMode":{ 
+          "shape":"WrapperBoolean", 
           "documentation":"<p>Enables running the Docker daemon inside a Docker container. Set to true only if the build project is used to build Docker images. Otherwise, a build that attempts to interact with the Docker daemon fails. The default setting is <code>false</code>.</p> <p>You can initialize the Docker daemon during the install phase of your build by adding one of the following sets of commands to the install phase of your buildspec file:</p> <p>If the operating system's base image is Ubuntu Linux:</p> <p> <code>- nohup /usr/local/bin/dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 --storage-driver=overlay&amp;</code> </p> <p> <code>- timeout 15 sh -c \"until docker info; do echo .; sleep 1; done\"</code> </p> <p>If the operating system's base image is Alpine Linux and the previous command does not work, add the <code>-t</code> argument to <code>timeout</code>:</p> <p> <code>- nohup /usr/local/bin/dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 --storage-driver=overlay&amp;</code> </p> <p> <code>- timeout -t 15 sh -c \"until docker info; do echo .; sleep 1; done\"</code> </p>"
-        },
-        "certificate":{
-          "shape":"String",
+        }, 
+        "certificate":{ 
+          "shape":"String", 
           "documentation":"<p>The ARN of the Amazon S3 bucket, path prefix, and object key that contains the PEM-encoded certificate for the build project. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/create-project-cli.html#cli.environment.certificate\">certificate</a> in the <i>CodeBuild User Guide</i>.</p>"
         },
         "registryCredential":{
@@ -2879,10 +2879,10 @@
         "imagePullCredentialsType":{
           "shape":"ImagePullCredentialsType",
           "documentation":"<p> The type of credentials CodeBuild uses to pull images in your build. There are two valid values: </p> <ul> <li> <p> <code>CODEBUILD</code> specifies that CodeBuild uses its own credentials. This requires that you modify your ECR repository policy to trust CodeBuild service principal. </p> </li> <li> <p> <code>SERVICE_ROLE</code> specifies that CodeBuild uses your build project's service role. </p> </li> </ul> <p> When you use a cross-account or private registry image, you must use SERVICE_ROLE credentials. When you use an CodeBuild curated image, you must use CODEBUILD credentials. </p>"
-        }
-      },
-      "documentation":"<p>Information about the build environment of the build project.</p>"
-    },
+        } 
+      }, 
+      "documentation":"<p>Information about the build environment of the build project.</p>" 
+    }, 
     "ProjectFileSystemLocation":{
       "type":"structure",
       "members":{
@@ -2913,60 +2913,60 @@
       "type":"list",
       "member":{"shape":"ProjectFileSystemLocation"}
     },
-    "ProjectName":{
-      "type":"string",
-      "max":255,
-      "min":2,
-      "pattern":"[A-Za-z0-9][A-Za-z0-9\\-_]{1,254}"
-    },
-    "ProjectNames":{
-      "type":"list",
-      "member":{"shape":"NonEmptyString"},
-      "max":100,
-      "min":1
-    },
+    "ProjectName":{ 
+      "type":"string", 
+      "max":255, 
+      "min":2, 
+      "pattern":"[A-Za-z0-9][A-Za-z0-9\\-_]{1,254}" 
+    }, 
+    "ProjectNames":{ 
+      "type":"list", 
+      "member":{"shape":"NonEmptyString"}, 
+      "max":100, 
+      "min":1 
+    }, 
     "ProjectSecondarySourceVersions":{
       "type":"list",
       "member":{"shape":"ProjectSourceVersion"},
       "max":12,
       "min":0
     },
-    "ProjectSortByType":{
-      "type":"string",
-      "enum":[
-        "NAME",
-        "CREATED_TIME",
-        "LAST_MODIFIED_TIME"
-      ]
-    },
-    "ProjectSource":{
-      "type":"structure",
-      "required":["type"],
-      "members":{
-        "type":{
-          "shape":"SourceType",
+    "ProjectSortByType":{ 
+      "type":"string", 
+      "enum":[ 
+        "NAME", 
+        "CREATED_TIME", 
+        "LAST_MODIFIED_TIME" 
+      ] 
+    }, 
+    "ProjectSource":{ 
+      "type":"structure", 
+      "required":["type"], 
+      "members":{ 
+        "type":{ 
+          "shape":"SourceType", 
           "documentation":"<p>The type of repository that contains the source code to be built. Valid values include:</p> <ul> <li> <p> <code>BITBUCKET</code>: The source code is in a Bitbucket repository.</p> </li> <li> <p> <code>CODECOMMIT</code>: The source code is in an CodeCommit repository.</p> </li> <li> <p> <code>CODEPIPELINE</code>: The source code settings are specified in the source action of a pipeline in CodePipeline.</p> </li> <li> <p> <code>GITHUB</code>: The source code is in a GitHub or GitHub Enterprise Cloud repository.</p> </li> <li> <p> <code>GITHUB_ENTERPRISE</code>: The source code is in a GitHub Enterprise Server repository.</p> </li> <li> <p> <code>NO_SOURCE</code>: The project does not have input source code.</p> </li> <li> <p> <code>S3</code>: The source code is in an Amazon S3 bucket.</p> </li> </ul>"
-        },
-        "location":{
-          "shape":"String",
+        }, 
+        "location":{ 
+          "shape":"String", 
           "documentation":"<p>Information about the location of the source code to be built. Valid values include:</p> <ul> <li> <p>For source code settings that are specified in the source action of a pipeline in CodePipeline, <code>location</code> should not be specified. If it is specified, CodePipeline ignores it. This is because CodePipeline uses the settings in a pipeline's source action instead of this value.</p> </li> <li> <p>For source code in an CodeCommit repository, the HTTPS clone URL to the repository that contains the source code and the buildspec file (for example, <code>https://git-codecommit.&lt;region-ID&gt;.amazonaws.com/v1/repos/&lt;repo-name&gt;</code>).</p> </li> <li> <p>For source code in an Amazon S3 input bucket, one of the following. </p> <ul> <li> <p>The path to the ZIP file that contains the source code (for example, <code>&lt;bucket-name&gt;/&lt;path&gt;/&lt;object-name&gt;.zip</code>). </p> </li> <li> <p>The path to the folder that contains the source code (for example, <code>&lt;bucket-name&gt;/&lt;path-to-source-code&gt;/&lt;folder&gt;/</code>). </p> </li> </ul> </li> <li> <p>For source code in a GitHub repository, the HTTPS clone URL to the repository that contains the source and the buildspec file. You must connect your account to your GitHub account. Use the CodeBuild console to start creating a build project. When you use the console to connect (or reconnect) with GitHub, on the GitHub <b>Authorize application</b> page, for <b>Organization access</b>, choose <b>Request access</b> next to each repository you want to allow CodeBuild to have access to, and then choose <b>Authorize application</b>. (After you have connected to your GitHub account, you do not need to finish creating the build project. You can leave the CodeBuild console.) To instruct CodeBuild to use this connection, in the <code>source</code> object, set the <code>auth</code> object's <code>type</code> value to <code>OAUTH</code>.</p> </li> <li> <p>For source code in a Bitbucket repository, the HTTPS clone URL to the repository that contains the source and the buildspec file. You must connect your Amazon Web Services account to your Bitbucket account. Use the CodeBuild console to start creating a build project. When you use the console to connect (or reconnect) with Bitbucket, on the Bitbucket <b>Confirm access to your account</b> page, choose <b>Grant access</b>. (After you have connected to your Bitbucket account, you do not need to finish creating the build project. You can leave the CodeBuild console.) To instruct CodeBuild to use this connection, in the <code>source</code> object, set the <code>auth</code> object's <code>type</code> value to <code>OAUTH</code>.</p> </li> </ul> <p> If you specify <code>CODEPIPELINE</code> for the <code>Type</code> property, don't specify this property. For all of the other types, you must specify <code>Location</code>. </p>"
-        },
-        "gitCloneDepth":{
-          "shape":"GitCloneDepth",
+        }, 
+        "gitCloneDepth":{ 
+          "shape":"GitCloneDepth", 
           "documentation":"<p>Information about the Git clone depth for the build project.</p>"
-        },
+        }, 
         "gitSubmodulesConfig":{
           "shape":"GitSubmodulesConfig",
           "documentation":"<p> Information about the Git submodules configuration for the build project. </p>"
         },
-        "buildspec":{
-          "shape":"String",
+        "buildspec":{ 
+          "shape":"String", 
           "documentation":"<p>The buildspec file declaration to use for the builds in this build project.</p> <p> If this value is set, it can be either an inline buildspec definition, the path to an alternate buildspec file relative to the value of the built-in <code>CODEBUILD_SRC_DIR</code> environment variable, or the path to an S3 bucket. The bucket must be in the same Region as the build project. Specify the buildspec file using its ARN (for example, <code>arn:aws:s3:::my-codebuild-sample2/buildspec.yml</code>). If this value is not provided or is set to an empty string, the source code must contain a buildspec file in its root directory. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html#build-spec-ref-name-storage\">Buildspec File Name and Storage Location</a>. </p>"
-        },
-        "auth":{
-          "shape":"SourceAuth",
+        }, 
+        "auth":{ 
+          "shape":"SourceAuth", 
           "documentation":"<p>Information about the authorization settings for CodeBuild to access the source code to be built.</p> <p>This information is for the CodeBuild console's use only. Your code should not get or set this information directly.</p>"
-        },
+        }, 
         "reportBuildStatus":{
           "shape":"WrapperBoolean",
           "documentation":"<p> Set to true to report the status of a build's start and finish to your source provider. This option is valid only when your source provider is GitHub, GitHub Enterprise, or Bitbucket. If this is set and you use a different source provider, an <code>invalidInputException</code> is thrown. </p> <p>To be able to report the build status to the source provider, the user associated with the source provider must have write access to the repo. If the user does not have write access, the build status cannot be updated. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/access-tokens.html\">Source provider access</a> in the <i>CodeBuild User Guide</i>.</p> <note> <p> The status of a build triggered by a webhook is always reported to your source provider. </p> </note>"
@@ -2975,17 +2975,17 @@
           "shape":"BuildStatusConfig",
           "documentation":"<p>Contains information that defines how the build project reports the build status to the source provider. This option is only used when the source provider is <code>GITHUB</code>, <code>GITHUB_ENTERPRISE</code>, or <code>BITBUCKET</code>.</p>"
         },
-        "insecureSsl":{
-          "shape":"WrapperBoolean",
-          "documentation":"<p>Enable this flag to ignore SSL warnings while connecting to the project source code.</p>"
+        "insecureSsl":{ 
+          "shape":"WrapperBoolean", 
+          "documentation":"<p>Enable this flag to ignore SSL warnings while connecting to the project source code.</p>" 
         },
         "sourceIdentifier":{
           "shape":"String",
           "documentation":"<p>An identifier for this project source. The identifier can only contain alphanumeric characters and underscores, and must be less than 128 characters in length. </p>"
-        }
-      },
-      "documentation":"<p>Information about the build input source code for the build project.</p>"
-    },
+        } 
+      }, 
+      "documentation":"<p>Information about the build input source code for the build project.</p>" 
+    }, 
     "ProjectSourceVersion":{
       "type":"structure",
       "required":[
@@ -3010,10 +3010,10 @@
       "max":12,
       "min":0
     },
-    "Projects":{
-      "type":"list",
-      "member":{"shape":"Project"}
-    },
+    "Projects":{ 
+      "type":"list", 
+      "member":{"shape":"Project"} 
+    }, 
     "PutResourcePolicyInput":{
       "type":"structure",
       "required":[
@@ -3333,20 +3333,20 @@
       "type":"list",
       "member":{"shape":"ResolvedArtifact"}
     },
-    "ResourceAlreadyExistsException":{
-      "type":"structure",
-      "members":{
-      },
+    "ResourceAlreadyExistsException":{ 
+      "type":"structure", 
+      "members":{ 
+      }, 
       "documentation":"<p>The specified Amazon Web Services resource cannot be created, because an Amazon Web Services resource with the same settings already exists.</p>",
-      "exception":true
-    },
-    "ResourceNotFoundException":{
-      "type":"structure",
-      "members":{
-      },
+      "exception":true 
+    }, 
+    "ResourceNotFoundException":{ 
+      "type":"structure", 
+      "members":{ 
+      }, 
       "documentation":"<p>The specified Amazon Web Services resource cannot be found.</p>",
-      "exception":true
-    },
+      "exception":true 
+    }, 
     "RetryBuildBatchInput":{
       "type":"structure",
       "members":{
@@ -3445,11 +3445,11 @@
       },
       "documentation":"<p> Information about the S3 bucket where the raw data of a report are exported. </p>"
     },
-    "SecurityGroupIds":{
-      "type":"list",
-      "member":{"shape":"NonEmptyString"},
-      "max":5
-    },
+    "SecurityGroupIds":{ 
+      "type":"list", 
+      "member":{"shape":"NonEmptyString"}, 
+      "max":5 
+    }, 
     "SensitiveNonEmptyString":{
       "type":"string",
       "min":1,
@@ -3470,32 +3470,32 @@
         "MODIFIED_TIME"
       ]
     },
-    "SortOrderType":{
-      "type":"string",
-      "enum":[
-        "ASCENDING",
-        "DESCENDING"
-      ]
-    },
-    "SourceAuth":{
-      "type":"structure",
-      "required":["type"],
-      "members":{
-        "type":{
-          "shape":"SourceAuthType",
+    "SortOrderType":{ 
+      "type":"string", 
+      "enum":[ 
+        "ASCENDING", 
+        "DESCENDING" 
+      ] 
+    }, 
+    "SourceAuth":{ 
+      "type":"structure", 
+      "required":["type"], 
+      "members":{ 
+        "type":{ 
+          "shape":"SourceAuthType", 
           "documentation":"<note> <p> This data type is deprecated and is no longer accurate or used. </p> </note> <p>The authorization type to use. The only valid value is <code>OAUTH</code>, which represents the OAuth authorization type.</p>"
-        },
-        "resource":{
-          "shape":"String",
-          "documentation":"<p>The resource value that applies to the specified authorization type.</p>"
-        }
-      },
+        }, 
+        "resource":{ 
+          "shape":"String", 
+          "documentation":"<p>The resource value that applies to the specified authorization type.</p>" 
+        } 
+      }, 
       "documentation":"<p>Information about the authorization settings for CodeBuild to access the source code to be built.</p> <p>This information is for the CodeBuild console's use only. Your code should not get or set this information directly.</p>"
-    },
-    "SourceAuthType":{
-      "type":"string",
-      "enum":["OAUTH"]
-    },
+    }, 
+    "SourceAuthType":{ 
+      "type":"string", 
+      "enum":["OAUTH"] 
+    }, 
     "SourceCredentialsInfo":{
       "type":"structure",
       "members":{
@@ -3518,18 +3518,18 @@
       "type":"list",
       "member":{"shape":"SourceCredentialsInfo"}
     },
-    "SourceType":{
-      "type":"string",
-      "enum":[
-        "CODECOMMIT",
-        "CODEPIPELINE",
-        "GITHUB",
-        "S3",
-        "BITBUCKET",
+    "SourceType":{ 
+      "type":"string", 
+      "enum":[ 
+        "CODECOMMIT", 
+        "CODEPIPELINE", 
+        "GITHUB", 
+        "S3", 
+        "BITBUCKET", 
         "GITHUB_ENTERPRISE",
         "NO_SOURCE"
-      ]
-    },
+      ] 
+    }, 
     "StartBuildBatchInput":{
       "type":"structure",
       "required":["projectName"],
@@ -3669,14 +3669,14 @@
         }
       }
     },
-    "StartBuildInput":{
-      "type":"structure",
-      "required":["projectName"],
-      "members":{
-        "projectName":{
-          "shape":"NonEmptyString",
+    "StartBuildInput":{ 
+      "type":"structure", 
+      "required":["projectName"], 
+      "members":{ 
+        "projectName":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>The name of the CodeBuild build project to start running a build.</p>"
-        },
+        }, 
         "secondarySourcesOverride":{
           "shape":"ProjectSources",
           "documentation":"<p> An array of <code>ProjectSource</code> objects. </p>"
@@ -3685,50 +3685,50 @@
           "shape":"ProjectSecondarySourceVersions",
           "documentation":"<p> An array of <code>ProjectSourceVersion</code> objects that specify one or more versions of the project's secondary sources to be used for this build only. </p>"
         },
-        "sourceVersion":{
-          "shape":"String",
+        "sourceVersion":{ 
+          "shape":"String", 
           "documentation":"<p>The version of the build input to be built, for this build only. If not specified, the latest version is used. If specified, the contents depends on the source provider:</p> <dl> <dt>CodeCommit</dt> <dd> <p>The commit ID, branch, or Git tag to use.</p> </dd> <dt>GitHub</dt> <dd> <p>The commit ID, pull request ID, branch name, or tag name that corresponds to the version of the source code you want to build. If a pull request ID is specified, it must use the format <code>pr/pull-request-ID</code> (for example <code>pr/25</code>). If a branch name is specified, the branch's HEAD commit ID is used. If not specified, the default branch's HEAD commit ID is used.</p> </dd> <dt>Bitbucket</dt> <dd> <p>The commit ID, branch name, or tag name that corresponds to the version of the source code you want to build. If a branch name is specified, the branch's HEAD commit ID is used. If not specified, the default branch's HEAD commit ID is used.</p> </dd> <dt>Amazon S3</dt> <dd> <p>The version ID of the object that represents the build input ZIP file to use.</p> </dd> </dl> <p>If <code>sourceVersion</code> is specified at the project level, then this <code>sourceVersion</code> (at the build level) takes precedence. </p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/sample-source-version.html\">Source Version Sample with CodeBuild</a> in the <i>CodeBuild User Guide</i>. </p>"
-        },
-        "artifactsOverride":{
-          "shape":"ProjectArtifacts",
-          "documentation":"<p>Build output artifact settings that override, for this build only, the latest ones already defined in the build project.</p>"
-        },
+        }, 
+        "artifactsOverride":{ 
+          "shape":"ProjectArtifacts", 
+          "documentation":"<p>Build output artifact settings that override, for this build only, the latest ones already defined in the build project.</p>" 
+        }, 
         "secondaryArtifactsOverride":{
           "shape":"ProjectArtifactsList",
           "documentation":"<p> An array of <code>ProjectArtifacts</code> objects. </p>"
         },
-        "environmentVariablesOverride":{
-          "shape":"EnvironmentVariables",
-          "documentation":"<p>A set of environment variables that overrides, for this build only, the latest ones already defined in the build project.</p>"
-        },
-        "sourceTypeOverride":{
-          "shape":"SourceType",
+        "environmentVariablesOverride":{ 
+          "shape":"EnvironmentVariables", 
+          "documentation":"<p>A set of environment variables that overrides, for this build only, the latest ones already defined in the build project.</p>" 
+        }, 
+        "sourceTypeOverride":{ 
+          "shape":"SourceType", 
           "documentation":"<p>A source input type, for this build, that overrides the source input defined in the build project.</p>"
-        },
-        "sourceLocationOverride":{
-          "shape":"String",
+        }, 
+        "sourceLocationOverride":{ 
+          "shape":"String", 
           "documentation":"<p>A location that overrides, for this build, the source location for the one defined in the build project.</p>"
-        },
-        "sourceAuthOverride":{
-          "shape":"SourceAuth",
-          "documentation":"<p>An authorization type for this build that overrides the one defined in the build project. This override applies only if the build project's source is BitBucket or GitHub.</p>"
-        },
-        "gitCloneDepthOverride":{
-          "shape":"GitCloneDepth",
-          "documentation":"<p>The user-defined depth of history, with a minimum value of 0, that overrides, for this build only, any previous depth of history defined in the build project.</p>"
-        },
+        }, 
+        "sourceAuthOverride":{ 
+          "shape":"SourceAuth", 
+          "documentation":"<p>An authorization type for this build that overrides the one defined in the build project. This override applies only if the build project's source is BitBucket or GitHub.</p>" 
+        }, 
+        "gitCloneDepthOverride":{ 
+          "shape":"GitCloneDepth", 
+          "documentation":"<p>The user-defined depth of history, with a minimum value of 0, that overrides, for this build only, any previous depth of history defined in the build project.</p>" 
+        }, 
         "gitSubmodulesConfigOverride":{
           "shape":"GitSubmodulesConfig",
           "documentation":"<p> Information about the Git submodules configuration for this build of an CodeBuild build project. </p>"
         },
-        "buildspecOverride":{
-          "shape":"String",
+        "buildspecOverride":{ 
+          "shape":"String", 
           "documentation":"<p>A buildspec file declaration that overrides, for this build only, the latest one already defined in the build project.</p> <p> If this value is set, it can be either an inline buildspec definition, the path to an alternate buildspec file relative to the value of the built-in <code>CODEBUILD_SRC_DIR</code> environment variable, or the path to an S3 bucket. The bucket must be in the same Region as the build project. Specify the buildspec file using its ARN (for example, <code>arn:aws:s3:::my-codebuild-sample2/buildspec.yml</code>). If this value is not provided or is set to an empty string, the source code must contain a buildspec file in its root directory. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html#build-spec-ref-name-storage\">Buildspec File Name and Storage Location</a>. </p>"
-        },
-        "insecureSslOverride":{
-          "shape":"WrapperBoolean",
-          "documentation":"<p>Enable this flag to override the insecure SSL setting that is specified in the build project. The insecure SSL setting determines whether to ignore SSL warnings while connecting to the project source code. This override applies only if the build's source is GitHub Enterprise.</p>"
-        },
+        }, 
+        "insecureSslOverride":{ 
+          "shape":"WrapperBoolean", 
+          "documentation":"<p>Enable this flag to override the insecure SSL setting that is specified in the build project. The insecure SSL setting determines whether to ignore SSL warnings while connecting to the project source code. This override applies only if the build's source is GitHub Enterprise.</p>" 
+        }, 
         "reportBuildStatusOverride":{
           "shape":"WrapperBoolean",
           "documentation":"<p> Set to true to report to your source provider the status of a build's start and completion. If you use this option with a source provider other than GitHub, GitHub Enterprise, or Bitbucket, an <code>invalidInputException</code> is thrown. </p> <p>To be able to report the build status to the source provider, the user associated with the source provider must have write access to the repo. If the user does not have write access, the build status cannot be updated. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/access-tokens.html\">Source provider access</a> in the <i>CodeBuild User Guide</i>.</p> <note> <p> The status of a build triggered by a webhook is always reported to your source provider. </p> </note>"
@@ -3737,38 +3737,38 @@
           "shape":"BuildStatusConfig",
           "documentation":"<p>Contains information that defines how the build project reports the build status to the source provider. This option is only used when the source provider is <code>GITHUB</code>, <code>GITHUB_ENTERPRISE</code>, or <code>BITBUCKET</code>.</p>"
         },
-        "environmentTypeOverride":{
-          "shape":"EnvironmentType",
-          "documentation":"<p>A container type for this build that overrides the one specified in the build project.</p>"
-        },
-        "imageOverride":{
-          "shape":"NonEmptyString",
-          "documentation":"<p>The name of an image for this build that overrides the one specified in the build project.</p>"
-        },
-        "computeTypeOverride":{
-          "shape":"ComputeType",
-          "documentation":"<p>The name of a compute type for this build that overrides the one specified in the build project.</p>"
-        },
-        "certificateOverride":{
-          "shape":"String",
-          "documentation":"<p>The name of a certificate for this build that overrides the one specified in the build project.</p>"
-        },
-        "cacheOverride":{
-          "shape":"ProjectCache",
-          "documentation":"<p>A ProjectCache object specified for this build that overrides the one defined in the build project.</p>"
-        },
-        "serviceRoleOverride":{
-          "shape":"NonEmptyString",
-          "documentation":"<p>The name of a service role for this build that overrides the one specified in the build project.</p>"
-        },
-        "privilegedModeOverride":{
-          "shape":"WrapperBoolean",
-          "documentation":"<p>Enable this flag to override privileged mode in the build project.</p>"
-        },
-        "timeoutInMinutesOverride":{
-          "shape":"TimeOut",
-          "documentation":"<p>The number of build timeout minutes, from 5 to 480 (8 hours), that overrides, for this build only, the latest setting already defined in the build project.</p>"
-        },
+        "environmentTypeOverride":{ 
+          "shape":"EnvironmentType", 
+          "documentation":"<p>A container type for this build that overrides the one specified in the build project.</p>" 
+        }, 
+        "imageOverride":{ 
+          "shape":"NonEmptyString", 
+          "documentation":"<p>The name of an image for this build that overrides the one specified in the build project.</p>" 
+        }, 
+        "computeTypeOverride":{ 
+          "shape":"ComputeType", 
+          "documentation":"<p>The name of a compute type for this build that overrides the one specified in the build project.</p>" 
+        }, 
+        "certificateOverride":{ 
+          "shape":"String", 
+          "documentation":"<p>The name of a certificate for this build that overrides the one specified in the build project.</p>" 
+        }, 
+        "cacheOverride":{ 
+          "shape":"ProjectCache", 
+          "documentation":"<p>A ProjectCache object specified for this build that overrides the one defined in the build project.</p>" 
+        }, 
+        "serviceRoleOverride":{ 
+          "shape":"NonEmptyString", 
+          "documentation":"<p>The name of a service role for this build that overrides the one specified in the build project.</p>" 
+        }, 
+        "privilegedModeOverride":{ 
+          "shape":"WrapperBoolean", 
+          "documentation":"<p>Enable this flag to override privileged mode in the build project.</p>" 
+        }, 
+        "timeoutInMinutesOverride":{ 
+          "shape":"TimeOut", 
+          "documentation":"<p>The number of build timeout minutes, from 5 to 480 (8 hours), that overrides, for this build only, the latest setting already defined in the build project.</p>" 
+        }, 
         "queuedTimeoutInMinutesOverride":{
           "shape":"TimeOut",
           "documentation":"<p> The number of minutes a build is allowed to be queued before it times out. </p>"
@@ -3777,8 +3777,8 @@
           "shape":"NonEmptyString",
           "documentation":"<p>The Key Management Service customer master key (CMK) that overrides the one specified in the build project. The CMK key encrypts the build output artifacts.</p> <note> <p> You can use a cross-account KMS key to encrypt the build output artifacts if your service role has permission to that key. </p> </note> <p>You can specify either the Amazon Resource Name (ARN) of the CMK or, if available, the CMK's alias (using the format <code>alias/&lt;alias-name&gt;</code>).</p>"
         },
-        "idempotencyToken":{
-          "shape":"String",
+        "idempotencyToken":{ 
+          "shape":"String", 
           "documentation":"<p>A unique, case sensitive identifier you provide to ensure the idempotency of the StartBuild request. The token is included in the StartBuild request and is valid for 5 minutes. If you repeat the StartBuild request with the same token, but change a parameter, CodeBuild returns a parameter mismatch error. </p>"
         },
         "logsConfigOverride":{
@@ -3796,29 +3796,29 @@
         "debugSessionEnabled":{
           "shape":"WrapperBoolean",
           "documentation":"<p>Specifies if session debugging is enabled for this build. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/session-manager.html\">Viewing a running build in Session Manager</a>.</p>"
-        }
-      }
-    },
-    "StartBuildOutput":{
-      "type":"structure",
-      "members":{
-        "build":{
-          "shape":"Build",
-          "documentation":"<p>Information about the build to be run.</p>"
-        }
-      }
-    },
-    "StatusType":{
-      "type":"string",
-      "enum":[
-        "SUCCEEDED",
-        "FAILED",
-        "FAULT",
-        "TIMED_OUT",
-        "IN_PROGRESS",
-        "STOPPED"
-      ]
-    },
+        } 
+      } 
+    }, 
+    "StartBuildOutput":{ 
+      "type":"structure", 
+      "members":{ 
+        "build":{ 
+          "shape":"Build", 
+          "documentation":"<p>Information about the build to be run.</p>" 
+        } 
+      } 
+    }, 
+    "StatusType":{ 
+      "type":"string", 
+      "enum":[ 
+        "SUCCEEDED", 
+        "FAILED", 
+        "FAULT", 
+        "TIMED_OUT", 
+        "IN_PROGRESS", 
+        "STOPPED" 
+      ] 
+    }, 
     "StopBuildBatchInput":{
       "type":"structure",
       "required":["id"],
@@ -3835,51 +3835,51 @@
         "buildBatch":{"shape":"BuildBatch"}
       }
     },
-    "StopBuildInput":{
-      "type":"structure",
-      "required":["id"],
-      "members":{
-        "id":{
-          "shape":"NonEmptyString",
-          "documentation":"<p>The ID of the build.</p>"
-        }
-      }
-    },
-    "StopBuildOutput":{
-      "type":"structure",
-      "members":{
-        "build":{
-          "shape":"Build",
-          "documentation":"<p>Information about the build.</p>"
-        }
-      }
-    },
-    "String":{"type":"string"},
-    "Subnets":{
-      "type":"list",
-      "member":{"shape":"NonEmptyString"},
-      "max":16
-    },
-    "Tag":{
-      "type":"structure",
-      "members":{
-        "key":{
-          "shape":"KeyInput",
-          "documentation":"<p>The tag's key.</p>"
-        },
-        "value":{
-          "shape":"ValueInput",
-          "documentation":"<p>The tag's value.</p>"
-        }
-      },
+    "StopBuildInput":{ 
+      "type":"structure", 
+      "required":["id"], 
+      "members":{ 
+        "id":{ 
+          "shape":"NonEmptyString", 
+          "documentation":"<p>The ID of the build.</p>" 
+        } 
+      } 
+    }, 
+    "StopBuildOutput":{ 
+      "type":"structure", 
+      "members":{ 
+        "build":{ 
+          "shape":"Build", 
+          "documentation":"<p>Information about the build.</p>" 
+        } 
+      } 
+    }, 
+    "String":{"type":"string"}, 
+    "Subnets":{ 
+      "type":"list", 
+      "member":{"shape":"NonEmptyString"}, 
+      "max":16 
+    }, 
+    "Tag":{ 
+      "type":"structure", 
+      "members":{ 
+        "key":{ 
+          "shape":"KeyInput", 
+          "documentation":"<p>The tag's key.</p>" 
+        }, 
+        "value":{ 
+          "shape":"ValueInput", 
+          "documentation":"<p>The tag's value.</p>" 
+        } 
+      }, 
       "documentation":"<p>A tag, consisting of a key and a value.</p> <p>This tag is available for use by Amazon Web Services services that support tags in CodeBuild.</p>"
-    },
-    "TagList":{
-      "type":"list",
-      "member":{"shape":"Tag"},
-      "max":50,
-      "min":0
-    },
+    }, 
+    "TagList":{ 
+      "type":"list", 
+      "member":{"shape":"Tag"}, 
+      "max":50, 
+      "min":0 
+    }, 
     "TestCase":{
       "type":"structure",
       "members":{
@@ -3959,28 +3959,28 @@
       },
       "documentation":"<p> Information about a test report. </p>"
     },
-    "TimeOut":{
-      "type":"integer",
-      "max":480,
-      "min":5
-    },
-    "Timestamp":{"type":"timestamp"},
-    "UpdateProjectInput":{
-      "type":"structure",
-      "required":["name"],
-      "members":{
-        "name":{
-          "shape":"NonEmptyString",
-          "documentation":"<p>The name of the build project.</p> <note> <p>You cannot change a build project's name.</p> </note>"
-        },
-        "description":{
-          "shape":"ProjectDescription",
-          "documentation":"<p>A new or replacement description of the build project.</p>"
-        },
-        "source":{
-          "shape":"ProjectSource",
-          "documentation":"<p>Information to be changed about the build input source code for the build project.</p>"
-        },
+    "TimeOut":{ 
+      "type":"integer", 
+      "max":480, 
+      "min":5 
+    }, 
+    "Timestamp":{"type":"timestamp"}, 
+    "UpdateProjectInput":{ 
+      "type":"structure", 
+      "required":["name"], 
+      "members":{ 
+        "name":{ 
+          "shape":"NonEmptyString", 
+          "documentation":"<p>The name of the build project.</p> <note> <p>You cannot change a build project's name.</p> </note>" 
+        }, 
+        "description":{ 
+          "shape":"ProjectDescription", 
+          "documentation":"<p>A new or replacement description of the build project.</p>" 
+        }, 
+        "source":{ 
+          "shape":"ProjectSource", 
+          "documentation":"<p>Information to be changed about the build input source code for the build project.</p>" 
+        }, 
         "secondarySources":{
           "shape":"ProjectSources",
           "documentation":"<p> An array of <code>ProjectSource</code> objects. </p>"
@@ -3993,48 +3993,48 @@
           "shape":"ProjectSecondarySourceVersions",
           "documentation":"<p> An array of <code>ProjectSourceVersion</code> objects. If <code>secondarySourceVersions</code> is specified at the build level, then they take over these <code>secondarySourceVersions</code> (at the project level). </p>"
         },
-        "artifacts":{
-          "shape":"ProjectArtifacts",
-          "documentation":"<p>Information to be changed about the build output artifacts for the build project.</p>"
-        },
+        "artifacts":{ 
+          "shape":"ProjectArtifacts", 
+          "documentation":"<p>Information to be changed about the build output artifacts for the build project.</p>" 
+        }, 
         "secondaryArtifacts":{
           "shape":"ProjectArtifactsList",
           "documentation":"<p> An array of <code>ProjectSource</code> objects. </p>"
         },
-        "cache":{
-          "shape":"ProjectCache",
-          "documentation":"<p>Stores recently used information so that it can be quickly accessed at a later time.</p>"
-        },
-        "environment":{
-          "shape":"ProjectEnvironment",
-          "documentation":"<p>Information to be changed about the build environment for the build project.</p>"
-        },
-        "serviceRole":{
-          "shape":"NonEmptyString",
+        "cache":{ 
+          "shape":"ProjectCache", 
+          "documentation":"<p>Stores recently used information so that it can be quickly accessed at a later time.</p>" 
+        }, 
+        "environment":{ 
+          "shape":"ProjectEnvironment", 
+          "documentation":"<p>Information to be changed about the build environment for the build project.</p>" 
+        }, 
+        "serviceRole":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>The replacement ARN of the Identity and Access Management role that enables CodeBuild to interact with dependent Amazon Web Services services on behalf of the Amazon Web Services account.</p>"
-        },
-        "timeoutInMinutes":{
-          "shape":"TimeOut",
+        }, 
+        "timeoutInMinutes":{ 
+          "shape":"TimeOut", 
           "documentation":"<p>The replacement value in minutes, from 5 to 480 (8 hours), for CodeBuild to wait before timing out any related build that did not get marked as completed.</p>"
-        },
+        }, 
         "queuedTimeoutInMinutes":{
           "shape":"TimeOut",
           "documentation":"<p> The number of minutes a build is allowed to be queued before it times out. </p>"
         },
-        "encryptionKey":{
-          "shape":"NonEmptyString",
+        "encryptionKey":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>The Key Management Service customer master key (CMK) to be used for encrypting the build output artifacts.</p> <note> <p> You can use a cross-account KMS key to encrypt the build output artifacts if your service role has permission to that key. </p> </note> <p>You can specify either the Amazon Resource Name (ARN) of the CMK or, if available, the CMK's alias (using the format <code>alias/&lt;alias-name&gt;</code>). </p>"
-        },
-        "tags":{
-          "shape":"TagList",
+        }, 
+        "tags":{ 
+          "shape":"TagList", 
           "documentation":"<p>An updated list of tag key and value pairs associated with this build project.</p> <p>These tags are available for use by Amazon Web Services services that support CodeBuild build project tags.</p>"
-        },
-        "vpcConfig":{
-          "shape":"VpcConfig",
+        }, 
+        "vpcConfig":{ 
+          "shape":"VpcConfig", 
           "documentation":"<p>VpcConfig enables CodeBuild to access resources in an Amazon VPC.</p>"
-        },
-        "badgeEnabled":{
-          "shape":"WrapperBoolean",
+        }, 
+        "badgeEnabled":{ 
+          "shape":"WrapperBoolean", 
           "documentation":"<p>Set this to true to generate a publicly accessible URL for your project's build badge.</p>"
         },
         "logsConfig":{
@@ -4050,17 +4050,17 @@
           "shape":"WrapperInt",
           "documentation":"<p>The maximum number of concurrent builds that are allowed for this project.</p> <p>New builds are only started if the current number of builds is less than or equal to this limit. If the current build count meets this limit, new builds are throttled and are not run.</p> <p>To remove this limit, set this value to -1.</p>"
         }
-      }
-    },
-    "UpdateProjectOutput":{
-      "type":"structure",
-      "members":{
-        "project":{
-          "shape":"Project",
-          "documentation":"<p>Information about the build project that was changed.</p>"
-        }
-      }
-    },
+      } 
+    }, 
+    "UpdateProjectOutput":{ 
+      "type":"structure", 
+      "members":{ 
+        "project":{ 
+          "shape":"Project", 
+          "documentation":"<p>Information about the build project that was changed.</p>" 
+        } 
+      } 
+    }, 
     "UpdateReportGroupInput":{
       "type":"structure",
       "required":["arn"],
@@ -4088,20 +4088,20 @@
         }
       }
     },
-    "UpdateWebhookInput":{
-      "type":"structure",
-      "required":["projectName"],
-      "members":{
-        "projectName":{
-          "shape":"ProjectName",
+    "UpdateWebhookInput":{ 
+      "type":"structure", 
+      "required":["projectName"], 
+      "members":{ 
+        "projectName":{ 
+          "shape":"ProjectName", 
           "documentation":"<p>The name of the CodeBuild project.</p>"
-        },
-        "branchFilter":{
-          "shape":"String",
+        }, 
+        "branchFilter":{ 
+          "shape":"String", 
           "documentation":"<p>A regular expression used to determine which repository branches are built when a webhook is triggered. If the name of a branch matches the regular expression, then it is built. If <code>branchFilter</code> is empty, then all branches are built.</p> <note> <p> It is recommended that you use <code>filterGroups</code> instead of <code>branchFilter</code>. </p> </note>"
-        },
-        "rotateSecret":{
-          "shape":"Boolean",
+        }, 
+        "rotateSecret":{ 
+          "shape":"Boolean", 
           "documentation":"<p> A boolean value that specifies whether the associated GitHub repository's secret token should be updated. If you use Bitbucket for your repository, <code>rotateSecret</code> is ignored. </p>"
         },
         "filterGroups":{
@@ -4111,61 +4111,61 @@
         "buildType":{
           "shape":"WebhookBuildType",
           "documentation":"<p>Specifies the type of build this webhook will trigger.</p>"
-        }
-      }
-    },
-    "UpdateWebhookOutput":{
-      "type":"structure",
-      "members":{
-        "webhook":{
-          "shape":"Webhook",
+        } 
+      } 
+    }, 
+    "UpdateWebhookOutput":{ 
+      "type":"structure", 
+      "members":{ 
+        "webhook":{ 
+          "shape":"Webhook", 
           "documentation":"<p> Information about a repository's webhook that is associated with a project in CodeBuild. </p>"
-        }
-      }
-    },
-    "ValueInput":{
-      "type":"string",
-      "max":255,
+        } 
+      } 
+    }, 
+    "ValueInput":{ 
+      "type":"string", 
+      "max":255, 
       "min":0,
       "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=@+\\-]*)$"
-    },
-    "VpcConfig":{
-      "type":"structure",
-      "members":{
-        "vpcId":{
-          "shape":"NonEmptyString",
-          "documentation":"<p>The ID of the Amazon VPC.</p>"
-        },
-        "subnets":{
-          "shape":"Subnets",
-          "documentation":"<p>A list of one or more subnet IDs in your Amazon VPC.</p>"
-        },
-        "securityGroupIds":{
-          "shape":"SecurityGroupIds",
-          "documentation":"<p>A list of one or more security groups IDs in your Amazon VPC.</p>"
-        }
-      },
+    }, 
+    "VpcConfig":{ 
+      "type":"structure", 
+      "members":{ 
+        "vpcId":{ 
+          "shape":"NonEmptyString", 
+          "documentation":"<p>The ID of the Amazon VPC.</p>" 
+        }, 
+        "subnets":{ 
+          "shape":"Subnets", 
+          "documentation":"<p>A list of one or more subnet IDs in your Amazon VPC.</p>" 
+        }, 
+        "securityGroupIds":{ 
+          "shape":"SecurityGroupIds", 
+          "documentation":"<p>A list of one or more security groups IDs in your Amazon VPC.</p>" 
+        } 
+      }, 
       "documentation":"<p>Information about the VPC configuration that CodeBuild accesses.</p>"
-    },
-    "Webhook":{
-      "type":"structure",
-      "members":{
-        "url":{
-          "shape":"NonEmptyString",
-          "documentation":"<p>The URL to the webhook.</p>"
-        },
-        "payloadUrl":{
-          "shape":"NonEmptyString",
+    }, 
+    "Webhook":{ 
+      "type":"structure", 
+      "members":{ 
+        "url":{ 
+          "shape":"NonEmptyString", 
+          "documentation":"<p>The URL to the webhook.</p>" 
+        }, 
+        "payloadUrl":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>The CodeBuild endpoint where webhook events are sent.</p>"
-        },
-        "secret":{
-          "shape":"NonEmptyString",
+        }, 
+        "secret":{ 
+          "shape":"NonEmptyString", 
           "documentation":"<p>The secret token of the associated repository. </p> <note> <p>A Bitbucket webhook does not support <code>secret</code>. </p> </note>"
-        },
-        "branchFilter":{
-          "shape":"String",
+        }, 
+        "branchFilter":{ 
+          "shape":"String", 
           "documentation":"<p>A regular expression used to determine which repository branches are built when a webhook is triggered. If the name of a branch matches the regular expression, then it is built. If <code>branchFilter</code> is empty, then all branches are built.</p> <note> <p>It is recommended that you use <code>filterGroups</code> instead of <code>branchFilter</code>. </p> </note>"
-        },
+        }, 
         "filterGroups":{
           "shape":"FilterGroups",
           "documentation":"<p>An array of arrays of <code>WebhookFilter</code> objects used to determine which webhooks are triggered. At least one <code>WebhookFilter</code> in the array must specify <code>EVENT</code> as its <code>type</code>. </p> <p>For a build to be triggered, at least one filter group in the <code>filterGroups</code> array must pass. For a filter group to pass, each of its filters must pass. </p>"
@@ -4174,13 +4174,13 @@
           "shape":"WebhookBuildType",
           "documentation":"<p>Specifies the type of build this webhook will trigger.</p>"
         },
-        "lastModifiedSecret":{
-          "shape":"Timestamp",
+        "lastModifiedSecret":{ 
+          "shape":"Timestamp", 
           "documentation":"<p>A timestamp that indicates the last time a repository's secret token was modified. </p>"
-        }
-      },
+        } 
+      }, 
       "documentation":"<p>Information about a webhook that connects repository events to a build project in CodeBuild.</p>"
-    },
+    }, 
     "WebhookBuildType":{
       "type":"string",
       "enum":[
@@ -4221,9 +4221,9 @@
         "COMMIT_MESSAGE"
       ]
     },
-    "WrapperBoolean":{"type":"boolean"},
-    "WrapperInt":{"type":"integer"},
-    "WrapperLong":{"type":"long"}
-  },
+    "WrapperBoolean":{"type":"boolean"}, 
+    "WrapperInt":{"type":"integer"}, 
+    "WrapperLong":{"type":"long"} 
+  }, 
   "documentation":"<p>CodeBuild is a fully managed build service in the cloud. CodeBuild compiles your source code, runs unit tests, and produces artifacts that are ready to deploy. CodeBuild eliminates the need to provision, manage, and scale your own build servers. It provides prepackaged build environments for the most popular programming languages and build tools, such as Apache Maven, Gradle, and more. You can also fully customize build environments in CodeBuild to use your own build tools. CodeBuild scales automatically to meet peak build requests. You pay only for the build time you consume. For more information about CodeBuild, see the <i> <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/welcome.html\">CodeBuild User Guide</a>.</i> </p>"
-}
+} 

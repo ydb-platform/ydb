@@ -1,18 +1,18 @@
-{
-  "version":"2.0",
-  "metadata":{
-    "apiVersion":"2017-07-01",
-    "endpointPrefix":"translate",
-    "jsonVersion":"1.1",
-    "protocol":"json",
-    "serviceFullName":"Amazon Translate",
-    "serviceId":"Translate",
-    "signatureVersion":"v4",
-    "signingName":"translate",
-    "targetPrefix":"AWSShineFrontendService_20170701",
-    "uid":"translate-2017-07-01"
-  },
-  "operations":{
+{ 
+  "version":"2.0", 
+  "metadata":{ 
+    "apiVersion":"2017-07-01", 
+    "endpointPrefix":"translate", 
+    "jsonVersion":"1.1", 
+    "protocol":"json", 
+    "serviceFullName":"Amazon Translate", 
+    "serviceId":"Translate", 
+    "signatureVersion":"v4", 
+    "signingName":"translate", 
+    "targetPrefix":"AWSShineFrontendService_20170701", 
+    "uid":"translate-2017-07-01" 
+  }, 
+  "operations":{ 
     "CreateParallelData":{
       "name":"CreateParallelData",
       "http":{
@@ -203,24 +203,24 @@
       ],
       "documentation":"<p>Stops an asynchronous batch translation job that is in progress.</p> <p>If the job's state is <code>IN_PROGRESS</code>, the job will be marked for termination and put into the <code>STOP_REQUESTED</code> state. If the job completes before it can be stopped, it is put into the <code>COMPLETED</code> state. Otherwise, the job is put into the <code>STOPPED</code> state.</p> <p>Asynchronous batch translation jobs are started with the <a>StartTextTranslationJob</a> operation. You can use the <a>DescribeTextTranslationJob</a> or <a>ListTextTranslationJobs</a> operations to get a batch translation job's <code>JobId</code>.</p>"
     },
-    "TranslateText":{
-      "name":"TranslateText",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"TranslateTextRequest"},
-      "output":{"shape":"TranslateTextResponse"},
-      "errors":[
-        {"shape":"InvalidRequestException"},
-        {"shape":"TextSizeLimitExceededException"},
-        {"shape":"TooManyRequestsException"},
-        {"shape":"UnsupportedLanguagePairException"},
-        {"shape":"DetectedLanguageLowConfidenceException"},
+    "TranslateText":{ 
+      "name":"TranslateText", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"TranslateTextRequest"}, 
+      "output":{"shape":"TranslateTextResponse"}, 
+      "errors":[ 
+        {"shape":"InvalidRequestException"}, 
+        {"shape":"TextSizeLimitExceededException"}, 
+        {"shape":"TooManyRequestsException"}, 
+        {"shape":"UnsupportedLanguagePairException"}, 
+        {"shape":"DetectedLanguageLowConfidenceException"}, 
         {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"},
-        {"shape":"ServiceUnavailableException"}
-      ],
+        {"shape":"InternalServerException"}, 
+        {"shape":"ServiceUnavailableException"} 
+      ], 
       "documentation":"<p>Translates input text from the source language to the target language. For a list of available languages and language codes, see <a>what-is-languages</a>.</p>"
     },
     "UpdateParallelData":{
@@ -242,9 +242,9 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Updates a previously created parallel data resource by importing a new input file from Amazon S3.</p>"
-    }
-  },
-  "shapes":{
+    } 
+  }, 
+  "shapes":{ 
     "AppliedTerminology":{
       "type":"structure",
       "members":{
@@ -263,12 +263,12 @@
       "type":"list",
       "member":{"shape":"AppliedTerminology"}
     },
-    "BoundedLengthString":{
-      "type":"string",
-      "max":5000,
+    "BoundedLengthString":{ 
+      "type":"string", 
+      "max":5000, 
       "min":1,
       "pattern":"[\\P{M}\\p{M}]{1,5000}"
-    },
+    }, 
     "ClientTokenString":{
       "type":"string",
       "max":64,
@@ -394,18 +394,18 @@
       "max":256,
       "pattern":"[\\P{M}\\p{M}]{0,256}"
     },
-    "DetectedLanguageLowConfidenceException":{
-      "type":"structure",
-      "members":{
-        "Message":{"shape":"String"},
-        "DetectedLanguageCode":{
-          "shape":"LanguageCodeString",
+    "DetectedLanguageLowConfidenceException":{ 
+      "type":"structure", 
+      "members":{ 
+        "Message":{"shape":"String"}, 
+        "DetectedLanguageCode":{ 
+          "shape":"LanguageCodeString", 
           "documentation":"<p>The language code of the auto-detected language from Amazon Comprehend.</p>"
-        }
-      },
+        } 
+      }, 
       "documentation":"<p>The confidence that Amazon Comprehend accurately detected the source language is low. If a low confidence level is acceptable for your application, you can use the language in the exception to call Amazon Translate again. For more information, see the <a href=\"https://docs.aws.amazon.com/comprehend/latest/dg/API_DetectDominantLanguage.html\">DetectDominantLanguage</a> operation in the <i>Amazon Comprehend Developer Guide</i>. </p>",
-      "exception":true
-    },
+      "exception":true 
+    }, 
     "EncryptionKey":{
       "type":"structure",
       "required":[
@@ -559,15 +559,15 @@
       "documentation":"<p>The input configuration properties for requesting a batch translation job.</p>"
     },
     "Integer":{"type":"integer"},
-    "InternalServerException":{
-      "type":"structure",
-      "members":{
-        "Message":{"shape":"String"}
-      },
+    "InternalServerException":{ 
+      "type":"structure", 
+      "members":{ 
+        "Message":{"shape":"String"} 
+      }, 
       "documentation":"<p>An internal server error occurred. Retry your request.</p>",
-      "exception":true,
-      "fault":true
-    },
+      "exception":true, 
+      "fault":true 
+    }, 
     "InvalidFilterException":{
       "type":"structure",
       "members":{
@@ -584,14 +584,14 @@
       "documentation":"<p>The value of the parameter is invalid. Review the value of the parameter you are using to correct it, and then retry your operation.</p>",
       "exception":true
     },
-    "InvalidRequestException":{
-      "type":"structure",
-      "members":{
-        "Message":{"shape":"String"}
-      },
+    "InvalidRequestException":{ 
+      "type":"structure", 
+      "members":{ 
+        "Message":{"shape":"String"} 
+      }, 
       "documentation":"<p> The request that you made is invalid. Check your request to determine why it's invalid and then retry the request. </p>",
-      "exception":true
-    },
+      "exception":true 
+    }, 
     "JobDetails":{
       "type":"structure",
       "members":{
@@ -634,11 +634,11 @@
         "STOPPED"
       ]
     },
-    "LanguageCodeString":{
-      "type":"string",
-      "max":5,
-      "min":2
-    },
+    "LanguageCodeString":{ 
+      "type":"string", 
+      "max":5, 
+      "min":2 
+    }, 
     "LanguageCodeStringList":{
       "type":"list",
       "member":{"shape":"LanguageCodeString"}
@@ -916,15 +916,15 @@
       "max":1024,
       "pattern":"s3://[a-z0-9][\\.\\-a-z0-9]{1,61}[a-z0-9](/.*)?"
     },
-    "ServiceUnavailableException":{
-      "type":"structure",
-      "members":{
-        "Message":{"shape":"String"}
-      },
+    "ServiceUnavailableException":{ 
+      "type":"structure", 
+      "members":{ 
+        "Message":{"shape":"String"} 
+      }, 
       "documentation":"<p>The Amazon Translate service is temporarily unavailable. Please wait a bit and then retry your request.</p>",
       "exception":true,
       "fault":true
-    },
+    }, 
     "StartTextTranslationJobRequest":{
       "type":"structure",
       "required":[
@@ -1011,11 +1011,11 @@
         }
       }
     },
-    "String":{
-      "type":"string",
+    "String":{ 
+      "type":"string", 
       "max":10000,
       "pattern":"[\\P{M}\\p{M}]{0,10000}"
-    },
+    }, 
     "TargetLanguageCodeStringList":{
       "type":"list",
       "member":{"shape":"LanguageCodeString"},
@@ -1143,14 +1143,14 @@
       "type":"list",
       "member":{"shape":"TerminologyProperties"}
     },
-    "TextSizeLimitExceededException":{
-      "type":"structure",
-      "members":{
-        "Message":{"shape":"String"}
-      },
+    "TextSizeLimitExceededException":{ 
+      "type":"structure", 
+      "members":{ 
+        "Message":{"shape":"String"} 
+      }, 
       "documentation":"<p> The size of the text you submitted exceeds the size limit. Reduce the size of the text or use a smaller document and then retry your request. </p>",
-      "exception":true
-    },
+      "exception":true 
+    }, 
     "TextTranslationJobFilter":{
       "type":"structure",
       "members":{
@@ -1240,70 +1240,70 @@
       "member":{"shape":"TextTranslationJobProperties"}
     },
     "Timestamp":{"type":"timestamp"},
-    "TooManyRequestsException":{
-      "type":"structure",
-      "members":{
-        "Message":{"shape":"String"}
-      },
+    "TooManyRequestsException":{ 
+      "type":"structure", 
+      "members":{ 
+        "Message":{"shape":"String"} 
+      }, 
       "documentation":"<p> You have made too many requests within a short period of time. Wait for a short time and then try your request again.</p>",
-      "exception":true
-    },
-    "TranslateTextRequest":{
-      "type":"structure",
-      "required":[
-        "Text",
-        "SourceLanguageCode",
-        "TargetLanguageCode"
-      ],
-      "members":{
-        "Text":{
-          "shape":"BoundedLengthString",
+      "exception":true 
+    }, 
+    "TranslateTextRequest":{ 
+      "type":"structure", 
+      "required":[ 
+        "Text", 
+        "SourceLanguageCode", 
+        "TargetLanguageCode" 
+      ], 
+      "members":{ 
+        "Text":{ 
+          "shape":"BoundedLengthString", 
           "documentation":"<p>The text to translate. The text string can be a maximum of 5,000 bytes long. Depending on your character set, this may be fewer than 5,000 characters.</p>"
-        },
+        }, 
         "TerminologyNames":{
           "shape":"ResourceNameList",
           "documentation":"<p>The name of the terminology list file to be used in the TranslateText request. You can use 1 terminology list at most in a <code>TranslateText</code> request. Terminology lists can contain a maximum of 256 terms.</p>"
         },
-        "SourceLanguageCode":{
-          "shape":"LanguageCodeString",
+        "SourceLanguageCode":{ 
+          "shape":"LanguageCodeString", 
           "documentation":"<p>The language code for the language of the source text. The language must be a language supported by Amazon Translate. For a list of language codes, see <a>what-is-languages</a>.</p> <p>To have Amazon Translate determine the source language of your text, you can specify <code>auto</code> in the <code>SourceLanguageCode</code> field. If you specify <code>auto</code>, Amazon Translate will call <a href=\"https://docs.aws.amazon.com/comprehend/latest/dg/comprehend-general.html\">Amazon Comprehend</a> to determine the source language.</p>"
-        },
-        "TargetLanguageCode":{
-          "shape":"LanguageCodeString",
+        }, 
+        "TargetLanguageCode":{ 
+          "shape":"LanguageCodeString", 
           "documentation":"<p>The language code requested for the language of the target text. The language must be a language supported by Amazon Translate.</p>"
-        }
-      }
-    },
-    "TranslateTextResponse":{
-      "type":"structure",
-      "required":[
-        "TranslatedText",
-        "SourceLanguageCode",
-        "TargetLanguageCode"
-      ],
-      "members":{
-        "TranslatedText":{
-          "shape":"String",
+        } 
+      } 
+    }, 
+    "TranslateTextResponse":{ 
+      "type":"structure", 
+      "required":[ 
+        "TranslatedText", 
+        "SourceLanguageCode", 
+        "TargetLanguageCode" 
+      ], 
+      "members":{ 
+        "TranslatedText":{ 
+          "shape":"String", 
           "documentation":"<p>The translated text.</p>"
-        },
-        "SourceLanguageCode":{
-          "shape":"LanguageCodeString",
+        }, 
+        "SourceLanguageCode":{ 
+          "shape":"LanguageCodeString", 
           "documentation":"<p>The language code for the language of the source text.</p>"
-        },
-        "TargetLanguageCode":{
-          "shape":"LanguageCodeString",
+        }, 
+        "TargetLanguageCode":{ 
+          "shape":"LanguageCodeString", 
           "documentation":"<p>The language code for the language of the target text. </p>"
         },
         "AppliedTerminologies":{
           "shape":"AppliedTerminologyList",
           "documentation":"<p>The names of the custom terminologies applied to the input text by Amazon Translate for the translated text response.</p>"
-        }
-      }
-    },
+        } 
+      } 
+    }, 
     "UnboundedLengthString":{"type":"string"},
-    "UnsupportedLanguagePairException":{
-      "type":"structure",
-      "members":{
+    "UnsupportedLanguagePairException":{ 
+      "type":"structure", 
+      "members":{ 
         "Message":{"shape":"String"},
         "SourceLanguageCode":{
           "shape":"LanguageCodeString",
@@ -1313,9 +1313,9 @@
           "shape":"LanguageCodeString",
           "documentation":"<p>The language code for the language of the translated text. </p>"
         }
-      },
+      }, 
       "documentation":"<p>Amazon Translate does not support translation from the language of the source text into the requested target language. For more information, see <a>how-to-error-msg</a>. </p>",
-      "exception":true
+      "exception":true 
     },
     "UpdateParallelDataRequest":{
       "type":"structure",
@@ -1364,7 +1364,7 @@
           "documentation":"<p>The time that the most recent update was attempted.</p>"
         }
       }
-    }
-  },
+    } 
+  }, 
   "documentation":"<p>Provides translation between one source language and another of the same set of languages.</p>"
-}
+} 

@@ -1,4 +1,4 @@
-{
+{ 
   "pagination": {
     "ListApplicationDependencies": {
       "input_token": "NextToken",
@@ -19,4 +19,4 @@
       "result_key": "Applications"
     }
   }
-}
+} 

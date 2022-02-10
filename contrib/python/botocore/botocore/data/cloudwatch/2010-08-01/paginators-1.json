@@ -1,29 +1,29 @@
-{
-  "pagination": {
-    "DescribeAlarmHistory": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "limit_key": "MaxRecords",
-      "result_key": "AlarmHistoryItems"
-    },
-    "DescribeAlarms": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "limit_key": "MaxRecords",
+{ 
+  "pagination": { 
+    "DescribeAlarmHistory": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "limit_key": "MaxRecords", 
+      "result_key": "AlarmHistoryItems" 
+    }, 
+    "DescribeAlarms": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "limit_key": "MaxRecords", 
       "result_key": [
         "MetricAlarms",
         "CompositeAlarms"
       ]
-    },
-    "ListDashboards": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "result_key": "DashboardEntries"
-    },
-    "ListMetrics": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "result_key": "Metrics"
+    }, 
+    "ListDashboards": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "result_key": "DashboardEntries" 
+    }, 
+    "ListMetrics": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "result_key": "Metrics" 
     },
     "GetMetricData": {
       "input_token": "NextToken",
@@ -33,6 +33,6 @@
         "MetricDataResults",
         "Messages"
       ]
-    }
-  }
-}
+    } 
+  } 
+} 

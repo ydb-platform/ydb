@@ -1,4 +1,4 @@
-{
+{ 
   "pagination": {
     "ListActionTypes": {
       "input_token": "nextToken",
@@ -36,4 +36,4 @@
       "result_key": "tags"
     }
   }
-}
+} 

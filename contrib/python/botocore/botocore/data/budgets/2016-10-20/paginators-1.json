@@ -1,4 +1,4 @@
-{
+{ 
   "pagination": {
     "DescribeBudgets": {
       "input_token": "NextToken",
@@ -43,4 +43,4 @@
       "result_key": "Actions"
     }
   }
-}
+} 

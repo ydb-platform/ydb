@@ -1,10 +1,10 @@
-{
-  "pagination": {
-    "DescribeEvents": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "limit_key": "MaxRecords",
-      "result_key": "Events"
+{ 
+  "pagination": { 
+    "DescribeEvents": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "limit_key": "MaxRecords", 
+      "result_key": "Events" 
     },
     "DescribeApplicationVersions": {
       "input_token": "NextToken",
@@ -29,6 +29,6 @@
       "limit_key": "MaxRecords",
       "output_token": "NextToken",
       "result_key": "PlatformSummaryList"
-    }
-  }
-}
+    } 
+  } 
+} 

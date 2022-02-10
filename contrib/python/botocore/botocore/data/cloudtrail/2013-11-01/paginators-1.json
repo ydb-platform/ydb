@@ -1,10 +1,10 @@
-{
-  "pagination": {
-    "LookupEvents": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "limit_key": "MaxResults",
-      "result_key": "Events"
+{ 
+  "pagination": { 
+    "LookupEvents": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "limit_key": "MaxResults", 
+      "result_key": "Events" 
     },
     "ListPublicKeys": {
       "input_token": "NextToken",
@@ -20,6 +20,6 @@
       "input_token": "NextToken",
       "output_token": "NextToken",
       "result_key": "Trails"
-    }
-  }
-}
+    } 
+  } 
+} 

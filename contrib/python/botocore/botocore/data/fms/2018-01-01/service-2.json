@@ -1,34 +1,34 @@
-{
-  "version":"2.0",
-  "metadata":{
-    "apiVersion":"2018-01-01",
-    "endpointPrefix":"fms",
-    "jsonVersion":"1.1",
-    "protocol":"json",
-    "serviceAbbreviation":"FMS",
-    "serviceFullName":"Firewall Management Service",
-    "serviceId":"FMS",
-    "signatureVersion":"v4",
-    "targetPrefix":"AWSFMS_20180101",
-    "uid":"fms-2018-01-01"
-  },
-  "operations":{
-    "AssociateAdminAccount":{
-      "name":"AssociateAdminAccount",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"AssociateAdminAccountRequest"},
-      "errors":[
-        {"shape":"InvalidOperationException"},
-        {"shape":"InvalidInputException"},
-        {"shape":"ResourceNotFoundException"},
+{ 
+  "version":"2.0", 
+  "metadata":{ 
+    "apiVersion":"2018-01-01", 
+    "endpointPrefix":"fms", 
+    "jsonVersion":"1.1", 
+    "protocol":"json", 
+    "serviceAbbreviation":"FMS", 
+    "serviceFullName":"Firewall Management Service", 
+    "serviceId":"FMS", 
+    "signatureVersion":"v4", 
+    "targetPrefix":"AWSFMS_20180101", 
+    "uid":"fms-2018-01-01" 
+  }, 
+  "operations":{ 
+    "AssociateAdminAccount":{ 
+      "name":"AssociateAdminAccount", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"AssociateAdminAccountRequest"}, 
+      "errors":[ 
+        {"shape":"InvalidOperationException"}, 
+        {"shape":"InvalidInputException"}, 
+        {"shape":"ResourceNotFoundException"}, 
         {"shape":"InternalErrorException"},
         {"shape":"LimitExceededException"}
-      ],
+      ], 
       "documentation":"<p>Sets the Firewall Manager administrator account. The account must be a member of the organization in Organizations whose resources you want to protect. Firewall Manager sets the permissions that allow the account to administer your Firewall Manager policies.</p> <p>The account that you associate with Firewall Manager is called the Firewall Manager administrator account. </p>"
-    },
+    }, 
     "DeleteAppsList":{
       "name":"DeleteAppsList",
       "http":{
@@ -43,36 +43,36 @@
       ],
       "documentation":"<p>Permanently deletes an Firewall Manager applications list.</p>"
     },
-    "DeleteNotificationChannel":{
-      "name":"DeleteNotificationChannel",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"DeleteNotificationChannelRequest"},
-      "errors":[
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InvalidOperationException"},
-        {"shape":"InternalErrorException"}
-      ],
+    "DeleteNotificationChannel":{ 
+      "name":"DeleteNotificationChannel", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"DeleteNotificationChannelRequest"}, 
+      "errors":[ 
+        {"shape":"ResourceNotFoundException"}, 
+        {"shape":"InvalidOperationException"}, 
+        {"shape":"InternalErrorException"} 
+      ], 
       "documentation":"<p>Deletes an Firewall Manager association with the IAM role and the Amazon Simple Notification Service (SNS) topic that is used to record Firewall Manager SNS logs.</p>"
-    },
-    "DeletePolicy":{
-      "name":"DeletePolicy",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"DeletePolicyRequest"},
-      "errors":[
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InvalidOperationException"},
+    }, 
+    "DeletePolicy":{ 
+      "name":"DeletePolicy", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"DeletePolicyRequest"}, 
+      "errors":[ 
+        {"shape":"ResourceNotFoundException"}, 
+        {"shape":"InvalidOperationException"}, 
         {"shape":"InternalErrorException"},
         {"shape":"InvalidInputException"},
         {"shape":"LimitExceededException"}
-      ],
+      ], 
       "documentation":"<p>Permanently deletes an Firewall Manager policy. </p>"
-    },
+    }, 
     "DeleteProtocolsList":{
       "name":"DeleteProtocolsList",
       "http":{
@@ -87,35 +87,35 @@
       ],
       "documentation":"<p>Permanently deletes an Firewall Manager protocols list.</p>"
     },
-    "DisassociateAdminAccount":{
-      "name":"DisassociateAdminAccount",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"DisassociateAdminAccountRequest"},
-      "errors":[
-        {"shape":"InvalidOperationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalErrorException"}
-      ],
+    "DisassociateAdminAccount":{ 
+      "name":"DisassociateAdminAccount", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"DisassociateAdminAccountRequest"}, 
+      "errors":[ 
+        {"shape":"InvalidOperationException"}, 
+        {"shape":"ResourceNotFoundException"}, 
+        {"shape":"InternalErrorException"} 
+      ], 
       "documentation":"<p>Disassociates the account that has been set as the Firewall Manager administrator account. To set a different account as the administrator account, you must submit an <code>AssociateAdminAccount</code> request.</p>"
-    },
-    "GetAdminAccount":{
-      "name":"GetAdminAccount",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"GetAdminAccountRequest"},
-      "output":{"shape":"GetAdminAccountResponse"},
-      "errors":[
-        {"shape":"InvalidOperationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalErrorException"}
-      ],
+    }, 
+    "GetAdminAccount":{ 
+      "name":"GetAdminAccount", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"GetAdminAccountRequest"}, 
+      "output":{"shape":"GetAdminAccountResponse"}, 
+      "errors":[ 
+        {"shape":"InvalidOperationException"}, 
+        {"shape":"ResourceNotFoundException"}, 
+        {"shape":"InternalErrorException"} 
+      ], 
       "documentation":"<p>Returns the Organizations account that is associated with Firewall Manager as the Firewall Manager administrator.</p>"
-    },
+    }, 
     "GetAppsList":{
       "name":"GetAppsList",
       "http":{
@@ -131,53 +131,53 @@
       ],
       "documentation":"<p>Returns information about the specified Firewall Manager applications list.</p>"
     },
-    "GetComplianceDetail":{
-      "name":"GetComplianceDetail",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"GetComplianceDetailRequest"},
-      "output":{"shape":"GetComplianceDetailResponse"},
-      "errors":[
-        {"shape":"ResourceNotFoundException"},
+    "GetComplianceDetail":{ 
+      "name":"GetComplianceDetail", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"GetComplianceDetailRequest"}, 
+      "output":{"shape":"GetComplianceDetailResponse"}, 
+      "errors":[ 
+        {"shape":"ResourceNotFoundException"}, 
         {"shape":"InternalErrorException"},
         {"shape":"InvalidInputException"},
         {"shape":"InvalidOperationException"}
-      ],
+      ], 
       "documentation":"<p>Returns detailed compliance information about the specified member account. Details include resources that are in and out of compliance with the specified policy. </p> <ul> <li> <p>Resources are considered noncompliant for WAF and Shield Advanced policies if the specified policy has not been applied to them.</p> </li> <li> <p>Resources are considered noncompliant for security group policies if they are in scope of the policy, they violate one or more of the policy rules, and remediation is disabled or not possible.</p> </li> <li> <p>Resources are considered noncompliant for Network Firewall policies if a firewall is missing in the VPC, if the firewall endpoint isn't set up in an expected Availability Zone and subnet, if a subnet created by the Firewall Manager doesn't have the expected route table, and for modifications to a firewall policy that violate the Firewall Manager policy's rules.</p> </li> <li> <p>Resources are considered noncompliant for DNS Firewall policies if a DNS Firewall rule group is missing from the rule group associations for the VPC. </p> </li> </ul>"
-    },
-    "GetNotificationChannel":{
-      "name":"GetNotificationChannel",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"GetNotificationChannelRequest"},
-      "output":{"shape":"GetNotificationChannelResponse"},
-      "errors":[
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InvalidOperationException"},
-        {"shape":"InternalErrorException"}
-      ],
+    }, 
+    "GetNotificationChannel":{ 
+      "name":"GetNotificationChannel", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"GetNotificationChannelRequest"}, 
+      "output":{"shape":"GetNotificationChannelResponse"}, 
+      "errors":[ 
+        {"shape":"ResourceNotFoundException"}, 
+        {"shape":"InvalidOperationException"}, 
+        {"shape":"InternalErrorException"} 
+      ], 
       "documentation":"<p>Information about the Amazon Simple Notification Service (SNS) topic that is used to record Firewall Manager SNS logs.</p>"
-    },
-    "GetPolicy":{
-      "name":"GetPolicy",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"GetPolicyRequest"},
-      "output":{"shape":"GetPolicyResponse"},
-      "errors":[
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InvalidOperationException"},
+    }, 
+    "GetPolicy":{ 
+      "name":"GetPolicy", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"GetPolicyRequest"}, 
+      "output":{"shape":"GetPolicyResponse"}, 
+      "errors":[ 
+        {"shape":"ResourceNotFoundException"}, 
+        {"shape":"InvalidOperationException"}, 
         {"shape":"InternalErrorException"},
         {"shape":"InvalidTypeException"}
-      ],
+      ], 
       "documentation":"<p>Returns information about the specified Firewall Manager policy.</p>"
-    },
+    }, 
     "GetProtectionStatus":{
       "name":"GetProtectionStatus",
       "http":{
@@ -239,20 +239,20 @@
       ],
       "documentation":"<p>Returns an array of <code>AppsListDataSummary</code> objects.</p>"
     },
-    "ListComplianceStatus":{
-      "name":"ListComplianceStatus",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"ListComplianceStatusRequest"},
-      "output":{"shape":"ListComplianceStatusResponse"},
-      "errors":[
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalErrorException"}
-      ],
+    "ListComplianceStatus":{ 
+      "name":"ListComplianceStatus", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"ListComplianceStatusRequest"}, 
+      "output":{"shape":"ListComplianceStatusResponse"}, 
+      "errors":[ 
+        {"shape":"ResourceNotFoundException"}, 
+        {"shape":"InternalErrorException"} 
+      ], 
       "documentation":"<p>Returns an array of <code>PolicyComplianceStatus</code> objects. Use <code>PolicyComplianceStatus</code> to get a summary of which member accounts are protected by the specified policy. </p>"
-    },
+    }, 
     "ListMemberAccounts":{
       "name":"ListMemberAccounts",
       "http":{
@@ -267,22 +267,22 @@
       ],
       "documentation":"<p>Returns a <code>MemberAccounts</code> object that lists the member accounts in the administrator's Amazon Web Services organization.</p> <p>The <code>ListMemberAccounts</code> must be submitted by the account that is set as the Firewall Manager administrator.</p>"
     },
-    "ListPolicies":{
-      "name":"ListPolicies",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"ListPoliciesRequest"},
-      "output":{"shape":"ListPoliciesResponse"},
-      "errors":[
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InvalidOperationException"},
-        {"shape":"LimitExceededException"},
-        {"shape":"InternalErrorException"}
-      ],
+    "ListPolicies":{ 
+      "name":"ListPolicies", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"ListPoliciesRequest"}, 
+      "output":{"shape":"ListPoliciesResponse"}, 
+      "errors":[ 
+        {"shape":"ResourceNotFoundException"}, 
+        {"shape":"InvalidOperationException"}, 
+        {"shape":"LimitExceededException"}, 
+        {"shape":"InternalErrorException"} 
+      ], 
       "documentation":"<p>Returns an array of <code>PolicySummary</code> objects.</p>"
-    },
+    }, 
     "ListProtocolsLists":{
       "name":"ListProtocolsLists",
       "http":{
@@ -331,36 +331,36 @@
       ],
       "documentation":"<p>Creates an Firewall Manager applications list.</p>"
     },
-    "PutNotificationChannel":{
-      "name":"PutNotificationChannel",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"PutNotificationChannelRequest"},
-      "errors":[
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InvalidOperationException"},
-        {"shape":"InternalErrorException"}
-      ],
+    "PutNotificationChannel":{ 
+      "name":"PutNotificationChannel", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"PutNotificationChannelRequest"}, 
+      "errors":[ 
+        {"shape":"ResourceNotFoundException"}, 
+        {"shape":"InvalidOperationException"}, 
+        {"shape":"InternalErrorException"} 
+      ], 
       "documentation":"<p>Designates the IAM role and Amazon Simple Notification Service (SNS) topic that Firewall Manager uses to record SNS logs.</p> <p>To perform this action outside of the console, you must configure the SNS topic to allow the Firewall Manager role <code>AWSServiceRoleForFMS</code> to publish SNS logs. For more information, see <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/fms-api-permissions-ref.html\">Firewall Manager required permissions for API actions</a> in the <i>Firewall Manager Developer Guide</i>.</p>"
-    },
-    "PutPolicy":{
-      "name":"PutPolicy",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"PutPolicyRequest"},
-      "output":{"shape":"PutPolicyResponse"},
-      "errors":[
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InvalidOperationException"},
-        {"shape":"InvalidInputException"},
+    }, 
+    "PutPolicy":{ 
+      "name":"PutPolicy", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"PutPolicyRequest"}, 
+      "output":{"shape":"PutPolicyResponse"}, 
+      "errors":[ 
+        {"shape":"ResourceNotFoundException"}, 
+        {"shape":"InvalidOperationException"}, 
+        {"shape":"InvalidInputException"}, 
         {"shape":"LimitExceededException"},
         {"shape":"InternalErrorException"},
         {"shape":"InvalidTypeException"}
-      ],
+      ], 
       "documentation":"<p>Creates an Firewall Manager policy.</p> <p>Firewall Manager provides the following types of policies: </p> <ul> <li> <p>An WAF policy (type WAFV2), which defines rule groups to run first in the corresponding WAF web ACL and rule groups to run last in the web ACL.</p> </li> <li> <p>An WAF Classic policy (type WAF), which defines a rule group. </p> </li> <li> <p>A Shield Advanced policy, which applies Shield Advanced protection to specified accounts and resources.</p> </li> <li> <p>A security group policy, which manages VPC security groups across your Amazon Web Services organization. </p> </li> <li> <p>An Network Firewall policy, which provides firewall rules to filter network traffic in specified Amazon VPCs.</p> </li> <li> <p>A DNS Firewall policy, which provides Route 53 Resolver DNS Firewall rules to filter DNS queries for specified VPCs.</p> </li> </ul> <p>Each policy is specific to one of the types. If you want to enforce more than one policy type across accounts, create multiple policies. You can create multiple policies for each type.</p> <p>You must be subscribed to Shield Advanced to create a Shield Advanced policy. For more information about subscribing to Shield Advanced, see <a href=\"https://docs.aws.amazon.com/waf/latest/DDOSAPIReference/API_CreateSubscription.html\">CreateSubscription</a>.</p>"
     },
     "PutProtocolsList":{
@@ -412,15 +412,15 @@
         {"shape":"InvalidInputException"}
       ],
       "documentation":"<p>Removes one or more tags from an Amazon Web Services resource.</p>"
-    }
-  },
-  "shapes":{
-    "AWSAccountId":{
-      "type":"string",
-      "max":1024,
+    } 
+  }, 
+  "shapes":{ 
+    "AWSAccountId":{ 
+      "type":"string", 
+      "max":1024, 
       "min":1,
       "pattern":"^[0-9]+$"
-    },
+    }, 
     "AccountRoleStatus":{
       "type":"string",
       "enum":[
@@ -536,16 +536,16 @@
       "type":"list",
       "member":{"shape":"AppsListDataSummary"}
     },
-    "AssociateAdminAccountRequest":{
-      "type":"structure",
-      "required":["AdminAccount"],
-      "members":{
-        "AdminAccount":{
-          "shape":"AWSAccountId",
+    "AssociateAdminAccountRequest":{ 
+      "type":"structure", 
+      "required":["AdminAccount"], 
+      "members":{ 
+        "AdminAccount":{ 
+          "shape":"AWSAccountId", 
           "documentation":"<p>The Amazon Web Services account ID to associate with Firewall Manager as the Firewall Manager administrator account. This must be an Organizations member account. For more information about Organizations, see <a href=\"https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_accounts.html\">Managing the Amazon Web Services Accounts in Your Organization</a>. </p>"
-        }
-      }
-    },
+        } 
+      } 
+    }, 
     "AwsEc2InstanceViolation":{
       "type":"structure",
       "members":{
@@ -605,35 +605,35 @@
       "max":2147483647,
       "min":-2147483648
     },
-    "Boolean":{"type":"boolean"},
+    "Boolean":{"type":"boolean"}, 
     "CIDR":{
       "type":"string",
       "max":256,
       "min":0,
       "pattern":"[a-f0-9:./]+"
     },
-    "ComplianceViolator":{
-      "type":"structure",
-      "members":{
-        "ResourceId":{
-          "shape":"ResourceId",
-          "documentation":"<p>The resource ID.</p>"
-        },
-        "ViolationReason":{
-          "shape":"ViolationReason",
-          "documentation":"<p>The reason that the resource is not protected by the policy.</p>"
-        },
-        "ResourceType":{
-          "shape":"ResourceType",
+    "ComplianceViolator":{ 
+      "type":"structure", 
+      "members":{ 
+        "ResourceId":{ 
+          "shape":"ResourceId", 
+          "documentation":"<p>The resource ID.</p>" 
+        }, 
+        "ViolationReason":{ 
+          "shape":"ViolationReason", 
+          "documentation":"<p>The reason that the resource is not protected by the policy.</p>" 
+        }, 
+        "ResourceType":{ 
+          "shape":"ResourceType", 
           "documentation":"<p>The resource type. This is in the format shown in the <a href=\"https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html\">Amazon Web Services Resource Types Reference</a>. For example: <code>AWS::ElasticLoadBalancingV2::LoadBalancer</code>, <code>AWS::CloudFront::Distribution</code>, or <code>AWS::NetworkFirewall::FirewallPolicy</code>.</p>"
-        }
-      },
-      "documentation":"<p>Details of the resource that is not protected by the policy.</p>"
-    },
-    "ComplianceViolators":{
-      "type":"list",
-      "member":{"shape":"ComplianceViolator"}
-    },
+        } 
+      }, 
+      "documentation":"<p>Details of the resource that is not protected by the policy.</p>" 
+    }, 
+    "ComplianceViolators":{ 
+      "type":"list", 
+      "member":{"shape":"ComplianceViolator"} 
+    }, 
     "CustomerPolicyScopeId":{
       "type":"string",
       "max":1024,
@@ -666,25 +666,25 @@
         }
       }
     },
-    "DeleteNotificationChannelRequest":{
-      "type":"structure",
-      "members":{
-      }
-    },
-    "DeletePolicyRequest":{
-      "type":"structure",
-      "required":["PolicyId"],
-      "members":{
-        "PolicyId":{
-          "shape":"PolicyId",
+    "DeleteNotificationChannelRequest":{ 
+      "type":"structure", 
+      "members":{ 
+      } 
+    }, 
+    "DeletePolicyRequest":{ 
+      "type":"structure", 
+      "required":["PolicyId"], 
+      "members":{ 
+        "PolicyId":{ 
+          "shape":"PolicyId", 
           "documentation":"<p>The ID of the policy that you want to delete. You can retrieve this ID from <code>PutPolicy</code> and <code>ListPolicies</code>.</p>"
         },
         "DeleteAllPolicyResources":{
           "shape":"Boolean",
           "documentation":"<p>If <code>True</code>, the request performs cleanup according to the policy type. </p> <p>For WAF and Shield Advanced policies, the cleanup does the following:</p> <ul> <li> <p>Deletes rule groups created by Firewall Manager</p> </li> <li> <p>Removes web ACLs from in-scope resources</p> </li> <li> <p>Deletes web ACLs that contain no rules or rule groups</p> </li> </ul> <p>For security group policies, the cleanup does the following for each security group in the policy:</p> <ul> <li> <p>Disassociates the security group from in-scope resources </p> </li> <li> <p>Deletes the security group if it was created through Firewall Manager and if it's no longer associated with any resources through another policy</p> </li> </ul> <p>After the cleanup, in-scope resources are no longer protected by web ACLs in this policy. Protection of out-of-scope resources remains unchanged. Scope is determined by tags that you create and accounts that you associate with the policy. When creating the policy, if you specify that only resources in specific accounts or with specific tags are in scope of the policy, those accounts and resources are handled by the policy. All others are out of scope. If you don't specify tags or accounts, all resources are in scope. </p>"
-        }
-      }
-    },
+        } 
+      } 
+    }, 
     "DeleteProtocolsListRequest":{
       "type":"structure",
       "required":["ListId"],
@@ -718,11 +718,11 @@
       "min":1,
       "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=,+\\-@]*)$"
     },
-    "DisassociateAdminAccountRequest":{
-      "type":"structure",
-      "members":{
-      }
-    },
+    "DisassociateAdminAccountRequest":{ 
+      "type":"structure", 
+      "members":{ 
+      } 
+    }, 
     "DnsDuplicateRuleGroupViolation":{
       "type":"structure",
       "members":{
@@ -965,29 +965,29 @@
       },
       "documentation":"<p>Information about the ReplaceRouteTableAssociation action in Amazon EC2.</p>"
     },
-    "ErrorMessage":{"type":"string"},
-    "EvaluationResult":{
-      "type":"structure",
-      "members":{
-        "ComplianceStatus":{
-          "shape":"PolicyComplianceStatusType",
+    "ErrorMessage":{"type":"string"}, 
+    "EvaluationResult":{ 
+      "type":"structure", 
+      "members":{ 
+        "ComplianceStatus":{ 
+          "shape":"PolicyComplianceStatusType", 
           "documentation":"<p>Describes an Amazon Web Services account's compliance with the Firewall Manager policy.</p>"
-        },
-        "ViolatorCount":{
-          "shape":"ResourceCount",
+        }, 
+        "ViolatorCount":{ 
+          "shape":"ResourceCount", 
           "documentation":"<p>The number of resources that are noncompliant with the specified policy. For WAF and Shield Advanced policies, a resource is considered noncompliant if it is not associated with the policy. For security group policies, a resource is considered noncompliant if it doesn't comply with the rules of the policy and remediation is disabled or not possible.</p>"
-        },
-        "EvaluationLimitExceeded":{
-          "shape":"Boolean",
+        }, 
+        "EvaluationLimitExceeded":{ 
+          "shape":"Boolean", 
           "documentation":"<p>Indicates that over 100 resources are noncompliant with the Firewall Manager policy.</p>"
-        }
-      },
+        } 
+      }, 
       "documentation":"<p>Describes the compliance status for the account. An account is considered noncompliant if it includes resources that are not protected by the specified policy or that don't comply with the policy.</p>"
-    },
-    "EvaluationResults":{
-      "type":"list",
-      "member":{"shape":"EvaluationResult"}
-    },
+    }, 
+    "EvaluationResults":{ 
+      "type":"list", 
+      "member":{"shape":"EvaluationResult"} 
+    }, 
     "ExpectedRoute":{
       "type":"structure",
       "members":{
@@ -1022,24 +1022,24 @@
       "type":"list",
       "member":{"shape":"ExpectedRoute"}
     },
-    "GetAdminAccountRequest":{
-      "type":"structure",
-      "members":{
-      }
-    },
-    "GetAdminAccountResponse":{
-      "type":"structure",
-      "members":{
-        "AdminAccount":{
-          "shape":"AWSAccountId",
+    "GetAdminAccountRequest":{ 
+      "type":"structure", 
+      "members":{ 
+      } 
+    }, 
+    "GetAdminAccountResponse":{ 
+      "type":"structure", 
+      "members":{ 
+        "AdminAccount":{ 
+          "shape":"AWSAccountId", 
           "documentation":"<p>The Amazon Web Services account that is set as the Firewall Manager administrator.</p>"
         },
         "RoleStatus":{
           "shape":"AccountRoleStatus",
           "documentation":"<p>The status of the Amazon Web Services account that you set as the Firewall Manager administrator.</p>"
-        }
-      }
-    },
+        } 
+      } 
+    }, 
     "GetAppsListRequest":{
       "type":"structure",
       "required":["ListId"],
@@ -1067,73 +1067,73 @@
         }
       }
     },
-    "GetComplianceDetailRequest":{
-      "type":"structure",
-      "required":[
-        "PolicyId",
-        "MemberAccount"
-      ],
-      "members":{
-        "PolicyId":{
-          "shape":"PolicyId",
-          "documentation":"<p>The ID of the policy that you want to get the details for. <code>PolicyId</code> is returned by <code>PutPolicy</code> and by <code>ListPolicies</code>.</p>"
-        },
-        "MemberAccount":{
-          "shape":"AWSAccountId",
+    "GetComplianceDetailRequest":{ 
+      "type":"structure", 
+      "required":[ 
+        "PolicyId", 
+        "MemberAccount" 
+      ], 
+      "members":{ 
+        "PolicyId":{ 
+          "shape":"PolicyId", 
+          "documentation":"<p>The ID of the policy that you want to get the details for. <code>PolicyId</code> is returned by <code>PutPolicy</code> and by <code>ListPolicies</code>.</p>" 
+        }, 
+        "MemberAccount":{ 
+          "shape":"AWSAccountId", 
           "documentation":"<p>The Amazon Web Services account that owns the resources that you want to get the details for.</p>"
-        }
-      }
-    },
-    "GetComplianceDetailResponse":{
-      "type":"structure",
-      "members":{
-        "PolicyComplianceDetail":{
-          "shape":"PolicyComplianceDetail",
-          "documentation":"<p>Information about the resources and the policy that you specified in the <code>GetComplianceDetail</code> request.</p>"
-        }
-      }
-    },
-    "GetNotificationChannelRequest":{
-      "type":"structure",
-      "members":{
-      }
-    },
-    "GetNotificationChannelResponse":{
-      "type":"structure",
-      "members":{
-        "SnsTopicArn":{
-          "shape":"ResourceArn",
+        } 
+      } 
+    }, 
+    "GetComplianceDetailResponse":{ 
+      "type":"structure", 
+      "members":{ 
+        "PolicyComplianceDetail":{ 
+          "shape":"PolicyComplianceDetail", 
+          "documentation":"<p>Information about the resources and the policy that you specified in the <code>GetComplianceDetail</code> request.</p>" 
+        } 
+      } 
+    }, 
+    "GetNotificationChannelRequest":{ 
+      "type":"structure", 
+      "members":{ 
+      } 
+    }, 
+    "GetNotificationChannelResponse":{ 
+      "type":"structure", 
+      "members":{ 
+        "SnsTopicArn":{ 
+          "shape":"ResourceArn", 
           "documentation":"<p>The SNS topic that records Firewall Manager activity. </p>"
-        },
-        "SnsRoleName":{
-          "shape":"ResourceArn",
+        }, 
+        "SnsRoleName":{ 
+          "shape":"ResourceArn", 
           "documentation":"<p>The IAM role that is used by Firewall Manager to record activity to SNS.</p>"
-        }
-      }
-    },
-    "GetPolicyRequest":{
-      "type":"structure",
-      "required":["PolicyId"],
-      "members":{
-        "PolicyId":{
-          "shape":"PolicyId",
+        } 
+      } 
+    }, 
+    "GetPolicyRequest":{ 
+      "type":"structure", 
+      "required":["PolicyId"], 
+      "members":{ 
+        "PolicyId":{ 
+          "shape":"PolicyId", 
           "documentation":"<p>The ID of the Firewall Manager policy that you want the details for.</p>"
-        }
-      }
-    },
-    "GetPolicyResponse":{
-      "type":"structure",
-      "members":{
-        "Policy":{
-          "shape":"Policy",
+        } 
+      } 
+    }, 
+    "GetPolicyResponse":{ 
+      "type":"structure", 
+      "members":{ 
+        "Policy":{ 
+          "shape":"Policy", 
           "documentation":"<p>Information about the specified Firewall Manager policy.</p>"
-        },
-        "PolicyArn":{
-          "shape":"ResourceArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the specified policy.</p>"
-        }
-      }
-    },
+        }, 
+        "PolicyArn":{ 
+          "shape":"ResourceArn", 
+          "documentation":"<p>The Amazon Resource Name (ARN) of the specified policy.</p>" 
+        } 
+      } 
+    }, 
     "GetProtectionStatusRequest":{
       "type":"structure",
       "required":["PolicyId"],
@@ -1253,30 +1253,30 @@
       "max":65535,
       "min":0
     },
-    "InternalErrorException":{
-      "type":"structure",
-      "members":{
-        "Message":{"shape":"ErrorMessage"}
-      },
-      "documentation":"<p>The operation failed because of a system problem, even though the request was valid. Retry your request.</p>",
-      "exception":true
-    },
-    "InvalidInputException":{
-      "type":"structure",
-      "members":{
-        "Message":{"shape":"ErrorMessage"}
-      },
-      "documentation":"<p>The parameters of the request were invalid.</p>",
-      "exception":true
-    },
-    "InvalidOperationException":{
-      "type":"structure",
-      "members":{
-        "Message":{"shape":"ErrorMessage"}
-      },
+    "InternalErrorException":{ 
+      "type":"structure", 
+      "members":{ 
+        "Message":{"shape":"ErrorMessage"} 
+      }, 
+      "documentation":"<p>The operation failed because of a system problem, even though the request was valid. Retry your request.</p>", 
+      "exception":true 
+    }, 
+    "InvalidInputException":{ 
+      "type":"structure", 
+      "members":{ 
+        "Message":{"shape":"ErrorMessage"} 
+      }, 
+      "documentation":"<p>The parameters of the request were invalid.</p>", 
+      "exception":true 
+    }, 
+    "InvalidOperationException":{ 
+      "type":"structure", 
+      "members":{ 
+        "Message":{"shape":"ErrorMessage"} 
+      }, 
       "documentation":"<p>The operation failed because there was nothing to do or the operation wasn't possible. For example, you might have submitted an <code>AssociateAdminAccount</code> request for an account ID that was already set as the Firewall Manager administrator. Or you might have tried to access a Region that's disabled by default, and that you need to enable for the Firewall Manager administrator account and for Organizations before you can access it.</p>",
-      "exception":true
-    },
+      "exception":true 
+    }, 
     "InvalidTypeException":{
       "type":"structure",
       "members":{
@@ -1299,14 +1299,14 @@
       "type":"list",
       "member":{"shape":"LengthBoundedString"}
     },
-    "LimitExceededException":{
-      "type":"structure",
-      "members":{
-        "Message":{"shape":"ErrorMessage"}
-      },
+    "LimitExceededException":{ 
+      "type":"structure", 
+      "members":{ 
+        "Message":{"shape":"ErrorMessage"} 
+      }, 
       "documentation":"<p>The operation exceeds a resource limit, for example, the maximum number of <code>policy</code> objects that you can create for an Amazon Web Services account. For more information, see <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/fms-limits.html\">Firewall Manager Limits</a> in the <i>WAF Developer Guide</i>.</p>",
-      "exception":true
-    },
+      "exception":true 
+    }, 
     "ListAppsListsRequest":{
       "type":"structure",
       "required":["MaxResults"],
@@ -1338,37 +1338,37 @@
         }
       }
     },
-    "ListComplianceStatusRequest":{
-      "type":"structure",
-      "required":["PolicyId"],
-      "members":{
-        "PolicyId":{
-          "shape":"PolicyId",
+    "ListComplianceStatusRequest":{ 
+      "type":"structure", 
+      "required":["PolicyId"], 
+      "members":{ 
+        "PolicyId":{ 
+          "shape":"PolicyId", 
           "documentation":"<p>The ID of the Firewall Manager policy that you want the details for.</p>"
-        },
-        "NextToken":{
-          "shape":"PaginationToken",
+        }, 
+        "NextToken":{ 
+          "shape":"PaginationToken", 
           "documentation":"<p>If you specify a value for <code>MaxResults</code> and you have more <code>PolicyComplianceStatus</code> objects than the number that you specify for <code>MaxResults</code>, Firewall Manager returns a <code>NextToken</code> value in the response that allows you to list another group of <code>PolicyComplianceStatus</code> objects. For the second and subsequent <code>ListComplianceStatus</code> requests, specify the value of <code>NextToken</code> from the previous response to get information about another batch of <code>PolicyComplianceStatus</code> objects.</p>"
-        },
-        "MaxResults":{
-          "shape":"PaginationMaxResults",
+        }, 
+        "MaxResults":{ 
+          "shape":"PaginationMaxResults", 
           "documentation":"<p>Specifies the number of <code>PolicyComplianceStatus</code> objects that you want Firewall Manager to return for this request. If you have more <code>PolicyComplianceStatus</code> objects than the number that you specify for <code>MaxResults</code>, the response includes a <code>NextToken</code> value that you can use to get another batch of <code>PolicyComplianceStatus</code> objects.</p>"
-        }
-      }
-    },
-    "ListComplianceStatusResponse":{
-      "type":"structure",
-      "members":{
-        "PolicyComplianceStatusList":{
-          "shape":"PolicyComplianceStatusList",
-          "documentation":"<p>An array of <code>PolicyComplianceStatus</code> objects.</p>"
-        },
-        "NextToken":{
-          "shape":"PaginationToken",
-          "documentation":"<p>If you have more <code>PolicyComplianceStatus</code> objects than the number that you specified for <code>MaxResults</code> in the request, the response includes a <code>NextToken</code> value. To list more <code>PolicyComplianceStatus</code> objects, submit another <code>ListComplianceStatus</code> request, and specify the <code>NextToken</code> value from the response in the <code>NextToken</code> value in the next request.</p>"
-        }
-      }
-    },
+        } 
+      } 
+    }, 
+    "ListComplianceStatusResponse":{ 
+      "type":"structure", 
+      "members":{ 
+        "PolicyComplianceStatusList":{ 
+          "shape":"PolicyComplianceStatusList", 
+          "documentation":"<p>An array of <code>PolicyComplianceStatus</code> objects.</p>" 
+        }, 
+        "NextToken":{ 
+          "shape":"PaginationToken", 
+          "documentation":"<p>If you have more <code>PolicyComplianceStatus</code> objects than the number that you specified for <code>MaxResults</code> in the request, the response includes a <code>NextToken</code> value. To list more <code>PolicyComplianceStatus</code> objects, submit another <code>ListComplianceStatus</code> request, and specify the <code>NextToken</code> value from the response in the <code>NextToken</code> value in the next request.</p>" 
+        } 
+      } 
+    }, 
     "ListId":{
       "type":"string",
       "max":36,
@@ -1401,32 +1401,32 @@
         }
       }
     },
-    "ListPoliciesRequest":{
-      "type":"structure",
-      "members":{
-        "NextToken":{
-          "shape":"PaginationToken",
+    "ListPoliciesRequest":{ 
+      "type":"structure", 
+      "members":{ 
+        "NextToken":{ 
+          "shape":"PaginationToken", 
           "documentation":"<p>If you specify a value for <code>MaxResults</code> and you have more <code>PolicySummary</code> objects than the number that you specify for <code>MaxResults</code>, Firewall Manager returns a <code>NextToken</code> value in the response that allows you to list another group of <code>PolicySummary</code> objects. For the second and subsequent <code>ListPolicies</code> requests, specify the value of <code>NextToken</code> from the previous response to get information about another batch of <code>PolicySummary</code> objects.</p>"
-        },
-        "MaxResults":{
-          "shape":"PaginationMaxResults",
+        }, 
+        "MaxResults":{ 
+          "shape":"PaginationMaxResults", 
           "documentation":"<p>Specifies the number of <code>PolicySummary</code> objects that you want Firewall Manager to return for this request. If you have more <code>PolicySummary</code> objects than the number that you specify for <code>MaxResults</code>, the response includes a <code>NextToken</code> value that you can use to get another batch of <code>PolicySummary</code> objects.</p>"
-        }
-      }
-    },
-    "ListPoliciesResponse":{
-      "type":"structure",
-      "members":{
-        "PolicyList":{
-          "shape":"PolicySummaryList",
-          "documentation":"<p>An array of <code>PolicySummary</code> objects.</p>"
-        },
-        "NextToken":{
-          "shape":"PaginationToken",
-          "documentation":"<p>If you have more <code>PolicySummary</code> objects than the number that you specified for <code>MaxResults</code> in the request, the response includes a <code>NextToken</code> value. To list more <code>PolicySummary</code> objects, submit another <code>ListPolicies</code> request, and specify the <code>NextToken</code> value from the response in the <code>NextToken</code> value in the next request.</p>"
-        }
-      }
-    },
+        } 
+      } 
+    }, 
+    "ListPoliciesResponse":{ 
+      "type":"structure", 
+      "members":{ 
+        "PolicyList":{ 
+          "shape":"PolicySummaryList", 
+          "documentation":"<p>An array of <code>PolicySummary</code> objects.</p>" 
+        }, 
+        "NextToken":{ 
+          "shape":"PaginationToken", 
+          "documentation":"<p>If you have more <code>PolicySummary</code> objects than the number that you specified for <code>MaxResults</code> in the request, the response includes a <code>NextToken</code> value. To list more <code>PolicySummary</code> objects, submit another <code>ListPolicies</code> request, and specify the <code>NextToken</code> value from the response in the <code>NextToken</code> value in the next request.</p>" 
+        } 
+      } 
+    }, 
     "ListProtocolsListsRequest":{
       "type":"structure",
       "required":["MaxResults"],
@@ -1477,12 +1477,12 @@
         }
       }
     },
-    "ManagedServiceData":{
-      "type":"string",
+    "ManagedServiceData":{ 
+      "type":"string", 
       "max":4096,
       "min":1,
       "pattern":".*"
-    },
+    }, 
     "MemberAccounts":{
       "type":"list",
       "member":{"shape":"AWSAccountId"}
@@ -1845,17 +1845,17 @@
       "type":"list",
       "member":{"shape":"RemediationActionWithOrder"}
     },
-    "PaginationMaxResults":{
-      "type":"integer",
-      "max":100,
-      "min":1
-    },
-    "PaginationToken":{
-      "type":"string",
+    "PaginationMaxResults":{ 
+      "type":"integer", 
+      "max":100, 
+      "min":1 
+    }, 
+    "PaginationToken":{ 
+      "type":"string", 
       "max":4096,
       "min":1,
       "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*)$"
-    },
+    }, 
     "PartialMatch":{
       "type":"structure",
       "members":{
@@ -1874,51 +1874,51 @@
       "type":"list",
       "member":{"shape":"PartialMatch"}
     },
-    "Policy":{
-      "type":"structure",
-      "required":[
-        "PolicyName",
-        "SecurityServicePolicyData",
-        "ResourceType",
-        "ExcludeResourceTags",
-        "RemediationEnabled"
-      ],
-      "members":{
-        "PolicyId":{
-          "shape":"PolicyId",
+    "Policy":{ 
+      "type":"structure", 
+      "required":[ 
+        "PolicyName", 
+        "SecurityServicePolicyData", 
+        "ResourceType", 
+        "ExcludeResourceTags", 
+        "RemediationEnabled" 
+      ], 
+      "members":{ 
+        "PolicyId":{ 
+          "shape":"PolicyId", 
           "documentation":"<p>The ID of the Firewall Manager policy.</p>"
-        },
-        "PolicyName":{
-          "shape":"ResourceName",
+        }, 
+        "PolicyName":{ 
+          "shape":"ResourceName", 
           "documentation":"<p>The name of the Firewall Manager policy.</p>"
-        },
-        "PolicyUpdateToken":{
-          "shape":"PolicyUpdateToken",
-          "documentation":"<p>A unique identifier for each update to the policy. When issuing a <code>PutPolicy</code> request, the <code>PolicyUpdateToken</code> in the request must match the <code>PolicyUpdateToken</code> of the current policy version. To get the <code>PolicyUpdateToken</code> of the current policy version, use a <code>GetPolicy</code> request.</p>"
-        },
-        "SecurityServicePolicyData":{
-          "shape":"SecurityServicePolicyData",
-          "documentation":"<p>Details about the security service that is being used to protect the resources.</p>"
-        },
-        "ResourceType":{
-          "shape":"ResourceType",
+        }, 
+        "PolicyUpdateToken":{ 
+          "shape":"PolicyUpdateToken", 
+          "documentation":"<p>A unique identifier for each update to the policy. When issuing a <code>PutPolicy</code> request, the <code>PolicyUpdateToken</code> in the request must match the <code>PolicyUpdateToken</code> of the current policy version. To get the <code>PolicyUpdateToken</code> of the current policy version, use a <code>GetPolicy</code> request.</p>" 
+        }, 
+        "SecurityServicePolicyData":{ 
+          "shape":"SecurityServicePolicyData", 
+          "documentation":"<p>Details about the security service that is being used to protect the resources.</p>" 
+        }, 
+        "ResourceType":{ 
+          "shape":"ResourceType", 
           "documentation":"<p>The type of resource protected by or in scope of the policy. This is in the format shown in the <a href=\"https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html\">Amazon Web Services Resource Types Reference</a>. To apply this policy to multiple resource types, specify a resource type of <code>ResourceTypeList</code> and then specify the resource types in a <code>ResourceTypeList</code>.</p> <p>For WAF and Shield Advanced, example resource types include <code>AWS::ElasticLoadBalancingV2::LoadBalancer</code> and <code>AWS::CloudFront::Distribution</code>. For a security group common policy, valid values are <code>AWS::EC2::NetworkInterface</code> and <code>AWS::EC2::Instance</code>. For a security group content audit policy, valid values are <code>AWS::EC2::SecurityGroup</code>, <code>AWS::EC2::NetworkInterface</code>, and <code>AWS::EC2::Instance</code>. For a security group usage audit policy, the value is <code>AWS::EC2::SecurityGroup</code>. For an Network Firewall policy or DNS Firewall policy, the value is <code>AWS::EC2::VPC</code>.</p>"
-        },
+        }, 
         "ResourceTypeList":{
           "shape":"ResourceTypeList",
           "documentation":"<p>An array of <code>ResourceType</code> objects. Use this only to specify multiple resource types. To specify a single resource type, use <code>ResourceType</code>.</p>"
         },
-        "ResourceTags":{
-          "shape":"ResourceTags",
-          "documentation":"<p>An array of <code>ResourceTag</code> objects.</p>"
-        },
-        "ExcludeResourceTags":{
-          "shape":"Boolean",
+        "ResourceTags":{ 
+          "shape":"ResourceTags", 
+          "documentation":"<p>An array of <code>ResourceTag</code> objects.</p>" 
+        }, 
+        "ExcludeResourceTags":{ 
+          "shape":"Boolean", 
           "documentation":"<p>If set to <code>True</code>, resources with the tags that are specified in the <code>ResourceTag</code> array are not in scope of the policy. If set to <code>False</code>, and the <code>ResourceTag</code> array is not null, only resources with the specified tags are in scope of the policy.</p>"
-        },
-        "RemediationEnabled":{
-          "shape":"Boolean",
-          "documentation":"<p>Indicates if the policy should be automatically applied to new resources.</p>"
+        }, 
+        "RemediationEnabled":{ 
+          "shape":"Boolean", 
+          "documentation":"<p>Indicates if the policy should be automatically applied to new resources.</p>" 
         },
         "IncludeMap":{
           "shape":"CustomerPolicyScopeMap",
@@ -1927,135 +1927,135 @@
         "ExcludeMap":{
           "shape":"CustomerPolicyScopeMap",
           "documentation":"<p>Specifies the Amazon Web Services account IDs and Organizations organizational units (OUs) to exclude from the policy. Specifying an OU is the equivalent of specifying all accounts in the OU and in any of its child OUs, including any child OUs and accounts that are added at a later time.</p> <p>You can specify inclusions or exclusions, but not both. If you specify an <code>IncludeMap</code>, Firewall Manager applies the policy to all accounts specified by the <code>IncludeMap</code>, and does not evaluate any <code>ExcludeMap</code> specifications. If you do not specify an <code>IncludeMap</code>, then Firewall Manager applies the policy to all accounts except for those specified by the <code>ExcludeMap</code>.</p> <p>You can specify account IDs, OUs, or a combination: </p> <ul> <li> <p>Specify account IDs by setting the key to <code>ACCOUNT</code>. For example, the following is a valid map: <code>{“ACCOUNT” : [“accountID1”, “accountID2”]}</code>.</p> </li> <li> <p>Specify OUs by setting the key to <code>ORG_UNIT</code>. For example, the following is a valid map: <code>{“ORG_UNIT” : [“ouid111”, “ouid112”]}</code>.</p> </li> <li> <p>Specify accounts and OUs together in a single map, separated with a comma. For example, the following is a valid map: <code>{“ACCOUNT” : [“accountID1”, “accountID2”], “ORG_UNIT” : [“ouid111”, “ouid112”]}</code>.</p> </li> </ul>"
-        }
-      },
+        } 
+      }, 
       "documentation":"<p>An Firewall Manager policy.</p>"
-    },
-    "PolicyComplianceDetail":{
-      "type":"structure",
-      "members":{
-        "PolicyOwner":{
-          "shape":"AWSAccountId",
+    }, 
+    "PolicyComplianceDetail":{ 
+      "type":"structure", 
+      "members":{ 
+        "PolicyOwner":{ 
+          "shape":"AWSAccountId", 
           "documentation":"<p>The Amazon Web Services account that created the Firewall Manager policy.</p>"
-        },
-        "PolicyId":{
-          "shape":"PolicyId",
+        }, 
+        "PolicyId":{ 
+          "shape":"PolicyId", 
           "documentation":"<p>The ID of the Firewall Manager policy.</p>"
-        },
-        "MemberAccount":{
-          "shape":"AWSAccountId",
+        }, 
+        "MemberAccount":{ 
+          "shape":"AWSAccountId", 
           "documentation":"<p>The Amazon Web Services account ID.</p>"
-        },
-        "Violators":{
-          "shape":"ComplianceViolators",
+        }, 
+        "Violators":{ 
+          "shape":"ComplianceViolators", 
           "documentation":"<p>An array of resources that aren't protected by the WAF or Shield Advanced policy or that aren't in compliance with the security group policy.</p>"
-        },
-        "EvaluationLimitExceeded":{
-          "shape":"Boolean",
+        }, 
+        "EvaluationLimitExceeded":{ 
+          "shape":"Boolean", 
           "documentation":"<p>Indicates if over 100 resources are noncompliant with the Firewall Manager policy.</p>"
-        },
-        "ExpiredAt":{
-          "shape":"TimeStamp",
+        }, 
+        "ExpiredAt":{ 
+          "shape":"TimeStamp", 
           "documentation":"<p>A timestamp that indicates when the returned information should be considered out of date.</p>"
         },
         "IssueInfoMap":{
           "shape":"IssueInfoMap",
           "documentation":"<p>Details about problems with dependent services, such as WAF or Config, and the error message received that indicates the problem with the service.</p>"
-        }
-      },
+        } 
+      }, 
       "documentation":"<p>Describes the noncompliant resources in a member account for a specific Firewall Manager policy. A maximum of 100 entries are displayed. If more than 100 resources are noncompliant, <code>EvaluationLimitExceeded</code> is set to <code>True</code>.</p>"
-    },
-    "PolicyComplianceStatus":{
-      "type":"structure",
-      "members":{
-        "PolicyOwner":{
-          "shape":"AWSAccountId",
+    }, 
+    "PolicyComplianceStatus":{ 
+      "type":"structure", 
+      "members":{ 
+        "PolicyOwner":{ 
+          "shape":"AWSAccountId", 
           "documentation":"<p>The Amazon Web Services account that created the Firewall Manager policy.</p>"
-        },
-        "PolicyId":{
-          "shape":"PolicyId",
+        }, 
+        "PolicyId":{ 
+          "shape":"PolicyId", 
           "documentation":"<p>The ID of the Firewall Manager policy.</p>"
-        },
-        "PolicyName":{
-          "shape":"ResourceName",
+        }, 
+        "PolicyName":{ 
+          "shape":"ResourceName", 
           "documentation":"<p>The name of the Firewall Manager policy.</p>"
-        },
-        "MemberAccount":{
-          "shape":"AWSAccountId",
-          "documentation":"<p>The member account ID.</p>"
-        },
-        "EvaluationResults":{
-          "shape":"EvaluationResults",
-          "documentation":"<p>An array of <code>EvaluationResult</code> objects.</p>"
-        },
-        "LastUpdated":{
-          "shape":"TimeStamp",
+        }, 
+        "MemberAccount":{ 
+          "shape":"AWSAccountId", 
+          "documentation":"<p>The member account ID.</p>" 
+        }, 
+        "EvaluationResults":{ 
+          "shape":"EvaluationResults", 
+          "documentation":"<p>An array of <code>EvaluationResult</code> objects.</p>" 
+        }, 
+        "LastUpdated":{ 
+          "shape":"TimeStamp", 
           "documentation":"<p>Timestamp of the last update to the <code>EvaluationResult</code> objects.</p>"
         },
         "IssueInfoMap":{
           "shape":"IssueInfoMap",
           "documentation":"<p>Details about problems with dependent services, such as WAF or Config, and the error message received that indicates the problem with the service.</p>"
-        }
-      },
+        } 
+      }, 
       "documentation":"<p>Indicates whether the account is compliant with the specified policy. An account is considered noncompliant if it includes resources that are not protected by the policy, for WAF and Shield Advanced policies, or that are noncompliant with the policy, for security group policies.</p>"
-    },
-    "PolicyComplianceStatusList":{
-      "type":"list",
-      "member":{"shape":"PolicyComplianceStatus"}
-    },
-    "PolicyComplianceStatusType":{
-      "type":"string",
-      "enum":[
-        "COMPLIANT",
-        "NON_COMPLIANT"
-      ]
-    },
-    "PolicyId":{
-      "type":"string",
-      "max":36,
+    }, 
+    "PolicyComplianceStatusList":{ 
+      "type":"list", 
+      "member":{"shape":"PolicyComplianceStatus"} 
+    }, 
+    "PolicyComplianceStatusType":{ 
+      "type":"string", 
+      "enum":[ 
+        "COMPLIANT", 
+        "NON_COMPLIANT" 
+      ] 
+    }, 
+    "PolicyId":{ 
+      "type":"string", 
+      "max":36, 
       "min":36,
       "pattern":"^[a-z0-9A-Z-]{36}$"
-    },
-    "PolicySummary":{
-      "type":"structure",
-      "members":{
-        "PolicyArn":{
-          "shape":"ResourceArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the specified policy.</p>"
-        },
-        "PolicyId":{
-          "shape":"PolicyId",
-          "documentation":"<p>The ID of the specified policy.</p>"
-        },
-        "PolicyName":{
-          "shape":"ResourceName",
+    }, 
+    "PolicySummary":{ 
+      "type":"structure", 
+      "members":{ 
+        "PolicyArn":{ 
+          "shape":"ResourceArn", 
+          "documentation":"<p>The Amazon Resource Name (ARN) of the specified policy.</p>" 
+        }, 
+        "PolicyId":{ 
+          "shape":"PolicyId", 
+          "documentation":"<p>The ID of the specified policy.</p>" 
+        }, 
+        "PolicyName":{ 
+          "shape":"ResourceName", 
           "documentation":"<p>The name of the specified policy.</p>"
-        },
-        "ResourceType":{
-          "shape":"ResourceType",
+        }, 
+        "ResourceType":{ 
+          "shape":"ResourceType", 
           "documentation":"<p>The type of resource protected by or in scope of the policy. This is in the format shown in the <a href=\"https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html\">Amazon Web Services Resource Types Reference</a>. For WAF and Shield Advanced, examples include <code>AWS::ElasticLoadBalancingV2::LoadBalancer</code> and <code>AWS::CloudFront::Distribution</code>. For a security group common policy, valid values are <code>AWS::EC2::NetworkInterface</code> and <code>AWS::EC2::Instance</code>. For a security group content audit policy, valid values are <code>AWS::EC2::SecurityGroup</code>, <code>AWS::EC2::NetworkInterface</code>, and <code>AWS::EC2::Instance</code>. For a security group usage audit policy, the value is <code>AWS::EC2::SecurityGroup</code>. For an Network Firewall policy or DNS Firewall policy, the value is <code>AWS::EC2::VPC</code>.</p>"
-        },
-        "SecurityServiceType":{
-          "shape":"SecurityServiceType",
+        }, 
+        "SecurityServiceType":{ 
+          "shape":"SecurityServiceType", 
           "documentation":"<p>The service that the policy is using to protect the resources. This specifies the type of policy that is created, either an WAF policy, a Shield Advanced policy, or a security group policy.</p>"
-        },
-        "RemediationEnabled":{
-          "shape":"Boolean",
-          "documentation":"<p>Indicates if the policy should be automatically applied to new resources.</p>"
-        }
-      },
+        }, 
+        "RemediationEnabled":{ 
+          "shape":"Boolean", 
+          "documentation":"<p>Indicates if the policy should be automatically applied to new resources.</p>" 
+        } 
+      }, 
       "documentation":"<p>Details of the Firewall Manager policy. </p>"
-    },
-    "PolicySummaryList":{
-      "type":"list",
-      "member":{"shape":"PolicySummary"}
-    },
-    "PolicyUpdateToken":{
-      "type":"string",
-      "max":1024,
+    }, 
+    "PolicySummaryList":{ 
+      "type":"list", 
+      "member":{"shape":"PolicySummary"} 
+    }, 
+    "PolicyUpdateToken":{ 
+      "type":"string", 
+      "max":1024, 
       "min":1,
       "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*)$"
-    },
+    }, 
     "PossibleRemediationAction":{
       "type":"structure",
       "required":["OrderedRemediationActions"],
@@ -2211,50 +2211,50 @@
         }
       }
     },
-    "PutNotificationChannelRequest":{
-      "type":"structure",
-      "required":[
-        "SnsTopicArn",
-        "SnsRoleName"
-      ],
-      "members":{
-        "SnsTopicArn":{
-          "shape":"ResourceArn",
+    "PutNotificationChannelRequest":{ 
+      "type":"structure", 
+      "required":[ 
+        "SnsTopicArn", 
+        "SnsRoleName" 
+      ], 
+      "members":{ 
+        "SnsTopicArn":{ 
+          "shape":"ResourceArn", 
           "documentation":"<p>The Amazon Resource Name (ARN) of the SNS topic that collects notifications from Firewall Manager.</p>"
-        },
-        "SnsRoleName":{
-          "shape":"ResourceArn",
+        }, 
+        "SnsRoleName":{ 
+          "shape":"ResourceArn", 
           "documentation":"<p>The Amazon Resource Name (ARN) of the IAM role that allows Amazon SNS to record Firewall Manager activity. </p>"
-        }
-      }
-    },
-    "PutPolicyRequest":{
-      "type":"structure",
-      "required":["Policy"],
-      "members":{
-        "Policy":{
-          "shape":"Policy",
+        } 
+      } 
+    }, 
+    "PutPolicyRequest":{ 
+      "type":"structure", 
+      "required":["Policy"], 
+      "members":{ 
+        "Policy":{ 
+          "shape":"Policy", 
           "documentation":"<p>The details of the Firewall Manager policy to be created.</p>"
         },
         "TagList":{
           "shape":"TagList",
           "documentation":"<p>The tags to add to the Amazon Web Services resource.</p>"
-        }
-      }
-    },
-    "PutPolicyResponse":{
-      "type":"structure",
-      "members":{
-        "Policy":{
-          "shape":"Policy",
+        } 
+      } 
+    }, 
+    "PutPolicyResponse":{ 
+      "type":"structure", 
+      "members":{ 
+        "Policy":{ 
+          "shape":"Policy", 
           "documentation":"<p>The details of the Firewall Manager policy.</p>"
-        },
-        "PolicyArn":{
-          "shape":"ResourceArn",
+        }, 
+        "PolicyArn":{ 
+          "shape":"ResourceArn", 
           "documentation":"<p>The Amazon Resource Name (ARN) of the policy.</p>"
-        }
-      }
-    },
+        } 
+      } 
+    }, 
     "PutProtocolsListRequest":{
       "type":"structure",
       "required":["ProtocolsList"],
@@ -2348,55 +2348,55 @@
       },
       "documentation":"<p>An ordered list of actions you can take to remediate a violation.</p>"
     },
-    "ResourceArn":{
-      "type":"string",
-      "max":1024,
+    "ResourceArn":{ 
+      "type":"string", 
+      "max":1024, 
       "min":1,
       "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*)$"
-    },
-    "ResourceCount":{
-      "type":"long",
-      "min":0
-    },
-    "ResourceId":{
-      "type":"string",
-      "max":1024,
+    }, 
+    "ResourceCount":{ 
+      "type":"long", 
+      "min":0 
+    }, 
+    "ResourceId":{ 
+      "type":"string", 
+      "max":1024, 
       "min":1,
       "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*)$"
-    },
+    }, 
     "ResourceIdList":{
       "type":"list",
       "member":{"shape":"ResourceId"}
     },
-    "ResourceName":{
-      "type":"string",
-      "max":128,
+    "ResourceName":{ 
+      "type":"string", 
+      "max":128, 
       "min":1,
       "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*)$"
-    },
-    "ResourceNotFoundException":{
-      "type":"structure",
-      "members":{
-        "Message":{"shape":"ErrorMessage"}
-      },
-      "documentation":"<p>The specified resource was not found.</p>",
-      "exception":true
-    },
-    "ResourceTag":{
-      "type":"structure",
-      "required":["Key"],
-      "members":{
-        "Key":{
+    }, 
+    "ResourceNotFoundException":{ 
+      "type":"structure", 
+      "members":{ 
+        "Message":{"shape":"ErrorMessage"} 
+      }, 
+      "documentation":"<p>The specified resource was not found.</p>", 
+      "exception":true 
+    }, 
+    "ResourceTag":{ 
+      "type":"structure", 
+      "required":["Key"], 
+      "members":{ 
+        "Key":{ 
           "shape":"ResourceTagKey",
-          "documentation":"<p>The resource tag key.</p>"
-        },
-        "Value":{
+          "documentation":"<p>The resource tag key.</p>" 
+        }, 
+        "Value":{ 
           "shape":"ResourceTagValue",
-          "documentation":"<p>The resource tag value.</p>"
-        }
-      },
+          "documentation":"<p>The resource tag value.</p>" 
+        } 
+      }, 
       "documentation":"<p>The resource tags that Firewall Manager uses to determine if a particular resource should be included or excluded from the Firewall Manager policy. Tags enable you to categorize your Amazon Web Services resources in different ways, for example, by purpose, owner, or environment. Each tag consists of a key and an optional value. Firewall Manager combines the tags with \"AND\" so that, if you add more than one tag to a policy scope, a resource must have all the specified tags to be included or excluded. For more information, see <a href=\"https://docs.aws.amazon.com/awsconsolehelpdocs/latest/gsg/tag-editor.html\">Working with Tag Editor</a>.</p>"
-    },
+    }, 
     "ResourceTagKey":{
       "type":"string",
       "max":128,
@@ -2408,18 +2408,18 @@
       "max":256,
       "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*)$"
     },
-    "ResourceTags":{
-      "type":"list",
-      "member":{"shape":"ResourceTag"},
-      "max":8,
-      "min":0
-    },
-    "ResourceType":{
-      "type":"string",
-      "max":128,
+    "ResourceTags":{ 
+      "type":"list", 
+      "member":{"shape":"ResourceTag"}, 
+      "max":8, 
+      "min":0 
+    }, 
+    "ResourceType":{ 
+      "type":"string", 
+      "max":128, 
       "min":1,
       "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*)$"
-    },
+    }, 
     "ResourceTypeList":{
       "type":"list",
       "member":{"shape":"ResourceType"}
@@ -2581,23 +2581,23 @@
       },
       "documentation":"<p>Describes a set of permissions for a security group rule.</p>"
     },
-    "SecurityServicePolicyData":{
-      "type":"structure",
-      "required":["Type"],
-      "members":{
-        "Type":{
-          "shape":"SecurityServiceType",
+    "SecurityServicePolicyData":{ 
+      "type":"structure", 
+      "required":["Type"], 
+      "members":{ 
+        "Type":{ 
+          "shape":"SecurityServiceType", 
           "documentation":"<p>The service that the policy is using to protect the resources. This specifies the type of policy that is created, either an WAF policy, a Shield Advanced policy, or a security group policy. For security group policies, Firewall Manager supports one security group for each common policy and for each content audit policy. This is an adjustable limit that you can increase by contacting Amazon Web Services Support.</p>"
-        },
-        "ManagedServiceData":{
-          "shape":"ManagedServiceData",
+        }, 
+        "ManagedServiceData":{ 
+          "shape":"ManagedServiceData", 
           "documentation":"<p>Details about the service that are specific to the service type, in JSON format. For service type <code>SHIELD_ADVANCED</code>, this is an empty string.</p> <ul> <li> <p>Example: <code>DNS_FIREWALL</code> </p> <p> <code>\"{\\\"type\\\":\\\"DNS_FIREWALL\\\",\\\"preProcessRuleGroups\\\":[{\\\"ruleGroupId\\\":\\\"rslvr-frg-1\\\",\\\"priority\\\":10}],\\\"postProcessRuleGroups\\\":[{\\\"ruleGroupId\\\":\\\"rslvr-frg-2\\\",\\\"priority\\\":9911}]}\"</code> </p> </li> <li> <p>Example: <code>NETWORK_FIREWALL</code> </p> <p> <code>\"{\\\"type\\\":\\\"NETWORK_FIREWALL\\\",\\\"networkFirewallStatelessRuleGroupReferences\\\":[{\\\"resourceARN\\\":\\\"arn:aws:network-firewall:us-west-1:1234567891011:stateless-rulegroup/rulegroup2\\\",\\\"priority\\\":10}],\\\"networkFirewallStatelessDefaultActions\\\":[\\\"aws:pass\\\",\\\"custom1\\\"],\\\"networkFirewallStatelessFragmentDefaultActions\\\":[\\\"custom2\\\",\\\"aws:pass\\\"],\\\"networkFirewallStatelessCustomActions\\\":[{\\\"actionName\\\":\\\"custom1\\\",\\\"actionDefinition\\\":{\\\"publishMetricAction\\\":{\\\"dimensions\\\":[{\\\"value\\\":\\\"dimension1\\\"}]}}},{\\\"actionName\\\":\\\"custom2\\\",\\\"actionDefinition\\\":{\\\"publishMetricAction\\\":{\\\"dimensions\\\":[{\\\"value\\\":\\\"dimension2\\\"}]}}}],\\\"networkFirewallStatefulRuleGroupReferences\\\":[{\\\"resourceARN\\\":\\\"arn:aws:network-firewall:us-west-1:1234567891011:stateful-rulegroup/rulegroup1\\\"}],\\\"networkFirewallOrchestrationConfig\\\":{\\\"singleFirewallEndpointPerVPC\\\":true,\\\"allowedIPV4CidrList\\\":[\\\"10.24.34.0/28\\\"]} }\"</code> </p> </li> <li> <p>Example: <code>WAFV2</code> </p> <p> <code>\"{\\\"type\\\":\\\"WAFV2\\\",\\\"preProcessRuleGroups\\\":[{\\\"ruleGroupArn\\\":null,\\\"overrideAction\\\":{\\\"type\\\":\\\"NONE\\\"},\\\"managedRuleGroupIdentifier\\\":{\\\"version\\\":null,\\\"vendorName\\\":\\\"AWS\\\",\\\"managedRuleGroupName\\\":\\\"AWSManagedRulesAmazonIpReputationList\\\"},\\\"ruleGroupType\\\":\\\"ManagedRuleGroup\\\",\\\"excludeRules\\\":[]}],\\\"postProcessRuleGroups\\\":[],\\\"defaultAction\\\":{\\\"type\\\":\\\"ALLOW\\\"},\\\"overrideCustomerWebACLAssociation\\\":false,\\\"loggingConfiguration\\\":{\\\"logDestinationConfigs\\\":[\\\"arn:aws:firehose:us-west-2:12345678912:deliverystream/aws-waf-logs-fms-admin-destination\\\"],\\\"redactedFields\\\":[{\\\"redactedFieldType\\\":\\\"SingleHeader\\\",\\\"redactedFieldValue\\\":\\\"Cookies\\\"},{\\\"redactedFieldType\\\":\\\"Method\\\"}]}}\"</code> </p> <p>In the <code>loggingConfiguration</code>, you can specify one <code>logDestinationConfigs</code>, you can optionally provide up to 20 <code>redactedFields</code>, and the <code>RedactedFieldType</code> must be one of <code>URI</code>, <code>QUERY_STRING</code>, <code>HEADER</code>, or <code>METHOD</code>.</p> </li> <li> <p>Example: <code>WAF Classic</code> </p> <p> <code>\"{\\\"type\\\": \\\"WAF\\\", \\\"ruleGroups\\\": [{\\\"id\\\":\\\"12345678-1bcd-9012-efga-0987654321ab\\\", \\\"overrideAction\\\" : {\\\"type\\\": \\\"COUNT\\\"}}], \\\"defaultAction\\\": {\\\"type\\\": \\\"BLOCK\\\"}}\"</code> </p> </li> <li> <p>Example: <code>SECURITY_GROUPS_COMMON</code> </p> <p> <code>\"{\\\"type\\\":\\\"SECURITY_GROUPS_COMMON\\\",\\\"revertManualSecurityGroupChanges\\\":false,\\\"exclusiveResourceSecurityGroupManagement\\\":false, \\\"applyToAllEC2InstanceENIs\\\":false,\\\"securityGroups\\\":[{\\\"id\\\":\\\" sg-000e55995d61a06bd\\\"}]}\"</code> </p> </li> <li> <p>Example: Shared VPCs. Apply the preceding policy to resources in shared VPCs as well as to those in VPCs that the account owns </p> <p> <code>\"{\\\"type\\\":\\\"SECURITY_GROUPS_COMMON\\\",\\\"revertManualSecurityGroupChanges\\\":false,\\\"exclusiveResourceSecurityGroupManagement\\\":false, \\\"applyToAllEC2InstanceENIs\\\":false,\\\"includeSharedVPC\\\":true,\\\"securityGroups\\\":[{\\\"id\\\":\\\" sg-000e55995d61a06bd\\\"}]}\"</code> </p> </li> <li> <p>Example: <code>SECURITY_GROUPS_CONTENT_AUDIT</code> </p> <p> <code>\"{\\\"type\\\":\\\"SECURITY_GROUPS_CONTENT_AUDIT\\\",\\\"securityGroups\\\":[{\\\"id\\\":\\\"sg-000e55995d61a06bd\\\"}],\\\"securityGroupAction\\\":{\\\"type\\\":\\\"ALLOW\\\"}}\"</code> </p> <p>The security group action for content audit can be <code>ALLOW</code> or <code>DENY</code>. For <code>ALLOW</code>, all in-scope security group rules must be within the allowed range of the policy's security group rules. For <code>DENY</code>, all in-scope security group rules must not contain a value or a range that matches a rule value or range in the policy security group.</p> </li> <li> <p>Example: <code>SECURITY_GROUPS_USAGE_AUDIT</code> </p> <p> <code>\"{\\\"type\\\":\\\"SECURITY_GROUPS_USAGE_AUDIT\\\",\\\"deleteUnusedSecurityGroups\\\":true,\\\"coalesceRedundantSecurityGroups\\\":true}\"</code> </p> </li> </ul>"
-        }
-      },
-      "documentation":"<p>Details about the security service that is being used to protect the resources.</p>"
-    },
-    "SecurityServiceType":{
-      "type":"string",
+        } 
+      }, 
+      "documentation":"<p>Details about the security service that is being used to protect the resources.</p>" 
+    }, 
+    "SecurityServiceType":{ 
+      "type":"string", 
       "enum":[
         "WAF",
         "WAFV2",
@@ -2608,7 +2608,7 @@
         "NETWORK_FIREWALL",
         "DNS_FIREWALL"
       ]
-    },
+    }, 
     "StatefulRuleGroup":{
       "type":"structure",
       "members":{
@@ -2672,12 +2672,12 @@
       },
       "documentation":"<p>A collection of key:value pairs associated with an Amazon Web Services resource. The key:value pair can be anything you define. Typically, the tag key represents a category (such as \"environment\") and the tag value represents a specific value within that category (such as \"test,\" \"development,\" or \"production\"). You can add up to 50 tags to each Amazon Web Services resource. </p>"
     },
-    "TagKey":{
-      "type":"string",
-      "max":128,
-      "min":1,
-      "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*)$"
-    },
+    "TagKey":{ 
+      "type":"string", 
+      "max":128, 
+      "min":1, 
+      "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*)$" 
+    }, 
     "TagKeyList":{
       "type":"list",
       "member":{"shape":"TagKey"},
@@ -2712,12 +2712,12 @@
       "members":{
       }
     },
-    "TagValue":{
-      "type":"string",
-      "max":256,
+    "TagValue":{ 
+      "type":"string", 
+      "max":256, 
       "min":0,
-      "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*)$"
-    },
+      "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*)$" 
+    }, 
     "TargetType":{
       "type":"string",
       "enum":[
@@ -2743,7 +2743,7 @@
       "type":"list",
       "member":{"shape":"TargetViolationReason"}
     },
-    "TimeStamp":{"type":"timestamp"},
+    "TimeStamp":{"type":"timestamp"}, 
     "UntagResourceRequest":{
       "type":"structure",
       "required":[
@@ -2813,11 +2813,11 @@
       },
       "documentation":"<p>Violations for a resource based on the specified Firewall Manager policy and Amazon Web Services account.</p>"
     },
-    "ViolationReason":{
-      "type":"string",
-      "enum":[
-        "WEB_ACL_MISSING_RULE_GROUP",
-        "RESOURCE_MISSING_WEB_ACL",
+    "ViolationReason":{ 
+      "type":"string", 
+      "enum":[ 
+        "WEB_ACL_MISSING_RULE_GROUP", 
+        "RESOURCE_MISSING_WEB_ACL", 
         "RESOURCE_INCORRECT_WEB_ACL",
         "RESOURCE_MISSING_SHIELD_PROTECTION",
         "RESOURCE_MISSING_WEB_ACL_OR_SHIELD_PROTECTION",
@@ -2841,14 +2841,14 @@
         "BLACK_HOLE_ROUTE_DETECTED",
         "BLACK_HOLE_ROUTE_DETECTED_IN_FIREWALL_SUBNET",
         "RESOURCE_MISSING_DNS_FIREWALL"
-      ]
+      ] 
     },
     "ViolationTarget":{
       "type":"string",
       "max":1024,
       "min":0,
       "pattern":".*"
-    }
-  },
+    } 
+  }, 
   "documentation":"<p>This is the <i>Firewall Manager API Reference</i>. This guide is for developers who need detailed information about the Firewall Manager API actions, data types, and errors. For detailed information about Firewall Manager features, see the <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/fms-chapter.html\">Firewall Manager Developer Guide</a>.</p> <p>Some API actions require explicit resource permissions. For information, see the developer guide topic <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/fms-api-permissions-ref.html\">Firewall Manager required permissions for API actions</a>. </p>"
-}
+} 

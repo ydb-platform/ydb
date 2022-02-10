@@ -1,4 +1,4 @@
-{
+{ 
   "pagination": {
     "ListChannels": {
       "input_token": "nextToken",
@@ -31,4 +31,4 @@
       "result_key": "pipelineSummaries"
     }
   }
-}
+} 

@@ -101,9 +101,9 @@ information that doesn't quite fit in the original models, but is still needed
 for the sdk. For instance, additional operation parameters might be added here
 which don't represent the actual service api.
 """
-import collections
+import collections 
 import os
-import logging
+import logging 
 
 from botocore import BOTOCORE_ROOT
 from botocore.compat import json
@@ -112,9 +112,9 @@ from botocore.compat import OrderedDict
 from botocore.exceptions import DataNotFoundError, UnknownServiceError
 from botocore.utils import deep_merge
 
-from library.python import resource
+from library.python import resource 
 
-
+ 
 logger = logging.getLogger(__name__)
 
 
@@ -179,9 +179,9 @@ class JSONFileLoader(object):
             return json.loads(payload, object_pairs_hook=OrderedDict)
 
 
-# SQS-119
-class HybridJsonLoader(JSONFileLoader):
-
+# SQS-119 
+class HybridJsonLoader(JSONFileLoader): 
+ 
     type_data_cache = collections.defaultdict(lambda: collections.defaultdict(set))
 
     arcadia_resources_path = (
@@ -193,8 +193,8 @@ class HybridJsonLoader(JSONFileLoader):
     @classmethod
     def collect_service_data(cls):
         if cls.type_data_cache:
-            return
-
+            return 
+ 
         for res in resource.resfs_files():
             res = six.ensure_str(res)
             if res.startswith(cls.arcadia_resources_path):
@@ -203,7 +203,7 @@ class HybridJsonLoader(JSONFileLoader):
                     service_name, version, type_name = splitted_path[:3]
                     type_name = type_name.replace('.json', '')
                     cls.type_data_cache[type_name][service_name].add(version)
-
+ 
     @classmethod
     def path_in_arcadia_resources(cls, file_path):
         for prefix in cls.arcadia_resources_path:
@@ -211,19 +211,19 @@ class HybridJsonLoader(JSONFileLoader):
             if path in resource.resfs_files():
                 return path
         return
-
-    def exists(self, file_path):
+ 
+    def exists(self, file_path): 
         if self.path_in_arcadia_resources(file_path):
-            return True
-        return super(HybridJsonLoader, self).exists(file_path)
-
-    def load_file(self, file_path):
+            return True 
+        return super(HybridJsonLoader, self).exists(file_path) 
+ 
+    def load_file(self, file_path): 
         path = self.path_in_arcadia_resources(file_path)
         if path:
             return json.loads(resource.resfs_read(path).decode(encoding='utf-8'))
-        return super(HybridJsonLoader, self).load_file(file_path)
-
-
+        return super(HybridJsonLoader, self).load_file(file_path) 
+ 
+ 
 def create_loader(search_path_string=None):
     """Create a Loader class.
 
@@ -257,7 +257,7 @@ class Loader(object):
     convenience method over ``load_data`` and ``determine_latest_version``.
 
     """
-    FILE_LOADER_CLASS = HybridJsonLoader
+    FILE_LOADER_CLASS = HybridJsonLoader 
     # The included models in botocore/data/ that we ship with botocore.
     BUILTIN_DATA_PATH = os.path.join(BOTOCORE_ROOT, 'data')
     # For convenience we automatically add ~/.aws/models to the data path.
@@ -333,11 +333,11 @@ class Loader(object):
                     if self.file_loader.exists(full_load_path):
                         services.add(service_name)
                         break
-
-        # SQS-119
-        HybridJsonLoader.collect_service_data()
+ 
+        # SQS-119 
+        HybridJsonLoader.collect_service_data() 
         services = services.union(HybridJsonLoader.type_data_cache[type_name].keys())
-
+ 
         return sorted(services)
 
     @instance_cache
@@ -389,11 +389,11 @@ class Loader(object):
                 # to the type_name passed in.
                 if self.file_loader.exists(full_path):
                     known_api_versions.add(dirname)
-
-        # SQS-119
-        HybridJsonLoader.collect_service_data()
+ 
+        # SQS-119 
+        HybridJsonLoader.collect_service_data() 
         known_api_versions = known_api_versions.union(HybridJsonLoader.type_data_cache[type_name][service_name])
-
+ 
         if not known_api_versions:
             raise DataNotFoundError(data_path=service_name)
         return sorted(known_api_versions)
@@ -479,12 +479,12 @@ class Loader(object):
             found = self.file_loader.load_file(possible_path)
             if found is not None:
                 return found
-
-        # SQS-119
-        found_by_arcadia_loader = self.file_loader.load_file(name)
-        if found_by_arcadia_loader is not None:
-            return found_by_arcadia_loader
-
+ 
+        # SQS-119 
+        found_by_arcadia_loader = self.file_loader.load_file(name) 
+        if found_by_arcadia_loader is not None: 
+            return found_by_arcadia_loader 
+ 
         # We didn't find anything that matched on any path.
         raise DataNotFoundError(data_path=name)
 

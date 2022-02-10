@@ -1,4 +1,4 @@
-{
+{ 
   "pagination": {
     "DescribeScalingPlanResources": {
       "input_token": "NextToken",
@@ -13,4 +13,4 @@
       "result_key": "ScalingPlans"
     }
   }
-}
+} 

@@ -1,10 +1,10 @@
-{
-  "pagination": {
-    "DescribeDomainControllers": {
-      "result_key": "DomainControllers",
-      "output_token": "NextToken",
-      "input_token": "NextToken",
-      "limit_key": "Limit"
+{ 
+  "pagination": { 
+    "DescribeDomainControllers": { 
+      "result_key": "DomainControllers", 
+      "output_token": "NextToken", 
+      "input_token": "NextToken", 
+      "limit_key": "Limit" 
     },
     "DescribeDirectories": {
       "input_token": "NextToken",
@@ -53,6 +53,6 @@
       "limit_key": "Limit",
       "output_token": "NextToken",
       "result_key": "Tags"
-    }
-  }
-}
+    } 
+  } 
+} 

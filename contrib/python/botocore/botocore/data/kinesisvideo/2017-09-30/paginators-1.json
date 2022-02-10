@@ -1,4 +1,4 @@
-{
+{ 
   "pagination": {
     "ListStreams": {
       "input_token": "NextToken",
@@ -13,4 +13,4 @@
       "result_key": "ChannelInfoList"
     }
   }
-}
+} 

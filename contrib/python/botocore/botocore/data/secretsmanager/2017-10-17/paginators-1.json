@@ -1,4 +1,4 @@
-{
+{ 
   "pagination": {
     "ListSecrets": {
       "input_token": "NextToken",
@@ -7,4 +7,4 @@
       "result_key": "SecretList"
     }
   }
-}
+} 

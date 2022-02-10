@@ -1,6 +1,6 @@
-{
-  "version": "1.0",
-  "examples": {
+{ 
+  "version": "1.0", 
+  "examples": { 
     "AddTagsToResource": [
       {
         "input": {
@@ -1049,5 +1049,5 @@
         "title": "Test conection"
       }
     ]
-  }
-}
+  } 
+} 

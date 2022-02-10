@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_ENCODING = 'utf-8'
 ENCODING_ERRORS_POLICY = 'replace'
 
-
+ 
 def left_strip(el, prefix):
     """
     Strips prefix at the left of el

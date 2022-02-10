@@ -3902,13 +3902,13 @@
                 }
             ]
         },
-        "mvn": {
-            "tools": {
+        "mvn": { 
+            "tools": { 
                 "mvn": {
                     "bottle": "maven",
                     "executable": "mvn"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -3929,7 +3929,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "fast_diff": {
             "tools": {
                 "fast_diff": {
@@ -7101,7 +7101,7 @@
         },
         "ant": {
             "formula": {
-                "sandbox_id": 36996223,
+                "sandbox_id": 36996223, 
                 "match": "ant"
             },
             "executable": {
@@ -7112,18 +7112,18 @@
                 ]
             }
         },
-        "maven": {
-            "formula": {
-                "sandbox_id": 39222824,
-                "match": "maven"
-            },
-            "executable": {
+        "maven": { 
+            "formula": { 
+                "sandbox_id": 39222824, 
+                "match": "maven" 
+            }, 
+            "executable": { 
                 "mvn": [
                     "bin",
                     "mvn"
                 ]
-            }
-        },
+            } 
+        }, 
         "fast_diff": {
             "formula": {
                 "sandbox_id": 42519064,

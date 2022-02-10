@@ -558,7 +558,7 @@ RECURSE(
     jsonpickle
     jsonpointer
     jsonref
-    jsonschema
+    jsonschema 
     jsonstreams
     juggler_sdk
     juggler_sdk/cli

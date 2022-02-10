@@ -172,16 +172,16 @@ public:
         Off_ += out.Counter();
     }
 
-    inline void AddSynonym(const TString& existingKey, const TString& newKey) { 
+    inline void AddSynonym(const TString& existingKey, const TString& newKey) {
         Y_ENSURE(Dict_.contains(existingKey), "key " << existingKey.data() << " not stored yet");
         Y_ENSURE(!Dict_.contains(newKey), "key " << newKey.data() << " already stored");
- 
-        TArchiveRecordDescriptorRef existingDescr = Dict_[existingKey]; 
-        TArchiveRecordDescriptorRef descr(new TArchiveRecordDescriptor(existingDescr->Offset(), existingDescr->Length(), newKey)); 
- 
-        Dict_[newKey] = descr; 
-    } 
- 
+
+        TArchiveRecordDescriptorRef existingDescr = Dict_[existingKey];
+        TArchiveRecordDescriptorRef descr(new TArchiveRecordDescriptor(existingDescr->Offset(), existingDescr->Length(), newKey));
+
+        Dict_[newKey] = descr;
+    }
+
 private:
     ui64 Off_;
     IOutputStream* Out_;
@@ -215,17 +215,17 @@ void TArchiveWriter::Finish() {
 }
 
 void TArchiveWriter::Add(const TString& key, IInputStream* src) {
-    Y_ENSURE(Impl_.Get(), "archive already closed"); 
+    Y_ENSURE(Impl_.Get(), "archive already closed");
 
     Impl_->Add(key, src);
 }
 
-void TArchiveWriter::AddSynonym(const TString& existingKey, const TString& newKey) { 
-    Y_ENSURE(Impl_.Get(), "archive already closed"); 
- 
-    Impl_->AddSynonym(existingKey, newKey); 
-} 
- 
+void TArchiveWriter::AddSynonym(const TString& existingKey, const TString& newKey) {
+    Y_ENSURE(Impl_.Get(), "archive already closed");
+
+    Impl_->AddSynonym(existingKey, newKey);
+}
+
 namespace {
     class TArchiveInputStreamBase {
     public:
@@ -266,7 +266,7 @@ public:
     inline ~TImpl() = default;
 
     inline void ReadDict() {
-        Y_ENSURE(Blob_.Size() >= sizeof(ui64), "too small blob"); 
+        Y_ENSURE(Blob_.Size() >= sizeof(ui64), "too small blob");
 
         const char* end = (const char*)Blob_.End();
         const char* ptr = end - sizeof(ui64);
@@ -274,7 +274,7 @@ public:
         memcpy(&dictlen, ptr, sizeof(ui64));
         dictlen = LittleToHost(dictlen);
 
-        Y_ENSURE(dictlen <= Blob_.Size() - sizeof(ui64), "bad blob"); 
+        Y_ENSURE(dictlen <= Blob_.Size() - sizeof(ui64), "bad blob");
 
         const char* beg = ptr - dictlen;
         TMemoryInput mi(beg, dictlen);

@@ -335,39 +335,39 @@ private:
                     const auto& name = callableType->GetNameStr();
                     if (name == TStringBuf("FolderPath"))
                     {
-                        const TString folderName(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
-                        auto blocks = TUserDataStorage::FindUserDataFolder(files, folderName);
-                        MKQL_ENSURE(blocks, "Folder not found: " << folderName);
-                        for ( const auto& b : *blocks) {
-                            auto block = b.second;
-                            auto filePath = block->FrozenFile->GetPath().GetPath();
-                            auto fullFileName = localRun ? filePath : TUserDataStorage::MakeRelativeName(b.first.Alias());
-                            YQL_LOG(DEBUG) << "Path resolve " << filePath << "|"<< fullFileName;
-                            // validate
-                            switch (block->Type) {
-                                case EUserDataType::URL:
-                                case EUserDataType::PATH:
-                                case EUserDataType::RAW_INLINE_DATA: {
-                                    break;
-                                }
-                                default:
-                                    YQL_ENSURE(false, "Unknown block type " << block->Type);
-                            }
-                            // filePath, fileName, md5
-                            auto f = IDqGateway::TFileResource();
-                            f.SetLocalPath(filePath);
-                            f.SetName(fullFileName);
-                            f.SetObjectId(block->FrozenFile->GetMd5());
+                        const TString folderName(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef()); 
+                        auto blocks = TUserDataStorage::FindUserDataFolder(files, folderName); 
+                        MKQL_ENSURE(blocks, "Folder not found: " << folderName); 
+                        for ( const auto& b : *blocks) { 
+                            auto block = b.second; 
+                            auto filePath = block->FrozenFile->GetPath().GetPath(); 
+                            auto fullFileName = localRun ? filePath : TUserDataStorage::MakeRelativeName(b.first.Alias()); 
+                            YQL_LOG(DEBUG) << "Path resolve " << filePath << "|"<< fullFileName; 
+                            // validate 
+                            switch (block->Type) { 
+                                case EUserDataType::URL: 
+                                case EUserDataType::PATH: 
+                                case EUserDataType::RAW_INLINE_DATA: { 
+                                    break; 
+                                } 
+                                default: 
+                                    YQL_ENSURE(false, "Unknown block type " << block->Type); 
+                            } 
+                            // filePath, fileName, md5 
+                            auto f = IDqGateway::TFileResource(); 
+                            f.SetLocalPath(filePath); 
+                            f.SetName(fullFileName); 
+                            f.SetObjectId(block->FrozenFile->GetMd5()); 
                             f.SetSize(block->FrozenFile->GetSize());
-                            f.SetObjectType(IDqGateway::TFileResource::EUSER_FILE);
+                            f.SetObjectType(IDqGateway::TFileResource::EUSER_FILE); 
                             uploadList->emplace(f);
-                        }
-                        const TProgramBuilder pgmBuilder(typeEnv, *State->FunctionRegistry);
-                        auto result = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(folderName);
-                        result.Freeze();
-                        if (result.GetNode() != node) {
-                            callable.SetResult(result, typeEnv);
-                        }
+                        } 
+                        const TProgramBuilder pgmBuilder(typeEnv, *State->FunctionRegistry); 
+                        auto result = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(folderName); 
+                        result.Freeze(); 
+                        if (result.GetNode() != node) { 
+                            callable.SetResult(result, typeEnv); 
+                        } 
                     } else if (name == TStringBuf("FileContent") || name == TStringBuf("FilePath")) {
                         const TString fileName(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
 
@@ -375,7 +375,7 @@ private:
                         MKQL_ENSURE(block, "File not found: " << fileName);
 
                         auto filePath = block->FrozenFile->GetPath().GetPath();
-                        auto fullFileName = localRun ? filePath : fileName;
+                        auto fullFileName = localRun ? filePath : fileName; 
 
                         const TProgramBuilder pgmBuilder(typeEnv, *State->FunctionRegistry);
                         TRuntimeNode result;

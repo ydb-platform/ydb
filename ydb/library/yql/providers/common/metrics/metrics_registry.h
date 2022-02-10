@@ -2,7 +2,7 @@
 
 #include "sensors_group.h"
 
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 
 namespace NYql {
 
@@ -49,10 +49,10 @@ struct IMetricsRegistry: public TThrRefBase {
             const TString& userName) const = 0;
 
     virtual void Flush() = 0;
-
-    virtual TSensorsGroupPtr GetSensors() {
-        ythrow yexception() << "Not implemented";
-    }
+ 
+    virtual TSensorsGroupPtr GetSensors() { 
+        ythrow yexception() << "Not implemented"; 
+    } 
 };
 
 

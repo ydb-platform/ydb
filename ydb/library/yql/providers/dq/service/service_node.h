@@ -37,7 +37,7 @@ namespace NYql {
     private:
         NDqs::TServiceNodeConfig Config;
         ui32 Threads;
-        IMetricsRegistryPtr MetricsRegistry;
+        IMetricsRegistryPtr MetricsRegistry; 
         THolder<NActors::TActorSystemSetup> Setup;
         TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
         THolder<NActors::TActorSystem> ActorSystem;

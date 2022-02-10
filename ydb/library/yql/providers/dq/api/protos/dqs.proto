@@ -118,15 +118,15 @@ message TEvQueryStatusResponse {
   Yql.DqsProto.QueryStatusResponse Response = 1;
 }
 
-message TEvIsReady {
-    Yql.DqsProto.IsReadyRequest Request = 1;
-    bool IsForwarded = 2;
-}
-
-message TEvIsReadyResponse {
-    bool IsReady = 1;
-}
-
+message TEvIsReady { 
+    Yql.DqsProto.IsReadyRequest Request = 1; 
+    bool IsForwarded = 2; 
+} 
+ 
+message TEvIsReadyResponse { 
+    bool IsReady = 1; 
+} 
+ 
 message TEvRoutesRequest {
 }
 

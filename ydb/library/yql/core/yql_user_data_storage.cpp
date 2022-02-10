@@ -122,13 +122,13 @@ TString TUserDataStorage::MakeFolderName(const TStringBuf& name) {
     return fullName;
 }
 
-TString TUserDataStorage::MakeRelativeName(const TStringBuf& name) {
-    if (name.StartsWith(HomePath)) {
-        return TString(name.substr(HomePath.size()));
-    }
-    return name.StartsWith(Sep) ? TString(name.substr(1)) : TString(name);
-}
-
+TString TUserDataStorage::MakeRelativeName(const TStringBuf& name) { 
+    if (name.StartsWith(HomePath)) { 
+        return TString(name.substr(HomePath.size())); 
+    } 
+    return name.StartsWith(Sep) ? TString(name.substr(1)) : TString(name); 
+} 
+ 
 TUserDataKey TUserDataStorage::ComposeUserDataKey(const TStringBuf& name) {
     auto fullName = MakeFullName(name);
     return TUserDataKey::File(fullName);
@@ -139,13 +139,13 @@ bool TUserDataStorage::ContainsUserDataFolder(const TStringBuf& name) const {
 }
 
 TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> TUserDataStorage::FindUserDataFolder(const TStringBuf& name, ui32 maxFileCount) const {
-    return FindUserDataFolder(UserData_,name,maxFileCount);
-}
-
-TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> TUserDataStorage::FindUserDataFolder(const TUserDataTable& userData, const TStringBuf& name, ui32 maxFileCount) {
+    return FindUserDataFolder(UserData_,name,maxFileCount); 
+} 
+ 
+TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> TUserDataStorage::FindUserDataFolder(const TUserDataTable& userData, const TStringBuf& name, ui32 maxFileCount) { 
     auto fullName = MakeFolderName(name);
     TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> res;
-    EnumFolderContent(userData, fullName, maxFileCount, [&](auto& key, auto& block) {
+    EnumFolderContent(userData, fullName, maxFileCount, [&](auto& key, auto& block) { 
         if (!res) {
             res.ConstructInPlace();
         }

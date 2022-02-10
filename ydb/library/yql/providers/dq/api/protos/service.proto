@@ -318,14 +318,14 @@ message ConfigureFailureInjectorRequest {
 message ConfigureFailureInjectorResponse {
     bool success = 1;
 }
-
-message IsReadyRequest {
-    repeated TFile Files = 1;
-}
-
-message IsReadyResponse {
-    bool IsReady = 1;
-}
+ 
+message IsReadyRequest { 
+    repeated TFile Files = 1; 
+} 
+ 
+message IsReadyResponse { 
+    bool IsReady = 1; 
+} 
 
 message RoutesRequest {
     uint32 NodeId = 1;

@@ -8,7 +8,7 @@
 
 #include <library/cpp/grpc/server/actors/logger.h>
 
-#include <utility>
+#include <utility> 
 
 namespace NYql {
     using namespace NActors;
@@ -82,7 +82,7 @@ namespace NYql {
         IMetricsRegistryPtr metricsRegistry)
         : Config(config)
         , Threads(threads)
-        , MetricsRegistry(std::move(metricsRegistry))
+        , MetricsRegistry(std::move(metricsRegistry)) 
     {
         std::tie(Setup, LogSettings) = BuildActorSetup(
             Config.NodeId,
@@ -158,9 +158,9 @@ namespace NYql {
         (static_cast<TDqsGrpcService*>(Service.Get()))->Stop().Wait(timeout);
 
         Server->Stop();
-        for (auto id : ActorIds) {
-            ActorSystem->Send(id, new NActors::TEvents::TEvPoison);
-        }
+        for (auto id : ActorIds) { 
+            ActorSystem->Send(id, new NActors::TEvents::TEvPoison); 
+        } 
         ActorSystem->Stop();
     }
 } // namespace NYql

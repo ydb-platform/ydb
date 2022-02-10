@@ -185,11 +185,11 @@ public:
     }
 
     void MergeSnapshot(const NProto::TMetricsRegistrySnapshot& snapshot) override {
-        MergeFromGroupProto(
-            snapshot.HasMergeToRoot()
-                ? GetSensorsRootGroup().Get()
-                : Sensors_.Get(),
-            snapshot.GetRootGroup(),
+        MergeFromGroupProto( 
+            snapshot.HasMergeToRoot() 
+                ? GetSensorsRootGroup().Get() 
+                : Sensors_.Get(), 
+            snapshot.GetRootGroup(), 
             snapshot.HasDontIncrement()
                 ? snapshot.GetDontIncrement()
                 : false);
@@ -203,10 +203,10 @@ public:
         // do nothing
     }
 
-    TSensorsGroupPtr GetSensors() override {
-        return Sensors_.Get();
-    }
-
+    TSensorsGroupPtr GetSensors() override { 
+        return Sensors_.Get(); 
+    } 
+ 
 private:
     TSensorCounterPtr GetCounter(
             const TString& labelName,

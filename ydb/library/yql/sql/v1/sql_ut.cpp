@@ -1280,16 +1280,16 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
               "REDUCE Input ON key using all $func(UUU::VVV(TableRow()));";
         UNIT_ASSERT(SqlToYql(req).IsOk());
     }
-
-    Y_UNIT_TEST(YsonDisableStrict) {
-        UNIT_ASSERT(SqlToYql("pragma yson.DisableStrict = \"false\";").IsOk());
-        UNIT_ASSERT(SqlToYql("pragma yson.DisableStrict;").IsOk());
-    }
-
-    Y_UNIT_TEST(YsonStrict) {
-        UNIT_ASSERT(SqlToYql("pragma yson.Strict = \"false\";").IsOk());
-        UNIT_ASSERT(SqlToYql("pragma yson.Strict;").IsOk());
-    }
+ 
+    Y_UNIT_TEST(YsonDisableStrict) { 
+        UNIT_ASSERT(SqlToYql("pragma yson.DisableStrict = \"false\";").IsOk()); 
+        UNIT_ASSERT(SqlToYql("pragma yson.DisableStrict;").IsOk()); 
+    } 
+ 
+    Y_UNIT_TEST(YsonStrict) { 
+        UNIT_ASSERT(SqlToYql("pragma yson.Strict = \"false\";").IsOk()); 
+        UNIT_ASSERT(SqlToYql("pragma yson.Strict;").IsOk()); 
+    } 
 
     Y_UNIT_TEST(JoinByTuple) {
         auto req = "use plato;\n"
@@ -2782,12 +2782,12 @@ select FormatType($f());
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:6:1: Error: DISCARD within UNION ALL is only allowed before first subquery\n");
     }
-
-    Y_UNIT_TEST(YsonStrictInvalidPragma) {
-        auto res = SqlToYql("pragma yson.Strict = \"wrong\";");
-        UNIT_ASSERT(!res.Root);
+ 
+    Y_UNIT_TEST(YsonStrictInvalidPragma) { 
+        auto res = SqlToYql("pragma yson.Strict = \"wrong\";"); 
+        UNIT_ASSERT(!res.Root); 
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:22: Error: Expected 'true', 'false' or no parameter for: Strict\n");
-    }
+    } 
 
     Y_UNIT_TEST(WarnTableNameInSomeContexts) {
         UNIT_ASSERT(SqlToYql("use plato; select TableName() from Input;").IsOk());

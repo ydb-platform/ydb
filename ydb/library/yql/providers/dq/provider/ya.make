@@ -3,8 +3,8 @@ LIBRARY()
 OWNER(g:yql)
 
 SRCS(
-    yql_dq_control.cpp
-    yql_dq_control.h
+    yql_dq_control.cpp 
+    yql_dq_control.h 
     yql_dq_datasink_type_ann.cpp
     yql_dq_datasink_type_ann.h
     yql_dq_datasource_type_ann.cpp

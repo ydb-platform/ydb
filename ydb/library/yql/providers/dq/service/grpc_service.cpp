@@ -720,29 +720,29 @@ namespace NYql::NDqs {
 
             ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, requestEvent.Release()));
         });
-
-        ADD_REQUEST(IsReady, IsReadyRequest, IsReadyResponse, {
-            auto* request = dynamic_cast<const Yql::DqsProto::IsReadyRequest*>(ctx->GetRequest());
-            Y_VERIFY(!!request);
-
-            auto ev = MakeHolder<TEvIsReady>(*request);
-
-            auto callback = MakeHolder<TRichActorFutureCallback<TEvIsReadyResponse>>(
-                    [ctx] (TAutoPtr<TEventHandle<TEvIsReadyResponse>>& event) mutable {
-                        Yql::DqsProto::IsReadyResponse result;
-                        result.SetIsReady(event->Get()->Record.GetIsReady());
-                        ctx->Reply(&result, Ydb::StatusIds::SUCCESS);
-                    },
-                    [ctx] () mutable {
-                        YQL_LOG(DEBUG) << "IsReadyForRevision failed";
-                        ctx->ReplyError(grpc::UNAVAILABLE, "Error");
-                    },
-                    TDuration::MilliSeconds(2000));
-
-            TActorId callbackId = ActorSystem.Register(callback.Release());
-
-            ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, ev.Release()));
-        });
+ 
+        ADD_REQUEST(IsReady, IsReadyRequest, IsReadyResponse, { 
+            auto* request = dynamic_cast<const Yql::DqsProto::IsReadyRequest*>(ctx->GetRequest()); 
+            Y_VERIFY(!!request); 
+ 
+            auto ev = MakeHolder<TEvIsReady>(*request); 
+ 
+            auto callback = MakeHolder<TRichActorFutureCallback<TEvIsReadyResponse>>( 
+                    [ctx] (TAutoPtr<TEventHandle<TEvIsReadyResponse>>& event) mutable { 
+                        Yql::DqsProto::IsReadyResponse result; 
+                        result.SetIsReady(event->Get()->Record.GetIsReady()); 
+                        ctx->Reply(&result, Ydb::StatusIds::SUCCESS); 
+                    }, 
+                    [ctx] () mutable { 
+                        YQL_LOG(DEBUG) << "IsReadyForRevision failed"; 
+                        ctx->ReplyError(grpc::UNAVAILABLE, "Error"); 
+                    }, 
+                    TDuration::MilliSeconds(2000)); 
+ 
+            TActorId callbackId = ActorSystem.Register(callback.Release()); 
+ 
+            ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, ev.Release())); 
+        }); 
 
         ADD_REQUEST(Routes, RoutesRequest, RoutesResponse, {
             auto* request = dynamic_cast<const Yql::DqsProto::RoutesRequest*>(ctx->GetRequest());

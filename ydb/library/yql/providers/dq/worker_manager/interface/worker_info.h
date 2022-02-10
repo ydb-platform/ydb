@@ -150,7 +150,7 @@ struct TWorkerInfo: public TThrRefBase {
 
     void AddToDownloadList(const THashMap<TString, TFileResource>& downloadList);
 
-    bool AddToDownloadList(const TString& key, const TFileResource& value);
+    bool AddToDownloadList(const TString& key, const TFileResource& value); 
 
     const THashMap<TString, TFileResource>& GetDownloadList();
 

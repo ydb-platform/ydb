@@ -48,7 +48,7 @@ public:
         : TRichActor<TDqExecuter>(&TDqExecuter::Handler)
         , GwmActorId(gwmActorId)
         , PrinterId(printerId)
-        , Settings(settings)
+        , Settings(settings) 
         , TraceId(traceId)
         , Username(username)
         , Counters(counters) // root, component=dq
@@ -444,7 +444,7 @@ private:
 
     NActors::TActorId GwmActorId;
     NActors::TActorId PrinterId;
-    TDqConfiguration::TPtr Settings;
+    TDqConfiguration::TPtr Settings; 
 
     NActors::TActorId ControlId;
     NActors::TActorId ResultId;

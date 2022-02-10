@@ -471,14 +471,14 @@ namespace NProtobufJson {
         for (const FieldDescriptor* field : fields) {
             Y_ASSERT(field);
             if (field->is_extension()) {
-                switch (GetConfig().ExtensionFieldNameMode) { 
-                    case TProto2JsonConfig::ExtFldNameFull: 
-                        PrintField(proto, *field, json, field->full_name()); 
-                        break; 
-                    case TProto2JsonConfig::ExtFldNameShort: 
-                        PrintField(proto, *field, json); 
-                        break; 
-                } 
+                switch (GetConfig().ExtensionFieldNameMode) {
+                    case TProto2JsonConfig::ExtFldNameFull:
+                        PrintField(proto, *field, json, field->full_name());
+                        break;
+                    case TProto2JsonConfig::ExtFldNameShort:
+                        PrintField(proto, *field, json);
+                        break;
+                }
             }
         }
 

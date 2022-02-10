@@ -55,12 +55,12 @@ namespace NProtobufJson {
         };
         FldNameMode FieldNameMode = FieldNameOriginalCase;
 
-        enum ExtFldNameMode { 
-            ExtFldNameFull = 0, // default, field.full_name() 
-            ExtFldNameShort // field.name() 
-        }; 
-        ExtFldNameMode ExtensionFieldNameMode = ExtFldNameFull; 
- 
+        enum ExtFldNameMode {
+            ExtFldNameFull = 0, // default, field.full_name()
+            ExtFldNameShort // field.name()
+        };
+        ExtFldNameMode ExtensionFieldNameMode = ExtFldNameFull;
+
         /// Use 'json_name' protobuf option for field name, mutually exclusive
         /// with FieldNameMode.
         bool UseJsonName = false;
@@ -125,11 +125,11 @@ namespace NProtobufJson {
             return *this;
         }
 
-        TSelf& SetExtensionFieldNameMode(ExtFldNameMode mode) { 
-            ExtensionFieldNameMode = mode; 
-            return *this; 
-        } 
- 
+        TSelf& SetExtensionFieldNameMode(ExtFldNameMode mode) {
+            ExtensionFieldNameMode = mode;
+            return *this;
+        }
+
         TSelf& AddStringTransform(TStringTransformPtr transform) {
             StringTransforms.push_back(transform);
             return *this;

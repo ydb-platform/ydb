@@ -57,11 +57,11 @@ struct async_out_buffer : ::boost::process::detail::posix::handler_base_ext,
     }
 
     template <typename Executor>
-    inline void on_success(Executor & /* exec */)
+    inline void on_success(Executor & /* exec */) 
     {
         auto  pipe              = this->pipe;
         boost::asio::async_read(*pipe, buf,
-                [pipe](const boost::system::error_code&, std::size_t /* size */){});
+                [pipe](const boost::system::error_code&, std::size_t /* size */){}); 
 
         this->pipe = nullptr;
         std::move(*pipe).sink().close();
@@ -112,7 +112,7 @@ struct async_out_future : ::boost::process::detail::posix::handler_base_ext,
         fut = promise->get_future();
     }
     template <typename Executor>
-    inline void on_success(Executor & /* exec */)
+    inline void on_success(Executor & /* exec */) 
     {
         auto pipe = this->pipe;
 
@@ -120,7 +120,7 @@ struct async_out_future : ::boost::process::detail::posix::handler_base_ext,
         auto promise = this->promise;
 
         boost::asio::async_read(*pipe, *buffer,
-                [pipe, buffer, promise](const boost::system::error_code& ec, std::size_t /* size */)
+                [pipe, buffer, promise](const boost::system::error_code& ec, std::size_t /* size */) 
                 {
                     if (ec && (ec.value() != ENOENT))
                     {

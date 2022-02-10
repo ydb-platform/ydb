@@ -2433,7 +2433,7 @@ class SessionPool(object):
             self.tracer = driver._driver_config.tracer
         else:
             self.tracer = ydb.Tracer(None)
-
+ 
     def retry_operation_sync(self, callee, retry_settings=None, *args, **kwargs):
 
         retry_settings = RetrySettings() if retry_settings is None else retry_settings

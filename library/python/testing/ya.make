@@ -4,7 +4,7 @@ RECURSE(
     behave
     deprecated
     fake_ya_package
-    filter
+    filter 
     gtest
     gtest/test
     gtest/test/gtest

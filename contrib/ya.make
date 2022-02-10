@@ -8,7 +8,7 @@ RECURSE(
     node_modules
     phantom/pd/ssl
     python
-    restricted
+    restricted 
     tests
     tools
 )

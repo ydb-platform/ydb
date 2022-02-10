@@ -1666,7 +1666,7 @@ class GnuCompiler(Compiler):
 
         style = ['${requirements;hide:CC_REQUIREMENTS} ${hide;kv:"p CC"} ${hide;kv:"pc green"}']
         cxx_args = [
-            '$CLANG_TIDY_ARGS',
+            '$CLANG_TIDY_ARGS', 
             '$YNDEXER_ARGS',
             '$CXX_COMPILER',
             '$C_FLAGS_PLATFORM',
@@ -1680,12 +1680,12 @@ class GnuCompiler(Compiler):
             '$_LANG_CFLAGS_VALUE',
             '${input:SRC}',
             '$TOOLCHAIN_ENV',
-            '$YNDEXER_OUTPUT',
+            '$YNDEXER_OUTPUT', 
             '&& $COMPILER_TIME_TRACE_POSTPROCESS',
         ] + style
 
         c_args = [
-            '$CLANG_TIDY_ARGS',
+            '$CLANG_TIDY_ARGS', 
             '$YNDEXER_ARGS',
             '$C_COMPILER',
             '$C_FLAGS_PLATFORM',
@@ -1699,7 +1699,7 @@ class GnuCompiler(Compiler):
             '$SRCFLAGS',
             '${input:SRC}',
             '$TOOLCHAIN_ENV',
-            '$YNDEXER_OUTPUT',
+            '$YNDEXER_OUTPUT', 
             '&& $COMPILER_TIME_TRACE_POSTPROCESS',
         ] + style
 
@@ -2054,25 +2054,25 @@ class LD(Linker):
         ld_env_style = '${cwd:ARCADIA_BUILD_ROOT} $TOOLCHAIN_ENV ${kv;hide:"p LD"} ${requirements;hide:LD_REQUIREMENTS} ${kv;hide:"pc light-blue"} ${kv;hide:"show_out"}'
 
         # Program
-        emit(
+        emit( 
             "GENERATE_MF_CMD",
-            '$YMAKE_PYTHON', '${input:"build/scripts/generate_mf.py"}',
+            '$YMAKE_PYTHON', '${input:"build/scripts/generate_mf.py"}', 
             '--build-root $ARCADIA_BUILD_ROOT --module-name $REALPRJNAME -o ${output;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.mf:REALPRJNAME}',
             '-t $MODULE_TYPE --ya-start-command-file -Ya,lics $LICENSE_NAMES -Ya,peers ${rootrel:PEERS} -Ya,credits ${input:CREDITS_TEXTS_FILE} $CREDITS_FLAGS --ya-end-command-file',
-        )
-        if is_positive("TIDY"):
-            emit(
-                'REAL_LINK_EXE',
-                '$YMAKE_PYTHON ${input:"build/scripts/clang_tidy_arch.py"}',
-                '--build-root $ARCADIA_BUILD_ROOT',
-                '--source-root $ARCADIA_ROOT',
-                '--output-file',
-                '$TARGET',
-                '$AUTO_INPUT',
-                ld_env_style
-            )
-        else:
-            emit('LINK_SCRIPT_EXE_FLAGS')
+        ) 
+        if is_positive("TIDY"): 
+            emit( 
+                'REAL_LINK_EXE', 
+                '$YMAKE_PYTHON ${input:"build/scripts/clang_tidy_arch.py"}', 
+                '--build-root $ARCADIA_BUILD_ROOT', 
+                '--source-root $ARCADIA_ROOT', 
+                '--output-file', 
+                '$TARGET', 
+                '$AUTO_INPUT', 
+                ld_env_style 
+            ) 
+        else: 
+            emit('LINK_SCRIPT_EXE_FLAGS') 
             emit('REAL_LINK_EXE_CMDLINE',
                  '$YMAKE_PYTHON ${input:"build/scripts/link_exe.py"}',
                  '--source-root $ARCADIA_ROOT',
@@ -2133,25 +2133,25 @@ class LD(Linker):
             emit('DWARF_COMMAND')
         else:
             emit('DWARF_COMMAND', self.dwarf_command, ld_env_style)
-        if is_positive("TIDY"):
-            emit('LINK_EXE', '$REAL_LINK_EXE')
-        else:
-            emit('LINK_EXE', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_LINK_EXE && $DWARF_COMMAND && $LINK_ADDITIONAL_SECTIONS_COMMAND && $PACK_IOS_CMD')
-        if is_positive("TIDY"):
-            emit('LINK_DYN_LIB', "$REAL_LINK_EXE")
-        else:
-            emit('LINK_DYN_LIB', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_LINK_DYN_LIB && $DWARF_COMMAND && $LINK_ADDITIONAL_SECTIONS_COMMAND')
+        if is_positive("TIDY"): 
+            emit('LINK_EXE', '$REAL_LINK_EXE') 
+        else: 
+            emit('LINK_EXE', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_LINK_EXE && $DWARF_COMMAND && $LINK_ADDITIONAL_SECTIONS_COMMAND && $PACK_IOS_CMD') 
+        if is_positive("TIDY"): 
+            emit('LINK_DYN_LIB', "$REAL_LINK_EXE") 
+        else: 
+            emit('LINK_DYN_LIB', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_LINK_DYN_LIB && $DWARF_COMMAND && $LINK_ADDITIONAL_SECTIONS_COMMAND') 
         emit('LINK_EXEC_DYN_LIB', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_LINK_EXEC_DYN_LIB && $DWARF_COMMAND && $LINK_ADDITIONAL_SECTIONS_COMMAND')
         emit('SWIG_DLL_JAR_CMD', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_SWIG_DLL_JAR_CMD && $DWARF_COMMAND')
 
         tail_link_lib = '$AUTO_INPUT ${requirements;hide:LIB_REQUIREMENTS} ${kv;hide:"p AR"} $TOOLCHAIN_ENV ${kv;hide:"pc light-red"} ${kv;hide:"show_out"}'
-        if is_positive("TIDY"):
-            archiver = '$YMAKE_PYTHON ${input:"build/scripts/clang_tidy_arch.py"} --source-root $ARCADIA_ROOT --build-root $ARCADIA_BUILD_ROOT --output-file'
-            emit('LINK_LIB', archiver, "$TARGET", tail_link_lib)
-        else:
-            archiver = '$YMAKE_PYTHON ${input:"build/scripts/link_lib.py"} ${quo:AR_TOOL} $AR_TYPE %s $ARCADIA_BUILD_ROOT %s' % (self.llvm_ar_format, self.ar_plugin or 'None')
-            # Static Library
-            emit('LINK_LIB', '$GENERATE_MF &&', archiver, '$TARGET', tail_link_lib)
+        if is_positive("TIDY"): 
+            archiver = '$YMAKE_PYTHON ${input:"build/scripts/clang_tidy_arch.py"} --source-root $ARCADIA_ROOT --build-root $ARCADIA_BUILD_ROOT --output-file' 
+            emit('LINK_LIB', archiver, "$TARGET", tail_link_lib) 
+        else: 
+            archiver = '$YMAKE_PYTHON ${input:"build/scripts/link_lib.py"} ${quo:AR_TOOL} $AR_TYPE %s $ARCADIA_BUILD_ROOT %s' % (self.llvm_ar_format, self.ar_plugin or 'None') 
+            # Static Library 
+            emit('LINK_LIB', '$GENERATE_MF &&', archiver, '$TARGET', tail_link_lib) 
         emit('GLOBAL_LINK_LIB', archiver, '$GLOBAL_TARGET', tail_link_lib)
 
         # "Fat Object" : pre-linked global objects and static library with all dependencies

@@ -34,5 +34,5 @@ RECURSE(
     scripts
     tests
     tests_slow
-    yandex_specific/config
+    yandex_specific/config 
 )

@@ -559,20 +559,20 @@ void THashTest::TestHMSetEmplace() {
     public:
         TKey(NTesting::TProbeState* state, int key)
             : TProbe(state)
-            , Key_(key)
+            , Key_(key) 
         {
         }
 
         operator size_t() const {
-            return THash<int>()(Key_);
+            return THash<int>()(Key_); 
         }
 
         bool operator==(const TKey& other) const {
-            return Key_ == other.Key_;
+            return Key_ == other.Key_; 
         }
 
     private:
-        int Key_;
+        int Key_; 
     };
 
     NTesting::TProbeState state;
@@ -791,27 +791,27 @@ public:
     };
 
     TCountingAllocator()
-        : Counters_(nullptr)
+        : Counters_(nullptr) 
     {
     }
 
     TCountingAllocator(TAllocatorCounters* counters)
-        : Counters_(counters)
+        : Counters_(counters) 
     {
         Y_ASSERT(counters);
     }
 
     template <class Other>
     TCountingAllocator(const TCountingAllocator<Other>& other)
-        : Counters_(other.Counters)
+        : Counters_(other.Counters) 
     {
     }
 
     T* allocate(size_type n) {
         auto result = base_type::allocate(n);
 
-        if (Counters_) {
-            ++Counters_->Allocations;
+        if (Counters_) { 
+            ++Counters_->Allocations; 
             Counters_->Chunks.emplace(result, n * sizeof(T));
         }
 
@@ -819,16 +819,16 @@ public:
     }
 
     void deallocate(T* p, size_type n) {
-        if (Counters_) {
-            ++Counters_->Deallocations;
-            Counters_->Chunks.erase(std::make_pair(p, n * sizeof(T)));
+        if (Counters_) { 
+            ++Counters_->Deallocations; 
+            Counters_->Chunks.erase(std::make_pair(p, n * sizeof(T))); 
         }
 
         base_type::deallocate(p, n);
     }
 
 private:
-    TAllocatorCounters* Counters_;
+    TAllocatorCounters* Counters_; 
 };
 
 void THashTest::TestAllocation() {
@@ -1264,7 +1264,7 @@ void THashTest::TestTupleHash() {
     * for example
     */
     struct A {
-        A Foo(const std::tuple<A, float>& v) {
+        A Foo(const std::tuple<A, float>& v) { 
             return std::get<A>(v);
         }
     };

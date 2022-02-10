@@ -81,10 +81,10 @@ const TString& GetRamDrivePath() {
     return NPrivate::GetTestEnv().RamDrivePath;
 }
 
-const TString& GetYtHddPath() {
-    return NPrivate::GetTestEnv().YtHddPath;
-}
-
+const TString& GetYtHddPath() { 
+    return NPrivate::GetTestEnv().YtHddPath; 
+} 
+ 
 const TString& GetOutputRamDrivePath() {
     return NPrivate::GetTestEnv().TestOutputRamDrivePath;
 }
@@ -159,7 +159,7 @@ namespace NPrivate {
         BuildRoot = "";
         WorkPath = "";
         RamDrivePath = "";
-        YtHddPath = "";
+        YtHddPath = ""; 
         TestOutputRamDrivePath = "";
         GdbPath = "";
         CoreSearchFile = "";
@@ -197,11 +197,11 @@ namespace NPrivate {
                 RamDrivePath = value->GetStringSafe("");
             }
 
-            value = context.GetValueByPath("runtime.yt_hdd_path");
-            if (value) {
-                YtHddPath = value->GetStringSafe("");
-            }
-
+            value = context.GetValueByPath("runtime.yt_hdd_path"); 
+            if (value) { 
+                YtHddPath = value->GetStringSafe(""); 
+            } 
+ 
             value = context.GetValueByPath("runtime.test_output_ram_drive_path");
             if (value) {
                 TestOutputRamDrivePath = value->GetStringSafe("");
@@ -225,10 +225,10 @@ namespace NPrivate {
             }
         }
 
-        if (!YtHddPath) {
-            YtHddPath = GetEnv("HDD_PATH");
-        }
-
+        if (!YtHddPath) { 
+            YtHddPath = GetEnv("HDD_PATH"); 
+        } 
+ 
         if (!SourceRoot) {
             SourceRoot = GetEnv("ARCADIA_SOURCE_ROOT");
         }

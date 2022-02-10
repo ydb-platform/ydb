@@ -1,5 +1,5 @@
-PY23_LIBRARY()
+PY23_LIBRARY() 
 OWNER(g:yatest)
-PY_SRCS(filter.py)
-
-END()
+PY_SRCS(filter.py) 
+ 
+END() 

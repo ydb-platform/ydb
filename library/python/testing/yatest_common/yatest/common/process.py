@@ -79,12 +79,12 @@ class InvalidExecutionStateError(Exception):
     pass
 
 
-class SignalInterruptionError(Exception):
-    def __init__(self, message=None):
-        super(SignalInterruptionError, self).__init__(message)
-        self.res = None
-
-
+class SignalInterruptionError(Exception): 
+    def __init__(self, message=None): 
+        super(SignalInterruptionError, self).__init__(message) 
+        self.res = None 
+ 
+ 
 class InvalidCommandError(Exception):
     pass
 
@@ -284,7 +284,7 @@ class _Execution(object):
     def wait(self, check_exit_code=True, timeout=None, on_timeout=None):
         def _wait():
             finished = None
-            interrupted = False
+            interrupted = False 
             try:
                 if hasattr(os, "wait4"):
                     try:
@@ -321,12 +321,12 @@ class _Execution(object):
                             yatest_logger.debug("Process resource usage is not available as process finished before wait4 was called")
                         else:
                             raise
-            except SignalInterruptionError:
-                interrupted = True
-                raise
+            except SignalInterruptionError: 
+                interrupted = True 
+                raise 
             finally:
-                if not interrupted:
-                    self._process.wait()  # this has to be here unconditionally, so that all process properties are set
+                if not interrupted: 
+                    self._process.wait()  # this has to be here unconditionally, so that all process properties are set 
 
             if not finished:
                 finished = time.time()

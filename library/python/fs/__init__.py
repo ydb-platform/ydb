@@ -326,8 +326,8 @@ def write_file(path, data, binary=True):
         ensure_dir(dir_path)
     tmp_path = path + '.tmp.' + str(random.random())
     with open_file(tmp_path, 'w' + ('b' if binary else '')) as f:
-        if not isinstance(data, bytes) and binary:
-            data = data.encode('UTF-8')
+        if not isinstance(data, bytes) and binary: 
+            data = data.encode('UTF-8') 
         f.write(data)
     replace_file(tmp_path, path)
 

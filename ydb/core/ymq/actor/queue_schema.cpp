@@ -769,12 +769,12 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let queuesRow '(
             '('Account userName)
             '('QueueName name)))
- 
-        (let eventsRow '( 
-            '('Account userName) 
-            '('QueueName name) 
-            '('EventType (Uint64 '1)))) 
- 
+
+        (let eventsRow '(
+            '('Account userName)
+            '('QueueName name)
+            '('EventType (Uint64 '1))))
+
         (let queuesSelect '(
             'QueueState
             'QueueId
@@ -836,11 +836,11 @@ static const char* const CommitQueueParamsQuery = R"__(
             '('MasterTabletId masterTabletId)
             '('TablesFormat tablesFormat)))
 
-        (let eventsUpdate '( 
-            '('CustomQueueName customName) 
-            '('EventTimestamp now) 
-            '('FolderId folderId))) 
- 
+        (let eventsUpdate '(
+            '('CustomQueueName customName)
+            '('EventTimestamp now)
+            '('FolderId folderId)))
+
         (let attrRow '(%3$s))
 
         (let attrUpdate '(
@@ -884,7 +884,7 @@ static const char* const CommitQueueParamsQuery = R"__(
             (ListIf queueExists (SetResult 'meta queuesRead))
 
             (ListIf willCommit (UpdateRow queuesTable queuesRow queuesUpdate))
-            (ListIf willCommit (UpdateRow eventsTable eventsRow eventsUpdate)) 
+            (ListIf willCommit (UpdateRow eventsTable eventsRow eventsUpdate))
             (ListIf willCommit (UpdateRow attrsTable attrRow attrUpdate))
             
              (If (Not willCommit) (AsList (Void))
@@ -1299,27 +1299,27 @@ static const char* EraseQueueRecordQuery = R"__(
     (
         (let name (Parameter 'NAME (DataType 'Utf8String)))
         (let userName (Parameter 'USER_NAME (DataType 'Utf8String)))
-        (let now (Parameter 'NOW (DataType 'Uint64))) 
+        (let now (Parameter 'NOW (DataType 'Uint64)))
 
         (let queuesTable '%2$s/.Queues)
-        (let eventsTable '%2$s/.Events) 
+        (let eventsTable '%2$s/.Events)
 
         (let queuesRow '(
             '('Account userName)
             '('QueueName name)))
-        (let eventsRow '( 
-            '('Account userName) 
-            '('QueueName name) 
-            '('EventType (Uint64 '0)))) 
- 
+        (let eventsRow '(
+            '('Account userName)
+            '('QueueName name)
+            '('EventType (Uint64 '0))))
+
         (let queuesSelect '(
             'QueueState
             'Version
             'FifoQueue
-            'Shards 
-            'CustomQueueName 
-            'CreatedTimestamp 
-            'FolderId)) 
+            'Shards
+            'CustomQueueName
+            'CreatedTimestamp
+            'FolderId))
         (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
 
         (let currentVersion
@@ -1329,28 +1329,28 @@ static const char* EraseQueueRecordQuery = R"__(
             )
         )
 
-        (let queueCreateTs 
-            (Coalesce 
-                (Member queuesRead 'CreatedTimestamp) 
-                (Uint64 '0) 
-            ) 
-        ) 
-        (let folderId 
-            (Coalesce 
-                (Member queuesRead 'FolderId) 
-                (Utf8String '"") 
-            ) 
-        ) 
- 
-        (let customName 
-            (Coalesce 
-                (Member queuesRead 'CustomQueueName) 
-                (Utf8String '"") 
-            ) 
-        ) 
- 
-        (let eventTs (Max now (Add queueCreateTs (Uint64 '2)))) 
- 
+        (let queueCreateTs
+            (Coalesce
+                (Member queuesRead 'CreatedTimestamp)
+                (Uint64 '0)
+            )
+        )
+        (let folderId
+            (Coalesce
+                (Member queuesRead 'FolderId)
+                (Utf8String '"")
+            )
+        )
+
+        (let customName
+            (Coalesce
+                (Member queuesRead 'CustomQueueName)
+                (Utf8String '"")
+            )
+        )
+
+        (let eventTs (Max now (Add queueCreateTs (Uint64 '2))))
+
         (let queueExists
             (Coalesce
                 (Or
@@ -1359,16 +1359,16 @@ static const char* EraseQueueRecordQuery = R"__(
                 )
                 (Bool 'false)))
 
-        (let eventsUpdate '( 
-            '('CustomQueueName customName) 
-            '('EventTimestamp eventTs) 
-            '('FolderId folderId))) 
- 
+        (let eventsUpdate '(
+            '('CustomQueueName customName)
+            '('EventTimestamp eventTs)
+            '('FolderId folderId)))
+
         (return (AsList
             (SetResult 'exists queueExists)
             (SetResult 'version currentVersion)
             (SetResult 'fields queuesRead)
-            (If queueExists (UpdateRow eventsTable eventsRow eventsUpdate) (Void)) 
+            (If queueExists (UpdateRow eventsTable eventsRow eventsUpdate) (Void))
             (If queueExists (EraseRow queuesTable queuesRow) (Void))))
     )
 )__";
@@ -1376,13 +1376,13 @@ static const char* EraseQueueRecordQuery = R"__(
 void TDeleteQueueSchemaActorV2::NextAction() {
     switch (EDeleting(SI_)) {
         case EDeleting::EraseQueueRecord: {
-                auto ev = MakeExecuteEvent(Sprintf(EraseQueueRecordQuery, QueuePath_.GetUserPath().c_str(), Cfg().GetRoot().c_str())); 
+                auto ev = MakeExecuteEvent(Sprintf(EraseQueueRecordQuery, QueuePath_.GetUserPath().c_str(), Cfg().GetRoot().c_str()));
             auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
-            auto nowMs = TInstant::Now().MilliSeconds(); 
+            auto nowMs = TInstant::Now().MilliSeconds();
             TParameters(trans->MutableParams()->MutableProto())
                 .Utf8("NAME", QueuePath_.QueueName)
-                .Utf8("USER_NAME", QueuePath_.UserName) 
-                .Uint64("NOW", nowMs); 
+                .Utf8("USER_NAME", QueuePath_.UserName)
+                .Uint64("NOW", nowMs);
 
             Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
             break;

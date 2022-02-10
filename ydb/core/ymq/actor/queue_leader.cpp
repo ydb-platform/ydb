@@ -168,9 +168,9 @@ void TQueueLeader::PassAway() {
     }
 
     // Explicitly set absolute counters to zero for proper counting aggregated parent counters:
-    SET_COUNTER_COUPLE(Counters_, MessagesCount, stored_count, 0); 
-    SET_COUNTER_COUPLE(Counters_, InflyMessagesCount, inflight_count, 0); 
-    SET_COUNTER_COUPLE(Counters_, OldestMessageAgeSeconds, oldest_age_milliseconds, 0); 
+    SET_COUNTER_COUPLE(Counters_, MessagesCount, stored_count, 0);
+    SET_COUNTER_COUPLE(Counters_, InflyMessagesCount, inflight_count, 0);
+    SET_COUNTER_COUPLE(Counters_, OldestMessageAgeSeconds, oldest_age_milliseconds, 0);
 
     TActorBootstrapped::PassAway();
 }
@@ -1214,7 +1214,7 @@ void TQueueLeader::AnswerGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr&
     auto resp = MakeHolder<TSqsEvents::TEvConfiguration>();
 
     resp->RootUrl = RootUrl_;
-    resp->SqsCoreCounters = Counters_->RootCounters.SqsCounters; 
+    resp->SqsCoreCounters = Counters_->RootCounters.SqsCounters;
     resp->QueueCounters = Counters_;
     resp->UserCounters = UserCounters_;
     resp->Shards = ShardsCount_;
@@ -1236,7 +1236,7 @@ void TQueueLeader::AnswerGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr&
 void TQueueLeader::AnswerFailed(TSqsEvents::TEvGetConfiguration::TPtr& ev) {
     auto answer = MakeHolder<TSqsEvents::TEvConfiguration>();
     answer->RootUrl = RootUrl_;
-    answer->SqsCoreCounters = Counters_->RootCounters.SqsCounters; 
+    answer->SqsCoreCounters = Counters_->RootCounters.SqsCounters;
     answer->QueueCounters = Counters_;
     answer->UserCounters = UserCounters_;
     answer->Fail = true;
@@ -1323,7 +1323,7 @@ void TQueueLeader::OnQueueConfiguration(const TSqsEvents::TEvExecuted::TRecord& 
                 answer->UserExists = true;
                 answer->QueueExists = false;
                 answer->RootUrl = RootUrl_;
-                answer->SqsCoreCounters = Counters_->RootCounters.SqsCounters; 
+                answer->SqsCoreCounters = Counters_->RootCounters.SqsCounters;
                 answer->QueueCounters = Counters_;
                 answer->UserCounters = UserCounters_;
                 answer->Fail = false;
@@ -1602,9 +1602,9 @@ void TQueueLeader::ReportMessagesCountMetricsIfReady() {
     }
 
     if (Counters_) {
-        SET_COUNTER_COUPLE(Counters_, MessagesCount, stored_count, messagesCount); 
+        SET_COUNTER_COUPLE(Counters_, MessagesCount, stored_count, messagesCount);
         if (!IsFifoQueue_) { // for fifo queues infly is always 0
-            SET_COUNTER_COUPLE(Counters_, InflyMessagesCount, inflight_count, inflyMessagesCount); 
+            SET_COUNTER_COUPLE(Counters_, InflyMessagesCount, inflight_count, inflyMessagesCount);
         }
     }
 }
@@ -1619,10 +1619,10 @@ void TQueueLeader::ReportOldestTimestampMetricsIfReady() {
     }
     if (Counters_) {
         if (oldestMessagesTimestamp != Max<ui64>()) {
-            auto age = (TActivationContext::Now() - TInstant::MilliSeconds(oldestMessagesTimestamp)).Seconds(); 
-            SET_COUNTER_COUPLE(Counters_, OldestMessageAgeSeconds, oldest_age_milliseconds, age); 
+            auto age = (TActivationContext::Now() - TInstant::MilliSeconds(oldestMessagesTimestamp)).Seconds();
+            SET_COUNTER_COUPLE(Counters_, OldestMessageAgeSeconds, oldest_age_milliseconds, age);
         } else {
-            SET_COUNTER_COUPLE(Counters_, OldestMessageAgeSeconds, oldest_age_milliseconds, 0); 
+            SET_COUNTER_COUPLE(Counters_, OldestMessageAgeSeconds, oldest_age_milliseconds, 0);
         }
     }
 }

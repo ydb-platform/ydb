@@ -380,13 +380,13 @@ std::shared_ptr<IReadSession> TPersQueueClient::CreateReadSession(const TReadSes
 }
 
 std::shared_ptr<IWriteSession> TPersQueueClient::CreateWriteSession(const TWriteSessionSettings& settings) {
-    return Impl_->CreateWriteSession(settings); 
-} 
+    return Impl_->CreateWriteSession(settings);
+}
 
 std::shared_ptr<ISimpleBlockingWriteSession> TPersQueueClient::CreateSimpleBlockingWriteSession(
-        const TWriteSessionSettings& settings 
-) { 
-    return Impl_->CreateSimpleWriteSession(settings); 
-} 
+        const TWriteSessionSettings& settings
+) {
+    return Impl_->CreateSimpleWriteSession(settings);
+}
 
 } // namespace NYdb::NPersQueue

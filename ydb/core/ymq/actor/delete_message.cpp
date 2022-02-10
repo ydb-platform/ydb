@@ -94,7 +94,7 @@ private:
             // Calc metrics
             const TDuration processingDuration = TActivationContext::Now() - lockTimestamp;
             COLLECT_HISTOGRAM_COUNTER(QueueCounters_, ClientMessageProcessing_Duration, processingDuration.MilliSeconds());
-            COLLECT_HISTOGRAM_COUNTER(QueueCounters_, client_processing_duration_milliseconds, processingDuration.MilliSeconds()); 
+            COLLECT_HISTOGRAM_COUNTER(QueueCounters_, client_processing_duration_milliseconds, processingDuration.MilliSeconds());
         } catch (...) {
             RLOG_SQS_WARN("Failed to process receipt handle " << entry.GetReceiptHandle() << ": " << CurrentExceptionMessage());
             MakeError(resp, NErrors::RECEIPT_HANDLE_IS_INVALID);
@@ -104,7 +104,7 @@ private:
     void ProcessAnswer(TDeleteMessageResponse* resp, const TSqsEvents::TEvDeleteMessageBatchResponse::TMessageResult& answer) {
         switch (answer.Status) {
             case TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK: {
-                INC_COUNTER_COUPLE(QueueCounters_, DeleteMessage_Count, deleted_count_per_second); 
+                INC_COUNTER_COUPLE(QueueCounters_, DeleteMessage_Count, deleted_count_per_second);
                 break;
             }
             case TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::NotFound: {

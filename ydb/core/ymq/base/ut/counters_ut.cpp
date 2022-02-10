@@ -195,99 +195,99 @@ Y_UNIT_TEST_SUITE(LazyCounterTest) {
 }
 
 Y_UNIT_TEST_SUITE(UserCountersTest) {
-#define ASSERT_STR_COUPLE_CONTAINS(string1, string2, what) \ 
-        UNIT_ASSERT_STRING_CONTAINS(string1, what); \ 
-        UNIT_ASSERT_STRING_CONTAINS(string2, what); 
- 
-#define ASSERT_FIRST_OF_COUPLE_CONTAINS(string1, string2, what) \ 
-        UNIT_ASSERT_STRING_CONTAINS(string1, what); \ 
-        UNIT_ASSERT(!string2.Contains(what)); 
- 
-#define ASSERT_STR_COUPLE_DONT_CONTAIN(string1, string2, what) \ 
-        UNIT_ASSERT(string1.find(what) == TString::npos); \ 
-        UNIT_ASSERT(string2.find(what) == TString::npos); 
- 
-#define ASSERT_USER_PRESENT(user) \ 
-    ASSERT_FIRST_OF_COUPLE_CONTAINS(CountersString(core), CountersString(ymqCounters), TString("user=") + user);  \ 
-    ASSERT_FIRST_OF_COUPLE_CONTAINS(CountersString(ymqCounters), CountersString(core), TString("cloud=") + user); 
- 
-#define ASSERT_USER_ABSENT(user) \ 
-    ASSERT_STR_COUPLE_DONT_CONTAIN(CountersString(core), CountersString(ymqCounters), TString("user=") + user);  \ 
-    ASSERT_STR_COUPLE_DONT_CONTAIN(CountersString(core), CountersString(ymqCounters), TString("cloud=") + user); 
- 
+#define ASSERT_STR_COUPLE_CONTAINS(string1, string2, what) \
+        UNIT_ASSERT_STRING_CONTAINS(string1, what); \
+        UNIT_ASSERT_STRING_CONTAINS(string2, what);
+
+#define ASSERT_FIRST_OF_COUPLE_CONTAINS(string1, string2, what) \
+        UNIT_ASSERT_STRING_CONTAINS(string1, what); \
+        UNIT_ASSERT(!string2.Contains(what));
+
+#define ASSERT_STR_COUPLE_DONT_CONTAIN(string1, string2, what) \
+        UNIT_ASSERT(string1.find(what) == TString::npos); \
+        UNIT_ASSERT(string2.find(what) == TString::npos);
+
+#define ASSERT_USER_PRESENT(user) \
+    ASSERT_FIRST_OF_COUPLE_CONTAINS(CountersString(core), CountersString(ymqCounters), TString("user=") + user);  \
+    ASSERT_FIRST_OF_COUPLE_CONTAINS(CountersString(ymqCounters), CountersString(core), TString("cloud=") + user);
+
+#define ASSERT_USER_ABSENT(user) \
+    ASSERT_STR_COUPLE_DONT_CONTAIN(CountersString(core), CountersString(ymqCounters), TString("user=") + user);  \
+    ASSERT_STR_COUPLE_DONT_CONTAIN(CountersString(core), CountersString(ymqCounters), TString("cloud=") + user);
+
     Y_UNIT_TEST(DisableCountersTest) {
         NKikimrConfig::TSqsConfig cfg;
         cfg.SetCreateLazyCounters(false);
         TIntrusivePtr<NMonitoring::TDynamicCounters> core = new NMonitoring::TDynamicCounters();
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters(); 
-        TIntrusivePtr<TUserCounters> user1 = new TUserCounters(cfg, core, ymqCounters, nullptr, "user1", nullptr); 
-        TIntrusivePtr<TUserCounters> user2 = new TUserCounters(cfg, core, ymqCounters, nullptr, "user2", nullptr); 
-        ASSERT_USER_PRESENT("user1"); 
-        ASSERT_USER_PRESENT("user2"); 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<TUserCounters> user1 = new TUserCounters(cfg, core, ymqCounters, nullptr, "user1", nullptr);
+        TIntrusivePtr<TUserCounters> user2 = new TUserCounters(cfg, core, ymqCounters, nullptr, "user2", nullptr);
+        ASSERT_USER_PRESENT("user1");
+        ASSERT_USER_PRESENT("user2");
 
         user1->DisableCounters(false);
-        ASSERT_USER_PRESENT("user1"); 
+        ASSERT_USER_PRESENT("user1");
 
         user1->DisableCounters(true);
-        TString sqsCntrText = CountersString(core); 
-        TString ymqCntrText = CountersString(ymqCounters); 
-        ASSERT_USER_ABSENT("user1"); 
-        ASSERT_USER_PRESENT("user2"); 
+        TString sqsCntrText = CountersString(core);
+        TString ymqCntrText = CountersString(ymqCounters);
+        ASSERT_USER_ABSENT("user1");
+        ASSERT_USER_PRESENT("user2");
 
         // again
         user1->DisableCounters(true);
-        sqsCntrText = CountersString(core); 
-        ymqCntrText = CountersString(ymqCounters); 
-        ASSERT_USER_ABSENT("user1"); 
-        ASSERT_USER_PRESENT("user2"); 
+        sqsCntrText = CountersString(core);
+        ymqCntrText = CountersString(ymqCounters);
+        ASSERT_USER_ABSENT("user1");
+        ASSERT_USER_PRESENT("user2");
 
         *user1->RequestTimeouts = 1;
         *user2->RequestTimeouts = 2;
 
         // return back
         user1->DisableCounters(false);
-        sqsCntrText = CountersString(core); 
-        ymqCntrText = CountersString(ymqCounters); 
-        ASSERT_USER_PRESENT("user1"); 
-        ASSERT_USER_PRESENT("user2"); 
-        ASSERT_STR_COUPLE_DONT_CONTAIN(sqsCntrText,ymqCntrText, "RequestTimeouts: 1"); 
-        ASSERT_FIRST_OF_COUPLE_CONTAINS(sqsCntrText, ymqCntrText, "RequestTimeouts: 2"); 
-        ASSERT_FIRST_OF_COUPLE_CONTAINS(sqsCntrText, ymqCntrText, "RequestTimeouts: 2"); 
-        ASSERT_FIRST_OF_COUPLE_CONTAINS(sqsCntrText, ymqCntrText, "RequestTimeouts: 0"); 
+        sqsCntrText = CountersString(core);
+        ymqCntrText = CountersString(ymqCounters);
+        ASSERT_USER_PRESENT("user1");
+        ASSERT_USER_PRESENT("user2");
+        ASSERT_STR_COUPLE_DONT_CONTAIN(sqsCntrText,ymqCntrText, "RequestTimeouts: 1");
+        ASSERT_FIRST_OF_COUPLE_CONTAINS(sqsCntrText, ymqCntrText, "RequestTimeouts: 2");
+        ASSERT_FIRST_OF_COUPLE_CONTAINS(sqsCntrText, ymqCntrText, "RequestTimeouts: 2");
+        ASSERT_FIRST_OF_COUPLE_CONTAINS(sqsCntrText, ymqCntrText, "RequestTimeouts: 0");
 
         // again
         *user1->RequestTimeouts = 3;
 
         user1->DisableCounters(false);
-        sqsCntrText = CountersString(core); 
-        ymqCntrText = CountersString(ymqCounters); 
-        ASSERT_USER_PRESENT("user1"); 
-        ASSERT_USER_PRESENT("user2"); 
-        ASSERT_FIRST_OF_COUPLE_CONTAINS(sqsCntrText, ymqCntrText, "RequestTimeouts: 2"); 
-        ASSERT_FIRST_OF_COUPLE_CONTAINS(sqsCntrText, ymqCntrText, "RequestTimeouts: 3"); 
+        sqsCntrText = CountersString(core);
+        ymqCntrText = CountersString(ymqCounters);
+        ASSERT_USER_PRESENT("user1");
+        ASSERT_USER_PRESENT("user2");
+        ASSERT_FIRST_OF_COUPLE_CONTAINS(sqsCntrText, ymqCntrText, "RequestTimeouts: 2");
+        ASSERT_FIRST_OF_COUPLE_CONTAINS(sqsCntrText, ymqCntrText, "RequestTimeouts: 3");
     }
 
     Y_UNIT_TEST(RemoveUserCountersTest) {
         NKikimrConfig::TSqsConfig cfg;
         cfg.SetCreateLazyCounters(false);
         TIntrusivePtr<NMonitoring::TDynamicCounters> core = new NMonitoring::TDynamicCounters();
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters(); 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters();
 
-        TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", nullptr); 
-        ASSERT_USER_PRESENT("my_user"); 
- 
+        TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", nullptr);
+        ASSERT_USER_PRESENT("my_user");
+
         user->RemoveCounters();
-        ASSERT_USER_ABSENT("my_user"); 
+        ASSERT_USER_ABSENT("my_user");
     }
 
     Y_UNIT_TEST(CountersAggregationTest) {
         NKikimrConfig::TSqsConfig cfg;
         cfg.SetCreateLazyCounters(false);
         TIntrusivePtr<NMonitoring::TDynamicCounters> core = new NMonitoring::TDynamicCounters();
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters(); 
-        TIntrusivePtr<TUserCounters> total = new TUserCounters(cfg, core, ymqCounters, nullptr, TOTAL_COUNTER_LABEL, nullptr); 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<TUserCounters> total = new TUserCounters(cfg, core, ymqCounters, nullptr, TOTAL_COUNTER_LABEL, nullptr);
         total->ShowDetailedCounters(TInstant::Max());
-        TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", total); 
+        TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", total);
         UNIT_ASSERT_STRING_CONTAINS(CountersString(core), "user=my_user");
         UNIT_ASSERT_STRING_CONTAINS(CountersString(core), "user=total");
 
@@ -300,7 +300,7 @@ Y_UNIT_TEST_SUITE(UserCountersTest) {
 
         // Try different types of member counters: detailed/usual/arrays/api statuses.
         ++*user->RequestTimeouts;
-        ++*user->SqsActionCounters[EAction::CreateQueue].Errors; 
+        ++*user->SqsActionCounters[EAction::CreateQueue].Errors;
         ++*user->GetDetailedCounters()->CreateAccountOnTheFly_Success;
         user->GetDetailedCounters()->APIStatuses.AddOk(3);
         user->GetDetailedCounters()->APIStatuses.AddError("AccessDeniedException", 2);
@@ -308,8 +308,8 @@ Y_UNIT_TEST_SUITE(UserCountersTest) {
         ++*user->GetTransactionCounters()->TransactionsCount;
         ++*user->GetTransactionCounters()->QueryTypeCounters[EQueryId::WRITE_MESSAGE_ID].TransactionsFailed;
 
-        ++*user->YmqActionCounters[EAction::CreateQueue].Errors; 
- 
+        ++*user->YmqActionCounters[EAction::CreateQueue].Errors;
+
         AssertCounterValues(core,
                             {
                                 { "user=total/RequestTimeouts", 1 },
@@ -331,14 +331,14 @@ Y_UNIT_TEST_SUITE(UserCountersTest) {
                                 { "user=total/queue=total/TransactionsFailedByType/query_type=WRITE_MESSAGE_ID", 1 },
                                 { "user=my_user/queue=total/TransactionsFailedByType/query_type=WRITE_MESSAGE_ID", 1 },
                             });
- 
-//    auto queue = user->CreateQueueCounters("my_queue", "folder", true); 
- 
-        AssertCounterValues(ymqCounters, 
-                            { 
-                                    { "cloud=my_user/method=create_queue/name=api.http.errors_count_per_second", 1 }, 
-                            } 
-        ); 
+
+//    auto queue = user->CreateQueueCounters("my_queue", "folder", true);
+
+        AssertCounterValues(ymqCounters,
+                            {
+                                    { "cloud=my_user/method=create_queue/name=api.http.errors_count_per_second", 1 },
+                            }
+        );
     }
 }
 
@@ -347,44 +347,44 @@ Y_UNIT_TEST_SUITE(QueueCountersTest) {
         NKikimrConfig::TSqsConfig cfg;
         cfg.SetCreateLazyCounters(false);
         TIntrusivePtr<NMonitoring::TDynamicCounters> core = new NMonitoring::TDynamicCounters();
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters(); 
-        TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", nullptr); 
-        ASSERT_USER_PRESENT("my_user"); 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", nullptr);
+        ASSERT_USER_PRESENT("my_user");
 
-        auto queue = user->CreateQueueCounters("my_queue", "folder", false); 
-        ASSERT_STR_COUPLE_DONT_CONTAIN(CountersString(core), CountersString(ymqCounters), "my_queue"); 
+        auto queue = user->CreateQueueCounters("my_queue", "folder", false);
+        ASSERT_STR_COUPLE_DONT_CONTAIN(CountersString(core), CountersString(ymqCounters), "my_queue");
 
         queue->InsertCounters();
-        ASSERT_STR_COUPLE_CONTAINS(CountersString(core), CountersString(ymqCounters), "my_queue"); 
+        ASSERT_STR_COUPLE_CONTAINS(CountersString(core), CountersString(ymqCounters), "my_queue");
 
-        ++*queue->RequestTimeouts; 
-        auto sqsCntrText = CountersString(core); 
-        auto ymqCntrText = CountersString(ymqCounters); 
-        ASSERT_FIRST_OF_COUPLE_CONTAINS(sqsCntrText, ymqCntrText, "RequestTimeouts: 1"); 
- 
-        ++*queue->request_timeouts_count_per_second; 
-        sqsCntrText = CountersString(core); 
-        ymqCntrText = CountersString(ymqCounters); 
-        ASSERT_FIRST_OF_COUPLE_CONTAINS(ymqCntrText, sqsCntrText, "request_timeouts_count_per_second: 1"); 
- 
+        ++*queue->RequestTimeouts;
+        auto sqsCntrText = CountersString(core);
+        auto ymqCntrText = CountersString(ymqCounters);
+        ASSERT_FIRST_OF_COUPLE_CONTAINS(sqsCntrText, ymqCntrText, "RequestTimeouts: 1");
+
+        ++*queue->request_timeouts_count_per_second;
+        sqsCntrText = CountersString(core);
+        ymqCntrText = CountersString(ymqCounters);
+        ASSERT_FIRST_OF_COUPLE_CONTAINS(ymqCntrText, sqsCntrText, "request_timeouts_count_per_second: 1");
+
         // Second time:
         queue->InsertCounters();
-        ASSERT_STR_COUPLE_CONTAINS(CountersString(core), CountersString(ymqCounters), "my_queue"); 
+        ASSERT_STR_COUPLE_CONTAINS(CountersString(core), CountersString(ymqCounters), "my_queue");
     }
 
     void RemoveQueueCountersTest(bool leader, const TString& folderId) {
         NKikimrConfig::TSqsConfig cfg;
         cfg.SetCreateLazyCounters(false);
         TIntrusivePtr<NMonitoring::TDynamicCounters> core = new NMonitoring::TDynamicCounters();
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters(); 
-        TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", nullptr); 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", nullptr);
         TIntrusivePtr<TQueueCounters> queue = user->CreateQueueCounters("my_queue", folderId, true);
         if (leader) {
             queue = queue->GetCountersForLeaderNode();
         }
-        ASSERT_STR_COUPLE_CONTAINS(CountersString(core), CountersString(ymqCounters), "queue=my_queue"); 
+        ASSERT_STR_COUPLE_CONTAINS(CountersString(core), CountersString(ymqCounters), "queue=my_queue");
         queue->RemoveCounters();
-        ASSERT_STR_COUPLE_DONT_CONTAIN(CountersString(core), CountersString(ymqCounters), "queue=my_queue"); 
+        ASSERT_STR_COUPLE_DONT_CONTAIN(CountersString(core), CountersString(ymqCounters), "queue=my_queue");
     }
 
     Y_UNIT_TEST(RemoveQueueCountersNonLeaderWithoutFolderTest) {
@@ -408,10 +408,10 @@ Y_UNIT_TEST_SUITE(QueueCountersTest) {
         cfg.SetYandexCloudMode(cloudMode);
         cfg.SetCreateLazyCounters(false);
         TIntrusivePtr<NMonitoring::TDynamicCounters> core = new NMonitoring::TDynamicCounters();
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters(); 
-        TIntrusivePtr<TUserCounters> total = new TUserCounters(cfg, core, ymqCounters, nullptr, TOTAL_COUNTER_LABEL, nullptr); 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<TUserCounters> total = new TUserCounters(cfg, core, ymqCounters, nullptr, TOTAL_COUNTER_LABEL, nullptr);
         total->ShowDetailedCounters(TInstant::Max());
-        TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", total); 
+        TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", total);
         TIntrusivePtr<TQueueCounters> queue = user->CreateQueueCounters("my_queue", cloudMode ? "my_folder" : "", true)->GetCountersForLeaderNode();
         UNIT_ASSERT_STRING_CONTAINS(CountersString(core), "queue=my_queue");
 
@@ -419,9 +419,9 @@ Y_UNIT_TEST_SUITE(QueueCountersTest) {
 
         // Try different types of member counters: detailed/usual/arrays/api statuses.
         ++*queue->MessagesPurged;
-        ++*queue->purged_count_per_second; 
-        ++*queue->SqsActionCounters[EAction::SendMessageBatch].Errors; 
-        ++*queue->YmqActionCounters[EAction::SendMessageBatch].Errors; 
+        ++*queue->purged_count_per_second;
+        ++*queue->SqsActionCounters[EAction::SendMessageBatch].Errors;
+        ++*queue->YmqActionCounters[EAction::SendMessageBatch].Errors;
         ++*queue->GetDetailedCounters()->ReceiveMessage_KeysInvalidated;
         ++*queue->GetTransactionCounters()->TransactionRetryTimeouts;
         ++*queue->GetTransactionCounters()->QueryTypeCounters[EQueryId::DELETE_MESSAGE_ID].TransactionsCount;
@@ -459,13 +459,13 @@ Y_UNIT_TEST_SUITE(QueueCountersTest) {
                                 { x("user=my_user/queue=total/TransactionsByType/query_type=DELETE_MESSAGE_ID"), 1 },
                                 { x("user=my_user/queue=my_queue/TransactionsByType/query_type=DELETE_MESSAGE_ID"), 1 },
                             });
- 
-        AssertCounterValues(ymqCounters, 
-                            { 
-                                { x("cloud=my_user/queue=my_queue/name=queue.messages.purged_count_per_second"), 1 }, 
- 
-                                { x("cloud=my_user/queue=my_queue/method=send_message_batch/name=api.http.errors_count_per_second"), 1 }, 
-                            }); 
+
+        AssertCounterValues(ymqCounters,
+                            {
+                                { x("cloud=my_user/queue=my_queue/name=queue.messages.purged_count_per_second"), 1 },
+
+                                { x("cloud=my_user/queue=my_queue/method=send_message_batch/name=api.http.errors_count_per_second"), 1 },
+                            });
     }
 
     Y_UNIT_TEST(CountersAggregationTest) {

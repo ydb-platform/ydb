@@ -40,7 +40,7 @@ TPQSchemaService::TPQSchemaService(const TActorId& schemeCache,
 
 
 void TPQSchemaService::Bootstrap(const TActorContext& ctx) {
-    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { // ToDo[migration]: switch to haveClusters 
+    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { // ToDo[migration]: switch to haveClusters
         ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(),
                  new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
     }
@@ -136,7 +136,7 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
     auto settings = result.mutable_settings();
     Ydb::Scheme::Entry *selfEntry = result.mutable_self();
     const auto& selfInfo = response.Self->Info;
-    selfEntry->set_name(path + "/" + selfInfo.GetName()); 
+    selfEntry->set_name(path + "/" + selfInfo.GetName());
     selfEntry->set_type(static_cast<Ydb::Scheme::Entry::Type>(selfInfo.GetPathType()));
     ConvertDirectoryEntry(selfInfo, selfEntry, true);
     if (response.PQGroupInfo) {

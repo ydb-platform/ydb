@@ -124,8 +124,8 @@ struct TSqsEvents {
 
         EvGarbageSearchResult,
 
-        EvCleanupQueryComplete, 
- 
+        EvCleanupQueryComplete,
+
         EvEnd,
     };
 
@@ -876,15 +876,15 @@ struct TSqsEvents {
         bool Success = true;
         THashMap<TString, TGarbageHint> GarbageHints;
     };
-    struct TEvCleanupQueryComplete : public NActors::TEventLocal<TEvCleanupQueryComplete, EvCleanupQueryComplete> { 
-        explicit TEvCleanupQueryComplete(const TString& name, ui64 type) 
-            : Name(name) 
-            , Type(type) 
-        { 
-        } 
-        TString Name; 
-        ui64 Type; 
-    }; 
+    struct TEvCleanupQueryComplete : public NActors::TEventLocal<TEvCleanupQueryComplete, EvCleanupQueryComplete> {
+        explicit TEvCleanupQueryComplete(const TString& name, ui64 type)
+            : Name(name)
+            , Type(type)
+        {
+        }
+        TString Name;
+        ui64 Type;
+    };
 };
 
 } // namespace NKikimr::NSQS

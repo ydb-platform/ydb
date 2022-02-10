@@ -76,13 +76,13 @@ static inline bool InternalErrorCode(PersQueue::ErrorCode::ErrorCode errorCode) 
 }
 
 struct TPartitionId {
-    NPersQueue::TConverterPtr TopicConverter; 
+    NPersQueue::TConverterPtr TopicConverter;
     ui64 Partition;
     ui64 AssignId;
 
     bool operator < (const TPartitionId& rhs) const {
-        return std::make_tuple(AssignId, Partition, TopicConverter->GetClientsideName()) < 
-               std::make_tuple(rhs.AssignId, rhs.Partition, rhs.TopicConverter->GetClientsideName()); 
+        return std::make_tuple(AssignId, Partition, TopicConverter->GetClientsideName()) <
+               std::make_tuple(rhs.AssignId, rhs.Partition, rhs.TopicConverter->GetClientsideName());
     }
 };
 
@@ -141,11 +141,11 @@ struct TEvPQProxy {
 
 
     struct TEvAuthResultOk : public NActors::TEventLocal<TEvAuthResultOk, EvAuthResultOk> {
-        TEvAuthResultOk(const TTopicTabletsPairs&& topicAndTablets) 
+        TEvAuthResultOk(const TTopicTabletsPairs&& topicAndTablets)
             : TopicAndTablets(std::move(topicAndTablets))
         { }
 
-        TTopicTabletsPairs TopicAndTablets; 
+        TTopicTabletsPairs TopicAndTablets;
     };
 
     struct TEvSessionSetPreferredCluster : public NActors::TEventLocal<TEvSessionSetPreferredCluster, EvSessionSetPreferredCluster> {
@@ -454,14 +454,14 @@ struct TEvPQProxy {
 /// WRITE ACTOR
 class TWriteSessionActor : public NActors::TActorBootstrapped<TWriteSessionActor> {
 using IContext = NGRpcServer::IGRpcStreamingContext<PersQueue::V1::StreamingWriteClientMessage, PersQueue::V1::StreamingWriteServerMessage>;
-using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse; 
-using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest; 
+using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
+using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
 
 public:
-    TWriteSessionActor(NKikimr::NGRpcService::TEvStreamPQWriteRequest* request, const ui64 cookie, 
-                       const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache, 
-                       TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC, 
-                       const NPersQueue::TTopicsListController& topicsController); 
+    TWriteSessionActor(NKikimr::NGRpcService::TEvStreamPQWriteRequest* request, const ui64 cookie,
+                       const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
+                       TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
+                       const NPersQueue::TTopicsListController& topicsController);
     ~TWriteSessionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -486,7 +486,7 @@ private:
             HFunc(TEvPQProxy::TEvDone, Handle)
             HFunc(TEvPersQueue::TEvGetPartitionIdForWriteResponse, Handle)
 
-            HFunc(TEvDescribeTopicsResponse, Handle) 
+            HFunc(TEvDescribeTopicsResponse, Handle)
 
             HFunc(NPQ::TEvPartitionWriter::TEvInitResult, Handle);
             HFunc(NPQ::TEvPartitionWriter::TEvWriteAccepted, Handle);
@@ -522,7 +522,7 @@ private:
     void Handle(TEvPQProxy::TEvUpdateToken::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDone::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
     void LogSession(const TActorContext& ctx);
 
     void DiscoverPartition(const NActors::TActorContext& ctx);
@@ -530,7 +530,7 @@ private:
     void RequestNextPartition(const NActors::TActorContext& ctx);
 
     void ProceedPartition(const ui32 partition, const NActors::TActorContext& ctx);
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateSourceIdMetadataRequest(const NActors::TActorContext& ctx); 
+    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateSourceIdMetadataRequest(const NActors::TActorContext& ctx);
     void InitCheckACL(const TActorContext& ctx);
 
     void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx);
@@ -577,8 +577,8 @@ private:
     TString PeerName;
     ui64 Cookie;
 
-    NPersQueue::TTopicsListController TopicsController; 
-    NPersQueue::TConverterPtr TopicConverter; 
+    NPersQueue::TTopicsListController TopicsController;
+    NPersQueue::TConverterPtr TopicConverter;
     ui32 Partition;
     ui32 PreferedPartition;
     // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1
@@ -673,15 +673,15 @@ private:
 
 
 class TReadInitAndAuthActor : public NActors::TActorBootstrapped<TReadInitAndAuthActor> {
-using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse; 
-using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest; 
- 
+using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
+using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
+
 public:
-     TReadInitAndAuthActor(const TActorContext& ctx, const TActorId& parentId, const TString& clientId, const ui64 cookie, 
-                           const TString& session, const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache, 
-                           TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TIntrusivePtr<NACLib::TUserToken> token, 
-                           const NPersQueue::TTopicsToConverter& topics); 
- 
+     TReadInitAndAuthActor(const TActorContext& ctx, const TActorId& parentId, const TString& clientId, const ui64 cookie,
+                           const TString& session, const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
+                           TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TIntrusivePtr<NACLib::TUserToken> token,
+                           const NPersQueue::TTopicsToConverter& topics);
+
     ~TReadInitAndAuthActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -691,11 +691,11 @@ public:
 
 private:
 
-    STRICT_STFUNC(StateFunc, 
-          HFunc(TEvDescribeTopicsResponse, HandleTopicsDescribeResponse) 
-          HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleClientSchemeCacheResponse) 
-          HFunc(NActors::TEvents::TEvPoisonPill, HandlePoison) 
-    ); 
+    STRICT_STFUNC(StateFunc,
+          HFunc(TEvDescribeTopicsResponse, HandleTopicsDescribeResponse)
+          HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleClientSchemeCacheResponse)
+          HFunc(NActors::TEvents::TEvPoisonPill, HandlePoison)
+    );
 
     void HandlePoison(NActors::TEvents::TEvPoisonPill::TPtr&, const NActors::TActorContext& ctx) {
         Die(ctx);
@@ -704,27 +704,27 @@ private:
     void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code, const TActorContext& ctx);
 
 
-    bool ProcessTopicSchemeCacheResponse(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, 
-                                         THashMap<TString, TTopicHolder>::iterator topicsIter, const TActorContext& ctx); 
-    void HandleClientSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx); 
+    bool ProcessTopicSchemeCacheResponse(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
+                                         THashMap<TString, TTopicHolder>::iterator topicsIter, const TActorContext& ctx);
+    void HandleClientSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
     void SendCacheNavigateRequest(const TActorContext& ctx, const TString& path);
 
-    void HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const NActors::TActorContext& ctx); 
+    void HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void FinishInitialization(const NActors::TActorContext& ctx);
-    bool CheckTopicACL(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& topic, const TActorContext& ctx); 
+    bool CheckTopicACL(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& topic, const TActorContext& ctx);
     void CheckClientACL(const TActorContext& ctx);
 
-    bool CheckACLPermissionsForNavigate(const TIntrusivePtr<TSecurityObject>& secObject, 
-                                        const TString& path, NACLib::EAccessRights rights, 
-                                        const TString& errorTextWhenAccessDenied, 
-                                        const TActorContext& ctx); 
+    bool CheckACLPermissionsForNavigate(const TIntrusivePtr<TSecurityObject>& secObject,
+                                        const TString& path, NACLib::EAccessRights rights,
+                                        const TString& errorTextWhenAccessDenied,
+                                        const TActorContext& ctx);
 
 private:
     const TActorId ParentId;
     const ui64 Cookie;
     const TString Session;
 
-    const TActorId MetaCacheId; 
+    const TActorId MetaCacheId;
     const TActorId NewSchemeCache;
 
     const TString ClientId;
@@ -735,17 +735,17 @@ private:
     THashMap<TString, TTopicHolder> Topics; // topic -> info
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    bool DoCheckACL; 
+    bool DoCheckACL;
 };
 
 
 class TReadSessionActor : public TActorBootstrapped<TReadSessionActor> {
 using IContext = NGRpcServer::IGRpcStreamingContext<PersQueue::V1::MigrationStreamingReadClientMessage, PersQueue::V1::MigrationStreamingReadServerMessage>;
 public:
-     TReadSessionActor(NKikimr::NGRpcService::TEvStreamPQReadRequest* request, const ui64 cookie, 
-                       const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache, 
-                       TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC, 
-                       const NPersQueue::TTopicsListController& topicsHandler); 
+     TReadSessionActor(NKikimr::NGRpcService::TEvStreamPQReadRequest* request, const ui64 cookie,
+                       const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
+                       TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
+                       const NPersQueue::TTopicsListController& topicsHandler);
     ~TReadSessionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -961,7 +961,7 @@ private:
     THashMap<ui64, TPartitionActorInfo> Partitions; //assignId -> info
 
     THashMap<TString, TTopicHolder> Topics; // topic -> info
-    THashMap<TString, NPersQueue::TConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching 
+    THashMap<TString, NPersQueue::TConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
     THashSet<TString> TopicsToResolve;
     THashMap<TString, TVector<ui32>> TopicGroups;
     THashMap<TString, ui64> ReadFromTimestamp;
@@ -1063,19 +1063,19 @@ private:
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
     NKikimr::NPQ::TMultiCounter SLIBigReadLatency;
     NKikimr::NPQ::TMultiCounter ReadsTotal;
- 
-    NPersQueue::TTopicsListController TopicsHandler; 
+
+    NPersQueue::TTopicsListController TopicsHandler;
 };
 
 
 class TReadInfoActor : public TRpcOperationRequestActor<TReadInfoActor, TEvPQReadInfoRequest> {
 using TBase = TRpcOperationRequestActor<TReadInfoActor, TEvPQReadInfoRequest>;
 public:
-     TReadInfoActor( 
-             NKikimr::NGRpcService::TEvPQReadInfoRequest* request, const NPersQueue::TTopicsListController& topicsHandler, 
-             const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache, 
-             TIntrusivePtr<NMonitoring::TDynamicCounters> counters 
-     ); 
+     TReadInfoActor(
+             NKikimr::NGRpcService::TEvPQReadInfoRequest* request, const NPersQueue::TTopicsListController& topicsHandler,
+             const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
+             TIntrusivePtr<NMonitoring::TDynamicCounters> counters
+     );
     ~TReadInfoActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -1117,12 +1117,12 @@ private:
 
     TActorId AuthInitActor;
 
-    TTopicTabletsPairs TopicAndTablets; 
+    TTopicTabletsPairs TopicAndTablets;
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
 
     TString ClientId;
-    NPersQueue::TTopicsListController TopicsHandler; 
+    NPersQueue::TTopicsListController TopicsHandler;
 };
 
 

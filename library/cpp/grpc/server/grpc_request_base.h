@@ -105,9 +105,9 @@ public:
 
     //! Returns future to get cancel of finish notification
     virtual TAsyncFinishResult GetFinishFuture() = 0;
- 
-    //! Returns peer address 
-    virtual TString GetPeer() const = 0; 
+
+    //! Returns peer address
+    virtual TString GetPeer() const = 0;
 
     //! Returns true if server is using ssl
     virtual bool SslServer() const = 0;

@@ -113,10 +113,10 @@ public:
         return FinishPromise_.GetFuture();
     }
 
-    TString GetPeer() const override { 
-        return TString(this->Context.peer()); 
-    } 
- 
+    TString GetPeer() const override {
+        return TString(this->Context.peer());
+    }
+
     bool SslServer() const override {
         return Server_->SslServer();
     }

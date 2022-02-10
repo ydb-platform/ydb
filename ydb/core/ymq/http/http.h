@@ -145,11 +145,11 @@ public:
     TAsyncHttpServer(const NKikimrConfig::TSqsConfig& config);
     ~TAsyncHttpServer();
 
-    void Initialize( 
-            NActors::TActorSystem* as, 
-            TIntrusivePtr<NMonitoring::TDynamicCounters> sqsCounters, 
-            TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters, 
-            ui32 poolId); 
+    void Initialize(
+            NActors::TActorSystem* as,
+            TIntrusivePtr<NMonitoring::TDynamicCounters> sqsCounters,
+            TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters,
+            ui32 poolId);
 
     void Start();
 

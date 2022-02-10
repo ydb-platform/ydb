@@ -14,9 +14,9 @@
 namespace NKikimr {
 namespace NMsgBusProxy {
 
-using namespace NSchemeCache; 
-using namespace NPqMetaCacheV2; 
- 
+using namespace NSchemeCache;
+using namespace NPqMetaCacheV2;
+
 const TDuration TPersQueueBaseRequestProcessor::TIMEOUT = TDuration::MilliSeconds(90000);
 
 namespace {
@@ -32,104 +32,104 @@ const TString& TopicPrefix(const TActorContext& ctx) {
     return topicPrefix;
 }
 
-TProcessingResult ProcessMetaCacheAllTopicsResponse(TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev) { 
-    auto *res = ev->Get()->Result.Get(); 
-    const TString& path = ev->Get()->Path; 
-    TProcessingResult result; 
-    if (!ev->Get()->Success) { 
-        return TProcessingResult{ 
-                MSTATUS_ERROR, 
-                NPersQueue::NErrorCode::UNKNOWN_TOPIC, 
-                Sprintf("path '%s' has invalid/unknown root prefix, Marker# PQ14", path.c_str()), 
-                true 
-        }; 
-    } 
-    if (!res) { 
-        return TProcessingResult{ 
-                MSTATUS_ERROR, 
-                NPersQueue::NErrorCode::ERROR, 
-                Sprintf("path '%s' describe error, Status# no status, reason: no reason, Marker# PQ1", path.c_str()), 
-                true 
-        }; 
-    } 
-    return {}; 
-} 
- 
-TProcessingResult ProcessMetaCacheSingleTopicsResponse( 
-        const TSchemeCacheNavigate::TEntry& entry 
-) { 
-    auto fullPath = JoinPath(entry.Path); 
-    switch (entry.Status) { 
-        case TSchemeCacheNavigate::EStatus::RootUnknown : { 
-            return TProcessingResult { 
-                MSTATUS_ERROR, 
-                NPersQueue::NErrorCode::UNKNOWN_TOPIC, 
-                Sprintf("path '%s' has unknown/invalid root prefix '%s', Marker# PQ14", 
-                        fullPath.c_str(), entry.Path[0].c_str()), 
-                true 
-            }; 
-        } 
-        case TSchemeCacheNavigate::EStatus::PathErrorUnknown: { 
-            return TProcessingResult { 
-                MSTATUS_ERROR, 
-                NPersQueue::NErrorCode::UNKNOWN_TOPIC, 
-                Sprintf("no path '%s', Marker# PQ150", fullPath.c_str()), 
-                true 
-            }; 
-        } 
-        case TSchemeCacheNavigate::EStatus::Ok: 
-            break; 
-        default: { 
-            return TProcessingResult { 
-                    MSTATUS_ERROR, 
-                    NPersQueue::NErrorCode::ERROR, 
-                    Sprintf("topic '%s' describe error, Status# %s, Marker# PQ1", 
-                            fullPath.c_str(), ToString(entry.Status).c_str()), 
-                    true 
-            }; 
-        } 
-    } 
- 
-    if (entry.Kind != TSchemeCacheNavigate::KindTopic) { 
-        return TProcessingResult { 
-                MSTATUS_ERROR, 
-                NPersQueue::NErrorCode::UNKNOWN_TOPIC, 
-                Sprintf("item '%s' is not a topic, Marker# PQ13", fullPath.c_str()), 
-                true 
-        }; 
-    } 
-    if (!entry.PQGroupInfo) { 
-        return TProcessingResult { 
-                MSTATUS_ERROR, 
-                NPersQueue::NErrorCode::UNKNOWN_TOPIC, 
-                Sprintf("topic '%s' describe error, reason: could not retrieve topic description, Marker# PQ2", 
-                        fullPath.c_str()), 
-                true 
-        }; 
-    } 
-    auto topicName = entry.PQGroupInfo->Description.GetName(); 
-    if (topicName.empty()) { 
-        topicName = entry.Path.back(); 
-    } 
-    if (!entry.PQGroupInfo->Description.HasBalancerTabletID()) { 
-        return TProcessingResult { 
-                MSTATUS_ERROR, 
-                NPersQueue::NErrorCode::UNKNOWN_TOPIC, 
-                Sprintf("topic '%s' has no balancer, Marker# PQ193", topicName.c_str()), 
-                true 
-        }; 
-    } 
-    if (entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) { 
-        return TProcessingResult { 
-                MSTATUS_ERROR, 
-                NPersQueue::NErrorCode::UNKNOWN_TOPIC, 
-                Sprintf("topic '%s' is not created, Marker# PQ94", topicName.c_str()), 
-                true 
-        }; 
-    } 
-    return {}; 
-} 
- 
+TProcessingResult ProcessMetaCacheAllTopicsResponse(TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev) {
+    auto *res = ev->Get()->Result.Get();
+    const TString& path = ev->Get()->Path;
+    TProcessingResult result;
+    if (!ev->Get()->Success) {
+        return TProcessingResult{
+                MSTATUS_ERROR,
+                NPersQueue::NErrorCode::UNKNOWN_TOPIC,
+                Sprintf("path '%s' has invalid/unknown root prefix, Marker# PQ14", path.c_str()),
+                true
+        };
+    }
+    if (!res) {
+        return TProcessingResult{
+                MSTATUS_ERROR,
+                NPersQueue::NErrorCode::ERROR,
+                Sprintf("path '%s' describe error, Status# no status, reason: no reason, Marker# PQ1", path.c_str()),
+                true
+        };
+    }
+    return {};
+}
+
+TProcessingResult ProcessMetaCacheSingleTopicsResponse(
+        const TSchemeCacheNavigate::TEntry& entry
+) {
+    auto fullPath = JoinPath(entry.Path);
+    switch (entry.Status) {
+        case TSchemeCacheNavigate::EStatus::RootUnknown : {
+            return TProcessingResult {
+                MSTATUS_ERROR,
+                NPersQueue::NErrorCode::UNKNOWN_TOPIC,
+                Sprintf("path '%s' has unknown/invalid root prefix '%s', Marker# PQ14",
+                        fullPath.c_str(), entry.Path[0].c_str()),
+                true
+            };
+        }
+        case TSchemeCacheNavigate::EStatus::PathErrorUnknown: {
+            return TProcessingResult {
+                MSTATUS_ERROR,
+                NPersQueue::NErrorCode::UNKNOWN_TOPIC,
+                Sprintf("no path '%s', Marker# PQ150", fullPath.c_str()),
+                true
+            };
+        }
+        case TSchemeCacheNavigate::EStatus::Ok:
+            break;
+        default: {
+            return TProcessingResult {
+                    MSTATUS_ERROR,
+                    NPersQueue::NErrorCode::ERROR,
+                    Sprintf("topic '%s' describe error, Status# %s, Marker# PQ1",
+                            fullPath.c_str(), ToString(entry.Status).c_str()),
+                    true
+            };
+        }
+    }
+
+    if (entry.Kind != TSchemeCacheNavigate::KindTopic) {
+        return TProcessingResult {
+                MSTATUS_ERROR,
+                NPersQueue::NErrorCode::UNKNOWN_TOPIC,
+                Sprintf("item '%s' is not a topic, Marker# PQ13", fullPath.c_str()),
+                true
+        };
+    }
+    if (!entry.PQGroupInfo) {
+        return TProcessingResult {
+                MSTATUS_ERROR,
+                NPersQueue::NErrorCode::UNKNOWN_TOPIC,
+                Sprintf("topic '%s' describe error, reason: could not retrieve topic description, Marker# PQ2",
+                        fullPath.c_str()),
+                true
+        };
+    }
+    auto topicName = entry.PQGroupInfo->Description.GetName();
+    if (topicName.empty()) {
+        topicName = entry.Path.back();
+    }
+    if (!entry.PQGroupInfo->Description.HasBalancerTabletID()) {
+        return TProcessingResult {
+                MSTATUS_ERROR,
+                NPersQueue::NErrorCode::UNKNOWN_TOPIC,
+                Sprintf("topic '%s' has no balancer, Marker# PQ193", topicName.c_str()),
+                true
+        };
+    }
+    if (entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
+        return TProcessingResult {
+                MSTATUS_ERROR,
+                NPersQueue::NErrorCode::UNKNOWN_TOPIC,
+                Sprintf("topic '%s' is not created, Marker# PQ94", topicName.c_str()),
+                true
+        };
+    }
+    return {};
+}
+
 NKikimrClient::TResponse CreateErrorReply(EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) {
     NKikimrClient::TResponse rec;
     rec.SetStatus(status);
@@ -143,10 +143,10 @@ struct TTopicInfo {
     THashMap<ui32, ui64> PartitionToTablet;
     ui64 BalancerTabletId = 0;
 
-    THolder<NKikimrPQ::TReadSessionsInfoResponse> ReadSessionsInfo; 
+    THolder<NKikimrPQ::TReadSessionsInfoResponse> ReadSessionsInfo;
 
     NKikimrPQ::TPQTabletConfig Config;
-    TIntrusiveConstPtr<TSchemeCacheNavigate::TPQGroupInfo> PQInfo; 
+    TIntrusiveConstPtr<TSchemeCacheNavigate::TPQGroupInfo> PQInfo;
     ui32 NumParts = 0;
     THashSet<ui32> PartitionsToRequest;
 
@@ -164,10 +164,10 @@ struct TTabletInfo {
     TVector<NKikimrPQ::TStatusResponse::TPartResult> StatusResponses;
 };
 
-TPersQueueBaseRequestProcessor::TPersQueueBaseRequestProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& pqMetaCacheId, bool listNodes) 
+TPersQueueBaseRequestProcessor::TPersQueueBaseRequestProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& pqMetaCacheId, bool listNodes)
     : RequestProto(new NKikimrClient::TPersQueueRequest(request))
     , RequestId(RequestProto->HasRequestId() ? RequestProto->GetRequestId() : "<none>")
-    , PqMetaCache(pqMetaCacheId) 
+    , PqMetaCache(pqMetaCacheId)
     , ListNodes(listNodes)
 {
 }
@@ -192,7 +192,7 @@ void TPersQueueBaseRequestProcessor::Bootstrap(const TActorContext& ctx) {
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "proxy got request " << RequestId);
 
     StartTimestamp = ctx.Now();
-    ctx.Send(PqMetaCache, new NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest(TopicPrefix(ctx))); 
+    ctx.Send(PqMetaCache, new NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest(TopicPrefix(ctx)));
 
     if (ListNodes) {
         const TActorId nameserviceId = GetNameserviceActorId();
@@ -213,8 +213,8 @@ void TPersQueueBaseRequestProcessor::Die(const TActorContext& ctx) {
 STFUNC(TPersQueueBaseRequestProcessor::StateFunc) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvInterconnect::TEvNodesInfo, Handle);
-        HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse, Handle); 
-        HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse, Handle); 
+        HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse, Handle);
+        HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse, Handle);
         HFunc(TEvPersQueue::TEvResponse, Handle);
         CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
@@ -284,31 +284,31 @@ void TPersQueueBaseRequestProcessor::GetTopicsListOrThrow(const ::google::protob
             throw std::runtime_error(desc);
         }
     }
- 
+
 }
 
-void TPersQueueBaseRequestProcessor::Handle( 
-        NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr&, const TActorContext& 
-) { 
-    Y_FAIL(); 
-} 
+void TPersQueueBaseRequestProcessor::Handle(
+        NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr&, const TActorContext&
+) {
+    Y_FAIL();
+}
 
-void TPersQueueBaseRequestProcessor::Handle( 
-        NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev, const TActorContext& ctx 
-) { 
-    auto& path = ev->Get()->Path; 
-    if (!ev->Get()->Success) { 
+void TPersQueueBaseRequestProcessor::Handle(
+        NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev, const TActorContext& ctx
+) {
+    auto& path = ev->Get()->Path;
+    if (!ev->Get()->Success) {
         return SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
                                     TStringBuilder() << "no path '" << path << "', Marker# PQ17");
     }
 
-    if (path != TopicPrefix(ctx)) { 
-        return SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, 
-                                    TStringBuilder() << "path '" << path << "' has no correct root prefix '" << TopicPrefix(ctx) 
+    if (path != TopicPrefix(ctx)) {
+        return SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
+                                    TStringBuilder() << "path '" << path << "' has no correct root prefix '" << TopicPrefix(ctx)
                                     << "', Marker# PQ18");
     }
 
-    SchemeCacheResponse = std::move(ev->Get()->Result); 
+    SchemeCacheResponse = std::move(ev->Get()->Result);
     if (ReadyToCreateChildren()) {
         if (CreateChildren(ctx)) {
             return;
@@ -321,13 +321,13 @@ bool TPersQueueBaseRequestProcessor::ReadyToCreateChildren() const {
 }
 
 bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
-    for (const auto& child : SchemeCacheResponse->ResultSet) { 
-        if (child.Kind == TSchemeCacheNavigate::EKind::KindTopic) { 
-            TString name = child.PQGroupInfo->Description.GetName(); 
-            if (name.empty()) { 
-                name = child.Path.back(); 
-            } 
-            if (!TopicsToRequest.empty() && !IsIn(TopicsToRequest, name)) { 
+    for (const auto& child : SchemeCacheResponse->ResultSet) {
+        if (child.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
+            TString name = child.PQGroupInfo->Description.GetName();
+            if (name.empty()) {
+                name = child.Path.back();
+            }
+            if (!TopicsToRequest.empty() && !IsIn(TopicsToRequest, name)) {
                 continue;
             }
             ChildrenToCreate.emplace_back(new TPerTopicInfo(child));
@@ -357,12 +357,12 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
     while (!ChildrenToCreate.empty()) {
         THolder<TPerTopicInfo> perTopicInfo(ChildrenToCreate.front().Release());
         ChildrenToCreate.pop_front();
-        const auto& name = perTopicInfo->TopicEntry.PQGroupInfo->Description.GetName(); 
-        THolder<IActor> childActor = CreateTopicSubactor(perTopicInfo->TopicEntry, name); 
+        const auto& name = perTopicInfo->TopicEntry.PQGroupInfo->Description.GetName();
+        THolder<IActor> childActor = CreateTopicSubactor(perTopicInfo->TopicEntry, name);
         if (childActor.Get() != nullptr) {
             const TActorId actorId = ctx.Register(childActor.Release());
             perTopicInfo->ActorId = actorId;
-            topics.emplace(name); 
+            topics.emplace(name);
             Children.emplace(actorId, std::move(perTopicInfo));
         }
     }
@@ -409,20 +409,20 @@ TPersQueueBaseRequestProcessor::TNodesInfo::TNodesInfo(THolder<TEvInterconnect::
     }
 }
 
-TTopicInfoBasedActor::TTopicInfoBasedActor(const TSchemeEntry& topicEntry, const TString& topicName) 
-    : TActorBootstrapped<TTopicInfoBasedActor>() 
-    , SchemeEntry(topicEntry) 
-    , Name(topicName) 
-    , ProcessingResult(ProcessMetaCacheSingleTopicsResponse(SchemeEntry)) 
+TTopicInfoBasedActor::TTopicInfoBasedActor(const TSchemeEntry& topicEntry, const TString& topicName)
+    : TActorBootstrapped<TTopicInfoBasedActor>()
+    , SchemeEntry(topicEntry)
+    , Name(topicName)
+    , ProcessingResult(ProcessMetaCacheSingleTopicsResponse(SchemeEntry))
 {
 }
 
-void TTopicInfoBasedActor::Bootstrap(const TActorContext &ctx) { 
-    Become(&TTopicInfoBasedActor::StateFunc); 
-    BootstrapImpl(ctx); 
+void TTopicInfoBasedActor::Bootstrap(const TActorContext &ctx) {
+    Become(&TTopicInfoBasedActor::StateFunc);
+    BootstrapImpl(ctx);
 }
 
-STFUNC(TTopicInfoBasedActor::StateFunc) { 
+STFUNC(TTopicInfoBasedActor::StateFunc) {
     switch (ev->GetTypeRewrite()) {
         CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
     default:
@@ -431,15 +431,15 @@ STFUNC(TTopicInfoBasedActor::StateFunc) {
 }
 
 
-class TMessageBusServerPersQueueImpl : public TActorBootstrapped<TMessageBusServerPersQueueImpl> { 
-    using TEvAllTopicsDescribeRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest; 
-    using TEvAllTopicsDescribeResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse; 
+class TMessageBusServerPersQueueImpl : public TActorBootstrapped<TMessageBusServerPersQueueImpl> {
+    using TEvAllTopicsDescribeRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest;
+    using TEvAllTopicsDescribeResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse;
 
 protected:
     NKikimrClient::TPersQueueRequest RequestProto;
     const TString RequestId;
     const bool IsMetaRequest;
-    const bool IsFetchRequest; 
+    const bool IsFetchRequest;
 
     bool CanProcessFetchRequest; //any partitions answered that it has data or WaitMs timeout occured
     ui32 FetchRequestReadsDone;
@@ -738,10 +738,10 @@ public:
 
             THashMap<ui32, ui32> partitionToResp;
             ui32 sz = 0;
-            Y_VERIFY(p.second.ReadSessionsInfo); 
-            auto* sessionsInfo = p.second.ReadSessionsInfo.Get(); 
-            for (ui32 i = 0; i < sessionsInfo->PartitionInfoSize(); ++i) { 
-                const auto& resp = sessionsInfo->GetPartitionInfo(i); 
+            Y_VERIFY(p.second.ReadSessionsInfo);
+            auto* sessionsInfo = p.second.ReadSessionsInfo.Get();
+            for (ui32 i = 0; i < sessionsInfo->PartitionInfoSize(); ++i) {
+                const auto& resp = sessionsInfo->GetPartitionInfo(i);
                 partitionToResp[resp.GetPartition()] = sz++;
                 auto res = topicRes->AddPartitionResult();
                 res->SetPartition(resp.GetPartition());
@@ -846,7 +846,7 @@ public:
 
         auto jt = TopicInfo.find(it->second.Topic);
         Y_VERIFY(jt != TopicInfo.end());
-        jt->second.ReadSessionsInfo = MakeHolder<NKikimrPQ::TReadSessionsInfoResponse>(std::move(response)); 
+        jt->second.ReadSessionsInfo = MakeHolder<NKikimrPQ::TReadSessionsInfoResponse>(std::move(response));
 
         AnswerIfCanForMeta(ctx);
     }
@@ -862,7 +862,7 @@ public:
             it->second.StatusResponses.push_back(response.GetPartResult(i));
         }
         TabletsAnswered.insert(it->first);
- 
+
         AnswerIfCanForMeta(ctx);
     }
 
@@ -872,37 +872,37 @@ public:
     }
 
 
-    void Handle(TEvAllTopicsDescribeResponse::TPtr& ev, const TActorContext& ctx) { 
+    void Handle(TEvAllTopicsDescribeResponse::TPtr& ev, const TActorContext& ctx) {
         --DescribeRequests;
-        auto* res = ev->Get()->Result.Get(); 
-        auto processResult = ProcessMetaCacheAllTopicsResponse(ev); 
-        if (processResult.IsFatal) { 
-            ErrorReason = processResult.Reason; 
-            return SendReplyAndDie(CreateErrorReply(processResult.Status, processResult.ErrorCode, ctx), ctx); 
+        auto* res = ev->Get()->Result.Get();
+        auto processResult = ProcessMetaCacheAllTopicsResponse(ev);
+        if (processResult.IsFatal) {
+            ErrorReason = processResult.Reason;
+            return SendReplyAndDie(CreateErrorReply(processResult.Status, processResult.ErrorCode, ctx), ctx);
         }
 
         NoTopicsAtStart = TopicInfo.empty();
         bool hasTopics = !NoTopicsAtStart;
 
-        for (const auto& entry : res->ResultSet) { 
-            if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo) { 
-                auto& description = entry.PQGroupInfo->Description; 
-                if (!hasTopics || TopicInfo.find(description.GetName()) != TopicInfo.end()) { 
-                    auto& topicInfo = TopicInfo[description.GetName()]; 
-                    topicInfo.BalancerTabletId = description.GetBalancerTabletID(); 
-                    topicInfo.PQInfo = entry.PQGroupInfo; 
+        for (const auto& entry : res->ResultSet) {
+            if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo) {
+                auto& description = entry.PQGroupInfo->Description;
+                if (!hasTopics || TopicInfo.find(description.GetName()) != TopicInfo.end()) {
+                    auto& topicInfo = TopicInfo[description.GetName()];
+                    topicInfo.BalancerTabletId = description.GetBalancerTabletID();
+                    topicInfo.PQInfo = entry.PQGroupInfo;
                 }
             }
         }
 
-        for (auto& p: TopicInfo) { 
+        for (auto& p: TopicInfo) {
             const TString& topic = p.first;
 
             if (!p.second.BalancerTabletId) {
                 ErrorReason = Sprintf("topic '%s' is not created, Marker# PQ94", topic.c_str());
                 return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, ctx), ctx);
             }
-            ProcessMetadata(p.first, p.second, ctx); 
+            ProcessMetadata(p.first, p.second, ctx);
         }
 
         if (RequestProto.HasMetaRequest()) {
@@ -910,22 +910,22 @@ public:
         }
     }
 
-    void ProcessMetadata(const TString& name, TTopicInfo& info, const TActorContext& ctx) { 
-        //const TString& name = info.PQInfo->Description.GetName(); 
-        if (!info.PQInfo) { //not supposed to happen anymore 
+    void ProcessMetadata(const TString& name, TTopicInfo& info, const TActorContext& ctx) {
+        //const TString& name = info.PQInfo->Description.GetName();
+        if (!info.PQInfo) { //not supposed to happen anymore
             if (RequestProto.HasMetaRequest() && NoTopicsAtStart && !RequestProto.GetMetaRequest().HasCmdGetTopicMetadata()) {
                 ++TopicsAnswered;
                 AnswerIfCanForMeta(ctx);
             } else {
-                ErrorReason = Sprintf("topic '%s' is not ready, Marker# PQ85", name.c_str()); 
-                SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, ctx), ctx); 
+                ErrorReason = Sprintf("topic '%s' is not ready, Marker# PQ85", name.c_str());
+                SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, ctx), ctx);
             }
             return;
         }
 
-        const auto& pqDescr = info.PQInfo->Description; 
-        const TString& topic = pqDescr.GetName(); 
-        Y_VERIFY(topic == name, "topic '%s' path '%s'", topic.c_str(), name.c_str()); 
+        const auto& pqDescr = info.PQInfo->Description;
+        const TString& topic = pqDescr.GetName();
+        Y_VERIFY(topic == name, "topic '%s' path '%s'", topic.c_str(), name.c_str());
 
         bool mirrorerRequest = false;
         if (RequestProto.HasPartitionRequest()) {
@@ -960,10 +960,10 @@ public:
         }
 
         if (AppData(ctx)->PQConfig.GetCheckACL() && operation && !mirrorerRequest) {
-            if (*operation == NKikimrPQ::EOperation::WRITE_OP && pqDescr.GetPQTabletConfig().GetRequireAuthWrite() || 
-                *operation == NKikimrPQ::EOperation::READ_OP && pqDescr.GetPQTabletConfig().GetRequireAuthRead()) { 
+            if (*operation == NKikimrPQ::EOperation::WRITE_OP && pqDescr.GetPQTabletConfig().GetRequireAuthWrite() ||
+                *operation == NKikimrPQ::EOperation::READ_OP && pqDescr.GetPQTabletConfig().GetRequireAuthRead()) {
                 ErrorReason = Sprintf("unauthenticated access to '%s' is denied, Marker# PQ419", topic.c_str());
-                return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::ACCESS_DENIED, ctx), ctx); 
+                return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::ACCESS_DENIED, ctx), ctx);
             }
         }
 
@@ -973,9 +973,9 @@ public:
             Y_VERIFY(it != TopicInfo.end());
             Y_VERIFY(it->second.PartitionsToRequest.size() == 1);
             ui32 partition = *(it->second.PartitionsToRequest.begin());
-            for (ui32 i = 0; i < pqDescr.PartitionsSize(); ++i) { 
-                const auto& pi = pqDescr.GetPartitions(i); 
-                if (pi.GetPartitionId() == partition) { 
+            for (ui32 i = 0; i < pqDescr.PartitionsSize(); ++i) {
+                const auto& pi = pqDescr.GetPartitions(i);
+                if (pi.GetPartitionId() == partition) {
                     tabletId = pi.GetTabletId();
                     break;
                 }
@@ -1011,9 +1011,9 @@ public:
             ++TopicsAnswered;
             auto it = TopicInfo.find(topic);
             Y_VERIFY(it != TopicInfo.end(), "topic '%s'", topic.c_str());
-            it->second.Config = pqDescr.GetPQTabletConfig(); 
-            it->second.Config.SetVersion(pqDescr.GetAlterVersion()); 
-            it->second.NumParts = pqDescr.PartitionsSize(); 
+            it->second.Config = pqDescr.GetPQTabletConfig();
+            it->second.Config.SetVersion(pqDescr.GetAlterVersion());
+            it->second.NumParts = pqDescr.PartitionsSize();
             if (metadataOnly) {
                 AnswerIfCanForMeta(ctx);
                 return;
@@ -1041,9 +1041,9 @@ public:
                 NTabletPipe::SendData(ctx, pipeClient, ev.Release());
             }
 
-            for (ui32 i = 0; i < pqDescr.PartitionsSize(); ++i) { 
-                ui32 part = pqDescr.GetPartitions(i).GetPartitionId(); 
-                ui64 tabletId = pqDescr.GetPartitions(i).GetTabletId(); 
+            for (ui32 i = 0; i < pqDescr.PartitionsSize(); ++i) {
+                ui32 part = pqDescr.GetPartitions(i).GetPartitionId();
+                ui64 tabletId = pqDescr.GetPartitions(i).GetTabletId();
                 if (!it->second.PartitionsToRequest.empty() && !it->second.PartitionsToRequest.contains(part)) {
                     continue;
                 }
@@ -1152,14 +1152,14 @@ public:
                 ui32 nodeId = ev->Get()->ServerId.NodeId();
                 it->second.NodeId = nodeId;
                 TabletsDiscovered.insert(tabletId);
- 
+
                 AnswerIfCanForMeta(ctx);
             }
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
- 
+
         ui64 tabletId = ev->Get()->TabletId;
         if (HandlePipeError(tabletId, ctx))
             return;
@@ -1310,8 +1310,8 @@ public:
             ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(RequestProto.GetFetchRequest().GetWaitMs(), 30000)), new TEvPersQueue::TEvHasDataInfoResponse);
         }
 
-        auto* request = new TEvAllTopicsDescribeRequest(TopicPrefix(ctx)); 
-        ctx.Send(SchemeCache, request); 
+        auto* request = new TEvAllTopicsDescribeRequest(TopicPrefix(ctx));
+        ctx.Send(SchemeCache, request);
         ++DescribeRequests;
 
         if (RequestProto.HasMetaRequest() && (RequestProto.GetMetaRequest().HasCmdGetPartitionLocations()
@@ -1324,9 +1324,9 @@ public:
         Become(&TMessageBusServerPersQueueImpl::StateFunc, ctx, TDuration::MilliSeconds(DefaultTimeout), new TEvents::TEvWakeup());
     }
 
-    STRICT_STFUNC(StateFunc, 
+    STRICT_STFUNC(StateFunc,
             HFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            HFunc(TEvAllTopicsDescribeResponse, Handle); 
+            HFunc(TEvAllTopicsDescribeResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvPersQueue::TEvResponse, Handle);
@@ -1336,7 +1336,7 @@ public:
             HFunc(TEvPersQueue::TEvReadSessionsInfoResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
-    ) 
+    )
 private:
     bool GetTopicsList(const ::google::protobuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& requests) {
         for (auto ri = requests.begin(); ri != requests.end(); ++ri) {
@@ -1355,12 +1355,12 @@ private:
                     return false;
                 }
             }
-            const auto& topic = topicRequest.GetTopic(); 
-            if (TopicInfo.contains(topic)) { 
-                ErrorReason = Sprintf("multiple TopicRequest for topic '%s'", topic.c_str()); 
+            const auto& topic = topicRequest.GetTopic();
+            if (TopicInfo.contains(topic)) {
+                ErrorReason = Sprintf("multiple TopicRequest for topic '%s'", topic.c_str());
                 return false;
-            } else { 
-                TopicInfo[topic] = std::move(topicInfo); 
+            } else {
+                TopicInfo[topic] = std::move(topicInfo);
             }
         }
         return true;

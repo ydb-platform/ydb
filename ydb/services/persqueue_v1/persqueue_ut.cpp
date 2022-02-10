@@ -78,27 +78,27 @@ static TString FormNetData() {
            "::1/128\tVLA\n";
 }
 
-namespace { 
-    const static TString DEFAULT_TOPIC_NAME = "rt3.dc1--topic1"; 
-    const static TString SHORT_TOPIC_NAME = "topic1"; 
-} 
- 
-#define MAKE_INSECURE_STUB                                                \ 
-    std::shared_ptr<grpc::Channel> Channel_;                              \ 
-    std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> StubP_;   \ 
-                                                                          \ 
-    {                                                                     \ 
-        Channel_ = grpc::CreateChannel(                                   \ 
-            "localhost:" + ToString(server.Server->GrpcPort),                    \ 
-            grpc::InsecureChannelCredentials()                            \ 
-        );                                                                \ 
-        StubP_ = Ydb::PersQueue::V1::PersQueueService::NewStub(Channel_); \ 
-    }                                                                     \ 
-    grpc::ClientContext rcontext; 
- 
- 
- 
-    Y_UNIT_TEST_SUITE(TPersQueueTest) { 
+namespace {
+    const static TString DEFAULT_TOPIC_NAME = "rt3.dc1--topic1";
+    const static TString SHORT_TOPIC_NAME = "topic1";
+}
+
+#define MAKE_INSECURE_STUB                                                \
+    std::shared_ptr<grpc::Channel> Channel_;                              \
+    std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> StubP_;   \
+                                                                          \
+    {                                                                     \
+        Channel_ = grpc::CreateChannel(                                   \
+            "localhost:" + ToString(server.Server->GrpcPort),                    \
+            grpc::InsecureChannelCredentials()                            \
+        );                                                                \
+        StubP_ = Ydb::PersQueue::V1::PersQueueService::NewStub(Channel_); \
+    }                                                                     \
+    grpc::ClientContext rcontext;
+
+
+
+    Y_UNIT_TEST_SUITE(TPersQueueTest) {
     Y_UNIT_TEST(AllEqual) {
         using NGRpcProxy::V1::AllEqual;
 
@@ -115,10 +115,10 @@ namespace {
         UNIT_ASSERT(!AllEqual(1, 1, 1, 1, 1, 0));
     }
 
-    Y_UNIT_TEST(SetupLockSession2) { 
-        TPersQueueV1TestServer server; 
-        SET_LOCALS; 
-        const TString topicPath = server.GetTopicPathMultipleDC(); 
+    Y_UNIT_TEST(SetupLockSession2) {
+        TPersQueueV1TestServer server;
+        SET_LOCALS;
+        const TString topicPath = server.GetTopicPathMultipleDC();
 
         auto driver = server.Server->AnnoyingClient->GetDriver();
 
@@ -130,7 +130,7 @@ namespace {
             auto msg = reader->GetEvent(true, 1);
             UNIT_ASSERT(msg);
 
-            Cerr << "Got message: " << NYdb::NPersQueue::DebugString(*msg) << "\n"; 
+            Cerr << "Got message: " << NYdb::NPersQueue::DebugString(*msg) << "\n";
 
             auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*msg);
 
@@ -144,8 +144,8 @@ namespace {
         auto wait = reader->WaitEvent();
         UNIT_ASSERT(!wait.Wait(TDuration::Seconds(1)));
 
-        pqClient->AlterTopicNoLegacy("/Root/PQ/rt3.dc2--acc--topic2dc", 2); 
-        Cerr << "======Alter topic done\n"; 
+        pqClient->AlterTopicNoLegacy("/Root/PQ/rt3.dc2--acc--topic2dc", 2);
+        Cerr << "======Alter topic done\n";
         UNIT_ASSERT(wait.Wait(TDuration::Seconds(5)));
 
         auto msg = reader->GetEvent(true, 1);
@@ -163,10 +163,10 @@ namespace {
     }
 
 
-    Y_UNIT_TEST(SetupLockSession) { 
-        TPersQueueV1TestServer server; 
-        SET_LOCALS; 
-        MAKE_INSECURE_STUB; 
+    Y_UNIT_TEST(SetupLockSession) {
+        TPersQueueV1TestServer server;
+        SET_LOCALS;
+        MAKE_INSECURE_STUB;
         auto readStream = StubP_->MigrationStreamingRead(&rcontext);
         UNIT_ASSERT(readStream);
 
@@ -178,14 +178,14 @@ namespace {
             req.mutable_init_request()->add_topics_read_settings()->set_topic("acc/topic1");
 
             req.mutable_init_request()->set_consumer("user");
-            req.mutable_init_request()->set_read_only_original(true); 
+            req.mutable_init_request()->set_read_only_original(true);
             req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1);
 
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
             UNIT_ASSERT(readStream->Read(&resp));
-            Cerr << "===Got response: " << resp.ShortDebugString() << Endl; 
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
             UNIT_ASSERT(resp.response_case() == MigrationStreamingReadServerMessage::kInitResponse);
             //send some reads
             req.Clear();
@@ -198,19 +198,19 @@ namespace {
         }
 
         {
-            Sleep(TDuration::Seconds(10)); 
+            Sleep(TDuration::Seconds(10));
             ReadInfoRequest request;
             ReadInfoResponse response;
             request.mutable_consumer()->set_path("user");
-            request.set_get_only_original(true); 
+            request.set_get_only_original(true);
             request.add_topics()->set_path("acc/topic1");
             grpc::ClientContext rcontext;
             auto status = StubP_->GetReadSessionsInfo(&rcontext, request, &response);
             UNIT_ASSERT(status.ok());
             ReadInfoResult res;
             response.operation().result().UnpackTo(&res);
-            Cerr << "Read info response: " << response << Endl << res << Endl; 
-            UNIT_ASSERT_VALUES_EQUAL(res.topics_size(), 1); 
+            Cerr << "Read info response: " << response << Endl << res << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(res.topics_size(), 1);
             UNIT_ASSERT(res.topics(0).status() == Ydb::StatusIds::SUCCESS);
         }
         ui64 assignId = 0;
@@ -279,7 +279,7 @@ namespace {
         }
 
 
-        pqClient->AlterTopic("rt3.dc1--acc--topic1", 10); 
+        pqClient->AlterTopic("rt3.dc1--acc--topic1", 10);
         {
             ReadInfoRequest request;
             ReadInfoResponse response;
@@ -291,10 +291,10 @@ namespace {
             UNIT_ASSERT(status.ok());
             ReadInfoResult res;
             response.operation().result().UnpackTo(&res);
-            Cerr << "Get read session info response: " << response << "\n" << res << "\n"; 
+            Cerr << "Get read session info response: " << response << "\n" << res << "\n";
 //            UNIT_ASSERT(res.sessions_size() == 1);
-            UNIT_ASSERT_VALUES_EQUAL(res.topics_size(), 1); 
-            UNIT_ASSERT_VALUES_EQUAL(res.topics(0).partitions_size(), 10); 
+            UNIT_ASSERT_VALUES_EQUAL(res.topics_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(res.topics(0).partitions_size(), 10);
         }
 
         {
@@ -305,39 +305,39 @@ namespace {
             request.add_topics()->set_path("acc/topic1");
             grpc::ClientContext rcontext;
 
-            pqClient->MarkNodeInHive(runtime, 0, false); 
-            pqClient->MarkNodeInHive(runtime, 1, false); 
+            pqClient->MarkNodeInHive(runtime, 0, false);
+            pqClient->MarkNodeInHive(runtime, 1, false);
 
-            pqClient->RestartBalancerTablet(runtime, "rt3.dc1--acc--topic1"); 
+            pqClient->RestartBalancerTablet(runtime, "rt3.dc1--acc--topic1");
             auto status = StubP_->GetReadSessionsInfo(&rcontext, request, &response);
             UNIT_ASSERT(status.ok());
             ReadInfoResult res;
             response.operation().result().UnpackTo(&res);
-            Cerr << "Read sessions info response: " << response << "\nResult: " << res << "\n"; 
+            Cerr << "Read sessions info response: " << response << "\nResult: " << res << "\n";
             UNIT_ASSERT(res.topics().size() == 1);
-            UNIT_ASSERT(res.topics(0).partitions(0).status() == Ydb::StatusIds::UNAVAILABLE); 
+            UNIT_ASSERT(res.topics(0).partitions(0).status() == Ydb::StatusIds::UNAVAILABLE);
         }
     }
 
 
     void SetupWriteSessionImpl(bool rr) {
-        NPersQueue::TTestServer server{PQSettings(0, 2, rr), false}; 
-        server.ServerSettings.SetEnableSystemViews(false); 
-        server.StartServer(); 
+        NPersQueue::TTestServer server{PQSettings(0, 2, rr), false};
+        server.ServerSettings.SetEnableSystemViews(false);
+        server.StartServer();
 
-        server.EnableLogs({ NKikimrServices::PERSQUEUE }); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10); 
+        server.EnableLogs({ NKikimrServices::PERSQUEUE });
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10);
 
-        TPQDataWriter writer("source", server); 
+        TPQDataWriter writer("source", server);
 
-        ui32 p = writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}); 
+        ui32 p = writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"});
 
-        server.AnnoyingClient->AlterTopic(DEFAULT_TOPIC_NAME, 15); 
+        server.AnnoyingClient->AlterTopic(DEFAULT_TOPIC_NAME, 15);
 
-        ui32 pp = writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue2"}); 
+        ui32 pp = writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue2"});
         UNIT_ASSERT_VALUES_EQUAL(p, pp);
 
-        writer.Write(SHORT_TOPIC_NAME, {"1", "2", "3", "4", "5"}); 
+        writer.Write(SHORT_TOPIC_NAME, {"1", "2", "3", "4", "5"});
 
         writer.Write("topic2", {"valuevaluevalue1"}, true);
 
@@ -377,9 +377,9 @@ namespace {
     Y_UNIT_TEST(StoreNoMoreThanXSourceIDs) {
         ui16 X = 4;
         ui64 SOURCEID_COUNT_DELETE_BATCH_SIZE = 100;
-        NPersQueue::TTestServer server; 
-        server.EnableLogs({ NKikimrServices::PERSQUEUE, NKikimrServices::PQ_WRITE_PROXY }); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8*1024*1024, 86400, 20000000, "", 200000000, {}, {}, {}, X, 86400); 
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::PERSQUEUE, NKikimrServices::PQ_WRITE_PROXY });
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8*1024*1024, 86400, 20000000, "", 200000000, {}, {}, {}, X, 86400);
 
         auto driver = server.AnnoyingClient->GetDriver();
 
@@ -429,8 +429,8 @@ namespace {
     }
 
     Y_UNIT_TEST(EachMessageGetsExactlyOneAcknowledgementInCorrectOrder) {
-        NPersQueue::TTestServer server; 
-        server.AnnoyingClient->CreateTopic("rt3.dc1--topic", 1); 
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic("rt3.dc1--topic", 1);
 
         auto driver = server.AnnoyingClient->GetDriver();
 
@@ -449,24 +449,24 @@ namespace {
         UNIT_ASSERT(res);
     }
 
-    Y_UNIT_TEST(SetupWriteSessionOnDisabledCluster) { 
-        TPersQueueV1TestServer server; 
-        SET_LOCALS; 
+    Y_UNIT_TEST(SetupWriteSessionOnDisabledCluster) {
+        TPersQueueV1TestServer server;
+        SET_LOCALS;
 
-        TPQDataWriter writer("source", *server.Server); 
+        TPQDataWriter writer("source", *server.Server);
 
-        pqClient->DisableDC(); 
+        pqClient->DisableDC();
 
         Sleep(TDuration::Seconds(5));
-        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true); 
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true);
     }
 
     Y_UNIT_TEST(CloseActiveWriteSessionOnClusterDisable) {
-        NPersQueue::TTestServer server; 
+        NPersQueue::TTestServer server;
 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10); 
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10);
 
-        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY }); 
+        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY });
 
 
         TPQDataWriter writer2("source", server);
@@ -480,7 +480,7 @@ namespace {
 
         Cerr << DebugString(*msg) << "\n";
 
-        server.AnnoyingClient->DisableDC(); 
+        server.AnnoyingClient->DisableDC();
 
         UNIT_ASSERT(writer->WaitEvent().Wait(TDuration::Seconds(30)));
         msg = writer->GetEvent(true);
@@ -498,11 +498,11 @@ namespace {
     }
 
     Y_UNIT_TEST(BadSids) {
-        NPersQueue::TTestServer server; 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10); 
-        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY }); 
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10);
+        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY });
         TPQDataWriter writer2("source", server);
-        TString topic = SHORT_TOPIC_NAME; 
+        TString topic = SHORT_TOPIC_NAME;
 
         auto driver = server.AnnoyingClient->GetDriver();
 
@@ -518,26 +518,26 @@ namespace {
     }
 
     Y_UNIT_TEST(ReadFromSeveralPartitions) {
-        NPersQueue::TTestServer server; 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_METACACHE }); 
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_METACACHE });
 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10); 
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10);
 
-        TPQDataWriter writer("source1", server); 
-        Cerr << "===Writer started\n"; 
+        TPQDataWriter writer("source1", server);
+        Cerr << "===Writer started\n";
         std::shared_ptr<grpc::Channel> Channel_;
         std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> StubP_;
 
-        Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials()); 
+        Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
         StubP_ = Ydb::PersQueue::V1::PersQueueService::NewStub(Channel_);
 
 
         //Write some data
-        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}); 
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"});
 
-        TPQDataWriter writer2("source2", server); 
-        writer2.Write(SHORT_TOPIC_NAME, {"valuevaluevalue2"}); 
-        Cerr << "===Writer - writes done\n"; 
+        TPQDataWriter writer2("source2", server);
+        writer2.Write(SHORT_TOPIC_NAME, {"valuevaluevalue2"});
+        Cerr << "===Writer - writes done\n";
 
         grpc::ClientContext rcontext;
         auto readStream = StubP_->MigrationStreamingRead(&rcontext);
@@ -548,20 +548,20 @@ namespace {
             MigrationStreamingReadClientMessage  req;
             MigrationStreamingReadServerMessage resp;
 
-            req.mutable_init_request()->add_topics_read_settings()->set_topic(SHORT_TOPIC_NAME); 
+            req.mutable_init_request()->add_topics_read_settings()->set_topic(SHORT_TOPIC_NAME);
 
             req.mutable_init_request()->set_consumer("user");
-            req.mutable_init_request()->set_read_only_original(true); 
- 
+            req.mutable_init_request()->set_read_only_original(true);
+
             req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1000);
 
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
-            Cerr << "===Try to get read response\n"; 
- 
+            Cerr << "===Try to get read response\n";
+
             UNIT_ASSERT(readStream->Read(&resp));
-            Cerr << "Read server response: " << resp.ShortDebugString() << Endl; 
+            Cerr << "Read server response: " << resp.ShortDebugString() << Endl;
             UNIT_ASSERT(resp.response_case() == MigrationStreamingReadServerMessage::kInitResponse);
 
             //send some reads
@@ -584,7 +584,7 @@ namespace {
             if (resp.response_case() == MigrationStreamingReadServerMessage::kAssigned) {
                 auto assignId = resp.assigned().assign_id();
                 MigrationStreamingReadClientMessage req;
-                req.mutable_start_read()->mutable_topic()->set_path(SHORT_TOPIC_NAME); 
+                req.mutable_start_read()->mutable_topic()->set_path(SHORT_TOPIC_NAME);
                 req.mutable_start_read()->set_cluster("dc1");
                 req.mutable_start_read()->set_assign_id(assignId);
                 UNIT_ASSERT(readStream->Write(req));
@@ -598,26 +598,26 @@ namespace {
 
 
     void SetupReadSessionTest() {
-        NPersQueue::TTestServer server; 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY }); 
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2); 
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
         server.AnnoyingClient->CreateTopicNoLegacy("rt3.dc2--topic1", 2, true, false);
 
-        TPQDataWriter writer("source1", server); 
+        TPQDataWriter writer("source1", server);
 
-        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue0"}); 
-        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}); 
-        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue2"}); 
-        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue3"}); 
-        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue4"}); 
-        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue5"}); 
-        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue6"}); 
-        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue7"}); 
-        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue8"}); 
-        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue9"}); 
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue0"});
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"});
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue2"});
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue3"});
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue4"});
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue5"});
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue6"});
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue7"});
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue8"});
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue9"});
 
-        writer.Read(SHORT_TOPIC_NAME, "user1", "", false, false); 
+        writer.Read(SHORT_TOPIC_NAME, "user1", "", false, false);
     }
 
     Y_UNIT_TEST(SetupReadSession) {
@@ -626,17 +626,17 @@ namespace {
 
 
     Y_UNIT_TEST(WriteExisting) {
-        NPersQueue::TTestServer server; 
-        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE }); 
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2); 
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
 
         {
             THolder<NMsgBusProxy::TBusPersQueue> request = TRequestDescribePQ().GetRequest({});
 
             NKikimrClient::TResponse response;
 
-            auto channel = grpc::CreateChannel("localhost:"+ToString(server.GrpcPort), grpc::InsecureChannelCredentials()); 
+            auto channel = grpc::CreateChannel("localhost:"+ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
             auto stub(NKikimrClient::TGRpcServer::NewStub(channel));
             grpc::ClientContext context;
             auto status = stub->PersQueueRequest(&context, request->Record, &response);
@@ -644,177 +644,177 @@ namespace {
             UNIT_ASSERT(status.ok());
         }
 
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 1, "valuevaluevalue1", "", ETransport::GRpc); 
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 2, "valuevaluevalue1", "", ETransport::GRpc); 
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 1, "valuevaluevalue1", "", ETransport::GRpc);
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 2, "valuevaluevalue1", "", ETransport::GRpc);
     }
 
     Y_UNIT_TEST(WriteExistingBigValue) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2)); 
-        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE }); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2, 8*1024*1024, 86400, 100000); 
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2));
+        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2, 8*1024*1024, 86400, 100000);
 
 
         TInstant now(Now());
 
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 1, TString(1000000, 'a')); 
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 2, TString(1, 'a')); 
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 1, TString(1000000, 'a'));
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 2, TString(1, 'a'));
         UNIT_ASSERT(TInstant::Now() - now > TDuration::MilliSeconds(5990)); //speed limit is 200kb/s and burst is 200kb, so to write 1mb it will take at least 4 seconds
     }
 
     Y_UNIT_TEST(WriteEmptyData) {
-        NPersQueue::TTestServer server{PQSettings(0).SetDomainName("Root").SetNodeCount(2)}; 
+        NPersQueue::TTestServer server{PQSettings(0).SetDomainName("Root").SetNodeCount(2)};
 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2); 
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
 
-        server.EnableLogs({ NKikimrServices::PERSQUEUE }); 
+        server.EnableLogs({ NKikimrServices::PERSQUEUE });
 
         // empty data and sourceId
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "", 1, "", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR); 
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "a", 1, "", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR); 
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "", 1, "a", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR); 
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "a", 1, "a", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_OK); 
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "", 1, "", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR);
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "a", 1, "", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR);
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "", 1, "a", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR);
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "a", 1, "a", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_OK);
     }
 
 
     Y_UNIT_TEST(WriteNonExistingPartition) {
-        NPersQueue::TTestServer server{PQSettings(0).SetDomainName("Root").SetNodeCount(2)}; 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2); 
+        NPersQueue::TTestServer server{PQSettings(0).SetDomainName("Root").SetNodeCount(2)};
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
 
-        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE }); 
+        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
-        server.AnnoyingClient->WriteToPQ( 
-                DEFAULT_TOPIC_NAME, 100500, "abacaba", 1, "valuevaluevalue1", "", 
-                ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR, NMsgBusProxy::MSTATUS_ERROR 
-        ); 
+        server.AnnoyingClient->WriteToPQ(
+                DEFAULT_TOPIC_NAME, 100500, "abacaba", 1, "valuevaluevalue1", "",
+                ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR, NMsgBusProxy::MSTATUS_ERROR
+        );
     }
 
     Y_UNIT_TEST(WriteNonExistingTopic) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2)); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2); 
-        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE }); 
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2));
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
+        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
-        server.AnnoyingClient->WriteToPQ( 
-                DEFAULT_TOPIC_NAME + "000", 1, "abacaba", 1, "valuevaluevalue1", "", 
-                ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR, NMsgBusProxy::MSTATUS_ERROR 
-        ); 
+        server.AnnoyingClient->WriteToPQ(
+                DEFAULT_TOPIC_NAME + "000", 1, "abacaba", 1, "valuevaluevalue1", "",
+                ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR, NMsgBusProxy::MSTATUS_ERROR
+        );
     }
 
     Y_UNIT_TEST(SchemeshardRestart) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(1)); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2); 
-        TString secondTopic = "rt3.dc1--topic2"; 
-        server.AnnoyingClient->CreateTopic(secondTopic, 2); 
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(1));
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
+        TString secondTopic = "rt3.dc1--topic2";
+        server.AnnoyingClient->CreateTopic(secondTopic, 2);
 
         // force topic1 into cache and establish pipe from cache to schemeshard
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 1, "valuevaluevalue1"); 
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 1, "valuevaluevalue1");
 
-        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, 
+        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD,
             NKikimrServices::PERSQUEUE,
             NKikimrServices::PQ_METACACHE });
 
-        server.AnnoyingClient->RestartSchemeshard(server.CleverServer->GetRuntime()); 
+        server.AnnoyingClient->RestartSchemeshard(server.CleverServer->GetRuntime());
 
-        server.AnnoyingClient->WriteToPQ(secondTopic, 1, "abacaba", 1, "valuevaluevalue1"); 
+        server.AnnoyingClient->WriteToPQ(secondTopic, 1, "abacaba", 1, "valuevaluevalue1");
     }
 
     Y_UNIT_TEST(WriteAfterAlter) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2)); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2); 
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2));
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
 
 
-        server.AnnoyingClient->WriteToPQ( 
-                DEFAULT_TOPIC_NAME, 5, "abacaba", 1, "valuevaluevalue1", "", 
-                ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR,  NMsgBusProxy::MSTATUS_ERROR 
-        ); 
+        server.AnnoyingClient->WriteToPQ(
+                DEFAULT_TOPIC_NAME, 5, "abacaba", 1, "valuevaluevalue1", "",
+                ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR,  NMsgBusProxy::MSTATUS_ERROR
+        );
 
-        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, 
+        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD,
             NKikimrServices::PERSQUEUE,
             NKikimrServices::PQ_METACACHE });
 
-        server.AnnoyingClient->AlterTopic(DEFAULT_TOPIC_NAME, 10); 
+        server.AnnoyingClient->AlterTopic(DEFAULT_TOPIC_NAME, 10);
         Sleep(TDuration::Seconds(1));
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 5, "abacaba", 1, "valuevaluevalue1"); 
-        server.AnnoyingClient->WriteToPQ( 
-                DEFAULT_TOPIC_NAME, 15, "abacaba", 1, "valuevaluevalue1", "", 
-                ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR,  NMsgBusProxy::MSTATUS_ERROR 
-        ); 
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 5, "abacaba", 1, "valuevaluevalue1");
+        server.AnnoyingClient->WriteToPQ(
+                DEFAULT_TOPIC_NAME, 15, "abacaba", 1, "valuevaluevalue1", "",
+                ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR,  NMsgBusProxy::MSTATUS_ERROR
+        );
 
-        server.AnnoyingClient->AlterTopic(DEFAULT_TOPIC_NAME, 20); 
+        server.AnnoyingClient->AlterTopic(DEFAULT_TOPIC_NAME, 20);
         Sleep(TDuration::Seconds(1));
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 5, "abacaba", 1, "valuevaluevalue1"); 
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 15, "abacaba", 1, "valuevaluevalue1"); 
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 5, "abacaba", 1, "valuevaluevalue1");
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 15, "abacaba", 1, "valuevaluevalue1");
     }
 
     Y_UNIT_TEST(Delete) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2)); 
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2));
 
-        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE}); 
+        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE});
 
         // Delete non-existing
-        server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME, NPersQueue::NErrorCode::UNKNOWN_TOPIC); 
+        server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME, NPersQueue::NErrorCode::UNKNOWN_TOPIC);
 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2); 
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
 
         // Delete existing
-        server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME); 
+        server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME);
 
         // Double delete - "What Is Dead May Never Die"
-        server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME, NPersQueue::NErrorCode::UNKNOWN_TOPIC); 
+        server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME, NPersQueue::NErrorCode::UNKNOWN_TOPIC);
 
         // Resurrect deleted topic
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2); 
-        server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME); 
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
+        server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME);
     }
 
 
     Y_UNIT_TEST(BigRead) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root")); 
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8*1024*1024, 86400, 20000000, "user1", 2000000);
 
-        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE }); 
+        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
         TString value(1024*1024, 'x');
         for (ui32 i = 0; i < 32; ++i)
-            server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value); 
+            server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value);
 
         // trying to read small PQ messages in a big messagebus event
-        auto info = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 32, "user1"}, 23, "", NMsgBusProxy::MSTATUS_OK); //will read 21mb 
+        auto info = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 32, "user1"}, 23, "", NMsgBusProxy::MSTATUS_OK); //will read 21mb
         UNIT_ASSERT_VALUES_EQUAL(info.BlobsFromDisk, 0);
         UNIT_ASSERT_VALUES_EQUAL(info.BlobsFromCache, 4);
 
         TInstant now(TInstant::Now());
-        info = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 32, "user1"}, 23, "", NMsgBusProxy::MSTATUS_OK); //will read 21mb 
+        info = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 32, "user1"}, 23, "", NMsgBusProxy::MSTATUS_OK); //will read 21mb
         TDuration dur = TInstant::Now() - now;
         UNIT_ASSERT_C(dur > TDuration::Seconds(7) && dur < TDuration::Seconds(20), "dur = " << dur); //speed limit is 2000kb/s and burst is 2000kb, so to read 24mb it will take at least 11 seconds
 
-        server.AnnoyingClient->GetPartStatus({}, 1, true); 
+        server.AnnoyingClient->GetPartStatus({}, 1, true);
 
     }
 
 
     // expects that L2 size is 32Mb
     Y_UNIT_TEST(Cache) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root")); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8*1024*1024, 86400); 
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8*1024*1024, 86400);
 
-        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE }); 
+        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
         TString value(1024*1024, 'x');
         for (ui32 i = 0; i < 32; ++i)
-            server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value); 
+            server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value);
 
-        auto info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user1"}, 16); 
-        auto info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user1"}, 16); 
+        auto info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user1"}, 16);
+        auto info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user1"}, 16);
 
         UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromCache, 3);
         UNIT_ASSERT_VALUES_EQUAL(info16.BlobsFromCache, 2);
         UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromDisk + info16.BlobsFromDisk, 0);
 
         for (ui32 i = 0; i < 8; ++i)
-            server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 32+i}, value); 
+            server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 32+i}, value);
 
-        info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user1"}, 16); 
-        info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user1"}, 16); 
+        info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user1"}, 16);
+        info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user1"}, 16);
 
         ui32 fromDisk = info0.BlobsFromDisk + info16.BlobsFromDisk;
         ui32 fromCache = info0.BlobsFromCache + info16.BlobsFromCache;
@@ -825,10 +825,10 @@ namespace {
     }
 
     Y_UNIT_TEST(CacheHead) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root")); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 6*1024*1024, 86400); 
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 6*1024*1024, 86400);
 
-        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE }); 
+        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
         ui64 seqNo = 0;
         for (ui32 blobSizeKB = 256; blobSizeKB < 4096; blobSizeKB *= 2) {
@@ -841,10 +841,10 @@ namespace {
             ui64 offset = seqNo;
             TString value(blobSize, 'a');
             for (ui32 i = 0; i < count; ++i)
-                server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", seqNo++}, value); 
+                server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", seqNo++}, value);
 
-            auto info_half1 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, offset, half, "user1"}, half); 
-            auto info_half2 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, offset, half, "user1"}, half); 
+            auto info_half1 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, offset, half, "user1"}, half);
+            auto info_half2 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, offset, half, "user1"}, half);
 
             UNIT_ASSERT(info_half1.BlobsFromCache > 0);
             UNIT_ASSERT(info_half2.BlobsFromCache > 0);
@@ -854,28 +854,28 @@ namespace {
     }
 
     Y_UNIT_TEST(SameOffset) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root")); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 6*1024*1024, 86400); 
-        TString secondTopic = DEFAULT_TOPIC_NAME + "2"; 
-        server.AnnoyingClient->CreateTopic(secondTopic, 1, 6*1024*1024, 86400); 
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 6*1024*1024, 86400);
+        TString secondTopic = DEFAULT_TOPIC_NAME + "2";
+        server.AnnoyingClient->CreateTopic(secondTopic, 1, 6*1024*1024, 86400);
 
-        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE }); 
+        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
         ui32 valueSize = 128;
         TString value1(valueSize, 'a');
         TString value2(valueSize, 'b');
-        server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 0}, value1); 
-        server.AnnoyingClient->WriteToPQ({secondTopic, 0, "source1", 0}, value2); 
+        server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 0}, value1);
+        server.AnnoyingClient->WriteToPQ({secondTopic, 0, "source1", 0}, value2);
 
         // avoid reading from head
         TString mb(1024*1024, 'x');
         for (ui32 i = 1; i < 16; ++i) {
-            server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, mb); 
-            server.AnnoyingClient->WriteToPQ({secondTopic, 0, "source1", i}, mb); 
+            server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, mb);
+            server.AnnoyingClient->WriteToPQ({secondTopic, 0, "source1", i}, mb);
         }
 
-        auto info1 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 1, "user1"}, 1); 
-        auto info2 = server.AnnoyingClient->ReadFromPQ({secondTopic, 0, 0, 1, "user1"}, 1); 
+        auto info1 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 1, "user1"}, 1);
+        auto info2 = server.AnnoyingClient->ReadFromPQ({secondTopic, 0, 0, 1, "user1"}, 1);
 
         UNIT_ASSERT_VALUES_EQUAL(info1.BlobsFromCache, 1);
         UNIT_ASSERT_VALUES_EQUAL(info2.BlobsFromCache, 1);
@@ -889,34 +889,34 @@ namespace {
 
 
     Y_UNIT_TEST(FetchRequest) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root")); 
-        TString secondTopic = DEFAULT_TOPIC_NAME + "2"; 
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
+        TString secondTopic = DEFAULT_TOPIC_NAME + "2";
 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10); 
-        server.AnnoyingClient->CreateTopic(secondTopic, 10); 
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10);
+        server.AnnoyingClient->CreateTopic(secondTopic, 10);
 
         ui32 valueSize = 128;
         TString value1(valueSize, 'a');
         TString value2(valueSize, 'b');
-        server.AnnoyingClient->WriteToPQ({secondTopic, 5, "source1", 0}, value2); 
-        server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 1, "source1", 0}, value1); 
-        server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 1, "source1", 1}, value2); 
+        server.AnnoyingClient->WriteToPQ({secondTopic, 5, "source1", 0}, value2);
+        server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 1, "source1", 0}, value1);
+        server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 1, "source1", 1}, value2);
 
-        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE }); 
+        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
         TInstant tm(TInstant::Now());
-        server.AnnoyingClient->FetchRequestPQ({{secondTopic, 5, 0, 400},{DEFAULT_TOPIC_NAME, 1, 0, 400},{DEFAULT_TOPIC_NAME, 3, 0, 400}}, 400, 1000000); 
+        server.AnnoyingClient->FetchRequestPQ({{secondTopic, 5, 0, 400},{DEFAULT_TOPIC_NAME, 1, 0, 400},{DEFAULT_TOPIC_NAME, 3, 0, 400}}, 400, 1000000);
         UNIT_ASSERT((TInstant::Now() - tm).Seconds() < 1);
         tm = TInstant::Now();
-        server.AnnoyingClient->FetchRequestPQ({{secondTopic, 5, 1, 400}}, 400, 5000); 
+        server.AnnoyingClient->FetchRequestPQ({{secondTopic, 5, 1, 400}}, 400, 5000);
         UNIT_ASSERT((TInstant::Now() - tm).Seconds() > 2);
-        server.AnnoyingClient->FetchRequestPQ({{secondTopic, 5, 0, 400},{DEFAULT_TOPIC_NAME, 1, 0, 400},{DEFAULT_TOPIC_NAME, 3, 0, 400}}, 1, 1000000); 
-        server.AnnoyingClient->FetchRequestPQ({{secondTopic, 5, 500, 400},{secondTopic, 4, 0, 400},{DEFAULT_TOPIC_NAME, 1, 0, 400}}, 400, 1000000); 
+        server.AnnoyingClient->FetchRequestPQ({{secondTopic, 5, 0, 400},{DEFAULT_TOPIC_NAME, 1, 0, 400},{DEFAULT_TOPIC_NAME, 3, 0, 400}}, 1, 1000000);
+        server.AnnoyingClient->FetchRequestPQ({{secondTopic, 5, 500, 400},{secondTopic, 4, 0, 400},{DEFAULT_TOPIC_NAME, 1, 0, 400}}, 400, 1000000);
     }
 
     Y_UNIT_TEST(Init) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2)); 
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2));
         if (!true) {
-            server.EnableLogs( { 
+            server.EnableLogs( {
                 NKikimrServices::FLAT_TX_SCHEMESHARD,
                 NKikimrServices::TX_DATASHARD,
                 NKikimrServices::HIVE,
@@ -927,38 +927,38 @@ namespace {
                 NKikimrServices::PQ_METACACHE });
         }
 
-        server.AnnoyingClient->DescribeTopic({}); 
-        server.AnnoyingClient->TestCase({}, 0, 0, true); 
+        server.AnnoyingClient->DescribeTopic({});
+        server.AnnoyingClient->TestCase({}, 0, 0, true);
 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10); 
-        server.AnnoyingClient->AlterTopic(DEFAULT_TOPIC_NAME, 20); 
-        TString secondTopic = DEFAULT_TOPIC_NAME + "2"; 
-        TString thirdTopic = DEFAULT_TOPIC_NAME + "3"; 
-        server.AnnoyingClient->CreateTopic(secondTopic, 25); 
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10);
+        server.AnnoyingClient->AlterTopic(DEFAULT_TOPIC_NAME, 20);
+        TString secondTopic = DEFAULT_TOPIC_NAME + "2";
+        TString thirdTopic = DEFAULT_TOPIC_NAME + "3";
+        server.AnnoyingClient->CreateTopic(secondTopic, 25);
 
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 5, "abacaba", 1, "valuevaluevalue1"); 
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 5, "abacaba", 2, "valuevaluevalue2"); 
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 5, "abacabae", 1, "valuevaluevalue3"); 
-        server.AnnoyingClient->ReadFromPQ(DEFAULT_TOPIC_NAME, 5, 0, 10, 3); 
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 5, "abacaba", 1, "valuevaluevalue1");
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 5, "abacaba", 2, "valuevaluevalue2");
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 5, "abacabae", 1, "valuevaluevalue3");
+        server.AnnoyingClient->ReadFromPQ(DEFAULT_TOPIC_NAME, 5, 0, 10, 3);
 
-        server.AnnoyingClient->SetClientOffsetPQ(DEFAULT_TOPIC_NAME, 5, 2); 
+        server.AnnoyingClient->SetClientOffsetPQ(DEFAULT_TOPIC_NAME, 5, 2);
 
-        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {5}}}, 1, 1, true); 
-        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {0}}}, 1, 0, true); 
-        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {}}}, 20, 1, true); 
-        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {5, 5}}}, 0, 0, false); 
-        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {111}}}, 0, 0, false); 
-        server.AnnoyingClient->TestCase({}, 45, 1, true); 
-        server.AnnoyingClient->TestCase({{thirdTopic, {}}}, 0, 0, false); 
-        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {}}, {thirdTopic, {}}}, 0, 0, false); 
-        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {}}, {secondTopic, {}}}, 45, 1, true); 
-        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {0, 3, 5}}, {secondTopic, {1, 4, 6, 8}}}, 7, 1, true); 
+        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {5}}}, 1, 1, true);
+        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {0}}}, 1, 0, true);
+        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {}}}, 20, 1, true);
+        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {5, 5}}}, 0, 0, false);
+        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {111}}}, 0, 0, false);
+        server.AnnoyingClient->TestCase({}, 45, 1, true);
+        server.AnnoyingClient->TestCase({{thirdTopic, {}}}, 0, 0, false);
+        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {}}, {thirdTopic, {}}}, 0, 0, false);
+        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {}}, {secondTopic, {}}}, 45, 1, true);
+        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {0, 3, 5}}, {secondTopic, {1, 4, 6, 8}}}, 7, 1, true);
 
-        server.AnnoyingClient->DescribeTopic({DEFAULT_TOPIC_NAME}); 
-        server.AnnoyingClient->DescribeTopic({secondTopic}); 
-        server.AnnoyingClient->DescribeTopic({secondTopic, DEFAULT_TOPIC_NAME}); 
-        server.AnnoyingClient->DescribeTopic({}); 
-        server.AnnoyingClient->DescribeTopic({thirdTopic}, true); 
+        server.AnnoyingClient->DescribeTopic({DEFAULT_TOPIC_NAME});
+        server.AnnoyingClient->DescribeTopic({secondTopic});
+        server.AnnoyingClient->DescribeTopic({secondTopic, DEFAULT_TOPIC_NAME});
+        server.AnnoyingClient->DescribeTopic({});
+        server.AnnoyingClient->DescribeTopic({thirdTopic}, true);
     }
 
     void WaitResolveSuccess(TFlatMsgBusPQClient& annoyingClient, TString topic, ui32 numParts) {
@@ -985,28 +985,28 @@ namespace {
     }
 
     Y_UNIT_TEST(WhenDisableNodeAndCreateTopic_ThenAllPartitionsAreOnOtherNode) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2)); 
-        server.EnableLogs({ NKikimrServices::PERSQUEUE, NKikimrServices::HIVE }); 
-        TString unusedTopic = "rt3.dc1--unusedtopic"; 
-        server.AnnoyingClient->CreateTopic(unusedTopic, 1); 
-        WaitResolveSuccess(*server.AnnoyingClient, unusedTopic, 1); 
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2));
+        server.EnableLogs({ NKikimrServices::PERSQUEUE, NKikimrServices::HIVE });
+        TString unusedTopic = "rt3.dc1--unusedtopic";
+        server.AnnoyingClient->CreateTopic(unusedTopic, 1);
+        WaitResolveSuccess(*server.AnnoyingClient, unusedTopic, 1);
 
         // Act
         // Disable node #0
-        server.AnnoyingClient->MarkNodeInHive(server.CleverServer->GetRuntime(), 0, false); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 3); 
-        WaitResolveSuccess(*server.AnnoyingClient, DEFAULT_TOPIC_NAME, 3); 
+        server.AnnoyingClient->MarkNodeInHive(server.CleverServer->GetRuntime(), 0, false);
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 3);
+        WaitResolveSuccess(*server.AnnoyingClient, DEFAULT_TOPIC_NAME, 3);
 
         // Assert that all partitions are on node #1
-        const ui32 node1Id = server.CleverServer->GetRuntime()->GetNodeId(1); 
+        const ui32 node1Id = server.CleverServer->GetRuntime()->GetNodeId(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            server.AnnoyingClient->GetPartLocation({{DEFAULT_TOPIC_NAME, {0, 1}}}, 2, true), 
+            server.AnnoyingClient->GetPartLocation({{DEFAULT_TOPIC_NAME, {0, 1}}}, 2, true),
             TVector<ui32>({node1Id, node1Id})
         );
     }
 
-    void PrepareForGrpc(NPersQueue::TTestServer& server) { 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2); 
+    void PrepareForGrpc(NPersQueue::TTestServer& server) {
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
     }
 
     class TTestCredentialsProvider : public NYdb::ICredentialsProvider {
@@ -1064,25 +1064,25 @@ namespace {
 
 
     Y_UNIT_TEST(CheckACLForGrpcWrite) {
-        NPersQueue::TTestServer server(PQSettings(0, 1)); 
-        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY }); 
-        PrepareForGrpc(server); 
+        NPersQueue::TTestServer server(PQSettings(0, 1));
+        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY });
+        PrepareForGrpc(server);
 
-        TPQDataWriter writer("source1", server); 
-        TPQDataWriter writer2("source1", server); 
+        TPQDataWriter writer("source1", server);
+        TPQDataWriter writer2("source1", server);
 
-        server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true); 
+        server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
 
-        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true, TString()); // Fail if user set empty token 
-        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN); 
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true, TString()); // Fail if user set empty token
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);
 
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, "topic1@" BUILTIN_ACL_DOMAIN);
-        server.AnnoyingClient->ModifyACL("/Root/PQ", DEFAULT_TOPIC_NAME, acl.SerializeAsString()); 
+        server.AnnoyingClient->ModifyACL("/Root/PQ", DEFAULT_TOPIC_NAME, acl.SerializeAsString());
         WaitACLModification();
 
-        writer2.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, false, "topic1@" BUILTIN_ACL_DOMAIN); 
-        writer2.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true, "invalid_ticket"); 
+        writer2.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, false, "topic1@" BUILTIN_ACL_DOMAIN);
+        writer2.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true, "invalid_ticket");
 
         auto driver = server.AnnoyingClient->GetDriver();
 
@@ -1136,67 +1136,67 @@ namespace {
 
 
     Y_UNIT_TEST(CheckACLForGrpcRead) {
-        NPersQueue::TTestServer server(PQSettings(0, 1)); 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY }); 
-        server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_INFO); 
-        TString topic2 = DEFAULT_TOPIC_NAME + "2"; 
-        TString shortTopic2Name = "topic12"; 
-        PrepareForGrpc(server); 
+        NPersQueue::TTestServer server(PQSettings(0, 1));
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
+        server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_INFO);
+        TString topic2 = DEFAULT_TOPIC_NAME + "2";
+        TString shortTopic2Name = "topic12";
+        PrepareForGrpc(server);
 
-        server.AnnoyingClient->CreateTopic(topic2, 1, 8*1024*1024, 86400, 20000000, "", 200000000, {"user1", "user2"}); 
-        server.WaitInit(shortTopic2Name); 
-        server.AnnoyingClient->CreateConsumer("user1"); 
-        server.AnnoyingClient->CreateConsumer("user2"); 
-        server.AnnoyingClient->CreateConsumer("user5"); 
-        server.AnnoyingClient->GrantConsumerAccess("user1", "user2@" BUILTIN_ACL_DOMAIN); 
-        server.AnnoyingClient->GrantConsumerAccess("user1", "user3@" BUILTIN_ACL_DOMAIN); 
+        server.AnnoyingClient->CreateTopic(topic2, 1, 8*1024*1024, 86400, 20000000, "", 200000000, {"user1", "user2"});
+        server.WaitInit(shortTopic2Name);
+        server.AnnoyingClient->CreateConsumer("user1");
+        server.AnnoyingClient->CreateConsumer("user2");
+        server.AnnoyingClient->CreateConsumer("user5");
+        server.AnnoyingClient->GrantConsumerAccess("user1", "user2@" BUILTIN_ACL_DOMAIN);
+        server.AnnoyingClient->GrantConsumerAccess("user1", "user3@" BUILTIN_ACL_DOMAIN);
 
         server.AnnoyingClient->GrantConsumerAccess("user1", "1@" BUILTIN_ACL_DOMAIN);
         server.AnnoyingClient->GrantConsumerAccess("user2", "2@" BUILTIN_ACL_DOMAIN);
         server.AnnoyingClient->GrantConsumerAccess("user5", "1@" BUILTIN_ACL_DOMAIN);
         server.AnnoyingClient->GrantConsumerAccess("user5", "2@" BUILTIN_ACL_DOMAIN);
-        Cerr << "=== Create writer\n"; 
-        TPQDataWriter writer("source1", server); 
+        Cerr << "=== Create writer\n";
+        TPQDataWriter writer("source1", server);
 
-        server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true); 
+        server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
 
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "1@" BUILTIN_ACL_DOMAIN);
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "2@" BUILTIN_ACL_DOMAIN);
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1@" BUILTIN_ACL_DOMAIN);
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user2@" BUILTIN_ACL_DOMAIN);
-        server.AnnoyingClient->ModifyACL("/Root/PQ", topic2, acl.SerializeAsString()); 
+        server.AnnoyingClient->ModifyACL("/Root/PQ", topic2, acl.SerializeAsString());
         WaitACLModification();
 
         auto ticket1 = "1@" BUILTIN_ACL_DOMAIN;
         auto ticket2 = "2@" BUILTIN_ACL_DOMAIN;
 
-        Cerr << "=== Writer - do reads\n"; 
-        writer.Read(shortTopic2Name, "user1", ticket1, false, false, true); 
+        Cerr << "=== Writer - do reads\n";
+        writer.Read(shortTopic2Name, "user1", ticket1, false, false, true);
 
-        writer.Read(shortTopic2Name, "user1", "user2@" BUILTIN_ACL_DOMAIN, false, false, true); 
-        writer.Read(shortTopic2Name, "user1", "user3@" BUILTIN_ACL_DOMAIN, true, false, true); //for topic 
-        writer.Read(shortTopic2Name, "user1", "user1@" BUILTIN_ACL_DOMAIN, true, false, true); //for consumer 
-        writer.Read(shortTopic2Name, "user2", ticket1, true, false, true); 
-        writer.Read(shortTopic2Name, "user2", ticket2, false, false, true); 
+        writer.Read(shortTopic2Name, "user1", "user2@" BUILTIN_ACL_DOMAIN, false, false, true);
+        writer.Read(shortTopic2Name, "user1", "user3@" BUILTIN_ACL_DOMAIN, true, false, true); //for topic
+        writer.Read(shortTopic2Name, "user1", "user1@" BUILTIN_ACL_DOMAIN, true, false, true); //for consumer
+        writer.Read(shortTopic2Name, "user2", ticket1, true, false, true);
+        writer.Read(shortTopic2Name, "user2", ticket2, false, false, true);
 
-        writer.Read(shortTopic2Name, "user5", ticket1, true, false, true); 
-        writer.Read(shortTopic2Name, "user5", ticket2, true, false, true); 
+        writer.Read(shortTopic2Name, "user5", ticket1, true, false, true);
+        writer.Read(shortTopic2Name, "user5", ticket2, true, false, true);
 
         acl.Clear();
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user3@" BUILTIN_ACL_DOMAIN);
-        server.AnnoyingClient->ModifyACL("/Root/PQ", topic2, acl.SerializeAsString()); 
+        server.AnnoyingClient->ModifyACL("/Root/PQ", topic2, acl.SerializeAsString());
         WaitACLModification();
 
-        Cerr << "==== Writer - read\n"; 
-        writer.Read(shortTopic2Name, "user1", "user3@" BUILTIN_ACL_DOMAIN, false, true, true); 
+        Cerr << "==== Writer - read\n";
+        writer.Read(shortTopic2Name, "user1", "user3@" BUILTIN_ACL_DOMAIN, false, true, true);
 
-        auto Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials()); 
+        auto Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
         auto StubP_ = Ydb::PersQueue::V1::PersQueueService::NewStub(Channel_);
 
 /*        auto driver = server.AnnoyingClient->GetDriver();
 
-        Cerr << "==== Start consuming loop\n"; 
+        Cerr << "==== Start consuming loop\n";
         for (ui32 i = 0; i < 2; ++i) {
 
             std::shared_ptr<NYdb::ICredentialsProviderFactory> creds = std::make_shared<TTestCredentialsProviderFactory>(NYdb::TStringType("user3@" BUILTIN_ACL_DOMAIN));
@@ -1217,7 +1217,7 @@ namespace {
 
             ev->Confirm();
 
-            Cerr << "=== Wait for consumer death (" << i << ")" << Endl; 
+            Cerr << "=== Wait for consumer death (" << i << ")" << Endl;
 
             msg = reader->GetEvent(true, 1);
             UNIT_ASSERT(msg);
@@ -1229,15 +1229,15 @@ namespace {
             UNIT_ASSERT(closeEv);
         }
 */
-        Cerr << "==== Start second loop\n"; 
+        Cerr << "==== Start second loop\n";
         for (ui32 i = 0; i < 3; ++i){
-            server.AnnoyingClient->GetClientInfo({topic2}, "user1", true); 
+            server.AnnoyingClient->GetClientInfo({topic2}, "user1", true);
 
             ReadInfoRequest request;
             ReadInfoResponse response;
             request.mutable_consumer()->set_path("user1");
             request.set_get_only_original(true);
-            request.add_topics()->set_path(shortTopic2Name); 
+            request.add_topics()->set_path(shortTopic2Name);
             grpc::ClientContext rcontext;
             if (i == 0) {
                 rcontext.AddMetadata("x-ydb-auth-ticket", "user_without_rights@" BUILTIN_ACL_DOMAIN);
@@ -1259,11 +1259,11 @@ namespace {
     }
 
     Y_UNIT_TEST(CheckKillBalancer) {
-        NPersQueue::TTestServer server; 
-        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY}); 
-        PrepareForGrpc(server); 
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
+        PrepareForGrpc(server);
 
-        TPQDataWriter writer("source1", server); 
+        TPQDataWriter writer("source1", server);
 
 
         auto driver = server.AnnoyingClient->GetDriver();
@@ -1284,7 +1284,7 @@ namespace {
             ev->Confirm();
         }
 
-        server.AnnoyingClient->RestartBalancerTablet(server.CleverServer->GetRuntime(), "rt3.dc1--topic1"); 
+        server.AnnoyingClient->RestartBalancerTablet(server.CleverServer->GetRuntime(), "rt3.dc1--topic1");
         Cerr << "Balancer killed\n";
 
 
@@ -1316,20 +1316,20 @@ namespace {
 
 
     Y_UNIT_TEST(TestWriteStat) {
-        NPersQueue::TTestServer server(PQSettings(0, 1, true, "10"), false); 
-        auto netDataUpdated = server.PrepareNetDataFile(FormNetData()); 
-        UNIT_ASSERT(netDataUpdated); 
-        server.StartServer(); 
+        NPersQueue::TTestServer server(PQSettings(0, 1, true, "10"), false);
+        auto netDataUpdated = server.PrepareNetDataFile(FormNetData());
+        UNIT_ASSERT(netDataUpdated);
+        server.StartServer();
 
-        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::NET_CLASSIFIER }); 
-        server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_ERROR); 
+        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::NET_CLASSIFIER });
+        server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_ERROR);
 
-        auto sender = server.CleverServer->GetRuntime()->AllocateEdgeActor(); 
+        auto sender = server.CleverServer->GetRuntime()->AllocateEdgeActor();
 
-        GetClassifierUpdate(*server.CleverServer, sender); //wait for initializing 
+        GetClassifierUpdate(*server.CleverServer, sender); //wait for initializing
 
-        server.AnnoyingClient->CreateTopic("rt3.dc1--account--topic1", 10, 10000, 10000, 2000); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10, 10000, 10000, 2000); 
+        server.AnnoyingClient->CreateTopic("rt3.dc1--account--topic1", 10, 10000, 10000, 2000);
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10, 10000, 10000, 2000);
 
         auto driver = server.AnnoyingClient->GetDriver();
 
@@ -1366,7 +1366,7 @@ namespace {
                 UNIT_ASSERT(ack->Acks.back().Stat->TotalTimeInPartitionQueue <= ack->Acks.back().Stat->PartitionQuotedTime + TDuration::Seconds(10));
             }
         }
-        GetCounters(server.CleverServer->GetRuntime()->GetMonPort(), "pqproxy", "writeSession", "account/topic1", "Vla"); 
+        GetCounters(server.CleverServer->GetRuntime()->GetMonPort(), "pqproxy", "writeSession", "account/topic1", "Vla");
         {
             NYdb::NPersQueue::TReadSessionSettings settings;
             settings.ConsumerName("shared/user").AppendTopics(TString("account/topic1")).ReadOriginal({"dc1"});
@@ -1378,14 +1378,14 @@ namespace {
 
             Cerr << NYdb::NPersQueue::DebugString(*msg) << "\n";
         }
-        GetCounters(server.CleverServer->GetRuntime()->GetMonPort(), "pqproxy", "readSession", "account/topic1", "Vla"); 
+        GetCounters(server.CleverServer->GetRuntime()->GetMonPort(), "pqproxy", "readSession", "account/topic1", "Vla");
     }
 
     Y_UNIT_TEST(TestWriteSessionsConflicts) {
-        NPersQueue::TTestServer server; 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1); 
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
 
-        TPQDataWriter writer("source", server); 
+        TPQDataWriter writer("source", server);
 
         server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY });
 
@@ -1433,13 +1433,13 @@ namespace {
     Y_UNIT_TEST(TestLockErrors) {
         return;  // Test is ignored. FIX: KIKIMR-7881
 
-        NPersQueue::TTestServer server; 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1); 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY }); 
-        auto pqLib = TPQLib::WithCerrLogger(); 
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
+        auto pqLib = TPQLib::WithCerrLogger();
 
         {
-            auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, SHORT_TOPIC_NAME, "123"); 
+            auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, SHORT_TOPIC_NAME, "123");
             for (ui32 i = 1; i <= 11; ++i) {
                 auto f = producer->Write(i,  TString(10, 'a'));
                 f.Wait();
@@ -1448,17 +1448,17 @@ namespace {
 
         TConsumerSettings ss;
         ss.Consumer = "user";
-        ss.Server = TServerSetting{"localhost", server.GrpcPort}; 
-        ss.Topics.push_back({SHORT_TOPIC_NAME, {}}); 
+        ss.Server = TServerSetting{"localhost", server.GrpcPort};
+        ss.Topics.push_back({SHORT_TOPIC_NAME, {}});
         ss.MaxCount = 1;
         ss.Unpack = false;
 
-        auto [consumer, ccResult] = CreateConsumer(pqLib, ss); 
+        auto [consumer, ccResult] = CreateConsumer(pqLib, ss);
         auto msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
         UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
-        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME); 
+        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
         UNIT_ASSERT(msg.GetValue().Response.assigned().read_offset() == 0);
@@ -1470,12 +1470,12 @@ namespace {
         future.Wait();
         Cerr << future.GetValue() << "\n";
 
-        std::tie(consumer, ccResult) = CreateConsumer(pqLib, ss); 
+        std::tie(consumer, ccResult) = CreateConsumer(pqLib, ss);
         msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
         UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
-        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME); 
+        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
         UNIT_ASSERT(msg.GetValue().Response.assigned().read_offset() == 0);
@@ -1487,12 +1487,12 @@ namespace {
         future.Wait();
         Cerr << future.GetValue() << "\n";
 
-        std::tie(consumer, ccResult) = CreateConsumer(pqLib, ss); 
+        std::tie(consumer, ccResult) = CreateConsumer(pqLib, ss);
         msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
         UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
-        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME); 
+        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
         UNIT_ASSERT(msg.GetValue().Response.assigned().read_offset() == 0);
@@ -1504,12 +1504,12 @@ namespace {
         future.Wait();
         Cerr << future.GetValue() << "\n";
 
-        std::tie(consumer, ccResult) = CreateConsumer(pqLib, ss); 
+        std::tie(consumer, ccResult) = CreateConsumer(pqLib, ss);
         msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
         UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
-        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME); 
+        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
         UNIT_ASSERT(msg.GetValue().Response.assigned().read_offset() == 0);
@@ -1530,12 +1530,12 @@ namespace {
             }
         }
 
-        std::tie(consumer, ccResult) = CreateConsumer(pqLib, ss); 
+        std::tie(consumer, ccResult) = CreateConsumer(pqLib, ss);
         msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
         UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
-        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME); 
+        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
         UNIT_ASSERT(msg.GetValue().Response.assigned().read_offset() == 5);
@@ -1545,12 +1545,12 @@ namespace {
         pp.SetValue(TAssignInfo{11, 11, false});
         Sleep(TDuration::Seconds(5));
 
-        std::tie(consumer, ccResult) = CreateConsumer(pqLib, ss); 
+        std::tie(consumer, ccResult) = CreateConsumer(pqLib, ss);
         msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
         UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
-        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME); 
+        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
         UNIT_ASSERT(msg.GetValue().Response.assigned().read_offset() == 11);
@@ -1562,12 +1562,12 @@ namespace {
         future.Wait();
         Cerr << future.GetValue() << "\n";
 
-        std::tie(consumer, ccResult) = CreateConsumer(pqLib, ss); 
+        std::tie(consumer, ccResult) = CreateConsumer(pqLib, ss);
         msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
         UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
-        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME); 
+        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
         UNIT_ASSERT(msg.GetValue().Response.assigned().read_offset() == 11);
@@ -1581,15 +1581,15 @@ namespace {
 */
 
     Y_UNIT_TEST(TestBigMessage) {
-        NPersQueue::TTestServer server; 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1); 
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
 
         server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY });
 
         TPQDataWriter writer2("source", server);
 
         auto driver = server.AnnoyingClient->GetDriver();
- 
+
         auto writer = CreateWriter(*driver, SHORT_TOPIC_NAME, "123", 0, "raw");
 
         auto msg = writer->GetEvent(true);
@@ -1599,28 +1599,28 @@ namespace {
         UNIT_ASSERT(ev);
 
         writer->Write(std::move(ev->ContinuationToken), TString((1 << 20) * 60, 'a')); //TODO: Increase GRPC_ARG_MAX_SEND_MESSAGE_LENGTH
-        { 
-            msg = writer->GetEvent(true); 
-            UNIT_ASSERT(msg); // ReadyToAcceptEvent 
-            auto ev2 = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent>(&*msg); 
-            UNIT_ASSERT(ev2); 
-        } 
-        { 
-            msg = writer->GetEvent(true); 
-            UNIT_ASSERT(msg); // Ack on write 
-            auto ev2 = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TAcksEvent>(&*msg); 
-            UNIT_ASSERT(ev2); 
-        } 
+        {
+            msg = writer->GetEvent(true);
+            UNIT_ASSERT(msg); // ReadyToAcceptEvent
+            auto ev2 = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent>(&*msg);
+            UNIT_ASSERT(ev2);
+        }
+        {
+            msg = writer->GetEvent(true);
+            UNIT_ASSERT(msg); // Ack on write
+            auto ev2 = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TAcksEvent>(&*msg);
+            UNIT_ASSERT(ev2);
+        }
     }
 
 /*
     void TestRereadsWhenDataIsEmptyImpl(bool withWait) {
-        NPersQueue::TTestServer server; 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1); 
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY }); 
-        TPQDataWriter writer("source", server); 
-        auto pqLib = TPQLib::WithCerrLogger(); 
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
+        TPQDataWriter writer("source", server);
+        auto pqLib = TPQLib::WithCerrLogger();
 
         // Write nonempty data
         NKikimr::NPersQueueTests::TRequestWritePQ writeReq(DEFAULT_TOPIC_NAME, 0, "src", 4);
@@ -1635,7 +1635,7 @@ namespace {
             }
             TString serialized;
             UNIT_ASSERT(dataChunk.SerializeToString(&serialized));
-            server.AnnoyingClient->WriteToPQ(writeReq, serialized); 
+            server.AnnoyingClient->WriteToPQ(writeReq, serialized);
         };
         write("data1");
         write("data2", true);
@@ -1647,10 +1647,10 @@ namespace {
         bool unpack = false;
         ui32 maxInflyRequests = 1;
         ui32 maxMemoryUsage = 1;
-        auto [consumer, ccResult] = CreateConsumer( 
-                pqLib, server.GrpcPort, "user", {SHORT_TOPIC_NAME, {}}, 
-                maxCount, unpack, {}, maxInflyRequests, maxMemoryUsage 
-        ); 
+        auto [consumer, ccResult] = CreateConsumer(
+                pqLib, server.GrpcPort, "user", {SHORT_TOPIC_NAME, {}},
+                maxCount, unpack, {}, maxInflyRequests, maxMemoryUsage
+        );
         UNIT_ASSERT_C(ccResult.Response.response_case() == MigrationStreamingReadServerMessage::kInitResponse, ccResult.Response);
 
         auto msg1 = GetNextMessageSkipAssignment(consumer).GetValueSync().Response;
@@ -1695,32 +1695,32 @@ namespace {
 
 
     Y_UNIT_TEST(TestLockAfterDrop) {
-        NPersQueue::TTestServer server{false}; 
-        server.GrpcServerOptions.SetMaxMessageSize(130*1024*1024); 
-        server.StartServer(); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1); 
-        server.WaitInit(SHORT_TOPIC_NAME); 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY }); 
-        auto pqLib = TPQLib::WithCerrLogger(); 
+        NPersQueue::TTestServer server{false};
+        server.GrpcServerOptions.SetMaxMessageSize(130*1024*1024);
+        server.StartServer();
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
+        server.WaitInit(SHORT_TOPIC_NAME);
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
+        auto pqLib = TPQLib::WithCerrLogger();
 
-        auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, SHORT_TOPIC_NAME, "123"); 
+        auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, SHORT_TOPIC_NAME, "123");
         auto f = producer->Write(1,  TString(1024, 'a'));
         f.Wait();
 
         ui32 maxCount = 1;
         bool unpack = false;
-        auto [consumer, ccResult] = CreateConsumer(pqLib, server.GrpcPort, "user", {SHORT_TOPIC_NAME, {}}, maxCount, unpack); 
+        auto [consumer, ccResult] = CreateConsumer(pqLib, server.GrpcPort, "user", {SHORT_TOPIC_NAME, {}}, maxCount, unpack);
         Cerr << ccResult.Response << "\n";
 
         auto msg = consumer->GetNextMessage();
         msg.Wait();
         UNIT_ASSERT_C(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned, msg.GetValue().Response);
-        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME); 
+        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
 
-        server.CleverServer->GetRuntime()->ResetScheduledCount(); 
-        server.AnnoyingClient->RestartPartitionTablets(server.CleverServer->GetRuntime(), DEFAULT_TOPIC_NAME); 
+        server.CleverServer->GetRuntime()->ResetScheduledCount();
+        server.AnnoyingClient->RestartPartitionTablets(server.CleverServer->GetRuntime(), DEFAULT_TOPIC_NAME);
 
         msg.GetValue().StartRead.SetValue({0,0,false});
 
@@ -1733,16 +1733,16 @@ namespace {
 
 
     Y_UNIT_TEST(TestMaxNewTopicModel) {
-        NPersQueue::TTestServer server; 
-        server.AnnoyingClient->AlterUserAttributes("/", "Root", {{"__extra_path_symbols_allowed", "@"}}); 
-        server.AnnoyingClient->CreateTopic("rt3.dc1--aaa@bbb@ccc--topic", 1); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1); 
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->AlterUserAttributes("/", "Root", {{"__extra_path_symbols_allowed", "@"}});
+        server.AnnoyingClient->CreateTopic("rt3.dc1--aaa@bbb@ccc--topic", 1);
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY }); 
-        auto pqLib = TPQLib::WithCerrLogger(); 
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
+        auto pqLib = TPQLib::WithCerrLogger();
 
         {
-            auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, "aaa/bbb/ccc/topic", "123"); 
+            auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, "aaa/bbb/ccc/topic", "123");
             UNIT_ASSERT_C(pcResult.Response.server_message_case() == StreamingWriteServerMessage::kInitResponse, pcResult.Response);
             for (ui32 i = 1; i <= 11; ++i) {
                 auto f = producer->Write(i,  TString(10, 'a'));
@@ -1753,7 +1753,7 @@ namespace {
 
         ui32 maxCount = 1;
         bool unpack = false;
-        auto [consumer, ccResult] = CreateConsumer(pqLib, server.GrpcPort, "user", {"aaa/bbb/ccc/topic", {}}, maxCount, unpack); 
+        auto [consumer, ccResult] = CreateConsumer(pqLib, server.GrpcPort, "user", {"aaa/bbb/ccc/topic", {}}, maxCount, unpack);
         UNIT_ASSERT_C(ccResult.Response.response_case() == MigrationStreamingReadServerMessage::kInitResponse, ccResult.Response);
 
         auto msg = consumer->GetNextMessage();
@@ -1764,18 +1764,18 @@ namespace {
 
 
     Y_UNIT_TEST(TestReleaseWithAssigns) {
-        NPersQueue::TTestServer server; 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 3); 
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 3);
 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY }); 
-        auto pqLib = TPQLib::WithCerrLogger(); 
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
+        auto pqLib = TPQLib::WithCerrLogger();
 
-        TPQDataWriter writer("source", server); 
+        TPQDataWriter writer("source", server);
 
         for (ui32 i = 1; i <= 3; ++i) {
             TString sourceId = "123" + ToString<int>(i);
             ui32 partitionGroup = i;
-            auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, SHORT_TOPIC_NAME, sourceId, partitionGroup); 
+            auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, SHORT_TOPIC_NAME, sourceId, partitionGroup);
 
             UNIT_ASSERT(pcResult.Response.server_message_case() == StreamingWriteServerMessage::kInitResponse);
             auto f = producer->Write(i,  TString(10, 'a'));
@@ -1784,13 +1784,13 @@ namespace {
 
         TConsumerSettings ss;
         ss.Consumer = "user";
-        ss.Server = TServerSetting{"localhost", server.GrpcPort}; 
-        ss.Topics.push_back({SHORT_TOPIC_NAME, {}}); 
+        ss.Server = TServerSetting{"localhost", server.GrpcPort};
+        ss.Topics.push_back({SHORT_TOPIC_NAME, {}});
         ss.ReadMirroredPartitions = false;
         ss.MaxCount = 3;
         ss.Unpack = false;
 
-        auto [consumer, ccResult] = CreateConsumer(pqLib, ss); 
+        auto [consumer, ccResult] = CreateConsumer(pqLib, ss);
         Cerr << ccResult.Response << "\n";
 
         for (ui32 i = 1; i <= 3; ++i) {
@@ -1798,11 +1798,11 @@ namespace {
             msg.Wait();
             Cerr << msg.GetValue().Response << "\n";
             UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
-            UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME); 
+            UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
             UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         }
 
-        auto [consumer2, ccResult2] = CreateConsumer(pqLib, ss); 
+        auto [consumer2, ccResult2] = CreateConsumer(pqLib, ss);
         Cerr << ccResult2.Response << "\n";
 
         auto msg = consumer->GetNextMessage();
@@ -1811,7 +1811,7 @@ namespace {
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
         UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kRelease);
-        UNIT_ASSERT(msg.GetValue().Response.release().topic().path() == SHORT_TOPIC_NAME); 
+        UNIT_ASSERT(msg.GetValue().Response.release().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.release().cluster() == "dc1");
 
         UNIT_ASSERT(!msg2.Wait(TDuration::Seconds(1)));
@@ -1822,18 +1822,18 @@ namespace {
         Cerr << msg2.GetValue().Response << "\n";
 
         UNIT_ASSERT(msg2.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
-        UNIT_ASSERT(msg2.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME); 
+        UNIT_ASSERT(msg2.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg2.GetValue().Response.assigned().cluster() == "dc1");
     }
 
     Y_UNIT_TEST(TestSilentRelease) {
-        NPersQueue::TTestServer server; 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 3); 
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 3);
 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY }); 
-        auto pqLib = TPQLib::WithCerrLogger(); 
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
+        auto pqLib = TPQLib::WithCerrLogger();
 
-        TPQDataWriter writer("source", server); 
+        TPQDataWriter writer("source", server);
 
         TVector<std::pair<ui64, ui64>> cookies;
 
@@ -1841,8 +1841,8 @@ namespace {
             TString sourceId = "123" + ToString<int>(i);
             ui32 partitionGroup = i;
 
-            auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, SHORT_TOPIC_NAME, sourceId, partitionGroup); 
-            Cerr << "===Response: " << pcResult.Response << Endl; 
+            auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, SHORT_TOPIC_NAME, sourceId, partitionGroup);
+            Cerr << "===Response: " << pcResult.Response << Endl;
             UNIT_ASSERT(pcResult.Response.server_message_case() == StreamingWriteServerMessage::kInitResponse);
             auto f = producer->Write(i,  TString(10, 'a'));
             f.Wait();
@@ -1850,13 +1850,13 @@ namespace {
 
         TConsumerSettings ss;
         ss.Consumer = "user";
-        ss.Server = TServerSetting{"localhost", server.GrpcPort}; 
-        ss.Topics.push_back({SHORT_TOPIC_NAME, {}}); 
+        ss.Server = TServerSetting{"localhost", server.GrpcPort};
+        ss.Topics.push_back({SHORT_TOPIC_NAME, {}});
         ss.ReadMirroredPartitions = false;
         ss.MaxCount = 1;
         ss.Unpack = false;
 
-        auto [consumer, ccResult] = CreateConsumer(pqLib, ss); 
+        auto [consumer, ccResult] = CreateConsumer(pqLib, ss);
         Cerr << ccResult.Response << "\n";
 
         for (ui32 i = 1; i <= 3; ++i) {
@@ -1868,7 +1868,7 @@ namespace {
             }
         }
 
-        auto [consumer2, ccResult2] = CreateConsumer(pqLib, ss); 
+        auto [consumer2, ccResult2] = CreateConsumer(pqLib, ss);
         Cerr << ccResult2.Response << "\n";
 
         auto msg = consumer->GetNextMessage();
@@ -1884,7 +1884,7 @@ namespace {
         Cerr << msg2.GetValue().Response << "\n";
 
         UNIT_ASSERT(msg2.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
-        UNIT_ASSERT(msg2.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME); 
+        UNIT_ASSERT(msg2.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg2.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg2.GetValue().Response.assigned().read_offset() == 1);
     }
@@ -1893,30 +1893,30 @@ namespace {
 
 /*
     Y_UNIT_TEST(TestDoubleRelease) {
-        NPersQueue::TTestServer server; 
-        server.AnnoyingClient->CreateTopic( 
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic(
                 DEFAULT_TOPIC_NAME, 1, 8000000, 86400, 50000000, "", 50000000, {"user1"}, {"user1", "user2"}
-        ); 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::TABLET_AGGREGATOR }); 
-        auto pqLib = TPQLib::WithCerrLogger(); 
-        TPQDataWriter writer("source", server); 
+        );
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::TABLET_AGGREGATOR });
+        auto pqLib = TPQLib::WithCerrLogger();
+        TPQDataWriter writer("source", server);
 
         TConsumerSettings ss;
         ss.Consumer = "user";
-        ss.Server = TServerSetting{"localhost", server.GrpcPort}; 
-        ss.Topics.push_back({SHORT_TOPIC_NAME, {}}); 
+        ss.Server = TServerSetting{"localhost", server.GrpcPort};
+        ss.Topics.push_back({SHORT_TOPIC_NAME, {}});
         ss.ReadMirroredPartitions = false;
         ss.MaxCount = 3;
         ss.Unpack = false;
 
-        auto [consumer, ccResult] = CreateConsumer(pqLib, ss); 
+        auto [consumer, ccResult] = CreateConsumer(pqLib, ss);
         Cerr << ccResult.Response << "\n";
 
         auto msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
         UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
-        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME); 
+        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
 
         msg = consumer->GetNextMessage();
@@ -1924,36 +1924,36 @@ namespace {
 
         THolder<IConsumer> consumer2;
         do {
-            std::tie(consumer2, ccResult) = CreateConsumer(pqLib, ss); 
+            std::tie(consumer2, ccResult) = CreateConsumer(pqLib, ss);
             Cerr << ccResult.Response << "\n";
         } while(!msg.Wait(TDuration::Seconds(1)));
 
         Cerr << msg.GetValue().Response << "\n";
         UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kRelease);
-        UNIT_ASSERT(msg.GetValue().Response.release().topic().path() == SHORT_TOPIC_NAME); 
+        UNIT_ASSERT(msg.GetValue().Response.release().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.release().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.release().forceful_release() == false);
 
         msg = consumer->GetNextMessage();
         UNIT_ASSERT(!msg.Wait(TDuration::Seconds(1)));
 
-        server.AnnoyingClient->RestartBalancerTablet(server.CleverServer->GetRuntime(), DEFAULT_TOPIC_NAME); 
+        server.AnnoyingClient->RestartBalancerTablet(server.CleverServer->GetRuntime(), DEFAULT_TOPIC_NAME);
         UNIT_ASSERT(msg.Wait(TDuration::Seconds(1)));
 
         Cerr << msg.GetValue().Response << "\n";
         UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kRelease);
-        UNIT_ASSERT(msg.GetValue().Response.release().topic().path() == SHORT_TOPIC_NAME); 
+        UNIT_ASSERT(msg.GetValue().Response.release().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.release().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.release().forceful_release() == true);
 
         THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response;
-        TActorId edge = server.CleverServer->GetRuntime()->AllocateEdgeActor(); 
+        TActorId edge = server.CleverServer->GetRuntime()->AllocateEdgeActor();
 
         do {
 
             auto actorId = NKikimr::CreateClusterLabeledCountersAggregatorActor(edge, TTabletTypes::PersQueue, 3, "rt3.*--*,user*!!/!!*!!/rt3.*--*", 0); // remove !!
-            server.CleverServer->GetRuntime()->Register(actorId); 
-            response = server.CleverServer->GetRuntime()-> 
+            server.CleverServer->GetRuntime()->Register(actorId);
+            response = server.CleverServer->GetRuntime()->
                             GrabEdgeEvent<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
 
            Cerr << "FINAL RESPONSE :\n" << response->Record.DebugString() << Endl;
@@ -1962,8 +1962,8 @@ namespace {
         Cerr << "MULITREQUEST\n";
 
         auto actorId = NKikimr::CreateClusterLabeledCountersAggregatorActor(edge, TTabletTypes::PersQueue, 3, "rt3.*--*,user*!!/!!*!!/rt3.*--*", 3); // remove !!
-        server.CleverServer->GetRuntime()->Register(actorId); 
-        response = server.CleverServer->GetRuntime()-> 
+        server.CleverServer->GetRuntime()->Register(actorId);
+        response = server.CleverServer->GetRuntime()->
                         GrabEdgeEvent<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
 
         Cerr << "FINAL RESPONSE2 :\n" << response->Record.DebugString() << Endl;
@@ -1986,9 +1986,9 @@ namespace {
         const auto& writeResponse = writeResult.GetValueSync().Response;
         UNIT_ASSERT_EQUAL_C(Ydb::StatusIds::SUCCESS, writeResponse.status(), "Response: " << writeResponse);
 
-        auto pqLib = TPQLib::WithCerrLogger(); 
+        auto pqLib = TPQLib::WithCerrLogger();
         using namespace NPersQueue;
-        auto [consumer, ccResult] = CreateConsumer(pqLib, setup.GetGrpcPort(), "shared/user", {"/account/topic" , {}}, 1000, false); 
+        auto [consumer, ccResult] = CreateConsumer(pqLib, setup.GetGrpcPort(), "shared/user", {"/account/topic" , {}}, 1000, false);
         Cerr << ccResult.Response << "\n";
 
         auto msg = consumer->GetNextMessage();
@@ -2025,17 +2025,17 @@ namespace {
 
         THolder<IProducer> producer = setup.StartProducer(topicPath, true);
 
-        auto pqLib = TPQLib::WithCerrLogger(); 
- 
-        auto [consumer, ccResult] = CreateConsumer( 
-                pqLib, setup.GetGrpcPort(), consumerPath, {topicPath , {}}, 1000, false 
-        ); 
+        auto pqLib = TPQLib::WithCerrLogger();
+
+        auto [consumer, ccResult] = CreateConsumer(
+                pqLib, setup.GetGrpcPort(), consumerPath, {topicPath , {}}, 1000, false
+        );
         Cerr << ccResult.Response << "\n";
 
         {
             auto msg = consumer->GetNextMessage();
             msg.Wait();
-            Cerr << "consumer assign response: " << msg.GetValue().Response << "\n"; 
+            Cerr << "consumer assign response: " << msg.GetValue().Response << "\n";
             UNIT_ASSERT(msg.GetValue().Type == EMT_ASSIGNED);
             msg.GetValue().StartRead.SetValue(TAssignInfo());
         }
@@ -2110,23 +2110,23 @@ namespace {
             return;
         }
 
-        NPersQueue::TTestServer server; 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1); 
-        server.WaitInit(SHORT_TOPIC_NAME); 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY }); 
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
+        server.WaitInit(SHORT_TOPIC_NAME);
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
 
-        server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME, NPersQueue::NErrorCode::OK, false); 
-        auto pqLib = TPQLib::WithCerrLogger(); 
+        server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME, NPersQueue::NErrorCode::OK, false);
+        auto pqLib = TPQLib::WithCerrLogger();
 
         ui32 maxCount = 1;
         bool unpack = false;
-        auto [consumer, ccResult] = CreateConsumer(pqLib, server.GrpcPort, "user", {SHORT_TOPIC_NAME, {}}, maxCount, unpack); 
-        Cerr << "Consumer create response: " << ccResult.Response << "\n"; 
+        auto [consumer, ccResult] = CreateConsumer(pqLib, server.GrpcPort, "user", {SHORT_TOPIC_NAME, {}}, maxCount, unpack);
+        Cerr << "Consumer create response: " << ccResult.Response << "\n";
 
         auto isDead = consumer->IsDead();
         isDead.Wait();
-        Cerr << "Is dead future value: " << isDead.GetValue() << "\n"; 
-        UNIT_ASSERT_EQUAL(ccResult.Response.Getissues(0).issue_code(), Ydb::PersQueue::ErrorCode::UNKNOWN_TOPIC); 
+        Cerr << "Is dead future value: " << isDead.GetValue() << "\n";
+        UNIT_ASSERT_EQUAL(ccResult.Response.Getissues(0).issue_code(), Ydb::PersQueue::ErrorCode::UNKNOWN_TOPIC);
     }
 */
     Y_UNIT_TEST(Codecs_InitWriteSession_DefaultTopicSupportedCodecsInInitResponse) {
@@ -2352,26 +2352,26 @@ namespace {
     }
 
     Y_UNIT_TEST(SchemeOperationsTest) {
-        NPersQueue::TTestServer server; 
-        server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR }); 
-        TString topic1 = "rt3.dc1--acc--topic1"; 
-        TString topic3 = "rt3.dc1--acc--topic3"; 
-        server.AnnoyingClient->CreateTopic(topic1, 1); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1); 
-        server.AnnoyingClient->CreateConsumer("user"); 
+        NPersQueue::TTestServer server;
+        server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
+        TString topic1 = "rt3.dc1--acc--topic1";
+        TString topic3 = "rt3.dc1--acc--topic3";
+        server.AnnoyingClient->CreateTopic(topic1, 1);
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
+        server.AnnoyingClient->CreateConsumer("user");
 
         std::shared_ptr<grpc::Channel> Channel_;
         std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> StubP_;
 
         {
-            Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials()); 
+            Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
             StubP_ = Ydb::PersQueue::V1::PersQueueService::NewStub(Channel_);
         }
 
         do {
             CreateTopicRequest request;
             CreateTopicResponse response;
-            request.set_path(TStringBuilder() << "/Root/PQ/" << topic3); 
+            request.set_path(TStringBuilder() << "/Root/PQ/" << topic3);
             auto props = request.mutable_settings();
             props->set_partitions_count(1);
             props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
@@ -2401,7 +2401,7 @@ namespace {
             // local cluster
             CreateTopicRequest request;
             CreateTopicResponse response;
-            request.set_path(TStringBuilder() << "/Root/PQ/" << topic3); 
+            request.set_path(TStringBuilder() << "/Root/PQ/" << topic3);
             auto props = request.mutable_settings();
             props->set_partitions_count(2);
             props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
@@ -2419,7 +2419,7 @@ namespace {
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-            server.AnnoyingClient->AddTopic(topic3); 
+            server.AnnoyingClient->AddTopic(topic3);
         }
 
         auto alter =[&StubP_](const AlterTopicRequest& request, Ydb::StatusIds::StatusCode statusCode, bool auth)
@@ -2440,7 +2440,7 @@ namespace {
         };
 
         AlterTopicRequest request;
-        request.set_path(TStringBuilder() << "/Root/PQ/" << topic3); 
+        request.set_path(TStringBuilder() << "/Root/PQ/" << topic3);
         auto props = request.mutable_settings();
         props->set_partitions_count(1);
         props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
@@ -2457,7 +2457,7 @@ namespace {
         props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
         auto rr = props->add_read_rules();
         alter(request, Ydb::StatusIds::BAD_REQUEST, false);
-        server.AnnoyingClient->AlterTopic(); 
+        server.AnnoyingClient->AlterTopic();
         props->add_supported_codecs(Ydb::PersQueue::V1::CODEC_RAW);
         props->add_supported_codecs(Ydb::PersQueue::V1::CODEC_ZSTD);
 
@@ -2481,9 +2481,9 @@ namespace {
         (*props->mutable_attributes())["_partitions_per_tablet"] = "5";
         alter(request, Ydb::StatusIds::SUCCESS, false);
 
-        TString topic4 = "rt3.dc1--acc--topic4"; 
-        server.AnnoyingClient->CreateTopic(topic4, 1); //ensure creation 
-        auto res = server.AnnoyingClient->DescribeTopic({topic3}); 
+        TString topic4 = "rt3.dc1--acc--topic4";
+        server.AnnoyingClient->CreateTopic(topic4, 1); //ensure creation
+        auto res = server.AnnoyingClient->DescribeTopic({topic3});
         Cerr << res.DebugString();
         TString resultDescribe = R"___(TopicInfo {
   Topic: "rt3.dc1--acc--topic3"
@@ -2572,7 +2572,7 @@ namespace {
         {
             DescribeTopicRequest request;
             DescribeTopicResponse response;
-            request.set_path(TStringBuilder() << "/Root/PQ/" << topic3); 
+            request.set_path(TStringBuilder() << "/Root/PQ/" << topic3);
             grpc::ClientContext rcontext;
             rcontext.AddMetadata("x-ydb-auth-ticket", "user@" BUILTIN_ACL_DOMAIN);
 
@@ -2603,7 +2603,7 @@ namespace {
         {
             DescribeTopicRequest request;
             DescribeTopicResponse response;
-            request.set_path(TStringBuilder() << "/Root/PQ/" << topic3); 
+            request.set_path(TStringBuilder() << "/Root/PQ/" << topic3);
             grpc::ClientContext rcontext;
 
             auto status = StubP_->DescribeTopic(&rcontext, request, &response);
@@ -2623,7 +2623,7 @@ namespace {
         {
             DescribeTopicRequest request;
             DescribeTopicResponse response;
-            request.set_path(TStringBuilder() << "/Root/PQ/" << topic3); 
+            request.set_path(TStringBuilder() << "/Root/PQ/" << topic3);
             grpc::ClientContext rcontext;
 
             auto status = StubP_->DescribeTopic(&rcontext, request, &response);
@@ -2639,7 +2639,7 @@ namespace {
         {
             DropTopicRequest request;
             DropTopicResponse response;
-            request.set_path(TStringBuilder() << "/Root/PQ/" << topic3); 
+            request.set_path(TStringBuilder() << "/Root/PQ/" << topic3);
             grpc::ClientContext rcontext;
             auto status = StubP_->DropTopic(&rcontext, request, &response);
 
@@ -2648,15 +2648,15 @@ namespace {
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-            server.AnnoyingClient->RemoveTopic(topic3); 
+            server.AnnoyingClient->RemoveTopic(topic3);
         }
 
 
         {
             DropTopicRequest request;
             DropTopicResponse response;
-            request.set_path(TStringBuilder() << "/Root/PQ/" << topic3); 
- 
+            request.set_path(TStringBuilder() << "/Root/PQ/" << topic3);
+
             grpc::ClientContext rcontext;
             auto status = StubP_->DropTopic(&rcontext, request, &response);
 
@@ -2667,13 +2667,13 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SCHEME_ERROR);
         }
 
-        server.AnnoyingClient->CreateTopic("rt3.dc1--acc--topic5", 1); //ensure creation 
-        server.AnnoyingClient->DescribeTopic({topic3}, true); 
+        server.AnnoyingClient->CreateTopic("rt3.dc1--acc--topic5", 1); //ensure creation
+        server.AnnoyingClient->DescribeTopic({topic3}, true);
 
 
         {
             NYdb::TDriverConfig driverCfg;
-            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort); 
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort);
             std::shared_ptr<NYdb::TDriver> ydbDriver(new NYdb::TDriver(driverCfg));
             auto pqClient = NYdb::NPersQueue::TPersQueueClient(*ydbDriver);
 
@@ -2686,18 +2686,18 @@ namespace {
 
 
     Y_UNIT_TEST(SchemeOperationsCheckPropValues) {
-        NPersQueue::TTestServer server; 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR }); 
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
 
-        server.AnnoyingClient->CreateTopic("rt3.dc1--acc--topic1", 1); 
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1); 
-        server.AnnoyingClient->CreateConsumer("user"); 
+        server.AnnoyingClient->CreateTopic("rt3.dc1--acc--topic1", 1);
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
+        server.AnnoyingClient->CreateConsumer("user");
 
         std::shared_ptr<grpc::Channel> Channel_;
         std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> StubP_;
 
         {
-            Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials()); 
+            Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
             StubP_ = Ydb::PersQueue::V1::PersQueueService::NewStub(Channel_);
         }
 
@@ -2764,19 +2764,19 @@ namespace {
     }
 
     Y_UNIT_TEST(ReadRuleServiceType) {
-        TServerSettings settings = PQSettings(0); 
+        TServerSettings settings = PQSettings(0);
         {
             settings.PQConfig.AddClientServiceType()->SetName("MyGreatType");
             settings.PQConfig.AddClientServiceType()->SetName("AnotherType");
             settings.PQConfig.AddClientServiceType()->SetName("SecondType");
         }
-        NPersQueue::TTestServer server(settings); 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR }); 
+        NPersQueue::TTestServer server(settings);
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
 
         std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub;
 
         {
-            std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials()); 
+            std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
             pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
         }
         auto checkDescribe = [&](const TVector<std::pair<TString, TString>>& readRules) {
@@ -3166,16 +3166,16 @@ namespace {
     }
 
     Y_UNIT_TEST(ReadRuleServiceTypeMigration) {
-        TServerSettings settings = PQSettings(0); 
+        TServerSettings settings = PQSettings(0);
         {
             settings.PQConfig.MutableDefaultClientServiceType()->SetName("default_type");
             settings.PQConfig.AddClientServiceType()->SetName("MyGreatType");
             settings.PQConfig.AddClientServiceType()->SetName("AnotherType");
             settings.PQConfig.AddClientServiceType()->SetName("SecondType");
         }
-        NPersQueue::TTestServer server(settings); 
+        NPersQueue::TTestServer server(settings);
 
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR }); 
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
 
         const ui32 topicsCount = 4;
         for (ui32 i = 1; i <= topicsCount; ++i) {
@@ -3188,7 +3188,7 @@ namespace {
 
         std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub;
         {
-            std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials()); 
+            std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
             pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
         }
         auto doAlter = [&](const TString& topic, const TVector<std::pair<TString, TString>>& readRules) {

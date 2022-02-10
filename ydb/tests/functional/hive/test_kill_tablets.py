@@ -32,7 +32,7 @@ class TestKillTablets(object):
             self.cluster.client.tablet_kill(tablet_id)
 
         generations = {info.TabletId: info.Generation for info in actual_tablet_info}
-        wait_tablets_state_by_id( 
+        wait_tablets_state_by_id(
             self.cluster.client,
             TabletStates.Active,
             tablet_ids=all_created_tablet_ids,
@@ -57,7 +57,7 @@ class TestKillTablets(object):
             is_ok_response()
         )
 
-        wait_tablets_state_by_id( 
+        wait_tablets_state_by_id(
             self.cluster.client,
             TabletStates.Active,
             tablet_ids=[hive_id],
@@ -67,7 +67,7 @@ class TestKillTablets(object):
         all_tablet_ids = create_tablets_and_wait_for_start(self.cluster.client, NUMBER_OF_TABLETS)
 
         # Assert
-        wait_tablets_state_by_id( 
+        wait_tablets_state_by_id(
             self.cluster.client,
             TabletStates.Active,
             tablet_ids=all_tablet_ids,

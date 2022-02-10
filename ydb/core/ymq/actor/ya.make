@@ -23,7 +23,7 @@ SRCS(
     garbage_collector.cpp
     get_queue_attributes.cpp
     get_queue_url.cpp
-    index_events_processor.cpp 
+    index_events_processor.cpp
     infly.cpp
     log.cpp
     list_dead_letter_source_queues.cpp

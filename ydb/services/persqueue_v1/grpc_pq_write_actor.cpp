@@ -22,7 +22,7 @@ using namespace NKikimrClient;
 
 
 namespace NKikimr {
-using namespace NSchemeCache; 
+using namespace NSchemeCache;
 
 Ydb::PersQueue::V1::Codec CodecByName(const TString& codec) {
     static const THashMap<TString, Ydb::PersQueue::V1::Codec> codecsByName = {
@@ -108,19 +108,19 @@ static const TString UPDATE_SOURCEID_QUERY2 = "` (Hash, Topic, SourceId, CreateT
 //TODO: add here tracking of bytes in/out
 
 
-TWriteSessionActor::TWriteSessionActor( 
-        NKikimr::NGRpcService::TEvStreamPQWriteRequest* request, const ui64 cookie, 
-        const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache, 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC, 
-        const NPersQueue::TTopicsListController& topicsController 
-) 
+TWriteSessionActor::TWriteSessionActor(
+        NKikimr::NGRpcService::TEvStreamPQWriteRequest* request, const ui64 cookie,
+        const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
+        const NPersQueue::TTopicsListController& topicsController
+)
     : Request(request)
     , State(ES_CREATED)
     , SchemeCache(schemeCache)
     , NewSchemeCache(newSchemeCache)
     , PeerName("")
     , Cookie(cookie)
-    , TopicsController(topicsController) 
+    , TopicsController(topicsController)
     , Partition(0)
     , PreferedPartition(Max<ui32>())
     , NumReserveBytesRequests(0)
@@ -174,23 +174,23 @@ void TWriteSessionActor::HandleDone(const TActorContext& ctx) {
     Die(ctx);
 }
 
-TString WriteRequestToLog(const Ydb::PersQueue::V1::StreamingWriteClientMessage& proto) { 
-    switch (proto.client_message_case()) { 
-        case StreamingWriteClientMessage::kInitRequest: 
-            return proto.ShortDebugString(); 
-            break; 
-        case StreamingWriteClientMessage::kWriteRequest: 
-            return " write_request[data omitted]"; 
-            break; 
-        case StreamingWriteClientMessage::kUpdateTokenRequest: 
-            return " update_token_request [content omitted]"; 
-        default: 
-            return TString(); 
-    } 
-} 
- 
+TString WriteRequestToLog(const Ydb::PersQueue::V1::StreamingWriteClientMessage& proto) {
+    switch (proto.client_message_case()) {
+        case StreamingWriteClientMessage::kInitRequest:
+            return proto.ShortDebugString();
+            break;
+        case StreamingWriteClientMessage::kWriteRequest:
+            return " write_request[data omitted]";
+            break;
+        case StreamingWriteClientMessage::kUpdateTokenRequest:
+            return " update_token_request [content omitted]";
+        default:
+            return TString();
+    }
+}
+
 void TWriteSessionActor::Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read done: success: " << ev->Get()->Success << " data: " << WriteRequestToLog(ev->Get()->Record)); 
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read done: success: " << ev->Get()->Success << " data: " << WriteRequestToLog(ev->Get()->Record));
     if (!ev->Get()->Success) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
         ctx.Send(ctx.SelfID, new TEvPQProxy::TEvDone());
@@ -260,7 +260,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvDone::TPtr&, const TActorContext&
 }
 
 void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
-    //Y_VERIFY(ACLCheckInProgress); 
+    //Y_VERIFY(ACLCheckInProgress);
 
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
 
@@ -283,7 +283,7 @@ void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
         }
     } else {
         TString errorReason = Sprintf("access to topic '%s' denied for '%s' due to 'no WriteTopic rights', Marker# PQ1125",
-            TopicConverter->GetClientsideName().c_str(), 
+            TopicConverter->GetClientsideName().c_str(),
             Token->GetUserSID().c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::ACCESS_DENIED, ctx);
     }
@@ -304,15 +304,15 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
         return;
     }
 
-    TopicConverter = TopicsController.GetWriteTopicConverter(init.topic(), Request->GetDatabaseName().GetOrElse("/Root")); 
-    if (!TopicConverter->IsValid()) { 
-        CloseSession( 
-                TStringBuilder() << "topic " << init.topic() << " could not be recognized: " << TopicConverter->GetReason(), 
-                PersQueue::ErrorCode::BAD_REQUEST, ctx 
-        ); 
-        return; 
+    TopicConverter = TopicsController.GetWriteTopicConverter(init.topic(), Request->GetDatabaseName().GetOrElse("/Root"));
+    if (!TopicConverter->IsValid()) {
+        CloseSession(
+                TStringBuilder() << "topic " << init.topic() << " could not be recognized: " << TopicConverter->GetReason(),
+                PersQueue::ErrorCode::BAD_REQUEST, ctx
+        );
+        return;
     }
- 
+
     PeerName = event->PeerName;
 
     SourceId = init.message_group_id();
@@ -325,7 +325,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     }
     EscapedSourceId = HexEncode(encodedSourceId);
 
-    TString s = TopicConverter->GetClientsideName() + encodedSourceId; 
+    TString s = TopicConverter->GetClientsideName() + encodedSourceId;
     Hash = MurmurHash<ui32>(s.c_str(), s.size(), MURMUR_ARRAY_SEED);
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << " " << init << " from " << PeerName);
@@ -345,10 +345,10 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
 
     PreferedPartition = init.partition_group_id() > 0 ? init.partition_group_id() - 1 : Max<ui32>();
 
-    InitMeta = GetInitialDataChunk(init, TopicConverter->GetFullLegacyName(), PeerName); // ToDo[migration] - check? 
+    InitMeta = GetInitialDataChunk(init, TopicConverter->GetFullLegacyName(), PeerName); // ToDo[migration] - check?
 
     auto subGroup = GetServiceCounters(Counters, "pqproxy|SLI");
-    Aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}}; 
+    Aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}};
 
     SLITotal = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsTotal"}, true, "sensor", false);
     SLIErrors = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsError"}, true, "sensor", false);
@@ -364,7 +364,7 @@ void TWriteSessionActor::SetupCounters()
 {
     //now topic is checked, can create group for real topic, not garbage
     auto subGroup = GetServiceCounters(Counters, "pqproxy|writeSession");
-    TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabels(LocalDC, TopicConverter->GetClientsideName()); 
+    TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabels(LocalDC, TopicConverter->GetClientsideName());
 
     BytesInflight = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"BytesInflight"}, false);
     BytesInflightTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"BytesInflightTotal"}, false);
@@ -381,7 +381,7 @@ void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& db
 {
     //now topic is checked, can create group for real topic, not garbage
     auto subGroup = NKikimr::NPQ::GetCountersForStream(Counters, "writeSession");
-    TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabelsForStream(TopicConverter->GetClientsideName(), cloudId, dbId, folderId); 
+    TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabelsForStream(TopicConverter->GetClientsideName(), cloudId, dbId, folderId);
 
     BytesInflight = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.bytes_proceeding"}, false);
     BytesInflightTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.bytes_proceeding_total"}, false);
@@ -396,35 +396,35 @@ void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& db
 void TWriteSessionActor::InitCheckSchema(const TActorContext& ctx, bool needWaitSchema) {
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "init check schema");
 
-    if (!needWaitSchema) { 
-        ACLCheckInProgress = true; 
+    if (!needWaitSchema) {
+        ACLCheckInProgress = true;
     }
-    ctx.Send(SchemeCache, new TEvDescribeTopicsRequest({TopicConverter->GetPrimaryPath()})); 
+    ctx.Send(SchemeCache, new TEvDescribeTopicsRequest({TopicConverter->GetPrimaryPath()}));
     if (needWaitSchema) {
         State = ES_WAIT_SCHEME_2;
     }
 }
 
-void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) { 
-    auto* res = ev->Get()->Result.Get(); 
-    Y_VERIFY(res->ResultSet.size() == 1); 
+void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
+    auto* res = ev->Get()->Result.Get();
+    Y_VERIFY(res->ResultSet.size() == 1);
 
-    auto& entry = res->ResultSet[0]; 
+    auto& entry = res->ResultSet[0];
     TString errorReason;
-    auto processResult = ProcessMetaCacheTopicResponse(entry); 
-    if (processResult.IsFatal) { 
-        CloseSession(processResult.Reason, processResult.ErrorCode, ctx); 
+    auto processResult = ProcessMetaCacheTopicResponse(entry);
+    if (processResult.IsFatal) {
+        CloseSession(processResult.Reason, processResult.ErrorCode, ctx);
         return;
     }
-    auto& description = entry.PQGroupInfo->Description; 
-    Y_VERIFY(description.PartitionsSize() > 0); 
-    Y_VERIFY(description.HasPQTabletConfig()); 
-    InitialPQTabletConfig = description.GetPQTabletConfig(); 
+    auto& description = entry.PQGroupInfo->Description;
+    Y_VERIFY(description.PartitionsSize() > 0);
+    Y_VERIFY(description.HasPQTabletConfig());
+    InitialPQTabletConfig = description.GetPQTabletConfig();
 
-    BalancerTabletId = description.GetBalancerTabletID(); 
+    BalancerTabletId = description.GetBalancerTabletID();
 
-    for (ui32 i = 0; i < description.PartitionsSize(); ++i) { 
-        const auto& pi = description.GetPartitions(i); 
+    for (ui32 i = 0; i < description.PartitionsSize(); ++i) {
+        const auto& pi = description.GetPartitions(i);
         PartitionToTablet[pi.GetPartitionId()] = pi.GetTabletId();
     }
 
@@ -436,10 +436,10 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
         SetupCounters();
     }
 
-    Y_VERIFY (entry.SecurityObject); 
-    ACL.Reset(new TAclWrapper(entry.SecurityObject)); 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " describe result for acl check"); 
- 
+    Y_VERIFY (entry.SecurityObject);
+    ACL.Reset(new TAclWrapper(entry.SecurityObject));
+    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " describe result for acl check");
+
     if (Request->GetInternalToken().empty()) { // session without auth
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             Request->ReplyUnauthenticated("Unauthenticated access is forbidden, please provide credentials");
@@ -454,7 +454,7 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
         Auth = *Request->GetYdbToken();
 
         Token = new NACLib::TUserToken(Request->GetInternalToken());
-        CheckACL(ctx); 
+        CheckACL(ctx);
     }
 }
 
@@ -464,11 +464,11 @@ void TWriteSessionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
     Y_VERIFY(navigate->ResultSet.size() == 1);
     if (navigate->ErrorCount > 0) {
         const NSchemeCache::TSchemeCacheNavigate::EStatus status = navigate->ResultSet.front().Status;
-        return CloseSession( 
-                TStringBuilder() << "Failed to read ACL for '" << TopicConverter->GetClientsideName() 
-                                 << "' Scheme cache error : " << status, 
-                PersQueue::ErrorCode::ERROR, ctx 
-        ); 
+        return CloseSession(
+                TStringBuilder() << "Failed to read ACL for '" << TopicConverter->GetClientsideName()
+                                 << "' Scheme cache error : " << status,
+                PersQueue::ErrorCode::ERROR, ctx
+        );
     }
 
     const auto& pqDescription = navigate->ResultSet.front().PQGroupInfo->Description;
@@ -478,7 +478,7 @@ void TWriteSessionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
     InitialPQTabletConfig = pqDescription.GetPQTabletConfig();
 
     if (!pqDescription.HasBalancerTabletID()) {
-        TString errorReason = Sprintf("topic '%s' has no balancer, Marker# PQ93", TopicConverter->GetClientsideName().c_str()); 
+        TString errorReason = Sprintf("topic '%s' has no balancer, Marker# PQ93", TopicConverter->GetClientsideName().c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
         return;
     }
@@ -515,7 +515,7 @@ void TWriteSessionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
 
 void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
 
-    if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { // ToDo[migration] - separate flag for having config tables 
+    if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { // ToDo[migration] - separate flag for having config tables
         auto partitionId = PreferedPartition < Max<ui32>() ? PreferedPartition
                                     : NKikimr::NDataStreams::V1::ShardFromDecimal(NKikimr::NDataStreams::V1::HexBytesToDecimal(MD5::Calc(SourceId)), PartitionToTablet.size());
         ProceedPartition(partitionId, ctx);
@@ -528,7 +528,7 @@ void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
     ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
     ev->Record.MutableRequest()->SetKeepSession(false);
     ev->Record.MutableRequest()->SetQuery(SelectSourceIdQuery);
-    ev->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig)); 
+    ev->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig));
     // fill tx settings: set commit tx flag & begin new serializable tx.
     ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
     ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
@@ -536,7 +536,7 @@ void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
     ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
     NClient::TParameters parameters;
     parameters["$Hash"] = Hash;
-    parameters["$Topic"] = TopicConverter->GetClientsideName(); 
+    parameters["$Topic"] = TopicConverter->GetClientsideName();
     parameters["$SourceId"] = EscapedSourceId;
     ev->Record.MutableRequest()->MutableParameters()->Swap(&parameters);
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
@@ -546,7 +546,7 @@ void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
 
 void TWriteSessionActor::UpdatePartition(const TActorContext& ctx) {
     Y_VERIFY(State == ES_WAIT_TABLE_REQUEST_1 || State == ES_WAIT_NEXT_PARTITION);
-    auto ev = MakeUpdateSourceIdMetadataRequest(ctx); 
+    auto ev = MakeUpdateSourceIdMetadataRequest(ctx);
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     State = ES_WAIT_TABLE_REQUEST_2;
 }
@@ -644,16 +644,16 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
     }
 }
 
-THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMetadataRequest( 
-        const NActors::TActorContext& ctx 
-) { 
- 
+THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMetadataRequest(
+        const NActors::TActorContext& ctx
+) {
+
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
     ev->Record.MutableRequest()->SetQuery(UpdateSourceIdQuery);
-    ev->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig)); 
+    ev->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig));
     ev->Record.MutableRequest()->SetKeepSession(false);
     // fill tx settings: set commit tx flag & begin new serializable tx.
     ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
@@ -663,7 +663,7 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMet
 
     NClient::TParameters parameters;
     parameters["$Hash"] = Hash;
-    parameters["$Topic"] = TopicConverter->GetClientsideName(); 
+    parameters["$Topic"] = TopicConverter->GetClientsideName();
     parameters["$SourceId"] = EscapedSourceId;
     parameters["$CreateTime"] = SourceIdCreateTime;
     parameters["$AccessTime"] = TInstant::Now().MilliSeconds();
@@ -691,10 +691,10 @@ void TWriteSessionActor::ProceedPartition(const ui32 partition, const TActorCont
     ui64 tabletId = it != PartitionToTablet.end() ? it->second : 0;
 
     if (!tabletId) {
-        CloseSession( 
-                Sprintf("no partition %u in topic '%s', Marker# PQ4", Partition, TopicConverter->GetClientsideName().c_str()), 
-                PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx 
-        ); 
+        CloseSession(
+                Sprintf("no partition %u in topic '%s', Marker# PQ4", Partition, TopicConverter->GetClientsideName().c_str()),
+                PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx
+        );
         return;
     }
 
@@ -770,8 +770,8 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev
     init->set_session_id(EscapeC(OwnerCookie));
     init->set_last_sequence_number(maxSeqNo);
     init->set_partition_id(Partition);
-    init->set_topic(TopicConverter->GetModernName()); 
-    init->set_cluster(TopicConverter->GetCluster()); 
+    init->set_topic(TopicConverter->GetModernName());
+    init->set_cluster(TopicConverter->GetCluster());
     init->set_block_format_version(0);
     if (InitialPQTabletConfig.HasCodecs()) {
         for (const auto& codecName : InitialPQTabletConfig.GetCodecs().GetCodecs()) {
@@ -1146,7 +1146,7 @@ void TWriteSessionActor::HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const
 
 void TWriteSessionActor::LogSession(const TActorContext& ctx) {
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie << " userAgent=\"" << UserAgent << "\" ip=" << PeerName << " proto=v1 "
-                            << " topic=" << TopicConverter->GetModernName() << " durationSec=" << (ctx.Now() - StartTime).Seconds()); 
+                            << " topic=" << TopicConverter->GetModernName() << " durationSec=" << (ctx.Now() - StartTime).Seconds());
 
     LogSessionDeadline = ctx.Now() + TDuration::Hours(1) + TDuration::Seconds(rand() % 60);
 }
@@ -1158,9 +1158,9 @@ void TWriteSessionActor::HandleWakeup(const TActorContext& ctx) {
         RequestNotChecked = false;
         InitCheckSchema(ctx);
     }
-    // ToDo[migration] - separate flag for having config tables 
+    // ToDo[migration] - separate flag for having config tables
     if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !SourceIdUpdateInfly && ctx.Now() - LastSourceIdUpdate > SOURCEID_UPDATE_PERIOD) {
-        auto ev = MakeUpdateSourceIdMetadataRequest(ctx); 
+        auto ev = MakeUpdateSourceIdMetadataRequest(ctx);
         SourceIdUpdateInfly = true;
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }

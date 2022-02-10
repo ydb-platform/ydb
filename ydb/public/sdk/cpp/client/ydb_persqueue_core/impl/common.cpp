@@ -2,8 +2,8 @@
 
 #include <util/charset/unidata.h>
 
-namespace NYdb::NPersQueue { 
- 
+namespace NYdb::NPersQueue {
+
 IRetryPolicy::ERetryErrorClass GetRetryErrorClass(EStatus status) {
     switch (status) {
     case EStatus::SUCCESS:
@@ -29,7 +29,7 @@ IRetryPolicy::ERetryErrorClass GetRetryErrorClass(EStatus status) {
     case EStatus::CLIENT_LIMITS_REACHED:
     case EStatus::CLIENT_DISCOVERY_FAILED:
         return IRetryPolicy::ERetryErrorClass::LongRetry;
- 
+
     case EStatus::SCHEME_ERROR:
     case EStatus::STATUS_UNDEFINED:
     case EStatus::BAD_REQUEST:
@@ -41,38 +41,38 @@ IRetryPolicy::ERetryErrorClass GetRetryErrorClass(EStatus status) {
     case EStatus::CLIENT_UNAUTHENTICATED:
     case EStatus::CLIENT_CALL_UNIMPLEMENTED:
         return IRetryPolicy::ERetryErrorClass::NoRetry;
-    } 
-} 
- 
-IRetryPolicy::ERetryErrorClass GetRetryErrorClassV2(EStatus status) { 
-    switch (status) { 
-        case EStatus::SCHEME_ERROR: 
-            return IRetryPolicy::ERetryErrorClass::NoRetry; 
-        default: 
-            return GetRetryErrorClass(status); 
- 
-    } 
-} 
- 
-void Cancel(NGrpc::IQueueClientContextPtr& context) { 
-    if (context) { 
-        context->Cancel(); 
-    } 
-} 
- 
-NYql::TIssues MakeIssueWithSubIssues(const TString& description, const NYql::TIssues& subissues) { 
-    NYql::TIssues issues; 
-    NYql::TIssue issue(description); 
-    for (const NYql::TIssue& i : subissues) { 
-        issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i)); 
-    } 
-    issues.AddIssue(std::move(issue)); 
-    return issues; 
-} 
- 
-size_t CalcDataSize(const TReadSessionEvent::TEvent& event) { 
+    }
+}
+
+IRetryPolicy::ERetryErrorClass GetRetryErrorClassV2(EStatus status) {
+    switch (status) {
+        case EStatus::SCHEME_ERROR:
+            return IRetryPolicy::ERetryErrorClass::NoRetry;
+        default:
+            return GetRetryErrorClass(status);
+
+    }
+}
+
+void Cancel(NGrpc::IQueueClientContextPtr& context) {
+    if (context) {
+        context->Cancel();
+    }
+}
+
+NYql::TIssues MakeIssueWithSubIssues(const TString& description, const NYql::TIssues& subissues) {
+    NYql::TIssues issues;
+    NYql::TIssue issue(description);
+    for (const NYql::TIssue& i : subissues) {
+        issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
+    }
+    issues.AddIssue(std::move(issue));
+    return issues;
+}
+
+size_t CalcDataSize(const TReadSessionEvent::TEvent& event) {
     if (const TReadSessionEvent::TDataReceivedEvent* dataEvent = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) {
-        size_t len = 0; 
+        size_t len = 0;
         if (dataEvent->IsCompressedMessages()) {
             for (const auto& msg : dataEvent->GetCompressedMessages()) {
                 len += msg.GetData().size();
@@ -83,13 +83,13 @@ size_t CalcDataSize(const TReadSessionEvent::TEvent& event) {
                     len += msg.GetData().size();
                 }
             }
-        } 
-        return len; 
-    } else { 
-        return 0; 
-    } 
-} 
- 
+        }
+        return len;
+    } else {
+        return 0;
+    }
+}
+
 static TStringBuf SplitPort(TStringBuf endpoint) {
     for (int i = endpoint.Size() - 1; i >= 0; --i) {
         if (endpoint[i] == ':') {
@@ -121,90 +121,90 @@ TString ApplyClusterEndpoint(TStringBuf driverEndpoint, const TString& clusterDi
     }
 }
 
-void IAsyncExecutor::Post(TFunction&& f) { 
-    PostImpl(std::move(f)); 
-} 
- 
-IAsyncExecutor::TPtr CreateDefaultExecutor() { 
+void IAsyncExecutor::Post(TFunction&& f) {
+    PostImpl(std::move(f));
+}
+
+IAsyncExecutor::TPtr CreateDefaultExecutor() {
     return CreateThreadPoolExecutor(1);
-} 
- 
-void TThreadPoolExecutor::PostImpl(TVector<TFunction>&& fs) { 
-    for (auto& f : fs) { 
-        ThreadPool->SafeAddFunc(std::move(f)); 
-    } 
-} 
- 
-void TThreadPoolExecutor::PostImpl(TFunction&& f) { 
-    ThreadPool->SafeAddFunc(std::move(f)); 
-} 
- 
-TSerialExecutor::TSerialExecutor(IAsyncExecutor::TPtr executor) 
+}
+
+void TThreadPoolExecutor::PostImpl(TVector<TFunction>&& fs) {
+    for (auto& f : fs) {
+        ThreadPool->SafeAddFunc(std::move(f));
+    }
+}
+
+void TThreadPoolExecutor::PostImpl(TFunction&& f) {
+    ThreadPool->SafeAddFunc(std::move(f));
+}
+
+TSerialExecutor::TSerialExecutor(IAsyncExecutor::TPtr executor)
     : Executor(executor)
 {
-    Y_VERIFY(executor); 
-} 
- 
-void TSerialExecutor::PostImpl(TVector<TFunction>&& fs) { 
-    for (auto& f : fs) { 
-        PostImpl(std::move(f)); 
-    } 
-} 
- 
-void TSerialExecutor::PostImpl(TFunction&& f) { 
-    with_lock(Mutex) { 
-        ExecutionQueue.push(std::move(f)); 
-        if (Busy) { 
-            return; 
-        } 
-        PostNext(); 
-    } 
-} 
- 
-void TSerialExecutor::PostNext() { 
-    Y_VERIFY(!Busy); 
- 
-    if (ExecutionQueue.empty()) { 
-        return; 
-    } 
- 
-    auto weakThis = weak_from_this(); 
-    Executor->Post([weakThis, f = std::move(ExecutionQueue.front())]() { 
-        if (auto sharedThis = weakThis.lock()) { 
-            f(); 
-            with_lock(sharedThis->Mutex) { 
-                sharedThis->Busy = false; 
-                sharedThis->PostNext(); 
-            } 
-        } 
-    }); 
-    ExecutionQueue.pop(); 
-    Busy = true; 
-} 
+    Y_VERIFY(executor);
+}
+
+void TSerialExecutor::PostImpl(TVector<TFunction>&& fs) {
+    for (auto& f : fs) {
+        PostImpl(std::move(f));
+    }
+}
+
+void TSerialExecutor::PostImpl(TFunction&& f) {
+    with_lock(Mutex) {
+        ExecutionQueue.push(std::move(f));
+        if (Busy) {
+            return;
+        }
+        PostNext();
+    }
+}
+
+void TSerialExecutor::PostNext() {
+    Y_VERIFY(!Busy);
+
+    if (ExecutionQueue.empty()) {
+        return;
+    }
+
+    auto weakThis = weak_from_this();
+    Executor->Post([weakThis, f = std::move(ExecutionQueue.front())]() {
+        if (auto sharedThis = weakThis.lock()) {
+            f();
+            with_lock(sharedThis->Mutex) {
+                sharedThis->Busy = false;
+                sharedThis->PostNext();
+            }
+        }
+    });
+    ExecutionQueue.pop();
+    Busy = true;
+}
 
 IExecutor::TPtr CreateThreadPoolExecutor(size_t threads) {
     return MakeIntrusive<TThreadPoolExecutor>(threads);
-} 
- 
+}
+
 IExecutor::TPtr CreateGenericExecutor() {
     return CreateThreadPoolExecutor(1);
-} 
+}
 
 IExecutor::TPtr CreateThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool> threadPool) {
     return MakeIntrusive<TThreadPoolExecutor>(std::move(threadPool));
-} 
- 
+}
+
 TThreadPoolExecutor::TThreadPoolExecutor(std::shared_ptr<IThreadPool> threadPool)
     : ThreadPool(std::move(threadPool))
 {
     IsFakeThreadPool = dynamic_cast<TFakeThreadPool*>(ThreadPool.get()) != nullptr;
-} 
- 
+}
+
 TThreadPoolExecutor::TThreadPoolExecutor(size_t threadsCount)
     : TThreadPoolExecutor(CreateThreadPool(threadsCount))
 {
     Y_VERIFY(threadsCount > 0);
     ThreadsCount = threadsCount;
-} 
+}
 
 }

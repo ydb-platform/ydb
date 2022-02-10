@@ -281,7 +281,7 @@ namespace Tests {
 
         auto future = grpcService->Prepare(
             system,
-            NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), 
+            NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
             NMsgBusProxy::CreateMsgBusProxyId(),
             counters
         );
@@ -306,7 +306,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcYdbTableService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbScriptingService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcOperationService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::V1::TGRpcPersQueueService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId)); 
+        GRpcServer->AddService(new NGRpcService::V1::TGRpcPersQueueService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxyId));
@@ -661,33 +661,33 @@ namespace Tests {
         }
 
         {
-            if (Settings->PQConfig.GetEnabled() == true) { 
-                IActor *pqMetaCache = NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache( 
-                        new NMonitoring::TDynamicCounters(), TDuration::Seconds(1) 
-                ); 
- 
-                TActorId pqMetaCacheId = Runtime->Register(pqMetaCache, nodeIdx); 
-                Runtime->RegisterService(NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), pqMetaCacheId, nodeIdx); 
-            } 
+            if (Settings->PQConfig.GetEnabled() == true) {
+                IActor *pqMetaCache = NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(
+                        new NMonitoring::TDynamicCounters(), TDuration::Seconds(1)
+                );
+
+                TActorId pqMetaCacheId = Runtime->Register(pqMetaCache, nodeIdx);
+                Runtime->RegisterService(NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), pqMetaCacheId, nodeIdx);
+            }
         }
 
         {
-            if (Settings->EnableMetering) { 
-                THolder<TFileLogBackend> fileBackend; 
-                try { 
-                    fileBackend = MakeHolder<TFileLogBackend>(Settings->MeteringFilePath); 
-                    auto meteringActor = NMetering::CreateMeteringWriter(std::move(fileBackend)); 
-                    TActorId meteringId = Runtime->Register(meteringActor.Release(), nodeIdx); 
-                    Runtime->RegisterService(NMetering::MakeMeteringServiceID(), meteringId, nodeIdx); 
- 
-                } catch (const TFileError &ex) { 
-                    Cerr << "TMeteringWriterInitializer: failed to open file '" << Settings->MeteringFilePath << "': " 
-                         << ex.what() << Endl; 
-                } 
-            } 
-        } 
- 
-        { 
+            if (Settings->EnableMetering) {
+                THolder<TFileLogBackend> fileBackend;
+                try {
+                    fileBackend = MakeHolder<TFileLogBackend>(Settings->MeteringFilePath);
+                    auto meteringActor = NMetering::CreateMeteringWriter(std::move(fileBackend));
+                    TActorId meteringId = Runtime->Register(meteringActor.Release(), nodeIdx);
+                    Runtime->RegisterService(NMetering::MakeMeteringServiceID(), meteringId, nodeIdx);
+
+                } catch (const TFileError &ex) {
+                    Cerr << "TMeteringWriterInitializer: failed to open file '" << Settings->MeteringFilePath << "': "
+                         << ex.what() << Endl;
+                }
+            }
+        }
+
+        {
             IActor* kesusService = NKesus::CreateKesusProxyService();
             TActorId kesusServiceId = Runtime->Register(kesusService, nodeIdx);
             Runtime->RegisterService(NKesus::MakeKesusProxyServiceId(), kesusServiceId, nodeIdx);

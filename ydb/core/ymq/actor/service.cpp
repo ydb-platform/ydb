@@ -11,7 +11,7 @@
 #include "queues_list_reader.h"
 #include "user_settings_names.h"
 #include "user_settings_reader.h"
-#include "index_events_processor.h" 
+#include "index_events_processor.h"
 
 #include <ydb/public/lib/value/value.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
@@ -28,11 +28,11 @@
 
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/logger/global/global.h> 
+#include <library/cpp/logger/global/global.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
-#include <util/stream/file.h> 
+#include <util/stream/file.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/system/hostname.h>
@@ -63,17 +63,17 @@ constexpr ui64 LIST_QUEUES_WAKEUP_TAG = 2;
 constexpr size_t EARLY_REQUEST_USERS_LIST_MAX_BUDGET = 10;
 constexpr i64 EARLY_REQUEST_QUEUES_LIST_MAX_BUDGET = 5; // per user
 
-bool IsInternalFolder(const TString& folder) { 
-    return folder.StartsWith(".sys"); 
-} 
- 
+bool IsInternalFolder(const TString& folder) {
+    return folder.StartsWith(".sys");
+}
+
 struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
-    TQueueInfo( 
+    TQueueInfo(
             TString userName, TString queueName, TString rootUrl, ui64 leaderTabletId, TString customName,
-            TString folderId, ui64 version, ui64 shardsCount, const TIntrusivePtr<TUserCounters>& userCounters, 
-            const TActorId& schemeCache, TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResourcesForUser, 
-            bool insertCounters 
-    ) 
+            TString folderId, ui64 version, ui64 shardsCount, const TIntrusivePtr<TUserCounters>& userCounters,
+            const TActorId& schemeCache, TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResourcesForUser,
+            bool insertCounters
+    )
         : UserName_(std::move(userName))
         , QueueName_(std::move(queueName))
         , CustomName_(std::move(customName))
@@ -128,16 +128,16 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
             LWPROBE(CreateLeader, UserName_, QueueName_, reason);
             LocalLeader_ = TActivationContext::Register(new TQueueLeader(UserName_, QueueName_, FolderId_, RootUrl_, Counters_, UserCounters_, SchemeCache_, QuoterResourcesForUser_));
             LOG_SQS_INFO("Start local leader [" << UserName_ << "/" << QueueName_ << "] actor " << LocalLeader_);
- 
-            // ToDo: Should better make TFolderCounters struct and move it there. 
-            // Will have to refactor TQueueCounters a bit, since it directly works with TUserCounters 
-            if (FolderId_) { 
-                auto folderCounters = GetFolderCounters(UserCounters_->UserCounters, FolderId_); 
-                if (folderCounters.YmqCounters) { 
-                    auto counter = folderCounters.YmqCounters->GetCounter("queue.total_count", false); 
-                    (*counter)++; 
-                } 
-            } 
+
+            // ToDo: Should better make TFolderCounters struct and move it there.
+            // Will have to refactor TQueueCounters a bit, since it directly works with TUserCounters
+            if (FolderId_) {
+                auto folderCounters = GetFolderCounters(UserCounters_->UserCounters, FolderId_);
+                if (folderCounters.YmqCounters) {
+                    auto counter = folderCounters.YmqCounters->GetCounter("queue.total_count", false);
+                    (*counter)++;
+                }
+            }
         }
     }
 
@@ -148,16 +148,16 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
             LOG_SQS_INFO("Stop local leader [" << UserName_ << "/" << QueueName_ << "] actor " << LocalLeader_);
             TActivationContext::Send(new IEventHandle(LocalLeader_, SelfId(), new TEvPoisonPill()));
             LocalLeader_ = TActorId();
-            if (FolderId_) { 
-                auto folderCounters = GetFolderCounters(UserCounters_->UserCounters, FolderId_); 
-                if (folderCounters.YmqCounters) { 
-                    auto counter = folderCounters.YmqCounters->GetCounter("queue.total_count", false); 
-                    counter->Dec(); 
-                    if (counter->Val() == 0) { 
-                        RemoveFolderCounters(UserCounters_->UserCounters, FolderId_); 
-                    } 
-                } 
-            } 
+            if (FolderId_) {
+                auto folderCounters = GetFolderCounters(UserCounters_->UserCounters, FolderId_);
+                if (folderCounters.YmqCounters) {
+                    auto counter = folderCounters.YmqCounters->GetCounter("queue.total_count", false);
+                    counter->Dec();
+                    if (counter->Val() == 0) {
+                        RemoveFolderCounters(UserCounters_->UserCounters, FolderId_);
+                    }
+                }
+            }
         }
     }
 
@@ -275,10 +275,10 @@ static TString GetEndpoint(const NKikimrConfig::TSqsConfig& config) {
     }
 }
 
-TSqsService::TSqsService(const TMaybe<ui32>& ydbPort) { 
-    if (ydbPort.Defined()) { 
-        YcSearchEventsConfig.GrpcPort = *ydbPort; 
-    } 
+TSqsService::TSqsService(const TMaybe<ui32>& ydbPort) {
+    if (ydbPort.Defined()) {
+        YcSearchEventsConfig.GrpcPort = *ydbPort;
+    }
     DebugInfo->SqsServiceActorPtr = this;
 }
 TSqsService::~TSqsService() {
@@ -298,11 +298,11 @@ void TSqsService::Bootstrap() {
 
     // Counters.
     SqsCoreCounters_ = GetSqsServiceCounters(AppData()->Counters, "core");
-    YmqRootCounters_ = GetYmqPublicCounters(AppData()->Counters); 
+    YmqRootCounters_ = GetYmqPublicCounters(AppData()->Counters);
     AllocPoolCounters_ = std::make_shared<TAlignedPagePoolCounters>(AppData()->Counters, "sqs");
-    AggregatedUserCounters_ = MakeIntrusive<TUserCounters>( 
-            Cfg(), SqsCoreCounters_, nullptr, AllocPoolCounters_, TOTAL_COUNTER_LABEL, nullptr, true 
-    ); 
+    AggregatedUserCounters_ = MakeIntrusive<TUserCounters>(
+            Cfg(), SqsCoreCounters_, nullptr, AllocPoolCounters_, TOTAL_COUNTER_LABEL, nullptr, true
+    );
     AggregatedUserCounters_->ShowDetailedCounters(TInstant::Max());
 
     InitSchemeCache();
@@ -314,29 +314,29 @@ void TSqsService::Bootstrap() {
 
     RequestSqsUsersList();
     RequestSqsQueuesList();
- 
-    if (Cfg().HasYcSearchEventsConfig() && YcSearchEventsConfig.GrpcPort) { 
-        auto& ycSearchCfg = Cfg().GetYcSearchEventsConfig(); 
-        YcSearchEventsConfig.Enabled = ycSearchCfg.GetEnableYcSearch(); 
- 
-        YcSearchEventsConfig.ReindexInterval = TDuration::Seconds(ycSearchCfg.GetReindexIntervalSeconds()); 
-        YcSearchEventsConfig.RescanInterval = TDuration::Seconds(ycSearchCfg.GetRescanIntervalSeconds()); 
- 
-        auto driverConfig = NYdb::TDriverConfig().SetEndpoint( 
-                TStringBuilder() << "localhost:" << YcSearchEventsConfig.GrpcPort); 
-        if (ycSearchCfg.HasTenantMode() && ycSearchCfg.GetTenantMode()) { 
-            driverConfig.SetDatabase(Cfg().GetRoot()); 
-            YcSearchEventsConfig.TenantMode = true; 
-        } 
+
+    if (Cfg().HasYcSearchEventsConfig() && YcSearchEventsConfig.GrpcPort) {
+        auto& ycSearchCfg = Cfg().GetYcSearchEventsConfig();
+        YcSearchEventsConfig.Enabled = ycSearchCfg.GetEnableYcSearch();
+
+        YcSearchEventsConfig.ReindexInterval = TDuration::Seconds(ycSearchCfg.GetReindexIntervalSeconds());
+        YcSearchEventsConfig.RescanInterval = TDuration::Seconds(ycSearchCfg.GetRescanIntervalSeconds());
+
+        auto driverConfig = NYdb::TDriverConfig().SetEndpoint(
+                TStringBuilder() << "localhost:" << YcSearchEventsConfig.GrpcPort);
+        if (ycSearchCfg.HasTenantMode() && ycSearchCfg.GetTenantMode()) {
+            driverConfig.SetDatabase(Cfg().GetRoot());
+            YcSearchEventsConfig.TenantMode = true;
+        }
 
         auto factory = AppData()->SqsAuthFactory;
         Y_VERIFY(factory);
- 
+
         driverConfig.SetCredentialsProviderFactory(factory->CreateCredentialsProviderFactory(Cfg()));
- 
-        YcSearchEventsConfig.Driver = MakeHolder<NYdb::TDriver>(driverConfig); 
-        MakeAndRegisterYcEventsProcessor(); 
-    } 
+
+        YcSearchEventsConfig.Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+        MakeAndRegisterYcEventsProcessor();
+    }
 }
 
 STATEFN(TSqsService::StateFunc) {
@@ -947,18 +947,18 @@ TSqsService::TUsersMap::iterator TSqsService::MutableUserIter(const TString& use
     auto userIt = Users_.find(userName);
     if (userIt == Users_.end()) {
         LOG_SQS_INFO("Creating user info record for user [" << userName << "]");
-        bool isInternal = IsInternalFolder(userName); 
-        if (isInternal) { 
-            LOG_SQS_INFO("[" << userName << "] is considered and internal service folder, will not create YMQ counters"); 
-        } 
-        TUserInfoPtr user = new TUserInfo( 
-                userName, 
-                new TUserCounters( 
-                        Cfg(), SqsCoreCounters_, 
-                        isInternal ? nullptr : YmqRootCounters_, 
-                        AllocPoolCounters_, userName, AggregatedUserCounters_, false 
-                ) 
-        ); 
+        bool isInternal = IsInternalFolder(userName);
+        if (isInternal) {
+            LOG_SQS_INFO("[" << userName << "] is considered and internal service folder, will not create YMQ counters");
+        }
+        TUserInfoPtr user = new TUserInfo(
+                userName,
+                new TUserCounters(
+                        Cfg(), SqsCoreCounters_,
+                        isInternal ? nullptr : YmqRootCounters_,
+                        AllocPoolCounters_, userName, AggregatedUserCounters_, false
+                )
+        );
         user->InitQuoterResources();
         userIt = Users_.emplace(userName, user).first;
 
@@ -1024,7 +1024,7 @@ void TSqsService::RemoveQueue(const TString& userName, const TString& queue) {
     queuePtr->GetLeaderNodeRequests_.clear();
     LeaderTabletIdToQueue_.erase(queuePtr->LeaderTabletId_);
     userIt->second->QueueByNameAndFolder_.erase(std::make_pair(queuePtr->CustomName_, queuePtr->FolderId_));
- 
+
     userIt->second->Queues_.erase(queueIt);
     queuePtr->Counters_->RemoveCounters();
 }
@@ -1290,13 +1290,13 @@ void TSqsService::AnswerErrorToRequests(const TUserInfoPtr& user, TMultimap& map
     }
     map.clear();
 }
- 
-void TSqsService::MakeAndRegisterYcEventsProcessor() { 
-    if (!YcSearchEventsConfig.Enabled) 
-        return; 
- 
-    auto root = YcSearchEventsConfig.TenantMode ? TString() : Cfg().GetRoot(); 
- 
+
+void TSqsService::MakeAndRegisterYcEventsProcessor() {
+    if (!YcSearchEventsConfig.Enabled)
+        return;
+
+    auto root = YcSearchEventsConfig.TenantMode ? TString() : Cfg().GetRoot();
+
     auto factory = AppData()->SqsEventsWriterFactory;
     Y_VERIFY(factory);
     Register(new TSearchEventsProcessor(
@@ -1304,14 +1304,14 @@ void TSqsService::MakeAndRegisterYcEventsProcessor() {
             MakeSimpleShared<NYdb::NTable::TTableClient>(*YcSearchEventsConfig.Driver),
             factory->CreateEventsWriter(Cfg(), GetSqsServiceCounters(AppData()->Counters, "yc_unified_agent"))
     ));
-} 
-// 
-//IActor* CreateSqsService(const TYcSearchEventsConfig& ycSearchEventsConfig) { 
-//    return new TSqsService(ycSearchEventsConfig); 
-//} 
+}
+//
+//IActor* CreateSqsService(const TYcSearchEventsConfig& ycSearchEventsConfig) {
+//    return new TSqsService(ycSearchEventsConfig);
+//}
 
-IActor* CreateSqsService(TMaybe<ui32> ydbPort) { 
-    return new TSqsService(ydbPort); 
+IActor* CreateSqsService(TMaybe<ui32> ydbPort) {
+    return new TSqsService(ydbPort);
 }
 
 } // namespace NKikimr::NSQS

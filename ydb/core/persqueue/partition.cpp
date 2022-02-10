@@ -4546,7 +4546,7 @@ void TPartition::HandleWrites(const TActorContext& ctx)
     ProcessReserveRequests(ctx);
 
     if (!haveData && !haveDrop && !haveCheckDisk) { //no data writed/deleted
-        if (!Requests.empty()) { //there could be change ownership requests that 
+        if (!Requests.empty()) { //there could be change ownership requests that
             bool res = ProcessWrites(request.Get(), ctx);
             Y_VERIFY(!res);
         }

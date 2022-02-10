@@ -1327,7 +1327,7 @@ Y_UNIT_TEST(TestWriteSplit) {
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
-        activeZone = false; 
+        activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"user1", true}}, tc); //never delete
@@ -1336,10 +1336,10 @@ Y_UNIT_TEST(TestWriteSplit) {
         TVector<std::pair<ui64, TString>> data;
         data.push_back({1, TString{size, 'b'}});
         data.push_back({2, TString{size, 'a'}});
-        activeZone = PlainOrSoSlow(true, false); 
+        activeZone = PlainOrSoSlow(true, false);
         CmdWrite(0, "sourceIdx", data, tc, false, {}, false, "", -1, 40000);
         RestartTablet(tc);
-        activeZone = false; 
+        activeZone = false;
         PQGetPartInfo(40000, 40002, tc);
     });
 }

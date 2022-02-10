@@ -4,7 +4,7 @@ import logging
 import time
 import threading
 
-import pytest 
+import pytest
 from hamcrest import assert_that, equal_to, not_none, raises, not_
 
 from ydb.tests.library.common.types import Erasure

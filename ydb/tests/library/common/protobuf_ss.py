@@ -9,9 +9,9 @@ from ydb.core.protos import flat_scheme_op_pb2
 from ydb.tests.library.common.protobuf import AbstractProtobufBuilder, build_protobuf_if_necessary
 
 
-DEFAULT_SIZE_TO_SPLIT = 10 ** 6 
- 
- 
+DEFAULT_SIZE_TO_SPLIT = 10 ** 6
+
+
 class TPartitionConfig(AbstractProtobufBuilder):
     """
     See /arcadia/ydb/core/protos/flat_scheme_op_pb2.proto
@@ -19,7 +19,7 @@ class TPartitionConfig(AbstractProtobufBuilder):
 
     def __init__(self):
         super(TPartitionConfig, self).__init__(flat_scheme_op_pb2.TPartitionConfig())
-        self.with_partitioning_policy(DEFAULT_SIZE_TO_SPLIT) 
+        self.with_partitioning_policy(DEFAULT_SIZE_TO_SPLIT)
 
     def __ensure_has_compaction_policy(self):
         if not self.protobuf.HasField('CompactionPolicy'):

@@ -23,8 +23,8 @@ std::shared_ptr<IReadSession> TPersQueueClient::TImpl::CreateReadSession(const T
 }
 
 std::shared_ptr<IWriteSession> TPersQueueClient::TImpl::CreateWriteSession(
-        const TWriteSessionSettings& settings 
-) { 
+        const TWriteSessionSettings& settings
+) {
     TMaybe<TWriteSessionSettings> maybeSettings;
     if (!settings.CompressionExecutor_ || !settings.EventHandlers_.HandlersExecutor_ || !settings.ClusterDiscoveryMode_) {
         maybeSettings = settings;
@@ -40,30 +40,30 @@ std::shared_ptr<IWriteSession> TPersQueueClient::TImpl::CreateWriteSession(
             }
         }
     }
-    auto session = std::make_shared<TWriteSession>( 
+    auto session = std::make_shared<TWriteSession>(
             maybeSettings.GetOrElse(settings), shared_from_this(), Connections_, DbDriverState_
-    ); 
-    session->Start(TDuration::Zero()); 
-    return std::move(session); 
-} 
- 
+    );
+    session->Start(TDuration::Zero());
+    return std::move(session);
+}
+
 std::shared_ptr<ISimpleBlockingWriteSession> TPersQueueClient::TImpl::CreateSimpleWriteSession(
-        const TWriteSessionSettings& settings 
-) { 
-    auto alteredSettings = settings; 
-    with_lock (Lock) { 
-        alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_); 
-        if (!settings.CompressionExecutor_) { 
-            alteredSettings.CompressionExecutor(Settings.DefaultCompressionExecutor_); 
-        } 
-    } 
- 
-    auto session = std::make_shared<TSimpleBlockingWriteSession>( 
+        const TWriteSessionSettings& settings
+) {
+    auto alteredSettings = settings;
+    with_lock (Lock) {
+        alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
+        if (!settings.CompressionExecutor_) {
+            alteredSettings.CompressionExecutor(Settings.DefaultCompressionExecutor_);
+        }
+    }
+
+    auto session = std::make_shared<TSimpleBlockingWriteSession>(
             alteredSettings, shared_from_this(), Connections_, DbDriverState_
-    ); 
-    return std::move(session); 
-} 
- 
+    );
+    return std::move(session);
+}
+
 std::shared_ptr<TPersQueueClient::TImpl> TPersQueueClient::TImpl::GetClientForEndpoint(const TString& clusterEndoint) {
     with_lock (Lock) {
         Y_VERIFY(!CustomEndpoint);
@@ -83,10 +83,10 @@ std::shared_ptr<TPersQueueClient::TImpl::IReadSessionConnectionProcessorFactory>
 }
 
 std::shared_ptr<TPersQueueClient::TImpl::IWriteSessionConnectionProcessorFactory> TPersQueueClient::TImpl::CreateWriteSessionConnectionProcessorFactory() {
-    using TService = Ydb::PersQueue::V1::PersQueueService; 
-    using TRequest = Ydb::PersQueue::V1::StreamingWriteClientMessage; 
-    using TResponse = Ydb::PersQueue::V1::StreamingWriteServerMessage; 
-    return CreateConnectionProcessorFactory<TService, TRequest, TResponse>(&TService::Stub::AsyncStreamingWrite, Connections_, DbDriverState_); 
-} 
- 
+    using TService = Ydb::PersQueue::V1::PersQueueService;
+    using TRequest = Ydb::PersQueue::V1::StreamingWriteClientMessage;
+    using TResponse = Ydb::PersQueue::V1::StreamingWriteServerMessage;
+    return CreateConnectionProcessorFactory<TService, TRequest, TResponse>(&TService::Stub::AsyncStreamingWrite, Connections_, DbDriverState_);
+}
+
 } // namespace NYdb::NPersQueue

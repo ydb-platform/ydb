@@ -74,9 +74,9 @@ private:
     TString LocalCluster;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier; // Detects client's datacenter by IP. May be null
-    std::shared_ptr<NPersQueue::TTopicNamesConverterFactory> TopicConverterFactory; 
-    std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler; 
-    bool HaveClusters; 
+    std::shared_ptr<NPersQueue::TTopicNamesConverterFactory> TopicConverterFactory;
+    std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler;
+    bool HaveClusters;
 };
 
 

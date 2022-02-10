@@ -80,14 +80,14 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx);
 
     void FillMeteringParams(const TActorContext& ctx);
-    TString GetMeteringJson(const TString& metricBillingId, const TString& schemeName, const THashMap<TString, ui64>& tags, 
-                         ui64 quantity, const TString& quantityUnit, 
-                         const TInstant& start, const TInstant& end, const TInstant& now); 
- 
-    void FlushMetrics(bool force, const TActorContext& ctx); 
-    void FlushRequests(bool force, const TActorContext& ctx); 
-    void FlushShardData(bool force, const TActorContext& ctx); 
- 
+    TString GetMeteringJson(const TString& metricBillingId, const TString& schemeName, const THashMap<TString, ui64>& tags,
+                         ui64 quantity, const TString& quantityUnit,
+                         const TInstant& start, const TInstant& end, const TInstant& now);
+
+    void FlushMetrics(bool force, const TActorContext& ctx);
+    void FlushRequests(bool force, const TActorContext& ctx);
+    void FlushShardData(bool force, const TActorContext& ctx);
+
     TMaybe<TEvPQ::TEvRegisterMessageGroup::TBody> MakeRegisterMessageGroup(
         const NKikimrClient::TPersQueuePartitionRequest::TCmdRegisterMessageGroup& cmd,
         NPersQueue::NErrorCode::EErrorCode& code, TString& error) const;
@@ -176,14 +176,14 @@ private:
     THashMap<ui64, TAutoPtr<TResponseBuilder>> ResponseProxy;
 
     NMetrics::TResourceMetrics *ResourceMetrics;
- 
-    bool MeteringEnabled = false; 
-    TDuration MetricsFlushInterval; 
-    TInstant ShardsMetricsLastFlush = TInstant::Zero(); 
-    TInstant RequestsMetricsLastFlush  = TInstant::Zero(); 
-    ui64 CurrentPutUnitsQuantity = 0; 
-    TString ResourceId; 
-    TString StreamName; 
+
+    bool MeteringEnabled = false;
+    TDuration MetricsFlushInterval;
+    TInstant ShardsMetricsLastFlush = TInstant::Zero();
+    TInstant RequestsMetricsLastFlush  = TInstant::Zero();
+    ui64 CurrentPutUnitsQuantity = 0;
+    TString ResourceId;
+    TString StreamName;
 
     ui64 MeteringCounter = 0;
 };

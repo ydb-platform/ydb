@@ -44,7 +44,7 @@ protected:
     THolder<NSQS::TAsyncHttpServer> SqsHttp;
 
     THolder<NYdb::TDriver> YdbDriver;
- 
+
     THolder<NKqp::TKqpShutdownController> KqpShutdownController;
 
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;

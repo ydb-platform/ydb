@@ -1,5 +1,5 @@
 OWNER(
-    komels 
+    komels
     g:kikimr
     g:logbroker
 )
@@ -18,7 +18,7 @@ SRCS(
 )
 
 END()
- 
+
 RECURSE_FOR_TESTS(
-    ut 
-) 
+    ut
+)

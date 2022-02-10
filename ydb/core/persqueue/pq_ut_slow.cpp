@@ -49,7 +49,7 @@ Y_UNIT_TEST(TestWriteVeryBigMessage) {
         data.push_back({2, TString{size, 'a'}});
         CmdWrite(1, "sourceIdx", data, tc, false, {}, false, "", -1, 80000);
         CmdWrite(0, "sourceIdx", data, tc, false, {}, false, "", -1, 0);
-        activeZone = true; 
+        activeZone = true;
         PQGetPartInfo(so, 1, tc);
         RestartTablet(tc);
         PQGetPartInfo(so, 1, tc);

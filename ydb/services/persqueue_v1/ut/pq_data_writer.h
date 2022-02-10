@@ -13,11 +13,11 @@ namespace NKikimr::NPersQueueTests {
 
 class TPQDataWriter {
 public:
-    TPQDataWriter(const TString& sourceId, NPersQueue::TTestServer& server, const TString& testTopicPath = "topic1") 
+    TPQDataWriter(const TString& sourceId, NPersQueue::TTestServer& server, const TString& testTopicPath = "topic1")
         : SourceId_(sourceId)
-        , Port_(server.GrpcPort) 
-        , Client(*server.AnnoyingClient) 
-        , Runtime(server.CleverServer->GetRuntime()) 
+        , Port_(server.GrpcPort)
+        , Client(*server.AnnoyingClient)
+        , Runtime(server.CleverServer->GetRuntime())
     {
         InitializeChannel();
         WaitWritePQServiceInitialization(testTopicPath);
@@ -42,7 +42,7 @@ public:
 
         req.mutable_init_request()->add_topics_read_settings()->set_topic(topic);
         req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1);
-        req.mutable_init_request()->set_read_only_original(true); 
+        req.mutable_init_request()->set_read_only_original(true);
 
         req.mutable_init_request()->set_consumer(clientId);
 
@@ -58,7 +58,7 @@ public:
             Y_FAIL("");
             UNIT_ASSERT(error);
         }
-        Cerr << "=== Got response: " << resp.ShortDebugString() << Endl; 
+        Cerr << "=== Got response: " << resp.ShortDebugString() << Endl;
         if (error) {
             UNIT_ASSERT(resp.response_case() == Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::RESPONSE_NOT_SET);
             return;

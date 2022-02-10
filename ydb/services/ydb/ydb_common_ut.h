@@ -80,9 +80,9 @@ public:
         ServerSettings->SetEnableYq(enableYq);
         ServerSettings->Formats = new TFormatFactory;
         ServerSettings->PQConfig = appConfig.GetPQConfig();
-        if (appConfig.HasMeteringConfig() && appConfig.GetMeteringConfig().HasMeteringFilePath()) { 
-            ServerSettings->SetMeteringFilePath(appConfig.GetMeteringConfig().GetMeteringFilePath()); 
-        } 
+        if (appConfig.HasMeteringConfig() && appConfig.GetMeteringConfig().HasMeteringFilePath()) {
+            ServerSettings->SetMeteringFilePath(appConfig.GetMeteringConfig().GetMeteringFilePath());
+        }
         ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TGRpcYdbDummyService>("dummy");
         if (udfFrFactory) {
             ServerSettings->SetFrFactory(udfFrFactory);

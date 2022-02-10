@@ -178,7 +178,7 @@ class Daemon(object):
         if not is_killed:
             exit_code = self.__daemon.exit_code
             self.__check_before_fail()
- 
+
             if exit_code not in self._acceptable_exit_codes:
                 raise DaemonError(
                     "Bad exit_code.",

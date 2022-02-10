@@ -233,12 +233,12 @@ bool THttpRequest::DoReply(const TReplyParams& p) {
 
         const TDuration parseTime = TInstant::Now() - StartTime_;
         RLOG_SQS_BASE_DEBUG(*Parent_->ActorSystem_, "Parse time: [" << parseTime.MilliSeconds() << "ms]");
-        RLOG_SQS_BASE_INFO( 
-                *Parent_->ActorSystem_, 
-                "Start request. User [" << UserName_ << "] Queue [" << QueueName_ << "], Cloud [" << AccountName_ 
-                       << "], Folder [" << FolderId_ << "] Action [" << ActionToString(Action_) 
-                       << "] IP [" << SourceAddress_ << "]" 
-        ); 
+        RLOG_SQS_BASE_INFO(
+                *Parent_->ActorSystem_,
+                "Start request. User [" << UserName_ << "] Queue [" << QueueName_ << "], Cloud [" << AccountName_
+                       << "], Folder [" << FolderId_ << "] Action [" << ActionToString(Action_)
+                       << "] IP [" << SourceAddress_ << "]"
+        );
 
         if (!Parent_->Config.GetYandexCloudMode() && UserName_.empty()) {
             WriteResponse(p, MakeErrorXmlResponse(NErrors::MISSING_PARAMETER, Parent_->AggregatedUserCounters_.Get(), "No user name was provided."));
@@ -996,19 +996,19 @@ TAsyncHttpServer::~TAsyncHttpServer() {
     DebugInfo->HttpServer = nullptr;
 }
 
-void TAsyncHttpServer::Initialize( 
-        NActors::TActorSystem* as, TIntrusivePtr<NMonitoring::TDynamicCounters> sqsCounters, 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters, ui32 poolId 
-) { 
+void TAsyncHttpServer::Initialize(
+        NActors::TActorSystem* as, TIntrusivePtr<NMonitoring::TDynamicCounters> sqsCounters,
+        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters, ui32 poolId
+) {
     ActorSystem_ = as;
-    HttpCounters_ = new THttpCounters(Config, sqsCounters->GetSubgroup("subsystem", "http")); 
+    HttpCounters_ = new THttpCounters(Config, sqsCounters->GetSubgroup("subsystem", "http"));
     if (Config.GetYandexCloudMode()) {
-        CloudAuthCounters_ = MakeHolder<TCloudAuthCounters>(Config, sqsCounters->GetSubgroup("subsystem", "cloud_auth")); 
+        CloudAuthCounters_ = MakeHolder<TCloudAuthCounters>(Config, sqsCounters->GetSubgroup("subsystem", "cloud_auth"));
     }
-    AggregatedUserCounters_ = MakeIntrusive<TUserCounters>( 
-            Config, sqsCounters->GetSubgroup("subsystem", "core"), ymqCounters, 
-            nullptr, TOTAL_COUNTER_LABEL, nullptr, true 
-    ); 
+    AggregatedUserCounters_ = MakeIntrusive<TUserCounters>(
+            Config, sqsCounters->GetSubgroup("subsystem", "core"), ymqCounters,
+            nullptr, TOTAL_COUNTER_LABEL, nullptr, true
+    );
     AggregatedUserCounters_->ShowDetailedCounters(TInstant::Max());
     PoolId_ = poolId;
 }

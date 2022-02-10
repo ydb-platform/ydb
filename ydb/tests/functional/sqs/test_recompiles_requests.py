@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import pytest 
+import pytest
 from hamcrest import assert_that, not_none
 
 from ydb.tests.library.common.types import Erasure

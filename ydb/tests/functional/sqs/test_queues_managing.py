@@ -3,8 +3,8 @@
 import time
 from collections import OrderedDict
 
-import pytest 
-from hamcrest import assert_that, equal_to, greater_than, not_none, none, has_item, has_items, raises, empty, instance_of 
+import pytest
+from hamcrest import assert_that, equal_to, greater_than, not_none, none, has_item, has_items, raises, empty, instance_of
 
 from sqs_matchers import ReadResponseMatcher
 
@@ -21,10 +21,10 @@ class QueuesManagingTest(KikimrSqsTestBase):
         return config_generator
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_create_queue(self, is_fifo): 
+    def test_create_queue(self, is_fifo):
         attributes = {}
-        if is_fifo: 
-            self.queue_name = self.queue_name + '.fifo' 
+        if is_fifo:
+            self.queue_name = self.queue_name + '.fifo'
             attributes['ContentBasedDeduplication'] = 'true'
         attributes['DelaySeconds'] = '506'
         attributes['MaximumMessageSize'] = '10003'
@@ -32,11 +32,11 @@ class QueuesManagingTest(KikimrSqsTestBase):
         attributes['ReceiveMessageWaitTimeSeconds'] = '11'
         attributes['VisibilityTimeout'] = '42'
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True)
-        existing_queues = self._sqs_api.list_queues() 
+        existing_queues = self._sqs_api.list_queues()
         assert_that(
             created_queue_url in existing_queues
         )
-        got_queue_url = self._sqs_api.get_queue_url(self.queue_name) 
+        got_queue_url = self._sqs_api.get_queue_url(self.queue_name)
         assert_that(
             got_queue_url, equal_to(created_queue_url)
         )
@@ -50,38 +50,38 @@ class QueuesManagingTest(KikimrSqsTestBase):
         if is_fifo:
             assert_that(created_attributes.get('ContentBasedDeduplication'), 'true')
 
-    def test_create_fifo_queue_wo_postfix(self): 
+    def test_create_fifo_queue_wo_postfix(self):
         def call_create():
             self.called = True
             self._sqs_api.create_queue(self.queue_name, is_fifo=True)
 
-        assert_that( 
+        assert_that(
             call_create,
             raises(
                 RuntimeError,
                 pattern='failed with status 400.*\n.*FIFO queue should end with &quot;\\.fifo&quot;'
             )
-        ) 
- 
-    def test_create_queue_generates_event(self): 
-        pytest.skip("Outdated") 
-        self._create_queue_and_assert(self.queue_name, is_fifo=False) 
+        )
+
+    def test_create_queue_generates_event(self):
+        pytest.skip("Outdated")
+        self._create_queue_and_assert(self.queue_name, is_fifo=False)
         table_path = '{}/.Queues'.format(self.sqs_root)
-        assert_that(self._get_table_lines_count(table_path), equal_to(1)) 
- 
+        assert_that(self._get_table_lines_count(table_path), equal_to(1))
+
         table_path = '{}/.Events'.format(self.sqs_root)
-        assert_that(self._get_table_lines_count(table_path), equal_to(1)) 
- 
-    def test_remove_queue_generates_event(self): 
-        pytest.skip("Outdated") 
-        queue_url = self._create_queue_and_assert(self.queue_name) 
+        assert_that(self._get_table_lines_count(table_path), equal_to(1))
+
+    def test_remove_queue_generates_event(self):
+        pytest.skip("Outdated")
+        queue_url = self._create_queue_and_assert(self.queue_name)
         table_path = '{}/.Events'.format(self.sqs_root)
-        lines_count = self._get_table_lines_count(table_path) 
-        assert_that(lines_count, greater_than(0)) 
- 
-        self._sqs_api.delete_queue(queue_url) 
-        assert_that(self._get_table_lines_count(table_path), greater_than(lines_count)) 
- 
+        lines_count = self._get_table_lines_count(table_path)
+        assert_that(lines_count, greater_than(0))
+
+        self._sqs_api.delete_queue(queue_url)
+        assert_that(self._get_table_lines_count(table_path), greater_than(lines_count))
+
     def test_create_queue_with_invalid_name(self):
         def call_create():
             self._sqs_api.create_queue('invalid_queue_name!')
@@ -95,11 +95,11 @@ class QueuesManagingTest(KikimrSqsTestBase):
         )
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_delete_queue(self, is_fifo): 
-        if is_fifo: 
-            self.queue_name = self.queue_name + '.fifo' 
-        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo) 
-        self._sqs_api.list_queues() 
+    def test_delete_queue(self, is_fifo):
+        if is_fifo:
+            self.queue_name = self.queue_name + '.fifo'
+        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
+        self._sqs_api.list_queues()
         self._sqs_api.send_message(created_queue_url, 'body', group_id='group' if is_fifo else None, deduplication_id='123' if is_fifo else None)
 
         send_message_labels = {
@@ -112,12 +112,12 @@ class QueuesManagingTest(KikimrSqsTestBase):
         sends = self._get_counter_value(counters, send_message_labels)
         assert_that(sends, equal_to(1))
 
-        delete_result = self._sqs_api.delete_queue(created_queue_url) 
+        delete_result = self._sqs_api.delete_queue(created_queue_url)
         assert_that(
             delete_result, not_none()
         )
 
-        existing_queues = self._sqs_api.list_queues() 
+        existing_queues = self._sqs_api.list_queues()
         assert_that(
             created_queue_url not in existing_queues,
             "Deleted queue appears in list_queues()"
@@ -238,16 +238,16 @@ class QueuesManagingTest(KikimrSqsTestBase):
         check_purged_queue(created_queue_url2)
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_delete_and_create_queue(self, is_fifo): 
-        if is_fifo: 
-            self.queue_name = self.queue_name + '.fifo' 
+    def test_delete_and_create_queue(self, is_fifo):
+        if is_fifo:
+            self.queue_name = self.queue_name + '.fifo'
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True)
         self.seq_no += 1
         self._send_message_and_assert(created_queue_url, self._msg_body_template.format(1), seq_no=self.seq_no if is_fifo else None, group_id='group' if is_fifo else None)
-        delete_result = self._sqs_api.delete_queue(created_queue_url) 
-        assert_that( 
-            delete_result, not_none() 
-        ) 
+        delete_result = self._sqs_api.delete_queue(created_queue_url)
+        assert_that(
+            delete_result, not_none()
+        )
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True)
 
         master_is_updated = False
@@ -265,9 +265,9 @@ class QueuesManagingTest(KikimrSqsTestBase):
         assert_that(master_is_updated)
         self.seq_no += 1
         msg_id = self._send_message_and_assert(created_queue_url, self._msg_body_template.format(2), seq_no=self.seq_no if is_fifo else None, group_id='group' if is_fifo else None)
-        self._read_messages_and_assert( 
+        self._read_messages_and_assert(
             created_queue_url, 10, ReadResponseMatcher().with_message_ids([msg_id, ])
-        ) 
+        )
 
     def test_ya_count_queues(self):
         assert_that(self._sqs_api.private_count_queues(), equal_to('0'))
@@ -336,5 +336,5 @@ class TestQueuesManagingWithTenant(get_test_with_sqs_tenant_installation(QueuesM
     pass
 
 
-class TestQueuesManagingWithPathTestQueuesManagingWithPath(get_test_with_sqs_installation_by_path(QueuesManagingTest)): 
+class TestQueuesManagingWithPathTestQueuesManagingWithPath(get_test_with_sqs_installation_by_path(QueuesManagingTest)):
     pass

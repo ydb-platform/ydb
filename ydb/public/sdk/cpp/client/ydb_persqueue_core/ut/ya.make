@@ -34,10 +34,10 @@ SRCS(
     common_ut.cpp
     read_session_ut.cpp
     basic_usage_ut.cpp
-    compress_executor_ut.cpp 
+    compress_executor_ut.cpp
     compression_ut.cpp
-    retry_policy_ut.cpp 
-    ut_utils.cpp 
+    retry_policy_ut.cpp
+    ut_utils.cpp
 )
 
 END()

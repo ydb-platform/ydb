@@ -13,18 +13,18 @@
 
 namespace NKikimr::NGRpcService {
 
-TGRpcPQClusterDiscoveryService::TGRpcPQClusterDiscoveryService( 
-        NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id, 
-        const TMaybe<ui64>& requestsInflightLimit 
-) 
+TGRpcPQClusterDiscoveryService::TGRpcPQClusterDiscoveryService(
+        NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id,
+        const TMaybe<ui64>& requestsInflightLimit
+)
     : ActorSystem_(system)
     , Counters_(counters)
     , GRpcRequestProxyId_(id)
-{ 
-    if (requestsInflightLimit.Defined()) { 
-        Limiter = MakeHolder<NGrpc::TGlobalLimiter>(requestsInflightLimit.GetRef()); 
-    } 
-} 
+{
+    if (requestsInflightLimit.Defined()) {
+        Limiter = MakeHolder<NGrpc::TGlobalLimiter>(requestsInflightLimit.GetRef());
+    }
+}
 
 void TGRpcPQClusterDiscoveryService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
     CQ_ = cq;
@@ -42,16 +42,16 @@ void TGRpcPQClusterDiscoveryService::SetGlobalLimiterHandle(NGrpc::TGlobalLimite
 }
 
 bool TGRpcPQClusterDiscoveryService::IncRequest() {
-    if (Limiter) { 
-        return Limiter->Inc(); 
-    } 
-    return true; 
+    if (Limiter) {
+        return Limiter->Inc();
+    }
+    return true;
 }
 
 void TGRpcPQClusterDiscoveryService::DecRequest() {
-    if (Limiter) { 
-        Limiter->Dec(); 
-    } 
+    if (Limiter) {
+        Limiter->Dec();
+    }
 }
 
 void TGRpcPQClusterDiscoveryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {

@@ -1425,16 +1425,16 @@ void TMessageBusServicesInitializer::InitializeServices(NActors::TActorSystemSet
     if (!IsServiceInitialized(setup, NMsgBusProxy::CreateMsgBusProxyId())
         && Config.HasMessageBusConfig() && Config.GetMessageBusConfig().GetStartBusProxy()) {
         if (IActor *proxy = BusServer.CreateProxy()) {
-            TDuration pqMetaRefresh = TDuration::MilliSeconds(appData->PQConfig.GetMetaCacheRefreshIntervalMilliSeconds()); 
-            if (appData->PQConfig.GetEnabled()) { 
-                setup->LocalServices.emplace_back( 
-                        NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), 
-                        TActorSetupCmd( 
-                                NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(appData->Counters, pqMetaRefresh), 
-                                TMailboxType::ReadAsFilled, appData->UserPoolId 
-                        ) 
-                ); 
-            } 
+            TDuration pqMetaRefresh = TDuration::MilliSeconds(appData->PQConfig.GetMetaCacheRefreshIntervalMilliSeconds());
+            if (appData->PQConfig.GetEnabled()) {
+                setup->LocalServices.emplace_back(
+                        NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
+                        TActorSetupCmd(
+                                NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(appData->Counters, pqMetaRefresh),
+                                TMailboxType::ReadAsFilled, appData->UserPoolId
+                        )
+                );
+            }
         }
 
         if (IActor* traceService = BusServer.CreateMessageBusTraceService()) {
@@ -1496,9 +1496,9 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
         if (appData->PQConfig.GetEnabled()) {
 
             TDuration pqMetaRefresh = TDuration::Seconds(NMsgBusProxy::PQ_METACACHE_REFRESH_INTERVAL_SECONDS);
-            IActor * cache = NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache( 
-                    appData->Counters, pqMetaRefresh 
-            ); 
+            IActor * cache = NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(
+                    appData->Counters, pqMetaRefresh
+            );
             Y_VERIFY(cache);
             setup->LocalServices.emplace_back(
                 NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
@@ -2092,11 +2092,11 @@ TSqsServiceInitializer::TSqsServiceInitializer(const TKikimrRunConfig& runConfig
 
 void TSqsServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     if (Config.GetSqsConfig().GetEnableSqs()) {
-        ui32 grpcPort = 0; 
-        if (Config.HasGRpcConfig()) 
-            grpcPort = Config.GetGRpcConfig().GetPort(); 
+        ui32 grpcPort = 0;
+        if (Config.HasGRpcConfig())
+            grpcPort = Config.GetGRpcConfig().GetPort();
         {
-            IActor* actor = NSQS::CreateSqsService(grpcPort); 
+            IActor* actor = NSQS::CreateSqsService(grpcPort);
             setup->LocalServices.emplace_back(
                 NSQS::MakeSqsServiceID(NodeId),
                 TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));

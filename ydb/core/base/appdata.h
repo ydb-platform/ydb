@@ -34,10 +34,10 @@ namespace NMonitoring {
     class TBusNgMonPage;
 }
 
-namespace NYdb { 
-    class TDriver; 
-} 
- 
+namespace NYdb {
+    class TDriver;
+}
+
 namespace NKikimr {
 
 namespace NScheme {

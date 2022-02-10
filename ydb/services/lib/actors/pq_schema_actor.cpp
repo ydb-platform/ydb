@@ -11,8 +11,8 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-#define DEFAULT_PARTITION_SPEED 1048576 // 1Mb 
- 
+#define DEFAULT_PARTITION_SPEED 1048576 // 1Mb
+
     constexpr i32 MAX_READ_RULES_COUNT = 3000;
 
     constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
@@ -337,23 +337,23 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         if (local) {
-            auto partSpeed = settings.max_partition_write_speed(); 
-            if (partSpeed < 0) { 
-                error = TStringBuilder() << "max_partition_write_speed can't be negative, provided " << partSpeed; 
+            auto partSpeed = settings.max_partition_write_speed();
+            if (partSpeed < 0) {
+                error = TStringBuilder() << "max_partition_write_speed can't be negative, provided " << partSpeed;
                 return Ydb::StatusIds::BAD_REQUEST;
-            } else if (partSpeed == 0) { 
-                partSpeed = DEFAULT_PARTITION_SPEED; 
+            } else if (partSpeed == 0) {
+                partSpeed = DEFAULT_PARTITION_SPEED;
             }
-            partConfig->SetWriteSpeedInBytesPerSecond(partSpeed); 
+            partConfig->SetWriteSpeedInBytesPerSecond(partSpeed);
 
-            const auto& burstSpeed = settings.max_partition_write_burst(); 
-            if (burstSpeed < 0) { 
-                error = TStringBuilder() << "max_partition_write_burst can't be negative, provided " << burstSpeed; 
+            const auto& burstSpeed = settings.max_partition_write_burst();
+            if (burstSpeed < 0) {
+                error = TStringBuilder() << "max_partition_write_burst can't be negative, provided " << burstSpeed;
                 return Ydb::StatusIds::BAD_REQUEST;
-            } else if (burstSpeed == 0) { 
-                partConfig->SetBurstSize(partSpeed); 
-            } else { 
-                partConfig->SetBurstSize(burstSpeed); 
+            } else if (burstSpeed == 0) {
+                partConfig->SetBurstSize(partSpeed);
+            } else {
+                partConfig->SetBurstSize(burstSpeed);
             }
         }
 

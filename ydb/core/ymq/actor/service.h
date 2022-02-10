@@ -3,7 +3,7 @@
 #include "events.h"
 #include "log.h"
 #include "serviceid.h"
-#include "index_events_processor.h" 
+#include "index_events_processor.h"
 
 #include <ydb/core/ymq/base/events_writer_iface.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -14,7 +14,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
-#include <library/cpp/logger/log.h> 
+#include <library/cpp/logger/log.h>
 
 namespace NKikimr::NSQS {
 
@@ -22,7 +22,7 @@ class TSqsService
     : public TActorBootstrapped<TSqsService>
 {
 public:
-    TSqsService(const TMaybe<ui32>& ydbPort); 
+    TSqsService(const TMaybe<ui32>& ydbPort);
     ~TSqsService();
 
     void Bootstrap();
@@ -129,12 +129,12 @@ private:
 
     void NotifyLocalDeadLetterQueuesLeaders(const std::vector<TSqsEvents::TEvQueuesList::TQueueRecord>& sortedQueues) const;
 
-    void MakeAndRegisterYcEventsProcessor(); 
- 
+    void MakeAndRegisterYcEventsProcessor();
+
 private:
     TString RootUrl_;
     TIntrusivePtr<NMonitoring::TDynamicCounters> SqsCoreCounters_;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> YmqRootCounters_; 
+    TIntrusivePtr<NMonitoring::TDynamicCounters> YmqRootCounters_;
     std::shared_ptr<TAlignedPagePoolCounters> AllocPoolCounters_;
     TIntrusivePtr<TUserCounters> AggregatedUserCounters_;
     TUsersMap Users_;
@@ -158,17 +158,17 @@ private:
     THashMultiMap<TString, TSqsEvents::TEvGetQueueId::TPtr> GetQueueIdRequests_; // user name -> request
     THashMultiMap<TString, TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr> GetQueueFolderIdAndCustomNameRequests_; // user name -> request
     THashMultiMap<TString, TSqsEvents::TEvCountQueues::TPtr> CountQueuesRequests_; // user name -> request
- 
- 
-    struct TYcSearchEventsConfig { 
-        THolder<NYdb::TDriver> Driver; 
-        ui32 GrpcPort = 0; 
-        bool Enabled = false; 
-        bool TenantMode = false; 
-        TDuration ReindexInterval = TDuration::Hours(4); 
-        TDuration RescanInterval = TDuration::Minutes(1); 
-    }; 
-    TYcSearchEventsConfig YcSearchEventsConfig; 
+
+
+    struct TYcSearchEventsConfig {
+        THolder<NYdb::TDriver> Driver;
+        ui32 GrpcPort = 0;
+        bool Enabled = false;
+        bool TenantMode = false;
+        TDuration ReindexInterval = TDuration::Hours(4);
+        TDuration RescanInterval = TDuration::Minutes(1);
+    };
+    TYcSearchEventsConfig YcSearchEventsConfig;
 };
 
 } // namespace NKikimr::NSQS

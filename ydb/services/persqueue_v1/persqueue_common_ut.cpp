@@ -36,32 +36,32 @@ using namespace Ydb::PersQueue::V1;
 using namespace NThreading;
 using namespace NNetClassifier;
 
- 
-#define MAKE_WRITE_STREAM(TOKEN)                                     \ 
-    grpc::ClientContext context;                                     \ 
-    context.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, TOKEN);        \ 
-    auto stream = server.ServiceStub->StreamingWrite(&context);      \ 
- 
- 
+
+#define MAKE_WRITE_STREAM(TOKEN)                                     \
+    grpc::ClientContext context;                                     \
+    context.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, TOKEN);        \
+    auto stream = server.ServiceStub->StreamingWrite(&context);      \
+
+
 Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
     // Auth* tests are for both authentication and authorization
-    Y_UNIT_TEST(Auth_CreateGrpcStreamWithInvalidTokenInInitialMetadata_SessionClosedWithUnauthenticatedError) { 
-        TPersQueueV1TestServer server; 
-        SET_LOCALS; 
- 
-        runtime->GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true); 
-        runtime->GetAppData().EnforceUserTokenRequirement = true; 
+    Y_UNIT_TEST(Auth_CreateGrpcStreamWithInvalidTokenInInitialMetadata_SessionClosedWithUnauthenticatedError) {
+        TPersQueueV1TestServer server;
+        SET_LOCALS;
+
+        runtime->GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
+        runtime->GetAppData().EnforceUserTokenRequirement = true;
         TVector<TString> invalidTokens = {TString(), "test_user", "test_user@invalid_domain"};
 
         for (const auto &invalidToken : invalidTokens) {
             Cerr << "Invalid token under test is '" << invalidToken << "'" << Endl;
-            MAKE_WRITE_STREAM(invalidToken); 
+            MAKE_WRITE_STREAM(invalidToken);
 
             // TODO: Message should be written to gRPC in order to get error. Fix gRPC data plane API code if our expectations are different.
             // Note that I check that initial metadata is sent during gRPC stream constructor.
             StreamingWriteClientMessage clientMessage;
             StreamingWriteServerMessage serverMessage;
-            clientMessage.mutable_init_request()->set_topic(server.GetTopicPath()); 
+            clientMessage.mutable_init_request()->set_topic(server.GetTopicPath());
             clientMessage.mutable_init_request()->set_message_group_id("test-group-id");
             AssertSuccessfullStreamingOperation(stream->Write(clientMessage), stream, &clientMessage);
 
@@ -76,22 +76,22 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
         return "test_user_" + ToString(i) + "@" + BUILTIN_ACL_DOMAIN;
     }
 
-    Y_UNIT_TEST(Auth_MultipleUpdateTokenRequestIterationsWithValidToken_GotUpdateTokenResponseForEachRequest) { 
-        TPersQueueV1TestServer server; 
- 
+    Y_UNIT_TEST(Auth_MultipleUpdateTokenRequestIterationsWithValidToken_GotUpdateTokenResponseForEachRequest) {
+        TPersQueueV1TestServer server;
+
         const int iterations = 10;
         NACLib::TDiffACL acl;
         for (int i = 0; i != iterations; ++i) {
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, GenerateValidToken(i));
         }
 
-        server.ModifyTopicACL(server.GetTopic(), acl); 
+        server.ModifyTopicACL(server.GetTopic(), acl);
 
-        MAKE_WRITE_STREAM(GenerateValidToken(0)); 
+        MAKE_WRITE_STREAM(GenerateValidToken(0));
 
         StreamingWriteClientMessage clientMessage;
         StreamingWriteServerMessage serverMessage;
-        clientMessage.mutable_init_request()->set_topic(server.GetTopicPath()); 
+        clientMessage.mutable_init_request()->set_topic(server.GetTopicPath());
         clientMessage.mutable_init_request()->set_message_group_id("test-group-id");
         AssertSuccessfullStreamingOperation(stream->Write(clientMessage), stream, &clientMessage);
         AssertSuccessfullStreamingOperation(stream->Read(&serverMessage), stream);
@@ -109,22 +109,22 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
         }
     }
 
-    Y_UNIT_TEST( 
-            Auth_WriteSessionWithValidTokenAndACEAndThenRemoveACEAndSendWriteRequest_SessionClosedWithUnauthorizedErrorAfterSuccessfullWriteResponse 
-    ) { 
-        TPersQueueV1TestServer server; 
- 
+    Y_UNIT_TEST(
+            Auth_WriteSessionWithValidTokenAndACEAndThenRemoveACEAndSendWriteRequest_SessionClosedWithUnauthorizedErrorAfterSuccessfullWriteResponse
+    ) {
+        TPersQueueV1TestServer server;
+
         //setup.GetPQConfig().SetACLRetryTimeoutSec(0);
         NACLib::TDiffACL acl;
         const auto token = GenerateValidToken();
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, token);
-        server.ModifyTopicACL(server.GetTopic(), acl); 
+        server.ModifyTopicACL(server.GetTopic(), acl);
 
-        MAKE_WRITE_STREAM(token); 
+        MAKE_WRITE_STREAM(token);
 
         StreamingWriteClientMessage clientMessage;
         StreamingWriteServerMessage serverMessage;
-        clientMessage.mutable_init_request()->set_topic(server.GetTopicPath()); 
+        clientMessage.mutable_init_request()->set_topic(server.GetTopicPath());
         clientMessage.mutable_init_request()->set_message_group_id("test-group-id");
         AssertSuccessfullStreamingOperation(stream->Write(clientMessage), stream, &clientMessage);
         AssertSuccessfullStreamingOperation(stream->Read(&serverMessage), stream);
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
                       serverMessage);
 
         acl.ClearAccess();
-        server.ModifyTopicACL(server.GetTopic(), acl); 
+        server.ModifyTopicACL(server.GetTopic(), acl);
 
         clientMessage = StreamingWriteClientMessage();
         auto *writeRequest = clientMessage.mutable_write_request();
@@ -158,23 +158,23 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
     }
 
     // TODO: Replace this test with a unit-test of TWriteSessionActor
-    Y_UNIT_TEST( 
-            Auth_MultipleInflightWriteUpdateTokenRequestWithDifferentValidToken_SessionClosedWithOverloadedError 
-    ) { 
-        TPersQueueV1TestServer server; 
-        SET_LOCALS; 
+    Y_UNIT_TEST(
+            Auth_MultipleInflightWriteUpdateTokenRequestWithDifferentValidToken_SessionClosedWithOverloadedError
+    ) {
+        TPersQueueV1TestServer server;
+        SET_LOCALS;
         const int iterations = 3;
         NACLib::TDiffACL acl;
         for (int i = 0; i != iterations; ++i) {
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, GenerateValidToken(i));
         }
 
-        server.ModifyTopicACL(server.GetTopic(), acl); 
-        MAKE_WRITE_STREAM(GenerateValidToken(0)); 
+        server.ModifyTopicACL(server.GetTopic(), acl);
+        MAKE_WRITE_STREAM(GenerateValidToken(0));
 
         StreamingWriteClientMessage clientMessage;
         StreamingWriteServerMessage serverMessage;
-        clientMessage.mutable_init_request()->set_topic(server.GetTopicPath()); 
+        clientMessage.mutable_init_request()->set_topic(server.GetTopicPath());
         clientMessage.mutable_init_request()->set_message_group_id("test-group-id");
         AssertSuccessfullStreamingOperation(stream->Write(clientMessage), stream, &clientMessage);
         AssertSuccessfullStreamingOperation(stream->Read(&serverMessage), stream);
@@ -183,9 +183,9 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
 
         // TWriteSessionActor uses GRpcRequestProxy for authentication. This will make next update token procedure stuck indefinetely
         auto noopActorID = TActorId();
-        for (size_t i = 0; i != runtime->GetNodeCount(); ++i) { 
+        for (size_t i = 0; i != runtime->GetNodeCount(); ++i) {
             // Destroy GRpcRequestProxy
-            runtime->RegisterService(NGRpcService::CreateGRpcRequestProxyId(), noopActorID); 
+            runtime->RegisterService(NGRpcService::CreateGRpcRequestProxyId(), noopActorID);
         }
 
         clientMessage.mutable_update_token_request()->set_token(GenerateValidToken(1));
@@ -203,24 +203,24 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
                 serverMessage);
     }
 
-    Y_UNIT_TEST(Auth_WriteUpdateTokenRequestWithInvalidToken_SessionClosedWithUnauthenticatedError) { 
-        TPersQueueV1TestServer server; 
-        SET_LOCALS; 
-        runtime->GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true); 
+    Y_UNIT_TEST(Auth_WriteUpdateTokenRequestWithInvalidToken_SessionClosedWithUnauthenticatedError) {
+        TPersQueueV1TestServer server;
+        SET_LOCALS;
+        runtime->GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
         const TString validToken = "test_user@" BUILTIN_ACL_DOMAIN;
         // TODO: Why test fails with 'BUILTIN_ACL_DOMAIN' as domain in invalid token?
         TVector<TString> invalidTokens = {TString(), "test_user", "test_user@invalid_domain"};
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, validToken);
-        server.ModifyTopicACL(server.GetTopic(), acl); 
+        server.ModifyTopicACL(server.GetTopic(), acl);
 
         for (const auto &invalidToken : invalidTokens) {
             Cerr << "Invalid token under test is '" << invalidToken << "'" << Endl;
-            MAKE_WRITE_STREAM(validToken); 
+            MAKE_WRITE_STREAM(validToken);
 
             StreamingWriteClientMessage clientMessage;
             StreamingWriteServerMessage serverMessage;
-            clientMessage.mutable_init_request()->set_topic(server.GetTopicPath()); 
+            clientMessage.mutable_init_request()->set_topic(server.GetTopicPath());
             clientMessage.mutable_init_request()->set_message_group_id("test-group-id");
             AssertSuccessfullStreamingOperation(stream->Write(clientMessage), stream, &clientMessage);
             AssertSuccessfullStreamingOperation(stream->Read(&serverMessage), stream);
@@ -238,9 +238,9 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
         }
     }
 
-    Y_UNIT_TEST(Auth_WriteUpdateTokenRequestWithValidTokenButWithoutACL_SessionClosedWithUnauthorizedError) { 
-        TPersQueueV1TestServer server; 
- 
+    Y_UNIT_TEST(Auth_WriteUpdateTokenRequestWithValidTokenButWithoutACL_SessionClosedWithUnauthorizedError) {
+        TPersQueueV1TestServer server;
+
         const TString validToken = "test_user@"
                                    BUILTIN_ACL_DOMAIN;
         const TString invalidToken = "test_user_2@"
@@ -248,13 +248,13 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, validToken);
 
-        server.ModifyTopicACL(server.GetTopic(), acl); 
+        server.ModifyTopicACL(server.GetTopic(), acl);
 
-        MAKE_WRITE_STREAM(validToken); 
+        MAKE_WRITE_STREAM(validToken);
 
         StreamingWriteClientMessage clientMessage;
         StreamingWriteServerMessage serverMessage;
-        clientMessage.mutable_init_request()->set_topic(server.GetTopicPath()); 
+        clientMessage.mutable_init_request()->set_topic(server.GetTopicPath());
         clientMessage.mutable_init_request()->set_message_group_id("test-message-group");
         AssertSuccessfullStreamingOperation(stream->Write(clientMessage), stream, &clientMessage);
         AssertSuccessfullStreamingOperation(stream->Read(&serverMessage), stream);
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
                             serverMessage.server_message_case(), serverMessage);
     }
 
-    void TestWriteWithRateLimiter(TPersQueueV1TestServerWithRateLimiter& server) { 
+    void TestWriteWithRateLimiter(TPersQueueV1TestServerWithRateLimiter& server) {
         const std::vector<TString> differentTopicPathsTypes = {
                 "account1/topic", // without folder
                 "account2/folder/topic", // with folder
@@ -280,7 +280,7 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
         };
         const TString data = TString("12345") * 100;
         for (const TString &topicPath : differentTopicPathsTypes) {
-            server.CreateTopicWithQuota(topicPath); 
+            server.CreateTopicWithQuota(topicPath);
 
             auto driver = server.Server->AnnoyingClient->GetDriver();
 
@@ -293,22 +293,22 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
         }
     }
 
-    Y_UNIT_TEST(TestWriteWithRateLimiterWithBlobsRateLimit) { 
-        TPersQueueV1TestServerWithRateLimiter server; 
-        server.InitAll(NKikimrPQ::TPQConfig::TQuotingConfig::WRITTEN_BLOB_SIZE); 
-        TestWriteWithRateLimiter(server); 
+    Y_UNIT_TEST(TestWriteWithRateLimiterWithBlobsRateLimit) {
+        TPersQueueV1TestServerWithRateLimiter server;
+        server.InitAll(NKikimrPQ::TPQConfig::TQuotingConfig::WRITTEN_BLOB_SIZE);
+        TestWriteWithRateLimiter(server);
     }
 
-    Y_UNIT_TEST(TestWriteWithRateLimiterWithUserPayloadRateLimit) { 
-        TPersQueueV1TestServerWithRateLimiter server; 
-        server.InitAll(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE); 
-        TestWriteWithRateLimiter(server); 
+    Y_UNIT_TEST(TestWriteWithRateLimiterWithUserPayloadRateLimit) {
+        TPersQueueV1TestServerWithRateLimiter server;
+        server.InitAll(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE);
+        TestWriteWithRateLimiter(server);
     }
 
-    void TestRateLimiterLimitsWrite(TPersQueueV1TestServerWithRateLimiter& server) { 
+    void TestRateLimiterLimitsWrite(TPersQueueV1TestServerWithRateLimiter& server) {
         const TString topicPath = "account/topic";
 
-        server.CreateTopicWithQuota(topicPath, true, 100.0); 
+        server.CreateTopicWithQuota(topicPath, true, 100.0);
         const TString data = TString("123") * 100; // 300 bytes // 3 seconds
 
         auto driver = server.Server->AnnoyingClient->GetDriver();
@@ -348,7 +348,7 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
         // Check write time with quota
         const TDuration writeTime = endWrite - startWrite;
         // in new scheme cache rate limiting is turned off
-        if (server.TenantModeEnabled()) { 
+        if (server.TenantModeEnabled()) {
             UNIT_ASSERT_GE_C(TDuration::Seconds(3), writeTime, "Write time: " << writeTime);
         } else {
             UNIT_ASSERT_GE_C(writeTime, TDuration::Seconds(3), "Write time: " << writeTime);

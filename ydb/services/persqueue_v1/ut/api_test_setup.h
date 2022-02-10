@@ -16,23 +16,23 @@ private:
     using TStreamingWriteClientMessage = Ydb::PersQueue::V1::StreamingWriteClientMessage;
     using TStreamingWriteServerMessage = Ydb::PersQueue::V1::StreamingWriteServerMessage;
     TLog Log;
-    NPersQueue::TTestServer server; 
+    NPersQueue::TTestServer server;
     std::shared_ptr<::grpc::Channel> channel;
     std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> service;
 public:
     APITestSetup(const TString& testCaseName)
         : Log("cerr")
-        , server(NPersQueue::TTestServer()) 
-        , channel(grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials())) 
+        , server(NPersQueue::TTestServer())
+        , channel(grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials()))
         , service(Ydb::PersQueue::V1::PersQueueService::NewStub(channel))
     {
         Log.SetFormatter([testCaseName](ELogPriority priority, TStringBuf message) {
             return TStringBuilder() << TInstant::Now() << " :" << testCaseName << " " << priority << ": " << message << Endl;
         });
-        server.CleverServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_DEBUG); 
-        server.CleverServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NActors::NLog::PRI_DEBUG); 
-        server.AnnoyingClient->CreateTopic("rt3.dc1--" + TString(GetTestTopic()), 1); 
-        NKikimr::NPersQueueTests::TPQDataWriter writer(GetTestMessageGroupId(), server); 
+        server.CleverServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_DEBUG);
+        server.CleverServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NActors::NLog::PRI_DEBUG);
+        server.AnnoyingClient->CreateTopic("rt3.dc1--" + TString(GetTestTopic()), 1);
+        NKikimr::NPersQueueTests::TPQDataWriter writer(GetTestMessageGroupId(), server);
 
         auto seed = TInstant::Now().MicroSeconds();
         // This makes failing randomized tests (for example with NUnitTest::RandomString(size, std::rand()) calls) reproducable
@@ -65,7 +65,7 @@ public:
     }
 
     NKikimr::Tests::TServer& GetServer() {
-        return *server.CleverServer; 
+        return *server.CleverServer;
     }
 
     TString GetPQRoot() {
@@ -73,11 +73,11 @@ public:
     }
 
     NKikimrPQ::TPQConfig& GetPQConfig() {
-        return server.CleverServer->GetRuntime()->GetAppData().PQConfig; 
+        return server.CleverServer->GetRuntime()->GetAppData().PQConfig;
     }
 
     NKikimr::NPersQueueTests::TFlatMsgBusPQClient& GetFlatMsgBusPQClient() {
-        return *server.AnnoyingClient; 
+        return *server.AnnoyingClient;
     }
 
     std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub>& GetPersQueueService() {
@@ -112,7 +112,7 @@ public:
         TServerMessage serverMessage;
         Log << TLOG_INFO << "Wait for \"init_response\"";
         AssertSuccessfullStreamingOperation(stream->Read(&serverMessage), stream);
-        Cerr << "Init response: " << serverMessage.ShortDebugString() << Endl; 
+        Cerr << "Init response: " << serverMessage.ShortDebugString() << Endl;
         UNIT_ASSERT_C(serverMessage.server_message_case() == TServerMessage::kInitResponse, serverMessage);
         Log << TLOG_INFO << "Session ID is " << serverMessage.init_response().session_id().Quote();
         return serverMessage;

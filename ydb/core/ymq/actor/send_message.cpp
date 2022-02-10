@@ -269,10 +269,10 @@ private:
 
                 // counters
                 if (status.Status == TSqsEvents::TEvSendMessageBatchResponse::ESendMessageStatus::AlreadySent) {
-                    INC_COUNTER_COUPLE(QueueCounters_, SendMessage_DeduplicationCount, deduplicated_count_per_second); 
+                    INC_COUNTER_COUPLE(QueueCounters_, SendMessage_DeduplicationCount, deduplicated_count_per_second);
                 } else {
-                    INC_COUNTER_COUPLE(QueueCounters_, SendMessage_Count, sent_count_per_second); 
-                    ADD_COUNTER_COUPLE(QueueCounters_, SendMessage_BytesWritten, sent_bytes_per_second, CalculateMessageSize(*currentRequest)); 
+                    INC_COUNTER_COUPLE(QueueCounters_, SendMessage_Count, sent_count_per_second);
+                    ADD_COUNTER_COUPLE(QueueCounters_, SendMessage_BytesWritten, sent_bytes_per_second, CalculateMessageSize(*currentRequest));
                 }
             } else {
                 MakeError(currentResponse, NErrors::INTERNAL_FAILURE);

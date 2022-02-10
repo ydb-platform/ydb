@@ -81,9 +81,9 @@ private:
     TString DeleteSourceIdQuery;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier; // Detects client's datacenter by IP. May be null
-    bool HaveClusters; 
-    NPersQueue::TConverterFactoryPtr ConverterFactory; 
-    std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler; 
+    bool HaveClusters;
+    NPersQueue::TConverterFactoryPtr ConverterFactory;
+    std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler;
 };
 
 

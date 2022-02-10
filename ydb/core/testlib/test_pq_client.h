@@ -53,8 +53,8 @@ inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool ro
     }
 
     Tests::TServerSettings settings(port, authConfig, pqConfig);
-    settings.SetDomainName("Root").SetNodeCount(nodesCount); 
- 
+    settings.SetDomainName("Root").SetNodeCount(nodesCount);
+
     TVector<NKikimrKqp::TKqpSetting> kqpSettings;
     NKikimrKqp::TKqpSetting kqpSetting;
     kqpSetting.SetName("_KqpQueryTimeout");
@@ -62,9 +62,9 @@ inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool ro
     kqpSetting.SetValue(yql_timeout);
     kqpSettings.push_back(kqpSetting);
     settings.SetKqpSettings(kqpSettings);
-    settings.PQClusterDiscoveryConfig.SetEnabled(true); 
-    settings.PQClusterDiscoveryConfig.SetTimedCountersUpdateIntervalSeconds(1); 
- 
+    settings.PQClusterDiscoveryConfig.SetEnabled(true);
+    settings.PQClusterDiscoveryConfig.SetTimedCountersUpdateIntervalSeconds(1);
+
     if (netDataFile)
         settings.NetClassifierConfig.SetNetDataFilePath(netDataFile->Name());
 
@@ -72,7 +72,7 @@ inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool ro
 }
 
 const TString TopicPrefix = "/Root/PQ/";
-const static TString DEFAULT_SRC_IDS_PATH = "/Root/PQ/SourceIdMeta2"; 
+const static TString DEFAULT_SRC_IDS_PATH = "/Root/PQ/SourceIdMeta2";
 
 
 struct TRequestCreatePQ {
@@ -137,7 +137,7 @@ struct TRequestCreatePQ {
         config->MutablePartitionConfig()->SetSourceIdLifetimeSeconds(SourceIdLifetime);
         config->MutablePartitionConfig()->SetSourceIdMaxCounts(SourceIdMaxCount);
         config->MutablePartitionConfig()->SetLowWatermark(LowWatermark);
- 
+
         config->SetLocalDC(true);
 
         auto codec = config->MutableCodecs();
@@ -161,9 +161,9 @@ struct TRequestCreatePQ {
             config->AddReadRuleVersions(0);
             config->AddConsumerCodecs()->AddIds(0);
         }
-        if (!ReadRules.empty()) { 
-            config->SetRequireAuthRead(true); 
-        } 
+        if (!ReadRules.empty()) {
+            config->SetRequireAuthRead(true);
+        }
         if (!User.empty()) {
             auto rq = config->MutablePartitionConfig()->AddReadQuota();
             rq->SetSpeedInBytesPerSecond(ReadSpeed);
@@ -456,12 +456,12 @@ enum class ETransport {
     GRpc
 };
 
-struct TPQTestClusterInfo { 
-    TString Balancer; 
-    bool Enabled; 
+struct TPQTestClusterInfo {
+    TString Balancer;
+    bool Enabled;
     ui64 Weight = 1000;
-}; 
- 
+};
+
 static THashMap<TString, TPQTestClusterInfo> DEFAULT_CLUSTERS_LIST = {
     {"dc1", {"localhost", true}},
     {"dc2", {"dc2.logbroker.yandex.net", true}}
@@ -479,8 +479,8 @@ private:
     const ui16 GRpcPort;
     NClient::TKikimr Kikimr;
     THolder<NYdb::TDriver> Driver;
-    ui64 TopicsVersion = 0; 
-    bool UseConfigTables = true; 
+    ui64 TopicsVersion = 0;
+    bool UseConfigTables = true;
 
     void RunYqlSchemeQuery(TString query) {
         auto tableClient = NYdb::NTable::TTableClient(*Driver);
@@ -515,9 +515,9 @@ private:
 
 
 public:
-    TFlatMsgBusPQClient( 
-            const Tests::TServerSettings& settings, ui16 grpc, TMaybe<TString> databaseName = Nothing() 
-    ) 
+    TFlatMsgBusPQClient(
+            const Tests::TServerSettings& settings, ui16 grpc, TMaybe<TString> databaseName = Nothing()
+    )
         : TFlatMsgBusClient(settings)
         , Settings(settings)
         , GRpcPort(grpc)
@@ -535,24 +535,24 @@ public:
     ~TFlatMsgBusPQClient() {
         Driver->Stop(true);
     }
- 
-    void SetNoConfigMode() { 
-        UseConfigTables = false; 
-    } 
- 
-    void FullInit( 
-            THashMap<TString, TPQTestClusterInfo> clusters = DEFAULT_CLUSTERS_LIST, 
-            const TString& srcIdsPath = DEFAULT_SRC_IDS_PATH, 
-            const TString& localCluster = TString() 
-    ) { 
-        InitRoot(); 
-        if (UseConfigTables) { 
-            InitSourceIds(srcIdsPath); 
-            InitDCs(clusters, localCluster); 
-        } else { 
-            InitSourceIds({}); 
-        } 
-    } 
+
+    void SetNoConfigMode() {
+        UseConfigTables = false;
+    }
+
+    void FullInit(
+            THashMap<TString, TPQTestClusterInfo> clusters = DEFAULT_CLUSTERS_LIST,
+            const TString& srcIdsPath = DEFAULT_SRC_IDS_PATH,
+            const TString& localCluster = TString()
+    ) {
+        InitRoot();
+        if (UseConfigTables) {
+            InitSourceIds(srcIdsPath);
+            InitDCs(clusters, localCluster);
+        } else {
+            InitSourceIds({});
+        }
+    }
     void InitRoot() {
         InitRootScheme();
         MkDir("/Root", "PQ");
@@ -562,7 +562,7 @@ public:
         return Driver.Get();
     }
 
-    void InitSourceIds(const TString& path = DEFAULT_SRC_IDS_PATH) { 
+    void InitSourceIds(const TString& path = DEFAULT_SRC_IDS_PATH) {
         TFsPath fsPath(path);
         CreateTable(fsPath.Dirname(),
            "Name: \"" + fsPath.Basename() + "\""
@@ -618,11 +618,11 @@ public:
                 weight Uint64,
                 PRIMARY KEY (name)
             );
-            CREATE TABLE [/Root/PQ/Config/V2/Topics] ( 
-                path Utf8, 
-                dc Utf8, 
-                PRIMARY KEY (path, dc) 
-            ); 
+            CREATE TABLE [/Root/PQ/Config/V2/Topics] (
+                path Utf8,
+                dc Utf8,
+                PRIMARY KEY (path, dc)
+            );
         )___");
 
         RunYqlSchemeQuery(R"___(
@@ -633,34 +633,34 @@ public:
             );
         )___");
 
-        TStringBuilder upsertClusters; 
+        TStringBuilder upsertClusters;
         upsertClusters <<  "UPSERT INTO [/Root/PQ/Config/V2/Cluster] (name, balancer, local, enabled, weight) VALUES ";
-        bool first = true; 
-        for (auto& [cluster, info] : clusters) { 
-            bool isLocal = localCluster.empty() ? first : localCluster == cluster; 
-            if (!first) 
-                upsertClusters << ", "; 
-            upsertClusters << "(\"" << cluster << "\", \"" << info.Balancer << "\", " << (isLocal ? "true" : "false") 
+        bool first = true;
+        for (auto& [cluster, info] : clusters) {
+            bool isLocal = localCluster.empty() ? first : localCluster == cluster;
+            if (!first)
+                upsertClusters << ", ";
+            upsertClusters << "(\"" << cluster << "\", \"" << info.Balancer << "\", " << (isLocal ? "true" : "false")
                            << ", " << (info.Enabled ? "true" : "false") << ", " << info.Weight << ")";
-            first = false; 
-        } 
-        upsertClusters << ";\n"; 
-        TString clustersStr = clusters.empty() ? "" : TString(upsertClusters); 
-        Cerr << "=== Init DC: " << clustersStr << Endl; 
+            first = false;
+        }
+        upsertClusters << ";\n";
+        TString clustersStr = clusters.empty() ? "" : TString(upsertClusters);
+        Cerr << "=== Init DC: " << clustersStr << Endl;
         RunYqlDataQuery(clustersStr + R"___(
-            UPSERT INTO [/Root/PQ/Config/V2/Versions] (name, version) VALUES ("Cluster", 1); 
-            UPSERT INTO [/Root/PQ/Config/V2/Versions] (name, version) VALUES ("Topics", 0); 
+            UPSERT INTO [/Root/PQ/Config/V2/Versions] (name, version) VALUES ("Cluster", 1);
+            UPSERT INTO [/Root/PQ/Config/V2/Versions] (name, version) VALUES ("Topics", 0);
         )___");
     }
 
-    void UpdateDcEnabled(const TString& name, bool enabled) { 
-        TStringBuilder query; 
-        query << "UPDATE [/Root/PQ/Config/V2/Cluster] SET enabled = " << (enabled ? "true" : "false") 
+    void UpdateDcEnabled(const TString& name, bool enabled) {
+        TStringBuilder query;
+        query << "UPDATE [/Root/PQ/Config/V2/Cluster] SET enabled = " << (enabled ? "true" : "false")
               << " where name = \"" << name << "\";";
-        Cerr << "===Update clusters: " << query << Endl; 
+        Cerr << "===Update clusters: " << query << Endl;
         RunYqlDataQuery(query);
-    } 
- 
+    }
+
     TPQTestClusterInfo GetDcInfo(const TString& name) {
         TStringBuilder query;
         query << "SELECT balancer, enabled, weight FROM [/Root/PQ/Config/V2/Cluster] where name = \"" << name << "\";";
@@ -736,9 +736,9 @@ public:
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SyncCall(request, reply);
-        Cerr << "Topic created - response: " << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl; 
+        Cerr << "Topic created - response: " << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
         if (status != NBus::MESSAGE_OK)
-            return 0; 
+            return 0;
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
         const NMsgBusProxy::TBusResponse* response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get());
         UNIT_ASSERT(response);
@@ -759,7 +759,7 @@ public:
             if (actualSize != cacheSize)
                 return 0;
         }
-        Cerr << "=== Topic created, have version: " << topicInfo.GetConfig().GetVersion() << Endl; 
+        Cerr << "=== Topic created, have version: " << topicInfo.GetConfig().GetVersion() << Endl;
         return topicInfo.GetConfig().GetVersion();
     }
 
@@ -807,12 +807,12 @@ public:
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SyncCall(request, reply);
-        Cerr << "Topic deleted got reply with status: " << status << Endl; 
+        Cerr << "Topic deleted got reply with status: " << status << Endl;
         if (status != NBus::MESSAGE_OK)
             return false;
         const NMsgBusProxy::TBusResponse* response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get());
-        if (response == nullptr) 
-            return false; 
+        if (response == nullptr)
+            return false;
         Cerr << "TopicDeleted response " << response->Record << "\n";
         UNIT_ASSERT(response);
         UNIT_ASSERT(response->Record.HasErrorCode());
@@ -837,7 +837,7 @@ public:
     }
 
     void CreateConsumer(const TString& oldName) {
-        auto name = NPersQueue::ConvertOldConsumerName(oldName); 
+        auto name = NPersQueue::ConvertOldConsumerName(oldName);
         RunYqlSchemeQuery("CREATE TABLE [/Root/PQ/" + name + "] (" + "Topic Utf8, Partition Uint32, Offset Uint64,  PRIMARY KEY (Topic,Partition) );");
     }
 
@@ -845,35 +845,35 @@ public:
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::ReadAttributes, subj);
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::WriteAttributes, subj);
-        auto name = NPersQueue::ConvertOldConsumerName(oldName); 
+        auto name = NPersQueue::ConvertOldConsumerName(oldName);
         auto pos = name.rfind("/");
         Y_VERIFY(pos != TString::npos);
         auto pref = "/Root/PQ/" + name.substr(0, pos);
         ModifyACL(pref, name.substr(pos + 1), acl.SerializeAsString());
     }
 
- 
+
     void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true) {
-        TString path = name; 
-        if (UseConfigTables) { 
-            path = TStringBuilder() << "/Root/PQ/" << name; 
-        } 
- 
-        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver); 
+        TString path = name;
+        if (UseConfigTables) {
+            path = TStringBuilder() << "/Root/PQ/" << name;
+        }
+
+        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(partsCount).ClientWriteDisabled(!canWrite);
-        Cerr << "===Create topic: " << path << Endl; 
-        auto res = pqClient.CreateTopic(path, settings); 
-        //ToDo - hack, cannot avoid legacy compat yet as PQv1 still uses RequestProcessor from core/client/server 
-        if (UseConfigTables) { 
-            AddTopic(name); 
-        } 
-        if (doWait) { 
-            res.Wait(); 
+        Cerr << "===Create topic: " << path << Endl;
+        auto res = pqClient.CreateTopic(path, settings);
+        //ToDo - hack, cannot avoid legacy compat yet as PQv1 still uses RequestProcessor from core/client/server
+        if (UseConfigTables) {
+            AddTopic(name);
+        }
+        if (doWait) {
+            res.Wait();
             Cerr << "Create topic result: " << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
             UNIT_ASSERT(res.GetValue().IsSuccess());
-        } 
-    } 
- 
+        }
+    }
+
     void WaitTopicInit(const TString& topic) {
         auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
         do {
@@ -889,30 +889,30 @@ public:
         } while (true);
     }
 
-    void CreateTopic( 
-            const TRequestCreatePQ& createRequest, 
-            bool doWait = true 
-    ) { 
-        const TInstant start = TInstant::Now(); 
- 
-        THolder<NMsgBusProxy::TBusPersQueue> request = createRequest.GetRequest(); 
+    void CreateTopic(
+            const TRequestCreatePQ& createRequest,
+            bool doWait = true
+    ) {
+        const TInstant start = TInstant::Now();
 
-        ui32 prevVersion = TopicCreated(createRequest.Topic); 
-        TAutoPtr<NBus::TBusMessage> reply; 
-        const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request, reply); 
-        UNIT_ASSERT(response); 
-        UNIT_ASSERT_VALUES_EQUAL_C((ui32)response->Record.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK, 
-                                   "proxy failure"); 
+        THolder<NMsgBusProxy::TBusPersQueue> request = createRequest.GetRequest();
 
-        AddTopic(createRequest.Topic); 
-        while (doWait && TopicRealCreated(createRequest.Topic) != prevVersion + 1) { 
-            Sleep(TDuration::MilliSeconds(500)); 
-            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT); 
+        ui32 prevVersion = TopicCreated(createRequest.Topic);
+        TAutoPtr<NBus::TBusMessage> reply;
+        const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request, reply);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL_C((ui32)response->Record.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK,
+                                   "proxy failure");
+
+        AddTopic(createRequest.Topic);
+        while (doWait && TopicRealCreated(createRequest.Topic) != prevVersion + 1) {
+            Sleep(TDuration::MilliSeconds(500));
+            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
-        while (doWait && TopicCreated(createRequest.Topic, prevVersion) != prevVersion + 1) { 
-            Sleep(TDuration::MilliSeconds(500)); 
-            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT); 
-        } 
+        while (doWait && TopicCreated(createRequest.Topic, prevVersion) != prevVersion + 1) {
+            Sleep(TDuration::MilliSeconds(500));
+            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
+        }
     }
 
     void CreateTopic(
@@ -929,30 +929,30 @@ public:
         ui64 sourceIdMaxCount = 6000000,
         ui64 sourceIdLifetime = 86400
     ) {
-        Y_VERIFY(name.StartsWith("rt3.")); 
- 
-        Cerr << "PQ Client: create topic: " << name << " with " << nParts << " partitions" << Endl; 
-        auto request = TRequestCreatePQ(
-                name, nParts, 0, lifetimeS, lowWatermark, writeSpeed, user, readSpeed, rr, important, mirrorFrom, 
-                sourceIdMaxCount, sourceIdLifetime 
-        );
-        return CreateTopic(request); 
-    } 
+        Y_VERIFY(name.StartsWith("rt3."));
 
-    void AlterTopicNoLegacy(const TString& name, ui32 nParts, ui64 lifetimeS = 86400) { 
-        TString path = name; 
-        if (!UseConfigTables) { 
-            path = TStringBuilder() << "/Root/PQ/" << name; 
-        } 
-        auto settings = NYdb::NPersQueue::TAlterTopicSettings().PartitionsCount(nParts); 
-        settings.RetentionPeriod(TDuration::Seconds(lifetimeS)); 
-        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver); 
-        auto res = pqClient.AlterTopic(path, settings); 
-        if (UseConfigTables) {  // ToDo - legacy 
-            AlterTopic(); 
-        } 
-        res.Wait(); 
-        Cerr << "Alter topic (" << path << ") response: " << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << Endl; 
+        Cerr << "PQ Client: create topic: " << name << " with " << nParts << " partitions" << Endl;
+        auto request = TRequestCreatePQ(
+                name, nParts, 0, lifetimeS, lowWatermark, writeSpeed, user, readSpeed, rr, important, mirrorFrom,
+                sourceIdMaxCount, sourceIdLifetime
+        );
+        return CreateTopic(request);
+    }
+
+    void AlterTopicNoLegacy(const TString& name, ui32 nParts, ui64 lifetimeS = 86400) {
+        TString path = name;
+        if (!UseConfigTables) {
+            path = TStringBuilder() << "/Root/PQ/" << name;
+        }
+        auto settings = NYdb::NPersQueue::TAlterTopicSettings().PartitionsCount(nParts);
+        settings.RetentionPeriod(TDuration::Seconds(lifetimeS));
+        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
+        auto res = pqClient.AlterTopic(path, settings);
+        if (UseConfigTables) {  // ToDo - legacy
+            AlterTopic();
+        }
+        res.Wait();
+        Cerr << "Alter topic (" << path << ") response: " << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << Endl;
     }
 
     void AlterTopic(
@@ -963,7 +963,7 @@ public:
         bool fillPartitionConfig = false,
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {}
     ) {
-        Y_VERIFY(name.StartsWith("rt3.")); 
+        Y_VERIFY(name.StartsWith("rt3."));
         TRequestAlterPQ requestDescr(name, nParts, cacheSize, lifetimeS, fillPartitionConfig, mirrorFrom);
         THolder<NMsgBusProxy::TBusPersQueue> request = requestDescr.GetRequest();
 
@@ -976,7 +976,7 @@ public:
                                    response->Record.DebugString().c_str());
 
         const TInstant start = TInstant::Now();
-        AlterTopic(); 
+        AlterTopic();
         while (TopicCreated(name, cacheSize) != prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
@@ -988,23 +988,23 @@ public:
 
     }
 
-    void DeleteTopicNoLegacy (const TString& name) { 
-        TString path = name; 
-        if (!UseConfigTables) { 
-            path = TStringBuilder() << "/Root/PQ/" << name; 
-        } else { 
-            RemoveTopic(name); // ToDo - also legacy 
-        } 
-        auto settings = NYdb::NPersQueue::TDropTopicSettings(); 
-        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver); 
-        auto res = pqClient.DropTopic(path, settings); 
-        res.Wait(); 
-        Cerr << "Drop topic response: " << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << Endl; 
-        return; 
-    } 
- 
+    void DeleteTopicNoLegacy (const TString& name) {
+        TString path = name;
+        if (!UseConfigTables) {
+            path = TStringBuilder() << "/Root/PQ/" << name;
+        } else {
+            RemoveTopic(name); // ToDo - also legacy
+        }
+        auto settings = NYdb::NPersQueue::TDropTopicSettings();
+        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
+        auto res = pqClient.DropTopic(path, settings);
+        res.Wait();
+        Cerr << "Drop topic response: " << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << Endl;
+        return;
+    }
+
     void DeleteTopic2(const TString& name, NPersQueue::NErrorCode::EErrorCode expectedStatus = NPersQueue::NErrorCode::OK, bool waitForTopicDeletion = true) {
-        Y_VERIFY(name.StartsWith("rt3.")); 
+        Y_VERIFY(name.StartsWith("rt3."));
         THolder<NMsgBusProxy::TBusPersQueue> request = TRequestDeletePQ{name}.GetRequest();
 
         TAutoPtr<NBus::TBusMessage> reply;
@@ -1026,7 +1026,7 @@ public:
             }
             UNIT_ASSERT_C(i < 500, "Drop is taking too long"); //25 seconds
         }
-        RemoveTopic(name); 
+        RemoveTopic(name);
         const TInstant start = TInstant::Now();
         while (waitForTopicDeletion && !TopicDeleted(name)) {
             Sleep(TDuration::MilliSeconds(50));
@@ -1076,13 +1076,13 @@ public:
     }
 
 
-    void WriteToPQ( 
-            const TRequestWritePQ& writeRequest, const TString& data, 
-            const TString& ticket = "", 
-            ETransport transport = ETransport::MsgBus, 
-            NMsgBusProxy::EResponseStatus expectedStatus = NMsgBusProxy::MSTATUS_OK, 
-            NMsgBusProxy::EResponseStatus expectedOwnerStatus = NMsgBusProxy::MSTATUS_OK 
-    ) { 
+    void WriteToPQ(
+            const TRequestWritePQ& writeRequest, const TString& data,
+            const TString& ticket = "",
+            ETransport transport = ETransport::MsgBus,
+            NMsgBusProxy::EResponseStatus expectedStatus = NMsgBusProxy::MSTATUS_OK,
+            NMsgBusProxy::EResponseStatus expectedOwnerStatus = NMsgBusProxy::MSTATUS_OK
+    ) {
 
         TString cookie = GetOwnership({writeRequest.Topic, writeRequest.Partition}, expectedOwnerStatus);
 
@@ -1130,12 +1130,12 @@ public:
         TVector<TString> Values;
     };
 
-    TReadDebugInfo ReadFromPQ( 
-            const TRequestReadPQ& readRequest, ui32 readCount, 
-            const TString& ticket = "", 
-            NMsgBusProxy::EResponseStatus expectedStatus = NMsgBusProxy::MSTATUS_OK, 
-            NPersQueue::NErrorCode::EErrorCode expectedError = NPersQueue::NErrorCode::OK 
-    ) { 
+    TReadDebugInfo ReadFromPQ(
+            const TRequestReadPQ& readRequest, ui32 readCount,
+            const TString& ticket = "",
+            NMsgBusProxy::EResponseStatus expectedStatus = NMsgBusProxy::MSTATUS_OK,
+            NPersQueue::NErrorCode::EErrorCode expectedError = NPersQueue::NErrorCode::OK
+    ) {
         THolder<NMsgBusProxy::TBusPersQueue> request = readRequest.GetRequest();
         if (!ticket.empty()) {
             request.Get()->Record.SetTicket(ticket);
@@ -1175,11 +1175,11 @@ public:
         return ReadFromPQ({topic, partition, startOffset, count, "user"}, readCount, ticket);
     }
 
-    void SetClientOffsetPQ( 
-            const TRequestSetClientOffsetPQ& cmdRequest, const TString& ticket = "", 
-            NMsgBusProxy::EResponseStatus expectedStatus = NMsgBusProxy::MSTATUS_OK, 
-            NPersQueue::NErrorCode::EErrorCode expectedError = NPersQueue::NErrorCode::OK 
-    ) { 
+    void SetClientOffsetPQ(
+            const TRequestSetClientOffsetPQ& cmdRequest, const TString& ticket = "",
+            NMsgBusProxy::EResponseStatus expectedStatus = NMsgBusProxy::MSTATUS_OK,
+            NPersQueue::NErrorCode::EErrorCode expectedError = NPersQueue::NErrorCode::OK
+    ) {
         THolder<NMsgBusProxy::TBusPersQueue> request = cmdRequest.GetRequest();
         if (!ticket.empty()) {
             request.Get()->Record.SetTicket(ticket);
@@ -1372,51 +1372,51 @@ public:
         GetPartLocation(topicsAndParts, resCount, ok);
         GetPartStatus(topicsAndParts, resCount, ok);
     }
- 
-private: 
-    static TString GetAlterTopicsVersionQuery() { 
-        return "UPSERT INTO [/Root/PQ/Config/V2/Versions] (name, version) VALUES (\"Topics\", $version);"; 
-    } 
- 
-public: 
-    void AddTopic(const TString& topic) { 
-        return AddOrRemoveTopic(topic, true); 
-    } 
- 
-    void RemoveTopic(const TString& topic) { 
-        return AddOrRemoveTopic(topic, false); 
-    } 
- 
-    void AddOrRemoveTopic(const TString& topic, bool add) { 
-        TStringBuilder query; 
-        query << "DECLARE $version as Int64; DECLARE $path AS Utf8; DECLARE $cluster as Utf8; "; 
-        if (add) { 
-            query << "UPSERT INTO [/Root/PQ/Config/V2/Topics] (path, dc) VALUES ($path, $cluster); "; 
-        } else { 
-            query << "DELETE FROM [/Root/PQ/Config/V2/Topics] WHERE path = $path AND dc = $cluster; "; 
-        } 
-        query << GetAlterTopicsVersionQuery(); 
-        NYdb::TParamsBuilder builder; 
-        auto params = builder 
-                .AddParam("$version").Int64(++TopicsVersion).Build() 
-                .AddParam("$path").Utf8(NPersQueue::GetTopicPath(topic)).Build() 
-                .AddParam("$cluster").Utf8(NPersQueue::GetDC(topic)).Build() 
-                .Build(); 
- 
-        Cerr << "===Run query:``" << query << "`` with topic = " << NPersQueue::GetTopicPath(topic) << ", dc = " << NPersQueue::GetDC(topic) << Endl; 
-        RunYqlDataQueryWithParams(query, params); 
-        Cerr << "===Query complete" << Endl; 
-    } 
- 
-    void AlterTopic() { 
-        NYdb::TParamsBuilder builder; 
-        auto params = builder 
-                .AddParam("$version").Int64(++TopicsVersion).Build() 
-                .Build(); 
-        TStringBuilder query; 
-        query << "DECLARE $version as Int64; " << GetAlterTopicsVersionQuery(); 
-        RunYqlDataQueryWithParams(query, params); 
-    } 
+
+private:
+    static TString GetAlterTopicsVersionQuery() {
+        return "UPSERT INTO [/Root/PQ/Config/V2/Versions] (name, version) VALUES (\"Topics\", $version);";
+    }
+
+public:
+    void AddTopic(const TString& topic) {
+        return AddOrRemoveTopic(topic, true);
+    }
+
+    void RemoveTopic(const TString& topic) {
+        return AddOrRemoveTopic(topic, false);
+    }
+
+    void AddOrRemoveTopic(const TString& topic, bool add) {
+        TStringBuilder query;
+        query << "DECLARE $version as Int64; DECLARE $path AS Utf8; DECLARE $cluster as Utf8; ";
+        if (add) {
+            query << "UPSERT INTO [/Root/PQ/Config/V2/Topics] (path, dc) VALUES ($path, $cluster); ";
+        } else {
+            query << "DELETE FROM [/Root/PQ/Config/V2/Topics] WHERE path = $path AND dc = $cluster; ";
+        }
+        query << GetAlterTopicsVersionQuery();
+        NYdb::TParamsBuilder builder;
+        auto params = builder
+                .AddParam("$version").Int64(++TopicsVersion).Build()
+                .AddParam("$path").Utf8(NPersQueue::GetTopicPath(topic)).Build()
+                .AddParam("$cluster").Utf8(NPersQueue::GetDC(topic)).Build()
+                .Build();
+
+        Cerr << "===Run query:``" << query << "`` with topic = " << NPersQueue::GetTopicPath(topic) << ", dc = " << NPersQueue::GetDC(topic) << Endl;
+        RunYqlDataQueryWithParams(query, params);
+        Cerr << "===Query complete" << Endl;
+    }
+
+    void AlterTopic() {
+        NYdb::TParamsBuilder builder;
+        auto params = builder
+                .AddParam("$version").Int64(++TopicsVersion).Build()
+                .Build();
+        TStringBuilder query;
+        query << "DECLARE $version as Int64; " << GetAlterTopicsVersionQuery();
+        RunYqlDataQueryWithParams(query, params);
+    }
 };
 
 } // namespace NPersQueueTests

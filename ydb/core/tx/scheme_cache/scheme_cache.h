@@ -263,10 +263,10 @@ struct TSchemeCacheNavigate {
         : Instant(0)
     {}
 
-    explicit TSchemeCacheNavigate(ui64 instant) 
-        : Instant(instant) 
-    {} 
- 
+    explicit TSchemeCacheNavigate(ui64 instant)
+        : Instant(instant)
+    {}
+
     TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
 
 }; // TSchemeCacheNavigate

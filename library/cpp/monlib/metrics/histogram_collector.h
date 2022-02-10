@@ -33,11 +33,11 @@ namespace NMonitoring {
         }
 
         /**
-         * Reset collector values
-         */
-        virtual void Reset() = 0;
-
-        /**
+         * Reset collector values 
+         */ 
+        virtual void Reset() = 0; 
+ 
+        /** 
          * @return snapshot of the state of this collector.
          */
         virtual IHistogramSnapshotPtr Snapshot() const = 0;

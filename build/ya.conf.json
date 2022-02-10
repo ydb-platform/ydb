@@ -354,9 +354,9 @@
         "vmexec": {
             "description": "VMEXEC run script inside qemu-vm"
         },
-        "yd-migrate": {
-            "description": "Run deploy migration"
-        },
+        "yd-migrate": { 
+            "description": "Run deploy migration" 
+        }, 
         "yfm-docs": {
             "description": "YFM-extended markdown processor for Cloud deploy (v3)"
         },
@@ -3606,28 +3606,28 @@
                 }
             ]
         },
-        "yd-migrate": {
-            "tools": {
-                "yd-migrate": {
-                    "bottle": "yd-migrate",
-                    "executable": "yd-migrate"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
+        "yd-migrate": { 
+            "tools": { 
+                "yd-migrate": { 
+                    "bottle": "yd-migrate", 
+                    "executable": "yd-migrate" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
         "dctl": {
             "tools": {
                 "dctl": {
@@ -6850,19 +6850,19 @@
                 ]
             }
         },
-        "yd-migrate": {
-            "formula": {
-                "sandbox_id": [
+        "yd-migrate": { 
+            "formula": { 
+                "sandbox_id": [ 
                     990283171
-                ],
+                ], 
                 "match": "yd_migrate"
-            },
-            "executable": {
-                "yd-migrate": [
-                    "migrate"
-                ]
-            }
-        },
+            }, 
+            "executable": { 
+                "yd-migrate": [ 
+                    "migrate" 
+                ] 
+            } 
+        }, 
         "dctl": {
             "formula": {
                 "sandbox_id": [

@@ -35,10 +35,10 @@ namespace NMonitoring {
             Values_.Add(index, count);
         }
 
-        void Reset() override {
-            Values_.Reset();
-        }
-
+        void Reset() override { 
+            Values_.Reset(); 
+        } 
+ 
         IHistogramSnapshotPtr Snapshot() const override {
             return new TExponentialHistogramSnapshot(Base_, Scale_, Values_.Copy());
         }

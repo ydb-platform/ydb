@@ -1016,7 +1016,7 @@ RECURSE(
     spacy
     spacy-legacy
     spacy-loggers
-    sparse-dot-topn 
+    sparse-dot-topn
     spdx-tools
     spidev
     spintop-openhtf

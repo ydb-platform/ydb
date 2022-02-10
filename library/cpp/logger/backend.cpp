@@ -27,14 +27,14 @@ namespace {
             Y_FAIL("Incorrect pointer for log backend");
         }
 
-        void Reopen(bool flush) {
+        void Reopen(bool flush) { 
             TGuard<TMutex> g(Mutex);
             for (auto& b : Backends) {
-                if (flush) {
-                    b->ReopenLog();
-                } else {
-                    b->ReopenLogNoFlush();
-                }
+                if (flush) { 
+                    b->ReopenLog(); 
+                } else { 
+                    b->ReopenLogNoFlush(); 
+                } 
             }
         }
     };
@@ -58,13 +58,13 @@ TLogBackend::~TLogBackend() {
     Singleton<TGlobalLogsStorage>()->UnRegister(this);
 }
 
-void TLogBackend::ReopenLogNoFlush() {
-    ReopenLog();
+void TLogBackend::ReopenLogNoFlush() { 
+    ReopenLog(); 
 }
-
-void TLogBackend::ReopenAllBackends(bool flush) {
-    Singleton<TGlobalLogsStorage>()->Reopen(flush);
-}
+ 
+void TLogBackend::ReopenAllBackends(bool flush) { 
+    Singleton<TGlobalLogsStorage>()->Reopen(flush); 
+} 
 
 size_t TLogBackend::QueueSize() const {
     ythrow yexception() << "Not implemented.";

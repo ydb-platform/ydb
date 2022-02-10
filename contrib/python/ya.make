@@ -19,7 +19,7 @@ RECURSE(
     aiohttp
     aiohttp-apispec
     aiohttp-cors
-    aiohttp-jinja2
+    aiohttp-jinja2 
     aiohttp-remotes
     aiohttp-retry
     aiohttp-swagger

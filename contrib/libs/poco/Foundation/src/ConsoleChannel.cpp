@@ -105,10 +105,10 @@ void ColorConsoleChannel::setProperty(const std::string& name, const std::string
 	{
 		_enableColors = icompare(value, "true") == 0;
 	}
-	else if (name == "testColor")
-	{
-		_colors[Message::PRIO_TEST] = parseColor(value);
-	}
+	else if (name == "testColor") 
+	{ 
+		_colors[Message::PRIO_TEST] = parseColor(value); 
+	} 
 	else if (name == "traceColor")
 	{
 		_colors[Message::PRIO_TRACE] = parseColor(value);
@@ -154,10 +154,10 @@ std::string ColorConsoleChannel::getProperty(const std::string& name) const
 	{
 		return _enableColors ? "true" : "false";
 	}
-	else if (name == "testColor")
-	{
-		return formatColor(_colors[Message::PRIO_TEST]);
-	}
+	else if (name == "testColor") 
+	{ 
+		return formatColor(_colors[Message::PRIO_TEST]); 
+	} 
 	else if (name == "traceColor")
 	{
 		return formatColor(_colors[Message::PRIO_TRACE]);
@@ -274,7 +274,7 @@ void ColorConsoleChannel::initColors()
 	_colors[Message::PRIO_INFORMATION] = CC_DEFAULT;
 	_colors[Message::PRIO_DEBUG]       = CC_GRAY;
 	_colors[Message::PRIO_TRACE]       = CC_GRAY;
-	_colors[Message::PRIO_TEST]        = CC_GRAY;
+	_colors[Message::PRIO_TEST]        = CC_GRAY; 
 }
 
 

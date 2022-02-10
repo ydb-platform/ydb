@@ -430,14 +430,14 @@ int Logger::parseLevel(const std::string& level)
 		return Message::PRIO_DEBUG;
 	else if (icompare(level, "trace") == 0)
 		return Message::PRIO_TRACE;
-	else if (icompare(level, "test") == 0)
-		return Message::PRIO_TEST;
+	else if (icompare(level, "test") == 0) 
+		return Message::PRIO_TEST; 
 	else
 	{
 		int numLevel;
 		if (Poco::NumberParser::tryParse(level, numLevel))
 		{
-			if (numLevel > 0 && numLevel < 10)
+			if (numLevel > 0 && numLevel < 10) 
 				return numLevel;
 			else
 				throw InvalidArgumentException("Log level out of range ", level);

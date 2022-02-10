@@ -325,7 +325,7 @@ int RemoteSyslogChannel::getPrio(const Message& msg)
 {
 	switch (msg.getPriority())
 	{
-	case Message::PRIO_TEST:
+	case Message::PRIO_TEST: 
 	case Message::PRIO_TRACE:
 	case Message::PRIO_DEBUG:
 		return SYSLOG_DEBUG;

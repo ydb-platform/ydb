@@ -278,19 +278,19 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_EQUAL(ys.Size(), 1);
         UNIT_ASSERT_EQUAL(ys[0].Value<int>(), 20);
     }
-
+ 
     Y_UNIT_TEST(Html) {
-        using namespace NXml;
-
-        TDocument htmlChunk("video", TDocument::RootName);
-        TNode videoNode = htmlChunk.Root();
-
-        videoNode.SetAttr("controls");
-
-        TStringStream ss;
-        videoNode.SaveAsHtml(ss);
-        UNIT_ASSERT_EQUAL(ss.Str(), "<video controls></video>");
-    }
+        using namespace NXml; 
+ 
+        TDocument htmlChunk("video", TDocument::RootName); 
+        TNode videoNode = htmlChunk.Root(); 
+ 
+        videoNode.SetAttr("controls"); 
+ 
+        TStringStream ss; 
+        videoNode.SaveAsHtml(ss); 
+        UNIT_ASSERT_EQUAL(ss.Str(), "<video controls></video>"); 
+    } 
 
     Y_UNIT_TEST(Move) {
         using namespace NXml;

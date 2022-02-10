@@ -136,14 +136,14 @@ namespace NXml {
 
     inline void TNode::SetAttr(TZtStringBuf name) {
         xmlAttr* attr = xmlSetProp(NodePointer, XMLCHAR(name.c_str()), nullptr);
-
+ 
         if (!attr) {
             THROW(XmlException, "Can't set node empty attribute <"
                                     << name
                                     << ">");
-        }
-    }
-
+        } 
+    } 
+ 
     inline void TNode::DelAttr(TZtStringBuf name) {
         if (xmlUnsetProp(NodePointer, XMLCHAR(name.c_str())) < 0)
             THROW(XmlException, "Can't delete node attribute <"

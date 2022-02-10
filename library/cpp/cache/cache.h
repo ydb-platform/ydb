@@ -8,26 +8,26 @@
 #include <util/generic/yexception.h>
 #include <utility>
 
-template <class TValue> 
-struct TUniformSizeProvider { 
-    size_t operator()(const TValue&) { 
-        return 1; 
-    } 
-}; 
- 
-template <typename TKey, typename TValue, class TSizeProvider = TUniformSizeProvider<TValue>> 
+template <class TValue>
+struct TUniformSizeProvider {
+    size_t operator()(const TValue&) {
+        return 1;
+    }
+};
+
+template <typename TKey, typename TValue, class TSizeProvider = TUniformSizeProvider<TValue>>
 class TLRUList {
 public:
-    TLRUList(size_t maxSize, const TSizeProvider& sizeProvider = TSizeProvider()) 
+    TLRUList(size_t maxSize, const TSizeProvider& sizeProvider = TSizeProvider())
         : List()
-        , SizeProvider(sizeProvider) 
-        , ItemsAmount(0) 
-        , TotalSize(0) 
+        , SizeProvider(sizeProvider)
+        , ItemsAmount(0)
+        , TotalSize(0)
         , MaxSize(maxSize)
     {
     }
 
-public: 
+public:
     struct TItem: public TIntrusiveListItem<TItem> {
         typedef TIntrusiveListItem<TItem> TBase;
         TItem(const TKey& key, const TValue& value = TValue())
@@ -65,15 +65,15 @@ public:
 public:
     TItem* Insert(TItem* item) {
         List.PushBack(item);
-        ++ItemsAmount; 
-        TotalSize += SizeProvider(item->Value); 
- 
-        return RemoveIfOverflown(); 
-    } 
- 
-    TItem* RemoveIfOverflown() { 
+        ++ItemsAmount;
+        TotalSize += SizeProvider(item->Value);
+
+        return RemoveIfOverflown();
+    }
+
+    TItem* RemoveIfOverflown() {
         TItem* deleted = nullptr;
-        if (TotalSize > MaxSize && ItemsAmount > 1) { 
+        if (TotalSize > MaxSize && ItemsAmount > 1) {
             deleted = GetOldest();
             Erase(deleted);
         }
@@ -88,8 +88,8 @@ public:
 
     void Erase(TItem* item) {
         item->Unlink();
-        --ItemsAmount; 
-        TotalSize -= SizeProvider(item->Value); 
+        --ItemsAmount;
+        TotalSize -= SizeProvider(item->Value);
     }
 
     void Promote(TItem* item) {
@@ -98,7 +98,7 @@ public:
     }
 
     size_t GetSize() const {
-        return ItemsAmount; 
+        return ItemsAmount;
     }
 
     size_t GetTotalSize() const {
@@ -118,9 +118,9 @@ public:
 private:
     typedef TIntrusiveList<TItem> TListType;
     TListType List;
-    TSizeProvider SizeProvider; 
-    size_t ItemsAmount; 
-    size_t TotalSize; 
+    TSizeProvider SizeProvider;
+    size_t ItemsAmount;
+    size_t TotalSize;
     size_t MaxSize;
 };
 
@@ -175,11 +175,11 @@ public:
     TItem* Insert(TItem* item) {
         List.PushBack(item); // give a chance for promotion
         ++ListSize;
- 
-        return RemoveIfOverflown(); 
-    } 
- 
-    TItem* RemoveIfOverflown() { 
+
+        return RemoveIfOverflown();
+    }
+
+    TItem* RemoveIfOverflown() {
         TItem* deleted = nullptr;
         if (ListSize > MaxSize) {
             deleted = GetLeastFrequentlyUsed();
@@ -283,35 +283,35 @@ public:
 
 public:
     TItem* Insert(TItem* item) {
-        FixHeap(); 
- 
-        if (Size >= MaxSize && item->Weight < GetLightest()->Weight) { 
-            return item; 
-        } 
- 
-        Heap.push_back(item); 
-        PushHeap(Heap.begin(), Heap.end(), THeapComparator()); 
-        ++Size; 
- 
-        return RemoveIfOverflown(); 
-    } 
- 
-    TItem* RemoveIfOverflown() { 
-        if (Size <= MaxSize) { 
+        FixHeap();
+
+        if (Size >= MaxSize && item->Weight < GetLightest()->Weight) {
+            return item;
+        }
+
+        Heap.push_back(item);
+        PushHeap(Heap.begin(), Heap.end(), THeapComparator());
+        ++Size;
+
+        return RemoveIfOverflown();
+    }
+
+    TItem* RemoveIfOverflown() {
+        if (Size <= MaxSize) {
             return nullptr;
         }
- 
-        auto lightest = GetLightest(); 
-        Erase(lightest); 
-        PopHeap(Heap.begin(), Heap.end(), THeapComparator()); 
-        return lightest; 
+
+        auto lightest = GetLightest();
+        Erase(lightest);
+        PopHeap(Heap.begin(), Heap.end(), THeapComparator());
+        return lightest;
     }
 
     TItem* GetLightest() {
-        FixHeap(); 
- 
+        FixHeap();
+
         Y_ASSERT(!Heap.empty());
- 
+
         return Heap.front();
     }
 
@@ -320,16 +320,16 @@ public:
     // and will be deleted on-access (using FixHeap method)
     void Erase(TItem* item) {
         Y_ASSERT(Size > 0);
- 
+
         --Size;
-        Removed.insert(item); 
+        Removed.insert(item);
     }
 
     void Promote(TItem*) {
         // do nothing
     }
 
-    [[nodiscard]] size_t GetSize() const { 
+    [[nodiscard]] size_t GetSize() const {
         return Size;
     }
 
@@ -349,20 +349,20 @@ public:
         Size = 0;
     }
 
-private: 
+private:
     // Physically remove erased elements from the heap
     void FixHeap() {
-        if (Removed.empty()) { 
-            return; 
+        if (Removed.empty()) {
+            return;
         }
- 
-        Heap.erase(std::remove_if(Heap.begin(), Heap.end(), [this](TItem* item) { 
-                       return this->Removed.contains(item); 
-                   }), 
-                   Heap.end()); 
-        MakeHeap(Heap.begin(), Heap.end(), THeapComparator()); 
-        Removed.clear(); 
-        Size = Heap.size(); 
+
+        Heap.erase(std::remove_if(Heap.begin(), Heap.end(), [this](TItem* item) {
+                       return this->Removed.contains(item);
+                   }),
+                   Heap.end());
+        MakeHeap(Heap.begin(), Heap.end(), THeapComparator());
+        Removed.clear();
+        Size = Heap.size();
     }
 
 private:
@@ -424,9 +424,9 @@ public:
         TIndexConstIterator Iter;
     };
 
-    TCache(TListType&& list, bool multiValue = false) 
+    TCache(TListType&& list, bool multiValue = false)
         : Index()
-        , List(std::move(list)) 
+        , List(std::move(list))
         , MultiValue(multiValue)
     {
     }
@@ -482,18 +482,18 @@ public:
         TIndexIterator it = Index.insert(tmpItem);
 
         TItem* insertedItem = const_cast<TItem*>(&*it);
-        auto removedItem = List.Insert(insertedItem); 
-        auto insertedWasRemoved = removedItem == insertedItem; 
+        auto removedItem = List.Insert(insertedItem);
+        auto insertedWasRemoved = removedItem == insertedItem;
         if (removedItem) {
             EraseFromIndex(removedItem);
-            while ((removedItem = List.RemoveIfOverflown())) { 
-                insertedWasRemoved = insertedWasRemoved || insertedItem == removedItem; 
-                EraseFromIndex(removedItem); 
-            } 
+            while ((removedItem = List.RemoveIfOverflown())) {
+                insertedWasRemoved = insertedWasRemoved || insertedItem == removedItem;
+                EraseFromIndex(removedItem);
+            }
         }
 
         Y_ASSERT(Index.size() == List.GetSize());
-        return !insertedWasRemoved; 
+        return !insertedWasRemoved;
     }
 
     void Update(const TKey& key, const TValue& value) {
@@ -574,20 +574,20 @@ struct TNoopDelete {
     }
 };
 
-template <typename TKey, typename TValue, typename TDeleter = TNoopDelete, class TSizeProvider = TUniformSizeProvider<TValue>> 
-class TLRUCache: public TCache<TKey, TValue, TLRUList<TKey, TValue, TSizeProvider>, TDeleter> { 
-    using TListType = TLRUList<TKey, TValue, TSizeProvider>; 
-    typedef TCache<TKey, TValue, TListType, TDeleter> TBase; 
+template <typename TKey, typename TValue, typename TDeleter = TNoopDelete, class TSizeProvider = TUniformSizeProvider<TValue>>
+class TLRUCache: public TCache<TKey, TValue, TLRUList<TKey, TValue, TSizeProvider>, TDeleter> {
+    using TListType = TLRUList<TKey, TValue, TSizeProvider>;
+    typedef TCache<TKey, TValue, TListType, TDeleter> TBase;
 
 public:
-    TLRUCache(size_t maxSize, bool multiValue = false, const TSizeProvider& sizeProvider = TSizeProvider()) 
-        : TBase(TListType(maxSize, sizeProvider), multiValue) 
+    TLRUCache(size_t maxSize, bool multiValue = false, const TSizeProvider& sizeProvider = TSizeProvider())
+        : TBase(TListType(maxSize, sizeProvider), multiValue)
     {
     }
 
-public: 
-    typedef typename TBase::TIterator TIterator; 
- 
+public:
+    typedef typename TBase::TIterator TIterator;
+
     TValue& GetOldest() {
         return TBase::List.GetOldest()->Value;
     }
@@ -604,13 +604,13 @@ public:
 template <typename TKey, typename TValue, typename TDeleter = TNoopDelete>
 class TLFUCache: public TCache<TKey, TValue, TLFUList<TKey, TValue>, TDeleter> {
     typedef TCache<TKey, TValue, TLFUList<TKey, TValue>, TDeleter> TBase;
-    using TListType = TLFUList<TKey, TValue>; 
+    using TListType = TLFUList<TKey, TValue>;
 
 public:
     typedef typename TBase::TIterator TIterator;
 
     TLFUCache(size_t maxSize, bool multiValue = false)
-        : TBase(TListType(maxSize), multiValue) 
+        : TBase(TListType(maxSize), multiValue)
     {
     }
 
@@ -629,13 +629,13 @@ public:
 template <typename TKey, typename TValue, typename TWeight, typename TWeighter, typename TDeleter = TNoopDelete>
 class TLWCache: public TCache<TKey, TValue, TLWList<TKey, TValue, TWeight, TWeighter>, TDeleter> {
     typedef TCache<TKey, TValue, TLWList<TKey, TValue, TWeight, TWeighter>, TDeleter> TBase;
-    using TListType = TLWList<TKey, TValue, TWeight, TWeighter>; 
+    using TListType = TLWList<TKey, TValue, TWeight, TWeighter>;
 
 public:
     typedef typename TBase::TIterator TIterator;
 
     TLWCache(size_t maxSize, bool multiValue = false)
-        : TBase(TListType(maxSize), multiValue) 
+        : TBase(TListType(maxSize), multiValue)
     {
     }
 

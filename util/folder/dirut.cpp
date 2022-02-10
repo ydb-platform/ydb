@@ -410,7 +410,7 @@ TString RealPath(const TString& path) {
 #else
     if (realpath(path.data(), result.Data()) == nullptr)
 #endif
-        ythrow TFileError() << "RealPath failed \"" << path << "\"";
+        ythrow TFileError() << "RealPath failed \"" << path << "\""; 
     return result.Data();
 }
 

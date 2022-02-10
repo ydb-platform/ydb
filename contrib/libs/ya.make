@@ -83,7 +83,7 @@ RECURSE(
     gamma_function_apache_math_port
     gdal
     gdal/apps
-    gdk-pixbuf 
+    gdk-pixbuf
     geos
     geos/capi/ctypes
     gflags
@@ -139,7 +139,7 @@ RECURSE(
     libc_compat
     libc_userver_workarounds
     libcpuid
-    libcroco 
+    libcroco
     libde265
     libdivide
     libdivsufsort2
@@ -177,7 +177,7 @@ RECURSE(
     libraw
     librdkafka
     librosa-cpp
-    librsvg 
+    librsvg
     libsamplerate
     libsavi
     libsodium

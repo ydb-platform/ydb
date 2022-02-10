@@ -1,52 +1,52 @@
-#pragma once 
+#pragma once
 
 #include <library/cpp/string_utils/ztstrbuf/ztstrbuf.h>
 
 #include <util/generic/string.h>
-#include <util/generic/vector.h> 
+#include <util/generic/vector.h>
 #include <util/stream/output.h>
 #include <util/stream/str.h>
-#include <algorithm> 
+#include <algorithm>
 #include "libxml-guards.h"
- 
-namespace NXml { 
+
+namespace NXml {
     class TNode;
- 
-    class TConstNodes; 
+
+    class TConstNodes;
     class TConstNode;
- 
+
     using TXPathContext = xmlXPathContext;
 
     class TDocument {
-    public: 
+    public:
         enum Source {
-            File, 
-            String, 
-            RootName, 
-        }; 
+            File,
+            String,
+            RootName,
+        };
 
-    public: 
-        /** 
+    public:
+        /**
         * create TDocument
         * @param source: filename, XML string, or name for the root element (depends on @src)
-        * @param src: source type: File | String | RootName 
-        * throws if file not found or cannot be parsed 
-        */ 
+        * @param src: source type: File | String | RootName
+        * throws if file not found or cannot be parsed
+        */
         TDocument(const TString& source, Source type = File);
- 
-    public: 
+
+    public:
         TDocument(const TDocument& that) = delete;
         TDocument& operator=(const TDocument& that) = delete;
- 
+
         TDocument(TDocument&& that);
         TDocument& operator=(TDocument&& that);
- 
-        /** 
-        * get root element 
-        */ 
+
+        /**
+        * get root element
+        */
         TNode Root();
         TConstNode Root() const;
- 
+
         void Save(IOutputStream& stream, TZtStringBuf enc = "", bool shouldFormat = true) const {
             int bufferSize = 0;
             xmlChar* xmlBuff = nullptr;
@@ -55,7 +55,7 @@ namespace NXml {
             TCharPtr xmlCharBuffPtr(xmlBuff);
             stream.Write(xmlBuff, bufferSize);
         }
- 
+
         TString ToString(TZtStringBuf enc = "", bool shouldFormat = true) const {
             TStringStream s;
             Save(s, enc, shouldFormat);
@@ -64,65 +64,65 @@ namespace NXml {
 
         void Swap(TDocument& that) {
             std::swap(this->Doc, that.Doc);
-        } 
- 
+        }
+
         xmlDocPtr GetImpl() {
             return Doc.Get();
         }
 
-    private: 
+    private:
         void ParseFile(const TString& file);
         void ParseString(TZtStringBuf xml);
- 
+
         TDocument(TDocHolder doc)
             : Doc(std::move(doc))
         {
         }
- 
+
         TDocHolder Doc;
-    }; 
- 
-    struct TNamespaceForXPath { 
+    };
+
+    struct TNamespaceForXPath {
         TString Prefix;
         TString Url;
-    }; 
+    };
     typedef TVector<TNamespaceForXPath> TNamespacesForXPath;
- 
+
     class TConstNodes {
-    private: 
+    private:
         struct TConstNodesRef {
             explicit TConstNodesRef(TConstNodes& n)
                 : r_(n)
             {
             }
-            TConstNodes& r_; 
-        }; 
+            TConstNodes& r_;
+        };
 
-    public: 
+    public:
         TConstNodes(const TConstNodes& nodes);
         TConstNodes& operator=(const TConstNodes& nodes);
- 
-        TConstNodes(TConstNodesRef ref); 
+
+        TConstNodes(TConstNodesRef ref);
         TConstNodes& operator=(TConstNodesRef ref);
- 
-        operator TConstNodesRef(); 
- 
-        /** 
-        * get node by id 
-        * @param number: node id 
-        */ 
+
+        operator TConstNodesRef();
+
+        /**
+        * get node by id
+        * @param number: node id
+        */
         TConstNode operator[](size_t number) const;
- 
-        /** 
-        * get number of nodes 
-        */ 
+
+        /**
+        * get number of nodes
+        */
         size_t Size() const {
             return SizeValue;
         }
         size_t size() const {
             return SizeValue;
         }
- 
+
         struct TNodeIter {
             const TConstNodes& Nodes;
             size_t Index;
@@ -145,30 +145,30 @@ namespace NXml {
             return TNodeIter{*this, size()};
         }
 
-    private: 
-        friend class TDocument; 
+    private:
+        friend class TDocument;
         friend class TConstNode;
         friend class TNode;
- 
+
         TConstNodes(xmlDoc* doc, TXPathObjectPtr obj);
- 
+
         size_t SizeValue;
         xmlDoc* Doc;
         TXPathObjectPtr Obj;
-    }; 
- 
+    };
+
     class TNode {
-    public: 
-        friend class TDocument; 
+    public:
+        friend class TDocument;
         friend class TConstNode;
         friend class TTextReader;
- 
-        /** 
-        * check if node is null 
-        */ 
+
+        /**
+        * check if node is null
+        */
         bool IsNull() const;
- 
-        /** 
+
+        /**
         * check if node is element node
         */
         bool IsElementNode() const;
@@ -187,16 +187,16 @@ namespace NXml {
 
         /**
         * get all element nodes matching given xpath expression
-        * @param xpath: xpath expression 
-        * @param quiet: don't throw exception if zero nodes found 
-        * @param ns: explicitly specify XML namespaces to use and their prefixes 
+        * @param xpath: xpath expression
+        * @param quiet: don't throw exception if zero nodes found
+        * @param ns: explicitly specify XML namespaces to use and their prefixes
         *
         * For historical reasons, this only works for *element* nodes.
         * Use the XPath function if you need other kinds of nodes.
-        */ 
+        */
         TConstNodes Nodes(TZtStringBuf xpath, bool quiet = false, const TNamespacesForXPath& ns = TNamespacesForXPath()) const;
- 
-        /** 
+
+        /**
         * get all element nodes matching given xpath expression
         * @param xpath: xpath expression
         * @param quiet: don't throw exception if zero nodes found
@@ -225,19 +225,19 @@ namespace NXml {
 
         /**
         * get the first element node matching given xpath expression
-        * @param xpath: path to node (from current node) 
-        * @param quiet: don't throw exception if node not found, 
+        * @param xpath: path to node (from current node)
+        * @param quiet: don't throw exception if node not found,
         *               return null node (@see IsNull())
-        * @param ns: explicitly specify XML namespaces to use and their prefixes 
+        * @param ns: explicitly specify XML namespaces to use and their prefixes
         *
         * For historical reasons, this only works for *element* nodes.
         * Use the XPath function if you need other kinds of nodes.
-        */ 
+        */
         /// @todo: quiet should be default, empty nodeset is not an error
         TNode Node(TZtStringBuf xpath, bool quiet = false, const TNamespacesForXPath& ns = TNamespacesForXPath());
         TConstNode Node(TZtStringBuf xpath, bool quiet = false, const TNamespacesForXPath& ns = TNamespacesForXPath()) const;
- 
-        /** 
+
+        /**
         * get the first element node matching given xpath expression
         * @param xpath: path to node (from current node)
         * @param quiet: don't throw exception if node not found,
@@ -251,18 +251,18 @@ namespace NXml {
         TConstNode Node(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const;
 
         /**
-        * get node first child 
-        * @param name: child name 
+        * get node first child
+        * @param name: child name
         * @note if name is empty, returns the first child node of type "element"
         * @note returns null node if no child found
-        */ 
+        */
         TNode FirstChild(TZtStringBuf name);
         TConstNode FirstChild(TZtStringBuf name) const;
- 
+
         TNode FirstChild();
         TConstNode FirstChild() const;
 
-        /** 
+        /**
         * get parent node
         * throws exception if has no parent
         */
@@ -270,36 +270,36 @@ namespace NXml {
         TConstNode Parent() const;
 
         /**
-        * get node neighbour 
-        * @param name: neighbour name 
+        * get node neighbour
+        * @param name: neighbour name
         * @note if name is empty, returns the next sibling node of type "element"
         * @node returns null node if no neighbour found
-        */ 
+        */
         TNode NextSibling(TZtStringBuf name);
         TConstNode NextSibling(TZtStringBuf name) const;
- 
+
         TNode NextSibling();
         TConstNode NextSibling() const;
 
-        /** 
-        * create child node 
-        * @param name: child name 
-        * returns new empty node 
-        */ 
+        /**
+        * create child node
+        * @param name: child name
+        * returns new empty node
+        */
         TNode AddChild(TZtStringBuf name);
- 
-        /** 
-        * create child node with given value 
-        * @param name: child name 
-        * @param value: node value 
-        */ 
-        template <class T> 
+
+        /**
+        * create child node with given value
+        * @param name: child name
+        * @param value: node value
+        */
+        template <class T>
         typename std::enable_if<!std::is_convertible_v<T, TZtStringBuf>, TNode>::type
         AddChild(TZtStringBuf name, const T& value);
- 
+
         TNode AddChild(TZtStringBuf name, TZtStringBuf value);
 
-        /** 
+        /**
         * add child node, making recursive copy of original
         * @param node: node to copy from
         * returns added node
@@ -318,80 +318,80 @@ namespace NXml {
         TNode AddText(TStringBuf value);
 
         /**
-        * get node attribute 
-        * @param name: attribute name 
-        * throws exception if attribute not found 
-        */ 
-        template <class T> 
+        * get node attribute
+        * @param name: attribute name
+        * throws exception if attribute not found
+        */
+        template <class T>
         T Attr(TZtStringBuf name) const;
- 
-        /** 
-        * get node attribute 
-        * @param name: attribute name 
-        * returns default value if attribute not found 
-        */ 
-        template <class T> 
+
+        /**
+        * get node attribute
+        * @param name: attribute name
+        * returns default value if attribute not found
+        */
+        template <class T>
         T Attr(TZtStringBuf name, const T& defvalue) const;
- 
-        /** 
-        * get node attribute 
-        * @param name: attribute name 
-        * @param value: return-value 
-        * throws exception if attribute not found 
-        */ 
-        template <class T> 
+
+        /**
+        * get node attribute
+        * @param name: attribute name
+        * @param value: return-value
+        * throws exception if attribute not found
+        */
+        template <class T>
         void Attr(TZtStringBuf name, T& value) const;
- 
-        /** 
-        * get node attribute 
-        * @param name: attribute name 
-        * @param defvalue: default value 
-        * @param value: return-value 
-        * returns default value if attribute not found, attr value otherwise 
-        */ 
-        template <class T> 
+
+        /**
+        * get node attribute
+        * @param name: attribute name
+        * @param defvalue: default value
+        * @param value: return-value
+        * returns default value if attribute not found, attr value otherwise
+        */
+        template <class T>
         void Attr(TZtStringBuf name, T& value, const T& defvalue) const;
- 
-        /** 
-        * get node value (text) 
-        * @throws exception if node is blank 
-        */ 
-        template <class T> 
+
+        /**
+        * get node value (text)
+        * @throws exception if node is blank
+        */
+        template <class T>
         T Value() const;
- 
-        /** 
-        * get node value 
-        * @param defvalue: default value 
-        * returns default value if node is blank 
-        */ 
-        template <class T> 
+
+        /**
+        * get node value
+        * @param defvalue: default value
+        * returns default value if node is blank
+        */
+        template <class T>
         T Value(const T& defvalue) const;
- 
-        /** 
-        * set node value 
-        * @param value: new text value 
-        */ 
+
+        /**
+        * set node value
+        * @param value: new text value
+        */
         template <class T>
         typename std::enable_if<!std::is_convertible_v<T, TStringBuf>, void>::type
         SetValue(const T& value);
- 
+
         void SetValue(TStringBuf value);
 
-        /** 
-        * set/reset node attribute value, 
-        * if attribute does not exist, it'll be created 
-        * @param name: attribute name 
-        * @param value: attribute value 
-        */ 
+        /**
+        * set/reset node attribute value,
+        * if attribute does not exist, it'll be created
+        * @param name: attribute name
+        * @param value: attribute value
+        */
         template<class T>
         typename std::enable_if<!std::is_convertible_v<T, TZtStringBuf>, void>::type
         SetAttr(TZtStringBuf name, const T& value);
- 
+
         void SetAttr(TZtStringBuf name, TZtStringBuf value);
 
         void SetAttr(TZtStringBuf name);
 
-        /** 
+        /**
         * delete node attribute
         * @param name: attribute name
         */
@@ -414,10 +414,10 @@ namespace NXml {
         TString Name() const;
 
         /**
-        * get node xpath 
-        */ 
+        * get node xpath
+        */
         TString Path() const;
- 
+
         /**
         * get node xml representation
         */
@@ -445,15 +445,15 @@ namespace NXml {
         */
         void Remove();
 
-        /** 
-        * constructs null node 
-        */ 
+        /**
+        * constructs null node
+        */
         TNode()
             : NodePointer(nullptr)
             , DocPointer(nullptr)
         {
         }
- 
+
     private:
         friend class TConstNodes;
 
@@ -462,30 +462,30 @@ namespace NXml {
             , DocPointer(doc)
         {
         }
- 
+
         TNode Find(xmlNode* start, TZtStringBuf name);
- 
+
         template <class T>
         void AttrInternal(TCharPtr& value, T& res, TStringBuf errContext) const;
- 
+
         void SaveInternal(IOutputStream& stream, TZtStringBuf enc, int options) const;
 
         xmlNode* NodePointer;
         xmlDoc* DocPointer;
-    }; 
- 
+    };
+
     class TConstNode {
-    public: 
-        friend class TDocument; 
-        friend class TConstNodes; 
+    public:
+        friend class TDocument;
+        friend class TConstNodes;
         friend class TNode;
-        /** 
-        * check if node is null 
-        */ 
+        /**
+        * check if node is null
+        */
         bool IsNull() const {
             return ActualNode.IsNull();
-        } 
- 
+        }
+
         bool IsElementNode() const {
             return ActualNode.IsElementNode();
         }
@@ -494,7 +494,7 @@ namespace NXml {
             return ActualNode.Parent();
         }
 
-        /** 
+        /**
         * Create xpath context to be used later for fast xpath evaluation.
         * @param nss: explicitly specify XML namespaces to use and their prefixes
         */
@@ -504,18 +504,18 @@ namespace NXml {
 
         /**
         * get all element nodes matching given xpath expression
-        * @param xpath: xpath expression 
-        * @param quiet: don't throw exception if zero nodes found 
+        * @param xpath: xpath expression
+        * @param quiet: don't throw exception if zero nodes found
         * @param ns: explicitly specify XML namespaces to use and their prefixes
         *
         * For historical reasons, this only works for *element* nodes.
         * Use the XPath function if you need other kinds of nodes.
-        */ 
+        */
         TConstNodes Nodes(TZtStringBuf xpath, bool quiet = false, const TNamespacesForXPath& ns = TNamespacesForXPath()) const {
             return ActualNode.Nodes(xpath, quiet, ns);
-        } 
- 
-        /** 
+        }
+
+        /**
         * get all element nodes matching given xpath expression
         * @param xpath: xpath expression
         * @param quiet: don't throw exception if zero nodes found
@@ -550,18 +550,18 @@ namespace NXml {
 
         /**
         * get the first element node matching given xpath expression
-        * @param xpath: path to node (from current node) 
-        * @param quiet: don't throw exception if node not found, 
+        * @param xpath: path to node (from current node)
+        * @param quiet: don't throw exception if node not found,
         *               return null node (@see IsNull())
         * @param ns: explicitly specify XML namespaces to use and their prefixes
         *
         * For historical reasons, this only works for *element* nodes.
         * Use the XPath function if you need other kinds of nodes.
-        */ 
+        */
         TConstNode Node(TZtStringBuf xpath, bool quiet = false, const TNamespacesForXPath& ns = TNamespacesForXPath()) const {
             return ActualNode.Node(xpath, quiet, ns);
-        } 
- 
+        }
+
         /**
         * get the first element node matching given xpath expression
         * @param xpath: path to node (from current node)
@@ -578,88 +578,88 @@ namespace NXml {
 
         TConstNode FirstChild(TZtStringBuf name) const {
             return ActualNode.FirstChild(name);
-        } 
- 
+        }
+
         TConstNode FirstChild() const {
             return ActualNode.FirstChild();
         }
 
-        /** 
-        * get node neighbour 
-        * @param name: neighbour name 
-        * throws exception if no neighbour found 
-        */ 
+        /**
+        * get node neighbour
+        * @param name: neighbour name
+        * throws exception if no neighbour found
+        */
         TConstNode NextSibling(TZtStringBuf name) const {
             return ActualNode.NextSibling(name);
-        } 
- 
+        }
+
         TConstNode NextSibling() const {
             return ActualNode.NextSibling();
         }
 
-        /** 
-        * get node attribute 
-        * @param name: attribute name 
-        * throws exception if attribute not found 
-        */ 
-        template <class T> 
+        /**
+        * get node attribute
+        * @param name: attribute name
+        * throws exception if attribute not found
+        */
+        template <class T>
         T Attr(TZtStringBuf name) const {
             return ActualNode.Attr<T>(name);
-        } 
- 
-        /** 
-        * get node attribute 
-        * @param name: attribute name 
-        * returns default value if attribute not found 
-        */ 
-        template <class T> 
+        }
+
+        /**
+        * get node attribute
+        * @param name: attribute name
+        * returns default value if attribute not found
+        */
+        template <class T>
         T Attr(TZtStringBuf name, const T& defvalue) const {
             return ActualNode.Attr(name, defvalue);
-        } 
- 
-        /** 
-        * get node attribute 
-        * @param name: attribute name 
-        * @param value: return-value 
-        * throws exception if attribute not found 
-        */ 
-        template <class T> 
+        }
+
+        /**
+        * get node attribute
+        * @param name: attribute name
+        * @param value: return-value
+        * throws exception if attribute not found
+        */
+        template <class T>
         void Attr(TZtStringBuf name, T& value) const {
             return ActualNode.Attr(name, value);
-        } 
- 
-        /** 
-        * get node attribute 
-        * @param name: attribute name 
-        * @param defvalue: default value 
-        * @param value: return-value 
-        * returns default value if attribute not found, attr value otherwise 
-        */ 
-        template <class T> 
+        }
+
+        /**
+        * get node attribute
+        * @param name: attribute name
+        * @param defvalue: default value
+        * @param value: return-value
+        * returns default value if attribute not found, attr value otherwise
+        */
+        template <class T>
         void Attr(TZtStringBuf name, T& value, const T& defvalue) const {
             return ActualNode.Attr(name, value, defvalue);
-        } 
- 
-        /** 
-        * get node value (text) 
-        * @throws exception if node is blank 
-        */ 
-        template <class T> 
+        }
+
+        /**
+        * get node value (text)
+        * @throws exception if node is blank
+        */
+        template <class T>
         T Value() const {
             return ActualNode.Value<T>();
-        } 
- 
-        /** 
-        * get node value 
-        * @param defvalue: default value 
-        * returns default value if node is blank 
-        */ 
-        template <class T> 
+        }
+
+        /**
+        * get node value
+        * @param defvalue: default value
+        * returns default value if node is blank
+        */
+        template <class T>
         T Value(const T& defvalue) const {
             return ActualNode.Value(defvalue);
-        } 
- 
-        /** 
+        }
+
+        /**
         * get node name
         */
         TString Name() const {
@@ -688,12 +688,12 @@ namespace NXml {
         }
 
         /**
-        * get node xpath 
-        */ 
+        * get node xpath
+        */
         TString Path() const {
             return ActualNode.Path();
-        } 
- 
+        }
+
         /**
         * get node xml representation
         */
@@ -706,13 +706,13 @@ namespace NXml {
             : ActualNode(node)
         {
         }
- 
+
         TNode ConstCast() const {
             return ActualNode;
         }
 
-    private: 
+    private:
         TNode ActualNode;
-    }; 
- 
+    };
+
 }

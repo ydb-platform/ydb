@@ -1,17 +1,17 @@
 LIBRARY()
- 
+
 OWNER(finder)
 
 SRCS(
-    xml-document.cpp 
+    xml-document.cpp
     xml-textreader.cpp
     xml-options.cpp
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/xml/init
-    contrib/libs/libxml 
+    contrib/libs/libxml
     library/cpp/string_utils/ztstrbuf
-) 
- 
-END() 
+)
+
+END()

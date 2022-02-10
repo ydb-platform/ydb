@@ -70,9 +70,9 @@ private:
     UNIT_TEST(TestUnique);
     UNIT_TEST(TestAddRetValue);
     UNIT_TEST(TestClear);
- 
+
     UNIT_TEST(TestIterateEmptyKey);
- 
+
     UNIT_TEST(TestTrieSet);
 
     UNIT_TEST(TestTrieForVectorInt64);
@@ -207,8 +207,8 @@ public:
     void TestUnique();
     void TestAddRetValue();
     void TestClear();
- 
-    void TestIterateEmptyKey(); 
+
+    void TestIterateEmptyKey();
 
     void TestTrieSet();
 
@@ -1042,24 +1042,24 @@ public:
         return RandomNumber<std::make_unsigned_t<T>>();
     }
 };
- 
-void TCompactTrieTest::TestIterateEmptyKey() { 
-    TBuffer trieBuffer; 
-    { 
-        TCompactTrieBuilder<char, ui32> builder; 
-        UNIT_ASSERT(builder.Add("", 1)); 
-        TBufferStream trieBufferO(trieBuffer); 
-        builder.Save(trieBufferO); 
-    } 
-    TCompactTrie<char, ui32> trie(TBlob::FromBuffer(trieBuffer)); 
-    ui32 val; 
-    UNIT_ASSERT(trie.Find("", &val)); 
-    UNIT_ASSERT(val == 1); 
-    TCompactTrie<char, ui32>::TConstIterator it = trie.Begin(); 
-    UNIT_ASSERT(it.GetKey().empty()); 
-    UNIT_ASSERT(it.GetValue() == 1); 
-} 
- 
+
+void TCompactTrieTest::TestIterateEmptyKey() {
+    TBuffer trieBuffer;
+    {
+        TCompactTrieBuilder<char, ui32> builder;
+        UNIT_ASSERT(builder.Add("", 1));
+        TBufferStream trieBufferO(trieBuffer);
+        builder.Save(trieBufferO);
+    }
+    TCompactTrie<char, ui32> trie(TBlob::FromBuffer(trieBuffer));
+    ui32 val;
+    UNIT_ASSERT(trie.Find("", &val));
+    UNIT_ASSERT(val == 1);
+    TCompactTrie<char, ui32>::TConstIterator it = trie.Begin();
+    UNIT_ASSERT(it.GetKey().empty());
+    UNIT_ASSERT(it.GetValue() == 1);
+}
+
 void TCompactTrieTest::TestTrieSet() {
     TBuffer buffer;
     {

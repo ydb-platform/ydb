@@ -569,7 +569,7 @@ RECURSE(
     jupyterhub
     jupyterhub-traefik-proxy
     jupytext
-    kaitaistruct
+    kaitaistruct 
     kazoo
     Keras-Preprocessing
     kiwisolver
@@ -621,7 +621,7 @@ RECURSE(
     memory-profiler
     mercurial
     mistune
-    mitmproxy
+    mitmproxy 
     mkdocs
     mkdocs-material
     mock
@@ -777,7 +777,7 @@ RECURSE(
     psycopg2
     ptpython
     ptyprocess
-    publicsuffix2
+    publicsuffix2 
     pure-eval
     pure-python-adb
     pure-sasl
@@ -842,7 +842,7 @@ RECURSE(
     pyOpenSSL
     pyparsing
     PyPDF2
-    pyperclip
+    pyperclip 
     PyPika
     pyproj
     pyre2
@@ -1158,7 +1158,7 @@ RECURSE(
     ws4py
     wsgi-intercept
     wsgi-profiler
-    wsproto
+    wsproto 
     wtf-peewee
     WTForms
     WTForms-JSON

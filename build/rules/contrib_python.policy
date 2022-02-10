@@ -62,7 +62,7 @@ ALLOW smarttv/droideka/proxy -> contrib/python/django/django-1.11
 ALLOW smarttv/droideka/tests -> contrib/python/django/django-1.11
 ALLOW smarttv/droideka/utils -> contrib/python/django/django-1.11
 ALLOW smarttv/droideka -> contrib/python/django/django-1.11
-ALLOW travel/avia/.* -> contrib/python/django/django-1.11
+ALLOW travel/avia/.* -> contrib/python/django/django-1.11 
 ALLOW travel/rasp/admin -> contrib/python/django/django-1.11
 ALLOW travel/rasp/library/python/common -> contrib/python/django/django-1.11
 ALLOW travel/rasp/library/python/sitemap -> contrib/python/django/django-1.11
@@ -146,7 +146,7 @@ ALLOW passport/infra/daemons/yasmsapi/db -> contrib/python/MySQL-python
 ALLOW testenv/core -> contrib/python/MySQL-python
 ALLOW testenv/recipes/ut -> contrib/python/MySQL-python
 # avia task to migrate from MySQL-python https://st.yandex-team.ru/RASPTICKETS-18201
-ALLOW travel/avia/.* -> contrib/python/MySQL-python
+ALLOW travel/avia/.* -> contrib/python/MySQL-python 
 ALLOW travel/library/recipe_utils -> contrib/python/MySQL-python
 ALLOW travel/rasp/admin -> contrib/python/MySQL-python
 ALLOW travel/rasp/library/common -> contrib/python/MySQL-python
@@ -252,12 +252,12 @@ ALLOW contrib/java/patched/com/android/tools/r8 -> contrib/java/patched/com/andr
 ALLOW contrib/java/patched/com/ryantenney/metrics/metrics-spring -> contrib/java/patched/com/ryantenney/metrics/metrics-spring
 ALLOW contrib/java/patched/io/leangen/graphql/spqr -> contrib/java/patched/io/leangen/graphql/spqr
 DENY .* -> contrib/java/patched
-
-# because library will not work without external dependencies - IBM MQ
-# See https://st.yandex-team.ru/CONTRIB-1854 and pymqi README for details
-ALLOW travel/avia -> contrib/python/pymqi
-DENY .* -> contrib/python/pymqi
-
+ 
+# because library will not work without external dependencies - IBM MQ 
+# See https://st.yandex-team.ru/CONTRIB-1854 and pymqi README for details 
+ALLOW travel/avia -> contrib/python/pymqi 
+DENY .* -> contrib/python/pymqi 
+ 
 # https://st.yandex-team.ru/CONTRIB-1839
 ALLOW datalens/backend/app/dls -> contrib/python/quart
 DENY .* -> contrib/python/quart

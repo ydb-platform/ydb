@@ -36,10 +36,10 @@ namespace NYql::NDqs {
         Record = std::move(proto);
     }
 
-    TEvGraphExecutionEvent::TEvGraphExecutionEvent(NDqProto::TGraphExecutionEvent& evt) {
-        Record = evt;
-    }
-
+    TEvGraphExecutionEvent::TEvGraphExecutionEvent(NDqProto::TGraphExecutionEvent& evt) { 
+        Record = evt; 
+    } 
+ 
     TEvPullDataRequest::TEvPullDataRequest(ui32 rowThreshold) {
         Record.SetRowThreshold(rowThreshold);
     }
@@ -47,8 +47,8 @@ namespace NYql::NDqs {
     TEvPullDataResponse::TEvPullDataResponse(NYql::NDqProto::TPullResponse& data) {
         Record.Swap(&data);
     }
-
-    TEvFullResultWriterStatusResponse::TEvFullResultWriterStatusResponse(NDqProto::TFullResultWriterStatusResponse& data) {
-        Record.CopyFrom(data);
-    }
+ 
+    TEvFullResultWriterStatusResponse::TEvFullResultWriterStatusResponse(NDqProto::TFullResultWriterStatusResponse& data) { 
+        Record.CopyFrom(data); 
+    } 
 }

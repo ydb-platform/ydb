@@ -228,7 +228,7 @@ public:
         });
     }
 
-    NThreading::TFuture<TResult>
+    NThreading::TFuture<TResult> 
     ExecutePlan(const TString& sessionId, NDqs::IDqsExecutionPlanner& plan, const TVector<TString>& columns,
                 const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
                 const TDqSettings::TPtr& settings,
@@ -257,12 +257,12 @@ public:
             *queryPB.AddColumns() = column;
         }
         settings->Save(queryPB);
-
-        {
+ 
+        { 
             auto& secParams = *queryPB.MutableSecureParams();
-            for (const auto&[k, v] : secureParams) {
-                secParams[k] = v;
-            }
+            for (const auto&[k, v] : secureParams) { 
+                secParams[k] = v; 
+            } 
         }
 
         {

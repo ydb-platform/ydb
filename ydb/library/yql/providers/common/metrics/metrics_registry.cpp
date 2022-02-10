@@ -46,7 +46,7 @@ private:
         label->SetValue(labelValue);
     }
 
-    void OnHistogram(const TString& labelName, const TString& labelValue, NMonitoring::IHistogramSnapshotPtr snapshot, bool) override {
+    void OnHistogram(const TString& labelName, const TString& labelValue, NMonitoring::IHistogramSnapshotPtr snapshot, bool) override { 
         if (Invalidate_) {
             return;
         }
@@ -195,7 +195,7 @@ public:
                 : false);
     }
 
-    IMetricsRegistryPtr Personalized(const TString& userName) const override {
+    IMetricsRegistryPtr Personalized(const TString& userName) const override { 
         return new TMetricsRegistryImpl(Sensors_, MakeMaybe(userName));
     }
 

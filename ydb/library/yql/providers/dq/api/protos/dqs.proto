@@ -3,7 +3,7 @@ option cc_enable_arenas = true;
 
 package NYql.NDqProto;
 
-import "google/protobuf/any.proto";
+import "google/protobuf/any.proto"; 
 import "ydb/library/yql/dq/proto/dq_transport.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/library/yql/providers/dq/api/protos/service.proto";
@@ -205,41 +205,41 @@ message TReadyState {
     repeated NActorsProto.TActorId ActorId = 5; // used for compute actor
 }
 
-enum EGraphExecutionEventType {
-    SYNC = 0;
-    START = 1;
-    FAIL = 2;
-    SUCCESS = 3;
+enum EGraphExecutionEventType { 
+    SYNC = 0; 
+    START = 1; 
+    FAIL = 2; 
+    SUCCESS = 3; 
     FULL_RESULT = 4;
-}
-
-message TGraphExecutionEvent {
-    EGraphExecutionEventType EventType = 1;
-    google.protobuf.Any Message = 2;
+} 
+ 
+message TGraphExecutionEvent { 
+    EGraphExecutionEventType EventType = 1; 
+    google.protobuf.Any Message = 2; 
     optional string ErrorMessage = 3;
-
-    message TMap {
-        map<string, bytes> Data = 1;
-    }
-
-    message TExecuteGraphDescriptor {
+ 
+    message TMap { 
+        map<string, bytes> Data = 1; 
+    } 
+ 
+    message TExecuteGraphDescriptor { 
         TMap SecureParams = 1;
         TMap GraphParams = 2;
-    }
+    } 
 
     message TFullResultDescriptor {
         bytes ResultType = 1;
     }
-}
-
-message TFullResultWriterStatusRequest {
-}
-
-message TFullResultWriterStatusResponse {
-    uint64 BytesReceived = 1;
-    optional string ErrorMessage = 2;
-}
-
+} 
+ 
+message TFullResultWriterStatusRequest { 
+} 
+ 
+message TFullResultWriterStatusResponse { 
+    uint64 BytesReceived = 1; 
+    optional string ErrorMessage = 2; 
+} 
+ 
 message TDqTaskPrepareResult {
     bool Result = 1;
     repeated TMetric Metric = 2;

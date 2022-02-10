@@ -55,10 +55,10 @@ void TDqIntegrationBase::FillSinkSettings(const TExprNode& node, ::google::proto
 }
 
 void TDqIntegrationBase::Annotate(const TExprNode& node, THashMap<TString, TString>& params) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     Y_UNUSED(params);
-}
-
+} 
+ 
 bool TDqIntegrationBase::PrepareFullResultTableParams(const TExprNode& root, TExprContext& ctx, THashMap<TString, TString>& params, THashMap<TString, TString>& secureParams) {
     Y_UNUSED(root);
     Y_UNUSED(ctx);

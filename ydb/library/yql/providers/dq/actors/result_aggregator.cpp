@@ -94,7 +94,7 @@ private:
         YQL_LOG_CTX_SCOPE(TraceId);                             \
         YQL_LOG(DEBUG) << "Unexpected event " << ( #TEvType );  \
     })
-
+ 
     STRICT_STFUNC(Handler, {
         HFunc(TEvPullResult, OnPullResult);
         HFunc(TEvReadyState, OnReadyState);
@@ -114,7 +114,7 @@ private:
         cFunc(TEvents::TEvGone::EventType, OnFullResultWriterShutdown)
     })
 
-
+ 
     STRICT_STFUNC(ShutdownHandler, {
         HFunc(TEvents::TEvGone, OnShutdownQueryResult);
         HANDLER_STUB(TEvPullResult)
@@ -127,7 +127,7 @@ private:
         HANDLER_STUB(TEvents::TEvUndelivered)
         HANDLER_STUB(TEvents::TEvWakeup)
     })
-
+ 
     void DoPassAway() override {
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_LOG(DEBUG) << __FUNCTION__;
@@ -147,7 +147,7 @@ private:
         if (PullRequestTimeout && now - PullRequestStartTime > PullRequestTimeout) {
             OnError("Timeout " + ToString(SourceID.NodeId()), true, true);
         }
-
+ 
         if (PingTimeout && now - PingStartTime > PingTimeout) {
             OnError("PingTimeout " + ToString(SourceID.NodeId()), true, true);
         }
@@ -176,7 +176,7 @@ private:
         AddCriticalEventType(TEvents::TEvWakeup::EventType);
         AddCriticalEventType(TEvPingResponse::EventType);
     }
-
+ 
     void OnPullResult(TEvPullResult::TPtr&, const TActorContext&) {
         YQL_LOG_CTX_SCOPE(TraceId);
         PullRequestStartTime = TInstant::Now();
@@ -274,17 +274,17 @@ private:
                         issue.Severity = TSeverityIds::S_WARNING;
                         Finish(/*truncated = */ true, {issue});
                     }
-                }
-            }
+                } 
+            } 
         }
     }
-
+ 
     void FlushCurrent() {
         YQL_LOG(DEBUG) << __FUNCTION__;
         YQL_ENSURE(!Truncated);
         YQL_ENSURE(!FullResultWriterID);
         YQL_ENSURE(Settings->EnableFullResultWrite.Get().GetOrElse(false));
-
+ 
         NDqProto::TGraphExecutionEvent record;
         record.SetEventType(NDqProto::EGraphExecutionEventType::FULL_RESULT);
         NDqProto::TGraphExecutionEvent::TFullResultDescriptor payload;
@@ -294,7 +294,7 @@ private:
         Synchronize<TEvGraphExecutionEvent>([this](TEvGraphExecutionEvent::TPtr& ev) {
             Y_VERIFY(ev->Get()->Record.GetEventType() == NYql::NDqProto::EGraphExecutionEventType::SYNC);
             YQL_LOG_CTX_SCOPE(TraceId);
-
+ 
             if (auto msg = ev->Get()->Record.GetErrorMessage()) {
                 OnError(msg, false, true);
             } else {
@@ -303,10 +303,10 @@ private:
                 FullResultWriterID = NActors::ActorIdFromProto(fullResultWriterProto);
                 Truncated = true;
                 WriteAllDataPartsToFullResultTable();
-            }
+            } 
         });
     }
-
+ 
     bool CanSendToFullResultWriter() {
         // TODO Customize
         return FullResultSentBytes - FullResultReceivedBytes <= 32_MB;
@@ -328,11 +328,11 @@ private:
                 YQL_LOG(DEBUG) << "Received error message: " << ev->Get()->Record.GetErrorMessage();
                 OnError(ev->Get()->Record.GetErrorMessage(), false, false);
                 return;
-            }
+            } 
             callback();
         });
     }
-
+ 
     void WriteAllDataPartsToFullResultTable() {
         while (FullResultSentDataParts < DataParts.size() && CanSendToFullResultWriter()) {
             UnsafeWriteToFullResultTable(DataParts[FullResultSentDataParts]);
@@ -348,7 +348,7 @@ private:
             WriteAllDataPartsToFullResultTable();
         });
     }
-
+ 
     void WriteToFullResultTable(TAutoPtr<NDqProto::TData> data) {
         if (CanSendToFullResultWriter()) {
             UnsafeWriteToFullResultTable(*data);
@@ -358,7 +358,7 @@ private:
             WriteToFullResultTable(data);
         });
     }
-
+ 
     void UnsafeWriteToFullResultTable(const NDqProto::TData& data) {
         NDqProto::TPullResponse response;
         response.SetResponseType(EPullResponseType::CONTINUE);
@@ -401,47 +401,47 @@ private:
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_ENSURE(!ev->Get()->Record.HasResultSet() && ev->Get()->Record.GetYson().empty());
         YQL_LOG(DEBUG) << "Shutting down TResultAggregator";
-
+ 
         BlockingActors.clear();
         if (FullResultWriterID) {
             BlockingActors.insert(FullResultWriterID);
             Send(FullResultWriterID, MakeHolder<TEvents::TEvPoison>());
         }
-
+ 
         YQL_LOG(DEBUG) << "Waiting for " << BlockingActors.size() << " blocking actors";
 
         QueryResponse.Reset(ev->Release().Release());
         Become(&TResultAggregator::ShutdownHandler);
         Send(SelfId(), MakeHolder<TEvents::TEvGone>());
     }
-
+ 
     void OnShutdownQueryResult(TEvents::TEvGone::TPtr& ev, const TActorContext&) {
         YQL_LOG_CTX_SCOPE(TraceId);
         auto iter = BlockingActors.find(ev->Sender);
         if (iter != BlockingActors.end()) {
             BlockingActors.erase(iter);
         }
-
+ 
         YQL_LOG(DEBUG) << "Shutting down TResultAggregator, " << BlockingActors.size() << " blocking actors left";
-
+ 
         if (BlockingActors.empty()) {
             EndOnQueryResult();
         }
     }
-
+ 
     void EndOnQueryResult() {
         YQL_LOG(DEBUG) << __FUNCTION__;
         NDqProto::TQueryResponse result = QueryResponse->Record;
-
+ 
         YQL_ENSURE(!result.HasResultSet() && result.GetYson().empty());
         FlushCounters(result);
-
+ 
         if (ResultYsonWriter) {
             ResultYsonWriter->OnEndList();
             ResultYsonWriter.Destroy();
         }
         ResultYsonOut.Destroy();
-
+ 
         *result.MutableYson() = ResultYson;
 
         if (!FinishIssues.Empty()) {
@@ -486,11 +486,11 @@ private:
     THashSet<TActorId> BlockingActors;
     THolder<TEvQueryResponse> QueryResponse;
 };
-
+ 
 class TResultPrinter: public TActor<TResultPrinter> {
 public:
     static constexpr char ActorName[] = "YQL_DQ_RESULT_PRINTER";
-
+ 
     TResultPrinter(IOutputStream& output, NThreading::TPromise<void>& promise)
         : TActor<TResultPrinter>(&TResultPrinter::Handler)
         , Output(output)

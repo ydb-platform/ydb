@@ -118,12 +118,12 @@ namespace {
             public TIntrusiveListItem<TVal>,
             public TObjectFromPool<TVal>
         {
-            // NOTE Constructor must be user-defined (and not =default) here 
-            // because TVal objects are created in the UB-capable placement 
-            // TObjectFromPool::new operator that stores data in a memory 
-            // allocated for the object. Without user defined constructor 
-            // zero-initialization takes place in TVal() expression and the 
-            // data is overwritten. 
+            // NOTE Constructor must be user-defined (and not =default) here
+            // because TVal objects are created in the UB-capable placement
+            // TObjectFromPool::new operator that stores data in a memory
+            // allocated for the object. Without user defined constructor
+            // zero-initialization takes place in TVal() expression and the
+            // data is overwritten.
             TVal() {
             }
         };

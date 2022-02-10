@@ -1,4 +1,4 @@
-#include "thread_helper.h" 
+#include "thread_helper.h"
 
 #include <util/generic/singleton.h>
 

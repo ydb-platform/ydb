@@ -46,15 +46,15 @@ THttpHeaders::THttpHeaders(IInputStream* stream) {
     TString header;
     TString line;
 
-    bool rdOk = stream->ReadLine(header); 
-    while (rdOk && !header.empty()) { 
-        rdOk = stream->ReadLine(line); 
+    bool rdOk = stream->ReadLine(header);
+    while (rdOk && !header.empty()) {
+        rdOk = stream->ReadLine(line);
 
-        if (rdOk && ((line[0] == ' ') || (line[0] == '\t'))) { 
-            header += line; 
-        } else { 
+        if (rdOk && ((line[0] == ' ') || (line[0] == '\t'))) {
+            header += line;
+        } else {
             AddHeader(THttpInputHeader(header));
-            header = line; 
+            header = line;
         }
     }
 }

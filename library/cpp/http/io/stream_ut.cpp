@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         const char* body = "<html>Hello</html>";
         httpOut << body;
         UNIT_ASSERT_VALUES_EQUAL(str.size(), 0u);
- 
+
         httpOut.Flush();
         UNIT_ASSERT_VALUES_EQUAL(checkStr.size(), str.size());
     }

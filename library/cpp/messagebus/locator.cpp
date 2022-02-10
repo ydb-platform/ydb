@@ -242,7 +242,7 @@ namespace NBus {
             --last;
             Y_ASSERT(Items.end() != last);
             Y_ASSERT(last->ServiceId == serviceId);
- 
+
             TItem& beg = const_cast<TItem&>(*first);
             beg.Addr = last->Addr;
         }

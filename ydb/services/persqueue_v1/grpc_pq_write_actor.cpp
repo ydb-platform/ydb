@@ -1,6 +1,6 @@
 #include "grpc_pq_actor.h"
 #include "grpc_pq_write.h"
-#include "grpc_pq_codecs.h" 
+#include "grpc_pq_codecs.h"
 
 #include <ydb/core/persqueue/pq_database.h>
 #include <ydb/core/persqueue/write_meta.h>
@@ -19,8 +19,8 @@
 using namespace NActors;
 using namespace NKikimrClient;
 
- 
- 
+
+
 namespace NKikimr {
 using namespace NSchemeCache;
 
@@ -35,44 +35,44 @@ Ydb::PersQueue::V1::Codec CodecByName(const TString& codec) {
     return codecIt != codecsByName.end() ? codecIt->second : Ydb::PersQueue::V1::CODEC_UNSPECIFIED;
 }
 
-template <> 
-void FillExtraFieldsForDataChunk( 
-    const Ydb::PersQueue::V1::StreamingWriteClientMessage::InitRequest& init, 
-    NKikimrPQClient::TDataChunk& data, 
-    TString& server, 
-    TString& ident, 
-    TString& logType, 
-    TString& file 
-) { 
-    for (const auto& item : init.session_meta()) { 
-        if (item.first == "server") { 
-            server = item.second; 
-        } else if (item.first == "ident") { 
-            ident = item.second; 
-        } else if (item.first == "logtype") { 
-            logType = item.second; 
-        } else if (item.first == "file") { 
-            file = item.second; 
-        } else { 
-            auto res = data.MutableExtraFields()->AddItems(); 
-            res->SetKey(item.first); 
-            res->SetValue(item.second); 
-        } 
-    } 
-} 
- 
-template <> 
-void FillChunkDataFromReq( 
-    NKikimrPQClient::TDataChunk& proto, 
-    const Ydb::PersQueue::V1::StreamingWriteClientMessage::WriteRequest& writeRequest, 
-    const i32 messageIndex 
-) { 
-    proto.SetSeqNo(writeRequest.sequence_numbers(messageIndex)); 
-    proto.SetCreateTime(writeRequest.created_at_ms(messageIndex)); 
-    proto.SetCodec(writeRequest.blocks_headers(messageIndex).front()); 
-    proto.SetData(writeRequest.blocks_data(messageIndex)); 
-} 
- 
+template <>
+void FillExtraFieldsForDataChunk(
+    const Ydb::PersQueue::V1::StreamingWriteClientMessage::InitRequest& init,
+    NKikimrPQClient::TDataChunk& data,
+    TString& server,
+    TString& ident,
+    TString& logType,
+    TString& file
+) {
+    for (const auto& item : init.session_meta()) {
+        if (item.first == "server") {
+            server = item.second;
+        } else if (item.first == "ident") {
+            ident = item.second;
+        } else if (item.first == "logtype") {
+            logType = item.second;
+        } else if (item.first == "file") {
+            file = item.second;
+        } else {
+            auto res = data.MutableExtraFields()->AddItems();
+            res->SetKey(item.first);
+            res->SetValue(item.second);
+        }
+    }
+}
+
+template <>
+void FillChunkDataFromReq(
+    NKikimrPQClient::TDataChunk& proto,
+    const Ydb::PersQueue::V1::StreamingWriteClientMessage::WriteRequest& writeRequest,
+    const i32 messageIndex
+) {
+    proto.SetSeqNo(writeRequest.sequence_numbers(messageIndex));
+    proto.SetCreateTime(writeRequest.created_at_ms(messageIndex));
+    proto.SetCodec(writeRequest.blocks_headers(messageIndex).front());
+    proto.SetData(writeRequest.blocks_data(messageIndex));
+}
+
 namespace NGRpcProxy {
 namespace V1 {
 
@@ -316,14 +316,14 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     PeerName = event->PeerName;
 
     SourceId = init.message_group_id();
-    TString encodedSourceId; 
-    try { 
+    TString encodedSourceId;
+    try {
         encodedSourceId = NPQ::NSourceIdEncoding::Encode(SourceId);
-    } catch (yexception& e) { 
-        CloseSession(TStringBuilder() << "incorrect sourceId \"" << SourceId << "\": " << e.what(),  PersQueue::ErrorCode::BAD_REQUEST, ctx); 
-        return; 
+    } catch (yexception& e) {
+        CloseSession(TStringBuilder() << "incorrect sourceId \"" << SourceId << "\": " << e.what(),  PersQueue::ErrorCode::BAD_REQUEST, ctx);
+        return;
     }
-    EscapedSourceId = HexEncode(encodedSourceId); 
+    EscapedSourceId = HexEncode(encodedSourceId);
 
     TString s = TopicConverter->GetClientsideName() + encodedSourceId;
     Hash = MurmurHash<ui32>(s.c_str(), s.size(), MURMUR_ARRAY_SEED);
@@ -950,7 +950,7 @@ void TWriteSessionActor::GenerateNextWriteRequest(const TActorContext& ctx) {
     i64 diff = 0;
     auto addData = [&](const StreamingWriteClientMessage::WriteRequest& writeRequest, const i32 messageIndex) {
         auto w = request.MutablePartitionRequest()->AddCmdWrite();
-        w->SetData(GetSerializedData(InitMeta, writeRequest, messageIndex)); 
+        w->SetData(GetSerializedData(InitMeta, writeRequest, messageIndex));
         w->SetSeqNo(writeRequest.sequence_numbers(messageIndex));
         w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(SourceId));
         w->SetCreateTimeMS(writeRequest.created_at_ms(messageIndex));

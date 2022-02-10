@@ -28,17 +28,17 @@ TProcessingResult ProcessMetaCacheAllTopicsResponse(NPqMetaCacheV2::TEvPqNewMeta
 TProcessingResult ProcessMetaCacheSingleTopicsResponse(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry);
 
 // Worker actor creation
-IActor* CreateMessageBusServerPersQueue( 
-    TBusMessageContext& msg, 
-    const TActorId& schemeCache, 
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory = nullptr 
-); 
-IActor* CreateActorServerPersQueue( 
-    const TActorId& parentId, 
-    const NKikimrClient::TPersQueueRequest& request, 
-    const TActorId& schemeCache, 
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory = nullptr 
-); 
+IActor* CreateMessageBusServerPersQueue(
+    TBusMessageContext& msg,
+    const TActorId& schemeCache,
+    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory = nullptr
+);
+IActor* CreateActorServerPersQueue(
+    const TActorId& parentId,
+    const NKikimrClient::TPersQueueRequest& request,
+    const TActorId& schemeCache,
+    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory = nullptr
+);
 
 
 NKikimrClient::TResponse CreateErrorReply(EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason);

@@ -17,7 +17,7 @@ TEST_SRCS(
     test_generic_messaging.py
     test_fifo_messaging.py
     test_multinode_cluster.py
-    test_multiplexing_tables_format.py 
+    test_multiplexing_tables_format.py
     test_ping.py
     test_polling.py
     test_queue_attributes_validation.py
@@ -50,7 +50,7 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
-    ydb/tests/library/sqs 
+    ydb/tests/library/sqs
     contrib/python/xmltodict
     contrib/python/boto3
     contrib/python/botocore

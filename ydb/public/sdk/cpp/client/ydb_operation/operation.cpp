@@ -1,9 +1,9 @@
-#include "operation.h" 
+#include "operation.h"
 
-#define INCLUDE_YDB_INTERNAL_H 
+#define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
-#undef INCLUDE_YDB_INTERNAL_H 
- 
+#undef INCLUDE_YDB_INTERNAL_H
+
 /* Headers below used to instantiate concrete 'Get' & 'List' methods */
 #include <ydb/public/sdk/cpp/client/ydb_export/export.h>
 #include <ydb/public/sdk/cpp/client/ydb_import/import.h>

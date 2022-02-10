@@ -2,7 +2,7 @@ UNITTEST()
 
 OWNER(
     g:kikimr
-    g:logbroker 
+    g:logbroker
 )
 
 IF (SANITIZER_TYPE)

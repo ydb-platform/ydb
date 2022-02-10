@@ -6,7 +6,7 @@ OWNER(
 )
 
 SRCS(
-    endpoints.cpp 
+    endpoints.cpp
 )
 
 PEERDIR(
@@ -15,7 +15,7 @@ PEERDIR(
 )
 
 END()
- 
+
 RECURSE_FOR_TESTS(
     ut
 )

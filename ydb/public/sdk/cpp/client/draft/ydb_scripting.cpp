@@ -1,10 +1,10 @@
 #include "ydb_scripting.h"
 
-#define INCLUDE_YDB_INTERNAL_H 
+#define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h>
-#undef INCLUDE_YDB_INTERNAL_H 
- 
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_scripting.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
@@ -322,7 +322,7 @@ TParamsBuilder TScriptingClient::GetParamsBuilder() {
 TAsyncExecuteYqlResult TScriptingClient::ExecuteYqlScript(const TString &query, NYdb::TParams&& params,
     const TExecuteYqlRequestSettings &settings)
 {
-    auto paramsPtr = params.Empty() ? nullptr : params.GetProtoMapPtr(); 
+    auto paramsPtr = params.Empty() ? nullptr : params.GetProtoMapPtr();
     return Impl_->ExecuteYqlScript(query, paramsPtr, settings);
 }
 
@@ -338,7 +338,7 @@ TAsyncExecuteYqlResult TScriptingClient::ExecuteYqlScript(const TString &query, 
         using TProtoParamsType = const ::google::protobuf::Map<TString, Ydb::TypedValue>;
         return Impl_->ExecuteYqlScript<TProtoParamsType&>(
             query,
-            params.GetProtoMap(), 
+            params.GetProtoMap(),
             settings);
     }
 }

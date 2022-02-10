@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/services/persqueue_cluster_discovery/cluster_ordering)
 OWNER(
     radix
     g:kikimr
-    g:logbroker 
+    g:logbroker
 )
 
 SRCS(

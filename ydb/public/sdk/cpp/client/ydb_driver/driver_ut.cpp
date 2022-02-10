@@ -1,6 +1,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
- 
+
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
@@ -8,16 +8,16 @@
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
 
-#include <library/cpp/testing/unittest/registar.h> 
-#include <library/cpp/testing/unittest/tests_data.h> 
- 
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
+
 #include <atomic>
- 
-#include <google/protobuf/text_format.h> 
- 
-using namespace NYdb; 
-using namespace NYdb::NTable; 
- 
+
+#include <google/protobuf/text_format.h>
+
+using namespace NYdb;
+using namespace NYdb::NTable;
+
 namespace {
 
     class TMockDiscoveryService : public Ydb::Discovery::V1::DiscoveryService::Service {
@@ -77,72 +77,72 @@ namespace {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) { 
-    Y_UNIT_TEST(ConnectWrongPort) { 
-        auto driver = TDriver( 
-            TDriverConfig() 
-                .SetEndpoint("localhost:100")); 
-        auto client = NTable::TTableClient(driver); 
-        auto sessionFuture = client.CreateSession(); 
- 
-        UNIT_ASSERT(sessionFuture.Wait(TDuration::Seconds(10))); 
-    } 
- 
-    Y_UNIT_TEST(ConnectWrongPortRetry) { 
-        auto driver = TDriver( 
-            TDriverConfig() 
-                .SetEndpoint("localhost:100")); 
-        auto client = NTable::TTableClient(driver); 
- 
+Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
+    Y_UNIT_TEST(ConnectWrongPort) {
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint("localhost:100"));
+        auto client = NTable::TTableClient(driver);
+        auto sessionFuture = client.CreateSession();
+
+        UNIT_ASSERT(sessionFuture.Wait(TDuration::Seconds(10)));
+    }
+
+    Y_UNIT_TEST(ConnectWrongPortRetry) {
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint("localhost:100"));
+        auto client = NTable::TTableClient(driver);
+
         std::atomic_int counter = 0;
-        std::function<void(const NTable::TAsyncCreateSessionResult& future)> handler = 
-            [&handler, &counter, client] (const NTable::TAsyncCreateSessionResult& future) mutable { 
-                UNIT_ASSERT_EQUAL(future.GetValue().GetStatus(), EStatus::TRANSPORT_UNAVAILABLE); 
-                UNIT_ASSERT_EXCEPTION(future.GetValue().GetSession(), NYdb::TContractViolation); 
+        std::function<void(const NTable::TAsyncCreateSessionResult& future)> handler =
+            [&handler, &counter, client] (const NTable::TAsyncCreateSessionResult& future) mutable {
+                UNIT_ASSERT_EQUAL(future.GetValue().GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+                UNIT_ASSERT_EXCEPTION(future.GetValue().GetSession(), NYdb::TContractViolation);
                 ++counter;
                 if (counter.load() > 4) {
-                    return; 
-                } 
- 
-                auto f = client.CreateSession(); 
- 
-                f.Apply(handler).GetValueSync(); 
-            }; 
- 
-        client.CreateSession().Apply(handler).GetValueSync(); 
-        UNIT_ASSERT_EQUAL(counter, 5); 
-    } 
- 
-    Y_UNIT_TEST(TokenCharacters) { 
-        auto checkToken = [](const TString& token) { 
-            auto driver = TDriver( 
-                TDriverConfig() 
-                    .SetEndpoint("localhost:100") 
-                    .SetAuthToken(token)); 
-            auto client = NTable::TTableClient(driver); 
- 
-            auto result = client.CreateSession().GetValueSync(); 
- 
-            return result.GetStatus(); 
-        }; 
- 
-        TVector<TString> InvalidTokens = { 
-            TString('\t'), 
-            TString('\n'), 
-            TString('\r') 
-        }; 
-        for (auto& t : InvalidTokens) { 
-            UNIT_ASSERT_EQUAL(checkToken(t), EStatus::CLIENT_UNAUTHENTICATED); 
-        } 
- 
-        TVector<TString> ValidTokens = { 
-            TString("qwerty 1234 <>,.?/:;\"'\\|}{~`!@#$%^&*()_+=-"), 
-            TString() 
-        }; 
-        for (auto& t : ValidTokens) { 
-            UNIT_ASSERT_EQUAL(checkToken(t), EStatus::TRANSPORT_UNAVAILABLE); 
-        } 
-    } 
+                    return;
+                }
+
+                auto f = client.CreateSession();
+
+                f.Apply(handler).GetValueSync();
+            };
+
+        client.CreateSession().Apply(handler).GetValueSync();
+        UNIT_ASSERT_EQUAL(counter, 5);
+    }
+
+    Y_UNIT_TEST(TokenCharacters) {
+        auto checkToken = [](const TString& token) {
+            auto driver = TDriver(
+                TDriverConfig()
+                    .SetEndpoint("localhost:100")
+                    .SetAuthToken(token));
+            auto client = NTable::TTableClient(driver);
+
+            auto result = client.CreateSession().GetValueSync();
+
+            return result.GetStatus();
+        };
+
+        TVector<TString> InvalidTokens = {
+            TString('\t'),
+            TString('\n'),
+            TString('\r')
+        };
+        for (auto& t : InvalidTokens) {
+            UNIT_ASSERT_EQUAL(checkToken(t), EStatus::CLIENT_UNAUTHENTICATED);
+        }
+
+        TVector<TString> ValidTokens = {
+            TString("qwerty 1234 <>,.?/:;\"'\\|}{~`!@#$%^&*()_+=-"),
+            TString()
+        };
+        for (auto& t : ValidTokens) {
+            UNIT_ASSERT_EQUAL(checkToken(t), EStatus::TRANSPORT_UNAVAILABLE);
+        }
+    }
 
     Y_UNIT_TEST(UsingIpAddresses) {
         TPortManager pm;
@@ -181,4 +181,4 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
         auto session = sessionResult.GetSession();
         UNIT_ASSERT_VALUES_EQUAL(session.GetId(), "my-session-id");
     }
-} 
+}

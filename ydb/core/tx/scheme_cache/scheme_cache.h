@@ -145,10 +145,10 @@ struct TSchemeCacheNavigate {
         TVector<TChild> Children;
     };
 
-    struct TDirEntryInfo : public TAtomicRefCount<TDirEntryInfo>{ 
+    struct TDirEntryInfo : public TAtomicRefCount<TDirEntryInfo>{
         NKikimrSchemeOp::TDirEntry Info;
-    }; 
- 
+    };
+
     struct TDomainDescription : public TAtomicRefCount<TDomainDescription> {
         EKind Kind = KindUnknown;
         NKikimrSubDomains::TDomainDescription Description;

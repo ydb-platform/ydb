@@ -21,7 +21,7 @@ IInputStream* CreateDecompressorStream(TInputStreamVariant& inputStreamStorage, 
     default:
     //case Ydb::PersQueue::V1::CODEC_RAW:
     //case Ydb::PersQueue::V1::CODEC_UNSPECIFIED:
-        throw yexception() << "unsupported codec value : " << ui64(codec); 
+        throw yexception() << "unsupported codec value : " << ui64(codec);
     }
 }
 

@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_persqueue_core)
 
 OWNER(
     g:kikimr
-    g:logbroker 
+    g:logbroker
 )
 
 IF (SANITIZER_TYPE)
@@ -35,7 +35,7 @@ SRCS(
     read_session_ut.cpp
     basic_usage_ut.cpp
     compress_executor_ut.cpp
-    compression_ut.cpp 
+    compression_ut.cpp
     retry_policy_ut.cpp
     ut_utils.cpp
 )

@@ -1,11 +1,11 @@
 #pragma once
 
-#include "common.h" 
- 
-#define INCLUDE_YDB_INTERNAL_H 
+#include "common.h"
+
+#define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
-#undef INCLUDE_YDB_INTERNAL_H 
- 
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 
@@ -40,7 +40,7 @@ public:
         for (const auto& codec : readRule.SupportedCodecs_) {
             rrProps.add_supported_codecs((static_cast<Ydb::PersQueue::V1::Codec>(codec)));
         }
-        rrProps.set_service_type(readRule.ServiceType_); 
+        rrProps.set_service_type(readRule.ServiceType_);
     }
 
     template <class TRequest, class TSettings>

@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "read.h"
 #include "pq_l2_service.h"
 
@@ -81,8 +81,8 @@ public:
         : Cache(SizeInBytes(1024*1024)/MAX_BLOB_SIZE) // It's some "much bigger then we need" size here.
         , MaxSize(SizeInBytes(params.MaxSizeMB))
         , CurrentSize(0)
-        , KeepTime(params.KeepTime) 
-        , RetentionTime(TDuration::Zero()) 
+        , KeepTime(params.KeepTime)
+        , RetentionTime(TDuration::Zero())
         , Counters(countersGroup)
     {}
 

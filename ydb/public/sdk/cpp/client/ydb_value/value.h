@@ -1,10 +1,10 @@
 #pragma once
 
-#include <util/datetime/base.h> 
+#include <util/datetime/base.h>
 #include <util/generic/maybe.h>
 
-#include <memory> 
- 
+#include <memory>
+
 namespace Ydb {
     class Type;
     class Value;

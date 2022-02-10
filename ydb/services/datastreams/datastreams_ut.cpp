@@ -42,7 +42,7 @@ public:
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetFlushIntervalSec(1);
-        appConfig.MutablePQConfig()->AddClientServiceType()->SetName("data-streams"); 
+        appConfig.MutablePQConfig()->AddClientServiceType()->SetName("data-streams");
 
         MeteringFile = MakeHolder<TTempFileHandle>("meteringData.txt");
         appConfig.MutableMeteringConfig()->SetMeteringFilePath(MeteringFile->Name());
@@ -157,13 +157,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
- 
+
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_status(),
                                      YDS_V1::StreamDescription::ACTIVE);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_name(), streamName);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().write_quota_kb_per_sec(), 1024); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(), 24); 
- 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().write_quota_kb_per_sec(), 1024);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(), 24);
+
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards().size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(0).sequence_number_range().starting_sequence_number(), "0");
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(0).hash_key_range().starting_hash_key(), "0");

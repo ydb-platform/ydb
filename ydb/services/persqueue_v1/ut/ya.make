@@ -1,11 +1,11 @@
 UNITTEST_FOR(ydb/services/persqueue_v1)
 
-OWNER( 
-    alexnick 
+OWNER(
+    alexnick
     g:kikimr
-    g:logbroker 
-) 
- 
+    g:logbroker
+)
+
 CFLAGS(
     -DACTORLIB_HUGE_PB_SIZE
 )

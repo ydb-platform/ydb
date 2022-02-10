@@ -1,71 +1,71 @@
-#pragma once 
- 
-#include "endpoint_pool.h" 
- 
+#pragma once
+
+#include "endpoint_pool.h"
+
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h>
- 
+
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_client/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/core_facility/core_facility.h>
- 
-namespace NYdb { 
 
-class ICredentialsProvider; 
-class ICredentialsProviderFactory; 
- 
-// Represents state of driver for one particular database 
+namespace NYdb {
+
+class ICredentialsProvider;
+class ICredentialsProviderFactory;
+
+// Represents state of driver for one particular database
 class TDbDriverState
     : public std::enable_shared_from_this<TDbDriverState>
     , public ICoreFacility
 {
 public:
-    enum class ENotifyType : size_t { 
-        STOP = 0, 
-        COUNT = 1 // types count 
-    }; 
- 
+    enum class ENotifyType : size_t {
+        STOP = 0,
+        COUNT = 1 // types count
+    };
+
     using TCb = std::function<NThreading::TFuture<void>()>;
-    using TPtr = std::shared_ptr<TDbDriverState>; 
- 
-    TDbDriverState( 
+    using TPtr = std::shared_ptr<TDbDriverState>;
+
+    TDbDriverState(
         const TStringType& database,
         const TStringType& discoveryEndpoint,
-        EDiscoveryMode discoveryMode, 
+        EDiscoveryMode discoveryMode,
         bool enableSsl,
-        IInternalClient* client 
-    ); 
- 
+        IInternalClient* client
+    );
+
     void AddPeriodicTask(TPeriodicCb&& cb, TDuration period) override;
 
-    void AddCb(TCb&& cb, ENotifyType type); 
-    void ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const; 
-    void ForEachLocalEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const; 
-    void ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const; 
-    EBalancingPolicy GetBalancingPolicy() const; 
+    void AddCb(TCb&& cb, ENotifyType type);
+    void ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
+    void ForEachLocalEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
+    void ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
+    EBalancingPolicy GetBalancingPolicy() const;
     TStringType GetEndpoint() const;
     void SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider);
- 
+
     const TStringType Database;
     const TStringType DiscoveryEndpoint;
-    const EDiscoveryMode DiscoveryMode; 
+    const EDiscoveryMode DiscoveryMode;
     const bool EnableSsl;
-    std::shared_ptr<ICredentialsProvider> CredentialsProvider; 
-    IInternalClient* Client; 
-    TEndpointPool EndpointPool; 
-    // StopCb allow client to subscribe for notifications from lower layer 
+    std::shared_ptr<ICredentialsProvider> CredentialsProvider;
+    IInternalClient* Client;
+    TEndpointPool EndpointPool;
+    // StopCb allow client to subscribe for notifications from lower layer
     std::mutex NotifyCbsLock;
     std::array<std::vector<TCb>, static_cast<size_t>(ENotifyType::COUNT)> NotifyCbs;
-#ifndef YDB_GRPC_UNSECURE_AUTH 
-    std::shared_ptr<grpc::CallCredentials> CallCredentials; 
-#endif 
-    // Status of last discovery call, used in sync mode, coresponding mutex 
+#ifndef YDB_GRPC_UNSECURE_AUTH
+    std::shared_ptr<grpc::CallCredentials> CallCredentials;
+#endif
+    // Status of last discovery call, used in sync mode, coresponding mutex
     std::shared_mutex LastDiscoveryStatusRWLock;
-    TPlainStatus LastDiscoveryStatus; 
-    NSdkStats::TStatCollector StatCollector; 
-    TLog Log; 
-}; 
- 
-// Tracker allows to get driver state by database and credentials 
-class TDbDriverStateTracker { 
+    TPlainStatus LastDiscoveryStatus;
+    NSdkStats::TStatCollector StatCollector;
+    TLog Log;
+};
+
+// Tracker allows to get driver state by database and credentials
+class TDbDriverStateTracker {
     using TStateKey = std::tuple<TStringType, TStringType, TStringType, EDiscoveryMode, bool>;
     struct TStateKeyHash {
         size_t operator()(const TStateKey& k) const noexcept {
@@ -77,24 +77,24 @@ class TDbDriverStateTracker {
             return (h0 ^ h1 ^ h2 ^ h3);
         }
     };
-public: 
-    TDbDriverStateTracker(IInternalClient* client); 
-    TDbDriverState::TPtr GetDriverState( 
+public:
+    TDbDriverStateTracker(IInternalClient* client);
+    TDbDriverState::TPtr GetDriverState(
         TStringType database,
         TStringType DiscoveryEndpoint,
-        EDiscoveryMode discoveryMode, 
+        EDiscoveryMode discoveryMode,
         bool enableSsl,
-        std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory 
-    ); 
-    NThreading::TFuture<void> SendNotification( 
+        std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
+    );
+    NThreading::TFuture<void> SendNotification(
         TDbDriverState::ENotifyType type);
-    void SetMetricRegistry(NMonitoring::TMetricRegistry *sensorsRegistry); 
-private: 
-    IInternalClient* DiscoveryClient_; 
+    void SetMetricRegistry(NMonitoring::TMetricRegistry *sensorsRegistry);
+private:
+    IInternalClient* DiscoveryClient_;
     std::unordered_map<TStateKey, std::weak_ptr<TDbDriverState>, TStateKeyHash> States_;
     std::shared_mutex Lock_;
-}; 
- 
-using TDbDriverStatePtr = TDbDriverState::TPtr; 
- 
-} // namespace NYdb 
+};
+
+using TDbDriverStatePtr = TDbDriverState::TPtr;
+
+} // namespace NYdb

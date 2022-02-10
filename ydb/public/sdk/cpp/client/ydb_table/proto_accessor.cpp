@@ -1,28 +1,28 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
- 
-#include "table.h" 
- 
-namespace NYdb { 
- 
-const Ydb::TableStats::QueryStats& TProtoAccessor::GetProto(const NTable::TQueryStats& queryStats) { 
-    return queryStats.GetProto(); 
-} 
- 
-const Ydb::Table::DescribeTableResult& TProtoAccessor::GetProto(const NTable::TTableDescription& tableDescription) { 
-    return tableDescription.GetProto(); 
-} 
- 
-NTable::TQueryStats TProtoAccessor::FromProto(const Ydb::TableStats::QueryStats& queryStats) { 
-    return NTable::TQueryStats(queryStats); 
-} 
- 
-NTable::TTableDescription TProtoAccessor::FromProto(const Ydb::Table::CreateTableRequest& request) { 
-    return NTable::TTableDescription(request); 
-} 
- 
+
+#include "table.h"
+
+namespace NYdb {
+
+const Ydb::TableStats::QueryStats& TProtoAccessor::GetProto(const NTable::TQueryStats& queryStats) {
+    return queryStats.GetProto();
+}
+
+const Ydb::Table::DescribeTableResult& TProtoAccessor::GetProto(const NTable::TTableDescription& tableDescription) {
+    return tableDescription.GetProto();
+}
+
+NTable::TQueryStats TProtoAccessor::FromProto(const Ydb::TableStats::QueryStats& queryStats) {
+    return NTable::TQueryStats(queryStats);
+}
+
+NTable::TTableDescription TProtoAccessor::FromProto(const Ydb::Table::CreateTableRequest& request) {
+    return NTable::TTableDescription(request);
+}
+
 NTable::TIndexDescription TProtoAccessor::FromProto(const Ydb::Table::TableIndex& tableIndex) {
     return NTable::TIndexDescription(tableIndex);
-} 
+}
 
 NTable::TIndexDescription TProtoAccessor::FromProto(const Ydb::Table::TableIndexDescription& tableIndexDesc) {
     return NTable::TIndexDescription(tableIndexDesc);

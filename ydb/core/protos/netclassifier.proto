@@ -12,7 +12,7 @@ message TNetClassifierUpdaterConfig {
     optional uint32 RetryIntervalSeconds = 2;
     optional uint32 NetDataUpdateIntervalSeconds = 3;
     optional EFormat Format = 4 [default = TSV];
-    repeated string NetBoxTags = 5; 
+    repeated string NetBoxTags = 5;
 }
 
 message TSubnet {

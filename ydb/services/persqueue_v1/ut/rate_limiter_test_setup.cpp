@@ -9,88 +9,88 @@ using namespace NKikimr::Tests;
 
 namespace NKikimr::NPersQueueTests {
 
-TRateLimiterTestSetup::TRateLimiterTestSetup( 
-    NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity limitedEntity, 
-    double writeAccountQuota, 
-    double readAccountQuota, 
-    bool enableReadQuoting 
-) 
+TRateLimiterTestSetup::TRateLimiterTestSetup(
+    NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity limitedEntity,
+    double writeAccountQuota,
+    double readAccountQuota,
+    bool enableReadQuoting
+)
     : Server(new NPersQueue::TTestServer(false))
     , LimitedEntity(limitedEntity)
-    , WriteAccountQuota(writeAccountQuota) 
-    , ReadAccountQuota(readAccountQuota) 
+    , WriteAccountQuota(writeAccountQuota)
+    , ReadAccountQuota(readAccountQuota)
 {
-    Start(enableReadQuoting); 
+    Start(enableReadQuoting);
 }
 
-void TRateLimiterTestSetup::CreateTopic(const TString& path) { 
+void TRateLimiterTestSetup::CreateTopic(const TString& path) {
     const TString name = BuildFullTopicName(path, "dc1");
     const TString account = GetAccount(name);
 
     Cerr << "Creating topic \"" << name << "\"" << Endl;
     Server->AnnoyingClient->CreateTopic(name, 1);
 
-    CreateKesus(account); 
-    CreateQuotaResources(path, "write-quota", false); 
-    CreateQuotaResources(path, "read-quota", true); 
-} 
+    CreateKesus(account);
+    CreateQuotaResources(path, "write-quota", false);
+    CreateQuotaResources(path, "read-quota", true);
+}
 
-void TRateLimiterTestSetup::CreateConsumer(const TString& path) { 
-    const TString account = GetAccount(path); 
+void TRateLimiterTestSetup::CreateConsumer(const TString& path) {
+    const TString account = GetAccount(path);
 
-    Cerr << "Creating consumer \"" << path << "\"" << Endl; 
+    Cerr << "Creating consumer \"" << path << "\"" << Endl;
     Server->AnnoyingClient->CreateConsumer(path);
 
-    CreateKesus(account); 
-    CreateQuotaResources(path, "write-quota", true); 
-    CreateQuotaResources(path, "read-quota", false); 
-} 
- 
-void TRateLimiterTestSetup::CreateKesus(const TString& account) { 
-    const NMsgBusProxy::EResponseStatus createKesusResult = Server->AnnoyingClient->CreateKesus(QuotersRootPath, account);
-    UNIT_ASSERT_C(createKesusResult == NMsgBusProxy::MSTATUS_OK, createKesusResult); 
- 
-    const TString kesusPath = TStringBuilder() << QuotersRootPath << "/" << account; 
+    CreateKesus(account);
+    CreateQuotaResources(path, "write-quota", true);
+    CreateQuotaResources(path, "read-quota", false);
+}
 
-    Cerr << "Creating kesus with path=" << kesusPath << Endl; 
-    auto setAccountQuota = [&](const TString& quotaPrefix, double value) { 
+void TRateLimiterTestSetup::CreateKesus(const TString& account) {
+    const NMsgBusProxy::EResponseStatus createKesusResult = Server->AnnoyingClient->CreateKesus(QuotersRootPath, account);
+    UNIT_ASSERT_C(createKesusResult == NMsgBusProxy::MSTATUS_OK, createKesusResult);
+
+    const TString kesusPath = TStringBuilder() << QuotersRootPath << "/" << account;
+
+    Cerr << "Creating kesus with path=" << kesusPath << Endl;
+    auto setAccountQuota = [&](const TString& quotaPrefix, double value) {
         Cerr << "Adding quota for account kesus=" << kesusPath << " quota-path=" << quotaPrefix << " value=" << value << Endl;
         const auto statusCode = Server->AnnoyingClient->AddQuoterResource(
                 Server->CleverServer->GetRuntime(), kesusPath, quotaPrefix, value
         );
-        UNIT_ASSERT_C( 
-            statusCode == Ydb::StatusIds::SUCCESS || statusCode == Ydb::StatusIds::ALREADY_EXISTS, 
-            "Status: " << Ydb::StatusIds::StatusCode_Name(statusCode) 
-        ); 
-    }; 
-    setAccountQuota("write-quota", WriteAccountQuota); 
-    setAccountQuota("read-quota", ReadAccountQuota); 
-} 
- 
-void TRateLimiterTestSetup::CreateQuotaResources(const TString& path, const TString& quotaPrefix, bool excludeLastComponent) { 
-    TVector<TString> pathComponents = SplitPath(path);
-    if (pathComponents.size() <= 1) { 
-        return; 
-    }
-    TStringBuilder prefixPath; 
-    prefixPath << quotaPrefix; 
+        UNIT_ASSERT_C(
+            statusCode == Ydb::StatusIds::SUCCESS || statusCode == Ydb::StatusIds::ALREADY_EXISTS,
+            "Status: " << Ydb::StatusIds::StatusCode_Name(statusCode)
+        );
+    };
+    setAccountQuota("write-quota", WriteAccountQuota);
+    setAccountQuota("read-quota", ReadAccountQuota);
+}
 
-    auto firstIt = pathComponents.begin() + 1; // resource path must be without account 
-    auto lastIt = pathComponents.end() - (excludeLastComponent ? 1 : 0); 
- 
-    const TString account = GetAccount(path); 
-    const TString kesusPath = TStringBuilder() << QuotersRootPath << "/" << account; 
-    for (auto currentComponent = firstIt; currentComponent != lastIt; ++currentComponent) { 
-        prefixPath << "/" << *currentComponent; 
-        Cerr << "Adding quoter resource: \"" << prefixPath << "\"" << Endl; 
+void TRateLimiterTestSetup::CreateQuotaResources(const TString& path, const TString& quotaPrefix, bool excludeLastComponent) {
+    TVector<TString> pathComponents = SplitPath(path);
+    if (pathComponents.size() <= 1) {
+        return;
+    }
+    TStringBuilder prefixPath;
+    prefixPath << quotaPrefix;
+
+    auto firstIt = pathComponents.begin() + 1; // resource path must be without account
+    auto lastIt = pathComponents.end() - (excludeLastComponent ? 1 : 0);
+
+    const TString account = GetAccount(path);
+    const TString kesusPath = TStringBuilder() << QuotersRootPath << "/" << account;
+    for (auto currentComponent = firstIt; currentComponent != lastIt; ++currentComponent) {
+        prefixPath << "/" << *currentComponent;
+        Cerr << "Adding quoter resource: \"" << prefixPath << "\"" << Endl;
         const auto statusCode = Server->AnnoyingClient->AddQuoterResource(
                 Server->CleverServer->GetRuntime(), kesusPath, prefixPath
         );
-        UNIT_ASSERT_C( 
-            statusCode == Ydb::StatusIds::SUCCESS || statusCode == Ydb::StatusIds::ALREADY_EXISTS, 
-            "Status: " << Ydb::StatusIds::StatusCode_Name(statusCode) 
-        ); 
-    } 
+        UNIT_ASSERT_C(
+            statusCode == Ydb::StatusIds::SUCCESS || statusCode == Ydb::StatusIds::ALREADY_EXISTS,
+            "Status: " << Ydb::StatusIds::StatusCode_Name(statusCode)
+        );
+    }
 }
 
 /*
@@ -107,13 +107,13 @@ THolder<Ydb::PersQueue::IProducer> TRateLimiterTestSetup::StartProducer(const TS
 }
 */
 
-void TRateLimiterTestSetup::Start(bool enableReadQuoting) { 
-    InitServer(enableReadQuoting); 
+void TRateLimiterTestSetup::Start(bool enableReadQuoting) {
+    InitServer(enableReadQuoting);
     InitQuoting();
     WaitWritePQServiceInitialization();
 }
 
-void TRateLimiterTestSetup::InitServer(bool enableReadQuoting) { 
+void TRateLimiterTestSetup::InitServer(bool enableReadQuoting) {
     auto& settings = Server->ServerSettings;
 
     settings.PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
@@ -130,7 +130,7 @@ void TRateLimiterTestSetup::InitServer(bool enableReadQuoting) {
             NKikimrServices::QUOTER_SERVICE,
             NKikimrServices::QUOTER_PROXY,
             NKikimrServices::KESUS_TABLET,
-            NKikimrServices::PQ_READ_SPEED_LIMITER 
+            NKikimrServices::PQ_READ_SPEED_LIMITER
         },
         NActors::NLog::PRI_TRACE
     );

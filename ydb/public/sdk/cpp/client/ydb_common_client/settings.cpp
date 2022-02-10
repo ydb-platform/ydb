@@ -1,13 +1,13 @@
-#include "settings.h" 
- 
+#include "settings.h"
+
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/parser.h>
 
-namespace NYdb { 
- 
+namespace NYdb {
+
 TCommonClientSettings& TCommonClientSettings::AuthToken(const TMaybe<TStringType>& token) {
-    return CredentialsProviderFactory(CreateOAuthCredentialsProviderFactory(token.GetRef())); 
-} 
- 
+    return CredentialsProviderFactory(CreateOAuthCredentialsProviderFactory(token.GetRef()));
+}
+
 TCommonClientSettings GetClientSettingsFromConnectionString(const TStringType& connectionString) {
     TCommonClientSettings settings;
     auto connectionInfo = ParseConnectionString(connectionString);
@@ -17,4 +17,4 @@ TCommonClientSettings GetClientSettingsFromConnectionString(const TStringType& c
     return settings;
 }
 
-} // namespace NYdb 
+} // namespace NYdb

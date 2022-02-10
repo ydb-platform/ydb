@@ -67,8 +67,8 @@ message TPQConfig {
             WRITTEN_BLOB_SIZE = 1; // Written blob size, including additional data for compaction.
             USER_PAYLOAD_SIZE = 2; // Message + source id size.
         }
-        optional bool EnableReadQuoting = 4 [default = false]; 
-        optional uint64 ReadCreditBytes = 5 [default = 100000]; 
+        optional bool EnableReadQuoting = 4 [default = false];
+        optional uint64 ReadCreditBytes = 5 [default = 100000];
 
         optional uint64 QuotaWaitDurationMs = 6 [default = 0]; // 0 means infinity
 
@@ -85,18 +85,18 @@ message TPQConfig {
 
     optional string Root = 27 [default = "/Root/PQ"];
 
-    message TPQLibSettings { 
-        optional uint32 ThreadsCount = 1 [default = 1]; 
-        optional uint32 CompressionPoolThreads = 2 [default = 1]; 
-        optional uint32 GRpcThreads = 3 [default = 1]; 
-    } 
- 
-    message TMirrorConfig { 
-        optional bool Enabled = 1 [default = true]; 
-        optional TPQLibSettings PQLibSettings = 2; 
-    } 
- 
-    optional TMirrorConfig MirrorConfig = 29; 
+    message TPQLibSettings {
+        optional uint32 ThreadsCount = 1 [default = 1];
+        optional uint32 CompressionPoolThreads = 2 [default = 1];
+        optional uint32 GRpcThreads = 3 [default = 1];
+    }
+
+    message TMirrorConfig {
+        optional bool Enabled = 1 [default = true];
+        optional TPQLibSettings PQLibSettings = 2;
+    }
+
+    optional TMirrorConfig MirrorConfig = 29;
 
     optional uint64 MinWriteLatencyMs = 30 [default = 0];
 
@@ -108,20 +108,20 @@ message TPQConfig {
 
     repeated uint32 ValidWriteSpeedLimitsKbPerSec = 34;
 
-    message TReadMeteringConfig { 
-        message TPricing { 
-            optional string Name = 1 [default = "unknown"]; 
-        } 
-        repeated TPricing Pricing = 2; 
-        optional TPricing UnknownPricing = 3; 
-    } 
- 
+    message TReadMeteringConfig {
+        message TPricing {
+            optional string Name = 1 [default = "unknown"];
+        }
+        repeated TPricing Pricing = 2;
+        optional TPricing UnknownPricing = 3;
+    }
+
     message TBillingMeteringConfig {
         optional bool Enabled = 1 [default = false];
         optional uint64 FlushIntervalSec = 2 [default = 30];
-        optional TReadMeteringConfig Read = 3; 
+        optional TReadMeteringConfig Read = 3;
     }
- 
+
     optional TBillingMeteringConfig BillingMeteringConfig = 35;
 
     optional NKikimrNodeLimits.TNodeLimitsConfig.TPersQueueNodeConfig PersQueueNodeConfig = 36;
@@ -129,16 +129,16 @@ message TPQConfig {
     optional bool EnableProtoSourceIdInfo = 37 [default = false];
 
     optional string Database = 38;
- 
-    message TClientServiceType { 
-        optional string Name = 1 [default = "data-transfer"]; 
-        optional string ReadPricingName = 2; 
+
+    message TClientServiceType {
+        optional string Name = 1 [default = "data-transfer"];
+        optional string ReadPricingName = 2;
         optional uint32 MaxReadRulesCountPerTopic = 3 [default = 0]; // 0 means no limit. If you want to allow only zero count, then do not specify ClientServiceType.
-    } 
- 
-    repeated TClientServiceType ClientServiceType = 39; 
-    optional TClientServiceType DefaultClientServiceType = 40; 
-    optional bool DisallowDefaultClientServiceType = 43 [default = false]; 
+    }
+
+    repeated TClientServiceType ClientServiceType = 39;
+    optional TClientServiceType DefaultClientServiceType = 40;
+    optional bool DisallowDefaultClientServiceType = 43 [default = false];
 
     optional uint32 MetaCacheRefreshIntervalMilliSeconds = 41 [default = 10000];
     optional bool MetaCacheSkipVersionCheck = 42 [default = false];
@@ -153,30 +153,30 @@ message TChannelProfile {
     optional double WriteBandwidth = 6; // required bandwidth (in bytes/sec) for write requests
 }
 
-message TMirrorPartitionConfig { 
-    message TCredentials { 
-        message IamCredentials { 
-            optional string Endpoint = 1; 
-            optional string ServiceAccountKey = 2; 
-        } 
-        oneof Credentials { 
-            string OauthToken = 1; 
-            string JwtParams = 2; 
-            IamCredentials Iam = 3; 
-        } 
-    } 
- 
-    optional string Endpoint = 1; 
-    optional uint32 EndpointPort = 6; 
-    optional string Topic = 2; 
-    optional string Consumer = 3; 
-    optional uint64 ReadFromTimestampsMs = 5; 
-    optional TCredentials Credentials = 7; 
-    optional string Database = 8; 
-    optional bool UseSecureConnection = 9 [default = false]; 
-    optional bool SyncWriteTime = 10 [default = false]; 
-} 
- 
+message TMirrorPartitionConfig {
+    message TCredentials {
+        message IamCredentials {
+            optional string Endpoint = 1;
+            optional string ServiceAccountKey = 2;
+        }
+        oneof Credentials {
+            string OauthToken = 1;
+            string JwtParams = 2;
+            IamCredentials Iam = 3;
+        }
+    }
+
+    optional string Endpoint = 1;
+    optional uint32 EndpointPort = 6;
+    optional string Topic = 2;
+    optional string Consumer = 3;
+    optional uint64 ReadFromTimestampsMs = 5;
+    optional TCredentials Credentials = 7;
+    optional string Database = 8;
+    optional bool UseSecureConnection = 9 [default = false];
+    optional bool SyncWriteTime = 10 [default = false];
+}
+
 message TPartitionConfig {
     optional int32 MaxCountInPartition = 1 [default = 10000000];
     optional int64 MaxSizeInPartition = 2 [default = 1099511627776];
@@ -206,8 +206,8 @@ message TPartitionConfig {
     optional uint32 TotalPartitions = 13 [default = 1];
 
     repeated TChannelProfile ExplicitChannelProfiles = 14;
- 
-    optional TMirrorPartitionConfig MirrorFrom = 15; 
+
+    optional TMirrorPartitionConfig MirrorFrom = 15;
 };
 
 message TPartitionKeyRange {
@@ -247,7 +247,7 @@ message TPQTabletConfig {
         repeated string Codecs = 2;
     }
     repeated TCodecs ConsumerCodecs = 16;
-    repeated string ReadRuleServiceTypes = 17; 
+    repeated string ReadRuleServiceTypes = 17;
 
     optional uint64 FormatVersion = 20;
     optional TCodecs Codecs = 21;
@@ -357,7 +357,7 @@ message TDescribeResponse {
 
 message TCheckACL {
     optional EOperation Operation = 2;
-    optional NPersQueueCommon.Credentials Auth = 4; //leaved for compatibility 
+    optional NPersQueueCommon.Credentials Auth = 4; //leaved for compatibility
     optional string User = 5;
     optional bytes Token = 6;
 }
@@ -571,12 +571,12 @@ message TStatusResponse {
         STATUS_DISK_IS_FULL = 4;
     }
 
-    message TErrorMessage { 
-        optional uint64 Timestamp = 1; 
-        optional NKikimrServices.EServiceKikimr Service = 2; 
-        optional string Message = 3; 
-    } 
- 
+    message TErrorMessage {
+        optional uint64 Timestamp = 1;
+        optional NKikimrServices.EServiceKikimr Service = 2;
+        optional string Message = 3;
+    }
+
     message TPartResult {
         optional int32 Partition = 1; // mandatory
         optional EStatus Status = 2;
@@ -615,8 +615,8 @@ message TStatusResponse {
 
         optional int64 SourceIdCount = 27;
         optional int64 SourceIdRetentionPeriodSec = 28;
- 
-        repeated TErrorMessage Errors = 29; 
+
+        repeated TErrorMessage Errors = 29;
     }
 
     optional uint64 TabletId = 1;

@@ -53,7 +53,7 @@ const bool TRACE_DELAY_TIMING = true;
 const bool SUPPRESS_DELAYS = false;
 const bool VARIATE_RANDOM_SEED = false;
 const ui64 PQ_CACHE_MAX_SIZE_MB = 32;
-const TDuration PQ_CACHE_KEEP_TIMEOUT = TDuration::Seconds(10); 
+const TDuration PQ_CACHE_KEEP_TIMEOUT = TDuration::Seconds(10);
 
 static NActors::TTestActorRuntime& AsKikimrRuntime(NActors::TTestActorRuntimeBase& r) {
     try {
@@ -113,7 +113,7 @@ namespace NKikimr {
 
     void SetupPQNodeCache(TTestActorRuntime& runtime, ui32 nodeIndex)
     {
-        struct NPQ::TCacheL2Parameters l2Params = {PQ_CACHE_MAX_SIZE_MB, PQ_CACHE_KEEP_TIMEOUT}; 
+        struct NPQ::TCacheL2Parameters l2Params = {PQ_CACHE_MAX_SIZE_MB, PQ_CACHE_KEEP_TIMEOUT};
         runtime.AddLocalService(NPQ::MakePersQueueL2CacheID(),
             TActorSetupCmd(
                 NPQ::CreateNodePersQueueL2Cache(l2Params, runtime.GetDynamicCounters(0)),

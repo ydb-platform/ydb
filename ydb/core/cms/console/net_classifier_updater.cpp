@@ -175,7 +175,7 @@ private:
 
     auto FormNetDataFromJson(TStringBuf jsonData) const {
         NKikimrNetClassifier::TNetData netData;
-        TVector<TString> tagsToFilter(UpdaterConfig().GetNetBoxTags().begin(), UpdaterConfig().GetNetBoxTags().end()); 
+        TVector<TString> tagsToFilter(UpdaterConfig().GetNetBoxTags().begin(), UpdaterConfig().GetNetBoxTags().end());
         NJson::TJsonValue value;
         bool res = NJson::ReadJsonTree(jsonData, &value);
         if (!res)
@@ -186,25 +186,25 @@ private:
             if (!v["prefix"].IsString())
                 return NKikimrNetClassifier::TNetData{};
             TString mask = v["prefix"].GetString();
- 
+
             if (!v["tags"].IsArray() || v["tags"].GetArray().size() == 0)
                 return NKikimrNetClassifier::TNetData{};
-            const auto& tags = v["tags"].GetArray(); 
-            TString label; 
-            for (auto& tag : tags) { 
-                if (!tag.IsString()) 
-                    return NKikimrNetClassifier::TNetData{}; 
-                if (std::count(tagsToFilter.begin(), tagsToFilter.end(), tag.GetString())) { 
-                    label = tag.GetString(); 
-                    break; 
-                } 
-            } 
-            if (tagsToFilter.empty()) { 
-                label = tags.front().GetString(); 
-            } 
-            if (!label) { 
-                continue; 
-            } 
+            const auto& tags = v["tags"].GetArray();
+            TString label;
+            for (auto& tag : tags) {
+                if (!tag.IsString())
+                    return NKikimrNetClassifier::TNetData{};
+                if (std::count(tagsToFilter.begin(), tagsToFilter.end(), tag.GetString())) {
+                    label = tag.GetString();
+                    break;
+                }
+            }
+            if (tagsToFilter.empty()) {
+                label = tags.front().GetString();
+            }
+            if (!label) {
+                continue;
+            }
             auto& subnet = *netData.AddSubnets();
             subnet.SetMask(mask);
             subnet.SetLabel(label);
@@ -241,28 +241,28 @@ private:
     }
 
     void HandleWhileWorking(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {
-        if (ev->Get()->Error.empty()) { 
-            if (ev->Get()->Response->Status == "200") { 
-                const auto netData = UpdaterConfig().GetFormat() == NKikimrNetClassifier::TNetClassifierUpdaterConfig::TSV 
-                                                    ? FormNetData(ev->Get()->Response->Body) 
-                                                    : FormNetDataFromJson(ev->Get()->Response->Body); 
-                if (netData.SubnetsSize() != 0) { 
-                    PackedNetData = PackAcquiredSubnets(netData); 
+        if (ev->Get()->Error.empty()) {
+            if (ev->Get()->Response->Status == "200") {
+                const auto netData = UpdaterConfig().GetFormat() == NKikimrNetClassifier::TNetClassifierUpdaterConfig::TSV
+                                                    ? FormNetData(ev->Get()->Response->Body)
+                                                    : FormNetDataFromJson(ev->Get()->Response->Body);
+                if (netData.SubnetsSize() != 0) {
+                    PackedNetData = PackAcquiredSubnets(netData);
 
-                    LastUpdateTimestamp = TActivationContext::Now(); 
-                    LastUpdateDatetimeUTC = LastUpdateTimestamp.ToRfc822String(); // for viewer 
+                    LastUpdateTimestamp = TActivationContext::Now();
+                    LastUpdateDatetimeUTC = LastUpdateTimestamp.ToRfc822String(); // for viewer
 
-                    // To modify the config it's essential to find the current id and generation 
-                    RequestCurrentConfigViaCookie(); 
-                    return; 
-                } else { 
-                    BLOG_ERROR("NetClassifierUpdater failed to get subnets: got empty subnets list"); 
-                } 
-            } else { 
-                BLOG_ERROR("NetClassifierUpdater failed to get subnets: http_status=" <<ev->Get()->Response->Status); 
+                    // To modify the config it's essential to find the current id and generation
+                    RequestCurrentConfigViaCookie();
+                    return;
+                } else {
+                    BLOG_ERROR("NetClassifierUpdater failed to get subnets: got empty subnets list");
+                }
+            } else {
+                BLOG_ERROR("NetClassifierUpdater failed to get subnets: http_status=" <<ev->Get()->Response->Status);
             }
-        } else { 
-            BLOG_ERROR("NetClassifierUpdater failed to get subnets: " << ev->Get()->Error); 
+        } else {
+            BLOG_ERROR("NetClassifierUpdater failed to get subnets: " << ev->Get()->Error);
         }
         InitializeAgain();
     }

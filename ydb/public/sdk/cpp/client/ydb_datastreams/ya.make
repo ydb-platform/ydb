@@ -1,18 +1,18 @@
-LIBRARY() 
- 
-OWNER(g:kikimr) 
- 
-SRCS( 
+LIBRARY()
+
+OWNER(g:kikimr)
+
+SRCS(
     datastreams.cpp
-) 
- 
-PEERDIR( 
-    library/cpp/grpc/client 
-    library/cpp/string_utils/url 
+)
+
+PEERDIR(
+    library/cpp/grpc/client
+    library/cpp/string_utils/url
     ydb/public/api/grpc/draft
     ydb/public/lib/operation_id
     ydb/public/sdk/cpp/client/impl/ydb_internal/make_request
     ydb/public/sdk/cpp/client/ydb_driver
-) 
- 
-END() 
+)
+
+END()

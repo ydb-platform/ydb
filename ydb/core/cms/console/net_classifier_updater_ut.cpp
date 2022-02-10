@@ -19,9 +19,9 @@ namespace NKikimr::NNetClassifierUpdaterTests {
 using namespace NConsole;
 using namespace Tests;
 
-using TNetClassifierUpdaterConfig = NKikimrNetClassifier::TNetClassifierUpdaterConfig; 
-const TString NETWORKS_URI = "/fancy_path/networks.tsv"; 
- 
+using TNetClassifierUpdaterConfig = NKikimrNetClassifier::TNetClassifierUpdaterConfig;
+const TString NETWORKS_URI = "/fancy_path/networks.tsv";
+
 static NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* MakeHttpResponse(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request, const TString& netData) {
     const TString content = TStringBuilder() << "HTTP/1.1 200 OK\r\nConnection: Close\r\nContent-Type: application/octet-stream\r\nContent-Length: "
                                              << netData.size() << "\r\n\r\n" << netData;
@@ -113,26 +113,26 @@ static TString ConvertToJson(const NKikimrNetClassifier::TNetData& netData) {
     return res;
 }
 
-NKikimrNetClassifier::TNetClassifierUpdaterConfig CreateUpdaterConfig( 
-    ui16 netDataSourcePort, 
-    TNetClassifierUpdaterConfig::EFormat format, 
-    const TVector<TString>& netBoxTags = {} 
-) { 
-    const TString url = TStringBuilder() << "http://[::1]:" << netDataSourcePort <<  NETWORKS_URI; 
-    NKikimrNetClassifier::TNetClassifierUpdaterConfig updaterConfig; 
-    updaterConfig.SetNetDataSourceUrl(url); 
-    updaterConfig.SetFormat(format); 
-    *updaterConfig.MutableNetBoxTags() = {netBoxTags.begin(), netBoxTags.end()}; 
-    return updaterConfig; 
-} 
+NKikimrNetClassifier::TNetClassifierUpdaterConfig CreateUpdaterConfig(
+    ui16 netDataSourcePort,
+    TNetClassifierUpdaterConfig::EFormat format,
+    const TVector<TString>& netBoxTags = {}
+) {
+    const TString url = TStringBuilder() << "http://[::1]:" << netDataSourcePort <<  NETWORKS_URI;
+    NKikimrNetClassifier::TNetClassifierUpdaterConfig updaterConfig;
+    updaterConfig.SetNetDataSourceUrl(url);
+    updaterConfig.SetFormat(format);
+    *updaterConfig.MutableNetBoxTags() = {netBoxTags.begin(), netBoxTags.end()};
+    return updaterConfig;
+}
 
 Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
-    void TestGetUpdatesFromHttpServer( 
-        const TString& sourceResponce, 
-        const NKikimrNetClassifier::TNetData& expectedNetData, 
-        TNetClassifierUpdaterConfig::EFormat format = TNetClassifierUpdaterConfig::TSV, 
-        const TVector<TString>& netBoxTags = {} 
-    ) { 
+    void TestGetUpdatesFromHttpServer(
+        const TString& sourceResponce,
+        const NKikimrNetClassifier::TNetData& expectedNetData,
+        TNetClassifierUpdaterConfig::EFormat format = TNetClassifierUpdaterConfig::TSV,
+        const TVector<TString>& netBoxTags = {}
+    ) {
         NMonitoring::TMetricRegistry sensors;
 
         TPortManager pm;
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
         const ui64 netDataSourcePort = pm.GetPort(13334);
         TServerSettings settings(port);
         auto& updaterConfig = *settings.NetClassifierConfig.MutableUpdaterConfig();
-        updaterConfig =  CreateUpdaterConfig(netDataSourcePort, format, netBoxTags); 
+        updaterConfig =  CreateUpdaterConfig(netDataSourcePort, format, netBoxTags);
         TServer cleverServer = TServer(settings);
         auto& actorSystem = *cleverServer.GetRuntime();
 
@@ -153,13 +153,13 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
 
         NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
 
-        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler(NETWORKS_URI, serverId)), 0, true); 
- 
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler(NETWORKS_URI, serverId)), 0, true);
+
         TAutoPtr<NActors::IEventHandle> handle;
         NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
-        UNIT_ASSERT_EQUAL(request->Request->URL, NETWORKS_URI); 
+        UNIT_ASSERT_EQUAL(request->Request->URL, NETWORKS_URI);
 
-        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, MakeHttpResponse(request, sourceResponce)), 0, true); 
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, MakeHttpResponse(request, sourceResponce)), 0, true);
         const TActorId sender = actorSystem.AllocateEdgeActor();
 
         size_t iterations = 0;
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
 
             const auto event = cleverServer.GetRuntime()->GrabEdgeEvent<TEvConfigsDispatcher::TEvGetConfigResponse>(handle);
 
-            if (CheckDistributableConfig(event->Config->GetNetClassifierDistributableConfig(), expectedNetData)) { 
+            if (CheckDistributableConfig(event->Config->GetNetClassifierDistributableConfig(), expectedNetData)) {
                 break;
             }
 
@@ -184,74 +184,74 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
     }
 
     Y_UNIT_TEST(TestGetUpdatesFromHttpServer) {
-        auto netData = FormNetData(); 
-        TestGetUpdatesFromHttpServer(ConvertToTsv(netData), netData); 
-        TestGetUpdatesFromHttpServer(ConvertToJson(netData), netData, TNetClassifierUpdaterConfig::NETBOX); 
+        auto netData = FormNetData();
+        TestGetUpdatesFromHttpServer(ConvertToTsv(netData), netData);
+        TestGetUpdatesFromHttpServer(ConvertToJson(netData), netData, TNetClassifierUpdaterConfig::NETBOX);
     }
 
-    Y_UNIT_TEST(TestFiltrationByNetboxTags) { 
-    const TString netboxResponce = "{   \ 
-        \"count\": 5,                   \ 
-        \"results\": [                  \ 
-            {\"prefix\": \"5.45.192.0/18\", \"tags\": [\"asd\", \"zxcv\"]},     \ 
-            {\"prefix\": \"5.255.192.0/18\", \"tags\": [\"zxcv\", \"asd\"]},    \ 
-            {\"prefix\": \"37.9.64.0/18\", \"tags\": [\"zxcv\"]},               \ 
-            {\"prefix\": \"95.108.128.0/17\", \"tags\": [\"asd\"]},             \ 
-            {\"prefix\": \"172.24.0.0/13\", \"tags\": [\"qwerty\"]}            \ 
-        ]}"; 
- 
-        auto addMask = [](NKikimrNetClassifier::TNetData& data, const TString& mask, const TString& label) { 
-            auto& subnet = *data.AddSubnets(); 
-            subnet.SetMask(mask); 
-            subnet.SetLabel(label); 
-        }; 
- 
-        { 
-            NKikimrNetClassifier::TNetData data; 
-            addMask(data, "5.45.192.0/18", "asd"); 
-            addMask(data, "5.255.192.0/18", "zxcv"); 
-            addMask(data, "37.9.64.0/18", "zxcv"); 
-            addMask(data, "95.108.128.0/17", "asd"); 
-            addMask(data, "172.24.0.0/13", "qwerty"); 
-            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX); 
-        } 
-        { 
-            NKikimrNetClassifier::TNetData data; 
-            addMask(data, "5.45.192.0/18", "asd"); 
-            addMask(data, "5.255.192.0/18", "zxcv"); 
-            addMask(data, "37.9.64.0/18", "zxcv"); 
-            addMask(data, "95.108.128.0/17", "asd"); 
-            addMask(data, "172.24.0.0/13", "qwerty"); 
-            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"asd", "zxcv", "qwerty", "faketag"}); 
-        } 
-        { 
-            NKikimrNetClassifier::TNetData data; 
-            addMask(data, "5.45.192.0/18", "asd"); 
-            addMask(data, "5.255.192.0/18", "zxcv"); 
-            addMask(data, "37.9.64.0/18", "zxcv"); 
-            addMask(data, "95.108.128.0/17", "asd"); 
-            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"zxcv", "asd"}); 
-        } 
-        { 
-            NKikimrNetClassifier::TNetData data; 
-            addMask(data, "5.45.192.0/18", "zxcv"); 
-            addMask(data, "5.255.192.0/18", "zxcv"); 
-            addMask(data, "37.9.64.0/18", "zxcv"); 
-            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"zxcv"}); 
-        } 
-        { 
-            NKikimrNetClassifier::TNetData data; 
-            addMask(data, "5.45.192.0/18", "asd"); 
-            addMask(data, "5.255.192.0/18", "asd"); 
-            addMask(data, "95.108.128.0/17", "asd"); 
-            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"asd"}); 
-        } 
-        { 
-            NKikimrNetClassifier::TNetData data; 
-            addMask(data, "172.24.0.0/13", "qwerty"); 
-            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"qwerty"}); 
-        } 
-    } 
+    Y_UNIT_TEST(TestFiltrationByNetboxTags) {
+    const TString netboxResponce = "{   \
+        \"count\": 5,                   \
+        \"results\": [                  \
+            {\"prefix\": \"5.45.192.0/18\", \"tags\": [\"asd\", \"zxcv\"]},     \
+            {\"prefix\": \"5.255.192.0/18\", \"tags\": [\"zxcv\", \"asd\"]},    \
+            {\"prefix\": \"37.9.64.0/18\", \"tags\": [\"zxcv\"]},               \
+            {\"prefix\": \"95.108.128.0/17\", \"tags\": [\"asd\"]},             \
+            {\"prefix\": \"172.24.0.0/13\", \"tags\": [\"qwerty\"]}            \
+        ]}";
+
+        auto addMask = [](NKikimrNetClassifier::TNetData& data, const TString& mask, const TString& label) {
+            auto& subnet = *data.AddSubnets();
+            subnet.SetMask(mask);
+            subnet.SetLabel(label);
+        };
+
+        {
+            NKikimrNetClassifier::TNetData data;
+            addMask(data, "5.45.192.0/18", "asd");
+            addMask(data, "5.255.192.0/18", "zxcv");
+            addMask(data, "37.9.64.0/18", "zxcv");
+            addMask(data, "95.108.128.0/17", "asd");
+            addMask(data, "172.24.0.0/13", "qwerty");
+            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX);
+        }
+        {
+            NKikimrNetClassifier::TNetData data;
+            addMask(data, "5.45.192.0/18", "asd");
+            addMask(data, "5.255.192.0/18", "zxcv");
+            addMask(data, "37.9.64.0/18", "zxcv");
+            addMask(data, "95.108.128.0/17", "asd");
+            addMask(data, "172.24.0.0/13", "qwerty");
+            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"asd", "zxcv", "qwerty", "faketag"});
+        }
+        {
+            NKikimrNetClassifier::TNetData data;
+            addMask(data, "5.45.192.0/18", "asd");
+            addMask(data, "5.255.192.0/18", "zxcv");
+            addMask(data, "37.9.64.0/18", "zxcv");
+            addMask(data, "95.108.128.0/17", "asd");
+            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"zxcv", "asd"});
+        }
+        {
+            NKikimrNetClassifier::TNetData data;
+            addMask(data, "5.45.192.0/18", "zxcv");
+            addMask(data, "5.255.192.0/18", "zxcv");
+            addMask(data, "37.9.64.0/18", "zxcv");
+            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"zxcv"});
+        }
+        {
+            NKikimrNetClassifier::TNetData data;
+            addMask(data, "5.45.192.0/18", "asd");
+            addMask(data, "5.255.192.0/18", "asd");
+            addMask(data, "95.108.128.0/17", "asd");
+            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"asd"});
+        }
+        {
+            NKikimrNetClassifier::TNetData data;
+            addMask(data, "172.24.0.0/13", "qwerty");
+            TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"qwerty"});
+        }
+    }
 }
 
 } // namespace NKikimr::NNetClassifierUpdaterTests

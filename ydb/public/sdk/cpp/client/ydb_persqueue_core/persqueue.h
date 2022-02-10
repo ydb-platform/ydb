@@ -9,7 +9,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 #include <util/thread/pool.h>
 
 #include <exception>
@@ -77,7 +77,7 @@ struct TDescribeTopicResult : public TStatus {
                 return SupportedCodecs_;
             }
             GETTER(ui32, Version);
-            GETTER(TString, ServiceType); 
+            GETTER(TString, ServiceType);
 
         private:
             TString ConsumerName_;
@@ -86,7 +86,7 @@ struct TDescribeTopicResult : public TStatus {
             EFormat SupportedFormat_;
             TVector<ECodec> SupportedCodecs_;
             ui32 Version_;
-            TString ServiceType_; 
+            TString ServiceType_;
         };
 
         struct TRemoteMirrorRule {
@@ -180,7 +180,7 @@ struct TReadRuleSettings {
     FLUENT_SETTING_DEFAULT(TVector<ECodec>, SupportedCodecs, GetDefaultCodecs());
 
     FLUENT_SETTING_DEFAULT(ui32, Version, 0);
-    FLUENT_SETTING(TString, ServiceType); 
+    FLUENT_SETTING(TString, ServiceType);
 
     TReadRuleSettings& SetSettings(const TDescribeTopicResult::TTopicSettings::TReadRule& settings) {
         ConsumerName_ = settings.ConsumerName();
@@ -192,7 +192,7 @@ struct TReadRuleSettings {
             SupportedCodecs_.push_back(codec);
         }
         Version_ = settings.Version();
-        ServiceType_ = settings.ServiceType(); 
+        ServiceType_ = settings.ServiceType();
         return *this;
     }
 
@@ -476,210 +476,210 @@ struct TReadSessionEvent {
     //! Contains batch of messages from single partition stream.
     struct TDataReceivedEvent {
 
-        struct TMessageInformation { 
-            TMessageInformation(ui64 offset, 
-                                TString messageGroupId, 
-                                ui64 seqNo, 
-                                TInstant createTime, 
-                                TInstant writeTime, 
-                                TString ip, 
-                                TWriteSessionMeta::TPtr meta, 
-                                ui64 uncompressedSize); 
-            ui64 Offset; 
-            TString MessageGroupId; 
-            ui64 SeqNo; 
-            TInstant CreateTime; 
-            TInstant WriteTime; 
-            TString Ip; 
-            TWriteSessionMeta::TPtr Meta; 
-            ui64 UncompressedSize; 
-        }; 
- 
-        class IMessage { 
-        public: 
-            virtual const TString& GetData() const; 
- 
-            //! Partition stream. Same as in batch. 
-            const TPartitionStream::TPtr& GetPartitionStream() const; 
- 
-            const TString& GetPartitionKey() const; 
- 
-            const TString GetExplicitHash() const; 
- 
-            virtual void Commit() = 0; 
- 
-            TString DebugString(bool printData = false) const; 
-            virtual void DebugString(TStringBuilder& ret, bool printData = false) const = 0; 
- 
-            IMessage(const TString& data, 
-                     TPartitionStream::TPtr partitionStream, 
-                     const TString& partitionKey, 
-                     const TString& explicitHash); 
- 
-            virtual ~IMessage() = default;
-        protected: 
-            TString Data; 
+        struct TMessageInformation {
+            TMessageInformation(ui64 offset,
+                                TString messageGroupId,
+                                ui64 seqNo,
+                                TInstant createTime,
+                                TInstant writeTime,
+                                TString ip,
+                                TWriteSessionMeta::TPtr meta,
+                                ui64 uncompressedSize);
+            ui64 Offset;
+            TString MessageGroupId;
+            ui64 SeqNo;
+            TInstant CreateTime;
+            TInstant WriteTime;
+            TString Ip;
+            TWriteSessionMeta::TPtr Meta;
+            ui64 UncompressedSize;
+        };
 
-            TPartitionStream::TPtr PartitionStream; 
-            TString PartitionKey; 
-            TString ExplicitHash; 
-        }; 
- 
-        //! Single message.
-        struct TMessage : public IMessage { 
-            //! User data.
-            //! Throws decompressor exception if decompression failed.
-            const TString& GetData() const override; 
+        class IMessage {
+        public:
+            virtual const TString& GetData() const;
 
-            bool HasException() const; 
+            //! Partition stream. Same as in batch.
+            const TPartitionStream::TPtr& GetPartitionStream() const;
 
-            //! Message offset.
-            ui64 GetOffset() const; 
+            const TString& GetPartitionKey() const;
 
-            //! Message group id.
-            const TString& GetMessageGroupId() const; 
+            const TString GetExplicitHash() const;
 
-            //! Sequence number.
-            ui64 GetSeqNo() const; 
+            virtual void Commit() = 0;
 
-            //! Message creation timestamp.
-            TInstant GetCreateTime() const; 
+            TString DebugString(bool printData = false) const;
+            virtual void DebugString(TStringBuilder& ret, bool printData = false) const = 0;
 
-            //! Message write timestamp.
-            TInstant GetWriteTime() const; 
-
-            //! Ip address of message source host.
-            const TString& GetIp() const; 
-
-            //! Metainfo.
-            const TWriteSessionMeta::TPtr& GetMeta() const; 
-
-            TMessage(const TString& data,
-                     std::exception_ptr decompressionException,
-                     const TMessageInformation& information, 
+            IMessage(const TString& data,
                      TPartitionStream::TPtr partitionStream,
                      const TString& partitionKey,
                      const TString& explicitHash);
 
-            //! Commits single message. 
-            void Commit() override; 
- 
-            using IMessage::DebugString; 
-            void DebugString(TStringBuilder& ret, bool printData = false) const override; 
- 
-        private:
-            std::exception_ptr DecompressionException;
-            TMessageInformation Information; 
+            virtual ~IMessage() = default;
+        protected:
+            TString Data;
+
+            TPartitionStream::TPtr PartitionStream;
+            TString PartitionKey;
+            TString ExplicitHash;
         };
 
-        struct TCompressedMessage : public IMessage { 
-            //! Messages count in compressed data 
-            ui64 GetBlocksCount() const; 
- 
-            //! Message codec 
-            ECodec GetCodec() const; 
- 
-            //! Message offset. 
-            ui64 GetOffset(ui64 index) const; 
- 
-            //! Message group id. 
-            const TString& GetMessageGroupId(ui64 index) const; 
- 
-            //! Sequence number. 
-            ui64 GetSeqNo(ui64 index) const; 
- 
-            //! Message creation timestamp. 
-            TInstant GetCreateTime(ui64 index) const; 
- 
-            //! Message write timestamp. 
-            TInstant GetWriteTime(ui64 index) const; 
- 
-            //! Ip address of message source host. 
-            const TString& GetIp(ui64 index) const; 
- 
-            //! Metainfo. 
-            const TWriteSessionMeta::TPtr& GetMeta(ui64 index) const; 
- 
-            //! Uncompressed block size. 
-            ui64 GetUncompressedSize(ui64 index) const; 
- 
-            virtual ~TCompressedMessage() {} 
-            TCompressedMessage(ECodec codec, 
-                               const TString& data, 
-                               const TVector<TMessageInformation>& information, 
-                               TPartitionStream::TPtr partitionStream, 
-                               const TString& partitionKey, 
-                               const TString& explicitHash); 
- 
-            //! Commits all offsets in compressed message. 
-            void Commit() override; 
- 
-            using IMessage::DebugString; 
-            void DebugString(TStringBuilder& ret, bool printData = false) const override; 
- 
-        private: 
-            ECodec Codec; 
-            TVector<TMessageInformation> Information; 
-        }; 
- 
+        //! Single message.
+        struct TMessage : public IMessage {
+            //! User data.
+            //! Throws decompressor exception if decompression failed.
+            const TString& GetData() const override;
+
+            bool HasException() const;
+
+            //! Message offset.
+            ui64 GetOffset() const;
+
+            //! Message group id.
+            const TString& GetMessageGroupId() const;
+
+            //! Sequence number.
+            ui64 GetSeqNo() const;
+
+            //! Message creation timestamp.
+            TInstant GetCreateTime() const;
+
+            //! Message write timestamp.
+            TInstant GetWriteTime() const;
+
+            //! Ip address of message source host.
+            const TString& GetIp() const;
+
+            //! Metainfo.
+            const TWriteSessionMeta::TPtr& GetMeta() const;
+
+            TMessage(const TString& data,
+                     std::exception_ptr decompressionException,
+                     const TMessageInformation& information,
+                     TPartitionStream::TPtr partitionStream,
+                     const TString& partitionKey,
+                     const TString& explicitHash);
+
+            //! Commits single message.
+            void Commit() override;
+
+            using IMessage::DebugString;
+            void DebugString(TStringBuilder& ret, bool printData = false) const override;
+
+        private:
+            std::exception_ptr DecompressionException;
+            TMessageInformation Information;
+        };
+
+        struct TCompressedMessage : public IMessage {
+            //! Messages count in compressed data
+            ui64 GetBlocksCount() const;
+
+            //! Message codec
+            ECodec GetCodec() const;
+
+            //! Message offset.
+            ui64 GetOffset(ui64 index) const;
+
+            //! Message group id.
+            const TString& GetMessageGroupId(ui64 index) const;
+
+            //! Sequence number.
+            ui64 GetSeqNo(ui64 index) const;
+
+            //! Message creation timestamp.
+            TInstant GetCreateTime(ui64 index) const;
+
+            //! Message write timestamp.
+            TInstant GetWriteTime(ui64 index) const;
+
+            //! Ip address of message source host.
+            const TString& GetIp(ui64 index) const;
+
+            //! Metainfo.
+            const TWriteSessionMeta::TPtr& GetMeta(ui64 index) const;
+
+            //! Uncompressed block size.
+            ui64 GetUncompressedSize(ui64 index) const;
+
+            virtual ~TCompressedMessage() {}
+            TCompressedMessage(ECodec codec,
+                               const TString& data,
+                               const TVector<TMessageInformation>& information,
+                               TPartitionStream::TPtr partitionStream,
+                               const TString& partitionKey,
+                               const TString& explicitHash);
+
+            //! Commits all offsets in compressed message.
+            void Commit() override;
+
+            using IMessage::DebugString;
+            void DebugString(TStringBuilder& ret, bool printData = false) const override;
+
+        private:
+            ECodec Codec;
+            TVector<TMessageInformation> Information;
+        };
+
         //! Partition stream.
         const TPartitionStream::TPtr& GetPartitionStream() const {
             return PartitionStream;
         }
 
-        bool IsCompressedMessages() const { 
-            return !CompressedMessages.empty(); 
-        } 
- 
-        size_t GetMessagesCount() const { 
-            return Messages.size() + CompressedMessages.size(); 
-        } 
- 
+        bool IsCompressedMessages() const {
+            return !CompressedMessages.empty();
+        }
+
+        size_t GetMessagesCount() const {
+            return Messages.size() + CompressedMessages.size();
+        }
+
         //! Get messages.
         TVector<TMessage>& GetMessages() {
-            CheckMessagesFilled(false); 
+            CheckMessagesFilled(false);
             return Messages;
         }
 
         const TVector<TMessage>& GetMessages() const {
-            CheckMessagesFilled(false); 
+            CheckMessagesFilled(false);
             return Messages;
         }
 
-        //! Get compressed messages. 
-        TVector<TCompressedMessage>& GetCompressedMessages() { 
-            CheckMessagesFilled(true); 
-            return CompressedMessages; 
-        } 
- 
-        const TVector<TCompressedMessage>& GetCompressedMessages() const { 
-            CheckMessagesFilled(true); 
-            return CompressedMessages; 
-        } 
- 
+        //! Get compressed messages.
+        TVector<TCompressedMessage>& GetCompressedMessages() {
+            CheckMessagesFilled(true);
+            return CompressedMessages;
+        }
+
+        const TVector<TCompressedMessage>& GetCompressedMessages() const {
+            CheckMessagesFilled(true);
+            return CompressedMessages;
+        }
+
         //! Commits all messages in batch.
         void Commit();
 
         TString DebugString(bool printData = false) const;
 
         TDataReceivedEvent(TVector<TMessage> messages,
-                           TVector<TCompressedMessage> compressedMessages, 
+                           TVector<TCompressedMessage> compressedMessages,
                            TPartitionStream::TPtr partitionStream);
 
     private:
-        void CheckMessagesFilled(bool compressed) const { 
-            Y_VERIFY(!Messages.empty() || !CompressedMessages.empty()); 
-            if (compressed && CompressedMessages.empty()) { 
-                ythrow yexception() << "cannot get compressed messages, parameter decompress=true for read session"; 
-            } 
-            if (!compressed && Messages.empty()) { 
-                ythrow yexception() << "cannot get decompressed messages, parameter decompress=false for read session"; 
-            } 
-        } 
- 
-    private: 
+        void CheckMessagesFilled(bool compressed) const {
+            Y_VERIFY(!Messages.empty() || !CompressedMessages.empty());
+            if (compressed && CompressedMessages.empty()) {
+                ythrow yexception() << "cannot get compressed messages, parameter decompress=true for read session";
+            }
+            if (!compressed && Messages.empty()) {
+                ythrow yexception() << "cannot get decompressed messages, parameter decompress=false for read session";
+            }
+        }
+
+    private:
         TVector<TMessage> Messages;
-        TVector<TCompressedMessage> CompressedMessages; 
+        TVector<TCompressedMessage> CompressedMessages;
         TPartitionStream::TPtr PartitionStream;
         std::vector<std::pair<ui64, ui64>> OffsetRanges;
     };
@@ -853,12 +853,12 @@ public:
     //! Add all messages from dataReceivedEvent to set.
     void Add(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent);
 
-    //! Add offsets range to set. 
-    void Add(const TPartitionStream::TPtr& partitionStream, ui64 startOffset, ui64 endOffset); 
- 
-    //! Add offset to set. 
-    void Add(const TPartitionStream::TPtr& partitionStream, ui64 offset); 
- 
+    //! Add offsets range to set.
+    void Add(const TPartitionStream::TPtr& partitionStream, ui64 startOffset, ui64 endOffset);
+
+    //! Add offset to set.
+    void Add(const TPartitionStream::TPtr& partitionStream, ui64 offset);
+
     //! Commit all added offsets.
     void Commit();
 
@@ -1296,9 +1296,9 @@ struct TReadSessionSettings : public TRequestSettings<TReadSessionSettings> {
     //! See description in TEventHandlers class.
     FLUENT_SETTING(TEventHandlers, EventHandlers);
 
-    //! Decompress messages 
-    FLUENT_SETTING_DEFAULT(bool, Decompress, true); 
- 
+    //! Decompress messages
+    FLUENT_SETTING_DEFAULT(bool, Decompress, true);
+
     //! Executor for decompression tasks.
     //! If not set, default executor will be used.
     FLUENT_SETTING(IExecutor::TPtr, DecompressionExecutor);

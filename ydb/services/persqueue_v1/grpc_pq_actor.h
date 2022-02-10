@@ -280,17 +280,17 @@ struct TEvPQProxy {
     };
 
     struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EvReadResponse> {
-        explicit TEvReadResponse(PersQueue::V1::MigrationStreamingReadServerMessage&& resp, ui64 nextReadOffset, bool fromDisk, TDuration waitQuotaTime) 
+        explicit TEvReadResponse(PersQueue::V1::MigrationStreamingReadServerMessage&& resp, ui64 nextReadOffset, bool fromDisk, TDuration waitQuotaTime)
             : Response(std::move(resp))
             , NextReadOffset(nextReadOffset)
             , FromDisk(fromDisk)
-            , WaitQuotaTime(waitQuotaTime) 
+            , WaitQuotaTime(waitQuotaTime)
         { }
 
         PersQueue::V1::MigrationStreamingReadServerMessage Response;
         ui64 NextReadOffset;
         bool FromDisk;
-        TDuration WaitQuotaTime; 
+        TDuration WaitQuotaTime;
     };
 
     struct TCommitCookie {
@@ -1009,7 +1009,7 @@ private:
         const TString Guid;
         TInstant Start;
         bool FromDisk;
-        TDuration WaitQuotaTime; 
+        TDuration WaitQuotaTime;
     };
 
     THashMap<TActorId, TFormedReadResponse::TPtr> PartitionToReadResponse; // Partition actor -> TFormedReadResponse answer that has this partition.
@@ -1163,7 +1163,7 @@ public:
     TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest *request);
 
     void Bootstrap(const NActors::TActorContext &ctx);
-    void ModifyPersqueueConfig(const TActorContext& ctx, 
+    void ModifyPersqueueConfig(const TActorContext& ctx,
                                NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                const NKikimrSchemeOp::TDirEntry& selfInfo);
@@ -1176,7 +1176,7 @@ public:
     TRemoveReadRuleActor(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest* request);
 
     void Bootstrap(const NActors::TActorContext &ctx);
-    void ModifyPersqueueConfig(const TActorContext& ctx, 
+    void ModifyPersqueueConfig(const TActorContext& ctx,
                                NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                const NKikimrSchemeOp::TDirEntry& selfInfo);

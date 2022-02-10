@@ -1,5 +1,5 @@
 #include "msgbus_server_persqueue.h"
-#include "msgbus_server_pq_read_session_info.h" 
+#include "msgbus_server_pq_read_session_info.h"
 
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -225,12 +225,12 @@ protected:
 
     // Register tested actor
     void RegisterActor(const NKikimrClient::TPersQueueRequest& request) {
-        Actor = CreateActorServerPersQueue( 
-            EdgeActorId, 
-            request, 
-            GetMockPQMetaCache().SelfId(), 
-            nullptr 
-        ); 
+        Actor = CreateActorServerPersQueue(
+            EdgeActorId,
+            request,
+            GetMockPQMetaCache().SelfId(),
+            nullptr
+        );
         TestMainActorId = Runtime->Register(Actor);
         TestActors.insert(TestMainActorId);
     }

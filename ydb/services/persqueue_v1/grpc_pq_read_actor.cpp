@@ -1451,7 +1451,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadResponse::TPtr& ev, const TAct
     if (event->FromDisk) {
         formedResponse->FromDisk = true;
     }
-    formedResponse->WaitQuotaTime = Max(formedResponse->WaitQuotaTime, event->WaitQuotaTime); 
+    formedResponse->WaitQuotaTime = Max(formedResponse->WaitQuotaTime, event->WaitQuotaTime);
     --formedResponse->RequestsInfly;
 
     BytesInflight_ += diff;
@@ -1472,7 +1472,7 @@ bool TReadSessionActor::WriteResponse(PersQueue::V1::MigrationStreamingReadServe
 }
 
 void TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadResponse::TPtr formedResponse) {
-    ui32 readDurationMs = (ctx.Now() - formedResponse->Start - formedResponse->WaitQuotaTime).MilliSeconds(); 
+    ui32 readDurationMs = (ctx.Now() - formedResponse->Start - formedResponse->WaitQuotaTime).MilliSeconds();
     if (formedResponse->FromDisk) {
         ReadLatencyFromDisk.IncFor(readDurationMs, 1);
     } else {
@@ -1988,7 +1988,7 @@ bool FillBatchedData(MigrationStreamingReadServerMessage::DataBatch * data, cons
         message->set_partition_key(r.GetPartitionKey());
 
         if (proto.HasCodec()) {
-            message->set_codec(NPQ::ToV1Codec((NPersQueueCommon::ECodec)proto.GetCodec())); 
+            message->set_codec(NPQ::ToV1Codec((NPersQueueCommon::ECodec)proto.GetCodec()));
         }
         message->set_uncompressed_size(r.GetUncompressedSize());
         message->set_data(proto.GetData());
@@ -2166,13 +2166,13 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
                 << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset << " ReadGuid " << ReadGuid << " has messages " << hasData);
 
     ReadGuid = TString();
-    auto readResponse = MakeHolder<TEvPQProxy::TEvReadResponse>( 
-        std::move(response), 
-        ReadOffset, 
-        res.GetBlobsFromDisk() > 0, 
-        TDuration::MilliSeconds(res.GetWaitQuotaTimeMs()) 
-    ); 
-    ctx.Send(ParentId, readResponse.Release()); 
+    auto readResponse = MakeHolder<TEvPQProxy::TEvReadResponse>(
+        std::move(response),
+        ReadOffset,
+        res.GetBlobsFromDisk() > 0,
+        TDuration::MilliSeconds(res.GetWaitQuotaTimeMs())
+    );
+    ctx.Send(ParentId, readResponse.Release());
     CheckRelease(ctx);
 
     PipeGeneration = 0; //reset tries counter - all ok
@@ -2858,12 +2858,12 @@ void TReadInfoActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorC
         proto.MutableMetaRequest()->MutableCmdGetReadSessionsInfo()->AddTopic(t.TopicNameConverter->GetClientsideName());
     }
 
-    ctx.Register(NMsgBusProxy::CreateActorServerPersQueue( 
-        ctx.SelfID, 
-        proto, 
-        SchemeCache, 
-        std::make_shared<NMsgBusProxy::TPersQueueGetReadSessionsInfoWorkerFactory>() 
-    )); 
+    ctx.Register(NMsgBusProxy::CreateActorServerPersQueue(
+        ctx.SelfID,
+        proto,
+        SchemeCache,
+        std::make_shared<NMsgBusProxy::TPersQueueGetReadSessionsInfoWorkerFactory>()
+    ));
 
 }
 

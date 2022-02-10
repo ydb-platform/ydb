@@ -1,7 +1,7 @@
 #include "blob.h"
 #include "type_codecs.h"
 
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 #include <util/string/escape.h>
 #include <util/system/unaligned_mem.h>
 
@@ -97,10 +97,10 @@ void TClientBlob::Serialize(TBuffer& res) const
         res.Append(ExplicitHashKey.data(), ExplicitHashKey.size());
     }
 
-    ui64 writeTimestampMs = WriteTimestamp.MilliSeconds(); 
-    ui64 createTimestampMs = CreateTimestamp.MilliSeconds(); 
-    res.Append((const char*)&writeTimestampMs, sizeof(ui64)); 
-    res.Append((const char*)&createTimestampMs, sizeof(ui64)); 
+    ui64 writeTimestampMs = WriteTimestamp.MilliSeconds();
+    ui64 createTimestampMs = CreateTimestamp.MilliSeconds();
+    res.Append((const char*)&writeTimestampMs, sizeof(ui64));
+    res.Append((const char*)&createTimestampMs, sizeof(ui64));
     if (outputUncompressedSize)
         res.Append((const char*)&(UncompressedSize), sizeof(ui32));
 
@@ -153,15 +153,15 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
         data += explicitHashKey.Size();
     }
 
-    TInstant writeTimestamp; 
-    TInstant createTimestamp; 
+    TInstant writeTimestamp;
+    TInstant createTimestamp;
     ui32 us = 0;
     if (hasTS) {
-        writeTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data)); 
+        writeTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
         data += sizeof(ui64);
     }
     if (hasTS2) {
-        createTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data)); 
+        createTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
         data += sizeof(ui64);
     }
     if (hasUS) {
@@ -317,8 +317,8 @@ void TBatch::Pack() {
     {
         auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(output);
         for (ui32 i = 0; i < Blobs.size(); ++i) {
-            ui64 writeTimestampMs = Blobs[i].WriteTimestamp.MilliSeconds(); 
-            chunk->AddData((const char*)&writeTimestampMs, sizeof(ui64)); 
+            ui64 writeTimestampMs = Blobs[i].WriteTimestamp.MilliSeconds();
+            chunk->AddData((const char*)&writeTimestampMs, sizeof(ui64));
         }
         OutputChunk(chunk, output, res);
     }
@@ -345,8 +345,8 @@ void TBatch::Pack() {
     {
         auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(output);
         for (ui32 i = 0; i < Blobs.size(); ++i) {
-            ui64 createTimestampMs = Blobs[i].CreateTimestamp.MilliSeconds(); 
-            chunk->AddData((const char*)&createTimestampMs, sizeof(ui64)); 
+            ui64 createTimestampMs = Blobs[i].CreateTimestamp.MilliSeconds();
+            chunk->AddData((const char*)&createTimestampMs, sizeof(ui64));
         }
         OutputChunk(chunk, output, res);
     }
@@ -495,17 +495,17 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
             partData.insert(std::make_pair(ps, TPartData(partNo, totalParts, totalSize)));
         }
     }
-    TVector<TInstant> wtime; 
+    TVector<TInstant> wtime;
     wtime.reserve(totalBlobs);
     {
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs);
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
-            ui64 timestampMs = *(ui64*)iter->Next().Data(); 
-            wtime.push_back(TInstant::MilliSeconds(timestampMs)); 
+            ui64 timestampMs = *(ui64*)iter->Next().Data();
+            wtime.push_back(TInstant::MilliSeconds(timestampMs));
         }
     }
-    TVector<TInstant> ctime; 
+    TVector<TInstant> ctime;
     ctime.reserve(totalBlobs);
 
     TVector<TString> partitionKey;
@@ -540,8 +540,8 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
             auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs);
             auto iter = chunk->MakeIterator();
             for (ui32 i = 0; i < totalBlobs; ++i) {
-                ui64 timestampMs = *(ui64*)iter->Next().Data(); 
-                ctime.push_back(TInstant::MilliSeconds(timestampMs)); 
+                ui64 timestampMs = *(ui64*)iter->Next().Data();
+                ctime.push_back(TInstant::MilliSeconds(timestampMs));
             }
         }
     } else {

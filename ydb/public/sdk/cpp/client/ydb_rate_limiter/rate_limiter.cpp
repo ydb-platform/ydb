@@ -1,9 +1,9 @@
-#include "rate_limiter.h" 
+#include "rate_limiter.h"
 
-#define INCLUDE_YDB_INTERNAL_H 
+#define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
-#undef INCLUDE_YDB_INTERNAL_H 
- 
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <ydb/public/api/grpc/ydb_rate_limiter_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
@@ -186,7 +186,7 @@ public:
             &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncAcquireResource,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
-    } 
+    }
 };
 
 TRateLimiterClient::TRateLimiterClient(const TDriver& driver, const TCommonClientSettings& settings)

@@ -1,5 +1,5 @@
-#include "impl.h" 
- 
+#include "impl.h"
+
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
@@ -42,7 +42,7 @@ TMaybe<TValue> TParams::TImpl::GetValue(const TString& name) const {
     return &ParamsMap_;
 }
 
-const ::google::protobuf::Map<TString, Ydb::TypedValue>& TParams::TImpl::GetProtoMap() const { 
+const ::google::protobuf::Map<TString, Ydb::TypedValue>& TParams::TImpl::GetProtoMap() const {
     return ParamsMap_;
 }
 

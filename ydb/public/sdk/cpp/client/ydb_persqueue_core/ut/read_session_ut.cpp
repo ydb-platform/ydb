@@ -1,12 +1,12 @@
-#include "ut_utils.h" 
+#include "ut_utils.h"
 
-#define INCLUDE_YDB_INTERNAL_H 
+#define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
-#undef INCLUDE_YDB_INTERNAL_H 
- 
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
- 
+
 #include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/testing/gmock_in_unittest/gmock.h>
 #include <library/cpp/testing/unittest/registar.h>

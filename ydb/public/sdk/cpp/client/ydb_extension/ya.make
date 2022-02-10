@@ -1,17 +1,17 @@
-LIBRARY() 
- 
-OWNER( 
-    dcherednik 
-    g:kikimr 
-) 
- 
-SRCS( 
-    extension.cpp 
-) 
- 
-PEERDIR( 
-    library/cpp/monlib/metrics 
+LIBRARY()
+
+OWNER(
+    dcherednik
+    g:kikimr
+)
+
+SRCS(
+    extension.cpp
+)
+
+PEERDIR(
+    library/cpp/monlib/metrics
     ydb/public/sdk/cpp/client/ydb_driver
-) 
- 
-END() 
+)
+
+END()

@@ -938,13 +938,13 @@ void TCloudAuthCounters::InitCounters(TIntrusivePtr<NMonitoring::TDynamicCounter
     INIT_HISTOGRAM_COUNTER(cloudAuthCounters, GetFolderIdDuration, ELifetime::Persistent, DurationBucketsMs, Lazy(*Cfg));
 }
 
-void TMeteringCounters::InitCounters(const TVector<TString>& classifierLabels) { 
-    const TString classifierRequestsLabel("ClassifierRequests_"); 
-    const TString idleClassifierRequestsLabel("IdleClassifierRequests_"); 
-    for (auto label : classifierLabels) { 
-        INIT_COUNTER_WITH_NAME(SqsMeteringCounters, ClassifierRequestsResults[label], TStringBuilder() << classifierRequestsLabel << label, ELifetime::Persistent, EValueType::Derivative, Lazy(Config)); 
-        INIT_COUNTER_WITH_NAME(SqsMeteringCounters, IdleClassifierRequestsResults[label], TStringBuilder() << idleClassifierRequestsLabel << label, ELifetime::Persistent, EValueType::Derivative, Lazy(Config)); 
-    } 
-} 
- 
+void TMeteringCounters::InitCounters(const TVector<TString>& classifierLabels) {
+    const TString classifierRequestsLabel("ClassifierRequests_");
+    const TString idleClassifierRequestsLabel("IdleClassifierRequests_");
+    for (auto label : classifierLabels) {
+        INIT_COUNTER_WITH_NAME(SqsMeteringCounters, ClassifierRequestsResults[label], TStringBuilder() << classifierRequestsLabel << label, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
+        INIT_COUNTER_WITH_NAME(SqsMeteringCounters, IdleClassifierRequestsResults[label], TStringBuilder() << idleClassifierRequestsLabel << label, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
+    }
+}
+
 } // namespace NKikimr::NSQS

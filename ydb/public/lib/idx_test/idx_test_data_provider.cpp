@@ -4,8 +4,8 @@
 
 #include <library/cpp/string_utils/base64/base64.h>
 
-#include <util/string/builder.h> 
- 
+#include <util/string/builder.h>
+
 using namespace NYdb;
 using namespace NYdb::NTable;
 

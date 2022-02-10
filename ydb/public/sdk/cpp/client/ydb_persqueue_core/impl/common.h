@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
-#include <util/generic/queue.h> 
+#include <util/generic/queue.h>
 #include <util/system/condvar.h>
 #include <util/thread/pool.h>
 
@@ -20,8 +20,8 @@ NYql::TIssues MakeIssueWithSubIssues(const TString& description, const NYql::TIs
 
 TString IssuesSingleLineString(const NYql::TIssues& issues);
 
-size_t CalcDataSize(const TReadSessionEvent::TEvent& event); 
- 
+size_t CalcDataSize(const TReadSessionEvent::TEvent& event);
+
 template <class TMessage>
 bool IsErrorMessage(const TMessage& serverMessage) {
     const Ydb::StatusIds::StatusCode status = serverMessage.status();

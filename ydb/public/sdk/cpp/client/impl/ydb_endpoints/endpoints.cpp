@@ -1,13 +1,13 @@
-#include "endpoints.h" 
+#include "endpoints.h"
 
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/string_utils/quote/quote.h>
- 
-#include <util/random/random.h> 
 
-#include <set> 
-#include <unordered_set> 
- 
+#include <util/random/random.h>
+
+#include <set>
+#include <unordered_set>
+
 namespace NYdb {
 
 class TEndpointElectorSafe::TObjRegistry : public IObjRegistryHandle {

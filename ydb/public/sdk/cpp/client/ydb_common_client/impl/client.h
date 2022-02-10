@@ -5,9 +5,9 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
- 
-#include <memory> 
- 
+
+#include <memory>
+
 namespace NYdb {
 
 template<typename T>

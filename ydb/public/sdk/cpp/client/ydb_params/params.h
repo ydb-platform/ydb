@@ -2,8 +2,8 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
-#include <google/protobuf/map.h> 
- 
+#include <google/protobuf/map.h>
+
 namespace Ydb {
     class TypedValue;
 }
@@ -42,9 +42,9 @@ public:
 private:
     TParams(::google::protobuf::Map<TString, Ydb::TypedValue>&& protoMap);
 
-    ::google::protobuf::Map<TString, Ydb::TypedValue>* GetProtoMapPtr(); 
-    const ::google::protobuf::Map<TString, Ydb::TypedValue>& GetProtoMap() const; 
- 
+    ::google::protobuf::Map<TString, Ydb::TypedValue>* GetProtoMapPtr();
+    const ::google::protobuf::Map<TString, Ydb::TypedValue>& GetProtoMap() const;
+
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
 };

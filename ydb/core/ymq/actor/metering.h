@@ -15,23 +15,23 @@
 
 namespace NKikimr::NSQS {
 
-struct TMeteringCounters; 
- 
-NSc::TValue CreateMeteringBillingRecord( 
-    const TString& folderId, 
-    const TString& resourceId, 
-    const TString& schema, 
-    const TString& fqdn, 
-    const TInstant& now, 
-    const ui64 quantity, 
-    const TString& unit, 
-    const NSc::TValue& tags 
-); 
- 
+struct TMeteringCounters;
+
+NSc::TValue CreateMeteringBillingRecord(
+    const TString& folderId,
+    const TString& resourceId,
+    const TString& schema,
+    const TString& fqdn,
+    const TInstant& now,
+    const ui64 quantity,
+    const TString& unit,
+    const NSc::TValue& tags
+);
+
 class TProcessedRequestsAggregator {
 public:
-    static const THashMap<TString, TString> LabelTransformation; 
-public: 
+    static const THashMap<TString, TString> LabelTransformation;
+public:
     TProcessedRequestsAggregator(const NKikimrConfig::TSqsConfig& config);
 
     // Do not rename enum members in the enums below (SQS-22)
@@ -43,8 +43,8 @@ public:
     enum ENetworkClass {
         inet = 0,
         cloud,
-        yandex, 
-        unknown 
+        yandex,
+        unknown
     };
 
     enum EQueueType {
@@ -56,7 +56,7 @@ public:
     struct TReportedTrafficKey {
         TString ResourceId;
         ETrafficType TrafficType;
-        TString NetworkClassLabel; 
+        TString NetworkClassLabel;
 
         bool operator<(const TReportedTrafficKey& rhs) const;
     };
@@ -68,7 +68,7 @@ public:
         bool operator<(const TReportedRequestsKey& rhs) const;
     };
 
-    TString ClassifyNetwork(const TString& address) const; 
+    TString ClassifyNetwork(const TString& address) const;
 
     ui64 CountBlocks(const ui64 bytes, const ui64 blockSize) const;
 
@@ -79,22 +79,22 @@ public:
 
     void ResetReportsStorage();
 
-    void UpdateNetClassifier(NAddressClassifier::TLabeledAddressClassifier::TConstPtr classifier, TMaybe<TInstant> netDataUpdateTimestamp); 
- 
+    void UpdateNetClassifier(NAddressClassifier::TLabeledAddressClassifier::TConstPtr classifier, TMaybe<TInstant> netDataUpdateTimestamp);
+
 private:
-    static TString ClassifyNetwork(NAddressClassifier::TLabeledAddressClassifier::TConstPtr classifier, const TString& address); 
- 
-    void InitAddressClassifier(const NKikimrConfig::TSqsConfig& config, TVector<TString>&& labels); 
- 
-private: 
-    bool NetClassifierOnly; 
- 
+    static TString ClassifyNetwork(NAddressClassifier::TLabeledAddressClassifier::TConstPtr classifier, const TString& address);
+
+    void InitAddressClassifier(const NKikimrConfig::TSqsConfig& config, TVector<TString>&& labels);
+
+private:
+    bool NetClassifierOnly;
+
     THashMap<TString, TMap<TReportedTrafficKey, ui64>> ReportedTraffic;
     THashMap<TString, TMap<TReportedRequestsKey, ui64>> ReportedRequests;
-    NAddressClassifier::TLabeledAddressClassifier::TConstPtr AddressClassifier; 
-    NAddressClassifier::TLabeledAddressClassifier::TConstPtr NetClassifier; 
- 
-    TIntrusivePtr<TMeteringCounters> Counters; 
+    NAddressClassifier::TLabeledAddressClassifier::TConstPtr AddressClassifier;
+    NAddressClassifier::TLabeledAddressClassifier::TConstPtr NetClassifier;
+
+    TIntrusivePtr<TMeteringCounters> Counters;
 };
 
 } // namespace NKikimr::NSQS

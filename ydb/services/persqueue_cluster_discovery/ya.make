@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(
     radix
     g:kikimr
-    g:logbroker 
+    g:logbroker
 )
 
 SRCS(

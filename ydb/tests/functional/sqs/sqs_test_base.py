@@ -15,7 +15,7 @@ import ydb.tests.library.common.yatest_common as yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.sqs.tables import create_all_tables as create_all_sqs_tables 
+from ydb.tests.library.sqs.tables import create_all_tables as create_all_sqs_tables
 
 from sqs_requests_client import SqsHttpApi
 
@@ -282,7 +282,7 @@ class KikimrSqsTestBase(object):
             driver.wait()
             with ydb.SessionPool(driver, size=1) as pool:
                 with pool.checkout() as session:
-                    create_all_sqs_tables(cls.sqs_root, driver, session) 
+                    create_all_sqs_tables(cls.sqs_root, driver, session)
         cls.create_metauser(cluster, config_generator)
 
     @classmethod

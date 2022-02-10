@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
- 
+
 #include <library/cpp/monlib/metrics/metric_registry.h>
 
 namespace Ydb {
@@ -14,23 +14,23 @@ class ListEndpointsResult;
 
 namespace NYdb {
 
-class IExtensionApi { 
-public: 
-    friend class TDriver; 
-public: 
-    virtual ~IExtensionApi() = default; 
-private: 
-    void SelfRegister(TDriver driver); 
-}; 
- 
-class IExtension { 
-    friend class TDriver; 
-public: 
-    virtual ~IExtension() = default; 
-private: 
-    void SelfRegister(TDriver driver); 
-}; 
- 
+class IExtensionApi {
+public:
+    friend class TDriver;
+public:
+    virtual ~IExtensionApi() = default;
+private:
+    void SelfRegister(TDriver driver);
+};
+
+class IExtension {
+    friend class TDriver;
+public:
+    virtual ~IExtension() = default;
+private:
+    void SelfRegister(TDriver driver);
+};
+
 namespace NSdkStats {
 
 class IStatApi: public IExtensionApi {

@@ -1,5 +1,5 @@
 #include "msgbus_server_pq_metarequest.h"
-#include "msgbus_server_pq_read_session_info.h" 
+#include "msgbus_server_pq_read_session_info.h"
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -439,12 +439,12 @@ void TPersQueueGetPartitionLocationsTopicWorker::Answer(
 //
 
 TPersQueueGetReadSessionsInfoProcessor::TPersQueueGetReadSessionsInfoProcessor(
-    const NKikimrClient::TPersQueueRequest& request, 
-    const TActorId& schemeCache, 
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory 
+    const NKikimrClient::TPersQueueRequest& request,
+    const TActorId& schemeCache,
+    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
 )
     : TPersQueueBaseRequestProcessor(request, schemeCache, true)
-    , PQReadSessionsInfoWorkerFactory(pqReadSessionsInfoWorkerFactory) 
+    , PQReadSessionsInfoWorkerFactory(pqReadSessionsInfoWorkerFactory)
 {
     const auto& cmd = RequestProto->GetMetaRequest().GetCmdGetReadSessionsInfo();
     const auto& topics = cmd.GetTopic();
@@ -531,13 +531,13 @@ bool TPersQueueGetReadSessionsInfoTopicWorker::WaitAllPipeEvents(const TActorCon
     return false;
 }
 
-THolder<IActor> TPersQueueGetReadSessionsInfoProcessor::CreateSessionsSubactor( 
-    const THashMap<TString, TActorId>&& readSessions 
-) { 
-    if (PQReadSessionsInfoWorkerFactory) { 
-        return PQReadSessionsInfoWorkerFactory->Create(SelfId(), std::move(readSessions), NodesInfo); 
+THolder<IActor> TPersQueueGetReadSessionsInfoProcessor::CreateSessionsSubactor(
+    const THashMap<TString, TActorId>&& readSessions
+) {
+    if (PQReadSessionsInfoWorkerFactory) {
+        return PQReadSessionsInfoWorkerFactory->Create(SelfId(), std::move(readSessions), NodesInfo);
     }
-    return MakeHolder<TPersQueueGetReadSessionsInfoWorker>(SelfId(), std::move(readSessions), NodesInfo); 
+    return MakeHolder<TPersQueueGetReadSessionsInfoWorker>(SelfId(), std::move(readSessions), NodesInfo);
 }
 
 STFUNC(TPersQueueGetReadSessionsInfoTopicWorker::WaitAllPipeEventsStateFunc) {

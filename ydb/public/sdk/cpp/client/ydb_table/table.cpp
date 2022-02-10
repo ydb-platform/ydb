@@ -1,10 +1,10 @@
-#include "table.h" 
+#include "table.h"
 
-#define INCLUDE_YDB_INTERNAL_H 
+#define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
-#undef INCLUDE_YDB_INTERNAL_H 
- 
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_stats/stats.h>
@@ -14,7 +14,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/client_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/data_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/request_migrator.h>
- 
+
 #include <library/cpp/cache/cache.h>
 
 #include <util/generic/map.h>
@@ -3549,7 +3549,7 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const TString& table, EDataForma
 TAsyncScanQueryPartIterator TTableClient::StreamExecuteScanQuery(const TString& query, const TParams& params,
     const TStreamExecScanQuerySettings& settings)
 {
-    return Impl_->StreamExecuteScanQuery(query, &params.GetProtoMap(), settings); 
+    return Impl_->StreamExecuteScanQuery(query, &params.GetProtoMap(), settings);
 }
 
 TAsyncScanQueryPartIterator TTableClient::StreamExecuteScanQuery(const TString& query,
@@ -3871,7 +3871,7 @@ TAsyncDataQueryResult TSession::ExecuteDataQuery(const TString& query, const TTx
 TAsyncDataQueryResult TSession::ExecuteDataQuery(const TString& query, const TTxControl& txControl,
     TParams&& params, const TExecDataQuerySettings& settings)
 {
-    auto paramsPtr = params.Empty() ? nullptr : params.GetProtoMapPtr(); 
+    auto paramsPtr = params.Empty() ? nullptr : params.GetProtoMapPtr();
     return Client_->ExecuteDataQuery(*this, query, txControl, paramsPtr, settings);
 }
 
@@ -3891,7 +3891,7 @@ TAsyncDataQueryResult TSession::ExecuteDataQuery(const TString& query, const TTx
             *this,
             query,
             txControl,
-            params.GetProtoMap(), 
+            params.GetProtoMap(),
             settings);
     }
 }
@@ -4048,7 +4048,7 @@ TAsyncDataQueryResult TDataQuery::Execute(const TTxControl& txControl,
 TAsyncDataQueryResult TDataQuery::Execute(const TTxControl& txControl, TParams&& params,
     const TExecDataQuerySettings& settings)
 {
-    auto paramsPtr = params.Empty() ? nullptr : params.GetProtoMapPtr(); 
+    auto paramsPtr = params.Empty() ? nullptr : params.GetProtoMapPtr();
     return Impl_->Session_.Client_->ExecuteDataQuery(
         Impl_->Session_,
         *this,
@@ -4075,7 +4075,7 @@ TAsyncDataQueryResult TDataQuery::Execute(const TTxControl& txControl, const TPa
             Impl_->Session_,
             *this,
             txControl,
-            params.GetProtoMap(), 
+            params.GetProtoMap(),
             settings,
             false);
     }

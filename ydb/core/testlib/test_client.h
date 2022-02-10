@@ -120,7 +120,7 @@ namespace Tests {
         NKikimrConfig::TCompactionConfig CompactionConfig;
         TMap<ui32, TString> NodeKeys;
         ui64 DomainPlanResolution = 0;
-        std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PersQueueGetReadSessionsInfoWorkerFactory; 
+        std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PersQueueGetReadSessionsInfoWorkerFactory;
 
         bool EnableMetering = false;
         TString MeteringFilePath;
@@ -159,23 +159,23 @@ namespace Tests {
         TServerSettings& SetChangesQueueItemsLimit(ui64 value) { ChangesQueueItemsLimit = value; return *this; }
         TServerSettings& SetChangesQueueBytesLimit(ui64 value) { ChangesQueueBytesLimit = value; return *this; }
         TServerSettings& SetMeteringFilePath(const TString& path) { EnableMetering = true; MeteringFilePath = path; return *this; }
-        TServerSettings& SetPersQueueGetReadSessionsInfoWorkerFactory( 
-            std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> factory 
-        ) { 
-            PersQueueGetReadSessionsInfoWorkerFactory = factory; 
-            return *this; 
-        } 
+        TServerSettings& SetPersQueueGetReadSessionsInfoWorkerFactory(
+            std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> factory
+        ) {
+            PersQueueGetReadSessionsInfoWorkerFactory = factory;
+            return *this;
+        }
 
         // Add additional grpc services
         template <typename TService>
-        TServerSettings& RegisterGrpcService( 
-            const TString& name, 
-            std::optional<NActors::TActorId> proxyId = std::nullopt 
-        ) { 
+        TServerSettings& RegisterGrpcService(
+            const TString& name,
+            std::optional<NActors::TActorId> proxyId = std::nullopt
+        ) {
             if (!GrpcServiceFactory) {
                 GrpcServiceFactory = std::make_shared<TGrpcServiceFactory>();
             }
-            GrpcServiceFactory->Register<TService>(name, true, proxyId); 
+            GrpcServiceFactory->Register<TService>(name, true, proxyId);
             return *this;
         }
 

@@ -1,15 +1,15 @@
-LIBRARY() 
- 
-OWNER( 
-    dcherednik 
-    g:kikimr 
-) 
- 
-SRCS( 
-    operation.cpp 
-) 
- 
-PEERDIR( 
+LIBRARY()
+
+OWNER(
+    dcherednik
+    g:kikimr
+)
+
+SRCS(
+    operation.cpp
+)
+
+PEERDIR(
     ydb/public/api/grpc
     ydb/public/lib/operation_id
     ydb/public/sdk/cpp/client/ydb_common_client/impl
@@ -17,6 +17,6 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_export
     ydb/public/sdk/cpp/client/ydb_import
     ydb/public/sdk/cpp/client/ydb_types/operation
-) 
- 
-END() 
+)
+
+END()

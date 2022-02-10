@@ -12,37 +12,37 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-    Ydb::StatusIds::StatusCode FillProposeRequestImpl( 
-        const TString& name, 
-        const Ydb::PersQueue::V1::TopicSettings& settings, 
+    Ydb::StatusIds::StatusCode FillProposeRequestImpl(
+        const TString& name,
+        const Ydb::PersQueue::V1::TopicSettings& settings,
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
-        const TActorContext& ctx, 
-        bool alter, 
-        TString& error 
-    ); 
- 
+        const TActorContext& ctx,
+        bool alter,
+        TString& error
+    );
+
     struct TClientServiceType {
         TString Name;
         ui32 MaxCount;
     };
     typedef std::map<TString, TClientServiceType> TClientServiceTypes;
     TClientServiceTypes GetSupportedClientServiceTypes(const TActorContext& ctx);
- 
+
     // Returns true if have duplicated read rules
     bool CheckReadRulesConfig(const NKikimrPQ::TPQTabletConfig& config, const TClientServiceTypes& supportedReadRuleServiceTypes, TString& error);
- 
-    TString AddReadRuleToConfig( 
-        NKikimrPQ::TPQTabletConfig *config, 
-        const Ydb::PersQueue::V1::TopicSettings::ReadRule& rr, 
+
+    TString AddReadRuleToConfig(
+        NKikimrPQ::TPQTabletConfig *config,
+        const Ydb::PersQueue::V1::TopicSettings::ReadRule& rr,
         const TClientServiceTypes& supportedReadRuleServiceTypes,
-        const TActorContext& ctx 
-    ); 
-    TString RemoveReadRuleFromConfig( 
-        NKikimrPQ::TPQTabletConfig *config, 
+        const TActorContext& ctx
+    );
+    TString RemoveReadRuleFromConfig(
+        NKikimrPQ::TPQTabletConfig *config,
         const NKikimrPQ::TPQTabletConfig& originalConfig,
-        const TString& consumerName, 
-        const TActorContext& ctx 
-    ); 
+        const TString& consumerName,
+        const TActorContext& ctx
+    );
     NYql::TIssue FillIssue(const TString &errorReason, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode);
 
 
@@ -105,14 +105,14 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         void SendDescribeProposeRequest(const NActors::TActorContext& ctx) {
             PrepareTopicPath(ctx);
-            auto navigateRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>(); 
-            navigateRequest->DatabaseName = CanonizePath(this->Request_->GetDatabaseName().GetOrElse("")); 
+            auto navigateRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+            navigateRequest->DatabaseName = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
 
-            NSchemeCache::TSchemeCacheNavigate::TEntry entry; 
-            entry.Path = NKikimr::SplitPath(TopicPath); 
-            entry.SyncVersion = true; 
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTopic; 
-            navigateRequest->ResultSet.emplace_back(entry); 
+            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+            entry.Path = NKikimr::SplitPath(TopicPath);
+            entry.SyncVersion = true;
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTopic;
+            navigateRequest->ResultSet.emplace_back(entry);
 
             if (this->Request_->GetInternalToken().empty()) {
                 if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
@@ -120,24 +120,24 @@ namespace NKikimr::NGRpcProxy::V1 {
                                           "Unauthenticated access is forbidden, please provide credentials", ctx);
                 }
             } else {
-                navigateRequest->UserToken = new NACLib::TUserToken(this->Request_->GetInternalToken()); 
+                navigateRequest->UserToken = new NACLib::TUserToken(this->Request_->GetInternalToken());
             }
             if (!IsDead) {
-                ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release())); 
+                ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release()));
             }
         }
 
         bool ReplyIfNotTopic(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get(); 
-            Y_VERIFY(result->ResultSet.size() == 1); 
-            const auto& response = result->ResultSet.front(); 
-            const TString path  = JoinPath(response.Path); 
+            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
+            Y_VERIFY(result->ResultSet.size() == 1);
+            const auto& response = result->ResultSet.front();
+            const TString path  = JoinPath(response.Path);
 
             if (ev->Get()->Request.Get()->ResultSet.size() != 1 ||
                 ev->Get()->Request.Get()->ResultSet.begin()->Kind !=
                 NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                this->Request_->RaiseIssue( 
-                    FillIssue( 
+                this->Request_->RaiseIssue(
+                    FillIssue(
                               TStringBuilder() << "path '" << path << "' is not a stream",
                               Ydb::PersQueue::ErrorCode::ERROR
                               )
@@ -165,10 +165,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                     FillIssue(
                         TStringBuilder() << "path '" << path << "' does not exist or you " <<
                         "do not have access rights",
-                        Ydb::PersQueue::ErrorCode::ERROR 
-                    ) 
-                ); 
-                return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx); 
+                        Ydb::PersQueue::ErrorCode::ERROR
+                    )
+                );
+                return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
             }
             case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete: {
                 this->Request_->RaiseIssue(
@@ -256,28 +256,28 @@ namespace NKikimr::NGRpcProxy::V1 {
                                 const TString& workingDir, const TString& name)
         {
             Y_UNUSED(name);
-            const auto& response = DescribeSchemeResult->Get()->Request.Get()->ResultSet.front(); 
+            const auto& response = DescribeSchemeResult->Get()->Request.Get()->ResultSet.front();
             NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
             modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
             modifyScheme.SetWorkingDir(workingDir);
 
             auto* config = modifyScheme.MutableAlterPersQueueGroup();
-            Y_VERIFY(response.Self); 
-            Y_VERIFY(response.PQGroupInfo); 
-            config->CopyFrom(response.PQGroupInfo->Description); 
+            Y_VERIFY(response.Self);
+            Y_VERIFY(response.PQGroupInfo);
+            config->CopyFrom(response.PQGroupInfo->Description);
 
             {
                 auto applyIf = modifyScheme.AddApplyIf();
-                applyIf->SetPathId(response.Self->Info.GetPathId()); 
-                applyIf->SetPathVersion(response.Self->Info.GetPathVersion()); 
+                applyIf->SetPathId(response.Self->Info.GetPathId());
+                applyIf->SetPathVersion(response.Self->Info.GetPathVersion());
             }
 
-            static_cast<TDerived*>(this)->ModifyPersqueueConfig( 
-                ctx, 
-                *config, 
-                response.PQGroupInfo->Description, 
-                response.Self->Info 
-            ); 
+            static_cast<TDerived*>(this)->ModifyPersqueueConfig(
+                ctx,
+                *config,
+                response.PQGroupInfo->Description,
+                response.Self->Info
+            );
 
             this->DescribeSchemeResult.Reset();
         }
@@ -296,7 +296,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
     private:
-        THolder<NActors::TEventHandle<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DescribeSchemeResult; 
+        THolder<NActors::TEventHandle<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DescribeSchemeResult;
     };
 
 }

@@ -1,14 +1,14 @@
-#include "source_id_encoding.h" 
- 
-#include <library/cpp/string_utils/base64/base64.h> 
- 
-#include <util/generic/yexception.h> 
-#include <util/string/strip.h> 
- 
-namespace NKikimr { 
+#include "source_id_encoding.h"
+
+#include <library/cpp/string_utils/base64/base64.h>
+
+#include <util/generic/yexception.h>
+#include <util/string/strip.h>
+
+namespace NKikimr {
 namespace NPQ {
 namespace NSourceIdEncoding {
- 
+
 struct TTags {
     static constexpr char Simple = 0;
     static constexpr char Base64 = 1;
@@ -16,10 +16,10 @@ struct TTags {
 
 static constexpr TStringBuf Base64Prefix = "base64:";
 
-TString EncodeSimple(const TString& sourceId) { 
+TString EncodeSimple(const TString& sourceId) {
     return TString(1, TTags::Simple) + sourceId;
-} 
- 
+}
+
 TString DecodeSimple(const TString& sourceId) {
     Y_VERIFY(!sourceId.empty() && sourceId[0] == TTags::Simple);
     return sourceId.substr(1);
@@ -49,14 +49,14 @@ TString DecodeBase64(const TString& sourceId) {
     return Base64Prefix + StripStringRight(Base64EncodeUrl(sourceId.substr(1)), EqualsStripAdapter(','));
 }
 
-TString Encode(const TString& sourceId) { 
+TString Encode(const TString& sourceId) {
     if (sourceId.StartsWith(Base64Prefix)) {
         return EncodeBase64(sourceId);
-    } else { 
+    } else {
         return EncodeSimple(sourceId);
-    } 
-} 
- 
+    }
+}
+
 TString Decode(const TString& sourceId) {
     Y_VERIFY(!sourceId.empty());
 
@@ -67,9 +67,9 @@ TString Decode(const TString& sourceId) {
         return DecodeBase64(sourceId);
     default:
         return sourceId;
-    } 
-} 
- 
+    }
+}
+
 bool IsValidEncoded(const TString& sourceId) {
     if (sourceId.empty()) {
         return false;
@@ -82,8 +82,8 @@ bool IsValidEncoded(const TString& sourceId) {
     default:
         return false;
     }
-} 
- 
+}
+
 } // NSourceIdEncoding
 } // NPQ
 } // NKikimr

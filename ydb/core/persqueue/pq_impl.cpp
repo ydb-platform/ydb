@@ -1,6 +1,6 @@
- 
+
 #include "pq_impl.h"
-#include "event_helpers.h" 
+#include "event_helpers.h"
 #include "partition.h"
 #include "read.h"
 #include <ydb/core/persqueue/config/config.h>
@@ -25,7 +25,7 @@ namespace NPQ {
 const TString TMP_REQUEST_MARKER = "__TMP__REQUEST__MARKER__";
 const ui32 CACHE_SIZE = 100 << 20; //100mb per tablet by default
 const ui32 MAX_BYTES = 25 * 1024 * 1024;
-const TDuration TOTAL_TIMEOUT = TDuration::Seconds(120); 
+const TDuration TOTAL_TIMEOUT = TDuration::Seconds(120);
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 10240;
 
 struct TPartitionInfo {
@@ -34,17 +34,17 @@ struct TPartitionInfo {
         : Actor(actor)
         , KeyRange(std::move(keyRange))
         , InitDone(initDone)
-    { 
-        Baseline.Populate(baseline); 
-    } 
+    {
+        Baseline.Populate(baseline);
+    }
 
     TPartitionInfo(const TPartitionInfo& info)
         : Actor(info.Actor)
         , KeyRange(info.KeyRange)
         , InitDone(info.InitDone)
-    { 
-        Baseline.Populate(info.Baseline); 
-    } 
+    {
+        Baseline.Populate(info.Baseline);
+    }
 
     TActorId Actor;
     TMaybe<TPartitionKeyRange> KeyRange;
@@ -143,9 +143,9 @@ private:
 
         auto partResp = Response->Record.MutablePartitionResponse()->MutableCmdReadResult();
 
-        partResp->SetMaxOffset(res.GetMaxOffset()); 
-        partResp->SetSizeLag(res.GetSizeLag()); 
-        partResp->SetWaitQuotaTimeMs(partResp->GetWaitQuotaTimeMs() + res.GetWaitQuotaTimeMs()); 
+        partResp->SetMaxOffset(res.GetMaxOffset());
+        partResp->SetSizeLag(res.GetSizeLag());
+        partResp->SetWaitQuotaTimeMs(partResp->GetWaitQuotaTimeMs() + res.GetWaitQuotaTimeMs());
 
         for (ui32 i = 0; i < res.ResultSize(); ++i) {
             if (!res.GetResult(i).HasPartNo() || res.GetResult(i).GetPartNo() == 0) {
@@ -343,7 +343,7 @@ public:
             AnswerAndDie(ctx);
             return;
         }
-        ctx.Schedule(TOTAL_TIMEOUT, new TEvents::TEvWakeup()); 
+        ctx.Schedule(TOTAL_TIMEOUT, new TEvents::TEvWakeup());
     }
 
 private:
@@ -538,10 +538,10 @@ private:
 
 void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error)
 {
-    ReplyPersQueueError( 
-        ctx.SelfID, ctx, TabletID(), TopicName, Nothing(), *Counters, NKikimrServices::PERSQUEUE, 
-        responseCookie, errorCode, error 
-    ); 
+    ReplyPersQueueError(
+        ctx.SelfID, ctx, TabletID(), TopicName, Nothing(), *Counters, NKikimrServices::PERSQUEUE,
+        responseCookie, errorCode, error
+    );
 }
 
 void TPersQueue::FillMeteringParams(const TActorContext& ctx)
@@ -621,8 +621,8 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
             Partitions.emplace(partitionId, TPartitionInfo(
                 ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicName, TopicPath, LocalDC, DCId, Config, *Counters, ctx, true)),
                 GetPartitionKeyRange(partition),
-                true, 
-                *Counters 
+                true,
+                *Counters
             ));
 
             // InitCompleted is true because this partition is empty
@@ -729,8 +729,8 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         Partitions.emplace(partitionId, TPartitionInfo(
             ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicName, TopicPath, LocalDC, DCId, Config, *Counters, ctx, false)),
             GetPartitionKeyRange(partition),
-            false, 
-            *Counters 
+            false,
+            *Counters
         ));
     }
     ConfigInited = true;
@@ -849,19 +849,19 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
     Y_VERIFY(it != Partitions.end());
     auto diff = ev->Get()->Counters.MakeDiffForAggr(it->second.Baseline);
     ui64 cpuUsage = diff->Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE].Get();
-    ui64 networkBytesUsage = diff->Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Get(); 
-    if (ResourceMetrics) { 
-        if (cpuUsage > 0) { 
+    ui64 networkBytesUsage = diff->Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Get();
+    if (ResourceMetrics) {
+        if (cpuUsage > 0) {
             ResourceMetrics->CPU.Increment(cpuUsage);
-        } 
-        if (networkBytesUsage > 0) { 
-            ResourceMetrics->Network.Increment(networkBytesUsage); 
-        } 
-        if (cpuUsage > 0 || networkBytesUsage > 0) { 
+        }
+        if (networkBytesUsage > 0) {
+            ResourceMetrics->Network.Increment(networkBytesUsage);
+        }
+        if (cpuUsage > 0 || networkBytesUsage > 0) {
             ResourceMetrics->TryUpdate(ctx);
-        } 
+        }
     }
- 
+
     Counters->Populate(*diff.Get());
     ev->Get()->Counters.RememberCurrentStateAsBaseline(it->second.Baseline);
 
@@ -1413,8 +1413,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
 
     TVector <TEvPQ::TEvWrite::TMsg> msgs;
 
-    bool mirroredPartition = Config.GetPartitionConfig().HasMirrorFrom(); 
- 
+    bool mirroredPartition = Config.GetPartitionConfig().HasMirrorFrom();
+
     if (!req.GetIsDirectWrite()) {
         if (!req.HasMessageNo()) {
             ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "MessageNo must be set for writes");
@@ -1427,7 +1427,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
             return;
         }
     }
- 
+
     if (req.HasCmdWriteOffset() && req.GetCmdWriteOffset() < 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "CmdWriteOffset can't be negative");
         return;
@@ -1479,14 +1479,14 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
             errorStr = "TotalSize is incorrect";
         } else if (cmd.GetSourceId().size() > MAX_SOURCE_ID_LENGTH) {
             errorStr = "Too big SourceId";
-        } else if (mirroredPartition && !cmd.GetDisableDeduplication()) { 
-            errorStr = "Write to mirrored topic is forbiden"; 
+        } else if (mirroredPartition && !cmd.GetDisableDeduplication()) {
+            errorStr = "Write to mirrored topic is forbiden";
         }
-        ui64 createTimestampMs = 0, writeTimestampMs = 0; 
+        ui64 createTimestampMs = 0, writeTimestampMs = 0;
         if (cmd.HasCreateTimeMS() && cmd.GetCreateTimeMS() >= 0)
-            createTimestampMs = cmd.GetCreateTimeMS(); 
+            createTimestampMs = cmd.GetCreateTimeMS();
         if (cmd.HasWriteTimeMS() && cmd.GetWriteTimeMS() > 0) {
-            writeTimestampMs = cmd.GetWriteTimeMS(); 
+            writeTimestampMs = cmd.GetWriteTimeMS();
             if (!cmd.GetDisableDeduplication()) {
                 errorStr = "WriteTimestamp avail only without deduplication";
             }
@@ -1498,7 +1498,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
         }
         ui32 mSize = MAX_BLOB_PART_SIZE - cmd.GetSourceId().size() - sizeof(ui32) - TClientBlob::OVERHEAD; //megaqc - remove this
         Y_VERIFY(mSize > 204800);
-        ui64 receiveTimestampMs = TAppData::TimeProvider->Now().MilliSeconds(); 
+        ui64 receiveTimestampMs = TAppData::TimeProvider->Now().MilliSeconds();
         bool disableDeduplication = cmd.GetDisableDeduplication();
         if (cmd.GetData().size() > mSize) {
             if (cmd.HasPartNo()) {
@@ -1525,10 +1525,10 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                 pos += mSize - diff;
                 diff = 0;
                 msgs.push_back({cmd.GetSourceId(), static_cast<ui64>(cmd.GetSeqNo()), partNo,
-                    totalParts, totalSize, createTimestampMs, receiveTimestampMs, 
+                    totalParts, totalSize, createTimestampMs, receiveTimestampMs,
                     disableDeduplication, writeTimestampMs, data, uncompressedSize,
                     cmd.GetPartitionKey(), cmd.GetExplicitHash(), cmd.GetExternalOperation()
-                }); 
+                });
                 partNo++;
                 uncompressedSize = 0;
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got client PART message topic: " << TopicName << " partition: " << req.GetPartition()
@@ -1539,12 +1539,12 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
             Y_VERIFY(partNo == totalParts);
         } else {
             msgs.push_back({cmd.GetSourceId(), static_cast<ui64>(cmd.GetSeqNo()), static_cast<ui16>(cmd.HasPartNo() ? cmd.GetPartNo() : 0),
-                static_cast<ui16>(cmd.HasPartNo() ? cmd.GetTotalParts() : 1), 
-                static_cast<ui32>(cmd.HasTotalSize() ? cmd.GetTotalSize() : cmd.GetData().Size()), 
-                createTimestampMs, receiveTimestampMs, disableDeduplication, writeTimestampMs, cmd.GetData(), 
+                static_cast<ui16>(cmd.HasPartNo() ? cmd.GetTotalParts() : 1),
+                static_cast<ui32>(cmd.HasTotalSize() ? cmd.GetTotalSize() : cmd.GetData().Size()),
+                createTimestampMs, receiveTimestampMs, disableDeduplication, writeTimestampMs, cmd.GetData(),
                 cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0u, cmd.GetPartitionKey(), cmd.GetExplicitHash(),
                 cmd.GetExternalOperation()
-            }); 
+            });
         }
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got client message topic: " << TopicName <<
                     " partition: " << req.GetPartition() <<

@@ -1,12 +1,12 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(g:kikimr)
- 
-SRCS( 
-    credentials.cpp 
+
+SRCS(
+    credentials.cpp
     login.cpp
-) 
- 
+)
+
 PEERDIR(
     ydb/library/login
     ydb/public/api/grpc
@@ -14,4 +14,4 @@ PEERDIR(
     ydb/library/yql/public/issue
 )
 
-END() 
+END()

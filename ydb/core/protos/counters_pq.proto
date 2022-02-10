@@ -55,7 +55,7 @@ enum ECumulativeCounters {
     COUNTER_PQ_WRITE_SMALL_OFFSET = 34                               [(CounterOpts) = {Name: "WriteSmallOffset"}];
 
     COUNTER_PQ_TABLET_CPU_USAGE = 35                                 [(CounterOpts) = {Name: "CPUUsage"}];
-    COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE = 36                       [(CounterOpts) = {Name: "NetworkUsage"}]; 
+    COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE = 36                       [(CounterOpts) = {Name: "NetworkUsage"}];
 }
 
 enum ESimpleCounters {

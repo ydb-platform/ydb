@@ -1,13 +1,13 @@
 #pragma once
 
-#include "table_enum.h" 
+#include "table_enum.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/query_stats/stats.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
- 
+
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/variant.h>
@@ -30,11 +30,11 @@ class ValueSinceUnixEpochModeSettings;
 }
 
 namespace NYdb {
- 
-namespace NScheme { 
-struct TPermissions; 
-} 
- 
+
+namespace NScheme {
+struct TPermissions;
+}
+
 namespace NTable {
 
 ////////////////////////////////////////////////////////////////////////////////

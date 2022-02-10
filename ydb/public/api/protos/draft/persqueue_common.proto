@@ -1,42 +1,42 @@
-syntax = "proto3"; 
-import "google/protobuf/descriptor.proto"; 
+syntax = "proto3";
+import "google/protobuf/descriptor.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
- 
-package NPersQueueCommon; 
- 
-option java_package = "com.yandex.ydb.persqueue"; 
-option cc_enable_arenas = true; 
- 
-extend google.protobuf.FileOptions { 
-    bool GenerateYaStyle = 66678; 
-} 
- 
-// TODO: Change to IssueMessage 
-message Error { 
-    NPersQueue.NErrorCode.EErrorCode code = 1; 
-    string description = 2; 
-} 
- 
-enum ECodec { 
-    RAW = 0; 
-    GZIP = 1; 
-    LZOP = 2; 
-    ZSTD = 3; 
-    DEFAULT = 100; // TODO: move to pqlib 
-} 
- 
-/** 
- * Structure for storing client credentials. 
- * Client must provide this structre in first request (init of write\read) and in case of changing, 
- * e.g. client gets new TVM Service ticket once per hour. Not all requests (read/write) could contain TCredentials - server will take already known credentials. 
- * Provided auth credentials will be checked once per some time at serverside. This means that if TVM ticket is too old, then read\write session will die. 
- * If no auth provided at all - client will be using guest rights. So, reading/writing is still possible without credentials. 
- */ 
- 
-message Credentials { 
-    oneof credentials { 
-        bytes tvm_service_ticket = 1; 
-        bytes oauth_token = 2; 
-    } 
-} 
- 
+
+package NPersQueueCommon;
+
+option java_package = "com.yandex.ydb.persqueue";
+option cc_enable_arenas = true;
+
+extend google.protobuf.FileOptions {
+    bool GenerateYaStyle = 66678;
+}
+
+// TODO: Change to IssueMessage
+message Error {
+    NPersQueue.NErrorCode.EErrorCode code = 1;
+    string description = 2;
+}
+
+enum ECodec {
+    RAW = 0;
+    GZIP = 1;
+    LZOP = 2;
+    ZSTD = 3;
+    DEFAULT = 100; // TODO: move to pqlib
+}
+
+/**
+ * Structure for storing client credentials.
+ * Client must provide this structre in first request (init of write\read) and in case of changing,
+ * e.g. client gets new TVM Service ticket once per hour. Not all requests (read/write) could contain TCredentials - server will take already known credentials.
+ * Provided auth credentials will be checked once per some time at serverside. This means that if TVM ticket is too old, then read\write session will die.
+ * If no auth provided at all - client will be using guest rights. So, reading/writing is still possible without credentials.
+ */
+
+message Credentials {
+    oneof credentials {
+        bytes tvm_service_ticket = 1;
+        bytes oauth_token = 2;
+    }
+}
+

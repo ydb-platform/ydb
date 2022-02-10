@@ -61,14 +61,14 @@ public:
             NKikimrClient::TPersQueueRequest request;
             request.MutableMetaRequest()->MutableCmdGetPartitionStatus()->SetClientId(Client);
             request.MutableMetaRequest()->MutableCmdGetPartitionStatus()->AddTopicRequest()->SetTopic(Topic);
-            ctx.Register(NMsgBusProxy::CreateActorServerPersQueue(ctx.SelfID, request, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), nullptr)); 
+            ctx.Register(NMsgBusProxy::CreateActorServerPersQueue(ctx.SelfID, request, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), nullptr));
             ++Requests;
         }
         {
             NKikimrClient::TPersQueueRequest request;
             request.MutableMetaRequest()->MutableCmdGetReadSessionsInfo()->SetClientId(Client);
             request.MutableMetaRequest()->MutableCmdGetReadSessionsInfo()->AddTopic(Topic);
-            ctx.Register(NMsgBusProxy::CreateActorServerPersQueue(ctx.SelfID, request, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), nullptr)); 
+            ctx.Register(NMsgBusProxy::CreateActorServerPersQueue(ctx.SelfID, request, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), nullptr));
             ++Requests;
         }
         Become(&TThis::StateRequestedTopicInfo, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());

@@ -1,18 +1,18 @@
-#include "export.h" 
+#include "export.h"
 
-#define INCLUDE_YDB_INTERNAL_H 
+#define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
-#undef INCLUDE_YDB_INTERNAL_H 
- 
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_export_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
- 
-#include <google/protobuf/repeated_field.h> 
-#include <google/protobuf/timestamp.pb.h> 
- 
+
+#include <google/protobuf/repeated_field.h>
+#include <google/protobuf/timestamp.pb.h>
+
 namespace NYdb {
 namespace NExport {
 

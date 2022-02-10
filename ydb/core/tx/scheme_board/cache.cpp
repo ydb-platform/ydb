@@ -190,7 +190,7 @@ namespace {
                 break;
             }
 
-            entry.Self.Drop(); 
+            entry.Self.Drop();
             entry.SecurityObject.Drop();
             entry.DomainInfo.Drop();
             entry.Kind = TNavigate::KindUnknown;
@@ -697,8 +697,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             CdcStreams.clear();
             Partitioning.clear();
 
-            Self.Drop(); 
- 
+            Self.Drop();
+
             DomainDescription.Drop();
             RtmrVolumeInfo.Drop();
             KesusInfo.Drop();
@@ -1317,8 +1317,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             Y_VERIFY(pathDesc.HasSelf());
             const auto& entryDesc = pathDesc.GetSelf();
-            Self = new TNavigate::TDirEntryInfo(); 
-            Self->Info.CopyFrom(entryDesc); 
+            Self = new TNavigate::TDirEntryInfo();
+            Self->Info.CopyFrom(entryDesc);
 
             Created = entryDesc.HasCreateFinished() && entryDesc.GetCreateFinished();
             CreateStep = entryDesc.GetCreateStep();
@@ -1665,7 +1665,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
 
             // specific (it's safe to fill them all)
-            entry.Self = Self; 
+            entry.Self = Self;
             entry.Columns = Columns;
             entry.NotNullColumns = NotNullColumns;
             entry.Indexes = Indexes;
@@ -1916,8 +1916,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
         TVector<TKeyDesc::TPartitionInfo> Partitioning;
 
-        TIntrusivePtr<TNavigate::TDirEntryInfo> Self; 
- 
+        TIntrusivePtr<TNavigate::TDirEntryInfo> Self;
+
         // RTMR specific
         TIntrusivePtr<TNavigate::TRtmrVolumeInfo> RtmrVolumeInfo;
 

@@ -254,11 +254,11 @@ public:
 
 // grpc_proxy
 class TGRpcServicesInitializer : public IKikimrServicesInitializer {
-private: 
-    std::shared_ptr<TModuleFactories> Factories; 
- 
+private:
+    std::shared_ptr<TModuleFactories> Factories;
+
 public:
-    TGRpcServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories); 
+    TGRpcServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -350,13 +350,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TPersQueueLibSharedInstanceInitializer : public IKikimrServicesInitializer { 
-public: 
-    TPersQueueLibSharedInstanceInitializer(const TKikimrRunConfig& runConfig); 
+class TPersQueueLibSharedInstanceInitializer : public IKikimrServicesInitializer {
+public:
+    TPersQueueLibSharedInstanceInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-}; 
- 
+};
+
 class TMemProfMonitorInitializer : public IKikimrServicesInitializer {
 public:
     TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig);

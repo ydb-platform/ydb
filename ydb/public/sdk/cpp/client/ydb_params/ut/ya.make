@@ -21,7 +21,7 @@ PEERDIR(
 )
 
 SRCS(
-    params_ut.cpp 
+    params_ut.cpp
 )
 
 END()

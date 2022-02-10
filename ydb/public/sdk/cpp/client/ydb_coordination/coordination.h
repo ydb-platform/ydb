@@ -13,11 +13,11 @@ namespace Coordination {
 }
 
 namespace NYdb {
- 
-namespace NScheme { 
-struct TPermissions; 
-} 
- 
+
+namespace NScheme {
+struct TPermissions;
+}
+
 namespace NCoordination {
 
 //! Represents result of a call with status

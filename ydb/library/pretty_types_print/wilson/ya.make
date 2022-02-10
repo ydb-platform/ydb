@@ -1,13 +1,13 @@
-LIBRARY() 
+LIBRARY()
 
-OWNER(g:kikimr) 
- 
-SRCS( 
-    out.cpp 
-) 
- 
-PEERDIR( 
+OWNER(g:kikimr)
+
+SRCS(
+    out.cpp
+)
+
+PEERDIR(
     ydb/library/wilson
-) 
- 
-END() 
+)
+
+END()

@@ -6212,7 +6212,7 @@ __kmp_register_library_startup(
                     // Attention! Falling to the next case. That's intentional.
                 case 1 : {    // Neighbor is alive.
                     // Check it is allowed.
-                    char * duplicate_ok = __kmp_env_get( "KMP_DUPLICATE_LIB_OK" ); 
+                    char * duplicate_ok = __kmp_env_get( "KMP_DUPLICATE_LIB_OK" );
                     if ( ! __kmp_str_match_true( duplicate_ok ) ) {
                         // That's not allowed. Issue fatal error.
                         __kmp_msg(

@@ -4,10 +4,10 @@ sys.dont_write_bytecode = True
 
 import argparse
 import base64
-try: 
-    import cPickle as pickle 
-except Exception: 
-    import pickle 
+try:
+    import cPickle as pickle
+except Exception:
+    import pickle
 
 import _common as common
 

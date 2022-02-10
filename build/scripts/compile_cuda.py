@@ -2,7 +2,7 @@ import sys
 import subprocess
 import os
 import collections
-import re 
+import re
 import tempfile
 
 
@@ -72,17 +72,17 @@ def main():
     for prefix in skip_prefix_list:
         cflags = [i for i in cflags if not i.startswith(prefix)]
 
-    if not is_clang(command): 
-        def good(arg): 
-            if arg.startswith('--target='): 
-                return False 
-            if arg in ('-Wno-exceptions', 
-                       '-Wno-inconsistent-missing-override'): 
-                return False 
-            return True 
-        cflags = filter(good, cflags) 
- 
-    cpp_args = [] 
+    if not is_clang(command):
+        def good(arg):
+            if arg.startswith('--target='):
+                return False
+            if arg in ('-Wno-exceptions',
+                       '-Wno-inconsistent-missing-override'):
+                return False
+            return True
+        cflags = filter(good, cflags)
+
+    cpp_args = []
     compiler_args = []
 
     # NVCC requires particular MSVC versions which may differ from the version
@@ -104,10 +104,10 @@ def main():
             if not value:
                 value = cflags_queue.popleft()
             if arg[1] == 'I':
-                cpp_args.append('-I{}'.format(value)) 
+                cpp_args.append('-I{}'.format(value))
             elif arg[1] == 'B':  # todo: delete "B" flag check when cuda stop to use gcc
                 pass
-            continue 
+            continue
 
         match = re.match(r'[-/]D(.*)', arg)
         if match:
@@ -118,13 +118,13 @@ def main():
             if vc_root and define.startswith('Y_MSVC_INCLUDE'):
                 define = os.path.expandvars('Y_MSVC_INCLUDE={}/include'.format(vc_root))
             cpp_args.append('-D' + define.replace('\\', '/'))
-            continue 
+            continue
 
-        compiler_args.append(arg) 
+        compiler_args.append(arg)
 
-    command += cpp_args 
-    if compiler_args: 
-        command += ['--compiler-options', ','.join(compiler_args)] 
+    command += cpp_args
+    if compiler_args:
+        command += ['--compiler-options', ','.join(compiler_args)]
 
     # --keep is necessary to prevent nvcc from embedding nvcc pid in generated
     # symbols.  It makes nvcc use the original file name as the prefix in the

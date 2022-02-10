@@ -1,22 +1,22 @@
-#include <Common/isLocalAddress.h>
-
+#include <Common/isLocalAddress.h> 
+ 
 #include <ifaddrs.h>
-#include <cstring>
+#include <cstring> 
 #include <optional>
 #include <common/types.h>
 #include <Common/Exception.h>
 #include <Poco/Net/IPAddress.h>
-#include <Poco/Net/SocketAddress.h>
-
-
-namespace DB
-{
-
+#include <Poco/Net/SocketAddress.h> 
+ 
+ 
+namespace DB 
+{ 
+ 
 namespace ErrorCodes
-{
+{ 
     extern const int SYSTEM_ERROR;
 }
-
+ 
 namespace
 {
 
@@ -46,7 +46,7 @@ struct NetworkInterfaces
             {
                 /// We interested only in IP-adresses
                 case AF_INET:
-                {
+                { 
                     interface_address.emplace(*(iface->ifa_addr));
                     break;
                 }
@@ -76,8 +76,8 @@ struct NetworkInterfaces
     }
 };
 
-}
-
+} 
+ 
 
 bool isLocalAddress(const Poco::Net::IPAddress & address)
 {
@@ -116,19 +116,19 @@ bool isLocalAddress(const Poco::Net::IPAddress & address)
 }
 
 
-bool isLocalAddress(const Poco::Net::SocketAddress & address, UInt16 clickhouse_port)
-{
-    return clickhouse_port == address.port() && isLocalAddress(address.host());
-}
-
-
-size_t getHostNameDifference(const std::string & local_hostname, const std::string & host)
-{
-    size_t hostname_difference = 0;
-    for (size_t i = 0; i < std::min(local_hostname.length(), host.length()); ++i)
-        if (local_hostname[i] != host[i])
-            ++hostname_difference;
-    return hostname_difference;
-}
-
-}
+bool isLocalAddress(const Poco::Net::SocketAddress & address, UInt16 clickhouse_port) 
+{ 
+    return clickhouse_port == address.port() && isLocalAddress(address.host()); 
+} 
+ 
+ 
+size_t getHostNameDifference(const std::string & local_hostname, const std::string & host) 
+{ 
+    size_t hostname_difference = 0; 
+    for (size_t i = 0; i < std::min(local_hostname.length(), host.length()); ++i) 
+        if (local_hostname[i] != host[i]) 
+            ++hostname_difference; 
+    return hostname_difference; 
+} 
+ 
+} 

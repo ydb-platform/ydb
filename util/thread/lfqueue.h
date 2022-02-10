@@ -70,10 +70,10 @@ class TLockFreeQueue: public TNonCopyable {
         }
     }
 
-    alignas(64) TRootNode* volatile JobQueue;
-    alignas(64) volatile TAtomic FreememCounter;
-    alignas(64) volatile TAtomic FreeingTaskCounter;
-    alignas(64) TRootNode* volatile FreePtr;
+    alignas(64) TRootNode* volatile JobQueue; 
+    alignas(64) volatile TAtomic FreememCounter; 
+    alignas(64) volatile TAtomic FreeingTaskCounter; 
+    alignas(64) TRootNode* volatile FreePtr; 
 
     void TryToFreeAsyncMemory() {
         TAtomic keepCounter = AtomicAdd(FreeingTaskCounter, 0);
@@ -306,7 +306,7 @@ public:
                 newRoot = new TRootNode;
             AtomicSet(newRoot->PushQueue, nullptr);
             listInvertor.DoCopy(AtomicGet(curRoot->PushQueue));
-            AtomicSet(newRoot->PopQueue, listInvertor.Copy);
+            AtomicSet(newRoot->PopQueue, listInvertor.Copy); 
             newRoot->CopyCounter(curRoot);
             Y_ASSERT(AtomicGet(curRoot->PopQueue) == nullptr);
             if (AtomicCas(&JobQueue, newRoot, curRoot)) {

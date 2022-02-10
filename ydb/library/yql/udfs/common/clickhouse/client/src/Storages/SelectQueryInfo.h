@@ -1,20 +1,20 @@
-#pragma once
-
-#include <Interpreters/PreparedSets.h>
-#include <Interpreters/DatabaseAndTableWithAlias.h>
-#include <Core/SortDescription.h>
-#include <Core/Names.h>
+#pragma once 
+ 
+#include <Interpreters/PreparedSets.h> 
+#include <Interpreters/DatabaseAndTableWithAlias.h> 
+#include <Core/SortDescription.h> 
+#include <Core/Names.h> 
 #include <Storages/ProjectionsDescription.h>
 #include <Interpreters/AggregateDescription.h>
 
-#include <memory>
-
-namespace DB
-{
-
-class ExpressionActions;
-using ExpressionActionsPtr = std::shared_ptr<ExpressionActions>;
-
+#include <memory> 
+ 
+namespace DB 
+{ 
+ 
+class ExpressionActions; 
+using ExpressionActionsPtr = std::shared_ptr<ExpressionActions>; 
+ 
 class ActionsDAG;
 using ActionsDAGPtr = std::shared_ptr<ActionsDAG>;
 
@@ -42,14 +42,14 @@ using ClusterPtr = std::shared_ptr<Cluster>;
 struct MergeTreeDataSelectAnalysisResult;
 using MergeTreeDataSelectAnalysisResultPtr = std::shared_ptr<MergeTreeDataSelectAnalysisResult>;
 
-struct PrewhereInfo
-{
-    /// Actions which are executed in order to alias columns are used for prewhere actions.
+struct PrewhereInfo 
+{ 
+    /// Actions which are executed in order to alias columns are used for prewhere actions. 
     ActionsDAGPtr alias_actions;
     /// Actions for row level security filter. Applied separately before prewhere_actions.
     /// This actions are separate because prewhere condition should not be executed over filtered rows.
     ActionsDAGPtr row_level_filter;
-    /// Actions which are executed on block in order to get filter column for prewhere step.
+    /// Actions which are executed on block in order to get filter column for prewhere step. 
     ActionsDAGPtr prewhere_actions;
     String row_level_column_name;
     String prewhere_column_name;
@@ -63,13 +63,13 @@ struct PrewhereInfo
     std::string dump() const;
 };
 
-/// Helper struct to store all the information about the filter expression.
-struct FilterInfo
-{
+/// Helper struct to store all the information about the filter expression. 
+struct FilterInfo 
+{ 
     ExpressionActionsPtr alias_actions;
     ExpressionActionsPtr actions;
-    String column_name;
-    bool do_remove_column = false;
+    String column_name; 
+    bool do_remove_column = false; 
 };
 
 /// Same as FilterInfo, but with ActionsDAG.
@@ -80,25 +80,25 @@ struct FilterDAGInfo
     bool do_remove_column = false;
 
     std::string dump() const;
-};
-
-struct InputOrderInfo
-{
-    SortDescription order_key_prefix_descr;
-    int direction;
+}; 
+ 
+struct InputOrderInfo 
+{ 
+    SortDescription order_key_prefix_descr; 
+    int direction; 
     UInt64 limit;
-
+ 
     InputOrderInfo(const SortDescription & order_key_prefix_descr_, int direction_, UInt64 limit_)
         : order_key_prefix_descr(order_key_prefix_descr_), direction(direction_), limit(limit_) {}
-
-    bool operator ==(const InputOrderInfo & other) const
-    {
-        return order_key_prefix_descr == other.order_key_prefix_descr && direction == other.direction;
-    }
-
-    bool operator !=(const InputOrderInfo & other) const { return !(*this == other); }
-};
-
+ 
+    bool operator ==(const InputOrderInfo & other) const 
+    { 
+        return order_key_prefix_descr == other.order_key_prefix_descr && direction == other.direction; 
+    } 
+ 
+    bool operator !=(const InputOrderInfo & other) const { return !(*this == other); } 
+}; 
+ 
 class IMergeTreeDataPart;
 
 using ManyExpressionActions = std::vector<ExpressionActionsPtr>;
@@ -125,15 +125,15 @@ struct ProjectionCandidate
     MergeTreeDataSelectAnalysisResultPtr merge_tree_normal_select_result_ptr;
 };
 
-/** Query along with some additional data,
-  *  that can be used during query processing
-  *  inside storage engines.
-  */
-struct SelectQueryInfo
-{
-    ASTPtr query;
-    ASTPtr view_query; /// Optimized VIEW query
-
+/** Query along with some additional data, 
+  *  that can be used during query processing 
+  *  inside storage engines. 
+  */ 
+struct SelectQueryInfo 
+{ 
+    ASTPtr query; 
+    ASTPtr view_query; /// Optimized VIEW query 
+ 
     /// Cluster for the query.
     ClusterPtr cluster;
     /// Optimized cluster for the query.
@@ -143,16 +143,16 @@ struct SelectQueryInfo
     ClusterPtr optimized_cluster;
 
     TreeRewriterResultPtr syntax_analyzer_result;
-
-    PrewhereInfoPtr prewhere_info;
-
-    ReadInOrderOptimizerPtr order_optimizer;
+ 
+    PrewhereInfoPtr prewhere_info; 
+ 
+    ReadInOrderOptimizerPtr order_optimizer; 
     /// Can be modified while reading from storage
     InputOrderInfoPtr input_order_info;
-
-    /// Prepared sets are used for indices by storage engine.
-    /// Example: x IN (1, 2, 3)
-    PreparedSets sets;
+ 
+    /// Prepared sets are used for indices by storage engine. 
+    /// Example: x IN (1, 2, 3) 
+    PreparedSets sets; 
 
     /// Cached value of ExpressionAnalysisResult::has_window
     bool has_window = false;
@@ -166,6 +166,6 @@ struct SelectQueryInfo
     bool merge_tree_empty_result = false;
     Block minmax_count_projection_block;
     MergeTreeDataSelectAnalysisResultPtr merge_tree_select_result_ptr;
-};
-
-}
+}; 
+ 
+} 

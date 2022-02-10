@@ -1,45 +1,45 @@
-#include "IPv6ToBinary.h"
-#include <Poco/Net/IPAddress.h>
+#include "IPv6ToBinary.h" 
+#include <Poco/Net/IPAddress.h> 
 #include <Poco/ByteOrder.h>
 
 #include <Common/formatIPv6.h>
 
-#include <cstring>
-
-
-namespace DB
-{
-
+#include <cstring> 
+ 
+ 
+namespace DB 
+{ 
+ 
 /// Result array could be indexed with all possible uint8 values without extra check.
 /// For values greater than 128 we will store same value as for 128 (all bits set).
 constexpr size_t IPV6_MASKS_COUNT = 256;
 using RawMaskArrayV6 = std::array<uint8_t, IPV6_BINARY_LENGTH>;
 
 void IPv6ToRawBinary(const Poco::Net::IPAddress & address, char * res)
-{
-    if (Poco::Net::IPAddress::IPv6 == address.family())
-    {
+{ 
+    if (Poco::Net::IPAddress::IPv6 == address.family()) 
+    { 
         memcpy(res, address.addr(), 16);
-    }
-    else if (Poco::Net::IPAddress::IPv4 == address.family())
-    {
-        /// Convert to IPv6-mapped address.
+    } 
+    else if (Poco::Net::IPAddress::IPv4 == address.family()) 
+    { 
+        /// Convert to IPv6-mapped address. 
         memset(res, 0, 10);
-        res[10] = '\xFF';
-        res[11] = '\xFF';
-        memcpy(&res[12], address.addr(), 4);
-    }
-    else
+        res[10] = '\xFF'; 
+        res[11] = '\xFF'; 
+        memcpy(&res[12], address.addr(), 4); 
+    } 
+    else 
         memset(res, 0, 16);
 }
-
+ 
 std::array<char, 16> IPv6ToBinary(const Poco::Net::IPAddress & address)
 {
     std::array<char, 16> res;
     IPv6ToRawBinary(address, res.data());
-    return res;
-}
-
+    return res; 
+} 
+ 
 template <typename RawMaskArrayT>
 static constexpr RawMaskArrayT generateBitMask(size_t prefix)
 {
@@ -54,7 +54,7 @@ static constexpr RawMaskArrayT generateBitMask(size_t prefix)
     while (i < arr.size())
         arr[i++] = 0x00;
     return arr;
-}
+} 
 
 template <typename RawMaskArrayT, size_t masksCount>
 static constexpr std::array<RawMaskArrayT, masksCount> generateBitMasks()

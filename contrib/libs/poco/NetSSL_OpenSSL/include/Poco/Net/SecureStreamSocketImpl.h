@@ -39,9 +39,9 @@ public:
 	SecureStreamSocketImpl(StreamSocketImpl* pStreamSocket, Context::Ptr pContext);
 		/// Creates the SecureStreamSocketImpl.
 
-    void setSendTimeout(const Poco::Timespan& timeout);
-    void setReceiveTimeout(const Poco::Timespan& timeout);
-
+    void setSendTimeout(const Poco::Timespan& timeout); 
+    void setReceiveTimeout(const Poco::Timespan& timeout); 
+ 
 	SocketImpl* acceptConnection(SocketAddress& clientAddr);
 		/// Not supported by a SecureStreamSocket.
 		///
@@ -219,7 +219,7 @@ private:
 	SecureStreamSocketImpl(const SecureStreamSocketImpl&);
 	SecureStreamSocketImpl& operator = (const SecureStreamSocketImpl&);
 
-    StreamSocketImpl * underlying_socket;
+    StreamSocketImpl * underlying_socket; 
 	SecureSocketImpl _impl;
 	bool             _lazyHandshake;
 

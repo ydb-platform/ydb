@@ -449,7 +449,7 @@ bool SocketImpl::secure() const
 }
 
 
-bool SocketImpl::pollImpl(Poco::Timespan& remainingTime, int mode)
+bool SocketImpl::pollImpl(Poco::Timespan& remainingTime, int mode) 
 {
 	poco_socket_t sockfd = _sockfd;
 	if (sockfd == POCO_INVALID_SOCKET) throw InvalidSocketException();
@@ -580,11 +580,11 @@ bool SocketImpl::pollImpl(Poco::Timespan& remainingTime, int mode)
 #endif // POCO_HAVE_FD_EPOLL
 }
 
-bool SocketImpl::poll(const Poco::Timespan& timeout, int mode)
-{
-	Poco::Timespan remainingTime(timeout);
-	return pollImpl(remainingTime, mode);
-}
+bool SocketImpl::poll(const Poco::Timespan& timeout, int mode) 
+{ 
+	Poco::Timespan remainingTime(timeout); 
+	return pollImpl(remainingTime, mode); 
+} 
 	
 void SocketImpl::setSendBufferSize(int size)
 {
@@ -616,13 +616,13 @@ int SocketImpl::getReceiveBufferSize()
 
 void SocketImpl::setSendTimeout(const Poco::Timespan& timeout)
 {
-#if defined(_WIN32)
+#if defined(_WIN32) 
 	int value = (int) timeout.totalMilliseconds();
 	setOption(SOL_SOCKET, SO_SNDTIMEO, value);
-#else
+#else 
 	setOption(SOL_SOCKET, SO_SNDTIMEO, timeout);
 #endif
-	_sndTimeout = timeout;
+	_sndTimeout = timeout; 
 }
 
 
@@ -650,7 +650,7 @@ void SocketImpl::setReceiveTimeout(const Poco::Timespan& timeout)
 #else
 	setOption(SOL_SOCKET, SO_RCVTIMEO, timeout);
 #endif
-	_recvTimeout = timeout;
+	_recvTimeout = timeout; 
 }
 
 

@@ -22,16 +22,16 @@ namespace Net {
 
 
 SecureStreamSocketImpl::SecureStreamSocketImpl(Context::Ptr pContext):
-    underlying_socket(new StreamSocketImpl),
-	_impl(underlying_socket, pContext),
+    underlying_socket(new StreamSocketImpl), 
+	_impl(underlying_socket, pContext), 
 	_lazyHandshake(false)
 {
 }
 
 
 SecureStreamSocketImpl::SecureStreamSocketImpl(StreamSocketImpl* pStreamSocket, Context::Ptr pContext):
-    underlying_socket(pStreamSocket),
-	_impl(underlying_socket, pContext),
+    underlying_socket(pStreamSocket), 
+	_impl(underlying_socket, pContext), 
 	_lazyHandshake(false)
 {
 	pStreamSocket->duplicate();
@@ -51,18 +51,18 @@ SecureStreamSocketImpl::~SecureStreamSocketImpl()
 	}
 }
 
-void SecureStreamSocketImpl::setSendTimeout(const Poco::Timespan& timeout)
-{
-    underlying_socket->setSendTimeout(timeout);
-    _sndTimeout = underlying_socket->getSendTimeout();
-}
+void SecureStreamSocketImpl::setSendTimeout(const Poco::Timespan& timeout) 
+{ 
+    underlying_socket->setSendTimeout(timeout); 
+    _sndTimeout = underlying_socket->getSendTimeout(); 
+} 
 
-void SecureStreamSocketImpl::setReceiveTimeout(const Poco::Timespan& timeout)
-{
-    underlying_socket->setReceiveTimeout(timeout);
-    _recvTimeout = underlying_socket->getReceiveTimeout();
-}
-
+void SecureStreamSocketImpl::setReceiveTimeout(const Poco::Timespan& timeout) 
+{ 
+    underlying_socket->setReceiveTimeout(timeout); 
+    _recvTimeout = underlying_socket->getReceiveTimeout(); 
+} 
+ 
 SocketImpl* SecureStreamSocketImpl::acceptConnection(SocketAddress& /*clientAddr*/)
 {
 	throw Poco::InvalidAccessException("Cannot acceptConnection() on a SecureStreamSocketImpl");

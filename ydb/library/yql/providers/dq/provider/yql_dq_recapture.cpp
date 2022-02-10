@@ -161,12 +161,12 @@ private:
             }
         } else if (auto datasource = TMaybeNode<TCoDataSource>(&node).Category()) {
             if (!VALID_SOURCES.contains(datasource.Cast().Value())) {
-                AddInfo(ctx, TStringBuilder() << "source '" << datasource.Cast().Value() << "' is not supported by DQ"); 
+                AddInfo(ctx, TStringBuilder() << "source '" << datasource.Cast().Value() << "' is not supported by DQ");
                 good = false;
             }
         } else if (auto datasink = TMaybeNode<TCoDataSink>(&node).Category()) {
             if (!VALID_SINKS.contains(datasink.Cast().Value())) {
-                AddInfo(ctx, TStringBuilder() << "sink '" << datasink.Cast().Value() << "' is not supported by DQ"); 
+                AddInfo(ctx, TStringBuilder() << "sink '" << datasink.Cast().Value() << "' is not supported by DQ");
                 good = false;
             }
         } else if (TMaybeNode<TCoEquiJoin>(&node) && !NDq::CheckJoinColumns(expr)) {

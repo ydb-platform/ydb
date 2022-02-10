@@ -180,9 +180,9 @@ TString& AppendCgiEscaped(const TStringBuf value, TString& to) {
 // additional characters that should not be quoted — its default value is '/'.
 
 // Also returns pointer to the end of result string.
- 
-template <class It1, class It2, class It3> 
-static inline It1 Quote(It1 to, It2 from, It3 end, const char* safe) { 
+
+template <class It1, class It2, class It3>
+static inline It1 Quote(It1 to, It2 from, It3 end, const char* safe) {
     bool escape_map[256];
     memcpy(escape_map, chars_to_url_escape, 256);
     // RFC 3986 Uniform Resource Identifiers (URI): Generic Syntax
@@ -196,22 +196,22 @@ static inline It1 Quote(It1 to, It2 from, It3 end, const char* safe) {
         escape_map[(unsigned char)*p] = 0;
     }
 
-    return Escape(to, from, end, escape_map); 
+    return Escape(to, from, end, escape_map);
 }
 
-char* Quote(char* to, const char* from, const char* safe) { 
-    return Quote(to, FixZero(from), TCStringEndIterator(), safe); 
-} 
- 
+char* Quote(char* to, const char* from, const char* safe) {
+    return Quote(to, FixZero(from), TCStringEndIterator(), safe);
+}
+
 char* Quote(char* to, const TStringBuf s, const char* safe) {
     return Quote(to, s.data(), s.data() + s.size(), safe);
-} 
- 
+}
+
 void Quote(TString& url, const char* safe) {
     TTempBuf tempBuf(CgiEscapeBufLen(url.size()));
     char* to = tempBuf.Data();
 
-    url.AssignNoAlias(to, Quote(to, url, safe)); 
+    url.AssignNoAlias(to, Quote(to, url, safe));
 }
 
 char* CGIUnescape(char* to, const char* from) {

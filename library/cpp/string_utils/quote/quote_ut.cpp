@@ -310,10 +310,10 @@ Y_UNIT_TEST_SUITE(TQuoteTest) {
         Quote(s, ";,");
         UNIT_ASSERT_VALUES_EQUAL("%2Fpath;tail%2Fpath,tail%2F", s.c_str());
     }
- 
+
     Y_UNIT_TEST(StringBuf) {
-        char r[100]; 
-        char* end = Quote(r, "abc\0/path", ""); 
-        UNIT_ASSERT_VALUES_EQUAL("abc\0%2Fpath", TStringBuf(r, end)); 
-    } 
+        char r[100];
+        char* end = Quote(r, "abc\0/path", "");
+        UNIT_ASSERT_VALUES_EQUAL("abc\0%2Fpath", TStringBuf(r, end));
+    }
 }

@@ -393,7 +393,7 @@ IF (OS_LINUX)
         ibdrv
         ibdrv/ut
         proc
-        luajit 
+        luajit
         luajit_21
         libaio
         libcap

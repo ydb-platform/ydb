@@ -255,10 +255,10 @@ void TTempBuf::SetPos(size_t off) {
     Impl_->SetPos(off);
 }
 
-char* TTempBuf::Proceed(size_t off) { 
-    char* ptr = Current(); 
+char* TTempBuf::Proceed(size_t off) {
+    char* ptr = Current();
     Impl_->Proceed(off);
-    return ptr; 
+    return ptr;
 }
 
 void TTempBuf::Append(const void* data, size_t len) {

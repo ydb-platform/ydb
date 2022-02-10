@@ -676,24 +676,24 @@ public:
     template <class OtherValue>
     iterator insert_equal(const OtherValue& obj) {
         reserve(num_elements + 1);
-        return emplace_equal_noresize(obj); 
+        return emplace_equal_noresize(obj);
     }
 
-    template <typename... Args> 
+    template <typename... Args>
     iterator emplace_equal(Args&&... args) {
         reserve(num_elements + 1);
-        return emplace_equal_noresize(std::forward<Args>(args)...); 
-    } 
- 
+        return emplace_equal_noresize(std::forward<Args>(args)...);
+    }
+
     template <class OtherValue>
     iterator insert_direct(const OtherValue& obj, insert_ctx ins) {
-        return emplace_direct(ins, obj); 
-    } 
- 
-    template <typename... Args> 
+        return emplace_direct(ins, obj);
+    }
+
+    template <typename... Args>
     iterator emplace_direct(insert_ctx ins, Args&&... args) {
         bool resized = reserve(num_elements + 1);
-        node* tmp = new_node(std::forward<Args>(args)...); 
+        node* tmp = new_node(std::forward<Args>(args)...);
         if (resized) {
             find_i(get_key(tmp->val), ins);
         }
@@ -703,19 +703,19 @@ public:
         return iterator(tmp);
     }
 
-    template <typename... Args> 
+    template <typename... Args>
     std::pair<iterator, bool> emplace_unique(Args&&... args) {
         reserve(num_elements + 1);
-        return emplace_unique_noresize(std::forward<Args>(args)...); 
-    } 
- 
-    template <typename... Args> 
+        return emplace_unique_noresize(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
     std::pair<iterator, bool> emplace_unique_noresize(Args&&... args);
- 
+
     template <class OtherValue>
     std::pair<iterator, bool> insert_unique_noresize(const OtherValue& obj);
 
-    template <typename... Args> 
+    template <typename... Args>
     iterator emplace_equal_noresize(Args&&... args);
 
     template <class InputIterator>
@@ -755,7 +755,7 @@ public:
 
         reserve(num_elements + n);
         for (; n > 0; --n, ++f)
-            emplace_equal_noresize(*f); 
+            emplace_equal_noresize(*f);
     }
 
     template <class OtherValue>
@@ -929,12 +929,12 @@ private:
         return bkt_num_key(get_key(obj), n);
     }
 
-    template <typename... Args> 
+    template <typename... Args>
     node* new_node(Args&&... val) {
         node* n = get_node();
         n->next = (node*)1; /*y*/ // just for a case
         try {
-            new (static_cast<void*>(&n->val)) Value(std::forward<Args>(val)...); 
+            new (static_cast<void*>(&n->val)) Value(std::forward<Args>(val)...);
         } catch (...) {
             put_node(n);
             throw;
@@ -997,28 +997,28 @@ inline __yhashtable_const_iterator<V> __yhashtable_const_iterator<V>::operator++
 }
 
 template <class V, class K, class HF, class Ex, class Eq, class A>
-template <typename... Args> 
+template <typename... Args>
 std::pair<typename THashTable<V, K, HF, Ex, Eq, A>::iterator, bool> THashTable<V, K, HF, Ex, Eq, A>::emplace_unique_noresize(Args&&... args) {
     auto deleter = [&](node* tmp) { delete_node(tmp); };
-    node* tmp = new_node(std::forward<Args>(args)...); 
-    std::unique_ptr<node, decltype(deleter)> guard(tmp, deleter); 
- 
-    const size_type n = bkt_num(tmp->val); 
-    node* first = buckets[n]; 
- 
-    if (first)                                                          /*y*/ 
-        for (node* cur = first; !((uintptr_t)cur & 1); cur = cur->next) /*y*/ 
-            if (equals(get_key(cur->val), get_key(tmp->val))) 
-                return std::pair<iterator, bool>(iterator(cur), false); /*y*/ 
- 
-    guard.release(); 
-    tmp->next = first ? first : (node*)((uintptr_t)&buckets[n + 1] | 1); /*y*/ 
-    buckets[n] = tmp; 
-    ++num_elements; 
-    return std::pair<iterator, bool>(iterator(tmp), true); /*y*/ 
-} 
- 
-template <class V, class K, class HF, class Ex, class Eq, class A> 
+    node* tmp = new_node(std::forward<Args>(args)...);
+    std::unique_ptr<node, decltype(deleter)> guard(tmp, deleter);
+
+    const size_type n = bkt_num(tmp->val);
+    node* first = buckets[n];
+
+    if (first)                                                          /*y*/
+        for (node* cur = first; !((uintptr_t)cur & 1); cur = cur->next) /*y*/
+            if (equals(get_key(cur->val), get_key(tmp->val)))
+                return std::pair<iterator, bool>(iterator(cur), false); /*y*/
+
+    guard.release();
+    tmp->next = first ? first : (node*)((uintptr_t)&buckets[n + 1] | 1); /*y*/
+    buckets[n] = tmp;
+    ++num_elements;
+    return std::pair<iterator, bool>(iterator(tmp), true); /*y*/
+}
+
+template <class V, class K, class HF, class Ex, class Eq, class A>
 template <class OtherValue>
 std::pair<typename THashTable<V, K, HF, Ex, Eq, A>::iterator, bool> THashTable<V, K, HF, Ex, Eq, A>::insert_unique_noresize(const OtherValue& obj) {
     const size_type n = bkt_num(obj);
@@ -1037,25 +1037,25 @@ std::pair<typename THashTable<V, K, HF, Ex, Eq, A>::iterator, bool> THashTable<V
 }
 
 template <class V, class K, class HF, class Ex, class Eq, class A>
-template <typename... Args> 
+template <typename... Args>
 __yhashtable_iterator<V> THashTable<V, K, HF, Ex, Eq, A>::emplace_equal_noresize(Args&&... args) {
     auto deleter = [&](node* tmp) { delete_node(tmp); };
-    node* tmp = new_node(std::forward<Args>(args)...); 
-    std::unique_ptr<node, decltype(deleter)> guard(tmp, deleter); 
-    const size_type n = bkt_num(tmp->val); 
+    node* tmp = new_node(std::forward<Args>(args)...);
+    std::unique_ptr<node, decltype(deleter)> guard(tmp, deleter);
+    const size_type n = bkt_num(tmp->val);
     node* first = buckets[n];
 
     if (first)                                                          /*y*/
         for (node* cur = first; !((uintptr_t)cur & 1); cur = cur->next) /*y*/
-            if (equals(get_key(cur->val), get_key(tmp->val))) { 
-                guard.release(); 
+            if (equals(get_key(cur->val), get_key(tmp->val))) {
+                guard.release();
                 tmp->next = cur->next;
                 cur->next = tmp;
                 ++num_elements;
                 return iterator(tmp); /*y*/
             }
 
-    guard.release(); 
+    guard.release();
     tmp->next = first ? first : (node*)((uintptr_t)&buckets[n + 1] | 1); /*y*/
     buckets[n] = tmp;
     ++num_elements;
@@ -1570,10 +1570,10 @@ public:
         return rep.insert_unique(obj);
     }
 
-    template <typename... Args> 
+    template <typename... Args>
     std::pair<iterator, bool> emplace(Args&&... args) {
-        return rep.emplace_unique(std::forward<Args>(args)...); 
-    } 
+        return rep.emplace_unique(std::forward<Args>(args)...);
+    }
 
     std::pair<iterator, bool> insert_noresize(const value_type& obj) {
         return rep.insert_unique_noresize(obj);
@@ -1644,7 +1644,7 @@ public:
             return it->second;
         }
 
-        return rep.emplace_direct(ctx, std::piecewise_construct, std::forward_as_tuple(key), std::forward_as_tuple())->second; 
+        return rep.emplace_direct(ctx, std::piecewise_construct, std::forward_as_tuple(key), std::forward_as_tuple())->second;
     }
 
     template <class TheKey>
@@ -1897,11 +1897,11 @@ public:
 
     template <typename... Args>
     iterator emplace(Args&&... args) {
-        return rep.emplace_equal(std::forward<Args>(args)...); 
-    } 
+        return rep.emplace_equal(std::forward<Args>(args)...);
+    }
 
     iterator insert_noresize(const value_type& obj) {
-        return rep.emplace_equal_noresize(obj); 
+        return rep.emplace_equal_noresize(obj);
     }
 
     template <typename... Args>

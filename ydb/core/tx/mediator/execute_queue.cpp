@@ -23,7 +23,7 @@ namespace NTxMediator {
         TTimeCastBuckets BucketSelector;
         TVector<TBucket> Buckets;
 
-        TBucket& SelectBucket(TTabletId tablet) {
+        TBucket& SelectBucket(TTabletId tablet) { 
             const ui32 bucketIdx = BucketSelector.Select(tablet);
             Y_VERIFY_DEBUG(bucketIdx < Buckets.size());
             return Buckets[bucketIdx];
@@ -66,7 +66,7 @@ namespace NTxMediator {
             TEvTxMediator::TEvCommitStep *msg = ev->Get();
             TMediateStep *step = msg->MediateStep.Get();
 
-            const ui32 totalCoordinators = step->Steps.size();
+            const ui32 totalCoordinators = step->Steps.size(); 
 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "Actor# " << ctx.SelfID.ToString()
                 << " MediatorId# " << MediatorId << " HANDLE TEvCommitStep " << step->ToString() << " marker# M1");
@@ -89,16 +89,16 @@ namespace NTxMediator {
 
                     const ui64 tttsize = coord.TabletsToTransaction.size();
                     while (readPos < tttsize) {
-                        const std::pair<TTabletId, std::size_t> &x = coord.TabletsToTransaction[readPos];
+                        const std::pair<TTabletId, std::size_t> &x = coord.TabletsToTransaction[readPos]; 
                         if (x.first != activeTablet)
                             break;
 
-                        currentTx.emplace_back(coord.Transactions[x.second]);
+                        currentTx.emplace_back(coord.Transactions[x.second]); 
                         ++readPos;
                     }
 
                     if (readPos < tttsize) {
-                        const std::pair<TTabletId, std::size_t> &x = coord.TabletsToTransaction[readPos];
+                        const std::pair<TTabletId, std::size_t> &x = coord.TabletsToTransaction[readPos]; 
                         if (x.first < lookupTablet)
                             lookupTablet = x.first;
                     }
@@ -132,7 +132,7 @@ namespace NTxMediator {
             Sort(step->TabletsToTransaction.begin(), step->TabletsToTransaction.end(), TCoordinatorStep::TabletToTransactionCmp());
 
             TVector<TTx> currentTx;
-            TTabletId activeTablet = 0;
+            TTabletId activeTablet = 0; 
 
             for (TVector<std::pair<TTabletId, std::size_t>>::const_iterator it = step->TabletsToTransaction.begin(), end = step->TabletsToTransaction.end(); it != end; ++it) {
                 if (activeTablet != it->first) {
@@ -142,7 +142,7 @@ namespace NTxMediator {
                     currentTx.clear();
                 }
 
-                currentTx.emplace_back(step->Transactions[it->second]);
+                currentTx.emplace_back(step->Transactions[it->second]); 
                 currentTx.back().AckTo = ackTo;
             }
 

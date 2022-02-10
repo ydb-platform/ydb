@@ -1,5 +1,5 @@
 #include "msgbus_tabletreq.h"
-#include "msgbus_securereq.h"
+#include "msgbus_securereq.h" 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 namespace NKikimr {
@@ -9,21 +9,21 @@ namespace {
     const ui64 DefaultTimeout = 90000;
 }
 
-class TMessageBusBSAdmGroupReconfigureWipe : public TMessageBusSecureRequest<
-        TMessageBusSimpleTabletRequest<
-        TMessageBusBSAdmGroupReconfigureWipe,
-        TEvBlobStorage::TEvControllerGroupReconfigureWipeResult,
+class TMessageBusBSAdmGroupReconfigureWipe : public TMessageBusSecureRequest< 
+        TMessageBusSimpleTabletRequest< 
+        TMessageBusBSAdmGroupReconfigureWipe, 
+        TEvBlobStorage::TEvControllerGroupReconfigureWipeResult, 
         NKikimrServices::TActivity::FRONT_BSADM_RECONF_REPLACE>> {
     TAutoPtr<TEvBlobStorage::TEvControllerGroupReconfigureWipe> Ev;
 public:
     TMessageBusBSAdmGroupReconfigureWipe(TBusMessageContext &msg, ui64 tabletId,
             TAutoPtr<TEvBlobStorage::TEvControllerGroupReconfigureWipe> ev, bool withRetry, TDuration timeout)
-        : TMessageBusSecureRequest(msg, tabletId, withRetry, timeout, false)
+        : TMessageBusSecureRequest(msg, tabletId, withRetry, timeout, false) 
         , Ev(ev)
-    {
-        SetSecurityToken(static_cast<TBusBSAdm*>(msg.GetMessage())->Record.GetSecurityToken());
-        SetRequireAdminAccess(true);
-    }
+    { 
+        SetSecurityToken(static_cast<TBusBSAdm*>(msg.GetMessage())->Record.GetSecurityToken()); 
+        SetRequireAdminAccess(true); 
+    } 
 
     void Handle(TEvBlobStorage::TEvControllerGroupReconfigureWipeResult::TPtr &ev, const TActorContext &ctx) {
         const NKikimrBlobStorage::TEvControllerGroupReconfigureWipeResult &record = ev->Get()->Record;
@@ -51,7 +51,7 @@ public:
     }
 };
 
-IActor* CreateMessageBusBSAdm(TBusMessageContext &msg) {
+IActor* CreateMessageBusBSAdm(TBusMessageContext &msg) { 
     const NKikimrClient::TBSAdm &record = static_cast<TBusBSAdm *>(msg.GetMessage())->Record;
 
     const ui32 targetDomain = record.GetDomain();

@@ -36,24 +36,24 @@ namespace NActors {
     ui64 TScheduledEventQueueItem::NextUniqueId = 0;
 
     void PrintEvent(TAutoPtr<IEventHandle>& ev, const TTestActorRuntimeBase* runtime) {
-        Cerr << "mailbox: " << ev->GetRecipientRewrite().Hint() << ", type: " << Sprintf("%08x", ev->GetTypeRewrite())
-            << ", from " << ev->Sender.LocalId();
+        Cerr << "mailbox: " << ev->GetRecipientRewrite().Hint() << ", type: " << Sprintf("%08x", ev->GetTypeRewrite()) 
+            << ", from " << ev->Sender.LocalId(); 
         TString name = runtime->GetActorName(ev->Sender);
-        if (!name.empty())
-            Cerr << " \"" << name << "\"";
-        Cerr << ", to " << ev->GetRecipientRewrite().LocalId();
-        name = runtime->GetActorName(ev->GetRecipientRewrite());
-        if (!name.empty())
-            Cerr << " \"" << name << "\"";
-        Cerr << ", ";
+        if (!name.empty()) 
+            Cerr << " \"" << name << "\""; 
+        Cerr << ", to " << ev->GetRecipientRewrite().LocalId(); 
+        name = runtime->GetActorName(ev->GetRecipientRewrite()); 
+        if (!name.empty()) 
+            Cerr << " \"" << name << "\""; 
+        Cerr << ", "; 
         if (ev->HasEvent())
-            Cerr << " : " << (PRINT_EVENT_BODY ? ev->GetBase()->ToString() : ev->GetBase()->ToStringHeader());
+            Cerr << " : " << (PRINT_EVENT_BODY ? ev->GetBase()->ToString() : ev->GetBase()->ToStringHeader()); 
         else if (ev->HasBuffer())
-            Cerr << " : BUFFER";
+            Cerr << " : BUFFER"; 
         else
-            Cerr << " : EMPTY";
+            Cerr << " : EMPTY"; 
 
-        Cerr << "\n";
+        Cerr << "\n"; 
     }
 
     TTestActorRuntimeBase::TNodeDataBase::TNodeDataBase() {
@@ -103,8 +103,8 @@ namespace NActors {
             }
 
             if (verbose) {
-                Cerr << "Got event at " << TInstant::MicroSeconds(Runtime->CurrentTimestamp) << ", ";
-                PrintEvent(ev, Runtime);
+                Cerr << "Got event at " << TInstant::MicroSeconds(Runtime->CurrentTimestamp) << ", "; 
+                PrintEvent(ev, Runtime); 
             }
 
             if (!Runtime->EventFilterFunc(*Runtime, ev)) {
@@ -114,11 +114,11 @@ namespace NActors {
                 Runtime->GetMailbox(nodeId, mailboxHint).Send(ev);
                 Runtime->MailboxesHasEvents.Signal();
                 if (verbose)
-                    Cerr << "Event was added to sent queue\n";
+                    Cerr << "Event was added to sent queue\n"; 
             }
             else {
                 if (verbose)
-                    Cerr << "Event was dropped\n";
+                    Cerr << "Event was dropped\n"; 
             }
         }
 
@@ -316,8 +316,8 @@ namespace NActors {
             }
 
             if (verbose) {
-                Cerr << "Got scheduled event at " << TInstant::MicroSeconds(Runtime->CurrentTimestamp) << ", ";
-                PrintEvent(ev, Runtime);
+                Cerr << "Got scheduled event at " << TInstant::MicroSeconds(Runtime->CurrentTimestamp) << ", "; 
+                PrintEvent(ev, Runtime); 
             }
 
             auto now = Runtime->GetTimeProvider()->Now();
@@ -331,13 +331,13 @@ namespace NActors {
                 Runtime->GetMailbox(Runtime->FirstNodeId + NodeIndex, mailboxHint).Schedule(TScheduledEventQueueItem(deadline, ev, cookie));
                 Runtime->MailboxesHasEvents.Signal();
                 if (verbose)
-                    Cerr << "Event was added to scheduled queue\n";
+                    Cerr << "Event was added to scheduled queue\n"; 
             } else {
                 if (cookie) {
                     cookie->Detach();
                 }
                 if (verbose) {
-                    Cerr << "Scheduled event for " << ev->GetRecipientRewrite().ToString() << " was dropped\n";
+                    Cerr << "Scheduled event for " << ev->GetRecipientRewrite().ToString() << " was dropped\n"; 
                 }
             }
         }
@@ -351,8 +351,8 @@ namespace NActors {
             }
 
             if (verbose) {
-                Cerr << "Got event at " << TInstant::MicroSeconds(Runtime->CurrentTimestamp) << ", ";
-                PrintEvent(ev, Runtime);
+                Cerr << "Got event at " << TInstant::MicroSeconds(Runtime->CurrentTimestamp) << ", "; 
+                PrintEvent(ev, Runtime); 
             }
 
             if (!Runtime->EventFilterFunc(*Runtime, ev)) {
@@ -385,10 +385,10 @@ namespace NActors {
                     Runtime->MailboxesHasEvents.Signal();
                 }
                 if (verbose)
-                    Cerr << "Event was added to sent queue\n";
+                    Cerr << "Event was added to sent queue\n"; 
             } else {
                 if (verbose)
-                    Cerr << "Event was dropped\n";
+                    Cerr << "Event was dropped\n"; 
             }
             return true;
         }
@@ -462,7 +462,7 @@ namespace NActors {
         , ClusterUUID(MakeClusterId())
         , FirstNodeId(NextNodeId)
         , NodeCount(nodeCount)
-        , DataCenterCount(dataCenterCount)
+        , DataCenterCount(dataCenterCount) 
         , UseRealThreads(useRealThreads)
         , LocalId(0)
         , DispatchCyclesCount(0)
@@ -529,16 +529,16 @@ namespace NActors {
 
     TTestActorRuntimeBase::TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount)
         : TTestActorRuntimeBase(nodeCount, dataCenterCount, false) {
-    }
-
+    } 
+ 
     TTestActorRuntimeBase::TTestActorRuntimeBase(ui32 nodeCount, bool useRealThreads)
         : TTestActorRuntimeBase(nodeCount, nodeCount, useRealThreads) {
-    }
-
+    } 
+ 
     TTestActorRuntimeBase::~TTestActorRuntimeBase() {
         CleanupNodes();
         Cerr.Flush();
-        Cerr.Flush();
+        Cerr.Flush(); 
         Clog.Flush();
 
         DisableActorCallstack();
@@ -582,58 +582,58 @@ namespace NActors {
     void TTestActorRuntimeBase::DefaultRegistrationObserver(TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
         if (runtime.ScheduleWhiteList.find(parentId) != runtime.ScheduleWhiteList.end()) {
             runtime.ScheduleWhiteList.insert(actorId);
-            runtime.ScheduleWhiteListParent[actorId] = parentId;
+            runtime.ScheduleWhiteListParent[actorId] = parentId; 
         }
     }
 
-    class TScheduledTreeItem {
-    public:
+    class TScheduledTreeItem { 
+    public: 
         TString Name;
-        ui64 Count;
+        ui64 Count; 
         TVector<TScheduledTreeItem> Children;
-
+ 
         TScheduledTreeItem(const TString& name)
-            : Name(name)
-            , Count(0)
-        {}
-
+            : Name(name) 
+            , Count(0) 
+        {} 
+ 
         TScheduledTreeItem* GetItem(const TString& name) {
-            TScheduledTreeItem* item = nullptr;
-            for (TScheduledTreeItem& i : Children) {
-                if (i.Name == name) {
-                    item = &i;
-                    break;
-                }
-            }
-            if (item != nullptr)
-                return item;
-            Children.emplace_back(name);
-            return &Children.back();
-        }
-
-        void RecursiveSort() {
-            Sort(Children, [](const TScheduledTreeItem& a, const TScheduledTreeItem& b) -> bool { return a.Count > b.Count; });
-            for (TScheduledTreeItem& item : Children) {
-                item.RecursiveSort();
-            }
-        }
-
+            TScheduledTreeItem* item = nullptr; 
+            for (TScheduledTreeItem& i : Children) { 
+                if (i.Name == name) { 
+                    item = &i; 
+                    break; 
+                } 
+            } 
+            if (item != nullptr) 
+                return item; 
+            Children.emplace_back(name); 
+            return &Children.back(); 
+        } 
+ 
+        void RecursiveSort() { 
+            Sort(Children, [](const TScheduledTreeItem& a, const TScheduledTreeItem& b) -> bool { return a.Count > b.Count; }); 
+            for (TScheduledTreeItem& item : Children) { 
+                item.RecursiveSort(); 
+            } 
+        } 
+ 
         void Print(IOutputStream& stream, const TString& prefix) {
-            for (auto it = Children.begin(); it != Children.end(); ++it) {
-                bool lastChild = (std::next(it) == Children.end());
+            for (auto it = Children.begin(); it != Children.end(); ++it) { 
+                bool lastChild = (std::next(it) == Children.end()); 
                 TString connectionPrefix = lastChild ? "└─ " : "├─ ";
                 TString subChildPrefix = lastChild ? "   " : "│  ";
-                stream << prefix << connectionPrefix << it->Name << " (" << it->Count << ")\n";
-                it->Print(stream, prefix + subChildPrefix);
-            }
-        }
-
+                stream << prefix << connectionPrefix << it->Name << " (" << it->Count << ")\n"; 
+                it->Print(stream, prefix + subChildPrefix); 
+            } 
+        } 
+ 
         void Print(IOutputStream& stream) {
-            stream << Name << " (" << Count << ")\n";
+            stream << Name << " (" << Count << ")\n"; 
             Print(stream, TString());
-        }
-    };
-
+        } 
+    }; 
+ 
     void TTestActorRuntimeBase::CollapsedTimeScheduledEventsSelector(TTestActorRuntimeBase& runtime, TScheduledEventsList& scheduledEvents, TEventsList& queue) {
         if (scheduledEvents.empty())
             return;
@@ -641,30 +641,30 @@ namespace NActors {
         TInstant time = scheduledEvents.begin()->Deadline;
         while (!scheduledEvents.empty() && scheduledEvents.begin()->Deadline == time) {
             static THashMap<std::pair<TActorId, TString>, ui64> eventTypes;
-            auto& item = *scheduledEvents.begin();
+            auto& item = *scheduledEvents.begin(); 
             TString name = item.Event->GetBase() ? TypeName(*item.Event->GetBase()) : Sprintf("%08" PRIx32, item.Event->Type);
             eventTypes[std::make_pair(item.Event->Recipient, name)]++;
             runtime.ScheduledCount++;
             if (runtime.ScheduledCount > runtime.ScheduledLimit) {
-//                TScheduledTreeItem root("Root");
+//                TScheduledTreeItem root("Root"); 
 //                TVector<TString> path;
-//                for (const auto& pr : eventTypes) {
-//                    path.clear();
-//                    path.push_back(runtime.GetActorName(pr.first.first));
-//                    for (auto it = runtime.ScheduleWhiteListParent.find(pr.first.first); it != runtime.ScheduleWhiteListParent.end(); it = runtime.ScheduleWhiteListParent.find(it->second)) {
-//                        path.insert(path.begin(), runtime.GetActorName(it->second));
-//                    }
-//                    path.push_back("<" + pr.first.second + ">"); // event name;
-//                    ui64 count = pr.second;
-//                    TScheduledTreeItem* item = &root;
-//                    item->Count += count;
+//                for (const auto& pr : eventTypes) { 
+//                    path.clear(); 
+//                    path.push_back(runtime.GetActorName(pr.first.first)); 
+//                    for (auto it = runtime.ScheduleWhiteListParent.find(pr.first.first); it != runtime.ScheduleWhiteListParent.end(); it = runtime.ScheduleWhiteListParent.find(it->second)) { 
+//                        path.insert(path.begin(), runtime.GetActorName(it->second)); 
+//                    } 
+//                    path.push_back("<" + pr.first.second + ">"); // event name; 
+//                    ui64 count = pr.second; 
+//                    TScheduledTreeItem* item = &root; 
+//                    item->Count += count; 
 //                    for (TString name : path) {
-//                        item = item->GetItem(name);
-//                        item->Count += count;
-//                    }
-//                }
-//                root.RecursiveSort();
-//                root.Print(Cerr);
+//                        item = item->GetItem(name); 
+//                        item->Count += count; 
+//                    } 
+//                } 
+//                root.RecursiveSort(); 
+//                root.Print(Cerr); 
 
                 ythrow TSchedulingLimitReachedException(runtime.ScheduledLimit);
             }
@@ -755,10 +755,10 @@ namespace NActors {
         IsInitialized = true;
     }
 
-    void SetupCrossDC() {
-
-    }
-
+    void SetupCrossDC() { 
+ 
+    } 
+ 
     TDuration TTestActorRuntimeBase::SetDispatchTimeout(TDuration timeout) {
         TGuard<TMutex> guard(Mutex);
         TDuration oldTimeout = DispatchTimeout;
@@ -798,11 +798,11 @@ namespace NActors {
     }
 
     void TTestActorRuntimeBase::UpdateCurrentTime(TInstant newTime) {
-        static int counter = 0;
-        ++counter;
-        if (VERBOSE) {
-            Cerr << "UpdateCurrentTime(" << counter << "," << newTime << ")\n";
-        }
+        static int counter = 0; 
+        ++counter; 
+        if (VERBOSE) { 
+            Cerr << "UpdateCurrentTime(" << counter << "," << newTime << ")\n"; 
+        } 
         TGuard<TMutex> guard(Mutex);
         Y_VERIFY(!UseRealThreads);
         if (newTime.MicroSeconds() > CurrentTimestamp) {
@@ -836,7 +836,7 @@ namespace NActors {
         TGuard<TMutex> guard(Mutex);
         ui64 nextId = ++LocalId;
         if (VERBOSE) {
-            Cerr << "Allocated id: " << nextId << "\n";
+            Cerr << "Allocated id: " << nextId << "\n"; 
         }
 
         return nextId;
@@ -1068,7 +1068,7 @@ namespace NActors {
         const TDuration scheduledEventsInspectInterval = TDuration::MilliSeconds(10);
         TInstant inspectScheduledEventsAt = dispatchTime + scheduledEventsInspectInterval;
         if (verbose) {
-            Cerr << "Start dispatch at " << TInstant::MicroSeconds(CurrentTimestamp) << ", deadline is " << deadline << "\n";
+            Cerr << "Start dispatch at " << TInstant::MicroSeconds(CurrentTimestamp) << ", deadline is " << deadline << "\n"; 
         }
 
         struct TTempEdgeEventsCaptor {
@@ -1181,14 +1181,14 @@ namespace NActors {
                                         ythrow TWithBackTrace<yexception>() << "Dispatched "
                                             << DispatchedEventsLimit << " events, limit reached.";
                                     }
-
+ 
                                     auto ev = mbox.second->Pop();
-                                    if (BlockedOutput.find(ev->Sender) == BlockedOutput.end()) {
-                                        //UpdateCurrentTime(TInstant::MicroSeconds(CurrentTimestamp + 10));
-                                        if (verbose) {
-                                            Cerr << "Process event at " << TInstant::MicroSeconds(CurrentTimestamp) << ", ";
-                                            PrintEvent(ev, this);
-                                        }
+                                    if (BlockedOutput.find(ev->Sender) == BlockedOutput.end()) { 
+                                        //UpdateCurrentTime(TInstant::MicroSeconds(CurrentTimestamp + 10)); 
+                                        if (verbose) { 
+                                            Cerr << "Process event at " << TInstant::MicroSeconds(CurrentTimestamp) << ", "; 
+                                            PrintEvent(ev, this); 
+                                        } 
                                     }
 
                                     hasProgress = true;
@@ -1263,7 +1263,7 @@ namespace NActors {
 
                     if (!mbox.second->IsEmpty()) {
                         if (verbose) {
-                            Cerr << "Dispatch complete with non-empty queue at " << TInstant::MicroSeconds(CurrentTimestamp) << "\n";
+                            Cerr << "Dispatch complete with non-empty queue at " << TInstant::MicroSeconds(CurrentTimestamp) << "\n"; 
                         }
 
                         return true;
@@ -1277,7 +1277,7 @@ namespace NActors {
 
             if (dispatchTime >= deadline) {
                 if (verbose) {
-                    Cerr << "Reach deadline at " << TInstant::MicroSeconds(CurrentTimestamp) << "\n";
+                    Cerr << "Reach deadline at " << TInstant::MicroSeconds(CurrentTimestamp) << "\n"; 
                 }
 
                 ythrow TWithBackTrace<TEmptyEventQueueException>();
@@ -1319,8 +1319,8 @@ namespace NActors {
                     nextScheduleMbox->PushScheduled(capturedScheduledEvents);
                     for (auto& event : selectedEvents) {
                         if (verbose && (BlockedOutput.find(event->Sender) == BlockedOutput.end())) {
-                            Cerr << "Selected scheduled event at " << TInstant::MicroSeconds(CurrentTimestamp) << ", ";
-                            PrintEvent(event, this);
+                            Cerr << "Selected scheduled event at " << TInstant::MicroSeconds(CurrentTimestamp) << ", "; 
+                            PrintEvent(event, this); 
                         }
 
                         nextScheduleMbox->Send(event);
@@ -1330,7 +1330,7 @@ namespace NActors {
 
                 if (!isEmpty) {
                     if (verbose) {
-                        Cerr << "Process selected events at " << TInstant::MicroSeconds(CurrentTimestamp) << "\n";
+                        Cerr << "Process selected events at " << TInstant::MicroSeconds(CurrentTimestamp) << "\n"; 
                     }
 
                     deadline = dispatchTime +  DispatchTimeout;
@@ -1339,7 +1339,7 @@ namespace NActors {
 
                 if (nearestMailboxDeadline.Defined()) {
                     if (verbose) {
-                        Cerr << "Forward time to " << *nearestMailboxDeadline.Get() << "\n";
+                        Cerr << "Forward time to " << *nearestMailboxDeadline.Get() << "\n"; 
                     }
 
                     UpdateCurrentTime(*nearestMailboxDeadline.Get());
@@ -1369,8 +1369,8 @@ namespace NActors {
     void TTestActorRuntimeBase::UpdateFinalEventsStatsForEachContext(IEventHandle& ev) {
         TDispatchContext* context = CurrentDispatchContext;
         while (context) {
-            for (const auto& finalEvent : context->Options->FinalEvents) {
-                if (finalEvent.EventCheck(ev)) {
+            for (const auto& finalEvent : context->Options->FinalEvents) { 
+                if (finalEvent.EventCheck(ev)) { 
                     auto& freq = context->FinalEventFrequency[&finalEvent];
                     if (++freq >= finalEvent.RequiredCount) {
                         context->FinalEventFound = true;
@@ -1397,7 +1397,7 @@ namespace NActors {
         TInstant deadline = TInstant::MicroSeconds(CurrentTimestamp) + duration;
         GetMailbox(nodeId, mailboxHint).Schedule(TScheduledEventQueueItem(deadline, ev, nullptr));
         if (VERBOSE)
-            Cerr << "Event was added to scheduled queue\n";
+            Cerr << "Event was added to scheduled queue\n"; 
     }
 
     void TTestActorRuntimeBase::ClearCounters() {
@@ -1497,14 +1497,14 @@ namespace NActors {
     void TTestActorRuntimeBase::EnableScheduleForActor(const TActorId& actorId, bool allow) {
         TGuard<TMutex> guard(Mutex);
         if (allow) {
-            if (VERBOSE) {
-                Cerr << "Actor " << actorId << " added to schedule whitelist";
-            }
+            if (VERBOSE) { 
+                Cerr << "Actor " << actorId << " added to schedule whitelist"; 
+            } 
             ScheduleWhiteList.insert(actorId);
         } else {
-            if (VERBOSE) {
-                Cerr << "Actor " << actorId << " removed from schedule whitelist";
-            }
+            if (VERBOSE) { 
+                Cerr << "Actor " << actorId << " removed from schedule whitelist"; 
+            } 
             ScheduleWhiteList.erase(actorId);
         }
     }
@@ -1560,8 +1560,8 @@ namespace NActors {
 
         ui64 recipientLocalId = ev->GetRecipientRewrite().LocalId();
         if ((BlockedOutput.find(ev->Sender) == BlockedOutput.end()) && VERBOSE) {
-            Cerr << "Send event, ";
-            PrintEvent(evHolder, this);
+            Cerr << "Send event, "; 
+            PrintEvent(evHolder, this); 
         }
 
         EvCounters[ev->GetTypeRewrite()]++;
@@ -1589,7 +1589,7 @@ namespace NActors {
             TlsActivationContext = prevTlsActivationContext;
         } else {
             if (VERBOSE) {
-                Cerr << "Failed to find actor with local id: " << recipientLocalId << "\n";
+                Cerr << "Failed to find actor with local id: " << recipientLocalId << "\n"; 
             }
 
             auto forwardedEv = ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown);
@@ -1727,18 +1727,18 @@ namespace NActors {
     }
 
     void TTestActorRuntimeBase::ClearMailbox(ui32 nodeId, ui32 hint) {
-        TGuard<TMutex> guard(Mutex);
-        auto mboxId = TEventMailboxId(nodeId, hint);
-        Mailboxes.erase(mboxId);
-    }
-
+        TGuard<TMutex> guard(Mutex); 
+        auto mboxId = TEventMailboxId(nodeId, hint); 
+        Mailboxes.erase(mboxId); 
+    } 
+ 
     TString TTestActorRuntimeBase::GetActorName(const TActorId& actorId) const {
-        auto it = ActorNames.find(actorId);
-        if (it != ActorNames.end())
-            return it->second;
-        return actorId.ToString();
-    }
-
+        auto it = ActorNames.find(actorId); 
+        if (it != ActorNames.end()) 
+            return it->second; 
+        return actorId.ToString(); 
+    } 
+ 
     struct TStrandingActorDecoratorContext : public TThrRefBase {
         TStrandingActorDecoratorContext()
             : Queue(new TQueueType)

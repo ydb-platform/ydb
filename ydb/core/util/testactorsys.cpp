@@ -97,7 +97,7 @@ static TActorId MakeBoardReplicaID(ui32 node, ui64 stateStorageGroup, ui32 repli
 
 NTabletPipe::TClientConfig TTestActorSystem::GetPipeConfigWithRetries() {
     NTabletPipe::TClientConfig pipeConfig;
-    pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+    pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries(); 
     return pipeConfig;
 }
 

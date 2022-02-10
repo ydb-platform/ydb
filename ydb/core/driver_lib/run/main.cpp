@@ -22,7 +22,7 @@
 #endif
 
 namespace NKikimr {
-
+ 
 int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories) {
 #ifdef _win32_
     WSADATA dummy;
@@ -30,7 +30,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
 #endif
 
     TKikimrRunner::SetSignalHandlers();
-    Cout << "Starting Kikimr r" << GetArcadiaLastChange()
+    Cout << "Starting Kikimr r" << GetArcadiaLastChange() 
          << " built by " << GetProgramBuildUser() << Endl;
 
     TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories));
@@ -65,11 +65,11 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         TRunCommandConfigParser configParser(runConfig);
 
         TOpts opts = TOpts::Default();
-        opts.SetTitle("KiKiMR client/server binary");
+        opts.SetTitle("KiKiMR client/server binary"); 
 
         configParser.SetupGlobalOpts(opts);
-        NMsgBusProxy::TMsgBusClientConfig mbusConfig;
-        mbusConfig.ConfigureLastGetopt(opts, "mb-");
+        NMsgBusProxy::TMsgBusClientConfig mbusConfig; 
+        mbusConfig.ConfigureLastGetopt(opts, "mb-"); 
         NDriverClient::HideOptions(opts);
         opts.AddLongOption('s', "server", "Server address to connect (default $KIKIMR_SERVER)").RequiredArgument("ADDR[:NUM]");
         opts.AddLongOption('k', "token", "Security token").RequiredArgument("TOKEN");
@@ -82,7 +82,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         opts.SetFreeArgsMin(1);
         opts.SetFreeArgTitle(0, "<command>", TDriverModeParser::CommandsCsv());
         opts.SetCmdLineDescr(NDriverClient::NewClientCommandsDescription(factories));
-
+ 
         opts.AddHelpOption('h');
         opts.ArgPermutation_ = NLastGetopt::REQUIRE_ORDER;
 
@@ -109,16 +109,16 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
             configParser.ApplyParsedOptions();
             return MainRun(runConfig, factories);
         }
-        case EDM_ADMIN:
-        case EDM_DB:
-        case EDM_TABLET:
-        case EDM_DEBUG:
-        case EDM_BS:
-        case EDM_BLOBSTORAGE:
-        case EDM_SERVER:
+        case EDM_ADMIN: 
+        case EDM_DB: 
+        case EDM_TABLET: 
+        case EDM_DEBUG: 
+        case EDM_BS: 
+        case EDM_BLOBSTORAGE: 
+        case EDM_SERVER: 
         case EDM_CMS:
         case EDM_DISCOVERY:
-        case EDM_WHOAMI:
+        case EDM_WHOAMI: 
             return NDriverClient::NewClient(argc + freeArgsPos, argv - freeArgsPos, factories);
         case EDM_FORMAT_INFO:
             return MainFormatInfo(cmdConf, argc, argv);
@@ -130,8 +130,8 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
             return NDriverClient::SchemeInitRoot(cmdConf, argc, argv);
         case EDM_COMPILE_AND_EXEC_MINIKQL:
             return NDriverClient::CompileAndExecMiniKQL(cmdConf, argc, argv);
-        case EDM_TRACE:
-            return NDriverClient::MessageBusTrace(cmdConf, argc, argv);
+        case EDM_TRACE: 
+            return NDriverClient::MessageBusTrace(cmdConf, argc, argv); 
         case EDM_KEYVALUE_REQUEST:
             return NDriverClient::KeyValueRequest(cmdConf, argc, argv);
         case EDM_PERSQUEUE_REQUEST:

@@ -17,7 +17,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
 
     TTxType GetTxType() const override { return TXTYPE_INIT_ROOT; }
 
-    void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
+    void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override { 
         NIceDb::TNiceDb db(txc.DB);
 
         const TDomainsInfo::TDomain& selfDomain = Self->GetDomainDescription(ctx);
@@ -53,11 +53,11 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Self->ShardInfos.clear();
         Self->RootPathElemets = std::move(rootPathElemets);
 
-
+ 
         TSubDomainInfo::TPtr newDomain = new TSubDomainInfo(0, Self->RootPathId());
         newDomain->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
         Self->SubDomains[Self->RootPathId()] = newDomain;
-
+ 
         Self->PersistUserAttributes(db, Self->RootPathId(), nullptr, newPath->UserAttrs);
         Self->PersistPath(db, newPath->PathId);
         Self->PersistUpdateNextPathId(db);
@@ -325,9 +325,9 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         RegisterShard(db, subdomain, processingParams.GetCoordinators(), TTabletTypes::Coordinator);
         RegisterShard(db, subdomain, processingParams.GetMediators(), TTabletTypes::Mediator);
         RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetSchemeShard()}, TTabletTypes::SchemeShard);
-        if (processingParams.HasHive()) {
-            RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetHive()}, TTabletTypes::Hive);
-        }
+        if (processingParams.HasHive()) { 
+            RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetHive()}, TTabletTypes::Hive); 
+        } 
         if (processingParams.HasSysViewProcessor()) {
             RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetSysViewProcessor()}, TTabletTypes::SysViewProcessor);
         }

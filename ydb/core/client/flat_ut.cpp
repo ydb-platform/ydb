@@ -1080,7 +1080,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         if (selfName != "/") {
             selfName= name.substr(name.find_last_of('/')+1);
         }
-        TAutoPtr<NMsgBusProxy::TBusResponse> res = annoyingClient.Ls(name);
+        TAutoPtr<NMsgBusProxy::TBusResponse> res = annoyingClient.Ls(name); 
         UNIT_ASSERT_VALUES_EQUAL_C(res->Record.GetPathDescription().GetSelf().GetName(), selfName, "Self name doesn't match");
 
         // Compare expected and actual children count
@@ -1104,7 +1104,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     void TestLsUknownPath(TFlatMsgBusClient& annoyingClient, const TString& name) {
-        TAutoPtr<NMsgBusProxy::TBusResponse> res = annoyingClient.Ls(name);
+        TAutoPtr<NMsgBusProxy::TBusResponse> res = annoyingClient.Ls(name); 
         UNIT_ASSERT_VALUES_EQUAL_C(res->Record.HasPathDescription(), false,
                                    "Unxepected description for " + name);
         UNIT_ASSERT_VALUES_EQUAL_C(res->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR,
@@ -1222,7 +1222,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     void TestLsPathIdSuccess(TFlatMsgBusClient& annoyingClient, ui64 schemeshardId, ui64 pathId, const TString& selfName, const TVector<TString>& children) {
-        TAutoPtr<NMsgBusProxy::TBusResponse> res = annoyingClient.LsPathId(schemeshardId, pathId);
+        TAutoPtr<NMsgBusProxy::TBusResponse> res = annoyingClient.LsPathId(schemeshardId, pathId); 
         UNIT_ASSERT_VALUES_EQUAL_C(res->Record.GetPathDescription().GetSelf().GetName(), selfName, "Self name doesn't match");
 
         // Compare expected and actual children count
@@ -1243,7 +1243,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     void TestLsUknownPathId(TFlatMsgBusClient& annoyingClient,  ui64 schemeshardId, ui64 pathId) {
-        TAutoPtr<NMsgBusProxy::TBusResponse> res = annoyingClient.LsPathId(schemeshardId, pathId);
+        TAutoPtr<NMsgBusProxy::TBusResponse> res = annoyingClient.LsPathId(schemeshardId, pathId); 
         UNIT_ASSERT_VALUES_EQUAL_C(res->Record.HasPathDescription(), false,
                                    "Unxepected description for pathId " + ToString(pathId));
         UNIT_ASSERT_VALUES_EQUAL_C(res->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR,
@@ -1257,7 +1257,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         TFlatMsgBusClient annoyingClient(port);
 
-        TAutoPtr<NMsgBusProxy::TBusResponse> res = annoyingClient.Ls("/");
+        TAutoPtr<NMsgBusProxy::TBusResponse> res = annoyingClient.Ls("/"); 
         ui64 schemeshardId = res->Record.GetPathDescription().GetChildren(0).GetSchemeshardId();
 
         annoyingClient.InitRoot();
@@ -1298,92 +1298,92 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-11"), NMsgBusProxy::MSTATUS_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-2"), NMsgBusProxy::MSTATUS_ERROR);
     }
-
+ 
     Y_UNIT_TEST(CheckACL) {
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
+        TPortManager pm; 
+        ui16 port = pm.GetPort(2134); 
         TServer cleverServer = TServer(TServerSettings(port));
-        if (!true) {
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG);
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_DEBUG);
-        }
-
-        TFlatMsgBusClient annoyingClient(port);
+        if (!true) { 
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG); 
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG); 
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG); 
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG); 
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG); 
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_DEBUG); 
+        } 
+ 
+        TFlatMsgBusClient annoyingClient(port); 
         annoyingClient.InitRoot();
         annoyingClient.ModifyOwner("/", "dc-1", "berkanavt@" BUILTIN_ACL_DOMAIN);
         annoyingClient.SetSecurityToken("berkanavt@" BUILTIN_ACL_DOMAIN); // there is should be something like "234ba4f44ef7c"
-
-        NMsgBusProxy::EResponseStatus status;
-
-        status = annoyingClient.MkDir("/dc-1", "Berkanavt");
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
-        status = annoyingClient.MkDir("/dc-1/Berkanavt", "tables");
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
-
+ 
+        NMsgBusProxy::EResponseStatus status; 
+ 
+        status = annoyingClient.MkDir("/dc-1", "Berkanavt"); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK); 
+        status = annoyingClient.MkDir("/dc-1/Berkanavt", "tables"); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK); 
+ 
         status = annoyingClient.CreateTable("/dc-1/Berkanavt",
                                    "Name: \"Unused\""
-                                       "Columns { Name: \"key1\"       Type: \"Uint32\"}"
+                                       "Columns { Name: \"key1\"       Type: \"Uint32\"}" 
                                        "Columns { Name: \"key2\"       Type: \"Utf8\"}"
-                                       "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
+                                       "Columns { Name: \"RowId\"      Type: \"Uint64\"}" 
                                        "Columns { Name: \"Value\"      Type: \"Utf8\"}"
-                                       "KeyColumnNames: [\"RowId\", \"key1\", \"key2\"]"
-                                   );
+                                       "KeyColumnNames: [\"RowId\", \"key1\", \"key2\"]" 
+                                   ); 
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
-
+ 
         status = annoyingClient.CreateTable("/dc-1/Berkanavt/tables",
-                                   "Name: \"Students\""
-                                        "Columns { Name: \"Id\"          Type: \"Uint32\"}"
+                                   "Name: \"Students\"" 
+                                        "Columns { Name: \"Id\"          Type: \"Uint32\"}" 
                                         "Columns { Name: \"Name\"        Type: \"Utf8\"}"
                                         "Columns { Name: \"LastName\"    Type: \"Utf8\"}"
-                                        "Columns { Name: \"Age\"         Type: \"Uint32\"}"
-                                        "KeyColumnNames: [\"Id\"]"
-                                        "UniformPartitionsCount: 10"
-                                   );
+                                        "Columns { Name: \"Age\"         Type: \"Uint32\"}" 
+                                        "KeyColumnNames: [\"Id\"]" 
+                                        "UniformPartitionsCount: 10" 
+                                   ); 
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
-
-        TAutoPtr<NMsgBusProxy::TBusResponse> response;
-
-        response = annoyingClient.Ls("/");
-        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-        response = annoyingClient.Ls("/dc-100");
-        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR);
+ 
+        TAutoPtr<NMsgBusProxy::TBusResponse> response; 
+ 
+        response = annoyingClient.Ls("/"); 
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK); 
+        response = annoyingClient.Ls("/dc-100"); 
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR); 
         response = annoyingClient.Ls("/dc-1/Argonaut");
-        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR);
-        response = annoyingClient.Ls("/dc-1/Berkanavt/tabls");
-        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR);
-        response = annoyingClient.Ls("/dc-1/Berkanavt/tables");
-        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR); 
+        response = annoyingClient.Ls("/dc-1/Berkanavt/tabls"); 
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR); 
+        response = annoyingClient.Ls("/dc-1/Berkanavt/tables"); 
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK); 
         response = annoyingClient.Ls("/dc-1/Berkanavt/tables/Students");
-        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK); 
 
-        ui64 studentsTableId;
-        {
-            TAutoPtr<NMsgBusProxy::TBusResponse> response = annoyingClient.Ls("/dc-1/Berkanavt/tables/Students");
-            studentsTableId = response.Get()->Record.GetPathDescription().GetSelf().GetPathId();
-        }
+        ui64 studentsTableId; 
+        { 
+            TAutoPtr<NMsgBusProxy::TBusResponse> response = annoyingClient.Ls("/dc-1/Berkanavt/tables/Students"); 
+            studentsTableId = response.Get()->Record.GetPathDescription().GetSelf().GetPathId(); 
+        } 
         TTableId tabletId(ChangeStateStorage(Tests::SchemeRoot, TestDomain), studentsTableId);
-
+ 
         annoyingClient.SetSecurityToken("argonaut@" BUILTIN_ACL_DOMAIN); // there is should be something like "234ba4f44ef7c"
         annoyingClient.FlatQuery("((return (AsList (SetResult 'res1 (Int32 '2016)))))");
-
+ 
         const char * updateProgram = R"((
             (let update_ '('('Name (Utf8 'Robert)) '('Age (Uint32 '21))))
             (return (AsList (UpdateRow '/dc-1/Berkanavt/tables/Students '('('Id (Uint32 '42))) update_)))
         ))";
-
-        // Update
+ 
+        // Update 
         annoyingClient.FlatQuery(updateProgram,
-                    NMsgBusProxy::MSTATUS_ERROR,
+                    NMsgBusProxy::MSTATUS_ERROR, 
                     TEvTxUserProxy::TResultStatus::AccessDenied); // as argonaut@
-
-        annoyingClient.SetSecurityToken("berkanavt@" BUILTIN_ACL_DOMAIN); // there is should be something like "234ba4f44ef7c"
+ 
+        annoyingClient.SetSecurityToken("berkanavt@" BUILTIN_ACL_DOMAIN); // there is should be something like "234ba4f44ef7c" 
         annoyingClient.FlatQuery(updateProgram); // as berkanavt@
-
-        NACLib::TDiffACL acl;
+ 
+        NACLib::TDiffACL acl; 
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericWrite, "argonaut@" BUILTIN_ACL_DOMAIN);
 
         annoyingClient.SetSecurityToken("argonaut@" BUILTIN_ACL_DOMAIN);
@@ -1407,7 +1407,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         acl.ClearAccess();
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "argonaut@" BUILTIN_ACL_DOMAIN);
-
+ 
         annoyingClient.ModifyACL("/dc-1", "Berkanavt", acl.SerializeAsString()); // as argonaut@
         annoyingClient.ResetSchemeCache(cleverServer, tabletId);
         annoyingClient.SetSecurityToken("argonaut@" BUILTIN_ACL_DOMAIN);
@@ -1420,17 +1420,17 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.FlatQuery(updateProgram,
             NMsgBusProxy::MSTATUS_ERROR,
             TEvTxUserProxy::TResultStatus::AccessDenied); // as argonaut@
-
+ 
         annoyingClient.SetSecurityToken("berkanavt@" BUILTIN_ACL_DOMAIN); // as berkanavt@
         NACLib::TDiffACL newAcl;
         newAcl.ClearAccess();
         newAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericWrite, "argonaut@" BUILTIN_ACL_DOMAIN);
         annoyingClient.ModifyACL("/dc-1", "Berkanavt", newAcl.SerializeAsString()); // as berkanavt@
-        annoyingClient.ResetSchemeCache(cleverServer, tabletId);
+        annoyingClient.ResetSchemeCache(cleverServer, tabletId); 
         annoyingClient.SetSecurityToken("argonaut@" BUILTIN_ACL_DOMAIN);
         annoyingClient.FlatQuery(updateProgram); // as argonaut@
 #endif
-    }
+    } 
 
     Y_UNIT_TEST(OutOfDiskSpace) {
         return;  // TODO https://st.yandex-team.ru/KIKIMR-2279

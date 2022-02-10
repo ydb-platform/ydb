@@ -14,7 +14,7 @@ namespace NNodeTabletMonitor {
 
 bool TTabletStateClassifier::IsActiveTablet(const NKikimrWhiteboard::TTabletStateInfo& state)
 {
-    return state.GetState() != NKikimrWhiteboard::TTabletStateInfo::Dead;
+    return state.GetState() != NKikimrWhiteboard::TTabletStateInfo::Dead; 
 }
 
 bool TTabletStateClassifier::IsDeadTablet(const NKikimrWhiteboard::TTabletStateInfo& state)
@@ -163,7 +163,7 @@ void TTabletListRenderer::RenderTableBody(TStringStream& str,
 }
 
 TString TTabletListRenderer::GetStateName(ETabletState state) {
-    return NKikimrWhiteboard::TTabletStateInfo::ETabletState_Name(state);
+    return NKikimrWhiteboard::TTabletStateInfo::ETabletState_Name(state); 
 }
 
 void TTabletListRenderer::RenderPageHeader(TStringStream& str)

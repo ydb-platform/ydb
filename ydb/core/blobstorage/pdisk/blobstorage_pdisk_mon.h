@@ -344,7 +344,7 @@ struct TPDiskMon {
             BootingFormatMagicChecking,
             BootingDeviceFormattingAndTrimming,
             ErrorInitialFormatRead,
-            ErrorInitialFormatReadDueToGuid,
+            ErrorInitialFormatReadDueToGuid, 
             ErrorInitialFormatReadIncompleteFormat,
             ErrorDiskCannotBeFormated,
             ErrorPDiskCannotBeInitialised,
@@ -385,7 +385,7 @@ struct TPDiskMon {
                 case BootingFormatMagicChecking: return "BootingFormatMagicChecking";
                 case BootingDeviceFormattingAndTrimming: return "BootingDeviceFormattingAndTrimming";
                 case ErrorInitialFormatRead: return "ErrorInitialFormatRead";
-                case ErrorInitialFormatReadDueToGuid: return "ErrorInitialFormatReadDueToGuid";
+                case ErrorInitialFormatReadDueToGuid: return "ErrorInitialFormatReadDueToGuid"; 
                 case ErrorInitialFormatReadIncompleteFormat: return "ErrorInitialFormatReadIncompleteFormat";
                 case ErrorDiskCannotBeFormated: return "ErrorDiskCannotBeFormated";
                 case ErrorPDiskCannotBeInitialised: return "ErrorPDiskCannotBeInitialised";

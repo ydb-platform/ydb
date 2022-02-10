@@ -38,13 +38,13 @@ using namespace PersQueue::V1;
 
 
 //11 tries = 10,23 seconds, then each try for 5 seconds , so 21 retries will take near 1 min
-static const NTabletPipe::TClientRetryPolicy RetryPolicyForPipes = {
-    .RetryLimitCount = 21,
-    .MinRetryTime = TDuration::MilliSeconds(10),
-    .MaxRetryTime = TDuration::Seconds(5),
-    .BackoffMultiplier = 2,
-    .DoFirstRetryInstantly = true
-};
+static const NTabletPipe::TClientRetryPolicy RetryPolicyForPipes = { 
+    .RetryLimitCount = 21, 
+    .MinRetryTime = TDuration::MilliSeconds(10), 
+    .MaxRetryTime = TDuration::Seconds(5), 
+    .BackoffMultiplier = 2, 
+    .DoFirstRetryInstantly = true 
+}; 
 
 static const ui64 MAX_INFLY_BYTES = 25 * 1024 * 1024;
 static const ui32 MAX_INFLY_READS = 10;
@@ -1863,13 +1863,13 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
     Y_VERIFY(!PipeClient);
 
     NTabletPipe::TClientConfig clientConfig;
-    clientConfig.RetryPolicy = {
-        .RetryLimitCount = 6,
-        .MinRetryTime = TDuration::MilliSeconds(10),
-        .MaxRetryTime = TDuration::MilliSeconds(100),
-        .BackoffMultiplier = 2,
-        .DoFirstRetryInstantly = true
-    };
+    clientConfig.RetryPolicy = { 
+        .RetryLimitCount = 6, 
+        .MinRetryTime = TDuration::MilliSeconds(10), 
+        .MaxRetryTime = TDuration::MilliSeconds(100), 
+        .BackoffMultiplier = 2, 
+        .DoFirstRetryInstantly = true 
+    }; 
     PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig));
     Y_VERIFY(TabletID);
 
@@ -2307,13 +2307,13 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
         Y_VERIFY(!PipeClient);
         FirstInit = false;
         NTabletPipe::TClientConfig clientConfig;
-        clientConfig.RetryPolicy = {
-            .RetryLimitCount = 6,
-            .MinRetryTime = TDuration::MilliSeconds(10),
-            .MaxRetryTime = TDuration::MilliSeconds(100),
-            .BackoffMultiplier = 2,
-            .DoFirstRetryInstantly = true
-        };
+        clientConfig.RetryPolicy = { 
+            .RetryLimitCount = 6, 
+            .MinRetryTime = TDuration::MilliSeconds(10), 
+            .MaxRetryTime = TDuration::MilliSeconds(100), 
+            .BackoffMultiplier = 2, 
+            .DoFirstRetryInstantly = true 
+        }; 
         PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig));
 
         NKikimrClient::TPersQueueRequest request;

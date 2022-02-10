@@ -219,7 +219,7 @@ namespace NKikimr {
     public:
         TAllVDiskKinds(const TString &prototext = TString());
         TIntrusivePtr<TVDiskConfig> MakeVDiskConfig(const TVDiskConfig::TBaseInfo &baseInfo);
-        void Merge(const NKikimrBlobStorage::TAllVDiskKinds &allVDiskKinds);
+        void Merge(const NKikimrBlobStorage::TAllVDiskKinds &allVDiskKinds); 
 
     private:
         using EKind = NKikimrBlobStorage::TVDiskKind::EVDiskKind;
@@ -229,8 +229,8 @@ namespace NKikimr {
         NKikimrBlobStorage::TAllVDiskKinds AllKindsConfig;
         TVDiskConfig VDiskMegaBaseConfig;
         TKindsMap KindsMap;
-
-        void ParseConfig();
+ 
+        void ParseConfig(); 
     };
 
 } // NKikimr

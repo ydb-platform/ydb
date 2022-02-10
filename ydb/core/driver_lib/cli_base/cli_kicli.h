@@ -62,7 +62,7 @@ void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBus
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusDrainNode>& request);
 
 template <typename ResponseType>
-int OnMessageBus(const TClientCommand::TConfig& config, const ResponseType& response);
+int OnMessageBus(const TClientCommand::TConfig& config, const ResponseType& response); 
 
 template <typename RequestType, typename ResponseType>
 int MessageBusCall(TClientCommand::TConfig& config, TAutoPtr<RequestType> request, std::function<int(const ResponseType&)> callback) {
@@ -82,8 +82,8 @@ int MessageBusCall(TClientCommand::TConfig& config, TAutoPtr<RequestType> reques
 
 template <typename RequestType, typename ResponseType = NMsgBusProxy::TBusResponse>
 int MessageBusCall(TClientCommand::TConfig& config, TAutoPtr<RequestType> request) {
-    return MessageBusCall<RequestType, ResponseType>(config, request, [&config](const ResponseType& response) -> int {
-        return OnMessageBus(config, response);
+    return MessageBusCall<RequestType, ResponseType>(config, request, [&config](const ResponseType& response) -> int { 
+        return OnMessageBus(config, response); 
     });
 }
 

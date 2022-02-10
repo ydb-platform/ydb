@@ -30,17 +30,17 @@ namespace NKikimr {
 
     const TString DEFAULT_STORAGE_POOL = "Storage Pool with id: 1";
 
-    static TChannelBind GetDefaultChannelBind(const TString& storagePool = DEFAULT_STORAGE_POOL) {
-        TChannelBind bind;
-        bind.SetStoragePoolName(storagePool);
-        return bind;
-    }
-
-    const TChannelsBindings DEFAULT_BINDED_CHANNELS = {GetDefaultChannelBind(), GetDefaultChannelBind(), GetDefaultChannelBind()};
+    static TChannelBind GetDefaultChannelBind(const TString& storagePool = DEFAULT_STORAGE_POOL) { 
+        TChannelBind bind; 
+        bind.SetStoragePoolName(storagePool); 
+        return bind; 
+    } 
+ 
+    const TChannelsBindings DEFAULT_BINDED_CHANNELS = {GetDefaultChannelBind(), GetDefaultChannelBind(), GetDefaultChannelBind()}; 
     void SetupBoxAndStoragePool(TTestActorRuntime &runtime, const TActorId& sender, ui32 domainId = 0, ui32 nGroups = 1);
-    void SetupChannelProfiles(TAppPrepare &app, ui32 domainId = 0, ui32 nchannels = 3);
-    TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count = 1);
-
+    void SetupChannelProfiles(TAppPrepare &app, ui32 domainId = 0, ui32 nchannels = 3); 
+    TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count = 1); 
+ 
     i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val);
     bool SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow);
 
@@ -110,7 +110,7 @@ namespace NKikimr {
     };
 
     struct TFakeHiveTabletInfo {
-        const TTabletTypes::EType Type;
+        const TTabletTypes::EType Type; 
         const ui64 TabletId;
         TActorId BootstrapperActorId;
 
@@ -131,35 +131,35 @@ namespace NKikimr {
     struct TFakeHiveState : TThrRefBase {
         TMap<std::pair<ui64, ui64>, TFakeHiveTabletInfo> Tablets;
         TMap<ui64, std::pair<ui64, ui64>> TabletIdToOwner;
-        TMap<ui64, ui64> TabletIdToHive;
+        TMap<ui64, ui64> TabletIdToHive; 
         ui64 NextTabletId;
-        ui64 NextHiveNextTabletId;
+        ui64 NextHiveNextTabletId; 
 
-        static constexpr ui64 TABLETS_PER_CHILD_HIVE = 1000000; // amount of tablet ids we reserve for child hive
-
+        static constexpr ui64 TABLETS_PER_CHILD_HIVE = 1000000; // amount of tablet ids we reserve for child hive 
+ 
         typedef TIntrusivePtr<TFakeHiveState> TPtr;
 
         TFakeHiveState()
             : NextTabletId(TTestTxConfig::FakeHiveTablets)
-            , NextHiveNextTabletId(NextTabletId + TABLETS_PER_CHILD_HIVE)
+            , NextHiveNextTabletId(NextTabletId + TABLETS_PER_CHILD_HIVE) 
         {}
-
-        TPtr AllocateSubHive() {
-            if (NextHiveNextTabletId == 0) {
-                return nullptr;
-            }
-            TPtr state = new TFakeHiveState();
-            state->NextTabletId = NextHiveNextTabletId;
-            state->NextHiveNextTabletId = 0;
-            ui64 hiveId = NextTabletId;
-            TabletIdToHive[NextHiveNextTabletId] = hiveId;
-            NextHiveNextTabletId += TABLETS_PER_CHILD_HIVE;
-            return state;
-        }
-
-        ui64 AllocateTabletId() {
-            return NextTabletId++;
-        }
+ 
+        TPtr AllocateSubHive() { 
+            if (NextHiveNextTabletId == 0) { 
+                return nullptr; 
+            } 
+            TPtr state = new TFakeHiveState(); 
+            state->NextTabletId = NextHiveNextTabletId; 
+            state->NextHiveNextTabletId = 0; 
+            ui64 hiveId = NextTabletId; 
+            TabletIdToHive[NextHiveNextTabletId] = hiveId; 
+            NextHiveNextTabletId += TABLETS_PER_CHILD_HIVE; 
+            return state; 
+        } 
+ 
+        ui64 AllocateTabletId() { 
+            return NextTabletId++; 
+        } 
     };
 
     typedef std::function<std::function<IActor* (const TActorId &, TTabletStorageInfo*)>(ui32 type)> TGetTabletCreationFunc;

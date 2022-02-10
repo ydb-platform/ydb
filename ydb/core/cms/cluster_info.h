@@ -335,7 +335,7 @@ using TNodeInfoPtr = TIntrusivePtr<TNodeInfo>;
  */
 struct TTabletInfo {
     using EState = NKikimrWhiteboard::TTabletStateInfo::ETabletState;
-    using EType = TTabletTypes::EType;
+    using EType = TTabletTypes::EType; 
 
     TTabletInfo() = default;
     TTabletInfo(const TTabletInfo &other) = default;
@@ -345,7 +345,7 @@ struct TTabletInfo {
     TTabletInfo &operator=(TTabletInfo &&other) = default;
 
     ui64 TabletId = 0;
-    EType Type = TTabletTypes::Unknown;
+    EType Type = TTabletTypes::Unknown; 
     EState State = NKikimrWhiteboard::TTabletStateInfo::Created;
     bool Leader = false;
     ui32 NodeId = 0;

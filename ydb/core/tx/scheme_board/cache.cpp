@@ -699,7 +699,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             Self.Drop();
 
-            DomainDescription.Drop();
+            DomainDescription.Drop(); 
             RtmrVolumeInfo.Drop();
             KesusInfo.Drop();
             SolomonVolumeInfo.Drop();
@@ -1339,19 +1339,19 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             switch (entryDesc.GetPathType()) {
             case NKikimrSchemeOp::EPathTypeSubDomain:
                 Kind = TNavigate::KindSubdomain;
-                FillInfo(Kind, DomainDescription, std::move(*pathDesc.MutableDomainDescription()));
+                FillInfo(Kind, DomainDescription, std::move(*pathDesc.MutableDomainDescription())); 
                 break;
             case NKikimrSchemeOp::EPathTypeExtSubDomain:
                 Kind = TNavigate::KindExtSubdomain;
-                FillInfo(Kind, DomainDescription, std::move(*pathDesc.MutableDomainDescription()));
+                FillInfo(Kind, DomainDescription, std::move(*pathDesc.MutableDomainDescription())); 
                 break;
             case NKikimrSchemeOp::EPathTypeDir:
             case NKikimrSchemeOp::EPathTypeBlockStoreVolume:
             case NKikimrSchemeOp::EPathTypeFileStore:
                 Kind = TNavigate::KindPath;
-                if (entryDesc.GetPathId() == entryDesc.GetParentPathId()) {
-                    FillInfo(Kind, DomainDescription, std::move(*pathDesc.MutableDomainDescription()));
-                }
+                if (entryDesc.GetPathId() == entryDesc.GetParentPathId()) { 
+                    FillInfo(Kind, DomainDescription, std::move(*pathDesc.MutableDomainDescription())); 
+                } 
                 break;
             case NKikimrSchemeOp::EPathTypeTable:
                 Kind = TNavigate::KindTable;
@@ -1670,7 +1670,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.NotNullColumns = NotNullColumns;
             entry.Indexes = Indexes;
             entry.CdcStreams = CdcStreams;
-            entry.DomainDescription = DomainDescription;
+            entry.DomainDescription = DomainDescription; 
             entry.RTMRVolumeInfo = RtmrVolumeInfo;
             entry.KesusInfo = KesusInfo;
             entry.SolomonVolumeInfo = SolomonVolumeInfo;
@@ -1906,7 +1906,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // domain & path specific
         TIntrusivePtr<TNavigate::TListNodeEntry> ListNodeEntry;
-        TIntrusivePtr<TNavigate::TDomainDescription> DomainDescription;
+        TIntrusivePtr<TNavigate::TDomainDescription> DomainDescription; 
 
         // table specific
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;

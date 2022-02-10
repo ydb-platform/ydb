@@ -32,7 +32,7 @@ namespace NMonitoring {
         TIndexMonPage* FindIndexPage(const TString& relativePath);
 
         void SortPages();
-        void ClearPages();
+        void ClearPages(); 
     };
 
 }

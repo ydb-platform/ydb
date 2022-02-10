@@ -1443,7 +1443,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         TYsonFieldChecker check(ysonString, 11);
 
-        check.String("Running"); // BootState
+        check.String("Running"); // BootState 
         check.DoubleGreaterOrEquals(0.0); // CPU
         check.Uint64(1u); // Generation
         check.Uint64GreaterOrEquals(0u); // Memory

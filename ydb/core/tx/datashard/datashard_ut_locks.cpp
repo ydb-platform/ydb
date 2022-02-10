@@ -600,7 +600,7 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
 
     TAutoPtr<IEventHandle> handle;
     NTabletPipe::TClientConfig pipeConfig;
-    pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+    pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries(); 
     auto pipe = runtime.ConnectToPipe(ChangeStateStorage(SchemeRoot, serverSettings.Domain), sender, 0, pipeConfig);
 
     // Create table with two shards.

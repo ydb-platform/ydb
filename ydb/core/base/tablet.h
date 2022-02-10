@@ -1,5 +1,5 @@
 #pragma once
-#include "blobstorage.h"
+#include "blobstorage.h" 
 #include "defs.h"
 #include "events.h"
 #include "logoblob.h"
@@ -50,7 +50,7 @@ struct TEvTablet {
         EvFAuxUpdate,
         EvFollowerGcApplied, // from leader to user tablet when all known followers reported consumed gc barrier
         EvFollowerSyncComplete, // from leader to user tablet when all old followers are touched and synced
-        EvCutTabletHistory,
+        EvCutTabletHistory, 
         EvUpdateConfig,
 
         EvCommit = EvBoot + 512,
@@ -73,8 +73,8 @@ struct TEvTablet {
         EvLocalMKQLResponse,
         EvLocalSchemeTx,
         EvLocalSchemeTxResponse,
-        EvGetCounters,
-        EvGetCountersResponse,
+        EvGetCounters, 
+        EvGetCountersResponse, 
         EvLocalReadColumns,
         EvLocalReadColumnsResponse,
 
@@ -94,7 +94,7 @@ struct TEvTablet {
 
         // utilitary
         EvCheckBlobstorageStatusResult = EvBoot + 3072,
-        EvResetTabletResult,
+        EvResetTabletResult, 
 
         EvEnd
     };
@@ -186,16 +186,16 @@ struct TEvTablet {
         TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
         TResourceProfilesPtr ResourceProfiles;
         TSharedQuotaPtr TxCacheQuota;
-
-        NMetrics::TTabletThroughputRawValue GroupReadBytes;
+ 
+        NMetrics::TTabletThroughputRawValue GroupReadBytes; 
         NMetrics::TTabletIopsRawValue GroupReadOps;
-
-        TEvBoot(
-                ui64 tabletId,
-                ui32 generation,
-                TDependencyGraph *dependencyGraph,
+ 
+        TEvBoot( 
+                ui64 tabletId, 
+                ui32 generation, 
+                TDependencyGraph *dependencyGraph, 
                 const TActorId& launcher,
-                TIntrusivePtr<TTabletStorageInfo> info,
+                TIntrusivePtr<TTabletStorageInfo> info, 
                 TResourceProfilesPtr profiles = nullptr,
                 TSharedQuotaPtr txCacheQuota = nullptr,
                 NMetrics::TTabletThroughputRawValue&& read = NMetrics::TTabletThroughputRawValue(),
@@ -203,11 +203,11 @@ struct TEvTablet {
             : TabletID(tabletId)
             , Generation(generation)
             , DependencyGraph(dependencyGraph)
-            , Launcher(launcher)
+            , Launcher(launcher) 
             , TabletStorageInfo(info)
             , ResourceProfiles(profiles)
             , TxCacheQuota(txCacheQuota)
-            , GroupReadBytes(std::move(read))
+            , GroupReadBytes(std::move(read)) 
             , GroupReadOps(std::move(readOps))
         {}
     };
@@ -304,7 +304,7 @@ struct TEvTablet {
 
     struct TEvPromoteToLeader : public TEventLocal<TEvPromoteToLeader, EvPromoteToLeader> {
         const ui32 SuggestedGeneration;
-        TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
+        TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo; 
 
         TEvPromoteToLeader(ui32 suggestedGeneration, TIntrusivePtr<TTabletStorageInfo> info)
             : SuggestedGeneration(suggestedGeneration)
@@ -320,7 +320,7 @@ struct TEvTablet {
         const ui32 ConfirmedOnSend;
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
-        NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
+        NMetrics::TTabletThroughputRawValue GroupWrittenBytes; 
         NMetrics::TTabletIopsRawValue GroupWrittenOps;
 
         TEvCommitResult(
@@ -340,7 +340,7 @@ struct TEvTablet {
             , ConfirmedOnSend(confirmedOnSend)
             , YellowMoveChannels(std::move(yellowMoveChannels))
             , YellowStopChannels(std::move(yellowStopChannels))
-            , GroupWrittenBytes(std::move(written))
+            , GroupWrittenBytes(std::move(written)) 
             , GroupWrittenOps(std::move(writtenOps))
         {}
     };
@@ -353,7 +353,7 @@ struct TEvTablet {
         XX(ReasonReserved01, 3) \
         XX(ReasonBootBSError, 4) \
         XX(ReasonBootSuggestOutdated, 5) \
-        XX(ReasonBootSSError, 6) \
+        XX(ReasonBootSSError, 6) \ 
         XX(ReasonBootReservedValue, 32) \
         XX(ReasonPill, 33) \
         XX(ReasonError, 34) \
@@ -463,22 +463,22 @@ struct TEvTablet {
         }
     };
 
-    struct TEvLocalMKQL : public TEventPB<TEvLocalMKQL, NKikimrTabletTxBase::TEvLocalMKQL, TEvTablet::EvLocalMKQL> {
+    struct TEvLocalMKQL : public TEventPB<TEvLocalMKQL, NKikimrTabletTxBase::TEvLocalMKQL, TEvTablet::EvLocalMKQL> { 
         TEvLocalMKQL()
         {}
     };
 
-    struct TEvLocalMKQLResponse : public TEventPB<TEvLocalMKQLResponse, NKikimrTabletTxBase::TEvLocalMKQLResponse, TEvTablet::EvLocalMKQLResponse> {
+    struct TEvLocalMKQLResponse : public TEventPB<TEvLocalMKQLResponse, NKikimrTabletTxBase::TEvLocalMKQLResponse, TEvTablet::EvLocalMKQLResponse> { 
         TEvLocalMKQLResponse()
         {}
     };
 
-    struct TEvLocalSchemeTx : public TEventPB<TEvLocalSchemeTx, NKikimrTabletTxBase::TEvLocalSchemeTx, TEvTablet::EvLocalSchemeTx> {
+    struct TEvLocalSchemeTx : public TEventPB<TEvLocalSchemeTx, NKikimrTabletTxBase::TEvLocalSchemeTx, TEvTablet::EvLocalSchemeTx> { 
         TEvLocalSchemeTx()
         {}
     };
 
-    struct TEvLocalSchemeTxResponse : public TEventPB<TEvLocalSchemeTxResponse, NKikimrTabletTxBase::TEvLocalSchemeTxResponse, TEvTablet::EvLocalSchemeTxResponse> {
+    struct TEvLocalSchemeTxResponse : public TEventPB<TEvLocalSchemeTxResponse, NKikimrTabletTxBase::TEvLocalSchemeTxResponse, TEvTablet::EvLocalSchemeTxResponse> { 
         TEvLocalSchemeTxResponse()
         {}
     };
@@ -714,23 +714,23 @@ struct TEvTablet {
 
         {}
     };
-
-    struct TEvResetTabletResult : public TEventLocal<TEvResetTabletResult, EvResetTabletResult> {
-        const NKikimrProto::EReplyStatus Status;
-        const ui64 TabletId;
-
-        TEvResetTabletResult(NKikimrProto::EReplyStatus status, ui64 tabletId)
-            : Status(status)
-            , TabletId(tabletId)
-        {}
-    };
-
-    struct TEvGetCounters : TEventPB<TEvGetCounters, NKikimrTabletBase::TEvGetCounters, EvGetCounters> {};
-    struct TEvGetCountersResponse : TEventPB<TEvGetCountersResponse, NKikimrTabletBase::TEvGetCountersResponse, EvGetCountersResponse> {};
-
-    struct TEvCutTabletHistory : TEventPB<TEvCutTabletHistory, NKikimrTabletBase::TEvCutTabletHistory, EvCutTabletHistory> {
-        TEvCutTabletHistory() = default;
-    };
+ 
+    struct TEvResetTabletResult : public TEventLocal<TEvResetTabletResult, EvResetTabletResult> { 
+        const NKikimrProto::EReplyStatus Status; 
+        const ui64 TabletId; 
+ 
+        TEvResetTabletResult(NKikimrProto::EReplyStatus status, ui64 tabletId) 
+            : Status(status) 
+            , TabletId(tabletId) 
+        {} 
+    }; 
+ 
+    struct TEvGetCounters : TEventPB<TEvGetCounters, NKikimrTabletBase::TEvGetCounters, EvGetCounters> {}; 
+    struct TEvGetCountersResponse : TEventPB<TEvGetCountersResponse, NKikimrTabletBase::TEvGetCountersResponse, EvGetCountersResponse> {}; 
+ 
+    struct TEvCutTabletHistory : TEventPB<TEvCutTabletHistory, NKikimrTabletBase::TEvCutTabletHistory, EvCutTabletHistory> { 
+        TEvCutTabletHistory() = default; 
+    }; 
 
     struct TEvUpdateConfig : TEventLocal<TEvUpdateConfig, EvUpdateConfig> {
         TResourceProfilesPtr ResourceProfiles;

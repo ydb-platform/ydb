@@ -1,6 +1,6 @@
 #include "tablet_flat_executed.h"
 #include "flat_executor.h"
-#include "flat_executor_counters.h"
+#include "flat_executor_counters.h" 
 #include <ydb/core/base/appdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -182,9 +182,9 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
     } else if (path == "/counters") {
         Executor()->RenderHtmlCounters(ev);
         return;
-    } else if (path == "/db") {
-        Executor()->RenderHtmlDb(ev, ExecutorCtx(ctx));
-        return;
+    } else if (path == "/db") { 
+        Executor()->RenderHtmlDb(ev, ExecutorCtx(ctx)); 
+        return; 
     } else {
         const TDuration uptime = TAppData::TimeProvider->Now() - StartTime0;
         TStringStream str;
@@ -238,8 +238,8 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
 
 void TTabletExecutedFlat::HandleGetCounters(TEvTablet::TEvGetCounters::TPtr &ev) {
     Executor()->GetTabletCounters(ev);
-}
-
+} 
+ 
 bool TTabletExecutedFlat::HandleDefaultEvents(STFUNC_SIG) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvTablet::TEvBoot, Handle);

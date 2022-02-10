@@ -183,7 +183,7 @@ void TYqlServer::Initialize() {
 
     for (ui32 nodeIdx = 0; nodeIdx < GetSettings().NodeCount; ++nodeIdx) {
         SetupDomainLocalService(nodeIdx);
-        SetupProxies(nodeIdx);
+        SetupProxies(nodeIdx); 
     }
     SetupLogging();
 }

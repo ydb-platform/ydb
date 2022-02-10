@@ -91,7 +91,7 @@ public:
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD State->ACL.GetACL().SerializeToString(&out);
         response->Record.MutablePathDescription()->MutableSelf()->SetACL(out);
-        response->Record.MutablePathDescription()->MutableSelf()->SetEffectiveACL(out);
+        response->Record.MutablePathDescription()->MutableSelf()->SetEffectiveACL(out); 
         //Fill response from State
         ctx.Send(ev->Sender, response.Release());
     }

@@ -59,7 +59,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // WHITEBOARD SECTOR
         // Update Whiteboard with the current status
-        // Update NodeWarden with current VDisk rank
+        // Update NodeWarden with current VDisk rank 
         ////////////////////////////////////////////////////////////////////////
         void UpdateWhiteboard(const TActorContext &ctx) {
             // satisfaction rank
@@ -78,16 +78,16 @@ namespace NKikimr {
                 record.SetWriteThroughput(bytesWritten * 1000000 / delta.MicroSeconds());
             }
             ctx.Send(*SkeletonFrontIDPtr, ev.release());
-            // send VDisk's metric to NodeWarden
+            // send VDisk's metric to NodeWarden 
             if (OverloadHandler) {
-                ctx.Send(NodeWardenServiceId,
+                ctx.Send(NodeWardenServiceId, 
                          new TEvBlobStorage::TEvControllerUpdateDiskStatus(
                              SelfVDiskId,
                              OverloadHandler->GetIntegralRankPercent(),
                              SelfId().NodeId(),
                              Config->BaseInfo.PDiskId,
                              Config->BaseInfo.VDiskSlotId));
-            }
+            } 
             // repeat later
             ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
         }
@@ -2425,7 +2425,7 @@ namespace NKikimr {
             , LocalRecovInfo()
             , SkeletonFrontIDPtr(new TActorId(skeletonFrontID))
             , LocalDbRecoveryID()
-            , NodeWardenServiceId(MakeBlobStorageNodeWardenID(vctx->NodeId))
+            , NodeWardenServiceId(MakeBlobStorageNodeWardenID(vctx->NodeId)) 
             , SelfVDiskId(GInfo->GetVDiskId(VCtx->ShortSelfVDisk))
             , Arena(std::make_shared<TRopeArena>(&TRopeArenaBackend::Allocate))
             , VDiskMonGroup(VCtx->VDiskCounters, "subsystem", "state")

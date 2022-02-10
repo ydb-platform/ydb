@@ -364,7 +364,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
 
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx)
     {
-        const auto &rec = ev->Get()->GetRecord();
+        const auto &rec = ev->Get()->GetRecord(); 
         UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), NKikimrScheme::StatusSuccess);
         auto &path = rec.GetPath();
         auto shardId = rec.GetPathDescription().GetSelf().GetSchemeshardId();
@@ -429,8 +429,8 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
                 bootstrapperActorId = Boot(ctx, type, &CreateTxMediator, DataGroupErasure);
             } else if (type == defaultTabletTypes.SchemeShard) {
                 bootstrapperActorId = Boot(ctx, type, &CreateFlatTxSchemeShard, DataGroupErasure);
-            } else if (type == defaultTabletTypes.Hive) {
-                bootstrapperActorId = Boot(ctx, type, &CreateDefaultHive, DataGroupErasure);
+            } else if (type == defaultTabletTypes.Hive) { 
+                bootstrapperActorId = Boot(ctx, type, &CreateDefaultHive, DataGroupErasure); 
             } else if (type == defaultTabletTypes.SysViewProcessor) {
                 bootstrapperActorId = Boot(ctx, type, &NSysView::CreateSysViewProcessor, DataGroupErasure);
             } else if (type == defaultTabletTypes.SequenceShard) {
@@ -785,8 +785,8 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         SetLogPriority(NKikimrServices::CMS_TENANTS, NLog::PRI_TRACE);
         SetLogPriority(NKikimrServices::CONFIGS_DISPATCHER, NLog::PRI_TRACE);
         SetLogPriority(NKikimrServices::CONFIGS_CACHE, NLog::PRI_TRACE);
-        SetLogPriority(NKikimrServices::HIVE, NLog::PRI_DEBUG);
-        SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_DEBUG);
+        SetLogPriority(NKikimrServices::HIVE, NLog::PRI_DEBUG); 
+        SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_DEBUG); 
         SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
         SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
@@ -804,7 +804,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     TAppPrepare app;
 
-    app.FeatureFlags = Extension.GetFeatureFlags();
+    app.FeatureFlags = Extension.GetFeatureFlags(); 
     app.ClearDomainsAndHive();
 
     ui32 planResolution = 500;
@@ -843,7 +843,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
                         TActorSetupCmd(new TFakeNodeWhiteboardService, TMailboxType::Simple, 0), i);
     }
 
-    SetupChannelProfiles(app);
+    SetupChannelProfiles(app); 
     SetupBasicServices(*this, app);
 
     if (ENABLE_DETAILED_LOG) {
@@ -901,11 +901,11 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
                 auto op = transaction->MutableSubDomain();
                 op->SetName(domain.Name);
 
-                for (const auto& [kind, pool] : GetAppData().DomainsInfo->GetDomain(0).StoragePoolTypes) {
+                for (const auto& [kind, pool] : GetAppData().DomainsInfo->GetDomain(0).StoragePoolTypes) { 
                     auto* p = op->AddStoragePools();
                     p->SetKind(kind);
                     p->SetName(pool.GetName());
-                }
+                } 
 
                 SendToPipe(domain.SchemeShardId, Sender, evTx.Release(), 0, GetPipeConfigWithRetries());
 
@@ -977,7 +977,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
         NKikimrBlobStorage::TDefineHostConfig hostConfig;
         hostConfig.SetHostConfigId(1);
-        hostConfig.AddDrive()->SetPath(TStringBuilder() << GetTempDir() << "pdisk_1.dat");
+        hostConfig.AddDrive()->SetPath(TStringBuilder() << GetTempDir() << "pdisk_1.dat"); 
         NKikimrBlobStorage::TDefineBox boxConfig;
         boxConfig.SetBoxId(1);
         for (const TEvInterconnect::TNodeInfo &node : reply1->Nodes) {
@@ -991,7 +991,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         request->Record.MutableRequest()->AddCommand()->MutableDefineBox()->CopyFrom(boxConfig);
 
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries(); 
         SendToPipe(MakeBSControllerID(0), Sender, request.Release(), 0, pipeConfig);
 
         auto reply2 = GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handle);
@@ -1124,7 +1124,7 @@ TTenantTestRuntime::TTenantTestRuntime(const TTenantTestConfig &config,
     , Config(config)
     , Extension(extension)
 {
-    Extension.MutableFeatureFlags()->SetEnableExternalHive(false);
+    Extension.MutableFeatureFlags()->SetEnableExternalHive(false); 
     Setup(createTenantPools);
 }
 

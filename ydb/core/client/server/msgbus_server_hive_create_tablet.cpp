@@ -12,17 +12,17 @@ namespace {
     const ui32 DefaultTimeout = 90000;
 }
 
-template <typename ResponseType>
+template <typename ResponseType> 
 class TMessageBusHiveCreateTablet
-        : public TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>
+        : public TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>> 
         , public TMessageBusSessionIdentHolder {
-using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
+using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>; 
 
     struct TRequest {
-        TEvHive::EEv Event;
+        TEvHive::EEv Event; 
         ui64 OwnerId;
         ui64 OwnerIdx;
-        TTabletTypes::EType TabletType;
+        TTabletTypes::EType TabletType; 
         TVector<ui32> AllowedNodeIDs;
         TVector<TSubDomainKey> AllowedDomains;
         TChannelsBindings BindedChannels;
@@ -30,12 +30,12 @@ using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
         NKikimrProto::EReplyStatus Status;
         ui64 TabletId;
 
-        TRequest(ui64 ownerId, ui64 ownerIdx, TTabletTypes::EType tabletType,
+        TRequest(ui64 ownerId, ui64 ownerIdx, TTabletTypes::EType tabletType, 
                  TVector<ui32> allowedNodeIDs,
                  TVector<TSubDomainKey> allowedDomains,
                  TChannelsBindings bindedChannels)
-            : Event(TEvHive::EvCreateTablet)
-            , OwnerId(ownerId)
+            : Event(TEvHive::EvCreateTablet) 
+            , OwnerId(ownerId) 
             , OwnerIdx(ownerIdx)
             , TabletType(tabletType)
             , AllowedNodeIDs(std::move(allowedNodeIDs))
@@ -44,15 +44,15 @@ using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
             , Status(NKikimrProto::UNKNOWN)
             , TabletId(0)
         {}
-
-        TRequest(ui64 ownerId, ui64 ownerIdx)
-            : Event(TEvHive::EvLookupTablet)
-            , OwnerId(ownerId)
-            , OwnerIdx(ownerIdx)
-            , TabletType()
-            , Status(NKikimrProto::UNKNOWN)
-            , TabletId(0)
-        {}
+ 
+        TRequest(ui64 ownerId, ui64 ownerIdx) 
+            : Event(TEvHive::EvLookupTablet) 
+            , OwnerId(ownerId) 
+            , OwnerIdx(ownerIdx) 
+            , TabletType() 
+            , Status(NKikimrProto::UNKNOWN) 
+            , TabletId(0) 
+        {} 
     };
 
     TDuration Timeout;
@@ -69,7 +69,7 @@ public:
         return NKikimrServices::TActivity::MSGBUS_COMMON;
     }
 
-    TMessageBusHiveCreateTablet(TBusMessageContext &msg)
+    TMessageBusHiveCreateTablet(TBusMessageContext &msg) 
             : TMessageBusSessionIdentHolder(msg)
             , Status(NKikimrProto::UNKNOWN)
             , ResponsesReceived(0)
@@ -82,9 +82,9 @@ public:
         for (ui32 i = 0; i < cmdCount; ++i) {
             const auto &cmd = record.GetCmdCreateTablet(i);
             isOk = isOk && cmd.HasOwnerId() && cmd.HasOwnerIdx()
-                && cmd.HasTabletType() && (cmd.BindedChannelsSize() > 0);
+                && cmd.HasTabletType() && (cmd.BindedChannelsSize() > 0); 
             if (isOk) {
-                Requests.emplace_back(cmd.GetOwnerId(), cmd.GetOwnerIdx(), cmd.GetTabletType(),
+                Requests.emplace_back(cmd.GetOwnerId(), cmd.GetOwnerIdx(), cmd.GetTabletType(), 
                     TVector<ui32>(cmd.GetAllowedNodeIDs().begin(), cmd.GetAllowedNodeIDs().end()),
                     TVector<TSubDomainKey>(cmd.GetAllowedDomains().begin(), cmd.GetAllowedDomains().end()),
                     TChannelsBindings(cmd.GetBindedChannels().begin(), cmd.GetBindedChannels().end()));
@@ -92,20 +92,20 @@ public:
                 ErrorReason = Sprintf("Missing arguments for CmdCreateTablet(%" PRIu32 ") call", i);
             }
         }
-        cmdCount = record.CmdLookupTabletSize();
-        for (ui32 i = 0; i < cmdCount; ++i) {
-            const auto &cmd = record.GetCmdLookupTablet(i);
-            isOk = isOk && cmd.HasOwnerId() && cmd.HasOwnerIdx();
-            if (isOk) {
+        cmdCount = record.CmdLookupTabletSize(); 
+        for (ui32 i = 0; i < cmdCount; ++i) { 
+            const auto &cmd = record.GetCmdLookupTablet(i); 
+            isOk = isOk && cmd.HasOwnerId() && cmd.HasOwnerIdx(); 
+            if (isOk) { 
                 Requests.emplace_back(cmd.GetOwnerId(), cmd.GetOwnerIdx());
-            } else {
-                ErrorReason = Sprintf("Missing arguments for CmdLookupTablet(%" PRIu32 ") call", i);
-            }
-        }
+            } else { 
+                ErrorReason = Sprintf("Missing arguments for CmdLookupTablet(%" PRIu32 ") call", i); 
+            } 
+        } 
         if (isOk) {
             isOk = isOk && record.HasDomainUid();
             if (!isOk) {
-                ErrorReason = Sprintf("Missing DomainUid for CmdCreateTablet/CmdLookupTablet call");
+                ErrorReason = Sprintf("Missing DomainUid for CmdCreateTablet/CmdLookupTablet call"); 
             }
         }
 
@@ -167,27 +167,27 @@ public:
         if (ResponsesReceived == Requests.size()) {
             switch (Status) {
                 case NKikimrProto::OK: {
-                    THolder<ResponseType> result(new ResponseType());
+                    THolder<ResponseType> result(new ResponseType()); 
                     auto &rec = result->Record;
                     rec.SetStatus(MSTATUS_OK);
                     for (ui32 i = 0; i < Requests.size(); ++i) {
                         TRequest &request = Requests[i];
-                        switch (request.Event) {
-                            case TEvHive::EvCreateTablet: {
-                                auto* item = rec.AddCreateTabletResult();
-                                item->SetStatus(request.Status);
-                                item->SetTabletId(request.TabletId);
-                                break;
-                            }
-                            case TEvHive::EvLookupTablet: {
-                                auto* item = rec.AddLookupTabletResult();
-                                item->SetStatus(request.Status);
-                                item->SetTabletId(request.TabletId);
-                                break;
-                            }
-                            default:
-                                break;
-                        }
+                        switch (request.Event) { 
+                            case TEvHive::EvCreateTablet: { 
+                                auto* item = rec.AddCreateTabletResult(); 
+                                item->SetStatus(request.Status); 
+                                item->SetTabletId(request.TabletId); 
+                                break; 
+                            } 
+                            case TEvHive::EvLookupTablet: { 
+                                auto* item = rec.AddLookupTabletResult(); 
+                                item->SetStatus(request.Status); 
+                                item->SetTabletId(request.TabletId); 
+                                break; 
+                            } 
+                            default: 
+                                break; 
+                        } 
                     }
                     return SendReplyAndDie(result.Release(), ctx);
                 }
@@ -215,7 +215,7 @@ public:
         Y_UNUSED(ev);
         PipeClient = TActorId();
         ErrorReason = Sprintf("Client pipe to Hive destroyed (connection lost), Marker# HC9");
-        SendReplyMove(CreateErrorReply(MSTATUS_ERROR, ctx));
+        SendReplyMove(CreateErrorReply(MSTATUS_ERROR, ctx)); 
         return Die(ctx);
     }
 
@@ -234,7 +234,7 @@ public:
 
     virtual NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx) {
         Y_UNUSED(ctx);
-        THolder<ResponseType> result(new ResponseType());
+        THolder<ResponseType> result(new ResponseType()); 
         auto &rec = result->Record;
         rec.SetStatus(status);
         if (ErrorReason.size()) {
@@ -246,7 +246,7 @@ public:
     }
 
     void SendReplyAndDie(NBus::TBusMessage *reply, const TActorContext &ctx) {
-        SendReplyMove(reply);
+        SendReplyMove(reply); 
         return Die(ctx);
     }
 
@@ -258,7 +258,7 @@ public:
 
         NTabletPipe::TClientConfig clientConfig;
         if (WithRetry) {
-            clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+            clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries(); 
         }
 
         auto &domainsInfo = *AppData(ctx)->DomainsInfo;
@@ -278,8 +278,8 @@ public:
 
             for (ui64 i = 0; i < Requests.size(); ++i) {
                 const TRequest &cmd = Requests[i];
-                switch (cmd.Event) {
-                    case TEvHive::EvCreateTablet: {
+                switch (cmd.Event) { 
+                    case TEvHive::EvCreateTablet: { 
                         THolder<TEvHive::TEvCreateTablet> x(new TEvHive::TEvCreateTablet(cmd.OwnerId,
                                                                                          cmd.OwnerIdx,
                                                                                          cmd.TabletType,
@@ -290,20 +290,20 @@ public:
                            *x->Record.AddAllowedDomains() = domainKey;
                         }
 
-                        NTabletPipe::SendData(ctx, PipeClient, x.Release(), i);
-                        break;
-                    }
-                    case TEvHive::EvLookupTablet: {
-                        THolder<TEvHive::TEvLookupTablet> x(new TEvHive::TEvLookupTablet(cmd.OwnerId, cmd.OwnerIdx));
-                        NTabletPipe::SendData(ctx, PipeClient, x.Release(), i);
-                        break;
-                    }
-                    default:
-                        break;
-                }
+                        NTabletPipe::SendData(ctx, PipeClient, x.Release(), i); 
+                        break; 
+                    } 
+                    case TEvHive::EvLookupTablet: { 
+                        THolder<TEvHive::TEvLookupTablet> x(new TEvHive::TEvLookupTablet(cmd.OwnerId, cmd.OwnerIdx)); 
+                        NTabletPipe::SendData(ctx, PipeClient, x.Release(), i); 
+                        break; 
+                    } 
+                    default: 
+                        break; 
+                } 
             }
 
-            TBase::Become(&TMessageBusHiveCreateTablet<ResponseType>::StateWaiting, ctx, Timeout, new TEvents::TEvWakeup());
+            TBase::Become(&TMessageBusHiveCreateTablet<ResponseType>::StateWaiting, ctx, Timeout, new TEvents::TEvWakeup()); 
         } else {
             if (ErrorReason.size() == 0) {
                 ErrorReason = Sprintf("Unexpected Status, Marker# HC8");
@@ -322,12 +322,12 @@ public:
     }
 };
 
-IActor* CreateMessageBusHiveCreateTablet(TBusMessageContext &msg) {
-    if (msg.GetMessage()->GetHeader()->Type == MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET) {
-        return new TMessageBusHiveCreateTablet<TBusHiveCreateTabletResult>(msg);
-    } else {
-        return new TMessageBusHiveCreateTablet<TBusResponse>(msg);
-    }
+IActor* CreateMessageBusHiveCreateTablet(TBusMessageContext &msg) { 
+    if (msg.GetMessage()->GetHeader()->Type == MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET) { 
+        return new TMessageBusHiveCreateTablet<TBusHiveCreateTabletResult>(msg); 
+    } else { 
+        return new TMessageBusHiveCreateTablet<TBusResponse>(msg); 
+    } 
 }
 
 }

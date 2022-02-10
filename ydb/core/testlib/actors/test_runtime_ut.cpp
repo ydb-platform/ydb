@@ -126,15 +126,15 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         TActorId actorId = runtime.Register(new TMyActor);
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
         auto events = runtime.CaptureEvents();
-        bool passed = false;
-        for (const auto& event : events) {
-            if (event->GetRecipientRewrite() == sender) {
-                UNIT_ASSERT_EQUAL_C(event->Type, TEvents::THelloWorld::Pong, "reply ev. type check");
-                passed = true;
-                break;
-            }
-        }
-        UNIT_ASSERT(passed);
+        bool passed = false; 
+        for (const auto& event : events) { 
+            if (event->GetRecipientRewrite() == sender) { 
+                UNIT_ASSERT_EQUAL_C(event->Type, TEvents::THelloWorld::Pong, "reply ev. type check"); 
+                passed = true; 
+                break; 
+            } 
+        } 
+        UNIT_ASSERT(passed); 
         runtime.PushEventsFront(events);
     }
 
@@ -214,15 +214,15 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         TActorId actorId = runtime.Register(actor);
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvWakeup));
         auto events = runtime.CaptureEvents();
-        bool passed = false;
-        for (const auto& event : events) {
-            if (event->Recipient == actor->GetChildId()) {
-                UNIT_ASSERT_EQUAL_C(event->Type, TEvents::THelloWorld::Ping, "reply ev. type check");
-                passed = true;
-                break;
-            }
-        }
-        UNIT_ASSERT(passed);
+        bool passed = false; 
+        for (const auto& event : events) { 
+            if (event->Recipient == actor->GetChildId()) { 
+                UNIT_ASSERT_EQUAL_C(event->Type, TEvents::THelloWorld::Ping, "reply ev. type check"); 
+                passed = true; 
+                break; 
+            } 
+        } 
+        UNIT_ASSERT(passed); 
         runtime.PushEventsFront(events);
     }
 

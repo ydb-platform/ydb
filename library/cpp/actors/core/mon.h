@@ -12,7 +12,7 @@ namespace NActors {
             HttpInfoRes,
             RemoteHttpInfo,
             RemoteHttpInfoRes,
-            RemoteJsonInfoRes,
+            RemoteJsonInfoRes, 
             RemoteBinaryInfoRes,
             End
         };
@@ -28,14 +28,14 @@ namespace NActors {
             }
 
             TEvHttpInfo(const NMonitoring::IMonHttpRequest& request, const TString& userToken)
-                : Request(request)
-                , UserToken(userToken)
-                , SubRequestId(0)
-            {
-            }
-
+                : Request(request) 
+                , UserToken(userToken) 
+                , SubRequestId(0) 
+            { 
+            } 
+ 
             const NMonitoring::IMonHttpRequest& Request;
-            TString UserToken; // built and serialized
+            TString UserToken; // built and serialized 
             // SubRequestId != 0 means that we assemble reply from multiple parts and SubRequestId contains this part id
             int SubRequestId;
         };
@@ -168,22 +168,22 @@ namespace NActors {
         struct TEvRemoteJsonInfoRes: public NActors::TEventBase<TEvRemoteJsonInfoRes, RemoteJsonInfoRes> {
             TEvRemoteJsonInfoRes() {
             }
-
+ 
             TEvRemoteJsonInfoRes(const TString& json)
-                : Json(json)
+                : Json(json) 
             {
             }
-
+ 
             TString Json;
-
+ 
             TString ToStringHeader() const override {
-                return "TEvRemoteJsonInfoRes";
-            }
-
+                return "TEvRemoteJsonInfoRes"; 
+            } 
+ 
             bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
                 return serializer->WriteString(&Json);
-            }
-
+            } 
+ 
             ui32 CalculateSerializedSize() const override {
                 return Json.size();
             }
@@ -194,9 +194,9 @@ namespace NActors {
 
             static IEventBase* Load(TEventSerializedData* bufs) {
                 return new TEvRemoteJsonInfoRes(bufs->GetString());
-            }
-        };
-
+            } 
+        }; 
+ 
         struct TEvRemoteBinaryInfoRes: public NActors::TEventBase<TEvRemoteBinaryInfoRes, RemoteBinaryInfoRes> {
             TEvRemoteBinaryInfoRes() {
             }

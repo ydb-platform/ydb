@@ -56,11 +56,11 @@ namespace NKikimr {
             ui64 salt = ++keySalt;
             TString baseDir = Runtime.GetTempDir();
 
-            if (Conf.UseDisk) {
-                MakeDirIfNotExist(baseDir.c_str());
-            }
+            if (Conf.UseDisk) { 
+                MakeDirIfNotExist(baseDir.c_str()); 
+            } 
 
-            PDiskPath = TStringBuilder() << baseDir << "pdisk_1.dat";
+            PDiskPath = TStringBuilder() << baseDir << "pdisk_1.dat"; 
 
             if (!Mock) {
                 FormatPDisk(PDiskPath,
@@ -95,10 +95,10 @@ namespace NKikimr {
             conf->PDiskConfigOverlay.SetGetDriveDataSwitch(NKikimrBlobStorage::TPDiskConfig::DoNotTouch);
             conf->PDiskConfigOverlay.SetWriteCacheSwitch(NKikimrBlobStorage::TPDiskConfig::DoNotTouch);
 
-            if (SectorMap) {
-                conf->SectorMaps[PDiskPath] = SectorMap;
-            }
-
+            if (SectorMap) { 
+                conf->SectorMaps[PDiskPath] = SectorMap; 
+            } 
+ 
             auto baseInfo = TVDiskConfig::TBaseInfo::SampleForTests();
             TIntrusivePtr<TVDiskConfig> vDisk = conf->AllVDiskKinds->MakeVDiskConfig(baseInfo);
             vDisk->AdvanceEntryPointTimeout = TDuration::Seconds(5);
@@ -123,7 +123,7 @@ namespace NKikimr {
             for (const auto &it: domains.Domains) {
                 str << "AvailabilityDomains: " << it.second->DomainUid << Endl;
             }
-            str << "PDisks { NodeID: " << Runtime.GetNodeId(0) << " PDiskID: 1 PDiskGuid: " << PDiskGuid
+            str << "PDisks { NodeID: " << Runtime.GetNodeId(0) << " PDiskID: 1 PDiskGuid: " << PDiskGuid 
                 << " Path: \"" << escapedPdiskPath << "\"}" << Endl;
             str << "" << Endl;
 
@@ -135,7 +135,7 @@ namespace NKikimr {
                         str << "VDisks {" << Endl;
                         str << "    VDiskID { GroupID: 0 GroupGeneration: 1 Ring: " << ringIdx
                             << " Domain: " << domainIdx << " VDisk: " << vDiskIdx << " }" << Endl;
-                        str << "    VDiskLocation { NodeID: " << Runtime.GetNodeId(0) << " PDiskID: 1 PDiskGuid: " << PDiskGuid
+                        str << "    VDiskLocation { NodeID: " << Runtime.GetNodeId(0) << " PDiskID: 1 PDiskGuid: " << PDiskGuid 
                             << " VDiskSlotID: " << slotId << " }" << Endl;
                         str << "}" << Endl;
                     }
@@ -154,7 +154,7 @@ namespace NKikimr {
                     str << "        FailDomains {" << Endl;
                     for (const ui32 vDiskIdx : xrange(DisksInDomain)) {
                         ui32 slotId = vDiskIdx + domainIdx * DisksInDomain + ringIdx * DomainsNum * DisksInDomain;
-                        str << "            VDiskLocations { NodeID: " << Runtime.GetNodeId(0) << " PDiskID: 1 VDiskSlotID: " << slotId
+                        str << "            VDiskLocations { NodeID: " << Runtime.GetNodeId(0) << " PDiskID: 1 VDiskSlotID: " << slotId 
                             << " PDiskGuid: " << PDiskGuid << " }" << Endl;
                     }
                     str << "        }" << Endl;

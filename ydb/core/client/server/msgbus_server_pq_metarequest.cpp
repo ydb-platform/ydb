@@ -690,7 +690,7 @@ void TPersQueueGetReadSessionsInfoTopicWorker::Answer(const TActorContext& ctx, 
                     res->SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
                     res->SetErrorReason("Tablet for partition is not running");
                 }
-            }
+            } 
         }
     }
     SendReplyAndDie(std::move(response), ctx);

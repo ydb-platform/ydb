@@ -13,5 +13,5 @@ message IssueMessage {
     optional Position end_position = 3;
     optional uint32 issue_code = 4;
     optional uint32 severity = 5;
-    repeated IssueMessage issues = 6;
+    repeated IssueMessage issues = 6; 
 }

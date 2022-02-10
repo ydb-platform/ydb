@@ -336,10 +336,10 @@ private:
 
         ui32 domain = AppData(ctx)->DomainsInfo->Domains.begin()->first;
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = {
-            .MinRetryTime = TDuration::MilliSeconds(10),
-            .MaxRetryTime = TDuration::Seconds(10),
-        };
+        pipeConfig.RetryPolicy = { 
+            .MinRetryTime = TDuration::MilliSeconds(10), 
+            .MaxRetryTime = TDuration::Seconds(10), 
+        }; 
         CmsPipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(domain), pipeConfig));
         NTabletPipe::SendData(ctx, CmsPipe, ev);
     }

@@ -97,7 +97,7 @@ namespace NKikimr {
 
             Config.ConnectToUserTablet = ev->Get()->ConnectToUserTablet;
             if (ev->Get()->WithRetryPolicy) {
-                Config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+                Config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries(); 
             }
 
             auto client = NTabletPipe::CreateClient(ctx.SelfID, ev->Get()->UseBadTabletId ?

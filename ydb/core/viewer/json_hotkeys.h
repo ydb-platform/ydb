@@ -20,7 +20,7 @@ using NSchemeShard::TEvSchemeShard;
 class TJsonHotkeys : public TViewerPipeClient<TJsonHotkeys> {
     static const bool WithRetry = false;
     using TBase = TViewerPipeClient<TJsonHotkeys>;
-    IViewer* Viewer;
+    IViewer* Viewer; 
     NMon::TEvHttpInfo::TPtr Event;
     TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     ui32 Timeout = 0;
@@ -41,9 +41,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonHotkeys(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
-        : Viewer(viewer)
-        , Event(ev)
+    TJsonHotkeys(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev) 
+        : Viewer(viewer) 
+        , Event(ev) 
     {}
 
     void FillParams(NKikimrSchemeOp::TDescribePath* record, const TCgiParameters& params) {
@@ -53,7 +53,7 @@ public:
         record->MutableOptions()->SetReturnPartitionStats(true);
     }
 
-    void Bootstrap() {
+    void Bootstrap() { 
         const auto& params(Event->Get()->Request.GetParams());
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Limit = FromStringWithDefault<ui32>(params.Get("limit"), 10);
@@ -64,21 +64,21 @@ public:
         THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
         FillParams(request->Record.MutableDescribePath(), params);
         request->Record.SetUserToken(Event->Get()->UserToken);
-        SendRequest(MakeTxProxyID(), request.Release());
+        SendRequest(MakeTxProxyID(), request.Release()); 
 
-        Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup()); 
     }
 
-    STATEFN(StateRequestedDescribe) {
+    STATEFN(StateRequestedDescribe) { 
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            hFunc(TEvDataShard::TEvGetDataHistogramResponse, Handle);
-            hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
+            hFunc(TEvDataShard::TEvGetDataHistogramResponse, Handle); 
+            hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle); 
+            cFunc(TEvents::TSystem::Wakeup, HandleTimeout); 
         }
     }
 
-    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) { 
         DescribeResult = ev->Release();
         const auto& pathDescription = DescribeResult->GetRecord().GetPathDescription();
         const auto& partitions = pathDescription.GetTablePartitions();
@@ -90,20 +90,20 @@ public:
         }
 
         Sort(tabletsOrder, std::greater<std::pair<ui64, int>>());
-        ui32 tablets = (ui32) std::max(1, (int) std::ceil(PollingFactor * tabletsOrder.size()));
+        ui32 tablets = (ui32) std::max(1, (int) std::ceil(PollingFactor * tabletsOrder.size())); 
 
-        for (ui32 i = 0; i < tablets; ++i) {
+        for (ui32 i = 0; i < tablets; ++i) { 
             THolder<TEvDataShard::TEvGetDataHistogramRequest> request = MakeHolder<TEvDataShard::TEvGetDataHistogramRequest>();
             if (EnableSampling) {
                 request->Record.SetCollectKeySampleMs(30000); // 30 sec
             }
             request->Record.SetActualData(true);
             ui64 datashardId = partitions.Get(tabletsOrder[i].second).GetDatashardId();
-            SendRequestToPipe(ConnectTabletPipe(datashardId), request.Release());
+            SendRequestToPipe(ConnectTabletPipe(datashardId), request.Release()); 
         }
     }
 
-    void Handle(TEvDataShard::TEvGetDataHistogramResponse::TPtr& ev) {
+    void Handle(TEvDataShard::TEvGetDataHistogramResponse::TPtr& ev) { 
         const auto& rec = ev->Get()->Record;
         for (const auto& i: rec.GetTableHistograms()) {
             for (const auto& item: i.GetKeyAccessSample().GetItems()) {
@@ -115,7 +115,7 @@ public:
             }
         }
 
-        RequestDone();
+        RequestDone(); 
     }
 
     NJson::TJsonValue BuildResponse() {
@@ -136,8 +136,8 @@ public:
         return root;
     }
 
-    void ReplyAndPassAway() {
-        TString headers = Viewer->GetHTTPOKJSON();
+    void ReplyAndPassAway() { 
+        TString headers = Viewer->GetHTTPOKJSON(); 
         if (DescribeResult != nullptr) {
             switch (DescribeResult->GetRecord().GetStatus()) {
             case NKikimrScheme::StatusAccessDenied:
@@ -150,15 +150,15 @@ public:
         NJson::TJsonValue root = BuildResponse();
         TString json = NJson::WriteJson(root, false);
 
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(headers + json, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        PassAway();
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(headers + json, 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
+        PassAway(); 
     }
 
-    void HandleTimeout() {
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        PassAway();
+    void HandleTimeout() { 
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(), 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
+        PassAway(); 
     }
 };
-
+ 
 }
 }

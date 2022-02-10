@@ -14,10 +14,10 @@ namespace
 
 NTabletPipe::TClientConfig GetPipeClientConfig() {
     NTabletPipe::TClientConfig config;
-    config.RetryPolicy = {
-        .MinRetryTime = TDuration::MilliSeconds(50),
-        .MaxRetryTime = TDuration::Seconds(2),
-    };
+    config.RetryPolicy = { 
+        .MinRetryTime = TDuration::MilliSeconds(50), 
+        .MaxRetryTime = TDuration::Seconds(2), 
+    }; 
     return config;
 }
 

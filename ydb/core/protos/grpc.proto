@@ -25,8 +25,8 @@ service TGRpcServer {
     rpc SchemeOperationStatus(TSchemeOperationStatus) returns (TResponse);
     // describe
     rpc SchemeDescribe(TSchemeDescribe) returns (TResponse);
-    // whoami
-    rpc WhoAmI(TWhoAmI) returns (TResponse);
+    // whoami 
+    rpc WhoAmI(TWhoAmI) returns (TResponse); 
 
     /////////////////////////////////////////////////////////////////////////////////////////////////
     // CHOOSE PROXY INTERFACE
@@ -46,8 +46,8 @@ service TGRpcServer {
     rpc BSAdm(TBSAdm) returns (TResponse);
 
     rpc ResolveNode(TResolveNodeRequest) returns (TResponse);
-    rpc FillNode(TFillNodeRequest) returns (TResponse);
-    rpc DrainNode(TDrainNodeRequest) returns (TResponse);
+    rpc FillNode(TFillNodeRequest) returns (TResponse); 
+    rpc DrainNode(TDrainNodeRequest) returns (TResponse); 
 
     // Blob storage configuration manipulation/query interface
     rpc BlobStorageConfig(TBlobStorageConfigRequest) returns (TResponse);

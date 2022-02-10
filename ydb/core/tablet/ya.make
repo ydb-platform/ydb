@@ -8,11 +8,11 @@ OWNER(
 
 SRCS(
     defs.h
-    node_tablet_monitor.cpp
-    node_tablet_monitor.h
-    node_whiteboard.cpp
-    pipe_tracker.cpp
-    pipe_tracker.h
+    node_tablet_monitor.cpp 
+    node_tablet_monitor.h 
+    node_whiteboard.cpp 
+    pipe_tracker.cpp 
+    pipe_tracker.h 
     resource_broker.cpp
     resource_broker.h
     resource_broker_impl.h
@@ -29,8 +29,8 @@ SRCS(
     tablet_tracing_signals.h
     tablet_list_renderer.cpp
     tablet_list_renderer.h
-    tablet_metrics.h
-    tablet_metrics.cpp
+    tablet_metrics.h 
+    tablet_metrics.cpp 
     tablet_monitoring_proxy.cpp
     tablet_monitoring_proxy.h
     tablet_pipecache.cpp
@@ -39,10 +39,10 @@ SRCS(
     tablet_pipe_client_cache.h
     tablet_pipe_server.cpp
     tablet_req_blockbs.cpp
-    tablet_req_delete.cpp
+    tablet_req_delete.cpp 
     tablet_req_findlatest.cpp
     tablet_req_rebuildhistory.cpp
-    tablet_req_reset.cpp
+    tablet_req_reset.cpp 
     tablet_req_writelog.cpp
     tablet_resolver.cpp
     tablet_responsiveness_pinger.cpp

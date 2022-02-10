@@ -447,15 +447,15 @@ namespace {
                 explicit TRec(int) {
                 }
             };
-
+ 
             auto promise = NewPromise<TRec>();
             promise.SetValue(TRec(1));
-
+ 
             auto future = MakeFuture(TRec(1));
             auto rec = future.ExtractValue();
             Y_UNUSED(rec);
         }
-
+ 
         Y_UNIT_TEST(ShouldNotExtractAfterGet) {
             TPromise<int> promise = NewPromise<int>();
             promise.SetValue(123);
@@ -463,7 +463,7 @@ namespace {
             UNIT_ASSERT_EQUAL(promise.GetValue(), 123);
             UNIT_CHECK_GENERATED_EXCEPTION(promise.ExtractValue(), TFutureException);
         }
-
+ 
         Y_UNIT_TEST(ShouldNotGetAfterExtract) {
             TPromise<int> promise = NewPromise<int>();
             promise.SetValue(123);
@@ -471,7 +471,7 @@ namespace {
             UNIT_ASSERT_EQUAL(promise.ExtractValue(), 123);
             UNIT_CHECK_GENERATED_EXCEPTION(promise.GetValue(), TFutureException);
         }
-
+ 
         Y_UNIT_TEST(ShouldNotExtractAfterExtract) {
             TPromise<int> promise = NewPromise<int>();
             promise.SetValue(123);
@@ -635,6 +635,6 @@ namespace {
             TestApplyLvalueCopyImpl<void>();
             TestApplyLvalueCopyImpl<int>();
         }
-    }
-
+    } 
+ 
 }

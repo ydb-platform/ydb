@@ -251,7 +251,7 @@ public:
 struct THttpRequest : NMonitoring::IHttpRequest {
     HTTP_METHOD Method;
     TCgiParameters CgiParameters;
-    THttpHeaders HttpHeaders;
+    THttpHeaders HttpHeaders; 
 
     THttpRequest(HTTP_METHOD method)
         : Method(method)
@@ -282,14 +282,14 @@ struct THttpRequest : NMonitoring::IHttpRequest {
     HTTP_METHOD GetMethod() const override {
         return Method;
     }
-
-    const THttpHeaders& GetHeaders() const override {
-        return HttpHeaders;
-    }
-
-    TString GetRemoteAddr() const override {
-        return TString();
-    }
+ 
+    const THttpHeaders& GetHeaders() const override { 
+        return HttpHeaders; 
+    } 
+ 
+    TString GetRemoteAddr() const override { 
+        return TString(); 
+    } 
 };
 
 class TTestHttpGetResponse : public TBaseTest {

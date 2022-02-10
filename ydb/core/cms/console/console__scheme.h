@@ -37,7 +37,7 @@ struct Schema : NIceDb::Schema {
         // } // DomainId
         struct ErrorCode : Column<17, NScheme::NTypeIds::Uint32> {};
         struct IsExternalSubDomain : Column<18, NScheme::NTypeIds::Bool> {};
-        struct IsExternalHive : Column<19, NScheme::NTypeIds::Bool> {};
+        struct IsExternalHive : Column<19, NScheme::NTypeIds::Bool> {}; 
         struct AreResourcesShared : Column<20, NScheme::NTypeIds::Bool> {};
         // SharedDomainId {
         struct SharedDomainSchemeShardId : Column<21, NScheme::NTypeIds::Uint64> {};
@@ -50,8 +50,8 @@ struct Schema : NIceDb::Schema {
         struct DatabaseQuotas : Column<27, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Path>;
-        using TColumns = TableColumns<Path, State, Coordinators, Mediators, PlanResolution,
-            Issue, TxId, UserToken, SubdomainVersion, ConfirmedSubdomain, TimeCastBucketsPerMediator,
+        using TColumns = TableColumns<Path, State, Coordinators, Mediators, PlanResolution, 
+            Issue, TxId, UserToken, SubdomainVersion, ConfirmedSubdomain, TimeCastBucketsPerMediator, 
             Attributes, Generation, SchemeShardId, PathId, ErrorCode, IsExternalSubDomain, IsExternalHive,
             AreResourcesShared, SharedDomainSchemeShardId, SharedDomainPathId, IsExternalSysViewProcessor,
             SchemaOperationQuotas, CreateIdempotencyKey, AlterIdempotencyKey, DatabaseQuotas>;

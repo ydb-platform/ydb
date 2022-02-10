@@ -1,47 +1,47 @@
-package NKikimrProto;
+package NKikimrProto; 
 option java_package = "ru.yandex.kikimr.proto";
 
 message TAuthConfig {
     optional TUserRegistryConfig UserRegistryConfig = 1;
     optional TTVMConfig TVMConfig = 2;
-    optional string StaffApiUserToken = 3;
-    optional string BlackBoxEndpoint = 4 [default = "blackbox.yandex-team.ru"];
-    optional string AccessServiceEndpoint = 5 [default = "as.private-api.cloud.yandex.net:4286"];
-    optional string UserAccountServiceEndpoint = 6 [default = "api-adapter.private-api.cloud.yandex.net:8443"];
-    optional string ServiceAccountServiceEndpoint = 7 [default = "api-adapter.private-api.cloud.yandex.net:8443"];
-    optional string StaffEndpoint = 10 [default = "staff-api.yandex-team.ru"];
-    optional uint32 GrpcCacheSize = 16 [default = 1024];
-    optional uint64 GrpcSuccessLifeTime = 17 [default = 60000]; // ms
-    optional uint64 GrpcErrorLifeTime = 18 [default = 10000]; // ms
-    optional bool UseBlackBox = 20 [default = true];
-    optional bool UseAccessService = 21 [default = false];
-    optional bool CacheAccessServiceAuthentication = 22 [default = true];
-    optional bool CacheAccessServiceAuthorization = 23 [default = true];
-    optional bool UseStaff = 25 [default = true];
-    optional bool UseUserAccountService = 26 [default = false];
-    optional bool UseServiceAccountService = 27 [default = false];
-    optional bool UseLoginProvider = 29 [default = true];
-    optional bool UseAccessServiceTLS = 31 [default = true];
-    optional bool UseUserAccountServiceTLS = 32 [default = true];
-    optional bool UseServiceAccountServiceTLS = 33 [default = true];
-    optional bool CacheUserAccountService = 37 [default = true];
-    optional bool CacheServiceAccountService = 38 [default = true];
-    optional string TvmServiceDomain = 40 [default = "tvm"];
-    optional string BlackBoxDomain = 41 [default = "blackbox"];
-    optional string AccessServiceDomain = 42 [default = "as"];
-    optional string UserAccountDomain = 43 [default = "passport"];
-    optional string ServiceDomain = 44 [default = "service"];
-    optional bool DomainLoginOnly = 45 [default = true];
-    optional string RefreshPeriod = 50 [default = "1s"]; // how often do we check for ticket freshness/expiration
-    optional string RefreshTime = 51 [default = "1h"]; // we will try to refresh valid ticket within RefreshTime/2 and RefreshTime randomly
-    optional string LifeTime = 52 [default = "1h"]; // for how long ticket will remain in the cache after last access
-    optional string ExpireTime = 53 [default = "24h"]; // after what time ticket will expired and removed from the cache
-    optional string TVMExpireTime = 54 [default = "2m"]; // the same for TVM tickets
-    optional string MinErrorRefreshTime = 55 [default = "1s"]; // min period for refresh of error ticket
-    optional string MaxErrorRefreshTime = 56 [default = "1m"]; // max period for refresh of error ticket
-    optional string PathToRootCA = 60 [default = "/etc/ssl/certs/YandexInternalRootCA.pem"]; // root CA certificate PEM/x509
-    optional uint32 AccessServiceGrpcKeepAliveTimeMs = 70 [default = 10000]; // CLOUD-27573
-    optional uint32 AccessServiceGrpcKeepAliveTimeoutMs = 71 [default = 1000]; // CLOUD-27573
+    optional string StaffApiUserToken = 3; 
+    optional string BlackBoxEndpoint = 4 [default = "blackbox.yandex-team.ru"]; 
+    optional string AccessServiceEndpoint = 5 [default = "as.private-api.cloud.yandex.net:4286"]; 
+    optional string UserAccountServiceEndpoint = 6 [default = "api-adapter.private-api.cloud.yandex.net:8443"]; 
+    optional string ServiceAccountServiceEndpoint = 7 [default = "api-adapter.private-api.cloud.yandex.net:8443"]; 
+    optional string StaffEndpoint = 10 [default = "staff-api.yandex-team.ru"]; 
+    optional uint32 GrpcCacheSize = 16 [default = 1024]; 
+    optional uint64 GrpcSuccessLifeTime = 17 [default = 60000]; // ms 
+    optional uint64 GrpcErrorLifeTime = 18 [default = 10000]; // ms 
+    optional bool UseBlackBox = 20 [default = true]; 
+    optional bool UseAccessService = 21 [default = false]; 
+    optional bool CacheAccessServiceAuthentication = 22 [default = true]; 
+    optional bool CacheAccessServiceAuthorization = 23 [default = true]; 
+    optional bool UseStaff = 25 [default = true]; 
+    optional bool UseUserAccountService = 26 [default = false]; 
+    optional bool UseServiceAccountService = 27 [default = false]; 
+    optional bool UseLoginProvider = 29 [default = true]; 
+    optional bool UseAccessServiceTLS = 31 [default = true]; 
+    optional bool UseUserAccountServiceTLS = 32 [default = true]; 
+    optional bool UseServiceAccountServiceTLS = 33 [default = true]; 
+    optional bool CacheUserAccountService = 37 [default = true]; 
+    optional bool CacheServiceAccountService = 38 [default = true]; 
+    optional string TvmServiceDomain = 40 [default = "tvm"]; 
+    optional string BlackBoxDomain = 41 [default = "blackbox"]; 
+    optional string AccessServiceDomain = 42 [default = "as"]; 
+    optional string UserAccountDomain = 43 [default = "passport"]; 
+    optional string ServiceDomain = 44 [default = "service"]; 
+    optional bool DomainLoginOnly = 45 [default = true]; 
+    optional string RefreshPeriod = 50 [default = "1s"]; // how often do we check for ticket freshness/expiration 
+    optional string RefreshTime = 51 [default = "1h"]; // we will try to refresh valid ticket within RefreshTime/2 and RefreshTime randomly 
+    optional string LifeTime = 52 [default = "1h"]; // for how long ticket will remain in the cache after last access 
+    optional string ExpireTime = 53 [default = "24h"]; // after what time ticket will expired and removed from the cache 
+    optional string TVMExpireTime = 54 [default = "2m"]; // the same for TVM tickets 
+    optional string MinErrorRefreshTime = 55 [default = "1s"]; // min period for refresh of error ticket 
+    optional string MaxErrorRefreshTime = 56 [default = "1m"]; // max period for refresh of error ticket 
+    optional string PathToRootCA = 60 [default = "/etc/ssl/certs/YandexInternalRootCA.pem"]; // root CA certificate PEM/x509 
+    optional uint32 AccessServiceGrpcKeepAliveTimeMs = 70 [default = 10000]; // CLOUD-27573 
+    optional uint32 AccessServiceGrpcKeepAliveTimeoutMs = 71 [default = 1000]; // CLOUD-27573 
 }
 
 message TUserRegistryConfig {

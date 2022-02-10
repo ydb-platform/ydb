@@ -517,7 +517,7 @@ public:
         TDomainId DomainId;
         TDomainId SharedDomainId;
         bool IsExternalSubdomain;
-        bool IsExternalHive;
+        bool IsExternalHive; 
         bool IsExternalSysViewProcessor;
         bool AreResourcesShared;
         THashSet<TTenant::TPtr> HostedTenants;
@@ -960,11 +960,11 @@ public:
     TTenantsManager(TConsole &self,
                     TDomainsInfo::TDomain::TPtr domain,
                     TDynamicCounterPtr counters,
-                    NKikimrConfig::TFeatureFlags featureFlags)
+                    NKikimrConfig::TFeatureFlags featureFlags) 
         : Self(self)
         , Domain(domain)
         , Counters(counters)
-        , FeatureFlags(std::move(featureFlags))
+        , FeatureFlags(std::move(featureFlags)) 
     {
     }
 
@@ -993,7 +993,7 @@ private:
     TQueue<THolder<ITransaction>> DelayedTxs;
     TSlotStats SlotStats;
     TCounters Counters;
-    NKikimrConfig::TFeatureFlags FeatureFlags;
+    NKikimrConfig::TFeatureFlags FeatureFlags; 
 };
 
 } // namespace NConsole

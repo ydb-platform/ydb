@@ -86,7 +86,7 @@ public:
     NUdf::TType* Build() const override {
         return NMiniKQL::TOptionalType::Create(
                     const_cast<NMiniKQL::TType*>(ItemType_),
-                    Parent_.Env());
+                    Parent_.Env()); 
     }
 
 private:
@@ -124,7 +124,7 @@ public:
 
     NUdf::TType* Build() const override {
         return NMiniKQL::TListType::Create(
-                    const_cast<NMiniKQL::TType*>(ItemType_), Parent_.Env());
+                    const_cast<NMiniKQL::TType*>(ItemType_), Parent_.Env()); 
     }
 
 private:
@@ -223,7 +223,7 @@ public:
     NUdf::TType* Build() const override {
         return NMiniKQL::TDictType::Create(
                     const_cast<NMiniKQL::TType*>(KeyType_),
-                    const_cast<NMiniKQL::TType*>(ValueType_), Parent_.Env());
+                    const_cast<NMiniKQL::TType*>(ValueType_), Parent_.Env()); 
     }
 
 private:
@@ -304,7 +304,7 @@ public:
             const NMiniKQL::TFunctionTypeInfoBuilder& parent,
             ui32 itemsCount)
         : Parent_(parent)
-        , StructBuilder_(Parent_.Env())
+        , StructBuilder_(Parent_.Env()) 
     {
         StructBuilder_.Reserve(itemsCount);
     }
@@ -420,7 +420,7 @@ public:
 
     NUdf::TType* Build() const override {
         return NMiniKQL::TTupleType::Create(
-                ElementTypes_.size(), ElementTypes_.data(),
+                ElementTypes_.size(), ElementTypes_.data(), 
                 Parent_.Env());
     }
 
@@ -502,13 +502,13 @@ public:
 
     NUdf::ICallableTypeBuilder& Arg(NUdf::TDataTypeId typeId) override {
         auto type = NMiniKQL::TDataType::Create(typeId, Env_);
-        ArgsTypes_.push_back(type);
+        ArgsTypes_.push_back(type); 
         return *this;
     }
 
     NUdf::ICallableTypeBuilder& Arg(const NUdf::TType* type) override {
-        auto mkqlType = const_cast<NMiniKQL::TType*>(static_cast<const NMiniKQL::TType*>(type));
-        ArgsTypes_.push_back(mkqlType);
+        auto mkqlType = const_cast<NMiniKQL::TType*>(static_cast<const NMiniKQL::TType*>(type)); 
+        ArgsTypes_.push_back(mkqlType); 
         return *this;
     }
 
@@ -516,7 +516,7 @@ public:
             const NUdf::ITypeBuilder& typeBuilder) override
     {
         auto type = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
-        ArgsTypes_.push_back(type);
+        ArgsTypes_.push_back(type); 
         return *this;
     }
 
@@ -531,8 +531,8 @@ public:
         NMiniKQL::TNode* payload = nullptr;
 
         auto callableType = NMiniKQL::TCallableType::Create(
-                    UdfName, ReturnType_,
-                    ArgsTypes_.size(), const_cast<NMiniKQL::TType**>(ArgsTypes_.data()),
+                    UdfName, ReturnType_, 
+                    ArgsTypes_.size(), const_cast<NMiniKQL::TType**>(ArgsTypes_.data()), 
                     payload, Env_);
         callableType->SetOptionalArgumentsCount(OptionalArgs_);
         return callableType;

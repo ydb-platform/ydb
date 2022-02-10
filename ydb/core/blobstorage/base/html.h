@@ -24,7 +24,7 @@ namespace NKikimr {
     private:
         NKikimrWhiteboard::EFlag Light;
         const TString Value;
-        static const std::pair<TStringBuf, TStringBuf> Lights[NKikimrWhiteboard::EFlag_ARRAYSIZE]; // {class, style}
+        static const std::pair<TStringBuf, TStringBuf> Lights[NKikimrWhiteboard::EFlag_ARRAYSIZE]; // {class, style} 
     };
 
 } // NKikimr

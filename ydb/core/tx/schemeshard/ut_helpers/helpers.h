@@ -398,10 +398,10 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime& runtime, ui64 schemeShard, ui64 tabletId,
         NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected = NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS);
 
-    // Login
+    // Login 
     TEvTx* CreateAlterLoginCreateUser(ui64 txId, const TString& user, const TString& password);
     NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
-
+ 
     // Mimics data query to a single table with multiple partitions
     class TFakeDataReq {
     public:

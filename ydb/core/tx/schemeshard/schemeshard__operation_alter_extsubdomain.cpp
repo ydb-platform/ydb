@@ -260,7 +260,7 @@ public:
             shardsToCreate += 1;
             allowOverTheLimitShards += 1;
         }
-
+ 
         if (wasViewProcessors && setViewProcessors) {
             if (bool(subDomainInfo->GetTenantSysViewProcessorID()) != settings.GetExternalSysViewProcessor()) {
                 result->SetError(
@@ -414,8 +414,8 @@ public:
             DeclareShards(txState, OperationId.GetTxId(), subDomain->PathId, 1, TTabletTypes::Hive, channelBindings, context.SS);
         } else if (!alterData->GetSharedHive()) {
             alterData->SetSharedHive(context.SS->GetGlobalHive(context.Ctx));
-        }
-
+        } 
+ 
         if (addViewProcessors) {
             DeclareShards(txState, OperationId.GetTxId(), subDomain->PathId, 1, TTabletTypes::SysViewProcessor, channelBindings, context.SS);
         }

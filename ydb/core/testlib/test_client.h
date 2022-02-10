@@ -77,9 +77,9 @@ namespace Tests {
 
 
     struct TServerSettings: public TThrRefBase, public TTestFeatureFlagsHolder<TServerSettings> {
-        static constexpr ui64 BOX_ID = 999;
-        ui64 POOL_ID = 1;
-
+        static constexpr ui64 BOX_ID = 999; 
+        ui64 POOL_ID = 1; 
+ 
         using TPtr = TIntrusivePtr<TServerSettings>;
         using TConstPtr = TIntrusiveConstPtr<TServerSettings>;
 
@@ -89,7 +89,7 @@ namespace Tests {
 
         ui16 Port;
         ui16 GrpcPort = 0;
-        NKikimrProto::TAuthConfig AuthConfig;
+        NKikimrProto::TAuthConfig AuthConfig; 
         NKikimrPQ::TPQConfig PQConfig;
         NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
         NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
@@ -125,14 +125,14 @@ namespace Tests {
         bool EnableMetering = false;
         TString MeteringFilePath;
 
-        std::function<IActor*(const NKikimrProto::TAuthConfig&)> CreateTicketParser = NKikimr::CreateTicketParser;
+        std::function<IActor*(const NKikimrProto::TAuthConfig&)> CreateTicketParser = NKikimr::CreateTicketParser; 
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
-
+ 
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
         TServerSettings& SetSupportsRedirect(bool value) { SupportsRedirect = value; return *this; }
         TServerSettings& SetTracePath(const TString& value) { TracePath = value; return *this; }
         TServerSettings& SetDomain(ui32 value) { Domain = value; return *this; }
-        TServerSettings& SetDomainName(const TString& value);
+        TServerSettings& SetDomainName(const TString& value); 
         TServerSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
         TServerSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
         TServerSettings& SetCustomDiskParams(const NFake::TStorage& value) { CustomDiskParams = value; return *this; }
@@ -141,8 +141,8 @@ namespace Tests {
         TServerSettings& SetEnableMockOnSingleNode(bool value) { EnableMockOnSingleNode = value; return *this; }
         TServerSettings& SetLogBackend(TAutoPtr<TLogBackend> value) { LogBackend = value; return *this; }
         TServerSettings& SetLoggerInitializer(TLoggerInitializer value) { LoggerInitializer = std::move(value); return *this; }
-        TServerSettings& AddStoragePoolType(const TString& poolKind, ui32 encryptionMode = 0);
-        TServerSettings& AddStoragePool(const TString& poolKind, const TString& poolName = {}, ui32 numGroups = 1, ui32 encryptionMode = 0);
+        TServerSettings& AddStoragePoolType(const TString& poolKind, ui32 encryptionMode = 0); 
+        TServerSettings& AddStoragePool(const TString& poolKind, const TString& poolName = {}, ui32 numGroups = 1, ui32 encryptionMode = 0); 
         TServerSettings& SetKqpSettings(const TVector<NKikimrKqp::TKqpSetting>& settings) { KqpSettings = settings; return *this; }
         TServerSettings& SetEnableConsole(bool value) { EnableConsole = value; return *this; }
         TServerSettings& SetEnableConfigsDispatcher(bool value) { EnableConfigsDispatcher = value; return *this; }
@@ -179,13 +179,13 @@ namespace Tests {
             return *this;
         }
 
-        explicit TServerSettings(ui16 port, const NKikimrProto::TAuthConfig authConfig = {}, const NKikimrPQ::TPQConfig pqConfig = {})
+        explicit TServerSettings(ui16 port, const NKikimrProto::TAuthConfig authConfig = {}, const NKikimrPQ::TPQConfig pqConfig = {}) 
             : Port(port)
             , AuthConfig(authConfig)
             , PQConfig(pqConfig)
-        {
-            AddStoragePool("test", "/" + DomainName + ":test");
-        }
+        { 
+            AddStoragePool("test", "/" + DomainName + ":test"); 
+        } 
 
         TServerSettings(const TServerSettings& settings) = default;
     };
@@ -201,7 +201,7 @@ namespace Tests {
         void SetupDomainLocalService(ui32 nodeIdx);
         void SetupLocalService(ui32 nodeIdx, const TString &domainName);
         void SetupConfigurators(ui32 nodeIdx);
-        void SetupProxies(ui32 nodeIdx);
+        void SetupProxies(ui32 nodeIdx); 
         void SetupLogging();
 
         void Initialize();
@@ -286,38 +286,38 @@ namespace Tests {
         const NMiniKQL::IFunctionRegistry& GetFunctionRegistry() const;
 
         template <typename T>
-        void PrepareRequest(TAutoPtr<T>&) {}
-
-        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusRequest>& request) {
-            if (!SecurityToken.empty())
-                request->Record.SetSecurityToken(SecurityToken);
-        }
-
-        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusPersQueue>& request) {
-            if (!SecurityToken.empty())
-                request->Record.SetSecurityToken(SecurityToken);
-        }
-
+        void PrepareRequest(TAutoPtr<T>&) {} 
+ 
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusRequest>& request) { 
+            if (!SecurityToken.empty()) 
+                request->Record.SetSecurityToken(SecurityToken); 
+        } 
+ 
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusPersQueue>& request) { 
+            if (!SecurityToken.empty()) 
+                request->Record.SetSecurityToken(SecurityToken); 
+        } 
+ 
         void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusSchemeOperation>& request) {
-            if (!SecurityToken.empty())
-                request->Record.SetSecurityToken(SecurityToken);
-        }
-
-        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusSchemeInitRoot>& request) {
-            if (!SecurityToken.empty())
-                request->Record.SetSecurityToken(SecurityToken);
-        }
-
-        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusSchemeDescribe>& request) {
-            if (!SecurityToken.empty())
-                request->Record.SetSecurityToken(SecurityToken);
-        }
-
-        template <typename T>
+            if (!SecurityToken.empty()) 
+                request->Record.SetSecurityToken(SecurityToken); 
+        } 
+ 
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusSchemeInitRoot>& request) { 
+            if (!SecurityToken.empty()) 
+                request->Record.SetSecurityToken(SecurityToken); 
+        } 
+ 
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusSchemeDescribe>& request) { 
+            if (!SecurityToken.empty()) 
+                request->Record.SetSecurityToken(SecurityToken); 
+        } 
+ 
+        template <typename T> 
         NBus::EMessageStatus SyncCall(TAutoPtr<T> msgHolder, TAutoPtr<NBus::TBusMessage> &reply) {
             NBus::EMessageStatus msgbusStatus = NBus::EMessageStatus::MESSAGE_TIMEOUT;
             const ui64 finishTimeMs = TInstant::Now().MilliSeconds() +  TIME_LIMIT_MS;
-            PrepareRequest(msgHolder);
+            PrepareRequest(msgHolder); 
             while (TInstant::Now().MilliSeconds() < finishTimeMs) {
                 T* msgCopy(new T());
                 msgCopy->Record = msgHolder->Record;
@@ -340,7 +340,7 @@ namespace Tests {
 
         void ExecuteTraceCommand(NKikimrClient::TMessageBusTraceRequest::ECommand command, const TString &path = TString());
         TString StartTrace(const TString &path);
-        void StopTrace();
+        void StopTrace(); 
 
         // Flat DB operations
         NMsgBusProxy::EResponseStatus WaitCreateTx(TTestActorRuntime* runtime, const TString& path, TDuration timeout);
@@ -385,11 +385,11 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::TBusResponse> TryDropPersQueueGroup(const TString& parent, const TString& name);
         TAutoPtr<NMsgBusProxy::TBusResponse> Ls(const TString& path);
         static TPathVersion ExtractPathVersion(const TAutoPtr<NMsgBusProxy::TBusResponse>& describe);
-        static TVector<ui64> ExtractTableShards(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
+        static TVector<ui64> ExtractTableShards(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp); 
         bool FlatQuery(const TString& mkql, NKikimrMiniKQL::TResult& result);
         bool FlatQuery(const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
-                       const NKikimrClient::TResponse& expectedResponse);
-        bool FlatQuery(const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
+                       const NKikimrClient::TResponse& expectedResponse); 
+        bool FlatQuery(const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result, 
                        ui32 expectedStatus = NMsgBusProxy::MSTATUS_OK);
         bool FlatQueryParams(const TString &query, const TString &params, bool queryCompiled, NKikimrMiniKQL::TResult &result);
 
@@ -410,7 +410,7 @@ namespace Tests {
         void RemoveStoragePool(const TString& name);
 
 
-        TAutoPtr<NMsgBusProxy::TBusResponse> HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
+        TAutoPtr<NMsgBusProxy::TBusResponse> HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type, 
                 const TVector<ui32>& allowed_node_ids, const TVector<TSubDomainKey>& allowed_domains = {}, const TChannelsBindings& binding = {});
 
 
@@ -471,7 +471,7 @@ namespace Tests {
                     break;
 
                 if (notReadyResp->Record.GetStatus() != NMsgBusProxy::MSTATUS_NOTREADY)
-                    break;
+                    break; 
 
                 // Retry if the server wasn't ready yet
                 Sleep(TDuration::MilliSeconds(10));

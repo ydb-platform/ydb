@@ -86,7 +86,7 @@ struct TEvPQ {
         EvPartitionCounters,
         EvTabletCacheCounters,
         EvPartitionLabeledCounters,
-        EvGetPartitionClientInfo,
+        EvGetPartitionClientInfo, 
         EvUpdateAvailableSize,
         EvPipeDisconnected,
         EvReserveBytes,
@@ -503,13 +503,13 @@ struct TEvPQ {
         TCacheCounters Counters;
     };
 
-    struct TEvGetPartitionClientInfo : TEventLocal<TEvGetPartitionClientInfo, EvGetPartitionClientInfo> {
+    struct TEvGetPartitionClientInfo : TEventLocal<TEvGetPartitionClientInfo, EvGetPartitionClientInfo> { 
         TEvGetPartitionClientInfo(const TActorId& sender)
-            : Sender(sender)
-        {}
-
+            : Sender(sender) 
+        {} 
+ 
         TActorId Sender;
-    };
+    }; 
 
     struct TEvUpdateAvailableSize : TEventLocal<TEvUpdateAvailableSize, EvUpdateAvailableSize> {
         TEvUpdateAvailableSize()

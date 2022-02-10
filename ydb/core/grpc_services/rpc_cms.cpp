@@ -36,7 +36,7 @@ public:
         ui32 group = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
 
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
+        pipeConfig.RetryPolicy = {.RetryLimitCount = 10}; 
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeConsoleID(group), pipeConfig);
         CmsPipe = ctx.RegisterWithSameMailbox(pipe);
 

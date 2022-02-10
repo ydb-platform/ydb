@@ -69,8 +69,8 @@ protected:
 
     virtual void InitializeRegistries(const TKikimrRunConfig& runConfig);
 
-    void InitializeAllocator(const TKikimrRunConfig& runConfig);
-
+    void InitializeAllocator(const TKikimrRunConfig& runConfig); 
+ 
     void InitializeLogSettings(const TKikimrRunConfig& runConfig);
 
     void ApplyLogSettings(const TKikimrRunConfig& runConfig);
@@ -79,8 +79,8 @@ protected:
 
     void InitializeControlBoard(const TKikimrRunConfig& runConfig);
 
-    void InitializeMonitoringLogin(const TKikimrRunConfig& runConfig);
-
+    void InitializeMonitoringLogin(const TKikimrRunConfig& runConfig); 
+ 
     void InitializeMessageBus(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories = nullptr

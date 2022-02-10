@@ -918,13 +918,13 @@ private:
                         TABLEH() {str << "PoolName";}
                     }
                 }
-                ui32 channelId = 0;
+                ui32 channelId = 0; 
                 for (auto& bind: shard.BindedChannels) {
                     TABLER() {
-                        TABLED() { str << channelId; }
+                        TABLED() { str << channelId; } 
                         TABLED() { str << bind.GetStoragePoolName(); }
                     }
-                    ++channelId;
+                    ++channelId; 
                 }
             }
         }

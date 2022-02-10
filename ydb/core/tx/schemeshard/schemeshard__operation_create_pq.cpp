@@ -172,15 +172,15 @@ TPersQueueGroupInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     return pqGroupInfo;
 }
 
-void ApplySharding(TTxId txId,
-                   TPathId pathId,
-                   TPersQueueGroupInfo::TPtr pqGroup,
-                   TTxState& txState,
+void ApplySharding(TTxId txId, 
+                   TPathId pathId, 
+                   TPersQueueGroupInfo::TPtr pqGroup, 
+                   TTxState& txState, 
                    const TChannelsBindings& rbBindedChannels,
                    const TChannelsBindings& pqBindedChannels,
                    TSchemeShard* ss) {
     pqGroup->AlterVersion = 0;
-    TShardInfo shardInfo = TShardInfo::PersQShardInfo(txId, pathId);
+    TShardInfo shardInfo = TShardInfo::PersQShardInfo(txId, pathId); 
     shardInfo.BindedChannels = pqBindedChannels;
     Y_VERIFY(pqGroup->TotalGroupCount == pqGroup->PartitionsToAdd.size());
     const ui64 count = pqGroup->ExpectedShardCount();
@@ -422,13 +422,13 @@ public:
         // explicit channel profiles are specified. Read balancer tablet is
         // a tablet with local db which doesn't use extra channels in any way.
         const ui32 tabletProfileId = 0;
-        TChannelsBindings tabletChannelsBinding;
-        if (!context.SS->ResolvePqChannels(tabletProfileId, dstPath.DomainId(), tabletChannelsBinding)) {
+        TChannelsBindings tabletChannelsBinding; 
+        if (!context.SS->ResolvePqChannels(tabletProfileId, dstPath.DomainId(), tabletChannelsBinding)) { 
             result->SetError(NKikimrScheme::StatusInvalidParameter,
-                             "Unable to construct channel binding for PQ with the storage pool");
-            return result;
-        }
-
+                             "Unable to construct channel binding for PQ with the storage pool"); 
+            return result; 
+        } 
+ 
         // This channel bindings are for PersQueue shards. They either use
         // explicit channel profiles, or reuse channel profile above.
         const auto& partConfig = createDEscription.GetPQTabletConfig().GetPartitionConfig();
@@ -498,7 +498,7 @@ public:
         for (auto shard : txState.Shards) {
             Y_VERIFY(shard.Operation == TTxState::CreateParts);
             context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, pathId, OperationId.GetTxId(), shard.TabletType);
-            context.SS->PersistChannelsBinding(db, shard.Idx, tabletChannelsBinding);
+            context.SS->PersistChannelsBinding(db, shard.Idx, tabletChannelsBinding); 
         }
         Y_VERIFY(txState.Shards.size() == shardsToCreate);
         context.SS->TabletCounters->Simple()[COUNTER_PQ_SHARD_COUNT].Add(shardsToCreate-1);

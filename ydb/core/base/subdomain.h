@@ -11,14 +11,14 @@ struct TSubDomainKey : public std::pair<ui64, ui64> {
 
     using TBase::TBase;
     TSubDomainKey() = default;
-    TSubDomainKey(const TSubDomainKey&) = default;
-    TSubDomainKey(TSubDomainKey&&) = default;
+    TSubDomainKey(const TSubDomainKey&) = default; 
+    TSubDomainKey(TSubDomainKey&&) = default; 
     TSubDomainKey(ui64 shardId, ui64 pathId);
     explicit TSubDomainKey(const NKikimrSubDomains::TDomainKey &domainKey);
 
-    TSubDomainKey& operator =(const TSubDomainKey&) = default;
-    TSubDomainKey& operator =(TSubDomainKey&&) = default;
-
+    TSubDomainKey& operator =(const TSubDomainKey&) = default; 
+    TSubDomainKey& operator =(TSubDomainKey&&) = default; 
+ 
     ui64 GetSchemeShard() const;
     ui64 GetPathId() const;
 

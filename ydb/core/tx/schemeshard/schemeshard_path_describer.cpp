@@ -596,7 +596,7 @@ void TPathDescriber::DescribeRevertedMigrations(TPathElement::TPtr pathEl) {
 void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     Y_VERIFY(pathEl->IsDomainRoot());
     auto it = Self->SubDomains.FindPtr(pathEl->PathId);
-    Y_VERIFY(it, "SubDomain not found");
+    Y_VERIFY(it, "SubDomain not found"); 
     auto subDomainInfo = *it;
 
     NKikimrSubDomains::TDomainDescription * entry = Result->Record.MutablePathDescription()->MutableDomainDescription();
@@ -644,22 +644,22 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     }
 }
 
-void TPathDescriber::DescribeDomainExtra(TPathElement::TPtr pathEl) {
-    Y_VERIFY(pathEl->IsDomainRoot());
-    auto it = Self->SubDomains.FindPtr(pathEl->PathId);
-    Y_VERIFY(it, "SubDomain not found");
-    auto subDomainInfo = *it;
-
-    NKikimrSubDomains::TDomainDescription * entry = Result->Record.MutablePathDescription()->MutableDomainDescription();
-
-    for (auto& pool: subDomainInfo->GetStoragePools()) {
-        *entry->AddStoragePools() = pool;
-    }
-    if (subDomainInfo->HasSecurityState()) {
-        entry->MutableSecurityState()->CopyFrom(subDomainInfo->GetSecurityState());
-    }
-}
-
+void TPathDescriber::DescribeDomainExtra(TPathElement::TPtr pathEl) { 
+    Y_VERIFY(pathEl->IsDomainRoot()); 
+    auto it = Self->SubDomains.FindPtr(pathEl->PathId); 
+    Y_VERIFY(it, "SubDomain not found"); 
+    auto subDomainInfo = *it; 
+ 
+    NKikimrSubDomains::TDomainDescription * entry = Result->Record.MutablePathDescription()->MutableDomainDescription(); 
+ 
+    for (auto& pool: subDomainInfo->GetStoragePools()) { 
+        *entry->AddStoragePools() = pool; 
+    } 
+    if (subDomainInfo->HasSecurityState()) { 
+        entry->MutableSecurityState()->CopyFrom(subDomainInfo->GetSecurityState()); 
+    } 
+} 
+ 
 void TPathDescriber::DescribeBlockStoreVolume(TPathId pathId, TPathElement::TPtr pathEl) {
     Y_VERIFY(pathEl->IsBlockStoreVolume());
     auto it = Self->BlockStoreVolumes.FindPtr(pathId);
@@ -797,9 +797,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
     auto descr = Result->Record.MutablePathDescription()->MutableSelf();
     FillPathDescr(descr, path);
     BuildEffectiveACL(descr, path);
-    auto base = path.Base();
-    DescribeDomain(base);
-    DescribeUserAttributes(base);
+    auto base = path.Base(); 
+    DescribeDomain(base); 
+    DescribeUserAttributes(base); 
     DescribePathVersion(path);
 
     if (base->IsCreateFinished()) {
@@ -858,7 +858,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();
-        }
+        } 
     } else {
         // here we do not full any object specific information, like table description
         // nevertheless, chindren list should be set even when dir or children is being created right now

@@ -56,17 +56,17 @@ TDataLiteral* BuildDataLiteral(const NUdf::TStringRef& data, NUdf::TDataTypeId t
 }
 
 TOptionalLiteral* BuildOptionalLiteral(TRuntimeNode value, const TTypeEnvironment& env) {
-    auto type = TOptionalType::Create(value.GetStaticType(), env);
+    auto type = TOptionalType::Create(value.GetStaticType(), env); 
     return TOptionalLiteral::Create(value, type, env);
 }
 
-TOptionalLiteral* BuildEmptyOptionalLiteral(TType *itemType, const TTypeEnvironment& env) {
-    auto type = TOptionalType::Create(itemType, env);
+TOptionalLiteral* BuildEmptyOptionalLiteral(TType *itemType, const TTypeEnvironment& env) { 
+    auto type = TOptionalType::Create(itemType, env); 
     return TOptionalLiteral::Create(type, env);
 }
 
 TOptionalLiteral* BuildEmptyOptionalDataLiteral(NUdf::TDataTypeId schemeType, const TTypeEnvironment& env) {
-    return BuildEmptyOptionalLiteral(TDataType::Create(schemeType, env), env);
+    return BuildEmptyOptionalLiteral(TDataType::Create(schemeType, env), env); 
 }
 
 TType* UnpackOptional(TRuntimeNode data, bool& isOptional) {
@@ -94,7 +94,7 @@ TDataType* UnpackOptionalData(TType* type, bool& isOptional) {
     return static_cast<TDataType*>(unpackedType);
 }
 
-TStructTypeBuilder::TStructTypeBuilder(const TTypeEnvironment& env)
+TStructTypeBuilder::TStructTypeBuilder(const TTypeEnvironment& env) 
     : Env(&env)
 {
 }
@@ -113,7 +113,7 @@ TStructType* TStructTypeBuilder::Build() {
         return Env->GetEmptyStruct()->GetType();
 
     Sort(Members.begin(), Members.end());
-    return TStructType::Create(Members.size(), Members.data(), *Env);
+    return TStructType::Create(Members.size(), Members.data(), *Env); 
 }
 
 void TStructTypeBuilder::FillIndexes() {
@@ -129,7 +129,7 @@ void TStructTypeBuilder::Clear() {
     Members.clear();
 }
 
-TStructLiteralBuilder::TStructLiteralBuilder(const TTypeEnvironment& env)
+TStructLiteralBuilder::TStructLiteralBuilder(const TTypeEnvironment& env) 
     : Env(&env)
 {
 }
@@ -169,7 +169,7 @@ TStructLiteral* TStructLiteralBuilder::Build() {
         sortedValues[i] = Values[sortedIndicies[i].second];
     }
 
-    auto type = TStructType::Create(sortedMembers.size(), sortedMembers.data(), *Env);
+    auto type = TStructType::Create(sortedMembers.size(), sortedMembers.data(), *Env); 
     return TStructLiteral::Create(sortedValues.size(), sortedValues.data(), type, *Env);
 }
 
@@ -177,7 +177,7 @@ void TStructLiteralBuilder::Clear() {
     Members.clear();
 }
 
-TListLiteralBuilder::TListLiteralBuilder(const TTypeEnvironment& env, TType* type)
+TListLiteralBuilder::TListLiteralBuilder(const TTypeEnvironment& env, TType* type) 
     : Env(&env)
     , Type(type)
 {}
@@ -188,7 +188,7 @@ TListLiteralBuilder& TListLiteralBuilder::Add(TRuntimeNode item) {
 }
 
 TListLiteral* TListLiteralBuilder::Build() {
-    auto type = TListType::Create(Type, *Env);
+    auto type = TListType::Create(Type, *Env); 
     return TListLiteral::Create(Items.data(), Items.size(), type, *Env);
 }
 
@@ -196,7 +196,7 @@ void TListLiteralBuilder::Clear() {
     Items.clear();
 }
 
-TDictLiteralBuilder::TDictLiteralBuilder(const TTypeEnvironment& env, TType* keyType, TType* payloadType)
+TDictLiteralBuilder::TDictLiteralBuilder(const TTypeEnvironment& env, TType* keyType, TType* payloadType) 
     : Env(&env)
     , KeyType(keyType)
     , PayloadType(payloadType)
@@ -213,7 +213,7 @@ TDictLiteralBuilder& TDictLiteralBuilder::Add(TRuntimeNode key, TRuntimeNode pay
 }
 
 TDictLiteral* TDictLiteralBuilder::Build() {
-    auto type = TDictType::Create(KeyType, PayloadType, *Env);
+    auto type = TDictType::Create(KeyType, PayloadType, *Env); 
     return TDictLiteral::Create(Items.size(), Items.data(), type, *Env);
 }
 
@@ -221,7 +221,7 @@ void TDictLiteralBuilder::Clear() {
     Items.clear();
 }
 
-TCallableTypeBuilder::TCallableTypeBuilder(const TTypeEnvironment& env, const TStringBuf& name, TType* returnType)
+TCallableTypeBuilder::TCallableTypeBuilder(const TTypeEnvironment& env, const TStringBuf& name, TType* returnType) 
     : Env(&env)
     , Name(Env->InternName(name))
     , ReturnType(returnType)
@@ -235,7 +235,7 @@ void TCallableTypeBuilder::Reserve(ui32 size) {
     ArgFlags.reserve(size);
 }
 
-TCallableTypeBuilder& TCallableTypeBuilder::Add(TType *type) {
+TCallableTypeBuilder& TCallableTypeBuilder::Add(TType *type) { 
     Arguments.push_back(type);
     ArgNames.emplace_back();
     ArgFlags.emplace_back();
@@ -287,7 +287,7 @@ void TCallableTypeBuilder::Clear() {
     FuncPayload = TStringBuf();
 }
 
-TCallableBuilder::TCallableBuilder(const TTypeEnvironment& env, const TStringBuf& name, TType* returnType, bool disableMerge)
+TCallableBuilder::TCallableBuilder(const TTypeEnvironment& env, const TStringBuf& name, TType* returnType, bool disableMerge) 
     : Env(&env)
     , Name(Env->InternName(name))
     , ReturnType(returnType)
@@ -303,9 +303,9 @@ void TCallableBuilder::Reserve(ui32 size) {
     ArgFlags.reserve(size);
 }
 
-TCallableBuilder& TCallableBuilder::Add(TRuntimeNode input) {
+TCallableBuilder& TCallableBuilder::Add(TRuntimeNode input) { 
     TType* inputType = input.GetStaticType();
-    Arguments.push_back(inputType);
+    Arguments.push_back(inputType); 
     Inputs.push_back(input);
     ArgNames.emplace_back();
     ArgFlags.emplace_back();

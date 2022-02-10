@@ -138,10 +138,10 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
 
         if (IsMonitoringEnabled) {
             // Monitoring startup
-            monitoring.Reset(new NActors::TMon({
-                .Port = pm.GetPort(8081),
-                .Title = "TestYard monitoring"
-            }));
+            monitoring.Reset(new NActors::TMon({ 
+                .Port = pm.GetPort(8081), 
+                .Title = "TestYard monitoring" 
+            })); 
             appData.Mon = monitoring.Get();
 
             monitoring->RegisterCountersPage("counters", "Counters", mainCounters);

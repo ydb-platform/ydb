@@ -57,8 +57,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto callableType = TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
-            .Add(env.GetVoid()->GetType())
-            .Add(env.GetTypeOfVoid())
+            .Add(env.GetVoid()->GetType()) 
+            .Add(env.GetTypeOfVoid()) 
             .Build();
 
         UNIT_ASSERT_EQUAL(callableType->GetKind(), TType::EKind::Callable);
@@ -149,13 +149,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
 
         auto callable2 = TCallableBuilder(env, "func2", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
             .Add(TRuntimeNode(callable1, false))
-            .Add(TRuntimeNode(env.GetVoid(), true))
+            .Add(TRuntimeNode(env.GetVoid(), true)) 
             .Build();
 
         UNIT_ASSERT_EQUAL(callable2->GetType()->GetKind(), TType::EKind::Callable);
         UNIT_ASSERT_EQUAL(callable2->GetType()->GetArgumentsCount(), 2);
-        UNIT_ASSERT_EQUAL(callable2->GetType()->GetArgumentType(0)->GetKind(), TType::EKind::Data);
-        UNIT_ASSERT_EQUAL(callable2->GetType()->GetArgumentType(1)->GetKind(), TType::EKind::Void);
+        UNIT_ASSERT_EQUAL(callable2->GetType()->GetArgumentType(0)->GetKind(), TType::EKind::Data); 
+        UNIT_ASSERT_EQUAL(callable2->GetType()->GetArgumentType(1)->GetKind(), TType::EKind::Void); 
         UNIT_ASSERT_EQUAL(callable2->GetInputsCount(), 2);
     }
 

@@ -20,31 +20,31 @@ namespace NYdb {
 using namespace Tests;
 using namespace NYdb;
 
-struct TKikimrTestSettings {
-    static constexpr bool SSL = false;
-    static constexpr bool AUTH = false;
-    static constexpr bool PrecreatePools = true;
+struct TKikimrTestSettings { 
+    static constexpr bool SSL = false; 
+    static constexpr bool AUTH = false; 
+    static constexpr bool PrecreatePools = true; 
     static constexpr bool EnableSystemViews = true;
-};
-
-struct TKikimrTestWithAuth : TKikimrTestSettings {
-    static constexpr bool AUTH = true;
-};
-
-struct TKikimrTestWithAuthAndSsl : TKikimrTestWithAuth {
-    static constexpr bool SSL = true;
-};
-
+}; 
+ 
+struct TKikimrTestWithAuth : TKikimrTestSettings { 
+    static constexpr bool AUTH = true; 
+}; 
+ 
+struct TKikimrTestWithAuthAndSsl : TKikimrTestWithAuth { 
+    static constexpr bool SSL = true; 
+}; 
+ 
 struct TKikimrTestNoSystemViews : TKikimrTestSettings {
     static constexpr bool EnableSystemViews = false;
 };
 
-template <typename TestSettings = TKikimrTestSettings>
-class TBasicKikimrWithGrpcAndRootSchema {
+template <typename TestSettings = TKikimrTestSettings> 
+class TBasicKikimrWithGrpcAndRootSchema { 
 public:
-    TBasicKikimrWithGrpcAndRootSchema(
-            NKikimrConfig::TAppConfig appConfig = {},
-            const TVector<NKikimrKqp::TKqpSetting>& kqpSettings = {},
+    TBasicKikimrWithGrpcAndRootSchema( 
+            NKikimrConfig::TAppConfig appConfig = {}, 
+            const TVector<NKikimrKqp::TKqpSetting>& kqpSettings = {}, 
             TAutoPtr<TLogBackend> logBackend = {},
             bool enableYq = false,
             TAppPrepare::TFnReg udfFrFactory = nullptr,
@@ -57,17 +57,17 @@ public:
         ServerSettings->SetLogBackend(logBackend);
         ServerSettings->SetDomainName("Root");
         ServerSettings->SetDynamicNodeCount(2);
-        if (TestSettings::PrecreatePools) {
-            ServerSettings->AddStoragePool("ssd");
-            ServerSettings->AddStoragePool("hdd");
-            ServerSettings->AddStoragePool("hdd1");
-            ServerSettings->AddStoragePool("hdd2");
-        } else {
-            ServerSettings->AddStoragePoolType("ssd");
-            ServerSettings->AddStoragePoolType("hdd");
-            ServerSettings->AddStoragePoolType("hdd1");
-            ServerSettings->AddStoragePoolType("hdd2");
-        }
+        if (TestSettings::PrecreatePools) { 
+            ServerSettings->AddStoragePool("ssd"); 
+            ServerSettings->AddStoragePool("hdd"); 
+            ServerSettings->AddStoragePool("hdd1"); 
+            ServerSettings->AddStoragePool("hdd2"); 
+        } else { 
+            ServerSettings->AddStoragePoolType("ssd"); 
+            ServerSettings->AddStoragePoolType("hdd"); 
+            ServerSettings->AddStoragePoolType("hdd1"); 
+            ServerSettings->AddStoragePoolType("hdd2"); 
+        } 
         ServerSettings->SetAppConfig(appConfig);
         ServerSettings->AuthConfig = appConfig.GetAuthConfig();
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
@@ -106,11 +106,11 @@ public:
         }
 
         NGrpc::TServerOptions grpcOption;
-        if (TestSettings::AUTH) {
+        if (TestSettings::AUTH) { 
             grpcOption.SetUseAuth(true);
         }
         grpcOption.SetPort(grpc);
-        if (TestSettings::SSL) {
+        if (TestSettings::SSL) { 
             NGrpc::TSslData sslData{NYdbSslTestData::ServerCrt,
                                           NYdbSslTestData::ServerKey,
                                           NYdbSslTestData::CaCrt};
@@ -125,7 +125,7 @@ public:
         annoyingClient.InitRootScheme("Root");
         GRpcPort_ = grpc;
     }
-
+ 
     ui16 GetPort() {
         return GRpcPort_;
     }
@@ -305,9 +305,9 @@ struct TTestOlap {
     }
 };
 
-using TKikimrWithGrpcAndRootSchema = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestSettings>;
-using TKikimrWithGrpcAndRootSchemaWithAuth = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth>;
-using TKikimrWithGrpcAndRootSchemaWithAuthAndSsl = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthAndSsl>;
+using TKikimrWithGrpcAndRootSchema = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestSettings>; 
+using TKikimrWithGrpcAndRootSchemaWithAuth = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth>; 
+using TKikimrWithGrpcAndRootSchemaWithAuthAndSsl = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthAndSsl>; 
 using TKikimrWithGrpcAndRootSchemaNoSystemViews = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestNoSystemViews>;
-
+ 
 }

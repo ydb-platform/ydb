@@ -24,7 +24,7 @@ namespace NMonitoring {
         virtual const THttpHeaders& GetHeaders() const = 0;
         virtual TStringBuf GetHeader(TStringBuf name) const = 0;
         virtual TStringBuf GetCookie(TStringBuf name) const = 0;
-        virtual TString GetRemoteAddr() const = 0;
+        virtual TString GetRemoteAddr() const = 0; 
 
         virtual TString GetServiceTitle() const = 0;
 
@@ -71,8 +71,8 @@ namespace NMonitoring {
         TStringBuf GetHeader(TStringBuf name) const override;
         TStringBuf GetCookie(TStringBuf name) const override;
         const THttpHeaders& GetHeaders() const override;
-        TString GetRemoteAddr() const override;
-
+        TString GetRemoteAddr() const override; 
+ 
         IMonPage* GetPage() const override {
             return MonPage;
         }

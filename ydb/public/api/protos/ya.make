@@ -21,7 +21,7 @@ SRCS(
     draft/ydb_logstore.proto
     draft/yq_private.proto
     persqueue_error_codes_v1.proto
-    ydb_auth.proto
+    ydb_auth.proto 
     ydb_persqueue_v1.proto
     ydb_persqueue_cluster_discovery.proto
     ydb_clickhouse_internal.proto
@@ -34,7 +34,7 @@ SRCS(
     ydb_formats.proto
     ydb_import.proto
     ydb_issue_message.proto
-    ydb_monitoring.proto
+    ydb_monitoring.proto 
     ydb_operation.proto
     ydb_query_stats.proto
     ydb_rate_limiter.proto

@@ -308,40 +308,40 @@ namespace NKikimr {
             virtual bool IsStopped() const = 0;
         };
 
-        struct TClientRetryPolicy {
-            ui32 RetryLimitCount = std::numeric_limits<ui32>::max();
-            TDuration MinRetryTime = TDuration::MilliSeconds(10);
-            TDuration MaxRetryTime = TDuration::Minutes(10);
-            ui32 BackoffMultiplier = 2;
-            bool DoFirstRetryInstantly = true;
+        struct TClientRetryPolicy { 
+            ui32 RetryLimitCount = std::numeric_limits<ui32>::max(); 
+            TDuration MinRetryTime = TDuration::MilliSeconds(10); 
+            TDuration MaxRetryTime = TDuration::Minutes(10); 
+            ui32 BackoffMultiplier = 2; 
+            bool DoFirstRetryInstantly = true; 
 
-            operator bool() const {
-                return RetryLimitCount != 0;
-            }
-
-            static TClientRetryPolicy WithoutRetries() {
-                return {
-                    .RetryLimitCount = {},
-                    .MinRetryTime = {},
-                    .MaxRetryTime = {},
-                    .BackoffMultiplier = {},
-                    .DoFirstRetryInstantly = {},
-                    };
-            }
-
-            static TClientRetryPolicy WithRetries() {
-                return {};
-            }
+            operator bool() const { 
+                return RetryLimitCount != 0; 
+            } 
+ 
+            static TClientRetryPolicy WithoutRetries() { 
+                return { 
+                    .RetryLimitCount = {}, 
+                    .MinRetryTime = {}, 
+                    .MaxRetryTime = {}, 
+                    .BackoffMultiplier = {}, 
+                    .DoFirstRetryInstantly = {}, 
+                    }; 
+            } 
+ 
+            static TClientRetryPolicy WithRetries() { 
+                return {}; 
+            } 
         };
 
-        struct TClientRetryState {
-            bool IsAllowedToRetry(TDuration& wait, const TClientRetryPolicy& policy);
+        struct TClientRetryState { 
+            bool IsAllowedToRetry(TDuration& wait, const TClientRetryPolicy& policy); 
             TDuration MakeCheckDelay();
-        protected:
-            ui64 RetryNumber = 0;
-            TDuration RetryDuration;
-        };
-
+        protected: 
+            ui64 RetryNumber = 0; 
+            TDuration RetryDuration; 
+        }; 
+ 
         struct TClientConfig {
             bool ConnectToUserTablet = false;
             bool AllowFollower = false;
@@ -350,15 +350,15 @@ namespace NKikimr {
             bool PreferLocal = false;
             bool CheckAliveness = false;
             bool ExpectShutdown = false;
-            TClientRetryPolicy RetryPolicy;
-
-            TClientConfig()
-                : RetryPolicy(TClientRetryPolicy::WithoutRetries())
-            {}
-
-            TClientConfig(TClientRetryPolicy retryPolicy)
-                : RetryPolicy(std::move(retryPolicy))
-            {}
+            TClientRetryPolicy RetryPolicy; 
+ 
+            TClientConfig() 
+                : RetryPolicy(TClientRetryPolicy::WithoutRetries()) 
+            {} 
+ 
+            TClientConfig(TClientRetryPolicy retryPolicy) 
+                : RetryPolicy(std::move(retryPolicy)) 
+            {} 
         };
 
         // Returns client actor.

@@ -288,7 +288,7 @@ protected:
         const ui64 bscId = MakeBSControllerID(domains->GetDefaultStateStorageGroup(domainUid));
 
         NTabletPipe::TClientConfig config;
-        config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries(); 
         CmsState->BSControllerPipe = this->Register(NTabletPipe::CreateClient(CmsState->CmsActorId, bscId, config));
     }
 

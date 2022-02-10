@@ -199,7 +199,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
     TSet<TLogoBlobID> RangesToDiscover;
 
     ui32 RequestsLeft;
-    NMetrics::TTabletThroughputRawValue GroupReadBytes;
+    NMetrics::TTabletThroughputRawValue GroupReadBytes; 
     NMetrics::TTabletIopsRawValue GroupReadOps;
 
     THolder<NTracing::ITrace> IntrospectionTrace;
@@ -453,9 +453,9 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         for (TVector<TEvBlobStorage::TEvRangeResult::TResponse>::iterator it = msg->Responses.begin(), end = msg->Responses.end(); it != end; ++it) {
             const TLogoBlobID &id = it->Id;
 
-            GroupReadBytes[std::make_pair(id.Channel(), msg->GroupId)] += it->Buffer.size();
+            GroupReadBytes[std::make_pair(id.Channel(), msg->GroupId)] += it->Buffer.size(); 
             GroupReadOps[std::make_pair(id.Channel(), msg->GroupId)] += 1;
-
+ 
             NKikimrTabletBase::TTabletLogEntry logEntry;
             if (!logEntry.ParseFromString(it->Buffer)) {
                 BLOG_ERROR("TTabletReqRebuildHistoryGraph::ApplyDiscoveryRange it->Buffer ParseFromString error, id# " << id);
@@ -577,7 +577,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             switch (response.Status) {
             case NKikimrProto::OK:
                 Y_VERIFY(1 == RefsToCheck.erase(response.Id));
-                GroupReadBytes[std::make_pair(response.Id.Channel(), msg->GroupId)] += response.Buffer.size();
+                GroupReadBytes[std::make_pair(response.Id.Channel(), msg->GroupId)] += response.Buffer.size(); 
                 GroupReadOps[std::make_pair(response.Id.Channel(), msg->GroupId)] += 1;
                 break;
             case NKikimrProto::NODATA:

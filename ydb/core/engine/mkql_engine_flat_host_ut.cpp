@@ -16,26 +16,26 @@ using namespace NTabletFlatExecutor;
 
 Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
 
-    struct Schema : NIceDb::Schema {
+    struct Schema : NIceDb::Schema { 
         struct TestTable : Table<1> {
             struct ID : Column<1, NUdf::TDataType<ui64>::Id> {};
             struct Value : Column<2, NUdf::TDataType<ui64>::Id> {};
             struct Name : Column<3, NUdf::TDataType<NUdf::TUtf8>::Id> {};
             struct BoolValue : Column<4, NUdf::TDataType<bool>::Id> {};
 
-            using TKey = TableKey<ID>;
-            using TColumns = TableColumns<ID, Value, Name, BoolValue>;
+            using TKey = TableKey<ID>; 
+            using TColumns = TableColumns<ID, Value, Name, BoolValue>; 
         };
 
         struct TestTable2 : Table<2> {
             struct ID1 : Column<1, NUdf::TDataType<ui64>::Id> {};
             struct ID2 : Column<2, NUdf::TDataType<ui64>::Id> {};
 
-            using TKey = TableKey<ID1, ID2>;
-            using TColumns = TableColumns<ID1, ID2>;
+            using TKey = TableKey<ID1, ID2>; 
+            using TColumns = TableColumns<ID1, ID2>; 
         };
 
-        using TTables = SchemaTables<TestTable, TestTable2>;
+        using TTables = SchemaTables<TestTable, TestTable2>; 
     };
 
 
@@ -48,12 +48,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
 
     Y_UNIT_TEST(Basic) {
         NTable::TDatabase DB;
-        NIceDb::TNiceDb db(DB);
+        NIceDb::TNiceDb db(DB); 
 
         { // Create tables
             NTable::TDummyEnv env;
             DB.Begin(1, env);
-            db.Materialize<Schema>();
+            db.Materialize<Schema>(); 
             DB.Commit(1, true);
         }
 
@@ -84,12 +84,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
             NTable::TDummyEnv env;
             DB.Begin(4, env);
             for (ui64 i = 0; i < 1000; ++i) {
-                auto row = db.Table<Schema::TestTable>().Key(i).Select<Schema::TestTable::Value, Schema::TestTable::Name, Schema::TestTable::BoolValue>();
-                UNIT_ASSERT(row.IsReady());
-                UNIT_ASSERT(row.IsValid());
-                ui64 value = row.GetValue<Schema::TestTable::Value>();
+                auto row = db.Table<Schema::TestTable>().Key(i).Select<Schema::TestTable::Value, Schema::TestTable::Name, Schema::TestTable::BoolValue>(); 
+                UNIT_ASSERT(row.IsReady()); 
+                UNIT_ASSERT(row.IsValid()); 
+                ui64 value = row.GetValue<Schema::TestTable::Value>(); 
                 TString name = row.GetValue<Schema::TestTable::Name>();
-                bool boolValue = row.GetValue<Schema::TestTable::BoolValue>();
+                bool boolValue = row.GetValue<Schema::TestTable::BoolValue>(); 
                 UNIT_ASSERT(value == i);
                 UNIT_ASSERT(ToString(value) == name);
                 UNIT_ASSERT(boolValue == (i % 2 == 0));

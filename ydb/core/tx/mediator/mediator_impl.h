@@ -20,23 +20,23 @@
 namespace NKikimr {
 namespace NTxMediator {
 
-    using TStepId = ui64;
-    using TTxId = ui64;
-    using TTabletId = ui64;
-
+    using TStepId = ui64; 
+    using TTxId = ui64; 
+    using TTabletId = ui64; 
+ 
     struct TTx {
         // transaction body
         ui64 Moderator;
-        TTxId TxId;
+        TTxId TxId; 
         TActorId AckTo;
 
-        TTx(ui64 moderator, TTxId txid)
+        TTx(ui64 moderator, TTxId txid) 
             : Moderator(moderator)
             , TxId(txid)
             , AckTo() // must be updated before commit
-        {
-            Y_VERIFY(TxId != 0);
-        }
+        { 
+            Y_VERIFY(TxId != 0); 
+        } 
 
         struct TCmpOrderId {
             bool operator()(const TTx &left, const TTx &right) const noexcept {
@@ -55,15 +55,15 @@ namespace NTxMediator {
     };
 
     struct TCoordinatorStep {
-        const TStepId Step;
-        const TStepId PrevStep;
+        const TStepId Step; 
+        const TStepId PrevStep; 
 
         TVector<TTx> Transactions;
 
         TVector<std::pair<TTabletId, std::size_t>> TabletsToTransaction; // tablet -> tx index in Transactions
 
         struct TabletToTransactionCmp {
-            bool operator()(const std::pair<TTabletId, std::size_t> &left, const std::pair<TTabletId, std::size_t> &right) const {
+            bool operator()(const std::pair<TTabletId, std::size_t> &left, const std::pair<TTabletId, std::size_t> &right) const { 
                 return left.first < right.first;
             }
         };
@@ -85,7 +85,7 @@ namespace NTxMediator {
                 str << "TabletsToTransaction: {";
                 for (size_t i = 0; i < TabletsToTransaction.size(); ++i) {
                     str << "{tablet# " << TabletsToTransaction[i].first;
-                    str << " txid# " << Transactions[TabletsToTransaction[i].second].TxId;
+                    str << " txid# " << Transactions[TabletsToTransaction[i].second].TxId; 
                     str << "}";
                 }
                 str << "}";
@@ -96,12 +96,12 @@ namespace NTxMediator {
     };
 
     struct TMediateStep {
-        TStepId From;
-        TStepId To;
+        TStepId From; 
+        TStepId To; 
 
         TVector<TAutoPtr<TCoordinatorStep>> Steps;
 
-        TMediateStep(TStepId from, TStepId to)
+        TMediateStep(TStepId from, TStepId to) 
             : From(from)
             , To(to)
         {}
@@ -124,9 +124,9 @@ namespace NTxMediator {
 }
 
 struct TEvTxMediator {
-    using TTabletId = NTxMediator::TTabletId;
-    using TStepId = NTxMediator::TStepId;
-
+    using TTabletId = NTxMediator::TTabletId; 
+    using TStepId = NTxMediator::TStepId; 
+ 
     enum EEv {
         EvCommitStep = EventSpaceBegin(TKikimrEvents::ES_TX_MEDIATOR),
         EvRequestLostAcks,
@@ -177,8 +177,8 @@ struct TEvTxMediator {
 
     // just reschedule command, actual transport is over command queue
     struct TEvCommitTabletStep : public TEventLocal<TEvCommitTabletStep, EvCommitTabletStep> {
-        const TStepId Step;
-        const TTabletId TabletId;
+        const TStepId Step; 
+        const TTabletId TabletId; 
         TVector<NTxMediator::TTx> Transactions; // todo: inplace placing
 
         TEvCommitTabletStep(TStepId step, TTabletId tabletId, TVector<NTxMediator::TTx> &transactions)
@@ -201,9 +201,9 @@ struct TEvTxMediator {
     };
 
     struct TEvStepPlanComplete : public TEventLocal<TEvStepPlanComplete, EvStepPlanComplete> {
-        const TStepId Step;
+        const TStepId Step; 
 
-        TEvStepPlanComplete(TStepId step)
+        TEvStepPlanComplete(TStepId step) 
             : Step(step)
         {}
 
@@ -216,8 +216,8 @@ struct TEvTxMediator {
     };
 
     struct TEvOoOTabletStep : public TEventLocal<TEvOoOTabletStep, EvOoOTabletStep> {
-        const TStepId Step;
-        const TTabletId TabletId;
+        const TStepId Step; 
+        const TTabletId TabletId; 
         TVector<NTxMediator::TTx> Transactions;
 
         TEvOoOTabletStep(TStepId step, TTabletId tabletId, TVector<NTxMediator::TTx> &transactions)

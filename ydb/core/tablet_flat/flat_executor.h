@@ -321,7 +321,7 @@ class TExecutor
     using ELnLev = NUtil::ELnLev;
 
     friend class TExecutorCompactionLogic;
-    class TTxExecutorDbMon;
+    class TTxExecutorDbMon; 
 
     static constexpr ui64 PostponeTransactionMemThreshold = 250*1024*1024;
 
@@ -409,7 +409,7 @@ class TExecutor
     TTabletCountersWithTxTypes* AppTxCounters = nullptr;
 
     TActorId Launcher;
-
+ 
     THashMap<TPrivatePageCacheWaitPad*, THolder<TTransactionWaitPad>> TransactionWaitPads;
     THashMap<TPrivatePageCacheWaitPad*, THolder<TCompactionReadWaitPad>> CompactionReadWaitPads;
 
@@ -597,7 +597,7 @@ public:
 
     void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const override;
     void RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr &ev) const override;
-    void RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) const override;
+    void RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) const override; 
     void GetTabletCounters(TEvTablet::TEvGetCounters::TPtr &ev) override;
 
     void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr &ev) override;

@@ -1,164 +1,164 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
-#include <util/stream/null.h>
-#include "hive_impl.h"
-#include "balancer.h"
-
-#ifdef NDEBUG
-#define Ctest Cnull
-#else
-#define Ctest Cerr
-#endif
-
-#ifdef address_sanitizer_enabled
-#define SANITIZER_TYPE address
-#endif
-#ifdef memory_sanitizer_enabled
-#define SANITIZER_TYPE memory
-#endif
-#ifdef thread_sanitizer_enabled
-#define SANITIZER_TYPE thread
-#endif
-
-using namespace NKikimr;
-using namespace NHive;
-
-Y_UNIT_TEST_SUITE(THiveImplTest) {
-    Y_UNIT_TEST(BootQueueSpeed) {
-        TBootQueue bootQueue;
-        static constexpr ui64 NUM_TABLETS = 1000000;
-
-        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
-        hiveStorage->TabletType = TTabletTypes::Hive;
+#include <util/stream/null.h> 
+#include "hive_impl.h" 
+#include "balancer.h" 
+ 
+#ifdef NDEBUG 
+#define Ctest Cnull 
+#else 
+#define Ctest Cerr 
+#endif 
+ 
+#ifdef address_sanitizer_enabled 
+#define SANITIZER_TYPE address 
+#endif 
+#ifdef memory_sanitizer_enabled 
+#define SANITIZER_TYPE memory 
+#endif 
+#ifdef thread_sanitizer_enabled 
+#define SANITIZER_TYPE thread 
+#endif 
+ 
+using namespace NKikimr; 
+using namespace NHive; 
+ 
+Y_UNIT_TEST_SUITE(THiveImplTest) { 
+    Y_UNIT_TEST(BootQueueSpeed) { 
+        TBootQueue bootQueue; 
+        static constexpr ui64 NUM_TABLETS = 1000000; 
+ 
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo; 
+        hiveStorage->TabletType = TTabletTypes::Hive; 
         THive hive(hiveStorage.Get(), TActorId());
         std::unordered_map<ui64, TLeaderTabletInfo> tablets;
-        THPTimer timer;
-
-        for (ui64 i = 0; i < NUM_TABLETS; ++i) {
+        THPTimer timer; 
+ 
+        for (ui64 i = 0; i < NUM_TABLETS; ++i) { 
             TLeaderTabletInfo& tablet = tablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second;
-            tablet.Weight = RandomNumber<double>();
-            bootQueue.AddToBootQueue(tablet);
-        }
-
-        double passed = timer.Passed();
-        Ctest << "Create = " << passed << Endl;
-#ifndef SANITIZER_TYPE
-        UNIT_ASSERT(passed < 5);
-#endif
-
-        timer.Reset();
-
-        double maxP = 100;
-
-        while (!bootQueue.BootQueue.empty()) {
-            auto record = bootQueue.PopFromBootQueue();
-            UNIT_ASSERT(record.Priority <= maxP);
-            maxP = record.Priority;
-            auto itTablet = tablets.find(record.TabletId.first);
-            if (itTablet != tablets.end()) {
-                bootQueue.AddToWaitQueue(itTablet->second);
-            }
-        }
-
-        passed = timer.Passed();
-        Ctest << "Process = " << passed << Endl;
-#ifndef SANITIZER_TYPE
-        UNIT_ASSERT(passed < 2);
-#endif
-
-        timer.Reset();
-
-        bootQueue.MoveFromWaitQueueToBootQueue();
-
-        passed = timer.Passed();
-        Ctest << "Move = " << passed << Endl;
-#ifndef SANITIZER_TYPE
-        UNIT_ASSERT(passed < 0.5);
-#endif
-    }
-
-    Y_UNIT_TEST(BalancerSpeedAndDistribution) {
-        static constexpr ui64 NUM_TABLETS = 100000;
-        static constexpr ui64 NUM_BUCKETS = 16;
-
-        auto CheckSpeedAndDistribution = [](
-            std::unordered_map<ui64, TLeaderTabletInfo>& allTablets,
-            std::function<void(std::vector<TTabletInfo*>&)> func) -> void {
-
-            std::vector<TTabletInfo*> tablets;
-            for (auto& [id, tab] : allTablets) {
-                tablets.emplace_back(&tab);
-            }
-
-            THPTimer timer;
-
-            func(tablets);
-
-            double passed = timer.Passed();
-
-            Ctest << "Time=" << passed << Endl;
-#ifndef SANITIZER_TYPE
-            UNIT_ASSERT(passed < 0.2);
-#endif
-            std::vector<double> buckets(NUM_BUCKETS, 0);
-            size_t revs = 0;
-            double prev = 0;
-            for (size_t n = 0; n < tablets.size(); ++n) {
-                buckets[n / (NUM_TABLETS / NUM_BUCKETS)] += tablets[n]->Weight;
-                if (n != 0 && tablets[n]->Weight >= prev) {
-                    ++revs;
-                }
-                prev = tablets[n]->Weight;
-            }
-
-            Ctest << "Indirection=" << revs * 100 / NUM_TABLETS << "%" << Endl;
-
-            Ctest << "Distribution=";
-            for (double v : buckets) {
-                Ctest << Sprintf("%.2f", v) << " ";
-            }
-            Ctest << Endl;
-
-            /*char bars[] = " ▁▂▃▄▅▆▇█";
-            double mx = *std::max_element(buckets.begin(), buckets.end());
-            for (double v : buckets) {
-                Ctest << bars[int(ceil(v / mx)) * 8];
-            }
-            Ctest << Endl;*/
-
-            /*prev = NUM_TABLETS;
-            for (double v : buckets) {
-                UNIT_ASSERT(v < prev);
-                prev = v;
-            }*/
-
-            std::sort(tablets.begin(), tablets.end());
-            auto unique_end = std::unique(tablets.begin(), tablets.end());
-            Ctest << "Duplicates=" << tablets.end() - unique_end << Endl;
-
-            UNIT_ASSERT(tablets.end() - unique_end == 0);
-        };
-
-        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
-        hiveStorage->TabletType = TTabletTypes::Hive;
-        THive hive(hiveStorage.Get(), TActorId());
-        std::unordered_map<ui64, TLeaderTabletInfo> allTablets;
-
-        for (ui64 i = 0; i < NUM_TABLETS; ++i) {
-            TLeaderTabletInfo& tablet = allTablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second;
-            tablet.Weight = RandomNumber<double>();
-        }
-
-        Ctest << "HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST" << Endl;
-        CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>);
-
-        //Ctest << "HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM" << Endl;
-        //CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>);
-
-        Ctest << "HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM" << Endl;
-        CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>);
-
-        Ctest << "HIVE_TABLET_BALANCE_STRATEGY_RANDOM" << Endl;
-        CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>);
-    }
-}
+            tablet.Weight = RandomNumber<double>(); 
+            bootQueue.AddToBootQueue(tablet); 
+        } 
+ 
+        double passed = timer.Passed(); 
+        Ctest << "Create = " << passed << Endl; 
+#ifndef SANITIZER_TYPE 
+        UNIT_ASSERT(passed < 5); 
+#endif 
+ 
+        timer.Reset(); 
+ 
+        double maxP = 100; 
+ 
+        while (!bootQueue.BootQueue.empty()) { 
+            auto record = bootQueue.PopFromBootQueue(); 
+            UNIT_ASSERT(record.Priority <= maxP); 
+            maxP = record.Priority; 
+            auto itTablet = tablets.find(record.TabletId.first); 
+            if (itTablet != tablets.end()) { 
+                bootQueue.AddToWaitQueue(itTablet->second); 
+            } 
+        } 
+ 
+        passed = timer.Passed(); 
+        Ctest << "Process = " << passed << Endl; 
+#ifndef SANITIZER_TYPE 
+        UNIT_ASSERT(passed < 2); 
+#endif 
+ 
+        timer.Reset(); 
+ 
+        bootQueue.MoveFromWaitQueueToBootQueue(); 
+ 
+        passed = timer.Passed(); 
+        Ctest << "Move = " << passed << Endl; 
+#ifndef SANITIZER_TYPE 
+        UNIT_ASSERT(passed < 0.5); 
+#endif 
+    } 
+ 
+    Y_UNIT_TEST(BalancerSpeedAndDistribution) { 
+        static constexpr ui64 NUM_TABLETS = 100000; 
+        static constexpr ui64 NUM_BUCKETS = 16; 
+ 
+        auto CheckSpeedAndDistribution = []( 
+            std::unordered_map<ui64, TLeaderTabletInfo>& allTablets, 
+            std::function<void(std::vector<TTabletInfo*>&)> func) -> void { 
+ 
+            std::vector<TTabletInfo*> tablets; 
+            for (auto& [id, tab] : allTablets) { 
+                tablets.emplace_back(&tab); 
+            } 
+ 
+            THPTimer timer; 
+ 
+            func(tablets); 
+ 
+            double passed = timer.Passed(); 
+ 
+            Ctest << "Time=" << passed << Endl; 
+#ifndef SANITIZER_TYPE 
+            UNIT_ASSERT(passed < 0.2); 
+#endif 
+            std::vector<double> buckets(NUM_BUCKETS, 0); 
+            size_t revs = 0; 
+            double prev = 0; 
+            for (size_t n = 0; n < tablets.size(); ++n) { 
+                buckets[n / (NUM_TABLETS / NUM_BUCKETS)] += tablets[n]->Weight; 
+                if (n != 0 && tablets[n]->Weight >= prev) { 
+                    ++revs; 
+                } 
+                prev = tablets[n]->Weight; 
+            } 
+ 
+            Ctest << "Indirection=" << revs * 100 / NUM_TABLETS << "%" << Endl; 
+ 
+            Ctest << "Distribution="; 
+            for (double v : buckets) { 
+                Ctest << Sprintf("%.2f", v) << " "; 
+            } 
+            Ctest << Endl; 
+ 
+            /*char bars[] = " ▁▂▃▄▅▆▇█"; 
+            double mx = *std::max_element(buckets.begin(), buckets.end()); 
+            for (double v : buckets) { 
+                Ctest << bars[int(ceil(v / mx)) * 8]; 
+            } 
+            Ctest << Endl;*/ 
+ 
+            /*prev = NUM_TABLETS; 
+            for (double v : buckets) { 
+                UNIT_ASSERT(v < prev); 
+                prev = v; 
+            }*/ 
+ 
+            std::sort(tablets.begin(), tablets.end()); 
+            auto unique_end = std::unique(tablets.begin(), tablets.end()); 
+            Ctest << "Duplicates=" << tablets.end() - unique_end << Endl; 
+ 
+            UNIT_ASSERT(tablets.end() - unique_end == 0); 
+        }; 
+ 
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo; 
+        hiveStorage->TabletType = TTabletTypes::Hive; 
+        THive hive(hiveStorage.Get(), TActorId()); 
+        std::unordered_map<ui64, TLeaderTabletInfo> allTablets; 
+ 
+        for (ui64 i = 0; i < NUM_TABLETS; ++i) { 
+            TLeaderTabletInfo& tablet = allTablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second; 
+            tablet.Weight = RandomNumber<double>(); 
+        } 
+ 
+        Ctest << "HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST" << Endl; 
+        CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>); 
+ 
+        //Ctest << "HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM" << Endl; 
+        //CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>); 
+ 
+        Ctest << "HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM" << Endl; 
+        CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>); 
+ 
+        Ctest << "HIVE_TABLET_BALANCE_STRATEGY_RANDOM" << Endl; 
+        CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>); 
+    } 
+} 

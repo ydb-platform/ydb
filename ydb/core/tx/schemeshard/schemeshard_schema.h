@@ -718,7 +718,7 @@ struct Schema : NIceDb::Schema {
         struct DatabaseQuotas : Column<23, NScheme::NTypeIds::String> {};
         struct StateVersion : Column<24, NScheme::NTypeIds::Uint64> {};
         struct DiskQuotaExceeded : Column<25, NScheme::NTypeIds::Bool> {};
-        struct SecurityStateVersion : Column<26, NScheme::NTypeIds::Uint64> {};
+        struct SecurityStateVersion : Column<26, NScheme::NTypeIds::Uint64> {}; 
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -746,8 +746,8 @@ struct Schema : NIceDb::Schema {
             PQPartitionsLimit,
             DatabaseQuotas,
             StateVersion,
-            DiskQuotaExceeded,
-            SecurityStateVersion
+            DiskQuotaExceeded, 
+            SecurityStateVersion 
         >;
     };
 
@@ -1500,32 +1500,32 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, AlterBody>;
     };
 
-    struct LoginKeys : Table<92> {
-        struct KeyId : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct KeyDataPEM : Column<2, NScheme::NTypeIds::String> {};
-        struct ExpiresAt : Column<3, NScheme::NTypeIds::Uint64> {};
-
-        using TKey = TableKey<KeyId>;
-        using TColumns = TableColumns<KeyId, KeyDataPEM, ExpiresAt>;
-    };
-
-    struct LoginSids : Table<93> {
-        struct SidName : Column<1, NScheme::NTypeIds::String> {};
-        struct SidType : Column<2, NScheme::NTypeIds::Uint64> { using Type = NLoginProto::ESidType::SidType; };
-        struct SidHash : Column<3, NScheme::NTypeIds::String> {};
-
-        using TKey = TableKey<SidName>;
-        using TColumns = TableColumns<SidName, SidType, SidHash>;
-    };
-
-    struct LoginSidMembers : Table<94> {
-        struct SidName : Column<1, NScheme::NTypeIds::String> {};
-        struct SidMember : Column<2, NScheme::NTypeIds::String> {};
-
-        using TKey = TableKey<SidName, SidMember>;
-        using TColumns = TableColumns<SidName, SidMember>;
-    };
-
+    struct LoginKeys : Table<92> { 
+        struct KeyId : Column<1, NScheme::NTypeIds::Uint64> {}; 
+        struct KeyDataPEM : Column<2, NScheme::NTypeIds::String> {}; 
+        struct ExpiresAt : Column<3, NScheme::NTypeIds::Uint64> {}; 
+ 
+        using TKey = TableKey<KeyId>; 
+        using TColumns = TableColumns<KeyId, KeyDataPEM, ExpiresAt>; 
+    }; 
+ 
+    struct LoginSids : Table<93> { 
+        struct SidName : Column<1, NScheme::NTypeIds::String> {}; 
+        struct SidType : Column<2, NScheme::NTypeIds::Uint64> { using Type = NLoginProto::ESidType::SidType; }; 
+        struct SidHash : Column<3, NScheme::NTypeIds::String> {}; 
+ 
+        using TKey = TableKey<SidName>; 
+        using TColumns = TableColumns<SidName, SidType, SidHash>; 
+    }; 
+ 
+    struct LoginSidMembers : Table<94> { 
+        struct SidName : Column<1, NScheme::NTypeIds::String> {}; 
+        struct SidMember : Column<2, NScheme::NTypeIds::String> {}; 
+ 
+        using TKey = TableKey<SidName, SidMember>; 
+        using TColumns = TableColumns<SidName, SidMember>; 
+    }; 
+ 
     struct CdcStream : Table<95> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
@@ -1677,9 +1677,9 @@ struct Schema : NIceDb::Schema {
         OlapStores,
         OlapStoresAlters,
         OlapTables,
-        OlapTablesAlters,
-        LoginKeys,
-        LoginSids,
+        OlapTablesAlters, 
+        LoginKeys, 
+        LoginSids, 
         LoginSidMembers,
         CdcStream,
         CdcStreamAlterData,

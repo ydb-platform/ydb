@@ -21,12 +21,12 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         TMaybe<TString> authToken = Request->GetYdbToken();
         if (authToken) {
-            TMaybe<TString> database = Request->GetDatabaseName();
-            ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-                .Database = database ? database.GetRef() : TString(),
-                .Ticket = authToken.GetRef(),
-                .PeerName = Request->GetPeerName()
-            }));
+            TMaybe<TString> database = Request->GetDatabaseName(); 
+            ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({ 
+                .Database = database ? database.GetRef() : TString(), 
+                .Ticket = authToken.GetRef(), 
+                .PeerName = Request->GetPeerName() 
+            })); 
             Become(&TThis::StateWaitForTicket);
         } else {
             ReplyError("No token provided");
@@ -37,14 +37,14 @@ public:
     STFUNC(StateWaitForTicket) {
         Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
+            hFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle); 
             hFunc(TEvents::TEvUndelivered, Handle);
         }
     }
 
 private:
-    void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
-        const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
+    void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) { 
+        const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get()); 
         auto *response = TEvWhoAmIRequest::AllocateResult<Ydb::Discovery::WhoAmIResult>(Request);
         if (!result.Error) {
             if (result.Token != nullptr) {

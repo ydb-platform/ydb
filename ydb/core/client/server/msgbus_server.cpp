@@ -2,8 +2,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include "msgbus_server.h"
-#include "msgbus_server_tracer.h"
-#include "msgbus_http_server.h"
+#include "msgbus_server_tracer.h" 
+#include "msgbus_http_server.h" 
 #include "grpc_server.h"
 
 namespace NKikimr {
@@ -123,15 +123,15 @@ public:
             MTYPE(TBusCmsRequest)
             MTYPE(TBusChooseProxy)
             MTYPE(TBusSqsRequest)
-            MTYPE(TBusWhoAmI)
+            MTYPE(TBusWhoAmI) 
             MTYPE(TBusStreamRequest)
             MTYPE(TBusS3ListingRequest)
             MTYPE(TBusS3ListingResponse)
             MTYPE(TBusInterconnectDebug)
             MTYPE(TBusConsoleRequest)
-            MTYPE(TBusResolveNode)
-            MTYPE(TBusFillNode)
-            MTYPE(TBusDrainNode)
+            MTYPE(TBusResolveNode) 
+            MTYPE(TBusFillNode) 
+            MTYPE(TBusDrainNode) 
             MTYPE(TBusTestShardControlRequest)
 #undef MTYPE
         }
@@ -330,17 +330,17 @@ THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplGRpc::Cre
     return MakeHolder<TMessageBusSessionIdentHolder::TImplGRpc>(this);
 }
 
-TMessageBusSessionIdentHolder::TMessageBusSessionIdentHolder()
-{}
-
+TMessageBusSessionIdentHolder::TMessageBusSessionIdentHolder() 
+{} 
+ 
 TMessageBusSessionIdentHolder::TMessageBusSessionIdentHolder(TBusMessageContext &msg)
 {
-    InitSession(msg);
+    InitSession(msg); 
 }
 
 TMessageBusSessionIdentHolder::~TMessageBusSessionIdentHolder()
 {}
-
+ 
 void TMessageBusSessionIdentHolder::InitSession(TBusMessageContext &msg) {
     Impl = msg.CreateSessionIdentHolder();
 }
@@ -361,80 +361,80 @@ void TMessageBusSessionIdentHolder::SendReplyMove(NBus::TBusMessageAutoPtr resp)
 }
 
 
-void TBusMessageWatcher::NotifyForget() {
-    if (MessageWatcher) {
-        MessageWatcher->OnMessageDied(GetMessageId());
-        MessageWatcher = nullptr;
+void TBusMessageWatcher::NotifyForget() { 
+    if (MessageWatcher) { 
+        MessageWatcher->OnMessageDied(GetMessageId()); 
+        MessageWatcher = nullptr; 
     }
 }
 
-void TBusMessageWatcher::NotifyReply(NBus::TBusMessage *response) {
-    if (MessageWatcher) {
-        MessageWatcher->OnMessageReplied(GetMessageId(), response);
-        MessageWatcher = nullptr;
-    }
-}
+void TBusMessageWatcher::NotifyReply(NBus::TBusMessage *response) { 
+    if (MessageWatcher) { 
+        MessageWatcher->OnMessageReplied(GetMessageId(), response); 
+        MessageWatcher = nullptr; 
+    } 
+} 
 
+ 
 
-
-class TMessageBusMonitorActor : public TActorBootstrapped<TMessageBusMonitorActor> {
-    struct TEvPrivate {
-        enum EEv {
-            EvUpdateMsgBusStats = EventSpaceBegin(TEvents::ES_PRIVATE),
-            EvEnd
-        };
-
-        static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expected EvEnd < EventSpaceEnd");
-
-        struct TEvUpdateMsgBusStats : TEventLocal<TEvUpdateMsgBusStats, EvUpdateMsgBusStats> {};
-    };
-
-    constexpr static TDuration::TValue Interval = TDuration::Seconds(10).GetValue();
-
-public:
-    TMessageBusMonitorActor(NBus::TBusServerSessionPtr session, const NBus::TBusServerSessionConfig &sessionConfig)
-        : Session(session)
-        , SessionConfig(sessionConfig)
-    {}
-
+class TMessageBusMonitorActor : public TActorBootstrapped<TMessageBusMonitorActor> { 
+    struct TEvPrivate { 
+        enum EEv { 
+            EvUpdateMsgBusStats = EventSpaceBegin(TEvents::ES_PRIVATE), 
+            EvEnd 
+        }; 
+ 
+        static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expected EvEnd < EventSpaceEnd"); 
+ 
+        struct TEvUpdateMsgBusStats : TEventLocal<TEvUpdateMsgBusStats, EvUpdateMsgBusStats> {}; 
+    }; 
+ 
+    constexpr static TDuration::TValue Interval = TDuration::Seconds(10).GetValue(); 
+ 
+public: 
+    TMessageBusMonitorActor(NBus::TBusServerSessionPtr session, const NBus::TBusServerSessionConfig &sessionConfig) 
+        : Session(session) 
+        , SessionConfig(sessionConfig) 
+    {} 
+ 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::MSGBUS_COMMON; }
-
-    void Bootstrap(const TActorContext &ctx) {
-        WhiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
-        ctx.Send(WhiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint("mbus", Sprintf(":%d", Session->GetProto()->GetPort())));
+ 
+    void Bootstrap(const TActorContext &ctx) { 
+        WhiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId()); 
+        ctx.Send(WhiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint("mbus", Sprintf(":%d", Session->GetProto()->GetPort()))); 
         Become(&TMessageBusMonitorActor::StateWork, ctx, TDuration::MicroSeconds(Interval), new TEvPrivate::TEvUpdateMsgBusStats());
-    }
-
-protected:
-    void Handle(TEvPrivate::TEvUpdateMsgBusStats::TPtr, const TActorContext &ctx) {
-        NKikimrWhiteboard::TSystemStateInfo systemStateInfo;
+    } 
+ 
+protected: 
+    void Handle(TEvPrivate::TEvUpdateMsgBusStats::TPtr, const TActorContext &ctx) { 
+        NKikimrWhiteboard::TSystemStateInfo systemStateInfo; 
         auto inFlightPercent = SessionConfig.MaxInFlight > 0 ? Session->GetInFlight() * 100 / SessionConfig.MaxInFlight : 0;
-        if (inFlightPercent < 75) {
-            systemStateInfo.SetMessageBusState(NKikimrWhiteboard::EFlag::Green);
-        } else
-        if (inFlightPercent < 85) {
-            systemStateInfo.SetMessageBusState(NKikimrWhiteboard::EFlag::Yellow);
-        } else
-        if (inFlightPercent < 95) {
-            systemStateInfo.SetMessageBusState(NKikimrWhiteboard::EFlag::Orange);
-        } else {
-            systemStateInfo.SetMessageBusState(NKikimrWhiteboard::EFlag::Red);
-        }
-        ctx.Send(WhiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(systemStateInfo));
+        if (inFlightPercent < 75) { 
+            systemStateInfo.SetMessageBusState(NKikimrWhiteboard::EFlag::Green); 
+        } else 
+        if (inFlightPercent < 85) { 
+            systemStateInfo.SetMessageBusState(NKikimrWhiteboard::EFlag::Yellow); 
+        } else 
+        if (inFlightPercent < 95) { 
+            systemStateInfo.SetMessageBusState(NKikimrWhiteboard::EFlag::Orange); 
+        } else { 
+            systemStateInfo.SetMessageBusState(NKikimrWhiteboard::EFlag::Red); 
+        } 
+        ctx.Send(WhiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(systemStateInfo)); 
         ctx.Schedule(TDuration::MicroSeconds(Interval), new TEvPrivate::TEvUpdateMsgBusStats());
-    }
-
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPrivate::TEvUpdateMsgBusStats, Handle);
-        }
-    }
-
+    } 
+ 
+    STFUNC(StateWork) { 
+        switch (ev->GetTypeRewrite()) { 
+            HFunc(TEvPrivate::TEvUpdateMsgBusStats, Handle); 
+        } 
+    } 
+ 
     TActorId WhiteboardServiceId;
-    NBus::TBusServerSessionPtr Session;
-    const NBus::TBusServerSessionConfig &SessionConfig;
-};
-
+    NBus::TBusServerSessionPtr Session; 
+    const NBus::TBusServerSessionConfig &SessionConfig; 
+}; 
+ 
 TMessageBusServer::TMessageBusServer(
     const NBus::TBusServerSessionConfig &sessionConfig,
     NBus::TBusMessageQueue *busQueue,
@@ -455,7 +455,7 @@ void TMessageBusServer::InitSession(TActorSystem *actorSystem, const TActorId &p
     ActorSystem = actorSystem;
     Proxy = proxy;
     Session = NBus::TBusServerSession::Create(&Protocol, this, SessionConfig, BusQueue);
-    HttpServer.Reset(CreateMessageBusHttpServer(actorSystem, this, Protocol, SessionConfig));
+    HttpServer.Reset(CreateMessageBusHttpServer(actorSystem, this, Protocol, SessionConfig)); 
     Monitor = ActorSystem->Register(new TMessageBusMonitorActor(Session, SessionConfig), TMailboxType::HTSwap,
         actorSystem->AppData<TAppData>()->UserPoolId);
 }
@@ -472,18 +472,18 @@ void TMessageBusServer::RegisterMonPage(NMonitoring::TBusNgMonPage *busMonPage) 
 }
 
 void TMessageBusServer::OnMessage(NBus::TOnMessageContext &msg) {
-    TBusMessageContext messageContext(msg);
-    OnMessage(messageContext);
-}
-
-void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
+    TBusMessageContext messageContext(msg); 
+    OnMessage(messageContext); 
+} 
+ 
+void TMessageBusServer::OnMessage(TBusMessageContext &msg) { 
     const ui32 msgType = msg.GetMessage()->GetHeader()->Type;
 
     switch (msgType) {
     case MTYPE_CLIENT_REQUEST:
         return ClientProxyRequest<TEvBusProxy::TEvRequest>(msg);
     case MTYPE_CLIENT_SCHEME_INITROOT:
-        return ClientProxyRequest<TEvBusProxy::TEvInitRoot>(msg);
+        return ClientProxyRequest<TEvBusProxy::TEvInitRoot>(msg); 
     case MTYPE_CLIENT_BSADM:
         return ClientActorRequest(CreateMessageBusBSAdm, msg);
     case MTYPE_CLIENT_SCHEME_NAVIGATE:
@@ -491,19 +491,19 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     case MTYPE_CLIENT_TYPES_REQUEST:
         return GetTypes(msg);
     case MTYPE_CLIENT_HIVE_CREATE_TABLET:
-    case MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET:
+    case MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET: 
         return ClientActorRequest(CreateMessageBusHiveCreateTablet, msg);
     case MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS:
-    case MTYPE_CLIENT_OLD_LOCAL_ENUMERATE_TABLETS:
+    case MTYPE_CLIENT_OLD_LOCAL_ENUMERATE_TABLETS: 
         return ClientActorRequest(CreateMessageBusLocalEnumerateTablets, msg);
     case MTYPE_CLIENT_KEYVALUE:
-    case MTYPE_CLIENT_OLD_KEYVALUE:
+    case MTYPE_CLIENT_OLD_KEYVALUE: 
         return ClientActorRequest(CreateMessageBusKeyValue, msg);
     case MTYPE_CLIENT_PERSQUEUE:
         return ClientProxyRequest<TEvBusProxy::TEvPersQueue>(msg);
     case MTYPE_CLIENT_CHOOSE_PROXY:
         return ClientActorRequest(CreateMessageBusChooseProxy, msg);
-    case MTYPE_CLIENT_TABLET_STATE_REQUEST:
+    case MTYPE_CLIENT_TABLET_STATE_REQUEST: 
         return ClientActorRequest(CreateMessageBusTabletStateRequest, msg);
     case MTYPE_CLIENT_TABLET_COUNTERS_REQUEST:
         return ClientActorRequest(CreateMessageBusTabletCountersRequest, msg);
@@ -511,39 +511,39 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusLocalMKQL, msg);
     case MTYPE_CLIENT_LOCAL_SCHEME_TX:
         return ClientActorRequest(CreateMessageBusLocalSchemeTx, msg);
-    case MTYPE_CLIENT_TABLET_KILL_REQUEST:
+    case MTYPE_CLIENT_TABLET_KILL_REQUEST: 
         return ClientActorRequest(CreateMessageBusTabletKillRequest, msg);
-    case MTYPE_CLIENT_FLAT_TX_REQUEST:
+    case MTYPE_CLIENT_FLAT_TX_REQUEST: 
         return ClientProxyRequest<TEvBusProxy::TEvFlatTxRequest>(msg);
-    case MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST:
+    case MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST: 
         return ClientActorRequest(CreateMessageBusSchemeOperationStatus, msg);
-    case MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST:
-    case MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST:
+    case MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST: 
+    case MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST: 
         return ClientProxyRequest<TEvBusProxy::TEvFlatDescribeRequest>(msg);
     case MTYPE_CLIENT_LOAD_REQUEST:
         return ClientActorRequest(CreateMessageBusBlobStorageLoadRequest, msg);
     case MTYPE_CLIENT_GET_REQUEST:
         return ClientActorRequest(CreateMessageBusBlobStorageGetRequest, msg);
-    case MTYPE_CLIENT_DB_SCHEMA:
+    case MTYPE_CLIENT_DB_SCHEMA: 
         return ClientProxyRequest<TEvBusProxy::TEvDbSchema>(msg);
-    case MTYPE_CLIENT_DB_OPERATION:
+    case MTYPE_CLIENT_DB_OPERATION: 
         return ClientProxyRequest<TEvBusProxy::TEvDbOperation>(msg);
-    case MTYPE_CLIENT_DB_BATCH:
+    case MTYPE_CLIENT_DB_BATCH: 
         return ClientProxyRequest<TEvBusProxy::TEvDbBatch>(msg);
     case MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST:
         return ClientActorRequest(CreateMessageBusBlobStorageConfig, msg);
-    case MTYPE_CLIENT_DRAIN_NODE:
-        return ClientActorRequest(CreateMessageBusDrainNode, msg);
-    case MTYPE_CLIENT_FILL_NODE:
-        return ClientActorRequest(CreateMessageBusFillNode, msg);
-    case MTYPE_CLIENT_RESOLVE_NODE:
-        return ClientActorRequest(CreateMessageBusResolveNode, msg);
+    case MTYPE_CLIENT_DRAIN_NODE: 
+        return ClientActorRequest(CreateMessageBusDrainNode, msg); 
+    case MTYPE_CLIENT_FILL_NODE: 
+        return ClientActorRequest(CreateMessageBusFillNode, msg); 
+    case MTYPE_CLIENT_RESOLVE_NODE: 
+        return ClientActorRequest(CreateMessageBusResolveNode, msg); 
     case MTYPE_CLIENT_CMS_REQUEST:
         return ClientActorRequest(CreateMessageBusCmsRequest, msg);
     case MTYPE_CLIENT_SQS_REQUEST:
         return ClientActorRequest(CreateMessageBusSqsRequest, msg);
-    case MTYPE_CLIENT_WHOAMI:
-        return ClientActorRequest(CreateMessageBusWhoAmI, msg);
+    case MTYPE_CLIENT_WHOAMI: 
+        return ClientActorRequest(CreateMessageBusWhoAmI, msg); 
     case MTYPE_CLIENT_S3_LISTING_REQUEST:
         return ClientActorRequest(CreateMessageBusS3ListingRequest, msg);
     case MTYPE_CLIENT_INTERCONNECT_DEBUG:
@@ -574,17 +574,17 @@ void TMessageBusServer::ClientProxyRequest(TBusMessageContext &msg) {
     if (Proxy)
         ActorSystem->Send(Proxy, new TEv(msg));
     else
-        msg.SendReplyMove(new TBusResponseStatus(MSTATUS_ERROR, "MessageBus proxy is not available"));
-}
-
+        msg.SendReplyMove(new TBusResponseStatus(MSTATUS_ERROR, "MessageBus proxy is not available")); 
+} 
+ 
 void TMessageBusServer::ClientActorRequest(ActorCreationFunc func, TBusMessageContext &msg) {
     if (IActor *x = func(msg))
         ActorSystem->Register(x, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
     else
         msg.SendReplyMove(new TBusResponseStatus(MSTATUS_ERROR));
-}
-
-void TMessageBusServer::GetTypes(TBusMessageContext &msg) {
+} 
+ 
+void TMessageBusServer::GetTypes(TBusMessageContext &msg) { 
     if (IActor *x = CreateMessageBusGetTypes(msg)) {
         ActorSystem->Register(x, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
     } else {
@@ -594,7 +594,7 @@ void TMessageBusServer::GetTypes(TBusMessageContext &msg) {
     }
 }
 
-void TMessageBusServer::UnknownMessage(TBusMessageContext &msg) {
+void TMessageBusServer::UnknownMessage(TBusMessageContext &msg) { 
     msg.SendReplyMove(new TBusResponseStatus(MSTATUS_UNKNOWN, "undocumented error 9"));
 }
 
@@ -602,10 +602,10 @@ IActor* TMessageBusServer::CreateProxy() {
     return CreateMessageBusServerProxy(this, PQReadSessionsInfoWorkerFactory);
 }
 
-IActor* TMessageBusServer::CreateMessageBusTraceService() {
-    return nullptr;
-}
-
+IActor* TMessageBusServer::CreateMessageBusTraceService() { 
+    return nullptr; 
+} 
+ 
 IMessageBusServer* CreateMsgBusServer(
     NBus::TBusMessageQueue *queue,
     const NBus::TBusServerSessionConfig &config,

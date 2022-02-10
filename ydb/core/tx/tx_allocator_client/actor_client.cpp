@@ -19,12 +19,12 @@ class TTxAllocatorClientActor: public TActorBootstrapped<TTxAllocatorClientActor
 
     static NTabletPipe::TClientConfig InitPipeClientConfig() {
         NTabletPipe::TClientConfig config;
-        config.RetryPolicy = {
-            .RetryLimitCount = 3,
-            .MinRetryTime = TDuration::MilliSeconds(100),
-            .MaxRetryTime = TDuration::Seconds(1),
-            .BackoffMultiplier = 5
-        };
+        config.RetryPolicy = { 
+            .RetryLimitCount = 3, 
+            .MinRetryTime = TDuration::MilliSeconds(100), 
+            .MaxRetryTime = TDuration::Seconds(1), 
+            .BackoffMultiplier = 5 
+        }; 
         return config;
     }
 

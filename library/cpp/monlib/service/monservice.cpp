@@ -41,14 +41,14 @@ TMonService2::TMonService2(const THttpServerOptions& options, TSimpleSharedPtr<I
 
 TMonService2::TMonService2(ui16 port, ui32 threads, const TString& title, THolder<IAuthProvider> auth)
     : TMonService2(port, TString(), threads, title, std::move(auth))
-{
-}
-
+{ 
+} 
+ 
 TMonService2::TMonService2(ui16 port, const TString& title, THolder<IAuthProvider> auth)
     : TMonService2(port, TString(), 0, title, std::move(auth))
 {
 }
-
+ 
 void TMonService2::OutputIndex(IOutputStream& out) {
     IndexMonPage->OutputIndex(out, true);
 }
@@ -123,7 +123,7 @@ IMonPage* TMonService2::FindPage(const TString& relativePath) {
 TIndexMonPage* TMonService2::FindIndexPage(const TString& relativePath) {
     return IndexMonPage->FindIndexPage(relativePath);
 }
-
-void TMonService2::SortPages() {
-    IndexMonPage->SortPages();
-}
+ 
+void TMonService2::SortPages() { 
+    IndexMonPage->SortPages(); 
+} 

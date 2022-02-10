@@ -538,9 +538,9 @@ public:
             hFunc(TEvStateStorage::TEvLock, HandleInit);
             default:
                 BLOG_W("ProxyRequest::StateInit unexpected event type# "
-                    << ev->GetTypeRewrite()
-                    << " event: "
-                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+                    << ev->GetTypeRewrite() 
+                    << " event: " 
+                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?")); 
                 break;
         }
     }
@@ -556,9 +556,9 @@ public:
             cFunc(TEvents::TSystem::Wakeup, HandleLookupTimeout);
             default:
                 BLOG_W("ProxyRequest::StateLookup unexpected event type# "
-                    << ev->GetTypeRewrite()
-                    << " event: "
-                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+                    << ev->GetTypeRewrite() 
+                    << " event: " 
+                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?")); 
                 break;
         }
     }
@@ -573,9 +573,9 @@ public:
             cFunc(TEvents::TSystem::Wakeup, HandleUpdateTimeout);
             default:
                 BLOG_W("ProxyRequest::StateUpdate unexpected event type# "
-                    << ev->GetTypeRewrite()
-                    << " event: "
-                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+                    << ev->GetTypeRewrite() 
+                    << " event: " 
+                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?")); 
                 break;
         }
     }
@@ -591,148 +591,148 @@ public:
             default:
                 BLOG_W("ProxyRequest::StateUpdateSig unexpected event type# "
                     << ev->GetTypeRewrite()
-                    << " event: "
-                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+                    << " event: " 
+                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?")); 
                 break;
         }
     }
 };
 
-class TStateStorageDumpRequest : public TActorBootstrapped<TStateStorageDumpRequest> {
-protected:
+class TStateStorageDumpRequest : public TActorBootstrapped<TStateStorageDumpRequest> { 
+protected: 
     const TActorId Sender;
-    TIntrusivePtr<TStateStorageInfo> Info;
+    TIntrusivePtr<TStateStorageInfo> Info; 
     TList<TActorId> AllReplicas;
-    TAutoPtr<TEvStateStorage::TEvResponseReplicasDumps> Response;
-    ui64 UndeliveredCount;
-
-public:
+    TAutoPtr<TEvStateStorage::TEvResponseReplicasDumps> Response; 
+    ui64 UndeliveredCount; 
+ 
+public: 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
     TStateStorageDumpRequest(const TActorId &sender, const TIntrusivePtr<TStateStorageInfo> &info)
-        : Sender(sender)
-        , Info(info)
-        , UndeliveredCount(0)
+        : Sender(sender) 
+        , Info(info) 
+        , UndeliveredCount(0) 
     {}
-
+ 
     void SendResponse() {
         Send(Sender, Response.Release());
         PassAway();
-    }
-
+    } 
+ 
     void Bootstrap() {
-        Response = new TEvStateStorage::TEvResponseReplicasDumps();
+        Response = new TEvStateStorage::TEvResponseReplicasDumps(); 
         AllReplicas = Info->SelectAllReplicas();
-        if (!AllReplicas.empty()) {
-            Response->ReplicasDumps.reserve(AllReplicas.size());
+        if (!AllReplicas.empty()) { 
+            Response->ReplicasDumps.reserve(AllReplicas.size()); 
             for (const TActorId &replica : AllReplicas) {
                 Send(replica, new TEvStateStorage::TEvReplicaDumpRequest(), IEventHandle::FlagTrackDelivery);
-            }
+            } 
             Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
-            Become(&TThis::StateRequestedDumps);
-        } else {
+            Become(&TThis::StateRequestedDumps); 
+        } else { 
             SendResponse();
-        }
-    }
-
+        } 
+    } 
+ 
     STATEFN(StateRequestedDumps) {
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             hFunc(TEvStateStorage::TEvReplicaDump, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);
             cFunc(TEvents::TSystem::Wakeup, Timeout);
-        }
-    }
-
+        } 
+    } 
+ 
     void OnResponseReceived() {
-        if (Response->ReplicasDumps.size() + UndeliveredCount >= AllReplicas.size())
+        if (Response->ReplicasDumps.size() + UndeliveredCount >= AllReplicas.size()) 
             SendResponse();
-    }
-
+    } 
+ 
     void Undelivered(TEvents::TEvUndelivered::TPtr &) {
-        ++UndeliveredCount;
+        ++UndeliveredCount; 
         OnResponseReceived();
-    }
-
+    } 
+ 
     void Handle(TEvStateStorage::TEvReplicaDump::TPtr &ev) {
-        Response->ReplicasDumps.emplace_back(std::make_pair(ev->Sender, ev->Release()));
+        Response->ReplicasDumps.emplace_back(std::make_pair(ev->Sender, ev->Release())); 
         OnResponseReceived();
-    }
-
+    } 
+ 
     void Timeout() {
         SendResponse();
-    }
-};
-
-class TStateStorageDeleteRequest : public TActorBootstrapped<TStateStorageDeleteRequest> {
-protected:
+    } 
+}; 
+ 
+class TStateStorageDeleteRequest : public TActorBootstrapped<TStateStorageDeleteRequest> { 
+protected: 
     const TActorId Sender;
-    TIntrusivePtr<TStateStorageInfo> Info;
+    TIntrusivePtr<TStateStorageInfo> Info; 
     TList<TActorId> AllReplicas;
-    ui32 Count;
-    ui32 UndeliveredCount;
-    ui64 TabletID;
-
-public:
+    ui32 Count; 
+    ui32 UndeliveredCount; 
+    ui64 TabletID; 
+ 
+public: 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
-    }
-
+    } 
+ 
     TStateStorageDeleteRequest(const TActorId &sender, const TIntrusivePtr<TStateStorageInfo> &info, ui64 tabletId)
-        : Sender(sender)
-        , Info(info)
-        , Count(0)
-        , UndeliveredCount(0)
-        , TabletID(tabletId)
-    {}
-
+        : Sender(sender) 
+        , Info(info) 
+        , Count(0) 
+        , UndeliveredCount(0) 
+        , TabletID(tabletId) 
+    {} 
+ 
     void SendResponse() {
         Send(Sender, new TEvStateStorage::TEvDeleteResult(TabletID, Count > AllReplicas.size() / 2 ? NKikimrProto::OK : NKikimrProto::ERROR));
         PassAway();
-    }
-
+    } 
+ 
     void Bootstrap() {
         AllReplicas = Info->SelectAllReplicas();
-        if (!AllReplicas.empty()) {
+        if (!AllReplicas.empty()) { 
             for (const TActorId &replica : AllReplicas) {
                 Send(replica, new TEvStateStorage::TEvReplicaDelete(TabletID), IEventHandle::FlagTrackDelivery);
-            }
+            } 
             Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
-            Become(&TThis::StateRequestedDelete);
-        } else {
+            Become(&TThis::StateRequestedDelete); 
+        } else { 
             SendResponse();
-        }
-    }
-
+        } 
+    } 
+ 
     STATEFN(StateRequestedDelete) {
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             hFunc(TEvStateStorage::TEvReplicaInfo, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);
             cFunc(TEvents::TSystem::Wakeup, Timeout);
-        }
-    }
-
+        } 
+    } 
+ 
     void OnResponseReceived() {
-        if (Count + UndeliveredCount >= AllReplicas.size())
+        if (Count + UndeliveredCount >= AllReplicas.size()) 
             SendResponse();
-    }
-
+    } 
+ 
     void Undelivered(TEvents::TEvUndelivered::TPtr &) {
-        ++UndeliveredCount;
+        ++UndeliveredCount; 
         OnResponseReceived();
-    }
-
+    } 
+ 
     void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &) {
-        ++Count;
+        ++Count; 
         OnResponseReceived();
-    }
-
+    } 
+ 
     void Timeout() {
         SendResponse();
-    }
-};
-
+    } 
+}; 
+ 
 class TStateStorageProxy : public TActor<TStateStorageProxy> {
     TIntrusivePtr<TStateStorageInfo> Info;
     TIntrusivePtr<TStateStorageInfo> BoardInfo;
@@ -962,7 +962,7 @@ public:
 
     STATEFN(StateInit) {
         BLOG_TRACE("Proxy::StateInit ev type# " << ev->GetTypeRewrite() << " event: "
-            << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+            << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?")); 
 
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvRequestReplicasDumps, Handle);
@@ -1010,8 +1010,8 @@ public:
             default:
                 BLOG_W("ProxyStub::StateFunc unexpected event type# "
                     << ev->GetTypeRewrite()
-                    << " event: "
-                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+                    << " event: " 
+                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?")); 
                 break;
         }
     }

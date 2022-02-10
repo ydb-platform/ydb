@@ -394,7 +394,7 @@ void CheckPoolScope(TTenantTestRuntime &runtime,
     read.AddName(name);
 
     NTabletPipe::TClientConfig pipeConfig;
-    pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+    pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries(); 
     runtime.SendToPipe(MakeBSControllerID(0), runtime.Sender, request.Release(), 0, pipeConfig);
 
     TAutoPtr<IEventHandle> handle;

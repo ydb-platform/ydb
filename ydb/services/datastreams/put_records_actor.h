@@ -55,13 +55,13 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx) {
             NTabletPipe::TClientConfig clientConfig;
-            clientConfig.RetryPolicy = {
-                .RetryLimitCount = 6,
-                .MinRetryTime = TDuration::MilliSeconds(10),
-                .MaxRetryTime = TDuration::MilliSeconds(100),
-                .BackoffMultiplier = 2,
-                .DoFirstRetryInstantly = true
-            };
+            clientConfig.RetryPolicy = { 
+                .RetryLimitCount = 6, 
+                .MinRetryTime = TDuration::MilliSeconds(10), 
+                .MaxRetryTime = TDuration::MilliSeconds(100), 
+                .BackoffMultiplier = 2, 
+                .DoFirstRetryInstantly = true 
+            }; 
             PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletId, clientConfig));
 
             SendWriteRequest(ctx);

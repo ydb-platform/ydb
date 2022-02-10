@@ -12,9 +12,9 @@ using namespace NKikimr;
 using namespace NTxProxyUT;
 using namespace NHelpers;
 
-class TTestEnvWithEncryptedPoolsSupport: public TBaseTestEnv {
+class TTestEnvWithEncryptedPoolsSupport: public TBaseTestEnv { 
 public:
-    TTestEnvWithEncryptedPoolsSupport(ui32 staticNodes = 1, ui32 dynamicNodes = 2)
+    TTestEnvWithEncryptedPoolsSupport(ui32 staticNodes = 1, ui32 dynamicNodes = 2) 
     {
         Settings = new Tests::TServerSettings(PortManager.GetPort(3534));
         GetSettings().SetEnableMockOnSingleNode(false);
@@ -22,7 +22,7 @@ public:
         GetSettings().SetNodeCount(staticNodes);
         GetSettings().SetDynamicNodeCount(dynamicNodes);
         ui32 encryptionMode = 1;
-        GetSettings().AddStoragePool("encrypted", "", encryptionMode);
+        GetSettings().AddStoragePool("encrypted", "", encryptionMode); 
 
         for (ui32 nodeIdx = 0; nodeIdx < staticNodes + dynamicNodes; ++nodeIdx) {
             TString key = TStringBuilder() << "node_key_" << nodeIdx;
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
     Y_UNIT_TEST(CreateTableOutsideDatabaseFailToStartTabletsButDropIsOk) {
         return;
 
-        TTestEnvWithEncryptedPoolsSupport env(1, 1);
+        TTestEnvWithEncryptedPoolsSupport env(1, 1); 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,

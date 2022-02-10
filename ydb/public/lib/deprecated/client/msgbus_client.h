@@ -25,19 +25,19 @@ private:
 
 public:
     typedef std::function<void (NBus::EMessageStatus status, TAutoPtr<NBus::TBusMessage> reply)> TOnCall;
-    typedef std::function<void (NBus::EMessageStatus status,
-                                TAutoPtr<NBus::TBusMessage> message,
-                                TAutoPtr<NBus::TBusMessage> reply)> TOnCallWithRequest;
+    typedef std::function<void (NBus::EMessageStatus status, 
+                                TAutoPtr<NBus::TBusMessage> message, 
+                                TAutoPtr<NBus::TBusMessage> reply)> TOnCallWithRequest; 
 
     TMsgBusClient(const TMsgBusClientConfig &config);
     ~TMsgBusClient();
 
     NBus::EMessageStatus SyncCall(TAutoPtr<NBus::TBusMessage> msg, TAutoPtr<NBus::TBusMessage> &reply);
     NBus::EMessageStatus AsyncCall(TAutoPtr<NBus::TBusMessage> msg, TOnCall callback);
-    NBus::EMessageStatus AsyncCall(TAutoPtr<NBus::TBusMessage> msg, TOnCallWithRequest callback);
+    NBus::EMessageStatus AsyncCall(TAutoPtr<NBus::TBusMessage> msg, TOnCallWithRequest callback); 
     void Init();
     void Shutdown();
-    const TMsgBusClientConfig& GetConfig();
+    const TMsgBusClientConfig& GetConfig(); 
 };
 
 EDataReqStatusExcerpt ExtractDataRequestStatus(const NKikimrClient::TResponse *response);

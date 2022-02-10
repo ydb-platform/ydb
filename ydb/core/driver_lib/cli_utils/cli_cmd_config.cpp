@@ -18,27 +18,27 @@ namespace NDriverClient {
         }
 
         void TCliCmdConfig::ConfigureMsgBusLastGetopt(const NLastGetopt::TOptsParseResult& res, int argc, char** argv) {
-            if (Address.empty()) {
+            if (Address.empty()) { 
                 TString kikimrServer = GetEnv("KIKIMR_SERVER");
-                if (kikimrServer != nullptr) {
-                    Address = kikimrServer;
-                }
-            }
-            TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(Address);
-            switch (endpoint.ServerType) {
-            case TCommandConfig::EServerType::GRpc:
+                if (kikimrServer != nullptr) { 
+                    Address = kikimrServer; 
+                } 
+            } 
+            TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(Address); 
+            switch (endpoint.ServerType) { 
+            case TCommandConfig::EServerType::GRpc: 
                 ClientConfig = NGrpc::TGRpcClientConfig(endpoint.Address);
                 if (endpoint.EnableSsl.Defined()) {
                     auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&ClientConfig.GetRef());
                     p->EnableSsl = endpoint.EnableSsl.GetRef();
                 }
-                break;
-            case TCommandConfig::EServerType::MessageBus:
-                if (!endpoint.Address.empty()) {
-                    NMsgBusProxy::TMsgBusClientConfig::CrackAddress(
-                                endpoint.Address,
-                                MsgBusClientConfig.Ip,
-                                MsgBusClientConfig.Port);
+                break; 
+            case TCommandConfig::EServerType::MessageBus: 
+                if (!endpoint.Address.empty()) { 
+                    NMsgBusProxy::TMsgBusClientConfig::CrackAddress( 
+                                endpoint.Address, 
+                                MsgBusClientConfig.Ip, 
+                                MsgBusClientConfig.Port); 
                 }
                 SetMsgBusDefaults(MsgBusClientConfig.BusSessionConfig, MsgBusClientConfig.BusQueueConfig);
                 if ((res.GetFreeArgCount() > 0) && (res.GetFreeArgs().at(0) == "mbus")) {
@@ -53,7 +53,7 @@ namespace NDriverClient {
                 }
 
                 ClientConfig = MsgBusClientConfig;
-                break;
+                break; 
             }
         }
 

@@ -12,7 +12,7 @@ SRCS(
     flat_comp_create.cpp
     flat_comp_gen.cpp
     flat_comp_shard.cpp
-    flat_cxx_database.h
+    flat_cxx_database.h 
     flat_database.cpp
     flat_database.h
     flat_dbase_scheme.cpp
@@ -31,9 +31,9 @@ SRCS(
     flat_executor_compaction_logic.h
     flat_executor_counters.cpp
     flat_executor_counters.h
-    flat_executor_db_mon.cpp
-    flat_executor_gclogic.cpp
-    flat_executor_gclogic.h
+    flat_executor_db_mon.cpp 
+    flat_executor_gclogic.cpp 
+    flat_executor_gclogic.h 
     flat_bio_actor.cpp
     flat_executor_snapshot.cpp
     flat_executor_txloglogic.cpp

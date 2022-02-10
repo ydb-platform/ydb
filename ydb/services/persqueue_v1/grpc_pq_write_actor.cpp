@@ -558,13 +558,13 @@ void TWriteSessionActor::RequestNextPartition(const TActorContext& ctx) {
     Y_VERIFY(!PipeToBalancer);
     Y_VERIFY(BalancerTabletId);
     NTabletPipe::TClientConfig clientConfig;
-    clientConfig.RetryPolicy = {
-        .RetryLimitCount = 6,
-        .MinRetryTime = TDuration::MilliSeconds(10),
-        .MaxRetryTime = TDuration::MilliSeconds(100),
-        .BackoffMultiplier = 2,
-        .DoFirstRetryInstantly = true
-    };
+    clientConfig.RetryPolicy = { 
+        .RetryLimitCount = 6, 
+        .MinRetryTime = TDuration::MilliSeconds(10), 
+        .MaxRetryTime = TDuration::MilliSeconds(100), 
+        .BackoffMultiplier = 2, 
+        .DoFirstRetryInstantly = true 
+    }; 
     PipeToBalancer = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, BalancerTabletId, clientConfig));
 
     NTabletPipe::SendData(ctx, PipeToBalancer, x.Release());

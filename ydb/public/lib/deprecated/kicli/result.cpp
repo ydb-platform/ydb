@@ -1,91 +1,91 @@
-#include "kicli.h"
-
+#include "kicli.h" 
+ 
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 #include <util/generic/ymath.h>
 
-namespace NKikimr {
-namespace NClient {
-
-TResult::TResult(NBus::EMessageStatus transportStatus)
-    : TransportStatus(transportStatus)
-{}
-
+namespace NKikimr { 
+namespace NClient { 
+ 
+TResult::TResult(NBus::EMessageStatus transportStatus) 
+    : TransportStatus(transportStatus) 
+{} 
+ 
 TResult::TResult(NBus::EMessageStatus transportStatus, const TString& message)
     : TransportStatus(transportStatus)
     , TransportErrorMessage(message)
 {}
 
-TResult::TResult(TAutoPtr<NBus::TBusMessage> reply)
-    : TransportStatus(NBus::MESSAGE_OK)
+TResult::TResult(TAutoPtr<NBus::TBusMessage> reply) 
+    : TransportStatus(NBus::MESSAGE_OK) 
     , Reply(reply.Release())
-{}
-
-ui16 TResult::GetType() const {
-    return Reply == nullptr ? 0 : Reply.Get()->GetHeader()->Type;
-}
-
+{} 
+ 
+ui16 TResult::GetType() const { 
+    return Reply == nullptr ? 0 : Reply.Get()->GetHeader()->Type; 
+} 
+ 
 template <> const NKikimrClient::TResponse& TResult::GetResult<NKikimrClient::TResponse>() const {
     Y_VERIFY(GetType() == NMsgBusProxy::MTYPE_CLIENT_RESPONSE, "Unexpected response type: %d", GetType());
-    return static_cast<NMsgBusProxy::TBusResponse*>(Reply.Get())->Record;
-}
-
+    return static_cast<NMsgBusProxy::TBusResponse*>(Reply.Get())->Record; 
+} 
+ 
 template <> const NKikimrClient::TBsTestLoadResponse& TResult::GetResult<NKikimrClient::TBsTestLoadResponse>() const {
     Y_VERIFY(GetType() == NMsgBusProxy::MTYPE_CLIENT_LOAD_RESPONSE, "Unexpected response type: %d", GetType());
     return static_cast<NMsgBusProxy::TBusBsTestLoadResponse*>(Reply.Get())->Record;
 }
 
-NMsgBusProxy::EResponseStatus TResult::GetStatus() const {
-    if (TransportStatus != NBus::MESSAGE_OK) {
-        switch (TransportStatus) {
-        case NBus::MESSAGE_CONNECT_FAILED:
-        case NBus::MESSAGE_SERVICE_UNKNOWN:
-        case NBus::MESSAGE_DESERIALIZE_ERROR:
-        case NBus::MESSAGE_HEADER_CORRUPTED:
-        case NBus::MESSAGE_DECOMPRESS_ERROR:
-        case NBus::MESSAGE_MESSAGE_TOO_LARGE:
-        case NBus::MESSAGE_REPLY_FAILED:
-        case NBus::MESSAGE_DELIVERY_FAILED:
-        case NBus::MESSAGE_INVALID_VERSION:
-        case NBus::MESSAGE_SERVICE_TOOMANY:
-            return NMsgBusProxy::MSTATUS_ERROR;
-        case NBus::MESSAGE_TIMEOUT:
-            return NMsgBusProxy::MSTATUS_TIMEOUT;
-        case NBus::MESSAGE_UNKNOWN:
-            return NMsgBusProxy::MSTATUS_UNKNOWN;
-        case NBus::MESSAGE_BUSY:
+NMsgBusProxy::EResponseStatus TResult::GetStatus() const { 
+    if (TransportStatus != NBus::MESSAGE_OK) { 
+        switch (TransportStatus) { 
+        case NBus::MESSAGE_CONNECT_FAILED: 
+        case NBus::MESSAGE_SERVICE_UNKNOWN: 
+        case NBus::MESSAGE_DESERIALIZE_ERROR: 
+        case NBus::MESSAGE_HEADER_CORRUPTED: 
+        case NBus::MESSAGE_DECOMPRESS_ERROR: 
+        case NBus::MESSAGE_MESSAGE_TOO_LARGE: 
+        case NBus::MESSAGE_REPLY_FAILED: 
+        case NBus::MESSAGE_DELIVERY_FAILED: 
+        case NBus::MESSAGE_INVALID_VERSION: 
+        case NBus::MESSAGE_SERVICE_TOOMANY: 
+            return NMsgBusProxy::MSTATUS_ERROR; 
+        case NBus::MESSAGE_TIMEOUT: 
+            return NMsgBusProxy::MSTATUS_TIMEOUT; 
+        case NBus::MESSAGE_UNKNOWN: 
+            return NMsgBusProxy::MSTATUS_UNKNOWN; 
+        case NBus::MESSAGE_BUSY: 
             return NMsgBusProxy::MSTATUS_REJECTED;
-        case NBus::MESSAGE_SHUTDOWN:
-            return NMsgBusProxy::MSTATUS_NOTREADY;
-        case NBus::MESSAGE_OK:
-            return NMsgBusProxy::MSTATUS_OK;
-        default:
-            return NMsgBusProxy::MSTATUS_INTERNALERROR;
-        };
-    } else
+        case NBus::MESSAGE_SHUTDOWN: 
+            return NMsgBusProxy::MSTATUS_NOTREADY; 
+        case NBus::MESSAGE_OK: 
+            return NMsgBusProxy::MSTATUS_OK; 
+        default: 
+            return NMsgBusProxy::MSTATUS_INTERNALERROR; 
+        }; 
+    } else 
     if (GetType() == NMsgBusProxy::MTYPE_CLIENT_RESPONSE) {
         return static_cast<NMsgBusProxy::EResponseStatus>(GetResult<NKikimrClient::TResponse>().GetStatus());
     } else
-    return NMsgBusProxy::MSTATUS_INTERNALERROR;
-}
-
-TError TResult::GetError() const {
-    return TError(*this);
-}
-
-TQueryResult::TQueryResult(const TResult& result)
-    : TResult(result)
-{}
-
-TValue TQueryResult::GetValue() const {
+    return NMsgBusProxy::MSTATUS_INTERNALERROR; 
+} 
+ 
+TError TResult::GetError() const { 
+    return TError(*this); 
+} 
+ 
+TQueryResult::TQueryResult(const TResult& result) 
+    : TResult(result) 
+{} 
+ 
+TValue TQueryResult::GetValue() const { 
     const NKikimrClient::TResponse& response = GetResult<NKikimrClient::TResponse>();
     Y_VERIFY(response.HasExecutionEngineEvaluatedResponse());
-    const auto& result = response.GetExecutionEngineEvaluatedResponse();
-    // TODO: type caching
-    return TValue::Create(result.GetValue(), result.GetType());
-}
-
+    const auto& result = response.GetExecutionEngineEvaluatedResponse(); 
+    // TODO: type caching 
+    return TValue::Create(result.GetValue(), result.GetType()); 
+} 
+ 
 TReadTableResult::TReadTableResult(const TResult& result)
     : TResult(result)
 {}
@@ -281,12 +281,12 @@ template <> TString TReadTableResult::GetValueText<TFormatCSV>(const TFormatCSV 
 /// @warning It's mistake to store Query as a row pointer here. TQuery could be a tmp object.
 ///          TPrepareResult result = kikimr.Query(some).SyncPrepare();
 ///          TPreparedQuery query = result.GetQuery(); //< error here. Query is obsolete.
-TPrepareResult::TPrepareResult(const TResult& result, const TQuery& query)
-    : TResult(result)
-    , Query(&query)
-{}
-
-TPreparedQuery TPrepareResult::GetQuery() const {
+TPrepareResult::TPrepareResult(const TResult& result, const TQuery& query) 
+    : TResult(result) 
+    , Query(&query) 
+{} 
+ 
+TPreparedQuery TPrepareResult::GetQuery() const { 
     const NKikimrClient::TResponse& response = GetResult<NKikimrClient::TResponse>();
     Y_VERIFY(response.HasMiniKQLCompileResults());
     const auto& compileResult = response.GetMiniKQLCompileResults();
@@ -297,7 +297,7 @@ TPreparedQuery TPrepareResult::GetQuery() const {
         (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).message().data() : "")
     );
     return TPreparedQuery(*Query, compileResult.GetCompiledProgram());
-}
-
+} 
+ 
 }
 }

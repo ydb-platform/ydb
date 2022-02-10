@@ -36,10 +36,10 @@ struct THttpRequest : NMonitoring::IHttpRequest {
     const THttpHeaders& GetHeaders() const override {
         return HttpHeaders;
     }
-
-    TString GetRemoteAddr() const override {
-        return TString();
-    }
+ 
+    TString GetRemoteAddr() const override { 
+        return TString(); 
+    } 
 };
 
 } // NKikimr

@@ -52,7 +52,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         if (!itemType) {
             return nullptr;
         }
-        return pgmBuilder.NewListType(itemType);
+        return pgmBuilder.NewListType(itemType); 
     }
 
     case ETypeAnnotationKind::Optional: {

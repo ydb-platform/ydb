@@ -1052,7 +1052,7 @@ public:
                 [path] (TPromise<TListPathResult> promise, TDescribeSchemeResponse&& response) {
                     try {
                         promise.SetValue(GetListPathResult(
-                            response.GetRecord().GetPathDescription(), path));
+                            response.GetRecord().GetPathDescription(), path)); 
                     }
                     catch (yexception& e) {
                         promise.SetValue(ResultFromException<TListPathResult>(e));

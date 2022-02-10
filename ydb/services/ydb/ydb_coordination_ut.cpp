@@ -34,9 +34,9 @@ struct TClientContext {
     NYdb::NCoordination::TClient Client;
     NYdb::NScheme::TSchemeClient SchemeClient;
 
-    template <typename Config>
+    template <typename Config> 
     TClientContext(
-            TBasicKikimrWithGrpcAndRootSchema<Config>& server,
+            TBasicKikimrWithGrpcAndRootSchema<Config>& server, 
             const TString& token = { },
             bool secure = false)
         : Location(TStringBuilder() << "localhost:" << server.GetPort())
@@ -623,15 +623,15 @@ Y_UNIT_TEST_SUITE(TGRpcNewCoordinationClient) {
 }
 
 Y_UNIT_TEST_SUITE(TGRpcNewCoordinationClientAuth) {
-    struct WithSslAndAuth : TKikimrTestSettings {
-        static constexpr bool SSL = true;
-        static constexpr bool AUTH = true;
-    };
-
-    using TKikimrWithGrpcAndRootSchema = NYdb::TBasicKikimrWithGrpcAndRootSchema<WithSslAndAuth>;
-
+    struct WithSslAndAuth : TKikimrTestSettings { 
+        static constexpr bool SSL = true; 
+        static constexpr bool AUTH = true; 
+    }; 
+ 
+    using TKikimrWithGrpcAndRootSchema = NYdb::TBasicKikimrWithGrpcAndRootSchema<WithSslAndAuth>; 
+ 
     Y_UNIT_TEST(OwnersAndPermissions) {
-        TKikimrWithGrpcAndRootSchema server;
+        TKikimrWithGrpcAndRootSchema server; 
 
         // Use root and allow users write permissions
         {

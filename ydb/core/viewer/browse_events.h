@@ -12,15 +12,15 @@ namespace NViewer {
 namespace NViewerEvents {
     enum EEv {
         EvBrowseResponse = EventSpaceBegin(TKikimrEvents::ES_VIEWER),
-        EvBrowseRequestSent,
-        EvBrowseRequestCompleted,
+        EvBrowseRequestSent, 
+        EvBrowseRequestCompleted, 
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_VIEWER), "expected EvEnd < EventSpaceEnd");
 
-    using TTabletId = ui64;
-
+    using TTabletId = ui64; 
+ 
     struct TEvBrowseResponse : TEventLocal<TEvBrowseResponse, EvBrowseResponse> {
         TEvBrowseResponse(
                 NKikimrViewer::TBrowseInfo&& browseInfo,
@@ -38,42 +38,42 @@ namespace NViewerEvents {
         NKikimrViewer::TMetaInfo MetaInfo;
         TString Error;
     };
-
-    struct TEvBrowseRequestSent : TEventLocal<TEvBrowseRequestSent, EvBrowseRequestSent> {
+ 
+    struct TEvBrowseRequestSent : TEventLocal<TEvBrowseRequestSent, EvBrowseRequestSent> { 
         TActorId Actor;
-        TTabletId Tablet;
-        ui32 Event;
-
+        TTabletId Tablet; 
+        ui32 Event; 
+ 
         TEvBrowseRequestSent(const TActorId& actor, TTabletId tablet, ui32 event)
-            : Actor(actor)
-            , Tablet(tablet)
-            , Event(event)
-        {}
-
+            : Actor(actor) 
+            , Tablet(tablet) 
+            , Event(event) 
+        {} 
+ 
         TEvBrowseRequestSent(const TActorId& actor, ui32 event)
-            : Actor(actor)
-            , Tablet(0)
-            , Event(event)
-        {}
-    };
-
-    struct TEvBrowseRequestCompleted : TEventLocal<TEvBrowseRequestCompleted, EvBrowseRequestCompleted> {
+            : Actor(actor) 
+            , Tablet(0) 
+            , Event(event) 
+        {} 
+    }; 
+ 
+    struct TEvBrowseRequestCompleted : TEventLocal<TEvBrowseRequestCompleted, EvBrowseRequestCompleted> { 
         TActorId Actor;
-        TTabletId Tablet;
-        ui32 Event;
-
+        TTabletId Tablet; 
+        ui32 Event; 
+ 
         TEvBrowseRequestCompleted(const TActorId& actor, TTabletId tablet, ui32 event)
-            : Actor(actor)
-            , Tablet(tablet)
-            , Event(event)
-        {}
-
+            : Actor(actor) 
+            , Tablet(tablet) 
+            , Event(event) 
+        {} 
+ 
         TEvBrowseRequestCompleted(const TActorId& actor, ui32 event)
-            : Actor(actor)
-            , Tablet(0)
-            , Event(event)
-        {}
-    };
+            : Actor(actor) 
+            , Tablet(0) 
+            , Event(event) 
+        {} 
+    }; 
 }   // namespace NViewerEvents
 
 }   // namespace NViewer

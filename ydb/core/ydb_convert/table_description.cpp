@@ -363,16 +363,16 @@ void FillTableStats(Ydb::Table::DescribeTableResult& out,
     }
 
     ui64 modificationTimeMs = in.GetTableStats().GetLastUpdateTime();
-    if (modificationTimeMs) {
-        auto modificationTime = MillisecToProtoTimeStamp(modificationTimeMs);
-        stats->mutable_modification_time()->CopyFrom(modificationTime);
-    }
+    if (modificationTimeMs) { 
+        auto modificationTime = MillisecToProtoTimeStamp(modificationTimeMs); 
+        stats->mutable_modification_time()->CopyFrom(modificationTime); 
+    } 
 
     ui64 creationTimeMs = in.GetSelf().GetCreateStep();
-    if (creationTimeMs) {
-        auto creationTime = MillisecToProtoTimeStamp(creationTimeMs);
-        stats->mutable_creation_time()->CopyFrom(creationTime);
-    }
+    if (creationTimeMs) { 
+        auto creationTime = MillisecToProtoTimeStamp(creationTimeMs); 
+        stats->mutable_creation_time()->CopyFrom(creationTime); 
+    } 
 }
 
 static bool IsDefaultFamily(const NKikimrSchemeOp::TFamilyDescription& family) {

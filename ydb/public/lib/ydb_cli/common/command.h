@@ -83,8 +83,8 @@ public:
         bool IsVerbose = false;
         bool EnableSsl = false;
 
-        bool JsonUi64AsText = false;
-        bool JsonBinaryAsBase64 = false;
+        bool JsonUi64AsText = false; 
+        bool JsonBinaryAsBase64 = false; 
 
         ui64 TabletId; // admin tablet #
         ui32 NodeId; // admin node #

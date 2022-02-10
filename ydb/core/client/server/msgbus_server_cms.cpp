@@ -1,5 +1,5 @@
-#include "msgbus_server_request.h"
-#include "msgbus_securereq.h"
+#include "msgbus_server_request.h" 
+#include "msgbus_securereq.h" 
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -16,10 +16,10 @@ using namespace NCms;
 
 namespace {
 
-class TCmsRequestActor : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TCmsRequestActor>>
+class TCmsRequestActor : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TCmsRequestActor>> 
 {
     using TActorBase = TActorBootstrapped<TCmsRequestActor>;
-    using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TCmsRequestActor>>;
+    using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TCmsRequestActor>>; 
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -27,10 +27,10 @@ public:
     }
 
     TCmsRequestActor(NKikimrClient::TCmsRequest &request, NMsgBusProxy::TBusMessageContext &msg)
-        : TBase(msg)
+        : TBase(msg) 
         , Request(request)
     {
-        TBase::SetSecurityToken(request.GetSecurityToken());
+        TBase::SetSecurityToken(request.GetSecurityToken()); 
     }
 
     void Bootstrap(const TActorContext &ctx)
@@ -55,14 +55,14 @@ public:
             StateStorageGroup = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
         }
 
-        SendRequest(ctx);
-        Become(&TCmsRequestActor::MainState);
+        SendRequest(ctx); 
+        Become(&TCmsRequestActor::MainState); 
     }
 
     void SendRequest(const TActorContext &ctx)
     {
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
+        pipeConfig.RetryPolicy = {.RetryLimitCount = 10}; 
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(StateStorageGroup), pipeConfig);
         CmsPipe = ctx.RegisterWithSameMailbox(pipe);
 
@@ -118,7 +118,7 @@ public:
             TAutoPtr<TEvCms::TEvResetMarkerRequest> request
                 = new TEvCms::TEvResetMarkerRequest;
             request->Record.CopyFrom(Request.GetResetMarkerRequest());
-            request->Record.SetUserToken(TBase::GetSerializedToken());
+            request->Record.SetUserToken(TBase::GetSerializedToken()); 
             NTabletPipe::SendData(ctx, CmsPipe, request.Release());
         } else if (Request.HasSetConfigRequest()) {
             TAutoPtr<TEvCms::TEvSetConfigRequest> request
@@ -129,7 +129,7 @@ public:
             TAutoPtr<TEvCms::TEvSetMarkerRequest> request
                 = new TEvCms::TEvSetMarkerRequest;
             request->Record.CopyFrom(Request.GetSetMarkerRequest());
-            request->Record.SetUserToken(TBase::GetSerializedToken());
+            request->Record.SetUserToken(TBase::GetSerializedToken()); 
             NTabletPipe::SendData(ctx, CmsPipe, request.Release());
         } else {
             ReplyWithErrorAndDie("Unknown CMS request", ctx);
@@ -238,7 +238,7 @@ public:
     {
         if (CmsPipe)
             NTabletPipe::CloseClient(ctx, CmsPipe);
-        TBase::Die(ctx);
+        TBase::Die(ctx); 
     }
 
     void SendReplyAndDie(const TActorContext &ctx)

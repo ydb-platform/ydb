@@ -242,12 +242,12 @@ struct TRuntimeTypeLoader {
     TMaybe<TType> LoadStructType(const TVector<std::pair<TString, TType>>& members, ui32 /*level*/) {
         auto structType = Builder.NewEmptyStructType();
         for (auto& member : members) {
-            structType = Builder.NewStructType(structType, member.first, member.second);
+            structType = Builder.NewStructType(structType, member.first, member.second); 
         }
         return structType;
     }
     TMaybe<TType> LoadListType(TType itemType, ui32 /*level*/) {
-        return Builder.NewListType(itemType);
+        return Builder.NewListType(itemType); 
     }
     TMaybe<TType> LoadStreamType(TType itemType, ui32 /*level*/) {
         return Builder.NewStreamType(itemType);
@@ -256,7 +256,7 @@ struct TRuntimeTypeLoader {
         return Builder.NewOptionalType(itemType);
     }
     TMaybe<TType> LoadTupleType(const TVector<TType>& elements, ui32 /*level*/) {
-        return Builder.NewTupleType(elements);
+        return Builder.NewTupleType(elements); 
     }
     TMaybe<TType> LoadDictType(TType keyType, TType valType, ui32 /*level*/) {
         return Builder.NewDictType(keyType, valType, false);

@@ -160,26 +160,26 @@ NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, c
 }
 
 
-template <typename ValType>
-class TAlmostDoneTypeValue : public TRawTypeValue {
-public:
+template <typename ValType> 
+class TAlmostDoneTypeValue : public TRawTypeValue { 
+public: 
     TAlmostDoneTypeValue(NUdf::TDataTypeId schemeType, ValType value)
-        : TRawTypeValue(&Value, sizeof(Value), schemeType)
-        , Value(value)
-    {}
-
-protected:
-    ValType Value;
-};
-
-template <>
+        : TRawTypeValue(&Value, sizeof(Value), schemeType) 
+        , Value(value) 
+    {} 
+ 
+protected: 
+    ValType Value; 
+}; 
+ 
+template <> 
 class TAlmostDoneTypeValue<TString> : public TRawTypeValue {
-public:
+public: 
     TAlmostDoneTypeValue(NUdf::TDataTypeId schemeType, const TString& value)
-        : TRawTypeValue(value.data(), value.size(), schemeType)
-    {}
-};
-
+        : TRawTypeValue(value.data(), value.size(), schemeType) 
+    {} 
+}; 
+ 
 // NOTE: TCell's can reference memomry from tupleValue
 bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
                     const NKikimrMiniKQL::TValue& tupleValue,

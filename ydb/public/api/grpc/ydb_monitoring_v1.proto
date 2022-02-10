@@ -1,11 +1,11 @@
-syntax = "proto3";
-
-package Ydb.Monitoring.V1;
-option java_package = "com.yandex.ydb.monitoring.v1";
-
+syntax = "proto3"; 
+ 
+package Ydb.Monitoring.V1; 
+option java_package = "com.yandex.ydb.monitoring.v1"; 
+ 
 import "ydb/public/api/protos/ydb_monitoring.proto";
-
-service MonitoringService {
-    // Gets the health status of the database.
-    rpc SelfCheck(Monitoring.SelfCheckRequest) returns (Monitoring.SelfCheckResponse);
-}
+ 
+service MonitoringService { 
+    // Gets the health status of the database. 
+    rpc SelfCheck(Monitoring.SelfCheckRequest) returns (Monitoring.SelfCheckResponse); 
+} 

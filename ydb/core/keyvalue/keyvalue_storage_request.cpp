@@ -159,7 +159,7 @@ public:
         wr->StatusFlags.Merge(ev->Get()->StatusFlags.Raw);
         wr->Latency = duration;
         ++WriteRequestsReplied;
-        IntermediateResults->Stat.GroupWrittenBytes[std::make_pair(ev->Get()->Id.Channel(), groupId)] += ev->Get()->Id.BlobSize();
+        IntermediateResults->Stat.GroupWrittenBytes[std::make_pair(ev->Get()->Id.Channel(), groupId)] += ev->Get()->Id.BlobSize(); 
         IntermediateResults->Stat.GroupWrittenIops[std::make_pair(ev->Get()->Id.Channel(), groupId)] += 1; // FIXME: count distinct blobs?
         UpdateRequest(ctx);
     }
@@ -275,7 +275,7 @@ public:
         }
 
         Y_VERIFY(ev->Get()->ResponseSz == request.ReadQueue.size());
-        auto groupId = ev->Get()->GroupId;
+        auto groupId = ev->Get()->GroupId; 
         decltype(request.ReadQueue)::iterator it = request.ReadQueue.begin();
         for (ui32 i = 0, num = ev->Get()->ResponseSz; i < num; ++i, ++it) {
             const auto& response = ev->Get()->Responses[i];
@@ -289,7 +289,7 @@ public:
                 Y_VERIFY(response.Buffer.size() == readItem.BlobSize);
                 Y_VERIFY(readItem.ValueOffset + readItem.BlobSize <= read.ValueSize);
                 memcpy(const_cast<char *>(read.Value.data()) + readItem.ValueOffset, response.Buffer.data(), response.Buffer.size());
-                IntermediateResults->Stat.GroupReadBytes[std::make_pair(response.Id.Channel(), groupId)] += response.Buffer.size();
+                IntermediateResults->Stat.GroupReadBytes[std::make_pair(response.Id.Channel(), groupId)] += response.Buffer.size(); 
                 IntermediateResults->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), groupId)] += 1; // FIXME: count distinct blobs?
             } else {
                 TStringStream err;

@@ -75,7 +75,7 @@ protected:
                     ctx.Send(Self.Tablet(), new TEvents::TEvPoisonPill);
                     return true;
                 }
-                Self.State.UpdateResourceMetrics(ctx);
+                Self.State.UpdateResourceMetrics(ctx); 
             }
             Self.State.InitExecute(Self.TabletID(), KeyValueActorId, txc.Generation, db, ctx, Self.Info());
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet
@@ -263,7 +263,7 @@ protected:
 
     void OnActivateExecutor(const TActorContext &ctx) override {
         Executor()->RegisterExternalTabletCounters(State.TakeTabletCounters());
-        State.SetupResourceMetrics(Executor()->GetResourceMetrics());
+        State.SetupResourceMetrics(Executor()->GetResourceMetrics()); 
         ctx.Schedule(TDuration::MilliSeconds(PeriodicRefreshMs), new TEvKeyValue::TEvPeriodicRefresh);
         Execute(new TTxInit(ctx.SelfID, *this), ctx);
     }
@@ -487,11 +487,11 @@ public:
             HFunc(TEvents::TEvPoisonPill, Handle);
 
             default:
-                if (!HandleDefaultEvents(ev, ctx)) {
+                if (!HandleDefaultEvents(ev, ctx)) { 
                     LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                             << " StateWork unexpected event type# " << (ui32)ev->GetTypeRewrite()
                             << " event# " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
-                }
+                } 
                 break;
         }
     }

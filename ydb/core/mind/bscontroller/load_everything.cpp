@@ -66,7 +66,7 @@ public:
             auto state = db.Table<T>().Select();
             if (!state.IsReady())
                 return false;
-            if (state.IsValid()) {
+            if (state.IsValid()) { 
                 Self->NextGroupID = state.GetValue<T::NextGroupID>();
                 Self->NextStoragePoolId = state.GetValue<T::NextStoragePoolId>();
                 Self->NextOperationLogIndex = state.GetValueOrDefault<T::NextOperationLogIndex>(1);
@@ -84,7 +84,7 @@ public:
                 Self->MaxScrubbedDisksAtOnce = state.GetValue<T::MaxScrubbedDisksAtOnce>();
                 Self->PDiskSpaceColorBorder = state.GetValue<T::PDiskSpaceColorBorder>();
                 Self->SysViewChangedSettings = true;
-            }
+            } 
         }
 
         // Node

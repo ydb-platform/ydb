@@ -14,7 +14,7 @@ RECURSE_FOR_TESTS(
     ut_filestore_reboots
     ut_index_build
     ut_index_build_reboots
-    ut_login
+    ut_login 
     ut_move
     ut_move_reboots
     ut_olap
@@ -41,7 +41,7 @@ RECURSE_FOR_TESTS(
     ut_user_attributes
     ut_user_attributes_reboots
 )
-
+ 
 LIBRARY()
 
 OWNER(
@@ -72,7 +72,7 @@ SRCS(
     schemeshard__init_schema.cpp
     schemeshard__serverless_storage_billing.cpp
     schemeshard__sync_update_tenants.cpp
-    schemeshard__login.cpp
+    schemeshard__login.cpp 
     schemeshard__monitoring.cpp
     schemeshard__notify.cpp
     schemeshard__operation.cpp
@@ -86,7 +86,7 @@ SRCS(
     schemeshard__operation_alter_fs.cpp
     schemeshard__operation_alter_index.cpp
     schemeshard__operation_alter_kesus.cpp
-    schemeshard__operation_alter_login.cpp
+    schemeshard__operation_alter_login.cpp 
     schemeshard__operation_alter_olap_store.cpp
     schemeshard__operation_alter_olap_table.cpp
     schemeshard__operation_alter_pq.cpp

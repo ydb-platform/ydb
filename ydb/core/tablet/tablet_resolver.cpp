@@ -696,7 +696,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         case TEntry::StProblemPing:
             if (ev->Sender == entry.KnownLeader) {
                 entry.Cookie.Detach();
-                entry.State = TEntry::StNormal;
+                entry.State = TEntry::StNormal; 
                 SendQueued(tabletId, entry, ctx);
                 MoveEntryToResolved(tabletId, *entryHolder);
             }

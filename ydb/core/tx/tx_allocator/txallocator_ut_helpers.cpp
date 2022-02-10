@@ -72,19 +72,19 @@ void TTestEnv::SetupLogging(TTestActorRuntime &runtime) {
 }
 
 void TTestEnv::Setup(TTestActorRuntime &runtime) {
-    static constexpr ui32 domainId = 0;
+    static constexpr ui32 domainId = 0; 
     SetupLogging(runtime);
     TAppPrepare app;
-    auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds("dc-1", domainId, 0,
+    auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds("dc-1", domainId, 0, 
                                                                               domainId, domainId, TVector<ui32>{domainId},
-                                                                              domainId, TVector<ui32>{domainId},
-                                                                              100500,
-                                                                              TVector<ui64>{},
-                                                                              TVector<ui64>{},
-                                                                              TVector<ui64>{},
-                                                                              DefaultPoolKinds(2));
-    app.AddDomain(domain.Release());
-    //app.AddHive(0, 0);
+                                                                              domainId, TVector<ui32>{domainId}, 
+                                                                              100500, 
+                                                                              TVector<ui64>{}, 
+                                                                              TVector<ui64>{}, 
+                                                                              TVector<ui64>{}, 
+                                                                              DefaultPoolKinds(2)); 
+    app.AddDomain(domain.Release()); 
+    //app.AddHive(0, 0); 
     SetupChannelProfiles(app);
     SetupTabletServices(runtime, &app, true);
 }

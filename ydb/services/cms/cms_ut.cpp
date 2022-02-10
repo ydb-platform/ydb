@@ -31,16 +31,16 @@ namespace NKikimr {
 using namespace Tests;
 using namespace NYdb;
 
-struct TCmsTestSettings : TKikimrTestSettings {
-    static constexpr bool PrecreatePools = false;
-};
-
-struct TCmsTestSettingsWithAuth : TCmsTestSettings {
-    static constexpr bool AUTH = true;
-};
-
-using TKikimrWithGrpcAndRootSchema = NYdb::TBasicKikimrWithGrpcAndRootSchema<TCmsTestSettings>;
-
+struct TCmsTestSettings : TKikimrTestSettings { 
+    static constexpr bool PrecreatePools = false; 
+}; 
+ 
+struct TCmsTestSettingsWithAuth : TCmsTestSettings { 
+    static constexpr bool AUTH = true; 
+}; 
+ 
+using TKikimrWithGrpcAndRootSchema = NYdb::TBasicKikimrWithGrpcAndRootSchema<TCmsTestSettings>; 
+ 
 static Ydb::StatusIds::StatusCode WaitForOperationStatus(std::shared_ptr<grpc::Channel> channel, const TString& opId, const TString &token = "") {
     std::unique_ptr<Ydb::Operation::V1::OperationService::Stub> stub;
     stub = Ydb::Operation::V1::OperationService::NewStub(channel);
@@ -130,7 +130,7 @@ static void SetSyncOperation(TRequest& req) {
 
 static void doSimpleTenantsTest(bool sync) {
     TKikimrWithGrpcAndRootSchema server;
-
+ 
     server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::CMS_TENANTS, NLog::PRI_TRACE);
 
     ui16 grpc = server.GetPort();
@@ -284,8 +284,8 @@ static void doSimpleTenantsTest(bool sync) {
     }
 }
 
-template <typename TTestSettings>
-void CheckCreateDatabase(NYdb::TBasicKikimrWithGrpcAndRootSchema<TTestSettings> &server,
+template <typename TTestSettings> 
+void CheckCreateDatabase(NYdb::TBasicKikimrWithGrpcAndRootSchema<TTestSettings> &server, 
                          std::shared_ptr<grpc::Channel> channel,
                          const TString &path,
                          bool disableTx = false,
@@ -317,7 +317,7 @@ void CheckCreateDatabase(NYdb::TBasicKikimrWithGrpcAndRootSchema<TTestSettings> 
     }
     {
         auto status = WaitForOperationStatus(channel, id, token);
-        UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::SUCCESS); 
     }
 
     if (runNode) {
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
     }
 
     Y_UNIT_TEST(AuthTokenTest) {
-        NYdb::TBasicKikimrWithGrpcAndRootSchema<TCmsTestSettingsWithAuth> server;
+        NYdb::TBasicKikimrWithGrpcAndRootSchema<TCmsTestSettingsWithAuth> server; 
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::CMS_TENANTS, NLog::PRI_TRACE);
         ui16 grpc = server.GetPort();
         TString id;
@@ -410,9 +410,9 @@ Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
         UNIT_ASSERT(response.operation().ready());
         UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS);
 
-        // In testing env we have pools kinds test, ssd, hdd, hdd1, hdd2 all with
+        // In testing env we have pools kinds test, ssd, hdd, hdd1, hdd2 all with 
         // none erasure and ROT disk.
-        THashSet<TString> poolKinds = {{TString("test"), TString("ssd"), TString("hdd"), TString("hdd1"), TString("hdd2")}};
+        THashSet<TString> poolKinds = {{TString("test"), TString("ssd"), TString("hdd"), TString("hdd1"), TString("hdd2")}}; 
         Ydb::Cms::DescribeDatabaseOptionsResult result;
         auto res = response.operation().result().UnpackTo(&result);
         UNIT_ASSERT(res);

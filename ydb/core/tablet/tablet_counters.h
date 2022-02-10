@@ -90,10 +90,10 @@ private:
     void SetTo(const TTabletSimpleCounter& rp) {
         Value = rp.Value;
     }
-
-    void Populate(const TTabletSimpleCounter& rp) {
-        SetTo(rp);
-    }
+ 
+    void Populate(const TTabletSimpleCounter& rp) { 
+        SetTo(rp); 
+    } 
 };
 
 ////////////////////////////////////////////
@@ -129,10 +129,10 @@ private:
     void SetTo(const TTabletCumulativeCounter& rp) {
         Value = rp.Value;
     }
-
-    void Populate(const TTabletCumulativeCounter& rp) {
-        Value += rp.Value;
-    }
+ 
+    void Populate(const TTabletCumulativeCounter& rp) { 
+        Value += rp.Value; 
+    } 
 };
 
 ////////////////////////////////////////////
@@ -190,10 +190,10 @@ public:
         return Ranges[index].RangeVal;
     }
 
-    TVector<TRangeDef> GetRanges() const {
-        return TVector<TRangeDef>(Ranges, Ranges + RangeCount);
-    }
-
+    TVector<TRangeDef> GetRanges() const { 
+        return TVector<TRangeDef>(Ranges, Ranges + RangeCount); 
+    } 
+ 
     bool GetIntegral() const {
         return Integral;
     }
@@ -251,13 +251,13 @@ public:
 
         Values = TArrayHolder<ui64>(new ui64[RangeCount]());
     }
-
-    void Clear() {
-        if (IsInitialized()) {
+ 
+    void Clear() { 
+        if (IsInitialized()) { 
             std::fill(&Values[0], &Values[RangeCount], 0);
-        }
-    }
-
+        } 
+    } 
+ 
 private:
     //
     ui32 FindSlot(ui64 what) const {
@@ -268,21 +268,21 @@ private:
         return std::is_sorted(Ranges, Ranges + RangeCount);
     }
 
-    bool IsInitialized() const {
-        return RangeCount != 0;
-    }
-
-    void Populate(const TTabletPercentileCounter& rp) {
-        if (IsInitialized()) {
+    bool IsInitialized() const { 
+        return RangeCount != 0; 
+    } 
+ 
+    void Populate(const TTabletPercentileCounter& rp) { 
+        if (IsInitialized()) { 
             Y_VERIFY_DEBUG(RangeCount == rp.RangeCount);
-            for (ui32 i = 0; i < RangeCount; ++i) {
-                Values[i] += rp.Values[i];
-            }
-        } else {
-            Initialize(rp);
-        }
-    }
-
+            for (ui32 i = 0; i < RangeCount; ++i) { 
+                Values[i] += rp.Values[i]; 
+            } 
+        } else { 
+            Initialize(rp); 
+        } 
+    } 
+ 
     //
     ui32 RangeCount = 0;
     const TRangeDef* Ranges = nullptr;
@@ -377,16 +377,16 @@ private:
         }
     }
 
-    void Populate(const TCountersArray<T>& rp) {
-        if (CountersQnt != rp.CountersQnt) {
-            Reset(rp);
-        } else {
-            for (ui32 i = 0, e = CountersQnt; i < e; ++i) {
-                Counters[i].Populate(rp.Counters[i]);
-            }
-        }
-    }
-
+    void Populate(const TCountersArray<T>& rp) { 
+        if (CountersQnt != rp.CountersQnt) { 
+            Reset(rp); 
+        } else { 
+            for (ui32 i = 0, e = CountersQnt; i < e; ++i) { 
+                Counters[i].Populate(rp.Counters[i]); 
+            } 
+        } 
+    } 
+ 
     //
     ui32 CountersQnt;
     TCountersHolder CountersHolder;
@@ -475,7 +475,7 @@ public:
 
     //
     void OutputHtml(IOutputStream &os) const;
-    void OutputProto(NKikimrTabletBase::TTabletCountersBase& op) const;
+    void OutputProto(NKikimrTabletBase::TTabletCountersBase& op) const; 
 
     //
     const char* SimpleCounterName(ui32 index) const {
@@ -490,23 +490,23 @@ public:
         return PercentileCountersMetaInfo[index];
     }
 
-    void Populate(const TTabletCountersBase& rp) {
-        if (!HasCounters()) {
-            SimpleCounters.Reset(rp.SimpleCounters);
-            SimpleCountersMetaInfo = rp.SimpleCountersMetaInfo;
-
-            CumulativeCounters.Reset(rp.CumulativeCounters);
-            CumulativeCountersMetaInfo = rp.CumulativeCountersMetaInfo;
-
-            PercentileCounters.Reset(rp.PercentileCounters);
-            PercentileCountersMetaInfo = rp.PercentileCountersMetaInfo;
-        } else {
-            SimpleCounters.Populate(rp.SimpleCounters);
-            CumulativeCounters.Populate(rp.CumulativeCounters);
-            PercentileCounters.Populate(rp.PercentileCounters);
-        }
-    }
-
+    void Populate(const TTabletCountersBase& rp) { 
+        if (!HasCounters()) { 
+            SimpleCounters.Reset(rp.SimpleCounters); 
+            SimpleCountersMetaInfo = rp.SimpleCountersMetaInfo; 
+ 
+            CumulativeCounters.Reset(rp.CumulativeCounters); 
+            CumulativeCountersMetaInfo = rp.CumulativeCountersMetaInfo; 
+ 
+            PercentileCounters.Reset(rp.PercentileCounters); 
+            PercentileCountersMetaInfo = rp.PercentileCountersMetaInfo; 
+        } else { 
+            SimpleCounters.Populate(rp.SimpleCounters); 
+            CumulativeCounters.Populate(rp.CumulativeCounters); 
+            PercentileCounters.Populate(rp.PercentileCounters); 
+        } 
+    } 
+ 
 private:
     //
     TTabletCountersBase(const TTabletCountersBase&);

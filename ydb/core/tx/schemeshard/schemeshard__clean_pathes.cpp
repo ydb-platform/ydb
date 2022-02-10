@@ -36,13 +36,13 @@ struct TSchemeShard::TTxCleanTables : public TTransactionBase<TSchemeShard> {
     }
 
     void Complete(const TActorContext &ctx) override {
-        if (RemovedCount) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "TTxCleanPathes Complete"
-                           << ", done PersistRemoveTable for " << RemovedCount << " tables"
-                           << ", left " << TablesToClean.size()
-                           << ", at schemeshard: "<< Self->TabletID());
-        }
+        if (RemovedCount) { 
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
+                       "TTxCleanPathes Complete" 
+                           << ", done PersistRemoveTable for " << RemovedCount << " tables" 
+                           << ", left " << TablesToClean.size() 
+                           << ", at schemeshard: "<< Self->TabletID()); 
+        } 
 
         if (TablesToClean) {
             Self->Execute(Self->CreateTxCleanTables(std::move(TablesToClean)), ctx);

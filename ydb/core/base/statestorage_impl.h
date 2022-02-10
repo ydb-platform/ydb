@@ -216,23 +216,23 @@ struct TEvStateStorage::TEvReplicaUpdate : public TEventPB<TEvStateStorage::TEvR
     }
 };
 
-struct TEvStateStorage::TEvReplicaDelete : public TEventPB<TEvStateStorage::TEvReplicaDelete, NKikimrStateStorage::TEvDelete, TEvStateStorage::EvReplicaDelete> {
-    TEvReplicaDelete()
-    {}
-
-    TEvReplicaDelete(ui64 tabletId)
-    {
-        Record.SetTabletID(tabletId);
-    }
-
+struct TEvStateStorage::TEvReplicaDelete : public TEventPB<TEvStateStorage::TEvReplicaDelete, NKikimrStateStorage::TEvDelete, TEvStateStorage::EvReplicaDelete> { 
+    TEvReplicaDelete() 
+    {} 
+ 
+    TEvReplicaDelete(ui64 tabletId) 
+    { 
+        Record.SetTabletID(tabletId); 
+    } 
+ 
     TString ToString() const {
-        TStringStream str;
-        str << "{EvReplicaUpdate TabletID: " << Record.GetTabletID();
-        str << "}";
-        return str.Str();
-    }
-};
-
+        TStringStream str; 
+        str << "{EvReplicaUpdate TabletID: " << Record.GetTabletID(); 
+        str << "}"; 
+        return str.Str(); 
+    } 
+}; 
+ 
 struct TEvStateStorage::TEvReplicaCleanup : public TEventPB<TEvStateStorage::TEvReplicaCleanup, NKikimrStateStorage::TEvCleanup, TEvStateStorage::EvReplicaCleanup> {
     TEvReplicaCleanup()
     {}

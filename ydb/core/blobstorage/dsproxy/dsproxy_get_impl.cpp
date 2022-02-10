@@ -18,7 +18,7 @@ namespace NKikimr {
 
 void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logCtx,
         TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult) {
-    outGetResult.Reset(new TEvBlobStorage::TEvGetResult(status, QuerySize, Info->GroupID));
+    outGetResult.Reset(new TEvBlobStorage::TEvGetResult(status, QuerySize, Info->GroupID)); 
     ReplyBytes = 0;
     outGetResult->BlockedGeneration = BlockedGeneration;
 

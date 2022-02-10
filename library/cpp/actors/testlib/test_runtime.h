@@ -74,20 +74,20 @@ namespace NActors {
 
     struct TDispatchOptions {
         struct TFinalEventCondition {
-            std::function<bool(IEventHandle& ev)> EventCheck;
+            std::function<bool(IEventHandle& ev)> EventCheck; 
             ui32 RequiredCount;
 
             TFinalEventCondition(ui32 eventType, ui32 requiredCount = 1)
-                : EventCheck([eventType](IEventHandle& ev) -> bool { return ev.GetTypeRewrite() == eventType; })
+                : EventCheck([eventType](IEventHandle& ev) -> bool { return ev.GetTypeRewrite() == eventType; }) 
                 , RequiredCount(requiredCount)
             {
             }
-
-            TFinalEventCondition(std::function<bool(IEventHandle& ev)> eventCheck, ui32 requiredCount = 1)
-                : EventCheck(eventCheck)
-                , RequiredCount(requiredCount)
-            {
-            }
+ 
+            TFinalEventCondition(std::function<bool(IEventHandle& ev)> eventCheck, ui32 requiredCount = 1) 
+                : EventCheck(eventCheck) 
+                , RequiredCount(requiredCount) 
+            { 
+            } 
         };
 
         TVector<TFinalEventCondition> FinalEvents;
@@ -359,14 +359,14 @@ namespace NActors {
             return GrabEdgeEventIf(handle, truth, simTimeout);
         }
 
-        template <typename TEvent>
-        THolder<TEvent> GrabEdgeEvent(TDuration simTimeout = TDuration::Max()) {
-            TAutoPtr<IEventHandle> handle;
-            std::function<bool(const TEvent&)> truth = [](const TEvent&) { return true; };
-            GrabEdgeEventIf(handle, truth, simTimeout);
+        template <typename TEvent> 
+        THolder<TEvent> GrabEdgeEvent(TDuration simTimeout = TDuration::Max()) { 
+            TAutoPtr<IEventHandle> handle; 
+            std::function<bool(const TEvent&)> truth = [](const TEvent&) { return true; }; 
+            GrabEdgeEventIf(handle, truth, simTimeout); 
             return THolder(handle ? handle->Release<TEvent>().Release() : nullptr);
-        }
-
+        } 
+ 
         template<class TEvent>
         typename TEvent::TPtr GrabEdgeEvent(const TSet<TActorId>& edgeFilter, TDuration simTimeout = TDuration::Max()) {
             return GrabEdgeEventIf<TEvent>(edgeFilter, [](const typename TEvent::TPtr&) { return true; }, simTimeout);
@@ -378,33 +378,33 @@ namespace NActors {
             return GrabEdgeEvent<TEvent>(edgeFilter, simTimeout);
         }
 
-        // replace with std::variant<>
-        template <typename... TEvents>
-        std::tuple<TEvents*...> GrabEdgeEvents(TAutoPtr<IEventHandle>& handle, TDuration simTimeout = TDuration::Max()) {
-            handle.Destroy();
-            auto eventTypes = { TEvents::EventType... };
+        // replace with std::variant<> 
+        template <typename... TEvents> 
+        std::tuple<TEvents*...> GrabEdgeEvents(TAutoPtr<IEventHandle>& handle, TDuration simTimeout = TDuration::Max()) { 
+            handle.Destroy(); 
+            auto eventTypes = { TEvents::EventType... }; 
             WaitForEdgeEvents([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
-                if (std::find(std::begin(eventTypes), std::end(eventTypes), event->GetTypeRewrite()) == std::end(eventTypes))
-                    return false;
-                handle = event;
-                return true;
+                if (std::find(std::begin(eventTypes), std::end(eventTypes), event->GetTypeRewrite()) == std::end(eventTypes)) 
+                    return false; 
+                handle = event; 
+                return true; 
             }, {}, simTimeout);
-            if (simTimeout == TDuration::Max())
-                Y_VERIFY(handle);
-            if (handle) {
-                return std::make_tuple(handle->Type == TEvents::EventType
-                                       ? reinterpret_cast<TAutoPtr<TEventHandle<TEvents>>&>(handle)->Get()
-                                       : static_cast<TEvents*>(nullptr)...);
-            }
-            return {};
-        }
-
+            if (simTimeout == TDuration::Max()) 
+                Y_VERIFY(handle); 
+            if (handle) { 
+                return std::make_tuple(handle->Type == TEvents::EventType 
+                                       ? reinterpret_cast<TAutoPtr<TEventHandle<TEvents>>&>(handle)->Get() 
+                                       : static_cast<TEvents*>(nullptr)...); 
+            } 
+            return {}; 
+        } 
+ 
         template <typename TEvent>
         TEvent* GrabEdgeEventRethrow(TAutoPtr<IEventHandle>& handle, TDuration simTimeout = TDuration::Max()) {
             try {
                 return GrabEdgeEvent<TEvent>(handle, simTimeout);
             } catch (...) {
-                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << CurrentExceptionMessage();
+                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << CurrentExceptionMessage(); 
             }
         }
 
@@ -426,33 +426,33 @@ namespace NActors {
             }
         }
 
-        template <typename... TEvents>
+        template <typename... TEvents> 
         static TString TypeNames() {
             static TString names[] = { TypeName<TEvents>()... };
             TString result;
             for (const TString& s : names) {
-                if (result.empty()) {
-                    result += '<';
-                } else {
-                    result += ',';
-                }
-                result += s;
-            }
-            if (!result.empty()) {
-                result += '>';
-            }
-            return result;
-        }
-
-        template <typename... TEvents>
-        std::tuple<TEvents*...> GrabEdgeEventsRethrow(TAutoPtr<IEventHandle>& handle, TDuration simTimeout = TDuration::Max()) {
-            try {
-                return GrabEdgeEvents<TEvents...>(handle, simTimeout);
-            } catch (...) {
-                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeNames<TEvents...>() << ": " << CurrentExceptionMessage();
-            }
-        }
-
+                if (result.empty()) { 
+                    result += '<'; 
+                } else { 
+                    result += ','; 
+                } 
+                result += s; 
+            } 
+            if (!result.empty()) { 
+                result += '>'; 
+            } 
+            return result; 
+        } 
+ 
+        template <typename... TEvents> 
+        std::tuple<TEvents*...> GrabEdgeEventsRethrow(TAutoPtr<IEventHandle>& handle, TDuration simTimeout = TDuration::Max()) { 
+            try { 
+                return GrabEdgeEvents<TEvents...>(handle, simTimeout); 
+            } catch (...) { 
+                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeNames<TEvents...>() << ": " << CurrentExceptionMessage(); 
+            } 
+        } 
+ 
         void ResetScheduledCount() {
             ScheduledCount = 0;
         }
@@ -496,7 +496,7 @@ namespace NActors {
         IActor* FindActor(const TActorId& actorId, TNodeDataBase* node) const;
         void SendInternal(IEventHandle* ev, ui32 nodeIndex, bool viaActorSystem);
         TEventMailBox& GetMailbox(ui32 nodeId, ui32 hint);
-        void ClearMailbox(ui32 nodeId, ui32 hint);
+        void ClearMailbox(ui32 nodeId, ui32 hint); 
         void HandleNonEmptyMailboxesForEachContext(TEventMailboxId mboxId);
         void UpdateFinalEventsStatsForEachContext(IEventHandle& ev);
         bool DispatchEventsInternal(const TDispatchOptions& options, TInstant simDeadline);
@@ -515,7 +515,7 @@ namespace NActors {
         const TString ClusterUUID;
         const ui32 FirstNodeId;
         const ui32 NodeCount;
-        const ui32 DataCenterCount;
+        const ui32 DataCenterCount; 
         const bool UseRealThreads;
 
         ui64 LocalId;

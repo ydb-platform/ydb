@@ -220,7 +220,7 @@ message TPersQueueRequest {
     optional TPersQueueFetchRequest FetchRequest = 3;
 
     //only one from data, meta or fetch request must be set.
-    optional string SecurityToken = 5;
+    optional string SecurityToken = 5; 
     optional string Ticket = 6; //if set, check for acl
 
     optional string RequestId = 100; //for logging
@@ -300,7 +300,7 @@ message TPersQueueMetaResponse {
             optional string Timestamp = 12;
             optional uint64 ClientReadOffset = 13;
             optional uint64 ReadTimeLag = 14;
-            optional uint32 TabletNodeId = 15;
+            optional uint32 TabletNodeId = 15; 
         }
 
         message TTopicResult {

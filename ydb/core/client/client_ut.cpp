@@ -16,7 +16,7 @@
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 
-#include <util/folder/path.h>
+#include <util/folder/path.h> 
 #include <util/generic/xrange.h>
 #include <util/string/subst.h>
 #include <util/thread/pool.h>
@@ -489,13 +489,13 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     Y_UNIT_TEST(ReadWriteViaMiniKQL) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
-
+ 
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
-
+ 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
             ReadWriteViaMiniKQLBody(client, false, false);
@@ -521,7 +521,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             ReadWriteViaMiniKQLBody(client, false, false);
         }
     }
-
+ 
     Y_UNIT_TEST(ReadWrite_MiniKQL_AfterAlter) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -815,9 +815,9 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 )
             )
             )___";
-
+ 
         UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
-
+ 
         NKikimrMiniKQL::TResult updateRes;
         const TString updateQuery = R"___(
             (
@@ -836,18 +836,18 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 ))
             )
         )___";
-
+ 
         UNIT_ASSERT(client.FlatQuery(updateQuery, updateRes));
-
+ 
         {
             TValue value = TValue::Create(updateRes.GetValue(), updateRes.GetType());
             TValue cmp1Opt = value["cmp1"];
             TValue cmp2Opt = value["cmp2"];
-
+ 
             UNIT_ASSERT(cmp1Opt.HaveValue() && bool(cmp1Opt) == true);
             UNIT_ASSERT(cmp2Opt.HaveValue() && bool(cmp2Opt) == false);
         }
-
+ 
         NKikimrMiniKQL::TResult readRes;
         const TString readQuery = R"___(
             (
@@ -864,34 +864,34 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 ))
             )
         )___";
-
+ 
         UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
-
+ 
         {
             TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
             TValue row1Opt = value["row1"];
             TValue row2Opt = value["row2"];
-
+ 
             UNIT_ASSERT(row1Opt.HaveValue() && ui64(row1Opt) == 10);
             UNIT_ASSERT(row2Opt.HaveValue() && ui64(row2Opt) == 50);
         }
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CASViaMiniKQL) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
-
+ 
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
-
+ 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
             CASViaMiniKQLBody(client);
         }
-
+ 
         {
             TTestTables tables(client, TTestTables::OneShard_OutOfOrder);
             CASViaMiniKQLBody(client);
@@ -2169,7 +2169,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             NTabletPipe::TClientConfig pipeClientConfig;
             pipeClientConfig.AllowFollower = true;
             pipeClientConfig.ForceFollower = true;
-            pipeClientConfig.RetryPolicy = {.RetryLimitCount = 2};
+            pipeClientConfig.RetryPolicy = {.RetryLimitCount = 2}; 
             runtime.Register(NTabletPipe::CreateClient(edge, tabletId, pipeClientConfig));
 
             auto reply = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(edge);
@@ -2275,7 +2275,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             NTabletPipe::TClientConfig pipeClientConfig;
             pipeClientConfig.AllowFollower = true;
             pipeClientConfig.ForceFollower = true;
-            pipeClientConfig.RetryPolicy = {.RetryLimitCount = 2};
+            pipeClientConfig.RetryPolicy = {.RetryLimitCount = 2}; 
             runtime.Register(NTabletPipe::CreateClient(edge, tabletId, pipeClientConfig));
 
             auto reply = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(edge);
@@ -2418,7 +2418,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             NTabletPipe::TClientConfig pipeClientConfig;
             pipeClientConfig.AllowFollower = true;
             pipeClientConfig.ForceFollower = true;
-            pipeClientConfig.RetryPolicy = {.RetryLimitCount = 2};
+            pipeClientConfig.RetryPolicy = {.RetryLimitCount = 2}; 
             runtime.Register(NTabletPipe::CreateClient(edge, tabletId, pipeClientConfig));
 
             auto reply = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(edge);
@@ -2465,7 +2465,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             NTabletPipe::TClientConfig pipeClientConfig;
             pipeClientConfig.AllowFollower = true;
             pipeClientConfig.ForceFollower = true;
-            pipeClientConfig.RetryPolicy = {.RetryLimitCount = 2};
+            pipeClientConfig.RetryPolicy = {.RetryLimitCount = 2}; 
             runtime.Register(NTabletPipe::CreateClient(edge, tabletId, pipeClientConfig));
 
             auto reply = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(edge);

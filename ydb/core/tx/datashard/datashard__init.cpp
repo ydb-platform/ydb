@@ -210,7 +210,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
     { // Reads user tables metadata
         Self->TableInfos.clear(); // For idempotency
-        auto rowset = db.Table<Schema::UserTables>().GreaterOrEqual(0).Select();  // TODO[serxa]: this should be Range() but it is not working right now
+        auto rowset = db.Table<Schema::UserTables>().GreaterOrEqual(0).Select();  // TODO[serxa]: this should be Range() but it is not working right now 
         if (!rowset.IsReady())
             return false;
         while (!rowset.EndOfSet()) {
@@ -512,7 +512,7 @@ public:
             Schema::SchemaTables<Schema::SchemaOperations>::Materialize(txc.DB, NIceDb::EMaterializationMode::NonExisting);
             Schema::SchemaTables<Schema::ScanProgress>::Materialize(txc.DB, NIceDb::EMaterializationMode::NonExisting);
         } else {
-            db.Materialize<Schema>();
+            db.Materialize<Schema>(); 
         }
 
         if (isCreate) {

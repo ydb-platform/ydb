@@ -30,45 +30,45 @@ public:
     NKikimrMiniKQL::TResult FlatQuery(const TString& mkql) {
         NKikimrMiniKQL::TResult res;
         TClient::TFlatQueryOptions opts;
-        bool success = TClient::FlatQuery(mkql, opts, res, NMsgBusProxy::MSTATUS_OK);
-        UNIT_ASSERT(success);
+        bool success = TClient::FlatQuery(mkql, opts, res, NMsgBusProxy::MSTATUS_OK); 
+        UNIT_ASSERT(success); 
         return res;
-    }
-
+    } 
+ 
     NKikimrMiniKQL::TResult FlatQuery(const TString& mkql, ui32 expectedStatus, ui32 expectedProxyErrorCode = TEvTxUserProxy::TResultStatus::Unknown) {
-        NKikimrMiniKQL::TResult res;
-        TClient::TFlatQueryOptions opts;
-        NKikimrClient::TResponse expectedResponse;
-        expectedResponse.SetStatus(expectedStatus);
-        if (expectedProxyErrorCode != TEvTxUserProxy::TResultStatus::Unknown) {
-            expectedResponse.SetProxyErrorCode(expectedProxyErrorCode);
-        }
+        NKikimrMiniKQL::TResult res; 
+        TClient::TFlatQueryOptions opts; 
+        NKikimrClient::TResponse expectedResponse; 
+        expectedResponse.SetStatus(expectedStatus); 
+        if (expectedProxyErrorCode != TEvTxUserProxy::TResultStatus::Unknown) { 
+            expectedResponse.SetProxyErrorCode(expectedProxyErrorCode); 
+        } 
         bool success = TClient::FlatQuery(mkql, opts, res, expectedResponse);
         UNIT_ASSERT(success == (expectedStatus == NMsgBusProxy::MSTATUS_OK));
         return res;
     }
 
-    TAutoPtr<NMsgBusProxy::TBusResponse> LsPathId(ui64 schemeshardId, ui64 pathId) {
+    TAutoPtr<NMsgBusProxy::TBusResponse> LsPathId(ui64 schemeshardId, ui64 pathId) { 
         TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe());
         request->Record.SetPathId(pathId);
         request->Record.SetSchemeshardId(schemeshardId);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
-        Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
-        return dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
+        Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl; 
+        return dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release()); 
     }
-
+ 
     void ResetSchemeCache(Tests::TServer &server, TTableId tableId) {
-        TTestActorRuntime* runtime = server.GetRuntime();
+        TTestActorRuntime* runtime = server.GetRuntime(); 
         TActorId txProxy = MakeTxProxyID();
         TActorId sender = runtime->AllocateEdgeActor();
-        TAutoPtr<TEvTxUserProxy::TEvInvalidateTable> ev(new TEvTxUserProxy::TEvInvalidateTable(tableId));
+        TAutoPtr<TEvTxUserProxy::TEvInvalidateTable> ev(new TEvTxUserProxy::TEvInvalidateTable(tableId)); 
         runtime->Send(new IEventHandle(txProxy, sender, ev.Release()));
-        TAutoPtr<IEventHandle> handle;
-        auto readSchemeStringResult = runtime->GrabEdgeEventRethrow<TEvTxUserProxy::TEvInvalidateTableResult>(handle);
-        Y_UNUSED(readSchemeStringResult);
-    }
+        TAutoPtr<IEventHandle> handle; 
+        auto readSchemeStringResult = runtime->GrabEdgeEventRethrow<TEvTxUserProxy::TEvInvalidateTableResult>(handle); 
+        Y_UNUSED(readSchemeStringResult); 
+    } 
 
     void KillTablet(Tests::TServer &server, ui64 tabletId) {
         TTestActorRuntime* runtime = server.GetRuntime();
@@ -107,14 +107,14 @@ public:
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        UNIT_ASSERT_VALUES_EQUAL(reply->GetHeader()->Type, (int)NMsgBusProxy::MTYPE_CLIENT_RESPONSE);
+        UNIT_ASSERT_VALUES_EQUAL(reply->GetHeader()->Type, (int)NMsgBusProxy::MTYPE_CLIENT_RESPONSE); 
         response = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
     }
 
     NMsgBusProxy::EResponseStatus SplitTablePartition(const TString& tablePath, const TString& splitDescription) {
         NKikimrClient::TResponse response;
         TrySplitTablePartition(tablePath, splitDescription, response);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), (int)NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), (int)NMsgBusProxy::MSTATUS_OK); 
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 };

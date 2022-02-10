@@ -76,14 +76,14 @@ struct TEvLocal {
         EvStopTablet, // must be here
         EvDeadTabletAck,
         EvEnumerateTablets,
-        EvSyncTablets,
-        EvTabletMetrics,
-        EvReconnect,
+        EvSyncTablets, 
+        EvTabletMetrics, 
+        EvReconnect, 
 
         EvStatus = EvRegisterNode + 512,
         EvTabletStatus,
         EvEnumerateTabletsResult,
-        EvTabletMetricsAck,
+        EvTabletMetricsAck, 
 
         EvAddTenant = EvRegisterNode + 1024,
         EvRemoveTenant,
@@ -98,7 +98,7 @@ struct TEvLocal {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_LOCAL),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_LOCAL)");
 
-    struct TEvRegisterNode : public TEventPB<TEvRegisterNode, NKikimrLocal::TEvRegisterNode, EvRegisterNode> {
+    struct TEvRegisterNode : public TEventPB<TEvRegisterNode, NKikimrLocal::TEvRegisterNode, EvRegisterNode> { 
         TEvRegisterNode()
         {}
 
@@ -107,7 +107,7 @@ struct TEvLocal {
         }
     };
 
-    struct TEvPing : public TEventPB<TEvPing, NKikimrLocal::TEvPing, EvPing> {
+    struct TEvPing : public TEventPB<TEvPing, NKikimrLocal::TEvPing, EvPing> { 
         TEvPing()
         {}
 
@@ -119,16 +119,16 @@ struct TEvLocal {
         }
     };
 
-    struct TEvReconnect : TEventPB<TEvReconnect, NKikimrLocal::TEvReconnect, EvReconnect> {
-        TEvReconnect() = default;
-
-        TEvReconnect(ui64 hiveId, ui32 hiveGeneration) {
-            Record.SetHiveId(hiveId);
-            Record.SetHiveGeneration(hiveGeneration);
-        }
-    };
-
-    struct TEvStatus : public TEventPB<TEvStatus, NKikimrLocal::TEvStatus, EvStatus> {
+    struct TEvReconnect : TEventPB<TEvReconnect, NKikimrLocal::TEvReconnect, EvReconnect> { 
+        TEvReconnect() = default; 
+ 
+        TEvReconnect(ui64 hiveId, ui32 hiveGeneration) { 
+            Record.SetHiveId(hiveId); 
+            Record.SetHiveGeneration(hiveGeneration); 
+        } 
+    }; 
+ 
+    struct TEvStatus : public TEventPB<TEvStatus, NKikimrLocal::TEvStatus, EvStatus> { 
         enum EStatus {
             StatusOk,
             StatusOutdated,
@@ -143,15 +143,15 @@ struct TEvLocal {
             Record.SetStatus(status);
         }
 
-        TEvStatus(EStatus status, ui64 inbootTablets, ui64 onlineTablets, ui64 deadTablets) {
-            Record.SetStatus(status);
-            Record.SetInbootTablets(inbootTablets);
-            Record.SetOnlineTablets(onlineTablets);
-            Record.SetDeadTablets(deadTablets);
-        }
+        TEvStatus(EStatus status, ui64 inbootTablets, ui64 onlineTablets, ui64 deadTablets) { 
+            Record.SetStatus(status); 
+            Record.SetInbootTablets(inbootTablets); 
+            Record.SetOnlineTablets(onlineTablets); 
+            Record.SetDeadTablets(deadTablets); 
+        } 
     };
 
-    struct TEvBootTablet : public TEventPB<TEvBootTablet, NKikimrLocal::TEvBootTablet, EvBootTablet> {
+    struct TEvBootTablet : public TEventPB<TEvBootTablet, NKikimrLocal::TEvBootTablet, EvBootTablet> { 
         TEvBootTablet()
         {}
 
@@ -163,19 +163,19 @@ struct TEvLocal {
         }
 
         TEvBootTablet(const TTabletStorageInfo &info, ui32 followerId) {
-            TabletStorageInfoToProto(info, Record.MutableInfo());
+            TabletStorageInfoToProto(info, Record.MutableInfo()); 
             Record.SetBootMode(NKikimrLocal::BOOT_MODE_FOLLOWER);
             Record.SetFollowerId(followerId);
-        }
+        } 
     };
 
     struct TEvStopTablet : public TEventPB<TEvStopTablet, NKikimrLocal::TEvStopTablet, EvStopTablet> {
         TEvStopTablet()
         {}
 
-        TEvStopTablet(std::pair<ui64, ui32> tabletId)
+        TEvStopTablet(std::pair<ui64, ui32> tabletId) 
         {
-            Record.SetTabletId(tabletId.first);
+            Record.SetTabletId(tabletId.first); 
             Record.SetFollowerId(tabletId.second);
         }
     };
@@ -184,15 +184,15 @@ struct TEvLocal {
         TEvDeadTabletAck()
         {}
 
-        TEvDeadTabletAck(std::pair<ui64, ui32> tabletId, ui32 generation)
+        TEvDeadTabletAck(std::pair<ui64, ui32> tabletId, ui32 generation) 
         {
-            Record.SetTabletId(tabletId.first);
+            Record.SetTabletId(tabletId.first); 
             Record.SetFollowerId(tabletId.second);
             Record.SetGeneration(generation);
         }
     };
 
-    struct TEvTabletStatus : public TEventPB<TEvTabletStatus, NKikimrLocal::TEvTabletStatus, EvTabletStatus> {
+    struct TEvTabletStatus : public TEventPB<TEvTabletStatus, NKikimrLocal::TEvTabletStatus, EvTabletStatus> { 
         enum EStatus {
             StatusOk,
             StatusBootFailed,
@@ -207,33 +207,33 @@ struct TEvLocal {
         TEvTabletStatus()
         {}
 
-        TEvTabletStatus(EStatus status, TEvTablet::TEvTabletDead::EReason reason, std::pair<ui64, ui32> tabletId, ui32 generation) {
+        TEvTabletStatus(EStatus status, TEvTablet::TEvTabletDead::EReason reason, std::pair<ui64, ui32> tabletId, ui32 generation) { 
+            Record.SetStatus(status); 
+            Record.SetReason(reason); 
+            Record.SetTabletID(tabletId.first); 
+            Record.SetFollowerId(tabletId.second); 
+            Record.SetGeneration(generation); 
+        } 
+ 
+        TEvTabletStatus(EStatus status, std::pair<ui64, ui32> tabletId, ui32 generation) { 
             Record.SetStatus(status);
-            Record.SetReason(reason);
-            Record.SetTabletID(tabletId.first);
-            Record.SetFollowerId(tabletId.second);
-            Record.SetGeneration(generation);
-        }
-
-        TEvTabletStatus(EStatus status, std::pair<ui64, ui32> tabletId, ui32 generation) {
-            Record.SetStatus(status);
-            Record.SetTabletID(tabletId.first);
+            Record.SetTabletID(tabletId.first); 
             Record.SetFollowerId(tabletId.second);
             Record.SetGeneration(generation);
         }
     };
 
 
-    struct TEvEnumerateTablets : public TEventPB<TEvEnumerateTablets, NKikimrLocal::TEvEnumerateTablets, EvEnumerateTablets> {
+    struct TEvEnumerateTablets : public TEventPB<TEvEnumerateTablets, NKikimrLocal::TEvEnumerateTablets, EvEnumerateTablets> { 
         TEvEnumerateTablets()
         {}
 
-        TEvEnumerateTablets(TTabletTypes::EType tabletType) {
-            Record.SetTabletType(tabletType);
+        TEvEnumerateTablets(TTabletTypes::EType tabletType) { 
+            Record.SetTabletType(tabletType); 
         }
     };
 
-    struct TEvEnumerateTabletsResult : public TEventPB<TEvEnumerateTabletsResult, NKikimrLocal::TEvEnumerateTabletsResult, EvEnumerateTabletsResult> {
+    struct TEvEnumerateTabletsResult : public TEventPB<TEvEnumerateTabletsResult, NKikimrLocal::TEvEnumerateTabletsResult, EvEnumerateTabletsResult> { 
         TEvEnumerateTabletsResult()
         {}
 
@@ -241,26 +241,26 @@ struct TEvLocal {
             Record.SetStatus(status);
         }
     };
-
-    struct TEvSyncTablets : public TEventPB<TEvSyncTablets, NKikimrLocal::TEvSyncTablets, EvSyncTablets> {
-        TEvSyncTablets()
-        {}
-    };
-
-    struct TEvTabletMetrics : public TEventLocal<TEvTabletMetrics, EvTabletMetrics> {
-        ui64 TabletId;
+ 
+    struct TEvSyncTablets : public TEventPB<TEvSyncTablets, NKikimrLocal::TEvSyncTablets, EvSyncTablets> { 
+        TEvSyncTablets() 
+        {} 
+    }; 
+ 
+    struct TEvTabletMetrics : public TEventLocal<TEvTabletMetrics, EvTabletMetrics> { 
+        ui64 TabletId; 
         ui32 FollowerId;
-        NKikimrTabletBase::TMetrics ResourceValues;
-
+        NKikimrTabletBase::TMetrics ResourceValues; 
+ 
         TEvTabletMetrics(ui64 tabletId, ui32 followerId, const NKikimrTabletBase::TMetrics& resourceValues)
-            : TabletId(tabletId)
+            : TabletId(tabletId) 
             , FollowerId(followerId)
-            , ResourceValues(resourceValues)
-        {}
-    };
-
-    struct TEvTabletMetricsAck : public TEventPB<TEvTabletMetricsAck, NKikimrLocal::TEvTabletMetricsAck, EvTabletMetricsAck> {
-    };
+            , ResourceValues(resourceValues) 
+        {} 
+    }; 
+ 
+    struct TEvTabletMetricsAck : public TEventPB<TEvTabletMetricsAck, NKikimrLocal::TEvTabletMetricsAck, EvTabletMetricsAck> { 
+    }; 
 
     struct TEvAddTenant : public TEventLocal<TEvAddTenant, EvAddTenant> {
         TRegistrationInfo TenantInfo;
@@ -311,7 +311,7 @@ struct TEvLocal {
 
         TString TenantName;
         EStatus Status;
-        NKikimrTabletBase::TMetrics ResourceLimit;
+        NKikimrTabletBase::TMetrics ResourceLimit; 
         TString Error;
         THashMap<TString, TString> Attributes;
         TSubDomainKey DomainKey;
@@ -354,7 +354,7 @@ struct TLocalConfig : public TThrRefBase {
 
     struct TTabletClassInfo {
         TTabletSetupInfo::TPtr SetupInfo;
-        ui64 MaxCount = 0; // maximum allowed number of running tablets, 0 means unlimited
+        ui64 MaxCount = 0; // maximum allowed number of running tablets, 0 means unlimited 
 
         TTabletClassInfo()
         {}

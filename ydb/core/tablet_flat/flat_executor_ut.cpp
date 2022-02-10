@@ -1,8 +1,8 @@
 #include "flat_executor_ut_common.h"
-
-namespace NKikimr {
-namespace NTabletFlatExecutor {
-
+ 
+namespace NKikimr { 
+namespace NTabletFlatExecutor { 
+ 
     struct TRowsModel {
         enum : ui32  {
             TableId = 101,
@@ -241,7 +241,7 @@ struct TDummyResult: public IDestructable {
     TDummyResult(ui64 count, ui64 expect)
         : Count(count), Expect(expect)
     {}
-
+ 
     ui64 Count = 0;
     ui64 Expect = 0;
 };
@@ -591,7 +591,7 @@ Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
         env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
         env.SendSync(new TEvents::TEvPoison, false, true);
     }
-}
+} 
 
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutorTxLimit) {

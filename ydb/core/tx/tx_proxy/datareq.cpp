@@ -313,7 +313,7 @@ private:
     TString DatashardErrors;
     TVector<ui64> ComplainingDatashards;
     TVector<TString> UnresolvedKeys;
-    TAutoPtr<const NACLib::TUserToken> UserToken;
+    TAutoPtr<const NACLib::TUserToken> UserToken; 
 
     THashMap<ui64, TPerTablet> PerTablet;
     NYql::TIssueManager IssueManager;
@@ -1249,10 +1249,10 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
         "Actor# " << ctx.SelfID.ToString() << " Cookie# " << (ui64)ev->Cookie
         << " txid# " << TxId << " HANDLE TDataReq marker# P1");
 
-    if (!record.GetUserToken().empty()) {
-        UserToken = new NACLib::TUserToken(record.GetUserToken());
-    }
-
+    if (!record.GetUserToken().empty()) { 
+        UserToken = new NACLib::TUserToken(record.GetUserToken()); 
+    } 
+ 
     // For read table transaction we need to resolve table path.
     if (txbody.HasReadTableTransaction()) {
         ReadTableRequest = new TReadTableRequest(txbody.GetReadTableTransaction());
@@ -1594,7 +1594,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
         if (access != 0
                 && UserToken != nullptr
                 && entry.KeyDescription->Status == TKeyDesc::EStatus::Ok
-                && entry.KeyDescription->SecurityObject != nullptr
+                && entry.KeyDescription->SecurityObject != nullptr 
                 && !entry.KeyDescription->SecurityObject->CheckAccess(access, *UserToken)) {
             TStringStream explanation;
             explanation << "Access denied for " << UserToken->GetUserSID()

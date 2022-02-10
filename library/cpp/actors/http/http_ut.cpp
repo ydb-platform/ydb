@@ -3,86 +3,86 @@
 #include <library/cpp/actors/core/executor_pool_basic.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
 #include <library/cpp/actors/testlib/test_runtime.h>
-#include <util/system/tempfile.h>
-#include "http.h"
-#include "http_proxy.h"
-
-
-
-enum EService : NActors::NLog::EComponent {
-    MIN,
-    Logger,
-    MVP,
-    MAX
-};
-
-namespace {
-
-template <typename HttpType>
-void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
-    request->EnsureEnoughSpaceAvailable(data.size());
-    auto size = std::min(request->Avail(), data.size());
-    memcpy(request->Pos(), data.data(), size);
-    request->Advance(size);
-}
-
-template <typename HttpType>
-void EatPartialString(TIntrusivePtr<HttpType>& request, const TString& data) {
-    for (char c : data) {
-        request->EnsureEnoughSpaceAvailable(1);
-        memcpy(request->Pos(), &c, 1);
-        request->Advance(1);
-    }
-}
-
-}
-
+#include <util/system/tempfile.h> 
+#include "http.h" 
+#include "http_proxy.h" 
+ 
+ 
+ 
+enum EService : NActors::NLog::EComponent { 
+    MIN, 
+    Logger, 
+    MVP, 
+    MAX 
+}; 
+ 
+namespace { 
+ 
+template <typename HttpType> 
+void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) { 
+    request->EnsureEnoughSpaceAvailable(data.size()); 
+    auto size = std::min(request->Avail(), data.size()); 
+    memcpy(request->Pos(), data.data(), size); 
+    request->Advance(size); 
+} 
+ 
+template <typename HttpType> 
+void EatPartialString(TIntrusivePtr<HttpType>& request, const TString& data) { 
+    for (char c : data) { 
+        request->EnsureEnoughSpaceAvailable(1); 
+        memcpy(request->Pos(), &c, 1); 
+        request->Advance(1); 
+    } 
+} 
+ 
+} 
+ 
 Y_UNIT_TEST_SUITE(HttpProxy) {
     Y_UNIT_TEST(BasicParsing) {
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "GET /test HTTP/1.1\r\nHost: test\r\nSome-Header: 32344\r\n\r\n");
-        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
-        UNIT_ASSERT_EQUAL(request->Method, "GET");
-        UNIT_ASSERT_EQUAL(request->URL, "/test");
-        UNIT_ASSERT_EQUAL(request->Protocol, "HTTP");
-        UNIT_ASSERT_EQUAL(request->Version, "1.1");
-        UNIT_ASSERT_EQUAL(request->Host, "test");
-        UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nSome-Header: 32344\r\n\r\n");
-    }
-
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(); 
+        EatWholeString(request, "GET /test HTTP/1.1\r\nHost: test\r\nSome-Header: 32344\r\n\r\n"); 
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done); 
+        UNIT_ASSERT_EQUAL(request->Method, "GET"); 
+        UNIT_ASSERT_EQUAL(request->URL, "/test"); 
+        UNIT_ASSERT_EQUAL(request->Protocol, "HTTP"); 
+        UNIT_ASSERT_EQUAL(request->Version, "1.1"); 
+        UNIT_ASSERT_EQUAL(request->Host, "test"); 
+        UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nSome-Header: 32344\r\n\r\n"); 
+    } 
+ 
     Y_UNIT_TEST(BasicParsingChunkedBody) {
-        NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
-        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
-        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
-        UNIT_ASSERT_EQUAL(response->Stage, NHttp::THttpIncomingResponse::EParseStage::Done);
-        UNIT_ASSERT_EQUAL(response->Status, "200");
-        UNIT_ASSERT_EQUAL(response->Connection, "close");
-        UNIT_ASSERT_EQUAL(response->Protocol, "HTTP");
-        UNIT_ASSERT_EQUAL(response->Version, "1.1");
-        UNIT_ASSERT_EQUAL(response->TransferEncoding, "chunked");
-        UNIT_ASSERT_EQUAL(response->Body, "this is test.");
-    }
-
-    Y_UNIT_TEST(InvalidParsingChunkedBody) {
-        NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
-        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
-        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
-        UNIT_ASSERT(response->IsError());
-    }
-
-    Y_UNIT_TEST(AdvancedParsingChunkedBody) {
-        NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
-        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
-        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\nthis\r\n\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
-        UNIT_ASSERT_EQUAL(response->Stage, NHttp::THttpIncomingResponse::EParseStage::Done);
-        UNIT_ASSERT_EQUAL(response->Status, "200");
-        UNIT_ASSERT_EQUAL(response->Connection, "close");
-        UNIT_ASSERT_EQUAL(response->Protocol, "HTTP");
-        UNIT_ASSERT_EQUAL(response->Version, "1.1");
-        UNIT_ASSERT_EQUAL(response->TransferEncoding, "chunked");
-        UNIT_ASSERT_EQUAL(response->Body, "this\r\n is test.");
-    }
-
+        NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest(); 
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request); 
+        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n"); 
+        UNIT_ASSERT_EQUAL(response->Stage, NHttp::THttpIncomingResponse::EParseStage::Done); 
+        UNIT_ASSERT_EQUAL(response->Status, "200"); 
+        UNIT_ASSERT_EQUAL(response->Connection, "close"); 
+        UNIT_ASSERT_EQUAL(response->Protocol, "HTTP"); 
+        UNIT_ASSERT_EQUAL(response->Version, "1.1"); 
+        UNIT_ASSERT_EQUAL(response->TransferEncoding, "chunked"); 
+        UNIT_ASSERT_EQUAL(response->Body, "this is test."); 
+    } 
+ 
+    Y_UNIT_TEST(InvalidParsingChunkedBody) { 
+        NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest(); 
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request); 
+        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n"); 
+        UNIT_ASSERT(response->IsError()); 
+    } 
+ 
+    Y_UNIT_TEST(AdvancedParsingChunkedBody) { 
+        NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest(); 
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request); 
+        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\nthis\r\n\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n"); 
+        UNIT_ASSERT_EQUAL(response->Stage, NHttp::THttpIncomingResponse::EParseStage::Done); 
+        UNIT_ASSERT_EQUAL(response->Status, "200"); 
+        UNIT_ASSERT_EQUAL(response->Connection, "close"); 
+        UNIT_ASSERT_EQUAL(response->Protocol, "HTTP"); 
+        UNIT_ASSERT_EQUAL(response->Version, "1.1"); 
+        UNIT_ASSERT_EQUAL(response->TransferEncoding, "chunked"); 
+        UNIT_ASSERT_EQUAL(response->Body, "this\r\n is test."); 
+    } 
+ 
     Y_UNIT_TEST(CreateRepsonseWithCompressedBody) {
         NHttp::THttpIncomingRequestPtr request = nullptr;
         NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(request, "HTTP", "1.1", "200", "OK");
@@ -95,264 +95,264 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
     }
 
     Y_UNIT_TEST(BasicPartialParsing) {
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatPartialString(request, "GET /test HTTP/1.1\r\nHost: test\r\nSome-Header: 32344\r\n\r\n");
-        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
-        UNIT_ASSERT_EQUAL(request->Method, "GET");
-        UNIT_ASSERT_EQUAL(request->URL, "/test");
-        UNIT_ASSERT_EQUAL(request->Protocol, "HTTP");
-        UNIT_ASSERT_EQUAL(request->Version, "1.1");
-        UNIT_ASSERT_EQUAL(request->Host, "test");
-        UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nSome-Header: 32344\r\n\r\n");
-    }
-
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(); 
+        EatPartialString(request, "GET /test HTTP/1.1\r\nHost: test\r\nSome-Header: 32344\r\n\r\n"); 
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done); 
+        UNIT_ASSERT_EQUAL(request->Method, "GET"); 
+        UNIT_ASSERT_EQUAL(request->URL, "/test"); 
+        UNIT_ASSERT_EQUAL(request->Protocol, "HTTP"); 
+        UNIT_ASSERT_EQUAL(request->Version, "1.1"); 
+        UNIT_ASSERT_EQUAL(request->Host, "test"); 
+        UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nSome-Header: 32344\r\n\r\n"); 
+    } 
+ 
     Y_UNIT_TEST(BasicPartialParsingChunkedBody) {
-        NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
-        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
-        EatPartialString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
-        UNIT_ASSERT_EQUAL(response->Stage, NHttp::THttpIncomingResponse::EParseStage::Done);
-        UNIT_ASSERT_EQUAL(response->Status, "200");
-        UNIT_ASSERT_EQUAL(response->Connection, "close");
-        UNIT_ASSERT_EQUAL(response->Protocol, "HTTP");
-        UNIT_ASSERT_EQUAL(response->Version, "1.1");
-        UNIT_ASSERT_EQUAL(response->TransferEncoding, "chunked");
-        UNIT_ASSERT_EQUAL(response->Body, "this is test.");
-    }
-
+        NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest(); 
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request); 
+        EatPartialString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n"); 
+        UNIT_ASSERT_EQUAL(response->Stage, NHttp::THttpIncomingResponse::EParseStage::Done); 
+        UNIT_ASSERT_EQUAL(response->Status, "200"); 
+        UNIT_ASSERT_EQUAL(response->Connection, "close"); 
+        UNIT_ASSERT_EQUAL(response->Protocol, "HTTP"); 
+        UNIT_ASSERT_EQUAL(response->Version, "1.1"); 
+        UNIT_ASSERT_EQUAL(response->TransferEncoding, "chunked"); 
+        UNIT_ASSERT_EQUAL(response->Body, "this is test."); 
+    } 
+ 
     Y_UNIT_TEST(AdvancedParsing) {
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "GE");
-        EatWholeString(request, "T");
-        EatWholeString(request, " ");
-        EatWholeString(request, "/test");
-        EatWholeString(request, " HTTP/1.1\r");
-        EatWholeString(request, "\nHo");
-        EatWholeString(request, "st: test");
-        EatWholeString(request, "\r\n");
-        EatWholeString(request, "Some-Header: 32344\r\n\r");
-        EatWholeString(request, "\n");
-        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
-        UNIT_ASSERT_EQUAL(request->Method, "GET");
-        UNIT_ASSERT_EQUAL(request->URL, "/test");
-        UNIT_ASSERT_EQUAL(request->Protocol, "HTTP");
-        UNIT_ASSERT_EQUAL(request->Version, "1.1");
-        UNIT_ASSERT_EQUAL(request->Host, "test");
-        UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nSome-Header: 32344\r\n\r\n");
-    }
-
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(); 
+        EatWholeString(request, "GE"); 
+        EatWholeString(request, "T"); 
+        EatWholeString(request, " "); 
+        EatWholeString(request, "/test"); 
+        EatWholeString(request, " HTTP/1.1\r"); 
+        EatWholeString(request, "\nHo"); 
+        EatWholeString(request, "st: test"); 
+        EatWholeString(request, "\r\n"); 
+        EatWholeString(request, "Some-Header: 32344\r\n\r"); 
+        EatWholeString(request, "\n"); 
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done); 
+        UNIT_ASSERT_EQUAL(request->Method, "GET"); 
+        UNIT_ASSERT_EQUAL(request->URL, "/test"); 
+        UNIT_ASSERT_EQUAL(request->Protocol, "HTTP"); 
+        UNIT_ASSERT_EQUAL(request->Version, "1.1"); 
+        UNIT_ASSERT_EQUAL(request->Host, "test"); 
+        UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nSome-Header: 32344\r\n\r\n"); 
+    } 
+ 
     Y_UNIT_TEST(AdvancedPartialParsing) {
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatPartialString(request, "GE");
-        EatPartialString(request, "T");
-        EatPartialString(request, " ");
-        EatPartialString(request, "/test");
-        EatPartialString(request, " HTTP/1.1\r");
-        EatPartialString(request, "\nHo");
-        EatPartialString(request, "st: test");
-        EatPartialString(request, "\r\n");
-        EatPartialString(request, "Some-Header: 32344\r\n\r");
-        EatPartialString(request, "\n");
-        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
-        UNIT_ASSERT_EQUAL(request->Method, "GET");
-        UNIT_ASSERT_EQUAL(request->URL, "/test");
-        UNIT_ASSERT_EQUAL(request->Protocol, "HTTP");
-        UNIT_ASSERT_EQUAL(request->Version, "1.1");
-        UNIT_ASSERT_EQUAL(request->Host, "test");
-        UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nSome-Header: 32344\r\n\r\n");
-    }
-
-    Y_UNIT_TEST(BasicRenderBodyWithHeadersAndCookies) {
-        NHttp::THttpOutgoingRequestPtr request = NHttp::THttpOutgoingRequest::CreateRequestGet("http://www.yandex.ru/data/url");
-        NHttp::THeadersBuilder headers;
-        NHttp::TCookiesBuilder cookies;
-        cookies.Set("cookie1", "123456");
-        cookies.Set("cookie2", "45678");
-        headers.Set("Cookie", cookies.Render());
-        request->Set(headers);
-        TString requestData;
-        request->AsString(requestData);
-        UNIT_ASSERT_VALUES_EQUAL(requestData, "GET /data/url HTTP/1.1\r\nHost: www.yandex.ru\r\nAccept: */*\r\nCookie: cookie1=123456; cookie2=45678;\r\n");
-    }
-
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(); 
+        EatPartialString(request, "GE"); 
+        EatPartialString(request, "T"); 
+        EatPartialString(request, " "); 
+        EatPartialString(request, "/test"); 
+        EatPartialString(request, " HTTP/1.1\r"); 
+        EatPartialString(request, "\nHo"); 
+        EatPartialString(request, "st: test"); 
+        EatPartialString(request, "\r\n"); 
+        EatPartialString(request, "Some-Header: 32344\r\n\r"); 
+        EatPartialString(request, "\n"); 
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done); 
+        UNIT_ASSERT_EQUAL(request->Method, "GET"); 
+        UNIT_ASSERT_EQUAL(request->URL, "/test"); 
+        UNIT_ASSERT_EQUAL(request->Protocol, "HTTP"); 
+        UNIT_ASSERT_EQUAL(request->Version, "1.1"); 
+        UNIT_ASSERT_EQUAL(request->Host, "test"); 
+        UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nSome-Header: 32344\r\n\r\n"); 
+    } 
+ 
+    Y_UNIT_TEST(BasicRenderBodyWithHeadersAndCookies) { 
+        NHttp::THttpOutgoingRequestPtr request = NHttp::THttpOutgoingRequest::CreateRequestGet("http://www.yandex.ru/data/url"); 
+        NHttp::THeadersBuilder headers; 
+        NHttp::TCookiesBuilder cookies; 
+        cookies.Set("cookie1", "123456"); 
+        cookies.Set("cookie2", "45678"); 
+        headers.Set("Cookie", cookies.Render()); 
+        request->Set(headers); 
+        TString requestData; 
+        request->AsString(requestData); 
+        UNIT_ASSERT_VALUES_EQUAL(requestData, "GET /data/url HTTP/1.1\r\nHost: www.yandex.ru\r\nAccept: */*\r\nCookie: cookie1=123456; cookie2=45678;\r\n"); 
+    } 
+ 
     Y_UNIT_TEST(BasicRunning) {
         NActors::TTestActorRuntimeBase actorSystem;
-        TPortManager portManager;
-        TIpPort port = portManager.GetTcpPort();
-        TAutoPtr<NActors::IEventHandle> handle;
+        TPortManager portManager; 
+        TIpPort port = portManager.GetTcpPort(); 
+        TAutoPtr<NActors::IEventHandle> handle; 
         actorSystem.Initialize();
         NMonitoring::TMetricRegistry sensors;
-
-        NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors);
+ 
+        NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors); 
         NActors::TActorId proxyId = actorSystem.Register(proxy);
         actorSystem.Send(new NActors::IEventHandle(proxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
-        actorSystem.DispatchEvents();
-
+        actorSystem.DispatchEvents(); 
+ 
         NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
-        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
-
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true); 
+ 
         NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
-        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(port) + "/test");
-        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
-
-        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
-
-        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
-
-        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\npassed\r\n0\r\n\r\n");
-        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
-
-        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
-
-        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
-        UNIT_ASSERT_EQUAL(response->Response->Body, "passed");
-    }
-
-    Y_UNIT_TEST(TlsRunning) {
-        NActors::TTestActorRuntimeBase actorSystem;
-        TPortManager portManager;
-        TIpPort port = portManager.GetTcpPort();
-        TAutoPtr<NActors::IEventHandle> handle;
-        actorSystem.Initialize();
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(port) + "/test"); 
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true); 
+ 
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle); 
+ 
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test"); 
+ 
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\npassed\r\n0\r\n\r\n"); 
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true); 
+ 
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle); 
+ 
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200"); 
+        UNIT_ASSERT_EQUAL(response->Response->Body, "passed"); 
+    } 
+ 
+    Y_UNIT_TEST(TlsRunning) { 
+        NActors::TTestActorRuntimeBase actorSystem; 
+        TPortManager portManager; 
+        TIpPort port = portManager.GetTcpPort(); 
+        TAutoPtr<NActors::IEventHandle> handle; 
+        actorSystem.Initialize(); 
         NMonitoring::TMetricRegistry sensors;
-
-        TString certificateContent = R"___(-----BEGIN PRIVATE KEY-----
-MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCzRZjodO7Aqe1w
-RyOj6kG6g2nn8ZGAxfao4mLT0jDTbVksrhV/h2s3uldLkFo5WrNQ8WZe+iIbXeFL
-s8tO6hslzreo9sih2IHoRcH5KnS/6YTqVhRTJb1jE2dM8NwYbwTi+T2Pe0FrBPjI
-kgVO50gAtYl9C+fc715uZiSKW+rRlP5OoFTwxrOjiU27RPZjFYyWK9wTI1Es9uRr
-lbZbLl5cY6dK2J1AViRraaYKCWO26VbOPWLsY4OD3e+ZXIc3OMCz6Yb0wmRPeJ60
-bbbkGfI8O27kDdv69MAWHIm0yYMzKEnom1dce7rNQNDEqJfocsYIsg+EvayT1yQ9
-KTBegw7LAgMBAAECggEBAKaOCrotqYQmXArsjRhFFDwMy+BKdzyEr93INrlFl0dX
-WHpCYobRcbOc1G3H94tB0UdqgAnNqtJyLlb+++ydZAuEOu4oGc8EL+10ofq0jzOd
-6Xct8kQt0/6wkFDTlii9PHUDy0X65ZRgUiNGRtg/2I2QG+SpowmI+trm2xwQueFs
-VaWrjc3cVvXx0b8Lu7hqZUv08kgC38stzuRk/n2T5VWSAr7Z4ZWQbO918Dv35HUw
-Wy/0jNUFP9CBCvFJ4l0OoH9nYhWFG+HXWzNdw6/Hca4jciRKo6esCiOZ9uWYv/ec
-/NvX9rgFg8G8/SrTisX10+Bbeq+R1RKwq/IG409TH4ECgYEA14L+3QsgNIUMeYAx
-jSCyk22R/tOHI1BM+GtKPUhnwHlAssrcPcxXMJovl6WL93VauYjym0wpCz9urSpA
-I2CqTsG8GYciA6Dr3mHgD6cK0jj9UPAU6EnZ5S0mjhPqKZqutu9QegzD2uESvuN8
-36xezwQthzAf0nI/P3sJGjVXjikCgYEA1POm5xcV6SmM6HnIdadEebhzZIJ9TXQz
-ry3Jj3a7CKyD5C7fAdkHUTCjgT/2ElxPi9ABkZnC+d/cW9GtJFa0II5qO/agm3KQ
-ZXYiutu9A7xACHYFXRiJEjVUdGG9dKMVOHUEa8IHEgrrcUVM/suy/GgutywIfaXs
-y58IFP24K9MCgYEAk6zjz7wL+XEiNy+sxLQfKf7vB9sSwxQHakK6wHuY/L8Zomp3
-uLEJHfjJm/SIkK0N2g0JkXkCtv5kbKyC/rsCeK0wo52BpVLjzaLr0k34kE0U6B1b
-dkEE2pGx1bG3x4KDLj+Wuct9ecK5Aa0IqIyI+vo16GkFpUM8K9e3SQo8UOECgYEA
-sCZYAkILYtJ293p9giz5rIISGasDAUXE1vxWBXEeJ3+kneTTnZCrx9Im/ewtnWR0
-fF90XL9HFDDD88POqAd8eo2zfKR2l/89SGBfPBg2EtfuU9FkgGyiPciVcqvC7q9U
-B15saMKX3KnhtdGwbfeLt9RqCCTJZT4SUSDcq5hwdvcCgYAxY4Be8mNipj8Cgg22
-mVWSolA0TEzbtUcNk6iGodpi+Z0LKpsPC0YRqPRyh1K+rIltG1BVdmUBHcMlOYxl
-lWWvbJH6PkJWy4n2MF7PO45kjN3pPZg4hgH63JjZeAineBwEArUGb9zHnvzcdRvF
-wuQ2pZHL/HJ0laUSieHDJ5917w==
------END PRIVATE KEY-----
-
-
------BEGIN CERTIFICATE-----
-MIIDjTCCAnWgAwIBAgIURt5IBx0J3xgEaQvmyrFH2A+NkpMwDQYJKoZIhvcNAQEL
-BQAwVjELMAkGA1UEBhMCUlUxDzANBgNVBAgMBk1vc2NvdzEPMA0GA1UEBwwGTW9z
-Y293MQ8wDQYDVQQKDAZZYW5kZXgxFDASBgNVBAMMC3Rlc3Qtc2VydmVyMB4XDTE5
-MDkyMDE3MTQ0MVoXDTQ3MDIwNDE3MTQ0MVowVjELMAkGA1UEBhMCUlUxDzANBgNV
-BAgMBk1vc2NvdzEPMA0GA1UEBwwGTW9zY293MQ8wDQYDVQQKDAZZYW5kZXgxFDAS
-BgNVBAMMC3Rlc3Qtc2VydmVyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
-AQEAs0WY6HTuwKntcEcjo+pBuoNp5/GRgMX2qOJi09Iw021ZLK4Vf4drN7pXS5Ba
-OVqzUPFmXvoiG13hS7PLTuobJc63qPbIodiB6EXB+Sp0v+mE6lYUUyW9YxNnTPDc
-GG8E4vk9j3tBawT4yJIFTudIALWJfQvn3O9ebmYkilvq0ZT+TqBU8Mazo4lNu0T2
-YxWMlivcEyNRLPbka5W2Wy5eXGOnStidQFYka2mmCgljtulWzj1i7GODg93vmVyH
-NzjAs+mG9MJkT3ietG225BnyPDtu5A3b+vTAFhyJtMmDMyhJ6JtXXHu6zUDQxKiX
-6HLGCLIPhL2sk9ckPSkwXoMOywIDAQABo1MwUTAdBgNVHQ4EFgQUDv/xuJ4CvCgG
-fPrZP3hRAt2+/LwwHwYDVR0jBBgwFoAUDv/xuJ4CvCgGfPrZP3hRAt2+/LwwDwYD
-VR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAinKpMYaA2tjLpAnPVbjy
-/ZxSBhhB26RiQp3Re8XOKyhTWqgYE6kldYT0aXgK9x9mPC5obQannDDYxDc7lX+/
-qP/u1X81ZcDRo/f+qQ3iHfT6Ftt/4O3qLnt45MFM6Q7WabRm82x3KjZTqpF3QUdy
-tumWiuAP5DMd1IRDtnKjFHO721OsEsf6NLcqdX89bGeqXDvrkwg3/PNwTyW5E7cj
-feY8L2eWtg6AJUnIBu11wvfzkLiH3QKzHvO/SIZTGf5ihDsJ3aKEE9UNauTL3bVc
-CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
-6g==
------END CERTIFICATE-----)___";
-
-        TTempFileHandle certificateFile;
-
-        certificateFile.Write(certificateContent.data(), certificateContent.size());
-
-        NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors);
+ 
+        TString certificateContent = R"___(-----BEGIN PRIVATE KEY----- 
+MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCzRZjodO7Aqe1w 
+RyOj6kG6g2nn8ZGAxfao4mLT0jDTbVksrhV/h2s3uldLkFo5WrNQ8WZe+iIbXeFL 
+s8tO6hslzreo9sih2IHoRcH5KnS/6YTqVhRTJb1jE2dM8NwYbwTi+T2Pe0FrBPjI 
+kgVO50gAtYl9C+fc715uZiSKW+rRlP5OoFTwxrOjiU27RPZjFYyWK9wTI1Es9uRr 
+lbZbLl5cY6dK2J1AViRraaYKCWO26VbOPWLsY4OD3e+ZXIc3OMCz6Yb0wmRPeJ60 
+bbbkGfI8O27kDdv69MAWHIm0yYMzKEnom1dce7rNQNDEqJfocsYIsg+EvayT1yQ9 
+KTBegw7LAgMBAAECggEBAKaOCrotqYQmXArsjRhFFDwMy+BKdzyEr93INrlFl0dX 
+WHpCYobRcbOc1G3H94tB0UdqgAnNqtJyLlb+++ydZAuEOu4oGc8EL+10ofq0jzOd 
+6Xct8kQt0/6wkFDTlii9PHUDy0X65ZRgUiNGRtg/2I2QG+SpowmI+trm2xwQueFs 
+VaWrjc3cVvXx0b8Lu7hqZUv08kgC38stzuRk/n2T5VWSAr7Z4ZWQbO918Dv35HUw 
+Wy/0jNUFP9CBCvFJ4l0OoH9nYhWFG+HXWzNdw6/Hca4jciRKo6esCiOZ9uWYv/ec 
+/NvX9rgFg8G8/SrTisX10+Bbeq+R1RKwq/IG409TH4ECgYEA14L+3QsgNIUMeYAx 
+jSCyk22R/tOHI1BM+GtKPUhnwHlAssrcPcxXMJovl6WL93VauYjym0wpCz9urSpA 
+I2CqTsG8GYciA6Dr3mHgD6cK0jj9UPAU6EnZ5S0mjhPqKZqutu9QegzD2uESvuN8 
+36xezwQthzAf0nI/P3sJGjVXjikCgYEA1POm5xcV6SmM6HnIdadEebhzZIJ9TXQz 
+ry3Jj3a7CKyD5C7fAdkHUTCjgT/2ElxPi9ABkZnC+d/cW9GtJFa0II5qO/agm3KQ 
+ZXYiutu9A7xACHYFXRiJEjVUdGG9dKMVOHUEa8IHEgrrcUVM/suy/GgutywIfaXs 
+y58IFP24K9MCgYEAk6zjz7wL+XEiNy+sxLQfKf7vB9sSwxQHakK6wHuY/L8Zomp3 
+uLEJHfjJm/SIkK0N2g0JkXkCtv5kbKyC/rsCeK0wo52BpVLjzaLr0k34kE0U6B1b 
+dkEE2pGx1bG3x4KDLj+Wuct9ecK5Aa0IqIyI+vo16GkFpUM8K9e3SQo8UOECgYEA 
+sCZYAkILYtJ293p9giz5rIISGasDAUXE1vxWBXEeJ3+kneTTnZCrx9Im/ewtnWR0 
+fF90XL9HFDDD88POqAd8eo2zfKR2l/89SGBfPBg2EtfuU9FkgGyiPciVcqvC7q9U 
+B15saMKX3KnhtdGwbfeLt9RqCCTJZT4SUSDcq5hwdvcCgYAxY4Be8mNipj8Cgg22 
+mVWSolA0TEzbtUcNk6iGodpi+Z0LKpsPC0YRqPRyh1K+rIltG1BVdmUBHcMlOYxl 
+lWWvbJH6PkJWy4n2MF7PO45kjN3pPZg4hgH63JjZeAineBwEArUGb9zHnvzcdRvF 
+wuQ2pZHL/HJ0laUSieHDJ5917w== 
+-----END PRIVATE KEY----- 
+ 
+ 
+-----BEGIN CERTIFICATE----- 
+MIIDjTCCAnWgAwIBAgIURt5IBx0J3xgEaQvmyrFH2A+NkpMwDQYJKoZIhvcNAQEL 
+BQAwVjELMAkGA1UEBhMCUlUxDzANBgNVBAgMBk1vc2NvdzEPMA0GA1UEBwwGTW9z 
+Y293MQ8wDQYDVQQKDAZZYW5kZXgxFDASBgNVBAMMC3Rlc3Qtc2VydmVyMB4XDTE5 
+MDkyMDE3MTQ0MVoXDTQ3MDIwNDE3MTQ0MVowVjELMAkGA1UEBhMCUlUxDzANBgNV 
+BAgMBk1vc2NvdzEPMA0GA1UEBwwGTW9zY293MQ8wDQYDVQQKDAZZYW5kZXgxFDAS 
+BgNVBAMMC3Rlc3Qtc2VydmVyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC 
+AQEAs0WY6HTuwKntcEcjo+pBuoNp5/GRgMX2qOJi09Iw021ZLK4Vf4drN7pXS5Ba 
+OVqzUPFmXvoiG13hS7PLTuobJc63qPbIodiB6EXB+Sp0v+mE6lYUUyW9YxNnTPDc 
+GG8E4vk9j3tBawT4yJIFTudIALWJfQvn3O9ebmYkilvq0ZT+TqBU8Mazo4lNu0T2 
+YxWMlivcEyNRLPbka5W2Wy5eXGOnStidQFYka2mmCgljtulWzj1i7GODg93vmVyH 
+NzjAs+mG9MJkT3ietG225BnyPDtu5A3b+vTAFhyJtMmDMyhJ6JtXXHu6zUDQxKiX 
+6HLGCLIPhL2sk9ckPSkwXoMOywIDAQABo1MwUTAdBgNVHQ4EFgQUDv/xuJ4CvCgG 
+fPrZP3hRAt2+/LwwHwYDVR0jBBgwFoAUDv/xuJ4CvCgGfPrZP3hRAt2+/LwwDwYD 
+VR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAinKpMYaA2tjLpAnPVbjy 
+/ZxSBhhB26RiQp3Re8XOKyhTWqgYE6kldYT0aXgK9x9mPC5obQannDDYxDc7lX+/ 
+qP/u1X81ZcDRo/f+qQ3iHfT6Ftt/4O3qLnt45MFM6Q7WabRm82x3KjZTqpF3QUdy 
+tumWiuAP5DMd1IRDtnKjFHO721OsEsf6NLcqdX89bGeqXDvrkwg3/PNwTyW5E7cj 
+feY8L2eWtg6AJUnIBu11wvfzkLiH3QKzHvO/SIZTGf5ihDsJ3aKEE9UNauTL3bVc 
+CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V 
+6g== 
+-----END CERTIFICATE-----)___"; 
+ 
+        TTempFileHandle certificateFile; 
+ 
+        certificateFile.Write(certificateContent.data(), certificateContent.size()); 
+ 
+        NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors); 
         NActors::TActorId proxyId = actorSystem.Register(proxy);
-
+ 
         THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
-        ///////// https configuration
-        add->Secure = true;
-        add->CertificateFile = certificateFile.Name();
-        add->PrivateKeyFile = certificateFile.Name();
-        /////////
+        ///////// https configuration 
+        add->Secure = true; 
+        add->CertificateFile = certificateFile.Name(); 
+        add->PrivateKeyFile = certificateFile.Name(); 
+        ///////// 
         actorSystem.Send(new NActors::IEventHandle(proxyId, TActorId(), add.Release()), 0, true);
-        actorSystem.DispatchEvents();
-
+        actorSystem.DispatchEvents(); 
+ 
         NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
-        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
-
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true); 
+ 
         NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
-        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("https://[::1]:" + ToString(port) + "/test");
-        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
-
-        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
-
-        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
-
-        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\npassed\r\n0\r\n\r\n");
-        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
-
-        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
-
-        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
-        UNIT_ASSERT_EQUAL(response->Response->Body, "passed");
-    }
-
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("https://[::1]:" + ToString(port) + "/test"); 
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true); 
+ 
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle); 
+ 
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test"); 
+ 
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\npassed\r\n0\r\n\r\n"); 
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true); 
+ 
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle); 
+ 
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200"); 
+        UNIT_ASSERT_EQUAL(response->Response->Body, "passed"); 
+    } 
+ 
     /*Y_UNIT_TEST(AdvancedRunning) {
         THolder<NActors::TActorSystemSetup> setup = MakeHolder<NActors::TActorSystemSetup>();
-        setup->NodeId = 1;
-        setup->ExecutorsCount = 1;
-        setup->Executors = new TAutoPtr<NActors::IExecutorPool>[1];
-        setup->Executors[0] = new NActors::TBasicExecutorPool(0, 2, 10);
-        setup->Scheduler = new NActors::TBasicSchedulerThread(NActors::TSchedulerConfig(512, 100));
-        NActors::TActorSystem actorSystem(setup);
-        actorSystem.Start();
-        NHttp::THttpProxy* incomingProxy = new NHttp::THttpProxy();
+        setup->NodeId = 1; 
+        setup->ExecutorsCount = 1; 
+        setup->Executors = new TAutoPtr<NActors::IExecutorPool>[1]; 
+        setup->Executors[0] = new NActors::TBasicExecutorPool(0, 2, 10); 
+        setup->Scheduler = new NActors::TBasicSchedulerThread(NActors::TSchedulerConfig(512, 100)); 
+        NActors::TActorSystem actorSystem(setup); 
+        actorSystem.Start(); 
+        NHttp::THttpProxy* incomingProxy = new NHttp::THttpProxy(); 
         NActors::TActorId incomingProxyId = actorSystem.Register(incomingProxy);
-        actorSystem.Send(incomingProxyId, new NHttp::TEvHttpProxy::TEvAddListeningPort(13337));
-
-        NHttp::THttpProxy* outgoingProxy = new NHttp::THttpProxy();
+        actorSystem.Send(incomingProxyId, new NHttp::TEvHttpProxy::TEvAddListeningPort(13337)); 
+ 
+        NHttp::THttpProxy* outgoingProxy = new NHttp::THttpProxy(); 
         NActors::TActorId outgoingProxyId = actorSystem.Register(outgoingProxy);
-
+ 
         THolder<NHttp::THttpStaticStringRequest> httpRequest = MakeHolder<NHttp::THttpStaticStringRequest>("GET /test HTTP/1.1\r\n\r\n");
-        actorSystem.Send(outgoingProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest("[::]:13337", std::move(httpRequest)));
-
-        Sleep(TDuration::Minutes(60));
-    }*/
-
-    Y_UNIT_TEST(TooLongHeader) {
-        NActors::TTestActorRuntimeBase actorSystem;
-        TPortManager portManager;
-        TIpPort port = portManager.GetTcpPort();
-        TAutoPtr<NActors::IEventHandle> handle;
-        actorSystem.Initialize();
-        NMonitoring::TMetricRegistry sensors;
-
-        NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors);
-        NActors::TActorId proxyId = actorSystem.Register(proxy);
-        actorSystem.Send(new NActors::IEventHandle(proxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
-        actorSystem.DispatchEvents();
-
-        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
-        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
-
-        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
-        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(port) + "/test");
-        httpRequest->Set("Connection", "close");
-        TString longHeader;
-        longHeader.append(9000, 'X');
-        httpRequest->Set(longHeader, "data");
-        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
-
-        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
-
-        UNIT_ASSERT_EQUAL(response->Response->Status, "400");
-        UNIT_ASSERT_EQUAL(response->Response->Body, "Invalid http header");
-    }
-}
+        actorSystem.Send(outgoingProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest("[::]:13337", std::move(httpRequest))); 
+ 
+        Sleep(TDuration::Minutes(60)); 
+    }*/ 
+ 
+    Y_UNIT_TEST(TooLongHeader) { 
+        NActors::TTestActorRuntimeBase actorSystem; 
+        TPortManager portManager; 
+        TIpPort port = portManager.GetTcpPort(); 
+        TAutoPtr<NActors::IEventHandle> handle; 
+        actorSystem.Initialize(); 
+        NMonitoring::TMetricRegistry sensors; 
+ 
+        NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors); 
+        NActors::TActorId proxyId = actorSystem.Register(proxy); 
+        actorSystem.Send(new NActors::IEventHandle(proxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true); 
+        actorSystem.DispatchEvents(); 
+ 
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor(); 
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true); 
+ 
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor(); 
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(port) + "/test"); 
+        httpRequest->Set("Connection", "close"); 
+        TString longHeader; 
+        longHeader.append(9000, 'X'); 
+        httpRequest->Set(longHeader, "data"); 
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true); 
+ 
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle); 
+ 
+        UNIT_ASSERT_EQUAL(response->Response->Status, "400"); 
+        UNIT_ASSERT_EQUAL(response->Response->Body, "Invalid http header"); 
+    } 
+} 

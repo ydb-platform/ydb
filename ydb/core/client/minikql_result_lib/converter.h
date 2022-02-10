@@ -12,7 +12,7 @@ class TType;
 
 
 namespace NKikimr {
-namespace NResultLib {
+namespace NResultLib { 
 
 TStruct ConvertResult(const NKikimrMiniKQL::TValue& value, const NKikimrMiniKQL::TType& type);
 
@@ -25,5 +25,5 @@ inline TStruct ConvertResult(const NKikimr::NClient::TQueryResult& apiResult) {
     return ConvertResult(result.GetValue(), result.GetType());
 }
 
-} // namespace NResultLib
+} // namespace NResultLib 
 } // namespace NKikimr

@@ -675,7 +675,7 @@ void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSch
     if (!WaitingForACL) //ignore if already processed
         return;
     WaitingForACL = false;
-    const auto& record = ev->Get()->GetRecord();
+    const auto& record = ev->Get()->GetRecord(); 
     if (record.GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
         ACL.Clear();
         Y_PROTOBUF_SUPPRESS_NODISCARD ACL.MutableACL()->ParseFromString(record.GetPathDescription().GetSelf().GetEffectiveACL());

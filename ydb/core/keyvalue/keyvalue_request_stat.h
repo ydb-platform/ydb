@@ -30,8 +30,8 @@ struct TRequestStat {
     TInstant LocalBaseTxCreatedAt;
     TInstant IntermediateCreatedAt;
     TRequestType::EType RequestType;
-    NMetrics::TTabletThroughputRawValue GroupReadBytes;
-    NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
+    NMetrics::TTabletThroughputRawValue GroupReadBytes; 
+    NMetrics::TTabletThroughputRawValue GroupWrittenBytes; 
     NMetrics::TTabletIopsRawValue GroupReadIops;
     NMetrics::TTabletIopsRawValue GroupWrittenIops;
 

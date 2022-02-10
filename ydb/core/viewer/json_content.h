@@ -1,40 +1,40 @@
-#pragma once
-#include <unordered_map>
+#pragma once 
+#include <unordered_map> 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include "viewer.h"
-#include "browse.h"
-
-namespace NKikimr {
-namespace NViewer {
-
-using namespace NActors;
-using ::google::protobuf::FieldDescriptor;
-
-class TJsonContent : public TActorBootstrapped<TJsonContent> {
-    using TThis = TJsonContent;
-    using TBase = TActorBootstrapped<TJsonContent>;
+#include "viewer.h" 
+#include "browse.h" 
+ 
+namespace NKikimr { 
+namespace NViewer { 
+ 
+using namespace NActors; 
+using ::google::protobuf::FieldDescriptor; 
+ 
+class TJsonContent : public TActorBootstrapped<TJsonContent> { 
+    using TThis = TJsonContent; 
+    using TBase = TActorBootstrapped<TJsonContent>; 
 
     IViewer* Viewer;
     TActorId Initiator;
-    NMon::TEvHttpInfo::TPtr Event;
-
+    NMon::TEvHttpInfo::TPtr Event; 
+ 
     IViewer::TContentRequestContext ContentRequestContext;
     TInstant BrowseStarted;
 
-public:
+public: 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
+    } 
+ 
     TJsonContent(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
         , Initiator(ev->Sender)
-        , Event(ev)
-    {}
-
+        , Event(ev) 
+    {} 
+ 
     STFUNC(StateWaitingBrowse) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NViewerEvents::TEvBrowseResponse, HandleBrowseResponse);
@@ -45,9 +45,9 @@ public:
 public:
     void Bootstrap(const TActorContext& ctx) {
         BuildRequestContext(&Event->Get()->Request, ContentRequestContext);
-        if (!Event->Get()->UserToken.empty()) {
-            ContentRequestContext.UserToken = Event->Get()->UserToken;
-        }
+        if (!Event->Get()->UserToken.empty()) { 
+            ContentRequestContext.UserToken = Event->Get()->UserToken; 
+        } 
         BrowseStarted = ctx.Now();
         ctx.RegisterWithSameMailbox(new TBrowse(Viewer, ctx.SelfID, ContentRequestContext.Path, Event->Get()->UserToken));
 
@@ -64,8 +64,8 @@ private:
         IViewer::TContentRequestContext& reqCtx) {
         if (!httpRequest) {
             return;
-        }
-
+        } 
+ 
         const auto& params = httpRequest->GetParams();
         auto post = httpRequest->GetPostContent();
 
@@ -85,19 +85,19 @@ private:
         reqCtx.Offset = FromStringWithDefault<ui32>(params.Get("offset"), reqCtx.Offset);
         reqCtx.Key = post;
 
-        if (params.Has("key")) {
+        if (params.Has("key")) { 
             reqCtx.Key = params.Get("key");
-        }
+        } 
 
         reqCtx.Path = params.Get("path");
-    }
-
+    } 
+ 
     void HandleBrowseResponse(NViewerEvents::TEvBrowseResponse::TPtr &ev, const TActorContext &ctx) {
         NViewerEvents::TEvBrowseResponse& event = *ev->Get();
 
         if (!event.Error.empty()) {
             return SendErrorReplyAndDie(event.Error, ctx);
-        }
+        } 
 
         auto type = event.BrowseInfo.GetType();
         auto contentHandler = Viewer->GetContentHandler(type);
@@ -119,12 +119,12 @@ private:
         // spawn content retrieval actor
         ctx.RegisterWithSameMailbox(contentHandler(Initiator, ContentRequestContext));
         Die(ctx);
-    }
-
+    } 
+ 
     void HandleBrowseTimeout(const TActorContext& ctx) {
-        return SendErrorReplyAndDie(Viewer->GetHTTPGATEWAYTIMEOUT(), ctx);
-    }
-
+        return SendErrorReplyAndDie(Viewer->GetHTTPGATEWAYTIMEOUT(), ctx); 
+    } 
+ 
     void SendErrorReplyAndDie(const TString& error, const TActorContext& ctx) {
         ctx.Send(
             Initiator,
@@ -133,37 +133,37 @@ private:
                 0,
                 NMon::IEvHttpInfoRes::EContentType::Custom));
 
-        Die(ctx);
-    }
-};
-
-template <>
-struct TJsonRequestParameters<TJsonContent> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":true,"type":"string"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"key","in":"query","description":"key for positioning","required":false,"type":"string"},
-                      {"name":"limit","in":"query","description":"rows limit","required":false,"type":"integer"},
-                      {"name":"offset","in":"query","description":"offset in rows","required":false,"type":"integer"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
-    }
-};
-
-template <>
-struct TJsonRequestSummary<TJsonContent> {
-    static TString GetSummary() {
-        return "\"Schema content preview\"";
-    }
-};
-
-template <>
-struct TJsonRequestDescription<TJsonContent> {
-    static TString GetDescription() {
-        return "\"Return schema preview\"";
-    }
-};
-
-
-}
-}
+        Die(ctx); 
+    } 
+}; 
+ 
+template <> 
+struct TJsonRequestParameters<TJsonContent> { 
+    static TString GetParameters() { 
+        return R"___([{"name":"path","in":"query","description":"schema path","required":true,"type":"string"}, 
+                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"}, 
+                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"}, 
+                      {"name":"key","in":"query","description":"key for positioning","required":false,"type":"string"}, 
+                      {"name":"limit","in":"query","description":"rows limit","required":false,"type":"integer"}, 
+                      {"name":"offset","in":"query","description":"offset in rows","required":false,"type":"integer"}, 
+                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___"; 
+    } 
+}; 
+ 
+template <> 
+struct TJsonRequestSummary<TJsonContent> { 
+    static TString GetSummary() { 
+        return "\"Schema content preview\""; 
+    } 
+}; 
+ 
+template <> 
+struct TJsonRequestDescription<TJsonContent> { 
+    static TString GetDescription() { 
+        return "\"Return schema preview\""; 
+    } 
+}; 
+ 
+ 
+} 
+} 

@@ -464,35 +464,35 @@ struct TUserInfo {
         }
         return false;
     }
-
+ 
     void SetImportant(bool important)
     {
         Important = important;
         LabeledCounters.SetGroup(User + "/" + (important ? "1" : "0") + "/" + Topic);
     }
 
-    i64 GetReadOffset() const {
+    i64 GetReadOffset() const { 
         return ReadOffset == -1 ? Offset : (ReadOffset + 1); //+1 because we want to track first not readed offset
-    }
-
+    } 
+ 
     TInstant GetReadTimestamp() const {
         return ReadTimestamp;
     }
 
     TInstant GetWriteTimestamp() const {
         return Offset == EndOffset ? TAppData::TimeProvider->Now() : WriteTimestamp;
-    }
-
+    } 
+ 
     TInstant GetCreateTimestamp() const {
         return Offset == EndOffset ? TAppData::TimeProvider->Now() : CreateTimestamp;
-    }
-
+    } 
+ 
     TInstant GetReadWriteTimestamp() const {
         TInstant ts =  ReadOffset == -1 ? WriteTimestamp : ReadWriteTimestamp;
         ts = GetReadOffset() >= EndOffset ? TAppData::TimeProvider->Now() : ts;
         return ts;
-    }
-
+    } 
+ 
     ui64 GetWriteLagMs() const {
         return WriteLagMs.GetValue();
     }
@@ -501,7 +501,7 @@ struct TUserInfo {
         TInstant ts = ReadOffset == -1 ? CreateTimestamp : ReadCreateTimestamp;
         ts = GetReadOffset() >= EndOffset ? TAppData::TimeProvider->Now() : ts;
         return ts;
-    }
+    } 
 
 };
 

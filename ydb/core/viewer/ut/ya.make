@@ -1,21 +1,21 @@
 UNITTEST_FOR(ydb/core/viewer)
 
-OWNER(g:kikimr)
+OWNER(g:kikimr) 
+ 
+FORK_SUBTESTS() 
+ 
+TIMEOUT(600) 
 
-FORK_SUBTESTS()
-
-TIMEOUT(600)
-
-SIZE(MEDIUM)
-
+SIZE(MEDIUM) 
+ 
 YQL_LAST_ABI_VERSION()
-
-SRCS(
-    viewer_ut.cpp
-)
-
+ 
+SRCS( 
+    viewer_ut.cpp 
+) 
+ 
 PEERDIR(
     ydb/core/testlib
 )
 
-END()
+END() 

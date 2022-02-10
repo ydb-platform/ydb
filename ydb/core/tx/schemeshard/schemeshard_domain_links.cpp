@@ -7,10 +7,10 @@ namespace NSchemeShard {
 TParentDomainLink::TParentDomainLink(NKikimr::NSchemeShard::TSchemeShard *self)
     : Self(self)
 {
-    PipeClientConfig.RetryPolicy = {
-        .MinRetryTime = TDuration::MilliSeconds(10),
-        .MaxRetryTime = TDuration::Minutes(5),
-    };
+    PipeClientConfig.RetryPolicy = { 
+        .MinRetryTime = TDuration::MilliSeconds(10), 
+        .MaxRetryTime = TDuration::Minutes(5), 
+    }; 
 }
 
 THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> TParentDomainLink::MakeSyncMsg() const {

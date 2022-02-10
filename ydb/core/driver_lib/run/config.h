@@ -43,14 +43,14 @@ union TBasicKikimrServicesMask {
         bool EnableKqp:1;
         bool EnableMemoryLog:1;
         bool EnableGRpcService:1;
-        bool EnableNodeIdentifier:1;
+        bool EnableNodeIdentifier:1; 
         bool EnableCms:1;
         bool EnableNodeTable:1;
         bool EnableGRpcProxyStatus:1;
         bool EnablePQ:1;
         bool EnableSqs:1;
         bool EnableConfigsDispatcher:1;
-        bool EnableSecurityServices:1;
+        bool EnableSecurityServices:1; 
         bool EnableTabletInfo:1;
         bool EnableQuoterService:1;
         bool EnablePersQueueClusterDiscovery:1;
@@ -61,7 +61,7 @@ union TBasicKikimrServicesMask {
         bool EnableSchemeBoardMonitoring:1;
         bool EnableConfigsCache:1;
         bool EnableLongTxService:1;
-        bool EnableHealthCheckService:1;
+        bool EnableHealthCheckService:1; 
         bool EnableYandexQuery:1;
         bool EnableSequenceProxyService:1;
     };

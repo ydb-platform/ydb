@@ -118,7 +118,7 @@ struct TRpcServices {
         EvKikhouseRefreshSnapshot,
         EvKikhouseDiscardSnapshot,
         EvExportToS3,
-        EvSelfCheck,
+        EvSelfCheck, 
         EvStreamExecuteScanQuery,
         EvPQDropTopic,
         EvPQCreateTopic,
@@ -195,9 +195,9 @@ struct TRpcServices {
         EvDropLogStore,
         EvCreateLogTable,
         EvDescribeLogTable,
-        EvDropLogTable,
+        EvDropLogTable, 
         EvAlterLogTable,
-        EvLogin,
+        EvLogin, 
         EvAnalyticsInternalPingTask,
         EvAnalyticsInternalGetTask,
         EvAnalyticsInternalWriteTaskResult,
@@ -314,7 +314,7 @@ public:
 
 struct TRequestAuxSettings {
     TRateLimiterMode RlMode = TRateLimiterMode::Off;
-    void (*CustomAttributeProcessor)(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
+    void (*CustomAttributeProcessor)(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr; 
 };
 
 // grpc_request_proxy part
@@ -339,7 +339,7 @@ public:
     virtual void SetRespHook(TRespHook&& hook) = 0;
     virtual void SetRlPath(TMaybe<NRpcService::TRlPath>&& path) = 0;
     virtual TRateLimiterMode GetRlMode() const = 0;
-    virtual bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
+    virtual bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, 
         ICheckerIface* iface) = 0;
 
     // Pass request for next processing
@@ -442,10 +442,10 @@ public:
         return InternalToken_;
     }
 
-    TString GetPeerName() const override {
-        return {};
-    }
-
+    TString GetPeerName() const override { 
+        return {}; 
+    } 
+ 
     void  SetRlPath(TMaybe<NRpcService::TRlPath>&&) override {}
 
     TMaybe<NRpcService::TRlPath> GetRlPath() const override {
@@ -511,10 +511,10 @@ public:
     void SetRespHook(TRespHook&&) override { /* do nothing */}
 
     TRateLimiterMode GetRlMode() const override {
-        return TRateLimiterMode::Off;
-    }
-
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+        return TRateLimiterMode::Off; 
+    } 
+ 
+    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override { 
         return false;
     }
 
@@ -554,7 +554,7 @@ public:
         return TRateLimiterMode::Off;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override { 
         return false;
     }
 
@@ -630,10 +630,10 @@ public:
         return InternalToken_;
     }
 
-    TString GetPeerName() const override {
-        return Ctx_->GetPeerName();
-    }
-
+    TString GetPeerName() const override { 
+        return Ctx_->GetPeerName(); 
+    } 
+ 
     bool Validate(TString&) override {
         return true;
     }
@@ -1050,7 +1050,7 @@ public:
         return AuxSettings.RlMode;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
+    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, 
         ICheckerIface* iface) override
     {
         if (!AuxSettings.CustomAttributeProcessor) {
@@ -1089,37 +1089,37 @@ public:
         return RateLimitMode;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override { 
         return false;
     }
 };
 
-template<ui32 TRpcId, typename TReq, typename TResp, bool IsOperation = true, TRateLimiterMode RlMode = TRateLimiterMode::Off>
-class TGRpcRequestWrapperNoAuth :
-    public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TGRpcRequestWrapperNoAuth<TRpcId, TReq, TResp, IsOperation, RlMode>> {
-public:
-    static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
-    static constexpr bool IsOp = IsOperation;
-    static constexpr TRateLimiterMode RateLimitMode = RlMode;
-
-    TGRpcRequestWrapperNoAuth(NGrpc::IRequestContextBase* ctx)
-        : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TGRpcRequestWrapperNoAuth<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx)
-    { }
-
+template<ui32 TRpcId, typename TReq, typename TResp, bool IsOperation = true, TRateLimiterMode RlMode = TRateLimiterMode::Off> 
+class TGRpcRequestWrapperNoAuth : 
+    public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TGRpcRequestWrapperNoAuth<TRpcId, TReq, TResp, IsOperation, RlMode>> { 
+public: 
+    static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg); 
+    static constexpr bool IsOp = IsOperation; 
+    static constexpr TRateLimiterMode RateLimitMode = RlMode; 
+ 
+    TGRpcRequestWrapperNoAuth(NGrpc::IRequestContextBase* ctx) 
+        : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TGRpcRequestWrapperNoAuth<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx) 
+    { } 
+ 
     TRateLimiterMode GetRlMode() const override {
-        return RateLimitMode;
-    }
-
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+        return RateLimitMode; 
+    } 
+ 
+    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override { 
         return false;
     }
 
-    const NGrpc::TAuthState& GetAuthState() const override {
-        static NGrpc::TAuthState noAuthState(false);
-        return noAuthState;
-    }
-};
-
+    const NGrpc::TAuthState& GetAuthState() const override { 
+        static NGrpc::TAuthState noAuthState(false); 
+        return noAuthState; 
+    } 
+}; 
+ 
 template<ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, TRateLimiterMode RlMode = TRateLimiterMode::Off>
 class TGRpcRequestValidationWrapper :
     public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TGRpcRequestValidationWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>> {
@@ -1136,7 +1136,7 @@ public:
         return RateLimitMode;
     }
 
-    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
+    bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override { 
         return false;
     }
 

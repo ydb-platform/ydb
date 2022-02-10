@@ -58,7 +58,7 @@ struct TRuntimeNode {
 
     ~TRuntimeNode() {}
 
-    TType* GetRuntimeType() const;
+    TType* GetRuntimeType() const; 
 
     TType* GetStaticType() const;
 
@@ -421,8 +421,8 @@ public:
         return EmptyStruct;
     }
 
-    TListLiteral* GetListOfVoid() const {
-        return ListOfVoid;
+    TListLiteral* GetListOfVoid() const { 
+        return ListOfVoid; 
     }
 
     TAnyType* GetAnyType() const {
@@ -490,7 +490,7 @@ private:
     TAnyType* AnyType;
     TStructLiteral* EmptyStruct;
     TTupleLiteral* EmptyTuple;
-    TListLiteral* ListOfVoid;
+    TListLiteral* ListOfVoid; 
 };
 
 template <>
@@ -611,7 +611,7 @@ class TStructType : public TType {
 friend class TType;
 public:
     static TStructType* Create(const std::pair<TString, TType*>* members, ui32 membersCount, const TTypeEnvironment& env);
-    static TStructType* Create(ui32 membersCount, const TStructMember* members, const TTypeEnvironment& env);
+    static TStructType* Create(ui32 membersCount, const TStructMember* members, const TTypeEnvironment& env); 
 
     using TType::IsSameType;
     bool IsSameType(const TStructType& typeToCompare) const;
@@ -686,7 +686,7 @@ private:
 class TListType : public TType {
 friend class TType;
 public:
-    static TListType* Create(TType* itemType, const TTypeEnvironment& env);
+    static TListType* Create(TType* itemType, const TTypeEnvironment& env); 
 
     using TType::IsSameType;
     bool IsSameType(const TListType& typeToCompare) const;
@@ -695,7 +695,7 @@ public:
     bool IsConvertableTo(const TListType& typeToCompare, bool ignoreTagged = false) const;
 
     TType* GetItemType() const {
-        return Data;
+        return Data; 
     }
 
     TDataType* IndexDictKeyType() const {
@@ -703,14 +703,14 @@ public:
     }
 
 private:
-    TListType(TType* itemType, const TTypeEnvironment& env, bool validate = true);
+    TListType(TType* itemType, const TTypeEnvironment& env, bool validate = true); 
 
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TType* Data;
+    TType* Data; 
     TDataType* IndexDictKey;
 };
 
@@ -800,7 +800,7 @@ private:
 class TOptionalType : public TType {
 friend class TType;
 public:
-    static TOptionalType* Create(TType* itemType, const TTypeEnvironment& env);
+    static TOptionalType* Create(TType* itemType, const TTypeEnvironment& env); 
 
     using TType::IsSameType;
     bool IsSameType(const TOptionalType& typeToCompare) const;
@@ -809,18 +809,18 @@ public:
     bool IsConvertableTo(const TOptionalType& typeToCompare, bool ignoreTagged = false) const;
 
     TType* GetItemType() const {
-        return Data;
+        return Data; 
     }
 
 private:
-    TOptionalType(TType* itemType, const TTypeEnvironment& env, bool validate = true);
+    TOptionalType(TType* itemType, const TTypeEnvironment& env, bool validate = true); 
 
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TType* Data;
+    TType* Data; 
 };
 
 class TOptionalLiteral : public TNode {
@@ -859,7 +859,7 @@ private:
 class TDictType : public TType {
 friend class TType;
 public:
-    static TDictType* Create(TType* keyType, TType* payloadType, const TTypeEnvironment& env);
+    static TDictType* Create(TType* keyType, TType* payloadType, const TTypeEnvironment& env); 
 
     using TType::IsSameType;
     bool IsSameType(const TDictType& typeToCompare) const;
@@ -878,7 +878,7 @@ public:
     static void EnsureValidDictKey(TType* keyType);
 
 private:
-    TDictType(TType* keyType, TType* payloadType, const TTypeEnvironment& env, bool validate = true);
+    TDictType(TType* keyType, TType* payloadType, const TTypeEnvironment& env, bool validate = true); 
 
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
@@ -924,9 +924,9 @@ class TCallableType : public TType {
 friend class TType;
 public:
     static TCallableType* Create(const TString& name, TType* returnType, ui32 argumentsCount,
-        TType** arguments, TNode* payload, const TTypeEnvironment& env);
-    static TCallableType* Create(TType* returnType, const TStringBuf& name, ui32 argumentsCount,
-        TType** arguments, TNode* payload, const TTypeEnvironment& env);
+        TType** arguments, TNode* payload, const TTypeEnvironment& env); 
+    static TCallableType* Create(TType* returnType, const TStringBuf& name, ui32 argumentsCount, 
+        TType** arguments, TNode* payload, const TTypeEnvironment& env); 
     void SetOptionalArgumentsCount(ui32 count);
     ui32 GetOptionalArgumentsCount() const {
         return OptionalArgs;
@@ -954,7 +954,7 @@ public:
         return ArgumentsCount;
     }
 
-    TType* GetArgumentType(ui32 index) const {
+    TType* GetArgumentType(ui32 index) const { 
         Y_VERIFY_DEBUG(index < ArgumentsCount);
         return Arguments[index];
     }
@@ -973,7 +973,7 @@ public:
 
 private:
     TCallableType(const TInternName& name, TType* returnType, ui32 argumentsCount, TType** arguments,
-        TNode* payload, const TTypeEnvironment& env);
+        TNode* payload, const TTypeEnvironment& env); 
 
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
@@ -984,7 +984,7 @@ private:
     ui32 ArgumentsCount;
     TInternName Name;
     TType* ReturnType;
-    TType** Arguments;
+    TType** Arguments; 
     TNode* Payload;
     ui32 OptionalArgs;
 };
@@ -1119,7 +1119,7 @@ private:
 class TTupleType : public TType {
 friend class TType;
 public:
-    static TTupleType* Create(ui32 elementsCount, TType* const* elements, const TTypeEnvironment& env);
+    static TTupleType* Create(ui32 elementsCount, TType* const* elements, const TTypeEnvironment& env); 
 
     using TType::IsSameType;
     bool IsSameType(const TTupleType& typeToCompare) const;
@@ -1137,7 +1137,7 @@ public:
     }
 
 private:
-    TTupleType(ui32 elemntsCount, TType** elements, const TTypeEnvironment& env, bool validate = true);
+    TTupleType(ui32 elemntsCount, TType** elements, const TTypeEnvironment& env, bool validate = true); 
 
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
@@ -1363,8 +1363,8 @@ inline bool TRuntimeNode::operator==(const TRuntimeNode& other) const {
     return IsImmediate() == other.IsImmediate() && GetNode()->Equals(*other.GetNode());
 }
 
-inline TType* TRuntimeNode::GetRuntimeType() const {
-    return GetNode()->GetGenericType();
+inline TType* TRuntimeNode::GetRuntimeType() const { 
+    return GetNode()->GetGenericType(); 
 }
 
 bool IsNumericType(NUdf::TDataTypeId typeId);

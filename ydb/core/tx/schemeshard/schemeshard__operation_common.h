@@ -297,9 +297,9 @@ public:
 
             switch (type) {
             case ETabletType::Coordinator:
-            case ETabletType::Mediator: {
+            case ETabletType::Mediator: { 
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Send configure request to coordinator/mediator: " << tabletID <<
+                    "Send configure request to coordinator/mediator: " << tabletID << 
                     " opId: " << OperationId <<
                     " schemeshard: " << ssId);
                 shard.Operation = TTxState::ConfigureParts;
@@ -307,16 +307,16 @@ public:
                 context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
                 break;
             }
-            case ETabletType::Hive: {
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Send configure request to hive: " << tabletID <<
-                    " opId: " << OperationId <<
-                    " schemeshard: " << ssId);
-                shard.Operation = TTxState::ConfigureParts;
-                auto event = new TEvHive::TEvConfigureHive(TSubDomainKey(pathId.OwnerId, pathId.LocalPathId));
-                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
-                break;
-            }
+            case ETabletType::Hive: { 
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
+                    "Send configure request to hive: " << tabletID << 
+                    " opId: " << OperationId << 
+                    " schemeshard: " << ssId); 
+                shard.Operation = TTxState::ConfigureParts; 
+                auto event = new TEvHive::TEvConfigureHive(TSubDomainKey(pathId.OwnerId, pathId.LocalPathId)); 
+                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event); 
+                break; 
+            } 
             case ETabletType::SysViewProcessor: {
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Send configure request to sysview processor: " << tabletID <<
@@ -609,24 +609,24 @@ public:
         }
 
         if (shardInfo.TabletID == InvalidTabletId) {
-            switch (shardInfo.TabletType) {
-            case ETabletType::DataShard:
+            switch (shardInfo.TabletType) { 
+            case ETabletType::DataShard: 
                 context.SS->TabletCounters->Simple()[COUNTER_TABLE_SHARD_ACTIVE_COUNT].Add(1);
-                break;
-            case ETabletType::Coordinator:
+                break; 
+            case ETabletType::Coordinator: 
                 context.SS->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_COORDINATOR_COUNT].Add(1);
-                break;
-            case ETabletType::Mediator:
+                break; 
+            case ETabletType::Mediator: 
                 context.SS->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_MEDIATOR_COUNT].Add(1);
-                break;
-            case ETabletType::Hive:
-                context.SS->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_HIVE_COUNT].Add(1);
-                break;
+                break; 
+            case ETabletType::Hive: 
+                context.SS->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_HIVE_COUNT].Add(1); 
+                break; 
             case ETabletType::SysViewProcessor:
                 context.SS->TabletCounters->Simple()[COUNTER_SYS_VIEW_PROCESSOR_COUNT].Add(1);
                 break;
-            default:
-                break;
+            default: 
+                break; 
             }
         }
 
@@ -672,13 +672,13 @@ public:
         TPathId domainId = context.SS->ResolveDomainId(targetPath);
 
         TPathElement::TPtr domainEl = context.SS->PathsById.at(domainId);
-        auto objectDomain = ev->Record.MutableObjectDomain();
+        auto objectDomain = ev->Record.MutableObjectDomain(); 
         if (domainEl->IsRoot()) {
-            objectDomain->SetSchemeShard(context.SS->ParentDomainId.OwnerId);
-            objectDomain->SetPathId(context.SS->ParentDomainId.LocalPathId);
+            objectDomain->SetSchemeShard(context.SS->ParentDomainId.OwnerId); 
+            objectDomain->SetPathId(context.SS->ParentDomainId.LocalPathId); 
         } else {
-            objectDomain->SetSchemeShard(domainId.OwnerId);
-            objectDomain->SetPathId(domainId.LocalPathId);
+            objectDomain->SetSchemeShard(domainId.OwnerId); 
+            objectDomain->SetPathId(domainId.LocalPathId); 
         }
 
         Y_VERIFY(context.SS->SubDomains.contains(domainId));
@@ -693,10 +693,10 @@ public:
             Y_FAIL("Cannot retrieve resources domain id");
         }
 
-        auto allowedDomain = ev->Record.AddAllowedDomains();
+        auto allowedDomain = ev->Record.AddAllowedDomains(); 
         allowedDomain->SetSchemeShard(resourcesDomainId.OwnerId);
         allowedDomain->SetPathId(resourcesDomainId.LocalPathId);
-
+ 
         if (tablePartitionConfig) {
             if (tablePartitionConfig->FollowerGroupsSize()) {
                 ev->Record.MutableFollowerGroups()->CopyFrom(tablePartitionConfig->GetFollowerGroups());
@@ -722,10 +722,10 @@ public:
 
         ev->Record.SetObjectId(targetPath->PathId.LocalPathId);
 
-        if (shard.TabletID) {
-            ev->Record.SetTabletID(ui64(shard.TabletID));
-        }
-
+        if (shard.TabletID) { 
+            ev->Record.SetTabletID(ui64(shard.TabletID)); 
+        } 
+ 
         return ev;
     }
 

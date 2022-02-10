@@ -1,10 +1,10 @@
-#include "hive_impl.h"
-#include "hive_log.h"
+#include "hive_impl.h" 
+#include "hive_log.h" 
 
 namespace NKikimr {
-namespace NHive {
+namespace NHive { 
 
-class TTxAdoptTablet : public TTransactionBase<THive> {
+class TTxAdoptTablet : public TTransactionBase<THive> { 
     const ui64 TabletId;
     const ui64 PrevOwner;
     const ui64 PrevOwnerIdx;
@@ -37,7 +37,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_ADOPT_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxAdoptTablet::Execute");
+        BLOG_D("THive::TTxAdoptTablet::Execute"); 
         NIceDb::TNiceDb db(txc.DB);
 
         const TOwnerIdxType::TValueType prevOwner(PrevOwner, PrevOwnerIdx);
@@ -55,17 +55,17 @@ public:
                 }
 
                 TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
-                if (tablet != nullptr && tablet->Type != TabletType) {
+                if (tablet != nullptr && tablet->Type != TabletType) { 
                     Explain = "there is the tablet with different type assotiated with the (owner; ownerIdx)";
                     Status = NKikimrProto::EReplyStatus::RACE;
                     return true;
                 }
 
-                if (tablet != nullptr) {
-                    Explain = "it seems like the tablet aleready adopted";
-                    Status = NKikimrProto::EReplyStatus::ALREADY;
-                    return true;
-                }
+                if (tablet != nullptr) { 
+                    Explain = "it seems like the tablet aleready adopted"; 
+                    Status = NKikimrProto::EReplyStatus::ALREADY; 
+                    return true; 
+                } 
             }
         }
 
@@ -84,7 +84,7 @@ public:
         }
 
         TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
-        if (tablet != nullptr && tablet->Type != TabletType) { // tablet is the same
+        if (tablet != nullptr && tablet->Type != TabletType) { // tablet is the same 
             Explain = "there is the tablet with different type assotiated with the (preOwner; prevOwnerIdx)";
             Status = NKikimrProto::EReplyStatus::ERROR;
             return true;
@@ -101,9 +101,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxAdoptTablet::Complete TabletId: " << TabletId <<
-               " Status: " << NKikimrProto::EReplyStatus_Name(Status) <<
-               " Explain: " << Explain);
+        BLOG_D("THive::TTxAdoptTablet::Complete TabletId: " << TabletId << 
+               " Status: " << NKikimrProto::EReplyStatus_Name(Status) << 
+               " Explain: " << Explain); 
 
         ctx.Send(Sender, new TEvHive::TEvAdoptTabletReply(Status, TabletId, Owner, OwnerIdx, Explain, Self->TabletID()), 0, Cookie);;
     }
@@ -114,5 +114,5 @@ ITransaction* THive::CreateAdoptTablet(NKikimrHive::TEvAdoptTablet &rec, const T
     return new TTxAdoptTablet(rec, sender, cookie, this);
 }
 
-} // NHive
-} // NKikimr
+} // NHive 
+} // NKikimr 

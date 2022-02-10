@@ -66,7 +66,7 @@ protected:
         if (GetSettings().SupportsRedirect && Tests::IsServerRedirected())
             return;
 
-        GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+        GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG); 
         GetRuntime().SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_NOTICE);
         GetRuntime().SetLogPriority(NKikimrServices::LOCAL, NActors::NLog::PRI_NOTICE);
 
@@ -110,14 +110,14 @@ public:
         SetLogging();
         InitRoot();
     }
-
-    TStoragePools GetPools() {
-        TStoragePools pools;
-        for (const auto& [kind, pool] : GetSettings().StoragePoolTypes) {
-            pools.emplace_back(pool.GetName(), kind);
-        }
-        return pools;
-    }
+ 
+    TStoragePools GetPools() { 
+        TStoragePools pools; 
+        for (const auto& [kind, pool] : GetSettings().StoragePoolTypes) { 
+            pools.emplace_back(pool.GetName(), kind); 
+        } 
+        return pools; 
+    } 
 };
 
 void Print(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
@@ -153,8 +153,8 @@ namespace NTestLs {
 
     using TPathVersion = Tests::TClient::TPathVersion;
     TPathVersion ExtractPathVersion(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
-
-    TVector<ui64> ExtractTableShards(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
+ 
+    TVector<ui64> ExtractTableShards(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp); 
 }
 
 namespace NHelpers {

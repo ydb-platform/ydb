@@ -15,10 +15,10 @@
 namespace NMonitoring {
     class THttpClient: public IHttpRequest {
     public:
-        void ServeRequest(THttpInput& in, IOutputStream& out, const NAddr::IRemoteAddr* remoteAddr, const THandler& Handler) {
+        void ServeRequest(THttpInput& in, IOutputStream& out, const NAddr::IRemoteAddr* remoteAddr, const THandler& Handler) { 
             try {
                 try {
-                    RemoteAddr = remoteAddr;
+                    RemoteAddr = remoteAddr; 
                     THttpHeaderParser parser;
                     parser.Init(&Header);
                     if (parser.Execute(in.FirstLine().data(), in.FirstLine().size()) < 0) {
@@ -34,15 +34,15 @@ namespace NMonitoring {
                         out << "HTTP/1.1 400 Bad request\r\nConnection: Close\r\n\r\n";
                         return;
                     }
-                    Headers = &in.Headers();
+                    Headers = &in.Headers(); 
                     CgiParams.Scan(Url.Get(THttpURL::FieldQuery));
                 } catch (...) {
                     out << "HTTP/1.1 500 Internal server error\r\nConnection: Close\r\n\r\n";
                     YSYSLOG(TLOG_ERR, "THttpClient: internal error while serving monitoring request: %s", CurrentExceptionMessage().data());
                 }
 
-                if (Header.http_method == HTTP_METHOD_POST)
-                    TransferData(&in, &PostContent);
+                if (Header.http_method == HTTP_METHOD_POST) 
+                    TransferData(&in, &PostContent); 
 
                 Handler(out, *this);
                 out.Finish();
@@ -64,49 +64,49 @@ namespace NMonitoring {
             return CgiParams;
         }
         const TCgiParameters& GetPostParams() const override {
-            if (PostParams.empty() && !PostContent.Buffer().Empty())
-                const_cast<THttpClient*>(this)->ScanPostParams();
+            if (PostParams.empty() && !PostContent.Buffer().Empty()) 
+                const_cast<THttpClient*>(this)->ScanPostParams(); 
             return PostParams;
         }
-        TStringBuf GetPostContent() const override {
-            return TStringBuf(PostContent.Buffer().Data(), PostContent.Buffer().Size());
-        }
+        TStringBuf GetPostContent() const override { 
+            return TStringBuf(PostContent.Buffer().Data(), PostContent.Buffer().Size()); 
+        } 
         HTTP_METHOD GetMethod() const override {
             return (HTTP_METHOD)Header.http_method;
         }
-        void ScanPostParams() {
+        void ScanPostParams() { 
             PostParams.Scan(TStringBuf(PostContent.Buffer().data(), PostContent.Buffer().size()));
-        }
-
-        const THttpHeaders& GetHeaders() const override {
-            if (Headers != nullptr) {
-                return *Headers;
-            }
-            static THttpHeaders defaultHeaders;
-            return defaultHeaders;
-        }
-
-        TString GetRemoteAddr() const override {
-            return RemoteAddr ? NAddr::PrintHostAndPort(*RemoteAddr) : TString();
-        }
-
+        } 
+ 
+        const THttpHeaders& GetHeaders() const override { 
+            if (Headers != nullptr) { 
+                return *Headers; 
+            } 
+            static THttpHeaders defaultHeaders; 
+            return defaultHeaders; 
+        } 
+ 
+        TString GetRemoteAddr() const override { 
+            return RemoteAddr ? NAddr::PrintHostAndPort(*RemoteAddr) : TString(); 
+        } 
+ 
     private:
         THttpRequestHeader Header;
-        const THttpHeaders* Headers = nullptr;
+        const THttpHeaders* Headers = nullptr; 
         THttpURL Url;
         TCgiParameters CgiParams;
         TCgiParameters PostParams;
-        TBufferOutput PostContent;
-        const NAddr::IRemoteAddr* RemoteAddr = nullptr;
+        TBufferOutput PostContent; 
+        const NAddr::IRemoteAddr* RemoteAddr = nullptr; 
     };
 
     /* TCoHttpServer */
 
     class TCoHttpServer::TConnection: public THttpClient {
     public:
-        TConnection(const TCoHttpServer::TAcceptFull& acc, const TCoHttpServer& parent)
-            : Socket(acc.S->Release())
-            , RemoteAddr(acc.Remote)
+        TConnection(const TCoHttpServer::TAcceptFull& acc, const TCoHttpServer& parent) 
+            : Socket(acc.S->Release()) 
+            , RemoteAddr(acc.Remote) 
             , Parent(parent)
         {
         }
@@ -119,7 +119,7 @@ namespace NMonitoring {
                 THttpOutput out(&io, &in);
                 // buffer reply so there will be ne context switching
                 TStringStream s;
-                ServeRequest(in, s, RemoteAddr, Parent.Handler);
+                ServeRequest(in, s, RemoteAddr, Parent.Handler); 
                 out << s.Str();
                 out.Finish();
             } catch (...) {
@@ -129,7 +129,7 @@ namespace NMonitoring {
 
     private:
         TSocketHolder Socket;
-        const NAddr::IRemoteAddr* RemoteAddr;
+        const NAddr::IRemoteAddr* RemoteAddr; 
         const TCoHttpServer& Parent;
     };
 
@@ -156,7 +156,7 @@ namespace NMonitoring {
     }
 
     void TCoHttpServer::OnAcceptFull(const TAcceptFull& acc) {
-        THolder<TConnection> conn(new TConnection(acc, *this));
+        THolder<TConnection> conn(new TConnection(acc, *this)); 
         Executor.Create(*conn, "client");
         Y_UNUSED(conn.Release());
     }
@@ -195,7 +195,7 @@ namespace NMonitoring {
         }
 
         bool Reply(void*) override {
-            ServeRequest(Input(), Output(), NAddr::GetPeerAddr(Socket()).Get(), Parent.Handler);
+            ServeRequest(Input(), Output(), NAddr::GetPeerAddr(Socket()).Get(), Parent.Handler); 
             return true;
         }
 

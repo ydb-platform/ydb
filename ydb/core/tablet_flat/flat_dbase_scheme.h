@@ -8,23 +8,23 @@
 #include <ydb/core/protos/scheme_log.pb.h>
 
 #include <util/generic/map.h>
-#include <util/generic/hash_set.h>
-#include <util/generic/list.h>
+#include <util/generic/hash_set.h> 
+#include <util/generic/list.h> 
 
 namespace NKikimr {
 namespace NTable {
 
-using namespace NTabletFlatScheme;
-
+using namespace NTabletFlatScheme; 
+ 
 using NKikimrSchemeOp::ECompactionStrategy;
 
 using TCompactionPolicy = NLocalDb::TCompactionPolicy;
-
+ 
 class TScheme {
 public:
-    using TTypeId = ui32;
+    using TTypeId = ui32; 
     using ECache = NPage::ECache;
-
+ 
     enum EDefault {
         DefaultRoom = 0,
         DefaultChannel = 1,
@@ -93,11 +93,11 @@ public:
             Rooms[DefaultRoom];
         }
 
-        ui32 Id;
+        ui32 Id; 
         TString Name;
         THashMap<ui32, TRoom> Rooms;
         THashMap<ui32, TFamily> Families;
-
+ 
         TIntrusiveConstPtr<TCompactionPolicy> CompactionPolicy;
         bool ColdBorrow = false;
         bool ByKeyFilter = false;
@@ -132,15 +132,15 @@ public:
         ECompactionStrategy DefaultCompactionStrategy = NKikimrSchemeOp::CompactionStrategyGenerational;
     };
 
-    const TTableInfo* GetTableInfo(ui32 id) const { return const_cast<TScheme*>(this)->GetTableInfo(id); }
+    const TTableInfo* GetTableInfo(ui32 id) const { return const_cast<TScheme*>(this)->GetTableInfo(id); } 
     const TColumn* GetColumnInfo(ui32 table, ui32 id) const { return const_cast<TScheme*>(this)->GetColumnInfo(const_cast<TScheme*>(this)->GetTableInfo(table), id); }
-
-    TAutoPtr<TSchemeChanges> GetSnapshot() const;
-
-    inline TTableInfo* GetTableInfo(ui32 id) {
-        return Tables.FindPtr(id);
-    }
-
+ 
+    TAutoPtr<TSchemeChanges> GetSnapshot() const; 
+ 
+    inline TTableInfo* GetTableInfo(ui32 id) { 
+        return Tables.FindPtr(id); 
+    } 
+ 
     inline TColumn* GetColumnInfo(TTableInfo* ptable, ui32 id) {
         return ptable ? ptable->Columns.FindPtr(id) : nullptr;
     }
@@ -149,10 +149,10 @@ public:
         return ptable ? ptable->Columns.FindPtr(id) : nullptr;
     }
 
-    bool IsEmpty() const {
-        return Tables.empty();
-    }
-
+    bool IsEmpty() const { 
+        return Tables.empty(); 
+    } 
+ 
     const TRoom* DefaultRoomFor(ui32 id) const noexcept
     {
         if (auto *table = GetTableInfo(id))
@@ -200,9 +200,9 @@ public:
     TRedo Redo;
 };
 
-// scheme delta
+// scheme delta 
 class TAlter {
-public:
+public: 
     using ECodec = NPage::ECodec;
     using ECache = NPage::ECache;
 
@@ -235,8 +235,8 @@ public:
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
 
     TAutoPtr<TSchemeChanges> Flush();
-protected:
+protected: 
     TSchemeChanges Log;
-};
-
+}; 
+ 
 }}

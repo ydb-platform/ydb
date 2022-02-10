@@ -138,7 +138,7 @@ void TBlobStorageGroupProxyMon::BecomeFull() {
 void TBlobStorageGroupProxyMon::SerializeToWhiteboard(NKikimrWhiteboard::TBSGroupStateInfo& pb, ui32 groupId) const {
     NKikimrWhiteboard::EFlag flag = NKikimrWhiteboard::EFlag::Green;
 
-    auto calculate = [&flag](const auto& tracker) {
+    auto calculate = [&flag](const auto& tracker) { 
         for (const auto& x : tracker.Percentiles) {
             const float percentile = x.first;
             const ui32 milliseconds = *x.second;
@@ -159,7 +159,7 @@ void TBlobStorageGroupProxyMon::SerializeToWhiteboard(NKikimrWhiteboard::TBSGrou
         calculate(GetResponseTime);
     }
     pb.SetGroupID(groupId);
-    pb.SetLatency(flag);
+    pb.SetLatency(flag); 
 }
 
 bool TBlobStorageGroupProxyMon::GetGroupIdGen(ui32 *groupId, ui32 *groupGen) const {

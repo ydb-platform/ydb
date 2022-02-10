@@ -30,7 +30,7 @@ void TConsole::OnActivateExecutor(const TActorContext &ctx)
 
     TenantsManager = new TTenantsManager(*this, domains->Domains.at(domainId),
                                          Counters,
-                                         AppData()->FeatureFlags);
+                                         AppData()->FeatureFlags); 
     ctx.RegisterWithSameMailbox(TenantsManager);
 
     if (AppData(ctx)->NetClassifierConfig.GetUpdaterConfig().GetNetDataSourceUrl()) {

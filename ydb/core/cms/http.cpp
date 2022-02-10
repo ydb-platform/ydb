@@ -149,7 +149,7 @@ private:
 
         result << " Headers {";
         for (const auto& header : request.GetHeaders()) {
-            if (stricmp(header.Name().data(), "Authorization") == 0) {
+            if (stricmp(header.Name().data(), "Authorization") == 0) { 
                 continue;
             }
 

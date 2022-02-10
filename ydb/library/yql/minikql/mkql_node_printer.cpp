@@ -85,7 +85,7 @@ namespace {
 
         void Visit(TStructType& node) override {
             WriteIndentation();
-            Out << "Type (Struct) with " << node.GetMembersCount() << " members {";
+            Out << "Type (Struct) with " << node.GetMembersCount() << " members {"; 
             WriteNewline();
 
             {
@@ -113,7 +113,7 @@ namespace {
 
         void Visit(TListType& node) override {
             WriteIndentation();
-            Out << "Type (List) {";
+            Out << "Type (List) {"; 
             WriteNewline();
 
             {
@@ -221,7 +221,7 @@ namespace {
 
         void Visit(TOptionalType& node) override {
             WriteIndentation();
-            Out << "Type (Optional) {";
+            Out << "Type (Optional) {"; 
             WriteNewline();
 
             {
@@ -247,7 +247,7 @@ namespace {
 
         void Visit(TDictType& node) override {
             WriteIndentation();
-            Out << "Type (Dict) {";
+            Out << "Type (Dict) {"; 
             WriteNewline();
 
             {
@@ -292,7 +292,7 @@ namespace {
             {
                 TIndentScope scope(this);
                 WriteIndentation();
-                Out << "Return type";
+                Out << "Return type"; 
                 if (node.IsMergeDisabled())
                     Out << ", merge disabled";
                 if (node.GetOptionalArgumentsCount() != 0)
@@ -311,12 +311,12 @@ namespace {
                 for (ui32 index = 0; index < node.GetArgumentsCount(); ++index) {
                     WriteIndentation();
                     const auto& type = node.GetArgumentType(index);
-                    Out << "Argument #" << index << " : {";
+                    Out << "Argument #" << index << " : {"; 
                     WriteNewline();
 
                     {
                         TIndentScope scope2(this);
-                        type->Accept(*this);
+                        type->Accept(*this); 
                     }
 
                     WriteIndentation();
@@ -354,14 +354,14 @@ namespace {
 
         void Visit(TTupleType& node) override {
             WriteIndentation();
-            Out << "Type (Tuple) with " << node.GetElementsCount() << " elements {";
+            Out << "Type (Tuple) with " << node.GetElementsCount() << " elements {"; 
             WriteNewline();
 
             {
                 TIndentScope scope(this);
                 for (ui32 index = 0; index < node.GetElementsCount(); ++index) {
                     WriteIndentation();
-                    Out << "#" << index << " : {";
+                    Out << "#" << index << " : {"; 
                     WriteNewline();
 
                     {
@@ -499,7 +499,7 @@ namespace {
 
         void Visit(TStructLiteral& node) override {
             WriteIndentation();
-            Out << "Struct {";
+            Out << "Struct {"; 
             WriteNewline();
 
             {
@@ -712,7 +712,7 @@ namespace {
 
         void Visit(TTupleLiteral& node) override {
             WriteIndentation();
-            Out << "Tuple {";
+            Out << "Tuple {"; 
             WriteNewline();
 
             {

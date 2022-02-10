@@ -215,17 +215,17 @@ TVector<NKikimrSchemeOp::TTablePartition> ExtractTablePartitions(const TAutoPtr<
 }
 
 NKikimrSchemeOp::TTableDescription ExtractTableDescription(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp) {
-    UNIT_ASSERT(resp.Get());
-    auto& record = resp->Record;
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+    UNIT_ASSERT(resp.Get()); 
+    auto& record = resp->Record; 
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NMsgBusProxy::MSTATUS_OK); 
     UNIT_ASSERT_VALUES_EQUAL(record.GetSchemeStatus(), NKikimrScheme::StatusSuccess);
-    auto& descr = record.GetPathDescription();
-    auto actualType = descr.GetSelf().GetPathType();
+    auto& descr = record.GetPathDescription(); 
+    auto actualType = descr.GetSelf().GetPathType(); 
     UNIT_ASSERT_VALUES_EQUAL(actualType, NKikimrSchemeOp::EPathTypeTable);
-    UNIT_ASSERT(descr.HasTable());
-    return descr.GetTable();
-}
-
+    UNIT_ASSERT(descr.HasTable()); 
+    return descr.GetTable(); 
+} 
+ 
 TString CheckStatus(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp, NKikimrScheme::EStatus schemeStatus) {
     UNIT_ASSERT(resp.Get());
     auto& record = resp->Record;
@@ -329,12 +329,12 @@ TString IsDoesNotExist(const TAutoPtr<NMsgBusProxy::TBusResponse> &resp) {
 
 namespace NHelpers {
 
-TChannelBind GetChannelBind(const TString& storagePool) {
-    TChannelBind bind;
-    bind.SetStoragePoolName(storagePool);
-    return bind;
-}
-
+TChannelBind GetChannelBind(const TString& storagePool) { 
+    TChannelBind bind; 
+    bind.SetStoragePoolName(storagePool); 
+    return bind; 
+} 
+ 
 ui64 CreateSubDomainAndTabletInside(TBaseTestEnv &env, const TString &name, ui64 shard_index, const TStoragePools &pools) {
     const ui64 owner = THash<TString>()(name);
 
@@ -342,16 +342,16 @@ ui64 CreateSubDomainAndTabletInside(TBaseTestEnv &env, const TString &name, ui64
     TChannelsBindings channelBindings;
     if (pools) {
         auto poolIt = pools.begin();
-        channelBindings.emplace_back(GetChannelBind(poolIt->GetName()));
+        channelBindings.emplace_back(GetChannelBind(poolIt->GetName())); 
 
         if (pools.size() > 1) {
             ++poolIt;
         }
-        channelBindings.emplace_back(GetChannelBind(poolIt->GetName()));
+        channelBindings.emplace_back(GetChannelBind(poolIt->GetName())); 
 
         if (pools.size() > 2) {
             ++poolIt;
-            channelBindings.emplace_back(GetChannelBind(poolIt->GetName()));
+            channelBindings.emplace_back(GetChannelBind(poolIt->GetName())); 
         }
     }
 
@@ -365,7 +365,7 @@ ui64 CreateSubDomainAndTabletInside(TBaseTestEnv &env, const TString &name, ui64
     TAutoPtr<NMsgBusProxy::TBusResponse> resp = env.GetClient().HiveCreateTablet(
                 env.GetSettings().Domain,
                 owner, shard_index,
-                TTabletTypes::TX_DUMMY,
+                TTabletTypes::TX_DUMMY, 
                 {},
                 {key},
                 channelBindings);

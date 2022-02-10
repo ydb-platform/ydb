@@ -15,7 +15,7 @@ PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/interconnect
     library/cpp/testing/unittest
-    util
+    util 
     ydb/core/base
     ydb/core/mind
     ydb/core/mon

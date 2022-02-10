@@ -296,17 +296,17 @@ namespace NKikimr {
         };
 
         TGRpcClient::TGRpcClient(const TGRpcClientConfig& config)
-            : Config(config)
-            , Impl(new TImpl(Config))
+            : Config(config) 
+            , Impl(new TImpl(Config)) 
         {}
 
         TGRpcClient::~TGRpcClient()
         {}
 
-        const TGRpcClientConfig& TGRpcClient::GetConfig() const {
-            return Config;
-        }
-
+        const TGRpcClientConfig& TGRpcClient::GetConfig() const { 
+            return Config; 
+        } 
+ 
         grpc_connectivity_state TGRpcClient::GetNetworkStatus() const {
             return Impl->GetNetworkStatus();
         }
@@ -342,11 +342,11 @@ namespace NKikimr {
         IMPL_REQUEST(DbSchema, TJSON, TJSON)
         IMPL_REQUEST(DbOperation, TJSON, TJSON)
         IMPL_REQUEST(DbBatch, TJSON, TJSON)
-        IMPL_REQUEST(ChooseProxy, TChooseProxyRequest, TResponse)
+        IMPL_REQUEST(ChooseProxy, TChooseProxyRequest, TResponse) 
         IMPL_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse)
-        IMPL_REQUEST(WhoAmI, TWhoAmI, TResponse)
-        IMPL_REQUEST(FillNode, TFillNodeRequest, TResponse)
-        IMPL_REQUEST(DrainNode, TDrainNodeRequest, TResponse)
+        IMPL_REQUEST(WhoAmI, TWhoAmI, TResponse) 
+        IMPL_REQUEST(FillNode, TFillNodeRequest, TResponse) 
+        IMPL_REQUEST(DrainNode, TDrainNodeRequest, TResponse) 
 
         } // NGRpcProxy
 } // NKikimr

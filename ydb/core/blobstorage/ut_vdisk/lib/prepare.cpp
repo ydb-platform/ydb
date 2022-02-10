@@ -359,10 +359,10 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     //////////////////////////////////////////////////////////////////////////////
 
     ///////////////////////// MONITORING SETTINGS /////////////////////////////////
-    Monitoring.reset(new NActors::TMon({
-        .Port = 8088,
-        .Title = "at"
-    }));
+    Monitoring.reset(new NActors::TMon({ 
+        .Port = 8088, 
+        .Title = "at" 
+    })); 
     NMonitoring::TIndexMonPage *actorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
     Monitoring->RegisterCountersPage("counters", "Counters", Counters);
     Monitoring->Start();

@@ -364,12 +364,12 @@ void TNodeWarden::SendDiskMetrics(bool reportMetrics) {
         for (auto& vdisk : std::exchange(VDisksWithUnreportedMetrics, {})) {
             Y_VERIFY(vdisk.VDiskMetrics);
             record.AddVDisksMetrics()->CopyFrom(*vdisk.VDiskMetrics);
-        }
+        } 
         for (auto& pdisk : std::exchange(PDisksWithUnreportedMetrics, {})) {
             Y_VERIFY(pdisk.PDiskMetrics);
             record.AddPDisksMetrics()->CopyFrom(*pdisk.PDiskMetrics);
         }
-    }
+    } 
 
     FillInVDiskStatus(record.MutableVDiskStatus(), false);
 
@@ -377,7 +377,7 @@ void TNodeWarden::SendDiskMetrics(bool reportMetrics) {
         SendToController(std::move(ev));
     }
 }
-
+ 
 void TNodeWarden::Handle(TEvStatusUpdate::TPtr ev) {
     STLOG(PRI_DEBUG, BS_NODE, NW47, "Handle(TEvStatusUpdate)");
     auto *msg = ev->Get();

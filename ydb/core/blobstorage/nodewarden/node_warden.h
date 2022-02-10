@@ -38,7 +38,7 @@ namespace NKikimr {
 
         TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
             : PDiskServiceFactory(pDiskServiceFactory)
-            , AllVDiskKinds(new TAllVDiskKinds)
+            , AllVDiskKinds(new TAllVDiskKinds) 
             , AllDriveModels(new NPDisk::TDriveModelDb)
         {}
 

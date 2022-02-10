@@ -1,46 +1,46 @@
-package NACLibProto;
-
+package NACLibProto; 
+ 
 option go_package = "a.yandex-team.ru/ydb/library/aclib/protos;aclibpb";
 
-message TACE {
-    optional uint32 AccessType = 1;
-    optional uint32 AccessRight = 2;
-    optional string SID = 3;
-    optional uint32 InheritanceType = 4;
-    optional bool Inherited = 5; // runtime only
-}
-
-message TACL {
-    // deny entries should precede allow entries
-    repeated TACE ACE = 1;
-}
-
-message TProtoHashBucket {
-    repeated string Values = 1;
-}
-
-message TProtoHashTable {
-    repeated TProtoHashBucket Buckets = 2;
-}
-
-message TUserToken {
-    optional string UserSID = 1;
-    optional TProtoHashTable GroupSIDs = 2;
-    optional string OriginalUserToken = 3;
-    optional string AuthType = 4;
-}
-
-message TSecurityObject {
-    optional string OwnerSID = 1;
-    optional TACL ACL = 2;
-    optional uint64 ExpireTime = 3; // ms
-}
-
-message TDiffACE {
-    optional uint32 DiffType = 1;
-    optional TACE ACE = 2;
-}
-
-message TDiffACL {
-    repeated TDiffACE DiffACE = 1;
-}
+message TACE { 
+    optional uint32 AccessType = 1; 
+    optional uint32 AccessRight = 2; 
+    optional string SID = 3; 
+    optional uint32 InheritanceType = 4; 
+    optional bool Inherited = 5; // runtime only 
+} 
+ 
+message TACL { 
+    // deny entries should precede allow entries 
+    repeated TACE ACE = 1; 
+} 
+ 
+message TProtoHashBucket { 
+    repeated string Values = 1; 
+} 
+ 
+message TProtoHashTable { 
+    repeated TProtoHashBucket Buckets = 2; 
+} 
+ 
+message TUserToken { 
+    optional string UserSID = 1; 
+    optional TProtoHashTable GroupSIDs = 2; 
+    optional string OriginalUserToken = 3; 
+    optional string AuthType = 4; 
+} 
+ 
+message TSecurityObject { 
+    optional string OwnerSID = 1; 
+    optional TACL ACL = 2; 
+    optional uint64 ExpireTime = 3; // ms 
+} 
+ 
+message TDiffACE { 
+    optional uint32 DiffType = 1; 
+    optional TACE ACE = 2; 
+} 
+ 
+message TDiffACL { 
+    repeated TDiffACE DiffACE = 1; 
+} 

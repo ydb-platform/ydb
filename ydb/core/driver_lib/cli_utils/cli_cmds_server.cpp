@@ -1,5 +1,5 @@
-#include "cli.h"
-#include "cli_cmds.h"
+#include "cli.h" 
+#include "cli_cmds.h" 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/driver_lib/run/run.h>
@@ -13,39 +13,39 @@
 #include <util/system/hostname.h>
 #include <google/protobuf/text_format.h>
 
-extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
-extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
-
-namespace NKikimr {
-namespace NDriverClient {
-
+extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig(); 
+extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig(); 
+ 
+namespace NKikimr { 
+namespace NDriverClient { 
+ 
 class TClientCommandServerBase : public TClientCommand {
 protected:
     NKikimrConfig::TAppConfig BaseConfig;
-    NKikimrConfig::TAppConfig AppConfig;
-    TKikimrRunConfig RunConfig;
-
-    ui32 LogLevel; // log settings
-    ui32 LogSamplingLevel; // log settings
-    ui32 LogSamplingRate; // log settings
+    NKikimrConfig::TAppConfig AppConfig; 
+    TKikimrRunConfig RunConfig; 
+ 
+    ui32 LogLevel; // log settings 
+    ui32 LogSamplingLevel; // log settings 
+    ui32 LogSamplingRate; // log settings 
     TString LogFormat;// log settings
     TString SysLogServiceTag; //unique tags for sys logs
     TString LogFileName; // log file name to initialize file log backend
     TString ClusterName; // log settings
-
-    ui32 NodeId;
+ 
+    ui32 NodeId; 
     TString NodeIdValue;
     ui32 DefaultInterconnectPort = 19001;
-    ui32 BusProxyPort;
-    NBus::TBusQueueConfig ProxyBusQueueConfig;
-    NBus::TBusServerSessionConfig ProxyBusSessionConfig;
+    ui32 BusProxyPort; 
+    NBus::TBusQueueConfig ProxyBusQueueConfig; 
+    NBus::TBusServerSessionConfig ProxyBusSessionConfig; 
     TVector<ui64> ProxyBindToProxy;
-    ui32 MonitoringPort;
-    TString MonitoringAddress;
-    ui32 MonitoringThreads;
+    ui32 MonitoringPort; 
+    TString MonitoringAddress; 
+    ui32 MonitoringThreads; 
     TString RestartsCountFile;
     TString TracePath;
-    size_t CompileInflightLimit; // MiniKQLCompileService
+    size_t CompileInflightLimit; // MiniKQLCompileService 
     TString UDFsDir;
     TVector<TString> UDFsPaths;
     TString HostLabelOverride;
@@ -62,8 +62,8 @@ protected:
     bool FixedNodeID;
     bool IgnoreCmsConfigs;
     bool HierarchicalCfg;
-    TString NodeAddress;
-    TString NodeHost;
+    TString NodeAddress; 
+    TString NodeHost; 
     TString NodeResolveHost;
     TString NodeDomain;
     ui32 InterconnectPort;
@@ -84,26 +84,26 @@ protected:
     TString PathToPKey;
     TString PathToCA;
     TVector<TString> YamlConfigFiles;
-
+ 
     TClientCommandServerBase(const char *cmd, const char *description)
         : TClientCommand(cmd, {}, description)
         , RunConfig(AppConfig)
     {}
 
-    virtual void Config(TConfig& config) override {
-        TClientCommand::Config(config);
-
-        LogLevel = NActors::NLog::PRI_WARN;
-        LogSamplingLevel = NActors::NLog::PRI_DEBUG;
-        LogSamplingRate = 0;
-
-        NodeId = 0;
+    virtual void Config(TConfig& config) override { 
+        TClientCommand::Config(config); 
+ 
+        LogLevel = NActors::NLog::PRI_WARN; 
+        LogSamplingLevel = NActors::NLog::PRI_DEBUG; 
+        LogSamplingRate = 0; 
+ 
+        NodeId = 0; 
         NodeIdValue = "";
-        BusProxyPort = NMsgBusProxy::TProtocol::DefaultPort;
-        MonitoringPort = 0;
-        MonitoringThreads = 10;
-        RestartsCountFile = "";
-        CompileInflightLimit = 100000;
+        BusProxyPort = NMsgBusProxy::TProtocol::DefaultPort; 
+        MonitoringPort = 0; 
+        MonitoringThreads = 10; 
+        RestartsCountFile = ""; 
+        CompileInflightLimit = 100000; 
         TenantName = "";
         TenantSlotType = "default";
         TenantSlotId = "";
@@ -127,23 +127,23 @@ protected:
         GRpcPublicAddressesV4.clear();
         GRpcPublicAddressesV6.clear();
         GRpcPublicTargetNameOverride = "";
-
-        config.Opts->AddLongOption("cluster-name", "which cluster this node belongs to")
-            .DefaultValue("unknown").OptionalArgument("STR").StoreResult(&ClusterName);
-        config.Opts->AddLongOption("log-level", "default logging level").OptionalArgument("1-7")
-            .DefaultValue(ToString(LogLevel)).StoreResult(&LogLevel);
-        config.Opts->AddLongOption("log-sampling-level", "sample logs equal to or above this level").OptionalArgument("1-7")
-            .DefaultValue(ToString(LogSamplingLevel)).StoreResult(&LogSamplingLevel);
-        config.Opts->AddLongOption("log-sampling-rate",
-                           "log only each Nth message with priority matching sampling level; 0 turns log sampling off")
-            .OptionalArgument(Sprintf("0,%" PRIu32, Max<ui32>()))
-            .DefaultValue(ToString(LogSamplingRate)).StoreResult(&LogSamplingRate);
-        config.Opts->AddLongOption("log-format", "log format to use; short skips the priority and timestamp")
-            .DefaultValue("full").OptionalArgument("full|short|json").StoreResult(&LogFormat);
-        config.Opts->AddLongOption("syslog", "send to syslog instead of stderr").NoArgument();
+ 
+        config.Opts->AddLongOption("cluster-name", "which cluster this node belongs to") 
+            .DefaultValue("unknown").OptionalArgument("STR").StoreResult(&ClusterName); 
+        config.Opts->AddLongOption("log-level", "default logging level").OptionalArgument("1-7") 
+            .DefaultValue(ToString(LogLevel)).StoreResult(&LogLevel); 
+        config.Opts->AddLongOption("log-sampling-level", "sample logs equal to or above this level").OptionalArgument("1-7") 
+            .DefaultValue(ToString(LogSamplingLevel)).StoreResult(&LogSamplingLevel); 
+        config.Opts->AddLongOption("log-sampling-rate", 
+                           "log only each Nth message with priority matching sampling level; 0 turns log sampling off") 
+            .OptionalArgument(Sprintf("0,%" PRIu32, Max<ui32>())) 
+            .DefaultValue(ToString(LogSamplingRate)).StoreResult(&LogSamplingRate); 
+        config.Opts->AddLongOption("log-format", "log format to use; short skips the priority and timestamp") 
+            .DefaultValue("full").OptionalArgument("full|short|json").StoreResult(&LogFormat); 
+        config.Opts->AddLongOption("syslog", "send to syslog instead of stderr").NoArgument(); 
         config.Opts->AddLongOption("syslog-service-tag", "unique tag for syslog").RequiredArgument("NAME").StoreResult(&SysLogServiceTag);
         config.Opts->AddLongOption("log-file-name", "file name for log backend").RequiredArgument("NAME").StoreResult(&LogFileName);
-        config.Opts->AddLongOption("tcp", "start tcp interconnect").NoArgument();
+        config.Opts->AddLongOption("tcp", "start tcp interconnect").NoArgument(); 
         config.Opts->AddLongOption('n', "node", "Node ID or 'static' to auto-detect using naming file and ic-port, or 'dynamic' for dynamic nodes, or 'dynamic-fixed' for dynamic nodes with infinite node ID lease (for dynamic storage nodes)")
             .RequiredArgument("[NUM|static|dynamic]").StoreResult(&NodeIdValue);
         config.Opts->AddLongOption("node-broker", "node broker address host:port")
@@ -152,10 +152,10 @@ protected:
                 .RequiredArgument("PORT").StoreResult(&NodeBrokerPort);
         config.Opts->AddLongOption("node-broker-use-tls", "use tls for node broker (hosts from naming file are used)")
                 .RequiredArgument("PORT").StoreResult(&NodeBrokerUseTls);
-        config.Opts->AddLongOption("node-address", "address for dynamic node")
-                .RequiredArgument("ADDR").StoreResult(&NodeAddress);
-        config.Opts->AddLongOption("node-host", "hostname for dynamic node")
-                .RequiredArgument("NAME").StoreResult(&NodeHost);
+        config.Opts->AddLongOption("node-address", "address for dynamic node") 
+                .RequiredArgument("ADDR").StoreResult(&NodeAddress); 
+        config.Opts->AddLongOption("node-host", "hostname for dynamic node") 
+                .RequiredArgument("NAME").StoreResult(&NodeHost); 
         config.Opts->AddLongOption("node-resolve-host", "resolve hostname for dynamic node")
                 .RequiredArgument("NAME").StoreResult(&NodeResolveHost);
         config.Opts->AddLongOption("node-domain", "domain for dynamic node to register in")
@@ -164,7 +164,7 @@ protected:
                 .RequiredArgument("NUM").StoreResult(&InterconnectPort);
         config.Opts->AddLongOption("sqs-port", "sqs port")
                 .RequiredArgument("NUM").StoreResult(&SqsHttpPort);
-        config.Opts->AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").AppendTo(&ProxyBindToProxy);
+        config.Opts->AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").AppendTo(&ProxyBindToProxy); 
         config.Opts->AddLongOption("host-label-override", "overrides host label for slot").RequiredArgument("NAME").StoreResult(&HostLabelOverride);
         config.Opts->AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'no', 'dynamic', '/<root>', '/<root>/<path_to_user>'}")
             .RequiredArgument("NAME").StoreResult(&TenantName);
@@ -180,20 +180,20 @@ protected:
             .RequiredArgument("NUM").StoreResult(&TenantMemory);
         config.Opts->AddLongOption("tenant-network", "specify Network limit for tenant binding")
             .RequiredArgument("NUM").StoreResult(&TenantNetwork);
-        config.Opts->AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort);
-        config.Opts->AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&MonitoringAddress);
-        config.Opts->AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&MonitoringThreads);
+        config.Opts->AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort); 
+        config.Opts->AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&MonitoringAddress); 
+        config.Opts->AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&MonitoringThreads); 
         config.Opts->AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument();
-
+ 
 //        config.Opts->AddLongOption('u', "url-base", "url base to request configs from").OptionalArgument("URL");
-        config.Opts->AddLongOption("sys-file", "actor system config file (use dummy config by default)").OptionalArgument("PATH");
-        config.Opts->AddLongOption("naming-file", "static nameservice config file").OptionalArgument("PATH");
+        config.Opts->AddLongOption("sys-file", "actor system config file (use dummy config by default)").OptionalArgument("PATH"); 
+        config.Opts->AddLongOption("naming-file", "static nameservice config file").OptionalArgument("PATH"); 
         config.Opts->AddLongOption("domains-file", "domain config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("bs-file", "blobstorage config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("log-file", "log config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("ic-file", "interconnect config file").OptionalArgument("PATH");
+        config.Opts->AddLongOption("bs-file", "blobstorage config file").OptionalArgument("PATH"); 
+        config.Opts->AddLongOption("log-file", "log config file").OptionalArgument("PATH"); 
+        config.Opts->AddLongOption("ic-file", "interconnect config file").OptionalArgument("PATH"); 
         config.Opts->AddLongOption("channels-file", "tablet channel profile config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("vdisk-file", "vdisk kind config file").OptionalArgument("PATH");
+        config.Opts->AddLongOption("vdisk-file", "vdisk kind config file").OptionalArgument("PATH"); 
         config.Opts->AddLongOption("drivemodel-file", "drive model config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("tenant-pool-file", "Tenant Pool service config file").OptionalArgument("PATH");
@@ -212,22 +212,22 @@ protected:
         config.Opts->AddLongOption("pqcd-file", "PersQueue cluster discovery config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("netclassifier-file", "NetClassifier config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("auth-file", "authorization configuration").OptionalArgument("PATH");
-        config.Opts->AddLongOption("auth-token-file", "authorization token configuration").OptionalArgument("PATH");
+        config.Opts->AddLongOption("auth-token-file", "authorization token configuration").OptionalArgument("PATH"); 
         config.Opts->AddLongOption("key-file", "tanant encryption key configuration").OptionalArgument("PATH");
         config.Opts->AddLongOption("pdisk-key-file", "pdisk encryption key configuration").OptionalArgument("PATH");
         config.Opts->AddLongOption("sqs-file", "SQS config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("bootstrap-file", "Bootstrap config file").OptionalArgument("PATH");
+        config.Opts->AddLongOption("bootstrap-file", "Bootstrap config file").OptionalArgument("PATH"); 
         config.Opts->AddLongOption("dyn-nodes-file", "Dynamic nodes config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("cms-file", "CMS config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("alloc-file", "Allocator config file").OptionalArgument("PATH");
+        config.Opts->AddLongOption("alloc-file", "Allocator config file").OptionalArgument("PATH"); 
         config.Opts->AddLongOption("yql-file", "Yql Analytics config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("yq-file", "Yandex Query config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("feature-flags-file", "File with feature flags to turn new features on/off").OptionalArgument("PATH");
         config.Opts->AddLongOption("rb-file", "File with resource broker customizations").OptionalArgument("PATH");
         config.Opts->AddLongOption("metering-file", "File with metering config").OptionalArgument("PATH");
-        config.Opts->AddLongOption('r', "restarts-count-file", "State for restarts monitoring counter,\nuse empty string to disable\n")
-                .OptionalArgument("PATH").DefaultValue(RestartsCountFile).StoreResult(&RestartsCountFile);
-        config.Opts->AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&CompileInflightLimit);
+        config.Opts->AddLongOption('r', "restarts-count-file", "State for restarts monitoring counter,\nuse empty string to disable\n") 
+                .OptionalArgument("PATH").DefaultValue(RestartsCountFile).StoreResult(&RestartsCountFile); 
+        config.Opts->AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&CompileInflightLimit); 
         config.Opts->AddLongOption("udf", "Load shared library with UDF by given path").AppendTo(&UDFsPaths);
         config.Opts->AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&UDFsDir);
         config.Opts->AddLongOption("node-type", "Type of the node")
@@ -246,7 +246,7 @@ protected:
         config.Opts->AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").AppendTo(&YamlConfigFiles);
         config.Opts->AddLongOption("cms-config-cache-file", "Path to CMS cache config file").OptionalArgument("PATH")
             .StoreResult(&RunConfig.PathToConfigCacheFile);
-        config.Opts->AddHelpOption('h');
+        config.Opts->AddHelpOption('h'); 
 
         // add messagebus proxy options
         config.Opts->AddLongOption("mbus", "Start MessageBus proxy").NoArgument();
@@ -261,8 +261,8 @@ protected:
 
         config.SetFreeArgsMin(0);
         config.Opts->SetFreeArgDefaultTitle("PATH", "path to protobuf file; files are merged in order in which they are enlisted");
-    }
-
+    } 
+ 
     template<typename TProto>
     TProto *MutableConfigPart(TConfig& config, const char *optname,
             bool (NKikimrConfig::TAppConfig::*hasConfig)() const,
@@ -284,28 +284,28 @@ protected:
         return res;
     }
 
-    template<typename TProto>
-    TProto *MutableConfigPartMerge(TConfig& config, const char *optname,
-            TProto* (NKikimrConfig::TAppConfig::*mutableConfig)()) {
-        TProto *res = nullptr;
-
-        if (config.ParseResult->Has(optname)) {
-            TProto cfg;
-            bool success = ParsePBFromFile(config.ParseResult->Get(optname), &cfg);
-            Y_VERIFY(success);
-            res = (AppConfig.*mutableConfig)();
-            res->MergeFrom(cfg);
-        }
-
-        return res;
-    }
-
-    virtual void Parse(TConfig& config) override {
-        TClientCommand::Parse(config);
-
+    template<typename TProto> 
+    TProto *MutableConfigPartMerge(TConfig& config, const char *optname, 
+            TProto* (NKikimrConfig::TAppConfig::*mutableConfig)()) { 
+        TProto *res = nullptr; 
+ 
+        if (config.ParseResult->Has(optname)) { 
+            TProto cfg; 
+            bool success = ParsePBFromFile(config.ParseResult->Get(optname), &cfg); 
+            Y_VERIFY(success); 
+            res = (AppConfig.*mutableConfig)(); 
+            res->MergeFrom(cfg); 
+        } 
+ 
+        return res; 
+    } 
+ 
+    virtual void Parse(TConfig& config) override { 
+        TClientCommand::Parse(config); 
+ 
 #define OPTION(NAME, FIELD) MutableConfigPart(config, NAME, &NKikimrConfig::TAppConfig::Has##FIELD, \
             &NKikimrConfig::TAppConfig::Get##FIELD, &NKikimrConfig::TAppConfig::Mutable##FIELD)
-#define OPTION_MERGE(NAME, FIELD) MutableConfigPartMerge(config, NAME, &NKikimrConfig::TAppConfig::Mutable##FIELD)
+#define OPTION_MERGE(NAME, FIELD) MutableConfigPartMerge(config, NAME, &NKikimrConfig::TAppConfig::Mutable##FIELD) 
 
         OPTION("auth-file", AuthConfig);
         OPTION_MERGE("auth-token-file", AuthConfig);
@@ -380,7 +380,7 @@ protected:
 
         OPTION("domains-file", DomainsConfig);
         OPTION("bs-file", BlobStorageConfig);
-
+ 
         if (auto logConfig = OPTION("log-file", LogConfig)) {
             if (config.ParseResult->Has("syslog"))
                 logConfig->SetSysLog(true);
@@ -394,12 +394,12 @@ protected:
                 logConfig->SetFormat(LogFormat);
             if (config.ParseResult->Has("cluster-name"))
                 logConfig->SetClusterName(ClusterName);
-        }
+        } 
         // This flag is set per node and we prefer flag over CMS.
         if (config.ParseResult->Has("syslog-service-tag")
             && !AppConfig.GetLogConfig().GetSysLogService())
             AppConfig.MutableLogConfig()->SetSysLogService(SysLogServiceTag);
-
+ 
         if (config.ParseResult->Has("log-file-name"))
             AppConfig.MutableLogConfig()->SetBackendFileName(LogFileName);
 
@@ -407,14 +407,14 @@ protected:
             if (config.ParseResult->Has("tcp")) {
                 interconnectConfig->SetStartTcp(true);
             }
-        }
-
+        } 
+ 
         OPTION("channels-file", ChannelProfileConfig);
-
+ 
         if (auto bootstrapConfig = OPTION("bootstrap-file", BootstrapConfig)) {
             bootstrapConfig->MutableCompileServiceConfig()->SetInflightLimit(CompileInflightLimit);
-        }
-
+        } 
+ 
         OPTION("vdisk-file", VDiskConfig);
         OPTION("drivemodel-file", DriveModelConfig);
         OPTION("grpc-file", GRpcConfig);
@@ -425,7 +425,7 @@ protected:
         OPTION("pqcd-file", PQClusterDiscoveryConfig);
         OPTION("netclassifier-file", NetClassifierConfig);
         OPTION("auth-file", AuthConfig);
-        OPTION_MERGE("auth-token-file", AuthConfig);
+        OPTION_MERGE("auth-token-file", AuthConfig); 
         OPTION("key-file", KeyConfig);
         OPTION("pdisk-key-file", PDiskKeyConfig);
         OPTION("sqs-file", SqsConfig);
@@ -434,13 +434,13 @@ protected:
         OPTION("metering-file", MeteringConfig);
         OPTION("kqp-file", KQPConfig);
         OPTION("incrhuge-file", IncrHugeConfig);
-        OPTION("alloc-file", AllocatorConfig);
+        OPTION("alloc-file", AllocatorConfig); 
         OPTION("yq-file", YandexQueryConfig);
 
-        if (!AppConfig.HasAllocatorConfig()) {
-            AppConfig.MutableAllocatorConfig()->CopyFrom(*DummyAllocatorConfig());
-        }
-
+        if (!AppConfig.HasAllocatorConfig()) { 
+            AppConfig.MutableAllocatorConfig()->CopyFrom(*DummyAllocatorConfig()); 
+        } 
+ 
         // apply certificates, if any
         if (config.ParseResult->Has("cert")) {
             AppConfig.MutableInterconnectConfig()->SetPathToCertificateFile(PathToCert);
@@ -518,12 +518,12 @@ protected:
             AppConfig.MutableMonitoringConfig()->SetMonitoringThreads(MonitoringThreads);
         if (!AppConfig.HasRestartsCountConfig() && RestartsCountFile)
             AppConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RestartsCountFile);
-
+ 
         // Ports and node type are always applied (event if config was loaded from CMS).
         if (MonitoringPort)
             AppConfig.MutableMonitoringConfig()->SetMonitoringPort(MonitoringPort);
-        if (MonitoringAddress)
-            AppConfig.MutableMonitoringConfig()->SetMonitoringAddress(MonitoringAddress);
+        if (MonitoringAddress) 
+            AppConfig.MutableMonitoringConfig()->SetMonitoringAddress(MonitoringAddress); 
         if (SqsHttpPort)
             RunConfig.AppConfig.MutableSqsConfig()->MutableHttpServerConfig()->SetPort(SqsHttpPort);
         if (GRpcPort) {
@@ -627,7 +627,7 @@ protected:
             auto queueConfig = messageBusConfig->MutableProxyBusQueueConfig();
             queueConfig->SetName(ProxyBusQueueConfig.Name);
             queueConfig->SetNumWorkers(ProxyBusQueueConfig.NumWorkers);
-
+ 
             auto sessionConfig = messageBusConfig->MutableProxyBusSessionConfig();
 
             // TODO use macro from messagebus header file
@@ -661,9 +661,9 @@ protected:
             }
             messageBusConfig->SetStartTracingBusProxy(!!TracePath);
             messageBusConfig->SetTracePath(TracePath);
-        }
-    }
-
+        } 
+    } 
+ 
     inline bool LoadConfigFromCMS() {
         TVector<TString> addrs;
         FillClusterEndpoints(addrs);
@@ -854,13 +854,13 @@ protected:
         RegisterDynamicNode();
         if (!HierarchicalCfg && !IgnoreCmsConfigs)
             LoadConfigForDynamicNode();
-    }
+    } 
 
-    THolder<NClient::TRegistrationResult> TryToRegisterDynamicNode(
-            const TString &addr,
-            const TString &domainName,
-            const TString &nodeHost,
-            const TString &nodeAddress,
+    THolder<NClient::TRegistrationResult> TryToRegisterDynamicNode( 
+            const TString &addr, 
+            const TString &domainName, 
+            const TString &nodeHost, 
+            const TString &nodeAddress, 
             const TString &nodeResolveHost,
         const TMaybe<TString>& path) {
         NClient::TKikimr kikimr(GetKikimr(addr));
@@ -883,10 +883,10 @@ protected:
 
         return MakeHolder<NClient::TRegistrationResult>
             (registrant.SyncRegisterNode(ToString(domainName),
-                                         nodeHost,
+                                         nodeHost, 
                                          InterconnectPort,
-                                         nodeAddress,
-                                         nodeResolveHost,
+                                         nodeAddress, 
+                                         nodeResolveHost, 
                                          std::move(loc),
                                          FixedNodeID,
                                          path));
@@ -1108,8 +1108,8 @@ private:
         }
         return NClient::TKikimr(grpcConfig);
     }
-};
-
+}; 
+ 
 class TClientCommandServerConfig : public TClientCommandServerBase {
 public:
     TClientCommandServerConfig()
@@ -1155,7 +1155,7 @@ private:
 void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories) {
     parent.AddCommand(std::make_unique<TClientCommandServer>(factories));
     parent.AddCommand(std::make_unique<TClientCommandServerConfig>());
-}
-
-}
-}
+} 
+ 
+} 
+} 

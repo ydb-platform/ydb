@@ -17,7 +17,7 @@ using namespace NKikimrWhiteboard;
 using namespace NKikimrBlobStorage;
 using namespace NKikimrCms;
 
-TTabletStateInfo MakeTabletInfo(ui64 id, TTabletTypes::EType type,
+TTabletStateInfo MakeTabletInfo(ui64 id, TTabletTypes::EType type, 
                                 TTabletStateInfo::ETabletState state, bool leader)
 {
     TTabletStateInfo tablet;
@@ -345,12 +345,12 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT(cluster.HasVDisk({0, 1, 0, 2, 0}));
         CheckVDisk(cluster.VDisk({0, 1, 0, 2, 0}), TVDiskID(0, 1, 0, 2, 0), 3, UP, 3, 1, 2);
 
-        cluster.AddTablet(1, MakeTabletInfo(1, TTabletTypes::Hive, TTabletStateInfo::Active, true));
+        cluster.AddTablet(1, MakeTabletInfo(1, TTabletTypes::Hive, TTabletStateInfo::Active, true)); 
         UNIT_ASSERT(cluster.HasTablet(1));
         UNIT_ASSERT(!cluster.HasTablet(2));
         UNIT_ASSERT_VALUES_EQUAL(cluster.Node(1).Tablets.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(cluster.Tablet(1).TabletId, 1);
-        UNIT_ASSERT_VALUES_EQUAL(cluster.Tablet(1).Type, TTabletTypes::Hive);
+        UNIT_ASSERT_VALUES_EQUAL(cluster.Tablet(1).Type, TTabletTypes::Hive); 
         UNIT_ASSERT_VALUES_EQUAL(cluster.Tablet(1).State, TTabletStateInfo::Active);
         UNIT_ASSERT_VALUES_EQUAL(cluster.Tablet(1).Leader, true);
 

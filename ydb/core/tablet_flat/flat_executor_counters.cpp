@@ -26,45 +26,45 @@ namespace NTabletFlatExecutor {
     XX(200, "200-1000") \
     XX(1000, ">1000")
 
-#define FLAT_EXECUTOR_DATA_SIZE(XX) \
-    XX(0ULL, "0") \
-    XX(1ULL, "10240") \
-    XX(10*1024ULL, "102400") \
-    XX(100*1024ULL, "1048576") \
-    XX(1024*1024ULL, "10485760") \
-    XX(10*1024*1024ULL, "104857600") \
-    XX(100*1024*1024ULL, "1073741824") \
-    XX(1024*1024*1024ULL, "10737418240") \
-    XX(10*1024*1024*1024ULL, "107374182400") \
-    XX(100*1024*1024*1024ULL, "1099511627776") \
-    XX(1024*1024*1024*1024ULL, "inf")
-
-#define FLAT_EXECUTOR_DATA_RATE(XX) \
-    XX(0ULL, "0") \
-    XX(1ULL, "10240") \
-    XX(10*1024ULL, "102400") \
-    XX(100*1024ULL, "1048576") \
-    XX(1024*1024ULL, "10485760") \
-    XX(10*1024*1024ULL, "104857600") \
-    XX(100*1024*1024ULL, "1073741824") \
-    XX(1024*1024*1024ULL, "10737418240") \
-    XX(10*1024*1024*1024ULL, "107374182400") \
-    XX(100*1024*1024*1024ULL, "1099511627776") \
-    XX(1024*1024*1024*1024ULL, "inf")
-
-#define FLAT_EXECUTOR_CONSUMED_CPU_RANGES(XX) \
-    XX(0, "0%") \
-    XX(100, "10%") \
-    XX(100000, "20%") \
-    XX(200000, "30%") \
-    XX(300000, "40%") \
-    XX(400000, "50%") \
-    XX(500000, "60%") \
-    XX(600000, "70%") \
-    XX(700000, "80%") \
-    XX(800000, "90%") \
-    XX(900000, "100%")
-
+#define FLAT_EXECUTOR_DATA_SIZE(XX) \ 
+    XX(0ULL, "0") \ 
+    XX(1ULL, "10240") \ 
+    XX(10*1024ULL, "102400") \ 
+    XX(100*1024ULL, "1048576") \ 
+    XX(1024*1024ULL, "10485760") \ 
+    XX(10*1024*1024ULL, "104857600") \ 
+    XX(100*1024*1024ULL, "1073741824") \ 
+    XX(1024*1024*1024ULL, "10737418240") \ 
+    XX(10*1024*1024*1024ULL, "107374182400") \ 
+    XX(100*1024*1024*1024ULL, "1099511627776") \ 
+    XX(1024*1024*1024*1024ULL, "inf") 
+ 
+#define FLAT_EXECUTOR_DATA_RATE(XX) \ 
+    XX(0ULL, "0") \ 
+    XX(1ULL, "10240") \ 
+    XX(10*1024ULL, "102400") \ 
+    XX(100*1024ULL, "1048576") \ 
+    XX(1024*1024ULL, "10485760") \ 
+    XX(10*1024*1024ULL, "104857600") \ 
+    XX(100*1024*1024ULL, "1073741824") \ 
+    XX(1024*1024*1024ULL, "10737418240") \ 
+    XX(10*1024*1024*1024ULL, "107374182400") \ 
+    XX(100*1024*1024*1024ULL, "1099511627776") \ 
+    XX(1024*1024*1024*1024ULL, "inf") 
+ 
+#define FLAT_EXECUTOR_CONSUMED_CPU_RANGES(XX) \ 
+    XX(0, "0%") \ 
+    XX(100, "10%") \ 
+    XX(100000, "20%") \ 
+    XX(200000, "30%") \ 
+    XX(300000, "40%") \ 
+    XX(400000, "50%") \ 
+    XX(500000, "60%") \ 
+    XX(600000, "70%") \ 
+    XX(700000, "80%") \ 
+    XX(800000, "90%") \ 
+    XX(900000, "100%") 
+ 
 const char* TExecutorCounters::SimpleCounterNames[TExecutorCounters::SIMPLE_COUNTER_SIZE] =
     {FLAT_EXECUTOR_SIMPLE_COUNTERS_MAP(COUNTER_TEXT_ARRAY)};
 const char* TExecutorCounters::CumulativeCounterNames[TExecutorCounters::CUMULATIVE_COUNTER_SIZE] =
@@ -77,9 +77,9 @@ TExecutorCounters::TExecutorCounters()
 {
     static TTabletPercentileCounter::TRangeDef txLatencyConfig[] = { FLAT_EXECUTOR_LATENCY_RANGES(COUNTER_PERCENTILE_CONFIG_ARRAY) };
     static TTabletPercentileCounter::TRangeDef txTouchedConfig[] = { FLAT_EXECUTOR_TOUCHED_BLOCKS(COUNTER_PERCENTILE_CONFIG_ARRAY) };
-    static TTabletPercentileCounter::TRangeDef txDataSize[] = { FLAT_EXECUTOR_DATA_SIZE(COUNTER_PERCENTILE_CONFIG_ARRAY) };
-    static TTabletPercentileCounter::TRangeDef txDataRate[] = { FLAT_EXECUTOR_DATA_RATE(COUNTER_PERCENTILE_CONFIG_ARRAY) };
-    static TTabletPercentileCounter::TRangeDef txConsumedCpu[] = { FLAT_EXECUTOR_CONSUMED_CPU_RANGES(COUNTER_PERCENTILE_CONFIG_ARRAY) };
+    static TTabletPercentileCounter::TRangeDef txDataSize[] = { FLAT_EXECUTOR_DATA_SIZE(COUNTER_PERCENTILE_CONFIG_ARRAY) }; 
+    static TTabletPercentileCounter::TRangeDef txDataRate[] = { FLAT_EXECUTOR_DATA_RATE(COUNTER_PERCENTILE_CONFIG_ARRAY) }; 
+    static TTabletPercentileCounter::TRangeDef txConsumedCpu[] = { FLAT_EXECUTOR_CONSUMED_CPU_RANGES(COUNTER_PERCENTILE_CONFIG_ARRAY) }; 
 
     Percentile()[TX_PERCENTILE_LATENCY_RO].Initialize(txLatencyConfig, false);
     Percentile()[TX_PERCENTILE_LATENCY_RW].Initialize(txLatencyConfig, false);

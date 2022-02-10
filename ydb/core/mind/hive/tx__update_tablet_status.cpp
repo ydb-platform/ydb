@@ -1,222 +1,222 @@
-#include "hive_impl.h"
-#include "hive_log.h"
-
-namespace NKikimr {
-namespace NHive {
-
-class TTxUpdateTabletStatus : public TTransactionBase<THive> {
-    const TTabletId TabletId;
+#include "hive_impl.h" 
+#include "hive_log.h" 
+ 
+namespace NKikimr { 
+namespace NHive { 
+ 
+class TTxUpdateTabletStatus : public TTransactionBase<THive> { 
+    const TTabletId TabletId; 
     const TActorId Local;
-    const TEvLocal::TEvTabletStatus::EStatus Status;
-    const TEvTablet::TEvTabletDead::EReason Reason;
-    ui32 Generation;
+    const TEvLocal::TEvTabletStatus::EStatus Status; 
+    const TEvTablet::TEvTabletDead::EReason Reason; 
+    ui32 Generation; 
     TFollowerId FollowerId;
-    TCompleteNotifications Notifications;
-
-public:
-    TTxUpdateTabletStatus(
-            TTabletId tabletId,
+    TCompleteNotifications Notifications; 
+ 
+public: 
+    TTxUpdateTabletStatus( 
+            TTabletId tabletId, 
             const TActorId &local,
-            ui32 generation,
+            ui32 generation, 
             TFollowerId followerId,
-            TEvLocal::TEvTabletStatus::EStatus status,
-            TEvTablet::TEvTabletDead::EReason reason,
-            THive *hive)
-        : TBase(hive)
-        , TabletId(tabletId)
-        , Local(local)
-        , Status(status)
-        , Reason(reason)
-        , Generation(generation)
+            TEvLocal::TEvTabletStatus::EStatus status, 
+            TEvTablet::TEvTabletDead::EReason reason, 
+            THive *hive) 
+        : TBase(hive) 
+        , TabletId(tabletId) 
+        , Local(local) 
+        , Status(status) 
+        , Reason(reason) 
+        , Generation(generation) 
         , FollowerId(followerId)
-    {}
-
-    TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_TABLET_STATUS; }
-
-    bool IsGoodStatusForPostpone() const {
-        switch (Status) {
-            case TEvLocal::TEvTabletStatus::StatusBootFailed:
-                switch (Reason) {
-                    case TEvTablet::TEvTabletDead::EReason::ReasonBootSSError:
-                    case TEvTablet::TEvTabletDead::EReason::ReasonBootBSError:
-                    case TEvTablet::TEvTabletDead::EReason::ReasonBootSSTimeout:
-                        return true;
-                    default:
-                        break;
-                }
+    {} 
+ 
+    TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_TABLET_STATUS; } 
+ 
+    bool IsGoodStatusForPostpone() const { 
+        switch (Status) { 
+            case TEvLocal::TEvTabletStatus::StatusBootFailed: 
+                switch (Reason) { 
+                    case TEvTablet::TEvTabletDead::EReason::ReasonBootSSError: 
+                    case TEvTablet::TEvTabletDead::EReason::ReasonBootBSError: 
+                    case TEvTablet::TEvTabletDead::EReason::ReasonBootSSTimeout: 
+                        return true; 
+                    default: 
+                        break; 
+                } 
                 break;
 
-            default:
-                break;
-        }
-        return false;
-    }
-
-    TString GetStatus() {
-        TStringBuilder str;
-        str << (ui32)Status;
-        if (Status != TEvLocal::TEvTabletStatus::StatusOk) {
-            str << " reason " << Reason;
-        }
-        return str;
-    }
-
+            default: 
+                break; 
+        } 
+        return false; 
+    } 
+ 
+    TString GetStatus() { 
+        TStringBuilder str; 
+        str << (ui32)Status; 
+        if (Status != TEvLocal::TEvTabletStatus::StatusOk) { 
+            str << " reason " << Reason; 
+        } 
+        return str; 
+    } 
+ 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         TTabletInfo* tablet = Self->FindTablet(TabletId, FollowerId);
-        if (tablet != nullptr) {
-            BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet "
-                        << tablet->ToString()
-                        << " status "
-                        << GetStatus()
-                        << " generation "
-                        << Generation
+        if (tablet != nullptr) { 
+            BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet " 
+                        << tablet->ToString() 
+                        << " status " 
+                        << GetStatus() 
+                        << " generation " 
+                        << Generation 
                         << " follower "
                         << FollowerId
-                        << " from local "
-                        << Local);
-            NIceDb::TNiceDb db(txc.DB);
-            TInstant now = TActivationContext::Now();
+                        << " from local " 
+                        << Local); 
+            NIceDb::TNiceDb db(txc.DB); 
+            TInstant now = TActivationContext::Now(); 
             Notifications.Reset(Self->SelfId());
-            if (Status == TEvLocal::TEvTabletStatus::StatusOk) {
-                tablet->Statistics.AddRestartTimestamp(now.MilliSeconds());
-                tablet->ActualizeTabletStatistics(now);
-                TNodeInfo* node = Self->FindNode(Local.NodeId());
-                if (node == nullptr) {
-                    // event from IC about disconnection of the node could overtake events from the node itself because of Pipe Server
-                    // KIKIMR-9614
-                    return true;
-                }
+            if (Status == TEvLocal::TEvTabletStatus::StatusOk) { 
+                tablet->Statistics.AddRestartTimestamp(now.MilliSeconds()); 
+                tablet->ActualizeTabletStatistics(now); 
+                TNodeInfo* node = Self->FindNode(Local.NodeId()); 
+                if (node == nullptr) { 
+                    // event from IC about disconnection of the node could overtake events from the node itself because of Pipe Server 
+                    // KIKIMR-9614 
+                    return true; 
+                } 
                 if (tablet->IsLeader() && Generation < tablet->GetLeader().KnownGeneration) {
-                    return true;
-                }
-                for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
-                    Notifications.Send(actor, new TEvPrivate::TEvRestartComplete({TabletId, FollowerId}, "OK"));
-                }
-                tablet->ActorsToNotifyOnRestart.clear();
+                    return true; 
+                } 
+                for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) { 
+                    Notifications.Send(actor, new TEvPrivate::TEvRestartComplete({TabletId, FollowerId}, "OK")); 
+                } 
+                tablet->ActorsToNotifyOnRestart.clear(); 
                 if (tablet->GetLeader().IsDeleting()) {
                     tablet->SendStopTablet(Local, {TabletId, FollowerId});
-                    return true;
-                }
-                tablet->BecomeRunning(Local.NodeId());
+                    return true; 
+                } 
+                tablet->BecomeRunning(Local.NodeId()); 
                 if (tablet->GetLeader().IsLockedToActor()) {
                     // Tablet is locked and shouldn't be running, but we just found out it's running on this node
                     // Ask it to stop using InitiateStop (which uses data saved by BecomeRunning call above)
-                    tablet->InitiateStop();
+                    tablet->InitiateStop(); 
                 }
-                tablet->BootState = Self->BootStateRunning;
-                tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
+                tablet->BootState = Self->BootStateRunning; 
+                tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds()); 
                 if (tablet->IsLeader()) {
                     TLeaderTabletInfo& leader(tablet->AsLeader());
                     leader.KnownGeneration = Generation;
                     db.Table<Schema::Tablet>().Key(TabletId).Update(NIceDb::TUpdate<Schema::Tablet::LeaderNode>(tablet->NodeId),
-                                                                    NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(Generation),
-                                                                    NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet->Statistics));
-                } else {
+                                                                    NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(Generation), 
+                                                                    NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet->Statistics)); 
+                } else { 
                     db.Table<Schema::TabletFollowerTablet>().Key(TabletId, FollowerId).Update(
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(tablet->AsFollower().FollowerGroup.Id),
-                                NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(Local.NodeId()),
-                                NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics));
-                }
+                                NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(Local.NodeId()), 
+                                NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics)); 
+                } 
                 for (const TActorId& actor : tablet->ActorsToNotify) {
-                    Notifications.Send(actor, new TEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
-                }
-                tablet->ActorsToNotify.clear();
-                db.Table<Schema::Tablet>().Key(TabletId).UpdateToNull<Schema::Tablet::ActorsToNotify>();
-            } else {
-                if (Local) {
+                    Notifications.Send(actor, new TEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId)); 
+                } 
+                tablet->ActorsToNotify.clear(); 
+                db.Table<Schema::Tablet>().Key(TabletId).UpdateToNull<Schema::Tablet::ActorsToNotify>(); 
+            } else { 
+                if (Local) { 
                     Notifications.Send(Local, new TEvLocal::TEvDeadTabletAck(std::make_pair(TabletId, FollowerId), Generation));
-                }
-                if (tablet->IsLeader()) {
-                    TLeaderTabletInfo& leader(tablet->AsLeader());
-                    if (Generation < leader.KnownGeneration) {
-                        return true;
-                    }
-                    if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriod()) >= Self->GetTabletRestarsMaxCount()) {
-                        if (IsGoodStatusForPostpone()) {
-                            leader.PostponeStart(now + Self->GetPostponeStartPeriod());
-                            BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet " << tablet->ToString()
-                                << " postponed start until " << leader.PostponedStart);
-                        }
-                    }
-                }
-                if (Local) {
-                    if (tablet->IsAliveOnLocal(Local)) {
+                } 
+                if (tablet->IsLeader()) { 
+                    TLeaderTabletInfo& leader(tablet->AsLeader()); 
+                    if (Generation < leader.KnownGeneration) { 
+                        return true; 
+                    } 
+                    if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriod()) >= Self->GetTabletRestarsMaxCount()) { 
+                        if (IsGoodStatusForPostpone()) { 
+                            leader.PostponeStart(now + Self->GetPostponeStartPeriod()); 
+                            BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet " << tablet->ToString() 
+                                << " postponed start until " << leader.PostponedStart); 
+                        } 
+                    } 
+                } 
+                if (Local) { 
+                    if (tablet->IsAliveOnLocal(Local)) { 
                         if (tablet->IsLeader()) {
                             TLeaderTabletInfo& leader(tablet->AsLeader());
                             db.Table<Schema::Tablet>().Key(TabletId).Update(NIceDb::TUpdate<Schema::Tablet::LeaderNode>(0),
                                                                             NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(leader.KnownGeneration),
-                                                                            NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet->Statistics));
-                        } else {
+                                                                            NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet->Statistics)); 
+                        } else { 
                             db.Table<Schema::TabletFollowerTablet>().Key(TabletId, FollowerId).Update(
                                         NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(tablet->AsFollower().FollowerGroup.Id),
-                                        NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0),
-                                        NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics));
-                        }
-                        tablet->InitiateStop();
-                    }
-                }
+                                        NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0), 
+                                        NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics)); 
+                        } 
+                        tablet->InitiateStop(); 
+                    } 
+                } 
                 switch (tablet->GetLeader().State) {
-                case ETabletState::GroupAssignment:
-                    //Y_FAIL("Unexpected tablet boot failure during group assignment");
-                    // Just ignore it. This is fail from previous generation.
-                    return true;
-                case ETabletState::StoppingInGroupAssignment:
-                case ETabletState::Stopping:
+                case ETabletState::GroupAssignment: 
+                    //Y_FAIL("Unexpected tablet boot failure during group assignment"); 
+                    // Just ignore it. This is fail from previous generation. 
+                    return true; 
+                case ETabletState::StoppingInGroupAssignment: 
+                case ETabletState::Stopping: 
                     if (tablet->IsLeader()) {
                         for (const TActorId& actor : tablet->GetLeader().ActorsToNotify) {
-                            Notifications.Send(actor, new TEvHive::TEvStopTabletResult(NKikimrProto::OK, TabletId));
-                        }
+                            Notifications.Send(actor, new TEvHive::TEvStopTabletResult(NKikimrProto::OK, TabletId)); 
+                        } 
                         tablet->GetLeader().ActorsToNotify.clear();
-                    }
+                    } 
                     [[fallthrough]]; // AUTOGENERATED_FALLTHROUGH_FIXME
 
-                case ETabletState::Stopped:
+                case ETabletState::Stopped: 
                     Self->ReportStoppedToWhiteboard(tablet->GetLeader());
-                    BLOG_D("Report tablet " << tablet->ToString() << " as stopped to Whiteboard");
-                    break;
-                case ETabletState::BlockStorage:
-                    // do nothing - let the tablet die
-                    break;
-                default:
-                    break;
-                };
-            }
-        }
-        return true;
-    }
-
+                    BLOG_D("Report tablet " << tablet->ToString() << " as stopped to Whiteboard"); 
+                    break; 
+                case ETabletState::BlockStorage: 
+                    // do nothing - let the tablet die 
+                    break; 
+                default: 
+                    break; 
+                }; 
+            } 
+        } 
+        return true; 
+    } 
+ 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxUpdateTabletStatus::Complete TabletId: " << TabletId << " Notifications: " << Notifications);
-        Notifications.Send(ctx);
+        BLOG_D("THive::TTxUpdateTabletStatus::Complete TabletId: " << TabletId << " Notifications: " << Notifications); 
+        Notifications.Send(ctx); 
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
-        if (tablet != nullptr) {
-            tablet->TryToBoot();
-        }
-        Self->ProcessBootQueue();
-    }
-};
-
+        if (tablet != nullptr) { 
+            tablet->TryToBoot(); 
+        } 
+        Self->ProcessBootQueue(); 
+    } 
+}; 
+ 
 ITransaction* THive::CreateUpdateTabletStatus(
-        TTabletId tabletId,
+        TTabletId tabletId, 
         const TActorId &local,
-        ui32 generation,
+        ui32 generation, 
         TFollowerId followerId,
-        TEvLocal::TEvTabletStatus::EStatus status,
-        TEvTablet::TEvTabletDead::EReason reason) {
-    return new TTxUpdateTabletStatus(tabletId, local, generation, followerId, status, reason, this);
-}
-
-} // NHive
-} // NKikimr
-
-template <>
-inline void Out<NKikimr::NHive::TCompleteNotifications>(IOutputStream& o, const NKikimr::NHive::TCompleteNotifications& n) {
-    o << n.SelfID << " -> [";
-    for (auto it = n.Notifications.begin(); it != n.Notifications.end(); ++it) {
-        if (it != n.Notifications.begin()) {
-            o << ',';
-        }
-        o << it->Get()->Recipient;
-    }
-    o << "]";
-}
+        TEvLocal::TEvTabletStatus::EStatus status, 
+        TEvTablet::TEvTabletDead::EReason reason) { 
+    return new TTxUpdateTabletStatus(tabletId, local, generation, followerId, status, reason, this); 
+} 
+ 
+} // NHive 
+} // NKikimr 
+ 
+template <> 
+inline void Out<NKikimr::NHive::TCompleteNotifications>(IOutputStream& o, const NKikimr::NHive::TCompleteNotifications& n) { 
+    o << n.SelfID << " -> ["; 
+    for (auto it = n.Notifications.begin(); it != n.Notifications.end(); ++it) { 
+        if (it != n.Notifications.begin()) { 
+            o << ','; 
+        } 
+        o << it->Get()->Recipient; 
+    } 
+    o << "]"; 
+} 

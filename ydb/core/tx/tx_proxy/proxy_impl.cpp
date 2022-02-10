@@ -183,12 +183,12 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
     static NTabletPipe::TClientConfig InitPipeClientConfig() {
         NTabletPipe::TClientConfig config;
-        config.RetryPolicy = {
-            .RetryLimitCount = 3,
-            .MinRetryTime = TDuration::MilliSeconds(100),
-            .MaxRetryTime = TDuration::Seconds(1),
-            .BackoffMultiplier = 5,
-        };
+        config.RetryPolicy = { 
+            .RetryLimitCount = 3, 
+            .MinRetryTime = TDuration::MilliSeconds(100), 
+            .MaxRetryTime = TDuration::Seconds(1), 
+            .BackoffMultiplier = 5, 
+        }; 
         return config;
     }
 
@@ -407,20 +407,20 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
         ctx.Send(reqId, new TEvTxProxyReq::TEvNavigateScheme(ev));
     }
 
-    void Handle(TEvTxUserProxy::TEvInvalidateTable::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvTxUserProxy::TEvInvalidateTable::TPtr &ev, const TActorContext &ctx) { 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                     "actor# " << SelfId() <<
                     " HANDLE EvInvalidateTable");
         ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(TTableId(ev.Get()->Get()->Record.GetSchemeShardId(), ev.Get()->Get()->Record.GetTableId()), ev.Get()->Sender));
-    }
-
-    void Handle(TEvTxProxySchemeCache::TEvInvalidateTableResult::TPtr &ev, const TActorContext &ctx) {
+    } 
+ 
+    void Handle(TEvTxProxySchemeCache::TEvInvalidateTableResult::TPtr &ev, const TActorContext &ctx) { 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                     "actor# " << SelfId() <<
                     " HANDLE EvInvalidateTableResult");
-        ctx.Send(ev.Get()->Get()->Sender, new TEvTxUserProxy::TEvInvalidateTableResult);
-    }
-
+        ctx.Send(ev.Get()->Get()->Sender, new TEvTxUserProxy::TEvInvalidateTableResult); 
+    } 
+ 
 public:
     TTxProxy(const TVector<ui64> &txAllocators)
         : PipeClientCache(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig()))
@@ -466,7 +466,7 @@ public:
             HFunc(TEvTxUserProxy::TEvNavigate, Handle);
             HFunc(TEvTxUserProxy::TEvProposeTransaction, Handle);
 
-            HFunc(TEvTxUserProxy::TEvInvalidateTable, Handle);
+            HFunc(TEvTxUserProxy::TEvInvalidateTable, Handle); 
             HFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult, Handle);
 
             HFunc(TEvTxUserProxy::TEvProposeKqpTransaction, Handle);

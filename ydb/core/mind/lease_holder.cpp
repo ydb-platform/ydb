@@ -144,7 +144,7 @@ private:
         ui32 group = domain.DefaultStateStorageGroup;
 
         NTabletPipe::TClientConfig config;
-        config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries(); 
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID(group), config);
         NodeBrokerPipe = ctx.Register(pipe);
     }

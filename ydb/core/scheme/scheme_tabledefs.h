@@ -560,25 +560,25 @@ private:
     EMode Mode;
     std::pair<ui64, ui64> SnapshotTime;
 };
-
-struct TSecurityObject : TAtomicRefCount<TSecurityObject>, NACLib::TSecurityObject {
+ 
+struct TSecurityObject : TAtomicRefCount<TSecurityObject>, NACLib::TSecurityObject { 
     using TPtr = TIntrusivePtr<TSecurityObject>;
 
     static NACLib::TSecurityObject FromByteStream(const NACLibProto::TSecurityObject* parent, const TString& owner, const TString& acl, bool isContainer) {
-        NACLib::TSecurityObject object(owner, isContainer);
-        Y_VERIFY(object.MutableACL()->ParseFromString(acl));
-        return parent != nullptr ? object.MergeWithParent(*parent) : object;
-    }
-
+        NACLib::TSecurityObject object(owner, isContainer); 
+        Y_VERIFY(object.MutableACL()->ParseFromString(acl)); 
+        return parent != nullptr ? object.MergeWithParent(*parent) : object; 
+    } 
+ 
     TSecurityObject(const TString& owner, const TString& acl, bool isContainer)
-        : NACLib::TSecurityObject(FromByteStream(nullptr, owner, acl, isContainer))
-    {}
-
+        : NACLib::TSecurityObject(FromByteStream(nullptr, owner, acl, isContainer)) 
+    {} 
+ 
     TSecurityObject(const TSecurityObject* parent, const TString& owner, const TString& acl, bool isContainer)
-        : NACLib::TSecurityObject(FromByteStream(parent, owner, acl, isContainer))
-    {}
-};
-
+        : NACLib::TSecurityObject(FromByteStream(parent, owner, acl, isContainer)) 
+    {} 
+}; 
+ 
 // key description of one minikql operation
 class TKeyDesc : TNonCopyable {
 public:
@@ -676,7 +676,7 @@ public:
     EStatus Status;
     TVector<TColumnInfo> ColumnInfos;
     TVector<TPartitionInfo> Partitions;
-    TIntrusivePtr<TSecurityObject> SecurityObject;
+    TIntrusivePtr<TSecurityObject> SecurityObject; 
 
     bool IsSystemView() const { return Partitions.empty(); }
 

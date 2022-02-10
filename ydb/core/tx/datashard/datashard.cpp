@@ -97,7 +97,7 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , PipeClientCacheConfig(new NTabletPipe::TBoundedClientCacheConfig())
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(PipeClientCacheConfig, GetPipeClientConfig()))
     , ResendReadSetPipeTracker(*PipeClientCache)
-    , SchemeShardPipeRetryPolicy({})
+    , SchemeShardPipeRetryPolicy({}) 
     , PathOwnerId(INVALID_TABLET_ID)
     , CurrentSchemeShardId(INVALID_TABLET_ID)
     , LastKnownMediator(INVALID_TABLET_ID)
@@ -156,12 +156,12 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
 NTabletPipe::TClientConfig TDataShard::GetPipeClientConfig() {
     NTabletPipe::TClientConfig config;
     config.CheckAliveness = true;
-    config.RetryPolicy = {
-        .RetryLimitCount = 30,
-        .MinRetryTime = TDuration::MilliSeconds(10),
-        .MaxRetryTime = TDuration::MilliSeconds(500),
-        .BackoffMultiplier = 2,
-    };
+    config.RetryPolicy = { 
+        .RetryLimitCount = 30, 
+        .MinRetryTime = TDuration::MilliSeconds(10), 
+        .MaxRetryTime = TDuration::MilliSeconds(500), 
+        .BackoffMultiplier = 2, 
+    }; 
     return config;
 }
 

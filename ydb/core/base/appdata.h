@@ -5,7 +5,7 @@
 #include "domain.h"
 #include "feature_flags.h"
 #include "nameservice.h"
-#include "tablet_types.h"
+#include "tablet_types.h" 
 #include "resource_profile.h"
 #include "event_filter.h"
 
@@ -88,16 +88,16 @@ struct TAppData {
     const NPDisk::IIoContextFactory* IoContextFactory = nullptr;
 
     struct TDefaultTabletTypes {
-        TTabletTypes::EType SchemeShard;
-        TTabletTypes::EType DataShard;
-        TTabletTypes::EType KeyValue;
-        TTabletTypes::EType PersQueue;
-        TTabletTypes::EType PersQueueReadBalancer;
-        TTabletTypes::EType Dummy;
-        TTabletTypes::EType Coordinator;
-        TTabletTypes::EType Mediator;
+        TTabletTypes::EType SchemeShard; 
+        TTabletTypes::EType DataShard; 
+        TTabletTypes::EType KeyValue; 
+        TTabletTypes::EType PersQueue; 
+        TTabletTypes::EType PersQueueReadBalancer; 
+        TTabletTypes::EType Dummy; 
+        TTabletTypes::EType Coordinator; 
+        TTabletTypes::EType Mediator; 
         TTabletTypes::EType Kesus;
-        TTabletTypes::EType Hive;
+        TTabletTypes::EType Hive; 
         TTabletTypes::EType SysViewProcessor;
         TTabletTypes::EType ColumnShard;
         TTabletTypes::EType TestShard;
@@ -138,22 +138,22 @@ struct TAppData {
     NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig SqsConfig;
-    NKikimrProto::TAuthConfig AuthConfig;
+    NKikimrProto::TAuthConfig AuthConfig; 
     NKikimrProto::TKeyConfig KeyConfig;
     NKikimrProto::TKeyConfig PDiskKeyConfig;
     TFeatureFlags FeatureFlags;
-    NKikimrConfig::THiveConfig HiveConfig;
+    NKikimrConfig::THiveConfig HiveConfig; 
     NKikimrConfig::TDataShardConfig DataShardConfig;
     NKikimrConfig::TMeteringConfig MeteringConfig;
     NKikimrConfig::TCompactionConfig CompactionConfig;
-    bool EnforceUserTokenRequirement = false;
+    bool EnforceUserTokenRequirement = false; 
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
     bool EnableKqpSpilling = false;
     bool AllowShadowDataInSchemeShardForTests = false;
     bool EnableMvccSnapshotWithLegacyDomainRoot = false;
-    TVector<TString> AdministrationAllowedSIDs; // users/groups which allowed to perform administrative tasks
-    TVector<TString> DefaultUserSIDs;
-    TString AllAuthenticatedUsers;
+    TVector<TString> AdministrationAllowedSIDs; // users/groups which allowed to perform administrative tasks 
+    TVector<TString> DefaultUserSIDs; 
+    TString AllAuthenticatedUsers; 
     TResourceProfilesPtr ResourceProfiles;
 
     TProgramShouldContinue * const KikimrShouldContinue;

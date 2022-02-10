@@ -19,7 +19,7 @@
 #include <ydb/core/util/counted_leaky_bucket.h>
 
 #include <ydb/library/login/protos/login.pb.h>
-
+ 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -73,14 +73,14 @@ struct TBindingsRoomsChange {
     bool ChannelsBindingsUpdated = false;
 };
 
-using TChannelsMapping = TVector<TString>; // channel idx -> storage pool name
-
+using TChannelsMapping = TVector<TString>; // channel idx -> storage pool name 
+ 
 /**
  * Maps original channels bindings to possible updates
  */
-using TBindingsRoomsChanges = TMap<TChannelsMapping, TBindingsRoomsChange>;
+using TBindingsRoomsChanges = TMap<TChannelsMapping, TBindingsRoomsChange>; 
 
-TChannelsMapping GetPoolsMapping(const TChannelsBindings& bindings);
+TChannelsMapping GetPoolsMapping(const TChannelsBindings& bindings); 
 
 struct TTableShardInfo {
     TShardIdx ShardIdx = InvalidShardIdx;
@@ -1258,12 +1258,12 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     }
 
     TTabletId GetTenantHiveID() const {
-        if (!ProcessingParams.HasHive()) {
-            return InvalidTabletId;
-        }
-        return TTabletId(ProcessingParams.GetHive());
-    }
-
+        if (!ProcessingParams.HasHive()) { 
+            return InvalidTabletId; 
+        } 
+        return TTabletId(ProcessingParams.GetHive()); 
+    } 
+ 
     TTabletId GetTenantSysViewProcessorID() const {
         if (!ProcessingParams.HasSysViewProcessor()) {
             return InvalidTabletId;
@@ -1598,14 +1598,14 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         if (schemeshards.size()) {
             ProcessingParams.SetSchemeShard(ui64(schemeshards.front()));
         }
-
-        ProcessingParams.ClearHive();
-        TVector<TTabletId> hives = FilterTablets(ETabletType::Hive, allShards);
-        Y_VERIFY_S(hives.size() <= 1, "size was: " << hives.size());
-        if (hives.size()) {
-            ProcessingParams.SetHive(ui64(hives.front()));
+ 
+        ProcessingParams.ClearHive(); 
+        TVector<TTabletId> hives = FilterTablets(ETabletType::Hive, allShards); 
+        Y_VERIFY_S(hives.size() <= 1, "size was: " << hives.size()); 
+        if (hives.size()) { 
+            ProcessingParams.SetHive(ui64(hives.front())); 
             SetSharedHive(InvalidTabletId); // set off shared hive when our own hive has found
-        }
+        } 
 
         ProcessingParams.ClearSysViewProcessor();
         TVector<TTabletId> sysViewProcessors = FilterTablets(ETabletType::SysViewProcessor, allShards);
@@ -1752,30 +1752,30 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         DiskQuotaExceeded = value;
     }
 
-    bool HasSecurityState() const {
-        return SecurityState.PublicKeysSize() > 0;
-    }
-
-    const NLoginProto::TSecurityState& GetSecurityState() const {
-        return SecurityState;
-    }
-
-    void UpdateSecurityState(NLoginProto::TSecurityState state) {
-        SecurityState = std::move(state);
-    }
-
-    ui64 GetSecurityStateVersion() const {
-        return SecurityStateVersion;
-    }
-
-    void SetSecurityStateVersion(ui64 securityStateVersion) {
-        SecurityStateVersion = securityStateVersion;
-    }
-
-    void IncSecurityStateVersion() {
-        ++SecurityStateVersion;
-    }
-
+    bool HasSecurityState() const { 
+        return SecurityState.PublicKeysSize() > 0; 
+    } 
+ 
+    const NLoginProto::TSecurityState& GetSecurityState() const { 
+        return SecurityState; 
+    } 
+ 
+    void UpdateSecurityState(NLoginProto::TSecurityState state) { 
+        SecurityState = std::move(state); 
+    } 
+ 
+    ui64 GetSecurityStateVersion() const { 
+        return SecurityStateVersion; 
+    } 
+ 
+    void SetSecurityStateVersion(ui64 securityStateVersion) { 
+        SecurityStateVersion = securityStateVersion; 
+    } 
+ 
+    void IncSecurityStateVersion() { 
+        ++SecurityStateVersion; 
+    } 
+ 
 private:
     bool InitiatedAsGlobal = false;
     NKikimrSubDomains::TProcessingParams ProcessingParams;
@@ -1805,9 +1805,9 @@ private:
     TPathId ResourcesDomainId;
     TTabletId SharedHive = InvalidTabletId;
 
-    NLoginProto::TSecurityState SecurityState;
-    ui64 SecurityStateVersion = 0;
-
+    NLoginProto::TSecurityState SecurityState; 
+    ui64 SecurityStateVersion = 0; 
+ 
     TVector<TTabletId> FilterTablets(TTabletTypes::EType type, const THashMap<TShardIdx, TShardInfo>& allShards) const {
         TVector<TTabletId> tablets;
         for (auto shardId: PrivateShards) {

@@ -1024,10 +1024,10 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropFileStore:
         return CreateDropFileStore(NextPartId(), tx);
 
-    // Login
+    // Login 
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin:
-        return CreateAlterLogin(NextPartId(), tx);
-
+        return CreateAlterLogin(NextPartId(), tx); 
+ 
     // Sequence
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
         return CreateNewSequence(NextPartId(), tx);

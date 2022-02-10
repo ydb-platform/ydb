@@ -22,5 +22,5 @@ message IssueMessage {
     // WARNING = 2;
     // INFO = 3;
     uint32 severity = 5;
-    repeated IssueMessage issues = 6;
+    repeated IssueMessage issues = 6; 
 }

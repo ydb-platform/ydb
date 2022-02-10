@@ -12,7 +12,7 @@ namespace {
 
 class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
 
-    struct Schema : NIceDb::Schema {
+    struct Schema : NIceDb::Schema { 
         struct Snaps : Table<1> {
             struct SourceTableId : Column<1, NScheme::NTypeIds::Uint32> {};
             struct DestinationTablet : Column<2, NScheme::NTypeIds::Uint64> {};
@@ -52,7 +52,7 @@ class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExec
 
         bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
             Y_UNUSED(ctx);
-            NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
+            NIceDb::TNiceDb(txc.DB).Materialize<Schema>(); 
             return true;
         }
 

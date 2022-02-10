@@ -12,8 +12,8 @@
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
-#include "schemeshard_identificators.h"
-
+#include "schemeshard_identificators.h" 
+ 
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -52,8 +52,8 @@ struct TEvSchemeShard {
         EvRewriteOwnerResult,
         EvPublishTenant,
         EvPublishTenantResult,  // 271125012
-        EvLogin,
-        EvLoginResult,
+        EvLogin, 
+        EvLoginResult, 
 
 
         EvBackupDatashard = EvModifySchemeTransaction + 6 * 512,
@@ -120,13 +120,13 @@ struct TEvSchemeShard {
         TEvModifySchemeTransactionResult()
         {}
 
-        TEvModifySchemeTransactionResult(TTxId txid, TTabletId schemeshardId) {
-            Record.SetTxId(ui64(txid));
-            Record.SetSchemeshardId(ui64(schemeshardId));
-        }
-
+        TEvModifySchemeTransactionResult(TTxId txid, TTabletId schemeshardId) { 
+            Record.SetTxId(ui64(txid)); 
+            Record.SetSchemeshardId(ui64(schemeshardId)); 
+        } 
+ 
         TEvModifySchemeTransactionResult(EStatus status, ui64 txid, ui64 schemeshardId, const TStringBuf& reason = TStringBuf())
-            : TEvModifySchemeTransactionResult(TTxId(txid), TTabletId(schemeshardId))
+            : TEvModifySchemeTransactionResult(TTxId(txid), TTabletId(schemeshardId)) 
         {
             Record.SetStatus(status);
             if (reason.size() > 0) {
@@ -147,13 +147,13 @@ struct TEvSchemeShard {
             return Record.GetReason().empty() && (Record.GetStatus() == EStatus::StatusSuccess);
         }
 
-        void SetStatus(EStatus status, const TString& reason = {}) {
-            Record.SetStatus(status);
-            if (reason) {
-                Record.SetReason(reason);
-            }
-        }
-
+        void SetStatus(EStatus status, const TString& reason = {}) { 
+            Record.SetStatus(status); 
+            if (reason) { 
+                Record.SetReason(reason); 
+            } 
+        } 
+ 
         void SetError(EStatus status, const TString& errStr) {
             Record.SetStatus(status);
             Record.SetReason(errStr);
@@ -218,10 +218,10 @@ struct TEvSchemeShard {
         {}
 
         TEvDescribeScheme(const NKikimrSchemeOp::TDescribePath& describePath)
-        {
-            Record.CopyFrom(describePath);
-        }
-
+        { 
+            Record.CopyFrom(describePath); 
+        } 
+ 
         TEvDescribeScheme(const TString& path)
         {
             Record.SetPath(path);
@@ -246,9 +246,9 @@ struct TEvSchemeShard {
         }
     };
 
-    struct TEvDescribeSchemeResult : public TEventPreSerializedPB<TEvDescribeSchemeResult,
+    struct TEvDescribeSchemeResult : public TEventPreSerializedPB<TEvDescribeSchemeResult, 
                                                                   NKikimrScheme::TEvDescribeSchemeResult,
-                                                                  EvDescribeSchemeResult> {
+                                                                  EvDescribeSchemeResult> { 
         TEvDescribeSchemeResult() = default;
 
         TEvDescribeSchemeResult(const TString& path, ui64 pathOwner, TPathId pathId)
@@ -260,17 +260,17 @@ struct TEvSchemeShard {
         }
     };
 
-    struct TEvDescribeSchemeResultBuilder : TEvDescribeSchemeResult {
-        using TBase::Record;
-
-        TEvDescribeSchemeResultBuilder() = default;
-
+    struct TEvDescribeSchemeResultBuilder : TEvDescribeSchemeResult { 
+        using TBase::Record; 
+ 
+        TEvDescribeSchemeResultBuilder() = default; 
+ 
         TEvDescribeSchemeResultBuilder(const TString& path, ui64 pathOwner, TPathId pathId)
             : TEvDescribeSchemeResult(path, pathOwner, pathId)
-        {
-        }
-    };
-
+        { 
+        } 
+    }; 
+ 
     struct TEvNotifyTxCompletion : public TEventPB<TEvNotifyTxCompletion,
                                                      NKikimrScheme::TEvNotifyTxCompletion,
                                                      EvNotifyTxCompletion> {
@@ -528,24 +528,24 @@ struct TEvSchemeShard {
             Record.SetSubDomainPathId(subDomainPathId);
         }
     };
-
+ 
     struct TEvLogin : TEventPB<TEvLogin, NKikimrScheme::TEvLogin, EvLogin> {
-        TEvLogin() = default;
-    };
-
+        TEvLogin() = default; 
+    }; 
+ 
     struct TEvLoginResult : TEventPB<TEvLoginResult, NKikimrScheme::TEvLoginResult, EvLoginResult> {
-        TEvLoginResult() = default;
-    };
+        TEvLoginResult() = default; 
+    }; 
 };
 
 }
-
+ 
 IActor* CreateFlatTxSchemeShard(const TActorId &tablet, TTabletStorageInfo *info);
 bool PartitionConfigHasExternalBlobsEnabled(const NKikimrSchemeOp::TPartitionConfig &partitionConfig);
 }
 
-template<>
+template<> 
 inline void Out<NKikimrScheme::EStatus>(IOutputStream& o, NKikimrScheme::EStatus x) {
     o << NKikimrScheme::EStatus_Name(x);
-    return;
-}
+    return; 
+} 

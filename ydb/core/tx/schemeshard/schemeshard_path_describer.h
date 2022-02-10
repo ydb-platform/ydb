@@ -34,7 +34,7 @@ class TPathDescriber {
     void DescribePathVersion(const TPath& path);
     void DescribeDomain(TPathElement::TPtr pathEl);
     void DescribeDomainRoot(TPathElement::TPtr pathEl);
-    void DescribeDomainExtra(TPathElement::TPtr pathEl);
+    void DescribeDomainExtra(TPathElement::TPtr pathEl); 
     void DescribeRevertedMigrations(TPathElement::TPtr pathEl);
 
     void DescribeBlockStoreVolume(TPathId pathId, TPathElement::TPtr pathEl);

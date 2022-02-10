@@ -8,8 +8,8 @@
 
 namespace NKikimr {
 
-using namespace NResultLib;
-
+using namespace NResultLib; 
+ 
 Y_UNIT_TEST_SUITE(TMiniKQLResultConverterTest) {
 
 Y_UNIT_TEST(TTestWithSimpleProgram) {

@@ -73,22 +73,22 @@ namespace NThreading {
                     default:
                         Y_ASSERT(state == ValueSet);
                 }
-            }
-
+            } 
+ 
         public:
             TFutureState()
                 : State(NotReady)
                 , NullValue(0)
             {
-            }
-
+            } 
+ 
             template <typename TT>
             TFutureState(TT&& value)
                 : State(ValueSet)
                 , Value(std::forward<TT>(value))
             {
             }
-
+ 
             TFutureState(std::exception_ptr exception, TError)
                 : State(ExceptionSet)
                 , Exception(std::move(exception))
@@ -101,11 +101,11 @@ namespace NThreading {
                     Value.~T();
                 }
             }
-
+ 
             bool HasValue() const {
                 return AtomicGet(State) >= ValueMoved; // ValueMoved, ValueSet, ValueRead
-            }
-
+            } 
+ 
             void TryRethrow() const {
                 int state = AtomicGet(State);
                 TryRethrowWithState(state);
@@ -148,7 +148,7 @@ namespace NThreading {
 
                     readyEvent = ReadyEvent.Get();
                     callbacks = std::move(Callbacks);
-
+ 
                     AtomicSet(State, ValueSet);
                 }
 
@@ -635,7 +635,7 @@ namespace NThreading {
         });
         return promise;
     }
-
+ 
     template <typename T>
     inline bool TFuture<T>::Initialized() const {
         return bool(State);
@@ -790,7 +790,7 @@ namespace NThreading {
         EnsureInitialized();
         State->SetValue(value);
     }
-
+ 
     template <typename T>
     inline void TPromise<T>::SetValue(T&& value) {
         EnsureInitialized();

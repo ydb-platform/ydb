@@ -1,13 +1,13 @@
-#pragma once
-
-#include <yandex/cloud/priv/iam/v1/service_account_service.grpc.pb.h>
-
-class TServiceAccountServiceMock : public yandex::cloud::priv::iam::v1::ServiceAccountService::Service {
-public:
-    THashMap<TString, yandex::cloud::priv::iam::v1::ServiceAccount> ServiceAccountData;
+#pragma once 
+ 
+#include <yandex/cloud/priv/iam/v1/service_account_service.grpc.pb.h> 
+ 
+class TServiceAccountServiceMock : public yandex::cloud::priv::iam::v1::ServiceAccountService::Service { 
+public: 
+    THashMap<TString, yandex::cloud::priv::iam::v1::ServiceAccount> ServiceAccountData; 
     THashMap<TString, yandex::cloud::priv::iam::v1::IamToken> IamTokens;
     TString Identity;
-
+ 
     TMaybe<grpc::Status> CheckAuthorization(grpc::ServerContext* context) {
         if (!Identity.empty()) {
             auto[reqIdBegin, reqIdEnd] = context->client_metadata().equal_range("authorization");
@@ -24,7 +24,7 @@ public:
     }
 
     virtual grpc::Status Get(grpc::ServerContext* context,
-                             const yandex::cloud::priv::iam::v1::GetServiceAccountRequest* request,
+                             const yandex::cloud::priv::iam::v1::GetServiceAccountRequest* request, 
                              yandex::cloud::priv::iam::v1::ServiceAccount* response) override
     {
         auto status = CheckAuthorization(context);
@@ -33,14 +33,14 @@ public:
         }
 
         TString id = request->service_account_id();
-        auto it = ServiceAccountData.find(id);
-        if (it != ServiceAccountData.end()) {
-            response->CopyFrom(it->second);
-            return grpc::Status::OK;
-        } else {
-            return grpc::Status(grpc::StatusCode::NOT_FOUND, "Not Found");
-        }
-    }
+        auto it = ServiceAccountData.find(id); 
+        if (it != ServiceAccountData.end()) { 
+            response->CopyFrom(it->second); 
+            return grpc::Status::OK; 
+        } else { 
+            return grpc::Status(grpc::StatusCode::NOT_FOUND, "Not Found"); 
+        } 
+    } 
 
     virtual grpc::Status IssueToken(grpc::ServerContext* context,
                              const yandex::cloud::priv::iam::v1::IssueTokenRequest* request,
@@ -61,5 +61,5 @@ public:
         }
     }
 
-};
-
+}; 
+ 

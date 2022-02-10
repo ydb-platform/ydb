@@ -373,7 +373,7 @@ void TKqpCountersBase::ReportIssues(const Ydb::Issue::IssueMessage& issue) {
         YdbResponsesLocksInvalidated->Inc();
     }
 
-    for (auto& childIssue : issue.issues()) {
+    for (auto& childIssue : issue.issues()) { 
         ReportIssues(childIssue);
     }
 }

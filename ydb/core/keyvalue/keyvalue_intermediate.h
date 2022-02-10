@@ -139,7 +139,7 @@ struct TIntermediate {
     ui64 TotalSizeLimit;
     ui64 TotalReadsScheduled;
     ui64 TotalReadsLimit;
-    ui64 SequentialReadLimit;
+    ui64 SequentialReadLimit; 
     bool IsTruncated;
 
     ui64 CreatedAtGeneration;

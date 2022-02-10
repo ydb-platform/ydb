@@ -11,9 +11,9 @@
 
 namespace NKikimr {
 
-class TTablet : public TActor<TTablet> {
-    using TTabletStateInfo = NKikimrWhiteboard::TTabletStateInfo;
-    using ETabletState = TTabletStateInfo::ETabletState;
+class TTablet : public TActor<TTablet> { 
+    using TTabletStateInfo = NKikimrWhiteboard::TTabletStateInfo; 
+    using ETabletState = TTabletStateInfo::ETabletState; 
 
     struct TStateStorageInfo {
         TActorId ProxyID;
@@ -87,7 +87,7 @@ class TTablet : public TActor<TTablet> {
 
         THolder<TFollowerUpdate> FollowerUpdate;
         TVector<TString> FollowerAuxUpdates;
-        NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
+        NMetrics::TTabletThroughputRawValue GroupWrittenBytes; 
         NMetrics::TTabletIopsRawValue GroupWrittenOps;
 
         TVector<ui32> YellowMoveChannels;
@@ -597,16 +597,16 @@ public:
         return NKikimrServices::TActivity::TABLET_ACTOR;
     }
 
-    TTablet(
+    TTablet( 
             const TActorId &launcher,
-            TTabletStorageInfo *info,
-            TTabletSetupInfo *setupInfo,
+            TTabletStorageInfo *info, 
+            TTabletSetupInfo *setupInfo, 
             bool leader,
             ui32 suggestedGeneration, // when leader == true
             ui32 followerID, // when leader == false
             TResourceProfilesPtr profiles = nullptr,
             TSharedQuotaPtr txCacheQuota = nullptr
-            );
+            ); 
 
     TAutoPtr<IEventHandle> AfterRegister(const TActorId &self, const TActorId &parentId) override;
     static void ExternalWriteZeroEntry(TTabletStorageInfo *info, ui32 gen, TActorIdentity owner);

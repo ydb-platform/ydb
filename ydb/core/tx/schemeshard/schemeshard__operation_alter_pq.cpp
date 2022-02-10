@@ -192,15 +192,15 @@ public:
     }
 
     TTxState& PrepareChanges(
-            TOperationId operationId,
-            const TPath& path,
+            TOperationId operationId, 
+            const TPath& path, 
             TPersQueueGroupInfo::TPtr pqGroup,
             ui64 shardsToCreate,
             const TChannelsBindings& rbChannelsBinding,
             const TChannelsBindings& pqChannelsBinding,
             TOperationContext& context)
     {
-        TPathElement::TPtr item = path.Base();
+        TPathElement::TPtr item = path.Base(); 
         NIceDb::TNiceDb db(context.Txc.DB);
 
         item->LastTxId = operationId.GetTxId();
@@ -227,8 +227,8 @@ public:
         ui64 checkShardsToCreate = 0;
         for (auto shard : txState.Shards) {
             if (shard.Operation == TTxState::CreateParts) {
-                TShardInfo& shardInfo = context.SS->ShardInfos[shard.Idx];
-                context.SS->PersistShardMapping(db, shard.Idx, shardInfo.TabletID, item->PathId, operationId.GetTxId(), shard.TabletType);
+                TShardInfo& shardInfo = context.SS->ShardInfos[shard.Idx]; 
+                context.SS->PersistShardMapping(db, shard.Idx, shardInfo.TabletID, item->PathId, operationId.GetTxId(), shard.TabletType); 
                 switch (shard.TabletType) {
                     case ETabletType::PersQueueReadBalancer:
                         context.SS->PersistChannelsBinding(db, shard.Idx, rbChannelsBinding);
@@ -239,9 +239,9 @@ public:
                         context.SS->TabletCounters->Simple()[COUNTER_PQ_SHARD_COUNT].Add(1);
                         break;
                 }
-                if (!shardInfo.TabletID) {
-                    ++checkShardsToCreate;
-                }
+                if (!shardInfo.TabletID) { 
+                    ++checkShardsToCreate; 
+                } 
             }
         }
         Y_VERIFY(shardsToCreate == checkShardsToCreate);
@@ -249,28 +249,28 @@ public:
         return txState;
     }
 
-    static bool IsChannelsEqual(const TChannelsBindings& a, const TChannelsBindings& b) {
-        // for some reason, the default equality operator doesn't work with this proto message
-        return std::equal(a.begin(), a.end(), b.begin(), b.end(),
-                          [](const NKikimrStoragePool::TChannelBind& a, const NKikimrStoragePool::TChannelBind& b) -> bool {
-                            return a.storagepoolname() == b.storagepoolname()
-                                    && a.iops() == b.iops()
-                                    && a.throughput() == b.throughput()
-                                    && a.size() == b.size();
-                          });
-    }
-
-    static bool IsShardRequiresRecreation(const TShardInfo& actual, const TShardInfo& requested) {
-        if (actual.BindedChannels.size() < requested.BindedChannels.size()) {
-            return true;
-        }
-        if (actual.BindedChannels.size() == requested.BindedChannels.size()
-            && !IsChannelsEqual(actual.BindedChannels, requested.BindedChannels)) {
-            return true;
-        }
-        return false;
-    }
-
+    static bool IsChannelsEqual(const TChannelsBindings& a, const TChannelsBindings& b) { 
+        // for some reason, the default equality operator doesn't work with this proto message 
+        return std::equal(a.begin(), a.end(), b.begin(), b.end(), 
+                          [](const NKikimrStoragePool::TChannelBind& a, const NKikimrStoragePool::TChannelBind& b) -> bool { 
+                            return a.storagepoolname() == b.storagepoolname() 
+                                    && a.iops() == b.iops() 
+                                    && a.throughput() == b.throughput() 
+                                    && a.size() == b.size(); 
+                          }); 
+    } 
+ 
+    static bool IsShardRequiresRecreation(const TShardInfo& actual, const TShardInfo& requested) { 
+        if (actual.BindedChannels.size() < requested.BindedChannels.size()) { 
+            return true; 
+        } 
+        if (actual.BindedChannels.size() == requested.BindedChannels.size() 
+            && !IsChannelsEqual(actual.BindedChannels, requested.BindedChannels)) { 
+            return true; 
+        } 
+        return false; 
+    } 
+ 
     bool ApplySharding(
             TTxId txId,
             const TPathId& pathId,
@@ -280,7 +280,7 @@ public:
             const TChannelsBindings& pqBindedChannels,
             TOperationContext& context)
     {
-        TShardInfo defaultShardInfo = TShardInfo::PersQShardInfo(txId, pathId);
+        TShardInfo defaultShardInfo = TShardInfo::PersQShardInfo(txId, pathId); 
         defaultShardInfo.BindedChannels = pqBindedChannels;
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -312,15 +312,15 @@ public:
         // reconfig old shards
         for (auto& shard : pqGroup->Shards) {
             auto shardIdx = shard.first;
-            auto& shardInfo = context.SS->ShardInfos[shardIdx];
+            auto& shardInfo = context.SS->ShardInfos[shardIdx]; 
 
-            if (IsShardRequiresRecreation(shardInfo, defaultShardInfo)) {
-                txState.Shards.emplace_back(shardIdx, ETabletType::PersQueue, TTxState::CreateParts);
-                shardInfo.CurrentTxId = defaultShardInfo.CurrentTxId;
-                shardInfo.BindedChannels = defaultShardInfo.BindedChannels;
-            } else {
-                txState.Shards.emplace_back(shardIdx, ETabletType::PersQueue, TTxState::ConfigureParts);
-            }
+            if (IsShardRequiresRecreation(shardInfo, defaultShardInfo)) { 
+                txState.Shards.emplace_back(shardIdx, ETabletType::PersQueue, TTxState::CreateParts); 
+                shardInfo.CurrentTxId = defaultShardInfo.CurrentTxId; 
+                shardInfo.BindedChannels = defaultShardInfo.BindedChannels; 
+            } else { 
+                txState.Shards.emplace_back(shardIdx, ETabletType::PersQueue, TTxState::ConfigureParts); 
+            } 
         }
 
         // create new shards
@@ -570,13 +570,13 @@ public:
         // explicit channel profiles are specified. Read balancer tablet is
         // a tablet with local db which doesn't use extra channels in any way.
         const ui32 tabletProfileId = 0;
-        TChannelsBindings tabletChannelsBinding;
-        if (!context.SS->ResolvePqChannels(tabletProfileId, path.DomainId(), tabletChannelsBinding)) {
+        TChannelsBindings tabletChannelsBinding; 
+        if (!context.SS->ResolvePqChannels(tabletProfileId, path.DomainId(), tabletChannelsBinding)) { 
             result->SetError(NKikimrScheme::StatusInvalidParameter,
-                             "Unable to construct channel binding for PQ with the storage pool");
-            return result;
-        }
-
+                             "Unable to construct channel binding for PQ with the storage pool"); 
+            return result; 
+        } 
+ 
         // This channel bindings are for PersQueue shards. They either use
         // explicit channel profiles, or reuse channel profile above.
         const auto& partConfig = newTabletConfig.GetPartitionConfig();

@@ -6,10 +6,10 @@
 #include <util/generic/set.h>
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
-#include <util/generic/hash_set.h>
+#include <util/generic/hash_set.h> 
 
 namespace NKikimr {
-namespace NFlatTxCoordinator {
+namespace NFlatTxCoordinator { 
     struct TMediatorStep;
     struct TMediatorConfirmations;
     struct TCoordinatorStepConfirmations;
@@ -17,7 +17,7 @@ namespace NFlatTxCoordinator {
 }
 
 namespace NKikimr {
-
+ 
 IActor* CreateFlatTxCoordinator(const TActorId &tablet, TTabletStorageInfo *info);
 
 struct TEvTxCoordinator {
@@ -76,7 +76,7 @@ struct TEvTxCoordinator {
     // must be explicit queue?
     struct TEvMediatorQueueStep : public TEventLocal<TEvMediatorQueueStep, EvMediatorQueueStep> {
         const ui64 GenCookie;
-        TAutoPtr<NFlatTxCoordinator::TMediatorStep> Step;
+        TAutoPtr<NFlatTxCoordinator::TMediatorStep> Step; 
 
         TEvMediatorQueueStep(ui64 genCookie, TAutoPtr<NFlatTxCoordinator::TMediatorStep> step);
     };
@@ -96,13 +96,13 @@ struct TEvTxCoordinator {
     };
 
     struct TEvMediatorQueueConfirmations : public TEventLocal<TEvMediatorQueueConfirmations, EvMediatorQueueConfirmations> {
-        TAutoPtr<NFlatTxCoordinator::TMediatorConfirmations> Confirmations;
+        TAutoPtr<NFlatTxCoordinator::TMediatorConfirmations> Confirmations; 
 
         TEvMediatorQueueConfirmations(TAutoPtr<NFlatTxCoordinator::TMediatorConfirmations> &confirmations);
     };
 
     struct TEvCoordinatorConfirmPlan : public TEventLocal<TEvCoordinatorConfirmPlan, EvCoordinatorConfirmPlan> {
-        TAutoPtr<NFlatTxCoordinator::TCoordinatorStepConfirmations> Confirmations;
+        TAutoPtr<NFlatTxCoordinator::TCoordinatorStepConfirmations> Confirmations; 
 
         TEvCoordinatorConfirmPlan(TAutoPtr<NFlatTxCoordinator::TCoordinatorStepConfirmations> &confirmations);
     };

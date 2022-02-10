@@ -268,7 +268,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
         {
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().MkDir("/dc-1/USER_0", "dir"));
             auto ls = env.GetClient().Ls("/dc-1/USER_0/dir");
-            NTestLs::InSubdomain(ls);
+            NTestLs::InSubdomain(ls); 
         }
 
         {
@@ -285,13 +285,13 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
         {
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().MkDir("/dc-1/USER_0/dir", "dir_0"));
             auto ls = env.GetClient().Ls("/dc-1/USER_0/dir/dir_0");
-            NTestLs::InSubdomain(ls);
+            NTestLs::InSubdomain(ls); 
         }
 
         {
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().MkDir("/dc-1/USER_0/dir", "dir_1"));
             auto ls = env.GetClient().Ls("/dc-1/USER_0/dir/dir_1");
-            NTestLs::InSubdomain(ls);
+            NTestLs::InSubdomain(ls); 
         }
 
         {

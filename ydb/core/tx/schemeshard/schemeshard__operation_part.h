@@ -378,9 +378,9 @@ ISubOperationBase::TPtr CreateAlterFileStore(TOperationId id, TTxState::ETxState
 ISubOperationBase::TPtr CreateDropFileStore(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateDropFileStore(TOperationId id, TTxState::ETxState state);
 
-ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state);
-
+ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, const TTxTransaction& tx); 
+ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state); 
+ 
 TVector<ISubOperationBase::TPtr> CreateConsistentMoveTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperationBase::TPtr CreateMoveTable(TOperationId id, const TTxTransaction& tx);

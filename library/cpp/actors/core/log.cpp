@@ -11,7 +11,7 @@ static_assert(int(NActors::NLog::PRI_WARN) == int(::TLOG_WARNING), "expect int(N
 static_assert(int(NActors::NLog::PRI_NOTICE) == int(::TLOG_NOTICE), "expect int(NActors::NLog::PRI_NOTICE) == int(::TLOG_NOTICE)");
 static_assert(int(NActors::NLog::PRI_INFO) == int(::TLOG_INFO), "expect int(NActors::NLog::PRI_INFO) == int(::TLOG_INFO)");
 static_assert(int(NActors::NLog::PRI_DEBUG) == int(::TLOG_DEBUG), "expect int(NActors::NLog::PRI_DEBUG) == int(::TLOG_DEBUG)");
-static_assert(int(NActors::NLog::PRI_TRACE) == int(::TLOG_RESOURCES), "expect int(NActors::NLog::PRI_TRACE) == int(::TLOG_RESOURCES)");
+static_assert(int(NActors::NLog::PRI_TRACE) == int(::TLOG_RESOURCES), "expect int(NActors::NLog::PRI_TRACE) == int(::TLOG_RESOURCES)"); 
 
 namespace {
     struct TRecordWithNewline {
@@ -441,7 +441,7 @@ namespace NActors {
                             str << "Change priority" << Endl;
                         }
                         UL() {
-                            for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
+                            for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) { 
                                 LI() {
                                     str << "<a href='logger?c=" << component << "&p=" << p << "'>"
                                         << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
@@ -452,7 +452,7 @@ namespace NActors {
                             str << "Change sampling priority" << Endl;
                         }
                         UL() {
-                            for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
+                            for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) { 
                                 LI() {
                                     str << "<a href='logger?c=" << component << "&sp=" << p << "'>"
                                         << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
@@ -515,7 +515,7 @@ namespace NActors {
                                 }
                             }
                             TABLEBODY() {
-                                for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
+                                for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) { 
                                     TABLER() {
                                         TABLED() {
                                             str << "<a href = 'logger?c=-1&p=" << p << "'>"
@@ -537,7 +537,7 @@ namespace NActors {
                                 }
                             }
                             TABLEBODY() {
-                                for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
+                                for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) { 
                                     TABLER() {
                                         TABLED() {
                                             str << "<a href = 'logger?c=-1&sp=" << p << "'>"

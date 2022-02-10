@@ -75,7 +75,7 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxFillIndex = 61                [(CounterOpts) = {Name: "InFlightOps/FillIndex"}];
     COUNTER_IN_FLIGHT_OPS_TxUpgradeSubDomain = 62         [(CounterOpts) = {Name: "InFlightOps/UpgradeSubDomain"}];
     COUNTER_IN_FLIGHT_OPS_TxUpgradeSubDomainDecision = 63 [(CounterOpts) = {Name: "InFlightOps/UpgradeSubDomainDecision"}];
-    COUNTER_SUB_DOMAIN_HIVE_COUNT = 64                    [(CounterOpts) = {Name: "SubDomainsHives"}];
+    COUNTER_SUB_DOMAIN_HIVE_COUNT = 64                    [(CounterOpts) = {Name: "SubDomainsHives"}]; 
     COUNTER_IN_FLIGHT_OPS_TxInitializeBuildIndex = 65     [(CounterOpts) = {Name: "InFlightOps/InitializeBuildIndex"}];
     COUNTER_SNAPSHOTS_COUNT = 66                          [(CounterOpts) = {Name: "Snapshots"}];
     COUNTER_LOCKS_COUNT = 67                              [(CounterOpts) = {Name: "Locks"}];
@@ -351,8 +351,8 @@ enum ETxTypes {
     TXTYPE_CLEAN_BLOCKSTORE_VOLUMES = 61                  [(TxTypeOpts) = {Name: "TxCleanBlockStoreVolumes"}];
     TXTYPE_CLEAN_DROPPED_PATHS = 62                       [(TxTypeOpts) = {Name: "TxCleanDroppedPaths"}];
     TXTYPE_CLEAN_DROPPED_SUBDOMAINS = 63                  [(TxTypeOpts) = {Name: "TxCleanDroppedSubDomains"}];
-
-    TXTYPE_LOGIN = 64                                     [(TxTypeOpts) = {Name: "TxLogin"}];
+ 
+    TXTYPE_LOGIN = 64                                     [(TxTypeOpts) = {Name: "TxLogin"}]; 
 
     TXTYPE_SEQUENCESHARD_CREATE_SEQUENCE_RESULT = 65      [(TxTypeOpts) = {Name: "TxSequenceShardCreateSequenceResult"}];
     TXTYPE_SEQUENCESHARD_DROP_SEQUENCE_RESULT = 66        [(TxTypeOpts) = {Name: "TxSequenceShardDropSequenceResult"}];

@@ -2,14 +2,14 @@
 #include <library/cpp/actors/core/interconnect.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
-#include "tablet_counters_aggregator.h"
-
-namespace NKikimr {
-
-using namespace NActors;
-
+#include "tablet_counters_aggregator.h" 
+ 
+namespace NKikimr { 
+ 
+using namespace NActors; 
+ 
 void TestHeavy(const ui32 v, ui32 numWorkers) {
-
+ 
     TInstant t(Now());
 
     TVector<TActorId> cc;
@@ -91,20 +91,20 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TActorId aggregatorId;
 
         TTestBasicRuntime runtime(1);
-
+ 
         runtime.Initialize(TAppPrepare().Unwrap());
         TActorId edge = runtime.AllocateEdgeActor();
-
+ 
         IActor* aggregator = CreateClusterLabeledCountersAggregatorActor(edge, TTabletTypes::PersQueue, 2, TString(), 3);
         aggregatorId = runtime.Register(aggregator);
-
+ 
         runtime.SetRegistrationObserverFunc([&cc, &aggregatorId](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
                 TTestActorRuntime::DefaultRegistrationObserver(runtime, parentId, actorId);
                     if (parentId == aggregatorId) {
                         cc.push_back(actorId);
                     }
                 });
-
+ 
         TDispatchOptions options;
         options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
         runtime.DispatchEvents(options);
@@ -116,66 +116,66 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
         }
 
-        {
+        { 
             THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
-            auto& group1 = *response->Record.AddLabeledCountersByGroup();
+            auto& group1 = *response->Record.AddLabeledCountersByGroup(); 
             group1.SetGroup("group1|group2");
             group1.SetGroupNames("AAA|BBB");
             group1.SetDelimiter("|");
-            auto& counter1 = *group1.AddLabeledCounter();
-            counter1.SetName("value1");
-            counter1.SetValue(13);
-            counter1.SetType(TLabeledCounterOptions::CT_SIMPLE);
-            counter1.SetAggregateFunc(TLabeledCounterOptions::EAF_SUM);
+            auto& counter1 = *group1.AddLabeledCounter(); 
+            counter1.SetName("value1"); 
+            counter1.SetValue(13); 
+            counter1.SetType(TLabeledCounterOptions::CT_SIMPLE); 
+            counter1.SetAggregateFunc(TLabeledCounterOptions::EAF_SUM); 
             runtime.Send(new NActors::IEventHandle(cc[0], edge, response.Release(), 0, 1), 0, true);
-        }
-
-        {
+        } 
+ 
+        { 
             THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
-            response->Record.AddCounterNames("value1");
-            auto& group1 = *response->Record.AddLabeledCountersByGroup();
+            response->Record.AddCounterNames("value1"); 
+            auto& group1 = *response->Record.AddLabeledCountersByGroup(); 
             group1.SetGroup("group1|group2");
             group1.SetGroupNames("AAA|BBB");
             group1.SetDelimiter("|");
-            auto& counter1 = *group1.AddLabeledCounter();
-            counter1.SetNameId(0);
-            counter1.SetValue(13);
-            counter1.SetType(TLabeledCounterOptions::CT_SIMPLE);
-            counter1.SetAggregateFunc(TLabeledCounterOptions::EAF_SUM);
+            auto& counter1 = *group1.AddLabeledCounter(); 
+            counter1.SetNameId(0); 
+            counter1.SetValue(13); 
+            counter1.SetType(TLabeledCounterOptions::CT_SIMPLE); 
+            counter1.SetAggregateFunc(TLabeledCounterOptions::EAF_SUM); 
             runtime.Send(new NActors::IEventHandle(cc[1], edge, response.Release(), 0, 2), 0, true);
-        }
-
-        {
+        } 
+ 
+        { 
             THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
-            response->Record.AddCounterNames("value1");
-            auto& group1 = *response->Record.AddLabeledCountersByGroup();
+            response->Record.AddCounterNames("value1"); 
+            auto& group1 = *response->Record.AddLabeledCountersByGroup(); 
             group1.SetGroup("group1|group2");
             group1.SetGroupNames("AAA|BBB");
             group1.SetDelimiter("|");
-            auto& counter1 = *group1.AddLabeledCounter();
-            counter1.SetNameId(0);
-            counter1.SetValue(13);
-            counter1.SetType(TLabeledCounterOptions::CT_SIMPLE);
-            counter1.SetAggregateFunc(TLabeledCounterOptions::EAF_SUM);
+            auto& counter1 = *group1.AddLabeledCounter(); 
+            counter1.SetNameId(0); 
+            counter1.SetValue(13); 
+            counter1.SetType(TLabeledCounterOptions::CT_SIMPLE); 
+            counter1.SetAggregateFunc(TLabeledCounterOptions::EAF_SUM); 
             runtime.Send(new NActors::IEventHandle(cc[2], edge, response.Release(), 0, 3), 0, true);
-        }
-
-        runtime.DispatchEvents();
-        THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = runtime.GrabEdgeEvent<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
-#ifndef NDEBUG
-        Cerr << response->Record.DebugString() << Endl;
-#endif
-        UNIT_ASSERT(response != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(response->Record.LabeledCountersByGroupSize(), 1);
-        const auto& group1 = response->Record.GetLabeledCountersByGroup(0);
+        } 
+ 
+        runtime.DispatchEvents(); 
+        THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = runtime.GrabEdgeEvent<TEvTabletCounters::TEvTabletLabeledCountersResponse>(); 
+#ifndef NDEBUG 
+        Cerr << response->Record.DebugString() << Endl; 
+#endif 
+        UNIT_ASSERT(response != nullptr); 
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.LabeledCountersByGroupSize(), 1); 
+        const auto& group1 = response->Record.GetLabeledCountersByGroup(0); 
         UNIT_ASSERT_VALUES_EQUAL(group1.GetGroup(), "group1/group2");
-        UNIT_ASSERT_VALUES_EQUAL(group1.LabeledCounterSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(group1.LabeledCounterSize(), 1);
-        const auto& counter1 = group1.GetLabeledCounter(0);
-        UNIT_ASSERT_VALUES_EQUAL(counter1.GetNameId(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(counter1.GetValue(), 39);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(group1.LabeledCounterSize(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(group1.LabeledCounterSize(), 1); 
+        const auto& counter1 = group1.GetLabeledCounter(0); 
+        UNIT_ASSERT_VALUES_EQUAL(counter1.GetNameId(), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(counter1.GetValue(), 39); 
+    } 
+ 
 
     Y_UNIT_TEST(HeavyAggregation) {
         TestHeavy(2, 10);
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TestHeavy(2, 1);
         TestHeavy(2, 0);
     }
-
+ 
     Y_UNIT_TEST(Version3Aggregation) {
         TVector<TActorId> cc;
         TActorId aggregatorId;
@@ -260,6 +260,6 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         UNIT_ASSERT_VALUES_EQUAL(res[1], "cons/aaa|1|aba/caba/daba|man");
     }
 
-}
-
-}
+} 
+ 
+} 

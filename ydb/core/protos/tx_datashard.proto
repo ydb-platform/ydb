@@ -728,7 +728,7 @@ message TEvGetTableStatsResult {
     optional uint64 DatashardId = 1;
     optional uint64 TableLocalId = 2;
     optional NKikimrTableStats.TTableStats TableStats = 3;
-    optional NKikimrTabletBase.TMetrics TabletMetrics = 4;
+    optional NKikimrTabletBase.TMetrics TabletMetrics = 4; 
     optional uint32 ShardState = 5;
     repeated uint64 UserTablePartOwners = 6;
     repeated uint64 SysTablesPartOwners = 7;
@@ -744,7 +744,7 @@ message TEvPeriodicTableStats {
     optional uint64 Round = 4;
 
     optional NKikimrTableStats.TTableStats TableStats = 5;
-    optional NKikimrTabletBase.TMetrics TabletMetrics = 6;
+    optional NKikimrTabletBase.TMetrics TabletMetrics = 6; 
 
     optional uint32 ShardState = 7;
     repeated uint64 UserTablePartOwners = 8;

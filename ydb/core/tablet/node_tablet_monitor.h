@@ -1,6 +1,6 @@
-#pragma once
-
-#include "defs.h"
+#pragma once 
+ 
+#include "defs.h" 
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event.h>
@@ -9,16 +9,16 @@
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <util/generic/ptr.h>
 #include <util/stream/str.h>
-
-namespace NKikimr {
-namespace NNodeTabletMonitor {
-
+ 
+namespace NKikimr { 
+namespace NNodeTabletMonitor { 
+ 
 inline TActorId MakeNodeTabletMonitorID(ui32 node = 0) {
-    char x[12] = {'n','o','d','e','t','a','b','l','e','t','m','o'};
+    char x[12] = {'n','o','d','e','t','a','b','l','e','t','m','o'}; 
     return TActorId(node, TStringBuf(x, 12));
-}
-
-
+} 
+ 
+ 
 struct ITabletStateClassifier : public TAtomicRefCount<ITabletStateClassifier>{
     virtual ui32 GetMaxTabletStateClass() const = 0;
     virtual std::function<bool(const NKikimrWhiteboard::TTabletStateInfo&)> GetTabletStateClassFilter(ui32 cls) const = 0;
@@ -56,5 +56,5 @@ struct ITabletListRenderer : public TAtomicRefCount<ITabletListRenderer> {
 IActor* CreateNodeTabletMonitor(const TIntrusivePtr<ITabletStateClassifier>& stateClassifier,
                                 const TIntrusivePtr<ITabletListRenderer>& renderer);
 
-} // NNodeTabletMonitor
-} // NKikimr
+} // NNodeTabletMonitor 
+} // NKikimr 

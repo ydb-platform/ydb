@@ -46,7 +46,7 @@
 
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/basics/appdata.h>
-
+ 
 const bool SUPPRESS_REBOOTS = false;
 const bool ENABLE_REBOOT_DISPATCH_LOG = true;
 const bool TRACE_DELAY_TIMING = true;
@@ -619,9 +619,9 @@ namespace NKikimr {
     void SetupTabletServices(TTestActorRuntime &runtime, TAppPrepare *app, bool mockDisk, NFake::TStorage storage,
                             NFake::TCaches caches) {
         TAutoPtr<TAppPrepare> dummy;
-        if (app == nullptr) {
-            dummy = app = new TAppPrepare;
-        }
+        if (app == nullptr) { 
+            dummy = app = new TAppPrepare; 
+        } 
         TUltimateNodes nodes(runtime, app);
         SetupBasicServices(runtime, *app, mockDisk, &nodes, storage, caches);
     }
@@ -630,15 +630,15 @@ namespace NKikimr {
         TDomainsInfo::TDomain::TStoragePoolKinds storagePoolKinds;
 
         for (ui32 poolNum = 1; poolNum <= count; ++poolNum) {
-            TString poolKind = "pool-kind-" + ToString(poolNum);
-            NKikimrBlobStorage::TDefineStoragePool& hddPool = storagePoolKinds[poolKind];
+            TString poolKind = "pool-kind-" + ToString(poolNum); 
+            NKikimrBlobStorage::TDefineStoragePool& hddPool = storagePoolKinds[poolKind]; 
             hddPool.SetBoxId(1);
             hddPool.SetErasureSpecies("none");
             hddPool.SetVDiskKind("Default");
             hddPool.AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::ROT);
             hddPool.SetKind(poolKind);
-            hddPool.SetStoragePoolId(poolNum);
-            hddPool.SetName("pool-" + ToString(poolNum));
+            hddPool.SetStoragePoolId(poolNum); 
+            hddPool.SetName("pool-" + ToString(poolNum)); 
         }
 
         return storagePoolKinds;
@@ -656,7 +656,7 @@ namespace NKikimr {
         return prev;
     }
 
-    void SetupChannelProfiles(TAppPrepare &app, ui32 domainId, ui32 nchannels) {
+    void SetupChannelProfiles(TAppPrepare &app, ui32 domainId, ui32 nchannels) { 
         Y_VERIFY(app.Domains && app.Domains->Domains.contains(domainId));
         auto& poolKinds = app.Domains->GetDomain(domainId).StoragePoolTypes;
         Y_VERIFY(!poolKinds.empty());
@@ -667,7 +667,7 @@ namespace NKikimr {
             channelProfiles->Profiles.emplace_back();
             auto& profile = channelProfiles->Profiles.back();
             for (ui32 channelIdx = 0; channelIdx < nchannels; ++channelIdx) {
-                profile.Channels.emplace_back(TBlobStorageGroupType::ErasureNone, 0, NKikimrBlobStorage::TVDiskKind::Default, poolKinds.begin()->first);
+                profile.Channels.emplace_back(TBlobStorageGroupType::ErasureNone, 0, NKikimrBlobStorage::TVDiskKind::Default, poolKinds.begin()->first); 
             }
         }
 
@@ -705,7 +705,7 @@ namespace NKikimr {
 
     void SetupBoxAndStoragePool(TTestActorRuntime &runtime, const TActorId& sender, ui32 domainId, ui32 nGroups) {
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries(); 
 
         //get NodesInfo, nodes hostname and port are interested
         runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes));
@@ -733,13 +733,13 @@ namespace NKikimr {
         host.SetHostConfigId(hostConfig.GetHostConfigId());
         bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineBox()->CopyFrom(boxConfig);
 
-        for (const auto& [kind, pool] : runtime.GetAppData().DomainsInfo->Domains[domainId]->StoragePoolTypes) {
-            NKikimrBlobStorage::TDefineStoragePool storagePool(pool);
-            storagePool.SetNumGroups(nGroups);
-            bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool);
-        }
+        for (const auto& [kind, pool] : runtime.GetAppData().DomainsInfo->Domains[domainId]->StoragePoolTypes) { 
+            NKikimrBlobStorage::TDefineStoragePool storagePool(pool); 
+            storagePool.SetNumGroups(nGroups); 
+            bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool); 
+        } 
 
-        runtime.SendToPipe(MakeBSControllerID(domainId), sender, bsConfigureRequest.Release(), 0, GetPipeConfigWithRetries());
+        runtime.SendToPipe(MakeBSControllerID(domainId), sender, bsConfigureRequest.Release(), 0, GetPipeConfigWithRetries()); 
 
         TAutoPtr<IEventHandle> handleConfigureResponse;
         auto configureResponse = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handleConfigureResponse);
@@ -1063,12 +1063,12 @@ namespace NKikimr {
     };
 
     NTabletPipe::TClientConfig GetPipeConfigWithRetriesAndFollowers() { // with blackjack and hookers... (c)
-        NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        NTabletPipe::TClientConfig pipeConfig; 
+        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries(); 
         pipeConfig.AllowFollower = true;
-        return pipeConfig;
-    }
-
+        return pipeConfig; 
+    } 
+ 
     void WaitScheduledEvents(TTestActorRuntime &runtime, TDuration delay, const TActorId &sender, ui32 nodeIndex) {
         runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), delay, nodeIndex);
         TAutoPtr<IEventHandle> handle;
@@ -1147,10 +1147,10 @@ namespace NKikimr {
         }
 
         void Handle(TEvHive::TEvCreateTablet::TPtr& ev, const TActorContext& ctx) {
-            Cout << "FAKEHIVE " << TabletID() << " TEvCreateTablet " << ev->Get()->Record.ShortDebugString() << Endl;
+            Cout << "FAKEHIVE " << TabletID() << " TEvCreateTablet " << ev->Get()->Record.ShortDebugString() << Endl; 
             NKikimrProto::EReplyStatus status = NKikimrProto::OK;
             const std::pair<ui64, ui64> key(ev->Get()->Record.GetOwner(), ev->Get()->Record.GetOwnerIdx());
-            const auto type = ev->Get()->Record.GetTabletType();
+            const auto type = ev->Get()->Record.GetTabletType(); 
             const auto bootMode = ev->Get()->Record.GetTabletBootMode();
             auto it = State->Tablets.find(key);
             const auto& defaultTabletTypes = AppData(ctx)->DefaultTabletTypes;
@@ -1178,23 +1178,23 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &CreateFlatTxSchemeShard, DataGroupErasure);
                 } else if (type == defaultTabletTypes.Kesus) {
                     bootstrapperActorId = Boot(ctx, type, &NKesus::CreateKesusTablet, DataGroupErasure);
-                } else if (type == defaultTabletTypes.Hive) {
-                    TFakeHiveState::TPtr state = State->AllocateSubHive();
+                } else if (type == defaultTabletTypes.Hive) { 
+                    TFakeHiveState::TPtr state = State->AllocateSubHive(); 
                     bootstrapperActorId = Boot(ctx, type, [=](const TActorId& tablet, TTabletStorageInfo* info) {
-                                                   return new TFakeHive(tablet, info, state, &TFakeHive::DefaultGetTabletCreationFunc);
-                                               }, DataGroupErasure);
+                                                   return new TFakeHive(tablet, info, state, &TFakeHive::DefaultGetTabletCreationFunc); 
+                                               }, DataGroupErasure); 
                 } else if (type == defaultTabletTypes.SysViewProcessor) {
                     bootstrapperActorId = Boot(ctx, type, &NSysView::CreateSysViewProcessor, DataGroupErasure);
                 } else if (type == defaultTabletTypes.SequenceShard) {
                     bootstrapperActorId = Boot(ctx, type, &NSequenceShard::CreateSequenceShard, DataGroupErasure);
                 } else if (type == defaultTabletTypes.ReplicationController) {
                     bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure);
-                } else {
+                } else { 
                     status = NKikimrProto::ERROR;
                 }
 
                 if (status == NKikimrProto::OK) {
-                    ui64 tabletId = State->AllocateTabletId();
+                    ui64 tabletId = State->AllocateTabletId(); 
                     it = State->Tablets.insert(std::make_pair(key, TTabletInfo(type, tabletId, bootstrapperActorId))).first;
                     State->TabletIdToOwner[tabletId] = key;
                 }
@@ -1305,7 +1305,7 @@ namespace NKikimr {
 
         void Handle(TEvHive::TEvDeleteTablet::TPtr &ev, const TActorContext &ctx) {
             NKikimrHive::TEvDeleteTablet& rec = ev->Get()->Record;
-            Cout << "FAKEHIVE " << TabletID() << " TEvDeleteTablet " << rec.ShortDebugString() << Endl;
+            Cout << "FAKEHIVE " << TabletID() << " TEvDeleteTablet " << rec.ShortDebugString() << Endl; 
             TVector<ui64> deletedIdx;
             for (size_t i = 0; i < rec.ShardLocalIdxSize(); ++i) {
                 auto id = std::make_pair<ui64, ui64>(rec.GetShardOwnerId(), rec.GetShardLocalIdx(i));
@@ -1317,7 +1317,7 @@ namespace NKikimr {
 
         void Handle(TEvHive::TEvDeleteOwnerTablets::TPtr &ev, const TActorContext &ctx) {
             NKikimrHive::TEvDeleteOwnerTablets& rec = ev->Get()->Record;
-            Cout << "FAKEHIVE " << TabletID() << " TEvDeleteOwnerTablets " << rec.ShortDebugString() << Endl;
+            Cout << "FAKEHIVE " << TabletID() << " TEvDeleteOwnerTablets " << rec.ShortDebugString() << Endl; 
             auto ownerId = rec.GetOwner();
             TVector<ui64> toDelete;
 
@@ -1419,9 +1419,9 @@ namespace NKikimr {
             tabletInfo.SetTabletID(tabletId);
             if (info) {
                 tabletInfo.SetTabletType(info->Type);
-                tabletInfo.SetState(200); // THive::ReadyToWork
+                tabletInfo.SetState(200); // THive::ReadyToWork 
 
-                // TODO: fill other fields when needed
+                // TODO: fill other fields when needed 
             }
         }
 

@@ -161,8 +161,8 @@ namespace NActors {
     bool TExecutorPoolBaseMailboxed::Cleanup() {
         return MailboxTable->Cleanup();
     }
-
-    ui32 TExecutorPoolBase::GetThreads() const {
-        return PoolThreads;
-    }
+ 
+    ui32 TExecutorPoolBase::GetThreads() const { 
+        return PoolThreads; 
+    } 
 }

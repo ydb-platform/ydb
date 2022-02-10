@@ -1573,13 +1573,13 @@ void TTenantSlotBroker::FillTenantState(const TString &name,
                 allocation->Description.Serialize(pinned);
                 pinned.SetCount(allocation->PinnedCount);
             }
-
-            for (auto &slot : allocation->AssignedSlots) {
-                const auto &slotId = slot->Id;
-                auto &assigned = *state.AddAssignedSlots();
-                assigned.SetNodeId(slotId.NodeId);
-                assigned.SetSlotId(slotId.SlotId);
-            }
+ 
+            for (auto &slot : allocation->AssignedSlots) { 
+                const auto &slotId = slot->Id; 
+                auto &assigned = *state.AddAssignedSlots(); 
+                assigned.SetNodeId(slotId.NodeId); 
+                assigned.SetSlotId(slotId.SlotId); 
+            } 
         }
     }
 }

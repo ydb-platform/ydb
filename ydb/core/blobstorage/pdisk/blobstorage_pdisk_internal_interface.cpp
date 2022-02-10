@@ -20,7 +20,7 @@ TString TEvWhiteboardReportResult::ToString(const TEvWhiteboardReportResult &rec
         str << " VDiskState# " << std::get<1>(p);
     }
     if (record.DiskMetrics) {
-        str << " DiskMetrics# " << record.DiskMetrics->Record;
+        str << " DiskMetrics# " << record.DiskMetrics->Record; 
     }
     str << "}";
     return str.Str();

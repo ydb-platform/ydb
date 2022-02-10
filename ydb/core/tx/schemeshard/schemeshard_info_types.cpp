@@ -1631,14 +1631,14 @@ bool TTableInfo::CheckSplitByLoad(const TSplitSettings& splitSettings, TShardIdx
     return true;
 }
 
-TChannelsMapping GetPoolsMapping(const TChannelsBindings& bindings) {
-    TChannelsMapping mapping;
-    for (const auto& bind : bindings) {
-        mapping.emplace_back(bind.GetStoragePoolName());
-    }
-    return mapping;
-}
-
+TChannelsMapping GetPoolsMapping(const TChannelsBindings& bindings) { 
+    TChannelsMapping mapping; 
+    for (const auto& bind : bindings) { 
+        mapping.emplace_back(bind.GetStoragePoolName()); 
+    } 
+    return mapping; 
+} 
+ 
 TString TExportInfo::ToString() const {
     return TStringBuilder() << "{"
         << " Id: " << Id

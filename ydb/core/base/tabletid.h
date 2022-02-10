@@ -27,15 +27,15 @@ namespace NKikimr {
         return candidate;
     }
 
-    static const ui64 TABLET_ID_BLACKHOLE_BEGIN = 0x800000;
-    static const ui64 TABLET_ID_BLACKHOLE_END = 0x900000;
-
+    static const ui64 TABLET_ID_BLACKHOLE_BEGIN = 0x800000; 
+    static const ui64 TABLET_ID_BLACKHOLE_END = 0x900000; 
+ 
     inline ui64 AvoidReservedUniqPartsBySystemTablets(ui64 candidate) {
         // candidate = AvoidReservedUniqPart(candidate, 0x800000, 0x800100); // coordinators
         // candidate = AvoidReservedUniqPart(candidate, 0x810000, 0x810100); // mediators
         // candidate = AvoidReservedUniqPart(candidate, 0x820000, 0x821000); // allocators
         // candidate = AvoidReservedUniqPart(candidate, 0x840000, 0x860000); // schemeshard
-        return AvoidReservedUniqPart(candidate, TABLET_ID_BLACKHOLE_BEGIN, TABLET_ID_BLACKHOLE_END); // for sure
+        return AvoidReservedUniqPart(candidate, TABLET_ID_BLACKHOLE_BEGIN, TABLET_ID_BLACKHOLE_END); // for sure 
     }
 
     inline bool IsReservedTabletId(ui64 tabletId) {

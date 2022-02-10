@@ -4,4 +4,4 @@
 
 TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
 TAutoPtr<NKikimrConfig::TChannelProfileConfig> DummyChannelProfileConfig();
-TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
+TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig(); 

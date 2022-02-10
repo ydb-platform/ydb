@@ -42,7 +42,7 @@ namespace NActors {
         ~TExecutorPoolBase();
         void ScheduleActivation(ui32 activation) override;
         TAffinity* Affinity() const override;
-        ui32 GetThreads() const override;
+        ui32 GetThreads() const override; 
     };
 
     void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&);

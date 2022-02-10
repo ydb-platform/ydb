@@ -1,7 +1,7 @@
 #pragma once
 
 #include "tablet_counters.h"
-#include "tablet_counters_aggregator.h"
+#include "tablet_counters_aggregator.h" 
 #include <ydb/core/tablet_flat/defs.h>
 #include <util/string/vector.h>
 #include <util/string/split.h>
@@ -45,13 +45,13 @@ public:
             TString cntName = co.GetName();
             Y_VERIFY(!cntName.empty(), "counter '%s' number (%d) cannot have an empty counter name",
                     vdesc->full_name().c_str(), vdesc->number());
-            TString nameString;
-            if (IsHistogramAggregateSimpleName(cntName)) {
-                nameString = co.GetName();
-            } else {
-                nameString = GetFilePrefix(appDesc->file()) + cntName;
-            }
-            NamesStrings.emplace_back(nameString);
+            TString nameString; 
+            if (IsHistogramAggregateSimpleName(cntName)) { 
+                nameString = co.GetName(); 
+            } else { 
+                nameString = GetFilePrefix(appDesc->file()) + cntName; 
+            } 
+            NamesStrings.emplace_back(nameString); 
             Ranges.push_back(ParseRanges(co));
             Integral.push_back(co.GetIntegral());
         }

@@ -438,14 +438,14 @@ class TDataShard
         };
     };
 
-    struct Schema : NIceDb::Schema {
+    struct Schema : NIceDb::Schema { 
         struct Sys : Table<1> {
             struct Id :             Column<1, NScheme::NTypeIds::Uint64> {};
             struct Bytes :          Column<2, NScheme::NTypeIds::String> {};
             struct Uint64 :         Column<3, NScheme::NTypeIds::Uint64> {};
 
-            using TKey = TableKey<Id>;
-            using TColumns = TableColumns<Id, Bytes, Uint64>;
+            using TKey = TableKey<Id>; 
+            using TColumns = TableColumns<Id, Bytes, Uint64>; 
         };
 
         // Note that table UserTablesStats must be always updated with this one
@@ -457,7 +457,7 @@ class TDataShard
             struct Schema :         Column<5, NScheme::NTypeIds::String> { using Type = TString; };
             struct ShadowTid :      Column<6, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 0; };
 
-            using TKey = TableKey<Tid>;
+            using TKey = TableKey<Tid>; 
             using TColumns = TableColumns<Tid, LocalTid, Path, Name, Schema, ShadowTid>;
         };
 
@@ -473,7 +473,7 @@ class TDataShard
             struct Source :         Column<9, NScheme::NTypeIds::ActorId> {};
             struct Cookie :         Column<10, NScheme::NTypeIds::Uint64> {};
 
-            using TKey = TableKey<TxId>;
+            using TKey = TableKey<TxId>; 
             using TColumns = TableColumns<TxId, Kind, Flags, State, InRSRemain, MaxStep, ReceivedAt, Flags64, Source, Cookie>;
         };
 
@@ -484,8 +484,8 @@ class TDataShard
             struct Body :           Column<4, NScheme::NTypeIds::String> { using Type = TString; };
             struct Source :         Column<5, NScheme::NTypeIds::ActorId> {};
 
-            using TKey = TableKey<TxId, Origin>;
-            using TColumns = TableColumns<TxId, Origin, InReadSetState, Body, Source>;
+            using TKey = TableKey<TxId, Origin>; 
+            using TColumns = TableColumns<TxId, Origin, InReadSetState, Body, Source>; 
         };
 
         struct InReadSets : Table<5> {
@@ -496,8 +496,8 @@ class TDataShard
             struct Body :           Column<5, NScheme::NTypeIds::String> { using Type = TString; };
             struct BalanceTrackList :      Column<6, NScheme::NTypeIds::String> { using Type = TString; };
 
-            using TKey = TableKey<TxId, Origin, From, To>;
-            using TColumns = TableColumns<TxId, Origin, From, To, Body, BalanceTrackList>;
+            using TKey = TableKey<TxId, Origin, From, To>; 
+            using TColumns = TableColumns<TxId, Origin, From, To, Body, BalanceTrackList>; 
         };
 
         struct OutReadSets : Table<6> {
@@ -510,24 +510,24 @@ class TDataShard
             struct Body :           Column<7, NScheme::NTypeIds::String> { using Type = TString; };
             struct SplitTraj :      Column<8, NScheme::NTypeIds::String> { using Type = TString; };
 
-            using TKey = TableKey<Seqno>;
-            using TColumns = TableColumns<Seqno, Step, TxId, Origin, From, To, Body, SplitTraj>;
+            using TKey = TableKey<Seqno>; 
+            using TColumns = TableColumns<Seqno, Step, TxId, Origin, From, To, Body, SplitTraj>; 
         };
 
         struct PlanQueue : Table<7> {
             struct Step :           Column<1, NScheme::NTypeIds::Uint64> {};
             struct TxId :           Column<2, NScheme::NTypeIds::Uint64> {};
 
-            using TKey = TableKey<Step, TxId>;
-            using TColumns = TableColumns<Step, TxId>;
+            using TKey = TableKey<Step, TxId>; 
+            using TColumns = TableColumns<Step, TxId>; 
         };
 
         struct DeadlineQueue : Table<8> {
             struct MaxStep :        Column<1, NScheme::NTypeIds::Uint64> {};
             struct TxId :           Column<2, NScheme::NTypeIds::Uint64> {};
 
-            using TKey = TableKey<MaxStep, TxId>;
-            using TColumns = TableColumns<MaxStep, TxId>;
+            using TKey = TableKey<MaxStep, TxId>; 
+            using TColumns = TableColumns<MaxStep, TxId>; 
         };
 
         struct SchemaOperations : Table<9> {
@@ -821,27 +821,27 @@ class TDataShard
         static constexpr const char* ShadowTablePrefix = "__shadow__";
     };
 
-    inline static bool SysGetUi64(NIceDb::TNiceDb& db, ui64 row, ui64& value) {
+    inline static bool SysGetUi64(NIceDb::TNiceDb& db, ui64 row, ui64& value) { 
         auto rowset = db.Table<Schema::Sys>().Key(row).Select<Schema::Sys::Uint64>();
         if (!rowset.IsReady())
             return false;
         if (rowset.IsValid())
-            value = rowset.GetValue<Schema::Sys::Uint64>();
+            value = rowset.GetValue<Schema::Sys::Uint64>(); 
         return true;
     }
 
-    inline static bool SysGetUi64(NIceDb::TNiceDb& db, ui64 row, ui32& value) {
-        auto rowset = db.Table<Schema::Sys>().Key(row).Select<Schema::Sys::Uint64>();
-        if (!rowset.IsReady())
-            return false;
-        if (rowset.IsValid()) {
-            ui64 val = rowset.GetValue<Schema::Sys::Uint64>();
-            Y_VERIFY(val <= std::numeric_limits<ui32>::max());
-            value = static_cast<ui32>(val);
-        }
-        return true;
-    }
-
+    inline static bool SysGetUi64(NIceDb::TNiceDb& db, ui64 row, ui32& value) { 
+        auto rowset = db.Table<Schema::Sys>().Key(row).Select<Schema::Sys::Uint64>(); 
+        if (!rowset.IsReady()) 
+            return false; 
+        if (rowset.IsValid()) { 
+            ui64 val = rowset.GetValue<Schema::Sys::Uint64>(); 
+            Y_VERIFY(val <= std::numeric_limits<ui32>::max()); 
+            value = static_cast<ui32>(val); 
+        } 
+        return true; 
+    } 
+ 
     inline static bool SysGetBool(NIceDb::TNiceDb& db, ui64 row, bool& value) {
         auto rowset = db.Table<Schema::Sys>().Key(row).Select<Schema::Sys::Uint64>();
         if (!rowset.IsReady())
@@ -1456,16 +1456,16 @@ private:
         THashMap<ui64, TLoanReturnInfo> LoanReturns;
         // part -> owner
         THashMap<TLogoBlobID, ui64> LoanOwners;
-        NTabletPipe::TClientRetryPolicy PipeRetryPolicy;
+        NTabletPipe::TClientRetryPolicy PipeRetryPolicy; 
 
     public:
         explicit TLoanReturnTracker(ui64 myTabletId)
             : MyTabletID(myTabletId)
-            , PipeRetryPolicy{
-                .RetryLimitCount = 20,
-                .MinRetryTime = TDuration::MilliSeconds(10),
-                .MaxRetryTime = TDuration::MilliSeconds(500),
-                .BackoffMultiplier = 2}
+            , PipeRetryPolicy{ 
+                .RetryLimitCount = 20, 
+                .MinRetryTime = TDuration::MilliSeconds(10), 
+                .MaxRetryTime = TDuration::MilliSeconds(500), 
+                .BackoffMultiplier = 2} 
         {}
 
         TLoanReturnTracker(const TLoanReturnTracker&) = delete;
@@ -1646,12 +1646,12 @@ private:
     public:
         explicit TChangeSenderActivator(ui64 selfTabletId)
             : Origin(selfTabletId)
-            , PipeRetryPolicy{
-                .RetryLimitCount = 20,
-                .MinRetryTime = TDuration::MilliSeconds(10),
-                .MaxRetryTime = TDuration::MilliSeconds(500),
-                .BackoffMultiplier = 2
-            }
+            , PipeRetryPolicy{ 
+                .RetryLimitCount = 20, 
+                .MinRetryTime = TDuration::MilliSeconds(10), 
+                .MaxRetryTime = TDuration::MilliSeconds(500), 
+                .BackoffMultiplier = 2 
+            } 
         {
         }
 
@@ -1731,7 +1731,7 @@ private:
 
     private:
         const ui64 Origin;
-        NTabletPipe::TClientRetryPolicy PipeRetryPolicy;
+        NTabletPipe::TClientRetryPolicy PipeRetryPolicy; 
 
         THashSet<ui64> Dst;
         THashMap<ui64, TActorId> PipesToDstShards;
@@ -1889,7 +1889,7 @@ private:
     TIntrusivePtr<NTabletPipe::TBoundedClientCacheConfig> PipeClientCacheConfig;
     THolder<NTabletPipe::IClientCache> PipeClientCache;
     TPipeTracker ResendReadSetPipeTracker;
-    NTabletPipe::TClientRetryPolicy SchemeShardPipeRetryPolicy;
+    NTabletPipe::TClientRetryPolicy SchemeShardPipeRetryPolicy; 
     TActorId SchemeShardPipe;   // For notifications about schema changes
     TActorId StateReportPipe;   // For notifications about shard state changes
     ui64 PathOwnerId; // TabletID of the schmemeshard that allocated the TPathId(ownerId,localId)
@@ -2341,7 +2341,7 @@ protected:
             return;
 
         auto* resourceMetrics = Executor()->GetResourceMetrics();
-
+ 
         for (const auto& t : TableInfos) {
             ui64 tableId = t.first;
 
@@ -2380,9 +2380,9 @@ protected:
             ev->Record.MutableTableStats()->SetRowReads(TabletCounters->Cumulative()[COUNTER_ENGINE_HOST_SELECT_ROW].Get());
             ev->Record.MutableTableStats()->SetRangeReads(TabletCounters->Cumulative()[COUNTER_ENGINE_HOST_SELECT_RANGE].Get());
             ev->Record.MutableTableStats()->SetRangeReadRows(TabletCounters->Cumulative()[COUNTER_ENGINE_HOST_SELECT_RANGE_ROWS].Get());
-            if (resourceMetrics != nullptr) {
-                resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
-            }
+            if (resourceMetrics != nullptr) { 
+                resourceMetrics->Fill(*ev->Record.MutableTabletMetrics()); 
+            } 
 
             ev->Record.MutableTableStats()->SetPartCount(ti.Stats.PartCount);
             ev->Record.MutableTableStats()->SetSearchHeight(ti.Stats.SearchHeight);

@@ -113,23 +113,23 @@ void TTabletCountersBase::OutputHtml(IOutputStream &os, const char* sectionName,
     }
 }
 
-void TTabletCountersBase::OutputProto(NKikimrTabletBase::TTabletCountersBase& op) const {
-    if (HasCounters()) {
-        for (ui32 idx = 0; idx < SimpleCounters.Size(); ++idx) {
+void TTabletCountersBase::OutputProto(NKikimrTabletBase::TTabletCountersBase& op) const { 
+    if (HasCounters()) { 
+        for (ui32 idx = 0; idx < SimpleCounters.Size(); ++idx) { 
             if (SimpleCounterName(idx)) {
                 auto& counter = *op.AddSimpleCounters();
                 counter.SetName(SimpleCounterName(idx));
                 counter.SetValue(SimpleCounters[idx].Get());
             }
-        }
-        for (ui32 idx = 0; idx < CumulativeCounters.Size(); ++idx) {
+        } 
+        for (ui32 idx = 0; idx < CumulativeCounters.Size(); ++idx) { 
             if (CumulativeCounterName(idx)) {
                 auto& counter = *op.AddCumulativeCounters();
                 counter.SetName(CumulativeCounterName(idx));
                 counter.SetValue(CumulativeCounters[idx].Get());
             }
-        }
-        for (ui32 idx = 0; idx < PercentileCounters.Size(); ++idx) {
+        } 
+        for (ui32 idx = 0; idx < PercentileCounters.Size(); ++idx) { 
             if (PercentileCounterName(idx)) {
                 auto& counter = *op.AddPercentileCounters();
                 counter.SetName(PercentileCounterName(idx));
@@ -138,11 +138,11 @@ void TTabletCountersBase::OutputProto(NKikimrTabletBase::TTabletCountersBase& op
                     counter.AddRanges(percentileCounter.GetRangeName(idxRange));
                     counter.AddValues(percentileCounter.GetRangeValue(idxRange));
                 }
-            }
-        }
-    }
-}
-
+            } 
+        } 
+    } 
+} 
+ 
 ////////////////////////////////////////////
 /// The TTabletLabeledCountersBase class
 ////////////////////////////////////////////

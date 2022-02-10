@@ -1,319 +1,319 @@
-#pragma once
-
-#include "hive.h"
-#include "tablet_info.h"
+#pragma once 
+ 
+#include "hive.h" 
+#include "tablet_info.h" 
 #include "follower_tablet_info.h"
-
-namespace NKikimr {
-namespace NHive {
-
-struct TTabletCategoryInfo {
-    TTabletCategoryId Id;
+ 
+namespace NKikimr { 
+namespace NHive { 
+ 
+struct TTabletCategoryInfo { 
+    TTabletCategoryId Id; 
     std::unordered_set<TLeaderTabletInfo*> Tablets;
-    ui64 MaxDisconnectTimeout = 0;
-    bool StickTogetherInDC = false;
-
-    TTabletCategoryInfo(TTabletCategoryId id)
-        : Id(id)
-    {}
-};
-
-struct TStoragePoolInfo;
-
+    ui64 MaxDisconnectTimeout = 0; 
+    bool StickTogetherInDC = false; 
+ 
+    TTabletCategoryInfo(TTabletCategoryId id) 
+        : Id(id) 
+    {} 
+}; 
+ 
+struct TStoragePoolInfo; 
+ 
 struct TLeaderTabletInfo : TTabletInfo {
-protected:
-    static TString DEFAULT_STORAGE_POOL_NAME;
-
-public:
-    TTabletId Id;
-    ETabletState State;
-    TTabletTypes::EType Type;
-    TObjectId ObjectId;
-    TSubDomainKey ObjectDomain;
-    TVector<TNodeId> AllowedNodes;
-    TVector<TDataCenterId> AllowedDataCenters;
-    NKikimrHive::TDataCentersPreference DataCentersPreference;
-    TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
-    TChannelsBindings BoundChannels;
-    std::bitset<MAX_TABLET_CHANNELS> ChannelProfileNewGroup;
-    NKikimrHive::TEvReassignTablet::EHiveReassignReason ChannelProfileReassignReason;
-    ui32 KnownGeneration;
-    TTabletCategoryInfo* Category;
+protected: 
+    static TString DEFAULT_STORAGE_POOL_NAME; 
+ 
+public: 
+    TTabletId Id; 
+    ETabletState State; 
+    TTabletTypes::EType Type; 
+    TObjectId ObjectId; 
+    TSubDomainKey ObjectDomain; 
+    TVector<TNodeId> AllowedNodes; 
+    TVector<TDataCenterId> AllowedDataCenters; 
+    NKikimrHive::TDataCentersPreference DataCentersPreference; 
+    TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo; 
+    TChannelsBindings BoundChannels; 
+    std::bitset<MAX_TABLET_CHANNELS> ChannelProfileNewGroup; 
+    NKikimrHive::TEvReassignTablet::EHiveReassignReason ChannelProfileReassignReason; 
+    ui32 KnownGeneration; 
+    TTabletCategoryInfo* Category; 
     TList<TFollowerGroup> FollowerGroups;
     TList<TFollowerTabletInfo> Followers;
-    TOwnerIdxType::TValueType Owner;
-    TVector<TSubDomainKey> EffectiveAllowedDomains; // AllowedDomains | ObjectDomain
-    NKikimrHive::ETabletBootMode BootMode;
+    TOwnerIdxType::TValueType Owner; 
+    TVector<TSubDomainKey> EffectiveAllowedDomains; // AllowedDomains | ObjectDomain 
+    NKikimrHive::ETabletBootMode BootMode; 
     TVector<TActorId> StorageInfoSubscribers;
     TActorId LockedToActor;
-    TDuration LockedReconnectTimeout;
-    ui64 PendingUnlockSeqNo;
-
-    bool SeizedByChild = false; // transient state for migration - need to delete it later
-    bool NeedToReleaseFromParent = false; // transient state for migration - need to delete it later
-
+    TDuration LockedReconnectTimeout; 
+    ui64 PendingUnlockSeqNo; 
+ 
+    bool SeizedByChild = false; // transient state for migration - need to delete it later 
+    bool NeedToReleaseFromParent = false; // transient state for migration - need to delete it later 
+ 
     TLeaderTabletInfo(TTabletId id, THive& hive)
         : TTabletInfo(ETabletRole::Leader, hive)
-        , Id(id)
-        , State(ETabletState::Unknown)
-        , Type(TTabletTypes::TYPE_INVALID)
-        , ObjectId(0)
-        , ChannelProfileReassignReason(NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO)
-        , KnownGeneration(0)
-        , Category(nullptr)
-        , BootMode(NKikimrHive::TABLET_BOOT_MODE_DEFAULT)
-        , PendingUnlockSeqNo(0)
-    {}
-
-    bool IsReadyToAssignGroups() const {
-        return !SeizedByChild && !NeedToReleaseFromParent && State == ETabletState::GroupAssignment && !BoundChannels.empty();
-    }
-
-    bool IsReadyToWork() const {
-        return !NeedToReleaseFromParent && State == ETabletState::ReadyToWork && !IsBootingSuppressed();
-    }
-
-    bool IsReadyToBoot() const {
-        return IsReadyToWork() && TTabletInfo::IsReadyToBoot();
-    }
-
-    bool IsReadyToStart(TInstant now) const {
-        return IsReadyToWork() && TTabletInfo::IsReadyToStart(now);
-    }
-
-    bool IsReadyToBlockStorage() const {
-        return State == ETabletState::BlockStorage;
-    }
-
-    bool IsStarting() const {
-        return IsReadyToWork() && TTabletInfo::IsStarting();
-    }
-
-    bool IsStartingOnNode(TNodeId nodeId) const {
-        return IsReadyToWork() && TTabletInfo::IsStartingOnNode(nodeId);
-    }
-
-    bool IsRunning() const {
-        return IsReadyToWork() && TTabletInfo::IsRunning();
-    }
-
-    bool IsAlive() const {
-        return IsReadyToWork() && TTabletInfo::IsAlive();
-    }
-
+        , Id(id) 
+        , State(ETabletState::Unknown) 
+        , Type(TTabletTypes::TYPE_INVALID) 
+        , ObjectId(0) 
+        , ChannelProfileReassignReason(NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO) 
+        , KnownGeneration(0) 
+        , Category(nullptr) 
+        , BootMode(NKikimrHive::TABLET_BOOT_MODE_DEFAULT) 
+        , PendingUnlockSeqNo(0) 
+    {} 
+ 
+    bool IsReadyToAssignGroups() const { 
+        return !SeizedByChild && !NeedToReleaseFromParent && State == ETabletState::GroupAssignment && !BoundChannels.empty(); 
+    } 
+ 
+    bool IsReadyToWork() const { 
+        return !NeedToReleaseFromParent && State == ETabletState::ReadyToWork && !IsBootingSuppressed(); 
+    } 
+ 
+    bool IsReadyToBoot() const { 
+        return IsReadyToWork() && TTabletInfo::IsReadyToBoot(); 
+    } 
+ 
+    bool IsReadyToStart(TInstant now) const { 
+        return IsReadyToWork() && TTabletInfo::IsReadyToStart(now); 
+    } 
+ 
+    bool IsReadyToBlockStorage() const { 
+        return State == ETabletState::BlockStorage; 
+    } 
+ 
+    bool IsStarting() const { 
+        return IsReadyToWork() && TTabletInfo::IsStarting(); 
+    } 
+ 
+    bool IsStartingOnNode(TNodeId nodeId) const { 
+        return IsReadyToWork() && TTabletInfo::IsStartingOnNode(nodeId); 
+    } 
+ 
+    bool IsRunning() const { 
+        return IsReadyToWork() && TTabletInfo::IsRunning(); 
+    } 
+ 
+    bool IsAlive() const { 
+        return IsReadyToWork() && TTabletInfo::IsAlive(); 
+    } 
+ 
     bool IsAliveOnLocal(const TActorId& local) const {
-        return IsReadyToWork() && TTabletInfo::IsAliveOnLocal(local);
-    }
-
-    bool IsDeleting() const {
-        return State == ETabletState::Deleting;
-    }
-
-    bool IsSomeoneAliveOnNode(TNodeId nodeId) const;
-    
-    bool IsLockedToActor() const {
-        return !!LockedToActor;
-    }
-
-    bool IsExternalBoot() const {
-        return BootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL;
-    }
-
-    bool IsBootingSuppressed() const {
-        return IsExternalBoot() || IsLockedToActor();
-    }
-
-    bool IsReadyToReassignTablet() const {
-        return !SeizedByChild && State == ETabletState::ReadyToWork;
-    }
-
+        return IsReadyToWork() && TTabletInfo::IsAliveOnLocal(local); 
+    } 
+ 
+    bool IsDeleting() const { 
+        return State == ETabletState::Deleting; 
+    } 
+ 
+    bool IsSomeoneAliveOnNode(TNodeId nodeId) const; 
+     
+    bool IsLockedToActor() const { 
+        return !!LockedToActor; 
+    } 
+ 
+    bool IsExternalBoot() const { 
+        return BootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL; 
+    } 
+ 
+    bool IsBootingSuppressed() const { 
+        return IsExternalBoot() || IsLockedToActor(); 
+    } 
+ 
+    bool IsReadyToReassignTablet() const { 
+        return !SeizedByChild && State == ETabletState::ReadyToWork; 
+    } 
+ 
     ui32 GetFollowersAliveOnDataCenter(TDataCenterId dataCenterId) const;
     ui32 GetFollowersAliveOnDataCenterExcludingFollower(TDataCenterId dataCenterId, const TTabletInfo& excludingFollower) const;
-
+ 
     TPathId GetTenant() const;
 
-    bool IsAllAlive() const {
-        if (!IsAlive())
-            return false;
+    bool IsAllAlive() const { 
+        if (!IsAlive()) 
+            return false; 
         for (const TTabletInfo& follower : Followers) {
             if (!follower.IsAlive())
-                return false;
-        }
-        return true;
-    }
-
-    bool IsSomeoneAlive() const {
-        if (IsAlive())
-            return true;
+                return false; 
+        } 
+        return true; 
+    } 
+ 
+    bool IsSomeoneAlive() const { 
+        if (IsAlive()) 
+            return true; 
         for (const TTabletInfo& follower : Followers) {
             if (follower.IsAlive())
-                return true;
-        }
-        return false;
-    }
-
+                return true; 
+        } 
+        return false; 
+    } 
+ 
     bool IsSomeFollowerAlive() const {
         for (const TTabletInfo& follower : Followers) {
             if (follower.IsAlive())
-                return true;
-        }
-        return false;
-    }
-
+                return true; 
+        } 
+        return false; 
+    } 
+ 
     bool HaveFollowers() const {
         return !Followers.empty();
-    }
-
+    } 
+ 
     bool IsFollowerPromotableOnNode(TNodeId nodeId) const;
     TFollowerId GetFollowerPromotableOnNode(TNodeId nodeId) const;
-
-    void AssignDomains(const TSubDomainKey& objectDomain, const TVector<TSubDomainKey>& allowedDomains);
-
-    bool TryToBoot() {
-        bool boot = false;
-        if (IsReadyToBoot()) {
-            boot |= InitiateBoot();
-        }
+ 
+    void AssignDomains(const TSubDomainKey& objectDomain, const TVector<TSubDomainKey>& allowedDomains); 
+ 
+    bool TryToBoot() { 
+        bool boot = false; 
+        if (IsReadyToBoot()) { 
+            boot |= InitiateBoot(); 
+        } 
         if (HaveFollowers()) {
             boot |= InitiateFollowersBoot();
-        }
-        return boot;
-    }
-
-    bool InitiateAssignTabletGroups();
-
+        } 
+        return boot; 
+    } 
+ 
+    bool InitiateAssignTabletGroups(); 
+ 
     bool InitiateFollowersBoot() {
-        bool result = false;
-        if (IsReadyToWork()) {
+        bool result = false; 
+        if (IsReadyToWork()) { 
             for (TFollowerTabletInfo& follower : Followers) {
                 if (follower.IsReadyToBoot()) {
                     result |= follower.InitiateBoot();
-                }
-            }
-        }
-        return result;
-    }
-
-    void Kill() {
+                } 
+            } 
+        } 
+        return result; 
+    } 
+ 
+    void Kill() { 
         for (TFollowerTabletInfo& follower : Followers) {
             follower.Kill();
-        }
-        TTabletInfo::Kill();
-    }
-
-    bool InitiateBlockStorage();
-    bool InitiateBlockStorage(ui32 generation);
-    bool InitiateDeleteStorage();
-
-    void IncreaseGeneration() {
-        Y_VERIFY(KnownGeneration < Max<ui32>());
-        ++KnownGeneration;
-    }
-
+        } 
+        TTabletInfo::Kill(); 
+    } 
+ 
+    bool InitiateBlockStorage(); 
+    bool InitiateBlockStorage(ui32 generation); 
+    bool InitiateDeleteStorage(); 
+ 
+    void IncreaseGeneration() { 
+        Y_VERIFY(KnownGeneration < Max<ui32>()); 
+        ++KnownGeneration; 
+    } 
+ 
     const TTabletInfo* FindTablet(TFollowerId followerId) const { // get leader or follower tablet depending on followerId
         if (followerId == 0) {
             return this; // leader
-        }
+        } 
         auto it = std::find_if(Followers.begin(), Followers.end(), [followerId](const TFollowerTabletInfo& info) -> bool {
             return info.Id == followerId;
-        });
+        }); 
         if (it != Followers.end()) {
-            return &(*it);
-        }
-        return nullptr;
-    }
-
+            return &(*it); 
+        } 
+        return nullptr; 
+    } 
+ 
     const TTabletInfo& GetTablet(TFollowerId followerId) const { // get leader or follower tablet depending on followerId
         const TTabletInfo* tablet = FindTablet(followerId);
-        if (tablet != nullptr) {
-            return *tablet;
-        }
+        if (tablet != nullptr) { 
+            return *tablet; 
+        } 
         return *this; // leader by default
-    }
-
+    } 
+ 
     TTabletInfo* FindTablet(TFollowerId followerId) { // get leader or follower tablet depending on followerId
         return const_cast<TTabletInfo*>(static_cast<const TLeaderTabletInfo*>(this)->FindTablet(followerId));
-    }
-
+    } 
+ 
     TTabletInfo&  GetTablet(TFollowerId followerId) { // get leader or follower tablet depending on followerId
         return const_cast<TTabletInfo&>(static_cast<const TLeaderTabletInfo&>(*this).GetTablet(followerId));
-    }
-
+    } 
+ 
     TFollowerTabletInfo& SpawnFollower(TFollowerGroup& followerGroup) {
         TFollowerTabletInfo& follower = AddFollower(followerGroup);
         follower.BecomeStopped();
         return follower;
-    }
-
-    template <template <typename, typename...> class Cont, typename Type, typename... Types>
-    static decltype(Type::Id) GenerateId(const Cont<Type, Types...>& items) {
-        decltype(Type::Id) id = 1;
-        bool retry;
-        do {
-            retry = false;
-            for (const auto& item : items) {
-                if (item.Id == id) {
-                    ++id;
-                    retry = true;
-                }
-            }
-        } while (retry);
-        return id;
-    }
-
+    } 
+ 
+    template <template <typename, typename...> class Cont, typename Type, typename... Types> 
+    static decltype(Type::Id) GenerateId(const Cont<Type, Types...>& items) { 
+        decltype(Type::Id) id = 1; 
+        bool retry; 
+        do { 
+            retry = false; 
+            for (const auto& item : items) { 
+                if (item.Id == id) { 
+                    ++id; 
+                    retry = true; 
+                } 
+            } 
+        } while (retry); 
+        return id; 
+    } 
+ 
     TFollowerId GenerateFollowerId() const {
         return GenerateId(Followers);
-    }
-
+    } 
+ 
     TFollowerTabletInfo& AddFollower(TFollowerGroup& followerGroup, TFollowerId followerId = 0);
     TFollowerGroupId GenerateFollowerGroupId() const;
     TFollowerGroup& AddFollowerGroup(TFollowerGroupId followerGroupId = 0);
-
+ 
     TFollowerGroup& GetFollowerGroup(TFollowerGroupId followerGroupId) {
         auto it = std::find(FollowerGroups.begin(), FollowerGroups.end(), followerGroupId);
         Y_VERIFY(it != FollowerGroups.end(), "%s", (TStringBuilder()
-                    << "TabletId=" << Id
+                    << "TabletId=" << Id 
                     << " FollowerGroupId=" << followerGroupId
                     << " FollowerGroupSize=" << FollowerGroups.size()
                     << " FollowersSize=" << Followers.size()).data());
-        return *it;
-    }
-
-    void NotifyStorageInfo(const TActorContext& ctx) {
+        return *it; 
+    } 
+ 
+    void NotifyStorageInfo(const TActorContext& ctx) { 
         TVector<TActorId> targets;
-        targets.swap(StorageInfoSubscribers);
+        targets.swap(StorageInfoSubscribers); 
         for (TActorId target : targets) {
-            ctx.Send(target, new TEvHive::TEvGetTabletStorageInfoResult(Id, *TabletStorageInfo));
-        }
-    }
-
+            ctx.Send(target, new TEvHive::TEvGetTabletStorageInfoResult(Id, *TabletStorageInfo)); 
+        } 
+    } 
+ 
     TActorId SetLockedToActor(const TActorId& actor, const TDuration& timeout);
-
+ 
     TActorId ClearLockedToActor() {
         return SetLockedToActor(TActorId(), TDuration());
-    }
-
-    void ActualizeTabletStatistics(TInstant now);
-    
-    void ResetTabletGroupsRequests() {
-        ChannelProfileNewGroup.reset();
-    }
-
-    ui32 GetChannelCount() const {
-        return BoundChannels.size();
-    }
-
-    void AcquireAllocationUnits();
-    void ReleaseAllocationUnits();
-    bool AcquireAllocationUnit(ui32 channelId);
-    bool ReleaseAllocationUnit(ui32 channelId);
-    const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* FindFreeAllocationUnit(ui32 channelId);
-    TString GetChannelStoragePoolName(const TTabletChannelInfo& channel);
-    TString GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel);
-    TString GetChannelStoragePoolName(ui32 channelId);
-    TStoragePoolInfo& GetStoragePool(ui32 channelId);
-};
-
-} // NHive
-} // NKikimr
-
+    } 
+ 
+    void ActualizeTabletStatistics(TInstant now); 
+     
+    void ResetTabletGroupsRequests() { 
+        ChannelProfileNewGroup.reset(); 
+    } 
+ 
+    ui32 GetChannelCount() const { 
+        return BoundChannels.size(); 
+    } 
+ 
+    void AcquireAllocationUnits(); 
+    void ReleaseAllocationUnits(); 
+    bool AcquireAllocationUnit(ui32 channelId); 
+    bool ReleaseAllocationUnit(ui32 channelId); 
+    const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* FindFreeAllocationUnit(ui32 channelId); 
+    TString GetChannelStoragePoolName(const TTabletChannelInfo& channel); 
+    TString GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel); 
+    TString GetChannelStoragePoolName(ui32 channelId); 
+    TStoragePoolInfo& GetStoragePool(ui32 channelId); 
+}; 
+ 
+} // NHive 
+} // NKikimr 
+ 

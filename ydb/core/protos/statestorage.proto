@@ -31,13 +31,13 @@ message TEvInfo {
 message TEvReplicaShutdown {
 };
 
-message TEvDumpRequest {
-};
-
-message TEvDump {
-    repeated TEvInfo Info = 1;
-};
-
+message TEvDumpRequest { 
+}; 
+ 
+message TEvDump { 
+    repeated TEvInfo Info = 1; 
+}; 
+ 
 message TEvUpdate {
     optional fixed64 TabletID = 1;
     optional uint64 Cookie = 2;
@@ -49,10 +49,10 @@ message TEvUpdate {
     optional bool IsGuardian = 8;
 };
 
-message TEvDelete {
-    optional fixed64 TabletID = 1;
-};
-
+message TEvDelete { 
+    optional fixed64 TabletID = 1; 
+}; 
+ 
 message TEvCleanup {
     optional fixed64 TabletID = 1;
     optional NActorsProto.TActorId ProposedLeader = 2;
@@ -85,7 +85,7 @@ message TEvReplicaLeaderDemoted {
 
 message TEvReplicaBoardPublish {
     optional string Path = 1;
-    optional bytes Payload = 2;
+    optional bytes Payload = 2; 
     optional uint64 TtlMs = 3;
     optional bool Register = 4;
     optional NActorsProto.TActorId Owner = 5;
@@ -105,7 +105,7 @@ message TEvReplicaBoardCleanup {
 
 message TBoardEntryInfo {
     optional NActorsProto.TActorId Owner = 1;
-    optional bytes Payload = 2;
+    optional bytes Payload = 2; 
 };
 
 message TEvReplicaBoardInfo {

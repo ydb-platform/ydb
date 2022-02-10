@@ -1,5 +1,5 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 # See documentation
 # https://wiki.yandex-team.ru/kikimr/techdoc/db/cxxapi/
 
@@ -7,19 +7,19 @@ OWNER(
     xenoxeno
     g:kikimr
 )
-
-SRCS(
+ 
+SRCS( 
     configurator.cpp
     dynamic_node.cpp
     error.cpp
-    kicli.h
-    kikimr.cpp
-    query.cpp
-    result.cpp
-    schema.cpp
-)
-
-PEERDIR(
+    kicli.h 
+    kikimr.cpp 
+    query.cpp 
+    result.cpp 
+    schema.cpp 
+) 
+ 
+PEERDIR( 
     contrib/libs/grpc
     library/cpp/actors/core
     library/cpp/threading/future
@@ -34,9 +34,9 @@ PEERDIR(
     ydb/public/lib/value
     ydb/library/yql/public/decimal
     ydb/library/yql/public/issue
-)
-
-END()
+) 
+ 
+END() 
 
 RECURSE_FOR_TESTS(
     ut

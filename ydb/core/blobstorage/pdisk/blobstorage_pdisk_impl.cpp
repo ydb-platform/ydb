@@ -1209,9 +1209,9 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             vslotId->SetPDiskId(PDiskId);
             vslotId->SetVSlotId(data.VDiskSlotId);
         }
-        NKikimrBlobStorage::TPDiskMetrics& pDiskMetrics = *reportResult->DiskMetrics->Record.AddPDisksMetrics();
-        pDiskMetrics.SetPDiskId(PDiskId);
-        pDiskMetrics.SetTotalSize(Format.DiskSize);
+        NKikimrBlobStorage::TPDiskMetrics& pDiskMetrics = *reportResult->DiskMetrics->Record.AddPDisksMetrics(); 
+        pDiskMetrics.SetPDiskId(PDiskId); 
+        pDiskMetrics.SetTotalSize(Format.DiskSize); 
         pDiskMetrics.SetAvailableSize(availableSize);
         pDiskMetrics.SetMaxReadThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_READ));
         pDiskMetrics.SetMaxWriteThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_WRITE));
@@ -2339,7 +2339,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestLogRead:
         {
             TLogRead &evLog = *static_cast<TLogRead*>(request);
-            TOwnerData &ownerData = OwnerData[evLog.Owner];
+            TOwnerData &ownerData = OwnerData[evLog.Owner]; 
             if (ownerData.HasReadTheWholeLog) {
                 err << "Can't read log for ownerId# " << evLog.Owner
                     << " ownerRound# " << evLog.OwnerRound << ", owner has already read the log!";
@@ -2429,7 +2429,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         {
 
             TChunkWrite &ev = *static_cast<TChunkWrite*>(request);
-            TOwnerData &ownerData = OwnerData[ev.Owner];
+            TOwnerData &ownerData = OwnerData[ev.Owner]; 
             Mon.QueueRequests->Dec();
             const ui32 size = ev.PartsPtr ? ev.PartsPtr->ByteSize() : 0;
             *Mon.QueueBytes -= size;

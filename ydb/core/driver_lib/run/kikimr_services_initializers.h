@@ -243,15 +243,15 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-// ticket_parser and so on...
-class TSecurityServicesInitializer : public IKikimrServicesInitializer {
-public:
-    std::shared_ptr<TModuleFactories> Factories;
-    TSecurityServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
-
+// ticket_parser and so on... 
+class TSecurityServicesInitializer : public IKikimrServicesInitializer { 
+public: 
+    std::shared_ptr<TModuleFactories> Factories; 
+    TSecurityServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories); 
+ 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
-
+}; 
+ 
 // grpc_proxy
 class TGRpcServicesInitializer : public IKikimrServicesInitializer {
 private:
@@ -287,13 +287,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TNodeIdentifierInitializer : public IKikimrServicesInitializer {
-public:
-    TNodeIdentifierInitializer(const TKikimrRunConfig& runConfig);
-
+class TNodeIdentifierInitializer : public IKikimrServicesInitializer { 
+public: 
+    TNodeIdentifierInitializer(const TKikimrRunConfig& runConfig); 
+ 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
-
+}; 
+ 
 class TTabletMonitorInitializer : public IKikimrServicesInitializer {
     TIntrusivePtr<NNodeTabletMonitor::ITabletStateClassifier> TabletStateClassifier;
     TIntrusivePtr<NNodeTabletMonitor::ITabletListRenderer> TabletListRenderer;
@@ -306,15 +306,15 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TViewerInitializer : public IKikimrServicesInitializer {
-    const TKikimrRunConfig& KikimrRunConfig;
-
-public:
+class TViewerInitializer : public IKikimrServicesInitializer { 
+    const TKikimrRunConfig& KikimrRunConfig; 
+ 
+public: 
     TViewerInitializer(const TKikimrRunConfig& runConfig);
-
+ 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
-
+}; 
+ 
 class TLoadInitializer : public IKikimrServicesInitializer {
 public:
     TLoadInitializer(const TKikimrRunConfig& runConfig);
@@ -479,13 +479,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class THealthCheckInitializer : public IKikimrServicesInitializer {
-public:
-    THealthCheckInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
+class THealthCheckInitializer : public IKikimrServicesInitializer { 
+public: 
+    THealthCheckInitializer(const TKikimrRunConfig& runConfig); 
+ 
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+}; 
+ 
 class TYandexQueryInitializer : public IKikimrServicesInitializer {
 public:
     TYandexQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NYq::IYqSharedResources::TPtr yqSharedResources);

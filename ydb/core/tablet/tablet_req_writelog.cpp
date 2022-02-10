@@ -16,7 +16,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     const TEvBlobStorage::TEvPut::ETactic CommitTactic;
 
     TIntrusivePtr<TTabletStorageInfo> Info;
-    NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
+    NMetrics::TTabletThroughputRawValue GroupWrittenBytes; 
     NMetrics::TTabletIopsRawValue GroupWrittenOps;
 
     ui64 RequestCookies = 0;
@@ -44,9 +44,9 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
         case NKikimrProto::OK:
             LOG_DEBUG_S(ctx, NKikimrServices::TABLET_MAIN, "Put Result: " << msg->Print(false));
 
-            GroupWrittenBytes[std::make_pair(msg->Id.Channel(), msg->GroupId)] += msg->Id.BlobSize();
+            GroupWrittenBytes[std::make_pair(msg->Id.Channel(), msg->GroupId)] += msg->Id.BlobSize(); 
             GroupWrittenOps[std::make_pair(msg->Id.Channel(), msg->GroupId)] += 1;
-
+ 
             ResponseCookies ^= ev->Cookie;
 
             if (--RepliesToWait == 0) {

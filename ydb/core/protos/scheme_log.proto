@@ -1,16 +1,16 @@
 import "ydb/core/protos/flat_scheme_op.proto";
 
-package NTabletFlatScheme;
-option java_package = "ru.yandex.kikimr.proto";
-
+package NTabletFlatScheme; 
+option java_package = "ru.yandex.kikimr.proto"; 
+ 
 message TAlterRecord {
-    enum EDeltaType {
-        AddTable = 1;
-        DropTable = 2;
-        AddColumn = 3;
-        DropColumn = 4;
-        AddColumnToKey = 5;
-        AddColumnToFamily = 6;
+    enum EDeltaType { 
+        AddTable = 1; 
+        DropTable = 2; 
+        AddColumn = 3; 
+        DropColumn = 4; 
+        AddColumnToKey = 5; 
+        AddColumnToFamily = 6; 
         AddFamily = 7;
         UpdateExecutorInfo = 8;
         SetCompactionPolicy = 9;
@@ -18,12 +18,12 @@ message TAlterRecord {
         SetFamily = 11;
         SetRedo = 12;
         SetTable = 13;
-    };
+    }; 
 
-    required EDeltaType DeltaType = 1;
-    optional uint32 TableId = 2;
-    optional string TableName = 3;
-    optional uint32 ColumnId = 4;
+    required EDeltaType DeltaType = 1; 
+    optional uint32 TableId = 2; 
+    optional string TableName = 3; 
+    optional uint32 ColumnId = 4; 
     optional uint32 FamilyId = 7;
     optional uint32 RoomId = 8;
 
@@ -67,8 +67,8 @@ message TAlterRecord {
     optional uint32 ExecutorLimitInFlyTx = 104;
     optional string ExecutorResourceProfile = 105;
     optional bool ExecutorLogFastCommitTactic = 106;
-};
-
-message TSchemeChanges {
+}; 
+ 
+message TSchemeChanges { 
     repeated TAlterRecord Delta = 1;
-};
+}; 

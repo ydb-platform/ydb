@@ -9,38 +9,38 @@ TDuration ParseDuration(const TStringBuf& str) {
     if (TDuration::TryParse(str, result))
         return result;
     ythrow yexception() << "wrong TDuration format";
-}
+} 
 
-TCommandConfig::TServerEndpoint TCommandConfig::ParseServerAddress(const TString& address) {
-    TServerEndpoint endpoint = {EServerType::GRpc, address};
-    if (address.empty()) {
-        endpoint.Address = "localhost";
-    }
-    TString hostname;
-    ui32 port = 0;
-    if (address.StartsWith("grpc://")) {
-        endpoint.ServerType = EServerType::GRpc;
-        endpoint.Address = endpoint.Address.substr(7);
-        port = 2135;
+TCommandConfig::TServerEndpoint TCommandConfig::ParseServerAddress(const TString& address) { 
+    TServerEndpoint endpoint = {EServerType::GRpc, address}; 
+    if (address.empty()) { 
+        endpoint.Address = "localhost"; 
+    } 
+    TString hostname; 
+    ui32 port = 0; 
+    if (address.StartsWith("grpc://")) { 
+        endpoint.ServerType = EServerType::GRpc; 
+        endpoint.Address = endpoint.Address.substr(7); 
+        port = 2135; 
         endpoint.EnableSsl = false;
     } else if (address.StartsWith("grpcs://")) {
         endpoint.ServerType = EServerType::GRpc;
         endpoint.Address = endpoint.Address.substr(8);
         port = 2135;
         endpoint.EnableSsl = true;
-    } else if (address.StartsWith("mbus://")) {
-        endpoint.ServerType = EServerType::MessageBus;
-        endpoint.Address = endpoint.Address.substr(7);
-        port = 2134;
-    } else {
-        endpoint.ServerType = EServerType::GRpc; // default;
-        port = 2135;
-    }
-    NMsgBusProxy::TMsgBusClientConfig::CrackAddress(endpoint.Address, hostname, port);
-    endpoint.Address = hostname + ':' + ToString(port);
-    return endpoint;
-}
-
+    } else if (address.StartsWith("mbus://")) { 
+        endpoint.ServerType = EServerType::MessageBus; 
+        endpoint.Address = endpoint.Address.substr(7); 
+        port = 2134; 
+    } else { 
+        endpoint.ServerType = EServerType::GRpc; // default; 
+        port = 2135; 
+    } 
+    NMsgBusProxy::TMsgBusClientConfig::CrackAddress(endpoint.Address, hostname, port); 
+    endpoint.Address = hostname + ':' + ToString(port); 
+    return endpoint; 
+} 
+ 
 const TString ArgFormatDescription() {
     return R"___(
 Common option formats:

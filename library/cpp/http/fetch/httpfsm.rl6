@@ -224,7 +224,7 @@ mime_type       = "text/plain"i                     %{c(MIME_TEXT)}
                 | ( "application/x-tar"i | "application/x-ustar"i | "application/x-gtar"i | "application/zip"i | "application/x-archive"i
                   | "application/x-bzip2"i | "application/x-rar"i ) %{c(MIME_ARCHIVE)}
                 | "application/x-dosexec"i          %{c(MIME_EXE)}
-                | "application/x-gzip"i             %{c(MIME_GZIP)} 
+                | "application/x-gzip"i             %{c(MIME_GZIP)}
                 | "application/json"i               %{c(MIME_JSON)}
                 | ("application/javascript"i | "text/javascript"i) %{c(MIME_JAVASCRIPT)}
                 | "application/vnd.android.package-archive"i %{c(MIME_APK)}

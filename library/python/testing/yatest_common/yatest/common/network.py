@@ -22,7 +22,7 @@ class PortManager(object):
     """
     See documentation here
 
-    https://wiki.yandex-team.ru/yatool/test/#python-acquire-ports 
+    https://wiki.yandex-team.ru/yatool/test/#python-acquire-ports
     """
 
     def __init__(self, sync_dir=None):

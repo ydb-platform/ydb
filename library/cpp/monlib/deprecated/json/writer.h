@@ -17,7 +17,7 @@ namespace NMonitoring {
         enum EState {
             STATE_ROOT,
             STATE_DOCUMENT,
-            STATE_COMMON_LABELS, 
+            STATE_COMMON_LABELS,
             STATE_METRICS,
             STATE_METRIC,
             STATE_LABELS,
@@ -30,11 +30,11 @@ namespace NMonitoring {
         void OpenDocument();
         void CloseDocument();
 
-        void OpenCommonLabels(); 
-        void CloseCommonLabels(); 
- 
-        void WriteCommonLabel(TStringBuf name, TStringBuf value); 
- 
+        void OpenCommonLabels();
+        void CloseCommonLabels();
+
+        void WriteCommonLabel(TStringBuf name, TStringBuf value);
+
         void OpenMetrics();
         void CloseMetrics();
 
@@ -57,8 +57,8 @@ namespace NMonitoring {
 
         void WriteValue(long long value);
         void WriteDoubleValue(double d);
- 
-        void WriteTs(ui64 ts); 
+
+        void WriteTs(ui64 ts);
 
     private:
         void WriteLabelsInner(TStringBuf name, TStringBuf value) {

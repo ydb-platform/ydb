@@ -14,7 +14,7 @@ namespace NKiwiAggr {
     public:
         // Supposed constructors:
         //
-        // TSomeHistogram(size_t intervals, ui64 id = 0);  // where intervals is some constant that defines histogram accuracy 
+        // TSomeHistogram(size_t intervals, ui64 id = 0);  // where intervals is some constant that defines histogram accuracy
         // TSomeHistogram(const THistogram& histo);  // histo must be acceptable for TSomeHistogram, for example, only with HT_FIXED_BIN_HISTOGRAM for TFixedBinHistogram
         // TSomeHistogram(IHistogram* histo); // any kind of IHistogram
 
@@ -38,8 +38,8 @@ namespace NKiwiAggr {
         virtual void FromProto(const THistogram& histo) = 0; // throws exception in case of wrong histogram type of histo
         virtual void ToProto(THistogram& histo) = 0;
 
-        virtual void SetId(ui64 id) = 0; 
-        virtual ui64 GetId() = 0; 
+        virtual void SetId(ui64 id) = 0;
+        virtual ui64 GetId() = 0;
         virtual bool Empty() = 0;
         virtual double GetMinValue() = 0;
         virtual double GetMaxValue() = 0;
@@ -49,8 +49,8 @@ namespace NKiwiAggr {
         virtual double GetSumBelowBound(double bound) = 0;
         virtual double CalcUpperBound(double sum) = 0;
         virtual double CalcLowerBound(double sum) = 0;
-        virtual double CalcUpperBoundSafe(double sum) = 0; 
-        virtual double CalcLowerBoundSafe(double sum) = 0; 
+        virtual double CalcUpperBoundSafe(double sum) = 0;
+        virtual double CalcLowerBoundSafe(double sum) = 0;
         double GetValueAtPercentile(double percentile) {
             return CalcUpperBound(percentile * GetSum());
         }

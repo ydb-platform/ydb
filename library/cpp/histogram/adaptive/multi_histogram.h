@@ -48,7 +48,7 @@ namespace NKiwiAggr {
             Add(histoRec.GetId(), histoRec.GetValue(), histoRec.GetWeight());
         }
 
-        void Add(ui64 id, double value, double weight) { 
+        void Add(ui64 id, double value, double weight) {
             THistogramsMap::const_iterator it = Histograms.find(id);
             if (it == Histograms.end()) {
                 it = Histograms.insert(std::make_pair(id, IHistogramPtr(new TMyHistogram(Intervals, id)))).first;
@@ -70,7 +70,7 @@ namespace NKiwiAggr {
             return result;
         }
 
-        IHistogramPtr GetHistogram(ui64 id) const { 
+        IHistogramPtr GetHistogram(ui64 id) const {
             THistogramsMap::const_iterator it = Histograms.find(id);
             if (it != Histograms.end()) {
                 return it->second;

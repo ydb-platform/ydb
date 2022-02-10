@@ -39,7 +39,7 @@ namespace NKiwiAggr {
         size_t ShrinkSize;
         size_t PrevSize;
 
-        ui64 Id; 
+        ui64 Id;
 
         double Sum;
         double MinValue;
@@ -49,7 +49,7 @@ namespace NKiwiAggr {
 
     public:
         TBlockHistogram(EHistogramType type, TQualityFunction calcQuality,
-                        size_t intervals, ui64 id = 0, size_t shrinkSize = DEFAULT_SHRINK_SIZE); 
+                        size_t intervals, ui64 id = 0, size_t shrinkSize = DEFAULT_SHRINK_SIZE);
 
         virtual ~TBlockHistogram() {
         }
@@ -68,8 +68,8 @@ namespace NKiwiAggr {
         virtual void FromProto(const THistogram& histo);
         virtual void ToProto(THistogram& histo);
 
-        virtual void SetId(ui64 id); 
-        virtual ui64 GetId(); 
+        virtual void SetId(ui64 id);
+        virtual ui64 GetId();
         virtual bool Empty();
         virtual double GetMinValue();
         virtual double GetMaxValue();
@@ -81,8 +81,8 @@ namespace NKiwiAggr {
         virtual double GetSumBelowBound(double bound);
         virtual double CalcUpperBound(double sum);
         virtual double CalcLowerBound(double sum);
-        virtual double CalcUpperBoundSafe(double sum); 
-        virtual double CalcLowerBoundSafe(double sum); 
+        virtual double CalcUpperBoundSafe(double sum);
+        virtual double CalcLowerBoundSafe(double sum);
 
     private:
         void SortBins();
@@ -101,7 +101,7 @@ namespace NKiwiAggr {
 
     class TBlockWeightHistogram: public TBlockHistogram {
     public:
-        TBlockWeightHistogram(size_t intervals, ui64 id = 0, size_t shrinkSize = DEFAULT_SHRINK_SIZE); 
+        TBlockWeightHistogram(size_t intervals, ui64 id = 0, size_t shrinkSize = DEFAULT_SHRINK_SIZE);
 
         virtual ~TBlockWeightHistogram() {
         }
@@ -116,7 +116,7 @@ namespace NKiwiAggr {
 
     class TBlockWardHistogram: public TBlockHistogram {
     public:
-        TBlockWardHistogram(size_t intervals, ui64 id = 0, size_t shrinkSize = DEFAULT_SHRINK_SIZE); 
+        TBlockWardHistogram(size_t intervals, ui64 id = 0, size_t shrinkSize = DEFAULT_SHRINK_SIZE);
 
         virtual ~TBlockWardHistogram() {
         }

@@ -38,7 +38,7 @@ namespace NKiwiAggr {
             }
         };
 
-        ui64 Id; 
+        ui64 Id;
         double MinValue;
         double MaxValue;
         double Sum;
@@ -50,9 +50,9 @@ namespace NKiwiAggr {
         TVector<TFastBin> PrecomputedBins;
 
     public:
-        TAdaptiveHistogram(size_t intervals, ui64 id = 0, TQualityFunction qualityFunc = CalcWeightQuality); 
-        TAdaptiveHistogram(const THistogram& histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, TQualityFunction qualityFunc = nullptr); 
-        TAdaptiveHistogram(IHistogram* histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, TQualityFunction qualityFunc = CalcWeightQuality); 
+        TAdaptiveHistogram(size_t intervals, ui64 id = 0, TQualityFunction qualityFunc = CalcWeightQuality);
+        TAdaptiveHistogram(const THistogram& histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, TQualityFunction qualityFunc = nullptr);
+        TAdaptiveHistogram(IHistogram* histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, TQualityFunction qualityFunc = CalcWeightQuality);
 
         ~TAdaptiveHistogram() override {
         }
@@ -105,17 +105,17 @@ namespace NKiwiAggr {
     template <TQualityFunction QualityFunction>
     class TDefinedAdaptiveHistogram: public TAdaptiveHistogram {
     public:
-        TDefinedAdaptiveHistogram(size_t intervals, ui64 id = 0) 
+        TDefinedAdaptiveHistogram(size_t intervals, ui64 id = 0)
             : TAdaptiveHistogram(intervals, id, QualityFunction)
         {
         }
 
-        TDefinedAdaptiveHistogram(const THistogram& histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0) 
+        TDefinedAdaptiveHistogram(const THistogram& histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0)
             : TAdaptiveHistogram(histo, defaultIntervals, defaultId, QualityFunction)
         {
         }
 
-        TDefinedAdaptiveHistogram(IHistogram* histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0) 
+        TDefinedAdaptiveHistogram(IHistogram* histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0)
             : TAdaptiveHistogram(histo, defaultIntervals, defaultId, QualityFunction)
         {
         }

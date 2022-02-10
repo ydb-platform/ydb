@@ -8,7 +8,7 @@
 #include <util/system/backtrace.h>
 
 namespace NKiwiAggr {
-    TAdaptiveHistogram::TAdaptiveHistogram(size_t intervals, ui64 id, TQualityFunction qualityFunc) 
+    TAdaptiveHistogram::TAdaptiveHistogram(size_t intervals, ui64 id, TQualityFunction qualityFunc)
         : Id(id)
         , Sum(0.0)
         , Intervals(intervals)
@@ -16,13 +16,13 @@ namespace NKiwiAggr {
     {
     }
 
-    TAdaptiveHistogram::TAdaptiveHistogram(const THistogram& histo, size_t defaultIntervals, ui64 defaultId, TQualityFunction qualityFunc) 
+    TAdaptiveHistogram::TAdaptiveHistogram(const THistogram& histo, size_t defaultIntervals, ui64 defaultId, TQualityFunction qualityFunc)
         : TAdaptiveHistogram(defaultIntervals, defaultId, qualityFunc)
     {
         FromProto(histo);
     }
 
-    TAdaptiveHistogram::TAdaptiveHistogram(IHistogram* histo, size_t defaultIntervals, ui64 defaultId, TQualityFunction qualityFunc) 
+    TAdaptiveHistogram::TAdaptiveHistogram(IHistogram* histo, size_t defaultIntervals, ui64 defaultId, TQualityFunction qualityFunc)
         : TAdaptiveHistogram(defaultIntervals, defaultId, qualityFunc)
     {
         TAdaptiveHistogram* adaptiveHisto = dynamic_cast<TAdaptiveHistogram*>(histo);
@@ -60,7 +60,7 @@ namespace NKiwiAggr {
 
     void TAdaptiveHistogram::Add(double value, double weight) {
         if (!IsValidFloat(value) || !IsValidFloat(weight)) {
-            ythrow yexception() << Sprintf("Histogram id %lu: bad value %f weight %f", Id, value, weight); 
+            ythrow yexception() << Sprintf("Histogram id %lu: bad value %f weight %f", Id, value, weight);
         }
         TWeightedValue weightedValue(value, weight);
         Add(weightedValue, true);
@@ -69,7 +69,7 @@ namespace NKiwiAggr {
 
     void TAdaptiveHistogram::Merge(const THistogram& histo, double multiplier) {
         if (!IsValidFloat(histo.GetMinValue()) || !IsValidFloat(histo.GetMaxValue())) {
-            fprintf(stderr, "Merging in histogram id %lu: skip bad histo with minvalue %f maxvalue %f\n", Id, histo.GetMinValue(), histo.GetMaxValue()); 
+            fprintf(stderr, "Merging in histogram id %lu: skip bad histo with minvalue %f maxvalue %f\n", Id, histo.GetMinValue(), histo.GetMaxValue());
             return;
         }
         if (histo.FreqSize() == 0) {
@@ -85,7 +85,7 @@ namespace NKiwiAggr {
                 double value = histo.GetPosition(j);
                 double weight = histo.GetFreq(j);
                 if (!IsValidFloat(value) || !IsValidFloat(weight)) {
-                    fprintf(stderr, "Merging in histogram id %lu: skip bad value %f weight %f\n", Id, value, weight); 
+                    fprintf(stderr, "Merging in histogram id %lu: skip bad value %f weight %f\n", Id, value, weight);
                     continue;
                 }
                 Add(value, weight * multiplier);
@@ -98,7 +98,7 @@ namespace NKiwiAggr {
             for (size_t j = 0; j < histo.FreqSize(); ++j) {
                 double weight = histo.GetFreq(j);
                 if (!IsValidFloat(pos) || !IsValidFloat(weight)) {
-                    fprintf(stderr, "Merging in histogram id %lu: skip bad value %f weight %f\n", Id, pos, weight); 
+                    fprintf(stderr, "Merging in histogram id %lu: skip bad value %f weight %f\n", Id, pos, weight);
                     pos += histo.GetBinRange();
                     continue;
                 }
@@ -216,14 +216,14 @@ namespace NKiwiAggr {
             double value = histo.GetPosition(i);
             double weight = histo.GetFreq(i);
             if (!IsValidFloat(value) || !IsValidFloat(weight)) {
-                fprintf(stderr, "FromProto in histogram id %lu: skip bad value %f weight %f\n", Id, value, weight); 
+                fprintf(stderr, "FromProto in histogram id %lu: skip bad value %f weight %f\n", Id, value, weight);
                 continue;
             }
             Add(value, weight);
         }
 
         if (!IsValidFloat(histo.GetMinValue()) || !IsValidFloat(histo.GetMaxValue())) {
-            ythrow yexception() << Sprintf("FromProto in histogram id %lu: skip bad histo with minvalue %f maxvalue %f", Id, histo.GetMinValue(), histo.GetMaxValue()); 
+            ythrow yexception() << Sprintf("FromProto in histogram id %lu: skip bad histo with minvalue %f maxvalue %f", Id, histo.GetMinValue(), histo.GetMaxValue());
         }
 
         MinValue = histo.GetMinValue();
@@ -253,11 +253,11 @@ namespace NKiwiAggr {
         }
     }
 
-    void TAdaptiveHistogram::SetId(ui64 id) { 
+    void TAdaptiveHistogram::SetId(ui64 id) {
         Id = id;
     }
 
-    ui64 TAdaptiveHistogram::GetId() { 
+    ui64 TAdaptiveHistogram::GetId() {
         return Id;
     }
 
@@ -430,20 +430,20 @@ namespace NKiwiAggr {
         }
     }
 
-    double TAdaptiveHistogram::CalcUpperBoundSafe(double sum) { 
-        if (!Empty()) { 
-            sum = Max(Bins.begin()->second, sum); 
-        } 
-        return CalcUpperBound(sum); 
-    } 
- 
-    double TAdaptiveHistogram::CalcLowerBoundSafe(double sum) { 
-        if (!Empty()) { 
-            sum = Max(Bins.rbegin()->second, sum); 
-        } 
-        return CalcLowerBound(sum); 
-    } 
- 
+    double TAdaptiveHistogram::CalcUpperBoundSafe(double sum) {
+        if (!Empty()) {
+            sum = Max(Bins.begin()->second, sum);
+        }
+        return CalcUpperBound(sum);
+    }
+
+    double TAdaptiveHistogram::CalcLowerBoundSafe(double sum) {
+        if (!Empty()) {
+            sum = Max(Bins.rbegin()->second, sum);
+        }
+        return CalcLowerBound(sum);
+    }
+
     void TAdaptiveHistogram::FromIHistogram(IHistogram* histo) {
         if (!histo) {
             ythrow yexception() << "Attempt to create TAdaptiveHistogram from a NULL pointer";

@@ -35,18 +35,18 @@ namespace NMonitoring {
         TransitionState(STATE_COMMON_LABELS, STATE_DOCUMENT);
         JsonWriter.CloseMap();
     }
- 
+
     void TDeprecatedJsonWriter::WriteCommonLabel(TStringBuf name, TStringBuf value) {
         TransitionState(STATE_COMMON_LABELS, STATE_COMMON_LABELS);
         JsonWriter.Write(name, value);
     }
- 
+
     void TDeprecatedJsonWriter::OpenMetrics() {
         TransitionState(STATE_DOCUMENT, STATE_METRICS);
         JsonWriter.Write("sensors");
         JsonWriter.OpenArray();
     }
- 
+
     void TDeprecatedJsonWriter::CloseMetrics() {
         TransitionState(STATE_METRICS, STATE_DOCUMENT);
         JsonWriter.CloseArray();

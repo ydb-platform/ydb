@@ -27,15 +27,15 @@ namespace NMonitoring {
         void HandleAbsentSubgroup(IMonHttpRequest& request);
 
     public:
-        TDynamicCountersPage(const TString& path, 
+        TDynamicCountersPage(const TString& path,
                              const TString& title,
-                             TIntrusivePtr<TDynamicCounters> counters, 
+                             TIntrusivePtr<TDynamicCounters> counters,
                              TOutputCallback outputCallback = nullptr)
             : TPreMonPage(path, title)
             , Counters(counters)
             , OutputCallback(outputCallback)
-        { 
-        } 
+        {
+        }
 
         void Output(NMonitoring::IMonHttpRequest& request) override;
 

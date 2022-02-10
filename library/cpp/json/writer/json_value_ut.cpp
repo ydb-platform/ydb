@@ -286,59 +286,59 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
     }
 
     Y_UNIT_TEST(GetValueByPathConstTest) {
-        TJsonValue lhs;
-        TJsonValue first;
-        TJsonValue second;
-        TJsonValue last;
-        first.InsertValue("e", "f");
-        second.InsertValue("c", first);
-        last.InsertValue("a", second);
-        lhs.InsertValue("l", last);
-
-        {
-            const TJsonValue* result = lhs.GetValueByPath("l", '/');
-            UNIT_ASSERT_EQUAL(*result, last);
-        }
-        {
-            const TJsonValue* result = lhs.GetValueByPath("l/a", '/');
-            UNIT_ASSERT_EQUAL(*result, second);
-        }
-        {
-            const TJsonValue* result = lhs.GetValueByPath("l/a/c", '/');
-            UNIT_ASSERT_EQUAL(*result, first);
-        }
-        {
-            const TJsonValue* result = lhs.GetValueByPath("l.a.c.e", '.');
-            UNIT_ASSERT_EQUAL(*result, "f");
-        }
-        {
-            const TJsonValue* result = lhs.GetValueByPath("l/a/c/e/x", '/');
-            UNIT_ASSERT_EQUAL(result, nullptr);
-        }
-        {
-            const TJsonValue* result = lhs.GetValueByPath("a/c/e/x", '/');
-            UNIT_ASSERT_EQUAL(result, nullptr);
-        }
-        {
-            const TJsonValue* result = lhs.GetValueByPath("nokey", '/');
-            UNIT_ASSERT_EQUAL(result, nullptr);
-        }
-        {
-            const TJsonValue* result = lhs.GetValueByPath("", '/');
+        TJsonValue lhs; 
+        TJsonValue first; 
+        TJsonValue second; 
+        TJsonValue last; 
+        first.InsertValue("e", "f"); 
+        second.InsertValue("c", first); 
+        last.InsertValue("a", second); 
+        lhs.InsertValue("l", last); 
+ 
+        { 
+            const TJsonValue* result = lhs.GetValueByPath("l", '/'); 
+            UNIT_ASSERT_EQUAL(*result, last); 
+        } 
+        { 
+            const TJsonValue* result = lhs.GetValueByPath("l/a", '/'); 
+            UNIT_ASSERT_EQUAL(*result, second); 
+        } 
+        { 
+            const TJsonValue* result = lhs.GetValueByPath("l/a/c", '/'); 
+            UNIT_ASSERT_EQUAL(*result, first); 
+        } 
+        { 
+            const TJsonValue* result = lhs.GetValueByPath("l.a.c.e", '.'); 
+            UNIT_ASSERT_EQUAL(*result, "f"); 
+        } 
+        { 
+            const TJsonValue* result = lhs.GetValueByPath("l/a/c/e/x", '/'); 
+            UNIT_ASSERT_EQUAL(result, nullptr); 
+        } 
+        { 
+            const TJsonValue* result = lhs.GetValueByPath("a/c/e/x", '/'); 
+            UNIT_ASSERT_EQUAL(result, nullptr); 
+        } 
+        { 
+            const TJsonValue* result = lhs.GetValueByPath("nokey", '/'); 
+            UNIT_ASSERT_EQUAL(result, nullptr); 
+        } 
+        { 
+            const TJsonValue* result = lhs.GetValueByPath("", '/'); 
             UNIT_ASSERT_EQUAL(*result, lhs); // itself
-        }
-
-        TJsonValue array;
-        TJsonValue third;
-        array[0] = first;
-        array[1] = second;
-        third["t"] = array;
-
-        UNIT_ASSERT(array.GetValueByPath("[0].e", '.')->GetStringRobust() == "f");
+        } 
+ 
+        TJsonValue array; 
+        TJsonValue third; 
+        array[0] = first; 
+        array[1] = second; 
+        third["t"] = array; 
+ 
+        UNIT_ASSERT(array.GetValueByPath("[0].e", '.')->GetStringRobust() == "f"); 
         UNIT_ASSERT(third.GetValueByPath("t.[0].e", '.')->GetStringRobust() == "f");
         UNIT_ASSERT(third.GetValueByPath("t.[1].c.e", '.')->GetStringRobust() == "f");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(EraseValueFromArray) {
         {
             TJsonValue vec;

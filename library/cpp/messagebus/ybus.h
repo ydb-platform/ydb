@@ -115,7 +115,7 @@ namespace NBus {
         int GetInFlight();
 
         const TBusProtocol* GetProto() const;
- 
+
         const TBusClientSession* GetBusClientSessionWorkaroundDoNotUse() const; // It's for TLoadBalancedProtocol::GetDestination() function that really needs TBusClientSession* unlike all other protocols. Look at review 32425 (http://rb.yandex-team.ru/arc/r/32425/) for more information.
     private:
         TIntrusivePtr< ::NBus::NPrivate::TBusSyncSourceSessionImpl> Session;

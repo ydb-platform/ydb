@@ -54,17 +54,17 @@ namespace NKiwiAggr {
         virtual ~TBlockHistogram() {
         }
 
-        virtual void Clear(); 
- 
+        virtual void Clear();
+
         virtual void Add(double value, double weight);
         virtual void Add(const THistoRec& histoRec);
 
         virtual void Merge(const THistogram& histo, double multiplier);
         virtual void Merge(const TVector<THistogram>& histogramsToMerge);
         virtual void Merge(TVector<IHistogramPtr> histogramsToMerge); // not implemented
- 
-        virtual void Multiply(double factor); 
- 
+
+        virtual void Multiply(double factor);
+
         virtual void FromProto(const THistogram& histo);
         virtual void ToProto(THistogram& histo);
 

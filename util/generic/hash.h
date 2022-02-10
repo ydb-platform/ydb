@@ -1736,16 +1736,16 @@ public:
 
 template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
 inline bool operator==(const THashMap<Key, T, HashFcn, EqualKey, Alloc>& hm1, const THashMap<Key, T, HashFcn, EqualKey, Alloc>& hm2) {
-    if (hm1.size() != hm2.size()) { 
-        return false; 
-    } 
+    if (hm1.size() != hm2.size()) {
+        return false;
+    }
     for (const auto& it1 : hm1) {
-        auto it2 = hm2.find(it1.first); 
-        if ((it2 == hm2.end()) || !(it1 == *it2)) { 
-            return false; 
-        } 
-    } 
-    return true; 
+        auto it2 = hm2.find(it1.first);
+        if ((it2 == hm2.end()) || !(it1 == *it2)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 template <class Key, class T, class HashFcn, class EqualKey, class Alloc>

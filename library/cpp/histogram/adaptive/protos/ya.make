@@ -1,6 +1,6 @@
 PROTO_LIBRARY()
 
-OWNER(g:crawl) 
+OWNER(g:crawl)
 
 SRCS(
     histo.proto

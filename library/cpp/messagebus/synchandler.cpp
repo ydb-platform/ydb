@@ -182,9 +182,9 @@ const TBusProtocol* TBusSyncSourceSession::GetProto() const {
     return Session->GetProto();
 }
 
-const TBusClientSession* TBusSyncSourceSession::GetBusClientSessionWorkaroundDoNotUse() const { 
-    return Session.Get(); 
-} 
+const TBusClientSession* TBusSyncSourceSession::GetBusClientSessionWorkaroundDoNotUse() const {
+    return Session.Get();
+}
 
 TBusSyncClientSessionPtr TBusMessageQueue::CreateSyncSource(TBusProtocol* proto, const TBusClientSessionConfig& config, bool needReply, const TString& name) {
     TIntrusivePtr<TBusSyncSourceSessionImpl> session = new TBusSyncSourceSessionImpl(this, proto, config, needReply, name);

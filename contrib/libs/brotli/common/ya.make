@@ -1,7 +1,7 @@
-LIBRARY() 
- 
+LIBRARY()
+
 LICENSE(MIT)
- 
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 OWNER(
@@ -9,18 +9,18 @@ OWNER(
     g:contrib
     g:cpp-contrib
 )
- 
-NO_UTIL() 
 
-NO_COMPILER_WARNINGS() 
- 
+NO_UTIL()
+
+NO_COMPILER_WARNINGS()
+
 ADDINCL(contrib/libs/brotli/include)
- 
-SRCS( 
-    dictionary.c 
+
+SRCS(
+    dictionary.c
     transform.c
-) 
- 
+)
+
 CFLAGS(-DBROTLI_BUILD_PORTABLE)
 
-END() 
+END()

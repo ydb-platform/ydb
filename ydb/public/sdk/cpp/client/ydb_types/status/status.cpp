@@ -16,13 +16,13 @@ public:
         : Status(std::move(status))
     { }
 
-    void CheckStatusOk(const TStringType& str) const { 
+    void CheckStatusOk(const TStringType& str) const {
         if (!Status.Ok()) {
-            ThrowFatalError(TStringType("Attempt to use result with not successfull status. ") + str + "\n"); 
+            ThrowFatalError(TStringType("Attempt to use result with not successfull status. ") + str + "\n");
         }
     }
 
-    void RaiseError(const TStringType& str) const { 
+    void RaiseError(const TStringType& str) const {
         ythrow TContractViolation(str);
     }
 };
@@ -52,19 +52,19 @@ bool TStatus::IsTransportError() const {
         && static_cast<size_t>(Impl_->Status.Status) <= TRANSPORT_STATUSES_LAST;
 }
 
-void TStatus::CheckStatusOk(const TStringType& str) const { 
+void TStatus::CheckStatusOk(const TStringType& str) const {
     Impl_->CheckStatusOk(str);
 }
 
-void TStatus::RaiseError(const TStringType& str) const { 
+void TStatus::RaiseError(const TStringType& str) const {
     Impl_->RaiseError(str);
 }
 
-const TStringType& TStatus::GetEndpoint() const { 
+const TStringType& TStatus::GetEndpoint() const {
     return Impl_->Status.Endpoint;
 }
 
-const std::multimap<TStringType, TStringType>& TStatus::GetResponseMetadata() const { 
+const std::multimap<TStringType, TStringType>& TStatus::GetResponseMetadata() const {
     return Impl_->Status.Metadata;
 }
 

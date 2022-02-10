@@ -59,8 +59,8 @@ public:
     void Start() {
         Y_VERIFY(this->Context_, "Missing shared context");
         auto context = this->Context_->CreateContext();
-        { 
-            std::lock_guard lock(Mutex_); 
+        {
+            std::lock_guard lock(Mutex_);
             LocalContext_ = context;
             Alarm_.Set(this->Context_->CompletionQueue(), Deadline_, PrepareTag());
         }
@@ -80,8 +80,8 @@ private:
     }
 
     bool Execute(bool ok) override {
-        { 
-            std::lock_guard lock(Mutex_); 
+        {
+            std::lock_guard lock(Mutex_);
             LocalContext_.reset();
         }
 
@@ -102,7 +102,7 @@ protected:
     gpr_timespec Deadline_ = {};
 
 private:
-    std::mutex Mutex_; 
+    std::mutex Mutex_;
     grpc::Alarm Alarm_;
     std::shared_ptr<IQueueClientContext> LocalContext_;
 };
@@ -118,7 +118,7 @@ public:
             TResponseCb<TResponse>&& userCb,
             TGRpcConnectionsImpl* connections,
             std::shared_ptr<IQueueClientContext> context,
-            const TStringType& endpoint) 
+            const TStringType& endpoint)
         : TGenericCbHolder<TResponseCb<TResponse>>(std::move(userCb), connections, std::move(context))
         , GRpcStatus_(std::move(status))
         , Endpoint_(endpoint)
@@ -127,8 +127,8 @@ public:
     void Process(void*) override {
         TPlainStatus status(GRpcStatus_, Endpoint_, {});
 
-        if (!Endpoint_.empty()) { 
-            TStringType msg = "Grpc error response on endpoint "; 
+        if (!Endpoint_.empty()) {
+            TStringType msg = "Grpc error response on endpoint ";
             msg += Endpoint_;
             status.Issues.AddIssue(NYql::TIssue(msg));
         }
@@ -139,7 +139,7 @@ public:
 
 private:
     NGrpc::TGrpcStatus GRpcStatus_;
-    TStringType Endpoint_; 
+    TStringType Endpoint_;
 };
 
 template<typename TResponse>
@@ -154,8 +154,8 @@ public:
             TResponseCb<TResponse>&& userCb,
             TGRpcConnectionsImpl* connections,
             std::shared_ptr<IQueueClientContext> context,
-            const TStringType& endpoint, 
-            std::multimap<TStringType, TStringType>&& metadata) 
+            const TStringType& endpoint,
+            std::multimap<TStringType, TStringType>&& metadata)
         : TGenericCbHolder<TResponseCb<TResponse>>(std::move(userCb), connections, std::move(context))
         , Response_(std::move(response))
         , GRpcStatus_(std::move(status))
@@ -170,8 +170,8 @@ public:
 private:
     TResponse Response_;
     NGrpc::TGrpcStatus GRpcStatus_;
-    const TStringType Endpoint_; 
-    std::multimap<TStringType, TStringType> Metadata_; 
+    const TStringType Endpoint_;
+    std::multimap<TStringType, TStringType> Metadata_;
 };
 
 class TSimpleCbResult
@@ -195,13 +195,13 @@ public:
     using TPtr = TIntrusivePtr<TDeferredAction>;
 
     TDeferredAction(
-        const TStringType& operationId, 
+        const TStringType& operationId,
         TDeferredOperationCb&& userCb,
         TGRpcConnectionsImpl* connection,
         std::shared_ptr<IQueueClientContext> context,
         TDuration timeout,
         TDbDriverStatePtr dbState,
-        const TStringType& endpoint); 
+        const TStringType& endpoint);
 
     void OnAlarm() override;
     void OnError() override;
@@ -209,8 +209,8 @@ public:
 private:
     TDuration NextDelay_;
     TDbDriverStatePtr DbDriverState_;
-    const TStringType OperationId_; 
-    const TStringType Endpoint_; 
+    const TStringType OperationId_;
+    const TStringType Endpoint_;
 };
 
 class TPeriodicAction

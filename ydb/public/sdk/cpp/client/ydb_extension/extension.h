@@ -48,8 +48,8 @@ class DestroyedClientException: public yexception {};
 
 class IDiscoveryMutatorApi: public IExtensionApi {
 public:
-    using TMutatorCb = std::function<TStatus(Ydb::Discovery::ListEndpointsResult* proto, TStatus status, const TStringType& database)>; 
- 
+    using TMutatorCb = std::function<TStatus(Ydb::Discovery::ListEndpointsResult* proto, TStatus status, const TStringType& database)>;
+
     static IDiscoveryMutatorApi* Create(TDriver driver);
 public:
     virtual void SetMutatorCb(TMutatorCb&& mutator) = 0;

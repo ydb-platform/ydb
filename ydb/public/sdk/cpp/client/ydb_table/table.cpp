@@ -1348,7 +1348,7 @@ public:
 private:
     void UpdateStats();
 
-    mutable std::mutex Mtx_; 
+    mutable std::mutex Mtx_;
     TMultiMap<TInstant, std::unique_ptr<TSession::TImpl>> Sessions_;
     bool Closed_;
     i64 ActiveSessions_;
@@ -2948,8 +2948,8 @@ TAsyncCreateSessionResult TSessionPoolImpl::GetSession(
     std::unique_ptr<TSession::TImpl> sessionImpl;
     bool needUpdateActiveSessionCounter = false;
     bool returnFakeSession = false;
-    { 
-        std::lock_guard guard(Mtx_); 
+    {
+        std::lock_guard guard(Mtx_);
         if (MaxActiveSessions_) {
             if (ActiveSessions_ < MaxActiveSessions_) {
                 ActiveSessions_++;
@@ -2998,8 +2998,8 @@ TAsyncCreateSessionResult TSessionPoolImpl::GetSession(
 
 bool TSessionPoolImpl::DropSessionOnEndpoint(std::shared_ptr<TTableClient::TImpl> client, const TString& endpoint) {
     std::unique_ptr<TSession::TImpl> sessionImpl;
-    { 
-        std::lock_guard guard(Mtx_); 
+    {
+        std::lock_guard guard(Mtx_);
         for (auto it = Sessions_.begin(); it != Sessions_.end(); it++) {
             if (it->second->GetEndpoint() == endpoint) {
                 sessionImpl = std::move(it->second);
@@ -3018,8 +3018,8 @@ bool TSessionPoolImpl::DropSessionOnEndpoint(std::shared_ptr<TTableClient::TImpl
 }
 
 bool TSessionPoolImpl::ReturnSession(TSession::TImpl* impl, bool active) {
-    { 
-        std::lock_guard guard(Mtx_); 
+    {
+        std::lock_guard guard(Mtx_);
         if (Closed_)
             return false;
         Sessions_.emplace(std::make_pair(impl->GetTimeToTouchFast(), impl));
@@ -3034,22 +3034,22 @@ bool TSessionPoolImpl::ReturnSession(TSession::TImpl* impl, bool active) {
 }
 
 void TSessionPoolImpl::DecrementActiveCounter() {
-    std::lock_guard guard(Mtx_); 
-    Y_VERIFY(ActiveSessions_); 
-    ActiveSessions_--; 
-    UpdateStats(); 
+    std::lock_guard guard(Mtx_);
+    Y_VERIFY(ActiveSessions_);
+    ActiveSessions_--;
+    UpdateStats();
 }
 
 void TSessionPoolImpl::Drain(std::function<bool(std::unique_ptr<TSession::TImpl>&&)> cb, bool close) {
-    std::lock_guard guard(Mtx_); 
-    Closed_ = close; 
-    for (auto it = Sessions_.begin(); it != Sessions_.end();) { 
-        const bool cont = cb(std::move(it->second)); 
-        it = Sessions_.erase(it); 
-        if (!cont) 
-            break; 
+    std::lock_guard guard(Mtx_);
+    Closed_ = close;
+    for (auto it = Sessions_.begin(); it != Sessions_.end();) {
+        const bool cont = cb(std::move(it->second));
+        it = Sessions_.erase(it);
+        if (!cont)
+            break;
     }
-    UpdateStats(); 
+    UpdateStats();
 }
 
 TPeriodicCb TSessionPoolImpl::CreatePeriodicTask(std::weak_ptr<TTableClient::TImpl> weakClient,
@@ -3072,8 +3072,8 @@ TPeriodicCb TSessionPoolImpl::CreatePeriodicTask(std::weak_ptr<TTableClient::TIm
             TVector<std::unique_ptr<TSession::TImpl>> sessionsToDelete;
             sessionsToDelete.reserve(keepAliveBatchSize);
             auto now = TInstant::Now();
-            { 
-                std::lock_guard guard(Mtx_); 
+            {
+                std::lock_guard guard(Mtx_);
                 auto& sessions = Sessions_;
 
                 auto it = sessions.begin();
@@ -3117,8 +3117,8 @@ TPeriodicCb TSessionPoolImpl::CreatePeriodicTask(std::weak_ptr<TTableClient::TIm
 }
 
 i64 TSessionPoolImpl::GetActiveSessions() const {
-    std::lock_guard guard(Mtx_); 
-    return ActiveSessions_; 
+    std::lock_guard guard(Mtx_);
+    return ActiveSessions_;
 }
 
 i64 TSessionPoolImpl::GetActiveSessionsLimit() const {
@@ -3126,8 +3126,8 @@ i64 TSessionPoolImpl::GetActiveSessionsLimit() const {
 }
 
 i64 TSessionPoolImpl::GetCurrentPoolSize() const {
-    std::lock_guard guard(Mtx_); 
-    return Sessions_.size(); 
+    std::lock_guard guard(Mtx_);
+    return Sessions_.size();
 }
 
 static bool IsSessionStatusRetriable(const TCreateSessionResult& res) {

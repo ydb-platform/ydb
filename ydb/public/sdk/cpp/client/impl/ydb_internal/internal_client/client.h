@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h>
 
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h>
- 
+
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/types.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/ydb.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/core_facility/core_facility.h>
@@ -26,7 +26,7 @@ public:
     virtual NThreading::TFuture<TListEndpointsResult> GetEndpoints(std::shared_ptr<TDbDriverState> dbState) = 0;
     virtual void AddPeriodicTask(TPeriodicCb&& cb, TDuration period) = 0;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    virtual void DeleteChannels(const std::vector<TStringType>& endpoints) = 0; 
+    virtual void DeleteChannels(const std::vector<TStringType>& endpoints) = 0;
 #endif
     virtual TBalancingSettings GetBalancingSettings() const = 0;
     virtual bool StartStatCollecting(NMonitoring::IMetricRegistry* sensorsRegistry) = 0;

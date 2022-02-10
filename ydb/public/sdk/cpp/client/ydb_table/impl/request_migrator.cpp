@@ -38,7 +38,7 @@ namespace NTable {
 constexpr TDuration MIGRATION_PREPARE_CLIENT_TIMEOUT = TDuration::Seconds(5);
 
 NThreading::TFuture<ui64> TRequestMigrator::SetHost(const TString& host, TSession targetSession) {
-    std::lock_guard lock(Lock_); 
+    std::lock_guard lock(Lock_);
     CurHost_ = host;
     TargetSession_.reset(new TSession(targetSession));
     if (!host)
@@ -49,7 +49,7 @@ NThreading::TFuture<ui64> TRequestMigrator::SetHost(const TString& host, TSessio
 }
 
 NThreading::TFuture<ui64> TRequestMigrator::SetHost(const TString& host) {
-    std::lock_guard lock(Lock_); 
+    std::lock_guard lock(Lock_);
     CurHost_ = host;
     TargetSession_.reset();
     if (!host)
@@ -113,15 +113,15 @@ bool TRequestMigrator::IsOurSession(TSession::TImpl* session) const {
 }
 
 bool TRequestMigrator::Reset() {
-    if (Lock_.try_lock()) { 
+    if (Lock_.try_lock()) {
         if (CurHost_) {
             CurHost_.clear();
             TargetSession_.reset();
             Promise_.SetValue(0);
-            Lock_.unlock(); 
+            Lock_.unlock();
             return true;
         } else {
-            Lock_.unlock(); 
+            Lock_.unlock();
             return false;
         }
     } else {
@@ -133,7 +133,7 @@ bool TRequestMigrator::DoCheckAndMigrate(TSession::TImpl* session, std::shared_p
     if (session->GetEndpoint().empty())
         return false;
 
-    if (Lock_.try_lock()) { 
+    if (Lock_.try_lock()) {
         if (IsOurSession(session)) {
             Queries_.clear();
 
@@ -155,10 +155,10 @@ bool TRequestMigrator::DoCheckAndMigrate(TSession::TImpl* session, std::shared_p
 
             // Clear host to prevent multiple migrations
             CurHost_.clear();
-            Lock_.unlock(); 
+            Lock_.unlock();
             return true;
         } else {
-            Lock_.unlock(); 
+            Lock_.unlock();
             return false;
         }
     } else {
@@ -167,7 +167,7 @@ bool TRequestMigrator::DoCheckAndMigrate(TSession::TImpl* session, std::shared_p
 }
 
 void TRequestMigrator::Wait() const {
-    std::lock_guard lock(Lock_); 
+    std::lock_guard lock(Lock_);
     if (Finished_.Initialized())
         Finished_.GetValueSync();
 }

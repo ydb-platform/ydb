@@ -29,9 +29,9 @@ class ICredentialsProvider;
 // Deferred callbacks
 using TDeferredResultCb = std::function<void(google::protobuf::Any*, TPlainStatus status)>;
 
-TStringType GetAuthInfo(TDbDriverStatePtr p); 
-void SetDatabaseHeader(TCallMeta& meta, const TStringType& database); 
-TStringType CreateSDKBuildInfo(); 
+TStringType GetAuthInfo(TDbDriverStatePtr p);
+void SetDatabaseHeader(TCallMeta& meta, const TStringType& database);
+TStringType CreateSDKBuildInfo();
 
 class TGRpcConnectionsImpl
     : public IQueueClientContextProvider
@@ -57,8 +57,8 @@ public:
     // This method returns DbDriverState (or just db state) for given database credentials pair
     // this state is used to keep data related to particular database.
     TDbDriverStatePtr GetDriverState(
-        const TMaybe<TStringType>& database, 
-        const TMaybe<TStringType>& discoveryEndpoint, 
+        const TMaybe<TStringType>& database,
+        const TMaybe<TStringType>& discoveryEndpoint,
         const TMaybe<EDiscoveryMode>& discoveryMode,
         const TMaybe<bool>& enableSsl,
         const TMaybe<std::shared_ptr<ICredentialsProviderFactory>>& credentialsProviderFactory
@@ -74,7 +74,7 @@ public:
     static void SetGrpcKeepAlive(NGrpc::TGRpcClientConfig& config, const TDuration& timeout, bool permitWithoutCalls);
 
     template<typename TService>
-    std::pair<std::unique_ptr<TServiceConnection<TService>>, TStringType> GetServiceConnection( 
+    std::pair<std::unique_ptr<TServiceConnection<TService>>, TStringType> GetServiceConnection(
         TDbDriverStatePtr dbState, const TStringType& preferredEndpoint,
         TRpcRequestSettings::TEndpointPolicy endpointPolicy)
     {
@@ -127,7 +127,7 @@ public:
         TDbDriverStatePtr dbState,
         const TRpcRequestSettings& requestSettings,
         TDuration clientTimeout,
-        const TStringType& preferredEndpoint, 
+        const TStringType& preferredEndpoint,
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
         using NGrpc::TGrpcStatus;
@@ -158,7 +158,7 @@ public:
 
         WithServiceConnection<TService>(
             [this, request = std::move(request), userResponseCb = std::move(userResponseCb), rpc, requestSettings, context = std::move(context), clientTimeout, dbState]
-            (TPlainStatus status, TConnection serviceConnection, TStringType endpoint) mutable -> void { 
+            (TPlainStatus status, TConnection serviceConnection, TStringType endpoint) mutable -> void {
                 if (!status.Ok()) {
                     userResponseCb(
                         nullptr,
@@ -194,7 +194,7 @@ public:
                     meta.Aux.push_back({YDB_REQUEST_TYPE_HEADER, requestSettings.RequestType});
                 }
 
-                if (!dbState->Database.empty()) { 
+                if (!dbState->Database.empty()) {
                     SetDatabaseHeader(meta, dbState->Database);
                 }
 
@@ -214,17 +214,17 @@ public:
                         dbState->StatCollector.DecGRpcInFlightByHost(endpoint);
 
                         if (NGrpc::IsGRpcStatusGood(grpcStatus)) {
-                            std::multimap<TStringType, TStringType> metadata; 
+                            std::multimap<TStringType, TStringType> metadata;
 
                             for (const auto& [name, value] : ctx.GetServerInitialMetadata()) {
                                 metadata.emplace(
-                                    TStringType(name.begin(), name.end()), 
-                                    TStringType(value.begin(), value.end())); 
+                                    TStringType(name.begin(), name.end()),
+                                    TStringType(value.begin(), value.end()));
                             }
                             for (const auto& [name, value] : ctx.GetServerTrailingMetadata()) {
                                 metadata.emplace(
-                                    TStringType(name.begin(), name.end()), 
-                                    TStringType(value.begin(), value.end())); 
+                                    TStringType(name.begin(), name.end()),
+                                    TStringType(value.begin(), value.end()));
                             }
 
                             auto resp = new TResult<TResponse>(
@@ -269,7 +269,7 @@ public:
         const TRpcRequestSettings& requestSettings,
         TDuration clientTimeout,
         bool poll = false,
-        const TStringType& preferredEndpoint = TStringType(), 
+        const TStringType& preferredEndpoint = TStringType(),
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
         if (!TryCreateContext(context)) {
@@ -354,7 +354,7 @@ public:
         TDuration deferredTimeout,
         const TRpcRequestSettings& requestSettings,
         TDuration clientTimeout,
-        const TStringType& preferredEndpoint = TStringType(), 
+        const TStringType& preferredEndpoint = TStringType(),
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
         auto operationCb = [userResponseCb = std::move(userResponseCb)](Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
@@ -408,7 +408,7 @@ public:
 
         WithServiceConnection<TService>(
             [request, responseCb = std::move(responseCb), rpc, requestSettings, context = std::move(context), dbState]
-            (TPlainStatus status, TConnection serviceConnection, TStringType endpoint) mutable { 
+            (TPlainStatus status, TConnection serviceConnection, TStringType endpoint) mutable {
                 if (!status.Ok()) {
                     responseCb(std::move(status), nullptr);
                     return;
@@ -441,7 +441,7 @@ public:
                     meta.Aux.push_back({YDB_REQUEST_TYPE_HEADER, requestSettings.RequestType});
                 }
 
-                if (!dbState->Database.empty()) { 
+                if (!dbState->Database.empty()) {
                     SetDatabaseHeader(meta, dbState->Database);
                 }
 
@@ -506,7 +506,7 @@ public:
 
         WithServiceConnection<TService>(
             [connectedCallback = std::move(connectedCallback), rpc, requestSettings, context = std::move(context), dbState]
-            (TPlainStatus status, TConnection serviceConnection, TStringType endpoint) mutable { 
+            (TPlainStatus status, TConnection serviceConnection, TStringType endpoint) mutable {
                 if (!status.Ok()) {
                     connectedCallback(std::move(status), nullptr);
                     return;
@@ -539,7 +539,7 @@ public:
                     meta.Aux.push_back({YDB_REQUEST_TYPE_HEADER, requestSettings.RequestType});
                 }
 
-                if (!dbState->Database.empty()) { 
+                if (!dbState->Database.empty()) {
                     SetDatabaseHeader(meta, dbState->Database);
                 }
 
@@ -583,10 +583,10 @@ public:
     }
 
     TAsyncListEndpointsResult GetEndpoints(TDbDriverStatePtr dbState) override;
-    TListEndpointsResult MutateDiscovery(TListEndpointsResult result, const TStringType& database); 
+    TListEndpointsResult MutateDiscovery(TListEndpointsResult result, const TStringType& database);
 
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    void DeleteChannels(const std::vector<TStringType>& endpoints) override { 
+    void DeleteChannels(const std::vector<TStringType>& endpoints) override {
         for (const auto& endpoint : endpoints) {
             ChannelPool_.DeleteChannel(endpoint);
         }
@@ -609,7 +609,7 @@ private:
     {
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         TConnection serviceConnection;
-        TStringType endpoint; 
+        TStringType endpoint;
         std::tie(serviceConnection, endpoint) = GetServiceConnection<TService>(dbState, preferredEndpoint, endpointPolicy);
         if (!serviceConnection) {
             if (dbState->DiscoveryMode == EDiscoveryMode::Sync) {
@@ -618,7 +618,7 @@ private:
                 errString << ", cluster endpoint " << dbState->DiscoveryEndpoint;
                 TPlainStatus discoveryStatus;
                 {
-                    std::shared_lock guard(dbState->LastDiscoveryStatusRWLock); 
+                    std::shared_lock guard(dbState->LastDiscoveryStatusRWLock);
                     discoveryStatus = dbState->LastDiscoveryStatus;
                 }
 
@@ -634,29 +634,29 @@ private:
                 callback(
                     discoveryStatus,
                     TConnection{nullptr},
-                    TStringType{ }); 
+                    TStringType{ });
             } else {
-                int64_t newVal; 
-                int64_t val; 
+                int64_t newVal;
+                int64_t val;
                 do {
-                    val = QueuedRequests_.load(); 
+                    val = QueuedRequests_.load();
                     if (val >= MaxQueuedRequests_) {
                         dbState->StatCollector.IncReqFailQueueOverflow();
                         callback(
                             TPlainStatus(EStatus::CLIENT_LIMITS_REACHED, "Requests queue limit reached"),
                             TConnection{nullptr},
-                            TStringType{ }); 
+                            TStringType{ });
                         return;
                     }
                     newVal = val + 1;
-                } while (!QueuedRequests_.compare_exchange_weak(val, newVal)); 
+                } while (!QueuedRequests_.compare_exchange_weak(val, newVal));
 
                 // UpdateAsync guarantee one update in progress for state
                 auto asyncResult = dbState->EndpointPool.UpdateAsync();
                 const bool needUpdateChannels = asyncResult.second;
                 asyncResult.first.Subscribe([this, callback = std::move(callback), needUpdateChannels, dbState, preferredEndpoint, endpointPolicy]
                     (const NThreading::TFuture<TEndpointUpdateResult>& future) mutable {
-                    --QueuedRequests_; 
+                    --QueuedRequests_;
                     const auto& updateResult = future.GetValue();
                     if (needUpdateChannels) {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
@@ -670,7 +670,7 @@ private:
                         callback(
                             TPlainStatus(discoveryStatus.Status, std::move(discoveryStatus.Issues)),
                             TConnection{nullptr},
-                            TStringType{ }); 
+                            TStringType{ });
                     }
                 });
             }
@@ -686,15 +686,15 @@ private:
     void EnqueueResponse(IObjectInQueue* action);
 
 private:
-    std::mutex ExtensionsLock_; 
+    std::mutex ExtensionsLock_;
     NMonitoring::TMetricRegistry* MetricRegistryPtr_ = nullptr;
 
     std::unique_ptr<IThreadPool> ResponseQueue_;
 
-    const TStringType DefaultDiscoveryEndpoint_; 
+    const TStringType DefaultDiscoveryEndpoint_;
     const bool EnableSsl_;
-    const TStringType CaCert_; 
-    const TStringType DefaultDatabase_; 
+    const TStringType CaCert_;
+    const TStringType DefaultDatabase_;
     std::shared_ptr<ICredentialsProviderFactory> DefaultCredentialsProviderFactory_;
     TDbDriverStateTracker StateTracker_;
     const EDiscoveryMode DefaultDiscoveryMode_;
@@ -705,7 +705,7 @@ private:
     const bool GRpcKeepAlivePermitWithoutCalls_;
     const ui64 MemoryQuota_;
 
-    std::atomic_int64_t QueuedRequests_; 
+    std::atomic_int64_t QueuedRequests_;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     NGrpc::TChannelPool ChannelPool_;
 #endif

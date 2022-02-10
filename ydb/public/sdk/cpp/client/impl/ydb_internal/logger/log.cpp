@@ -40,8 +40,8 @@ TLogFormatter GetPrefixLogFormatter(const TString& prefix) {
     };
 }
 
-TStringType GetDatabaseLogPrefix(const TStringType& database) { 
-    return "[" + database + "] "; 
+TStringType GetDatabaseLogPrefix(const TStringType& database) {
+    return "[" + database + "] ";
 }
 
 } // namespace NYdb

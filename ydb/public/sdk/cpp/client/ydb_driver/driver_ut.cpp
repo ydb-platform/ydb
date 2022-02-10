@@ -11,7 +11,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
-#include <atomic> 
+#include <atomic>
 
 #include <google/protobuf/text_format.h>
 
@@ -94,13 +94,13 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
                 .SetEndpoint("localhost:100"));
         auto client = NTable::TTableClient(driver);
 
-        std::atomic_int counter = 0; 
+        std::atomic_int counter = 0;
         std::function<void(const NTable::TAsyncCreateSessionResult& future)> handler =
             [&handler, &counter, client] (const NTable::TAsyncCreateSessionResult& future) mutable {
                 UNIT_ASSERT_EQUAL(future.GetValue().GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
                 UNIT_ASSERT_EXCEPTION(future.GetValue().GetSession(), NYdb::TContractViolation);
-                ++counter; 
-                if (counter.load() > 4) { 
+                ++counter;
+                if (counter.load() > 4) {
                     return;
                 }
 

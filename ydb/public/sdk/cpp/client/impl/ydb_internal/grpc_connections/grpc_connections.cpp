@@ -5,7 +5,7 @@
 
 namespace NYdb {
 
-bool IsTokenCorrect(const TStringType& in) { 
+bool IsTokenCorrect(const TStringType& in) {
     for (char c : in) {
         if (!(IsAsciiAlnum(c) || IsAsciiPunct(c) || c == ' '))
             return false;
@@ -13,7 +13,7 @@ bool IsTokenCorrect(const TStringType& in) {
     return true;
 }
 
-TStringType GetAuthInfo(TDbDriverStatePtr p) { 
+TStringType GetAuthInfo(TDbDriverStatePtr p) {
     auto token = p->CredentialsProvider->GetAuthInfo();
     if (!IsTokenCorrect(token)) {
         throw TContractViolation("token is incorrect, iligal characters found");
@@ -21,13 +21,13 @@ TStringType GetAuthInfo(TDbDriverStatePtr p) {
     return token;
 }
 
-void SetDatabaseHeader(TCallMeta& meta, const TStringType& database) { 
+void SetDatabaseHeader(TCallMeta& meta, const TStringType& database) {
     // See TDbDriverStateTracker::GetDriverState to find place where we do quote non ASCII characters
     meta.Aux.push_back({YDB_DATABASE_HEADER, database});
 }
 
-TStringType CreateSDKBuildInfo() { 
-    return TStringType("ydb-cpp-sdk/") + GetSdkSemver(); 
+TStringType CreateSDKBuildInfo() {
+    return TStringType("ydb-cpp-sdk/") + GetSdkSemver();
 }
 
 template<class TDerived>
@@ -53,8 +53,8 @@ protected:
             gpr_now(GPR_CLOCK_MONOTONIC),
             gpr_time_from_micros(timeout.MicroSeconds(), GPR_TIMESPAN));
 
-        { 
-            std::lock_guard guard(Mutex); 
+        {
+            std::lock_guard guard(Mutex);
             Context = context;
             Alarm.Set(context->CompletionQueue(), deadline, OnAlarmTag.Prepare());
         }
@@ -66,8 +66,8 @@ protected:
 
 private:
     void OnAlarm(bool ok) {
-        { 
-            std::lock_guard guard(Mutex); 
+        {
+            std::lock_guard guard(Mutex);
             // Break circular dependencies
             Context.reset();
         }
@@ -76,7 +76,7 @@ private:
     }
 
 private:
-    std::mutex Mutex; 
+    std::mutex Mutex;
     IQueueClientContextPtr Context;
     grpc::Alarm Alarm;
 
@@ -152,29 +152,29 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , MemoryQuota_(params->GetMemoryQuota())
     , QueuedRequests_(0)
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    , ChannelPool_(params->GetTcpKeepAliveSettings(), params->GetSocketIdleTimeout()) 
+    , ChannelPool_(params->GetTcpKeepAliveSettings(), params->GetSocketIdleTimeout())
 #endif
     , GRpcClientLow_(params->GetNetworkThreadsNum())
     , Log(params->GetLog())
 {
-#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL 
-    if (params->GetSocketIdleTimeout() != TDuration::Max()) { 
-        auto channelPoolUpdateWrapper = [this] 
-            (NYql::TIssues&&, EStatus status) mutable 
-        { 
-            if (status != EStatus::SUCCESS) { 
-                return false; 
-            } 
- 
-            ChannelPool_.DeleteExpiredStubsHolders(); 
-            return true; 
-        }; 
-        AddPeriodicTask(channelPoolUpdateWrapper, params->GetSocketIdleTimeout() * 0.1); 
-    } 
-#endif 
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+    if (params->GetSocketIdleTimeout() != TDuration::Max()) {
+        auto channelPoolUpdateWrapper = [this]
+            (NYql::TIssues&&, EStatus status) mutable
+        {
+            if (status != EStatus::SUCCESS) {
+                return false;
+            }
+
+            ChannelPool_.DeleteExpiredStubsHolders();
+            return true;
+        };
+        AddPeriodicTask(channelPoolUpdateWrapper, params->GetSocketIdleTimeout() * 0.1);
+    }
+#endif
     //TAdaptiveThreadPool ignores params
     ResponseQueue_->Start(params->GetClientThreadsNum(), params->GetMaxQueuedResponses());
-    if (!DefaultDatabase_.empty()) { 
+    if (!DefaultDatabase_.empty()) {
         DefaultState_ = StateTracker_.GetDriverState(
             DefaultDatabase_,
             DefaultDiscoveryEndpoint_,
@@ -263,8 +263,8 @@ void TGRpcConnectionsImpl::ScheduleCallback(
 }
 
 TDbDriverStatePtr TGRpcConnectionsImpl::GetDriverState(
-    const TMaybe<TStringType>& database, 
-    const TMaybe<TStringType>& discoveryEndpoint, 
+    const TMaybe<TStringType>& database,
+    const TMaybe<TStringType>& discoveryEndpoint,
     const TMaybe<EDiscoveryMode>& discoveryMode,
     const TMaybe<bool>& enableSsl,
     const TMaybe<std::shared_ptr<ICredentialsProviderFactory>>& credentialsProviderFactory
@@ -346,8 +346,8 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
     });
 }
 
-TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult result, const TStringType& database) { 
-    std::lock_guard lock(ExtensionsLock_); 
+TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult result, const TStringType& database) {
+    std::lock_guard lock(ExtensionsLock_);
     if (!DiscoveryMutatorCb)
         return result;
 
@@ -372,8 +372,8 @@ TBalancingSettings TGRpcConnectionsImpl::GetBalancingSettings() const {
 }
 
 bool TGRpcConnectionsImpl::StartStatCollecting(NMonitoring::IMetricRegistry* sensorsRegistry) {
-    { 
-        std::lock_guard lock(ExtensionsLock_); 
+    {
+        std::lock_guard lock(ExtensionsLock_);
         if (MetricRegistryPtr_) {
             return false;
         }
@@ -390,8 +390,8 @@ bool TGRpcConnectionsImpl::StartStatCollecting(NMonitoring::IMetricRegistry* sen
 }
 
 NMonitoring::TMetricRegistry* TGRpcConnectionsImpl::GetMetricRegistry() {
-    std::lock_guard lock(ExtensionsLock_); 
-    return MetricRegistryPtr_; 
+    std::lock_guard lock(ExtensionsLock_);
+    return MetricRegistryPtr_;
 }
 
 void TGRpcConnectionsImpl::RegisterExtension(IExtension* extension) {
@@ -403,7 +403,7 @@ void TGRpcConnectionsImpl::RegisterExtensionApi(IExtensionApi* api) {
 }
 
 void TGRpcConnectionsImpl::SetDiscoveryMutator(IDiscoveryMutatorApi::TMutatorCb&& cb) {
-    std::lock_guard lock(ExtensionsLock_); 
+    std::lock_guard lock(ExtensionsLock_);
     DiscoveryMutatorCb = std::move(cb);
 }
 

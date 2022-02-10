@@ -8,7 +8,7 @@
 
 #include <util/generic/string.h>
 
-#include <mutex> 
+#include <mutex>
 #include <memory>
 
 namespace NYdb {
@@ -71,7 +71,7 @@ private:
     std::vector<TString> Queries_;
     std::unique_ptr<TSession> TargetSession_;
 
-    mutable std::mutex Lock_; 
+    mutable std::mutex Lock_;
     NThreading::TPromise<ui64> Promise_;
     NThreading::TFuture<void> Finished_;
 };

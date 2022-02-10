@@ -1,7 +1,7 @@
 #pragma once
 
-#include <atomic> 
-#include <shared_mutex> 
+#include <atomic>
+#include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -11,7 +11,7 @@
 namespace NYdb {
 
 struct TEndpointRecord {
-    TStringType Endpoint; 
+    TStringType Endpoint;
     i32 Priority;
     TStringType SslTargetNameOverride;
 
@@ -50,7 +50,7 @@ public:
     TEndpointElectorSafe() = default;
 
     // Sets new endpoints, returns removed
-    std::vector<TStringType> SetNewState(std::vector<TEndpointRecord>&& records); 
+    std::vector<TStringType> SetNewState(std::vector<TEndpointRecord>&& records);
 
     // Allows to get stats
     void SetStatCollector(const NSdkStats::TStatCollector::TEndpointElectorStatCollector& endpointStatCollector);
@@ -59,17 +59,17 @@ public:
     TEndpointRecord GetEndpoint(const TStringType& preferredEndpoint) const;
 
     // Move endpoint to the end
-    void PessimizeEndpoint(const TStringType& endpoint); 
+    void PessimizeEndpoint(const TStringType& endpoint);
 
     // Returns % of pessimized endpoints
     int GetPessimizationRatio() const;
 
     // Associate object with the endpoint
     // Returns false if no required endpoint, or object already registered
-    bool LinkObjToEndpoint(const TStringType& endpoint, TEndpointObj* obj, const void* tag); 
+    bool LinkObjToEndpoint(const TStringType& endpoint, TEndpointObj* obj, const void* tag);
 
     // Perform some action for each object group associated with endpoint
-    using THandleCb = std::function<void(const TStringType& host, const IObjRegistryHandle& handle)>; 
+    using THandleCb = std::function<void(const TStringType& host, const IObjRegistryHandle& handle)>;
     void ForEachEndpoint(const THandleCb& cb, i32 minPriority, i32 maxPriority, const void* tag) const;
 
     class TObjRegistry;
@@ -82,11 +82,11 @@ private:
     };
 
 private:
-    mutable std::shared_mutex Mutex_; 
+    mutable std::shared_mutex Mutex_;
     std::vector<TEndpointRecord> Records_;
     std::unordered_map<TStringType, TKnownEndpoint> KnownEndpoints_;
     i32 BestK_ = -1;
-    std::atomic_int PessimizationRatio_ = 0; 
+    std::atomic_int PessimizationRatio_ = 0;
     NSdkStats::TAtomicCounter<NMonitoring::TIntGauge> EndpointCountGauge_;
     NSdkStats::TAtomicCounter<NMonitoring::TIntGauge> PessimizationRatioGauge_;
     NSdkStats::TAtomicCounter<NMonitoring::TIntGauge> EndpointActiveGauge_;

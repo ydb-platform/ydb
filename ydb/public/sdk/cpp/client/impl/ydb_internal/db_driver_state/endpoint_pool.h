@@ -9,8 +9,8 @@
 
 #include <library/cpp/threading/future/future.h>
 
-#include <mutex> 
- 
+#include <mutex>
+
 namespace NYdb {
 
 struct TListEndpointsResult {
@@ -22,7 +22,7 @@ using TAsyncListEndpointsResult = NThreading::TFuture<TListEndpointsResult>;
 using TListEndpointsResultProvider = std::function<TAsyncListEndpointsResult()>;
 
 struct TEndpointUpdateResult {
-    std::vector<TStringType> Removed; 
+    std::vector<TStringType> Removed;
     TPlainStatus DiscoveryStatus;
 };
 
@@ -33,9 +33,9 @@ public:
     std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync();
     TEndpointRecord GetEndpoint(const TStringType& preferredEndpoint) const;
     TDuration TimeSinceLastUpdate() const;
-    void BanEndpoint(const TStringType& endpoint); 
+    void BanEndpoint(const TStringType& endpoint);
     int GetPessimizationRatio();
-    bool LinkObjToEndpoint(const TStringType& endpoint, TEndpointObj* obj, const void* tag); 
+    bool LinkObjToEndpoint(const TStringType& endpoint, TEndpointObj* obj, const void* tag);
     void ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     void ForEachLocalEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     void ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
@@ -45,14 +45,14 @@ public:
     static constexpr i32 GetLocalityShift();
 
 private:
-    TStringType GetPreferedLocation(const TStringType& selfLocation); 
+    TStringType GetPreferedLocation(const TStringType& selfLocation);
 
 private:
     TListEndpointsResultProvider Provider_;
-    std::mutex Mutex_; 
+    std::mutex Mutex_;
     TEndpointElectorSafe Elector_;
     NThreading::TPromise<TEndpointUpdateResult> DiscoveryPromise_;
-    std::atomic_uint64_t LastUpdateTime_; 
+    std::atomic_uint64_t LastUpdateTime_;
     const TBalancingSettings BalancingSettings_;
 
     NSdkStats::TStatCollector* StatCollector_ = nullptr;

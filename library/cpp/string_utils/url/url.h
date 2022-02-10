@@ -125,11 +125,11 @@ void GetSchemeHostAndPort(const TStringBuf url, TStringBuf& scheme, TStringBuf& 
 
 Y_PURE_FUNCTION
 TStringBuf GetPathAndQuery(const TStringBuf url, bool trimFragment = true) noexcept;
-/** 
- * Extracts host from url and cuts http(https) protocol prefix and port if any. 
- * @param[in] url   any URL 
- * @return          host without port and http(https) prefix. 
- */ 
+/**
+ * Extracts host from url and cuts http(https) protocol prefix and port if any.
+ * @param[in] url   any URL
+ * @return          host without port and http(https) prefix.
+ */
 Y_PURE_FUNCTION
 TStringBuf GetOnlyHost(const TStringBuf url) noexcept;
 

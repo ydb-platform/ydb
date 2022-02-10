@@ -62,7 +62,7 @@ namespace {
         }
 
         bool OnMapKey(const TStringBuf& v) override {
-            auto iv = P.AppendCString(v);
+            auto iv = P.AppendCString(v); 
 
             B.Key(iv.data(), iv.size());
 

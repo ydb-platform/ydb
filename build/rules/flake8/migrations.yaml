@@ -1262,7 +1262,7 @@ migrations:
     - alice/uniproxy/bin/send-digest
     - alice/uniproxy/tools/perf_results_parser
     - antirobot/tools/prepare_requests_cbb
-    - browser/infra/services/ci/backend/flakiness/migrations
+    - browser/infra/services/ci/backend/flakiness/migrations 
     - cv/imageproc/ocr/tools/nirvana/captcha_renderer
     - cv/short2long/nirvana/lib
     - cv/short2long/training/yt_load_highlights

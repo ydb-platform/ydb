@@ -1177,7 +1177,7 @@ RECURSE(
     yfinance
     youtube-dl
     yoyo-migrations
-    yt-dlp 
+    yt-dlp
     zake
     zeep
     zero-downtime-migrations

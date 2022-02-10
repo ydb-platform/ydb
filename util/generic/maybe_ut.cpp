@@ -156,58 +156,58 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
         x = 7;
         UNIT_ASSERT(m == 7);
     }
- 
+
     Y_UNIT_TEST(TestMove) {
-        struct TMovable { 
-            int Flag = 0; 
- 
-            TMovable(int flag) 
-                : Flag(flag) 
-            { 
-            } 
- 
-            TMovable(const TMovable&) = delete; 
-            TMovable& operator=(const TMovable&) = delete; 
- 
-            TMovable(TMovable&& other) { 
-                std::swap(Flag, other.Flag); 
-            } 
-            TMovable& operator=(TMovable&& other) { 
-                std::swap(Flag, other.Flag); 
-                return *this; 
-            } 
-        }; 
- 
-        // Move ctor from value 
-        TMovable value1(1); 
-        TMaybe<TMovable> m1(std::move(value1)); 
-        UNIT_ASSERT(m1.Defined()); 
-        UNIT_ASSERT_VALUES_EQUAL(m1->Flag, 1); 
- 
-        // Move assignment from value 
-        TMovable value2(2); 
-        TMaybe<TMovable> m2; 
-        m2 = std::move(value2); 
-        UNIT_ASSERT(m2.Defined()); 
-        UNIT_ASSERT_VALUES_EQUAL(m2->Flag, 2); 
- 
-        // Move ctor from maybe 
-        TMaybe<TMovable> m3(std::move(m1)); 
-        UNIT_ASSERT(m3.Defined()); 
-        UNIT_ASSERT_VALUES_EQUAL(m3->Flag, 1); 
- 
-        // Move assignment from maybe 
-        TMaybe<TMovable> m4; 
-        m4 = std::move(m2); 
-        UNIT_ASSERT(m4.Defined()); 
-        UNIT_ASSERT_VALUES_EQUAL(m4->Flag, 2); 
+        struct TMovable {
+            int Flag = 0;
+
+            TMovable(int flag)
+                : Flag(flag)
+            {
+            }
+
+            TMovable(const TMovable&) = delete;
+            TMovable& operator=(const TMovable&) = delete;
+
+            TMovable(TMovable&& other) {
+                std::swap(Flag, other.Flag);
+            }
+            TMovable& operator=(TMovable&& other) {
+                std::swap(Flag, other.Flag);
+                return *this;
+            }
+        };
+
+        // Move ctor from value
+        TMovable value1(1);
+        TMaybe<TMovable> m1(std::move(value1));
+        UNIT_ASSERT(m1.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(m1->Flag, 1);
+
+        // Move assignment from value
+        TMovable value2(2);
+        TMaybe<TMovable> m2;
+        m2 = std::move(value2);
+        UNIT_ASSERT(m2.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(m2->Flag, 2);
+
+        // Move ctor from maybe
+        TMaybe<TMovable> m3(std::move(m1));
+        UNIT_ASSERT(m3.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(m3->Flag, 1);
+
+        // Move assignment from maybe
+        TMaybe<TMovable> m4;
+        m4 = std::move(m2);
+        UNIT_ASSERT(m4.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(m4->Flag, 2);
 
         // Move value from temporary maybe instance
         TMovable o5 = *MakeMaybe<TMovable>(5);
         UNIT_ASSERT_VALUES_EQUAL(o5.Flag, 5);
         TMovable o6 = MakeMaybe<TMovable>(6).GetRef();
         UNIT_ASSERT_VALUES_EQUAL(o6.Flag, 6);
-    } 
+    }
 
     Y_UNIT_TEST(TestCast) {
         // Undefined maybe casts to undefined maybe

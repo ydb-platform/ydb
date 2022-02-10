@@ -508,7 +508,7 @@ public:
     int Add(const chunk_id, TMaybe<T, TPolicy>* pData) {
         TMaybe<T, TPolicy>& data = *pData;
         if (IsReading()) {
-            bool defined = false; 
+            bool defined = false;
             Add(1, &defined);
             if (defined) {
                 data = T();

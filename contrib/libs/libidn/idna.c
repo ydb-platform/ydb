@@ -77,7 +77,7 @@ static char* STRCAT(char* destination, const char* source) {
  * @in: input array with unicode code points.
  * @inlen: length of input array with unicode code points.
  * @out: output zero terminated string that must have room for at
- *       least IDNA_LABEL_MAX_LENGTH characters plus the terminating zero.
+ *       least IDNA_LABEL_MAX_LENGTH characters plus the terminating zero. 
  * @flags: an #Idna_flags value, e.g., %IDNA_ALLOW_UNASSIGNED or
  *   %IDNA_USE_STD3_ASCII_RULES.
  *
@@ -230,13 +230,13 @@ step3:
 	if (src[i] > 0x7F)
 	  inasciirange = 0;
 	/* copy string to output buffer if we are about to skip to step8 */
-	if (i < IDNA_LABEL_MAX_LENGTH)
+	if (i < IDNA_LABEL_MAX_LENGTH) 
 	  out[i] = src[i];
       }
-    if (i < IDNA_LABEL_MAX_LENGTH + 1)
+    if (i < IDNA_LABEL_MAX_LENGTH + 1) 
       out[i] = '\0';
     else
-      out[IDNA_LABEL_MAX_LENGTH] = 0;
+      out[IDNA_LABEL_MAX_LENGTH] = 0; 
     if (inasciirange)
       goto step8;
   }
@@ -268,7 +268,7 @@ step3:
   for (len = 0; src[len]; len++)
     ;
   src[len] = '\0';
-  outlen = IDNA_LABEL_MAX_LENGTH - STRLEN (IDNA_ACE_PREFIX);
+  outlen = IDNA_LABEL_MAX_LENGTH - STRLEN (IDNA_ACE_PREFIX); 
   rc = punycode_encode (len, src, NULL,
 			&outlen, &out[STRLEN (IDNA_ACE_PREFIX)]);
   if (rc != PUNYCODE_SUCCESS)
@@ -285,13 +285,13 @@ step3:
   memcpy (out, IDNA_ACE_PREFIX, STRLEN (IDNA_ACE_PREFIX));
 
   /*
-   * 8. Verify that the number of code points is in the range 1 to IDNA_LABEL_MAX_LENGTH
+   * 8. Verify that the number of code points is in the range 1 to IDNA_LABEL_MAX_LENGTH 
    * inclusive (0 is excluded).
    */
 
 step8:
   free (src);
-  if (STRLEN (out) < 1 || STRLEN (out) > IDNA_LABEL_MAX_LENGTH - 1)
+  if (STRLEN (out) < 1 || STRLEN (out) > IDNA_LABEL_MAX_LENGTH - 1) 
     return IDNA_INVALID_LENGTH;
 
   return IDNA_SUCCESS;
@@ -303,7 +303,7 @@ idna_to_unicode_internal (char *utf8in,
 			  uint32_t * out, size_t * outlen, int flags)
 {
   int rc;
-  char tmpout[IDNA_LABEL_MAX_LENGTH + 1];
+  char tmpout[IDNA_LABEL_MAX_LENGTH + 1]; 
   size_t utf8len = STRLEN (utf8in) + 1;
   size_t addlen = 0;
 
@@ -857,7 +857,7 @@ idna_to_unicode_lzlz (const char *input, char **output, int flags)
  * @IDNA_CONTAINS_MINUS: For IDNA_USE_STD3_ASCII_RULES, indicate that
  *   the string contains a leading or trailing hyphen-minus (U+002D).
  * @IDNA_INVALID_LENGTH: The final output string is not within the
- *   (inclusive) range 1 to IDNA_LABEL_MAX_LENGTH characters.
+ *   (inclusive) range 1 to IDNA_LABEL_MAX_LENGTH characters. 
  * @IDNA_NO_ACE_PREFIX: The string does not contain the ACE prefix
  *   (for ToUnicode).
  * @IDNA_ROUNDTRIP_VERIFY_ERROR: The ToASCII operation on output

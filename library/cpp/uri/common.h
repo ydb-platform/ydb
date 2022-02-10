@@ -356,10 +356,10 @@ namespace NUri {
             FeaturesCheckSpecialChar = 0 | FeatureEncodeSpace | FeatureEncodeCntrl | FeatureEncodePercent,
 
             FeaturesEncodePChar = 0 | FeatureUpperEncoded | FeaturesEncodeDecode | FeaturesCheckSpecialChar,
-
+ 
             // http://wiki.yandex-team.ru/robot/newDesign/dups/normolization
             FeaturesRecommended = 0 | FeatureSchemeKnown | FeatureRemoteOnly | FeatureToLower | FeatureCheckHost | FeatureConvertHostIDN | FeatureHashBangToEscapedFragment | FeatureEncodeSpace | FeatureEncodeCntrl | FeatureEncodeExtendedASCII | FeatureUpperEncoded | FeatureDecodeUnreserved | FeaturePathOperation | FeaturePathStripRootParent,
-
+ 
             FeaturesRobot = FeaturesRecommended
         };
     };

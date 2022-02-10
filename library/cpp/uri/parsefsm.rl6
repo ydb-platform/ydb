@@ -145,7 +145,7 @@
     ext_space     = " " >{ REQ(fpc, FeatureEncodeSpace) };
     ext_cntrl     = cntrl >{ REQ(fpc, FeatureEncodeCntrl) };
 
-    pct_maybe_encoded = PCT (HEXDIG | HEXNUM)? ;
+    pct_maybe_encoded = PCT (HEXDIG | HEXNUM)? ; 
     ext_safe      = unreserved
                   | pct_maybe_encoded
                   | sub_delims

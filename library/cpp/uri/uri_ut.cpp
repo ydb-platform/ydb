@@ -654,15 +654,15 @@ namespace NUri {
 #undef ENC
             }
             {
-#define DEC "независимая-экспертиза-оценка-ущерба-авто-дтп.рф"
-#define PNC "xn--------3veabbbbjgk5abecc3afsad2cg8bvq2alouolqf5brd3a4jzftgqd.xn--p1ai"
+#define DEC "независимая-экспертиза-оценка-ущерба-авто-дтп.рф" 
+#define PNC "xn--------3veabbbbjgk5abecc3afsad2cg8bvq2alouolqf5brd3a4jzftgqd.xn--p1ai" 
                 TTest test = {
                     "http://" DEC "/", TParseFlags(TFeature::FeaturesRobot), TState::ParsedOK, "http", "", "", PNC, 80, "/", "", ""};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" PNC "/");
-#undef PNC
-#undef DEC
+#undef PNC 
+#undef DEC 
             }
         }
 

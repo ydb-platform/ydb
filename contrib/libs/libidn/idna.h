@@ -61,10 +61,10 @@ extern "C"
 #  define IDNA_ACE_PREFIX "xn--"
 # endif
 
-# ifndef IDNA_LABEL_MAX_LENGTH
-#  define IDNA_LABEL_MAX_LENGTH 255
-# endif
-
+# ifndef IDNA_LABEL_MAX_LENGTH 
+#  define IDNA_LABEL_MAX_LENGTH 255 
+# endif 
+ 
   extern const char *idna_strerror (Idna_rc rc);
 
   /* Core functions */

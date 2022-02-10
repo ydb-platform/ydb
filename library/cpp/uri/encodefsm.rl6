@@ -20,16 +20,16 @@ namespace NEncode {
             > { HexReset(); }
             % { DoHex(); };
 
-    bad_escaped = ( "%" hex )
-                % {
-                      DoSym(*(fpc - 2));
-                      DoSym(*(fpc - 1));
-                  };
+    bad_escaped = ( "%" hex ) 
+                % { 
+                      DoSym(*(fpc - 2)); 
+                      DoSym(*(fpc - 1)); 
+                  }; 
 
-    sym = (any - bad_escaped - escaped) %{ DoSym(*(fpc - 1)); };
+    sym = (any - bad_escaped - escaped) %{ DoSym(*(fpc - 1)); }; 
 
-    main := ( escaped | bad_escaped | sym )**;
-
+    main := ( escaped | bad_escaped | sym )**; 
+ 
     write data;
 }%%
 

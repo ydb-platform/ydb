@@ -7,7 +7,7 @@
 #include <libxml/xpathInternals.h>
 #include <libxml/xmlsave.h>
 #include <libxml/uri.h>
-#include <libxml/xmlschemas.h> 
+#include <libxml/xmlschemas.h>
 
 template <class T, void (*DestroyFun)(T*)>
 struct TFunctionDestroy {
@@ -44,11 +44,11 @@ namespace NXml {
     //    xmlSchemaPtr schema;
     DEF_HOLDER(xmlSchema, xmlSchemaFree);
     DEF_PTR(xmlSchema, xmlSchemaFree);
- 
+
     //    xmlSchemaValidCtxt ctxt;
     DEF_HOLDER(xmlSchemaValidCtxt, xmlSchemaFreeValidCtxt);
     DEF_PTR(xmlSchemaValidCtxt, xmlSchemaFreeValidCtxt);
- 
+
     // xmlSaveCtxtPtr
     inline void xmlFreeSave(xmlSaveCtxt* c) {
         // returns int
@@ -56,7 +56,7 @@ namespace NXml {
     }
     DEF_HOLDER(xmlSaveCtxt, xmlFreeSave);
     DEF_PTR(xmlSaveCtxt, xmlFreeSave);
- 
+
     DEF_PTR(xmlURI, xmlFreeURI);
     DEF_PTR(xmlNode, xmlFreeNode);
     DEF_PTR(xmlParserCtxt, xmlFreeParserCtxt);

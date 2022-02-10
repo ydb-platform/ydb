@@ -8,6 +8,6 @@ RECURSE(
     parslib/ut
     sax
     sax/ut
-    validator 
-    validator/ut 
+    validator
+    validator/ut
 )

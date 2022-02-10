@@ -24,9 +24,9 @@ SRCS(
     extra/glyphs.cpp
     re_lexer.cpp
     re_parser.y
-    read_unicode.cpp
+    read_unicode.cpp 
     extraencodings.cpp
-    approx_matching.cpp
+    approx_matching.cpp 
     half_final_fsm.cpp
     minimize.h
 )

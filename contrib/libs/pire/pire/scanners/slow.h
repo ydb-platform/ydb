@@ -24,7 +24,7 @@
 #ifndef PIRE_SCANNERS_SLOW_H
 #define PIRE_SCANNERS_SLOW_H
 
-#include <contrib/libs/pire/pire/approx_matching.h>
+#include <contrib/libs/pire/pire/approx_matching.h> 
 #include <contrib/libs/pire/pire/partition.h>
 #include <contrib/libs/pire/pire/vbitset.h>
 #include <contrib/libs/pire/pire/fsm.h>
@@ -250,12 +250,12 @@ public:
 		}
 	}
 
-	explicit SlowScanner(Fsm& fsm, bool needActions = false, bool removeEpsilons = true, size_t distance = 0)
+	explicit SlowScanner(Fsm& fsm, bool needActions = false, bool removeEpsilons = true, size_t distance = 0) 
 		: need_actions(needActions)
 	{
-		if (distance) {
-			fsm = CreateApproxFsm(fsm, distance);
-		}
+		if (distance) { 
+			fsm = CreateApproxFsm(fsm, distance); 
+		} 
 		if (removeEpsilons)
 			fsm.RemoveEpsilons();
 		fsm.Sparse(!removeEpsilons);
@@ -357,7 +357,7 @@ private:
 
 	bool need_actions;
 	TVector<TVector<Action>> m_actionsvec;
-	static const SlowScanner& Null();
+	static const SlowScanner& Null(); 
 
 	template<class T> void alloc(T*& p, size_t size)
 	{
@@ -416,17 +416,17 @@ private:
 	friend void BuildScanner<SlowScanner>(const Fsm&, SlowScanner&);
 };
 
-template<>
-inline SlowScanner Fsm::Compile(size_t distance) {
-	return SlowScanner(*this, false, true, distance);
-}
-
-inline const SlowScanner& SlowScanner::Null()
-{
-	static const SlowScanner n = Fsm::MakeFalse().Compile<SlowScanner>();
-	return n;
-}
-
+template<> 
+inline SlowScanner Fsm::Compile(size_t distance) { 
+	return SlowScanner(*this, false, true, distance); 
+} 
+ 
+inline const SlowScanner& SlowScanner::Null() 
+{ 
+	static const SlowScanner n = Fsm::MakeFalse().Compile<SlowScanner>(); 
+	return n; 
+} 
+ 
 #ifndef PIRE_DEBUG
 /// A specialization of Run(), since its state is much heavier than other ones
 /// and we thus want to avoid copying states.

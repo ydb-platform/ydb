@@ -37,11 +37,11 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         UNIT_ASSERT(!TMatcher(TFsm("qw", TFsm::TOptions().SetCaseInsensitive(false))).Match("Qw").Final());
     }
 
-    Y_UNIT_TEST(UnicodeCase) {
-        UNIT_ASSERT(TMatcher(TFsm("\\x{61}\\x{62}", TFsm::TOptions().SetCaseInsensitive(true))).Match("Ab").Final());
-        UNIT_ASSERT(!TMatcher(TFsm("\\x{61}\\x{62}", TFsm::TOptions().SetCaseInsensitive(false))).Match("Ab").Final());
-    }
-
+    Y_UNIT_TEST(UnicodeCase) { 
+        UNIT_ASSERT(TMatcher(TFsm("\\x{61}\\x{62}", TFsm::TOptions().SetCaseInsensitive(true))).Match("Ab").Final()); 
+        UNIT_ASSERT(!TMatcher(TFsm("\\x{61}\\x{62}", TFsm::TOptions().SetCaseInsensitive(false))).Match("Ab").Final()); 
+    } 
+ 
     Y_UNIT_TEST(Utf) {
         NRegExp::TFsmBase::TOptions opts;
         opts.Charset = CODES_UTF8;

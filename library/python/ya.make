@@ -63,7 +63,7 @@ RECURSE(
     django_celery_monitoring
     django_russian
     django_template_common
-    django_tools_log_context
+    django_tools_log_context 
     dssclient
     dump_dict
     edit_distance
@@ -190,7 +190,7 @@ RECURSE(
     toloka-kit
     toloka-airflow
     toloka-prefect
-    tools_structured_logs
+    tools_structured_logs 
     thread
     thread/test
     tskv

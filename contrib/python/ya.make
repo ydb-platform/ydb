@@ -263,24 +263,24 @@ RECURSE(
     django-js-asset
     django-json-widget
     django-markwhat
-    django-model-choices
+    django-model-choices 
     django-model-utils
     django-modeladmin-reorder
     django-modeltranslation
     django-moderation
     django-mptt
     django-mptt-admin
-    django-nested-inline
+    django-nested-inline 
     django-netfields
     django-ninja
-    django-object-actions
+    django-object-actions 
     django-opentracing
     django-partial-index
     django-pdb
     django-phonenumbers
     django-picklefield
     django-post-office
-    django-postgrespool2
+    django-postgrespool2 
     django-proxy-storage
     django-query-exchange
     django-redis

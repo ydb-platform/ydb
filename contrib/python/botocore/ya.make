@@ -798,10 +798,10 @@ RESOURCE_FILES(
     #botocore/data/schemas/2019-12-02/waiters-2.json
     #botocore/data/sdb/2009-04-15/paginators-1.json
     #botocore/data/sdb/2009-04-15/service-2.json
-    botocore/data/secretsmanager/2017-10-17/examples-1.json
-    botocore/data/secretsmanager/2017-10-17/paginators-1.json
-    botocore/data/secretsmanager/2017-10-17/service-2.json
-    botocore/data/secretsmanager/2017-10-17/service-2.sdk-extras.json
+    botocore/data/secretsmanager/2017-10-17/examples-1.json 
+    botocore/data/secretsmanager/2017-10-17/paginators-1.json 
+    botocore/data/secretsmanager/2017-10-17/service-2.json 
+    botocore/data/secretsmanager/2017-10-17/service-2.sdk-extras.json 
     #botocore/data/securityhub/2018-10-26/paginators-1.json
     #botocore/data/securityhub/2018-10-26/service-2.json
     #botocore/data/serverlessrepo/2017-09-08/paginators-1.json

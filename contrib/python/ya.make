@@ -855,7 +855,7 @@ RECURSE(
     PySocks
     pystan
     pystan/pystan_model
-    pysyncobj
+    pysyncobj 
     pyTelegramBotAPI
     pytest
     pytest-allure-adaptor
@@ -1117,7 +1117,7 @@ RECURSE(
     urllib3
     urlpy
     user-agents
-    uvicorn
+    uvicorn 
     uvloop
     uwsgi
     uwsgi/bin
@@ -1136,7 +1136,7 @@ RECURSE(
     Wand
     wasabi
     watchdog
-    watchgod
+    watchgod 
     wcwidth
     webargs
     webauthn

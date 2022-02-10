@@ -16,21 +16,21 @@ namespace protobuf {
 namespace compiler {
 namespace perlxs {
 
-inline bool HasFieldPresence(const FileDescriptor* file) {
-  return file->syntax() != FileDescriptor::SYNTAX_PROTO3;
-}
-
-bool HasHasMethod(const FieldDescriptor* field) {
-  if (HasFieldPresence(field->file())) {
-    // In proto1/proto2, every field has a has_$name$() method.
-    return true;
-  }
-  // For message types without true field presence, only fields with a message
-  // type have a has_$name$() method.
-  return field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE;
-}
-
-
+inline bool HasFieldPresence(const FileDescriptor* file) { 
+  return file->syntax() != FileDescriptor::SYNTAX_PROTO3; 
+} 
+ 
+bool HasHasMethod(const FieldDescriptor* field) { 
+  if (HasFieldPresence(field->file())) { 
+    // In proto1/proto2, every field has a has_$name$() method. 
+    return true; 
+  } 
+  // For message types without true field presence, only fields with a message 
+  // type have a has_$name$() method. 
+  return field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE; 
+} 
+ 
+ 
 PerlXSGenerator::PerlXSGenerator() {}
 PerlXSGenerator::~PerlXSGenerator() {}
 
@@ -766,7 +766,7 @@ PerlXSGenerator::GenerateMessageXSFieldAccessors(const FieldDescriptor* field,
 		  "\n"
 		  "  OUTPUT:\n"
 		  "    RETVAL\n");
-  } else if ( HasHasMethod(field) ) {
+  } else if ( HasHasMethod(field) ) { 
     printer.Print(vars,
 		  "I32\n"
 		  "has_$perlname$(svTHIS)\n"
@@ -1729,14 +1729,14 @@ PerlXSGenerator::StartFieldToHashref(const FieldDescriptor * field,
 		  "$i$ < msg$pdepth$->$cppname$_size(); $i$++ ) {\n");
   } else {
     vars["i"] = "";
-    if ( HasHasMethod(field) ) {
-        printer.Print(vars,
-              "if ( msg$pdepth$->has_$cppname$() ) {\n");
-    }
-    else {
-        printer.Print(vars,
-              "{\n");
-    }
+    if ( HasHasMethod(field) ) { 
+        printer.Print(vars, 
+              "if ( msg$pdepth$->has_$cppname$() ) {\n"); 
+    } 
+    else { 
+        printer.Print(vars, 
+              "{\n"); 
+    } 
   }
   printer.Indent();
 }

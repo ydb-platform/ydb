@@ -1,20 +1,20 @@
 #include "blob_recovery_impl.h"
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_queues.h>
-
+ 
 namespace NKikimr {
 
     void TBlobRecoveryActor::StartQueues() {
-        struct TQueueActorIdWrapper {
-            TQueueInfo Wrap(TActorId &&id) const {
-                return {std::move(id)};
-            }
-        };
+        struct TQueueActorIdWrapper { 
+            TQueueInfo Wrap(TActorId &&id) const { 
+                return {std::move(id)}; 
+            } 
+        }; 
         const NBackpressure::TQueueClientId clientId(NBackpressure::EQueueClientType::ReplJob,
             Info->GetTotalVDisksNum() + Info->GetOrderNumber(VCtx->ShortSelfVDisk)); // distinct queue client id
-        CreateQueuesForVDisks(Queues, SelfId(), Info, VCtx, Info->GetVDisks(), Counters,
-            clientId, NKikimrBlobStorage::EVDiskQueueId::GetLowRead, "PeerScrub",
-            TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA, TQueueActorIdWrapper());
+        CreateQueuesForVDisks(Queues, SelfId(), Info, VCtx, Info->GetVDisks(), Counters, 
+            clientId, NKikimrBlobStorage::EVDiskQueueId::GetLowRead, "PeerScrub", 
+            TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA, TQueueActorIdWrapper()); 
     }
 
     void TBlobRecoveryActor::StopQueues() {

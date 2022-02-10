@@ -1,24 +1,24 @@
-#include "actor.cpp"
-#include "events.h"
-#include "actorsystem.h"
-#include "executor_pool_basic.h"
-#include "scheduler_basic.h"
-#include "actor_bootstrapped.h"
-
+#include "actor.cpp" 
+#include "events.h" 
+#include "actorsystem.h" 
+#include "executor_pool_basic.h" 
+#include "scheduler_basic.h" 
+#include "actor_bootstrapped.h" 
+ 
 #include <library/cpp/actors/util/threadparkpad.h>
-#include <library/cpp/testing/unittest/registar.h>
-
+#include <library/cpp/testing/unittest/registar.h> 
+ 
 #include <util/generic/algorithm.h>
 #include <util/system/atomic.h>
 #include <util/system/rwlock.h>
 #include <util/system/hp_timer.h>
-
-using namespace NActors;
-
+ 
+using namespace NActors; 
+ 
 struct TTestEndDecorator : TDecorator {
     TThreadParkPad* Pad;
     TAtomic* ActorsAlive;
-
+ 
     TTestEndDecorator(THolder<IActor>&& actor, TThreadParkPad* pad, TAtomic* actorsAlive)
         : TDecorator(std::move(actor))
         , Pad(pad)
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     public:
         static constexpr auto ActorActivityType() {
             return ACTORLIB_COMMON;
-        }
+        } 
 
         TSendReceiveActor(double* elapsedTime, TActorId receiver, bool allocation, ERole role, ui32 neighbours = 0)
             : EventsCounter(TotalEventsAmount)
@@ -108,8 +108,8 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         bool AllocatesMemory;
         ERole Role;
         ui32 MailboxNeighboursCount;
-    };
-
+    }; 
+ 
     void AddBasicPool(THolder<TActorSystemSetup>& setup, ui32 threads, bool activateEveryEvent) {
         TBasicExecutorPoolConfig basic;
         basic.PoolId = setup->GetExecutorsCount();
@@ -482,90 +482,90 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
 }
 
 Y_UNIT_TEST_SUITE(TestDecorator) {
-    struct TPingDecorator : TDecorator {
-        TAutoPtr<IEventHandle> SavedEvent = nullptr;
+    struct TPingDecorator : TDecorator { 
+        TAutoPtr<IEventHandle> SavedEvent = nullptr; 
         ui64* Counter;
-
+ 
         TPingDecorator(THolder<IActor>&& actor, ui64* counter)
-            : TDecorator(std::move(actor))
-            , Counter(counter)
-        {
-        }
-
+            : TDecorator(std::move(actor)) 
+            , Counter(counter) 
+        { 
+        } 
+ 
         bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) override {
-            *Counter += 1;
-            if (ev->Type != TEvents::THelloWorld::Pong) {
-                TAutoPtr<IEventHandle> pingEv = new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPing());
-                SavedEvent = ev;
-                Actor->Receive(pingEv, ctx);
-            } else {
-                Actor->Receive(SavedEvent, ctx);
-            }
-            return false;
-        }
-    };
-
-    struct TPongDecorator : TDecorator {
+            *Counter += 1; 
+            if (ev->Type != TEvents::THelloWorld::Pong) { 
+                TAutoPtr<IEventHandle> pingEv = new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPing()); 
+                SavedEvent = ev; 
+                Actor->Receive(pingEv, ctx); 
+            } else { 
+                Actor->Receive(SavedEvent, ctx); 
+            } 
+            return false; 
+        } 
+    }; 
+ 
+    struct TPongDecorator : TDecorator { 
         ui64* Counter;
-
+ 
         TPongDecorator(THolder<IActor>&& actor, ui64* counter)
-            : TDecorator(std::move(actor))
-            , Counter(counter)
-        {
-        }
+            : TDecorator(std::move(actor)) 
+            , Counter(counter) 
+        { 
+        } 
 
         bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
-            *Counter += 1;
-            if (ev->Type == TEvents::THelloWorld::Ping) {
-                TAutoPtr<IEventHandle> pongEv = new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPong());
-                Send(SelfId(), new TEvents::TEvPong());
-                return false;
-            }
-            return true;
-        }
-    };
-
+            *Counter += 1; 
+            if (ev->Type == TEvents::THelloWorld::Ping) { 
+                TAutoPtr<IEventHandle> pongEv = new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPong()); 
+                Send(SelfId(), new TEvents::TEvPong()); 
+                return false; 
+            } 
+            return true; 
+        } 
+    }; 
+ 
     struct TTestActor : TActorBootstrapped<TTestActor> {
         static constexpr char ActorName[] = "TestActor";
 
-        void Bootstrap()
-        {
+        void Bootstrap() 
+        { 
             const auto& activityTypeIndex = GetActivityType();
             Y_ENSURE(activityTypeIndex < GetActivityTypeCount());
             Y_ENSURE(GetActivityTypeName(activityTypeIndex) == "TestActor");
-            PassAway();
-        }
-    };
+            PassAway(); 
+        } 
+    }; 
 
-    Y_UNIT_TEST(Basic) {
-        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
-        setup->NodeId = 0;
-        setup->ExecutorsCount = 1;
-        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
-        for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
-            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic");
-        }
-        setup->Scheduler = new TBasicSchedulerThread;
-
-        TActorSystem actorSystem(setup);
-        actorSystem.Start();
-
+    Y_UNIT_TEST(Basic) { 
+        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>(); 
+        setup->NodeId = 0; 
+        setup->ExecutorsCount = 1; 
+        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]); 
+        for (ui32 i = 0; i < setup->ExecutorsCount; ++i) { 
+            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic"); 
+        } 
+        setup->Scheduler = new TBasicSchedulerThread; 
+ 
+        TActorSystem actorSystem(setup); 
+        actorSystem.Start(); 
+ 
         THolder<IActor> innerActor = MakeHolder<TTestActor>();
-        ui64 pongCounter = 0;
+        ui64 pongCounter = 0; 
         THolder<IActor> pongActor = MakeHolder<TPongDecorator>(std::move(innerActor), &pongCounter);
-        ui64 pingCounter = 0;
+        ui64 pingCounter = 0; 
         THolder<IActor> pingActor = MakeHolder<TPingDecorator>(std::move(pongActor), &pingCounter);
 
         TThreadParkPad pad;
         TAtomic actorsAlive = 0;
-
+ 
         THolder<IActor> endActor = MakeHolder<TTestEndDecorator>(std::move(pingActor), &pad, &actorsAlive);
         actorSystem.Register(endActor.Release(), TMailboxType::HTSwap);
 
         pad.Park();
-        actorSystem.Stop();
-        UNIT_ASSERT(pongCounter == 2 && pingCounter == 2);
-    }
+        actorSystem.Stop(); 
+        UNIT_ASSERT(pongCounter == 2 && pingCounter == 2); 
+    } 
 
     Y_UNIT_TEST(LocalProcessKey) {
         static constexpr char ActorName[] = "TestActor";
@@ -575,4 +575,4 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         UNIT_ASSERT((TLocalProcessKey<TActorActivityTag, ActorName>::GetName() == ActorName));
         UNIT_ASSERT((TEnumProcessKey<TActorActivityTag, IActor::EActorActivity>::GetIndex(IActor::INTERCONNECT_PROXY_TCP) == IActor::INTERCONNECT_PROXY_TCP));
     }
-}
+} 

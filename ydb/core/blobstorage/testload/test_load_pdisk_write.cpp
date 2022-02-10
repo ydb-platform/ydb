@@ -387,7 +387,7 @@ public:
 
             if (IntervalMs) {
                 // Enforce intervals between requests
-                TInstant now = TAppData::TimeProvider->Now();
+                TInstant now = TAppData::TimeProvider->Now(); 
                 TInstant nextRequest = LastRequest + TDuration::MilliSeconds(IntervalMs);
                 if (now < nextRequest) {
                     // Suspend sending until interval will elapse

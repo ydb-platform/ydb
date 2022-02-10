@@ -539,27 +539,27 @@ public:
     }
 
     void ErrorHandle(NPDisk::TEvMultiLog::TPtr &ev) {
-        const NPDisk::TEvMultiLog &evMultiLog = *ev->Get();
-        TStringStream str;
-        str << "PDiskId# " << PDisk->PDiskId;
-        str << " TEvBatchedLogs error because PDisk State# ";
-        if (CurrentStateFunc() == &TPDiskActor::StateInit) {
-            str << "Init, wait for PDisk to initialize. Did you ckeck EvYardInit result? Marker# BSY10";
-        } else if (CurrentStateFunc() == &TPDiskActor::StateError) {
-            str << "Error, there is a terminal internal error in PDisk. Did you check EvYardInit result? Marker# BSY11";
-        } else {
-            str << "Unknown, something went very wrong in PDisk. Marker# BSY12";
-        }
-        str << " StateErrorReason# " << StateErrorReason;
-        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str()));
-        for (auto &log : evMultiLog.Logs) {
-            result->Results.push_back(NPDisk::TEvLogResult::TRecord(log->Lsn, log->Cookie));
-        }
-        PDisk->Mon.WriteLog.CountRequest(0);
+        const NPDisk::TEvMultiLog &evMultiLog = *ev->Get(); 
+        TStringStream str; 
+        str << "PDiskId# " << PDisk->PDiskId; 
+        str << " TEvBatchedLogs error because PDisk State# "; 
+        if (CurrentStateFunc() == &TPDiskActor::StateInit) { 
+            str << "Init, wait for PDisk to initialize. Did you ckeck EvYardInit result? Marker# BSY10"; 
+        } else if (CurrentStateFunc() == &TPDiskActor::StateError) { 
+            str << "Error, there is a terminal internal error in PDisk. Did you check EvYardInit result? Marker# BSY11"; 
+        } else { 
+            str << "Unknown, something went very wrong in PDisk. Marker# BSY12"; 
+        } 
+        str << " StateErrorReason# " << StateErrorReason; 
+        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str())); 
+        for (auto &log : evMultiLog.Logs) { 
+            result->Results.push_back(NPDisk::TEvLogResult::TRecord(log->Lsn, log->Cookie)); 
+        } 
+        PDisk->Mon.WriteLog.CountRequest(0); 
         Send(ev->Sender, result.Release());
-        PDisk->Mon.WriteLog.CountResponse();
-    }
-
+        PDisk->Mon.WriteLog.CountResponse(); 
+    } 
+ 
     void ErrorHandle(NPDisk::TEvReadLog::TPtr &ev) {
         const NPDisk::TEvReadLog &evReadLog = *ev->Get();
         TStringStream str;
@@ -677,15 +677,15 @@ public:
     }
 
     void Handle(NPDisk::TEvMultiLog::TPtr &ev) {
-        for (auto &log : ev->Get()->Logs) {
-            double burstMs;
-            TLogWrite* request = PDisk->ReqCreator.CreateLogWrite(*log, ev->Sender, burstMs, std::move(ev->TraceId));
-            CheckBurst(request->IsSensitive, burstMs);
-            request->Orbit = std::move(log->Orbit);
-            PDisk->InputRequest(request);
-        }
-    }
-
+        for (auto &log : ev->Get()->Logs) { 
+            double burstMs; 
+            TLogWrite* request = PDisk->ReqCreator.CreateLogWrite(*log, ev->Sender, burstMs, std::move(ev->TraceId)); 
+            CheckBurst(request->IsSensitive, burstMs); 
+            request->Orbit = std::move(log->Orbit); 
+            PDisk->InputRequest(request); 
+        } 
+    } 
+ 
     void Handle(NPDisk::TEvReadLog::TPtr &ev) {
         LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " %s Marker# BSY01",
             (ui32)PDisk->PDiskId, ev->Get()->ToString().c_str());

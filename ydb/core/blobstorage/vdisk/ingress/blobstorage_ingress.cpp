@@ -37,10 +37,10 @@ namespace NKikimr {
         Y_VERIFY(handoff < domainsNum);
 
         // barrierIngressValueMask
-        ui32 barrierIngressValueMask = (1ull << totalVDisks) - 1;
+        ui32 barrierIngressValueMask = (1ull << totalVDisks) - 1; 
 
         // barrierIngressDomainMask
-        ui32 barrierIngressDomainMask = (1ull << disksInDomain) - 1;
+        ui32 barrierIngressDomainMask = (1ull << disksInDomain) - 1; 
 
         return new TIngressCache(vdiskOrderNum, totalVDisks, domainsNum, disksInDomain, handoff,
                                  barrierIngressValueMask, barrierIngressDomainMask, std::move(top));

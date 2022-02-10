@@ -38,7 +38,7 @@ namespace NKikimr {
             ReplJob,
             DSProxy,
             VDiskLoad,
-            VPatch,
+            VPatch, 
         };
 
         inline const char *EQueueClientType2String(EQueueClientType t) {
@@ -47,7 +47,7 @@ namespace NKikimr {
                 case EQueueClientType::ReplJob:     return "ReplJob";
                 case EQueueClientType::DSProxy:     return "DSProxy";
                 case EQueueClientType::VDiskLoad:   return "VDiskLoad";
-                case EQueueClientType::VPatch:   return "VPatch";
+                case EQueueClientType::VPatch:   return "VPatch"; 
             }
 
             Y_FAIL("unexpected EQueueClientType");
@@ -87,11 +87,11 @@ namespace NKikimr {
                         Identifier = msgQoS.GetVDiskLoadId();
                         break;
 
-                    case NKikimrBlobStorage::TMsgQoS::ClientIdCase::kVPatchVDiskId:
-                        Type = EQueueClientType::VPatch;
-                        Identifier = msgQoS.GetVPatchVDiskId();
-                        break;
-
+                    case NKikimrBlobStorage::TMsgQoS::ClientIdCase::kVPatchVDiskId: 
+                        Type = EQueueClientType::VPatch; 
+                        Identifier = msgQoS.GetVPatchVDiskId(); 
+                        break; 
+ 
                     case NKikimrBlobStorage::TMsgQoS::ClientIdCase::CLIENTID_NOT_SET:
                         Type = EQueueClientType::None;
                         Identifier = 0;
@@ -118,10 +118,10 @@ namespace NKikimr {
                     case EQueueClientType::VDiskLoad:
                         msgQoS->SetVDiskLoadId(Identifier);
                         break;
-
-                    case EQueueClientType::VPatch:
-                        msgQoS->SetVPatchVDiskId(Identifier);
-                        break;
+ 
+                    case EQueueClientType::VPatch: 
+                        msgQoS->SetVPatchVDiskId(Identifier); 
+                        break; 
                 }
             }
 
@@ -491,10 +491,10 @@ namespace NKikimr {
         }
     };
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // TEvVPut
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+    // TEvVPut 
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+ 
     struct TEvBlobStorage::TEvVPut
             : public TEventPB<TEvBlobStorage::TEvVPut, NKikimrBlobStorage::TEvVPut, TEvBlobStorage::EvVPut> {
         // In current realization it is intentionaly lost on event serialization since
@@ -508,22 +508,22 @@ namespace NKikimr {
                 const bool ignoreBlock, const ui64 *cookie, TInstant deadline,
                 NKikimrBlobStorage::EPutHandleClass cls)
         {
-            InitWithoutBuffer(logoBlobId, vdisk, ignoreBlock, cookie, deadline, cls);
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.Data(), buffer.size());
-            StorePayload(buffer);
-        }
-
-        TEvVPut(const TLogoBlobID &logoBlobId, TRope buffer, const TVDiskID &vdisk,
-                const bool ignoreBlock, const ui64 *cookie, TInstant deadline,
-                NKikimrBlobStorage::EPutHandleClass cls)
-        {
-            InitWithoutBuffer(logoBlobId, vdisk, ignoreBlock, cookie, deadline, cls);
-            StorePayload(std::move(buffer));
-        }
-
-        void InitWithoutBuffer(const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const bool ignoreBlock,
-                const ui64 *cookie, TInstant deadline, NKikimrBlobStorage::EPutHandleClass cls)
-        {
+            InitWithoutBuffer(logoBlobId, vdisk, ignoreBlock, cookie, deadline, cls); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.Data(), buffer.size()); 
+            StorePayload(buffer); 
+        } 
+ 
+        TEvVPut(const TLogoBlobID &logoBlobId, TRope buffer, const TVDiskID &vdisk, 
+                const bool ignoreBlock, const ui64 *cookie, TInstant deadline, 
+                NKikimrBlobStorage::EPutHandleClass cls) 
+        { 
+            InitWithoutBuffer(logoBlobId, vdisk, ignoreBlock, cookie, deadline, cls); 
+            StorePayload(std::move(buffer)); 
+        } 
+ 
+        void InitWithoutBuffer(const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const bool ignoreBlock, 
+                const ui64 *cookie, TInstant deadline, NKikimrBlobStorage::EPutHandleClass cls) 
+        { 
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&logoBlobId, sizeof(logoBlobId));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&vdisk, sizeof(vdisk));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&ignoreBlock, sizeof(ignoreBlock));
@@ -551,14 +551,14 @@ namespace NKikimr {
             return Record.GetIgnoreBlock();
         }
 
-        TRope GetBuffer() const {
-            return Record.HasBuffer() ? TRope(Record.GetBuffer()) : GetPayload(0);
-        }
-
+        TRope GetBuffer() const { 
+            return Record.HasBuffer() ? TRope(Record.GetBuffer()) : GetPayload(0); 
+        } 
+ 
         void StorePayload(const TString& buffer);
 
-        void StorePayload(TRope&& buffer);
-
+        void StorePayload(TRope&& buffer); 
+ 
         ui64 GetBufferBytes() const {
             if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
                 ui64 sizeBytes = 0;
@@ -760,32 +760,32 @@ namespace NKikimr {
 
     struct TEvBlobStorage::TEvVMultiPut
         : public TEventPB<TEvBlobStorage::TEvVMultiPut, NKikimrBlobStorage::TEvVMultiPut, TEvBlobStorage::EvVMultiPut>
-    {
-        mutable NLWTrace::TOrbit Orbit;
-
-        TEvVMultiPut() = default;
-
-        TEvVMultiPut(const TVDiskID &vdisk, TInstant deadline, NKikimrBlobStorage::EPutHandleClass cls,
-                     bool ignoreBlock, const ui64 *cookie = nullptr)
-        {
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&vdisk, sizeof(vdisk));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&ignoreBlock, sizeof(ignoreBlock));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&cookie, sizeof(cookie));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&deadline, sizeof(deadline));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&cls, sizeof(cls));
-
-            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-            Record.SetIgnoreBlock(ignoreBlock);
-            if (cookie) {
-                Record.SetCookie(*cookie);
-            }
-            if (deadline != TInstant::Max()) {
-                Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds());
-            }
-            Record.SetHandleClass(cls);
-            Record.MutableMsgQoS()->SetExtQueueId(HandleClassToQueueId(cls));
-        }
-
+    { 
+        mutable NLWTrace::TOrbit Orbit; 
+ 
+        TEvVMultiPut() = default; 
+ 
+        TEvVMultiPut(const TVDiskID &vdisk, TInstant deadline, NKikimrBlobStorage::EPutHandleClass cls, 
+                     bool ignoreBlock, const ui64 *cookie = nullptr) 
+        { 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&vdisk, sizeof(vdisk)); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&ignoreBlock, sizeof(ignoreBlock)); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&cookie, sizeof(cookie)); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&deadline, sizeof(deadline)); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&cls, sizeof(cls)); 
+ 
+            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID()); 
+            Record.SetIgnoreBlock(ignoreBlock); 
+            if (cookie) { 
+                Record.SetCookie(*cookie); 
+            } 
+            if (deadline != TInstant::Max()) { 
+                Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds()); 
+            } 
+            Record.SetHandleClass(cls); 
+            Record.MutableMsgQoS()->SetExtQueueId(HandleClassToQueueId(cls)); 
+        } 
+ 
         ui64 GetBufferBytes(ui64 idx) const {
             Y_VERIFY_DEBUG(idx < Record.ItemsSize());
             if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
@@ -795,46 +795,46 @@ namespace NKikimr {
             }
         }
 
-        ui64 GetBufferBytes() const {
-            ui64 bytes = 0;
-            if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
+        ui64 GetBufferBytes() const { 
+            ui64 bytes = 0; 
+            if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) { 
                 ui32 size = GetPayloadCount();
-                for (ui32 i = 0; i < size; ++i) {
-                    bytes += GetPayload(i).GetSize();
-                }
-            } else {
-                for (const auto &item : Record.GetItems()) {
-                    bytes += item.GetBuffer().size();
-                }
-            }
-            return bytes;
-        }
-
-        ui64 GetSumBlobSize() const {
-            ui64 sum = 0;
-            for (auto &item : Record.GetItems()) {
-                TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
-                sum += blobId.BlobSize();
-            }
-            return sum;
-        }
-
-        void StorePayload(NKikimrBlobStorage::TVMultiPutItem &item, const TString &buffer);
-
-
-        TRope GetItemBuffer(ui64 itemIdx) const;
-
-        void AddVPut(const TLogoBlobID &logoBlobId, const TString &buffer, ui64 *cookie) {
-            NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems();
-            LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());
-            item->SetFullDataSize(logoBlobId.BlobSize());
-            StorePayload(*item, buffer);
-            item->SetFullDataSize(logoBlobId.BlobSize());
-            if (cookie) {
-                item->SetCookie(*cookie);
-            }
-        }
-
+                for (ui32 i = 0; i < size; ++i) { 
+                    bytes += GetPayload(i).GetSize(); 
+                } 
+            } else { 
+                for (const auto &item : Record.GetItems()) { 
+                    bytes += item.GetBuffer().size(); 
+                } 
+            } 
+            return bytes; 
+        } 
+ 
+        ui64 GetSumBlobSize() const { 
+            ui64 sum = 0; 
+            for (auto &item : Record.GetItems()) { 
+                TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID()); 
+                sum += blobId.BlobSize(); 
+            } 
+            return sum; 
+        } 
+ 
+        void StorePayload(NKikimrBlobStorage::TVMultiPutItem &item, const TString &buffer); 
+ 
+ 
+        TRope GetItemBuffer(ui64 itemIdx) const; 
+ 
+        void AddVPut(const TLogoBlobID &logoBlobId, const TString &buffer, ui64 *cookie) { 
+            NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems(); 
+            LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID()); 
+            item->SetFullDataSize(logoBlobId.BlobSize()); 
+            StorePayload(*item, buffer); 
+            item->SetFullDataSize(logoBlobId.BlobSize()); 
+            if (cookie) { 
+                item->SetCookie(*cookie); 
+            } 
+        } 
+ 
         bool Validate(TString& errorReason) {
             if (Record.ItemsSize() == 0) {
                 errorReason =  "TEvVMultiPut rejected by VDisk. It has 0 blobs to put";
@@ -853,172 +853,172 @@ namespace NKikimr {
             return false;
         }
 
-        TString ToString() const override {
-            TStringStream str;
-            str << "{EvVMultiPut";
-            ui64 size = Record.ItemsSize();
-            for (ui64 itemIdx = 0; itemIdx < size; ++itemIdx) {
-                const NKikimrBlobStorage::TVMultiPutItem &item = Record.GetItems(itemIdx);
-                str << " Item# {VMultiPutItem";
-                TLogoBlobID id = LogoBlobIDFromLogoBlobID(item.GetBlobID());
-                str << " ID# " << id.ToString();
-                str << " FullDataSize# " << item.GetFullDataSize();
-                TString data = GetItemBuffer(itemIdx).ConvertToString();
-                str << " DataSize# " << data.size();
-                if (data.size() > 16) {
-                    str << " Data# <too_large>";
-                } else {
-                    str << " Data# " << data;
-                }
-                if (item.HasCookie()) {
-                    str << " Cookie# " << item.GetCookie();
-                }
-                str << "}";
-            }
-
-            str << " VDiskId# " << VDiskIDFromVDiskID(Record.GetVDiskID());
-
-            if (Record.GetIgnoreBlock()) {
-                str << " IgnoreBlock";
-            }
-            if (Record.HasHandleClass()) {
-                str << " HandleClass# " << Record.GetHandleClass();
-            }
-            if (Record.HasMsgQoS()) {
-                str << " ";
-                TEvBlobStorage::TEvVPut::OutMsgQos(Record.GetMsgQoS(), str);
-            }
-            if (Record.HasCookie()) {
-                str << " Cookie# " << Record.GetCookie();
-            }
-            str << "}";
-            return str.Str();
-        }
-    };
-
+        TString ToString() const override { 
+            TStringStream str; 
+            str << "{EvVMultiPut"; 
+            ui64 size = Record.ItemsSize(); 
+            for (ui64 itemIdx = 0; itemIdx < size; ++itemIdx) { 
+                const NKikimrBlobStorage::TVMultiPutItem &item = Record.GetItems(itemIdx); 
+                str << " Item# {VMultiPutItem"; 
+                TLogoBlobID id = LogoBlobIDFromLogoBlobID(item.GetBlobID()); 
+                str << " ID# " << id.ToString(); 
+                str << " FullDataSize# " << item.GetFullDataSize(); 
+                TString data = GetItemBuffer(itemIdx).ConvertToString(); 
+                str << " DataSize# " << data.size(); 
+                if (data.size() > 16) { 
+                    str << " Data# <too_large>"; 
+                } else { 
+                    str << " Data# " << data; 
+                } 
+                if (item.HasCookie()) { 
+                    str << " Cookie# " << item.GetCookie(); 
+                } 
+                str << "}"; 
+            } 
+ 
+            str << " VDiskId# " << VDiskIDFromVDiskID(Record.GetVDiskID()); 
+ 
+            if (Record.GetIgnoreBlock()) { 
+                str << " IgnoreBlock"; 
+            } 
+            if (Record.HasHandleClass()) { 
+                str << " HandleClass# " << Record.GetHandleClass(); 
+            } 
+            if (Record.HasMsgQoS()) { 
+                str << " "; 
+                TEvBlobStorage::TEvVPut::OutMsgQos(Record.GetMsgQoS(), str); 
+            } 
+            if (Record.HasCookie()) { 
+                str << " Cookie# " << Record.GetCookie(); 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
+    }; 
+ 
     struct TEvBlobStorage::TEvVMultiPutResult
         : public TEvVResultBaseWithQoSPB<TEvBlobStorage::TEvVMultiPutResult,
                 NKikimrBlobStorage::TEvVMultiPutResult,
-                TEvBlobStorage::EvVMultiPutResult>
-    {
-        mutable NLWTrace::TOrbit Orbit;
-
-        TEvVMultiPutResult() = default;
-
+                TEvBlobStorage::EvVMultiPutResult> 
+    { 
+        mutable NLWTrace::TOrbit Orbit; 
+ 
+        TEvVMultiPutResult() = default; 
+ 
         TEvVMultiPutResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const ui64 *cookie,
                 const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVMultiPut *record,
                 const TActorIDPtr &skeletonFrontIDPtr, const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
                 const NVDiskMon::TLtcHistoPtr &histoPtr, const ui64 bufferSizeBytes, NWilson::TTraceId traceId,
                 ui64 incarnationGuid, const TString& errorReason)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
-                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, record, skeletonFrontIDPtr)
-        {
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId), 
+                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, record, skeletonFrontIDPtr) 
+        { 
             IncrementSize(bufferSizeBytes);
-            Record.SetStatus(status);
-            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-            if (cookie) {
-                Record.SetCookie(*cookie);
-            }
-            if (record && record->HasTimestamps()) {
-                Record.MutableTimestamps()->CopyFrom(record->GetTimestamps());
-            }
+            Record.SetStatus(status); 
+            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID()); 
+            if (cookie) { 
+                Record.SetCookie(*cookie); 
+            } 
+            if (record && record->HasTimestamps()) { 
+                Record.MutableTimestamps()->CopyFrom(record->GetTimestamps()); 
+            } 
             if (status == NKikimrProto::OK) {
                 Record.SetIncarnationGuid(incarnationGuid);
             }
             if (errorReason && status != NKikimrProto::OK) {
                 Record.SetErrorReason(errorReason);
             }
-        }
-
+        } 
+ 
         void AddVPutResult(NKikimrProto::EReplyStatus status, const TString& errorReason, const TLogoBlobID &logoBlobId,
                 ui64 *cookie, ui32 statusFlags = 0)
-        {
-            NKikimrBlobStorage::TVMultiPutResultItem *item = Record.AddItems();
-            item->SetStatus(status);
+        { 
+            NKikimrBlobStorage::TVMultiPutResultItem *item = Record.AddItems(); 
+            item->SetStatus(status); 
             if (errorReason && status != NKikimrProto::OK) {
                 item->SetErrorReason(errorReason);
             }
-            LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());
-            if (cookie) {
-                item->SetCookie(*cookie);
-            }
-            item->SetStatusFlags(statusFlags);
-        }
-
+            LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID()); 
+            if (cookie) { 
+                item->SetCookie(*cookie); 
+            } 
+            item->SetStatusFlags(statusFlags); 
+        } 
+ 
         void MakeError(NKikimrProto::EReplyStatus status, const TString& errorReason,
                 const NKikimrBlobStorage::TEvVMultiPut &request) {
-            Record.SetStatus(status);
+            Record.SetStatus(status); 
             if (errorReason && status != NKikimrProto::OK) {
                 Record.SetErrorReason(errorReason);
             }
             if (status == NKikimrProto::NOTREADY) {
                 status = NKikimrProto::ERROR; // treat BS_QUEUE internally generated NOTREADY as ERROR
             }
-
-            for (auto &item : request.GetItems()) {
-                Y_VERIFY(item.HasBlobID());
-                TLogoBlobID logoBlobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
-                ui64 cookieValue = 0;
-                ui64 *cookie = nullptr;
-                if (item.HasCookie()) {
-                    cookieValue = item.GetCookie();
-                    cookie = &cookieValue;
-                }
+ 
+            for (auto &item : request.GetItems()) { 
+                Y_VERIFY(item.HasBlobID()); 
+                TLogoBlobID logoBlobId = LogoBlobIDFromLogoBlobID(item.GetBlobID()); 
+                ui64 cookieValue = 0; 
+                ui64 *cookie = nullptr; 
+                if (item.HasCookie()) { 
+                    cookieValue = item.GetCookie(); 
+                    cookie = &cookieValue; 
+                } 
                 AddVPutResult(status, errorReason, logoBlobId, cookie);
-            }
+            } 
 
             if (request.HasVDiskID()) {
                 Record.MutableVDiskID()->CopyFrom(request.GetVDiskID());
             }
-            if (request.HasCookie()) {
-                Record.SetCookie(request.GetCookie());
-            }
-            if (request.HasTimestamps()) {
-                Record.MutableTimestamps()->CopyFrom(request.GetTimestamps());
-            }
-        }
-
-        TString ToString() const override {
-            return ToString(Record);
-        }
-
-        static TString ToString(const NKikimrBlobStorage::TEvVMultiPutResult &record) {
-            TStringStream str;
-            str << "{EvVMultiPutResult Status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus()).data();
+            if (request.HasCookie()) { 
+                Record.SetCookie(request.GetCookie()); 
+            } 
+            if (request.HasTimestamps()) { 
+                Record.MutableTimestamps()->CopyFrom(request.GetTimestamps()); 
+            } 
+        } 
+ 
+        TString ToString() const override { 
+            return ToString(Record); 
+        } 
+ 
+        static TString ToString(const NKikimrBlobStorage::TEvVMultiPutResult &record) { 
+            TStringStream str; 
+            str << "{EvVMultiPutResult Status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus()).data(); 
             if (record.HasErrorReason()) {
                 str << " ErrorReason# " << '"' << EscapeC(record.GetErrorReason()) << '"';
             }
-            ui64 size = record.ItemsSize();
-            for (ui64 itemIdx = 0; itemIdx < size; ++itemIdx) {
-                const NKikimrBlobStorage::TVMultiPutResultItem &item = record.GetItems(itemIdx);
-                str << " Item# {VMultiPutResultItem";
-                str << " Status# " << NKikimrProto::EReplyStatus_Name(item.GetStatus()).data();
+            ui64 size = record.ItemsSize(); 
+            for (ui64 itemIdx = 0; itemIdx < size; ++itemIdx) { 
+                const NKikimrBlobStorage::TVMultiPutResultItem &item = record.GetItems(itemIdx); 
+                str << " Item# {VMultiPutResultItem"; 
+                str << " Status# " << NKikimrProto::EReplyStatus_Name(item.GetStatus()).data(); 
                 if (item.HasErrorReason()) {
                     str << " ErrorReason# " << '"' << EscapeC(item.GetErrorReason()) << '"';
                 }
-                TLogoBlobID id = LogoBlobIDFromLogoBlobID(item.GetBlobID());
-                str << " ID# " << id.ToString();
-                if (item.HasCookie()) {
-                    str << " Cookie# " << item.GetCookie();
-                }
-                str << "}";
-            }
-            if (record.HasMsgQoS()) {
-                str << " ";
-                TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
-            }
-            if (record.HasCookie()) {
-                str << " Cookie# " << record.GetCookie();
-            }
-            str << "}";
-            return str.Str();
-        }
-    };
-
+                TLogoBlobID id = LogoBlobIDFromLogoBlobID(item.GetBlobID()); 
+                str << " ID# " << id.ToString(); 
+                if (item.HasCookie()) { 
+                    str << " Cookie# " << item.GetCookie(); 
+                } 
+                str << "}"; 
+            } 
+            if (record.HasMsgQoS()) { 
+                str << " "; 
+                TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str); 
+            } 
+            if (record.HasCookie()) { 
+                str << " Cookie# " << record.GetCookie(); 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
+    }; 
+ 
     //////////////////////////////////////////////////////////////////////////////////////////////
     // VGet
     //////////////////////////////////////////////////////////////////////////////////////////////
-
+ 
     struct TEvBlobStorage::TEvVGet
         : public TEventPB<TEvBlobStorage::TEvVGet, NKikimrBlobStorage::TEvVGet, TEvBlobStorage::EvVGet>
     {
@@ -1383,297 +1383,297 @@ namespace NKikimr {
         }
     };
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // VPatch
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    template <typename TEv, typename TRecord, ui32 EventType>
-    struct TEvVSpecialPatchBase
-            : public TEventPB<TEv, TRecord, EventType> {
-        mutable NLWTrace::TOrbit Orbit;
-
-        TEvVSpecialPatchBase() = default;
-
-        TEvVSpecialPatchBase(ui32 originalGroupId, ui32 patchedGroupId, const TLogoBlobID &originalBlobId,
-                const TLogoBlobID &patchedBlobId, const TVDiskID &vdisk, bool ignoreBlock, TMaybe<ui64> cookie,
-                TInstant deadline)
-        {
-            InitWithoutBuffer(originalGroupId, patchedGroupId, originalBlobId, patchedBlobId, vdisk, ignoreBlock,
-                    cookie, deadline);
-        }
-
-        void InitWithoutBuffer(ui32 originalGroupId, ui32 patchedGroupId, const TLogoBlobID &originalBlobId,
-                const TLogoBlobID &patchedBlobId, const TVDiskID &vdisk, bool ignoreBlock, TMaybe<ui64> cookie,
-                TInstant deadline)
-        {
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&originalBlobId, sizeof(originalBlobId));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&patchedBlobId, sizeof(patchedBlobId));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&vdisk, sizeof(vdisk));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&ignoreBlock, sizeof(ignoreBlock));
-
-            this->Record.SetOriginalGroupId(originalGroupId);
-            this->Record.SetPatchedGroupId(patchedGroupId);
-
-            LogoBlobIDFromLogoBlobID(originalBlobId, this->Record.MutableOriginalBlobId());
-            LogoBlobIDFromLogoBlobID(patchedBlobId, this->Record.MutablePatchedBlobId());
-
-            VDiskIDFromVDiskID(vdisk, this->Record.MutableVDiskID());
-            if (ignoreBlock) {
-                this->Record.SetIgnoreBlock(ignoreBlock);
-            }
-            if (cookie) {
-                this->Record.SetCookie(*cookie);
-            }
-            if (deadline != TInstant::Max()) {
-                this->Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds());
-            }
-            this->Record.MutableMsgQoS()->SetExtQueueId(HandleClassToQueueId(NKikimrBlobStorage::AsyncBlob));
-        }
-
-        bool GetIgnoreBlock() const {
-            return this->Record.GetIgnoreBlock();
-        }
-
-        void AddDiff(ui64 startIdx, const TString &buffer) {
-            TLogoBlobID id = LogoBlobIDFromLogoBlobID(this->Record.GetOriginalBlobId());
-            Y_VERIFY(startIdx < id.BlobSize());
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&buffer, sizeof(buffer));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.data(), buffer.size() + 1);
-            Y_VERIFY(startIdx + buffer.size() <= id.BlobSize());
-
-            NKikimrBlobStorage::TDiffBlock *diffBlock = this->Record.AddDiffs();
-            diffBlock->SetOffset(startIdx);
-            diffBlock->SetBuffer(buffer);
-        }
-
-        TString ToString() const override {
-            return ToString(this->Record);
-        }
-
-        static TString ToString(const TRecord &record) {
-            TStringStream str;
-            TLogoBlobID originalId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId());
-            TLogoBlobID patchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
-            str << "{TEvVMovedPatch";
-            str << " OriginalBlobId# " << originalId.ToString();
-            str << " PatchedBlobId# " << patchedId.ToString();
-            str << " OriginalGroupId# " << record.GetOriginalBlobId();
-            str << " PatchedGroupId# " << record.GetPatchedBlobId();
-            if (record.GetIgnoreBlock()) {
-                str << " IgnoreBlock";
-            }
-            if (record.HasMsgQoS()) {
-                str << " ";
-                TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
-            }
-            str << " DiffCount# " << record.DiffsSize();
-            str << "}";
-            return str.Str();
-        }
-
-        ui32 DiffSizeSum() const {
-            ui32 result = 0;
-            for (auto &diff : this->Record.GetDiffs()) {
-                result += diff.GetBuffer().size();
-            }
-            return result;
-        }
-    };
-
-    template <typename TEv, typename TRecord, ui32 EventType, typename TReqRecord>
-    struct TEvVSpecialPatchBaseResult
-            : public TEvVResultBaseWithQoSPB<TEv, TRecord, EventType> {
-        using TBase = TEvVResultBaseWithQoSPB<TEv, TRecord, EventType>;
-        mutable NLWTrace::TOrbit Orbit;
-
-        TEvVSpecialPatchBaseResult() = default;
-
-        TEvVSpecialPatchBaseResult(const NKikimrProto::EReplyStatus status, const TLogoBlobID &originalBlobId,
-                const TLogoBlobID &patchedBlobId, const TVDiskID &vdisk, TMaybe<ui64> cookie,
-                TOutOfSpaceStatus oosStatus, const TInstant &now, ui32 recByteSize,
-                TReqRecord *record, const TActorIDPtr &skeletonFrontIDPtr,
-                const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                NWilson::TTraceId traceId, ui64 incarnationGuid, const TString& errorReason)
-            : TBase(now, counterPtr, histoPtr, std::move(traceId),
-                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, record, skeletonFrontIDPtr)
-        {
-            this->Record.SetStatus(status);
-            LogoBlobIDFromLogoBlobID(originalBlobId, this->Record.MutableOriginalBlobId());
-            LogoBlobIDFromLogoBlobID(patchedBlobId, this->Record.MutablePatchedBlobId());
-            VDiskIDFromVDiskID(vdisk, this->Record.MutableVDiskID());
-            if (cookie) {
-                this->Record.SetCookie(*cookie);
-            }
-            this->Record.SetStatusFlags(oosStatus.Flags);
-            this->Record.SetApproximateFreeSpaceShare(oosStatus.ApproximateFreeSpaceShare);
-            if (record && record->HasTimestamps()) {
-                this->Record.MutableTimestamps()->CopyFrom(record->GetTimestamps());
-            }
-            if (status == NKikimrProto::OK) {
-                this->Record.SetIncarnationGuid(incarnationGuid);
-            }
-            if (errorReason && status != NKikimrProto::OK) {
-                this->Record.SetErrorReason(errorReason);
-            }
-        }
-
-        void UpdateStatus(const NKikimrProto::EReplyStatus status) {
-            this->Record.SetStatus(status);
-        }
-
-        TString ToString() const override {
-            return ToString(this->Record);
-        }
-
-        static TString ToString(const TRecord &record) {
-            TStringStream str;
-            TLogoBlobID originalId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId());
-            TLogoBlobID patchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
-            TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-            str << "{EvVMovedPatchResult Status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus()).data();
-            if (record.HasErrorReason()) {
-                str << " ErrorReason# " << '"' << EscapeC(record.GetErrorReason()) << '"';
-            }
-            str << " OriginalBlobId# " << originalId;
-            str << " PatchedBlobId# " << patchedId;
-            str << " VDiskId# " << vdiskId;
-            if (record.HasCookie()) {
-                str << " Cookie# " << record.GetCookie();
-            }
-            if (record.HasMsgQoS()) {
-                str << " ";
-                TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
-            }
-            str << "}";
-
-            return str.Str();
-        }
-
-        void MakeError(NKikimrProto::EReplyStatus status, const TString& errorReason,
-                const TReqRecord &request) {
-            this->Record.SetStatus(status);
-            if (status != NKikimrProto::OK && errorReason) {
-                this->Record.SetErrorReason(errorReason);
-            }
-            Y_VERIFY(request.HasOriginalBlobId());
-            Y_VERIFY(request.HasPatchedBlobId());
-            TLogoBlobID originalBlobId = LogoBlobIDFromLogoBlobID(request.GetOriginalBlobId());
-            TLogoBlobID patchedBlobId = LogoBlobIDFromLogoBlobID(request.GetPatchedBlobId());
-            LogoBlobIDFromLogoBlobID(originalBlobId, this->Record.MutableOriginalBlobId());
-            LogoBlobIDFromLogoBlobID(patchedBlobId, this->Record.MutablePatchedBlobId());
-
-            Y_VERIFY(request.HasVDiskID());
-            TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
-            VDiskIDFromVDiskID(vDiskId, this->Record.MutableVDiskID());
-            if (request.HasCookie()) {
-                this->Record.SetCookie(request.GetCookie());
-            }
-            if (request.HasTimestamps()) {
-                this->Record.MutableTimestamps()->CopyFrom(request.GetTimestamps());
-            }
-        }
-    };
-
-
-    struct TEvBlobStorage::TEvVMovedPatch
-        : TEvVSpecialPatchBase<
-                TEvBlobStorage::TEvVMovedPatch,
-                NKikimrBlobStorage::TEvVMovedPatch,
-                TEvBlobStorage::EvVMovedPatch>
-    {
-        using TBase = TEvVSpecialPatchBase<
-                TEvBlobStorage::TEvVMovedPatch,
-                NKikimrBlobStorage::TEvVMovedPatch,
-                TEvBlobStorage::EvVMovedPatch>;
-
-        TEvVMovedPatch() = default;
-
-        TEvVMovedPatch(ui32 originalGroupId, ui32 patchedGroupId, const TLogoBlobID &originalBlobId,
-                const TLogoBlobID &patchedBlobId, const TVDiskID &vdisk, bool ignoreBlock, TMaybe<ui64> cookie,
-                TInstant deadline)
-            : TBase(originalGroupId, patchedGroupId, originalBlobId, patchedBlobId, vdisk, ignoreBlock,
-                    cookie, deadline)
-        {}
-    };
-
-    struct TEvBlobStorage::TEvVMovedPatchResult
-        : TEvVSpecialPatchBaseResult<
-                TEvBlobStorage::TEvVMovedPatchResult,
-                NKikimrBlobStorage::TEvVMovedPatchResult,
-                TEvBlobStorage::EvVMovedPatchResult,
-                NKikimrBlobStorage::TEvVMovedPatch>
-    {
-        using TBase = TEvVSpecialPatchBaseResult<
-                TEvBlobStorage::TEvVMovedPatchResult,
-                NKikimrBlobStorage::TEvVMovedPatchResult,
-                TEvBlobStorage::EvVMovedPatchResult,
-                NKikimrBlobStorage::TEvVMovedPatch>;
-
-        TEvVMovedPatchResult() = default;
-
-        TEvVMovedPatchResult(const NKikimrProto::EReplyStatus status, const TLogoBlobID &originalBlobId,
-                const TLogoBlobID &patchedBlobId, const TVDiskID &vdisk, TMaybe<ui64> cookie,
-                TOutOfSpaceStatus oosStatus, const TInstant &now, ui32 recByteSize,
-                NKikimrBlobStorage::TEvVMovedPatch *record, const TActorIDPtr &skeletonFrontIDPtr,
-                const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                NWilson::TTraceId traceId, ui64 incarnationGuid, const TString& errorReason)
-            : TBase(status, originalBlobId, patchedBlobId, vdisk, cookie, oosStatus, now, recByteSize,
-                    record, skeletonFrontIDPtr, counterPtr, histoPtr, std::move(traceId), incarnationGuid, errorReason)
-        {}
-    };
-
-
-    struct TEvBlobStorage::TEvVInplacePatch
-        : TEvVSpecialPatchBase<
-                TEvBlobStorage::TEvVInplacePatch,
-                NKikimrBlobStorage::TEvVInplacePatch,
-                TEvBlobStorage::EvVInplacePatch>
-    {
-        using TBase = TEvVSpecialPatchBase<
-                TEvBlobStorage::TEvVInplacePatch,
-                NKikimrBlobStorage::TEvVInplacePatch,
-                TEvBlobStorage::EvVInplacePatch>;
-
-        TEvVInplacePatch() = default;
-
-        TEvVInplacePatch(ui32 originalGroupId, ui32 patchedGroupId, const TLogoBlobID &originalBlobId,
-                const TLogoBlobID &patchedBlobId, const TVDiskID &vdisk, bool ignoreBlock, TMaybe<ui64> cookie,
-                TInstant deadline)
-            : TBase(originalGroupId, patchedGroupId, originalBlobId, patchedBlobId, vdisk, ignoreBlock,
-                    cookie, deadline)
-        {}
-    };
-
-    struct TEvBlobStorage::TEvVInplacePatchResult
-        : TEvVSpecialPatchBaseResult<
-                TEvBlobStorage::TEvVInplacePatchResult,
-                NKikimrBlobStorage::TEvVInplacePatchResult,
-                TEvBlobStorage::EvVInplacePatchResult,
-                NKikimrBlobStorage::TEvVInplacePatch>
-    {
-        using TBase = TEvVSpecialPatchBaseResult<
-                TEvBlobStorage::TEvVInplacePatchResult,
-                NKikimrBlobStorage::TEvVInplacePatchResult,
-                TEvBlobStorage::EvVInplacePatchResult,
-                NKikimrBlobStorage::TEvVInplacePatch>;
-
-        TEvVInplacePatchResult() = default;
-
-        TEvVInplacePatchResult(const NKikimrProto::EReplyStatus status, const TLogoBlobID &originalBlobId,
-                const TLogoBlobID &patchedBlobId, const TVDiskID &vdisk, TMaybe<ui64> cookie,
-                TOutOfSpaceStatus oosStatus, const TInstant &now, ui32 recByteSize,
-                NKikimrBlobStorage::TEvVInplacePatch *record, const TActorIDPtr &skeletonFrontIDPtr,
-                const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                NWilson::TTraceId traceId, ui64 incarnationGuid, const TString& errorReason)
-            : TBase(status, originalBlobId, patchedBlobId, vdisk, cookie, oosStatus, now, recByteSize,
-                    record, skeletonFrontIDPtr, counterPtr, histoPtr, std::move(traceId), incarnationGuid, errorReason)
-        {}
-    };
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // VBLOCK
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+    // VPatch 
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+ 
+    template <typename TEv, typename TRecord, ui32 EventType> 
+    struct TEvVSpecialPatchBase 
+            : public TEventPB<TEv, TRecord, EventType> { 
+        mutable NLWTrace::TOrbit Orbit; 
+ 
+        TEvVSpecialPatchBase() = default; 
+ 
+        TEvVSpecialPatchBase(ui32 originalGroupId, ui32 patchedGroupId, const TLogoBlobID &originalBlobId, 
+                const TLogoBlobID &patchedBlobId, const TVDiskID &vdisk, bool ignoreBlock, TMaybe<ui64> cookie, 
+                TInstant deadline) 
+        { 
+            InitWithoutBuffer(originalGroupId, patchedGroupId, originalBlobId, patchedBlobId, vdisk, ignoreBlock, 
+                    cookie, deadline); 
+        } 
+ 
+        void InitWithoutBuffer(ui32 originalGroupId, ui32 patchedGroupId, const TLogoBlobID &originalBlobId, 
+                const TLogoBlobID &patchedBlobId, const TVDiskID &vdisk, bool ignoreBlock, TMaybe<ui64> cookie, 
+                TInstant deadline) 
+        { 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&originalBlobId, sizeof(originalBlobId)); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&patchedBlobId, sizeof(patchedBlobId)); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&vdisk, sizeof(vdisk)); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&ignoreBlock, sizeof(ignoreBlock)); 
+ 
+            this->Record.SetOriginalGroupId(originalGroupId); 
+            this->Record.SetPatchedGroupId(patchedGroupId); 
+ 
+            LogoBlobIDFromLogoBlobID(originalBlobId, this->Record.MutableOriginalBlobId()); 
+            LogoBlobIDFromLogoBlobID(patchedBlobId, this->Record.MutablePatchedBlobId()); 
+ 
+            VDiskIDFromVDiskID(vdisk, this->Record.MutableVDiskID()); 
+            if (ignoreBlock) { 
+                this->Record.SetIgnoreBlock(ignoreBlock); 
+            } 
+            if (cookie) { 
+                this->Record.SetCookie(*cookie); 
+            } 
+            if (deadline != TInstant::Max()) { 
+                this->Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds()); 
+            } 
+            this->Record.MutableMsgQoS()->SetExtQueueId(HandleClassToQueueId(NKikimrBlobStorage::AsyncBlob)); 
+        } 
+ 
+        bool GetIgnoreBlock() const { 
+            return this->Record.GetIgnoreBlock(); 
+        } 
+ 
+        void AddDiff(ui64 startIdx, const TString &buffer) { 
+            TLogoBlobID id = LogoBlobIDFromLogoBlobID(this->Record.GetOriginalBlobId()); 
+            Y_VERIFY(startIdx < id.BlobSize()); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&buffer, sizeof(buffer)); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.data(), buffer.size() + 1); 
+            Y_VERIFY(startIdx + buffer.size() <= id.BlobSize()); 
+ 
+            NKikimrBlobStorage::TDiffBlock *diffBlock = this->Record.AddDiffs(); 
+            diffBlock->SetOffset(startIdx); 
+            diffBlock->SetBuffer(buffer); 
+        } 
+ 
+        TString ToString() const override { 
+            return ToString(this->Record); 
+        } 
+ 
+        static TString ToString(const TRecord &record) { 
+            TStringStream str; 
+            TLogoBlobID originalId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId()); 
+            TLogoBlobID patchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId()); 
+            str << "{TEvVMovedPatch"; 
+            str << " OriginalBlobId# " << originalId.ToString(); 
+            str << " PatchedBlobId# " << patchedId.ToString(); 
+            str << " OriginalGroupId# " << record.GetOriginalBlobId(); 
+            str << " PatchedGroupId# " << record.GetPatchedBlobId(); 
+            if (record.GetIgnoreBlock()) { 
+                str << " IgnoreBlock"; 
+            } 
+            if (record.HasMsgQoS()) { 
+                str << " "; 
+                TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str); 
+            } 
+            str << " DiffCount# " << record.DiffsSize(); 
+            str << "}"; 
+            return str.Str(); 
+        } 
+ 
+        ui32 DiffSizeSum() const { 
+            ui32 result = 0; 
+            for (auto &diff : this->Record.GetDiffs()) { 
+                result += diff.GetBuffer().size(); 
+            } 
+            return result; 
+        } 
+    }; 
+ 
+    template <typename TEv, typename TRecord, ui32 EventType, typename TReqRecord> 
+    struct TEvVSpecialPatchBaseResult 
+            : public TEvVResultBaseWithQoSPB<TEv, TRecord, EventType> { 
+        using TBase = TEvVResultBaseWithQoSPB<TEv, TRecord, EventType>; 
+        mutable NLWTrace::TOrbit Orbit; 
+ 
+        TEvVSpecialPatchBaseResult() = default; 
+ 
+        TEvVSpecialPatchBaseResult(const NKikimrProto::EReplyStatus status, const TLogoBlobID &originalBlobId, 
+                const TLogoBlobID &patchedBlobId, const TVDiskID &vdisk, TMaybe<ui64> cookie, 
+                TOutOfSpaceStatus oosStatus, const TInstant &now, ui32 recByteSize, 
+                TReqRecord *record, const TActorIDPtr &skeletonFrontIDPtr, 
+                const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr, 
+                NWilson::TTraceId traceId, ui64 incarnationGuid, const TString& errorReason) 
+            : TBase(now, counterPtr, histoPtr, std::move(traceId), 
+                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, record, skeletonFrontIDPtr) 
+        { 
+            this->Record.SetStatus(status); 
+            LogoBlobIDFromLogoBlobID(originalBlobId, this->Record.MutableOriginalBlobId()); 
+            LogoBlobIDFromLogoBlobID(patchedBlobId, this->Record.MutablePatchedBlobId()); 
+            VDiskIDFromVDiskID(vdisk, this->Record.MutableVDiskID()); 
+            if (cookie) { 
+                this->Record.SetCookie(*cookie); 
+            } 
+            this->Record.SetStatusFlags(oosStatus.Flags); 
+            this->Record.SetApproximateFreeSpaceShare(oosStatus.ApproximateFreeSpaceShare); 
+            if (record && record->HasTimestamps()) { 
+                this->Record.MutableTimestamps()->CopyFrom(record->GetTimestamps()); 
+            } 
+            if (status == NKikimrProto::OK) { 
+                this->Record.SetIncarnationGuid(incarnationGuid); 
+            } 
+            if (errorReason && status != NKikimrProto::OK) { 
+                this->Record.SetErrorReason(errorReason); 
+            } 
+        } 
+ 
+        void UpdateStatus(const NKikimrProto::EReplyStatus status) { 
+            this->Record.SetStatus(status); 
+        } 
+ 
+        TString ToString() const override { 
+            return ToString(this->Record); 
+        } 
+ 
+        static TString ToString(const TRecord &record) { 
+            TStringStream str; 
+            TLogoBlobID originalId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId()); 
+            TLogoBlobID patchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId()); 
+            TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID()); 
+            str << "{EvVMovedPatchResult Status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus()).data(); 
+            if (record.HasErrorReason()) { 
+                str << " ErrorReason# " << '"' << EscapeC(record.GetErrorReason()) << '"'; 
+            } 
+            str << " OriginalBlobId# " << originalId; 
+            str << " PatchedBlobId# " << patchedId; 
+            str << " VDiskId# " << vdiskId; 
+            if (record.HasCookie()) { 
+                str << " Cookie# " << record.GetCookie(); 
+            } 
+            if (record.HasMsgQoS()) { 
+                str << " "; 
+                TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str); 
+            } 
+            str << "}"; 
+ 
+            return str.Str(); 
+        } 
+ 
+        void MakeError(NKikimrProto::EReplyStatus status, const TString& errorReason, 
+                const TReqRecord &request) { 
+            this->Record.SetStatus(status); 
+            if (status != NKikimrProto::OK && errorReason) { 
+                this->Record.SetErrorReason(errorReason); 
+            } 
+            Y_VERIFY(request.HasOriginalBlobId()); 
+            Y_VERIFY(request.HasPatchedBlobId()); 
+            TLogoBlobID originalBlobId = LogoBlobIDFromLogoBlobID(request.GetOriginalBlobId()); 
+            TLogoBlobID patchedBlobId = LogoBlobIDFromLogoBlobID(request.GetPatchedBlobId()); 
+            LogoBlobIDFromLogoBlobID(originalBlobId, this->Record.MutableOriginalBlobId()); 
+            LogoBlobIDFromLogoBlobID(patchedBlobId, this->Record.MutablePatchedBlobId()); 
+ 
+            Y_VERIFY(request.HasVDiskID()); 
+            TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID()); 
+            VDiskIDFromVDiskID(vDiskId, this->Record.MutableVDiskID()); 
+            if (request.HasCookie()) { 
+                this->Record.SetCookie(request.GetCookie()); 
+            } 
+            if (request.HasTimestamps()) { 
+                this->Record.MutableTimestamps()->CopyFrom(request.GetTimestamps()); 
+            } 
+        } 
+    }; 
+ 
+ 
+    struct TEvBlobStorage::TEvVMovedPatch 
+        : TEvVSpecialPatchBase< 
+                TEvBlobStorage::TEvVMovedPatch, 
+                NKikimrBlobStorage::TEvVMovedPatch, 
+                TEvBlobStorage::EvVMovedPatch> 
+    { 
+        using TBase = TEvVSpecialPatchBase< 
+                TEvBlobStorage::TEvVMovedPatch, 
+                NKikimrBlobStorage::TEvVMovedPatch, 
+                TEvBlobStorage::EvVMovedPatch>; 
+ 
+        TEvVMovedPatch() = default; 
+ 
+        TEvVMovedPatch(ui32 originalGroupId, ui32 patchedGroupId, const TLogoBlobID &originalBlobId, 
+                const TLogoBlobID &patchedBlobId, const TVDiskID &vdisk, bool ignoreBlock, TMaybe<ui64> cookie, 
+                TInstant deadline) 
+            : TBase(originalGroupId, patchedGroupId, originalBlobId, patchedBlobId, vdisk, ignoreBlock, 
+                    cookie, deadline) 
+        {} 
+    }; 
+ 
+    struct TEvBlobStorage::TEvVMovedPatchResult 
+        : TEvVSpecialPatchBaseResult< 
+                TEvBlobStorage::TEvVMovedPatchResult, 
+                NKikimrBlobStorage::TEvVMovedPatchResult, 
+                TEvBlobStorage::EvVMovedPatchResult, 
+                NKikimrBlobStorage::TEvVMovedPatch> 
+    { 
+        using TBase = TEvVSpecialPatchBaseResult< 
+                TEvBlobStorage::TEvVMovedPatchResult, 
+                NKikimrBlobStorage::TEvVMovedPatchResult, 
+                TEvBlobStorage::EvVMovedPatchResult, 
+                NKikimrBlobStorage::TEvVMovedPatch>; 
+ 
+        TEvVMovedPatchResult() = default; 
+ 
+        TEvVMovedPatchResult(const NKikimrProto::EReplyStatus status, const TLogoBlobID &originalBlobId, 
+                const TLogoBlobID &patchedBlobId, const TVDiskID &vdisk, TMaybe<ui64> cookie, 
+                TOutOfSpaceStatus oosStatus, const TInstant &now, ui32 recByteSize, 
+                NKikimrBlobStorage::TEvVMovedPatch *record, const TActorIDPtr &skeletonFrontIDPtr, 
+                const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr, 
+                NWilson::TTraceId traceId, ui64 incarnationGuid, const TString& errorReason) 
+            : TBase(status, originalBlobId, patchedBlobId, vdisk, cookie, oosStatus, now, recByteSize, 
+                    record, skeletonFrontIDPtr, counterPtr, histoPtr, std::move(traceId), incarnationGuid, errorReason) 
+        {} 
+    }; 
+ 
+ 
+    struct TEvBlobStorage::TEvVInplacePatch 
+        : TEvVSpecialPatchBase< 
+                TEvBlobStorage::TEvVInplacePatch, 
+                NKikimrBlobStorage::TEvVInplacePatch, 
+                TEvBlobStorage::EvVInplacePatch> 
+    { 
+        using TBase = TEvVSpecialPatchBase< 
+                TEvBlobStorage::TEvVInplacePatch, 
+                NKikimrBlobStorage::TEvVInplacePatch, 
+                TEvBlobStorage::EvVInplacePatch>; 
+ 
+        TEvVInplacePatch() = default; 
+ 
+        TEvVInplacePatch(ui32 originalGroupId, ui32 patchedGroupId, const TLogoBlobID &originalBlobId, 
+                const TLogoBlobID &patchedBlobId, const TVDiskID &vdisk, bool ignoreBlock, TMaybe<ui64> cookie, 
+                TInstant deadline) 
+            : TBase(originalGroupId, patchedGroupId, originalBlobId, patchedBlobId, vdisk, ignoreBlock, 
+                    cookie, deadline) 
+        {} 
+    }; 
+ 
+    struct TEvBlobStorage::TEvVInplacePatchResult 
+        : TEvVSpecialPatchBaseResult< 
+                TEvBlobStorage::TEvVInplacePatchResult, 
+                NKikimrBlobStorage::TEvVInplacePatchResult, 
+                TEvBlobStorage::EvVInplacePatchResult, 
+                NKikimrBlobStorage::TEvVInplacePatch> 
+    { 
+        using TBase = TEvVSpecialPatchBaseResult< 
+                TEvBlobStorage::TEvVInplacePatchResult, 
+                NKikimrBlobStorage::TEvVInplacePatchResult, 
+                TEvBlobStorage::EvVInplacePatchResult, 
+                NKikimrBlobStorage::TEvVInplacePatch>; 
+ 
+        TEvVInplacePatchResult() = default; 
+ 
+        TEvVInplacePatchResult(const NKikimrProto::EReplyStatus status, const TLogoBlobID &originalBlobId, 
+                const TLogoBlobID &patchedBlobId, const TVDiskID &vdisk, TMaybe<ui64> cookie, 
+                TOutOfSpaceStatus oosStatus, const TInstant &now, ui32 recByteSize, 
+                NKikimrBlobStorage::TEvVInplacePatch *record, const TActorIDPtr &skeletonFrontIDPtr, 
+                const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr, 
+                NWilson::TTraceId traceId, ui64 incarnationGuid, const TString& errorReason) 
+            : TBase(status, originalBlobId, patchedBlobId, vdisk, cookie, oosStatus, now, recByteSize, 
+                    record, skeletonFrontIDPtr, counterPtr, histoPtr, std::move(traceId), incarnationGuid, errorReason) 
+        {} 
+    }; 
+ 
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+    // VBLOCK 
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+ 
     struct TEvBlobStorage::TEvVBlock
         : public TEventPB<TEvBlobStorage::TEvVBlock, NKikimrBlobStorage::TEvVBlock, TEvBlobStorage::EvVBlock> {
         TEvVBlock()
@@ -1762,303 +1762,303 @@ namespace NKikimr {
         }
     };
 
-    //////////////////////////////////////////////////////////////////////////////////////////////
-    // VPatch
-    //////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////// 
+    // VPatch 
+    ////////////////////////////////////////////////////////////////////////////////////////////// 
 
-    struct TEvBlobStorage::TEvVPatchStart
-        : public TEventPB<TEvBlobStorage::TEvVPatchStart,
-                NKikimrBlobStorage::TEvVPatchStart,
-                TEvBlobStorage::EvVPatchStart>
-    {
-        mutable NLWTrace::TOrbit Orbit;
-
-        TEvVPatchStart() = default;
-
-        TEvVPatchStart(const TLogoBlobID &originalBlobId, const TLogoBlobID &patchedBlobId, const TVDiskID &vDiskId,
-                TInstant deadline, TMaybe<ui64> cookie, bool notifyIfNotReady)
-        {
-            LogoBlobIDFromLogoBlobID(originalBlobId, Record.MutableOriginalBlobId());
-            LogoBlobIDFromLogoBlobID(patchedBlobId, Record.MutablePatchedBlobId());
-            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID());
-            if (cookie) {
-                Record.SetCookie(*cookie);
-            }
-            if (deadline != TInstant::Max()) {
-                Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds());
-            }
-            if (notifyIfNotReady) {
-                Record.SetNotifyIfNotReady(true);
-            }
-            Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::GetFastRead);
-        }
-    };
-
-    struct TEvBlobStorage::TEvVPatchFoundParts
-        : public TEvVResultBaseWithQoSPB<TEvBlobStorage::TEvVPatchFoundParts,
-                NKikimrBlobStorage::TEvVPatchFoundParts,
-                TEvBlobStorage::EvVPatchFoundParts>
-    {
-        mutable NLWTrace::TOrbit Orbit;
-
-        TEvVPatchFoundParts() = default;
-
-        TEvVPatchFoundParts(NKikimrProto::EReplyStatus status, const TLogoBlobID &originalBlobId,
-                const TLogoBlobID &patchedBlobId, const TVDiskID &vDiskId, TMaybe<ui64> cookie, const TInstant &now,
-                const TString &errorReason, NKikimrBlobStorage::TEvVPatchStart *record,
-                const TActorIDPtr &skeletonFrontIDPtr, const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId, ui64 incarnationGuid)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
-                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, record->GetCachedSize(),
-                    record, skeletonFrontIDPtr)
-        {
-            Record.SetStatus(status);
-            LogoBlobIDFromLogoBlobID(originalBlobId, Record.MutableOriginalBlobId());
-            LogoBlobIDFromLogoBlobID(patchedBlobId, Record.MutablePatchedBlobId());
-            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID());
-
-            if (cookie) {
-                Record.SetCookie(*cookie);
-            }
-            if (record && record->HasTimestamps()) {
-                Record.MutableTimestamps()->CopyFrom(record->GetTimestamps());
-            }
-            if (status == NKikimrProto::OK) {
-                Record.SetIncarnationGuid(incarnationGuid);
-            }
-            Record.SetErrorReason(errorReason);
-        }
-
-        void AddPart(ui8 part) {
-            Record.AddOriginalParts(part);
-        }
-
-        void SetStatus(NKikimrProto::EReplyStatus status) {
-            Record.SetStatus(status);
-        }
-
-        void MakeError(NKikimrProto::EReplyStatus status, const TString& errorReason,
-                const NKikimrBlobStorage::TEvVPatchStart &request) {
-            Record.SetErrorReason(errorReason);
-            Record.SetStatus(status);
-            Y_VERIFY(request.HasOriginalBlobId());
-            TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(request.GetOriginalBlobId());
-            LogoBlobIDFromLogoBlobID(blobId, Record.MutableOriginalBlobId());
-            Y_VERIFY(request.HasVDiskID());
-            TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
-            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID());
-            Y_VERIFY(request.HasCookie());
-            Record.SetCookie(request.GetCookie());
-        }
-    };
-
-    struct TEvBlobStorage::TEvVPatchDiff
-        : public TEventPB<TEvBlobStorage::TEvVPatchDiff,
-                NKikimrBlobStorage::TEvVPatchDiff,
-                TEvBlobStorage::EvVPatchDiff>
-    {
-        mutable NLWTrace::TOrbit Orbit;
-
-        TEvVPatchDiff() = default;
-
-        TEvVPatchDiff(const TLogoBlobID &originalPartBlobId, const TLogoBlobID &patchedPartBlobId, const TVDiskID &vDiskId,
-                ui32 expectedXorDiffs, TInstant deadline, TMaybe<ui64> cookie)
-        {
-            LogoBlobIDFromLogoBlobID(originalPartBlobId, Record.MutableOriginalPartBlobId());
-            LogoBlobIDFromLogoBlobID(patchedPartBlobId, Record.MutablePatchedPartBlobId());
-            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID());
-            if (expectedXorDiffs) {
-                Record.SetExpectedXorDiffs(expectedXorDiffs);
-            }
-            if (cookie) {
-                Record.SetCookie(*cookie);
-            }
-            if (deadline != TInstant::Max()) {
-                Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds());
-            }
-            Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob);
-        }
-
-        void AddDiff(ui64 startIdx, const TString &buffer) {
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.data(), buffer.size());
-
-            NKikimrBlobStorage::TDiffBlock *r = Record.AddDiffs();
-            r->SetOffset(startIdx);
-            r->SetBuffer(buffer.data(), buffer.size());
-        }
-
-        void AddXorReceiver(const TVDiskID &vDiskId, ui8 partId) {
-            NKikimrBlobStorage::TXorDiffReceiver *r = Record.AddXorReceivers();
-            VDiskIDFromVDiskID(vDiskId, r->MutableVDiskID());
-            r->SetPartId(partId);
-        }
-
-        void SetForceEnd() {
-            Record.SetForceEnd(true);
-        }
-
-        bool IsForceEnd() const {
-            return Record.HasForceEnd() && Record.GetForceEnd();
-        }
-
-        bool IsXorReceiver() const {
-            return Record.HasExpectedXorDiffs() && Record.GetExpectedXorDiffs();
-        }
-
-        ui32 GetExpectedXorDiffs() const {
-            return Record.HasExpectedXorDiffs() ? Record.GetExpectedXorDiffs() : 0;
-        }
-
-        ui32 DiffSizeSum() const {
-            ui32 result = 0;
-            for (auto &diff : Record.GetDiffs()) {
-                result += diff.GetBuffer().size();
-            }
-            return result;
-        }
-    };
-
-
-    struct TEvBlobStorage::TEvVPatchXorDiff
-        : public TEventPB<TEvBlobStorage::TEvVPatchXorDiff,
-                NKikimrBlobStorage::TEvVPatchXorDiff,
-                TEvBlobStorage::EvVPatchXorDiff>
-    {
-        mutable NLWTrace::TOrbit Orbit;
-
-        TEvVPatchXorDiff() = default;
-
-        TEvVPatchXorDiff(const TLogoBlobID &originalPartBlobId, const TLogoBlobID &patchedPartBlobId, const TVDiskID &vDiskId,
-                ui8 partId, TInstant deadline, TMaybe<ui64> cookie)
-        {
-            LogoBlobIDFromLogoBlobID(originalPartBlobId, Record.MutableOriginalPartBlobId());
-            LogoBlobIDFromLogoBlobID(patchedPartBlobId, Record.MutablePatchedPartBlobId());
-            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID());
-            Record.SetFromPartId(partId);
-            if (cookie) {
-                Record.SetCookie(*cookie);
-            }
-            if (deadline != TInstant::Max()) {
-                Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds());
-            }
-            Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob);
-        }
-
-        void AddDiff(ui64 startIdx, const TString &buffer) {
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.data(), buffer.size());
-
-            NKikimrBlobStorage::TDiffBlock *r = Record.AddDiffs();
-            r->SetOffset(startIdx);
-            r->SetBuffer(buffer.data(), buffer.size());
-        }
-
-        ui32 DiffSizeSum() const {
-            ui32 result = 0;
-            for (auto &diff : Record.GetDiffs()) {
-                result += diff.GetBuffer().size();
-            }
-            return result;
-        }
-    };
-
-    struct TEvBlobStorage::TEvVPatchXorDiffResult
-        : public TEvVResultBaseWithQoSPB<TEvBlobStorage::TEvVPatchXorDiffResult,
-                NKikimrBlobStorage::TEvVPatchXorDiffResult,
-                TEvBlobStorage::EvVPatchXorDiffResult>
-    {
-        mutable NLWTrace::TOrbit Orbit;
-
-        TEvVPatchXorDiffResult() = default;
-
-        TEvVPatchXorDiffResult(NKikimrProto::EReplyStatus status, TInstant now,
-                NKikimrBlobStorage::TEvVPatchXorDiff *record, const TActorIDPtr &skeletonFrontIDPtr,
-                const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
-                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, record->GetCachedSize(),
-                    record, skeletonFrontIDPtr)
-        {
-            Record.SetStatus(status);
-            if (record && record->HasTimestamps()) {
-                Record.MutableTimestamps()->CopyFrom(record->GetTimestamps());
-            }
-        }
-
-        void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
-                const NKikimrBlobStorage::TEvVPatchXorDiff &request)
-        {
-            Record.SetStatus(status);
-            if (request.HasTimestamps()) {
-                Record.MutableTimestamps()->CopyFrom(request.GetTimestamps());
-            }
-        }
-    };
-
-    struct TEvBlobStorage::TEvVPatchResult
-        : public TEvVResultBaseWithQoSPB<TEvBlobStorage::TEvVPatchResult,
-                NKikimrBlobStorage::TEvVPatchResult,
-                TEvBlobStorage::EvVPatchResult>
-    {
-        mutable NLWTrace::TOrbit Orbit;
-
-        TEvVPatchResult() = default;
-
-        TEvVPatchResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &originalPartBlobId,
-                const TLogoBlobID &patchedPartBlobId, const TVDiskID &vDiskId, TMaybe<ui64> cookie, TInstant now,
-                NKikimrBlobStorage::TEvVPatchDiff *record, const TActorIDPtr &skeletonFrontIDPtr,
-                const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                NWilson::TTraceId traceId, ui64 incarnationGuid)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
-                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, record->GetCachedSize(),
-                    record, skeletonFrontIDPtr)
-        {
-            Record.SetStatus(status);
-            LogoBlobIDFromLogoBlobID(originalPartBlobId, Record.MutableOriginalPartBlobId());
-            LogoBlobIDFromLogoBlobID(patchedPartBlobId, Record.MutablePatchedPartBlobId());
-            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID());
-
-            if (cookie) {
-                Record.SetCookie(*cookie);
-            }
-            if (record && record->HasTimestamps()) {
-                Record.MutableTimestamps()->CopyFrom(record->GetTimestamps());
-            }
-            if (status == NKikimrProto::OK) {
-                Record.SetIncarnationGuid(incarnationGuid);
-            }
-        }
-
-        void SetStatus(NKikimrProto::EReplyStatus status, const TString &errorReason) {
-            Record.SetStatus(status);
-            Record.SetErrorReason(errorReason);
-        }
-
-        void SetStatusFlagsAndFreeSpace(ui32 statusFlags, float approximateFreeSpaceShare) {
-            Record.SetStatusFlags(statusFlags);
-            Record.SetApproximateFreeSpaceShare(approximateFreeSpaceShare);
-        }
-
-        void MakeError(NKikimrProto::EReplyStatus status, const TString &errorReason,
-                const NKikimrBlobStorage::TEvVPatchDiff &request)
-        {
-            Record.SetErrorReason(errorReason);
-            Record.SetStatus(status);
-
-            Y_VERIFY(request.HasOriginalPartBlobId());
-            TLogoBlobID originalPartBlobId = LogoBlobIDFromLogoBlobID(request.GetOriginalPartBlobId());
-            LogoBlobIDFromLogoBlobID(originalPartBlobId, Record.MutableOriginalPartBlobId());
-
-            Y_VERIFY(request.HasPatchedPartBlobId());
-            TLogoBlobID patchedPartBlobId = LogoBlobIDFromLogoBlobID(request.GetPatchedPartBlobId());
-            LogoBlobIDFromLogoBlobID(patchedPartBlobId, Record.MutablePatchedPartBlobId());
-
-            Y_VERIFY(request.HasVDiskID());
+    struct TEvBlobStorage::TEvVPatchStart 
+        : public TEventPB<TEvBlobStorage::TEvVPatchStart, 
+                NKikimrBlobStorage::TEvVPatchStart, 
+                TEvBlobStorage::EvVPatchStart> 
+    { 
+        mutable NLWTrace::TOrbit Orbit; 
+ 
+        TEvVPatchStart() = default; 
+ 
+        TEvVPatchStart(const TLogoBlobID &originalBlobId, const TLogoBlobID &patchedBlobId, const TVDiskID &vDiskId, 
+                TInstant deadline, TMaybe<ui64> cookie, bool notifyIfNotReady) 
+        { 
+            LogoBlobIDFromLogoBlobID(originalBlobId, Record.MutableOriginalBlobId()); 
+            LogoBlobIDFromLogoBlobID(patchedBlobId, Record.MutablePatchedBlobId()); 
+            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID()); 
+            if (cookie) { 
+                Record.SetCookie(*cookie); 
+            } 
+            if (deadline != TInstant::Max()) { 
+                Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds()); 
+            } 
+            if (notifyIfNotReady) { 
+                Record.SetNotifyIfNotReady(true); 
+            } 
+            Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::GetFastRead); 
+        } 
+    }; 
+ 
+    struct TEvBlobStorage::TEvVPatchFoundParts 
+        : public TEvVResultBaseWithQoSPB<TEvBlobStorage::TEvVPatchFoundParts, 
+                NKikimrBlobStorage::TEvVPatchFoundParts, 
+                TEvBlobStorage::EvVPatchFoundParts> 
+    { 
+        mutable NLWTrace::TOrbit Orbit; 
+ 
+        TEvVPatchFoundParts() = default; 
+ 
+        TEvVPatchFoundParts(NKikimrProto::EReplyStatus status, const TLogoBlobID &originalBlobId, 
+                const TLogoBlobID &patchedBlobId, const TVDiskID &vDiskId, TMaybe<ui64> cookie, const TInstant &now, 
+                const TString &errorReason, NKikimrBlobStorage::TEvVPatchStart *record, 
+                const TActorIDPtr &skeletonFrontIDPtr, const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, 
+                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId, ui64 incarnationGuid) 
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId), 
+                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, record->GetCachedSize(), 
+                    record, skeletonFrontIDPtr) 
+        { 
+            Record.SetStatus(status); 
+            LogoBlobIDFromLogoBlobID(originalBlobId, Record.MutableOriginalBlobId()); 
+            LogoBlobIDFromLogoBlobID(patchedBlobId, Record.MutablePatchedBlobId()); 
+            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID()); 
+ 
+            if (cookie) { 
+                Record.SetCookie(*cookie); 
+            } 
+            if (record && record->HasTimestamps()) { 
+                Record.MutableTimestamps()->CopyFrom(record->GetTimestamps()); 
+            } 
+            if (status == NKikimrProto::OK) { 
+                Record.SetIncarnationGuid(incarnationGuid); 
+            } 
+            Record.SetErrorReason(errorReason); 
+        } 
+ 
+        void AddPart(ui8 part) { 
+            Record.AddOriginalParts(part); 
+        } 
+ 
+        void SetStatus(NKikimrProto::EReplyStatus status) { 
+            Record.SetStatus(status); 
+        } 
+ 
+        void MakeError(NKikimrProto::EReplyStatus status, const TString& errorReason, 
+                const NKikimrBlobStorage::TEvVPatchStart &request) { 
+            Record.SetErrorReason(errorReason); 
+            Record.SetStatus(status); 
+            Y_VERIFY(request.HasOriginalBlobId()); 
+            TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(request.GetOriginalBlobId()); 
+            LogoBlobIDFromLogoBlobID(blobId, Record.MutableOriginalBlobId()); 
+            Y_VERIFY(request.HasVDiskID()); 
+            TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID()); 
+            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID()); 
+            Y_VERIFY(request.HasCookie()); 
+            Record.SetCookie(request.GetCookie()); 
+        } 
+    }; 
+ 
+    struct TEvBlobStorage::TEvVPatchDiff 
+        : public TEventPB<TEvBlobStorage::TEvVPatchDiff, 
+                NKikimrBlobStorage::TEvVPatchDiff, 
+                TEvBlobStorage::EvVPatchDiff> 
+    { 
+        mutable NLWTrace::TOrbit Orbit; 
+ 
+        TEvVPatchDiff() = default; 
+ 
+        TEvVPatchDiff(const TLogoBlobID &originalPartBlobId, const TLogoBlobID &patchedPartBlobId, const TVDiskID &vDiskId, 
+                ui32 expectedXorDiffs, TInstant deadline, TMaybe<ui64> cookie) 
+        { 
+            LogoBlobIDFromLogoBlobID(originalPartBlobId, Record.MutableOriginalPartBlobId()); 
+            LogoBlobIDFromLogoBlobID(patchedPartBlobId, Record.MutablePatchedPartBlobId()); 
+            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID()); 
+            if (expectedXorDiffs) { 
+                Record.SetExpectedXorDiffs(expectedXorDiffs); 
+            } 
+            if (cookie) { 
+                Record.SetCookie(*cookie); 
+            } 
+            if (deadline != TInstant::Max()) { 
+                Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds()); 
+            } 
+            Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob); 
+        } 
+ 
+        void AddDiff(ui64 startIdx, const TString &buffer) { 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.data(), buffer.size()); 
+ 
+            NKikimrBlobStorage::TDiffBlock *r = Record.AddDiffs(); 
+            r->SetOffset(startIdx); 
+            r->SetBuffer(buffer.data(), buffer.size()); 
+        } 
+ 
+        void AddXorReceiver(const TVDiskID &vDiskId, ui8 partId) { 
+            NKikimrBlobStorage::TXorDiffReceiver *r = Record.AddXorReceivers(); 
+            VDiskIDFromVDiskID(vDiskId, r->MutableVDiskID()); 
+            r->SetPartId(partId); 
+        } 
+ 
+        void SetForceEnd() { 
+            Record.SetForceEnd(true); 
+        } 
+ 
+        bool IsForceEnd() const { 
+            return Record.HasForceEnd() && Record.GetForceEnd(); 
+        } 
+ 
+        bool IsXorReceiver() const { 
+            return Record.HasExpectedXorDiffs() && Record.GetExpectedXorDiffs(); 
+        } 
+ 
+        ui32 GetExpectedXorDiffs() const { 
+            return Record.HasExpectedXorDiffs() ? Record.GetExpectedXorDiffs() : 0; 
+        } 
+ 
+        ui32 DiffSizeSum() const { 
+            ui32 result = 0; 
+            for (auto &diff : Record.GetDiffs()) { 
+                result += diff.GetBuffer().size(); 
+            } 
+            return result; 
+        } 
+    }; 
+ 
+ 
+    struct TEvBlobStorage::TEvVPatchXorDiff 
+        : public TEventPB<TEvBlobStorage::TEvVPatchXorDiff, 
+                NKikimrBlobStorage::TEvVPatchXorDiff, 
+                TEvBlobStorage::EvVPatchXorDiff> 
+    { 
+        mutable NLWTrace::TOrbit Orbit; 
+ 
+        TEvVPatchXorDiff() = default; 
+ 
+        TEvVPatchXorDiff(const TLogoBlobID &originalPartBlobId, const TLogoBlobID &patchedPartBlobId, const TVDiskID &vDiskId, 
+                ui8 partId, TInstant deadline, TMaybe<ui64> cookie) 
+        { 
+            LogoBlobIDFromLogoBlobID(originalPartBlobId, Record.MutableOriginalPartBlobId()); 
+            LogoBlobIDFromLogoBlobID(patchedPartBlobId, Record.MutablePatchedPartBlobId()); 
+            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID()); 
+            Record.SetFromPartId(partId); 
+            if (cookie) { 
+                Record.SetCookie(*cookie); 
+            } 
+            if (deadline != TInstant::Max()) { 
+                Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds()); 
+            } 
+            Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob); 
+        } 
+ 
+        void AddDiff(ui64 startIdx, const TString &buffer) { 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.data(), buffer.size()); 
+ 
+            NKikimrBlobStorage::TDiffBlock *r = Record.AddDiffs(); 
+            r->SetOffset(startIdx); 
+            r->SetBuffer(buffer.data(), buffer.size()); 
+        } 
+ 
+        ui32 DiffSizeSum() const { 
+            ui32 result = 0; 
+            for (auto &diff : Record.GetDiffs()) { 
+                result += diff.GetBuffer().size(); 
+            } 
+            return result; 
+        } 
+    }; 
+ 
+    struct TEvBlobStorage::TEvVPatchXorDiffResult 
+        : public TEvVResultBaseWithQoSPB<TEvBlobStorage::TEvVPatchXorDiffResult, 
+                NKikimrBlobStorage::TEvVPatchXorDiffResult, 
+                TEvBlobStorage::EvVPatchXorDiffResult> 
+    { 
+        mutable NLWTrace::TOrbit Orbit; 
+ 
+        TEvVPatchXorDiffResult() = default; 
+ 
+        TEvVPatchXorDiffResult(NKikimrProto::EReplyStatus status, TInstant now, 
+                NKikimrBlobStorage::TEvVPatchXorDiff *record, const TActorIDPtr &skeletonFrontIDPtr, 
+                const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, 
+                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId) 
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId), 
+                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, record->GetCachedSize(), 
+                    record, skeletonFrontIDPtr) 
+        { 
+            Record.SetStatus(status); 
+            if (record && record->HasTimestamps()) { 
+                Record.MutableTimestamps()->CopyFrom(record->GetTimestamps()); 
+            } 
+        } 
+ 
+        void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/, 
+                const NKikimrBlobStorage::TEvVPatchXorDiff &request) 
+        { 
+            Record.SetStatus(status); 
+            if (request.HasTimestamps()) { 
+                Record.MutableTimestamps()->CopyFrom(request.GetTimestamps()); 
+            } 
+        } 
+    }; 
+ 
+    struct TEvBlobStorage::TEvVPatchResult 
+        : public TEvVResultBaseWithQoSPB<TEvBlobStorage::TEvVPatchResult, 
+                NKikimrBlobStorage::TEvVPatchResult, 
+                TEvBlobStorage::EvVPatchResult> 
+    { 
+        mutable NLWTrace::TOrbit Orbit; 
+ 
+        TEvVPatchResult() = default; 
+ 
+        TEvVPatchResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &originalPartBlobId, 
+                const TLogoBlobID &patchedPartBlobId, const TVDiskID &vDiskId, TMaybe<ui64> cookie, TInstant now, 
+                NKikimrBlobStorage::TEvVPatchDiff *record, const TActorIDPtr &skeletonFrontIDPtr, 
+                const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr, 
+                NWilson::TTraceId traceId, ui64 incarnationGuid) 
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId), 
+                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, record->GetCachedSize(), 
+                    record, skeletonFrontIDPtr) 
+        { 
+            Record.SetStatus(status); 
+            LogoBlobIDFromLogoBlobID(originalPartBlobId, Record.MutableOriginalPartBlobId()); 
+            LogoBlobIDFromLogoBlobID(patchedPartBlobId, Record.MutablePatchedPartBlobId()); 
+            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID()); 
+ 
+            if (cookie) { 
+                Record.SetCookie(*cookie); 
+            } 
+            if (record && record->HasTimestamps()) { 
+                Record.MutableTimestamps()->CopyFrom(record->GetTimestamps()); 
+            } 
+            if (status == NKikimrProto::OK) { 
+                Record.SetIncarnationGuid(incarnationGuid); 
+            } 
+        } 
+ 
+        void SetStatus(NKikimrProto::EReplyStatus status, const TString &errorReason) { 
+            Record.SetStatus(status); 
+            Record.SetErrorReason(errorReason); 
+        } 
+ 
+        void SetStatusFlagsAndFreeSpace(ui32 statusFlags, float approximateFreeSpaceShare) { 
+            Record.SetStatusFlags(statusFlags); 
+            Record.SetApproximateFreeSpaceShare(approximateFreeSpaceShare); 
+        } 
+ 
+        void MakeError(NKikimrProto::EReplyStatus status, const TString &errorReason, 
+                const NKikimrBlobStorage::TEvVPatchDiff &request) 
+        { 
+            Record.SetErrorReason(errorReason); 
+            Record.SetStatus(status); 
+ 
+            Y_VERIFY(request.HasOriginalPartBlobId()); 
+            TLogoBlobID originalPartBlobId = LogoBlobIDFromLogoBlobID(request.GetOriginalPartBlobId()); 
+            LogoBlobIDFromLogoBlobID(originalPartBlobId, Record.MutableOriginalPartBlobId()); 
+ 
+            Y_VERIFY(request.HasPatchedPartBlobId()); 
+            TLogoBlobID patchedPartBlobId = LogoBlobIDFromLogoBlobID(request.GetPatchedPartBlobId()); 
+            LogoBlobIDFromLogoBlobID(patchedPartBlobId, Record.MutablePatchedPartBlobId()); 
+ 
+            Y_VERIFY(request.HasVDiskID()); 
             Record.MutableVDiskID()->CopyFrom(request.GetVDiskID());
-            Y_VERIFY(request.HasCookie());
-            Record.SetCookie(request.GetCookie());
-        }
-    };
-
+            Y_VERIFY(request.HasCookie()); 
+            Record.SetCookie(request.GetCookie()); 
+        } 
+    }; 
+ 
     struct TEvBlobStorage::TEvVGetBlock
         : public TEventPB<TEvBlobStorage::TEvVGetBlock,
                     NKikimrBlobStorage::TEvVGetBlock,
@@ -2717,15 +2717,15 @@ namespace NKikimr {
             Record.SetFrontQueueId(queueId);
             wstatus.Serialize(*Record.MutableWindow());
         }
-
+ 
         TEvVWindowChange(NKikimrBlobStorage::EVDiskQueueId queueId, TDropConnection) {
             Record.SetFrontQueueId(queueId);
             Record.SetDropConnection(true);
         }
 
-        TString ToString() const override {
+        TString ToString() const override { 
             return SingleLineProto(Record);
-        }
+        } 
     };
 
     struct TEvVGenerationChange: public TEventLocal<TEvVGenerationChange, TEvBlobStorage::EvVGenerationChange> {

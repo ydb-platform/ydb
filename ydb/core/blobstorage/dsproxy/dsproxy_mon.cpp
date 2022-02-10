@@ -44,13 +44,13 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<NMonito
     EventIndexRestoreGet = EventGroup->GetCounter("EvIndexRestoreGet", true);
     EventMultiCollect = EventGroup->GetCounter("EvMultiCollect", true);
     EventStatus = EventGroup->GetCounter("EvStatus", true);
-    EventStopPutBatching = EventGroup->GetCounter("EvStopPutBatching", true);
-    EventStopGetBatching = EventGroup->GetCounter("EvStopGetBatching", true);
-    EventPatch = EventGroup->GetCounter("EvPatch", true);
+    EventStopPutBatching = EventGroup->GetCounter("EvStopPutBatching", true); 
+    EventStopGetBatching = EventGroup->GetCounter("EvStopGetBatching", true); 
+    EventPatch = EventGroup->GetCounter("EvPatch", true); 
 
-    PutsSentViaPutBatching = EventGroup->GetCounter("PutsSentViaPutBatching", true);
-    PutBatchesSent = EventGroup->GetCounter("PutBatchesSent", true);
-
+    PutsSentViaPutBatching = EventGroup->GetCounter("PutsSentViaPutBatching", true); 
+    PutBatchesSent = EventGroup->GetCounter("PutBatchesSent", true); 
+ 
     auto buckets = EventGroup->GetSubgroup("sensor", "EvPutBytesBuckets");
     for (ui32 size : {0, 256, 4096, 65536, 250000, 1000000, 4000000}) {
         EventPutBytesBuckets.emplace(size, buckets->GetNamedCounter("size", Sprintf("%" PRIu32, (ui32)size), true));
@@ -71,13 +71,13 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<NMonito
     ActiveRange = ActiveRequestsGroup->GetCounter("ActiveRange");
     ActiveCollectGarbage = ActiveRequestsGroup->GetCounter("ActiveCollectGarbage");
     ActiveStatus = ActiveRequestsGroup->GetCounter("ActiveStatus");
-    ActivePatch = ActiveRequestsGroup->GetCounter("ActivePatch");
+    ActivePatch = ActiveRequestsGroup->GetCounter("ActivePatch"); 
 
-    // special patch counters
-    VPatchContinueFailed = ActiveRequestsGroup->GetCounter("VPatchContinueFailed");
-    VPatchPartPlacementVerifyFailed = ActiveRequestsGroup->GetCounter("VPatchPartPlacementVerifyFailed");
-    PatchesWithFallback = ActiveRequestsGroup->GetCounter("PatchesWithFallback");
-
+    // special patch counters 
+    VPatchContinueFailed = ActiveRequestsGroup->GetCounter("VPatchContinueFailed"); 
+    VPatchPartPlacementVerifyFailed = ActiveRequestsGroup->GetCounter("VPatchPartPlacementVerifyFailed"); 
+    PatchesWithFallback = ActiveRequestsGroup->GetCounter("PatchesWithFallback"); 
+ 
     // subevents
     {
         auto group = Counters->GetSubgroup("subsystem", "subevents");
@@ -85,7 +85,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<NMonito
         PutGroup.Init(group->GetSubgroup("request", "put"));
         DiscoverGroup.Init(group->GetSubgroup("request", "discover"));
         RangeGroup.Init(group->GetSubgroup("request", "range"));
-        PatchGroup.Init(group->GetSubgroup("request", "patch"));
+        PatchGroup.Init(group->GetSubgroup("request", "patch")); 
     }
 
     ActiveMultiGet = ActiveRequestsGroup->GetCounter("ActiveMultiGet");
@@ -100,7 +100,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<NMonito
     RespStatRange.emplace(respStatGroup->GetSubgroup("request", "range"));
     RespStatCollectGarbage.emplace(respStatGroup->GetSubgroup("request", "collectGarbage"));
     RespStatStatus.emplace(respStatGroup->GetSubgroup("request", "status"));
-    RespStatPatch.emplace(respStatGroup->GetSubgroup("request", "patch"));
+    RespStatPatch.emplace(respStatGroup->GetSubgroup("request", "patch")); 
 }
 
 void TBlobStorageGroupProxyMon::BecomeFull() {
@@ -130,7 +130,7 @@ void TBlobStorageGroupProxyMon::BecomeFull() {
         IndexRestoreGetResponseTime.Initialize(ResponseGroup, "event", "indexRestoreGet", "Response in millisec",
                 Percentiles1);
         RangeResponseTime.Initialize(ResponseGroup, "event", "range", "Response in millisec", Percentiles1);
-        PatchResponseTime.Initialize(ResponseGroup, "event", "patch", "Response in millisec", Percentiles1);
+        PatchResponseTime.Initialize(ResponseGroup, "event", "patch", "Response in millisec", Percentiles1); 
     }
     IsLimitedMon = false;
 }
@@ -190,7 +190,7 @@ void TBlobStorageGroupProxyMon::Update() {
         DiscoverResponseTime.Update();
         IndexRestoreGetResponseTime.Update();
         RangeResponseTime.Update();
-        PatchResponseTime.Update();
+        PatchResponseTime.Update(); 
     }
 
     BlockResponseTime.Update();

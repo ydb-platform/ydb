@@ -55,9 +55,9 @@ struct TDsProxyNodeMon : public TThrRefBase {
     NMonitoring::TPercentileTracker<16, 512, 15> GetLowReadResponseTime;
     THistoPtrForDeviceType GetLowReadResponseTimeHist;
 
-    NMonitoring::TPercentileTracker<16, 512, 15> PatchResponseTime;
-    THistoPtrForDeviceType PatchResponseTimeHist;
-
+    NMonitoring::TPercentileTracker<16, 512, 15> PatchResponseTime; 
+    THistoPtrForDeviceType PatchResponseTimeHist; 
+ 
     NMonitoring::TPercentileTracker<16, 512, 15> BlockResponseTime;
     NMonitoring::TPercentileTracker<16, 512, 15> DiscoverResponseTime;
     NMonitoring::TPercentileTracker<16, 512, 15> IndexRestoreGetResponseTime;
@@ -74,7 +74,7 @@ struct TDsProxyNodeMon : public TThrRefBase {
     NMonitoring::TDynamicCounters::TCounterPtr RestartCollectGarbage;
     NMonitoring::TDynamicCounters::TCounterPtr RestartIndexRestoreGet;
     NMonitoring::TDynamicCounters::TCounterPtr RestartStatus;
-    NMonitoring::TDynamicCounters::TCounterPtr RestartPatch;
+    NMonitoring::TDynamicCounters::TCounterPtr RestartPatch; 
 
     std::array<NMonitoring::TDynamicCounters::TCounterPtr, 4> RestartHisto;
 
@@ -95,7 +95,7 @@ struct TDsProxyNodeMon : public TThrRefBase {
             TDuration duration);
     void CountGetResponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls, ui32 size,
             TDuration duration);
-    void CountPatchResponseTime(TPDiskCategory::EDeviceType type, TDuration duration);
+    void CountPatchResponseTime(TPDiskCategory::EDeviceType type, TDuration duration); 
 
     // Called only from NodeWarder
     void CheckNodeMonCountersForDeviceType(TPDiskCategory::EDeviceType type);

@@ -161,9 +161,9 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
 
     void ScrubTest(TBlobStorageGroupType erasure) {
         SetRandomSeed(1);
-        TEnvironmentSetup env(false, erasure);
+        TEnvironmentSetup env(false, erasure); 
         auto& runtime = env.Runtime;
-        env.CreateBoxAndPool();
+        env.CreateBoxAndPool(); 
         env.Sim(TDuration::Minutes(1));
         auto groups = env.GetGroups();
         auto info = env.GetGroupInfo(groups[0]);

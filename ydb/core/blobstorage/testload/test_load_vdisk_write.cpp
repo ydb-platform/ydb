@@ -148,7 +148,7 @@ namespace NKikimr {
             }
 
             void TryToIssuePuts(const TActorContext& ctx) {
-                const TInstant now = TAppData::TimeProvider->Now();
+                const TInstant now = TAppData::TimeProvider->Now(); 
 
                 while (IsConnected &&
                         now >= NextWriteRequestTimestamp &&
@@ -218,7 +218,7 @@ namespace NKikimr {
             }
 
             void TryToCollect(const TActorContext& ctx) {
-                const TInstant now = TAppData::TimeProvider->Now();
+                const TInstant now = TAppData::TimeProvider->Now(); 
                 if (IsConnected && now >= NextCollectRequestTimestamp) {
                     if (CollectStep < BlobStep + StepDistance) {
                         const ui32 collectStep = CollectStep++;

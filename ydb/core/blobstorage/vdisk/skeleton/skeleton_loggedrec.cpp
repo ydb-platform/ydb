@@ -39,50 +39,50 @@ namespace NKikimr {
         TLogoBlobID genId(Id, 0);
         hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Seg.Point());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix << "TEvVPut: reply;"
-                << " id# " << Id
-                << " msg# " << Result->ToString()
-                << " Marker# BSVSLR01");
+        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix << "TEvVPut: reply;" 
+                << " id# " << Id 
+                << " msg# " << Result->ToString() 
+                << " Marker# BSVSLR01"); 
 
         SendVDiskResponse(ctx, Recipient, Result.release(), actor, RecipientCookie);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
-    // TLoggedRecVPut -- incapsulates TEvVPut replay action (for small blobs)
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////
-    TLoggedRecVMultiPutItem::TLoggedRecVMultiPutItem(
-            TLsnSeg seg,
-            bool confirmSyncLogAlso,
-            const TLogoBlobID &id,
-            const TIngress &ingress,
-            TRope &&buffer,
+    // TLoggedRecVPut -- incapsulates TEvVPut replay action (for small blobs) 
+    /////////////////////////////////////////////////////////////////////////////////////////////////////// 
+    TLoggedRecVMultiPutItem::TLoggedRecVMultiPutItem( 
+            TLsnSeg seg, 
+            bool confirmSyncLogAlso, 
+            const TLogoBlobID &id, 
+            const TIngress &ingress, 
+            TRope &&buffer, 
             std::unique_ptr<TEvVMultiPutItemResult> result,
             const TActorId &recipient,
-            ui64 recipientCookie)
-        : ILoggedRec(seg, confirmSyncLogAlso)
-        , Id(id)
-        , Ingress(ingress)
-        , Buffer(std::move(buffer))
+            ui64 recipientCookie) 
+        : ILoggedRec(seg, confirmSyncLogAlso) 
+        , Id(id) 
+        , Ingress(ingress) 
+        , Buffer(std::move(buffer)) 
         , Result(std::move(result))
-        , Recipient(recipient)
-        , RecipientCookie(recipientCookie)
-    {}
-
-    void TLoggedRecVMultiPutItem::Replay(THull &hull, const TActorContext &ctx, const IActor& actor) {
-        Y_UNUSED(actor);
-        TLogoBlobID genId(Id, 0);
-        hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Seg.Point());
-
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix
-                << "TEvVMultiPut: item reply;"
-                << " id# " << Id
-                << " msg# " << Result->ToString()
-                << " Marker# BSVSLR02");
-
+        , Recipient(recipient) 
+        , RecipientCookie(recipientCookie) 
+    {} 
+ 
+    void TLoggedRecVMultiPutItem::Replay(THull &hull, const TActorContext &ctx, const IActor& actor) { 
+        Y_UNUSED(actor); 
+        TLogoBlobID genId(Id, 0); 
+        hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Seg.Point()); 
+ 
+        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix 
+                << "TEvVMultiPut: item reply;" 
+                << " id# " << Id 
+                << " msg# " << Result->ToString() 
+                << " Marker# BSVSLR02"); 
+ 
         ctx.Send(Recipient, Result.release(), RecipientCookie);
-    }
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////
+    } 
+ 
+    /////////////////////////////////////////////////////////////////////////////////////////////////////// 
     // TLoggedRecVPut -- incapsulates TEvVPut replay action (for huge blobs)
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
     TLoggedRecVPutHuge::TLoggedRecVPutHuge(
@@ -106,8 +106,8 @@ namespace NKikimr {
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix
-                << "TEvVPut: realtime# false result# " << msg->Result->ToString()
-                << " Marker# BSVSLR03");
+                << "TEvVPut: realtime# false result# " << msg->Result->ToString() 
+                << " Marker# BSVSLR03"); 
         SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), actor, msg->OrigCookie);
     }
 
@@ -140,8 +140,8 @@ namespace NKikimr {
         hull.AddBlockCmd(ctx, TabletId, Gen, IssuerGuid, Seg.Point(), replySender);
 
         LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BLOCK, hull.GetHullCtx()->VCtx->VDiskLogPrefix
-                << "TEvVBlock: result# " << Result->ToString()
-                << " Marker# BSVSLR04");
+                << "TEvVBlock: result# " << Result->ToString() 
+                << " Marker# BSVSLR04"); 
         SendVDiskResponse(ctx, Recipient, Result.release(), actor, RecipientCookie);
     }
 
@@ -165,8 +165,8 @@ namespace NKikimr {
         hull.AddGCCmd(ctx, record, Ingress, Seg);
 
         LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_GC, hull.GetHullCtx()->VCtx->VDiskLogPrefix
-                << "TEvVCollectGarbage: result# " << Result->ToString()
-                << " Marker# BSVSLR05");
+                << "TEvVCollectGarbage: result# " << Result->ToString() 
+                << " Marker# BSVSLR05"); 
         SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), actor, OrigEv->Cookie);
     }
 

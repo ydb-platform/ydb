@@ -38,7 +38,7 @@ struct TIntermediate {
         ui32 Offset;
         ui32 Size;
         ui32 ValueSize;
-        ui32 RequestedSize = 0;
+        ui32 RequestedSize = 0; 
         ui64 CreationUnixTime;
         NKikimrClient::TKeyValueRequest::EStorageChannel StorageChannel;
         NKikimrBlobStorage::EGetHandleClass HandleClass;
@@ -100,9 +100,9 @@ struct TIntermediate {
         bool IsAllowed;
     };
 
-    using TCmd = std::variant<TWrite, TDelete, TRename, TCopyRange, TConcat>;
-    using TReadCmd = std::variant<TRead, TRangeRead>;
-
+    using TCmd = std::variant<TWrite, TDelete, TRename, TCopyRange, TConcat>; 
+    using TReadCmd = std::variant<TRead, TRangeRead>; 
+ 
     TDeque<TRead> Reads;
     TDeque<TRangeRead> RangeReads;
     TDeque<TWrite> Writes;
@@ -114,16 +114,16 @@ struct TIntermediate {
     TMaybe<TTrimLeakedBlobs> TrimLeakedBlobs;
     TMaybe<TSetExecutorFastLogPolicy> SetExecutorFastLogPolicy;
 
-    TStackVec<TCmd, 1> Commands;
-    TStackVec<ui32, 1> WriteIndices;
-    std::optional<TReadCmd> ReadCommand;
-
-    ui64 WriteCount = 0;
-    ui64 DeleteCount = 0;
-    ui64 RenameCount = 0;
-    ui64 CopyRangeCount = 0;
-    ui64 ConcatCount = 0;
-
+    TStackVec<TCmd, 1> Commands; 
+    TStackVec<ui32, 1> WriteIndices; 
+    std::optional<TReadCmd> ReadCommand; 
+ 
+    ui64 WriteCount = 0; 
+    ui64 DeleteCount = 0; 
+    ui64 RenameCount = 0; 
+    ui64 CopyRangeCount = 0; 
+    ui64 ConcatCount = 0; 
+ 
     ui64 Cookie;
     ui64 Generation;
     ui64 RequestUid;
@@ -150,13 +150,13 @@ struct TIntermediate {
     TRequestStat Stat;
 
     NKikimrClient::TResponse Response;
-    NKikimrKeyValue::ExecuteTransactionResult ExecuteTransactionResponse;
-    NKikimrKeyValue::GetStatusResult GetStatusResponse;
+    NKikimrKeyValue::ExecuteTransactionResult ExecuteTransactionResponse; 
+    NKikimrKeyValue::GetStatusResult GetStatusResponse; 
 
-    THashMap<ui32, NKikimrKeyValue::Channel*> Channels;
-
-    ui32 EvType = 0;
-
+    THashMap<ui32, NKikimrKeyValue::Channel*> Channels; 
+ 
+    ui32 EvType = 0; 
+ 
     TIntermediate(TActorId respondTo, TActorId keyValueActorId, ui64 channelGeneration, ui64 channelStep,
             TRequestType::EType requestType);
 

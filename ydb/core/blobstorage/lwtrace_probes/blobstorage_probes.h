@@ -56,12 +56,12 @@ struct TEventTypeField {
 }
 
 #define BLOBSTORAGE_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES) \
-    PROBE(DSProxyBatchedPutRequest, GROUPS("DSProxy"), \
-        TYPES(ui64, ui32), \
-        NAMES("count" , "groupId")) \
-    PROBE(DSProxyBatchedGetRequest, GROUPS("DSProxy"), \
-        TYPES(ui64, ui32), \
-        NAMES("count" , "groupId")) \
+    PROBE(DSProxyBatchedPutRequest, GROUPS("DSProxy"), \ 
+        TYPES(ui64, ui32), \ 
+        NAMES("count" , "groupId")) \ 
+    PROBE(DSProxyBatchedGetRequest, GROUPS("DSProxy"), \ 
+        TYPES(ui64, ui32), \ 
+        NAMES("count" , "groupId")) \ 
     PROBE(ProxyPutBootstrapPart, GROUPS("Durations"), \
       TYPES(ui64, double, double, ui64, double), \
       NAMES("size", "waitMs", "splitMs", "splitCount", "splitElapsedMs")) \
@@ -72,18 +72,18 @@ struct TEventTypeField {
       TYPES(NKikimr::TEventTypeField, ui64, ui64, ui32, ui32, ui32, double, double, double, double, TString, TString), \
       NAMES("type", "size", "tabletId", "groupId", "channel", "vdiskOrderNum", "startTime", "totalDurationMs", \
           "vdiskDurationMs", "transferDurationMs", "handleClass", "status")) \
-    PROBE(VDiskSkeletonFrontVMovedPatchRecieved, GROUPS("VDisk", "DSProxy"), \
-      TYPES(ui32, ui32, ui32, ui64, ui64), \
-      NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \
-    PROBE(VDiskSkeletonFrontVPatchStartRecieved, GROUPS("VDisk", "DSProxy"), \
-      TYPES(ui32, ui32, ui32, ui64, ui64), \
-      NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \
-    PROBE(VDiskSkeletonFrontVPatchDiffRecieved, GROUPS("VDisk", "DSProxy"), \
-      TYPES(ui32, ui32, ui32, ui64, ui64), \
-      NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \
-    PROBE(VDiskSkeletonFrontVPatchXorDiffRecieved, GROUPS("VDisk", "DSProxy"), \
-      TYPES(ui32, ui32, ui32, ui64, ui64), \
-      NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \
+    PROBE(VDiskSkeletonFrontVMovedPatchRecieved, GROUPS("VDisk", "DSProxy"), \ 
+      TYPES(ui32, ui32, ui32, ui64, ui64), \ 
+      NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \ 
+    PROBE(VDiskSkeletonFrontVPatchStartRecieved, GROUPS("VDisk", "DSProxy"), \ 
+      TYPES(ui32, ui32, ui32, ui64, ui64), \ 
+      NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \ 
+    PROBE(VDiskSkeletonFrontVPatchDiffRecieved, GROUPS("VDisk", "DSProxy"), \ 
+      TYPES(ui32, ui32, ui32, ui64, ui64), \ 
+      NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \ 
+    PROBE(VDiskSkeletonFrontVPatchXorDiffRecieved, GROUPS("VDisk", "DSProxy"), \ 
+      TYPES(ui32, ui32, ui32, ui64, ui64), \ 
+      NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \ 
     PROBE(VDiskSkeletonFrontVPutRecieved, GROUPS("VDisk", "DSProxy"), \
       TYPES(ui32, ui32, ui32, ui64, ui64), \
       NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \
@@ -93,9 +93,9 @@ struct TEventTypeField {
     PROBE(VDiskSkeletonVPutRecieved, GROUPS("VDisk", "DSProxy"), \
       TYPES(ui32, ui32, ui32, ui64, ui64), \
       NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \
-    PROBE(VDiskSkeletonVMultiPutRecieved, GROUPS("VDisk", "DSProxy"), \
-      TYPES(ui32, ui32, ui32, ui64, ui64), \
-      NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \
+    PROBE(VDiskSkeletonVMultiPutRecieved, GROUPS("VDisk", "DSProxy"), \ 
+      TYPES(ui32, ui32, ui32, ui64, ui64), \ 
+      NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \ 
     PROBE(VDiskRecoveryLogWriterVPutIsRecieved, GROUPS("VDisk"), \
       TYPES(ui32, ui64), \
       NAMES("owner", "lsn")) \

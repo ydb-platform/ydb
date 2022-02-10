@@ -8,40 +8,40 @@
 #include <library/cpp/actors/util/threadparkpad.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-#include <util/system/mutex.h>
-
+#include <util/system/mutex.h> 
+ 
 namespace NActors {
     class TBasicExecutorPool: public TExecutorPoolBase {
         struct TThreadCtx {
             TAutoPtr<TExecutorThread> Thread;
             TThreadParkPad Pad;
-            TThreadParkPad BlockedPad;
+            TThreadParkPad BlockedPad; 
             TAtomic WaitingFlag;
-            TAtomic BlockedFlag;
+            TAtomic BlockedFlag; 
 
             // different threads must spin/block on different cache-lines.
             // we add some padding bytes to enforce this rule
-            static const size_t SizeWithoutPadding = sizeof(TAutoPtr<TExecutorThread>) + 2 * sizeof(TThreadParkPad) + 2 * sizeof(TAtomic);
-            ui8 Padding[64 - SizeWithoutPadding];
-            static_assert(64 >= SizeWithoutPadding);
+            static const size_t SizeWithoutPadding = sizeof(TAutoPtr<TExecutorThread>) + 2 * sizeof(TThreadParkPad) + 2 * sizeof(TAtomic); 
+            ui8 Padding[64 - SizeWithoutPadding]; 
+            static_assert(64 >= SizeWithoutPadding); 
 
             enum EWaitState {
                 WS_NONE,
                 WS_ACTIVE,
-                WS_BLOCKED,
-                WS_RUNNING
+                WS_BLOCKED, 
+                WS_RUNNING 
             };
 
-            enum EBlockedState {
-                BS_NONE,
-                BS_BLOCKING,
-                BS_BLOCKED
-            };
-
-            TThreadCtx()
-                : WaitingFlag(WS_NONE)
-                , BlockedFlag(BS_NONE)
-            {
+            enum EBlockedState { 
+                BS_NONE, 
+                BS_BLOCKING, 
+                BS_BLOCKED 
+            }; 
+ 
+            TThreadCtx() 
+                : WaitingFlag(WS_NONE) 
+                , BlockedFlag(BS_NONE) 
+            { 
             }
         };
 
@@ -63,9 +63,9 @@ namespace NActors {
         TAtomic MaxUtilizationCounter;
         TAtomic MaxUtilizationAccumulator;
 
-        TAtomic ThreadCount;
-        TMutex ChangeThreadsLock;
-
+        TAtomic ThreadCount; 
+        TMutex ChangeThreadsLock; 
+ 
     public:
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
@@ -101,11 +101,11 @@ namespace NActors {
         }
 
         void SetRealTimeMode() const override;
-
-        ui32 GetThreadCount() const;
-        void SetThreadCount(ui32 threads);
-
-    private:
+ 
+        ui32 GetThreadCount() const; 
+        void SetThreadCount(ui32 threads); 
+ 
+    private: 
         void WakeUpLoop();
     };
 }

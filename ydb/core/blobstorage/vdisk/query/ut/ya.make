@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/blobstorage/vdisk/query)
-
-OWNER(g:kikimr)
-
+ 
+OWNER(g:kikimr) 
+ 
 IF (WITH_VALGRIND)
     FORK_SUBTESTS()
     TIMEOUT(1800)
@@ -12,14 +12,14 @@ ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
-
-PEERDIR(
+ 
+PEERDIR( 
     ydb/core/blobstorage/vdisk/huge
     ydb/core/protos
-)
-
-SRCS(
+) 
+ 
+SRCS( 
     query_spacetracker_ut.cpp
-)
-
-END()
+) 
+ 
+END() 

@@ -329,37 +329,37 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
     mutable NLWTrace::TOrbit Orbit;
 };
 
-struct TEvMultiLog : public TEventLocal<TEvMultiLog, TEvBlobStorage::EvMultiLog> {
-    TBatchedVec<THolder<TEvLog>> Logs;
-    TLsnSeg LsnSeg;
-
-    void AddLog(THolder<TEvLog> &&ev) {
-        Logs.emplace_back(std::move(ev));
-        auto &log = *Logs.back();
-        if (Logs.size() == 1) {
-            LsnSeg = TLsnSeg(log.LsnSegmentStart, log.Lsn);
-        } else {
-            Y_VERIFY_S(LsnSeg.Last + 1 == log.LsnSegmentStart, "LastLsn# " << LsnSeg.Last <<
-                                                               " NewLsnStart# " << log.LsnSegmentStart);
-            LsnSeg.Last = log.Lsn;
-        }
-    }
-
-    TString ToString() const {
-        return ToString(*this);
-    }
-
-    static TString ToString(const TEvMultiLog &record) {
-        TStringBuilder str;
-        str << '{';
-        for (ui64 idx = 0; idx < record.Logs.size(); ++idx) {
-            str << (idx ? ", " : "") << idx << "# " << record.Logs[idx]->ToString();
-        }
-        str << '}';
-        return str;
-    }
-};
-
+struct TEvMultiLog : public TEventLocal<TEvMultiLog, TEvBlobStorage::EvMultiLog> { 
+    TBatchedVec<THolder<TEvLog>> Logs; 
+    TLsnSeg LsnSeg; 
+ 
+    void AddLog(THolder<TEvLog> &&ev) { 
+        Logs.emplace_back(std::move(ev)); 
+        auto &log = *Logs.back(); 
+        if (Logs.size() == 1) { 
+            LsnSeg = TLsnSeg(log.LsnSegmentStart, log.Lsn); 
+        } else { 
+            Y_VERIFY_S(LsnSeg.Last + 1 == log.LsnSegmentStart, "LastLsn# " << LsnSeg.Last << 
+                                                               " NewLsnStart# " << log.LsnSegmentStart); 
+            LsnSeg.Last = log.Lsn; 
+        } 
+    } 
+ 
+    TString ToString() const { 
+        return ToString(*this); 
+    } 
+ 
+    static TString ToString(const TEvMultiLog &record) { 
+        TStringBuilder str; 
+        str << '{'; 
+        for (ui64 idx = 0; idx < record.Logs.size(); ++idx) { 
+            str << (idx ? ", " : "") << idx << "# " << record.Logs[idx]->ToString(); 
+        } 
+        str << '}'; 
+        return str; 
+    } 
+}; 
+ 
 struct TEvLogResult : public TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResult> {
     struct TRecord {
         ui64 Lsn;

@@ -14,7 +14,7 @@ namespace NKikimr {
             TActivationContext::Send(StopGetBatchingEvent.Release());
         }
         BatchedGetRequestCount++;
-
+ 
         EnsureMonitoring(true);
         LWTRACK(DSProxyGetHandle, ev->Get()->Orbit);
         EnableWilsonTracing(ev, Mon->GetSamplePPM);
@@ -107,7 +107,7 @@ namespace NKikimr {
         Send(MonActor, new TEvThroughputAddRequest(ev->Get()->HandleClass, bytes));
         EnableWilsonTracing(ev, Mon->PutSamplePPM);
 
-        if (EnablePutBatching && bytes < MaxBatchedPutSize) {
+        if (EnablePutBatching && bytes < MaxBatchedPutSize) { 
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
             Y_VERIFY((ui64)handleClass <= PutHandleClassCount);
@@ -119,8 +119,8 @@ namespace NKikimr {
             }
 
             if (batchedPuts.Queue.size() == MaxBatchedPutRequests || batchedPuts.Bytes + bytes > MaxBatchedPutSize) {
-                *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size();
-                ++*Mon->PutBatchesSent;
+                *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size(); 
+                ++*Mon->PutBatchesSent; 
                 ProcessBatchedPutRequests(batchedPuts, handleClass, tactic);
             }
 
@@ -129,14 +129,14 @@ namespace NKikimr {
         } else {
             TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(ev->Get()->HandleClass);
 
-            TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext());
-            bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut();
+            TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext()); 
+            bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut(); 
             // TODO(alexvru): MinLatency support
             const TActorId reqID = Register(
                     CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
                         ev->Get(), ev->Cookie, std::move(ev->TraceId), Mon->TimeStats.IsEnabled(),
-                        PerDiskStats, kind, TActivationContext::Now(), StoragePoolCounters,
-                        enableRequestMod3x3ForMinLatency));
+                        PerDiskStats, kind, TActivationContext::Now(), StoragePoolCounters, 
+                        enableRequestMod3x3ForMinLatency)); 
             ActiveRequests.insert(reqID);
         }
     }
@@ -158,11 +158,11 @@ namespace NKikimr {
         }
         EnsureMonitoring(true);
         Mon->EventPatch->Inc();
-        TInstant now = TActivationContext::Now();
+        TInstant now = TActivationContext::Now(); 
         const TActorId reqId = Register(
                 CreateBlobStorageGroupPatchRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
-                        ev->Get(), ev->Cookie, std::move(ev->TraceId), now,
-                        StoragePoolCounters, SelfId(), EnableVPatch.Update(now)));
+                        ev->Get(), ev->Cookie, std::move(ev->TraceId), now, 
+                        StoragePoolCounters, SelfId(), EnableVPatch.Update(now))); 
         ActiveRequests.insert(reqId);
     }
 
@@ -257,21 +257,21 @@ namespace NKikimr {
         TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(handleClass);
 
         if (Info) {
-            TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext());
-            bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut();
+            TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext()); 
+            bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut(); 
             // TODO(alexvru): MinLatency support
             if (batchedPuts.Queue.size() == 1) {
                 const TActorId reqID = Register(
                     CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues, batchedPuts.Queue.front()->Sender,
                         Mon, batchedPuts.Queue.front()->Get(), batchedPuts.Queue.front()->Cookie,
                         std::move(batchedPuts.Queue.front()->TraceId), Mon->TimeStats.IsEnabled(), PerDiskStats, kind,
-                        TActivationContext::Now(), StoragePoolCounters, enableRequestMod3x3ForMinLatency));
+                        TActivationContext::Now(), StoragePoolCounters, enableRequestMod3x3ForMinLatency)); 
                 ActiveRequests.insert(reqID);
             } else {
                 const TActorId reqID = Register(
                     CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues,
                         Mon, batchedPuts.Queue, Mon->TimeStats.IsEnabled(), PerDiskStats, kind, TActivationContext::Now(),
-                        StoragePoolCounters, handleClass, tactic, enableRequestMod3x3ForMinLatency));
+                        StoragePoolCounters, handleClass, tactic, enableRequestMod3x3ForMinLatency)); 
                 ActiveRequests.insert(reqID);
             }
         } else {
@@ -289,15 +289,15 @@ namespace NKikimr {
         for (auto &bucket : PutBatchedBucketQueue) {
             auto &batchedPuts = BatchedPuts[bucket.HandleClass][bucket.Tactic];
             Y_VERIFY(!batchedPuts.Queue.empty());
-            *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size();
-            ++*Mon->PutBatchesSent;
+            *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size(); 
+            ++*Mon->PutBatchesSent; 
             ProcessBatchedPutRequests(batchedPuts, bucket.HandleClass, bucket.Tactic);
         }
         PutBatchedBucketQueue.clear();
         ++*Mon->EventStopPutBatching;
         LWPROBE(DSProxyBatchedPutRequest, BatchedPutRequestCount, GroupId);
         BatchedPutRequestCount = 0;
-        EnablePutBatching.Update(TActivationContext::Now());
+        EnablePutBatching.Update(TActivationContext::Now()); 
     }
 
     void TBlobStorageGroupProxy::Handle(TEvStopBatchingGetRequests::TPtr& ev) {

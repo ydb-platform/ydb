@@ -453,8 +453,8 @@ struct TEvBlobStorage {
         EvCollectGarbage,
         EvStatus,
         EvVBaldSyncLog,
-        EvPatch,
-        EvInplacePatch,
+        EvPatch, 
+        EvInplacePatch, 
 
         //
         EvPutResult = EvPut + 512,                              /// 268 632 576
@@ -466,8 +466,8 @@ struct TEvBlobStorage {
         EvCollectGarbageResult,
         EvStatusResult,
         EvVBaldSyncLogResult,
-        EvPatchResult,
-        EvInplacePatchResult,
+        EvPatchResult, 
+        EvInplacePatchResult, 
 
         // proxy <-> vdisk interface
         EvVPut = EvPut + 2 * 512,                               /// 268 633 088
@@ -481,13 +481,13 @@ struct TEvBlobStorage {
         EvVDbStat,
         EvVCheckReadiness,
         EvVCompact,                                             /// 268 633 098
-        EvVMultiPut,
-        EvVMovedPatch,
-        EvVPatchStart,
-        EvVPatchDiff,
-        EvVPatchXorDiff,
+        EvVMultiPut, 
+        EvVMovedPatch, 
+        EvVPatchStart, 
+        EvVPatchDiff, 
+        EvVPatchXorDiff, 
         EvVDefrag,
-        EvVInplacePatch,
+        EvVInplacePatch, 
 
         EvVPutResult = EvPut + 3 * 512,                         /// 268 633 600
         EvVGetResult,
@@ -500,13 +500,13 @@ struct TEvBlobStorage {
         EvVWindowChange,
         EvVCheckReadinessResult,
         EvVCompactResult,
-        EvVMultiPutResult,
-        EvVMovedPatchResult,
-        EvVPatchFoundParts,
-        EvVPatchXorDiffResult,
-        EvVPatchResult,
+        EvVMultiPutResult, 
+        EvVMovedPatchResult, 
+        EvVPatchFoundParts, 
+        EvVPatchXorDiffResult, 
+        EvVPatchResult, 
         EvVDefragResult,
-        EvVInplacePatchResult,
+        EvVInplacePatchResult, 
 
         // vdisk <-> vdisk interface
         EvVDisk = EvPut + 4 * 512,                              /// 268 634 112
@@ -644,8 +644,8 @@ struct TEvBlobStorage {
         EvMonStreamQuery,                                       // 268 636 270
         EvMonStreamActorDeathNote,
         EvPDiskErrorStateChange,
-        EvMultiLog,
-        EvVMultiPutItemResult,
+        EvMultiLog, 
+        EvVMultiPutItemResult, 
         EvEnrichNotYet,
         EvCommenceRepl, // for debugging purposes
         EvRecoverBlob,
@@ -666,8 +666,8 @@ struct TEvBlobStorage {
         EvCompactVDisk,
         EvCompactVDiskResult,
         EvDefragRewritten,
-        EvVPatchDyingRequest,
-        EvVPatchDyingConfirm,
+        EvVPatchDyingRequest, 
+        EvVPatchDyingConfirm, 
         EvNonrestoredCorruptedBlobNotify,
         EvHugeLockChunks,
         EvHugeStat,
@@ -739,9 +739,9 @@ struct TEvBlobStorage {
         EvGroupStatReport,
         EvAccelerateGet,
         EvAcceleratePut,
-        EvRequestProxyQueueState,
-        EvRequestProxySessionsState,
-        EvProxySessionsState,
+        EvRequestProxyQueueState, 
+        EvRequestProxySessionsState, 
+        EvProxySessionsState, 
         EvBunchOfEvents,
 
         // blobstorage controller interface
@@ -855,15 +855,15 @@ struct TEvBlobStorage {
     struct TEvRangeResult;
     struct TEvCollectGarbageResult;
     struct TEvStatusResult;
-    struct TEvPatchResult;
-    struct TEvInplacePatchResult;
+    struct TEvPatchResult; 
+    struct TEvInplacePatchResult; 
 
     struct TEvPut : public TEventLocal<TEvPut, EvPut> {
         enum ETactic {
-            TacticMaxThroughput = 0,
+            TacticMaxThroughput = 0, 
             TacticMinLatency,
-            TacticDefault, // Default depends on the erasure type
-            TacticCount // This is not a tactic, but a number of tactics. Add new tactics before this line.
+            TacticDefault, // Default depends on the erasure type 
+            TacticCount // This is not a tactic, but a number of tactics. Add new tactics before this line. 
         };
         static const char* TacticName(ETactic tactic) {
             switch (tactic) {
@@ -873,8 +873,8 @@ struct TEvBlobStorage {
                     return "MinLatency";
                 case TacticDefault:
                     return "Default";
-                default:
-                    return "unknown";
+                default: 
+                    return "unknown"; 
             }
         };
 
@@ -1268,293 +1268,293 @@ struct TEvBlobStorage {
         }
     };
 
-    struct TEvPatch : public TEventLocal<TEvPatch, EvPatch> {
-    private:
-        static constexpr ui32 BaseDomainsCount = 8;
-        static constexpr ui32 MaxStepsForFindingId = 128;
-
-    public:
-        struct TDiff {
-            TString Buffer;
-            ui32 Offset;
-
-            TDiff()
-                : Offset(0)
-            {
-            }
-
-            void Set(const TString &buffer, ui32 offset) {
-                Buffer = buffer;
-                Offset = offset;
-                Y_VERIFY_S(buffer.Size(), "EvPatchDiff invalid: Diff size must be non-zero");
-            }
-
-            template <typename TOStream>
-            void Output(TOStream &os) const {
-                os << "TDiff {Offset# " << Offset << " Size# " << Buffer.Size() << '}';
-            }
-
-            TString ToString() const {
-                TStringBuilder str;
-                Output(str);
-                return str;
-            }
-        };
-
-        const ui32 OriginalGroupId;
-        const TLogoBlobID OriginalId;
-        const TLogoBlobID PatchedId;
-        const ui32 MaskForCookieBruteForcing = 0;
-
-        TArrayHolder<TDiff> Diffs;
-        const ui64 DiffCount;
-        const TInstant Deadline;
-        mutable NLWTrace::TOrbit Orbit;
-        ui32 RestartCounter = 0;
-
-        TEvPatch(ui32 originalGroupId, const TLogoBlobID &originalId, const TLogoBlobID &patchedId,
-                ui32 maskForCookieBruteForcing, TArrayHolder<TDiff> &&diffs, ui64 diffCount, TInstant deadline)
-            : OriginalGroupId(originalGroupId)
-            , OriginalId(originalId)
-            , PatchedId(patchedId)
-            , MaskForCookieBruteForcing(maskForCookieBruteForcing)
-            , Diffs(std::move(diffs))
-            , DiffCount(diffCount)
-            , Deadline(deadline)
-        {
-            CheckContructorArgs(originalId, patchedId, Diffs, DiffCount);
-        }
-
+    struct TEvPatch : public TEventLocal<TEvPatch, EvPatch> { 
+    private: 
+        static constexpr ui32 BaseDomainsCount = 8; 
+        static constexpr ui32 MaxStepsForFindingId = 128; 
+ 
+    public: 
+        struct TDiff { 
+            TString Buffer; 
+            ui32 Offset; 
+ 
+            TDiff() 
+                : Offset(0) 
+            { 
+            } 
+ 
+            void Set(const TString &buffer, ui32 offset) { 
+                Buffer = buffer; 
+                Offset = offset; 
+                Y_VERIFY_S(buffer.Size(), "EvPatchDiff invalid: Diff size must be non-zero"); 
+            } 
+ 
+            template <typename TOStream> 
+            void Output(TOStream &os) const { 
+                os << "TDiff {Offset# " << Offset << " Size# " << Buffer.Size() << '}'; 
+            } 
+ 
+            TString ToString() const { 
+                TStringBuilder str; 
+                Output(str); 
+                return str; 
+            } 
+        }; 
+ 
+        const ui32 OriginalGroupId; 
+        const TLogoBlobID OriginalId; 
+        const TLogoBlobID PatchedId; 
+        const ui32 MaskForCookieBruteForcing = 0; 
+ 
+        TArrayHolder<TDiff> Diffs; 
+        const ui64 DiffCount; 
+        const TInstant Deadline; 
+        mutable NLWTrace::TOrbit Orbit; 
+        ui32 RestartCounter = 0; 
+ 
+        TEvPatch(ui32 originalGroupId, const TLogoBlobID &originalId, const TLogoBlobID &patchedId, 
+                ui32 maskForCookieBruteForcing, TArrayHolder<TDiff> &&diffs, ui64 diffCount, TInstant deadline) 
+            : OriginalGroupId(originalGroupId) 
+            , OriginalId(originalId) 
+            , PatchedId(patchedId) 
+            , MaskForCookieBruteForcing(maskForCookieBruteForcing) 
+            , Diffs(std::move(diffs)) 
+            , DiffCount(diffCount) 
+            , Deadline(deadline) 
+        { 
+            CheckContructorArgs(originalId, patchedId, Diffs, DiffCount); 
+        } 
+ 
         static void CheckContructorArgs(const TLogoBlobID &originalId, const TLogoBlobID &patchedId,
-                const TArrayHolder<TDiff> &diffs, ui64 diffCount)
-        {
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&originalId, sizeof(originalId));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&patchedId, sizeof(patchedId));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(diffs.Get(), sizeof(*diffs.Get()) * diffCount);
-
-            Y_VERIFY_S(originalId, "EvPatch invalid: LogoBlobId must have non-zero tablet field,"
-                    << " OriginalId# " << originalId);
-            Y_VERIFY_S(patchedId, "EvPatch invalid: LogoBlobId must have non-zero tablet field,"
-                    << " PatchedId# " << patchedId);
-            Y_VERIFY_S(originalId != patchedId, "EvPatch invalid: OriginalId and PatchedId mustn't be equal"
-                    << " OriginalId# " << originalId
-                    << " PatchedId# " << patchedId);
-            Y_VERIFY_S(originalId.BlobSize() == patchedId.BlobSize(),
-                    "EvPatch invalid: LogoBlobId must have non-zero tablet field,"
-                    << " OriginalId# " << originalId
-                    << " PatchedId# " << patchedId);
-
-            for (ui32 idx = 0; idx < diffCount; ++idx) {
-                REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(diffs[idx].Buffer.Data(), diffs[idx].Buffer.size());
-
-                if (idx) {
-                    Y_VERIFY_S(diffs[idx - 1].Offset + diffs[idx].Buffer.Size() <= diffs[idx].Offset,
-                            "EvPatch invalid: Diffs mustn't be re-covered,"
-                            << " [" << idx - 1 << "].Offset# " << diffs[idx - 1].Offset
-                            << " [" << idx - 1 << "].Size# " << diffs[idx - 1].Buffer.Size()
-                            << " [" << idx << "].Offset# " << diffs[idx].Offset
-                            << " [" << idx << "].Size# " << diffs[idx].Buffer.Size());
-                }
-                Y_VERIFY_S(diffs[idx].Offset + diffs[idx].Buffer.Size() <= originalId.BlobSize(),
-                        "EvPatch invalid: Blob size bound was overflow by diff,"
-                        << " [" << idx << "].Offset# " << diffs[idx].Offset
-                        << " [" << idx << "].Size# " << diffs[idx].Buffer.Size()
-                        << " [" << idx << "].EndIdx# " << diffs[idx].Offset + diffs[idx].Buffer.Size()
-                        << " BlobSize# " << originalId.BlobSize());
-                Y_VERIFY_S(diffs[idx].Buffer.Size(),
-                        "EvPatch invalid: Diff size must be non-zero,"
-                        << " [" << idx << "].Size# " << diffs[idx].Buffer.Size());
-            }
-        }
-
-        static bool GetBlobIdWithSamePlacement(const TLogoBlobID &originalId, TLogoBlobID *patchedId,
-                ui32 bitsForBruteForce, ui32 originalGroupId, ui32 currentGroupId)
-        {
-            if (originalGroupId != currentGroupId) {
-                return false;
-            }
-
-            ui32 expectedValue = originalId.Hash() % BaseDomainsCount;
-            Y_VERIFY(patchedId);
-            if (patchedId->Hash() % BaseDomainsCount == expectedValue) {
-                return true;
-            }
-
-            Y_VERIFY(bitsForBruteForce <= TLogoBlobID::MaxCookie);
-            ui32 baseCookie = ~bitsForBruteForce & patchedId->Cookie();
-            ui32 extraCookie = TLogoBlobID::MaxCookie + 1;
-            ui32 steps = 0;
-            do {
-                extraCookie = (extraCookie - 1) & bitsForBruteForce;
-                ui32 cookie = baseCookie | (extraCookie ^ bitsForBruteForce);
-                steps++;
-
-                TLogoBlobID id(patchedId->TabletID(), patchedId->Generation(), patchedId->Step(), patchedId->Channel(),
-                        patchedId->BlobSize(), cookie, 0, patchedId->CrcMode());
-                if (id.Hash() % BaseDomainsCount == expectedValue) {
-                    *patchedId = id;
-                    return true;
-                }
-
-            } while(extraCookie && steps < MaxStepsForFindingId);
-
-            return false;
-        }
-
-        TString Print(bool isFull) const {
-            Y_UNUSED(isFull);
-            TStringBuilder str;
-            str << "TEvPatch {OriginalGroupId# " << OriginalGroupId;
-            str << " OriginalId# " << OriginalId;
-            str << " PatchedId# " << PatchedId;
-            str << " Deadline# " << Deadline.MilliSeconds();
-            str << " DiffCount# " << DiffCount;
-            for (ui32 idx = 0; idx < DiffCount; ++idx) {
-                str << ' ';
-                Diffs[idx].Output(str);
-            }
-            str << '}';
-            return str;
-        }
-
-        TString ToString() const {
-            return Print(false);
-        }
-
-        ui32 CalculateSize() const {
-            return sizeof(*this) + sizeof(TDiff) * DiffCount;
-        }
-
-        std::unique_ptr<TEvPatchResult> MakeErrorResponse(NKikimrProto::EReplyStatus status,
-                const TString& errorReason, ui32 groupId);
-    };
-
-    struct TEvPatchResult : public TEventLocal<TEvPatchResult, EvPatchResult> {
-        NKikimrProto::EReplyStatus Status;
-        const TLogoBlobID Id;
-        const TStorageStatusFlags StatusFlags;
-        const ui32 GroupId;
-        const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained'
-        TString ErrorReason;
-        mutable NLWTrace::TOrbit Orbit;
-
-        TEvPatchResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, TStorageStatusFlags statusFlags,
-                ui32 groupId, float approximateFreeSpaceShare)
-            : Status(status)
-            , Id(id)
-            , StatusFlags(statusFlags)
-            , GroupId(groupId)
-            , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
-        {
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&id, sizeof(id));
-        }
-
-        TString Print(bool isFull) const {
-            Y_UNUSED(isFull);
-            TStringBuilder str;
-            str << "TEvPatchResult {Id# " << Id;
-            str << " Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
-            str << " StatusFlags# " << StatusFlags;
-            if (ErrorReason.size()) {
-                str << " ErrorReason# \"" << ErrorReason << "\"";
-            }
-            str << " ApproximateFreeSpaceShare# " << ApproximateFreeSpaceShare;
-            str << "}";
-            return str;
-        }
-
-        TString ToString() const {
-            return Print(false);
-        }
-    };
-
-    struct TEvInplacePatch : public TEventLocal<TEvInplacePatch, EvInplacePatch> {
-        using TDiff = TEvPatch::TDiff;
-
-        const TLogoBlobID OriginalId;
-        const TLogoBlobID PatchedId;
-
-        TArrayHolder<TDiff> Diffs;
-        const ui64 DiffCount;
-        const TInstant Deadline;
-        mutable NLWTrace::TOrbit Orbit;
-        ui32 RestartCounter = 0;
-
-        TEvInplacePatch(const TLogoBlobID &originalId, const TLogoBlobID &patchedId, TArrayHolder<TDiff> &&diffs,
-                ui64 diffCount, TInstant deadline)
-            : OriginalId(originalId)
-            , PatchedId(patchedId)
-            , Diffs(std::move(diffs))
-            , DiffCount(diffCount)
-            , Deadline(deadline)
-        {
-            TEvPatch::CheckContructorArgs(originalId, patchedId, Diffs, DiffCount);
-        }
-
-        TString Print(bool isFull) const {
-            Y_UNUSED(isFull);
-            TStringBuilder str;
-            str << "TEvInplacePatch {OriginalId# " << OriginalId;
-            str << " PatchedId# " << PatchedId;
-            str << " Deadline# " << Deadline.MilliSeconds();
-            str << " DiffCount# " << DiffCount;
-            for (ui32 idx = 0; idx < DiffCount; ++idx) {
-                str << ' ';
-                Diffs[idx].Output(str);
-            }
-            str << '}';
-            return str;
-        }
-
-        TString ToString() const {
-            return Print(false);
-        }
-
-        ui32 CalculateSize() const {
-            return sizeof(*this) + sizeof(TDiff) * DiffCount;
-        }
-
-        std::unique_ptr<TEvInplacePatchResult> MakeErrorResponse(NKikimrProto::EReplyStatus status,
-                const TString& errorReason);
-    };
-
-    struct TEvInplacePatchResult : public TEventLocal<TEvInplacePatchResult, EvInplacePatchResult> {
-        NKikimrProto::EReplyStatus Status;
-        const TLogoBlobID Id;
-        const TStorageStatusFlags StatusFlags;
-        const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained'
-        TString ErrorReason;
-        mutable NLWTrace::TOrbit Orbit;
-
-        TEvInplacePatchResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, TStorageStatusFlags statusFlags,
-                float approximateFreeSpaceShare)
-            : Status(status)
-            , Id(id)
-            , StatusFlags(statusFlags)
-            , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
-        {
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&id, sizeof(id));
-        }
-
-        TString Print(bool isFull) const {
-            Y_UNUSED(isFull);
-            TStringBuilder str;
-            str << "TEvPatchResult {Id# " << Id;
-            str << " Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
-            str << " StatusFlags# " << StatusFlags;
-            if (ErrorReason.size()) {
-                str << " ErrorReason# \"" << ErrorReason << "\"";
-            }
-            str << " ApproximateFreeSpaceShare# " << ApproximateFreeSpaceShare;
-            str << "}";
-            return str;
-        }
-
-        TString ToString() const {
-            return Print(false);
-        }
-    };
-
+                const TArrayHolder<TDiff> &diffs, ui64 diffCount) 
+        { 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&originalId, sizeof(originalId)); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&patchedId, sizeof(patchedId)); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(diffs.Get(), sizeof(*diffs.Get()) * diffCount); 
+ 
+            Y_VERIFY_S(originalId, "EvPatch invalid: LogoBlobId must have non-zero tablet field," 
+                    << " OriginalId# " << originalId); 
+            Y_VERIFY_S(patchedId, "EvPatch invalid: LogoBlobId must have non-zero tablet field," 
+                    << " PatchedId# " << patchedId); 
+            Y_VERIFY_S(originalId != patchedId, "EvPatch invalid: OriginalId and PatchedId mustn't be equal" 
+                    << " OriginalId# " << originalId 
+                    << " PatchedId# " << patchedId); 
+            Y_VERIFY_S(originalId.BlobSize() == patchedId.BlobSize(), 
+                    "EvPatch invalid: LogoBlobId must have non-zero tablet field," 
+                    << " OriginalId# " << originalId 
+                    << " PatchedId# " << patchedId); 
+ 
+            for (ui32 idx = 0; idx < diffCount; ++idx) { 
+                REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(diffs[idx].Buffer.Data(), diffs[idx].Buffer.size()); 
+ 
+                if (idx) { 
+                    Y_VERIFY_S(diffs[idx - 1].Offset + diffs[idx].Buffer.Size() <= diffs[idx].Offset, 
+                            "EvPatch invalid: Diffs mustn't be re-covered," 
+                            << " [" << idx - 1 << "].Offset# " << diffs[idx - 1].Offset 
+                            << " [" << idx - 1 << "].Size# " << diffs[idx - 1].Buffer.Size() 
+                            << " [" << idx << "].Offset# " << diffs[idx].Offset 
+                            << " [" << idx << "].Size# " << diffs[idx].Buffer.Size()); 
+                } 
+                Y_VERIFY_S(diffs[idx].Offset + diffs[idx].Buffer.Size() <= originalId.BlobSize(), 
+                        "EvPatch invalid: Blob size bound was overflow by diff," 
+                        << " [" << idx << "].Offset# " << diffs[idx].Offset 
+                        << " [" << idx << "].Size# " << diffs[idx].Buffer.Size() 
+                        << " [" << idx << "].EndIdx# " << diffs[idx].Offset + diffs[idx].Buffer.Size() 
+                        << " BlobSize# " << originalId.BlobSize()); 
+                Y_VERIFY_S(diffs[idx].Buffer.Size(), 
+                        "EvPatch invalid: Diff size must be non-zero," 
+                        << " [" << idx << "].Size# " << diffs[idx].Buffer.Size()); 
+            } 
+        } 
+ 
+        static bool GetBlobIdWithSamePlacement(const TLogoBlobID &originalId, TLogoBlobID *patchedId, 
+                ui32 bitsForBruteForce, ui32 originalGroupId, ui32 currentGroupId) 
+        { 
+            if (originalGroupId != currentGroupId) { 
+                return false; 
+            } 
+ 
+            ui32 expectedValue = originalId.Hash() % BaseDomainsCount; 
+            Y_VERIFY(patchedId); 
+            if (patchedId->Hash() % BaseDomainsCount == expectedValue) { 
+                return true; 
+            } 
+ 
+            Y_VERIFY(bitsForBruteForce <= TLogoBlobID::MaxCookie); 
+            ui32 baseCookie = ~bitsForBruteForce & patchedId->Cookie(); 
+            ui32 extraCookie = TLogoBlobID::MaxCookie + 1; 
+            ui32 steps = 0; 
+            do { 
+                extraCookie = (extraCookie - 1) & bitsForBruteForce; 
+                ui32 cookie = baseCookie | (extraCookie ^ bitsForBruteForce); 
+                steps++; 
+ 
+                TLogoBlobID id(patchedId->TabletID(), patchedId->Generation(), patchedId->Step(), patchedId->Channel(), 
+                        patchedId->BlobSize(), cookie, 0, patchedId->CrcMode()); 
+                if (id.Hash() % BaseDomainsCount == expectedValue) { 
+                    *patchedId = id; 
+                    return true; 
+                } 
+ 
+            } while(extraCookie && steps < MaxStepsForFindingId); 
+ 
+            return false; 
+        } 
+ 
+        TString Print(bool isFull) const { 
+            Y_UNUSED(isFull); 
+            TStringBuilder str; 
+            str << "TEvPatch {OriginalGroupId# " << OriginalGroupId; 
+            str << " OriginalId# " << OriginalId; 
+            str << " PatchedId# " << PatchedId; 
+            str << " Deadline# " << Deadline.MilliSeconds(); 
+            str << " DiffCount# " << DiffCount; 
+            for (ui32 idx = 0; idx < DiffCount; ++idx) { 
+                str << ' '; 
+                Diffs[idx].Output(str); 
+            } 
+            str << '}'; 
+            return str; 
+        } 
+ 
+        TString ToString() const { 
+            return Print(false); 
+        } 
+ 
+        ui32 CalculateSize() const { 
+            return sizeof(*this) + sizeof(TDiff) * DiffCount; 
+        } 
+ 
+        std::unique_ptr<TEvPatchResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, 
+                const TString& errorReason, ui32 groupId); 
+    }; 
+ 
+    struct TEvPatchResult : public TEventLocal<TEvPatchResult, EvPatchResult> { 
+        NKikimrProto::EReplyStatus Status; 
+        const TLogoBlobID Id; 
+        const TStorageStatusFlags StatusFlags; 
+        const ui32 GroupId; 
+        const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained' 
+        TString ErrorReason; 
+        mutable NLWTrace::TOrbit Orbit; 
+ 
+        TEvPatchResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, TStorageStatusFlags statusFlags, 
+                ui32 groupId, float approximateFreeSpaceShare) 
+            : Status(status) 
+            , Id(id) 
+            , StatusFlags(statusFlags) 
+            , GroupId(groupId) 
+            , ApproximateFreeSpaceShare(approximateFreeSpaceShare) 
+        { 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&id, sizeof(id)); 
+        } 
+ 
+        TString Print(bool isFull) const { 
+            Y_UNUSED(isFull); 
+            TStringBuilder str; 
+            str << "TEvPatchResult {Id# " << Id; 
+            str << " Status# " << NKikimrProto::EReplyStatus_Name(Status).data(); 
+            str << " StatusFlags# " << StatusFlags; 
+            if (ErrorReason.size()) { 
+                str << " ErrorReason# \"" << ErrorReason << "\""; 
+            } 
+            str << " ApproximateFreeSpaceShare# " << ApproximateFreeSpaceShare; 
+            str << "}"; 
+            return str; 
+        } 
+ 
+        TString ToString() const { 
+            return Print(false); 
+        } 
+    }; 
+ 
+    struct TEvInplacePatch : public TEventLocal<TEvInplacePatch, EvInplacePatch> { 
+        using TDiff = TEvPatch::TDiff; 
+ 
+        const TLogoBlobID OriginalId; 
+        const TLogoBlobID PatchedId; 
+ 
+        TArrayHolder<TDiff> Diffs; 
+        const ui64 DiffCount; 
+        const TInstant Deadline; 
+        mutable NLWTrace::TOrbit Orbit; 
+        ui32 RestartCounter = 0; 
+ 
+        TEvInplacePatch(const TLogoBlobID &originalId, const TLogoBlobID &patchedId, TArrayHolder<TDiff> &&diffs, 
+                ui64 diffCount, TInstant deadline) 
+            : OriginalId(originalId) 
+            , PatchedId(patchedId) 
+            , Diffs(std::move(diffs)) 
+            , DiffCount(diffCount) 
+            , Deadline(deadline) 
+        { 
+            TEvPatch::CheckContructorArgs(originalId, patchedId, Diffs, DiffCount); 
+        } 
+ 
+        TString Print(bool isFull) const { 
+            Y_UNUSED(isFull); 
+            TStringBuilder str; 
+            str << "TEvInplacePatch {OriginalId# " << OriginalId; 
+            str << " PatchedId# " << PatchedId; 
+            str << " Deadline# " << Deadline.MilliSeconds(); 
+            str << " DiffCount# " << DiffCount; 
+            for (ui32 idx = 0; idx < DiffCount; ++idx) { 
+                str << ' '; 
+                Diffs[idx].Output(str); 
+            } 
+            str << '}'; 
+            return str; 
+        } 
+ 
+        TString ToString() const { 
+            return Print(false); 
+        } 
+ 
+        ui32 CalculateSize() const { 
+            return sizeof(*this) + sizeof(TDiff) * DiffCount; 
+        } 
+ 
+        std::unique_ptr<TEvInplacePatchResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, 
+                const TString& errorReason); 
+    }; 
+ 
+    struct TEvInplacePatchResult : public TEventLocal<TEvInplacePatchResult, EvInplacePatchResult> { 
+        NKikimrProto::EReplyStatus Status; 
+        const TLogoBlobID Id; 
+        const TStorageStatusFlags StatusFlags; 
+        const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained' 
+        TString ErrorReason; 
+        mutable NLWTrace::TOrbit Orbit; 
+ 
+        TEvInplacePatchResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, TStorageStatusFlags statusFlags, 
+                float approximateFreeSpaceShare) 
+            : Status(status) 
+            , Id(id) 
+            , StatusFlags(statusFlags) 
+            , ApproximateFreeSpaceShare(approximateFreeSpaceShare) 
+        { 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&id, sizeof(id)); 
+        } 
+ 
+        TString Print(bool isFull) const { 
+            Y_UNUSED(isFull); 
+            TStringBuilder str; 
+            str << "TEvPatchResult {Id# " << Id; 
+            str << " Status# " << NKikimrProto::EReplyStatus_Name(Status).data(); 
+            str << " StatusFlags# " << StatusFlags; 
+            if (ErrorReason.size()) { 
+                str << " ErrorReason# \"" << ErrorReason << "\""; 
+            } 
+            str << " ApproximateFreeSpaceShare# " << ApproximateFreeSpaceShare; 
+            str << "}"; 
+            return str; 
+        } 
+ 
+        TString ToString() const { 
+            return Print(false); 
+        } 
+    }; 
+ 
     // special kind of request, strictly used for tablet discovery
     // returns logoblobid of last known control-channel (zero) entry.
     struct TEvDiscover : public TEventLocal<TEvDiscover, EvDiscover> {
@@ -1978,22 +1978,22 @@ struct TEvBlobStorage {
     struct TEvConfigureProxy;
     struct TEvUpdateGroupInfo;
 
-    struct TEvVMovedPatch;
-    struct TEvVMovedPatchResult;
-    struct TEvVInplacePatch;
-    struct TEvVInplacePatchResult;
+    struct TEvVMovedPatch; 
+    struct TEvVMovedPatchResult; 
+    struct TEvVInplacePatch; 
+    struct TEvVInplacePatchResult; 
     struct TEvVPut;
     struct TEvVPutResult;
-    struct TEvVMultiPut;
-    struct TEvVMultiPutResult;
+    struct TEvVMultiPut; 
+    struct TEvVMultiPutResult; 
     struct TEvVGet;
     struct TEvVGetResult;
-    struct TEvVPatchStart;
-    struct TEvVPatchFoundParts;
-    struct TEvVPatchDiff;
-    struct TEvVPatchResult;
-    struct TEvVPatchXorDiff;
-    struct TEvVPatchXorDiffResult;
+    struct TEvVPatchStart; 
+    struct TEvVPatchFoundParts; 
+    struct TEvVPatchDiff; 
+    struct TEvVPatchResult; 
+    struct TEvVPatchXorDiff; 
+    struct TEvVPatchXorDiffResult; 
     struct TEvVBlock;
     struct TEvVBlockResult;
     struct TEvVGetBlock;

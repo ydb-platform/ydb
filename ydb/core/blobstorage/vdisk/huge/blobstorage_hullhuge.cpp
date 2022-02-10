@@ -164,7 +164,7 @@ namespace NKikimr {
                 case NKikimrBlobStorage::EPutHandleClass::TabletLog:    return NPriWrite::HullHugeUserData;
                 case NKikimrBlobStorage::EPutHandleClass::AsyncBlob:    return NPriWrite::HullHugeAsyncBlob;
                 case NKikimrBlobStorage::EPutHandleClass::UserData:     return NPriWrite::HullHugeUserData;
-                default: Y_FAIL_S("Unexpected HandleClass# " << int(Item->HandleClass));
+                default: Y_FAIL_S("Unexpected HandleClass# " << int(Item->HandleClass)); 
             }
         }
 
@@ -685,9 +685,9 @@ namespace NKikimr {
 
             // notify log cutter if the FirstLsnToKeep has changed since last reporting
             if (firstLsnToKeep != State.LastReportedFirstLsnToKeep) {
-                Y_VERIFY_S(firstLsnToKeep > State.LastReportedFirstLsnToKeep, "huge keeper log rollback"
-                        << " firstLsnToKeep#" << firstLsnToKeep
-                        << " State.LastReportedFirstLsnToKeep# " << State.LastReportedFirstLsnToKeep);
+                Y_VERIFY_S(firstLsnToKeep > State.LastReportedFirstLsnToKeep, "huge keeper log rollback" 
+                        << " firstLsnToKeep#" << firstLsnToKeep 
+                        << " State.LastReportedFirstLsnToKeep# " << State.LastReportedFirstLsnToKeep); 
                 ctx.Send(HugeKeeperCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::HugeKeeper, firstLsnToKeep));
                 State.LastReportedFirstLsnToKeep = firstLsnToKeep;
 
@@ -777,10 +777,10 @@ namespace NKikimr {
 
             auto checkAndSet = [this, msg] (ui64 &dbLsn) {
                 ui64 origRecoveredLsn = HugeKeeperCtx->LsnMngr->GetOriginallyRecoveredLsn();
-                Y_VERIFY_S(dbLsn <= msg->DeletionLsn, HugeKeeperCtx->VCtx->VDiskLogPrefix << " Check failed:"
-                        << " dbLsn# " << dbLsn << " origRecoveredLsn# " << origRecoveredLsn
-                        << " recovInfo# " << HugeKeeperCtx->LocalRecoveryInfoDbg
-                        << " msg# " << msg->ToString());
+                Y_VERIFY_S(dbLsn <= msg->DeletionLsn, HugeKeeperCtx->VCtx->VDiskLogPrefix << " Check failed:" 
+                        << " dbLsn# " << dbLsn << " origRecoveredLsn# " << origRecoveredLsn 
+                        << " recovInfo# " << HugeKeeperCtx->LocalRecoveryInfoDbg 
+                        << " msg# " << msg->ToString()); 
                 dbLsn = msg->DeletionLsn;
             };
 
@@ -842,8 +842,8 @@ namespace NKikimr {
             Y_VERIFY(nErased == 1);
             // depending on SlotIsUsed...
             if (msg->SlotIsUsed) {
-                Y_VERIFY_S(State.Pers->LogPos.HugeBlobLoggedLsn < msg->RecLsn,
-                        "pers# " << State.Pers->ToString() << " msg# " << msg->ToString());
+                Y_VERIFY_S(State.Pers->LogPos.HugeBlobLoggedLsn < msg->RecLsn, 
+                        "pers# " << State.Pers->ToString() << " msg# " << msg->ToString()); 
                 // ...update HugeBlobLoggedLsn (monotonically incremented)
                 State.Pers->LogPos.HugeBlobLoggedLsn = msg->RecLsn;
             } else {

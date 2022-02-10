@@ -33,7 +33,7 @@ public:
     void Bootstrap() {
         NKikimrBlobStorage::TVDiskCostSettings settings;
         FillInCostSettings(&settings);
-        CostModel.emplace(settings, TErasureType::ErasureNone);
+        CostModel.emplace(settings, TErasureType::ErasureNone); 
 
         Become(&TThis::StateFunc, TDuration::Seconds(10), new TEvents::TEvWakeup);
     }

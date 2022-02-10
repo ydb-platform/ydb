@@ -1,14 +1,14 @@
-#pragma once
-
-#include "defs.h"
-
+#pragma once 
+ 
+#include "defs.h" 
+ 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-
-namespace NKikimr {
-
+ 
+namespace NKikimr { 
+ 
 IActor* CreateSkeletonVMovedPatchActor(TActorId leaderId, TOutOfSpaceStatus oosStatus,
-        TEvBlobStorage::TEvVMovedPatch::TPtr &ev, TActorIDPtr skeletonFrontIDPtr,
-        NMonitoring::TDynamicCounters::TCounterPtr multiPutResMsgsPtr,
-        ui64 incarnationGuid, const TVDiskContextPtr &vCtx);
-
-} // NKikimr
+        TEvBlobStorage::TEvVMovedPatch::TPtr &ev, TActorIDPtr skeletonFrontIDPtr, 
+        NMonitoring::TDynamicCounters::TCounterPtr multiPutResMsgsPtr, 
+        ui64 incarnationGuid, const TVDiskContextPtr &vCtx); 
+ 
+} // NKikimr 

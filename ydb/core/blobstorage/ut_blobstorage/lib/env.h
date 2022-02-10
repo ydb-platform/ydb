@@ -61,7 +61,7 @@ struct TEnvironmentSetup {
         })
     {}
 
-    TEnvironmentSetup(ui32 nodeCount, TNodeWardenMockActor::TSetup::TPtr nodeWardenMockSetup,
+    TEnvironmentSetup(ui32 nodeCount, TNodeWardenMockActor::TSetup::TPtr nodeWardenMockSetup, 
             TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureNone)
         : TEnvironmentSetup(TSettings{
             .NodeCount = nodeCount,
@@ -308,7 +308,7 @@ struct TEnvironmentSetup {
         }
 
         auto response = Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription()); 
     }
 
     std::vector<ui32> GetGroups() {
@@ -446,18 +446,18 @@ struct TEnvironmentSetup {
         return WaitForEdgeActorEvent<TEvBlobStorage::TEvVDbStatResult>(edge)->Get()->Record.GetData();
     }
 
-    void WithQueueId(const TVDiskID& vdiskId, NKikimrBlobStorage::EVDiskQueueId queue, std::function<void(TActorId)> action) {
-        const TActorId& queueId = CreateQueueActor(vdiskId, queue, 1000);
-        action(queueId);
-        Runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, queueId, {}, nullptr, 0), queueId.NodeId());
-    }
-
+    void WithQueueId(const TVDiskID& vdiskId, NKikimrBlobStorage::EVDiskQueueId queue, std::function<void(TActorId)> action) { 
+        const TActorId& queueId = CreateQueueActor(vdiskId, queue, 1000); 
+        action(queueId); 
+        Runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, queueId, {}, nullptr, 0), queueId.NodeId()); 
+    } 
+ 
     void CheckBlob(const TActorId& vdiskActorId, const TVDiskID& vdiskId, const TLogoBlobID& blobId, const TString& part,
             NKikimrProto::EReplyStatus status = NKikimrProto::OK) {
-        WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::GetFastRead, [&](TActorId queueId) {
-            const TActorId& edge = Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-            Runtime->Send(new IEventHandle(queueId, edge, TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdiskId,
-                TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead, TEvBlobStorage::TEvVGet::EFlags::None,
+        WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::GetFastRead, [&](TActorId queueId) { 
+            const TActorId& edge = Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__); 
+            Runtime->Send(new IEventHandle(queueId, edge, TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdiskId, 
+                TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead, TEvBlobStorage::TEvVGet::EFlags::None, 
                 Nothing(), {{blobId, 1u, ui32(part.size() - 2)}}).release()), queueId.NodeId());
             auto r = WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge, false);
             {
@@ -483,22 +483,22 @@ struct TEnvironmentSetup {
                 UNIT_ASSERT(!res.HasBuffer());
                 UNIT_ASSERT_VALUES_EQUAL(LogoBlobIDFromLogoBlobID(res.GetBlobID()), blobId.FullID());
                 UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), status);
-            }
-        });
+            } 
+        }); 
     }
 
     void PutBlob(const TVDiskID& vdiskId, const TLogoBlobID& blobId, const TString& part) {
-        WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
-            const TActorId& edge = Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-            Runtime->Send(new IEventHandle(queueId, edge, new TEvBlobStorage::TEvVPut(blobId, part, vdiskId, false, nullptr,
-                TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog)), queueId.NodeId());
-            auto r = WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge);
+        WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) { 
+            const TActorId& edge = Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__); 
+            Runtime->Send(new IEventHandle(queueId, edge, new TEvBlobStorage::TEvVPut(blobId, part, vdiskId, false, nullptr, 
+                TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog)), queueId.NodeId()); 
+            auto r = WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge); 
 
-            auto& record = r->Get()->Record;
-            Cerr << "*** PUT BLOB " << blobId << " TO " << vdiskId << " FINISHED WITH "
-                << NKikimrProto::EReplyStatus_Name(record.GetStatus()) << " ***" << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
-        });
+            auto& record = r->Get()->Record; 
+            Cerr << "*** PUT BLOB " << blobId << " TO " << vdiskId << " FINISHED WITH " 
+                << NKikimrProto::EReplyStatus_Name(record.GetStatus()) << " ***" << Endl; 
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK); 
+        }); 
     }
 
     void CommenceReplication() {

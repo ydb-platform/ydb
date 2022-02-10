@@ -105,7 +105,7 @@ namespace NKikimr {
 
         void MainCycle(const TActorContext &ctx) {
             TQuery *query = nullptr;
-            while ((query = FetchNextQuery()) && !ResultSize.IsOverflow()) {
+            while ((query = FetchNextQuery()) && !ResultSize.IsOverflow()) { 
                 Y_VERIFY(query->PartId == 0); // only full blobs (w/o specifying a part) are allowed
                 const ui64 *cookiePtr = query->HasCookie ? &query->CookieVal : nullptr;
                 ResultSize.AddLogoBlobIndex();
@@ -170,7 +170,7 @@ namespace NKikimr {
         friend class TLevelIndexExtremeQueryViaBatcherBase;
         friend class TLevelIndexQueryBase;
 
-        const TBlobStorageGroupType GType;
+        const TBlobStorageGroupType GType; 
         TReadBatcher Batcher;
         TRecordMergerCallback Merger;
         TActiveActors ActiveActors;
@@ -312,7 +312,7 @@ namespace NKikimr {
 
         void MainCycle(const TActorContext &ctx) {
             TQuery *query = nullptr;
-            while ((query = FetchNextQuery()) && !ResultSize.IsOverflow()) {
+            while ((query = FetchNextQuery()) && !ResultSize.IsOverflow()) { 
                 const TLogoBlobID &fullId = query->LogoBlobID; // full blob id we are looking for
                 const TLogoBlobID partId = TLogoBlobID(fullId, query->PartId);
                 bool found = false;
@@ -320,7 +320,7 @@ namespace NKikimr {
 
                 ResultSize.AddLogoBlobIndex();
                 if (BlobInIndex) {
-                    ResultSize.AddLogoBlobData(GType.PartSize(partId), query->Shift, query->Size);
+                    ResultSize.AddLogoBlobData(GType.PartSize(partId), query->Shift, query->Size); 
                     Batcher.StartTraverse(fullId, query, query->PartId, query->Shift, query->Size);
                     ForwardIt->PutToMerger(&Merger);
                     Merger.Finish();
@@ -342,7 +342,7 @@ namespace NKikimr {
                 }
             }
 
-            if (ResultSize.IsOverflow()) {
+            if (ResultSize.IsOverflow()) { 
                 SendResponseAndDie(ctx, this);
             } else {
                 ui8 priority = PDiskPriority();
@@ -391,9 +391,9 @@ namespace NKikimr {
             : TLevelIndexExtremeQueryViaBatcherBase(queryCtx, parentId, std::move(logoBlobsSnapshot),
                     std::move(barrierSnapshot), ev, std::move(result), replSchedulerId)
             , TActorBootstrapped<TLevelIndexExtremeQueryViaBatcherMergeData>()
-            , GType(QueryCtx->HullCtx->VCtx->Top->GType)
+            , GType(QueryCtx->HullCtx->VCtx->Top->GType) 
             , Batcher(BatcherCtx)
-            , Merger(&Batcher, GType)
+            , Merger(&Batcher, GType) 
         {}
     };
 

@@ -1,23 +1,23 @@
-#include "actorsystem.h"
-#include "executor_pool_basic.h"
-#include "hfunc.h"
-#include "scheduler_basic.h"
-
+#include "actorsystem.h" 
+#include "executor_pool_basic.h" 
+#include "hfunc.h" 
+#include "scheduler_basic.h" 
+ 
 #include <library/cpp/actors/util/should_continue.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/actors/protos/unittests.pb.h>
-
-using namespace NActors;
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TEvMsg : public NActors::TEventBase<TEvMsg, 10347> {
-    DEFINE_SIMPLE_LOCAL_EVENT(TEvMsg, "ExecutorPoolTest: Msg");
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
+ 
+using namespace NActors; 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+struct TEvMsg : public NActors::TEventBase<TEvMsg, 10347> { 
+    DEFINE_SIMPLE_LOCAL_EVENT(TEvMsg, "ExecutorPoolTest: Msg"); 
+}; 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 inline ui64 DoTimedWork(ui64 workUs) {
     ui64 startUs = ThreadCPUTime();
     ui64 endUs = startUs + workUs;
@@ -30,62 +30,62 @@ inline ui64 DoTimedWork(ui64 workUs) {
     return nowUs - startUs;
 }
 
-class TTestSenderActor : public IActor {
-private:
-    using EActivityType = IActor::EActivityType ;
-    using EActorActivity = IActor::EActorActivity;
-
-private:
-    TAtomic Counter;
+class TTestSenderActor : public IActor { 
+private: 
+    using EActivityType = IActor::EActivityType ; 
+    using EActorActivity = IActor::EActorActivity; 
+ 
+private: 
+    TAtomic Counter; 
     TActorId Receiver;
-
-    std::function<void(void)> Action;
-
-public:
-    TTestSenderActor(std::function<void(void)> action = [](){},
-                     EActivityType activityType =  EActorActivity::OTHER)
-        : IActor(static_cast<TReceiveFunc>(&TTestSenderActor::Execute), activityType)
-        , Action(action)
-    {}
-
+ 
+    std::function<void(void)> Action; 
+ 
+public: 
+    TTestSenderActor(std::function<void(void)> action = [](){}, 
+                     EActivityType activityType =  EActorActivity::OTHER) 
+        : IActor(static_cast<TReceiveFunc>(&TTestSenderActor::Execute), activityType) 
+        , Action(action) 
+    {} 
+ 
     void Start(TActorId receiver, size_t count) {
-        AtomicSet(Counter, count);
-        Receiver = receiver;
-    }
-
-    void Stop() {
-        while (true) {
-            if (GetCounter() == 0) {
-                break;
-            }
+        AtomicSet(Counter, count); 
+        Receiver = receiver; 
+    } 
+ 
+    void Stop() { 
+        while (true) { 
+            if (GetCounter() == 0) { 
+                break; 
+            } 
 
             Sleep(TDuration::MilliSeconds(1));
-        }
-    }
-
-    size_t GetCounter() const {
-        return AtomicGet(Counter);
-    }
-
-private:
+        } 
+    } 
+ 
+    size_t GetCounter() const { 
+        return AtomicGet(Counter); 
+    } 
+ 
+private: 
     STFUNC(Execute) {
-        Y_UNUSED(ctx);
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvMsg, Handle);
-        }
-    }
-
+        Y_UNUSED(ctx); 
+        switch (ev->GetTypeRewrite()) { 
+            hFunc(TEvMsg, Handle); 
+        } 
+    } 
+ 
     void Handle(TEvMsg::TPtr &ev) {
-        Y_UNUSED(ev);
-        Action();
+        Y_UNUSED(ev); 
+        Action(); 
         TAtomicBase count = AtomicDecrement(Counter);
         Y_VERIFY(count != Max<TAtomicBase>());
-        if (count) {
-            Send(Receiver, new TEvMsg());
-        }
-    }
-};
-
+        if (count) { 
+            Send(Receiver, new TEvMsg()); 
+        } 
+    } 
+}; 
+ 
 // Single cpu balancer that switches pool on every activation; not thread-safe
 struct TRoundRobinBalancer: public IBalancer {
     TCpuState* State;
@@ -121,38 +121,38 @@ void AddUnitedPool(THolder<TActorSystemSetup>& setup, ui32 concurrency = 0) {
 }
 
 THolder<TActorSystemSetup> GetActorSystemSetup(ui32 cpuCount) {
-    auto setup = MakeHolder<NActors::TActorSystemSetup>();
-    setup->NodeId = 1;
+    auto setup = MakeHolder<NActors::TActorSystemSetup>(); 
+    setup->NodeId = 1; 
     setup->CpuManager.UnitedWorkers.CpuCount = cpuCount;
     setup->CpuManager.UnitedWorkers.NoRealtime = true; // unavailable in test environment
-    setup->Scheduler = new TBasicSchedulerThread(NActors::TSchedulerConfig(512, 0));
-    return setup;
-}
-
+    setup->Scheduler = new TBasicSchedulerThread(NActors::TSchedulerConfig(512, 0)); 
+    return setup; 
+} 
+ 
 Y_UNIT_TEST_SUITE(UnitedExecutorPool) {
-
+ 
 #ifdef _linux_
-
+ 
     Y_UNIT_TEST(OnePoolManyCpus) {
-        const size_t msgCount = 1e4;
+        const size_t msgCount = 1e4; 
         auto setup = GetActorSystemSetup(4);
         AddUnitedPool(setup);
-        TActorSystem actorSystem(setup);
-        actorSystem.Start();
-
-        auto begin = TInstant::Now();
-
-        auto actor = new TTestSenderActor();
-        auto actorId = actorSystem.Register(actor);
-        actor->Start(actor->SelfId(), msgCount);
-        actorSystem.Send(actorId, new TEvMsg());
-
-        while (actor->GetCounter()) {
-            auto now = TInstant::Now();
+        TActorSystem actorSystem(setup); 
+        actorSystem.Start(); 
+ 
+        auto begin = TInstant::Now(); 
+ 
+        auto actor = new TTestSenderActor(); 
+        auto actorId = actorSystem.Register(actor); 
+        actor->Start(actor->SelfId(), msgCount); 
+        actorSystem.Send(actorId, new TEvMsg()); 
+ 
+        while (actor->GetCounter()) { 
+            auto now = TInstant::Now(); 
             UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Counter is " << actor->GetCounter());
 
             Sleep(TDuration::MilliSeconds(1));
-        }
+        } 
 
         TVector<TExecutorThreadStats> stats;
         TExecutorPoolStats poolStats;
@@ -183,20 +183,20 @@ Y_UNIT_TEST_SUITE(UnitedExecutorPool) {
         UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolDestroyedActors, 0);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolAllocatedMailboxes, 4095); // one line
         UNIT_ASSERT(stats[0].MailboxPushedOutByTime + stats[0].MailboxPushedOutByEventCount + stats[0].MailboxPushedOutBySoftPreemption >= msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(ManyPoolsOneSharedCpu) {
-        const size_t msgCount = 1e4;
+        const size_t msgCount = 1e4; 
         const size_t pools = 4;
         auto setup = GetActorSystemSetup(1);
         for (size_t pool = 0; pool < pools; pool++) {
             AddUnitedPool(setup);
         }
-        TActorSystem actorSystem(setup);
-        actorSystem.Start();
-
-        auto begin = TInstant::Now();
-
+        TActorSystem actorSystem(setup); 
+        actorSystem.Start(); 
+ 
+        auto begin = TInstant::Now(); 
+ 
         TVector<TTestSenderActor*> actors;
         for (size_t pool = 0; pool < pools; pool++) {
             auto actor = new TTestSenderActor();
@@ -204,20 +204,20 @@ Y_UNIT_TEST_SUITE(UnitedExecutorPool) {
             actor->Start(actor->SelfId(), msgCount);
             actorSystem.Send(actorId, new TEvMsg());
             actors.push_back(actor);
-        }
-
-        while (true) {
+        } 
+ 
+        while (true) { 
             size_t left = 0;
             for (auto actor : actors) {
                 left += actor->GetCounter();
-            }
+            } 
             if (left == 0) {
                 break;
             }
-            auto now = TInstant::Now();
+            auto now = TInstant::Now(); 
             UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "left " << left);
             Sleep(TDuration::MilliSeconds(1));
-        }
+        } 
 
         for (size_t pool = 0; pool < pools; pool++) {
             TVector<TExecutorThreadStats> stats;
@@ -231,8 +231,8 @@ Y_UNIT_TEST_SUITE(UnitedExecutorPool) {
             UNIT_ASSERT_VALUES_EQUAL(stats[0].ReceivedEvents, msgCount);
             UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolActorRegistrations, 1);
         }
-    }
-
+    } 
+ 
     Y_UNIT_TEST(ManyPoolsOneAssignedCpu) {
         const size_t msgCount = 1e4;
         const size_t pools = 4;
@@ -289,11 +289,11 @@ Y_UNIT_TEST_SUITE(UnitedExecutorPool) {
         for (size_t pool = 0; pool < pools; pool++) {
             AddUnitedPool(setup);
         }
-        TActorSystem actorSystem(setup);
-        actorSystem.Start();
-
-        auto begin = TInstant::Now();
-
+        TActorSystem actorSystem(setup); 
+        actorSystem.Start(); 
+ 
+        auto begin = TInstant::Now(); 
+ 
         TVector<TTestSenderActor*> actors;
         for (size_t pool = 0; pool < pools; pool++) {
             auto actor = new TTestSenderActor([]() {
@@ -303,21 +303,21 @@ Y_UNIT_TEST_SUITE(UnitedExecutorPool) {
             actor->Start(actor->SelfId(), msgCount);
             actorSystem.Send(actorId, new TEvMsg());
             actors.push_back(actor);
-        }
-
-        while (true) {
+        } 
+ 
+        while (true) { 
             size_t left = 0;
             for (auto actor : actors) {
                 left += actor->GetCounter();
-            }
+            } 
             if (left == 0) {
                 break;
             }
-            auto now = TInstant::Now();
+            auto now = TInstant::Now(); 
             UNIT_ASSERT_C(now - begin < TDuration::Seconds(15), "left " << left);
             Sleep(TDuration::MilliSeconds(1));
-        }
-
+        } 
+ 
         for (size_t pool = 0; pool < pools; pool++) {
             TVector<TExecutorThreadStats> stats;
             TExecutorPoolStats poolStats;
@@ -326,13 +326,13 @@ Y_UNIT_TEST_SUITE(UnitedExecutorPool) {
             for (ui32 idx = 1; idx < stats.size(); ++idx) {
                 stats[0].Aggregate(stats[idx]);
             }
-
+ 
             UNIT_ASSERT_VALUES_EQUAL(stats[0].ReceivedEvents, msgCount);
             UNIT_ASSERT_VALUES_EQUAL(stats[0].PreemptedEvents, msgCount); // every 100ms event should be preempted
             UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolActorRegistrations, 1);
-        }
+        } 
     }
-
+ 
 #endif
-
-}
+ 
+} 

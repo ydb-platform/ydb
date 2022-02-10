@@ -21,7 +21,7 @@ PEERDIR(
 )
 
 SRCS(
-    batched_vec_ut.cpp
+    batched_vec_ut.cpp 
     bufferwithgaps_ut.cpp
     ptr_ut.cpp
 )

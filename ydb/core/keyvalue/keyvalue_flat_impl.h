@@ -279,29 +279,29 @@ protected:
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // gRPC
-
-    void Handle(TEvKeyValue::TEvRead::TPtr &ev) {
-        State.OnEvReadRequest(ev, TActivationContext::AsActorContext(), Info());
-    }
-
-    void Handle(TEvKeyValue::TEvReadRange::TPtr &ev) {
-        State.OnEvReadRangeRequest(ev, TActivationContext::AsActorContext(), Info());
-    }
-
-    void Handle(TEvKeyValue::TEvExecuteTransaction::TPtr &ev) {
-        State.OnEvExecuteTransaction(ev, TActivationContext::AsActorContext(), Info());
-    }
-
-    void Handle(TEvKeyValue::TEvGetStatus::TPtr &ev) {
-        State.OnEvGetStatus(ev, TActivationContext::AsActorContext(), Info());
-    }
-
-    void Handle(TEvKeyValue::TEvObtainLock::TPtr &ev) {
-        State.OnEvObtainLock(ev, TActivationContext::AsActorContext(), Info());
-    }
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // gRPC 
+ 
+    void Handle(TEvKeyValue::TEvRead::TPtr &ev) { 
+        State.OnEvReadRequest(ev, TActivationContext::AsActorContext(), Info()); 
+    } 
+ 
+    void Handle(TEvKeyValue::TEvReadRange::TPtr &ev) { 
+        State.OnEvReadRangeRequest(ev, TActivationContext::AsActorContext(), Info()); 
+    } 
+ 
+    void Handle(TEvKeyValue::TEvExecuteTransaction::TPtr &ev) { 
+        State.OnEvExecuteTransaction(ev, TActivationContext::AsActorContext(), Info()); 
+    } 
+ 
+    void Handle(TEvKeyValue::TEvGetStatus::TPtr &ev) { 
+        State.OnEvGetStatus(ev, TActivationContext::AsActorContext(), Info()); 
+    } 
+ 
+    void Handle(TEvKeyValue::TEvObtainLock::TPtr &ev) { 
+        State.OnEvObtainLock(ev, TActivationContext::AsActorContext(), Info()); 
+    } 
+ 
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
     // Online state
     void Handle(TEvKeyValue::TEvEraseCollect::TPtr &ev, const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
@@ -339,19 +339,19 @@ protected:
         Execute(new TTxStoreCollect(this), ctx);
     }
 
-    void CheckYellowChannels(TRequestStat& stat) {
-        IExecutor* executor = Executor();
+    void CheckYellowChannels(TRequestStat& stat) { 
+        IExecutor* executor = Executor(); 
         if ((stat.YellowMoveChannels || stat.YellowStopChannels) && executor) {
             executor->OnYellowChannels(std::move(stat.YellowMoveChannels), std::move(stat.YellowStopChannels));
-        }
-    }
-
+        } 
+    } 
+ 
     void Handle(TEvKeyValue::TEvIntermediate::TPtr &ev, const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " Handle TEvIntermediate " << ev->Get()->ToString());
-
-        CheckYellowChannels(ev->Get()->Intermediate->Stat);
-
+ 
+        CheckYellowChannels(ev->Get()->Intermediate->Stat); 
+ 
         State.OnEvIntermediate(*(ev->Get()->Intermediate), ctx);
         Execute(new TTxRequest(std::move(ev->Get()->Intermediate), this), ctx);
     }
@@ -360,8 +360,8 @@ protected:
         TEvKeyValue::TEvNotify &event = *ev->Get();
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " Handle TEvNotify " << event.ToString());
-
-        CheckYellowChannels(ev->Get()->Stat);
+ 
+        CheckYellowChannels(ev->Get()->Stat); 
         State.OnRequestComplete(event.RequestUid, event.Generation, event.Step, ctx, Info(), event.Status, event.Stat);
     }
 
@@ -469,12 +469,12 @@ public:
             return;
         RestoreActorActivity();
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvKeyValue::TEvRead, Handle);
-            hFunc(TEvKeyValue::TEvReadRange, Handle);
-            hFunc(TEvKeyValue::TEvExecuteTransaction, Handle);
-            hFunc(TEvKeyValue::TEvGetStatus, Handle);
-            hFunc(TEvKeyValue::TEvObtainLock, Handle);
-
+            hFunc(TEvKeyValue::TEvRead, Handle); 
+            hFunc(TEvKeyValue::TEvReadRange, Handle); 
+            hFunc(TEvKeyValue::TEvExecuteTransaction, Handle); 
+            hFunc(TEvKeyValue::TEvGetStatus, Handle); 
+            hFunc(TEvKeyValue::TEvObtainLock, Handle); 
+ 
             HFunc(TEvKeyValue::TEvEraseCollect, Handle);
             HFunc(TEvKeyValue::TEvCollect, Handle);
             HFunc(TEvKeyValue::TEvStoreCollect, Handle);
@@ -535,9 +535,9 @@ public:
 
     }
 
-    bool ReassignChannelsEnabled() const override {
-        return true;
-    }
+    bool ReassignChannelsEnabled() const override { 
+        return true; 
+    } 
 };
 
 

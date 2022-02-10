@@ -41,10 +41,10 @@ SRCS(
     skeleton_overload_handler.h
     skeleton_vmultiput_actor.cpp
     skeleton_vmultiput_actor.h
-    skeleton_vmovedpatch_actor.cpp
-    skeleton_vmovedpatch_actor.h
-    skeleton_vpatch_actor.cpp
-    skeleton_vpatch_actor.h
+    skeleton_vmovedpatch_actor.cpp 
+    skeleton_vmovedpatch_actor.h 
+    skeleton_vpatch_actor.cpp 
+    skeleton_vpatch_actor.h 
 )
 
 END()

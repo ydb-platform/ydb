@@ -75,8 +75,8 @@ namespace NKikimr {
         void Handle(NPDisk::TEvCheckSpaceResult::TPtr &ev, const TActorContext &ctx) {
             const auto *msg = ev->Get();
             LOG_DEBUG_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                    << "TDskSpaceTrackerActor:handle TEvCheckSpaceResult; msg# " << msg->ToString()
-                    << " Marker# BSVSOOST02");
+                    << "TDskSpaceTrackerActor:handle TEvCheckSpaceResult; msg# " << msg->ToString() 
+                    << " Marker# BSVSOOST02"); 
 
             CHECK_PDISK_RESPONSE(VCtx, ev, ctx);
 

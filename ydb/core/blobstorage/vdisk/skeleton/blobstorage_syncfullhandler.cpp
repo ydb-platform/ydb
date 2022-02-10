@@ -49,8 +49,8 @@ namespace NKikimr {
             LOG_DEBUG_S(ctx, BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
                     << "TVSyncFullHandler: Bootstrap: fromVDisk# "
                     << VDiskIDFromVDiskID(Record.GetSourceVDiskID())
-                    << " fromSyncState# " << clientSyncState.ToString()
-                    << " Marker# BSVSFH01");
+                    << " fromSyncState# " << clientSyncState.ToString() 
+                    << " Marker# BSVSFH01"); 
 
 
             // check that the disk is from this group
@@ -67,10 +67,10 @@ namespace NKikimr {
             // check disk guid and start from the beginning if it has changed
             if (Db->GetVDiskIncarnationGuid() != clientSyncState.Guid) {
                 LOG_DEBUG_S(ctx, BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
-                        << "TVSyncFullHandler: GUID CHANGED;"
-                        << " SourceVDisk# " << SourceVDisk
-                        << " DbBirthLsn# " << DbBirthLsn
-                        << " Marker# BSVSFH02");
+                        << "TVSyncFullHandler: GUID CHANGED;" 
+                        << " SourceVDisk# " << SourceVDisk 
+                        << " DbBirthLsn# " << DbBirthLsn 
+                        << " Marker# BSVSFH02"); 
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::NODATA, SelfVDiskId,
                     TSyncState(Db->GetVDiskIncarnationGuid(), DbBirthLsn), Record.GetCookie(), Now,
                     IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, std::move(Ev->TraceId), Ev->GetChannel());
@@ -113,8 +113,8 @@ namespace NKikimr {
             LOG_DEBUG_S(ctx, BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
                     << "TVSyncFullHandler: ourConfirmedLsn# " << ConfirmedLsn
                     << " syncedLsn# " << syncedLsn
-                    << " SourceVDisk# " << SourceVDisk
-                    << " Marker# BSVSFH03");
+                    << " SourceVDisk# " << SourceVDisk 
+                    << " Marker# BSVSFH03"); 
 
             IActor *actor = CreateHullSyncFullActor(
                 Db->Config,

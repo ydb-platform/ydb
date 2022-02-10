@@ -34,7 +34,7 @@ namespace NActors {
         TAtomic Active = 0; // Number of mailboxes ready for execution or currently executing
         TAtomic Tokens = 0; // Pending tokens (token is required for worker to start execution, guarantees concurrency limit and activation availability)
         volatile bool StopFlag = false;
-
+ 
         // Configuration
         TPoolId PoolId;
         TAtomicBase Concurrency; // Max concurrent workers running this pool
@@ -78,7 +78,7 @@ namespace NActors {
                     value = RelaxedLoad(tokens);
                 } else {
                     value = AtomicLoad(tokens);
-                }
+                } 
                 if (value > 0) {
                     if (AtomicCas(tokens, value - 1, value)) {
                         return true; // token acquired
@@ -87,8 +87,8 @@ namespace NActors {
                     return false; // no more tokens
                 }
             }
-        }
-
+        } 
+ 
         // Try acquire pending token. Must be done before execution
         bool TryAcquireToken() {
             return TryAcquireTokenImpl<false>(&Tokens);
@@ -739,7 +739,7 @@ namespace NActors {
 #else
                     NanoSleep(timeoutNs); // non-linux wake is not supported, cpu will go idle on slow -> fast switch
 #endif
-                }
+                } 
             }
         }
 
@@ -985,7 +985,7 @@ namespace NActors {
                     if (pool->TryAcquireTokenRelaxed()) {
                         result = WakeWithTokenAcquired(united, pool->PoolId);
                         return true; // token acquired or stop
-                    }
+                    } 
                 }
             } else {
                 if (assignedPool->TryAcquireTokenRelaxed()) {
@@ -1009,12 +1009,12 @@ namespace NActors {
                     } else {
                         result = current;
                         return true; // wakeup
-                    }
+                    } 
                 }
-            }
+            } 
             return false; // spin threshold exceeded, no wakeups
-        }
-
+        } 
+ 
         bool StartBlocking(TPoolId& result) {
             // Switch into blocked state
             if (State.StartBlocking()) {
@@ -1210,7 +1210,7 @@ namespace NActors {
         AtomicStore(&StopFlag, true);
         for (TPoolId pool = 0; pool < PoolCount; pool++) {
             Pools[pool].Stop();
-        }
+        } 
         for (TCpuId cpuId = 0; cpuId < CpuCount; cpuId++) {
             Cpus[cpuId].Stop();
         }
@@ -1320,7 +1320,7 @@ namespace NActors {
         wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timeTracker.Elapsed());
         return result;
     }
-
+ 
     TPoolId TUnitedWorkers::WaitSequence(TCpu& cpu, TWorkerContext& wctx, TTimeTracker& timeTracker) {
         TPoolId result;
         if (cpu.ActiveWait(Us2Ts(Config.SpinThresholdUs), result)) {
@@ -1338,8 +1338,8 @@ namespace NActors {
             wctx.AddParkedCycles(timeTracker.Elapsed());
         } while (!wakeup);
         return result;
-    }
-
+    } 
+ 
     void TUnitedWorkers::GetCurrentStats(TPoolId pool, TVector<TExecutorThreadStats>& statsCopy) const {
         size_t idx = 1;
         statsCopy.resize(idx + Pools[pool].WakeOrderCpus.size());
@@ -1349,7 +1349,7 @@ namespace NActors {
             s.Aggregate(cpu->PoolStats[pool]);
         }
     }
-
+ 
     TUnitedExecutorPool::TUnitedExecutorPool(const TUnitedExecutorPoolConfig& cfg, TUnitedWorkers* united)
         : TExecutorPoolBaseMailboxed(cfg.PoolId, cfg.MaxActivityType)
         , United(united)
@@ -1357,10 +1357,10 @@ namespace NActors {
     {
         United->SetupPool(TPoolId(cfg.PoolId), this, MailboxTable.Get());
     }
-
+ 
     void TUnitedExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) {
         ActorSystem = actorSystem;
-
+ 
         // Schedule readers are initialized through TUnitedWorkers::Prepare
         *scheduleReaders = nullptr;
         *scheduleSz = 0;
@@ -1406,9 +1406,9 @@ namespace NActors {
         const auto current = ActorSystem->Monotonic();
         if (deadline < current) {
             deadline = current;
-        }
+        } 
         United->GetScheduleWriter(workerId)->Push(deadline.MicroSeconds(), ev.Release(), cookie);
-    }
+    } 
 
     void TUnitedExecutorPool::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
         Y_VERIFY_DEBUG(workerId < United->GetWorkerCount());

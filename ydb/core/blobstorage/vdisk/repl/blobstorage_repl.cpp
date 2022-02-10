@@ -190,17 +190,17 @@ namespace NKikimr {
 
         void Bootstrap() {
             QueueActorMapPtr = std::make_shared<TQueueActorMap>();
-            auto replInterconnectChannel = static_cast<TInterconnectChannels::EInterconnectChannels>(
+            auto replInterconnectChannel = static_cast<TInterconnectChannels::EInterconnectChannels>( 
                     ReplCtx->VDiskCfg->ReplInterconnectChannel);
-
+ 
             const TBlobStorageGroupInfo::TTopology& topology = ReplCtx->GInfo->GetTopology();
-            NBackpressure::TQueueClientId replQueueClientId(NBackpressure::EQueueClientType::ReplJob,
-                        topology.GetOrderNumber(ReplCtx->VCtx->ShortSelfVDisk));
-            CreateQueuesForVDisks(*QueueActorMapPtr, SelfId(), ReplCtx->GInfo, ReplCtx->VCtx,
-                    ReplCtx->GInfo->GetVDisks(), ReplCtx->MonGroup.GetGroup(),
-                    replQueueClientId, NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead,
-                    "PeerRepl", replInterconnectChannel);
-
+            NBackpressure::TQueueClientId replQueueClientId(NBackpressure::EQueueClientType::ReplJob, 
+                        topology.GetOrderNumber(ReplCtx->VCtx->ShortSelfVDisk)); 
+            CreateQueuesForVDisks(*QueueActorMapPtr, SelfId(), ReplCtx->GInfo, ReplCtx->VCtx, 
+                    ReplCtx->GInfo->GetVDisks(), ReplCtx->MonGroup.GetGroup(), 
+                    replQueueClientId, NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead, 
+                    "PeerRepl", replInterconnectChannel); 
+ 
             for (const auto& [vdiskId, vdiskActorId] : ReplCtx->VDiskCfg->BaseInfo.DonorDiskIds) {
                 TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord(new NBackpressure::TFlowRecord);
                 auto info = MakeIntrusive<TBlobStorageGroupInfo>(ReplCtx->GInfo, vdiskId, vdiskActorId);

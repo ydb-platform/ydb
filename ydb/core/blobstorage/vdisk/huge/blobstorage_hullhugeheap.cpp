@@ -84,9 +84,9 @@ namespace NKikimr {
         // TChain
         ////////////////////////////////////////////////////////////////////////////
         TMask TChain::BuildConstMask(const TString &prefix, ui32 slotsInChunk) {
-            Y_VERIFY_S(1 < slotsInChunk && slotsInChunk <= MaxNumberOfSlots,
-                    prefix << "It's not a good idea to have so many slots in chunk;"
-                    << " slotsInChunk# " << slotsInChunk);
+            Y_VERIFY_S(1 < slotsInChunk && slotsInChunk <= MaxNumberOfSlots, 
+                    prefix << "It's not a good idea to have so many slots in chunk;" 
+                    << " slotsInChunk# " << slotsInChunk); 
             TMask mask;
             mask.Reserve(slotsInChunk);
             mask.Set(0, slotsInChunk);
@@ -101,8 +101,8 @@ namespace NKikimr {
             TFreeSpace::iterator it = FreeSpace.begin();
             TMask &mask = it->second;
 
-            Y_VERIFY_S(!mask.Empty(), VDiskLogPrefix << "TChain::Allocate1:"
-                    << " id# " << id->ToString() << " State# " << ToString());
+            Y_VERIFY_S(!mask.Empty(), VDiskLogPrefix << "TChain::Allocate1:" 
+                    << " id# " << id->ToString() << " State# " << ToString()); 
             ui32 slot = mask.FirstNonZeroBit();
             mask.Reset(slot);
 
@@ -118,30 +118,30 @@ namespace NKikimr {
 
         // allocate id, but we know that this chain doesn't have free slots, so add a chunk to it
         void TChain::Allocate(NPrivate::TChunkSlot *id, TChunkID chunkId) {
-            Y_VERIFY_S(FreeSpace.empty(), VDiskLogPrefix << "Empty");
+            Y_VERIFY_S(FreeSpace.empty(), VDiskLogPrefix << "Empty"); 
 
             FreeSpace.emplace(chunkId, ConstMask);
             FreeSlotsInFreeSpace += SlotsInChunk;
             bool res = Allocate(id);
-            Y_VERIFY_S(res, VDiskLogPrefix << "TChain::Allocate2:"
-                    << " id# " << id->ToString() << " chunkId# " << chunkId << " State# " << ToString());
+            Y_VERIFY_S(res, VDiskLogPrefix << "TChain::Allocate2:" 
+                    << " id# " << id->ToString() << " chunkId# " << chunkId << " State# " << ToString()); 
         }
 
         TFreeRes TChain::Free(const NPrivate::TChunkSlot &id) {
-            Y_VERIFY_S(id.GetSlotId() < SlotsInChunk && AllocatedSlots > 0, VDiskLogPrefix
-                    << " id# " << id.ToString() << " SlotsInChunk# " << SlotsInChunk
-                    << " AllocatedSlots# " << AllocatedSlots << " State# " << ToString());
+            Y_VERIFY_S(id.GetSlotId() < SlotsInChunk && AllocatedSlots > 0, VDiskLogPrefix 
+                    << " id# " << id.ToString() << " SlotsInChunk# " << SlotsInChunk 
+                    << " AllocatedSlots# " << AllocatedSlots << " State# " << ToString()); 
             AllocatedSlots--;
 
             ui32 chunkId = id.GetChunkId();
             ui32 slotId = id.GetSlotId();
-            Y_VERIFY_S(chunkId, VDiskLogPrefix << "chunkId# " << chunkId);
+            Y_VERIFY_S(chunkId, VDiskLogPrefix << "chunkId# " << chunkId); 
             TFreeSpace::iterator it;
 
             auto freeFoundSlot = [&] (TFreeSpace &container, const char *containerName) {
                 TMask &mask = it->second;
                 Y_VERIFY_S(!mask.Get(slotId), VDiskLogPrefix << "TChain::Free: containerName# " << containerName
-                        << " id# " << id.ToString() << " State# " << ToString());
+                        << " id# " << id.ToString() << " State# " << ToString()); 
                 mask.Set(slotId);
                 ++FreeSlotsInFreeSpace;
                 if (mask == ConstMask) {
@@ -208,8 +208,8 @@ namespace NKikimr {
             TFreeSpace::iterator it = FreeSpace.find(chunkId);
             if (it != FreeSpace.end()) {
                 TMask &mask = it->second;
-                Y_VERIFY_S(mask.Get(slotId), VDiskLogPrefix << "RecoveryModeAllocate:"
-                        << " id# " << id.ToString() << " State# " << ToString());
+                Y_VERIFY_S(mask.Get(slotId), VDiskLogPrefix << "RecoveryModeAllocate:" 
+                        << " id# " << id.ToString() << " State# " << ToString()); 
                 mask.Reset(slotId);
 
                 if (mask.Empty()) {
@@ -225,15 +225,15 @@ namespace NKikimr {
         }
 
         void TChain::RecoveryModeAllocate(const NPrivate::TChunkSlot &id, TChunkID chunkId) {
-            Y_VERIFY_S(id.GetChunkId() == chunkId && FreeSpace.find(chunkId) == FreeSpace.end(),
-                    VDiskLogPrefix << " id# " << id.ToString() << " chunkId# " << chunkId << " State# " << ToString());
+            Y_VERIFY_S(id.GetChunkId() == chunkId && FreeSpace.find(chunkId) == FreeSpace.end(), 
+                    VDiskLogPrefix << " id# " << id.ToString() << " chunkId# " << chunkId << " State# " << ToString()); 
 
             FreeSpace.emplace(chunkId, ConstMask);
             FreeSlotsInFreeSpace += SlotsInChunk;
             bool res = RecoveryModeAllocate(id);
 
-            Y_VERIFY_S(res, VDiskLogPrefix << "RecoveryModeAllocate:"
-                    << " id# " << id.ToString() << " chunkId# " << chunkId << " State# " << ToString());
+            Y_VERIFY_S(res, VDiskLogPrefix << "RecoveryModeAllocate:" 
+                    << " id# " << id.ToString() << " chunkId# " << chunkId << " State# " << ToString()); 
         }
 
         void TChain::Save(IOutputStream *s) const {
@@ -252,8 +252,8 @@ namespace NKikimr {
             FreeSpace.clear();
             ui32 slotsInChunk = 0;
             ::Load(s, slotsInChunk);
-            Y_VERIFY_S(slotsInChunk == SlotsInChunk, VDiskLogPrefix
-                    << "slotsInChunk# " << slotsInChunk << " SlotsInChunk# " << SlotsInChunk);
+            Y_VERIFY_S(slotsInChunk == SlotsInChunk, VDiskLogPrefix 
+                    << "slotsInChunk# " << slotsInChunk << " SlotsInChunk# " << SlotsInChunk); 
             ::Load(s, AllocatedSlots);
             ::Load(s, FreeSpace);
             FreeSlotsInFreeSpace = 0;
@@ -331,9 +331,9 @@ namespace NKikimr {
         {
             ui32 slotSizeInBlocks = Blocks + ShiftInBlocks;
             ui32 blocksInChunk = chunkSize / appendBlockSize;
-            Y_VERIFY_S(appendBlockSize * blocksInChunk == chunkSize, VDiskLogPrefix
-                    << "Blocks# " << Blocks << " ShiftInBlocks# " << ShiftInBlocks
-                    << " chunkSize# " << chunkSize << " appendBlockSize# " << appendBlockSize);
+            Y_VERIFY_S(appendBlockSize * blocksInChunk == chunkSize, VDiskLogPrefix 
+                    << "Blocks# " << Blocks << " ShiftInBlocks# " << ShiftInBlocks 
+                    << " chunkSize# " << chunkSize << " appendBlockSize# " << appendBlockSize); 
 
             SlotsInChunk = blocksInChunk / slotSizeInBlocks;
             SlotSize = slotSizeInBlocks * appendBlockSize;
@@ -347,8 +347,8 @@ namespace NKikimr {
 
         NPrivate::TChunkSlot TChainDelegator::Convert(const TDiskPart &addr) const {
             ui32 slotId = addr.Offset / SlotSize;
-            Y_VERIFY_S(slotId * SlotSize == addr.Offset, VDiskLogPrefix
-                    << "slotId# " << slotId << " addr# " << addr.ToString() << " State# " << ToString());
+            Y_VERIFY_S(slotId * SlotSize == addr.Offset, VDiskLogPrefix 
+                    << "slotId# " << slotId << " addr# " << addr.ToString() << " State# " << ToString()); 
             return NPrivate::TChunkSlot(addr.ChunkIdx, slotId);
         }
 
@@ -416,12 +416,12 @@ namespace NKikimr {
             , Overhead(overhead)
             , OldMapCompatible(oldMapCompatible)
         {
-            Y_VERIFY_S(MinHugeBlobInBytes != 0 &&
+            Y_VERIFY_S(MinHugeBlobInBytes != 0 && 
                     MinHugeBlobInBytes <= MilestoneBlobInBytes &&
                     MilestoneBlobInBytes < MaxBlobInBytes, "INVALID CONFIGURATION! (SETTINGS ARE:"
-                            << " MaxBlobInBytes# " << MaxBlobInBytes << " MinHugeBlobInBytes# " << MinHugeBlobInBytes
-                            << " MilestoneBlobInBytes# " << MilestoneBlobInBytes << " ChunkSize# " << ChunkSize
-                            << " AppendBlockSize# " << AppendBlockSize << ")");
+                            << " MaxBlobInBytes# " << MaxBlobInBytes << " MinHugeBlobInBytes# " << MinHugeBlobInBytes 
+                            << " MilestoneBlobInBytes# " << MilestoneBlobInBytes << " ChunkSize# " << ChunkSize 
+                            << " AppendBlockSize# " << AppendBlockSize << ")"); 
             BuildLayout(OldMapCompatible);
         }
 
@@ -511,8 +511,8 @@ namespace NKikimr {
                 // map size has been changed, run migration
                 StartMode = EStartMode::Migrated;
                 TBuiltChainDelegators b = BuildChains(MilestoneBlobInBytes);
-                Y_VERIFY_S(size == b.ChainDelegators.size(), "size# " << size
-                        << " b.ChainDelegators.size()# " << b.ChainDelegators.size());
+                Y_VERIFY_S(size == b.ChainDelegators.size(), "size# " << size 
+                        << " b.ChainDelegators.size()# " << b.ChainDelegators.size()); 
 
                 // load into temporary delegators
                 for (auto &x : b.ChainDelegators) {
@@ -535,10 +535,10 @@ namespace NKikimr {
                 // entry point size rollback case
                 Y_VERIFY(size > ChainDelegators.size());
                 ui32 curChainDelegatorsSize = ChainDelegators.size();
-                Y_FAIL_S("Impossible case; MinHugeBlobInBytes# " << MinHugeBlobInBytes
-                        << " MilestoneBlobInBytes# " << MilestoneBlobInBytes
-                        << " loadedSize# " << size
-                        << " curChainDelegatorsSize# " << curChainDelegatorsSize);
+                Y_FAIL_S("Impossible case; MinHugeBlobInBytes# " << MinHugeBlobInBytes 
+                        << " MilestoneBlobInBytes# " << MilestoneBlobInBytes 
+                        << " loadedSize# " << size 
+                        << " curChainDelegatorsSize# " << curChainDelegatorsSize); 
             }
         }
 
@@ -676,11 +676,11 @@ namespace NKikimr {
             Y_VERIFY(!ChainDelegators.empty());
             BuildSearchTable();
 
-            Y_VERIFY_S(GetMinREALHugeBlobInBytes() != 0, "INVALID CONFIGURATION: MinREALHugeBlobInBytes IS 0"
+            Y_VERIFY_S(GetMinREALHugeBlobInBytes() != 0, "INVALID CONFIGURATION: MinREALHugeBlobInBytes IS 0" 
                     << " (SETTINGS ARE: MaxBlobInBytes# " << MaxBlobInBytes
-                    << " MinHugeBlobInBytes# " << MinHugeBlobInBytes
-                    << " ChunkSize# " << ChunkSize
-                    << " AppendBlockSize# " << AppendBlockSize << ')');
+                    << " MinHugeBlobInBytes# " << MinHugeBlobInBytes 
+                    << " ChunkSize# " << ChunkSize 
+                    << " AppendBlockSize# " << AppendBlockSize << ')'); 
         }
 
         inline ui32 TAllChains::SizeToBlocks(ui32 size) const {
@@ -721,14 +721,14 @@ namespace NKikimr {
         //////////////////////////////////////////////////////////////////////////////////////////
         THugeSlot THeap::ConvertDiskPartToHugeSlot(const TDiskPart &addr) const {
             const TChainDelegator *chainD = Chains.GetChain(addr.Size);
-            Y_VERIFY_S(chainD && (addr.Offset / chainD->SlotSize * chainD->SlotSize == addr.Offset), VDiskLogPrefix
-                    << "chainD# " <<  (chainD ? chainD->ToString() : "nullptr") << " addr# " << addr.ToString());
+            Y_VERIFY_S(chainD && (addr.Offset / chainD->SlotSize * chainD->SlotSize == addr.Offset), VDiskLogPrefix 
+                    << "chainD# " <<  (chainD ? chainD->ToString() : "nullptr") << " addr# " << addr.ToString()); 
             return THugeSlot(addr.ChunkIdx, addr.Offset, chainD->SlotSize);
         }
 
         bool THeap::Allocate(ui32 size, THugeSlot *hugeSlot, ui32 *slotSize) {
             TChainDelegator *chainD = Chains.GetChain(size);
-            Y_VERIFY_S(chainD, VDiskLogPrefix << "size# " << size << " Heap# " << ToString());
+            Y_VERIFY_S(chainD, VDiskLogPrefix << "size# " << size << " Heap# " << ToString()); 
             *slotSize = chainD->SlotSize;
 
             NPrivate::TChunkSlot id;
@@ -761,7 +761,7 @@ namespace NKikimr {
         ui32 THeap::RemoveChunk() {
             if (FreeChunks.size() > FreeChunksReservation) {
                 ui32 chunkId = GetChunkIdFromFreeChunks();
-                Y_VERIFY_S(chunkId, VDiskLogPrefix << "State# " << ToString());
+                Y_VERIFY_S(chunkId, VDiskLogPrefix << "State# " << ToString()); 
                 return chunkId;
             } else {
                 return 0;
@@ -787,7 +787,7 @@ namespace NKikimr {
         void THeap::RecoveryModeAllocate(const TDiskPart &addr) {
             ui32 size = addr.Size;
             TChainDelegator *chainD = Chains.GetChain(size);
-            Y_VERIFY_S(chainD, VDiskLogPrefix << "State# " << ToString());
+            Y_VERIFY_S(chainD, VDiskLogPrefix << "State# " << ToString()); 
 
             NPrivate::TChunkSlot id(chainD->Convert(addr));
             bool allocated = chainD->ChainPtr->RecoveryModeAllocate(id);
@@ -887,7 +887,7 @@ namespace NKikimr {
         // THeap: Private
         //////////////////////////////////////////////////////////////////////////////////////////
         inline ui32 THeap::GetChunkIdFromFreeChunks() {
-            Y_VERIFY_S(!FreeChunks.empty(), VDiskLogPrefix << "State# " << ToString());
+            Y_VERIFY_S(!FreeChunks.empty(), VDiskLogPrefix << "State# " << ToString()); 
             TFreeChunks::iterator it = FreeChunks.begin();
             ui32 chunkId = *it;
             FreeChunks.erase(it);
@@ -896,7 +896,7 @@ namespace NKikimr {
 
         inline void THeap::PutChunkIdToFreeChunks(ui32 chunkId) {
             bool res = FreeChunks.insert(chunkId).second;
-            Y_VERIFY_S(res, VDiskLogPrefix << "State# " << ToString());
+            Y_VERIFY_S(res, VDiskLogPrefix << "State# " << ToString()); 
         }
 
     } // NHuge

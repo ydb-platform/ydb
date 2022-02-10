@@ -2,7 +2,7 @@
 #include "defs.h"
 
 #include "dsproxy.h"
-
+ 
 #include <ydb/core/blobstorage/base/batched_vec.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/util/fragmented_buffer.h>
@@ -77,15 +77,15 @@ struct TBlobState {
     TStackVec<TState, TypicalPartsInBlob> Parts;
     TStackVec<TDisk, TypicalDisksInSubring> Disks;
     TVector<TEvBlobStorage::TEvGetResult::TPartMapItem> PartMap;
-    ui8 BlobIdx;
-    NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
-    bool IsChanged = false;
-    bool IsDone = false;
+    ui8 BlobIdx; 
+    NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN; 
+    bool IsChanged = false; 
+    bool IsDone = false; 
 
     void Init(const TLogoBlobID &id, const TBlobStorageGroupInfo &Info);
     void AddNeeded(ui64 begin, ui64 size);
     void AddPartToPut(ui32 partIdx, TString &partData);
-    void MarkBlobReadyToPut(ui8 blobIdx = 0);
+    void MarkBlobReadyToPut(ui8 blobIdx = 0); 
     bool Restore(const TBlobStorageGroupInfo &info);
     void AddResponseData(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 diskIdxInSubring,
             ui32 shift, TString &data);
@@ -126,14 +126,14 @@ struct TDiskPutRequest {
     TString Buffer;
     EPutReason Reason;
     bool IsHandoff;
-    ui8 BlobIdx;
+    ui8 BlobIdx; 
 
-    TDiskPutRequest(const TLogoBlobID &id, TString buffer, EPutReason reason, bool isHandoff, ui8 blobIdx = 0)
+    TDiskPutRequest(const TLogoBlobID &id, TString buffer, EPutReason reason, bool isHandoff, ui8 blobIdx = 0) 
         : Id(id)
         , Buffer(std::move(buffer))
         , Reason(reason)
         , IsHandoff(isHandoff)
-        , BlobIdx(blobIdx)
+        , BlobIdx(blobIdx) 
     {}
 };
 
@@ -151,7 +151,7 @@ struct TGroupDiskRequests {
     void AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const TIntervalSet<i32> &intervalSet);
     void AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const ui32 shift, const ui32 size);
     void AddPut(const ui32 diskOrderNumber, const TLogoBlobID &id, TString buffer,
-        TDiskPutRequest::EPutReason putReason, bool isHandoff, ui8 blobIdx = 0);
+        TDiskPutRequest::EPutReason putReason, bool isHandoff, ui8 blobIdx = 0); 
 };
 
 struct TBlackboard;
@@ -171,50 +171,50 @@ struct TBlackboard {
 
     using TBlobStates = TMap<TLogoBlobID, TBlobState>;
     TBlobStates BlobStates;
-    TBlobStates DoneBlobStates;
+    TBlobStates DoneBlobStates; 
     TGroupDiskRequests GroupDiskRequests;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     TIntrusivePtr<TGroupQueues> GroupQueues; // To obtain FlowRecords only
     EAccelerationMode AccelerationMode;
     const NKikimrBlobStorage::EPutHandleClass PutHandleClass;
     const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
-    const bool IsAllRequestsTogether;
-    ui64 DoneCount = 0;
+    const bool IsAllRequestsTogether; 
+    ui64 DoneCount = 0; 
 
     TBlackboard(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
-            NKikimrBlobStorage::EPutHandleClass putHandleClass, NKikimrBlobStorage::EGetHandleClass getHandleClass,
-            bool isAllRequestsTogether = true)
+            NKikimrBlobStorage::EPutHandleClass putHandleClass, NKikimrBlobStorage::EGetHandleClass getHandleClass, 
+            bool isAllRequestsTogether = true) 
         : GroupDiskRequests(info->GetTotalVDisksNum())
         , Info(info)
         , GroupQueues(groupQueues)
         , AccelerationMode(AccelerationModeSkipOneSlowest)
         , PutHandleClass(putHandleClass)
         , GetHandleClass(getHandleClass)
-        , IsAllRequestsTogether(isAllRequestsTogether)
+        , IsAllRequestsTogether(isAllRequestsTogether) 
     {}
 
     void AddNeeded(const TLogoBlobID &id, ui32 inShift, ui32 inSize);
     void AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TString &partData);
-    void MarkBlobReadyToPut(const TLogoBlobID &id, ui8 blobIdx = 0);
-    void MoveBlobStateToDone(const TLogoBlobID &id);
+    void MarkBlobReadyToPut(const TLogoBlobID &id, ui8 blobIdx = 0); 
+    void MoveBlobStateToDone(const TLogoBlobID &id); 
     void AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TString &data);
     void AddPutOkResponse(const TLogoBlobID &id, ui32 orderNumber);
     void AddNoDataResponse(const TLogoBlobID &id, ui32 orderNumber);
     void AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber);
     void AddNotYetResponse(const TLogoBlobID &id, ui32 orderNumber);
     EStrategyOutcome RunStrategy(TLogContext &logCtx, const IStrategy& s, TBatchedVec<TBlobStates::value_type*> *finished = nullptr);
-    TBlobState& GetState(const TLogoBlobID &id);
+    TBlobState& GetState(const TLogoBlobID &id); 
     ssize_t AddPartMap(const TLogoBlobID &id, ui32 diskOrderNumber, ui32 requestIndex);
     void ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapIndex, ui32 responseIndex, NKikimrProto::EReplyStatus status);
     void GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
             NKikimrBlobStorage::EVDiskQueueId queueId,
             ui64 *outWorstNs, ui64 *outNextToWorstNs, i32 *outWorstOrderNumber) const;
     TString ToString() const;
-    void ChangeAll() {
-        for (auto &[id, blob] : BlobStates) {
-            blob.IsChanged = true;
-        }
-    }
+    void ChangeAll() { 
+        for (auto &[id, blob] : BlobStates) { 
+            blob.IsChanged = true; 
+        } 
+    } 
 };
 
 }//NKikimr

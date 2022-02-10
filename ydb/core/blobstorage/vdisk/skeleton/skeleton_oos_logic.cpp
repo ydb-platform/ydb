@@ -132,8 +132,8 @@ namespace NKikimr {
 
     TOutOfSpaceLogic::~TOutOfSpaceLogic() {}
 
-    template <typename TPutEventPtr>
-    bool AllowImpl(const TOutOfSpaceLogic &logic, const TActorContext &ctx, TPutEventPtr &ev) {
+    template <typename TPutEventPtr> 
+    bool AllowImpl(const TOutOfSpaceLogic &logic, const TActorContext &ctx, TPutEventPtr &ev) { 
         Y_UNUSED(ctx);
         auto color = logic.VCtx->GetOutOfSpaceState().GetGlobalColor();
         auto &stat = logic.Stat->Lookup(TOutOfSpaceLogic::TStat::Put, color).HandleMsg(ev->Get()->GetCachedByteSize());
@@ -147,7 +147,7 @@ namespace NKikimr {
             case TSpaceColor::ORANGE:
             {
                 // allow writes with IgnoreBlock=true
-                auto &record = ev->Get()->Record;
+                auto &record = ev->Get()->Record; 
                 const bool allow = record.GetIgnoreBlock();
                 return stat.Pass(allow);
             }
@@ -159,14 +159,14 @@ namespace NKikimr {
         }
     }
 
-    bool TOutOfSpaceLogic::Allow(const TActorContext &ctx, TEvBlobStorage::TEvVPut::TPtr &ev) const {
-        return AllowImpl(*this, ctx, ev);
-    }
-
-    bool TOutOfSpaceLogic::Allow(const TActorContext &ctx, TEvBlobStorage::TEvVMultiPut::TPtr &ev) const {
-        return AllowImpl(*this, ctx, ev);
-    }
-
+    bool TOutOfSpaceLogic::Allow(const TActorContext &ctx, TEvBlobStorage::TEvVPut::TPtr &ev) const { 
+        return AllowImpl(*this, ctx, ev); 
+    } 
+ 
+    bool TOutOfSpaceLogic::Allow(const TActorContext &ctx, TEvBlobStorage::TEvVMultiPut::TPtr &ev) const { 
+        return AllowImpl(*this, ctx, ev); 
+    } 
+ 
     bool TOutOfSpaceLogic::Allow(const TActorContext &ctx, TEvBlobStorage::TEvVBlock::TPtr &ev) const {
         Y_UNUSED(ctx);
         auto color = VCtx->GetOutOfSpaceState().GetGlobalColor();
@@ -227,16 +227,16 @@ namespace NKikimr {
                 if (msg->IsAnubis()) {
                     LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
                             << "OUT OF SPACE while removing LogoBlob we got from Anubis;"
-                            << " LogoBlobId# " << msg->LogoBlobId
-                            << " Marker# BSVSOOSL01");
+                            << " LogoBlobId# " << msg->LogoBlobId 
+                            << " Marker# BSVSOOSL01"); 
                     return stat.NotAllow();
                 } else {
                     // We MUST allow Osiris writes. W/o Osiris we can't work.
                     // There should not be too much of them.
                     LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
                             << "OUT OF SPACE while adding resurrected by Osiris LogoBlob;"
-                            << " FORCING addition: LogoBlobId# " << msg->LogoBlobId
-                            << " Marker# BSVSOOSL02");
+                            << " FORCING addition: LogoBlobId# " << msg->LogoBlobId 
+                            << " Marker# BSVSOOSL02"); 
                     return stat.Allow();
                 }
             }

@@ -35,7 +35,7 @@ SRCS(
     dsproxy_nodemon.h
     dsproxy_nodemonactor.cpp
     dsproxy_nodemonactor.h
-    dsproxy_patch.cpp
+    dsproxy_patch.cpp 
     dsproxy_put.cpp
     dsproxy_put_impl.cpp
     dsproxy_put_impl.h

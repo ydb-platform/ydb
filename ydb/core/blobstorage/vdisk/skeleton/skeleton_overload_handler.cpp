@@ -27,8 +27,8 @@ namespace NKikimr {
 
         NMonGroup::TSkeletonOverloadGroup &Mon;
         TQueueType Queue;
-        TVMovedPatchHandler VMovedPatchHandler;
-        TVPatchStartHandler VPatchStartHandler;
+        TVMovedPatchHandler VMovedPatchHandler; 
+        TVPatchStartHandler VPatchStartHandler; 
         TVPutHandler VPutHandler;
         TVMultiPutHandler VMultiPutHandler;
         TLocalSyncDataHandler LocalSyncDataHandler;
@@ -37,33 +37,33 @@ namespace NKikimr {
     public:
         TEmergencyQueue(
                 NMonGroup::TSkeletonOverloadGroup &mon,
-                TVMovedPatchHandler &&vMovedPatch,
-                TVPatchStartHandler &&vPatchStart,
+                TVMovedPatchHandler &&vMovedPatch, 
+                TVPatchStartHandler &&vPatchStart, 
                 TVPutHandler &&vput,
                 TVMultiPutHandler &&vMultiPut,
                 TLocalSyncDataHandler &&loc,
                 TAnubisOsirisPutHandler &&aoput)
             : Mon(mon)
-            , VMovedPatchHandler(std::move(vMovedPatch))
-            , VPatchStartHandler(std::move(vPatchStart))
+            , VMovedPatchHandler(std::move(vMovedPatch)) 
+            , VPatchStartHandler(std::move(vPatchStart)) 
             , VPutHandler(std::move(vput))
             , VMultiPutHandler(std::move(vMultiPut))
             , LocalSyncDataHandler(std::move(loc))
             , AnubisOsirisPutHandler(std::move(aoput))
         {}
 
-        void Push(TEvBlobStorage::TEvVMovedPatch::TPtr ev) {
-            ++Mon.EmergencyMovedPatchQueueItems();
-            Mon.EmergencyMovedPatchQueueBytes() += ev->Get()->Record.ByteSize();
-            Queue.Push(TItem(ev));
-        }
-
-        void Push(TEvBlobStorage::TEvVPatchStart::TPtr ev) {
-            ++Mon.EmergencyPatchStartQueueItems();
-            Mon.EmergencyPatchStartQueueBytes() += ev->Get()->Record.ByteSize();
-            Queue.Push(TItem(ev));
-        }
-
+        void Push(TEvBlobStorage::TEvVMovedPatch::TPtr ev) { 
+            ++Mon.EmergencyMovedPatchQueueItems(); 
+            Mon.EmergencyMovedPatchQueueBytes() += ev->Get()->Record.ByteSize(); 
+            Queue.Push(TItem(ev)); 
+        } 
+ 
+        void Push(TEvBlobStorage::TEvVPatchStart::TPtr ev) { 
+            ++Mon.EmergencyPatchStartQueueItems(); 
+            Mon.EmergencyPatchStartQueueBytes() += ev->Get()->Record.ByteSize(); 
+            Queue.Push(TItem(ev)); 
+        } 
+ 
         void Push(TEvBlobStorage::TEvVPut::TPtr ev) {
             ++Mon.EmergencyPutQueueItems();
             Mon.EmergencyPutQueueBytes() += ev->Get()->Record.ByteSize();
@@ -71,8 +71,8 @@ namespace NKikimr {
         }
 
         void Push(TEvBlobStorage::TEvVMultiPut::TPtr ev) {
-            ++Mon.EmergencyMultiPutQueueItems();
-            Mon.EmergencyMultiPutQueueBytes() += ev->Get()->Record.ByteSize();
+            ++Mon.EmergencyMultiPutQueueItems(); 
+            Mon.EmergencyMultiPutQueueBytes() += ev->Get()->Record.ByteSize(); 
             Queue.Push(TItem(ev));
         }
 
@@ -98,20 +98,20 @@ namespace NKikimr {
             TAutoPtr<IEventHandle> ev = item->Ev.release();
             Queue.Pop();
             switch (ev->GetTypeRewrite()) {
-                case TEvBlobStorage::EvVMovedPatch: {
-                    auto *evMovedPatch = reinterpret_cast<TEvBlobStorage::TEvVMovedPatch::TPtr*>(&ev);
-                    --Mon.EmergencyMovedPatchQueueItems();
-                    Mon.EmergencyMovedPatchQueueBytes() -= (*evMovedPatch)->Get()->Record.ByteSize();
-                    VMovedPatchHandler(ctx, *evMovedPatch);
-                    break;
-                }
-                case TEvBlobStorage::EvVPatchStart: {
-                    auto *evPatchStart = reinterpret_cast<TEvBlobStorage::TEvVPatchStart::TPtr*>(&ev);
-                    --Mon.EmergencyPatchStartQueueItems();
-                    Mon.EmergencyPatchStartQueueBytes() -= (*evPatchStart)->Get()->Record.ByteSize();
-                    VPatchStartHandler(ctx, *evPatchStart);
-                    break;
-                }
+                case TEvBlobStorage::EvVMovedPatch: { 
+                    auto *evMovedPatch = reinterpret_cast<TEvBlobStorage::TEvVMovedPatch::TPtr*>(&ev); 
+                    --Mon.EmergencyMovedPatchQueueItems(); 
+                    Mon.EmergencyMovedPatchQueueBytes() -= (*evMovedPatch)->Get()->Record.ByteSize(); 
+                    VMovedPatchHandler(ctx, *evMovedPatch); 
+                    break; 
+                } 
+                case TEvBlobStorage::EvVPatchStart: { 
+                    auto *evPatchStart = reinterpret_cast<TEvBlobStorage::TEvVPatchStart::TPtr*>(&ev); 
+                    --Mon.EmergencyPatchStartQueueItems(); 
+                    Mon.EmergencyPatchStartQueueBytes() -= (*evPatchStart)->Get()->Record.ByteSize(); 
+                    VPatchStartHandler(ctx, *evPatchStart); 
+                    break; 
+                } 
                 case TEvBlobStorage::EvVPut: {
                     auto *evPut = reinterpret_cast<TEvBlobStorage::TEvVPut::TPtr*>(&ev);
                     --Mon.EmergencyPutQueueItems();
@@ -154,16 +154,16 @@ namespace NKikimr {
             const TPDiskCtxPtr &pdiskCtx,
             std::shared_ptr<THull> hull,
             NMonGroup::TSkeletonOverloadGroup &&mon,
-            TVMovedPatchHandler &&vMovedPatch,
-            TVPatchStartHandler &&vPatchStart,
+            TVMovedPatchHandler &&vMovedPatch, 
+            TVPatchStartHandler &&vPatchStart, 
             TVPutHandler &&vput,
             TVMultiPutHandler &&vMultiPut,
             TLocalSyncDataHandler &&loc,
             TAnubisOsirisPutHandler &&aoput)
         : Hull(std::move(hull))
         , Mon(std::move(mon))
-        , EmergencyQueue(new TEmergencyQueue(Mon, std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
-                std::move(vMultiPut), std::move(loc), std::move(aoput)))
+        , EmergencyQueue(new TEmergencyQueue(Mon, std::move(vMovedPatch), std::move(vPatchStart), std::move(vput), 
+                std::move(vMultiPut), std::move(loc), std::move(aoput))) 
         , DynamicPDiskWeightsManager(std::make_shared<TDynamicPDiskWeightsManager>(vctx, pdiskCtx))
     {}
 
@@ -210,14 +210,14 @@ namespace NKikimr {
         return proceedFurther;
     }
 
-    bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVMovedPatch::TPtr &ev, const TActorContext &ctx, IActor *skeleton) {
-        return PostponeEventPrivate(ev, ctx, skeleton);
-    }
-
-    bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVPatchStart::TPtr &ev, const TActorContext &ctx, IActor *skeleton) {
-        return PostponeEventPrivate(ev, ctx, skeleton);
-    }
-
+    bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVMovedPatch::TPtr &ev, const TActorContext &ctx, IActor *skeleton) { 
+        return PostponeEventPrivate(ev, ctx, skeleton); 
+    } 
+ 
+    bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVPatchStart::TPtr &ev, const TActorContext &ctx, IActor *skeleton) { 
+        return PostponeEventPrivate(ev, ctx, skeleton); 
+    } 
+ 
     bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton) {
         return PostponeEventPrivate(ev, ctx, skeleton);
     }

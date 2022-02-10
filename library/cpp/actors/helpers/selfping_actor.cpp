@@ -67,8 +67,8 @@ private:
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> SlidingWindow;
     NSlidingWindow::TSlidingWindow<TAvgOperation<ui64>> CalculationSlidingWindow;
 
-    THPTimer Timer;
-
+    THPTimer Timer; 
+ 
 public:
     static constexpr auto ActorActivityType() {
         return SELF_PING_ACTOR;
@@ -87,7 +87,7 @@ public:
     void Bootstrap(const TActorContext& ctx)
     {
         Become(&TSelfPingActor::RunningState);
-        SchedulePing(ctx, Timer.Passed());
+        SchedulePing(ctx, Timer.Passed()); 
     }
 
     STFUNC(RunningState)
@@ -148,23 +148,23 @@ public:
 
     void HandlePing(TEvPing::TPtr &ev, const TActorContext &ctx)
     {
-        const auto now = ctx.Now();
-        const double hpNow = Timer.Passed();
+        const auto now = ctx.Now(); 
+        const double hpNow = Timer.Passed(); 
         const auto& e = *ev->Get();
-        const double passedTime = hpNow - e.TimeStart;
-        const ui64 delayUs = passedTime > 0.0 ? static_cast<ui64>(passedTime * 1e6) : 0;
+        const double passedTime = hpNow - e.TimeStart; 
+        const ui64 delayUs = passedTime > 0.0 ? static_cast<ui64>(passedTime * 1e6) : 0; 
 
-        *Counter = SlidingWindow.Update(delayUs, now);
+        *Counter = SlidingWindow.Update(delayUs, now); 
 
         ui64 d = MeasureTaskDurationNs();
-        auto res = CalculationSlidingWindow.Update({1, d}, now);
+        auto res = CalculationSlidingWindow.Update({1, d}, now); 
         *CalculationTimeCounter = double(res.Sum) / double(res.Count + 1);
 
-        SchedulePing(ctx, hpNow);
+        SchedulePing(ctx, hpNow); 
     }
 
 private:
-    void SchedulePing(const TActorContext &ctx, double hpNow) const
+    void SchedulePing(const TActorContext &ctx, double hpNow) const 
     {
         ctx.Schedule(SendInterval, new TEvPing(hpNow));
     }

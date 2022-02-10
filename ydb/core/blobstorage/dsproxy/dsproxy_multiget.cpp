@@ -1,9 +1,9 @@
 #include "dsproxy.h"
 #include "dsproxy_mon.h"
-
+ 
 #include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/blobstorage/vdisk/query/query_spacetracker.h>
-
+ 
 #include <util/generic/set.h>
 
 namespace NKikimr {
@@ -162,22 +162,22 @@ public:
         Y_VERIFY(QuerySize != 0); // reply with error?
         ui32 beginIdx = 0;
         TLogoBlobID lastBlobId;
-        TQueryResultSizeTracker resultSize;
-        resultSize.Init();
-
+        TQueryResultSizeTracker resultSize; 
+        resultSize.Init(); 
+ 
         for (ui32 queryIdx = 0; queryIdx < QuerySize; ++queryIdx) {
             const TEvBlobStorage::TEvGet::TQuery &query = Queries[queryIdx];
             if (lastBlobId == query.Id && queryIdx != 0) {
                 continue;
             }
-            resultSize.AddAllPartsOfLogoBlob(Info->Type, query.Id);
+            resultSize.AddAllPartsOfLogoBlob(Info->Type, query.Id); 
 
             if (queryIdx != beginIdx) {
                 if (resultSize.IsOverflow() || queryIdx - beginIdx == 10000) {
                     PrepareRequest(beginIdx, queryIdx);
                     beginIdx = queryIdx;
-                    resultSize.Init();
-                    resultSize.AddAllPartsOfLogoBlob(Info->Type, query.Id);
+                    resultSize.Init(); 
+                    resultSize.AddAllPartsOfLogoBlob(Info->Type, query.Id); 
                 }
             }
         }

@@ -21,7 +21,7 @@ namespace NKikimr {
 
         // Check if we allow this write
         bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVPut::TPtr &ev) const;
-        bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVMultiPut::TPtr &ev) const;
+        bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVMultiPut::TPtr &ev) const; 
         bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVBlock::TPtr &ev) const;
         bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVCollectGarbage::TPtr &ev) const;
         bool Allow(const TActorContext &ctx, TEvLocalSyncData::TPtr &ev) const;
@@ -38,9 +38,9 @@ namespace NKikimr {
         mutable std::unique_ptr<TStat> Stat;
 
         bool DefaultAllow(ESpaceColor color) const;
-
-        template <typename TEvPtr>
-        friend bool AllowImpl(const TOutOfSpaceLogic &logic, const TActorContext &ctx, TEvPtr &ev);
+ 
+        template <typename TEvPtr> 
+        friend bool AllowImpl(const TOutOfSpaceLogic &logic, const TActorContext &ctx, TEvPtr &ev); 
     };
 
 } // NKikimr

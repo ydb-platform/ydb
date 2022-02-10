@@ -73,20 +73,20 @@ std::unique_ptr<TEvBlobStorage::TEvBlockResult> TEvBlobStorage::TEvBlock::MakeEr
     return res;
 }
 
-std::unique_ptr<TEvBlobStorage::TEvPatchResult> TEvBlobStorage::TEvPatch::MakeErrorResponse(
-        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 groupId) {
-    auto res = std::make_unique<TEvPatchResult>(status, PatchedId, TStorageStatusFlags(), groupId, 0.0f);
-    res->ErrorReason = errorReason;
-    return res;
-}
-
-std::unique_ptr<TEvBlobStorage::TEvInplacePatchResult> TEvBlobStorage::TEvInplacePatch::MakeErrorResponse(
-        NKikimrProto::EReplyStatus status, const TString& errorReason) {
-    auto res = std::make_unique<TEvInplacePatchResult>(status, PatchedId, TStorageStatusFlags(), 0.0f);
-    res->ErrorReason = errorReason;
-    return res;
-}
-
+std::unique_ptr<TEvBlobStorage::TEvPatchResult> TEvBlobStorage::TEvPatch::MakeErrorResponse( 
+        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 groupId) { 
+    auto res = std::make_unique<TEvPatchResult>(status, PatchedId, TStorageStatusFlags(), groupId, 0.0f); 
+    res->ErrorReason = errorReason; 
+    return res; 
+} 
+ 
+std::unique_ptr<TEvBlobStorage::TEvInplacePatchResult> TEvBlobStorage::TEvInplacePatch::MakeErrorResponse( 
+        NKikimrProto::EReplyStatus status, const TString& errorReason) { 
+    auto res = std::make_unique<TEvInplacePatchResult>(status, PatchedId, TStorageStatusFlags(), 0.0f); 
+    res->ErrorReason = errorReason; 
+    return res; 
+} 
+ 
 std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> TEvBlobStorage::TEvDiscover::MakeErrorResponse(
         NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 /*groupId*/) {
     auto res = std::make_unique<TEvDiscoverResult>(status, MinGeneration, 0);

@@ -32,7 +32,7 @@ namespace NActors {
 
         TUnitedWorkersConfig Config;
         TCpuAllocationConfig Allocation;
-
+ 
         volatile bool StopFlag = false;
 
     public:
@@ -66,7 +66,7 @@ namespace NActors {
 
         // Add activation of newly scheduled mailbox and wake cpu to execute it if required
         void PushActivation(TPoolId pool, ui32 activation, ui64 revolvingCounter);
-
+ 
         // Try acquire pending token. Must be done before execution
         bool TryAcquireToken(TPoolId pool);
 

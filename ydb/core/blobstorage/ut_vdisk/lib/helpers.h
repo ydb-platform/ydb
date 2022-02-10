@@ -80,27 +80,27 @@ NActors::IActor *CreateManyPuts(TConfiguration *conf, const NActors::TActorId &n
                                 std::shared_ptr<IPutHandleClassGenerator> cls, std::shared_ptr<TSet<ui32>> badSteps,
                                 TDuration requestTimeout);
 
-struct TMsgPackInfo {
-    ui32 Count;
-    TString MsgData;
-
-    TMsgPackInfo(ui32 dataSize, ui32 count)
-        : Count(count)
-    {
-        MsgData.reserve(dataSize);
-        for (ui32 i = 0; i < dataSize; i++) {
-            MsgData.append('a' + i % 26);
-        }
-    }
-};
-
-
+struct TMsgPackInfo { 
+    ui32 Count; 
+    TString MsgData; 
+ 
+    TMsgPackInfo(ui32 dataSize, ui32 count) 
+        : Count(count) 
+    { 
+        MsgData.reserve(dataSize); 
+        for (ui32 i = 0; i < dataSize; i++) { 
+            MsgData.append('a' + i % 26); 
+        } 
+    } 
+}; 
+ 
+ 
 NActors::IActor *CreateManyPuts(TConfiguration *conf, const NActors::TActorId &notifyID,
-                                const TAllVDisks::TVDiskInstance &vdiskInfo,
+                                const TAllVDisks::TVDiskInstance &vdiskInfo, 
                                 std::shared_ptr<TVector<TMsgPackInfo>> msgPacks, ui64 tabletId, ui32 channel, ui32 gen,
                                 std::shared_ptr<IPutHandleClassGenerator> cls, std::shared_ptr<TSet<ui32>> badSteps,
-                                TDuration requestTimeout);
-
+                                TDuration requestTimeout); 
+ 
 NActors::IActor *CreateManyMultiPuts(TConfiguration *conf, const NActors::TActorId &notifyID,
                                      const TAllVDisks::TVDiskInstance &vdiskInfo,
                                      ui32 msgDataSize, ui32 msgNum, ui32 batchSize,
@@ -113,13 +113,13 @@ NActors::IActor *CreateManyGets(const NActors::TActorId &notifyID, const TAllVDi
                                 std::shared_ptr<TSet<ui32>> badSteps);
 
 NActors::IActor *CreateGet(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
-                           ui32 msgDataSize, ui32 msgNum, ui64 tabletId, ui32 channel, ui32 gen, ui64 shift,
-                           bool withErrorResponse);
-
+                           ui32 msgDataSize, ui32 msgNum, ui64 tabletId, ui32 channel, ui32 gen, ui64 shift, 
+                           bool withErrorResponse); 
+ 
 NActors::IActor *CreateGet(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
                            std::shared_ptr<TVector<TMsgPackInfo>> msgPacks, ui64 tabletId, ui32 channel, ui32 gen,
-                           ui64 shift, bool withErrorResponse);
-
+                           ui64 shift, bool withErrorResponse); 
+ 
 NActors::IActor *CreatePutGC(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
                              ui64 tabletID, ui32 recGen, ui32 recGenCounter, ui32 channel, bool collect, ui32 collectGen,
                              ui32 collectStep, TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep,

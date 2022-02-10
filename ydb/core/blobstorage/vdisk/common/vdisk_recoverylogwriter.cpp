@@ -106,8 +106,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             while (!Queue.empty() && ((item = &Queue.top())->LsnSegmentStart == CurSentLsn + 1)) {
                 CurSentLsn = item->Lsn;
                 std::unique_ptr<IEventHandle> ev = std::move(const_cast<TQueueItem*>(item)->Ev);
-                ui32 type = ev->Type;
-                switch (type) {
+                ui32 type = ev->Type; 
+                switch (type) { 
                     case TEvBlobStorage::EvLog:
                         LWTRACK(VDiskRecoveryLogWriterVPutIsSent, ev->Get<NPDisk::TEvLog>()->Orbit, Owner, item->Lsn);
                         break;
@@ -118,9 +118,9 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                                 LWTRACK(VDiskRecoveryLogWriterVPutIsSent, log->Orbit, Owner, log->Lsn);
                             }
                             break;
-                        }
-                }
-                Queue.pop();
+                        } 
+                } 
+                Queue.pop(); 
                 ctx.ExecutorThread.Send(ev.release());
             }
         }
@@ -150,39 +150,39 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             }
         }
 
-        void Handle(NPDisk::TEvMultiLog::TPtr &ev, const TActorContext &ctx) {
-            NPDisk::TEvMultiLog *logs = ev->Get();
-            ui64 lsnSegmentStart = logs->LsnSeg.First;
-            ui64 lsn = logs->LsnSeg.Last;
-            Y_VERIFY_DEBUG_S(lsnSegmentStart == logs->Logs.front()->LsnSegmentStart && lsn == logs->Logs.back()->Lsn,
-                    "LsnSeg not match with inner logs"
-                    << "LsnSeg# " << logs->LsnSeg.ToString()
-                    << "Logs.front().LsnSegmentStart# " << logs->Logs.front()->LsnSegmentStart
-                    << "Logs.back().Lsn# " << logs->Logs.back()->Lsn);
-            for (auto &log : logs->Logs) {
-                LWTRACK(VDiskRecoveryLogWriterVPutIsRecieved, log->Orbit, Owner, log->Lsn);
+        void Handle(NPDisk::TEvMultiLog::TPtr &ev, const TActorContext &ctx) { 
+            NPDisk::TEvMultiLog *logs = ev->Get(); 
+            ui64 lsnSegmentStart = logs->LsnSeg.First; 
+            ui64 lsn = logs->LsnSeg.Last; 
+            Y_VERIFY_DEBUG_S(lsnSegmentStart == logs->Logs.front()->LsnSegmentStart && lsn == logs->Logs.back()->Lsn, 
+                    "LsnSeg not match with inner logs" 
+                    << "LsnSeg# " << logs->LsnSeg.ToString() 
+                    << "Logs.front().LsnSegmentStart# " << logs->Logs.front()->LsnSegmentStart 
+                    << "Logs.back().Lsn# " << logs->Logs.back()->Lsn); 
+            for (auto &log : logs->Logs) { 
+                LWTRACK(VDiskRecoveryLogWriterVPutIsRecieved, log->Orbit, Owner, log->Lsn); 
                 TLogSignature signature = log->Signature.GetUnmasked();
                 Y_VERIFY(TLogSignature::First < signature && signature < TLogSignature::Max);
-                i64 msgSize = log->ApproximateSize();
-                // count written bytes
-                *LsmLogBytesWritten += msgSize;
-                // update generic counters
+                i64 msgSize = log->ApproximateSize(); 
+                // count written bytes 
+                *LsmLogBytesWritten += msgSize; 
+                // update generic counters 
                 Counters.Update(signature, msgSize);
-                LWTRACK(VDiskRecoveryLogWriterVPutIsSent, log->Orbit, Owner, lsn);
-            }
+                LWTRACK(VDiskRecoveryLogWriterVPutIsSent, log->Orbit, Owner, lsn); 
+            } 
             std::unique_ptr<IEventHandle> converted(ev->Forward(YardID).Release());
-
-            if (lsnSegmentStart == CurSentLsn + 1) {
-                // rewrite and send message;
+ 
+            if (lsnSegmentStart == CurSentLsn + 1) { 
+                // rewrite and send message; 
                 ctx.ExecutorThread.Send(converted.release());
-                CurSentLsn = lsn;
-                // proceed with elements waiting in the queue
-                ProcessQueue(ctx);
-            } else {
+                CurSentLsn = lsn; 
+                // proceed with elements waiting in the queue 
+                ProcessQueue(ctx); 
+            } else { 
                 Queue.push(TQueueItem(std::move(converted), lsnSegmentStart, lsn));
-            }
-        }
-
+            } 
+        } 
+ 
         void Handle(TEvBlobStorage::TEvVCompact::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
             ui64 lsn = CurSentLsn + 1;
@@ -196,7 +196,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
         STRICT_STFUNC(StateFunc,
             HFunc(NPDisk::TEvLog, Handle)
-            HFunc(NPDisk::TEvMultiLog, Handle)
+            HFunc(NPDisk::TEvMultiLog, Handle) 
             HFunc(TEvBlobStorage::TEvVCompact, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
         )

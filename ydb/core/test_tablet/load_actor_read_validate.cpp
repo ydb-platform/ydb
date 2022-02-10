@@ -19,14 +19,14 @@ namespace NKikimr::NTestShard {
         std::unordered_map<ui64, TString> QueriesInFlight;
         ui64 LastCookie = 0;
 
-        bool IssueReadMode = false; // true - via EvRequest, false - via EvReadRequest
-        bool IssueReadRangeMode = false; // true - via EvRequest, false - via EvReadRequest
-
-        ui32 WaitedReadsViaEvResponse = 0;
-        ui32 WaitedReadsViaEvReadResponse = 0;
-        ui32 WaitedReadRangesViaEvResponse = 0;
-        ui32 WaitedReadRangesViaEvReadRangeResponse = 0;
-
+        bool IssueReadMode = false; // true - via EvRequest, false - via EvReadRequest 
+        bool IssueReadRangeMode = false; // true - via EvRequest, false - via EvReadRequest 
+ 
+        ui32 WaitedReadsViaEvResponse = 0; 
+        ui32 WaitedReadsViaEvReadResponse = 0; 
+        ui32 WaitedReadRangesViaEvResponse = 0; 
+        ui32 WaitedReadRangesViaEvReadRangeResponse = 0; 
+ 
         // read retry logic
         std::unordered_set<TString> KeyReadsWaitingForRetry;
         ui32 RetryCount = 0;
@@ -77,7 +77,7 @@ namespace NKikimr::NTestShard {
             }
         }
 
-        void SendReadRangeViaEvRequest() {
+        void SendReadRangeViaEvRequest() { 
             auto request = std::make_unique<TEvKeyValue::TEvRequest>();
             auto& record = request->Record;
             record.SetTabletId(TabletId);
@@ -91,40 +91,40 @@ namespace NKikimr::NTestShard {
             Send(TabletActorId, request.release());
         }
 
-        void SendReadRangeViaEvReadRange() {
-            auto request = std::make_unique<TEvKeyValue::TEvReadRange>();
-            auto& record = request->Record;
-            record.set_tablet_id(TabletId);
-            record.set_cookie(0);
-            auto *range = record.mutable_range();
-            range->set_from_key_exclusive(*LastKey);
-            Send(TabletActorId, request.release());
-        }
-
-        void IssueNextReadRangeQuery() {
-            IssueReadRangeMode = !IssueReadRangeMode;
-            if (IssueReadRangeMode) {
-                WaitedReadRangesViaEvResponse++;
-                SendReadRangeViaEvRequest();
-            } else {
-                WaitedReadRangesViaEvReadRangeResponse++;
-                SendReadRangeViaEvReadRange();
-            }
-        }
-
-        TString PopQueryByCookie(ui64 cookie) {
-            auto it = QueriesInFlight.find(cookie);
-            Y_VERIFY(it != QueriesInFlight.end());
-            TString key = std::move(it->second);
-            QueriesInFlight.erase(it);
-            return key;
-        }
-
+        void SendReadRangeViaEvReadRange() { 
+            auto request = std::make_unique<TEvKeyValue::TEvReadRange>(); 
+            auto& record = request->Record; 
+            record.set_tablet_id(TabletId); 
+            record.set_cookie(0); 
+            auto *range = record.mutable_range(); 
+            range->set_from_key_exclusive(*LastKey); 
+            Send(TabletActorId, request.release()); 
+        } 
+ 
+        void IssueNextReadRangeQuery() { 
+            IssueReadRangeMode = !IssueReadRangeMode; 
+            if (IssueReadRangeMode) { 
+                WaitedReadRangesViaEvResponse++; 
+                SendReadRangeViaEvRequest(); 
+            } else { 
+                WaitedReadRangesViaEvReadRangeResponse++; 
+                SendReadRangeViaEvReadRange(); 
+            } 
+        } 
+ 
+        TString PopQueryByCookie(ui64 cookie) { 
+            auto it = QueriesInFlight.find(cookie); 
+            Y_VERIFY(it != QueriesInFlight.end()); 
+            TString key = std::move(it->second); 
+            QueriesInFlight.erase(it); 
+            return key; 
+        } 
+ 
         void Handle(TEvKeyValue::TEvResponse::TPtr ev) {
             auto& r = ev->Get()->Record;
             if (r.GetCookie()) {
-                WaitedReadsViaEvResponse--;
-                TString key = PopQueryByCookie(r.GetCookie());
+                WaitedReadsViaEvResponse--; 
+                TString key = PopQueryByCookie(r.GetCookie()); 
 
                 if (r.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
                     STLOG(PRI_ERROR, TEST_SHARD, TS18, "CmdRead failed", (TabletId, TabletId), (Status, r.GetStatus()),
@@ -153,7 +153,7 @@ namespace NKikimr::NTestShard {
                     " actual# " << MD5::Calc(value) << " len# " << value.size());
                 STLOG(PRI_DEBUG, TEST_SHARD, TS16, "read key", (TabletId, TabletId), (Key, key));
             } else {
-                WaitedReadRangesViaEvResponse--;
+                WaitedReadRangesViaEvResponse--; 
                 if (r.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
                     STLOG(PRI_ERROR, TEST_SHARD, TS17, "CmdRangeRead failed", (TabletId, TabletId), (Status, r.GetStatus()),
                         (ErrorReason, r.GetErrorReason()));
@@ -180,73 +180,73 @@ namespace NKikimr::NTestShard {
             FinishIfPossible();
         }
 
-        void Handle(TEvKeyValue::TEvReadResponse::TPtr ev) {
-            auto& record = ev->Get()->Record;
-            WaitedReadsViaEvReadResponse--;
-
-            const TString key = PopQueryByCookie(record.cookie());
-            const NKikimrKeyValue::Statuses::ReplyStatus status = record.status();
-
-            if (status == NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT) {
-                STLOG(PRI_ERROR, TEST_SHARD, TS23, "CmdRead failed", (TabletId, TabletId), (Status, status),
-                    (ErrorReason, record.msg()));
-                return IssueRead(key);
-            }
-
-            if (status == NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR && RetryCount < 10) {
-                const bool inserted = KeyReadsWaitingForRetry.insert(key).second;
-                Y_VERIFY(inserted);
-                STLOG(PRI_ERROR, TEST_SHARD, TS24, "read key failed -- going to retry", (TabletId, TabletId),
-                    (Key, key), (ErrorReason, record.msg()));
-                return;
-            }
-
-            Y_VERIFY_S(status == NKikimrKeyValue::Statuses::RSTATUS_OK,
-                "Status# " << NKikimrKeyValue::Statuses_ReplyStatus_Name(status)
-                << " Cookie# " << record.cookie()
-                << " Message# " << record.msg());
-
-            const TString& value = record.value();
-            const bool inserted = Keys.try_emplace(key, value.size()).second;
-            Y_VERIFY(inserted);
-            Y_VERIFY_S(MD5::Calc(value) == key, "TabletId# " << TabletId << " Key# " << key << " digest mismatch"
-                " actual# " << MD5::Calc(value) << " len# " << value.size());
-            STLOG(PRI_DEBUG, TEST_SHARD, TS16, "read key", (TabletId, TabletId), (Key, key));
-            FinishIfPossible();
-        }
-
-        void Handle(TEvKeyValue::TEvReadRangeResponse::TPtr ev) {
-            WaitedReadRangesViaEvReadRangeResponse--;
-            auto& record = ev->Get()->Record;
-            const NKikimrKeyValue::Statuses::ReplyStatus status = record.status();
-
-            if (status != NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT) {
-                STLOG(PRI_ERROR, TEST_SHARD, TS19, "CmdRangeRead failed", (TabletId, TabletId), (Status, status),
-                    (ErrorReason, record.msg()));
-                return IssueNextReadRangeQuery();
-            }
-
-            Y_VERIFY_S(status == NKikimrKeyValue::Statuses::RSTATUS_OK
-                || status ==  NKikimrKeyValue::Statuses::RSTATUS_NO_DATA
-                || status == NKikimrKeyValue::Statuses::RSTATUS_OVERRUN,
-                "TabletId# " << TabletId << " CmdReadRange failed"
-                << " Status# " << NKikimrKeyValue::Statuses_ReplyStatus_Name(status));
-
-            for (const auto& pair : record.pair()) {
-                const TString& key = pair.key();
-                LastKey = key;
-                IssueRead(key);
-            }
-            if (!record.pair_size()) {
-                STLOG(PRI_INFO, TEST_SHARD, TS20, "finished reading from KeyValue tablet", (TabletId, TabletId));
-                KeyValueReadComplete = true;
-            } else {
-                IssueNextReadRangeQuery();
-            }
-            FinishIfPossible();
-        }
-
-        ui64 SendReadViaEvRequest(const TString& key) {
+        void Handle(TEvKeyValue::TEvReadResponse::TPtr ev) { 
+            auto& record = ev->Get()->Record; 
+            WaitedReadsViaEvReadResponse--; 
+ 
+            const TString key = PopQueryByCookie(record.cookie()); 
+            const NKikimrKeyValue::Statuses::ReplyStatus status = record.status(); 
+ 
+            if (status == NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT) { 
+                STLOG(PRI_ERROR, TEST_SHARD, TS23, "CmdRead failed", (TabletId, TabletId), (Status, status), 
+                    (ErrorReason, record.msg())); 
+                return IssueRead(key); 
+            } 
+ 
+            if (status == NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR && RetryCount < 10) { 
+                const bool inserted = KeyReadsWaitingForRetry.insert(key).second; 
+                Y_VERIFY(inserted); 
+                STLOG(PRI_ERROR, TEST_SHARD, TS24, "read key failed -- going to retry", (TabletId, TabletId), 
+                    (Key, key), (ErrorReason, record.msg())); 
+                return; 
+            } 
+ 
+            Y_VERIFY_S(status == NKikimrKeyValue::Statuses::RSTATUS_OK, 
+                "Status# " << NKikimrKeyValue::Statuses_ReplyStatus_Name(status) 
+                << " Cookie# " << record.cookie() 
+                << " Message# " << record.msg()); 
+ 
+            const TString& value = record.value(); 
+            const bool inserted = Keys.try_emplace(key, value.size()).second; 
+            Y_VERIFY(inserted); 
+            Y_VERIFY_S(MD5::Calc(value) == key, "TabletId# " << TabletId << " Key# " << key << " digest mismatch" 
+                " actual# " << MD5::Calc(value) << " len# " << value.size()); 
+            STLOG(PRI_DEBUG, TEST_SHARD, TS16, "read key", (TabletId, TabletId), (Key, key)); 
+            FinishIfPossible(); 
+        } 
+ 
+        void Handle(TEvKeyValue::TEvReadRangeResponse::TPtr ev) { 
+            WaitedReadRangesViaEvReadRangeResponse--; 
+            auto& record = ev->Get()->Record; 
+            const NKikimrKeyValue::Statuses::ReplyStatus status = record.status(); 
+ 
+            if (status != NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT) { 
+                STLOG(PRI_ERROR, TEST_SHARD, TS19, "CmdRangeRead failed", (TabletId, TabletId), (Status, status), 
+                    (ErrorReason, record.msg())); 
+                return IssueNextReadRangeQuery(); 
+            } 
+ 
+            Y_VERIFY_S(status == NKikimrKeyValue::Statuses::RSTATUS_OK 
+                || status ==  NKikimrKeyValue::Statuses::RSTATUS_NO_DATA 
+                || status == NKikimrKeyValue::Statuses::RSTATUS_OVERRUN, 
+                "TabletId# " << TabletId << " CmdReadRange failed" 
+                << " Status# " << NKikimrKeyValue::Statuses_ReplyStatus_Name(status)); 
+ 
+            for (const auto& pair : record.pair()) { 
+                const TString& key = pair.key(); 
+                LastKey = key; 
+                IssueRead(key); 
+            } 
+            if (!record.pair_size()) { 
+                STLOG(PRI_INFO, TEST_SHARD, TS20, "finished reading from KeyValue tablet", (TabletId, TabletId)); 
+                KeyValueReadComplete = true; 
+            } else { 
+                IssueNextReadRangeQuery(); 
+            } 
+            FinishIfPossible(); 
+        } 
+ 
+        ui64 SendReadViaEvRequest(const TString& key) { 
             auto request = std::make_unique<TEvKeyValue::TEvRequest>();
             auto& record = request->Record;
             record.SetTabletId(TabletId);
@@ -255,33 +255,33 @@ namespace NKikimr::NTestShard {
             auto *read = record.AddCmdRead();
             read->SetKey(key);
             Send(TabletActorId, request.release());
-            return cookie;
-        }
-
-        ui64 SendReadViaEvReadRequest(const TString& key) {
-            auto request = std::make_unique<TEvKeyValue::TEvRead>();
-            auto& record = request->Record;
-            record.set_tablet_id(TabletId);
-            const ui64 cookie = ++LastCookie;
-            record.set_cookie(cookie);
-            record.set_key(key);
-            Send(TabletActorId, request.release());
-            return cookie;
-        }
-
-        ui64 SendRead(const TString& key) {
-            IssueReadMode = !IssueReadMode;
-            if (IssueReadMode) {
-                WaitedReadsViaEvResponse++;
-                return SendReadViaEvRequest(key);
-            } else {
-                WaitedReadsViaEvReadResponse++;
-                return SendReadViaEvReadRequest(key);
-            }
-        }
-
-        void IssueRead(const TString& key) {
-            const ui64 cookie = SendRead(key);
+            return cookie; 
+        } 
+ 
+        ui64 SendReadViaEvReadRequest(const TString& key) { 
+            auto request = std::make_unique<TEvKeyValue::TEvRead>(); 
+            auto& record = request->Record; 
+            record.set_tablet_id(TabletId); 
+            const ui64 cookie = ++LastCookie; 
+            record.set_cookie(cookie); 
+            record.set_key(key); 
+            Send(TabletActorId, request.release()); 
+            return cookie; 
+        } 
+ 
+        ui64 SendRead(const TString& key) { 
+            IssueReadMode = !IssueReadMode; 
+            if (IssueReadMode) { 
+                WaitedReadsViaEvResponse++; 
+                return SendReadViaEvRequest(key); 
+            } else { 
+                WaitedReadsViaEvReadResponse++; 
+                return SendReadViaEvReadRequest(key); 
+            } 
+        } 
+ 
+        void IssueRead(const TString& key) { 
+            const ui64 cookie = SendRead(key); 
             const bool inserted = QueriesInFlight.emplace(cookie, key).second;
             Y_VERIFY(inserted);
         }
@@ -530,30 +530,30 @@ namespace NKikimr::NTestShard {
                                     TABLED() { str << QueriesInFlight.size(); }
                                 }
                             }
-                            TABLEBODY() {
-                                TABLER() {
-                                    TABLED() { str << "WaitedReadsViaEvResponse"; }
-                                    TABLED() { str << WaitedReadsViaEvResponse; }
-                                }
-                            }
-                            TABLEBODY() {
-                                TABLER() {
-                                    TABLED() { str << "WaitedReadsViaEvReadResponse"; }
-                                    TABLED() { str << WaitedReadsViaEvReadResponse; }
-                                }
-                            }
-                            TABLEBODY() {
-                                TABLER() {
-                                    TABLED() { str << "WaitedReadRangesViaEvResponse"; }
-                                    TABLED() { str << WaitedReadRangesViaEvResponse; }
-                                }
-                            }
-                            TABLEBODY() {
-                                TABLER() {
-                                    TABLED() { str << "WaitedReadRangesViaEvReadRangeResponse"; }
-                                    TABLED() { str << WaitedReadRangesViaEvReadRangeResponse; }
-                                }
-                            }
+                            TABLEBODY() { 
+                                TABLER() { 
+                                    TABLED() { str << "WaitedReadsViaEvResponse"; } 
+                                    TABLED() { str << WaitedReadsViaEvResponse; } 
+                                } 
+                            } 
+                            TABLEBODY() { 
+                                TABLER() { 
+                                    TABLED() { str << "WaitedReadsViaEvReadResponse"; } 
+                                    TABLED() { str << WaitedReadsViaEvReadResponse; } 
+                                } 
+                            } 
+                            TABLEBODY() { 
+                                TABLER() { 
+                                    TABLED() { str << "WaitedReadRangesViaEvResponse"; } 
+                                    TABLED() { str << WaitedReadRangesViaEvResponse; } 
+                                } 
+                            } 
+                            TABLEBODY() { 
+                                TABLER() { 
+                                    TABLED() { str << "WaitedReadRangesViaEvReadRangeResponse"; } 
+                                    TABLED() { str << WaitedReadRangesViaEvReadRangeResponse; } 
+                                } 
+                            } 
                         }
                     }
                 }
@@ -566,8 +566,8 @@ namespace NKikimr::NTestShard {
         }
 
         STRICT_STFUNC(StateFunc,
-            hFunc(TEvKeyValue::TEvReadResponse, Handle);
-            hFunc(TEvKeyValue::TEvReadRangeResponse, Handle);
+            hFunc(TEvKeyValue::TEvReadResponse, Handle); 
+            hFunc(TEvKeyValue::TEvReadRangeResponse, Handle); 
             hFunc(TEvKeyValue::TEvResponse, Handle);
             hFunc(TEvStateServerStatus, Handle);
             hFunc(TEvStateServerReadResult, Handle);
@@ -582,7 +582,7 @@ namespace NKikimr::NTestShard {
         Send(TabletActorId, new TTestShard::TEvSwitchMode(TTestShard::EMode::READ_VALIDATE));
         Y_VERIFY(!ValidationActorId);
         ValidationActorId = RegisterWithSameMailbox(new TValidationActor(*this, initialCheck));
-        ValidationRunningCount++;
+        ValidationRunningCount++; 
     }
 
     void TLoadActor::Handle(TEvValidationFinished::TPtr ev) {

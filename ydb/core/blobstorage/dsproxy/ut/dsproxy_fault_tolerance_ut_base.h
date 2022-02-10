@@ -185,8 +185,8 @@ public:
             }
         }
         while (responsesPending--) {
-            auto resp = WaitForSpecificEvent<TEvVMockCtlResponse>();
-            // Cerr << (TStringBuilder() << "]] SpecEventDelete(wipe=" << wipe << "): " << resp->Get()->ToString() << Endl);
+            auto resp = WaitForSpecificEvent<TEvVMockCtlResponse>(); 
+            // Cerr << (TStringBuilder() << "]] SpecEventDelete(wipe=" << wipe << "): " << resp->Get()->ToString() << Endl); 
         }
     }
 

@@ -2,7 +2,7 @@
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/base/batched_vec.h>
-
+ 
 namespace NKikimr {
     namespace NPrivate {
 
@@ -17,55 +17,55 @@ namespace NKikimr {
                 ui32 StatusFlags = 0;
                 bool Received = false;
                 bool HasCookie = false;
-
-                TString ToString() const {
-                    return TStringBuilder()
-                        << "{"
-                        << " Status# " << NKikimrProto::EReplyStatus_Name(Status)
+ 
+                TString ToString() const { 
+                    return TStringBuilder() 
+                        << "{" 
+                        << " Status# " << NKikimrProto::EReplyStatus_Name(Status) 
                         << " ErrorReason# " << '"' << EscapeC(ErrorReason) << '"'
-                        << " BlobId# " << BlobId.ToString()
-                        << " HasCookie# " << HasCookie
-                        << " Cookie# " << Cookie
-                        << " StatusFlags# " << NPDisk::StatusFlagsToString(StatusFlags)
-                        << " Received# " << Received
-                        << " }";
-                }
+                        << " BlobId# " << BlobId.ToString() 
+                        << " HasCookie# " << HasCookie 
+                        << " Cookie# " << Cookie 
+                        << " StatusFlags# " << NPDisk::StatusFlagsToString(StatusFlags) 
+                        << " Received# " << Received 
+                        << " }"; 
+                } 
             };
 
-            TBatchedVec<TItem> Items;
+            TBatchedVec<TItem> Items; 
             ui64 ReceivedResults;
             TActorIDPtr SkeletonFrontIDPtr;
-            NMonitoring::TDynamicCounters::TCounterPtr MultiPutResMsgsPtr;
+            NMonitoring::TDynamicCounters::TCounterPtr MultiPutResMsgsPtr; 
 
             TEvBlobStorage::TEvVMultiPut::TPtr Event;
             TActorId LeaderId;
-            TOutOfSpaceStatus OOSStatus;
+            TOutOfSpaceStatus OOSStatus; 
 
             const ui64 IncarnationGuid;
 
         public:
             TBufferVMultiPutActor(TActorId leaderId, const TBatchedVec<NKikimrProto::EReplyStatus> &statuses,
-                    TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
-                    TActorIDPtr skeletonFrontIDPtr, NMonitoring::TDynamicCounters::TCounterPtr multiPutResMsgsPtr,
+                    TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev, 
+                    TActorIDPtr skeletonFrontIDPtr, NMonitoring::TDynamicCounters::TCounterPtr multiPutResMsgsPtr, 
                     ui64 incarnationGuid)
                 : TActorBootstrapped()
                 , Items(ev->Get()->Record.ItemsSize())
                 , ReceivedResults(0)
                 , SkeletonFrontIDPtr(skeletonFrontIDPtr)
-                , MultiPutResMsgsPtr(multiPutResMsgsPtr)
+                , MultiPutResMsgsPtr(multiPutResMsgsPtr) 
                 , Event(ev)
                 , LeaderId(leaderId)
-                , OOSStatus(oosStatus)
+                , OOSStatus(oosStatus) 
                 , IncarnationGuid(incarnationGuid)
             {
-                Y_VERIFY(statuses.size() == Items.size());
-                for (ui64 idx = 0; idx < Items.size(); ++idx) {
-                    Items[idx].Status = statuses[idx];
-                }
+                Y_VERIFY(statuses.size() == Items.size()); 
+                for (ui64 idx = 0; idx < Items.size(); ++idx) { 
+                    Items[idx].Status = statuses[idx]; 
+                } 
             }
 
         private:
-            void SendResponseAndDie(const TActorContext &ctx) {
+            void SendResponseAndDie(const TActorContext &ctx) { 
                 NKikimrBlobStorage::TEvVMultiPut &vMultiPutRecord = Event->Get()->Record;
                 TVDiskID vdisk = VDiskIDFromVDiskID(vMultiPutRecord.GetVDiskID());
 
@@ -88,56 +88,56 @@ namespace NKikimr {
                         result.HasCookie ? &result.Cookie : nullptr, result.StatusFlags);
                 }
 
-                vMultiPutResult->Record.SetStatusFlags(OOSStatus.Flags);
+                vMultiPutResult->Record.SetStatusFlags(OOSStatus.Flags); 
 
                 SendVDiskResponse(ctx, Event->Sender, vMultiPutResult.release(), *this, Event->Cookie);
                 PassAway();
             }
 
-            void Handle(TEvVMultiPutItemResult::TPtr &ev, const TActorContext &ctx) {
-                TLogoBlobID blobId = ev->Get()->BlobId;
-                ui64 idx = ev->Get()->ItemIdx;
-                Y_VERIFY(idx < Items.size(), "itemIdx# %" PRIu64 " ItemsSize# %" PRIu64, idx, (ui64)Items.size());
-                TItem &item = Items[idx];
-                Y_VERIFY(blobId == item.BlobId, "itemIdx# %" PRIu64 " blobId# %s item# %s", idx, blobId.ToString().data(), item.ToString().data());
-
-                Y_VERIFY(!item.Received, "itemIdx# %" PRIu64 " item# %s", idx, item.ToString().data());
-                item.Received = true;
-                item.Status = ev->Get()->Status;
+            void Handle(TEvVMultiPutItemResult::TPtr &ev, const TActorContext &ctx) { 
+                TLogoBlobID blobId = ev->Get()->BlobId; 
+                ui64 idx = ev->Get()->ItemIdx; 
+                Y_VERIFY(idx < Items.size(), "itemIdx# %" PRIu64 " ItemsSize# %" PRIu64, idx, (ui64)Items.size()); 
+                TItem &item = Items[idx]; 
+                Y_VERIFY(blobId == item.BlobId, "itemIdx# %" PRIu64 " blobId# %s item# %s", idx, blobId.ToString().data(), item.ToString().data()); 
+ 
+                Y_VERIFY(!item.Received, "itemIdx# %" PRIu64 " item# %s", idx, item.ToString().data()); 
+                item.Received = true; 
+                item.Status = ev->Get()->Status; 
                 item.ErrorReason = ev->Get()->ErrorReason;
-
-                ReceivedResults++;
-
-                if (ReceivedResults == Items.size()) {
-                    SendResponseAndDie(ctx);
-                }
-            }
-
+ 
+                ReceivedResults++; 
+ 
+                if (ReceivedResults == Items.size()) { 
+                    SendResponseAndDie(ctx); 
+                } 
+            } 
+ 
             void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev, const TActorContext &ctx) {
                 NKikimrBlobStorage::TEvVPutResult &record = ev->Get()->Record;
 
                 TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(record.GetBlobID());
                 Y_VERIFY(record.HasCookie());
                 ui64 idx = record.GetCookie();
-                Y_VERIFY(idx < Items.size(), "itemIdx# %" PRIu64 " ItemsSize# %" PRIu64, idx, (ui64)Items.size());
+                Y_VERIFY(idx < Items.size(), "itemIdx# %" PRIu64 " ItemsSize# %" PRIu64, idx, (ui64)Items.size()); 
                 TItem &item = Items[idx];
-                Y_VERIFY(blobId == item.BlobId, "itemIdx# %" PRIu64 " blobId# %s item# %s", idx, blobId.ToString().data(), item.ToString().data());
+                Y_VERIFY(blobId == item.BlobId, "itemIdx# %" PRIu64 " blobId# %s item# %s", idx, blobId.ToString().data(), item.ToString().data()); 
 
-                Y_VERIFY(!item.Received, "itemIdx# %" PRIu64 " item# %s", idx, item.ToString().data());
+                Y_VERIFY(!item.Received, "itemIdx# %" PRIu64 " item# %s", idx, item.ToString().data()); 
                 item.Received = true;
                 Y_VERIFY(record.HasStatus());
                 item.Status = record.GetStatus();
                 item.ErrorReason = record.GetErrorReason();
-
+ 
                 ReceivedResults++;
 
                 if (ReceivedResults == Items.size()) {
-                    SendResponseAndDie(ctx);
+                    SendResponseAndDie(ctx); 
                 }
             }
 
             void Bootstrap(const TActorContext &ctx) {
-                Y_UNUSED(ctx);
+                Y_UNUSED(ctx); 
                 NKikimrBlobStorage::TEvVMultiPut &record = Event->Get()->Record;
 
                 for (ui64 idx = 0; idx < record.ItemsSize(); ++idx) {
@@ -152,10 +152,10 @@ namespace NKikimr {
                         item.Cookie = recItem.GetCookie();
                     }
 
-                    if (item.Status != NKikimrProto::OK) {
-                        item.Received = true;
-                        ReceivedResults++;
-                    }
+                    if (item.Status != NKikimrProto::OK) { 
+                        item.Received = true; 
+                        ReceivedResults++; 
+                    } 
                 }
 
                 Become(&TThis::StateWait);
@@ -164,7 +164,7 @@ namespace NKikimr {
             STFUNC(StateWait) {
                 Y_UNUSED(ctx);
                 switch (ev->GetTypeRewrite()) {
-                    HFunc(TEvVMultiPutItemResult, Handle);
+                    HFunc(TEvVMultiPutItemResult, Handle); 
                     HFunc(TEvBlobStorage::TEvVPutResult, Handle);
                 }
             }
@@ -173,11 +173,11 @@ namespace NKikimr {
     } // NPrivate
 
     IActor* CreateSkeletonVMultiPutActor(TActorId leaderId, const TBatchedVec<NKikimrProto::EReplyStatus> &statuses,
-            TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
-            TActorIDPtr skeletonFrontIDPtr, NMonitoring::TDynamicCounters::TCounterPtr counterPtr,
-            ui64 incarnationGuid) {
+            TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev, 
+            TActorIDPtr skeletonFrontIDPtr, NMonitoring::TDynamicCounters::TCounterPtr counterPtr, 
+            ui64 incarnationGuid) { 
         return new NPrivate::TBufferVMultiPutActor(leaderId, statuses, oosStatus, ev,
-                skeletonFrontIDPtr, counterPtr, incarnationGuid);
+                skeletonFrontIDPtr, counterPtr, incarnationGuid); 
     }
 
 } // NKikimr

@@ -96,38 +96,38 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TSkeletonOverloadGroup)
             {
-                COUNTER_INIT(EmergencyMovedPatchQueueItems, false);
-                COUNTER_INIT(EmergencyPatchStartQueueItems, false);
+                COUNTER_INIT(EmergencyMovedPatchQueueItems, false); 
+                COUNTER_INIT(EmergencyPatchStartQueueItems, false); 
                 COUNTER_INIT(EmergencyPutQueueItems, false);
                 COUNTER_INIT(EmergencyMultiPutQueueItems, false);
                 COUNTER_INIT(EmergencyLocalSyncDataQueueItems, false);
                 COUNTER_INIT(EmergencyAnubisOsirisPutQueueItems, false);
-
-                COUNTER_INIT(EmergencyMovedPatchQueueBytes, false);
-                COUNTER_INIT(EmergencyPatchStartQueueBytes, false);
+ 
+                COUNTER_INIT(EmergencyMovedPatchQueueBytes, false); 
+                COUNTER_INIT(EmergencyPatchStartQueueBytes, false); 
                 COUNTER_INIT(EmergencyPutQueueBytes, false);
                 COUNTER_INIT(EmergencyMultiPutQueueBytes, false);
                 COUNTER_INIT(EmergencyLocalSyncDataQueueBytes, false);
                 COUNTER_INIT(EmergencyAnubisOsirisPutQueueBytes, false);
-
+ 
                 COUNTER_INIT(FreshSatisfactionRankPercent, false);
                 COUNTER_INIT(LevelSatisfactionRankPercent, false);
             }
 
-            COUNTER_DEF(EmergencyMovedPatchQueueItems);
-            COUNTER_DEF(EmergencyPatchStartQueueItems);
+            COUNTER_DEF(EmergencyMovedPatchQueueItems); 
+            COUNTER_DEF(EmergencyPatchStartQueueItems); 
             COUNTER_DEF(EmergencyPutQueueItems);
             COUNTER_DEF(EmergencyMultiPutQueueItems);
             COUNTER_DEF(EmergencyLocalSyncDataQueueItems);
             COUNTER_DEF(EmergencyAnubisOsirisPutQueueItems);
-
-            COUNTER_DEF(EmergencyMovedPatchQueueBytes);
-            COUNTER_DEF(EmergencyPatchStartQueueBytes);
+ 
+            COUNTER_DEF(EmergencyMovedPatchQueueBytes); 
+            COUNTER_DEF(EmergencyPatchStartQueueBytes); 
             COUNTER_DEF(EmergencyPutQueueBytes);
             COUNTER_DEF(EmergencyMultiPutQueueBytes);
             COUNTER_DEF(EmergencyLocalSyncDataQueueBytes);
             COUNTER_DEF(EmergencyAnubisOsirisPutQueueBytes);
-
+ 
             COUNTER_DEF(FreshSatisfactionRankPercent);
             COUNTER_DEF(LevelSatisfactionRankPercent);
         };
@@ -422,12 +422,12 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TVDiskIFaceGroup)
             {
-                COUNTER_INIT(MovedPatchMsgs, true);
-                COUNTER_INIT(PatchStartMsgs, true);
-                COUNTER_INIT(PatchDiffMsgs, true);
-                COUNTER_INIT(PatchXorDiffMsgs, true);
+                COUNTER_INIT(MovedPatchMsgs, true); 
+                COUNTER_INIT(PatchStartMsgs, true); 
+                COUNTER_INIT(PatchDiffMsgs, true); 
+                COUNTER_INIT(PatchXorDiffMsgs, true); 
                 COUNTER_INIT(PutMsgs, true);
-                COUNTER_INIT(MultiPutMsgs, true);
+                COUNTER_INIT(MultiPutMsgs, true); 
                 COUNTER_INIT(GetMsgs, true);
                 COUNTER_INIT(BlockMsgs, true);
                 COUNTER_INIT(GetBlockMsgs, true);
@@ -441,12 +441,12 @@ public:                                                                         
                 COUNTER_INIT(AnubisPutMsgs, true);
                 COUNTER_INIT(OsirisPutMsgs, true);
 
-                COUNTER_INIT_PRIVATE(MovedPatchResMsgs, true);
-                COUNTER_INIT_PRIVATE(PatchFoundPartsMsgs, true);
-                COUNTER_INIT_PRIVATE(PatchXorDiffResMsgs, true);
-                COUNTER_INIT_PRIVATE(PatchResMsgs, true);
+                COUNTER_INIT_PRIVATE(MovedPatchResMsgs, true); 
+                COUNTER_INIT_PRIVATE(PatchFoundPartsMsgs, true); 
+                COUNTER_INIT_PRIVATE(PatchXorDiffResMsgs, true); 
+                COUNTER_INIT_PRIVATE(PatchResMsgs, true); 
                 COUNTER_INIT_PRIVATE(PutResMsgs, true);
-                COUNTER_INIT_PRIVATE(MultiPutResMsgs, true);
+                COUNTER_INIT_PRIVATE(MultiPutResMsgs, true); 
                 COUNTER_INIT_PRIVATE(GetResMsgs, true);
                 COUNTER_INIT_PRIVATE(BlockResMsgs, true);
                 COUNTER_INIT_PRIVATE(GetBlockResMsgs, true);
@@ -464,12 +464,12 @@ public:                                                                         
                 COUNTER_INIT(GetTotalBytes, true);
             }
 
-            COUNTER_DEF(MovedPatchMsgs);
-            COUNTER_DEF(PatchStartMsgs);
-            COUNTER_DEF(PatchDiffMsgs);
-            COUNTER_DEF(PatchXorDiffMsgs);
+            COUNTER_DEF(MovedPatchMsgs); 
+            COUNTER_DEF(PatchStartMsgs); 
+            COUNTER_DEF(PatchDiffMsgs); 
+            COUNTER_DEF(PatchXorDiffMsgs); 
             COUNTER_DEF(PutMsgs);
-            COUNTER_DEF(MultiPutMsgs);
+            COUNTER_DEF(MultiPutMsgs); 
             COUNTER_DEF(GetMsgs);
             COUNTER_DEF(BlockMsgs);
             COUNTER_DEF(GetBlockMsgs);
@@ -483,12 +483,12 @@ public:                                                                         
             COUNTER_DEF(AnubisPutMsgs);
             COUNTER_DEF(OsirisPutMsgs);
 
-            COUNTER_DEF(MovedPatchResMsgs);
-            COUNTER_DEF(PatchFoundPartsMsgs);
-            COUNTER_DEF(PatchXorDiffResMsgs);
-            COUNTER_DEF(PatchResMsgs);
+            COUNTER_DEF(MovedPatchResMsgs); 
+            COUNTER_DEF(PatchFoundPartsMsgs); 
+            COUNTER_DEF(PatchXorDiffResMsgs); 
+            COUNTER_DEF(PatchResMsgs); 
             COUNTER_DEF(PutResMsgs);
-            COUNTER_DEF(MultiPutResMsgs);
+            COUNTER_DEF(MultiPutResMsgs); 
             COUNTER_DEF(GetResMsgs);
             COUNTER_DEF(BlockResMsgs);
             COUNTER_DEF(GetBlockResMsgs);

@@ -38,7 +38,7 @@ SRCS(
     keyvalue_state.cpp
     keyvalue_state.h
     keyvalue_state_collect.cpp
-    keyvalue_storage_read_request.cpp
+    keyvalue_storage_read_request.cpp 
     keyvalue_storage_request.cpp
     keyvalue_storage_request.h
     keyvalue_stored_state_data.cpp
@@ -48,7 +48,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    library/cpp/actors/protos
+    library/cpp/actors/protos 
     ydb/core/base
     ydb/core/blobstorage/base
     ydb/core/blobstorage/dsproxy
@@ -65,7 +65,7 @@ END()
 RECURSE(
     protos
 )
-
+ 
 RECURSE_FOR_TESTS(
     ut
 )

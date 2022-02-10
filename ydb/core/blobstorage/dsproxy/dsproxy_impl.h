@@ -101,8 +101,8 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     TBatchedQueue<TEvBlobStorage::TEvGet::TPtr> BatchedGets[GetHandleClassCount];
     TStackVec<NKikimrBlobStorage::EGetHandleClass, GetHandleClassCount> GetBatchedBucketQueue;
 
-    TMemorizableControlWrapper EnablePutBatching;
-    TMemorizableControlWrapper EnableVPatch;
+    TMemorizableControlWrapper EnablePutBatching; 
+    TMemorizableControlWrapper EnableVPatch; 
 
     TInstant EstablishingSessionStartTime;
 
@@ -300,10 +300,10 @@ public:
 
     TBlobStorageGroupProxy(TIntrusivePtr<TBlobStorageGroupInfo>&& info, bool forceWaitAllDrives,
             TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch);
+            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch); 
 
     TBlobStorageGroupProxy(ui32 groupId, bool isEjected, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch);
+            const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch); 
 
     void Bootstrap();
 

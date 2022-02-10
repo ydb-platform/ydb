@@ -14,8 +14,8 @@ namespace NKikimr::NTestShard {
         TActorId TabletActorId;
         const NKikimrClient::TTestShardControlRequest::TCmdInitialize Settings;
 
-        ui64 ValidationRunningCount = 0;
-
+        ui64 ValidationRunningCount = 0; 
+ 
         struct TKeyInfo {
             const ui32 Len = 0;
             ::NTestShard::TStateServer::EEntityState ConfirmedState = ::NTestShard::TStateServer::ABSENT;

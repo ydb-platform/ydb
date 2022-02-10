@@ -483,23 +483,23 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         BlockGroup(runtime, sender0, tabletId, groupId, generation++, true, NKikimrProto::EReplyStatus::NO_GROUP);
     }
 
-    CUSTOM_UNIT_TEST(TestSendToInvalidGroupId) {
-        TTestBasicRuntime runtime(1, false);
-        Setup(runtime, "", nullptr);
-
-        auto sender = runtime.AllocateEdgeActor(0);
-
-        CreateStoragePool(runtime, DOMAIN_ID, "test_storage", "pool-kind-1");
-        ui32 groupId = Max<ui32>();
-
-        ui64 tabletId = 1234;
-        ui32 generation = 1;
+    CUSTOM_UNIT_TEST(TestSendToInvalidGroupId) { 
+        TTestBasicRuntime runtime(1, false); 
+        Setup(runtime, "", nullptr); 
+ 
+        auto sender = runtime.AllocateEdgeActor(0); 
+ 
+        CreateStoragePool(runtime, DOMAIN_ID, "test_storage", "pool-kind-1"); 
+        ui32 groupId = Max<ui32>(); 
+ 
+        ui64 tabletId = 1234; 
+        ui32 generation = 1; 
         BlockGroup(runtime, sender, tabletId, groupId, generation, true, NKikimrProto::ERROR);
-        Put(runtime, sender, groupId, TLogoBlobID(tabletId, generation, 0, 0, 5, 0), "hello",
-                NKikimrProto::EReplyStatus::ERROR);
+        Put(runtime, sender, groupId, TLogoBlobID(tabletId, generation, 0, 0, 5, 0), "hello", 
+                NKikimrProto::EReplyStatus::ERROR); 
         CollectGroup(runtime, sender, tabletId, groupId, true, NKikimrProto::EReplyStatus::ERROR);
-    }
-
+    } 
+ 
     CUSTOM_UNIT_TEST(TestBlockEncriptedGroup) {
         TTestBasicRuntime runtime(2, false);
         Setup(runtime, "", nullptr);

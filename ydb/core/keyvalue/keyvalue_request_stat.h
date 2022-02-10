@@ -37,7 +37,7 @@ struct TRequestStat {
 
     TVector<ui32> YellowStopChannels;
     TVector<ui32> YellowMoveChannels;
-
+ 
     void Clear() {
         ReadBytes = 0;
         Reads = 0;

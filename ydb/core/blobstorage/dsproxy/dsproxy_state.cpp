@@ -296,8 +296,8 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::Handle(TEvRequestProxySessionsState::TPtr &ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "RequestProxySessionsState Group# " << GroupId
-                << " Marker# DSP59");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "RequestProxySessionsState Group# " << GroupId 
+                << " Marker# DSP59"); 
         Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr));
     }
 

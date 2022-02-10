@@ -97,8 +97,8 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
 
-    void MakeBelongsToSubgroupBenchmark(TBlobStorageGroupType::EErasureSpecies erasure, ui32 numFailDomains,
-            NUnitTest::TTestContext& ut_context) {
+    void MakeBelongsToSubgroupBenchmark(TBlobStorageGroupType::EErasureSpecies erasure, ui32 numFailDomains, 
+            NUnitTest::TTestContext& ut_context) { 
         auto groupInfo = std::make_unique<TBlobStorageGroupInfo>(erasure, 1, numFailDomains, 1);
         const ui32 blobSubgroupSize = groupInfo->Type.BlobSubgroupSize();
         TOriginalBlobStorageGroupInfo orig(blobSubgroupSize, *groupInfo);
@@ -110,10 +110,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
             }
         }
 
-        constexpr ui64 blobCount = 10'000'000;
-        UNIT_ASSERT(blobCount == ids.size());
-        ui64 iterationCount = numFailDomains * blobCount;
-
+        constexpr ui64 blobCount = 10'000'000; 
+        UNIT_ASSERT(blobCount == ids.size()); 
+        ui64 iterationCount = numFailDomains * blobCount; 
+ 
         THPTimer timer;
         ui32 num = 0;
         for (const auto& vdisk : groupInfo->GetVDisks()) {
@@ -122,14 +122,14 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
                 num += groupInfo->BelongsToSubgroup(vd, id.Hash()) ? 1 : 0;
             }
         }
-        double newMetric = 1'000'000'000 * timer.PassedReset() / iterationCount;
-        TString newMetricsName = TStringBuilder() << TErasureType::ErasureSpeciesToStr(erasure)
-                << " domains " << numFailDomains
-                << " new (ns)";
-        ut_context.Metrics[newMetricsName] = newMetric;
-        Cerr << newMetricsName << ": " << newMetric<< Endl;
+        double newMetric = 1'000'000'000 * timer.PassedReset() / iterationCount; 
+        TString newMetricsName = TStringBuilder() << TErasureType::ErasureSpeciesToStr(erasure) 
+                << " domains " << numFailDomains 
+                << " new (ns)"; 
+        ut_context.Metrics[newMetricsName] = newMetric; 
+        Cerr << newMetricsName << ": " << newMetric<< Endl; 
 
-        timer.Reset();
+        timer.Reset(); 
         ui32 num2 = 0;
         for (const auto& vdisk : groupInfo->GetVDisks()) {
             for (const TLogoBlobID& id : ids) {
@@ -137,75 +137,75 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
                 num2 += orig.BelongsToSubgroup(vd, id.Hash()) ? 1 : 0;
             }
         }
-        double oldMetric = 1'000'000'000 * timer.PassedReset() / iterationCount;
-        TString oldMetricsName = TStringBuilder() << TErasureType::ErasureSpeciesToStr(erasure)
-                << " domains " << numFailDomains
-                << " old (ns)";
-        ut_context.Metrics[oldMetricsName] = oldMetric;
-        Cerr << oldMetricsName << ": " << oldMetric << Endl;
+        double oldMetric = 1'000'000'000 * timer.PassedReset() / iterationCount; 
+        TString oldMetricsName = TStringBuilder() << TErasureType::ErasureSpeciesToStr(erasure) 
+                << " domains " << numFailDomains 
+                << " old (ns)"; 
+        ut_context.Metrics[oldMetricsName] = oldMetric; 
+        Cerr << oldMetricsName << ": " << oldMetric << Endl; 
 
         UNIT_ASSERT_VALUES_EQUAL(num, num2);
     }
 
-    Y_UNIT_TEST(BelongsToSubgroupBenchmark) {
-        auto erasures = {TBlobStorageGroupType::ErasureNone,
-                TBlobStorageGroupType::ErasureMirror3,
-                TBlobStorageGroupType::Erasure4Plus2Block,
-                TBlobStorageGroupType::ErasureMirror3of4};
-        for (auto erasure : erasures) {
-            TBlobStorageGroupType type(erasure);
-            for (ui32 domains : {type.BlobSubgroupSize(), 9u}) {
-                MakeBelongsToSubgroupBenchmark(erasure, domains, ut_context);
-            }
-        }
-    }
-
+    Y_UNIT_TEST(BelongsToSubgroupBenchmark) { 
+        auto erasures = {TBlobStorageGroupType::ErasureNone, 
+                TBlobStorageGroupType::ErasureMirror3, 
+                TBlobStorageGroupType::Erasure4Plus2Block, 
+                TBlobStorageGroupType::ErasureMirror3of4}; 
+        for (auto erasure : erasures) { 
+            TBlobStorageGroupType type(erasure); 
+            for (ui32 domains : {type.BlobSubgroupSize(), 9u}) { 
+                MakeBelongsToSubgroupBenchmark(erasure, domains, ut_context); 
+            } 
+        } 
+    } 
+ 
     void BasicCheck(const std::unique_ptr<TBlobStorageGroupInfo> &groupInfo, TOriginalBlobStorageGroupInfo &orig,
-            TLogoBlobID id, ui32 blobSubgroupSize) {
-        std::array<TVDiskID, 8> vdisks;
-        std::array<TActorId, 8> services;
-        orig.PickSubgroup(id.Hash(), blobSubgroupSize, vdisks.data(), services.data());
-
-        TBlobStorageGroupInfo::TVDiskIds vdisks2;
-        TBlobStorageGroupInfo::TServiceIds services2;
-        groupInfo->PickSubgroup(id.Hash(), &vdisks2, &services2);
-
-        UNIT_ASSERT_EQUAL(vdisks2.size(), blobSubgroupSize);
-        UNIT_ASSERT_EQUAL(services2.size(), blobSubgroupSize);
-        UNIT_ASSERT(std::equal(vdisks2.begin(), vdisks2.end(), vdisks.begin()));
-        UNIT_ASSERT(std::equal(services2.begin(), services2.end(), services.begin()));
-
-        for (ui32 i = 0; i < blobSubgroupSize; ++i) {
-            const TVDiskID& vdisk = vdisks[i];
-
-            UNIT_ASSERT_EQUAL(groupInfo->GetVDiskInSubgroup(i, id.Hash()),
-                    orig.GetVDiskInSubgroup(i, id.Hash()));
-            UNIT_ASSERT_EQUAL(groupInfo->GetVDiskInSubgroup(i, id.Hash()), vdisk);
-
-            UNIT_ASSERT_EQUAL(groupInfo->GetIdxInSubgroup(vdisk, id.Hash()),
-                    orig.GetIdxInSubgroup(vdisk, id.Hash()));
-            UNIT_ASSERT_EQUAL(groupInfo->GetIdxInSubgroup(vdisk, id.Hash()), i);
-        }
-
-        THashMap<TVDiskID, ui32> disk2index;
-        for (ui32 i = 0; i < blobSubgroupSize; ++i) {
-            disk2index[vdisks2[i]] = i;
-        }
-
-        for (const auto& vdisk : groupInfo->GetVDisks()) {
-            auto vd = groupInfo->GetVDiskId(vdisk.OrderNumber);
-            auto it = disk2index.find(vd);
-            bool isReplicaFor = it != disk2index.end();
-
-            UNIT_ASSERT_VALUES_EQUAL(orig.BelongsToSubgroup(vd, id.Hash()), isReplicaFor);
-            UNIT_ASSERT_VALUES_EQUAL(groupInfo->BelongsToSubgroup(vd, id.Hash()), isReplicaFor);
-
-            const ui32 index = isReplicaFor ? it->second : blobSubgroupSize;
-            UNIT_ASSERT_VALUES_EQUAL(orig.GetIdxInSubgroup(vd, id.Hash()), index);
-            UNIT_ASSERT_VALUES_EQUAL(groupInfo->GetIdxInSubgroup(vd, id.Hash()), index);
-        }
-    }
-
+            TLogoBlobID id, ui32 blobSubgroupSize) { 
+        std::array<TVDiskID, 8> vdisks; 
+        std::array<TActorId, 8> services; 
+        orig.PickSubgroup(id.Hash(), blobSubgroupSize, vdisks.data(), services.data()); 
+ 
+        TBlobStorageGroupInfo::TVDiskIds vdisks2; 
+        TBlobStorageGroupInfo::TServiceIds services2; 
+        groupInfo->PickSubgroup(id.Hash(), &vdisks2, &services2); 
+ 
+        UNIT_ASSERT_EQUAL(vdisks2.size(), blobSubgroupSize); 
+        UNIT_ASSERT_EQUAL(services2.size(), blobSubgroupSize); 
+        UNIT_ASSERT(std::equal(vdisks2.begin(), vdisks2.end(), vdisks.begin())); 
+        UNIT_ASSERT(std::equal(services2.begin(), services2.end(), services.begin())); 
+ 
+        for (ui32 i = 0; i < blobSubgroupSize; ++i) { 
+            const TVDiskID& vdisk = vdisks[i]; 
+ 
+            UNIT_ASSERT_EQUAL(groupInfo->GetVDiskInSubgroup(i, id.Hash()), 
+                    orig.GetVDiskInSubgroup(i, id.Hash())); 
+            UNIT_ASSERT_EQUAL(groupInfo->GetVDiskInSubgroup(i, id.Hash()), vdisk); 
+ 
+            UNIT_ASSERT_EQUAL(groupInfo->GetIdxInSubgroup(vdisk, id.Hash()), 
+                    orig.GetIdxInSubgroup(vdisk, id.Hash())); 
+            UNIT_ASSERT_EQUAL(groupInfo->GetIdxInSubgroup(vdisk, id.Hash()), i); 
+        } 
+ 
+        THashMap<TVDiskID, ui32> disk2index; 
+        for (ui32 i = 0; i < blobSubgroupSize; ++i) { 
+            disk2index[vdisks2[i]] = i; 
+        } 
+ 
+        for (const auto& vdisk : groupInfo->GetVDisks()) { 
+            auto vd = groupInfo->GetVDiskId(vdisk.OrderNumber); 
+            auto it = disk2index.find(vd); 
+            bool isReplicaFor = it != disk2index.end(); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(orig.BelongsToSubgroup(vd, id.Hash()), isReplicaFor); 
+            UNIT_ASSERT_VALUES_EQUAL(groupInfo->BelongsToSubgroup(vd, id.Hash()), isReplicaFor); 
+ 
+            const ui32 index = isReplicaFor ? it->second : blobSubgroupSize; 
+            UNIT_ASSERT_VALUES_EQUAL(orig.GetIdxInSubgroup(vd, id.Hash()), index); 
+            UNIT_ASSERT_VALUES_EQUAL(groupInfo->GetIdxInSubgroup(vd, id.Hash()), index); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(BasicChecks) {
         for (auto erasure : {TBlobStorageGroupType::ErasureNone, TBlobStorageGroupType::ErasureMirror3,
                 TBlobStorageGroupType::Erasure3Plus1Block, TBlobStorageGroupType::Erasure3Plus1Stripe,
@@ -219,20 +219,20 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
             for (ui32 i = 0; i < 100; ++i) {
                 for (ui32 j = 0; j < 10; ++j) {
                     TLogoBlobID id(i, 1, j, 1, 1000, 1);
-                    BasicCheck(groupInfo, orig, id, blobSubgroupSize);
+                    BasicCheck(groupInfo, orig, id, blobSubgroupSize); 
                 }
             }
         }
     }
 
-    Y_UNIT_TEST(CheckCorrectBehaviourWithHashOverlow) {
+    Y_UNIT_TEST(CheckCorrectBehaviourWithHashOverlow) { 
         auto groupInfo = std::make_unique<TBlobStorageGroupInfo>(TErasureType::ErasureMirror3, 1U, 5U, 1U);
-        const ui32 blobSubgroupSize = groupInfo->Type.BlobSubgroupSize();
-        TOriginalBlobStorageGroupInfo orig(blobSubgroupSize, *groupInfo);
-        TLogoBlobID id(4550843067551373890, 2564314201, 2840555155, 59, 0, 2230444);
-        BasicCheck(groupInfo, orig, id, blobSubgroupSize);
-    }
-
+        const ui32 blobSubgroupSize = groupInfo->Type.BlobSubgroupSize(); 
+        TOriginalBlobStorageGroupInfo orig(blobSubgroupSize, *groupInfo); 
+        TLogoBlobID id(4550843067551373890, 2564314201, 2840555155, 59, 0, 2230444); 
+        BasicCheck(groupInfo, orig, id, blobSubgroupSize); 
+    } 
+ 
     Y_UNIT_TEST(Mirror3dcMapper) {
         auto groupInfo = std::make_unique<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3, 3U, 5U, 4U);
 

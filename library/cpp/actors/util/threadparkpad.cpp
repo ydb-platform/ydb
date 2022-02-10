@@ -48,7 +48,7 @@ namespace NActors {
 
 namespace NActors {
     class TThreadParkPad::TImpl {
-        TAtomic Interrupted;
+        TAtomic Interrupted; 
         HANDLE EvHandle;
 
     public:
@@ -66,7 +66,7 @@ namespace NActors {
 
         bool Park() noexcept {
             ::WaitForSingleObject(EvHandle, INFINITE);
-            return AtomicGet(Interrupted);
+            return AtomicGet(Interrupted); 
         }
 
         void Unpark() noexcept {
@@ -74,12 +74,12 @@ namespace NActors {
         }
 
         void Interrupt() noexcept {
-            AtomicSet(Interrupted, true);
+            AtomicSet(Interrupted, true); 
             Unpark();
         }
 
         bool IsInterrupted() const noexcept {
-            return AtomicGet(Interrupted);
+            return AtomicGet(Interrupted); 
         }
     };
 
@@ -89,7 +89,7 @@ namespace NActors {
 
 namespace NActors {
     class TThreadParkPad::TImpl {
-        TAtomic Interrupted;
+        TAtomic Interrupted; 
         TSystemEvent Ev;
 
     public:
@@ -103,7 +103,7 @@ namespace NActors {
 
         bool Park() noexcept {
             Ev.Wait();
-            return AtomicGet(Interrupted);
+            return AtomicGet(Interrupted); 
         }
 
         void Unpark() noexcept {
@@ -111,12 +111,12 @@ namespace NActors {
         }
 
         void Interrupt() noexcept {
-            AtomicSet(Interrupted, true);
+            AtomicSet(Interrupted, true); 
             Unpark();
         }
 
         bool IsInterrupted() const noexcept {
-            return AtomicGet(Interrupted);
+            return AtomicGet(Interrupted); 
         }
     };
 #endif

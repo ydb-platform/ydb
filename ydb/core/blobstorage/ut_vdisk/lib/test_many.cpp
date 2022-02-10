@@ -7,69 +7,69 @@ using namespace NKikimr;
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class TManyPutOneGetActor : public TSyncTestBase {
-protected:
-    const bool WaitForCompaction;
+class TManyPutOneGetActor : public TSyncTestBase { 
+protected: 
+    const bool WaitForCompaction; 
     std::shared_ptr<TVector<TMsgPackInfo>> MsgPacks;
-    const ui64 TabletId;
-    const ui64 Shift;
+    const ui64 TabletId; 
+    const ui64 Shift; 
     std::shared_ptr<IPutHandleClassGenerator> HandleClassGen;
     std::shared_ptr<TSet<ui32>> BadSteps;
-    const bool WithErrorResponse;
-
-    virtual void Scenario(const TActorContext &ctx) {
-        // load data
-        SyncRunner->Run(ctx, CreateManyPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgPacks,
-                                            TabletId, 0, 1, HandleClassGen, BadSteps, TDuration::Seconds(0)));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
-
-        // wait for compaction
-        if (WaitForCompaction) {
-            SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
-        }
-
-        // read
-        SyncRunner->Run(ctx, CreateGet(SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgPacks, TabletId, 0, 1, Shift,
-                                       WithErrorResponse));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  GET done");
-    }
-
-
-public:
-    TManyPutOneGetActor(TConfiguration *conf, bool waitForCompaction, ui32 msgNum, ui32 msgSize,
-                        ui64 tabletId, ui64 shift, NKikimrBlobStorage::EPutHandleClass cls,
-                        bool withErrorResponse)
-        : TSyncTestBase(conf)
-        , WaitForCompaction(waitForCompaction)
-        , MsgPacks(new TVector<TMsgPackInfo>{TMsgPackInfo(msgSize, msgNum)})
-        , TabletId(tabletId)
-        , Shift(shift)
+    const bool WithErrorResponse; 
+ 
+    virtual void Scenario(const TActorContext &ctx) { 
+        // load data 
+        SyncRunner->Run(ctx, CreateManyPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgPacks, 
+                                            TabletId, 0, 1, HandleClassGen, BadSteps, TDuration::Seconds(0))); 
+        LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded"); 
+ 
+        // wait for compaction 
+        if (WaitForCompaction) { 
+            SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf)); 
+            LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done"); 
+        } 
+ 
+        // read 
+        SyncRunner->Run(ctx, CreateGet(SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgPacks, TabletId, 0, 1, Shift, 
+                                       WithErrorResponse)); 
+        LOG_NOTICE(ctx, NActorsServices::TEST, "  GET done"); 
+    } 
+ 
+ 
+public: 
+    TManyPutOneGetActor(TConfiguration *conf, bool waitForCompaction, ui32 msgNum, ui32 msgSize, 
+                        ui64 tabletId, ui64 shift, NKikimrBlobStorage::EPutHandleClass cls, 
+                        bool withErrorResponse) 
+        : TSyncTestBase(conf) 
+        , WaitForCompaction(waitForCompaction) 
+        , MsgPacks(new TVector<TMsgPackInfo>{TMsgPackInfo(msgSize, msgNum)}) 
+        , TabletId(tabletId) 
+        , Shift(shift) 
         , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls))
         , BadSteps(std::make_shared<TSet<ui32>>())
-        , WithErrorResponse(withErrorResponse)
-    {}
-
+        , WithErrorResponse(withErrorResponse) 
+    {} 
+ 
     TManyPutOneGetActor(TConfiguration *conf, bool waitForCompaction, std::shared_ptr<TVector<TMsgPackInfo>> msgPacks,
-                        ui64 tabletId, ui64 shift, NKikimrBlobStorage::EPutHandleClass cls,
-                        bool withErrorResponse)
-        : TSyncTestBase(conf)
-        , WaitForCompaction(waitForCompaction)
-        , MsgPacks(msgPacks)
-        , TabletId(tabletId)
-        , Shift(shift)
+                        ui64 tabletId, ui64 shift, NKikimrBlobStorage::EPutHandleClass cls, 
+                        bool withErrorResponse) 
+        : TSyncTestBase(conf) 
+        , WaitForCompaction(waitForCompaction) 
+        , MsgPacks(msgPacks) 
+        , TabletId(tabletId) 
+        , Shift(shift) 
         , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls))
         , BadSteps(std::make_shared<TSet<ui32>>())
-        , WithErrorResponse(withErrorResponse)
-    {}
-};
-
-void TManyPutOneGet::operator ()(TConfiguration *conf) {
-    conf->ActorSystem1->Register(new TManyPutOneGetActor(conf, WaitForCompaction, MsgPacks, TabletId, Shift,
-                                                         HandleClass, WithErrorResponse));
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        , WithErrorResponse(withErrorResponse) 
+    {} 
+}; 
+ 
+void TManyPutOneGet::operator ()(TConfiguration *conf) { 
+    conf->ActorSystem1->Register(new TManyPutOneGetActor(conf, WaitForCompaction, MsgPacks, TabletId, Shift, 
+                                                         HandleClass, WithErrorResponse)); 
+} 
+ 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
 class TManyPutGetActor : public TSyncTestBase {
 protected:
     const bool WaitForCompaction;

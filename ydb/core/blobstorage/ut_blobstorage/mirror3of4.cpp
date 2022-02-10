@@ -6,7 +6,7 @@ Y_UNIT_TEST_SUITE(Mirror3of4) {
         SetRandomSeed(1);
         TEnvironmentSetup env(false, TBlobStorageGroupType::ErasureMirror3of4);
         auto& runtime = env.Runtime;
-        env.CreateBoxAndPool();
+        env.CreateBoxAndPool(); 
         env.Sim(TDuration::Minutes(1));
 //        runtime->SetLogPriority(NKikimrServices::BS_PROXY_PUT, NLog::PRI_DEBUG);
 //        runtime->SetLogPriority(NKikimrServices::BS_VDISK_PUT, NLog::PRI_DEBUG);

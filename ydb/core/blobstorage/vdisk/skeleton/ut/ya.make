@@ -20,9 +20,9 @@ PEERDIR(
 
 SRCS(
     skeleton_oos_logic_ut.cpp
-    skeleton_vpatch_actor_ut.cpp
+    skeleton_vpatch_actor_ut.cpp 
 )
 
-YQL_LAST_ABI_VERSION()
-
+YQL_LAST_ABI_VERSION() 
+ 
 END()

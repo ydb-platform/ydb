@@ -31,34 +31,34 @@ public:
     }
 };
 
-class TMemorizableControlWrapper {
-    static constexpr i32 RequestCountWithRelevantValue = 1024;
-    static constexpr TDuration TimeDurationWithRelevantValue = TDuration::Seconds(15);
-    TControlWrapper Control;
-    TInstant CheckingRelevantDeadline;
-    i32 CheckingCounter = 0;
-    i64 CurrentValue = 0;
-
-public:
-    TMemorizableControlWrapper(const TControlWrapper &control)
-        : Control(control)
-        , CurrentValue(Control)
-    {
-    }
-
-    i64 Update(TInstant now) {
-        CheckingCounter--;
-        if (now > CheckingRelevantDeadline || CheckingCounter <= 0) {
-            CurrentValue = Control;
-            CheckingRelevantDeadline = now + TimeDurationWithRelevantValue;
-            CheckingCounter = RequestCountWithRelevantValue;
-        }
-        return CurrentValue;
-    }
-
-    operator i64() const {
-        return CurrentValue;
-    }
-};
-
+class TMemorizableControlWrapper { 
+    static constexpr i32 RequestCountWithRelevantValue = 1024; 
+    static constexpr TDuration TimeDurationWithRelevantValue = TDuration::Seconds(15); 
+    TControlWrapper Control; 
+    TInstant CheckingRelevantDeadline; 
+    i32 CheckingCounter = 0; 
+    i64 CurrentValue = 0; 
+ 
+public: 
+    TMemorizableControlWrapper(const TControlWrapper &control) 
+        : Control(control) 
+        , CurrentValue(Control) 
+    { 
+    } 
+ 
+    i64 Update(TInstant now) { 
+        CheckingCounter--; 
+        if (now > CheckingRelevantDeadline || CheckingCounter <= 0) { 
+            CurrentValue = Control; 
+            CheckingRelevantDeadline = now + TimeDurationWithRelevantValue; 
+            CheckingCounter = RequestCountWithRelevantValue; 
+        } 
+        return CurrentValue; 
+    } 
+ 
+    operator i64() const { 
+        return CurrentValue; 
+    } 
+}; 
+ 
 }

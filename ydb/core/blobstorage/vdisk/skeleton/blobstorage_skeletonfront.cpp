@@ -55,10 +55,10 @@ namespace NKikimr {
         void ApplyToRecord(IEventHandle& event, Func&& callback) {
             switch (event.GetTypeRewrite()) {
 #define EVENT_TYPE(EVENT) case TEvBlobStorage::EVENT::EventType: callback(static_cast<TEvBlobStorage::EVENT&>(*event.GetBase()).Record); return;
-                EVENT_TYPE(TEvVMovedPatch)
-                EVENT_TYPE(TEvVPatchStart)
-                EVENT_TYPE(TEvVPatchDiff)
-                EVENT_TYPE(TEvVPatchXorDiff)
+                EVENT_TYPE(TEvVMovedPatch) 
+                EVENT_TYPE(TEvVPatchStart) 
+                EVENT_TYPE(TEvVPatchDiff) 
+                EVENT_TYPE(TEvVPatchXorDiff) 
                 EVENT_TYPE(TEvVPut)
                 EVENT_TYPE(TEvVMultiPut)
                 EVENT_TYPE(TEvVGet)
@@ -517,10 +517,10 @@ namespace NKikimr {
                 switch (ev->Type()) {
 #define UPDATE_WINDOW_STATUS(TYPE) case TYPE::EventType: msgQoS = static_cast<TYPE&>(*ev).Record.MutableMsgQoS(); break;
                     // all message types that have MsgQoS structure
-                    UPDATE_WINDOW_STATUS(TEvBlobStorage::TEvVMovedPatchResult)
-                    UPDATE_WINDOW_STATUS(TEvBlobStorage::TEvVPatchFoundParts)
-                    UPDATE_WINDOW_STATUS(TEvBlobStorage::TEvVPatchXorDiffResult)
-                    UPDATE_WINDOW_STATUS(TEvBlobStorage::TEvVPatchResult)
+                    UPDATE_WINDOW_STATUS(TEvBlobStorage::TEvVMovedPatchResult) 
+                    UPDATE_WINDOW_STATUS(TEvBlobStorage::TEvVPatchFoundParts) 
+                    UPDATE_WINDOW_STATUS(TEvBlobStorage::TEvVPatchXorDiffResult) 
+                    UPDATE_WINDOW_STATUS(TEvBlobStorage::TEvVPatchResult) 
                     UPDATE_WINDOW_STATUS(TEvBlobStorage::TEvVPutResult)
                     UPDATE_WINDOW_STATUS(TEvBlobStorage::TEvVMultiPutResult)
                     UPDATE_WINDOW_STATUS(TEvBlobStorage::TEvVGetResult)
@@ -724,14 +724,14 @@ namespace NKikimr {
             } else {
                 switch (msg->Phase) {
                     case TEvFrontRecoveryStatus::LocalRecoveryDone:
-                    {
+                    { 
                         Become(&TThis::StateSyncGuidRecoveryInProgress);
-                        TBlobStorageGroupType type = (GInfo ? GInfo->Type : TErasureType::ErasureNone);
+                        TBlobStorageGroupType type = (GInfo ? GInfo->Type : TErasureType::ErasureNone); 
                         CostModel = std::make_unique<TCostModel>(msg->Dsk->SeekTimeUs, msg->Dsk->ReadSpeedBps,
                             msg->Dsk->WriteSpeedBps, msg->Dsk->ReadBlockSize, msg->Dsk->WriteBlockSize,
                             msg->HugeBlobCtx->MinREALHugeBlobInBytes, type);
                         break;
-                    }
+                    } 
                     case TEvFrontRecoveryStatus::SyncGuidRecoveryDone:
                         Become(&TThis::StateFunc);
                         SendNotifications(ctx);
@@ -940,8 +940,8 @@ namespace NKikimr {
                     << "Access denied Type# " << Sprintf("0x%08" PRIx32, ev->GetTypeRewrite())
                     << " Sender# " << ev->Sender.ToString()
                     << " OriginScopeId# " << ScopeIdToString(ev->OriginScopeId)
-                    << " LocalScopeId# " << ScopeIdToString(AppData(ctx)->LocalScopeId.GetInterconnectScopeId())
-                    << " Marker# BSVSF01");
+                    << " LocalScopeId# " << ScopeIdToString(AppData(ctx)->LocalScopeId.GetInterconnectScopeId()) 
+                    << " Marker# BSVSF01"); 
             ++*AccessDeniedMessages;
             TInstant now = TAppData::TimeProvider->Now();
             FillInCostSettingsAndTimestampIfApplicable(ev->Get()->Record, now);
@@ -984,26 +984,26 @@ namespace NKikimr {
             return val ? TInstant::Seconds(val) : TInstant::Max();
         }
 
-        template <typename TRecord, typename Dimmy = void>
-        struct THasMsgQoS {
-            static constexpr bool value = false;
-        };
+        template <typename TRecord, typename Dimmy = void> 
+        struct THasMsgQoS { 
+            static constexpr bool value = false; 
+        }; 
 
-        template <typename TRecord>
-        struct THasMsgQoS<TRecord, TRecord> {
-            static constexpr bool value = true;
+        template <typename TRecord> 
+        struct THasMsgQoS<TRecord, TRecord> { 
+            static constexpr bool value = true; 
+ 
+            static auto Checking(TRecord &r) { 
+                return r.MutableMsgQoS(); 
+            } 
+        }; 
 
-            static auto Checking(TRecord &r) {
-                return r.MutableMsgQoS();
-            }
-        };
-
-        template<typename TRecord>
-        void FillInCostSettingsAndTimestampIfApplicable(TRecord& record, TInstant now) const
-        {
-            if constexpr (THasMsgQoS<TRecord>::value) {
-                FillInCostSettingsAndTimestampIfRequired(record.MutableMsgQoS(), now);
-            }
+        template<typename TRecord> 
+        void FillInCostSettingsAndTimestampIfApplicable(TRecord& record, TInstant now) const 
+        { 
+            if constexpr (THasMsgQoS<TRecord>::value) { 
+                FillInCostSettingsAndTimestampIfRequired(record.MutableMsgQoS(), now); 
+            } 
         }
 
         void FillInCostSettingsAndTimestampIfRequired(NKikimrBlobStorage::TMsgQoS *qos, TInstant now) const {
@@ -1077,50 +1077,50 @@ namespace NKikimr {
             return compatibilityMatrix[extId][intId];
         }
 
-        template <typename TEvPtr>
-        void HandlePatchEvent(TEvPtr &ev) {
-            const ui64 cost = CostModel->GetCost(*ev->Get());
-
-            auto &record = ev->Get()->Record;
-
-            TLogoBlobID blob;
-            TLogoBlobID patchedBlob;
-            constexpr bool blobIdWithoutPartId = std::is_same_v<TEvPtr, TEvBlobStorage::TEvVMovedPatch::TPtr>
-                    || std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchStart::TPtr>;
-            if constexpr (blobIdWithoutPartId) {
-                blob = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId());
-                patchedBlob = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
-            } else {
-                blob = LogoBlobIDFromLogoBlobID(record.GetOriginalPartBlobId());
-                patchedBlob = LogoBlobIDFromLogoBlobID(record.GetPatchedPartBlobId());
-            }
-
-            const char* name = "Unknown";
+        template <typename TEvPtr> 
+        void HandlePatchEvent(TEvPtr &ev) { 
+            const ui64 cost = CostModel->GetCost(*ev->Get()); 
+ 
+            auto &record = ev->Get()->Record; 
+ 
+            TLogoBlobID blob; 
+            TLogoBlobID patchedBlob; 
+            constexpr bool blobIdWithoutPartId = std::is_same_v<TEvPtr, TEvBlobStorage::TEvVMovedPatch::TPtr> 
+                    || std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchStart::TPtr>; 
+            if constexpr (blobIdWithoutPartId) { 
+                blob = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId()); 
+                patchedBlob = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId()); 
+            } else { 
+                blob = LogoBlobIDFromLogoBlobID(record.GetOriginalPartBlobId()); 
+                patchedBlob = LogoBlobIDFromLogoBlobID(record.GetPatchedPartBlobId()); 
+            } 
+ 
+            const char* name = "Unknown"; 
             TIntQueueClass *queue = IntQueueHugePutsBackground.get();
-            if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVMovedPatch::TPtr>) {
-                LWTRACK(VDiskSkeletonFrontVMovedPatchRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
-                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize());
-                name = "TEvVMovedPatch";
-            } else if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchStart::TPtr>) {
-                LWTRACK(VDiskSkeletonFrontVPatchStartRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
-                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize());
+            if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVMovedPatch::TPtr>) { 
+                LWTRACK(VDiskSkeletonFrontVMovedPatchRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId, 
+                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize()); 
+                name = "TEvVMovedPatch"; 
+            } else if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchStart::TPtr>) { 
+                LWTRACK(VDiskSkeletonFrontVPatchStartRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId, 
+                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize()); 
                 queue = IntQueueFastGets.get();
-                name = "TEvVPatchStart";
-            } else if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchDiff::TPtr>) {
-                LWTRACK(VDiskSkeletonFrontVPatchDiffRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
-                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize());
-                name = "TEvVPatchDiff";
-            } else if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchXorDiff::TPtr>) {
-                LWTRACK(VDiskSkeletonFrontVPatchXorDiffRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
-                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize());
-                name = "TEvVPatchXorDiff";
-            }
-
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                    << name << ": received;" << " OriginalBlobId# " << blob << " PatchedBlobId# " << patchedBlob);
-            HandleRequestWithQoS(TActivationContext::AsActorContext(), ev, name, cost, *queue);
-        }
-
+                name = "TEvVPatchStart"; 
+            } else if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchDiff::TPtr>) { 
+                LWTRACK(VDiskSkeletonFrontVPatchDiffRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId, 
+                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize()); 
+                name = "TEvVPatchDiff"; 
+            } else if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchXorDiff::TPtr>) { 
+                LWTRACK(VDiskSkeletonFrontVPatchXorDiffRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId, 
+                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize()); 
+                name = "TEvVPatchXorDiff"; 
+            } 
+ 
+            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix 
+                    << name << ": received;" << " OriginalBlobId# " << blob << " PatchedBlobId# " << patchedBlob); 
+            HandleRequestWithQoS(TActivationContext::AsActorContext(), ev, name, cost, *queue); 
+        } 
+ 
         void Handle(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx) {
             bool logPutInternalQueue = true;
             const ui64 cost = CostModel->GetCost(*ev->Get(), &logPutInternalQueue);
@@ -1270,11 +1270,11 @@ namespace NKikimr {
         template <typename TPtr>
         void SetReceivedTime(TPtr& ev) {
             using TRecord = decltype(ev->Get()->Record);
-            if constexpr (std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVMovedPatch>
-                       || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVPatchStart>
-                       || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVPatchDiff>
-                       || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVPatchXorDiff>
-                       || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVPut>
+            if constexpr (std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVMovedPatch> 
+                       || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVPatchStart> 
+                       || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVPatchDiff> 
+                       || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVPatchXorDiff> 
+                       || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVPut> 
                        || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVMultiPut>
                        || std::is_convertible_v<TRecord, NKikimrBlobStorage::TEvVGet>)
             {
@@ -1393,9 +1393,9 @@ namespace NKikimr {
             }
 
             // all checks passed
-            LOG_INFO_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix << "VDisk Generation Change success;"
-                    << " new VDiskId# " << vdiskId
-                    << " Marker# BSVSF02");
+            LOG_INFO_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix << "VDisk Generation Change success;" 
+                    << " new VDiskId# " << vdiskId 
+                    << " Marker# BSVSF02"); 
 
             // update GroupInfo-related fields
             GInfo = info;
@@ -1418,8 +1418,8 @@ namespace NKikimr {
         void Handle(TEvPDiskErrorStateChange::TPtr &ev, const TActorContext &ctx) {
             LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
                     << "SkeletonFront: got TEvPDiskErrorStateChange;"
-                    << " state# " << TPDiskErrorState::StateToString(ev->Get()->State)
-                    << " Marker# BSVSF03");
+                    << " state# " << TPDiskErrorState::StateToString(ev->Get()->State) 
+                    << " Marker# BSVSF03"); 
 
 
             // switch skeleton state to PDiskError
@@ -1438,11 +1438,11 @@ namespace NKikimr {
             for (auto *q : {&IntQueueAsyncGets, &IntQueueFastGets, &IntQueueDiscover, &IntQueueLowGets, &IntQueueLogPuts,
                     &IntQueueHugePutsForeground, &IntQueueHugePutsBackground}) {
                 (*q)->DropWithError(ctx, *this);
-            }
+            } 
             // drop external queues
             DisconnectClients(ctx);
         }
-
+ 
         void DisconnectClients(const TActorContext& ctx) {
             const auto& base = Config->BaseInfo;
             const TActorId& serviceId = MakeBlobStorageVDiskID(SelfId().NodeId(), base.PDiskId, base.VDiskSlotId);
@@ -1540,10 +1540,10 @@ namespace NKikimr {
 
         // while local db recovery is in progress, we use this state function to handle requests
         STRICT_STFUNC(StateLocalRecoveryInProgress,
-            HFunc(TEvBlobStorage::TEvVMovedPatch, DatabaseNotReadyHandle)
-            HFunc(TEvBlobStorage::TEvVPatchStart, DatabaseNotReadyHandle)
-            HFunc(TEvBlobStorage::TEvVPatchDiff, DatabaseNotReadyHandle)
-            HFunc(TEvBlobStorage::TEvVPatchXorDiff, DatabaseNotReadyHandle)
+            HFunc(TEvBlobStorage::TEvVMovedPatch, DatabaseNotReadyHandle) 
+            HFunc(TEvBlobStorage::TEvVPatchStart, DatabaseNotReadyHandle) 
+            HFunc(TEvBlobStorage::TEvVPatchDiff, DatabaseNotReadyHandle) 
+            HFunc(TEvBlobStorage::TEvVPatchXorDiff, DatabaseNotReadyHandle) 
             HFunc(TEvBlobStorage::TEvVPut, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVMultiPut, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVGet, DatabaseNotReadyHandle)
@@ -1579,10 +1579,10 @@ namespace NKikimr {
 
         // while recovering sync guid we use this state function to handle requests
         STRICT_STFUNC(StateSyncGuidRecoveryInProgress,
-            HFunc(TEvBlobStorage::TEvVMovedPatch, DatabaseNotReadyHandle)
-            HFunc(TEvBlobStorage::TEvVPatchStart, DatabaseNotReadyHandle)
-            HFunc(TEvBlobStorage::TEvVPatchDiff, DatabaseNotReadyHandle)
-            HFunc(TEvBlobStorage::TEvVPatchXorDiff, DatabaseNotReadyHandle)
+            HFunc(TEvBlobStorage::TEvVMovedPatch, DatabaseNotReadyHandle) 
+            HFunc(TEvBlobStorage::TEvVPatchStart, DatabaseNotReadyHandle) 
+            HFunc(TEvBlobStorage::TEvVPatchDiff, DatabaseNotReadyHandle) 
+            HFunc(TEvBlobStorage::TEvVPatchXorDiff, DatabaseNotReadyHandle) 
             HFunc(TEvBlobStorage::TEvVPut, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVMultiPut, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVGet, DatabaseNotReadyHandle)
@@ -1621,10 +1621,10 @@ namespace NKikimr {
         )
 
         STRICT_STFUNC(StateDatabaseError,
-            HFunc(TEvBlobStorage::TEvVMovedPatch, DatabaseErrorHandle)
-            HFunc(TEvBlobStorage::TEvVPatchStart, DatabaseErrorHandle)
-            HFunc(TEvBlobStorage::TEvVPatchDiff, DatabaseErrorHandle)
-            HFunc(TEvBlobStorage::TEvVPatchXorDiff, DatabaseErrorHandle)
+            HFunc(TEvBlobStorage::TEvVMovedPatch, DatabaseErrorHandle) 
+            HFunc(TEvBlobStorage::TEvVPatchStart, DatabaseErrorHandle) 
+            HFunc(TEvBlobStorage::TEvVPatchDiff, DatabaseErrorHandle) 
+            HFunc(TEvBlobStorage::TEvVPatchXorDiff, DatabaseErrorHandle) 
             HFunc(TEvBlobStorage::TEvVPut, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVMultiPut, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVGet, DatabaseErrorHandle)
@@ -1663,33 +1663,33 @@ namespace NKikimr {
         // Events checking: RACE and access control
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        template <typename TEv>
-        static constexpr bool IsPatchEvent = std::is_same_v<TEv, TEvBlobStorage::TEvVMovedPatch>
-                || std::is_same_v<TEv, TEvBlobStorage::TEvVPatchStart>
-                || std::is_same_v<TEv, TEvBlobStorage::TEvVPatchDiff>
-                || std::is_same_v<TEv, TEvBlobStorage::TEvVPatchXorDiff>;
+        template <typename TEv> 
+        static constexpr bool IsPatchEvent = std::is_same_v<TEv, TEvBlobStorage::TEvVMovedPatch> 
+                || std::is_same_v<TEv, TEvBlobStorage::TEvVPatchStart> 
+                || std::is_same_v<TEv, TEvBlobStorage::TEvVPatchDiff> 
+                || std::is_same_v<TEv, TEvBlobStorage::TEvVPatchXorDiff>; 
 
-        template <typename TEv>
-        static constexpr bool IsWithoutQoS = std::is_same_v<TEv, TEvBlobStorage::TEvVStatus>
-                || std::is_same_v<TEv, TEvBlobStorage::TEvVDbStat>
-                || std::is_same_v<TEv, TEvBlobStorage::TEvVCompact>
+        template <typename TEv> 
+        static constexpr bool IsWithoutQoS = std::is_same_v<TEv, TEvBlobStorage::TEvVStatus> 
+                || std::is_same_v<TEv, TEvBlobStorage::TEvVDbStat> 
+                || std::is_same_v<TEv, TEvBlobStorage::TEvVCompact> 
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVDefrag>
-                || std::is_same_v<TEv, TEvBlobStorage::TEvVBaldSyncLog>;
+                || std::is_same_v<TEv, TEvBlobStorage::TEvVBaldSyncLog>; 
 
         template <typename TEv>
         static constexpr bool IsValidatable = std::is_same_v<TEv, TEvBlobStorage::TEvVMultiPut>
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVGet>
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVPut>;
 
-        template<typename TEventType>
-        void CheckExecute(TAutoPtr<TEventHandle<TEventType>>& ev, const TActorContext& ctx) {
-            if constexpr (IsPatchEvent<TEventType>) {
-                HandlePatchEvent(ev);
-            } else if constexpr (IsWithoutQoS<TEventType>) {
-                HandleRequestWithoutQoS(ev, ctx);
-            } else {
-                Handle(ev, ctx);
-            }
+        template<typename TEventType> 
+        void CheckExecute(TAutoPtr<TEventHandle<TEventType>>& ev, const TActorContext& ctx) { 
+            if constexpr (IsPatchEvent<TEventType>) { 
+                HandlePatchEvent(ev); 
+            } else if constexpr (IsWithoutQoS<TEventType>) { 
+                HandleRequestWithoutQoS(ev, ctx); 
+            } else { 
+                Handle(ev, ctx); 
+            } 
         }
 
         template <typename TEv>
@@ -1700,8 +1700,8 @@ namespace NKikimr {
             return true;
         }
 
-        template <typename TEventType>
-        void Check(TAutoPtr<TEventHandle<TEventType>>& ev, const TActorContext& ctx) {
+        template <typename TEventType> 
+        void Check(TAutoPtr<TEventHandle<TEventType>>& ev, const TActorContext& ctx) { 
             const auto& record = ev->Get()->Record;
             if (!SelfVDiskId.SameDisk(record.GetVDiskID())) {
                 return Reply(ev, ctx, NKikimrProto::RACE, "group generation mismatch", TAppData::TimeProvider->Now());
@@ -1734,10 +1734,10 @@ namespace NKikimr {
         }
 
         STRICT_STFUNC(StateFunc,
-            HFunc(TEvBlobStorage::TEvVMovedPatch, Check)
-            HFunc(TEvBlobStorage::TEvVPatchStart, Check)
-            HFunc(TEvBlobStorage::TEvVPatchDiff, Check)
-            HFunc(TEvBlobStorage::TEvVPatchXorDiff, Check)
+            HFunc(TEvBlobStorage::TEvVMovedPatch, Check) 
+            HFunc(TEvBlobStorage::TEvVPatchStart, Check) 
+            HFunc(TEvBlobStorage::TEvVPatchDiff, Check) 
+            HFunc(TEvBlobStorage::TEvVPatchXorDiff, Check) 
             HFunc(TEvBlobStorage::TEvVPut, ValidateEvent)
             HFunc(TEvBlobStorage::TEvVMultiPut, ValidateEvent)
             HFunc(TEvBlobStorage::TEvVGet, ValidateEvent)
@@ -1786,10 +1786,10 @@ namespace NKikimr {
                        NKikimrProto::EReplyStatus status, const TString& errorReason, TInstant now,
                        const TWindowStatus &wstatus) {
             switch (ev->GetTypeRewrite()) {
-                HFuncStatus(TEvBlobStorage::TEvVMovedPatch, status, errorReason, now, wstatus);
-                HFuncStatus(TEvBlobStorage::TEvVPatchStart, status, errorReason, now, wstatus);
-                HFuncStatus(TEvBlobStorage::TEvVPatchDiff, status, errorReason, now, wstatus);
-                HFuncStatus(TEvBlobStorage::TEvVPatchXorDiff, status, errorReason, now, wstatus);
+                HFuncStatus(TEvBlobStorage::TEvVMovedPatch, status, errorReason, now, wstatus); 
+                HFuncStatus(TEvBlobStorage::TEvVPatchStart, status, errorReason, now, wstatus); 
+                HFuncStatus(TEvBlobStorage::TEvVPatchDiff, status, errorReason, now, wstatus); 
+                HFuncStatus(TEvBlobStorage::TEvVPatchXorDiff, status, errorReason, now, wstatus); 
                 HFuncStatus(TEvBlobStorage::TEvVPut, status, errorReason, now, wstatus);
                 HFuncStatus(TEvBlobStorage::TEvVMultiPut, status, errorReason, now, wstatus);
                 HFuncStatus(TEvBlobStorage::TEvVGet, status, errorReason, now, wstatus);

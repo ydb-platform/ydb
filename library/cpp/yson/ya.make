@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     ermolovd
-    g:yt 
+    g:yt
 )
 
 PEERDIR(

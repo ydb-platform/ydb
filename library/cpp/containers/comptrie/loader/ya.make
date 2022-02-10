@@ -1,15 +1,15 @@
-LIBRARY()
-
-OWNER(my34)
-
-SRCS(
-    loader.h
+LIBRARY() 
+ 
+OWNER(my34) 
+ 
+SRCS( 
+    loader.h 
     loader.cpp
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     library/cpp/archive
     library/cpp/containers/comptrie
-)
-
-END()
+) 
+ 
+END() 

@@ -1,18 +1,18 @@
-#include "string_transform.h" 
- 
+#include "string_transform.h"
+
 #include <google/protobuf/stubs/strutil.h>
- 
+
 #include <library/cpp/string_utils/base64/base64.h>
 
-namespace NProtobufJson { 
+namespace NProtobufJson {
     void TCEscapeTransform::Transform(TString& str) const {
         str = google::protobuf::CEscape(str);
     }
- 
+
     void TSafeUtf8CEscapeTransform::Transform(TString& str) const {
         str = google::protobuf::strings::Utf8SafeCEscape(str);
     }
- 
+
     void TDoubleEscapeTransform::Transform(TString& str) const {
         TString escaped = google::protobuf::CEscape(str);
         str = "";
@@ -22,7 +22,7 @@ namespace NProtobufJson {
             str += *it;
         }
     }
- 
+
     void TDoubleUnescapeTransform::Transform(TString& str) const {
         str = google::protobuf::UnescapeCEscapeString(Unescape(str));
     }

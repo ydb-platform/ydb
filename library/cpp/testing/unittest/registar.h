@@ -654,7 +654,7 @@ public:                       \
             UNIT_FAIL_IMPL("exception-free assertion failed", Sprintf("%s throws %s\nException message: %s", #A, (::TStringBuilder() << C).data(), CurrentExceptionMessage().data())); \
         }                                                                                                                                                                \
     } while (false)
- 
+
 #define UNIT_ASSERT_NO_EXCEPTION(A) UNIT_ASSERT_NO_EXCEPTION_C(A, "")
 
     namespace NPrivate {

@@ -1,28 +1,28 @@
-#include "json.h" 
-#include "proto.h" 
+#include "json.h"
+#include "proto.h"
 #include "proto2json.h"
- 
+
 #include <library/cpp/protobuf/json/ut/test.pb.h>
 
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
- 
+
 #include <library/cpp/protobuf/json/json2proto.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include <util/generic/hash_set.h> 
+
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
-#include <util/generic/ylimits.h> 
-#include <util/stream/str.h> 
+#include <util/generic/ylimits.h>
+#include <util/stream/str.h>
 #include <util/string/cast.h>
-#include <util/system/defaults.h> 
-#include <util/system/yassert.h> 
- 
-using namespace NProtobufJson; 
-using namespace NProtobufJsonTest; 
- 
+#include <util/system/defaults.h>
+#include <util/system/yassert.h>
+
+using namespace NProtobufJson;
+using namespace NProtobufJsonTest;
+
 namespace google {
     namespace protobuf {
         namespace internal {
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TJson2ProtoTest) {
     FillFlatProto(&modelProto);
     UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 }
- 
+
     // Try to skip each field
 #define DEFINE_FIELD(name, value)                                     \
     {                                                                 \
@@ -93,9 +93,9 @@ Y_UNIT_TEST_SUITE(TJson2ProtoTest) {
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);                  \
     }
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD 
+#undef DEFINE_FIELD
 } // TestFlatOptional
- 
+
 Y_UNIT_TEST(TestFlatRequired){
     {const NJson::TJsonValue& json = CreateFlatJson();
 TFlatRequired proto;
@@ -104,7 +104,7 @@ TFlatRequired modelProto;
 FillFlatProto(&modelProto);
 UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 }
- 
+
 // Try to skip each field
 #define DEFINE_FIELD(name, value)                                     \
     {                                                                 \
@@ -115,9 +115,9 @@ UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
         UNIT_ASSERT_EXCEPTION(Json2Proto(json, proto), yexception);   \
     }
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD 
+#undef DEFINE_FIELD
 } // TestFlatRequired
- 
+
 Y_UNIT_TEST(TestNameGenerator) {
     TJson2ProtoConfig cfg;
     cfg.SetNameGenerator([](const NProtoBuf::FieldDescriptor&) { return "42"; });
@@ -165,7 +165,7 @@ TFlatRepeated modelProto;
 FillRepeatedProto(&modelProto);
 UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 }
- 
+
 // Try to skip each field
 #define DEFINE_REPEATED_FIELD(name, ...)                                      \
     {                                                                         \
@@ -179,9 +179,9 @@ UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);                          \
     }
 #include <library/cpp/protobuf/json/ut/repeated_fields.incl>
-#undef DEFINE_REPEATED_FIELD 
+#undef DEFINE_REPEATED_FIELD
 } // TestFlatRepeated
- 
+
 Y_UNIT_TEST(TestCompositeOptional){
     {const NJson::TJsonValue& json = CreateCompositeJson();
 TCompositeOptional proto;
@@ -190,7 +190,7 @@ TCompositeOptional modelProto;
 FillCompositeProto(&modelProto);
 UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 }
- 
+
 // Try to skip each field
 #define DEFINE_FIELD(name, value)                                          \
     {                                                                      \
@@ -204,9 +204,9 @@ UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);                       \
     }
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD 
+#undef DEFINE_FIELD
 } // TestCompositeOptional
- 
+
 Y_UNIT_TEST(TestCompositeOptionalStringBuf){
     {NJson::TJsonValue json = CreateCompositeJson();
 json["Part"]["Double"] = 42.5;
@@ -249,37 +249,37 @@ Y_UNIT_TEST(TestCompositeRequired) {
         FillCompositeProto(&modelProto);
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
     }
- 
+
     {
         NJson::TJsonValue json;
         TCompositeRequired proto;
         UNIT_ASSERT_EXCEPTION(Json2Proto(json, proto), yexception);
     }
 } // TestCompositeRequired
- 
+
 Y_UNIT_TEST(TestCompositeRepeated) {
     {
         NJson::TJsonValue json;
         NJson::TJsonValue array;
         array.AppendValue(CreateFlatJson());
         json.InsertValue("Part", array);
- 
+
         TCompositeRepeated proto;
         Json2Proto(json, proto);
- 
+
         TFlatOptional partModelProto;
         FillFlatProto(&partModelProto);
         TCompositeRepeated modelProto;
         modelProto.AddPart()->CopyFrom(partModelProto);
- 
+
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
     }
- 
+
     {
         // Array of messages with each field skipped
         TCompositeRepeated modelProto;
         NJson::TJsonValue array;
- 
+
 #define DEFINE_REPEATED_FIELD(name, ...)                 \
     {                                                    \
         THashSet<TString> skippedField;                  \
@@ -290,18 +290,18 @@ Y_UNIT_TEST(TestCompositeRepeated) {
         array.AppendValue(CreateFlatJson(skippedField)); \
     }
 #include <library/cpp/protobuf/json/ut/repeated_fields.incl>
-#undef DEFINE_REPEATED_FIELD 
- 
+#undef DEFINE_REPEATED_FIELD
+
         NJson::TJsonValue json;
         json.InsertValue("Part", array);
- 
+
         TCompositeRepeated proto;
         Json2Proto(json, proto);
- 
+
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
     }
 } // TestCompositeRepeated
- 
+
 Y_UNIT_TEST(TestInvalidEnum) {
     {
         NJson::TJsonValue json;
@@ -309,13 +309,13 @@ Y_UNIT_TEST(TestInvalidEnum) {
         TFlatOptional proto;
         UNIT_ASSERT_EXCEPTION(Json2Proto(json, proto), yexception);
     }
- 
+
     {
         NJson::TJsonValue json;
         json.InsertValue("Enum", 100);
         TFlatOptional proto;
         UNIT_ASSERT_EXCEPTION(Json2Proto(json, proto), yexception);
-    } 
+    }
 }
 
 Y_UNIT_TEST(TestFieldNameMode) {
@@ -1144,4 +1144,4 @@ Y_UNIT_TEST(TestAllowComments) {
     UNIT_ASSERT_VALUES_EQUAL(proto.GetI64(), 3423);
 } // TestAllowComments
 
-} // TJson2ProtoTest 
+} // TJson2ProtoTest

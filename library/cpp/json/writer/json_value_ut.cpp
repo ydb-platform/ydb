@@ -1,11 +1,11 @@
-#include "json_value.h" 
- 
+#include "json_value.h"
+
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include <util/stream/input.h> 
- 
-using namespace NJson; 
- 
+
+#include <util/stream/input.h>
+
+using namespace NJson;
+
 Y_UNIT_TEST_SUITE(TJsonValueTest) {
     Y_UNIT_TEST(UndefTest) {
         TJsonValue undef;
@@ -37,177 +37,177 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
     }
 
     Y_UNIT_TEST(DefaultCompareTest) {
-        { 
-            TJsonValue lhs; 
-            TJsonValue rhs; 
-            UNIT_ASSERT(lhs == rhs); 
-            UNIT_ASSERT(rhs == lhs); 
-        } 
- 
-        { 
-            TJsonValue lhs; 
-            TJsonValue rhs(JSON_NULL); 
-            UNIT_ASSERT(lhs != rhs); 
-            UNIT_ASSERT(rhs != lhs); 
-        } 
-    } 
- 
+        {
+            TJsonValue lhs;
+            TJsonValue rhs;
+            UNIT_ASSERT(lhs == rhs);
+            UNIT_ASSERT(rhs == lhs);
+        }
+
+        {
+            TJsonValue lhs;
+            TJsonValue rhs(JSON_NULL);
+            UNIT_ASSERT(lhs != rhs);
+            UNIT_ASSERT(rhs != lhs);
+        }
+    }
+
     Y_UNIT_TEST(NullCompareTest) {
-        TJsonValue lhs(JSON_NULL); 
-        TJsonValue rhs(JSON_NULL); 
-        UNIT_ASSERT(lhs == rhs); 
-        UNIT_ASSERT(rhs == lhs); 
-    } 
- 
+        TJsonValue lhs(JSON_NULL);
+        TJsonValue rhs(JSON_NULL);
+        UNIT_ASSERT(lhs == rhs);
+        UNIT_ASSERT(rhs == lhs);
+    }
+
     Y_UNIT_TEST(StringCompareTest) {
-        { 
-            TJsonValue lhs(JSON_STRING); 
-            TJsonValue rhs(JSON_STRING); 
-            UNIT_ASSERT(lhs == rhs); 
-            UNIT_ASSERT(rhs == lhs); 
-        } 
- 
-        { 
-            TJsonValue lhs(""); 
-            TJsonValue rhs(""); 
-            UNIT_ASSERT(lhs == rhs); 
-            UNIT_ASSERT(rhs == lhs); 
-        } 
- 
-        { 
-            TJsonValue lhs("abc"); 
-            TJsonValue rhs("abc"); 
-            UNIT_ASSERT(lhs == rhs); 
-            UNIT_ASSERT(rhs == lhs); 
-        } 
- 
-        { 
-            TJsonValue lhs("1"); 
-            TJsonValue rhs(1); 
-            UNIT_ASSERT(lhs != rhs); 
-            UNIT_ASSERT(rhs != lhs); 
-        } 
-    } 
- 
+        {
+            TJsonValue lhs(JSON_STRING);
+            TJsonValue rhs(JSON_STRING);
+            UNIT_ASSERT(lhs == rhs);
+            UNIT_ASSERT(rhs == lhs);
+        }
+
+        {
+            TJsonValue lhs("");
+            TJsonValue rhs("");
+            UNIT_ASSERT(lhs == rhs);
+            UNIT_ASSERT(rhs == lhs);
+        }
+
+        {
+            TJsonValue lhs("abc");
+            TJsonValue rhs("abc");
+            UNIT_ASSERT(lhs == rhs);
+            UNIT_ASSERT(rhs == lhs);
+        }
+
+        {
+            TJsonValue lhs("1");
+            TJsonValue rhs(1);
+            UNIT_ASSERT(lhs != rhs);
+            UNIT_ASSERT(rhs != lhs);
+        }
+    }
+
     Y_UNIT_TEST(ArrayCompareTest) {
-        { 
-            TJsonValue lhs(JSON_ARRAY); 
-            TJsonValue rhs(JSON_ARRAY); 
-            UNIT_ASSERT(lhs == rhs); 
-            UNIT_ASSERT(rhs == lhs); 
-        } 
- 
-        { 
-            TJsonValue lhs; 
-            TJsonValue rhs; 
- 
-            lhs.AppendValue(TJsonValue()); 
- 
-            UNIT_ASSERT(lhs != rhs); 
-            UNIT_ASSERT(rhs != lhs); 
-        } 
- 
-        { 
-            TJsonValue lhs; 
-            TJsonValue rhs; 
- 
-            lhs.AppendValue(1); 
-            lhs.AppendValue("2"); 
-            lhs.AppendValue(3.0); 
-            lhs.AppendValue(TJsonValue()); 
-            lhs.AppendValue(TJsonValue(JSON_NULL)); 
- 
-            rhs.AppendValue(1); 
-            rhs.AppendValue("2"); 
-            rhs.AppendValue(3.0); 
-            rhs.AppendValue(TJsonValue()); 
-            rhs.AppendValue(TJsonValue(JSON_NULL)); 
- 
-            UNIT_ASSERT(lhs == rhs); 
-            UNIT_ASSERT(rhs == lhs); 
-        } 
- 
-        { 
-            TJsonValue lhs; 
-            TJsonValue rhs; 
- 
-            lhs.AppendValue(1); 
-            rhs.AppendValue("1"); 
- 
-            UNIT_ASSERT(lhs != rhs); 
-            UNIT_ASSERT(rhs != lhs); 
-        } 
-    } 
- 
+        {
+            TJsonValue lhs(JSON_ARRAY);
+            TJsonValue rhs(JSON_ARRAY);
+            UNIT_ASSERT(lhs == rhs);
+            UNIT_ASSERT(rhs == lhs);
+        }
+
+        {
+            TJsonValue lhs;
+            TJsonValue rhs;
+
+            lhs.AppendValue(TJsonValue());
+
+            UNIT_ASSERT(lhs != rhs);
+            UNIT_ASSERT(rhs != lhs);
+        }
+
+        {
+            TJsonValue lhs;
+            TJsonValue rhs;
+
+            lhs.AppendValue(1);
+            lhs.AppendValue("2");
+            lhs.AppendValue(3.0);
+            lhs.AppendValue(TJsonValue());
+            lhs.AppendValue(TJsonValue(JSON_NULL));
+
+            rhs.AppendValue(1);
+            rhs.AppendValue("2");
+            rhs.AppendValue(3.0);
+            rhs.AppendValue(TJsonValue());
+            rhs.AppendValue(TJsonValue(JSON_NULL));
+
+            UNIT_ASSERT(lhs == rhs);
+            UNIT_ASSERT(rhs == lhs);
+        }
+
+        {
+            TJsonValue lhs;
+            TJsonValue rhs;
+
+            lhs.AppendValue(1);
+            rhs.AppendValue("1");
+
+            UNIT_ASSERT(lhs != rhs);
+            UNIT_ASSERT(rhs != lhs);
+        }
+    }
+
     Y_UNIT_TEST(CompareTest) {
-        { 
-            TJsonValue lhs; 
-            lhs.InsertValue("null value", TJsonValue(JSON_NULL)); 
-            lhs.InsertValue("int key", TJsonValue(10)); 
-            lhs.InsertValue("double key", TJsonValue(11.11)); 
-            lhs.InsertValue("string key", TJsonValue("string")); 
- 
-            TJsonValue array; 
-            array.AppendValue(1); 
-            array.AppendValue(2); 
-            array.AppendValue(3); 
-            array.AppendValue("string"); 
-            lhs.InsertValue("array", array); 
- 
-            lhs.InsertValue("bool key", TJsonValue(true)); 
- 
-            TJsonValue rhs; 
-            rhs = lhs; 
- 
-            UNIT_ASSERT(lhs == rhs); 
-            UNIT_ASSERT(rhs == lhs); 
-        } 
- 
-        { 
-            // Insert keys in different orders 
-            const int NUM_KEYS = 1000; 
- 
-            TJsonValue lhs; 
-            for (int i = 0; i < NUM_KEYS; ++i) 
-                lhs.InsertValue(ToString(i), i); 
- 
-            TJsonValue rhs; 
-            for (int i = 0; i < NUM_KEYS; i += 2) 
-                rhs.InsertValue(ToString(i), i); 
-            for (int i = 1; i < NUM_KEYS; i += 2) 
-                rhs.InsertValue(ToString(i), i); 
- 
-            UNIT_ASSERT(lhs == rhs); 
-            UNIT_ASSERT(rhs == lhs); 
-        } 
- 
-        { 
-            TJsonValue lhs; 
-            lhs.InsertValue("null value", TJsonValue(JSON_NULL)); 
-            lhs.InsertValue("int key", TJsonValue(10)); 
-            lhs.InsertValue("double key", TJsonValue(11.11)); 
-            lhs.InsertValue("string key", TJsonValue("string")); 
- 
-            TJsonValue array; 
-            array.AppendValue(1); 
-            array.AppendValue(2); 
-            array.AppendValue(3); 
-            array.AppendValue("string"); 
-            lhs.InsertValue("array", array); 
- 
-            lhs.InsertValue("bool key", TJsonValue(true)); 
- 
-            TJsonValue rhs; 
-            rhs.InsertValue("null value", TJsonValue(JSON_NULL)); 
-            rhs.InsertValue("int key", TJsonValue(10)); 
-            rhs.InsertValue("double key", TJsonValue(11.11)); 
-            rhs.InsertValue("string key", TJsonValue("string")); 
-            rhs.InsertValue("bool key", TJsonValue(true)); 
- 
-            UNIT_ASSERT(lhs != rhs); 
-            UNIT_ASSERT(rhs != lhs); 
-        } 
-    } 
+        {
+            TJsonValue lhs;
+            lhs.InsertValue("null value", TJsonValue(JSON_NULL));
+            lhs.InsertValue("int key", TJsonValue(10));
+            lhs.InsertValue("double key", TJsonValue(11.11));
+            lhs.InsertValue("string key", TJsonValue("string"));
+
+            TJsonValue array;
+            array.AppendValue(1);
+            array.AppendValue(2);
+            array.AppendValue(3);
+            array.AppendValue("string");
+            lhs.InsertValue("array", array);
+
+            lhs.InsertValue("bool key", TJsonValue(true));
+
+            TJsonValue rhs;
+            rhs = lhs;
+
+            UNIT_ASSERT(lhs == rhs);
+            UNIT_ASSERT(rhs == lhs);
+        }
+
+        {
+            // Insert keys in different orders
+            const int NUM_KEYS = 1000;
+
+            TJsonValue lhs;
+            for (int i = 0; i < NUM_KEYS; ++i)
+                lhs.InsertValue(ToString(i), i);
+
+            TJsonValue rhs;
+            for (int i = 0; i < NUM_KEYS; i += 2)
+                rhs.InsertValue(ToString(i), i);
+            for (int i = 1; i < NUM_KEYS; i += 2)
+                rhs.InsertValue(ToString(i), i);
+
+            UNIT_ASSERT(lhs == rhs);
+            UNIT_ASSERT(rhs == lhs);
+        }
+
+        {
+            TJsonValue lhs;
+            lhs.InsertValue("null value", TJsonValue(JSON_NULL));
+            lhs.InsertValue("int key", TJsonValue(10));
+            lhs.InsertValue("double key", TJsonValue(11.11));
+            lhs.InsertValue("string key", TJsonValue("string"));
+
+            TJsonValue array;
+            array.AppendValue(1);
+            array.AppendValue(2);
+            array.AppendValue(3);
+            array.AppendValue("string");
+            lhs.InsertValue("array", array);
+
+            lhs.InsertValue("bool key", TJsonValue(true));
+
+            TJsonValue rhs;
+            rhs.InsertValue("null value", TJsonValue(JSON_NULL));
+            rhs.InsertValue("int key", TJsonValue(10));
+            rhs.InsertValue("double key", TJsonValue(11.11));
+            rhs.InsertValue("string key", TJsonValue("string"));
+            rhs.InsertValue("bool key", TJsonValue(true));
+
+            UNIT_ASSERT(lhs != rhs);
+            UNIT_ASSERT(rhs != lhs);
+        }
+    }
 
     Y_UNIT_TEST(SwapTest) {
         {
@@ -647,4 +647,4 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
         UNIT_ASSERT_VALUES_EQUAL(filled["4"].GetMapSafe().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(filled["4"]["5"], TJsonValue{5});
     }
-} // TJsonValueTest 
+} // TJsonValueTest

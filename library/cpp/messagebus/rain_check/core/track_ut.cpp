@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TaskTracker) {
 
         testSync.WaitFor(1);
 
-        UNIT_ASSERT_VALUES_EQUAL(1u, tracker->Size()); 
+        UNIT_ASSERT_VALUES_EQUAL(1u, tracker->Size());
 
         testSync.CheckAndIncrement(1);
 

@@ -19,7 +19,7 @@ namespace NJson {
         bool AllowComments = false;
         bool DontValidateUtf8 = false;
         bool AllowEscapedApostrophe = false;
- 
+
         void SetBufferSize(size_t bufferSize);
         size_t GetBufferSize() const;
 
@@ -30,7 +30,7 @@ namespace NJson {
     bool ReadJsonTree(TStringBuf in, TJsonValue* out, bool throwOnError = false);
     bool ReadJsonTree(TStringBuf in, bool allowComments, TJsonValue* out, bool throwOnError = false);
     bool ReadJsonTree(TStringBuf in, const TJsonReaderConfig* config, TJsonValue* out, bool throwOnError = false);
- 
+
     bool ReadJsonTree(IInputStream* in, TJsonValue* out, bool throwOnError = false);
     bool ReadJsonTree(IInputStream* in, bool allowComments, TJsonValue* out, bool throwOnError = false);
     bool ReadJsonTree(IInputStream* in, const TJsonReaderConfig* config, TJsonValue* out, bool throwOnError = false);
@@ -38,7 +38,7 @@ namespace NJson {
     TJsonValue ReadJsonTree(IInputStream* in, bool throwOnError = false);
     TJsonValue ReadJsonTree(IInputStream* in, bool allowComments, bool throwOnError);
     TJsonValue ReadJsonTree(IInputStream* in, const TJsonReaderConfig* config, bool throwOnError = false);
- 
+
     bool ReadJson(IInputStream* in, TJsonCallbacks* callbacks);
     bool ReadJson(IInputStream* in, bool allowComments, TJsonCallbacks* callbacks);
     bool ReadJson(IInputStream* in, bool allowComments, bool allowEscapedApostrophe, TJsonCallbacks* callbacks);

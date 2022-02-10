@@ -26,10 +26,10 @@ public:
     }
 
     bool OnUInteger(unsigned long long val) override {
-        Writer.Write(val); 
-        return true; 
-    } 
- 
+        Writer.Write(val);
+        return true;
+    }
+
     bool OnString(const TStringBuf& val) override {
         Writer.Write(val);
         return true;
@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         UNIT_ASSERT_VALUES_EQUAL(value["array"][1].GetInteger(), 2);
         UNIT_ASSERT_VALUES_EQUAL(value["array"][2].GetInteger(), 3);
         UNIT_ASSERT_VALUES_EQUAL(value["array"][3].GetString(), TString("TString"));
-        UNIT_ASSERT(value["null value"].IsNull()); 
+        UNIT_ASSERT(value["null value"].IsNull());
 
         // AsString
         UNIT_ASSERT_VALUES_EQUAL(value["intkey"].GetStringRobust(), "10");
@@ -146,12 +146,12 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         UNIT_ASSERT_VALUES_EQUAL(value["null value"].GetStringRobust(), "null");
 
         const TJsonValue::TArray* array;
-        UNIT_ASSERT(GetArrayPointer(value, "array", &array)); 
-        UNIT_ASSERT_VALUES_EQUAL(value["array"].GetArray().size(), array->size()); 
-        UNIT_ASSERT_VALUES_EQUAL(value["array"][0].GetInteger(), (*array)[0].GetInteger()); 
+        UNIT_ASSERT(GetArrayPointer(value, "array", &array));
+        UNIT_ASSERT_VALUES_EQUAL(value["array"].GetArray().size(), array->size());
+        UNIT_ASSERT_VALUES_EQUAL(value["array"][0].GetInteger(), (*array)[0].GetInteger());
         UNIT_ASSERT_VALUES_EQUAL(value["array"][1].GetInteger(), (*array)[1].GetInteger());
         UNIT_ASSERT_VALUES_EQUAL(value["array"][2].GetInteger(), (*array)[2].GetInteger());
-        UNIT_ASSERT_VALUES_EQUAL(value["array"][3].GetString(), (*array)[3].GetString()); 
+        UNIT_ASSERT_VALUES_EQUAL(value["array"][3].GetString(), (*array)[3].GetString());
     }
 
     Y_UNIT_TEST(TJsonRomaTest) {
@@ -166,193 +166,193 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
     }
 
     Y_UNIT_TEST(TJsonReadTreeWithComments) {
-        { 
+        {
             TString leadingCommentData = "{ // \"test\" : 1 \n}";
-            { 
-                // No comments allowed 
-                TStringStream in; 
-                in << leadingCommentData; 
-                TJsonValue value; 
-                UNIT_ASSERT(!ReadJsonTree(&in, false, &value)); 
-            } 
- 
-            { 
-                // Comments allowed 
-                TStringStream in; 
-                in << leadingCommentData; 
-                TJsonValue value; 
-                UNIT_ASSERT(ReadJsonTree(&in, true, &value)); 
-                UNIT_ASSERT(!value.Has("test")); 
-            } 
-        } 
- 
-        { 
+            {
+                // No comments allowed
+                TStringStream in;
+                in << leadingCommentData;
+                TJsonValue value;
+                UNIT_ASSERT(!ReadJsonTree(&in, false, &value));
+            }
+
+            {
+                // Comments allowed
+                TStringStream in;
+                in << leadingCommentData;
+                TJsonValue value;
+                UNIT_ASSERT(ReadJsonTree(&in, true, &value));
+                UNIT_ASSERT(!value.Has("test"));
+            }
+        }
+
+        {
             TString trailingCommentData = "{ \"test1\" : 1 // \"test2\" : 2 \n }";
-            { 
-                // No comments allowed 
-                TStringStream in; 
-                in << trailingCommentData; 
-                TJsonValue value; 
-                UNIT_ASSERT(!ReadJsonTree(&in, false, &value)); 
-            } 
- 
-            { 
-                // Comments allowed 
-                TStringStream in; 
-                in << trailingCommentData; 
-                TJsonValue value; 
-                UNIT_ASSERT(ReadJsonTree(&in, true, &value)); 
-                UNIT_ASSERT(value.Has("test1")); 
-                UNIT_ASSERT_EQUAL(value["test1"].GetInteger(), 1); 
-                UNIT_ASSERT(!value.Has("test2")); 
-            } 
-        } 
-    } 
- 
+            {
+                // No comments allowed
+                TStringStream in;
+                in << trailingCommentData;
+                TJsonValue value;
+                UNIT_ASSERT(!ReadJsonTree(&in, false, &value));
+            }
+
+            {
+                // Comments allowed
+                TStringStream in;
+                in << trailingCommentData;
+                TJsonValue value;
+                UNIT_ASSERT(ReadJsonTree(&in, true, &value));
+                UNIT_ASSERT(value.Has("test1"));
+                UNIT_ASSERT_EQUAL(value["test1"].GetInteger(), 1);
+                UNIT_ASSERT(!value.Has("test2"));
+            }
+        }
+    }
+
     Y_UNIT_TEST(TJsonSignedIntegerTest) {
-        { 
-            TStringStream in; 
-            in << "{ \"test\" : " << Min<i64>() << " }"; 
-            TJsonValue value; 
-            UNIT_ASSERT(ReadJsonTree(&in, &value)); 
-            UNIT_ASSERT(value.Has("test")); 
-            UNIT_ASSERT(value["test"].IsInteger()); 
-            UNIT_ASSERT(!value["test"].IsUInteger()); 
-            UNIT_ASSERT_EQUAL(value["test"].GetInteger(), Min<i64>()); 
-            UNIT_ASSERT_EQUAL(value["test"].GetIntegerRobust(), Min<i64>()); 
-        } // Min<i64>() 
- 
-        { 
-            TStringStream in; 
-            in << "{ \"test\" : " << Max<i64>() + 1ull << " }"; 
-            TJsonValue value; 
-            UNIT_ASSERT(ReadJsonTree(&in, &value)); 
-            UNIT_ASSERT(value.Has("test")); 
-            UNIT_ASSERT(!value["test"].IsInteger()); 
-            UNIT_ASSERT(value["test"].IsUInteger()); 
+        {
+            TStringStream in;
+            in << "{ \"test\" : " << Min<i64>() << " }";
+            TJsonValue value;
+            UNIT_ASSERT(ReadJsonTree(&in, &value));
+            UNIT_ASSERT(value.Has("test"));
+            UNIT_ASSERT(value["test"].IsInteger());
+            UNIT_ASSERT(!value["test"].IsUInteger());
+            UNIT_ASSERT_EQUAL(value["test"].GetInteger(), Min<i64>());
+            UNIT_ASSERT_EQUAL(value["test"].GetIntegerRobust(), Min<i64>());
+        } // Min<i64>()
+
+        {
+            TStringStream in;
+            in << "{ \"test\" : " << Max<i64>() + 1ull << " }";
+            TJsonValue value;
+            UNIT_ASSERT(ReadJsonTree(&in, &value));
+            UNIT_ASSERT(value.Has("test"));
+            UNIT_ASSERT(!value["test"].IsInteger());
+            UNIT_ASSERT(value["test"].IsUInteger());
             UNIT_ASSERT_EQUAL(value["test"].GetIntegerRobust(), (i64)(Max<i64>() + 1ull));
-        } // Max<i64>() + 1 
-    } 
- 
+        } // Max<i64>() + 1
+    }
+
     Y_UNIT_TEST(TJsonUnsignedIntegerTest) {
-        { 
-            TStringStream in; 
-            in << "{ \"test\" : 1 }"; 
-            TJsonValue value; 
-            UNIT_ASSERT(ReadJsonTree(&in, &value)); 
-            UNIT_ASSERT(value.Has("test")); 
-            UNIT_ASSERT(value["test"].IsInteger()); 
-            UNIT_ASSERT(value["test"].IsUInteger()); 
-            UNIT_ASSERT_EQUAL(value["test"].GetInteger(), 1); 
-            UNIT_ASSERT_EQUAL(value["test"].GetIntegerRobust(), 1); 
-            UNIT_ASSERT_EQUAL(value["test"].GetUInteger(), 1); 
-            UNIT_ASSERT_EQUAL(value["test"].GetUIntegerRobust(), 1); 
-        } // 1 
- 
-        { 
-            TStringStream in; 
-            in << "{ \"test\" : -1 }"; 
-            TJsonValue value; 
-            UNIT_ASSERT(ReadJsonTree(&in, &value)); 
-            UNIT_ASSERT(value.Has("test")); 
-            UNIT_ASSERT(value["test"].IsInteger()); 
-            UNIT_ASSERT(!value["test"].IsUInteger()); 
-            UNIT_ASSERT_EQUAL(value["test"].GetInteger(), -1); 
-            UNIT_ASSERT_EQUAL(value["test"].GetIntegerRobust(), -1); 
-            UNIT_ASSERT_EQUAL(value["test"].GetUInteger(), 0); 
-            UNIT_ASSERT_EQUAL(value["test"].GetUIntegerRobust(), static_cast<unsigned long long>(-1)); 
-        } // -1 
- 
-        { 
-            TStringStream in; 
-            in << "{ \"test\" : 18446744073709551615 }"; 
-            TJsonValue value; 
-            UNIT_ASSERT(ReadJsonTree(&in, &value)); 
-            UNIT_ASSERT(value.Has("test")); 
-            UNIT_ASSERT(!value["test"].IsInteger()); 
-            UNIT_ASSERT(value["test"].IsUInteger()); 
-            UNIT_ASSERT_EQUAL(value["test"].GetInteger(), 0); 
-            UNIT_ASSERT_EQUAL(value["test"].GetIntegerRobust(), static_cast<long long>(18446744073709551615ull)); 
-            UNIT_ASSERT_EQUAL(value["test"].GetUInteger(), 18446744073709551615ull); 
-            UNIT_ASSERT_EQUAL(value["test"].GetUIntegerRobust(), 18446744073709551615ull); 
-        } // 18446744073709551615 
- 
-        { 
-            TStringStream in; 
-            in << "{ \"test\" : 1.1 }"; 
-            TJsonValue value; 
-            UNIT_ASSERT(ReadJsonTree(&in, &value)); 
-            UNIT_ASSERT(value.Has("test")); 
-            UNIT_ASSERT(!value["test"].IsInteger()); 
-            UNIT_ASSERT(!value["test"].IsUInteger()); 
-            UNIT_ASSERT_EQUAL(value["test"].GetInteger(), 0); 
-            UNIT_ASSERT_EQUAL(value["test"].GetIntegerRobust(), static_cast<long long>(1.1)); 
-            UNIT_ASSERT_EQUAL(value["test"].GetUInteger(), 0); 
-            UNIT_ASSERT_EQUAL(value["test"].GetUIntegerRobust(), static_cast<unsigned long long>(1.1)); 
-        } // 1.1 
- 
-        { 
-            TStringStream in; 
-            in << "{ \"test\" : [1, 18446744073709551615] }"; 
-            TJsonValue value; 
-            UNIT_ASSERT(ReadJsonTree(&in, &value)); 
-            UNIT_ASSERT(value.Has("test")); 
-            UNIT_ASSERT(value["test"].IsArray()); 
-            UNIT_ASSERT_EQUAL(value["test"].GetArray().size(), 2); 
-            UNIT_ASSERT(value["test"][0].IsInteger()); 
-            UNIT_ASSERT(value["test"][0].IsUInteger()); 
-            UNIT_ASSERT_EQUAL(value["test"][0].GetInteger(), 1); 
-            UNIT_ASSERT_EQUAL(value["test"][0].GetUInteger(), 1); 
-            UNIT_ASSERT(!value["test"][1].IsInteger()); 
-            UNIT_ASSERT(value["test"][1].IsUInteger()); 
-            UNIT_ASSERT_EQUAL(value["test"][1].GetUInteger(), 18446744073709551615ull); 
-        } 
-    } // TJsonUnsignedIntegerTest 
- 
+        {
+            TStringStream in;
+            in << "{ \"test\" : 1 }";
+            TJsonValue value;
+            UNIT_ASSERT(ReadJsonTree(&in, &value));
+            UNIT_ASSERT(value.Has("test"));
+            UNIT_ASSERT(value["test"].IsInteger());
+            UNIT_ASSERT(value["test"].IsUInteger());
+            UNIT_ASSERT_EQUAL(value["test"].GetInteger(), 1);
+            UNIT_ASSERT_EQUAL(value["test"].GetIntegerRobust(), 1);
+            UNIT_ASSERT_EQUAL(value["test"].GetUInteger(), 1);
+            UNIT_ASSERT_EQUAL(value["test"].GetUIntegerRobust(), 1);
+        } // 1
+
+        {
+            TStringStream in;
+            in << "{ \"test\" : -1 }";
+            TJsonValue value;
+            UNIT_ASSERT(ReadJsonTree(&in, &value));
+            UNIT_ASSERT(value.Has("test"));
+            UNIT_ASSERT(value["test"].IsInteger());
+            UNIT_ASSERT(!value["test"].IsUInteger());
+            UNIT_ASSERT_EQUAL(value["test"].GetInteger(), -1);
+            UNIT_ASSERT_EQUAL(value["test"].GetIntegerRobust(), -1);
+            UNIT_ASSERT_EQUAL(value["test"].GetUInteger(), 0);
+            UNIT_ASSERT_EQUAL(value["test"].GetUIntegerRobust(), static_cast<unsigned long long>(-1));
+        } // -1
+
+        {
+            TStringStream in;
+            in << "{ \"test\" : 18446744073709551615 }";
+            TJsonValue value;
+            UNIT_ASSERT(ReadJsonTree(&in, &value));
+            UNIT_ASSERT(value.Has("test"));
+            UNIT_ASSERT(!value["test"].IsInteger());
+            UNIT_ASSERT(value["test"].IsUInteger());
+            UNIT_ASSERT_EQUAL(value["test"].GetInteger(), 0);
+            UNIT_ASSERT_EQUAL(value["test"].GetIntegerRobust(), static_cast<long long>(18446744073709551615ull));
+            UNIT_ASSERT_EQUAL(value["test"].GetUInteger(), 18446744073709551615ull);
+            UNIT_ASSERT_EQUAL(value["test"].GetUIntegerRobust(), 18446744073709551615ull);
+        } // 18446744073709551615
+
+        {
+            TStringStream in;
+            in << "{ \"test\" : 1.1 }";
+            TJsonValue value;
+            UNIT_ASSERT(ReadJsonTree(&in, &value));
+            UNIT_ASSERT(value.Has("test"));
+            UNIT_ASSERT(!value["test"].IsInteger());
+            UNIT_ASSERT(!value["test"].IsUInteger());
+            UNIT_ASSERT_EQUAL(value["test"].GetInteger(), 0);
+            UNIT_ASSERT_EQUAL(value["test"].GetIntegerRobust(), static_cast<long long>(1.1));
+            UNIT_ASSERT_EQUAL(value["test"].GetUInteger(), 0);
+            UNIT_ASSERT_EQUAL(value["test"].GetUIntegerRobust(), static_cast<unsigned long long>(1.1));
+        } // 1.1
+
+        {
+            TStringStream in;
+            in << "{ \"test\" : [1, 18446744073709551615] }";
+            TJsonValue value;
+            UNIT_ASSERT(ReadJsonTree(&in, &value));
+            UNIT_ASSERT(value.Has("test"));
+            UNIT_ASSERT(value["test"].IsArray());
+            UNIT_ASSERT_EQUAL(value["test"].GetArray().size(), 2);
+            UNIT_ASSERT(value["test"][0].IsInteger());
+            UNIT_ASSERT(value["test"][0].IsUInteger());
+            UNIT_ASSERT_EQUAL(value["test"][0].GetInteger(), 1);
+            UNIT_ASSERT_EQUAL(value["test"][0].GetUInteger(), 1);
+            UNIT_ASSERT(!value["test"][1].IsInteger());
+            UNIT_ASSERT(value["test"][1].IsUInteger());
+            UNIT_ASSERT_EQUAL(value["test"][1].GetUInteger(), 18446744073709551615ull);
+        }
+    } // TJsonUnsignedIntegerTest
+
     Y_UNIT_TEST(TJsonDoubleTest) {
-        { 
-            TStringStream in; 
-            in << "{ \"test\" : 1.0 }"; 
-            TJsonValue value; 
-            UNIT_ASSERT(ReadJsonTree(&in, &value)); 
-            UNIT_ASSERT(value.Has("test")); 
-            UNIT_ASSERT(value["test"].IsDouble()); 
-            UNIT_ASSERT_EQUAL(value["test"].GetDouble(), 1.0); 
-            UNIT_ASSERT_EQUAL(value["test"].GetDoubleRobust(), 1.0); 
-        } // 1.0 
- 
-        { 
-            TStringStream in; 
-            in << "{ \"test\" : 1 }"; 
-            TJsonValue value; 
-            UNIT_ASSERT(ReadJsonTree(&in, &value)); 
-            UNIT_ASSERT(value.Has("test")); 
-            UNIT_ASSERT(value["test"].IsDouble()); 
-            UNIT_ASSERT_EQUAL(value["test"].GetDouble(), 1.0); 
-            UNIT_ASSERT_EQUAL(value["test"].GetDoubleRobust(), 1.0); 
-        } // 1 
- 
-        { 
-            TStringStream in; 
-            in << "{ \"test\" : -1 }"; 
-            TJsonValue value; 
-            UNIT_ASSERT(ReadJsonTree(&in, &value)); 
-            UNIT_ASSERT(value.Has("test")); 
-            UNIT_ASSERT(value["test"].IsDouble()); 
-            UNIT_ASSERT_EQUAL(value["test"].GetDouble(), -1.0); 
-            UNIT_ASSERT_EQUAL(value["test"].GetDoubleRobust(), -1.0); 
-        } // -1 
- 
-        { 
-            TStringStream in; 
-            in << "{ \"test\" : " << Max<ui64>() << " }"; 
-            TJsonValue value; 
-            UNIT_ASSERT(ReadJsonTree(&in, &value)); 
-            UNIT_ASSERT(value.Has("test")); 
-            UNIT_ASSERT(!value["test"].IsDouble()); 
-            UNIT_ASSERT_EQUAL(value["test"].GetDouble(), 0.0); 
-            UNIT_ASSERT_EQUAL(value["test"].GetDoubleRobust(), static_cast<double>(Max<ui64>())); 
-        } // Max<ui64>() 
+        {
+            TStringStream in;
+            in << "{ \"test\" : 1.0 }";
+            TJsonValue value;
+            UNIT_ASSERT(ReadJsonTree(&in, &value));
+            UNIT_ASSERT(value.Has("test"));
+            UNIT_ASSERT(value["test"].IsDouble());
+            UNIT_ASSERT_EQUAL(value["test"].GetDouble(), 1.0);
+            UNIT_ASSERT_EQUAL(value["test"].GetDoubleRobust(), 1.0);
+        } // 1.0
+
+        {
+            TStringStream in;
+            in << "{ \"test\" : 1 }";
+            TJsonValue value;
+            UNIT_ASSERT(ReadJsonTree(&in, &value));
+            UNIT_ASSERT(value.Has("test"));
+            UNIT_ASSERT(value["test"].IsDouble());
+            UNIT_ASSERT_EQUAL(value["test"].GetDouble(), 1.0);
+            UNIT_ASSERT_EQUAL(value["test"].GetDoubleRobust(), 1.0);
+        } // 1
+
+        {
+            TStringStream in;
+            in << "{ \"test\" : -1 }";
+            TJsonValue value;
+            UNIT_ASSERT(ReadJsonTree(&in, &value));
+            UNIT_ASSERT(value.Has("test"));
+            UNIT_ASSERT(value["test"].IsDouble());
+            UNIT_ASSERT_EQUAL(value["test"].GetDouble(), -1.0);
+            UNIT_ASSERT_EQUAL(value["test"].GetDoubleRobust(), -1.0);
+        } // -1
+
+        {
+            TStringStream in;
+            in << "{ \"test\" : " << Max<ui64>() << " }";
+            TJsonValue value;
+            UNIT_ASSERT(ReadJsonTree(&in, &value));
+            UNIT_ASSERT(value.Has("test"));
+            UNIT_ASSERT(!value["test"].IsDouble());
+            UNIT_ASSERT_EQUAL(value["test"].GetDouble(), 0.0);
+            UNIT_ASSERT_EQUAL(value["test"].GetDoubleRobust(), static_cast<double>(Max<ui64>()));
+        } // Max<ui64>()
     }     // TJsonDoubleTest
 
     Y_UNIT_TEST(TJsonInvalidTest) {

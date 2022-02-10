@@ -1,16 +1,16 @@
-#include "json2proto.h" 
+#include "json2proto.h"
 #include "util.h"
- 
+
 #include <library/cpp/json/json_value.h>
- 
+
 #include <google/protobuf/message.h>
 #include <google/protobuf/descriptor.h>
- 
+
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/string/ascii.h>
-#include <util/string/cast.h> 
- 
+#include <util/string/cast.h>
+
 #define JSON_TO_FIELD(EProtoCppType, name, json, JsonCheckType, ProtoSet, JsonGet)        \
     case FieldDescriptor::EProtoCppType: {                                          \
         if (config.CastRobust) {                                                    \
@@ -32,8 +32,8 @@
         }                                                                           \
         reflection->ProtoSet(&proto, &field, json.JsonGet());                       \
         break;                                                                      \
-    } 
- 
+    }
+
 static TString GetFieldName(const google::protobuf::FieldDescriptor& field,
                             const NProtobufJson::TJson2ProtoConfig& config) {
     if (config.NameGenerator) {
@@ -71,13 +71,13 @@ static TString GetFieldName(const google::protobuf::FieldDescriptor& field,
         case NProtobufJson::TJson2ProtoConfig::FieldNameSnakeCaseDense:
             NProtobufJson::ToSnakeCaseDense(&name);
             break;
-        default: 
+        default:
             Y_VERIFY_DEBUG(false, "Unknown FieldNameMode.");
     }
     return name;
 }
 
-static void 
+static void
 JsonString2Field(const NJson::TJsonValue& json,
                  google::protobuf::Message& proto,
                  const google::protobuf::FieldDescriptor& field,
@@ -123,28 +123,28 @@ FindEnumValue(const NProtoBuf::EnumDescriptor* enumField,
 }
 
 static void
-JsonEnum2Field(const NJson::TJsonValue& json, 
-               google::protobuf::Message& proto, 
+JsonEnum2Field(const NJson::TJsonValue& json,
+               google::protobuf::Message& proto,
                const google::protobuf::FieldDescriptor& field,
                const NProtobufJson::TJson2ProtoConfig& config) {
-    using namespace google::protobuf; 
- 
-    const Reflection* reflection = proto.GetReflection(); 
+    using namespace google::protobuf;
+
+    const Reflection* reflection = proto.GetReflection();
     Y_ASSERT(!!reflection);
- 
-    const EnumDescriptor* enumField = field.enum_type(); 
+
+    const EnumDescriptor* enumField = field.enum_type();
     Y_ASSERT(!!enumField);
- 
-    /// @todo configure name/numerical value 
+
+    /// @todo configure name/numerical value
     const EnumValueDescriptor* enumFieldValue = nullptr;
- 
-    if (json.IsInteger()) { 
+
+    if (json.IsInteger()) {
         const auto value = json.GetInteger();
         enumFieldValue = enumField->FindValueByNumber(value);
         if (!enumFieldValue) {
             ythrow yexception() << "Invalid integer value of JSON enum field: " << value << ".";
         }
-    } else if (json.IsString()) { 
+    } else if (json.IsString()) {
         const auto& value = json.GetString();
         if (config.EnumValueMode == NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive) {
             enumFieldValue = FindEnumValue(enumField, value, AsciiEqualsIgnoreCase);
@@ -156,25 +156,25 @@ JsonEnum2Field(const NJson::TJsonValue& json,
         if (!enumFieldValue) {
             ythrow yexception() << "Invalid string value of JSON enum field: " << TStringBuf(value).Head(100) << ".";
         }
-    } else { 
-        ythrow yexception() << "Invalid type of JSON enum field: not an integer/string."; 
-    } 
- 
+    } else {
+        ythrow yexception() << "Invalid type of JSON enum field: not an integer/string.";
+    }
+
     if (field.is_repeated()) {
         reflection->AddEnum(&proto, &field, enumFieldValue);
-    } else { 
+    } else {
         reflection->SetEnum(&proto, &field, enumFieldValue);
-    } 
-} 
- 
-static void 
-Json2SingleField(const NJson::TJsonValue& json, 
-                 google::protobuf::Message& proto, 
+    }
+}
+
+static void
+Json2SingleField(const NJson::TJsonValue& json,
+                 google::protobuf::Message& proto,
                  const google::protobuf::FieldDescriptor& field,
                  const NProtobufJson::TJson2ProtoConfig& config,
                  bool isMapValue = false) {
-    using namespace google::protobuf; 
- 
+    using namespace google::protobuf;
+
     const Reflection* reflection = proto.GetReflection();
     Y_ASSERT(!!reflection);
 
@@ -188,12 +188,12 @@ Json2SingleField(const NJson::TJsonValue& json,
             }
 
             return;
-        } 
-    } 
- 
+        }
+    }
+
     const NJson::TJsonValue& fieldJson = name ? json[name] : json;
- 
-    switch (field.cpp_type()) { 
+
+    switch (field.cpp_type()) {
         JSON_TO_FIELD(CPPTYPE_INT32, field.name(), fieldJson, IsInteger, SetInt32, GetInteger);
         JSON_TO_FIELD(CPPTYPE_INT64, field.name(), fieldJson, IsInteger, SetInt64, GetInteger);
         JSON_TO_FIELD(CPPTYPE_UINT32, field.name(), fieldJson, IsInteger, SetUInt32, GetInteger);
@@ -201,7 +201,7 @@ Json2SingleField(const NJson::TJsonValue& json,
         JSON_TO_FIELD(CPPTYPE_DOUBLE, field.name(), fieldJson, IsDouble, SetDouble, GetDouble);
         JSON_TO_FIELD(CPPTYPE_FLOAT, field.name(), fieldJson, IsDouble, SetFloat, GetDouble);
         JSON_TO_FIELD(CPPTYPE_BOOL, field.name(), fieldJson, IsBoolean, SetBool, GetBoolean);
- 
+
         case FieldDescriptor::CPPTYPE_STRING: {
             JsonString2Field(fieldJson, proto, field, config);
             break;
@@ -211,22 +211,22 @@ Json2SingleField(const NJson::TJsonValue& json,
             JsonEnum2Field(fieldJson, proto, field, config);
             break;
         }
- 
+
         case FieldDescriptor::CPPTYPE_MESSAGE: {
             Message* innerProto = reflection->MutableMessage(&proto, &field);
             Y_ASSERT(!!innerProto);
             NProtobufJson::MergeJson2Proto(fieldJson, *innerProto, config);
- 
+
             break;
         }
- 
+
         default:
             ythrow yexception() << "Unknown protobuf field type: "
                                 << static_cast<int>(field.cpp_type()) << ".";
-    } 
-} 
- 
-static void 
+    }
+}
+
+static void
 SetKey(NProtoBuf::Message& proto,
        const NProtoBuf::FieldDescriptor& field,
        const TString& key) {
@@ -312,20 +312,20 @@ Json2RepeatedFieldValue(const NJson::TJsonValue& jsonValue,
 }
 
 static void
-Json2RepeatedField(const NJson::TJsonValue& json, 
-                   google::protobuf::Message& proto, 
+Json2RepeatedField(const NJson::TJsonValue& json,
+                   google::protobuf::Message& proto,
                    const google::protobuf::FieldDescriptor& field,
                    const NProtobufJson::TJson2ProtoConfig& config) {
-    using namespace google::protobuf; 
- 
+    using namespace google::protobuf;
+
     TString name = GetFieldName(field, config);
     if (!json.Has(name))
-        return; 
- 
+        return;
+
     const NJson::TJsonValue& fieldJson = json[name];
     if (fieldJson.GetType() == NJson::JSON_UNDEFINED || fieldJson.GetType() == NJson::JSON_NULL)
-        return; 
- 
+        return;
+
     bool isMap = fieldJson.GetType() == NJson::JSON_MAP;
     if (isMap) {
         if (!config.MapAsObject) {
@@ -336,15 +336,15 @@ Json2RepeatedField(const NJson::TJsonValue& json,
     }
 
     if (fieldJson.GetType() != NJson::JSON_ARRAY && !config.MapAsObject && !config.VectorizeScalars && !config.ValueVectorizer) {
-        ythrow yexception() << "JSON field doesn't represent an array for " 
+        ythrow yexception() << "JSON field doesn't represent an array for "
                             << name
-                            << "(actual type is " 
-                            << static_cast<int>(fieldJson.GetType()) << ")."; 
-    } 
- 
-    const Reflection* reflection = proto.GetReflection(); 
+                            << "(actual type is "
+                            << static_cast<int>(fieldJson.GetType()) << ").";
+    }
+
+    const Reflection* reflection = proto.GetReflection();
     Y_ASSERT(!!reflection);
- 
+
     if (isMap) {
         const THashMap<TString, NJson::TJsonValue> jsonMap = fieldJson.GetMap();
         for (const auto& x : jsonMap) {
@@ -367,16 +367,16 @@ Json2RepeatedField(const NJson::TJsonValue& json,
             }
         } else if (config.VectorizeScalars) {
             Json2RepeatedFieldValue(fieldJson, proto, field, config, reflection);
-        } 
-    } 
-} 
- 
-namespace NProtobufJson { 
+        }
+    }
+}
+
+namespace NProtobufJson {
     void MergeJson2Proto(const NJson::TJsonValue& json, google::protobuf::Message& proto, const TJson2ProtoConfig& config) {
         if (json.IsNull()) {
             return;
         }
- 
+
         Y_ENSURE(json.IsMap(), "expected json map");
 
         const google::protobuf::Descriptor* descriptor = proto.GetDescriptor();
@@ -385,7 +385,7 @@ namespace NProtobufJson {
         for (int f = 0, endF = descriptor->field_count(); f < endF; ++f) {
             const google::protobuf::FieldDescriptor* field = descriptor->field(f);
             Y_ASSERT(!!field);
- 
+
             if (field->is_repeated()) {
                 Json2RepeatedField(json, proto, *field, config);
             } else {
@@ -404,7 +404,7 @@ namespace NProtobufJson {
             }
         }
     }
- 
+
     void MergeJson2Proto(const TStringBuf& json, google::protobuf::Message& proto, const TJson2ProtoConfig& config) {
         NJson::TJsonReaderConfig jsonCfg;
         jsonCfg.DontValidateUtf8 = true;

@@ -2,7 +2,7 @@
 #include "json.h"
 
 #include <util/generic/ymath.h>
-#include <util/generic/ylimits.h> 
+#include <util/generic/ylimits.h>
 #include <util/generic/utility.h>
 #include <util/generic/singleton.h>
 #include <util/stream/str.h>
@@ -10,63 +10,63 @@
 #include <util/string/cast.h>
 #include <util/string/type.h>
 #include <util/string/vector.h>
-#include <util/system/yassert.h> 
+#include <util/system/yassert.h>
 #include <util/ysaveload.h>
 #include <util/generic/bt_exception.h>
 
-static bool 
-AreJsonMapsEqual(const NJson::TJsonValue& lhs, const NJson::TJsonValue& rhs) { 
-    using namespace NJson; 
- 
+static bool
+AreJsonMapsEqual(const NJson::TJsonValue& lhs, const NJson::TJsonValue& rhs) {
+    using namespace NJson;
+
     Y_VERIFY(lhs.GetType() == JSON_MAP, "lhs has not a JSON_MAP type.");
- 
-    if (rhs.GetType() != JSON_MAP) 
-        return false; 
- 
+
+    if (rhs.GetType() != JSON_MAP)
+        return false;
+
     typedef TJsonValue::TMapType TMapType;
     const TMapType& lhsMap = lhs.GetMap();
     const TMapType& rhsMap = rhs.GetMap();
- 
-    if (lhsMap.size() != rhsMap.size()) 
-        return false; 
- 
+
+    if (lhsMap.size() != rhsMap.size())
+        return false;
+
     for (const auto& lhsIt : lhsMap) {
         TMapType::const_iterator rhsIt = rhsMap.find(lhsIt.first);
-        if (rhsIt == rhsMap.end()) 
-            return false; 
- 
+        if (rhsIt == rhsMap.end())
+            return false;
+
         if (lhsIt.second != rhsIt->second)
-            return false; 
-    } 
- 
-    return true; 
-} 
- 
-static bool 
-AreJsonArraysEqual(const NJson::TJsonValue& lhs, const NJson::TJsonValue& rhs) { 
-    using namespace NJson; 
- 
+            return false;
+    }
+
+    return true;
+}
+
+static bool
+AreJsonArraysEqual(const NJson::TJsonValue& lhs, const NJson::TJsonValue& rhs) {
+    using namespace NJson;
+
     Y_VERIFY(lhs.GetType() == JSON_ARRAY, "lhs has not a JSON_ARRAY type.");
- 
-    if (rhs.GetType() != JSON_ARRAY) 
-        return false; 
- 
-    typedef TJsonValue::TArray TArray; 
-    const TArray& lhsArray = lhs.GetArray(); 
-    const TArray& rhsArray = rhs.GetArray(); 
- 
-    if (lhsArray.size() != rhsArray.size()) 
-        return false; 
- 
-    for (TArray::const_iterator lhsIt = lhsArray.begin(), rhsIt = rhsArray.begin(); 
+
+    if (rhs.GetType() != JSON_ARRAY)
+        return false;
+
+    typedef TJsonValue::TArray TArray;
+    const TArray& lhsArray = lhs.GetArray();
+    const TArray& rhsArray = rhs.GetArray();
+
+    if (lhsArray.size() != rhsArray.size())
+        return false;
+
+    for (TArray::const_iterator lhsIt = lhsArray.begin(), rhsIt = rhsArray.begin();
          lhsIt != lhsArray.end(); ++lhsIt, ++rhsIt) {
-        if (*lhsIt != *rhsIt) 
-            return false; 
-    } 
- 
-    return true; 
-} 
- 
+        if (*lhsIt != *rhsIt)
+            return false;
+    }
+
+    return true;
+}
+
 namespace NJson {
     const TJsonValue TJsonValue::UNDEFINED{};
 
@@ -135,7 +135,7 @@ namespace NJson {
         SetType(JSON_UINTEGER);
         Value.UInteger = value;
     }
- 
+
     TJsonValue::TJsonValue(const int value) noexcept {
         SetType(JSON_INTEGER);
         Value.Integer = value;
@@ -145,7 +145,7 @@ namespace NJson {
         SetType(JSON_UINTEGER);
         Value.UInteger = value;
     }
- 
+
     TJsonValue::TJsonValue(const long value) noexcept {
         SetType(JSON_INTEGER);
         Value.Integer = value;
@@ -155,7 +155,7 @@ namespace NJson {
         SetType(JSON_UINTEGER);
         Value.UInteger = value;
     }
- 
+
     TJsonValue::TJsonValue(const double value) noexcept {
         SetType(JSON_DOUBLE);
         Value.Double = value;
@@ -362,55 +362,55 @@ namespace NJson {
 
             case JSON_UINTEGER:
                 return Value.UInteger;
- 
+
             case JSON_DOUBLE:
                 return Value.Double;
- 
+
             default:
                 Y_ASSERT(false && "Unexpected type.");
                 return 0;
         }
-    } 
+    }
 
     unsigned long long TJsonValue::GetUInteger() const {
         if (!IsUInteger())
             return 0;
- 
+
         switch (Type) {
             case JSON_UINTEGER:
                 return Value.UInteger;
- 
+
             case JSON_INTEGER:
                 return Value.Integer;
- 
+
             case JSON_DOUBLE:
                 return Value.Double;
- 
+
             default:
                 Y_ASSERT(false && "Unexpected type.");
                 return 0;
         }
-    } 
- 
+    }
+
     double TJsonValue::GetDouble() const {
         if (!IsDouble())
             return 0.0;
- 
+
         switch (Type) {
             case JSON_DOUBLE:
                 return Value.Double;
- 
+
             case JSON_INTEGER:
                 return Value.Integer;
- 
+
             case JSON_UINTEGER:
                 return Value.UInteger;
- 
+
             default:
                 Y_ASSERT(false && "Unexpected type.");
                 return 0.0;
         }
-    } 
+    }
 
     const TString& TJsonValue::GetString() const {
         return Type != JSON_STRING ? Singleton<TDefaultsHolder>()->String : Value.String;
@@ -593,8 +593,8 @@ namespace NJson {
             case JSON_UINTEGER:
                 return Value.UInteger;
         }
-    } 
- 
+    }
+
     double TJsonValue::GetDoubleRobust() const noexcept {
         switch (Type) {
             case JSON_ARRAY:
@@ -664,11 +664,11 @@ namespace NJson {
     bool TJsonValue::GetUInteger(unsigned long long* value) const noexcept {
         if (!IsUInteger())
             return false;
- 
+
         *value = GetUInteger();
         return true;
     }
- 
+
     bool TJsonValue::GetDouble(double* value) const noexcept {
         if (!IsDouble())
             return false;
@@ -765,56 +765,56 @@ namespace NJson {
     bool TJsonValue::IsBoolean() const noexcept {
         return Type == JSON_BOOLEAN;
     }
- 
+
     bool TJsonValue::IsInteger() const noexcept {
         switch (Type) {
             case JSON_INTEGER:
                 return true;
- 
+
             case JSON_UINTEGER:
                 return (Value.UInteger <= static_cast<unsigned long long>(Max<long long>()));
- 
+
             case JSON_DOUBLE:
                 return ((long long)Value.Double == Value.Double);
 
             default:
                 return false;
         }
-    } 
+    }
 
     bool TJsonValue::IsUInteger() const noexcept {
         switch (Type) {
             case JSON_UINTEGER:
                 return true;
- 
+
             case JSON_INTEGER:
                 return (Value.Integer >= 0);
- 
+
             case JSON_DOUBLE:
                 return ((unsigned long long)Value.Double == Value.Double);
- 
+
             default:
                 return false;
         }
-    } 
- 
+    }
+
     bool TJsonValue::IsDouble() const noexcept {
         // Check whether we can convert integer to floating-point
         // without precision loss.
         switch (Type) {
             case JSON_DOUBLE:
                 return true;
- 
+
             case JSON_INTEGER:
                 return (1ll << std::numeric_limits<double>::digits) >= Abs(Value.Integer);
- 
+
             case JSON_UINTEGER:
                 return (1ull << std::numeric_limits<double>::digits) >= Value.UInteger;
- 
+
             default:
                 return false;
         }
-    } 
+    }
 
     namespace {
         template <class TPtr, class T>
@@ -906,42 +906,42 @@ namespace NJson {
 
     void TJsonValue::Scan(IScanCallback& callback) {
         DoScan("", nullptr, callback);
-    } 
- 
+    }
+
     bool TJsonValue::IsString() const noexcept {
         return Type == JSON_STRING;
-    } 
- 
+    }
+
     bool TJsonValue::IsMap() const noexcept {
         return Type == JSON_MAP;
-    } 
- 
+    }
+
     bool TJsonValue::IsArray() const noexcept {
         return Type == JSON_ARRAY;
-    } 
- 
+    }
+
     bool TJsonValue::Has(const TStringBuf& key) const noexcept {
         return Type == JSON_MAP && Value.Map->contains(key);
-    } 
- 
+    }
+
     bool TJsonValue::Has(size_t key) const noexcept {
         return Type == JSON_ARRAY && Value.Array->size() > key;
-    } 
- 
+    }
+
     bool TJsonValue::operator==(const TJsonValue& rhs) const {
         switch (Type) {
             case JSON_UNDEFINED: {
                 return (rhs.GetType() == JSON_UNDEFINED);
             }
- 
+
             case JSON_NULL: {
                 return rhs.IsNull();
             }
- 
+
             case JSON_BOOLEAN: {
                 return (rhs.IsBoolean() && Value.Boolean == rhs.Value.Boolean);
             }
- 
+
             case JSON_INTEGER: {
                 return (rhs.IsInteger() && GetInteger() == rhs.GetInteger());
             }

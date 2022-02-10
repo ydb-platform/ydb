@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
         WriteJson(&out, &v);
         UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected);
     }
- 
+
     Y_UNIT_TEST(FormatOutput) {
         TString expected = "{\n  \"key1\":null,\n  \"key2\":\n    {\n      \"subkey1\":\n        [\n          1,\n          {\n            \"subsubkey\":\"test2\"\n          },\n          null,\n          true\n        ],\n      \"subkey2\":\"test\"\n    }\n}";
         TJsonValue v;
@@ -83,45 +83,45 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
     }
 
     Y_UNIT_TEST(SimpleUnsignedIntegerWriteTest) {
-        { 
+        {
             TString expected = "{\"test\":1}";
-            TJsonValue v; 
-            v.InsertValue("test", 1ull); 
-            TStringStream out; 
-            WriteJson(&out, &v); 
-            UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected); 
-        } // 1 
- 
-        { 
+            TJsonValue v;
+            v.InsertValue("test", 1ull);
+            TStringStream out;
+            WriteJson(&out, &v);
+            UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected);
+        } // 1
+
+        {
             TString expected = "{\"test\":-1}";
-            TJsonValue v; 
-            v.InsertValue("test", -1); 
-            TStringStream out; 
-            WriteJson(&out, &v); 
-            UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected); 
-        } // -1 
- 
-        { 
+            TJsonValue v;
+            v.InsertValue("test", -1);
+            TStringStream out;
+            WriteJson(&out, &v);
+            UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected);
+        } // -1
+
+        {
             TString expected = "{\"test\":18446744073709551615}";
-            TJsonValue v; 
-            v.InsertValue("test", 18446744073709551615ull); 
-            TStringStream out; 
-            WriteJson(&out, &v); 
-            UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected); 
-        } // 18446744073709551615 
- 
-        { 
+            TJsonValue v;
+            v.InsertValue("test", 18446744073709551615ull);
+            TStringStream out;
+            WriteJson(&out, &v);
+            UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected);
+        } // 18446744073709551615
+
+        {
             TString expected = "{\"test\":[1,18446744073709551615]}";
-            TJsonValue v; 
-            v.InsertValue("test", TJsonValue()); 
-            v["test"].AppendValue(1); 
-            v["test"].AppendValue(18446744073709551615ull); 
-            TStringStream out; 
-            WriteJson(&out, &v); 
-            UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected); 
-        } // 18446744073709551615 
+            TJsonValue v;
+            v.InsertValue("test", TJsonValue());
+            v["test"].AppendValue(1);
+            v["test"].AppendValue(18446744073709551615ull);
+            TStringStream out;
+            WriteJson(&out, &v);
+            UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected);
+        } // 18446744073709551615
     }     // SimpleUnsignedIntegerWriteTest
- 
+
     Y_UNIT_TEST(WriteOptionalTest) {
         {
             TString expected = "{\"test\":1}";

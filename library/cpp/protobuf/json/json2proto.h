@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include "string_transform.h"
 #include "name_generator.h"
 
@@ -9,18 +9,18 @@
 #include <util/stream/input.h>
 #include <util/stream/str.h>
 #include <util/stream/mem.h>
- 
+
 namespace google {
     namespace protobuf {
         class Message;
     }
 }
 
-namespace NProtobufJson { 
+namespace NProtobufJson {
     struct TJson2ProtoConfig {
         using TSelf = TJson2ProtoConfig;
         using TValueVectorizer = std::function<NJson::TJsonValue::TArray(const NJson::TJsonValue& jsonValue)>;
- 
+
         enum FldNameMode {
             FieldNameOriginalCase = 0, // default
             FieldNameLowerCase,
@@ -167,7 +167,7 @@ namespace NProtobufJson {
     /// @throw yexception
     void Json2Proto(const TStringBuf& json, google::protobuf::Message& proto,
                     const TJson2ProtoConfig& config = TJson2ProtoConfig());
- 
+
     /// @throw yexception
     inline void Json2Proto(const TString& json, google::protobuf::Message& proto,
                            const TJson2ProtoConfig& config = TJson2ProtoConfig()) {

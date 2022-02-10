@@ -1,30 +1,30 @@
-#include "json.h" 
-#include "proto.h" 
- 
+#include "json.h"
+#include "proto.h"
+
 #include <library/cpp/protobuf/json/ut/test.pb.h>
 
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
- 
+
 #include <library/cpp/protobuf/json/proto2json.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include <util/generic/hash_set.h> 
+
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
-#include <util/generic/ylimits.h> 
- 
-#include <util/stream/str.h> 
- 
-#include <util/system/defaults.h> 
-#include <util/system/yassert.h> 
- 
+#include <util/generic/ylimits.h>
+
+#include <util/stream/str.h>
+
+#include <util/system/defaults.h>
+#include <util/system/yassert.h>
+
 #include <limits>
 
-using namespace NProtobufJson; 
-using namespace NProtobufJsonTest; 
- 
+using namespace NProtobufJson;
+using namespace NProtobufJsonTest;
+
 Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
     Y_UNIT_TEST(TestFlatDefault) {
         using namespace ::google::protobuf;
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json));
         UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
     }
- 
+
     {
         TStringStream jsonStream;
         NJson::TJsonValue json;
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
         UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
     } // streamed
 }
- 
+
     // Try to skip each field
 #define DEFINE_FIELD(name, value)                                          \
     {                                                                      \
@@ -138,9 +138,9 @@ Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
         }                                                                  \
     }
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD 
+#undef DEFINE_FIELD
 } // TestFlatOptional
- 
+
 Y_UNIT_TEST(TestFlatRequired){
     {TFlatRequired proto;
 FillFlatProto(&proto);
@@ -150,7 +150,7 @@ const NJson::TJsonValue& modelJson = CreateFlatJson();
     UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json));
     UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
 }
- 
+
 {
     TStringStream jsonStream;
     NJson::TJsonValue json;
@@ -159,7 +159,7 @@ const NJson::TJsonValue& modelJson = CreateFlatJson();
     UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
 } // streamed
 }
- 
+
 // Try to skip each field
 #define DEFINE_FIELD(name, value)                                          \
     {                                                                      \
@@ -179,20 +179,20 @@ const NJson::TJsonValue& modelJson = CreateFlatJson();
         }                                                                  \
     }
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD 
+#undef DEFINE_FIELD
 } // TestFlatRequired
- 
+
 Y_UNIT_TEST(TestFlatRepeated) {
     {
         TFlatRepeated proto;
         FillRepeatedProto(&proto);
         const NJson::TJsonValue& modelJson = CreateRepeatedFlatJson();
-        { 
+        {
             NJson::TJsonValue json;
             UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json));
             UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
-        } 
- 
+        }
+
         {
             TStringStream jsonStream;
             NJson::TJsonValue json;
@@ -224,9 +224,9 @@ Y_UNIT_TEST(TestFlatRepeated) {
         }                                                                          \
     }
 #include <library/cpp/protobuf/json/ut/repeated_fields.incl>
-#undef DEFINE_REPEATED_FIELD 
+#undef DEFINE_REPEATED_FIELD
 } // TestFlatRepeated
- 
+
 Y_UNIT_TEST(TestCompositeOptional){
     {TCompositeOptional proto;
 FillCompositeProto(&proto);
@@ -236,7 +236,7 @@ const NJson::TJsonValue& modelJson = CreateCompositeJson();
     UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json));
     UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
 }
- 
+
 {
     TStringStream jsonStream;
     NJson::TJsonValue json;
@@ -245,7 +245,7 @@ const NJson::TJsonValue& modelJson = CreateCompositeJson();
     UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
 } // streamed
 }
- 
+
 // Try to skip each field
 #define DEFINE_FIELD(name, value)                                               \
     {                                                                           \
@@ -265,9 +265,9 @@ const NJson::TJsonValue& modelJson = CreateCompositeJson();
         }                                                                       \
     }
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD 
+#undef DEFINE_FIELD
 } // TestCompositeOptional
- 
+
 Y_UNIT_TEST(TestCompositeRequired){
     {TCompositeRequired proto;
 FillCompositeProto(&proto);
@@ -277,7 +277,7 @@ const NJson::TJsonValue& modelJson = CreateCompositeJson();
     UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json));
     UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
 }
- 
+
 {
     TStringStream jsonStream;
     NJson::TJsonValue json;
@@ -286,7 +286,7 @@ const NJson::TJsonValue& modelJson = CreateCompositeJson();
     UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
 } // streamed
 }
- 
+
 // Try to skip each field
 #define DEFINE_FIELD(name, value)                                               \
     {                                                                           \
@@ -306,9 +306,9 @@ const NJson::TJsonValue& modelJson = CreateCompositeJson();
         }                                                                       \
     }
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD 
+#undef DEFINE_FIELD
 } // TestCompositeRequired
- 
+
 Y_UNIT_TEST(TestCompositeRepeated) {
     {
         TFlatOptional partProto;
@@ -320,13 +320,13 @@ Y_UNIT_TEST(TestCompositeRepeated) {
         NJson::TJsonValue modelArray;
         modelArray.AppendValue(CreateFlatJson());
         modelJson.InsertValue("Part", modelArray);
-        { 
+        {
             NJson::TJsonValue json;
             UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json));
             UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
-        } 
- 
-        { 
+        }
+
+        {
             TStringStream jsonStream;
             NJson::TJsonValue json;
             UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStream));
@@ -334,7 +334,7 @@ Y_UNIT_TEST(TestCompositeRepeated) {
             UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
         } // streamed
     }
- 
+
     {
         // Array of messages with each field skipped
         TCompositeRepeated proto;
@@ -350,27 +350,27 @@ Y_UNIT_TEST(TestCompositeRepeated) {
         modelArray.AppendValue(CreateFlatJson(skippedField)); \
     }
 #include <library/cpp/protobuf/json/ut/repeated_fields.incl>
-#undef DEFINE_REPEATED_FIELD 
- 
+#undef DEFINE_REPEATED_FIELD
+
         NJson::TJsonValue modelJson;
         modelJson.InsertValue("Part", modelArray);
- 
-        { 
-            NJson::TJsonValue json; 
+
+        {
+            NJson::TJsonValue json;
             UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json));
             UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
-        } 
- 
-        { 
+        }
+
+        {
             TStringStream jsonStream;
-            NJson::TJsonValue json; 
+            NJson::TJsonValue json;
             UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStream));
             UNIT_ASSERT(ReadJsonTree(&jsonStream, &json));
             UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
         } // streamed
     }
 } // TestCompositeRepeated
- 
+
 Y_UNIT_TEST(TestEnumConfig) {
     {
         TFlatOptional proto;
@@ -380,11 +380,11 @@ Y_UNIT_TEST(TestEnumConfig) {
         NJson::TJsonValue json;
         TProto2JsonConfig config;
         config.EnumMode = TProto2JsonConfig::EnumNumber;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config));
         UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
     }
- 
+
     {
         TFlatOptional proto;
         proto.SetEnum(E_1);
@@ -393,11 +393,11 @@ Y_UNIT_TEST(TestEnumConfig) {
         NJson::TJsonValue json;
         TProto2JsonConfig config;
         config.EnumMode = TProto2JsonConfig::EnumName;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config));
         UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
     }
- 
+
     {
         TFlatOptional proto;
         proto.SetEnum(E_1);
@@ -406,11 +406,11 @@ Y_UNIT_TEST(TestEnumConfig) {
         NJson::TJsonValue json;
         TProto2JsonConfig config;
         config.EnumMode = TProto2JsonConfig::EnumFullName;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config));
         UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
     }
- 
+
     {
         TFlatOptional proto;
         proto.SetEnum(E_1);
@@ -419,11 +419,11 @@ Y_UNIT_TEST(TestEnumConfig) {
         NJson::TJsonValue json;
         TProto2JsonConfig config;
         config.EnumMode = TProto2JsonConfig::EnumNameLowerCase;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config));
         UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
     }
- 
+
     {
         TFlatOptional proto;
         proto.SetEnum(E_1);
@@ -455,13 +455,13 @@ Y_UNIT_TEST(TestMissingSingleKeyConfig) {
 #define DEFINE_FIELD(name, value) \
     modelJson.InsertValue(#name, NJson::TJsonValue(NJson::JSON_NULL));
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD 
- 
+#undef DEFINE_FIELD
+
         TFlatOptional proto;
         NJson::TJsonValue json;
         TProto2JsonConfig config;
         config.MissingSingleKeyMode = TProto2JsonConfig::MissingKeyNull;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config));
         UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
     }
@@ -512,7 +512,7 @@ Y_UNIT_TEST(TestMissingSingleKeyConfig) {
         UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
     }
 } // TestMissingSingleKeyConfig
- 
+
 Y_UNIT_TEST(TestMissingRepeatedKeyNoConfig) {
     {
         TFlatRepeated proto;
@@ -531,23 +531,23 @@ Y_UNIT_TEST(TestMissingRepeatedKeyConfig) {
         NJson::TJsonValue json;
         TProto2JsonConfig config;
         config.MissingRepeatedKeyMode = TProto2JsonConfig::MissingKeySkip;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config));
         UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
     }
- 
+
     {
         NJson::TJsonValue modelJson;
 #define DEFINE_FIELD(name, value) \
     modelJson.InsertValue(#name, NJson::TJsonValue(NJson::JSON_NULL));
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD 
- 
+#undef DEFINE_FIELD
+
         TFlatRepeated proto;
         NJson::TJsonValue json;
         TProto2JsonConfig config;
         config.MissingRepeatedKeyMode = TProto2JsonConfig::MissingKeyNull;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config));
         UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
     }
@@ -563,63 +563,63 @@ Y_UNIT_TEST(TestMissingRepeatedKeyConfig) {
         UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
     }
 } // TestMissingRepeatedKeyConfig
- 
+
 Y_UNIT_TEST(TestEscaping) {
     // No escape
     {
         TString modelStr(R"_({"String":"value\""})_");
- 
+
         TFlatOptional proto;
         proto.SetString(R"_(value")_");
         TStringStream jsonStr;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
- 
+
     // TEscapeJTransform
     {
         TString modelStr(R"_({"String":"value\""})_");
- 
+
         TFlatOptional proto;
         proto.SetString(R"_(value")_");
         TProto2JsonConfig config;
         config.StringTransforms.push_back(new TEscapeJTransform<false, true>());
         TStringStream jsonStr;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(modelStr, jsonStr.Str());
     }
- 
+
     // TCEscapeTransform
     {
         TString modelStr(R"_({"String":"value\""})_");
- 
+
         TFlatOptional proto;
         proto.SetString(R"_(value")_");
         TProto2JsonConfig config;
         config.StringTransforms.push_back(new TCEscapeTransform());
         TStringStream jsonStr;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
- 
+
     // TSafeUtf8CEscapeTransform
     {
         TString modelStr(R"_({"String":"value\""})_");
- 
+
         TFlatOptional proto;
         proto.SetString(R"_(value")_");
         TProto2JsonConfig config;
         config.StringTransforms.push_back(new TSafeUtf8CEscapeTransform());
         TStringStream jsonStr;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
 } // TestEscaping
- 
+
 class TBytesTransform: public IStringTransform {
 public:
     int GetType() const override {
@@ -666,58 +666,58 @@ Y_UNIT_TEST(TestFieldNameMode) {
     // Original case 1
     {
         TString modelStr(R"_({"String":"value"})_");
- 
+
         TFlatOptional proto;
         proto.SetString("value");
         TStringStream jsonStr;
         TProto2JsonConfig config;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
- 
+
     // Original case 2
     {
         TString modelStr(R"_({"String":"value"})_");
- 
+
         TFlatOptional proto;
         proto.SetString("value");
         TStringStream jsonStr;
         TProto2JsonConfig config;
         config.FieldNameMode = TProto2JsonConfig::FieldNameOriginalCase;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
- 
+
     // Lowercase
     {
         TString modelStr(R"_({"string":"value"})_");
- 
+
         TFlatOptional proto;
         proto.SetString("value");
         TStringStream jsonStr;
         TProto2JsonConfig config;
         config.FieldNameMode = TProto2JsonConfig::FieldNameLowerCase;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
- 
+
     // Uppercase
     {
         TString modelStr(R"_({"STRING":"value"})_");
- 
+
         TFlatOptional proto;
         proto.SetString("value");
         TStringStream jsonStr;
         TProto2JsonConfig config;
         config.FieldNameMode = TProto2JsonConfig::FieldNameUpperCase;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
- 
+
     // Camelcase
     {
         TString modelStr(R"_({"string":"value"})_");
@@ -825,33 +825,33 @@ Y_UNIT_TEST(TestFieldNameMode) {
     // Original case, repeated
     {
         TString modelStr(R"_({"I32":[1,2]})_");
- 
+
         TFlatRepeated proto;
         proto.AddI32(1);
         proto.AddI32(2);
         TStringStream jsonStr;
         TProto2JsonConfig config;
         config.FieldNameMode = TProto2JsonConfig::FieldNameOriginalCase;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
- 
+
     // Lower case, repeated
     {
         TString modelStr(R"_({"i32":[1,2]})_");
- 
+
         TFlatRepeated proto;
         proto.AddI32(1);
         proto.AddI32(2);
         TStringStream jsonStr;
         TProto2JsonConfig config;
         config.FieldNameMode = TProto2JsonConfig::FieldNameLowerCase;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
- 
+
     // UseJsonName
     {
         // FIXME(CONTRIB-139): see the comment about UseJsonName in json2proto_ut.cpp:
@@ -1019,4 +1019,4 @@ Y_UNIT_TEST(TestExtension) {
     UNIT_ASSERT_EQUAL(Proto2Json(proto, cfg), "{\"bar\":1}");
 } // TestExtension
 
-} // TProto2JsonTest 
+} // TProto2JsonTest

@@ -1,11 +1,11 @@
-#pragma once 
- 
-#include <util/generic/hash_set.h> 
+#pragma once
+
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
- 
-#include <util/system/defaults.h> 
- 
-namespace NProtobufJsonTest { 
+
+#include <util/system/defaults.h>
+
+namespace NProtobufJsonTest {
     template <typename TProto>
     inline void
     FillFlatProto(TProto* proto,
@@ -14,20 +14,20 @@ namespace NProtobufJsonTest {
     if (skippedFields.find(#name) == skippedFields.end()) \
         proto->Set##name(value);
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD 
+#undef DEFINE_FIELD
     }
- 
+
     template <typename TRepeatedField, typename TValue>
     inline void
     AddValue(TRepeatedField* field, TValue value) {
         field->Add(value);
     }
- 
+
     inline void
     AddValue(google::protobuf::RepeatedPtrField<TString>* field, const TString& value) {
         *(field->Add()) = value;
     }
- 
+
     inline void
     FillRepeatedProto(TFlatRepeated* proto,
                       const THashSet<TString>& skippedFields = THashSet<TString>()) {
@@ -37,17 +37,17 @@ namespace NProtobufJsonTest {
         for (size_t i = 0, end = Y_ARRAY_SIZE(values); i < end; ++i) { \
             AddValue(proto->Mutable##name(), values[i]);               \
         }                                                              \
-    } 
-#include <library/cpp/protobuf/json/ut/repeated_fields.incl>
-#undef DEFINE_REPEATED_FIELD 
     }
- 
+#include <library/cpp/protobuf/json/ut/repeated_fields.incl>
+#undef DEFINE_REPEATED_FIELD
+    }
+
     template <typename TProto>
     inline void
     FillCompositeProto(TProto* proto, const THashSet<TString>& skippedFields = THashSet<TString>()) {
         FillFlatProto(proto->MutablePart(), skippedFields);
     }
- 
+
 #define UNIT_ASSERT_PROTOS_EQUAL(lhs, rhs)                                               \
     do {                                                                                 \
         if (lhs.SerializeAsString() != rhs.SerializeAsString()) {                        \
@@ -58,5 +58,5 @@ namespace NProtobufJsonTest {
             UNIT_ASSERT_STRINGS_EQUAL(lhs.SerializeAsString(), rhs.SerializeAsString()); \
         }                                                                                \
     } while (false);
- 
+
 }

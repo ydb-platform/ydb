@@ -130,10 +130,10 @@ ALLOW .* -> vendor/github.com/aws/aws-sdk-go/aws
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/s3
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/sqs
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/kms
-ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/ec2
+ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/ec2 
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/route53
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/kinesis
-ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/sts
+ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/sts 
 
 # TOML parser/encoder with reflection
 ALLOW .* -> vendor/github.com/BurntSushi/toml
@@ -770,9 +770,9 @@ ALLOW .* -> vendor/github.com/aymerick/raymond
 # CONTRIB-2176
 ALLOW .* -> vendor/github.com/masterzen/winrm
 
-# CONTRIB-2267
-ALLOW .* -> vendor/github.com/apparentlymart/go-cidr
-
+# CONTRIB-2267 
+ALLOW .* -> vendor/github.com/apparentlymart/go-cidr 
+ 
 # CONTRIB-2266
 ALLOW .* -> vendor/github.com/vertica/vertica-sql-go
 

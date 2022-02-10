@@ -124,14 +124,14 @@ def test_split():
     assert func.split([1, 0, 1], lambda x: x) == ([1, 1], [0])
 
 
-def test_flatten_dict():
-    assert func.flatten_dict({"a": 1, "b": 2}) == {"a": 1, "b": 2}
-    assert func.flatten_dict({"a": 1}) == {"a": 1}
-    assert func.flatten_dict({}) == {}
-    assert func.flatten_dict({"a": 1, "b": {"c": {"d": 2}}}) == {"a": 1, "b.c.d": 2}
-    assert func.flatten_dict({"a": 1, "b": {"c": {"d": 2}}}, separator="/") == {"a": 1, "b/c/d": 2}
-
-
+def test_flatten_dict(): 
+    assert func.flatten_dict({"a": 1, "b": 2}) == {"a": 1, "b": 2} 
+    assert func.flatten_dict({"a": 1}) == {"a": 1} 
+    assert func.flatten_dict({}) == {} 
+    assert func.flatten_dict({"a": 1, "b": {"c": {"d": 2}}}) == {"a": 1, "b.c.d": 2} 
+    assert func.flatten_dict({"a": 1, "b": {"c": {"d": 2}}}, separator="/") == {"a": 1, "b/c/d": 2} 
+ 
+ 
 def test_memoize_thread_local():
     class Counter(object):
         def __init__(self, s):

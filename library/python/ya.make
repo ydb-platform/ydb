@@ -193,7 +193,7 @@ RECURSE(
     tools_structured_logs
     thread
     thread/test
-    tskv
+    tskv 
     tvmauth
     tvm2
     tvm2/tests

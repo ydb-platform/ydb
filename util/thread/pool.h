@@ -10,8 +10,8 @@
 #include <util/generic/noncopyable.h>
 #include <functional>
 
-class TDuration; 
- 
+class TDuration;
+
 struct IObjectInQueue {
     virtual ~IObjectInQueue() = default;
 

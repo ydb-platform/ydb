@@ -19,15 +19,15 @@
 TTimer::TTimer(const TStringBuf message) {
     static const int SMALL_DURATION_CHAR_LENGTH = 9;                     // strlen("0.123456s")
     Message_.Reserve(message.length() + SMALL_DURATION_CHAR_LENGTH + 1); // +"\n"
-    Message_ << message; 
-    // Do not measure the allocations above. 
+    Message_ << message;
+    // Do not measure the allocations above.
     Start_ = TInstant::Now();
 }
 
 TTimer::~TTimer() {
-    const TDuration duration = TInstant::Now() - Start_; 
-    Message_ << duration << "\n"; 
-    Cerr << Message_.Str(); 
+    const TDuration duration = TInstant::Now() - Start_;
+    Message_ << duration << "\n";
+    Cerr << Message_.Str();
 }
 
 static ui64 ManuallySetCyclesPerSecond = 0;

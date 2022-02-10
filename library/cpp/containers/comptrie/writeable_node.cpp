@@ -1,6 +1,6 @@
-#include "writeable_node.h" 
-#include "node.h" 
-#include "comptrie_impl.h" 
+#include "writeable_node.h"
+#include "node.h"
+#include "comptrie_impl.h"
 
 namespace NCompactTrie {
     TWriteableNode::TWriteableNode()
@@ -26,7 +26,7 @@ namespace NCompactTrie {
         , Label(node.GetLabel())
     {
     }
- 
+
     size_t TWriteableNode::Measure() const {
         size_t len = 2 + LeafLength;
         size_t fwdLen = 0;
@@ -77,7 +77,7 @@ namespace NCompactTrie {
         size_t usedLen = 2;
         usedLen += PackOffset(buffer + usedLen, leftOffset);
         usedLen += PackOffset(buffer + usedLen, rightOffset);
- 
+
         if (LeafPos && LeafLength) {
             memcpy(buffer + usedLen, LeafPos, LeafLength);
             usedLen += LeafLength;

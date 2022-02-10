@@ -4,12 +4,12 @@
 
 #include <util/system/rusage.h>
 #include <util/generic/string.h>
-#include <util/stream/str.h> 
+#include <util/stream/str.h>
 
 class TTimer {
 private:
     TInstant Start_;
-    TStringStream Message_; 
+    TStringStream Message_;
 
 public:
     TTimer(const TStringBuf message = TStringBuf(" took: "));

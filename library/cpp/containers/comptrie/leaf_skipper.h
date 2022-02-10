@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstddef> 
+#include <cstddef>
 
 namespace NCompactTrie {
     class ILeafSkipper {
@@ -23,34 +23,34 @@ namespace NCompactTrie {
         size_t SkipLeaf(const char* p) const override {
             return Packer->SkipLeaf(p);
         }
- 
-        // For test purposes. 
+
+        // For test purposes.
         const TPacker* GetPacker() const {
             return Packer;
         }
     };
- 
-    // The data you need to traverse the trie without unpacking the values. 
-    struct TOpaqueTrie { 
-        const char* Data; 
-        size_t Length; 
-        const ILeafSkipper& SkipFunction; 
- 
-        TOpaqueTrie(const char* data, size_t dataLength, const ILeafSkipper& skipFunction) 
-            : Data(data) 
-            , Length(dataLength) 
-            , SkipFunction(skipFunction) 
+
+    // The data you need to traverse the trie without unpacking the values.
+    struct TOpaqueTrie {
+        const char* Data;
+        size_t Length;
+        const ILeafSkipper& SkipFunction;
+
+        TOpaqueTrie(const char* data, size_t dataLength, const ILeafSkipper& skipFunction)
+            : Data(data)
+            , Length(dataLength)
+            , SkipFunction(skipFunction)
         {
         }
- 
-        bool operator==(const TOpaqueTrie& other) const { 
-            return Data == other.Data && 
+
+        bool operator==(const TOpaqueTrie& other) const {
+            return Data == other.Data &&
                    Length == other.Length &&
                    &SkipFunction == &other.SkipFunction;
-        } 
- 
-        bool operator!=(const TOpaqueTrie& other) const { 
-            return !(*this == other); 
-        } 
-    }; 
+        }
+
+        bool operator!=(const TOpaqueTrie& other) const {
+            return !(*this == other);
+        }
+    };
 }

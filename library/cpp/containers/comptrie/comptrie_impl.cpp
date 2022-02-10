@@ -1,7 +1,7 @@
-#include "comptrie_impl.h" 
+#include "comptrie_impl.h"
 
 #include <util/system/rusage.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 
 // Unpack the leaf value. The algorithm can store up to 8 full bytes in leafs.
 

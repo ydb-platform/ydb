@@ -32,23 +32,23 @@ public:
 
 template <typename T>
 class TAsIsPacker { // this packer is not really a packer...
-public: 
+public:
     void UnpackLeaf(const char* p, T& t) const {
         memcpy(&t, p, sizeof(T));
-    } 
-    void PackLeaf(char* buffer, const T& data, size_t computedSize) const { 
+    }
+    void PackLeaf(char* buffer, const T& data, size_t computedSize) const {
         Y_ASSERT(computedSize == sizeof(data));
         memcpy(buffer, &data, sizeof(T));
-    } 
-    size_t MeasureLeaf(const T& data) const { 
+    }
+    size_t MeasureLeaf(const T& data) const {
         Y_UNUSED(data);
         return sizeof(T);
-    } 
+    }
     size_t SkipLeaf(const char*) const {
-        return sizeof(T); 
-    } 
-}; 
- 
+        return sizeof(T);
+    }
+};
+
 // Implementation
 
 namespace NPackers {
@@ -91,9 +91,9 @@ namespace NPackers {
         return NImpl::TConvertImpl<T, std::is_signed<T>::value>::Convert(data);
     }
 
-    //--------------------------------- 
-    // TIntegralPacker --- for integral types. 
- 
+    //---------------------------------
+    // TIntegralPacker --- for integral types.
+
     template <class T>
     class TIntegralPacker { // can pack only integral types <= ui64
     public:
@@ -196,7 +196,7 @@ namespace NPackers {
         return TIntegralPacker<ui64>().SkipLeaf(p);
     }
 
-    //------------------------------------------- 
+    //-------------------------------------------
     // TFPPacker --- for float/double
     namespace NImpl {
         template <class TFloat, class TUInt>
@@ -250,7 +250,7 @@ namespace NPackers {
 
     //-------------------------------------------
     // TStringPacker --- for TString/TUtf16String and TStringBuf.
- 
+
     template <class TStringType>
     class TStringPacker {
     public:
@@ -486,92 +486,92 @@ namespace NPackers {
         return size1 + size2;
     }
 
-    //------------------------------------------------------------------------------------------ 
+    //------------------------------------------------------------------------------------------
     // Packer for fixed-size arrays, i.e. for std::array.
-    // Saves memory by not storing anything about their size. 
-    // SkipLeaf skips every value, so can be slow for big arrays. 
+    // Saves memory by not storing anything about their size.
+    // SkipLeaf skips every value, so can be slow for big arrays.
     // Requires std::tuple_size<TValue>, TValue::operator[] and possibly TValue::value_type.
-    template <class TValue, class TElementPacker = TPacker<typename TValue::value_type>> 
-    class TArrayPacker { 
-    public: 
-        using TElemPacker = TElementPacker; 
- 
-        enum { 
-            Size = std::tuple_size<TValue>::value
-        }; 
- 
-        void UnpackLeaf(const char* p, TValue& t) const { 
-            const char* buf = p; 
-            for (size_t i = 0; i < Size; ++i) { 
-                TElemPacker().UnpackLeaf(buf, t[i]); 
-                buf += TElemPacker().SkipLeaf(buf); 
-            } 
-        } 
- 
-        void PackLeaf(char* buffer, const TValue& data, size_t computedSize) const { 
-            size_t remainingSize = computedSize; 
-            char* pos = buffer; 
-            for (size_t i = 0; i < Size; ++i) { 
-                const size_t elemSize = TElemPacker().MeasureLeaf(data[i]); 
-                TElemPacker().PackLeaf(pos, data[i], Min(elemSize, remainingSize)); 
-                pos += elemSize; 
-                remainingSize -= elemSize; 
-            } 
-        } 
- 
-        size_t MeasureLeaf(const TValue& data) const { 
-            size_t result = 0; 
-            for (size_t i = 0; i < Size; ++i) { 
-                result += TElemPacker().MeasureLeaf(data[i]); 
-            } 
-            return result; 
-        } 
- 
-        size_t SkipLeaf(const char* p) const // this function better be fast because it is very frequently used 
-        { 
-            const char* buf = p; 
-            for (size_t i = 0; i < Size; ++i) { 
-                buf += TElemPacker().SkipLeaf(buf); 
-            } 
-            return buf - p; 
-        } 
-    }; 
- 
-    //------------------------------------ 
-    // TPacker --- the generic packer. 
+    template <class TValue, class TElementPacker = TPacker<typename TValue::value_type>>
+    class TArrayPacker {
+    public:
+        using TElemPacker = TElementPacker;
 
-    template <class T, bool IsIntegral> 
-    class TPackerImpl; 
+        enum {
+            Size = std::tuple_size<TValue>::value
+        };
+
+        void UnpackLeaf(const char* p, TValue& t) const {
+            const char* buf = p;
+            for (size_t i = 0; i < Size; ++i) {
+                TElemPacker().UnpackLeaf(buf, t[i]);
+                buf += TElemPacker().SkipLeaf(buf);
+            }
+        }
+
+        void PackLeaf(char* buffer, const TValue& data, size_t computedSize) const {
+            size_t remainingSize = computedSize;
+            char* pos = buffer;
+            for (size_t i = 0; i < Size; ++i) {
+                const size_t elemSize = TElemPacker().MeasureLeaf(data[i]);
+                TElemPacker().PackLeaf(pos, data[i], Min(elemSize, remainingSize));
+                pos += elemSize;
+                remainingSize -= elemSize;
+            }
+        }
+
+        size_t MeasureLeaf(const TValue& data) const {
+            size_t result = 0;
+            for (size_t i = 0; i < Size; ++i) {
+                result += TElemPacker().MeasureLeaf(data[i]);
+            }
+            return result;
+        }
+
+        size_t SkipLeaf(const char* p) const // this function better be fast because it is very frequently used
+        {
+            const char* buf = p;
+            for (size_t i = 0; i < Size; ++i) {
+                buf += TElemPacker().SkipLeaf(buf);
+            }
+            return buf - p;
+        }
+    };
+
+    //------------------------------------
+    // TPacker --- the generic packer.
+
+    template <class T, bool IsIntegral>
+    class TPackerImpl;
 
     template <class T>
     class TPackerImpl<T, true>: public TIntegralPacker<T> {
-    }; 
-    // No implementation for non-integral types. 
+    };
+    // No implementation for non-integral types.
 
     template <class T>
     class TPacker: public TPackerImpl<T, std::is_integral<T>::value> {
-    }; 
+    };
 
     template <>
     class TPacker<float>: public TAsIsPacker<float> {
-    }; 
+    };
 
     template <>
     class TPacker<double>: public TAsIsPacker<double> {
-    }; 
+    };
 
-    template <> 
+    template <>
     class TPacker<TString>: public TStringPacker<TString> {
-    }; 
- 
-    template <> 
+    };
+
+    template <>
     class TPacker<TUtf16String>: public TStringPacker<TUtf16String> {
     };
 
     template <>
     class TPacker<TStringBuf>: public TStringPacker<TStringBuf> {
-    }; 
- 
+    };
+
     template <>
     class TPacker<TWtringBuf>: public TStringPacker<TWtringBuf> {
     };

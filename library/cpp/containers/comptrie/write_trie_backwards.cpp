@@ -1,10 +1,10 @@
-#include "write_trie_backwards.h" 
- 
-#include "comptrie_impl.h" 
+#include "write_trie_backwards.h"
+
+#include "comptrie_impl.h"
 #include "leaf_skipper.h"
 
-#include <util/generic/buffer.h> 
-#include <util/generic/vector.h> 
+#include <util/generic/buffer.h>
+#include <util/generic/vector.h>
 
 namespace NCompactTrie {
     size_t WriteTrieBackwards(IOutputStream& os, TReverseNodeEnumerator& enumerator, bool verbose) {

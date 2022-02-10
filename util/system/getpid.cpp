@@ -1,6 +1,6 @@
-#include "getpid.h" 
- 
-#ifdef _win_ 
+#include "getpid.h"
+
+#ifdef _win_
     // The include file should be Windows.h for Windows <=7, Processthreadsapi.h for Windows >=8 and Server 2012,
     // see http://msdn.microsoft.com/en-us/library/windows/desktop/ms683180%28v=vs.85%29.aspx
     // The way to determine windows version is described in http://msdn.microsoft.com/en-us/library/windows/desktop/aa383745%28v=vs.85%29.aspx
@@ -13,11 +13,11 @@
     #include <sys/types.h>
     #include <unistd.h>
 #endif
- 
+
 TProcessId GetPID() {
-#ifdef _win_ 
-    return GetCurrentProcessId(); 
-#else 
-    return getpid(); 
-#endif 
-} 
+#ifdef _win_
+    return GetCurrentProcessId();
+#else
+    return getpid();
+#endif
+}

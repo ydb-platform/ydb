@@ -104,13 +104,13 @@ inline TString ToString(char* s) {
 }
 
 /*
- * Wrapper for wide strings. 
- */ 
+ * Wrapper for wide strings.
+ */
 template <class T>
 inline TUtf16String ToWtring(const T& t) {
     return TUtf16String::FromAscii(ToString(t));
-} 
- 
+}
+
 inline const TUtf16String& ToWtring(const TUtf16String& w) {
     return w;
 }
@@ -122,7 +122,7 @@ inline const TUtf16String& ToWtring(TUtf16String& w) {
 struct TFromStringException: public TBadCastException {
 };
 
-/* 
+/*
  * specialized for:
  *  bool
  *  short

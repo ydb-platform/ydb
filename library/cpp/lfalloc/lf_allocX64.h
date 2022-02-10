@@ -301,12 +301,12 @@ enum EMMapMode {
     MM_HUGE    // memory for large allocs
 };
 
-#ifndef _MSC_VER 
+#ifndef _MSC_VER
 inline void VerifyMmapResult(void* result) {
     if (Y_UNLIKELY(result == MAP_FAILED))
         NMalloc::AbortFromCorruptedAllocator("negative size requested? or just out of mem");
 }
-#endif 
+#endif
 
 #if !defined(_MSC_VER) && !defined(_freebsd_) && defined(_64_)
 static char* AllocWithMMapLinuxImpl(uintptr_t sz, EMMapMode mode) {

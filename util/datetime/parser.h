@@ -61,22 +61,22 @@ struct TDateTimeFields {
         if (MicroSecond > 999999)
             return false;
 
-        if (Year == 1970 && Month == 1 && Day == 1) { 
-            if ((i64)(3600 * Hour + 60 * Minute + Second) < (60 * ZoneOffsetMinutes)) 
-                return false; 
-        } 
- 
+        if (Year == 1970 && Month == 1 && Day == 1) {
+            if ((i64)(3600 * Hour + 60 * Minute + Second) < (60 * ZoneOffsetMinutes))
+                return false;
+        }
+
         return true;
     }
 
-    TInstant ToInstant(TInstant defaultValue) const { 
+    TInstant ToInstant(TInstant defaultValue) const {
         time_t tt = ToTimeT(-1);
         if (tt == -1)
             return defaultValue;
         return TInstant::Seconds(tt) + TDuration::MicroSeconds(MicroSecond);
     }
 
-    time_t ToTimeT(time_t defaultValue) const { 
+    time_t ToTimeT(time_t defaultValue) const {
         if (!IsOk())
             return defaultValue;
         struct tm tm;
@@ -107,28 +107,28 @@ protected:
     int I;
     int Dc;
 
-protected: 
+protected:
     TDateTimeParserBase()
-        : DateTimeFields() 
-        , cs(0) 
+        : DateTimeFields()
+        , cs(0)
         , Sign(0)
         , I(0xDEADBEEF) // to guarantee unittest break if ragel code is incorrect
-        , Dc(0xDEADBEEF) 
+        , Dc(0xDEADBEEF)
     {
     }
- 
-    inline TInstant GetResult(int firstFinalState, TInstant defaultValue) const { 
-        if (cs < firstFinalState) 
-            return defaultValue; 
-        return DateTimeFields.ToInstant(defaultValue); 
-    } 
+
+    inline TInstant GetResult(int firstFinalState, TInstant defaultValue) const {
+        if (cs < firstFinalState)
+            return defaultValue;
+        return DateTimeFields.ToInstant(defaultValue);
+    }
 };
 
 #define DECLARE_PARSER(CLASS)                            \
     struct CLASS: public TDateTimeParserBase {           \
         CLASS();                                         \
         bool ParsePart(const char* input, size_t len);   \
-        TInstant GetResult(TInstant defaultValue) const; \ 
+        TInstant GetResult(TInstant defaultValue) const; \
     };
 
 DECLARE_PARSER(TIso8601DateTimeParser)

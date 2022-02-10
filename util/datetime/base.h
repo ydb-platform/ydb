@@ -69,10 +69,10 @@ bool ParseHTTPDateTimeDeprecated(const char* date, size_t dateLen, time_t& utcTi
 bool ParseX509ValidityDateTimeDeprecated(const char* date, time_t& utcTime);
 bool ParseX509ValidityDateTimeDeprecated(const char* date, size_t dateLen, time_t& utcTime);
 
-bool ParseISO8601DateTime(const char* date, time_t& utcTime); 
-bool ParseISO8601DateTime(const char* date, size_t dateLen, time_t& utcTime); 
-bool ParseRFC822DateTime(const char* date, time_t& utcTime); 
-bool ParseRFC822DateTime(const char* date, size_t dateLen, time_t& utcTime); 
+bool ParseISO8601DateTime(const char* date, time_t& utcTime);
+bool ParseISO8601DateTime(const char* date, size_t dateLen, time_t& utcTime);
+bool ParseRFC822DateTime(const char* date, time_t& utcTime);
+bool ParseRFC822DateTime(const char* date, size_t dateLen, time_t& utcTime);
 bool ParseHTTPDateTime(const char* date, time_t& utcTime);
 bool ParseHTTPDateTime(const char* date, size_t dateLen, time_t& utcTime);
 bool ParseX509ValidityDateTime(const char* date, time_t& utcTime);

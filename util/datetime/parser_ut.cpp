@@ -170,20 +170,20 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         bool r = true;
         time_t t = 0;
 
-        t = 12345; 
+        t = 12345;
         r = ParseRFC822DateTime("", t);
-        UNIT_ASSERT(!r); 
-        UNIT_ASSERT_EQUAL(t, (time_t)12345); 
- 
-        t = 223344; 
+        UNIT_ASSERT(!r);
+        UNIT_ASSERT_EQUAL(t, (time_t)12345);
+
+        t = 223344;
         r = ParseRFC822DateTime("Fri, some junk", t);
-        UNIT_ASSERT(!r); 
-        UNIT_ASSERT_EQUAL(t, (time_t)223344); 
- 
-        t = 54321; 
+        UNIT_ASSERT(!r);
+        UNIT_ASSERT_EQUAL(t, (time_t)223344);
+
+        t = 54321;
         r = ParseRFC822DateTime("Fri, 4 Mar 2005 19:34:45 UTC", t);
         UNIT_ASSERT(!r);
-        UNIT_ASSERT_EQUAL(t, (time_t)54321); 
+        UNIT_ASSERT_EQUAL(t, (time_t)54321);
 
         // TODO: check semantic validity of parsed date (30 Feb, 88:90 etc.).
         // The following tests MUST fail (they don't now)
@@ -263,8 +263,8 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         UNIT_ASSERT(p.ParsePart(part2, strlen(part2)));
         UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(1109954085), p.GetResult(TInstant::Max()));
         p = TRfc822DateTimeParser();
-        const char* part3 = "Fri, 4 Mar 05 19:34:46 +0300"; 
-        UNIT_ASSERT(p.ParsePart(part3, strlen(part3))); 
+        const char* part3 = "Fri, 4 Mar 05 19:34:46 +0300";
+        UNIT_ASSERT(p.ParsePart(part3, strlen(part3)));
         UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(1109954086), p.GetResult(TInstant::Zero()));
     }
 
@@ -276,8 +276,8 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         UNIT_ASSERT(p.ParsePart(part2, strlen(part2)));
         UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(637487057), p.GetResult(TInstant::Max()));
         p = TIso8601DateTimeParser();
-        const char* part3 = "1990-03-15T15:16:18+0732"; 
-        UNIT_ASSERT(p.ParsePart(part3, strlen(part3))); 
+        const char* part3 = "1990-03-15T15:16:18+0732";
+        UNIT_ASSERT(p.ParsePart(part3, strlen(part3)));
         UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(637487058), p.GetResult(TInstant::Zero()));
     }
 
@@ -376,20 +376,20 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         bool ret;
         time_t t;
 
-        t = 12345; 
+        t = 12345;
         ret = ParseISO8601DateTime("", t);
-        UNIT_ASSERT(!ret); 
-        UNIT_ASSERT_EQUAL(t, (time_t)12345); 
- 
+        UNIT_ASSERT(!ret);
+        UNIT_ASSERT_EQUAL(t, (time_t)12345);
+
         // some bad dates
-        t = 54321; 
+        t = 54321;
         ret = ParseISO8601DateTime("a990-01-15", t);
         UNIT_ASSERT(!ret);
-        UNIT_ASSERT_EQUAL(t, (time_t)54321); 
+        UNIT_ASSERT_EQUAL(t, (time_t)54321);
 
         ret = ParseISO8601DateTime("1970-01-01T03:00:00+04:00", t); // this is 1969 GMT
-        UNIT_ASSERT(!ret); 
- 
+        UNIT_ASSERT(!ret);
+
         ret = ParseISO8601DateTime("1987-13-16", t);
         UNIT_ASSERT(!ret);
 

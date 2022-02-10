@@ -190,15 +190,15 @@ private:
 
 #if defined(HAVE_EPOLL_POLLER)
 static inline int ContEpollWait(int epfd, struct epoll_event* events, int maxevents, int timeout) noexcept {
-    int ret; 
+    int ret;
 
-    do { 
+    do {
         ret = epoll_wait(epfd, events, maxevents, Min<int>(timeout, 35 * 60 * 1000));
-    } while (ret == -1 && errno == EINTR); 
+    } while (ret == -1 && errno == EINTR);
 
-    return ret; 
-} 
- 
+    return ret;
+}
+
 template <class TLockPolicy>
 class TEpollPoller {
 public:

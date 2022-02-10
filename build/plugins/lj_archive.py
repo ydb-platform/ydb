@@ -17,8 +17,8 @@ def onlj_archive(unit, *args):
     luas = list(iter_luas(args))
     objs = list(iter_objs(luas))
 
-    unit.onarchive_by_keys(['DONTCOMPRESS', 'NAME', 'LuaScripts.inc', 'KEYS', ':'.join(luas)] + objs) 
-    unit.onarchive_by_keys(['DONTCOMPRESS', 'NAME', 'LuaSources.inc', 'KEYS', ':'.join(luas)] + luas) 
+    unit.onarchive_by_keys(['DONTCOMPRESS', 'NAME', 'LuaScripts.inc', 'KEYS', ':'.join(luas)] + objs)
+    unit.onarchive_by_keys(['DONTCOMPRESS', 'NAME', 'LuaSources.inc', 'KEYS', ':'.join(luas)] + luas)
 
 def onlj_21_archive(unit, *args):
     """

@@ -146,7 +146,7 @@ RECURSE(
     channels
     chart-studio
     CherryPy
-    cherrypy-cors
+    cherrypy-cors 
     ciso8601
     clang
     clang/example
@@ -310,7 +310,7 @@ RECURSE(
     djangorestframework-camel-case
     djangorestframework-csv
     djangorestframework-filters
-    djangorestframework-jsonp
+    djangorestframework-jsonp 
     djangorestframework-xml
     dm.xmlsec.binding
     dnspython
@@ -1148,7 +1148,7 @@ RECURSE(
     webstruct
     WebTest
     webvtt-py
-    weighted-levenshtein
+    weighted-levenshtein 
     Werkzeug
     wheel
     whitenoise

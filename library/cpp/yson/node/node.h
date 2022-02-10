@@ -202,7 +202,7 @@ public:
 
     const TNode& operator[](const TStringBuf key) const;
     TNode& operator[](const TStringBuf key);
-    const TNode& At(const TStringBuf key) const; 
+    const TNode& At(const TStringBuf key) const;
     TNode& At(const TStringBuf key);
 
     // map getters

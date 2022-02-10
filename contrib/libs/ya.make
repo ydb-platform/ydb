@@ -64,7 +64,7 @@ RECURSE(
     farmhash/ut
     faster-rnnlm
     fastlz
-    fastops 
+    fastops
     fcgi
     ffmpeg-3
     ffmpeg-3.4.1

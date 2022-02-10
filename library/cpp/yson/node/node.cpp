@@ -540,17 +540,17 @@ TNode& TNode::operator[](const TStringBuf key)
     return std::get<TMapType>(Value_)[key];
 }
 
-const TNode& TNode::At(const TStringBuf key) const { 
-    CheckType(Map); 
+const TNode& TNode::At(const TStringBuf key) const {
+    CheckType(Map);
     const auto& map = std::get<TMapType>(Value_);
-    TMapType::const_iterator i = map.find(key); 
-    if (i == map.end()) { 
+    TMapType::const_iterator i = map.find(key);
+    if (i == map.end()) {
         ythrow TLookupError() << "Cannot find key " << key;
-    } else { 
-        return i->second; 
-    } 
-} 
- 
+    } else {
+        return i->second;
+    }
+}
+
 TNode& TNode::At(const TStringBuf key) {
     CheckType(Map);
     auto& map = std::get<TMapType>(Value_);

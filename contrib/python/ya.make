@@ -158,7 +158,7 @@ RECURSE(
     clickhouse-cityhash
     clickhouse-driver
     clickhouse-sqlalchemy
-    cloudpickle 
+    cloudpickle
     color
     colorama
     coloredlogs

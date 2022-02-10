@@ -38,7 +38,7 @@ RECURSE(
     aiosocksy
     aiosqlite
     aiotg
-    aiounittest 
+    aiounittest
     aiozipkin
     aiozk
     alabaster
@@ -58,7 +58,7 @@ RECURSE(
     appdirs
     APScheduler
     apsw
-    aresponses 
+    aresponses
     argcomplete
     argon2-cffi
     argon2-cffi-bindings
@@ -894,7 +894,7 @@ RECURSE(
     python-debian
     python-decouple
     python-docx
-    python-dotenv 
+    python-dotenv
     python-editor
     python-geohash
     python-gnupg

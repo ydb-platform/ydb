@@ -101,7 +101,7 @@ RECURSE(
     printtrie
     printurls
     printwzrd
-    printwzrd/scripts 
+    printwzrd/scripts
     printwzrd/tests
     printxmap
     printxref

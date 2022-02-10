@@ -1,7 +1,7 @@
 import json
 
-from . import process 
-from . import runtime 
+from . import process
+from . import runtime
 
 
 def execute_benchmark(path, budget=None, threads=None):

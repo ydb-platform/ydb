@@ -1,1 +1,1 @@
-OWNER(g:yatest g:java-contrib) 
+OWNER(g:yatest g:java-contrib)

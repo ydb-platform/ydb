@@ -12,7 +12,7 @@ RECURSE(
     pytest_runner
     pytest_runner/example
     pytest_runner/test
-    recipe 
+    recipe
     system_info
     types_test
     yapackage

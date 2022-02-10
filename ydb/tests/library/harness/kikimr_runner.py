@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 import logging
-import os 
-import shutil 
-import tempfile 
+import os
+import shutil
+import tempfile
 import time
 import itertools
 from google.protobuf import text_format
- 
+
 import ydb.tests.library.common.yatest_common as yatest_common
 
 from ydb.tests.library.common.wait_for import wait_for
@@ -19,11 +19,11 @@ from . import kikimr_cluster_interface
 import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_started_on_some_node
 from library.python import resource
- 
+
 
 logger = logging.getLogger(__name__)
- 
- 
+
+
 def get_unique_path_for_current_test(output_path, sub_folder):
     test_name = yatest_common.context.test_name or ""
     test_name = test_name.replace(':', '_')
@@ -56,7 +56,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__cluster_name = cluster_name
         self.__configurator = configurator
         self.__common_udfs_dir = udfs_dir
- 
+
         self.__encryption_key = encryption_key
         self._tenant_affiliation = tenant_affiliation if tenant_affiliation is not None else 'dynamic'
         self.grpc_port = port_allocator.grpc_port
@@ -77,7 +77,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         )
         self.__cms_config_cache_file_name = self.__cms_config_cache_file.name
         daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240)
- 
+
     @property
     def cwd(self):
         if self.__cwd is None:
@@ -115,10 +115,10 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         command = [self.__configurator.binary_path, "server"]
         if self.__common_udfs_dir is not None:
             command.append("--udfs-dir={}".format(self.__common_udfs_dir))
- 
+
         if self.__configurator.suppress_version_check:
             command.append("--suppress-version-check")
- 
+
         if self.__node_broker_port is not None:
             command.append("--node-broker=%s%s:%d" % (
                 "grpcs://" if self.__configurator.grpc_ssl_enable else "",
@@ -154,7 +154,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--cms-config-cache-file=%s" % self.cms_config_cache_file_name,
             ]
         )
- 
+
         if self.__encryption_key is not None:
             command.extend(["--key-file", self.__encryption_key])
 
@@ -164,7 +164,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         logger.info('CFG_DIR_PATH="%s"', self.__config_path)
         logger.info("Final command: %s", ' '.join(command).replace(self.__config_path, '$CFG_DIR_PATH'))
         return command
- 
+
     def stop(self):
         try:
             super(KiKiMRNode, self).stop()
@@ -202,8 +202,8 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             super(KiKiMRNode, self).start()
         finally:
             logger.info("Started node %s", self)
- 
- 
+
+
 class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def __init__(self, configurator=None, cluster_name=''):
         super(KiKiMR, self).__init__()
@@ -263,7 +263,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             raise
 
     def start(self):
-        """ 
+        """
         Safely starts kikimr instance.
         Do not override this method.
         """
@@ -288,7 +288,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
         for node_id in self.__configurator.all_node_ids():
             self.__run_node(node_id)
- 
+
         self.__wait_for_bs_controller_to_start()
         self.__add_bs_box()
 
@@ -409,10 +409,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 )
             )
         return self.__config_path
- 
+
     def __write_configs(self):
         self.__configurator.write_proto_configs(self.config_path)
- 
+
     def __instantiate_udfs_dir(self):
         to_load = self.__configurator.get_yql_udfs_to_load()
         if len(to_load) == 0:
@@ -427,7 +427,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for pdisk in self.__configurator.pdisks_info:
             if pdisk['node_id'] != node_id:
                 continue
- 
+
             self.nodes[node_id].format_pdisk(**pdisk)
 
     def __add_bs_box(self):

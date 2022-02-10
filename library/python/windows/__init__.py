@@ -6,10 +6,10 @@ import sys
 import shutil
 import logging
 
-from six import reraise 
- 
-import library.python.func 
-import library.python.strings 
+from six import reraise
+
+import library.python.func
+import library.python.strings
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ RETRIABLE_DIR_ERRORS = (ERRORS['ACCESS_DENIED'], ERRORS['DIR_NOT_EMPTY'], ERRORS
 
 
 # Check if on Windows
-@library.python.func.lazy 
+@library.python.func.lazy
 def on_win():
     return os.name == 'nt'
 
@@ -78,7 +78,7 @@ def errorfix(f):
         except WindowsError:
             tp, value, tb = sys.exc_info()
             fix_error(value)
-            reraise(tp, value, tb) 
+            reraise(tp, value, tb)
 
     return f_wrapped
 
@@ -100,7 +100,7 @@ if on_win():
     import msvcrt
     import time
 
-    import library.python.strings 
+    import library.python.strings
 
     _has_ctypes = True
     try:
@@ -153,7 +153,7 @@ if on_win():
                     raise
                 ei = sys.exc_info()
                 time.sleep(delay)
-        reraise(ei[0], ei[1], ei[2]) 
+        reraise(ei[0], ei[1], ei[2])
 
     # Placeholder for disabled functions
     @win_only
@@ -170,7 +170,7 @@ if on_win():
 
     @win_only
     def unicode_path(path):
-        return library.python.strings.to_unicode(path, library.python.strings.fs_encoding()) 
+        return library.python.strings.to_unicode(path, library.python.strings.fs_encoding())
 
     @win_only
     @require_ctypes
@@ -189,9 +189,9 @@ if on_win():
 
     @win_only
     def transcode_error(windows_error, to_enc='utf-8'):
-        from_enc = 'utf-8' if getattr(windows_error, 'utf8', False) else library.python.strings.guess_default_encoding() 
+        from_enc = 'utf-8' if getattr(windows_error, 'utf8', False) else library.python.strings.guess_default_encoding()
         if from_enc != to_enc:
-            windows_error.strerror = library.python.strings.to_str(windows_error.strerror, to_enc=to_enc, from_enc=from_enc) 
+            windows_error.strerror = library.python.strings.to_str(windows_error.strerror, to_enc=to_enc, from_enc=from_enc)
         setattr(windows_error, 'utf8', to_enc == 'utf-8')
 
     class Transaction(object):
@@ -236,7 +236,7 @@ if on_win():
     @win_only
     @require_ctypes
     def replace_file_across_devices(src, dst):
-        with Transaction(timeout=_ATOMIC_RENAME_FILE_TRANSACTION_DEFAULT_TIMEOUT, description='ya library.python.windows replace_file_across_devices') as transaction: 
+        with Transaction(timeout=_ATOMIC_RENAME_FILE_TRANSACTION_DEFAULT_TIMEOUT, description='ya library.python.windows replace_file_across_devices') as transaction:
             if not ctypes.windll.kernel32.MoveFileTransactedW(unicode_path(src), unicode_path(dst), None, None, _MOVEFILE_REPLACE_EXISTING | _MOVEFILE_WRITE_THROUGH, transaction):
                 raise ctypes.WinError()
 

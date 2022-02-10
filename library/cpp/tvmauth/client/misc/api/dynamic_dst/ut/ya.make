@@ -6,6 +6,6 @@ SRCS(
     tvm_client_ut.cpp
 )
 
-ENV(YA_TEST_SHORTEN_WINE_PATH=1) 
- 
+ENV(YA_TEST_SHORTEN_WINE_PATH=1)
+
 END()

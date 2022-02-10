@@ -18,12 +18,12 @@ def _get_ya_config():
         import pytest
         return pytest.config
     except (ImportError, AttributeError):
-        try: 
-            import library.python.testing.recipe 
-            if library.python.testing.recipe.ya: 
-                return library.python.testing.recipe 
-        except (ImportError, AttributeError): 
-            pass 
+        try:
+            import library.python.testing.recipe
+            if library.python.testing.recipe.ya:
+                return library.python.testing.recipe
+        except (ImportError, AttributeError):
+            pass
         raise NotImplementedError("yatest.common.* is only available from the testing runtime")
 
 
@@ -160,11 +160,11 @@ def work_path(path=None):
     :param path: path relative to the test suite working dir
     :return: absolute path inside the test suite working dir
     """
-    return _join_path( 
-        os.environ.get("TEST_WORK_PATH") or 
-            _get_ya_plugin_instance().get_context("work_path") or 
-            os.getcwd(), 
-        path) 
+    return _join_path(
+        os.environ.get("TEST_WORK_PATH") or
+            _get_ya_plugin_instance().get_context("work_path") or
+            os.getcwd(),
+        path)
 
 
 def python_path():
@@ -304,10 +304,10 @@ class Context(object):
         return _get_ya_plugin_instance().get_context("test_stderr")
 
     @property
-    def test_debug(self): 
-        return _get_ya_plugin_instance().get_context("test_debug") 
- 
-    @property 
+    def test_debug(self):
+        return _get_ya_plugin_instance().get_context("test_debug")
+
+    @property
     def test_traceback(self):
         return _get_ya_plugin_instance().get_context("test_traceback")
 
@@ -315,29 +315,29 @@ class Context(object):
     def test_name(self):
         return _get_ya_config().current_test_name
 
-    @property 
-    def sanitize(self): 
+    @property
+    def sanitize(self):
         """
         Detect if current test run is under sanitizer
 
         :return: one of `None`, 'address', 'memory', 'thread', 'undefined'
         """
-        return _get_ya_plugin_instance().get_context("sanitize") 
- 
-    @property 
-    def flags(self): 
-        _flags = _get_ya_plugin_instance().get_context("flags") 
-        if _flags: 
-            _flags_dict = dict() 
-            for f in _flags: 
-                key, value = f.split('=', 1) 
-                _flags_dict[key] = value 
-            return _flags_dict 
-        else: 
-            return dict() 
- 
-    def get_context_key(self, key): 
-        return _get_ya_plugin_instance().get_context(key) 
- 
- 
+        return _get_ya_plugin_instance().get_context("sanitize")
+
+    @property
+    def flags(self):
+        _flags = _get_ya_plugin_instance().get_context("flags")
+        if _flags:
+            _flags_dict = dict()
+            for f in _flags:
+                key, value = f.split('=', 1)
+                _flags_dict[key] = value
+            return _flags_dict
+        else:
+            return dict()
+
+    def get_context_key(self, key):
+        return _get_ya_plugin_instance().get_context(key)
+
+
 context = Context()

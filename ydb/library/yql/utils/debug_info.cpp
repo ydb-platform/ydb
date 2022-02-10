@@ -30,8 +30,8 @@ void SetCurrentOperationId(const char* operationId) {
     const char* threadName = nullptr;
     if (len > THREAD_NAME_MAX_LENGTH) {
         threadName = operationId + (len - THREAD_NAME_MAX_LENGTH + 1);
-    } else { 
-        threadName = operationId; 
+    } else {
+        threadName = operationId;
     }
     TThread::SetCurrentThreadName(threadName);
 }

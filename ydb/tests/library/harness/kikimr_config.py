@@ -319,7 +319,7 @@ class KikimrConfigGenerator(object):
                 with open(fpath, 'wb') as f:
                     f.write(data)
 
-    def write_proto_configs(self, configs_path): 
+    def write_proto_configs(self, configs_path):
         self.write_tls_data()
         with open(os.path.join(configs_path, "config.yaml"), "w") as writer:
             writer.write(yaml.safe_dump(self.yaml_config))

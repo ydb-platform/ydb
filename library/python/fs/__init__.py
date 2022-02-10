@@ -10,9 +10,9 @@ import six
 import stat
 import sys
 
-import library.python.func 
-import library.python.strings 
-import library.python.windows 
+import library.python.func
+import library.python.strings
+import library.python.windows
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ except NameError:
 
 
 _diehard_win_tries = 10
-errorfix_win = library.python.windows.errorfix 
+errorfix_win = library.python.windows.errorfix
 
 
 class CustomFsError(OSError):
@@ -69,7 +69,7 @@ def create_dirs(path):
 #   if src is file and dst is dir - throws OSError (errno EISDIR)
 # On Windows, if dst exists - throws OSError (errno EEXIST)
 @errorfix_win
-@library.python.windows.diehard(library.python.windows.RETRIABLE_FILE_ERRORS, tries=_diehard_win_tries) 
+@library.python.windows.diehard(library.python.windows.RETRIABLE_FILE_ERRORS, tries=_diehard_win_tries)
 def move(src, dst):
     os.rename(src, dst)
 
@@ -87,10 +87,10 @@ def move(src, dst):
 #   if dst is file - replaces it
 #   if dst is dir - throws OSError (errno EACCES)
 @errorfix_win
-@library.python.windows.diehard(library.python.windows.RETRIABLE_FILE_ERRORS, tries=_diehard_win_tries) 
+@library.python.windows.diehard(library.python.windows.RETRIABLE_FILE_ERRORS, tries=_diehard_win_tries)
 def replace_file(src, dst):
-    if library.python.windows.on_win(): 
-        library.python.windows.replace_file(src, dst) 
+    if library.python.windows.on_win():
+        library.python.windows.replace_file(src, dst)
     else:
         os.rename(src, dst)
 
@@ -114,7 +114,7 @@ def replace(src, dst):
 # Atomic file remove
 # Throws OSError
 @errorfix_win
-@library.python.windows.diehard(library.python.windows.RETRIABLE_FILE_ERRORS, tries=_diehard_win_tries) 
+@library.python.windows.diehard(library.python.windows.RETRIABLE_FILE_ERRORS, tries=_diehard_win_tries)
 def remove_file(path):
     os.remove(path)
 
@@ -122,7 +122,7 @@ def remove_file(path):
 # Atomic empty directory remove
 # Throws OSError
 @errorfix_win
-@library.python.windows.diehard(library.python.windows.RETRIABLE_DIR_ERRORS, tries=_diehard_win_tries) 
+@library.python.windows.diehard(library.python.windows.RETRIABLE_DIR_ERRORS, tries=_diehard_win_tries)
 def remove_dir(path):
     os.rmdir(path)
 
@@ -136,10 +136,10 @@ def fix_path_encoding(path):
 # Throws OSError, AssertionError
 @errorfix_win
 def remove_tree(path):
-    @library.python.windows.diehard(library.python.windows.RETRIABLE_DIR_ERRORS, tries=_diehard_win_tries) 
+    @library.python.windows.diehard(library.python.windows.RETRIABLE_DIR_ERRORS, tries=_diehard_win_tries)
     def rmtree(path):
-        if library.python.windows.on_win(): 
-            library.python.windows.rmtree(path) 
+        if library.python.windows.on_win():
+            library.python.windows.rmtree(path)
         else:
             shutil.rmtree(fix_path_encoding(path))
 
@@ -190,8 +190,8 @@ def ensure_removed(path):
 # If dst exists - throws OSError (errno EEXIST)
 @errorfix_win
 def hardlink(src, lnk):
-    if library.python.windows.on_win(): 
-        library.python.windows.hardlink(src, lnk) 
+    if library.python.windows.on_win():
+        library.python.windows.hardlink(src, lnk)
     else:
         os.link(src, lnk)
 
@@ -228,8 +228,8 @@ def hardlink_or_copy(src, lnk):
 # If dst exists - throws OSError (errno EEXIST)
 @errorfix_win
 def symlink(src, lnk):
-    if library.python.windows.on_win(): 
-        library.python.windows.run_disabled(src, lnk) 
+    if library.python.windows.on_win():
+        library.python.windows.run_disabled(src, lnk)
     else:
         os.symlink(src, lnk)
 
@@ -306,7 +306,7 @@ def read_file_unicode(path, binary=True, enc='utf-8'):
             with open(path, 'r', encoding=enc) as f:
                 return f.read()
     # codecs.open is always binary
-    with codecs.open(path, 'r', encoding=enc, errors=library.python.strings.ENCODING_ERRORS_POLICY) as f: 
+    with codecs.open(path, 'r', encoding=enc, errors=library.python.strings.ENCODING_ERRORS_POLICY) as f:
         return f.read()
 
 

@@ -19,9 +19,9 @@ try:
 except ImportError:
     cores = None
 
-from . import runtime 
-from . import path 
-from . import environment 
+from . import runtime
+from . import path
+from . import environment
 
 
 MAX_OUT_LEN = 1000 * 1000  # 1 mb
@@ -48,11 +48,11 @@ class ExecutionError(Exception):
 
     def __init__(self, execution_result):
         if not isinstance(execution_result.command, six.string_types):
-            command = " ".join(str(arg) for arg in execution_result.command) 
-        else: 
-            command = execution_result.command 
+            command = " ".join(str(arg) for arg in execution_result.command)
+        else:
+            command = execution_result.command
         message = "Command '{command}' has failed with code {code}.\nErrors:\n{err}\n".format(
-            command=command, 
+            command=command,
             code=execution_result.exit_code,
             err=_format_error(execution_result.std_err))
         if cores:
@@ -62,7 +62,7 @@ class ExecutionError(Exception):
             message += "Backtrace is not available: module cores isn't available"
 
         super(ExecutionError, self).__init__(message)
-        self.execution_result = execution_result 
+        self.execution_result = execution_result
 
 
 class TimeoutError(Exception):
@@ -274,7 +274,7 @@ class _Execution(object):
                     afile.write(six.ensure_binary(self._backtrace))
                 # generate pretty html version of backtrace aka Tri Korochki
                 pbt_filename = bt_filename + ".html"
-                backtrace_to_html(bt_filename, pbt_filename) 
+                backtrace_to_html(bt_filename, pbt_filename)
 
             if store_cores:
                 runtime._register_core(os.path.basename(self.command[0]), self.command[0], core_path, bt_filename, pbt_filename)
@@ -288,11 +288,11 @@ class _Execution(object):
             try:
                 if hasattr(os, "wait4"):
                     try:
-                        if hasattr(subprocess, "_eintr_retry_call"): 
-                            pid, sts, rusage = subprocess._eintr_retry_call(os.wait4, self._process.pid, 0) 
-                        else: 
-                            # PEP 475 
-                            pid, sts, rusage = os.wait4(self._process.pid, 0) 
+                        if hasattr(subprocess, "_eintr_retry_call"):
+                            pid, sts, rusage = subprocess._eintr_retry_call(os.wait4, self._process.pid, 0)
+                        else:
+                            # PEP 475
+                            pid, sts, rusage = os.wait4(self._process.pid, 0)
                         finished = time.time()
                         self._process._handle_exitstatus(sts)
                         for field in [
@@ -447,7 +447,7 @@ def execute(
     """
     if env is None:
         env = os.environ.copy()
-    else: 
+    else:
         # Certain environment variables must be present for programs to work properly.
         # For more info see DEVTOOLSSUPPORT-4907
         mandatory_env_name = 'YA_MANDATORY_ENV_VARS'
@@ -458,10 +458,10 @@ def execute(
         else:
             mandatory_system_vars = ['TMPDIR']
 
-        for var in mandatory_system_vars: 
-            if var not in env and var in os.environ: 
-                env[var] = os.environ[var] 
- 
+        for var in mandatory_system_vars:
+            if var not in env and var in os.environ:
+                env[var] = os.environ[var]
+
     if not wait and timeout is not None:
         raise ValueError("Incompatible arguments 'timeout' and wait=False")
 
@@ -518,7 +518,7 @@ def execute(
     else:
         yatest_logger.debug("Executing '%s' in '%s'", command, cwd)
     # XXX
- 
+
     started = time.time()
     process = subprocess.Popen(
         command, shell=shell, universal_newlines=True,
@@ -703,9 +703,9 @@ def check_glibc_version(binary_path):
         if not match:
             continue
         assert distutils.version.LooseVersion(match.group(1)) <= lucid_glibc_version, match.group(0)
- 
- 
-def backtrace_to_html(bt_filename, output): 
+
+
+def backtrace_to_html(bt_filename, output):
     try:
         from library.python import coredump_filter
         with open(output, "wb") as afile:

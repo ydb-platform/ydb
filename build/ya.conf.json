@@ -3960,7 +3960,7 @@
                     "default": true
                 }
             ]
-        }, 
+        },
         "idea_run_plugin": {
             "tools": {
                 "idea_run_plugin": {
@@ -4270,12 +4270,12 @@
                 }
             ]
         },
-        "kiwi_protos": { 
-            "tools": { 
+        "kiwi_protos": {
+            "tools": {
                 "kiwi_protos": {
                     "bottle": "kiwi_protos"
                 }
-            }, 
+            },
             "platforms": [
                 {
                     "host": {
@@ -7026,7 +7026,7 @@
         },
         "kwfeed": {
             "formula": {
-                "sandbox_id": 36077631, 
+                "sandbox_id": 36077631,
                 "match": "KWFeed"
             },
             "executable": {
@@ -7073,7 +7073,7 @@
         },
         "kwmktorrent": {
             "formula": {
-                "sandbox_id": 451506451, 
+                "sandbox_id": 451506451,
                 "match": "KWMKTorrent"
             },
             "executable": {
@@ -7084,7 +7084,7 @@
         },
         "kwmqbuild": {
             "formula": {
-                "sandbox_id": 41067877, 
+                "sandbox_id": 41067877,
                 "match": "KWMQBuild"
             },
             "executable": {
@@ -7129,16 +7129,16 @@
                 "sandbox_id": 42519064,
                 "match": "fast_diff"
             }
-        }, 
+        },
         "kiwi_protos": {
-            "formula": { 
-                "sandbox_id": 32521995, 
-                "match": "KiWi python protos" 
-            } 
+            "formula": {
+                "sandbox_id": 32521995,
+                "match": "KiWi python protos"
+            }
         },
         "allure_commandline": {
             "formula": {
-                "sandbox_id": 569859192, 
+                "sandbox_id": 569859192,
                 "match": "Allure Commandline"
             },
             "executable": {

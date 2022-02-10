@@ -1,4 +1,4 @@
-from . import canonical 
+from . import canonical
 
 
 def old_canonical_file(output_file_name, storage_md5):

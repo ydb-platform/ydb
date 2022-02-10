@@ -296,7 +296,7 @@ RECURSE(
     django-sitemessage
     django-sitetree
     django-sortedm2m
-    django-storages 
+    django-storages
     django-tastypie
     django-test-migrations
     django-timezone-field
@@ -434,22 +434,22 @@ RECURSE(
     gemfileparser
     gensim
     GeoAlchemy2
-    geobuf 
+    geobuf
     geoindex
     gevent
     gino
-    gitdb2 
+    gitdb2
     github3.py
-    GitPython 
+    GitPython
     glob2
     glom
     goerr
-    google-api-core 
+    google-api-core
     google-api-python-client
-    google-auth 
+    google-auth
     google-auth-httplib2
     google-auth-oauthlib
-    google-cloud-speech 
+    google-cloud-speech
     google-pasta
     googleads
     gpxpy
@@ -617,7 +617,7 @@ RECURSE(
     matplotlib-inline
     mccabe
     mecab-python3
-    meld3 
+    meld3
     memory-profiler
     mercurial
     mistune
@@ -825,7 +825,7 @@ RECURSE(
     PyJWT
     pykdtree
     pyketama
-    pylev 
+    pylev
     pylint
     pylxd
     pylzma
@@ -863,7 +863,7 @@ RECURSE(
     pytest-bdd
     pytest-datadir
     pytest-datafixtures
-    pytest-django 
+    pytest-django
     pytest-falcon
     pytest-falcon-client
     pytest-fixture-config

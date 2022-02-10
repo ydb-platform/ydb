@@ -1,6 +1,6 @@
 # coding: utf-8
 import re
-import sys 
+import sys
 
 
 RESTART_TEST_INDICATOR = '##restart-test##'
@@ -227,20 +227,20 @@ class YaTestTags(Enum):
     NotAutocheck = "ya:not_autocheck"
 
 
-class Status(object): 
+class Status(object):
     GOOD, XFAIL, FAIL, XPASS, MISSING, CRASHED, TIMEOUT = range(1, 8)
-    SKIPPED = -100 
-    NOT_LAUNCHED = -200 
-    CANON_DIFF = -300 
-    DESELECTED = -400 
-    INTERNAL = -sys.maxint 
+    SKIPPED = -100
+    NOT_LAUNCHED = -200
+    CANON_DIFF = -300
+    DESELECTED = -400
+    INTERNAL = -sys.maxint
     FLAKY = -50
-    BY_NAME = {'good': GOOD, 'fail': FAIL, 'xfail': XFAIL, 'xpass': XPASS, 'missing': MISSING, 'crashed': CRASHED, 
-               'skipped': SKIPPED, 'flaky': FLAKY, 'not_launched': NOT_LAUNCHED, 'timeout': TIMEOUT, 'diff': CANON_DIFF, 
-               'internal': INTERNAL, 'deselected': DESELECTED} 
-    TO_STR = {GOOD: 'good', FAIL: 'fail', XFAIL: 'xfail', XPASS: 'xpass', MISSING: 'missing', CRASHED: 'crashed', 
-              SKIPPED: 'skipped', FLAKY: 'flaky', NOT_LAUNCHED: 'not_launched', TIMEOUT: 'timeout', CANON_DIFF: 'diff', 
-              INTERNAL: 'internal', DESELECTED: 'deselected'} 
+    BY_NAME = {'good': GOOD, 'fail': FAIL, 'xfail': XFAIL, 'xpass': XPASS, 'missing': MISSING, 'crashed': CRASHED,
+               'skipped': SKIPPED, 'flaky': FLAKY, 'not_launched': NOT_LAUNCHED, 'timeout': TIMEOUT, 'diff': CANON_DIFF,
+               'internal': INTERNAL, 'deselected': DESELECTED}
+    TO_STR = {GOOD: 'good', FAIL: 'fail', XFAIL: 'xfail', XPASS: 'xpass', MISSING: 'missing', CRASHED: 'crashed',
+              SKIPPED: 'skipped', FLAKY: 'flaky', NOT_LAUNCHED: 'not_launched', TIMEOUT: 'timeout', CANON_DIFF: 'diff',
+              INTERNAL: 'internal', DESELECTED: 'deselected'}
 
 
 class _Colors(object):

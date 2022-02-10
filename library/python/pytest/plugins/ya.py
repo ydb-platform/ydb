@@ -52,8 +52,8 @@ import yatest_lib.tools
 
 import yatest_lib.external as canon
 
-import yatest_lib.ya 
- 
+import yatest_lib.ya
+
 from library.python.pytest import context
 
 console_logger = logging.getLogger("console")
@@ -150,7 +150,7 @@ def pytest_addoption(parser):
     parser.addoption("--test-file-filter", action="store", dest="test_file_filter", default=None, help="test file filter")
     parser.addoption("--test-param", action="append", dest="test_params", default=None, help="test parameters")
     parser.addoption("--test-log-level", action="store", dest="test_log_level", choices=["critical", "error", "warning", "info", "debug"], default="debug", help="test log level")
-    parser.addoption("--mode", action="store", choices=[yatest_lib.ya.RunMode.List, yatest_lib.ya.RunMode.Run], dest="mode", default=yatest_lib.ya.RunMode.Run, help="testing mode") 
+    parser.addoption("--mode", action="store", choices=[yatest_lib.ya.RunMode.List, yatest_lib.ya.RunMode.Run], dest="mode", default=yatest_lib.ya.RunMode.Run, help="testing mode")
     parser.addoption("--test-list-file", action="store", dest="test_list_file")
     parser.addoption("--modulo", default=1, type=int)
     parser.addoption("--modulo-index", default=0, type=int)
@@ -159,9 +159,9 @@ def pytest_addoption(parser):
     parser.addoption("--project-path", action="store", default="", help="path to CMakeList where test is declared")
     parser.addoption("--build-type", action="store", default="", help="build type")
     parser.addoption("--flags", action="append", dest="flags", default=[], help="build flags (-D)")
-    parser.addoption("--sanitize", action="store", default="", help="sanitize mode") 
+    parser.addoption("--sanitize", action="store", default="", help="sanitize mode")
     parser.addoption("--test-stderr", action="store_true", default=False, help="test stderr")
-    parser.addoption("--test-debug", action="store_true", default=False, help="test debug mode") 
+    parser.addoption("--test-debug", action="store_true", default=False, help="test debug mode")
     parser.addoption("--root-dir", action="store", default=None)
     parser.addoption("--ya-trace", action="store", dest="ya_trace_path", default=None, help="path to ya trace report")
     parser.addoption("--ya-version", action="store", dest="ya_version", default=0, type=int, help="allows to be compatible with ya and the new changes in ya-dev")
@@ -197,17 +197,17 @@ def pytest_configure(config):
     context = {
         "project_path": config.option.project_path,
         "test_stderr": config.option.test_stderr,
-        "test_debug": config.option.test_debug, 
+        "test_debug": config.option.test_debug,
         "build_type": config.option.build_type,
         "test_traceback": config.option.tbstyle,
-        "flags": config.option.flags, 
-        "sanitize": config.option.sanitize, 
+        "flags": config.option.flags,
+        "sanitize": config.option.sanitize,
     }
- 
-    if config.option.collectonly: 
-        config.option.mode = yatest_lib.ya.RunMode.List 
- 
-    config.ya = yatest_lib.ya.Ya( 
+
+    if config.option.collectonly:
+        config.option.mode = yatest_lib.ya.RunMode.List
+
+    config.ya = yatest_lib.ya.Ya(
         config.option.mode,
         config.option.source_root,
         config.option.build_root,
@@ -491,13 +491,13 @@ def pytest_collection_modifyitems(items, config):
                 items.extend(item)
             yatest_logger.info("Modulo %s tests are: %s", modulo_index, chunk_items)
 
-    if config.option.mode == yatest_lib.ya.RunMode.Run: 
+    if config.option.mode == yatest_lib.ya.RunMode.Run:
         for item in items:
             test_item = NotLaunchedTestItem(item.nodeid, config.option.test_suffix)
             config.ya_trace_reporter.on_start_test_class(test_item)
             config.ya_trace_reporter.on_finish_test_case(test_item)
             config.ya_trace_reporter.on_finish_test_class(test_item)
-    elif config.option.mode == yatest_lib.ya.RunMode.List: 
+    elif config.option.mode == yatest_lib.ya.RunMode.List:
         tests = []
         for item in items:
             item = CustomTestItem(item.nodeid, pytest_config.option.test_suffix, item.keywords)
@@ -695,7 +695,7 @@ class TestItem(object):
         if isinstance(entry, _pytest.reports.BaseReport):
             self._error = get_formatted_error(entry)
         else:
-            self._error = "[[{}]]{}".format(yatest_lib.tools.to_str(marker), yatest_lib.tools.to_str(entry)) 
+            self._error = "[[{}]]{}".format(yatest_lib.tools.to_str(marker), yatest_lib.tools.to_str(entry))
 
     @property
     def duration(self):
@@ -811,7 +811,7 @@ class TraceReportGenerator(object):
 
     def on_finish_test_class(self, test_item):
         pytest_config.ya.set_test_item_node_id(test_item.nodeid)
-        self.trace('test-finished', {'class': test_item.class_name.decode('utf-8') if sys.version_info[0] < 3 else test_item.class_name}) 
+        self.trace('test-finished', {'class': test_item.class_name.decode('utf-8') if sys.version_info[0] < 3 else test_item.class_name})
 
     def on_start_test_case(self, test_item):
         class_name = yatest_lib.tools.to_utf8(test_item.class_name)
@@ -888,7 +888,7 @@ class TraceReportGenerator(object):
             'name': name
         }
 
-        data = yatest_lib.tools.to_str(json.dumps(event, ensure_ascii=False)) 
+        data = yatest_lib.tools.to_str(json.dumps(event, ensure_ascii=False))
         self._file.write(data + '\n')
         self._file.flush()
 

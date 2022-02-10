@@ -4,16 +4,16 @@ import errno
 import os
 import pytest
 
-import library.python.strings 
-import library.python.windows 
+import library.python.strings
+import library.python.windows
 
 
 def gen_error_access_denied():
-    if library.python.windows.on_win(): 
+    if library.python.windows.on_win():
         err = WindowsError()
         err.errno = errno.EACCES
         err.strerror = ''
-        err.winerror = library.python.windows.ERRORS['ACCESS_DENIED'] 
+        err.winerror = library.python.windows.ERRORS['ACCESS_DENIED']
     else:
         err = OSError()
         err.errno = errno.EACCES
@@ -23,7 +23,7 @@ def gen_error_access_denied():
 
 
 def test_errorfix_buggy():
-    @library.python.windows.errorfix 
+    @library.python.windows.errorfix
     def erroneous_func():
         gen_error_access_denied()
 
@@ -36,11 +36,11 @@ def test_errorfix_buggy():
 
 
 def test_errorfix_explicit():
-    @library.python.windows.errorfix 
+    @library.python.windows.errorfix
     def erroneous_func():
-        if library.python.windows.on_win(): 
+        if library.python.windows.on_win():
             err = WindowsError()
-            err.winerror = library.python.windows.ERRORS['ACCESS_DENIED'] 
+            err.winerror = library.python.windows.ERRORS['ACCESS_DENIED']
         else:
             err = OSError()
         err.errno = errno.EACCES
@@ -56,27 +56,27 @@ def test_errorfix_explicit():
 
 
 def test_errorfix_decoding_cp1251():
-    @library.python.windows.errorfix 
+    @library.python.windows.errorfix
     def erroneous_func():
         model_msg = u'Какое-то описание ошибки'
-        if library.python.windows.on_win(): 
+        if library.python.windows.on_win():
             err = WindowsError()
-            err.strerror = library.python.strings.to_str(model_msg, 'cp1251') 
+            err.strerror = library.python.strings.to_str(model_msg, 'cp1251')
         else:
             err = OSError()
-            err.strerror = library.python.strings.to_str(model_msg) 
+            err.strerror = library.python.strings.to_str(model_msg)
         raise err
 
     with pytest.raises(OSError) as errinfo:
         erroneous_func()
     error_msg = errinfo.value.strerror
     if not isinstance(errinfo.value.strerror, unicode):
-        error_msg = library.python.strings.to_unicode(error_msg) 
+        error_msg = library.python.strings.to_unicode(error_msg)
     assert error_msg == u'Какое-то описание ошибки'
 
 
 def test_diehard():
-    @library.python.windows.diehard(library.python.windows.ERRORS['ACCESS_DENIED'], tries=5) 
+    @library.python.windows.diehard(library.python.windows.ERRORS['ACCESS_DENIED'], tries=5)
     def erroneous_func(errors):
         try:
             gen_error_access_denied()
@@ -90,7 +90,7 @@ def test_diehard():
     assert errinfo.value.errno == errno.EACCES
     assert any(e.errno == errno.EACCES for e in raised_errors)
     assert raised_errors and errinfo.value == raised_errors[-1]
-    if library.python.windows.on_win(): 
+    if library.python.windows.on_win():
         assert len(raised_errors) == 5
     else:
         assert len(raised_errors) == 1

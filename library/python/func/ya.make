@@ -1,10 +1,10 @@
-OWNER(g:yatool) 
- 
-PY23_LIBRARY() 
- 
-PY_SRCS(__init__.py) 
- 
-END() 
+OWNER(g:yatool)
+
+PY23_LIBRARY()
+
+PY_SRCS(__init__.py)
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

@@ -9,7 +9,7 @@ import six
 import library.python.fs
 import library.python.strings
 import library.python.tmp
-import library.python.windows 
+import library.python.windows
 
 import yatest.common
 
@@ -62,7 +62,7 @@ def trees_equal(dir1, dir2):
 
 
 def inodes_unsupported():
-    return library.python.windows.on_win() 
+    return library.python.windows.on_win()
 
 
 def inodes_equal(path1, path2):
@@ -70,11 +70,11 @@ def inodes_equal(path1, path2):
 
 
 def gen_error_access_denied():
-    if library.python.windows.on_win(): 
+    if library.python.windows.on_win():
         err = WindowsError()
         err.errno = errno.EACCES
         err.strerror = ''
-        err.winerror = library.python.windows.ERRORS['ACCESS_DENIED'] 
+        err.winerror = library.python.windows.ERRORS['ACCESS_DENIED']
     else:
         err = OSError()
         err.errno = errno.EACCES
@@ -166,7 +166,7 @@ def test_move_file_no_src(path):
 def test_move_file_exists(path):
     mkfile(path('src'), 'SRC')
     mkfile(path('dst'), 'DST')
-    if library.python.windows.on_win(): 
+    if library.python.windows.on_win():
         # move is platform-dependent, use replace_file for dst replacement on all platforms
         with pytest.raises(OSError) as errinfo:
             library.python.fs.move(path('src'), path('dst'))
@@ -222,7 +222,7 @@ def test_move_dir_exists_empty(path):
     os.mkdir(path('src'))
     mkfile(path('src/src_file'))
     os.mkdir(path('dst'))
-    if library.python.windows.on_win(): 
+    if library.python.windows.on_win():
         # move is platform-dependent, use non-atomic replace for directory replacement
         with pytest.raises(OSError) as errinfo:
             library.python.fs.move(path('src'), path('dst'))
@@ -553,7 +553,7 @@ def test_hardlink_dir(path):
     assert not os.path.isdir(path('dst'))
 
 
-@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows') 
+@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows')
 @in_env
 def test_symlink_file(path):
     mkfile(path('src'), 'SRC')
@@ -564,7 +564,7 @@ def test_symlink_file(path):
     assert file_data(path('dst')) == 'SRC'
 
 
-@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows') 
+@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows')
 @in_env
 def test_symlink_file_no_src(path):
     library.python.fs.symlink(path('src'), path('dst'))
@@ -573,7 +573,7 @@ def test_symlink_file_no_src(path):
     assert os.path.islink(path('dst'))
 
 
-@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows') 
+@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows')
 @in_env
 def test_symlink_file_exists(path):
     mkfile(path('src'), 'SRC')
@@ -587,7 +587,7 @@ def test_symlink_file_exists(path):
     assert file_data(path('dst')) == 'DST'
 
 
-@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows') 
+@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows')
 @in_env
 def test_symlink_file_exists_dir(path):
     mkfile(path('src'), 'SRC')
@@ -601,7 +601,7 @@ def test_symlink_file_exists_dir(path):
     assert not os.path.isfile(path('dst/src'))
 
 
-@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows') 
+@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows')
 @in_env
 def test_symlink_dir(path):
     os.mkdir(path('src'))
@@ -613,7 +613,7 @@ def test_symlink_dir(path):
     assert os.path.isfile(path('dst/src_file'))
 
 
-@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows') 
+@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows')
 @in_env
 def test_symlink_dir_no_src(path):
     library.python.fs.symlink(path('src'), path('dst'))
@@ -622,7 +622,7 @@ def test_symlink_dir_no_src(path):
     assert os.path.islink(path('dst'))
 
 
-@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows') 
+@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows')
 @in_env
 def test_symlink_dir_exists(path):
     os.mkdir(path('src'))
@@ -637,7 +637,7 @@ def test_symlink_dir_exists(path):
     assert not os.path.isfile(path('dst/src_file'))
 
 
-@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows') 
+@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows')
 @in_env
 def test_symlink_dir_exists_file(path):
     os.mkdir(path('src'))
@@ -908,7 +908,7 @@ def test_write_file_multiline(path):
     library.python.fs.write_file(path('src'), 'SRC line 1\nSRC line 2\n')
     assert file_data(path('src')) == 'SRC line 1\nSRC line 2\n'
     library.python.fs.write_file(path('src2'), 'SRC line 1\nSRC line 2\n', binary=False)
-    if library.python.windows.on_win(): 
+    if library.python.windows.on_win():
         assert file_data(path('src2')) == 'SRC line 1\r\nSRC line 2\r\n'
     else:
         assert file_data(path('src2')) == 'SRC line 1\nSRC line 2\n'
@@ -919,7 +919,7 @@ def test_write_file_multiline_crlf(path):
     library.python.fs.write_file(path('src'), 'SRC line 1\r\nSRC line 2\r\n')
     assert file_data(path('src')) == 'SRC line 1\r\nSRC line 2\r\n'
     library.python.fs.write_file(path('src2'), 'SRC line 1\r\nSRC line 2\r\n', binary=False)
-    if library.python.windows.on_win(): 
+    if library.python.windows.on_win():
         assert file_data(path('src2')) == 'SRC line 1\r\r\nSRC line 2\r\r\n'
     else:
         assert file_data(path('src2')) == 'SRC line 1\r\nSRC line 2\r\n'
@@ -947,7 +947,7 @@ def test_get_tree_size(path):
     assert library.python.fs.get_tree_size(path(''), recursive=True) == 3
 
 
-@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows') 
+@pytest.mark.skipif(library.python.windows.on_win(), reason='Symlinks disabled on Windows')
 @in_env
 def test_get_tree_size_dangling_symlink(path):
     os.makedirs(path('deeper'))
@@ -959,7 +959,7 @@ def test_get_tree_size_dangling_symlink(path):
     assert library.python.fs.get_tree_size(path(''), recursive=True) == 1
 
 
-@pytest.mark.skipif(not library.python.windows.on_win(), reason='Test hardlinks on windows') 
+@pytest.mark.skipif(not library.python.windows.on_win(), reason='Test hardlinks on windows')
 def test_hardlink_or_copy():
     max_allowed_hard_links = 1023
 

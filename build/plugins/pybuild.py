@@ -128,7 +128,7 @@ def add_python_lint_checks(unit, py_ver, files):
             # temporary allowed, TODO: remove
             "taxi/uservices/",
             "travel/",
-            "market/report/lite/",  # MARKETOUT-38662, deadline: 2021-08-12 
+            "market/report/lite/",  # MARKETOUT-38662, deadline: 2021-08-12
             "passport/backend/oauth/",  # PASSP-35982
         )
 
@@ -522,15 +522,15 @@ def onpy_srcs(unit, *args):
         unit.onsrcs(['GLOBAL', '{}.fbs.pysrc'.format(pysrc_base_name)])
 
 
-def _check_test_srcs(*args): 
+def _check_test_srcs(*args):
     used = set(args) & {"NAMESPACE", "TOP_LEVEL", "__main__.py"}
     if used:
         param = list(used)[0]
         ymake.report_configure_error('in TEST_SRCS: you cannot use {} here - it would broke testing machinery'.format(param))
- 
- 
-def ontest_srcs(unit, *args): 
-    _check_test_srcs(*args) 
+
+
+def ontest_srcs(unit, *args):
+    _check_test_srcs(*args)
     if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
         unit.onpy_srcs(["NAMESPACE", "__tests__"] + list(args))
 

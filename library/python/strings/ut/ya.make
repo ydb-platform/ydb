@@ -1,11 +1,11 @@
-OWNER(g:yatool) 
- 
+OWNER(g:yatool)
+
 PY23_TEST()
- 
+
 TEST_SRCS(test_strings.py)
- 
-PEERDIR( 
-    library/python/strings 
-) 
- 
-END() 
+
+PEERDIR(
+    library/python/strings
+)
+
+END()

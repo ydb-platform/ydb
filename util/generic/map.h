@@ -13,7 +13,7 @@
 
 template <class K, class V, class Less, class A>
 class TMap: public std::map<K, V, Less, TReboundAllocator<A, std::pair<const K, V>>>, public TMapOps<TMap<K, V, Less, A>> {
-    using TBase = std::map<K, V, Less, TReboundAllocator<A, std::pair<const K, V>>>;
+    using TBase = std::map<K, V, Less, TReboundAllocator<A, std::pair<const K, V>>>; 
 
 public:
     using TBase::TBase;
@@ -29,7 +29,7 @@ public:
 
 template <class K, class V, class Less, class A>
 class TMultiMap: public std::multimap<K, V, Less, TReboundAllocator<A, std::pair<const K, V>>> {
-    using TBase = std::multimap<K, V, Less, TReboundAllocator<A, std::pair<const K, V>>>;
+    using TBase = std::multimap<K, V, Less, TReboundAllocator<A, std::pair<const K, V>>>; 
 
 public:
     using TBase::TBase;

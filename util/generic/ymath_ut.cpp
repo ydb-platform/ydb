@@ -32,7 +32,7 @@ class TMathTest: public TTestBase {
     UNIT_TEST(TestLogGamma);
     UNIT_TEST(TestIsValidFloat);
     UNIT_TEST(TestAbs);
-    UNIT_TEST(TestPower);
+    UNIT_TEST(TestPower); 
     UNIT_TEST(TestSigmoid);
     UNIT_TEST(TestCeilDiv);
     UNIT_TEST_SUITE_END();
@@ -43,7 +43,7 @@ private:
     void TestErf();
     void TestLogGamma();
     void TestAbs();
-    void TestPower();
+    void TestPower(); 
     void TestSigmoid();
     void TestCeilDiv();
 
@@ -172,15 +172,15 @@ void TMathTest::TestAbs() {
     UNIT_ASSERT_VALUES_EQUAL(Abs(-1.0), 1.0);
     UNIT_ASSERT_VALUES_EQUAL(Abs(0.0), 0.0);
 }
-
-void TMathTest::TestPower() {
-    UNIT_ASSERT_VALUES_EQUAL(Power(0, 0), 1);
-    UNIT_ASSERT_VALUES_EQUAL(Power(-1, 1), -1);
-    UNIT_ASSERT_VALUES_EQUAL(Power(-1, 2), 1);
-    UNIT_ASSERT_VALUES_EQUAL(Power(2LL, 32), 1LL << 32);
-    UNIT_ASSERT_DOUBLES_EQUAL(Power(0.0, 0), 1.0, 1e-9);
-    UNIT_ASSERT_DOUBLES_EQUAL(Power(0.1, 3), 1e-3, 1e-9);
-}
+ 
+void TMathTest::TestPower() { 
+    UNIT_ASSERT_VALUES_EQUAL(Power(0, 0), 1); 
+    UNIT_ASSERT_VALUES_EQUAL(Power(-1, 1), -1); 
+    UNIT_ASSERT_VALUES_EQUAL(Power(-1, 2), 1); 
+    UNIT_ASSERT_VALUES_EQUAL(Power(2LL, 32), 1LL << 32); 
+    UNIT_ASSERT_DOUBLES_EQUAL(Power(0.0, 0), 1.0, 1e-9); 
+    UNIT_ASSERT_DOUBLES_EQUAL(Power(0.1, 3), 1e-3, 1e-9); 
+} 
 
 void TMathTest::TestSigmoid() {
     UNIT_ASSERT_EQUAL(Sigmoid(0.f), 0.5f);

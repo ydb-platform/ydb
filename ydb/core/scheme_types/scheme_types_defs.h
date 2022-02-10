@@ -61,7 +61,7 @@ public:
 
 template<typename T, ui32 TypeId, const char* Name>
 class IIntegerTypeWithKeyString : public TTypedType<T, IIntegerTypeWithKeyString<T, TypeId, Name>, TypeId, Name> {
-    static_assert(std::is_integral<T>::value, "expect std::is_integral<T>::value");
+    static_assert(std::is_integral<T>::value, "expect std::is_integral<T>::value"); 
 public:
 };
 

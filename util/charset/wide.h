@@ -146,7 +146,7 @@ inline wchar32 ReadSymbolAndAdvance(const wchar32*& begin, const wchar32* end) n
 
 template <class T>
 inline size_t WriteSymbol(wchar16 s, T& dest) noexcept {
-    ::NDetail::TSelector<std::is_pointer<T>::value>::WriteSymbol(s, dest);
+    ::NDetail::TSelector<std::is_pointer<T>::value>::WriteSymbol(s, dest); 
     return 1;
 }
 

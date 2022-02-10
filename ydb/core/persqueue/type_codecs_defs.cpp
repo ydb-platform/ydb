@@ -39,7 +39,7 @@ inline void AddFixedLen(TTypeCodecs* codecs, bool initDefaults = true) {
 
 template <typename TType>
 void AddIntCodecs(TTypeCodecs* codecs) {
-    static_assert(std::is_integral<typename TType::TValueType>::value, "Not an integral type.");
+    static_assert(std::is_integral<typename TType::TValueType>::value, "Not an integral type."); 
     using TSigned = std::make_signed_t<typename TType::TValueType>;
     using TUnsigned = std::make_unsigned_t<typename TType::TValueType>;
 
@@ -54,10 +54,10 @@ void AddIntCodecs(TTypeCodecs* codecs) {
     codecs->AddCodec<TDeltaZigZagCodec<TSigned, true>>();
     codecs->AddCodec<TDeltaZigZagCodec<TSigned, false>>();
 
-    if (std::is_signed<typename TType::TValueType>::value) {
+    if (std::is_signed<typename TType::TValueType>::value) { 
         codecs->AddAlias(TCodecSig(TCodecType::Compact, true), TCodecSig(TCodecType::ZigZag, true), true);
         codecs->AddAlias(TCodecSig(TCodecType::Compact, false), TCodecSig(TCodecType::ZigZag, false), true);
-    } else  { // std::is_unsigned<typename TType::TValueType>::value)
+    } else  { // std::is_unsigned<typename TType::TValueType>::value) 
         codecs->AddAlias(TCodecSig(TCodecType::Compact, true), TCodecSig(TCodecType::VarInt, true), true);
         codecs->AddAlias(TCodecSig(TCodecType::Compact, false), TCodecSig(TCodecType::VarInt, false), true);
     }

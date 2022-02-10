@@ -212,7 +212,7 @@ public:
 
     template <typename TChar>
     inline TChar* Append(const TChar* str, size_t len) {
-        TChar* ret = AllocateArray<TChar>(len);
+        TChar* ret = AllocateArray<TChar>(len); 
 
         std::char_traits<TChar>::copy(ret, str, len);
         return ret;
@@ -417,8 +417,8 @@ private:
 template <class T>
 using TPoolAlloc = TPoolAllocBase<T, TMemoryPool>;
 
-// Any type since it is supposed to be rebound anyway.
-using TPoolAllocator = TPoolAlloc<int>;
+// Any type since it is supposed to be rebound anyway. 
+using TPoolAllocator = TPoolAlloc<int>; 
 
 template <class T>
 inline bool operator==(const TPoolAlloc<T>&, const TPoolAlloc<T>&) noexcept {

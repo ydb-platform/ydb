@@ -3,8 +3,8 @@
 
 #include <contrib/libs/double-conversion/double-conversion.h>
 
-#include <cmath>
-
+#include <cmath> 
+ 
 namespace NYql::NJsonPath {
 
 using double_conversion::StringToDoubleConverter;
@@ -30,4 +30,4 @@ double ParseDouble(const TStringBuf literal) {
     return Singleton<TStringToNumberConverter>()->StringToDouble(literal.data(), literal.length(), &parsedCharactersCount);
 }
 
-}
+} 

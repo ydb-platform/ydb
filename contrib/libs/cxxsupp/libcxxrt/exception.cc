@@ -34,7 +34,7 @@
 #include "dwarf_eh.h"
 #include "atomic.h"
 #include "cxxabi.h"
-#include "msan.h"
+#include "msan.h" 
 
 using namespace ABI_NAMESPACE;
 
@@ -1175,13 +1175,13 @@ static void pushCleanupException(_Unwind_Exception *exceptionObject,
  */
 extern "C"
 BEGIN_PERSONALITY_FUNCTION(__gxx_personality_v0)
-#if defined(__SANITIZE_MEMORY__)
-  __msan_unpoison(&version, sizeof(version));
-  __msan_unpoison(&actions, sizeof(actions));
-  __msan_unpoison(&exceptionClass, sizeof(exceptionClass));
-  __msan_unpoison(&exceptionObject, sizeof(exceptionObject));
-  __msan_unpoison(&context, sizeof(context));
-#endif
+#if defined(__SANITIZE_MEMORY__) 
+  __msan_unpoison(&version, sizeof(version)); 
+  __msan_unpoison(&actions, sizeof(actions)); 
+  __msan_unpoison(&exceptionClass, sizeof(exceptionClass)); 
+  __msan_unpoison(&exceptionObject, sizeof(exceptionObject)); 
+  __msan_unpoison(&context, sizeof(context)); 
+#endif 
 	// This personality function is for version 1 of the ABI.  If you use it
 	// with a future version of the ABI, it won't know what to do, so it
 	// reports a fatal error and give up before it breaks anything.

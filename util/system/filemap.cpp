@@ -106,7 +106,7 @@ static int ModeToMmapProt(TMemoryMapCommon::EOpenMode mode) {
 void NPrivate::Precharge(const void* data, size_t dataSize, size_t off, size_t size) {
     if (off > dataSize) {
         assert(false);
-        return;
+        return; 
     }
     size_t endOff = (size == (size_t)-1 ? dataSize : off + size);
     if (endOff > dataSize) {
@@ -115,12 +115,12 @@ void NPrivate::Precharge(const void* data, size_t dataSize, size_t off, size_t s
     }
     size = endOff - off;
     if (dataSize == 0 || size == 0) {
-        return;
+        return; 
     }
 
     volatile const char *c = (const char*)data + off, *e = c + size;
     for (; c < e; c += 512) {
-        *c;
+        *c; 
     }
 }
 
@@ -525,7 +525,7 @@ TFileMap::~TFileMap() {
     }
 }
 
-void TFileMap::Precharge(size_t pos, size_t size) const {
+void TFileMap::Precharge(size_t pos, size_t size) const { 
     NPrivate::Precharge(Ptr(), MappedSize(), pos, size);
 }
 

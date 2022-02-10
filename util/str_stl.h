@@ -26,7 +26,7 @@ namespace std {
         bool operator()(const char* x, const TStringBuf y) const {
             return strlen(x) == y.size() && memcmp(x, y.data(), y.size()) == 0;
         }
-        using is_transparent = void;
+        using is_transparent = void; 
     };
 }
 
@@ -58,7 +58,7 @@ namespace NHashPrivate {
 }
 
 template <class T>
-struct hash: public NHashPrivate::THashHelper<T, std::is_scalar<T>::value && !std::is_integral<T>::value> {
+struct hash: public NHashPrivate::THashHelper<T, std::is_scalar<T>::value && !std::is_integral<T>::value> { 
 };
 
 template <typename T>
@@ -146,7 +146,7 @@ struct THash: public ::hash<T> {
 };
 
 namespace NHashPrivate {
-    template <class TFirst, class TSecond, bool IsEmpty = std::is_empty<THash<TFirst>>::value&& std::is_empty<THash<TSecond>>::value>
+    template <class TFirst, class TSecond, bool IsEmpty = std::is_empty<THash<TFirst>>::value&& std::is_empty<THash<TSecond>>::value> 
     struct TPairHash {
     private:
         THash<TFirst> FirstHash;
@@ -186,12 +186,12 @@ struct TEqualTo: public std::equal_to<T> {
 
 template <>
 struct TEqualTo<TString>: public TEqualTo<TStringBuf> {
-    using is_transparent = void;
+    using is_transparent = void; 
 };
 
 template <>
 struct TEqualTo<TUtf16String>: public TEqualTo<TWtringBuf> {
-    using is_transparent = void;
+    using is_transparent = void; 
 };
 
 template <>
@@ -214,7 +214,7 @@ struct TCIEqualTo {
 
 template <>
 struct TCIEqualTo<const char*> {
-    inline bool operator()(const char* a, const char* b) const {
+    inline bool operator()(const char* a, const char* b) const { 
         return stricmp(a, b) == 0;
     }
 };
@@ -239,12 +239,12 @@ struct TLess: public std::less<T> {
 
 template <>
 struct TLess<TString>: public TLess<TStringBuf> {
-    using is_transparent = void;
+    using is_transparent = void; 
 };
 
 template <>
 struct TLess<TUtf16String>: public TLess<TWtringBuf> {
-    using is_transparent = void;
+    using is_transparent = void; 
 };
 
 template <>
@@ -258,12 +258,12 @@ struct TGreater: public std::greater<T> {
 
 template <>
 struct TGreater<TString>: public TGreater<TStringBuf> {
-    using is_transparent = void;
+    using is_transparent = void; 
 };
 
 template <>
 struct TGreater<TUtf16String>: public TGreater<TWtringBuf> {
-    using is_transparent = void;
+    using is_transparent = void; 
 };
 
 template <>

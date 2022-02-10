@@ -84,7 +84,7 @@ public:
 
 template <class TType>
 constexpr bool IsNegative(const TType value) noexcept {
-    return TInteger<std::is_unsigned<TType>::value>::IsNegative(value);
+    return TInteger<std::is_unsigned<TType>::value>::IsNegative(value); 
 }
 
 namespace NPrivate {
@@ -116,7 +116,7 @@ inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result,
     using TSmallInt = ::NPrivate::TUnderlyingTypeOrSelf<TSmall>;
     using TLargeInt = ::NPrivate::TUnderlyingTypeOrSelf<TLarge>;
 
-    if (std::is_unsigned<TSmallInt>::value && std::is_signed<TLargeInt>::value) {
+    if (std::is_unsigned<TSmallInt>::value && std::is_signed<TLargeInt>::value) { 
         if (IsNegative(largeInt)) {
             ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '"
                                        << TypeName<TSmallInt>()
@@ -126,7 +126,7 @@ inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result,
 
     TSmallInt smallInt = TSmallInt(largeInt);
 
-    if (std::is_signed<TSmallInt>::value && std::is_unsigned<TLargeInt>::value) {
+    if (std::is_signed<TSmallInt>::value && std::is_unsigned<TLargeInt>::value) { 
         if (IsNegative(smallInt)) {
             ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '"
                                        << TypeName<TSmallInt>()

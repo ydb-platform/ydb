@@ -6,8 +6,8 @@
 #include <util/generic/list.h>
 #include <util/generic/vector.h>
 #include <util/generic/bitops.h>
-
-#include <array>
+ 
+#include <array> 
 // Data serialization strategy class.
 // Default realization can pack only limited range of types, but you can pack any data other using your own strategy class.
 
@@ -87,8 +87,8 @@ namespace NPackers {
 
     template <class T>
     inline ui64 ConvertIntegral(const T& data) {
-        static_assert(std::is_integral<T>::value, "T must be integral type");
-        return NImpl::TConvertImpl<T, std::is_signed<T>::value>::Convert(data);
+        static_assert(std::is_integral<T>::value, "T must be integral type"); 
+        return NImpl::TConvertImpl<T, std::is_signed<T>::value>::Convert(data); 
     }
 
     //---------------------------------
@@ -178,7 +178,7 @@ namespace NPackers {
 
     template <class T>
     inline void TIntegralPacker<T>::UnpackLeaf(const char* p, T& t) const {
-        NImpl::TUnpackLeafImpl<T, std::is_signed<T>::value>().UnpackLeaf(p, t);
+        NImpl::TUnpackLeafImpl<T, std::is_signed<T>::value>().UnpackLeaf(p, t); 
     }
 
     template <class T>
@@ -487,17 +487,17 @@ namespace NPackers {
     }
 
     //------------------------------------------------------------------------------------------
-    // Packer for fixed-size arrays, i.e. for std::array.
+    // Packer for fixed-size arrays, i.e. for std::array. 
     // Saves memory by not storing anything about their size.
     // SkipLeaf skips every value, so can be slow for big arrays.
-    // Requires std::tuple_size<TValue>, TValue::operator[] and possibly TValue::value_type.
+    // Requires std::tuple_size<TValue>, TValue::operator[] and possibly TValue::value_type. 
     template <class TValue, class TElementPacker = TPacker<typename TValue::value_type>>
     class TArrayPacker {
     public:
         using TElemPacker = TElementPacker;
 
         enum {
-            Size = std::tuple_size<TValue>::value
+            Size = std::tuple_size<TValue>::value 
         };
 
         void UnpackLeaf(const char* p, TValue& t) const {

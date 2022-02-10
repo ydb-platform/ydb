@@ -16,37 +16,37 @@
 // and recognizes the Perl escape sequences \d, \s, \w, \D, \S, and \W.
 // See regexp.h for rationale.
 
-#include <ctype.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
-#include <algorithm>
-#include <map>
-#include <string>
+#include <ctype.h> 
+#include <stddef.h> 
+#include <stdint.h> 
+#include <string.h> 
+#include <algorithm> 
+#include <map> 
+#include <string> 
 #include <vector>
-
-#include "util/util.h"
-#include "util/logging.h"
-#include "util/strutil.h"
-#include "util/utf.h"
+ 
+#include "util/util.h" 
+#include "util/logging.h" 
+#include "util/strutil.h" 
+#include "util/utf.h" 
 #include "re2/pod_array.h"
 #include "re2/regexp.h"
-#include "re2/stringpiece.h"
+#include "re2/stringpiece.h" 
 #include "re2/unicode_casefold.h"
 #include "re2/unicode_groups.h"
-#include "re2/walker-inl.h"
+#include "re2/walker-inl.h" 
 
-#if defined(RE2_USE_ICU)
-#include "unicode/uniset.h"
-#include "unicode/unistr.h"
-#include "unicode/utypes.h"
-#endif
-
+#if defined(RE2_USE_ICU) 
+#include "unicode/uniset.h" 
+#include "unicode/unistr.h" 
+#include "unicode/utypes.h" 
+#endif 
+ 
 namespace re2 {
 
 // Controls the maximum repeat count permitted by the parser.
 static int maximum_repeat_count = 1000;
-
+ 
 void Regexp::FUZZING_ONLY_set_maximum_repeat_count(int i) {
   maximum_repeat_count = i;
 }
@@ -183,8 +183,8 @@ private:
   int ncap_;  // number of capturing parens seen
   int rune_max_;  // maximum char value for this encoding
 
-  ParseState(const ParseState&) = delete;
-  ParseState& operator=(const ParseState&) = delete;
+  ParseState(const ParseState&) = delete; 
+  ParseState& operator=(const ParseState&) = delete; 
 };
 
 // Pseudo-operators - only on parse stack.
@@ -242,8 +242,8 @@ bool Regexp::ParseState::PushRegexp(Regexp* re) {
   // single characters (e.g., [.] instead of \.), and some
   // analysis does better with fewer character classes.
   // Similarly, [Aa] can be rewritten as a literal A with ASCII case folding.
-  if (re->op_ == kRegexpCharClass && re->ccb_ != NULL) {
-    re->ccb_->RemoveAbove(rune_max_);
+  if (re->op_ == kRegexpCharClass && re->ccb_ != NULL) { 
+    re->ccb_->RemoveAbove(rune_max_); 
     if (re->ccb_->size() == 1) {
       Rune r = re->ccb_->begin()->lo;
       re->Decref();
@@ -269,12 +269,12 @@ bool Regexp::ParseState::PushRegexp(Regexp* re) {
 // Searches the case folding tables and returns the CaseFold* that contains r.
 // If there isn't one, returns the CaseFold* with smallest f->lo bigger than r.
 // If there isn't one, returns NULL.
-const CaseFold* LookupCaseFold(const CaseFold *f, int n, Rune r) {
-  const CaseFold* ef = f + n;
+const CaseFold* LookupCaseFold(const CaseFold *f, int n, Rune r) { 
+  const CaseFold* ef = f + n; 
 
   // Binary search for entry containing r.
   while (n > 0) {
-    int m = n/2;
+    int m = n/2; 
     if (f[m].lo <= r && r <= f[m].hi)
       return &f[m];
     if (r < f[m].lo) {
@@ -286,10 +286,10 @@ const CaseFold* LookupCaseFold(const CaseFold *f, int n, Rune r) {
   }
 
   // There is no entry that contains r, but f points
-  // where it would have been.  Unless f points at
+  // where it would have been.  Unless f points at 
   // the end of the array, it points at the next entry
   // after r.
-  if (f < ef)
+  if (f < ef) 
     return f;
 
   // No entry contains r; no entry contains runes > r.
@@ -297,24 +297,24 @@ const CaseFold* LookupCaseFold(const CaseFold *f, int n, Rune r) {
 }
 
 // Returns the result of applying the fold f to the rune r.
-Rune ApplyFold(const CaseFold *f, Rune r) {
+Rune ApplyFold(const CaseFold *f, Rune r) { 
   switch (f->delta) {
     default:
       return r + f->delta;
 
-    case EvenOddSkip:  // even <-> odd but only applies to every other
-      if ((r - f->lo) % 2)
-        return r;
-      FALLTHROUGH_INTENDED;
+    case EvenOddSkip:  // even <-> odd but only applies to every other 
+      if ((r - f->lo) % 2) 
+        return r; 
+      FALLTHROUGH_INTENDED; 
     case EvenOdd:  // even <-> odd
       if (r%2 == 0)
         return r + 1;
       return r - 1;
 
-    case OddEvenSkip:  // odd <-> even but only applies to every other
-      if ((r - f->lo) % 2)
-        return r;
-      FALLTHROUGH_INTENDED;
+    case OddEvenSkip:  // odd <-> even but only applies to every other 
+      if ((r - f->lo) % 2) 
+        return r; 
+      FALLTHROUGH_INTENDED; 
     case OddEven:  // odd <-> even
       if (r%2 == 1)
         return r + 1;
@@ -333,7 +333,7 @@ Rune ApplyFold(const CaseFold *f, Rune r) {
 //
 //   CycleFoldRune('?') = '?'
 Rune CycleFoldRune(Rune r) {
-  const CaseFold* f = LookupCaseFold(unicode_casefold, num_unicode_casefold, r);
+  const CaseFold* f = LookupCaseFold(unicode_casefold, num_unicode_casefold, r); 
   if (f == NULL || r < f->lo)
     return r;
   return ApplyFold(f, r);
@@ -356,7 +356,7 @@ static void AddFoldedRange(CharClassBuilder* cc, Rune lo, Rune hi, int depth) {
     return;
 
   while (lo <= hi) {
-    const CaseFold* f = LookupCaseFold(unicode_casefold, num_unicode_casefold, lo);
+    const CaseFold* f = LookupCaseFold(unicode_casefold, num_unicode_casefold, lo); 
     if (f == NULL)  // lo has no fold, nor does anything above lo
       break;
     if (lo < f->lo) {  // lo has no fold; next rune with a fold is f->lo
@@ -367,7 +367,7 @@ static void AddFoldedRange(CharClassBuilder* cc, Rune lo, Rune hi, int depth) {
     // Add in the result of folding the range lo - f->hi
     // and that range's fold, recursively.
     Rune lo1 = lo;
-    Rune hi1 = std::min<Rune>(hi, f->hi);
+    Rune hi1 = std::min<Rune>(hi, f->hi); 
     switch (f->delta) {
       default:
         lo1 += f->delta;
@@ -482,23 +482,23 @@ bool Regexp::ParseState::PushRepeatOp(RegexpOp op, const StringPiece& s,
   Regexp::ParseFlags fl = flags_;
   if (nongreedy)
     fl = fl ^ NonGreedy;
-
-  // Squash **, ++ and ??. Regexp::Star() et al. handle this too, but
-  // they're mostly for use during simplification, not during parsing.
-  if (op == stacktop_->op() && fl == stacktop_->parse_flags())
-    return true;
-
-  // Squash *+, *?, +*, +?, ?* and ?+. They all squash to *, so because
-  // op is a repeat, we just have to check that stacktop_->op() is too,
-  // then adjust stacktop_.
-  if ((stacktop_->op() == kRegexpStar ||
-       stacktop_->op() == kRegexpPlus ||
-       stacktop_->op() == kRegexpQuest) &&
-      fl == stacktop_->parse_flags()) {
-    stacktop_->op_ = kRegexpStar;
-    return true;
-  }
-
+ 
+  // Squash **, ++ and ??. Regexp::Star() et al. handle this too, but 
+  // they're mostly for use during simplification, not during parsing. 
+  if (op == stacktop_->op() && fl == stacktop_->parse_flags()) 
+    return true; 
+ 
+  // Squash *+, *?, +*, +?, ?* and ?+. They all squash to *, so because 
+  // op is a repeat, we just have to check that stacktop_->op() is too, 
+  // then adjust stacktop_. 
+  if ((stacktop_->op() == kRegexpStar || 
+       stacktop_->op() == kRegexpPlus || 
+       stacktop_->op() == kRegexpQuest) && 
+      fl == stacktop_->parse_flags()) { 
+    stacktop_->op_ = kRegexpStar; 
+    return true; 
+  } 
+ 
   Regexp* re = new Regexp(op, fl);
   re->AllocSub(1);
   re->down_ = stacktop_->down_;
@@ -508,61 +508,61 @@ bool Regexp::ParseState::PushRepeatOp(RegexpOp op, const StringPiece& s,
   return true;
 }
 
-// RepetitionWalker reports whether the repetition regexp is valid.
-// Valid means that the combination of the top-level repetition
-// and any inner repetitions does not exceed n copies of the
-// innermost thing.
-// This rewalks the regexp tree and is called for every repetition,
-// so we have to worry about inducing quadratic behavior in the parser.
-// We avoid this by only using RepetitionWalker when min or max >= 2.
-// In that case the depth of any >= 2 nesting can only get to 9 without
-// triggering a parse error, so each subtree can only be rewalked 9 times.
-class RepetitionWalker : public Regexp::Walker<int> {
- public:
-  RepetitionWalker() {}
-  virtual int PreVisit(Regexp* re, int parent_arg, bool* stop);
-  virtual int PostVisit(Regexp* re, int parent_arg, int pre_arg,
-                        int* child_args, int nchild_args);
-  virtual int ShortVisit(Regexp* re, int parent_arg);
-
- private:
-  RepetitionWalker(const RepetitionWalker&) = delete;
-  RepetitionWalker& operator=(const RepetitionWalker&) = delete;
-};
-
-int RepetitionWalker::PreVisit(Regexp* re, int parent_arg, bool* stop) {
-  int arg = parent_arg;
-  if (re->op() == kRegexpRepeat) {
-    int m = re->max();
-    if (m < 0) {
-      m = re->min();
-    }
-    if (m > 0) {
-      arg /= m;
-    }
-  }
-  return arg;
-}
-
-int RepetitionWalker::PostVisit(Regexp* re, int parent_arg, int pre_arg,
-                                int* child_args, int nchild_args) {
-  int arg = pre_arg;
-  for (int i = 0; i < nchild_args; i++) {
-    if (child_args[i] < arg) {
-      arg = child_args[i];
-    }
-  }
-  return arg;
-}
-
-int RepetitionWalker::ShortVisit(Regexp* re, int parent_arg) {
+// RepetitionWalker reports whether the repetition regexp is valid. 
+// Valid means that the combination of the top-level repetition 
+// and any inner repetitions does not exceed n copies of the 
+// innermost thing. 
+// This rewalks the regexp tree and is called for every repetition, 
+// so we have to worry about inducing quadratic behavior in the parser. 
+// We avoid this by only using RepetitionWalker when min or max >= 2. 
+// In that case the depth of any >= 2 nesting can only get to 9 without 
+// triggering a parse error, so each subtree can only be rewalked 9 times. 
+class RepetitionWalker : public Regexp::Walker<int> { 
+ public: 
+  RepetitionWalker() {} 
+  virtual int PreVisit(Regexp* re, int parent_arg, bool* stop); 
+  virtual int PostVisit(Regexp* re, int parent_arg, int pre_arg, 
+                        int* child_args, int nchild_args); 
+  virtual int ShortVisit(Regexp* re, int parent_arg); 
+ 
+ private: 
+  RepetitionWalker(const RepetitionWalker&) = delete; 
+  RepetitionWalker& operator=(const RepetitionWalker&) = delete; 
+}; 
+ 
+int RepetitionWalker::PreVisit(Regexp* re, int parent_arg, bool* stop) { 
+  int arg = parent_arg; 
+  if (re->op() == kRegexpRepeat) { 
+    int m = re->max(); 
+    if (m < 0) { 
+      m = re->min(); 
+    } 
+    if (m > 0) { 
+      arg /= m; 
+    } 
+  } 
+  return arg; 
+} 
+ 
+int RepetitionWalker::PostVisit(Regexp* re, int parent_arg, int pre_arg, 
+                                int* child_args, int nchild_args) { 
+  int arg = pre_arg; 
+  for (int i = 0; i < nchild_args; i++) { 
+    if (child_args[i] < arg) { 
+      arg = child_args[i]; 
+    } 
+  } 
+  return arg; 
+} 
+ 
+int RepetitionWalker::ShortVisit(Regexp* re, int parent_arg) { 
   // Should never be called: we use Walk(), not WalkExponential().
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-  LOG(DFATAL) << "RepetitionWalker::ShortVisit called";
+  LOG(DFATAL) << "RepetitionWalker::ShortVisit called"; 
 #endif
-  return 0;
-}
-
+  return 0; 
+} 
+ 
 // Pushes a repetition regexp onto the stack.
 // A valid argument for the operator must already be on the stack.
 bool Regexp::ParseState::PushRepetition(int min, int max,
@@ -591,14 +591,14 @@ bool Regexp::ParseState::PushRepetition(int min, int max,
   re->sub()[0] = FinishRegexp(stacktop_);
   re->simple_ = re->ComputeSimple();
   stacktop_ = re;
-  if (min >= 2 || max >= 2) {
-    RepetitionWalker w;
+  if (min >= 2 || max >= 2) { 
+    RepetitionWalker w; 
     if (w.Walk(stacktop_, maximum_repeat_count) == 0) {
-      status_->set_code(kRegexpRepeatSize);
-      status_->set_error_arg(s);
-      return false;
-    }
-  }
+      status_->set_code(kRegexpRepeatSize); 
+      status_->set_error_arg(s); 
+      return false; 
+    } 
+  } 
   return true;
 }
 
@@ -637,33 +637,33 @@ bool Regexp::ParseState::DoVerticalBar() {
   Regexp* r1;
   Regexp* r2;
   if ((r1 = stacktop_) != NULL &&
-      (r2 = r1->down_) != NULL &&
+      (r2 = r1->down_) != NULL && 
       r2->op() == kVerticalBar) {
     Regexp* r3;
-    if ((r3 = r2->down_) != NULL &&
-        (r1->op() == kRegexpAnyChar || r3->op() == kRegexpAnyChar)) {
-      // AnyChar is above or below the vertical bar. Let it subsume
-      // the other when the other is Literal, CharClass or AnyChar.
-      if (r3->op() == kRegexpAnyChar &&
-          (r1->op() == kRegexpLiteral ||
-           r1->op() == kRegexpCharClass ||
-           r1->op() == kRegexpAnyChar)) {
-        // Discard r1.
-        stacktop_ = r2;
-        r1->Decref();
-        return true;
+    if ((r3 = r2->down_) != NULL && 
+        (r1->op() == kRegexpAnyChar || r3->op() == kRegexpAnyChar)) { 
+      // AnyChar is above or below the vertical bar. Let it subsume 
+      // the other when the other is Literal, CharClass or AnyChar. 
+      if (r3->op() == kRegexpAnyChar && 
+          (r1->op() == kRegexpLiteral || 
+           r1->op() == kRegexpCharClass || 
+           r1->op() == kRegexpAnyChar)) { 
+        // Discard r1. 
+        stacktop_ = r2; 
+        r1->Decref(); 
+        return true; 
       }
-      if (r1->op() == kRegexpAnyChar &&
-          (r3->op() == kRegexpLiteral ||
-           r3->op() == kRegexpCharClass ||
-           r3->op() == kRegexpAnyChar)) {
-        // Rearrange the stack and discard r3.
-        r1->down_ = r3->down_;
-        r2->down_ = r1;
-        stacktop_ = r2;
-        r3->Decref();
-        return true;
-      }
+      if (r1->op() == kRegexpAnyChar && 
+          (r3->op() == kRegexpLiteral || 
+           r3->op() == kRegexpCharClass || 
+           r3->op() == kRegexpAnyChar)) { 
+        // Rearrange the stack and discard r3. 
+        r1->down_ = r3->down_; 
+        r2->down_ = r1; 
+        stacktop_ = r2; 
+        r3->Decref(); 
+        return true; 
+      } 
     }
     // Swap r1 below vertical bar (r2).
     r1->down_ = r2->down_;
@@ -1083,14 +1083,14 @@ void FactorAlternationImpl::Round1(Regexp** sub, int nsub,
 void FactorAlternationImpl::Round2(Regexp** sub, int nsub,
                                    Regexp::ParseFlags flags,
                                    std::vector<Splice>* splices) {
-  // Round 2: Factor out common simple prefixes,
-  // just the first piece of each concatenation.
-  // This will be good enough a lot of the time.
-  //
-  // Complex subexpressions (e.g. involving quantifiers)
-  // are not safe to factor because that collapses their
-  // distinct paths through the automaton, which affects
-  // correctness in some cases.
+  // Round 2: Factor out common simple prefixes, 
+  // just the first piece of each concatenation. 
+  // This will be good enough a lot of the time. 
+  // 
+  // Complex subexpressions (e.g. involving quantifiers) 
+  // are not safe to factor because that collapses their 
+  // distinct paths through the automaton, which affects 
+  // correctness in some cases. 
   int start = 0;
   Regexp* first = NULL;
   for (int i = 0; i <= nsub; i++) {
@@ -1100,23 +1100,23 @@ void FactorAlternationImpl::Round2(Regexp** sub, int nsub,
     if (i < nsub) {
       first_i = Regexp::LeadingRegexp(sub[i]);
       if (first != NULL &&
-          // first must be an empty-width op
-          // OR a char class, any char or any byte
-          // OR a fixed repeat of a literal, char class, any char or any byte.
-          (first->op() == kRegexpBeginLine ||
-           first->op() == kRegexpEndLine ||
-           first->op() == kRegexpWordBoundary ||
-           first->op() == kRegexpNoWordBoundary ||
-           first->op() == kRegexpBeginText ||
-           first->op() == kRegexpEndText ||
-           first->op() == kRegexpCharClass ||
-           first->op() == kRegexpAnyChar ||
-           first->op() == kRegexpAnyByte ||
-           (first->op() == kRegexpRepeat &&
-            first->min() == first->max() &&
-            (first->sub()[0]->op() == kRegexpLiteral ||
-             first->sub()[0]->op() == kRegexpCharClass ||
-             first->sub()[0]->op() == kRegexpAnyChar ||
+          // first must be an empty-width op 
+          // OR a char class, any char or any byte 
+          // OR a fixed repeat of a literal, char class, any char or any byte. 
+          (first->op() == kRegexpBeginLine || 
+           first->op() == kRegexpEndLine || 
+           first->op() == kRegexpWordBoundary || 
+           first->op() == kRegexpNoWordBoundary || 
+           first->op() == kRegexpBeginText || 
+           first->op() == kRegexpEndText || 
+           first->op() == kRegexpCharClass || 
+           first->op() == kRegexpAnyChar || 
+           first->op() == kRegexpAnyByte || 
+           (first->op() == kRegexpRepeat && 
+            first->min() == first->max() && 
+            (first->sub()[0]->op() == kRegexpLiteral || 
+             first->sub()[0]->op() == kRegexpCharClass || 
+             first->sub()[0]->op() == kRegexpAnyChar || 
              first->sub()[0]->op() == kRegexpAnyByte))) &&
           Regexp::Equal(first, first_i))
         continue;
@@ -1312,7 +1312,7 @@ bool Regexp::ParseState::MaybeConcatString(int r, ParseFlags flags) {
   if (r >= 0) {
     re1->op_ = kRegexpLiteral;
     re1->rune_ = r;
-    re1->parse_flags_ = static_cast<uint16_t>(flags);
+    re1->parse_flags_ = static_cast<uint16_t>(flags); 
     return true;
   }
 
@@ -1391,18 +1391,18 @@ static bool MaybeParseRepetition(StringPiece* sp, int* lo, int* hi) {
 // Argument order is backwards from usual Google style
 // but consistent with chartorune.
 static int StringPieceToRune(Rune *r, StringPiece *sp, RegexpStatus* status) {
-  // fullrune() takes int, not size_t. However, it just looks
-  // at the leading byte and treats any length >= 4 the same.
+  // fullrune() takes int, not size_t. However, it just looks 
+  // at the leading byte and treats any length >= 4 the same. 
   if (fullrune(sp->data(), static_cast<int>(std::min(size_t{4}, sp->size())))) {
-    int n = chartorune(r, sp->data());
-    // Some copies of chartorune have a bug that accepts
-    // encodings of values in (10FFFF, 1FFFFF] as valid.
-    // Those values break the character class algorithm,
-    // which assumes Runemax is the largest rune.
-    if (*r > Runemax) {
-      n = 1;
-      *r = Runeerror;
-    }
+    int n = chartorune(r, sp->data()); 
+    // Some copies of chartorune have a bug that accepts 
+    // encodings of values in (10FFFF, 1FFFFF] as valid. 
+    // Those values break the character class algorithm, 
+    // which assumes Runemax is the largest rune. 
+    if (*r > Runemax) { 
+      n = 1; 
+      *r = Runeerror; 
+    } 
     if (!(n == 1 && *r == Runeerror)) {  // no decoding error
       sp->remove_prefix(n);
       return n;
@@ -1456,12 +1456,12 @@ static bool ParseEscape(StringPiece* s, Rune* rp,
   if (s->empty() || (*s)[0] != '\\') {
     // Should not happen - caller always checks.
     status->set_code(kRegexpInternalError);
-    status->set_error_arg(StringPiece());
+    status->set_error_arg(StringPiece()); 
     return false;
   }
   if (s->size() == 1) {
     status->set_code(kRegexpTrailingBackslash);
-    status->set_error_arg(StringPiece());
+    status->set_error_arg(StringPiece()); 
     return false;
   }
   Rune c, c1;
@@ -1492,7 +1492,7 @@ static bool ParseEscape(StringPiece* s, Rune* rp,
       // Single non-zero octal digit is a backreference; not supported.
       if (s->empty() || (*s)[0] < '0' || (*s)[0] > '7')
         goto BadEscape;
-      FALLTHROUGH_INTENDED;
+      FALLTHROUGH_INTENDED; 
     case '0':
       // consume up to three octal digits; already have one.
       code = c - '0';
@@ -1507,8 +1507,8 @@ static bool ParseEscape(StringPiece* s, Rune* rp,
           }
         }
       }
-      if (code > rune_max)
-        goto BadEscape;
+      if (code > rune_max) 
+        goto BadEscape; 
       *rp = code;
       return true;
 
@@ -1582,7 +1582,7 @@ static bool ParseEscape(StringPiece* s, Rune* rp,
     // in Perl, \b means word-boundary but [\b]
     // means backspace.  We don't support that:
     // if you want a backspace embed a literal
-    // backspace character or use \x08.
+    // backspace character or use \x08. 
     //
     // case 'b':
     //   *rp = '\b';
@@ -1594,7 +1594,7 @@ static bool ParseEscape(StringPiece* s, Rune* rp,
 BadEscape:
   // Unrecognized escape sequence.
   status->set_code(kRegexpBadEscape);
-  status->set_error_arg(
+  status->set_error_arg( 
       StringPiece(begin, static_cast<size_t>(s->data() - begin)));
   return false;
 }
@@ -1623,8 +1623,8 @@ void CharClassBuilder::AddRangeFlags(
 }
 
 // Look for a group with the given name.
-static const UGroup* LookupGroup(const StringPiece& name,
-                                 const UGroup *groups, int ngroups) {
+static const UGroup* LookupGroup(const StringPiece& name, 
+                                 const UGroup *groups, int ngroups) { 
   // Simple name lookup.
   for (int i = 0; i < ngroups; i++)
     if (StringPiece(groups[i].name) == name)
@@ -1641,12 +1641,12 @@ static const UGroup* LookupPerlGroup(const StringPiece& name) {
   return LookupGroup(name, perl_groups, num_perl_groups);
 }
 
-#if !defined(RE2_USE_ICU)
-// Fake UGroup containing all Runes
-static URange16 any16[] = { { 0, 65535 } };
-static URange32 any32[] = { { 65536, Runemax } };
-static UGroup anygroup = { "Any", +1, any16, 1, any32, 1 };
-
+#if !defined(RE2_USE_ICU) 
+// Fake UGroup containing all Runes 
+static URange16 any16[] = { { 0, 65535 } }; 
+static URange32 any32[] = { { 65536, Runemax } }; 
+static UGroup anygroup = { "Any", +1, any16, 1, any32, 1 }; 
+ 
 // Look for a Unicode group with the given name (e.g., "Han")
 static const UGroup* LookupUnicodeGroup(const StringPiece& name) {
   // Special case: "Any" means any.
@@ -1654,11 +1654,11 @@ static const UGroup* LookupUnicodeGroup(const StringPiece& name) {
     return &anygroup;
   return LookupGroup(name, unicode_groups, num_unicode_groups);
 }
-#endif
+#endif 
 
 // Add a UGroup or its negation to the character class.
-static void AddUGroup(CharClassBuilder *cc, const UGroup *g, int sign,
-                      Regexp::ParseFlags parse_flags) {
+static void AddUGroup(CharClassBuilder *cc, const UGroup *g, int sign, 
+                      Regexp::ParseFlags parse_flags) { 
   if (sign == +1) {
     for (int i = 0; i < g->nr16; i++) {
       cc->AddRangeFlags(g->r16[i].lo, g->r16[i].hi, parse_flags);
@@ -1675,13 +1675,13 @@ static void AddUGroup(CharClassBuilder *cc, const UGroup *g, int sign,
       // to what's already missing.  Too hard, so do in two steps.
       CharClassBuilder ccb1;
       AddUGroup(&ccb1, g, +1, parse_flags);
-      // If the flags say to take out \n, put it in, so that negating will take it out.
-      // Normally AddRangeFlags does this, but we're bypassing AddRangeFlags.
-      bool cutnl = !(parse_flags & Regexp::ClassNL) ||
-                   (parse_flags & Regexp::NeverNL);
-      if (cutnl) {
-        ccb1.AddRange('\n', '\n');
-      }
+      // If the flags say to take out \n, put it in, so that negating will take it out. 
+      // Normally AddRangeFlags does this, but we're bypassing AddRangeFlags. 
+      bool cutnl = !(parse_flags & Regexp::ClassNL) || 
+                   (parse_flags & Regexp::NeverNL); 
+      if (cutnl) { 
+        ccb1.AddRange('\n', '\n'); 
+      } 
       ccb1.Negate();
       cc->AddCharClass(&ccb1);
       return;
@@ -1746,7 +1746,7 @@ ParseStatus ParseUnicodeGroup(StringPiece* s, Regexp::ParseFlags parse_flags,
   // Committed to parse.  Results:
   int sign = +1;  // -1 = negated char class
   if (c == 'P')
-    sign = -sign;
+    sign = -sign; 
   StringPiece seq = *s;  // \p{Han} or \pL
   StringPiece name;  // Han or L
   s->remove_prefix(2);  // '\\', 'p'
@@ -1759,8 +1759,8 @@ ParseStatus ParseUnicodeGroup(StringPiece* s, Regexp::ParseFlags parse_flags,
     name = StringPiece(p, static_cast<size_t>(s->data() - p));
   } else {
     // Name is in braces. Look for closing }
-    size_t end = s->find('}', 0);
-    if (end == StringPiece::npos) {
+    size_t end = s->find('}', 0); 
+    if (end == StringPiece::npos) { 
       if (!IsValidUTF8(seq, status))
         return kParseError;
       status->set_code(kRegexpBadCharRange);
@@ -1780,9 +1780,9 @@ ParseStatus ParseUnicodeGroup(StringPiece* s, Regexp::ParseFlags parse_flags,
     sign = -sign;
     name.remove_prefix(1);  // '^'
   }
-
-#if !defined(RE2_USE_ICU)
-  // Look up the group in the RE2 Unicode data.
+ 
+#if !defined(RE2_USE_ICU) 
+  // Look up the group in the RE2 Unicode data. 
   const UGroup *g = LookupUnicodeGroup(name);
   if (g == NULL) {
     status->set_code(kRegexpBadCharRange);
@@ -1791,30 +1791,30 @@ ParseStatus ParseUnicodeGroup(StringPiece* s, Regexp::ParseFlags parse_flags,
   }
 
   AddUGroup(cc, g, sign, parse_flags);
-#else
-  // Look up the group in the ICU Unicode data. Because ICU provides full
-  // Unicode properties support, this could be more than a lookup by name.
-  ::icu::UnicodeString ustr = ::icu::UnicodeString::fromUTF8(
+#else 
+  // Look up the group in the ICU Unicode data. Because ICU provides full 
+  // Unicode properties support, this could be more than a lookup by name. 
+  ::icu::UnicodeString ustr = ::icu::UnicodeString::fromUTF8( 
       std::string("\\p{") + std::string(name) + std::string("}"));
-  UErrorCode uerr = U_ZERO_ERROR;
-  ::icu::UnicodeSet uset(ustr, uerr);
-  if (U_FAILURE(uerr)) {
-    status->set_code(kRegexpBadCharRange);
-    status->set_error_arg(seq);
-    return kParseError;
-  }
-
-  // Convert the UnicodeSet to a URange32 and UGroup that we can add.
-  int nr = uset.getRangeCount();
+  UErrorCode uerr = U_ZERO_ERROR; 
+  ::icu::UnicodeSet uset(ustr, uerr); 
+  if (U_FAILURE(uerr)) { 
+    status->set_code(kRegexpBadCharRange); 
+    status->set_error_arg(seq); 
+    return kParseError; 
+  } 
+ 
+  // Convert the UnicodeSet to a URange32 and UGroup that we can add. 
+  int nr = uset.getRangeCount(); 
   PODArray<URange32> r(nr);
-  for (int i = 0; i < nr; i++) {
-    r[i].lo = uset.getRangeStart(i);
-    r[i].hi = uset.getRangeEnd(i);
-  }
+  for (int i = 0; i < nr; i++) { 
+    r[i].lo = uset.getRangeStart(i); 
+    r[i].hi = uset.getRangeEnd(i); 
+  } 
   UGroup g = {"", +1, 0, 0, r.data(), nr};
-  AddUGroup(cc, &g, sign, parse_flags);
-#endif
-
+  AddUGroup(cc, &g, sign, parse_flags); 
+#endif 
+ 
   return kParseOk;
 }
 
@@ -1841,7 +1841,7 @@ static ParseStatus ParseCCName(StringPiece* s, Regexp::ParseFlags parse_flags,
 
   // Got it.  Check that it's valid.
   q += 2;
-  StringPiece name(p, static_cast<size_t>(q - p));
+  StringPiece name(p, static_cast<size_t>(q - p)); 
 
   const UGroup *g = LookupPosixGroup(name);
   if (g == NULL) {
@@ -1895,8 +1895,8 @@ bool Regexp::ParseState::ParseCCRange(StringPiece* s, RuneRange* rr,
       return false;
     if (rr->hi < rr->lo) {
       status->set_code(kRegexpBadCharRange);
-      status->set_error_arg(
-          StringPiece(os.data(), static_cast<size_t>(s->data() - os.data())));
+      status->set_error_arg( 
+          StringPiece(os.data(), static_cast<size_t>(s->data() - os.data()))); 
       return false;
     }
   } else {
@@ -1915,7 +1915,7 @@ bool Regexp::ParseState::ParseCharClass(StringPiece* s,
   if (s->empty() || (*s)[0] != '[') {
     // Caller checked this.
     status->set_code(kRegexpInternalError);
-    status->set_error_arg(StringPiece());
+    status->set_error_arg(StringPiece()); 
     return false;
   }
   bool negated = false;
@@ -2083,8 +2083,8 @@ bool Regexp::ParseState::ParsePerlFlags(StringPiece* s) {
   // so that's the one we implement.  One is enough.
   if (t.size() > 2 && t[0] == 'P' && t[1] == '<') {
     // Pull out name.
-    size_t end = t.find('>', 2);
-    if (end == StringPiece::npos) {
+    size_t end = t.find('>', 2); 
+    if (end == StringPiece::npos) { 
       if (!IsValidUTF8(*s, status_))
         return false;
       status_->set_code(kRegexpBadNamedCapture);
@@ -2192,7 +2192,7 @@ bool Regexp::ParseState::ParsePerlFlags(StringPiece* s) {
 
 BadPerlOp:
   status_->set_code(kRegexpBadPerlOp);
-  status_->set_error_arg(
+  status_->set_error_arg( 
       StringPiece(s->data(), static_cast<size_t>(t.data() - s->data())));
   return false;
 }
@@ -2205,7 +2205,7 @@ void ConvertLatin1ToUTF8(const StringPiece& latin1, std::string* utf) {
   char buf[UTFmax];
 
   utf->clear();
-  for (size_t i = 0; i < latin1.size(); i++) {
+  for (size_t i = 0; i < latin1.size(); i++) { 
     Rune r = latin1[i] & 0xFF;
     int n = runetochar(buf, &r);
     utf->append(buf, n);
@@ -2246,9 +2246,9 @@ Regexp* Regexp::Parse(const StringPiece& s, ParseFlags global_flags,
     return ps.DoFinish();
   }
 
-  StringPiece lastunary = StringPiece();
+  StringPiece lastunary = StringPiece(); 
   while (!t.empty()) {
-    StringPiece isunary = StringPiece();
+    StringPiece isunary = StringPiece(); 
     switch (t[0]) {
       default: {
         Rune r;
@@ -2267,13 +2267,13 @@ Regexp* Regexp::Parse(const StringPiece& s, ParseFlags global_flags,
             return NULL;
           break;
         }
-        if (ps.flags() & NeverCapture) {
-          if (!ps.DoLeftParenNoCapture())
-            return NULL;
-        } else {
-          if (!ps.DoLeftParen(StringPiece()))
-            return NULL;
-        }
+        if (ps.flags() & NeverCapture) { 
+          if (!ps.DoLeftParenNoCapture()) 
+            return NULL; 
+        } else { 
+          if (!ps.DoLeftParen(StringPiece())) 
+            return NULL; 
+        } 
         t.remove_prefix(1);  // '('
         break;
 
@@ -2340,14 +2340,14 @@ Regexp* Regexp::Parse(const StringPiece& s, ParseFlags global_flags,
             //   a** is a syntax error, not a double-star.
             // (and a++ means something else entirely, which we don't support!)
             status->set_code(kRegexpRepeatOp);
-            status->set_error_arg(StringPiece(
+            status->set_error_arg(StringPiece( 
                 lastunary.data(),
                 static_cast<size_t>(t.data() - lastunary.data())));
             return NULL;
           }
         }
-        opstr = StringPiece(opstr.data(),
-                            static_cast<size_t>(t.data() - opstr.data()));
+        opstr = StringPiece(opstr.data(), 
+                            static_cast<size_t>(t.data() - opstr.data())); 
         if (!ps.PushRepeatOp(op, opstr, nongreedy))
           return NULL;
         isunary = opstr;
@@ -2373,14 +2373,14 @@ Regexp* Regexp::Parse(const StringPiece& s, ParseFlags global_flags,
           if (!lastunary.empty()) {
             // Not allowed to stack repetition operators.
             status->set_code(kRegexpRepeatOp);
-            status->set_error_arg(StringPiece(
+            status->set_error_arg(StringPiece( 
                 lastunary.data(),
                 static_cast<size_t>(t.data() - lastunary.data())));
             return NULL;
           }
         }
-        opstr = StringPiece(opstr.data(),
-                            static_cast<size_t>(t.data() - opstr.data()));
+        opstr = StringPiece(opstr.data(), 
+                            static_cast<size_t>(t.data() - opstr.data())); 
         if (!ps.PushRepetition(lo, hi, opstr, nongreedy))
           return NULL;
         isunary = opstr;

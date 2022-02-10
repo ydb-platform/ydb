@@ -315,7 +315,7 @@ public:
     using TThis = TBitMapOps<TTraits>;
 
 private:
-    static_assert(std::is_unsigned<TChunk>::value, "expect std::is_unsigned<TChunk>::value");
+    static_assert(std::is_unsigned<TChunk>::value, "expect std::is_unsigned<TChunk>::value"); 
 
     static constexpr size_t BitsPerChunk = 8 * sizeof(TChunk);
     static constexpr TChunk ModMask = static_cast<TChunk>(BitsPerChunk - 1);
@@ -567,7 +567,7 @@ public:
 
     template <class TTo>
     void Export(size_t pos, TTo& to) const {
-        static_assert(std::is_unsigned<TTo>::value, "expect std::is_unsigned<TTo>::value");
+        static_assert(std::is_unsigned<TTo>::value, "expect std::is_unsigned<TTo>::value"); 
         to = 0;
         size_t chunkpos = pos >> DivCount;
         if (chunkpos >= Mask.GetChunkCapacity())

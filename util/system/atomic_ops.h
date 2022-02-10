@@ -17,7 +17,7 @@ inline const TAtomic* AsAtomicPtr(T const volatile* target) {
 template <typename T>
 struct TAtomicTraits {
     enum {
-        Castable = std::is_integral<T>::value && sizeof(T) == sizeof(TAtomicBase) && !std::is_const<T>::value,
+        Castable = std::is_integral<T>::value && sizeof(T) == sizeof(TAtomicBase) && !std::is_const<T>::value, 
     };
 };
 

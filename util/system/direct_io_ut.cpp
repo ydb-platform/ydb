@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(TDirectIoTestSuite) {
             size_t writeCount = Min<size_t>(1 + RandomNumber<size_t>(1 << 10), data.ysize() - writePos);
             file.Write(&data[writePos], sizeof(ui64) * writeCount);
             writePos += writeCount;
-            size_t readPos = RandomNumber(writePos);
+            size_t readPos = RandomNumber(writePos); 
             size_t readCount = RandomNumber(writePos - readPos);
             UNIT_ASSERT_VALUES_EQUAL(
                 file.Pread(&readResult[0], readCount * sizeof(ui64), readPos * sizeof(ui64)),
@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TDirectIoTestSuite) {
         file.Finish();
         TDirectIOBufferedFile fileNew(FileName_, RdOnly | Direct | Seq | OpenAlways, 1 << 15);
         for (int i = 0; i < 1000; ++i) {
-            size_t readPos = RandomNumber(data.size());
+            size_t readPos = RandomNumber(data.size()); 
             size_t readCount = RandomNumber(data.size() - readPos);
             UNIT_ASSERT_VALUES_EQUAL(
                 fileNew.Pread(&readResult[0], readCount * sizeof(ui64), readPos * sizeof(ui64)),

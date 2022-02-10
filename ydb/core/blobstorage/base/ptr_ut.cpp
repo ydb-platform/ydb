@@ -12,23 +12,23 @@ Y_UNIT_TEST_SUITE(PtrTest) {
     class TSimpleTestDeleter {
     public:
         TSimpleTestDeleter()
-            : Num(new std::atomic<ui64>())
+            : Num(new std::atomic<ui64>()) 
         {
-            Num->store(0);
+            Num->store(0); 
         }
 
         template <class T>
         inline void Destroy(std::unique_ptr<T> t) noexcept {
-            ++(*Num);
+            ++(*Num); 
             CheckedDelete<T>(t.release());
         }
 
         ui64 GetNum() const {
-            return Num->load();
+            return Num->load(); 
         }
 
     private:
-        std::shared_ptr<std::atomic<ui64>> Num;
+        std::shared_ptr<std::atomic<ui64>> Num; 
     };
 
     class TTest1 : public TAtomicRefCountWithDeleter<TTest1, TSimpleTestDeleter> {

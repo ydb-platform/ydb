@@ -5,14 +5,14 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/actors/interconnect/event_holder_pool.h>
 
-#include <atomic>
-
+#include <atomic> 
+ 
 using namespace NActors;
 
 template<typename T>
 TEventHolderPool Setup(T&& callback) {
     auto common = MakeIntrusive<TInterconnectProxyCommon>();
-    common->DestructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>();
+    common->DestructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(); 
     common->MaxDestructorQueueSize = 1024 * 1024;
     return TEventHolderPool(common, callback);
 }

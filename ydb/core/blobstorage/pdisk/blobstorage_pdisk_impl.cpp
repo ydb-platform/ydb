@@ -1193,7 +1193,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             i64 ownerFree = Max<i64>(0, Keeper.GetOwnerFree(owner)) * Format.ChunkSize;
             i64 ownerAllocated = (i64)Keeper.GetOwnerUsed(owner) * Format.ChunkSize;
             minSlotSize = Min(minSlotSize, Keeper.GetOwnerHardLimit(owner) * Format.ChunkSize);
-            reportResult->VDiskStateVect.emplace_back(data.WhiteboardProxyId, NKikimrWhiteboard::TVDiskStateInfo());
+            reportResult->VDiskStateVect.emplace_back(data.WhiteboardProxyId, NKikimrWhiteboard::TVDiskStateInfo()); 
             auto& vdiskInfo = std::get<1>(reportResult->VDiskStateVect.back());
             vdiskInfo.SetAvailableSize(ownerFree);
             vdiskInfo.SetAllocatedSize(ownerAllocated);

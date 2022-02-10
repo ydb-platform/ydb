@@ -21,7 +21,7 @@ public:
      *  pointer types cannot be serialized as POD-type
      */
     enum {
-        IsSerializablePod = TTypeTraits<T>::IsPod && !std::is_pointer<T>::value
+        IsSerializablePod = TTypeTraits<T>::IsPod && !std::is_pointer<T>::value 
     };
 };
 
@@ -218,17 +218,17 @@ struct TRangeSerialize<It, false> {
 
 template <class It>
 static inline void SaveRange(IOutputStream* rh, It b, It e) {
-    TRangeSerialize<It, std::is_pointer<It>::value>::Save(rh, b, e);
+    TRangeSerialize<It, std::is_pointer<It>::value>::Save(rh, b, e); 
 }
 
 template <class It>
 static inline void LoadRange(IInputStream* rh, It b, It e) {
-    TRangeSerialize<It, std::is_pointer<It>::value>::Load(rh, b, e);
+    TRangeSerialize<It, std::is_pointer<It>::value>::Load(rh, b, e); 
 }
 
 template <class It, class TStorage>
 static inline void LoadRange(IInputStream* rh, It b, It e, TStorage& pool) {
-    TRangeSerialize<It, std::is_pointer<It>::value>::Load(rh, b, e, pool);
+    TRangeSerialize<It, std::is_pointer<It>::value>::Load(rh, b, e, pool); 
 }
 
 template <class T>
@@ -383,19 +383,19 @@ class TSerializer<std::deque<T, A>>: public TVectorSerializer<std::deque<T, A>> 
 };
 
 template <class TArray>
-class TStdArraySerializer {
+class TStdArraySerializer { 
 public:
     static inline void Save(IOutputStream* rh, const TArray& a) {
-        ::SaveArray(rh, a.data(), a.size());
+        ::SaveArray(rh, a.data(), a.size()); 
     }
 
     static inline void Load(IInputStream* rh, TArray& a) {
-        ::LoadArray(rh, a.data(), a.size());
+        ::LoadArray(rh, a.data(), a.size()); 
     }
 };
 
 template <class T, size_t N>
-class TSerializer<std::array<T, N>>: public TStdArraySerializer<std::array<T, N>> {
+class TSerializer<std::array<T, N>>: public TStdArraySerializer<std::array<T, N>> { 
 };
 
 template <class A, class B>

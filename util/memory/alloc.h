@@ -3,7 +3,7 @@
 #include <memory>
 
 template <class Allocator, class T>
-using TReboundAllocator = typename std::allocator_traits<Allocator>::template rebind_alloc<T>;
+using TReboundAllocator = typename std::allocator_traits<Allocator>::template rebind_alloc<T>; 
 
 class IAllocator {
 public:

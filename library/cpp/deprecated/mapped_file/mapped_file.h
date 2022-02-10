@@ -64,7 +64,7 @@ public:
         return (Map_ ? (void*)((unsigned char*)Map_->Ptr() + pos) : nullptr);
     }
 
-    void precharge(size_t pos = 0, size_t size = (size_t)-1) const;
+    void precharge(size_t pos = 0, size_t size = (size_t)-1) const; 
 
     void swap(TMappedFile& file) noexcept {
         DoSwap(Map_, file.Map_);

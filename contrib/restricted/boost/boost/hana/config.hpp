@@ -89,7 +89,7 @@ Distributed under the Boost Software License, Version 1.0.
 #if defined(_LIBCPP_VERSION)
 
 #   define BOOST_HANA_CONFIG_LIBCPP BOOST_HANA_CONFIG_VERSION(              \
-                (_LIBCPP_VERSION) / 1000, 0, (_LIBCPP_VERSION) % 1000)
+                (_LIBCPP_VERSION) / 1000, 0, (_LIBCPP_VERSION) % 1000) 
 
 #   if BOOST_HANA_CONFIG_LIBCPP < BOOST_HANA_CONFIG_VERSION(1, 0, 101)
 #       warning "Versions of libc++ prior to the one shipped with Clang 3.5.0 are not supported by Hana."

@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-#ifndef RE2_PREFILTER_TREE_H_
-#define RE2_PREFILTER_TREE_H_
-
+#ifndef RE2_PREFILTER_TREE_H_ 
+#define RE2_PREFILTER_TREE_H_ 
+ 
 // The PrefilterTree class is used to form an AND-OR tree of strings
 // that would trigger each regexp. The 'prefilter' of each regexp is
 // added to PrefilterTree, and then PrefilterTree is used to find all
@@ -16,11 +16,11 @@
 // atoms) that the user of this class should use to do the string
 // matching.
 
-#include <map>
-#include <string>
-#include <vector>
-
-#include "util/util.h"
+#include <map> 
+#include <string> 
+#include <vector> 
+ 
+#include "util/util.h" 
 #include "re2/prefilter.h"
 #include "re2/sparse_array.h"
 
@@ -29,7 +29,7 @@ namespace re2 {
 class PrefilterTree {
  public:
   PrefilterTree();
-  explicit PrefilterTree(int min_atom_len);
+  explicit PrefilterTree(int min_atom_len); 
   ~PrefilterTree();
 
   // Adds the prefilter for the next regexp. Note that we assume that
@@ -50,8 +50,8 @@ class PrefilterTree {
   // contain all the ids of string atoms that were found to match the
   // content. The caller can use any string match engine to perform
   // this function. This function is thread safe.
-  void RegexpsGivenStrings(const std::vector<int>& matched_atoms,
-                           std::vector<int>* regexps) const;
+  void RegexpsGivenStrings(const std::vector<int>& matched_atoms, 
+                           std::vector<int>* regexps) const; 
 
   // Print debug prefilter. Also prints unique ids associated with
   // nodes of the prefilter of the regexp.
@@ -77,23 +77,23 @@ class PrefilterTree {
     // are two different nodes, but they share the atom 'def'. So when
     // 'def' matches, it triggers two parents, corresponding to the two
     // different OR nodes.
-    StdIntMap* parents;
+    StdIntMap* parents; 
 
     // When this node is ready to trigger the parent, what are the
     // regexps that are triggered.
-    std::vector<int> regexps;
+    std::vector<int> regexps; 
   };
 
-  // Returns true if the prefilter node should be kept.
-  bool KeepNode(Prefilter* node) const;
-
+  // Returns true if the prefilter node should be kept. 
+  bool KeepNode(Prefilter* node) const; 
+ 
   // This function assigns unique ids to various parts of the
   // prefilter, by looking at if these nodes are already in the
   // PrefilterTree.
   void AssignUniqueIds(NodeMap* nodes, std::vector<std::string>* atom_vec);
 
   // Given the matching atoms, find the regexps to be triggered.
-  void PropagateMatch(const std::vector<int>& atom_ids,
+  void PropagateMatch(const std::vector<int>& atom_ids, 
                       IntMap* regexps) const;
 
   // Returns the prefilter node that has the same NodeString as this
@@ -112,28 +112,28 @@ class PrefilterTree {
 
   // These are all the nodes formed by Compile. Essentially, there is
   // one node for each unique atom and each unique AND/OR node.
-  std::vector<Entry> entries_;
+  std::vector<Entry> entries_; 
 
   // indices of regexps that always pass through the filter (since we
   // found no required literals in these regexps).
-  std::vector<int> unfiltered_;
+  std::vector<int> unfiltered_; 
 
   // vector of Prefilter for all regexps.
-  std::vector<Prefilter*> prefilter_vec_;
+  std::vector<Prefilter*> prefilter_vec_; 
 
   // Atom index in returned strings to entry id mapping.
-  std::vector<int> atom_index_to_id_;
+  std::vector<int> atom_index_to_id_; 
 
   // Has the prefilter tree been compiled.
   bool compiled_;
 
-  // Strings less than this length are not stored as atoms.
-  const int min_atom_len_;
-
-  PrefilterTree(const PrefilterTree&) = delete;
-  PrefilterTree& operator=(const PrefilterTree&) = delete;
+  // Strings less than this length are not stored as atoms. 
+  const int min_atom_len_; 
+ 
+  PrefilterTree(const PrefilterTree&) = delete; 
+  PrefilterTree& operator=(const PrefilterTree&) = delete; 
 };
 
-}  // namespace
+}  // namespace 
 
 #endif  // RE2_PREFILTER_TREE_H_

@@ -236,8 +236,8 @@ public:
             const ui32 channels = profile.ChannelSize();
             Y_VERIFY(channels >= 2);
 
-            appData->ChannelProfiles->Profiles.emplace_back();
-            TChannelProfiles::TProfile &outProfile = appData->ChannelProfiles->Profiles.back();
+            appData->ChannelProfiles->Profiles.emplace_back(); 
+            TChannelProfiles::TProfile &outProfile = appData->ChannelProfiles->Profiles.back(); 
             ui32 channelIdx = 0;
             for (const NKikimrConfig::TChannelProfileConfig::TProfile::TChannel &channel : profile.GetChannel()) {
                 Y_VERIFY(channel.HasErasureSpecies());

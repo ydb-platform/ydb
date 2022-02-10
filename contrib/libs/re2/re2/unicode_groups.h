@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-#ifndef RE2_UNICODE_GROUPS_H_
-#define RE2_UNICODE_GROUPS_H_
-
+#ifndef RE2_UNICODE_GROUPS_H_ 
+#define RE2_UNICODE_GROUPS_H_ 
+ 
 // Unicode character groups.
 
 // The codes get split into ranges of 16-bit codes
@@ -18,23 +18,23 @@
 // to 16.5 kB of data but make the data harder to use;
 // we don't bother.
 
-#include <stdint.h>
+#include <stdint.h> 
 
-#include "util/util.h"
-#include "util/utf.h"
+#include "util/util.h" 
+#include "util/utf.h" 
 
 namespace re2 {
 
 struct URange16
 {
-  uint16_t lo;
-  uint16_t hi;
+  uint16_t lo; 
+  uint16_t hi; 
 };
 
 struct URange32
 {
-  Rune lo;
-  Rune hi;
+  Rune lo; 
+  Rune hi; 
 };
 
 struct UGroup
@@ -64,4 +64,4 @@ extern const int num_perl_groups;
 
 }  // namespace re2
 
-#endif  // RE2_UNICODE_GROUPS_H_
+#endif  // RE2_UNICODE_GROUPS_H_ 

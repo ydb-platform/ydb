@@ -4,16 +4,16 @@
 #include <util/generic/bitops.h>
 #include <util/generic/string.h>
 
-#include <array>
+#include <array> 
 
 struct TDurationHistogram {
     static const unsigned Buckets = 20;
-    std::array<ui64, Buckets> Times;
+    std::array<ui64, Buckets> Times; 
 
     static const unsigned SecondBoundary = 11;
 
     TDurationHistogram() {
-        Times.fill(0);
+        Times.fill(0); 
     }
 
     static unsigned BucketFor(TDuration d) {

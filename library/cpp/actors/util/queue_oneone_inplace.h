@@ -5,7 +5,7 @@
 
 template <typename T, ui32 TSize, typename TChunk = TQueueChunk<T, TSize>>
 class TOneOneQueueInplace : TNonCopyable {
-    static_assert(std::is_integral<T>::value || std::is_pointer<T>::value, "expect std::is_integral<T>::value || std::is_pointer<T>::valuer");
+    static_assert(std::is_integral<T>::value || std::is_pointer<T>::value, "expect std::is_integral<T>::value || std::is_pointer<T>::valuer"); 
 
     TChunk* ReadFrom;
     ui32 ReadPosition;

@@ -15,9 +15,9 @@
  * in name space re2.
  */
 
-#ifndef UTIL_UTF_H_
-#define UTIL_UTF_H_
-
+#ifndef UTIL_UTF_H_ 
+#define UTIL_UTF_H_ 
+ 
 #include <stdint.h>
 
 namespace re2 {
@@ -41,4 +41,4 @@ char* utfrune(const char*, Rune);
 
 }  // namespace re2
 
-#endif  // UTIL_UTF_H_
+#endif  // UTIL_UTF_H_ 

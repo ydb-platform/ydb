@@ -186,8 +186,8 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
 
     template <typename T>
     void DoCheckAssignment(T t, T tless, T tmore, TStringBuf s, TStringBuf ss) {
-        bool expectint = std::is_integral<T>::value;
-        bool expectnum = std::is_arithmetic<T>::value;
+        bool expectint = std::is_integral<T>::value; 
+        bool expectnum = std::is_arithmetic<T>::value; 
         bool expectbool = std::is_same<bool, T>::value;
 
         {

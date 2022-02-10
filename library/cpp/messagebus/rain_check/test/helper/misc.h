@@ -2,7 +2,7 @@
 
 #include <library/cpp/messagebus/rain_check/core/rain_check.h>
 
-#include <array>
+#include <array> 
 
 namespace NRainCheck {
     struct TNopSimpleTask: public ISimpleTask {
@@ -32,7 +32,7 @@ namespace NRainCheck {
         {
         }
 
-        std::array<TSubtaskCompletion, 2> Completion;
+        std::array<TSubtaskCompletion, 2> Completion; 
 
         void Run() override;
     };
@@ -47,7 +47,7 @@ namespace NRainCheck {
         {
         }
 
-        std::array<TSubtaskCompletion, 2> Completion;
+        std::array<TSubtaskCompletion, 2> Completion; 
 
         TContinueFunc Start() override;
 

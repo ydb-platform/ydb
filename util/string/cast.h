@@ -82,9 +82,9 @@ namespace NPrivate {
  */
 template <class T>
 inline TString ToString(const T& t) {
-    using TR = std::remove_cv_t<T>;
+    using TR = std::remove_cv_t<T>; 
 
-    return ::NPrivate::TToString<TR, std::is_arithmetic<TR>::value>::Cvt((const TR&)t);
+    return ::NPrivate::TToString<TR, std::is_arithmetic<TR>::value>::Cvt((const TR&)t); 
 }
 
 inline const TString& ToString(const TString& s) noexcept {
@@ -273,8 +273,8 @@ inline bool TryFromString(const TUtf16String& s, T& result) {
 template <class T, class TStringType>
 inline bool TryFromStringWithDefault(const TStringType& s, T& result, const T& def) {
     return TryFromString<T>(s.data(), s.size(), result, def);
-}
-
+} 
+ 
 template <class T>
 inline bool TryFromStringWithDefault(const char* s, T& result, const T& def) {
     return TryFromStringWithDefault<T>(TStringBuf(s), result, def);
@@ -296,8 +296,8 @@ inline T FromString(const TChar* data, const size_t len, const T& def) {
 template <class T, class TStringType>
 inline T FromStringWithDefault(const TStringType& s, const T& def) {
     return FromString<T>(s.data(), s.size(), def);
-}
-
+} 
+ 
 template <class T>
 inline T FromStringWithDefault(const char* s, const T& def) {
     return FromStringWithDefault<T>(TStringBuf(s), def);
@@ -316,7 +316,7 @@ size_t IntToString(T t, char* buf, size_t len);
 
 template <int base, class T>
 inline TString IntToString(T t) {
-    static_assert(std::is_arithmetic<std::remove_cv_t<T>>::value, "expect std::is_arithmetic<std::remove_cv_t<T>>::value");
+    static_assert(std::is_arithmetic<std::remove_cv_t<T>>::value, "expect std::is_arithmetic<std::remove_cv_t<T>>::value"); 
 
     char buf[256];
 

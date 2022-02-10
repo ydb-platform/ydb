@@ -69,7 +69,7 @@ namespace {
     template <class T, unsigned base, class TChar>
     struct TBasicIntFormatter {
         static_assert(1 < base && base < 17, "expect 1 < base && base < 17");
-        static_assert(std::is_unsigned<T>::value, "TBasicIntFormatter can only handle unsigned integers.");
+        static_assert(std::is_unsigned<T>::value, "TBasicIntFormatter can only handle unsigned integers."); 
 
         static inline size_t Format(T value, TChar* buf, size_t len) {
             Y_ENSURE(len, TStringBuf("zero length"));
@@ -105,7 +105,7 @@ namespace {
     template <class T, unsigned base, class TChar>
     struct TIntFormatter {
         static_assert(1 < base && base < 17, "expect 1 < base && base < 17");
-        static_assert(std::is_integral<T>::value, "T must be an integral type.");
+        static_assert(std::is_integral<T>::value, "T must be an integral type."); 
 
         static inline size_t Format(T value, TChar* buf, size_t len) {
             using TUFmt = TBasicIntFormatter<std::make_unsigned_t<T>, base, TChar>;
@@ -180,7 +180,7 @@ namespace {
     template <class T, unsigned base, class TChar>
     struct TBasicIntParser {
         static_assert(1 < base && base < 17, "Expect 1 < base && base < 17.");
-        static_assert(std::is_unsigned<T>::value, "TBasicIntParser can only handle unsigned integers.");
+        static_assert(std::is_unsigned<T>::value, "TBasicIntParser can only handle unsigned integers."); 
 
         enum : unsigned {
             BASE_POW_2 = base * base,
@@ -270,10 +270,10 @@ namespace {
     template <class T, unsigned base, class TChar>
     struct TIntParser {
         static_assert(1 < base && base < 17, "Expect 1 < base && base < 17.");
-        static_assert(std::is_integral<T>::value, "T must be an integral type.");
+        static_assert(std::is_integral<T>::value, "T must be an integral type."); 
 
         enum {
-            IsSigned = std::is_signed<T>::value
+            IsSigned = std::is_signed<T>::value 
         };
 
         using TUnsigned = std::make_unsigned_t<T>;

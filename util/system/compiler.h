@@ -274,8 +274,8 @@ _YandexAbort();
     #define _ubsan_enabled_
 #endif
 
-#ifdef __clang__
-
+#ifdef __clang__ 
+ 
     #if __has_feature(thread_sanitizer)
         #define _tsan_enabled_
     #endif
@@ -286,7 +286,7 @@ _YandexAbort();
         #define _asan_enabled_
     #endif
 
-#else
+#else 
 
     #if defined(thread_sanitizer_enabled) || defined(__SANITIZE_THREAD__)
         #define _tsan_enabled_
@@ -298,8 +298,8 @@ _YandexAbort();
         #define _asan_enabled_
     #endif
 
-#endif
-
+#endif 
+ 
 #if defined(_asan_enabled_) || defined(_msan_enabled_) || defined(_tsan_enabled_) || defined(_ubsan_enabled_)
     #define _san_enabled_
 #endif
@@ -550,8 +550,8 @@ _YandexAbort();
     #define Y_PRAGMA_NO_DEPRECATED
 #endif
 
-// Memory sanitizer sometimes doesn't correctly set parameter shadow of constant functions.
-#if (defined(__clang__) || defined(__GNUC__)) && !defined(_msan_enabled_)
+// Memory sanitizer sometimes doesn't correctly set parameter shadow of constant functions. 
+#if (defined(__clang__) || defined(__GNUC__)) && !defined(_msan_enabled_) 
     /**
  * @def Y_CONST_FUNCTION
    methods and functions, marked with this method are promised to:
@@ -601,14 +601,14 @@ _YandexAbort();
 #if defined(__SIZEOF_INT128__)
     #define Y_HAVE_INT128 1
 #endif
-
-/**
- * XRAY macro must be passed to compiler if XRay is enabled.
- *
- * Define everything XRay-specific as a macro so that it doesn't cause errors
- * for compilers that doesn't support XRay.
- */
-#if defined(XRAY) && defined(__cplusplus)
+ 
+/** 
+ * XRAY macro must be passed to compiler if XRay is enabled. 
+ * 
+ * Define everything XRay-specific as a macro so that it doesn't cause errors 
+ * for compilers that doesn't support XRay. 
+ */ 
+#if defined(XRAY) && defined(__cplusplus) 
     #include <xray/xray_interface.h>
     #define Y_XRAY_ALWAYS_INSTRUMENT [[clang::xray_always_instrument]]
     #define Y_XRAY_NEVER_INSTRUMENT [[clang::xray_never_instrument]]
@@ -616,13 +616,13 @@ _YandexAbort();
         do {                                        \
             __xray_customevent(__string, __length); \
         } while (0)
-#else
+#else 
     #define Y_XRAY_ALWAYS_INSTRUMENT
     #define Y_XRAY_NEVER_INSTRUMENT
     #define Y_XRAY_CUSTOM_EVENT(__string, __length) \
         do {                                        \
         } while (0)
-#endif
+#endif 
 
 #ifdef __cplusplus
 

@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-#ifndef RE2_WALKER_INL_H_
-#define RE2_WALKER_INL_H_
-
+#ifndef RE2_WALKER_INL_H_ 
+#define RE2_WALKER_INL_H_ 
+ 
 // Helper class for traversing Regexps without recursion.
 // Clients should declare their own subclasses that override
 // the PreVisit and PostVisit methods, which are called before
@@ -13,9 +13,9 @@
 // Not quite the Visitor pattern, because (among other things)
 // the Visitor pattern is recursive.
 
-#include <stack>
+#include <stack> 
 
-#include "util/logging.h"
+#include "util/logging.h" 
 #include "re2/regexp.h"
 
 namespace re2 {
@@ -95,8 +95,8 @@ template<typename T> class Regexp::Walker {
 
   T WalkInternal(Regexp* re, T top_arg, bool use_copy);
 
-  Walker(const Walker&) = delete;
-  Walker& operator=(const Walker&) = delete;
+  Walker(const Walker&) = delete; 
+  Walker& operator=(const Walker&) = delete; 
 };
 
 template<typename T> T Regexp::Walker<T>::PreVisit(Regexp* re,
@@ -190,7 +190,7 @@ template<typename T> T Regexp::Walker<T>::WalkInternal(Regexp* re, T top_arg,
           s->child_args = &s->child_arg;
         else if (re->nsub_ > 1)
           s->child_args = new T[re->nsub_];
-        FALLTHROUGH_INTENDED;
+        FALLTHROUGH_INTENDED; 
       }
       default: {
         if (re->nsub_ > 0) {
@@ -244,4 +244,4 @@ template<typename T> T Regexp::Walker<T>::WalkExponential(Regexp* re, T top_arg,
 
 }  // namespace re2
 
-#endif  // RE2_WALKER_INL_H_
+#endif  // RE2_WALKER_INL_H_ 

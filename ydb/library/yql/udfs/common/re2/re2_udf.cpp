@@ -1,12 +1,12 @@
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 
-#include <contrib/libs/re2/re2/re2.h>
+#include <contrib/libs/re2/re2/re2.h> 
 
 #include <util/charset/utf8.h>
 #include <util/string/cast.h>
 
-using namespace re2;
+using namespace re2; 
 using namespace NKikimr;
 using namespace NUdf;
 

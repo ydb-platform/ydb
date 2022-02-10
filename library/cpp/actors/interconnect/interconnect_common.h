@@ -13,8 +13,8 @@
 #include "logging.h"
 #include "event_filter.h"
 
-#include <atomic>
-
+#include <atomic> 
+ 
 namespace NActors {
     enum class EEncryptionMode {
         DISABLED, // no encryption is required at all
@@ -78,7 +78,7 @@ namespace NActors {
         TInterconnectSettings Settings;
         TRegisterMonPageCallback RegisterMonPage;
         TActorId DestructorId;
-        std::shared_ptr<std::atomic<TAtomicBase>> DestructorQueueSize;
+        std::shared_ptr<std::atomic<TAtomicBase>> DestructorQueueSize; 
         TAtomicBase MaxDestructorQueueSize = 1024 * 1024 * 1024;
         TString ClusterUUID;
         TVector<TString> AcceptUUID;

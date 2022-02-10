@@ -1544,10 +1544,10 @@ private:
 public:
     void Push(const NLWTrace::TProbe* probe)
     {
-        TableData.emplace_back();
+        TableData.emplace_back(); 
         auto& row = TableData.back();
 
-        row.emplace_back();
+        row.emplace_back(); 
         TString& groups = row.back();
         bool first = true;
         for (const char* const* i = probe->Event.Groups; *i != nullptr; ++i, first = false) {
@@ -1556,7 +1556,7 @@ public:
 
         row.push_back(ProbeHtml(probe->Event.GetProvider(), probe->Event.Name));
 
-        row.emplace_back();
+        row.emplace_back(); 
         TString& params = row.back();
         first = true;
         for (size_t i = 0; i < probe->Event.Signature.ParamCount; i++, first = false) {
@@ -2584,7 +2584,7 @@ private:
         if (CutTs.Skip(item)) {
             return;
         }
-        Table.emplace_back();
+        Table.emplace_back(); 
         NAnalytics::TRow& row = Table.back();
         row["_thread"] = tid;
         if (item.Timestamp != TInstant::Zero()) {
@@ -2614,7 +2614,7 @@ private:
         for (auto& v : Groups) {
             const TString& group = v.first;
             const TTrackLogRefs& tl = v.second;
-            Table.emplace_back();
+            Table.emplace_back(); 
             NAnalytics::TRow& row = Table.back();
             row.Name = group;
             for (const NLWTrace::TLogItem& item : tl.Items) {
@@ -2737,12 +2737,12 @@ struct TPatternNode {
         using namespace NAnalytics;
         NAnalytics::TTable ret;
         for (ui64 x : ResTotalAll) {
-            ret.emplace_back();
+            ret.emplace_back(); 
             TRow& row = ret.back();
             row["resTotal"] = double(x) * 1000.0 / NHPTimer::GetClockRate();
         }
         for (ui64 x : ResLastAll) {
-            ret.emplace_back();
+            ret.emplace_back(); 
             TRow& row = ret.back();
             row["resLast"] = double(x) * 1000.0 / NHPTimer::GetClockRate();
         }

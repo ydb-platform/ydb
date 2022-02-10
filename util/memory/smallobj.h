@@ -107,17 +107,17 @@ private:
 template <class T>
 class TObjectFromPool {
 public:
-    struct THeader {
-        void* Pool;
-        // Can't just use T because THeader must be standard layout type for offsetof to work.
-        alignas(T) char Obj[sizeof(T)];
-    };
-    using TPool = TSmallObjAllocator<THeader>;
+    struct THeader { 
+        void* Pool; 
+        // Can't just use T because THeader must be standard layout type for offsetof to work. 
+        alignas(T) char Obj[sizeof(T)]; 
+    }; 
+    using TPool = TSmallObjAllocator<THeader>; 
 
     inline void* operator new(size_t, TPool* pool) {
-        THeader* ret = pool->Allocate();
-        ret->Pool = pool;
-        return &ret->Obj;
+        THeader* ret = pool->Allocate(); 
+        ret->Pool = pool; 
+        return &ret->Obj; 
     }
 
     inline void operator delete(void* ptr, size_t) noexcept {
@@ -134,8 +134,8 @@ public:
 
 private:
     static inline void DoDelete(void* ptr) noexcept {
-        static_assert(std::is_standard_layout<THeader>::value, "offsetof is only defined for standard layout types");
-        THeader* header = (THeader*)((char*)ptr - offsetof(THeader, Obj));
-        ((TPool*)header->Pool)->Release(header);
+        static_assert(std::is_standard_layout<THeader>::value, "offsetof is only defined for standard layout types"); 
+        THeader* header = (THeader*)((char*)ptr - offsetof(THeader, Obj)); 
+        ((TPool*)header->Pool)->Release(header); 
     }
 };

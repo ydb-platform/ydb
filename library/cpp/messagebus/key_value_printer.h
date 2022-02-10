@@ -17,7 +17,7 @@ public:
     ~TKeyValuePrinter();
 
     template <typename TKey, typename TValue>
-    void AddRow(const TKey& key, const TValue& value, bool leftAlign = !std::is_integral<TValue>::value) {
+    void AddRow(const TKey& key, const TValue& value, bool leftAlign = !std::is_integral<TValue>::value) { 
         return AddRowImpl(ToString(key), ToString(value), leftAlign);
     }
 

@@ -26,7 +26,7 @@
 #include "search_iterator.h"
 #include "pattern_searcher.h"
 
-#include <array>
+#include <array> 
 #include <iterator>
 
 
@@ -1435,7 +1435,7 @@ void TCompactTrieTest::TestFirstSymbolIteratorChar32() {
 
 
 void TCompactTrieTest::TestArrayPacker() {
-    using TDataInt = std::array<int, 2>;
+    using TDataInt = std::array<int, 2>; 
     const std::pair<TString, TDataInt> dataXxx{"xxx", {{15, 16}}};
     const std::pair<TString, TDataInt> dataYyy{"yyy", {{20, 30}}};
 

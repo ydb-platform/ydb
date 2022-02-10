@@ -923,7 +923,7 @@ private:
                 size_t outsz = buff.Size();
 
                 for (ui32 i = 0; i < inlearn.size(); ++i) {
-                    out.emplace_back();
+                    out.emplace_back(); 
                     c->Encode(AsStrBuf(inlearn[i]), out[i]);
 
                     insz += inlearn[i].Size();
@@ -976,7 +976,7 @@ private:
         TVector<TBuffer> d;
 
         // 1. common case
-        d.emplace_back();
+        d.emplace_back(); 
         AppendTo(d.back(), 1ULL);
         AppendTo(d.back(), 10ULL);
         AppendTo(d.back(), 100ULL);
@@ -985,7 +985,7 @@ private:
         AppendTo(d.back(), 100000ULL);
 
         // 2. delta overflow
-        d.emplace_back();
+        d.emplace_back(); 
         AppendTo(d.back(), 1ULL);
         AppendTo(d.back(), 10ULL);
         AppendTo(d.back(), 100ULL);
@@ -994,7 +994,7 @@ private:
         AppendTo(d.back(), (ui64)-10ULL);
 
         // 3. bad sorting
-        d.emplace_back();
+        d.emplace_back(); 
         AppendTo(d.back(), 1ULL);
         AppendTo(d.back(), 10ULL);
         AppendTo(d.back(), 1000ULL);
@@ -1003,7 +1003,7 @@ private:
         AppendTo(d.back(), 100000ULL);
 
         // all bad
-        d.emplace_back();
+        d.emplace_back(); 
         AppendTo(d.back(), -1LL);
         AppendTo(d.back(), -1LL);
         AppendTo(d.back(), -1LL);
@@ -1017,12 +1017,12 @@ private:
         using namespace NCodecs;
         {
             TVector<TBuffer> d;
-            d.emplace_back();
+            d.emplace_back(); 
             AppendTo(d.back(), -1LL);
             AppendTo(d.back(), -1LL);
             AppendTo(d.back(), -1LL);
             AppendTo(d.back(), -1LL);
-            d.emplace_back();
+            d.emplace_back(); 
             AppendTo(d.back(), 0LL);
             AppendTo(d.back(), 1LL);
             AppendTo(d.back(), 2LL);
@@ -1030,7 +1030,7 @@ private:
             AppendTo(d.back(), 0LL);
             AppendTo(d.back(), 1LL);
             AppendTo(d.back(), 2LL);
-            d.emplace_back();
+            d.emplace_back(); 
             AppendTo(d.back(), 0LL);
             AppendTo(d.back(), 1LL);
             AppendTo(d.back(), 2LL);
@@ -1039,7 +1039,7 @@ private:
             AppendTo(d.back(), 0LL);
             AppendTo(d.back(), 1LL);
             AppendTo(d.back(), 2LL);
-            d.emplace_back();
+            d.emplace_back(); 
             AppendTo(d.back(), 0LL);
             AppendTo(d.back(), -1LL);
             AppendTo(d.back(), -2LL);
@@ -1055,12 +1055,12 @@ private:
         }
         {
             TVector<TBuffer> d;
-            d.emplace_back();
+            d.emplace_back(); 
             AppendTo(d.back(), -1);
             AppendTo(d.back(), -1);
             AppendTo(d.back(), -1);
             AppendTo(d.back(), -1);
-            d.emplace_back();
+            d.emplace_back(); 
             AppendTo(d.back(), 0);
             AppendTo(d.back(), 1);
             AppendTo(d.back(), 2);
@@ -1069,7 +1069,7 @@ private:
             AppendTo(d.back(), 0);
             AppendTo(d.back(), 1);
             AppendTo(d.back(), 2);
-            d.emplace_back();
+            d.emplace_back(); 
             AppendTo(d.back(), 0);
             AppendTo(d.back(), -1);
             AppendTo(d.back(), -2);
@@ -1085,7 +1085,7 @@ private:
         }
         {
             TVector<TBuffer> d;
-            d.emplace_back();
+            d.emplace_back(); 
             for (auto& textValue : TextValues) {
                 AppendTo(d.back(), (ui32)strlen(textValue));
             }
@@ -1095,7 +1095,7 @@ private:
         }
         {
             TVector<TBuffer> d;
-            d.emplace_back();
+            d.emplace_back(); 
             for (auto& textValue : TextValues) {
                 AppendTo(d.back(), (ui64)strlen(textValue));
             }
@@ -1112,7 +1112,7 @@ private:
             TVector<TBuffer> learn;
 
             for (auto& textValue : TextValues) {
-                learn.emplace_back(textValue, strlen(textValue));
+                learn.emplace_back(textValue, strlen(textValue)); 
             }
 
             TestCodec<TCodec, true>(learn);
@@ -1123,11 +1123,11 @@ private:
 
         {
             TVector<TBuffer> learn;
-            learn.emplace_back();
+            learn.emplace_back(); 
             learn.back().Append('a');
 
             TVector<TBuffer> test;
-            test.emplace_back();
+            test.emplace_back(); 
             for (ui32 i = 0; i < 256; ++i) {
                 test.back().Append((ui8)i);
             }
@@ -1137,7 +1137,7 @@ private:
 
         {
             TVector<TBuffer> learn;
-            learn.emplace_back();
+            learn.emplace_back(); 
             for (ui32 i = 0; i < 256; ++i) {
                 for (ui32 j = 0; j < i; ++j) {
                     learn.back().Append((ui8)i);
@@ -1145,7 +1145,7 @@ private:
             }
 
             TVector<TBuffer> test;
-            test.emplace_back();
+            test.emplace_back(); 
             for (ui32 i = 0; i < 256; ++i) {
                 test.back().Append((ui8)i);
             }
@@ -1155,7 +1155,7 @@ private:
 
         {
             TVector<TBuffer> learn;
-            learn.emplace_back();
+            learn.emplace_back(); 
             for (ui32 i = 0; i < 128; ++i) {
                 for (ui32 j = 0; j < i; ++j) {
                     learn.back().Append((ui8)i);
@@ -1163,7 +1163,7 @@ private:
             }
 
             TVector<TBuffer> test;
-            test.emplace_back();
+            test.emplace_back(); 
             for (ui32 i = 128; i < 256; ++i) {
                 test.back().Append((ui8)i);
             }
@@ -1200,7 +1200,7 @@ private:
         TVector<TBuffer> data;
 
         for (auto& textValue : TextValues) {
-            data.emplace_back(textValue, strlen(textValue));
+            data.emplace_back(textValue, strlen(textValue)); 
         }
 
         TVector<TBuffer> outLearn;
@@ -1210,7 +1210,7 @@ private:
             static_cast<ICodec&>(codec).Learn(data.begin(), data.end());
 
             for (ui32 i = 0; i < data.size(); ++i) {
-                outLearn.emplace_back();
+                outLearn.emplace_back(); 
                 codec.Encode(AsStrBuf(data[i]), outLearn[i]);
             }
         }
@@ -1236,7 +1236,7 @@ private:
             codec.LearnByFreqs(TArrayRef<std::pair<char, ui64>>(freqs, Y_ARRAY_SIZE(freqs)));
 
             for (ui32 i = 0; i < data.size(); ++i) {
-                outLearnByFreqs.emplace_back();
+                outLearnByFreqs.emplace_back(); 
                 codec.Encode(AsStrBuf(data[i]), outLearnByFreqs[i]);
             }
         }
@@ -1254,7 +1254,7 @@ private:
             TVector<TBuffer> learn;
 
             for (auto& textValue : TextValues) {
-                learn.emplace_back(textValue, strlen(textValue));
+                learn.emplace_back(textValue, strlen(textValue)); 
             }
 
             TestCodec<TSolarCodec, true>(learn, TVector<TBuffer>(), new TSolarCodec(512, 8));
@@ -1271,11 +1271,11 @@ private:
 
         {
             TVector<TBuffer> learn;
-            learn.emplace_back();
+            learn.emplace_back(); 
             learn.back().Append('a');
 
             TVector<TBuffer> test;
-            test.emplace_back();
+            test.emplace_back(); 
             for (ui32 i = 0; i < 256; ++i) {
                 test.back().Append((ui8)i);
             }
@@ -1288,7 +1288,7 @@ private:
 
         {
             TVector<TBuffer> learn;
-            learn.emplace_back();
+            learn.emplace_back(); 
             for (ui32 i = 0; i < 256; ++i) {
                 for (ui32 j = 0; j < i; ++j) {
                     learn.back().Append((ui8)i);
@@ -1296,7 +1296,7 @@ private:
             }
 
             TVector<TBuffer> test;
-            test.emplace_back();
+            test.emplace_back(); 
             for (ui32 i = 0; i < 256; ++i) {
                 test.back().Append((ui8)i);
             }
@@ -1312,7 +1312,7 @@ private:
         using namespace NCodecs;
         {
             TVector<TBuffer> learn;
-            learn.emplace_back();
+            learn.emplace_back(); 
             for (ui32 i = 0; i < 256; ++i) {
                 for (i32 j = i; j >= 0; --j) {
                     learn.back().Append((ui8)j);
@@ -1320,7 +1320,7 @@ private:
             }
 
             TVector<TBuffer> test;
-            test.emplace_back();
+            test.emplace_back(); 
             for (ui32 i = 0; i < 256; ++i) {
                 test.back().Append((ui8)i);
             }
@@ -1330,7 +1330,7 @@ private:
         }
         {
             TVector<TBuffer> d;
-            d.emplace_back();
+            d.emplace_back(); 
             for (ui32 i = 0; i < 256; ++i) {
                 for (i32 j = i; j >= 0; --j) {
                     d.back().Append(i * i);

@@ -9,7 +9,7 @@
 #include <util/system/mutex.h>
 #include <util/stream/output.h>
 
-#include <functional>
+#include <functional> 
 #include <cstdlib>
 
 class TMtpQueueHelper {
@@ -40,10 +40,10 @@ namespace NYmp {
         TMtpQueueHelper::Instance().SetThreadCount(threads);
     }
 
-    inline size_t GetThreadCount() {
+    inline size_t GetThreadCount() { 
         return TMtpQueueHelper::Instance().GetThreadCount();
-    }
-
+    } 
+ 
     template <typename T>
     inline void ParallelForStaticChunk(T begin, T end, size_t chunkSize, std::function<void(T)> func) {
         chunkSize = Max<size_t>(chunkSize, 1);

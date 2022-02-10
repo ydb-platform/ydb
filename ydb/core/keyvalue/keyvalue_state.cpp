@@ -1,6 +1,6 @@
 #include "keyvalue_state.h"
 #include "keyvalue_data.h"
-#include "keyvalue_storage_read_request.h" 
+#include "keyvalue_storage_read_request.h"
 #include "keyvalue_storage_request.h"
 #include "keyvalue_trash_key_arbitrary.h"
 #include <ydb/core/base/tablet.h>
@@ -14,7 +14,7 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <util/string/escape.h>
-#include <util/charset/utf8.h> 
+#include <util/charset/utf8.h>
 
 // Set to 1 in order for tablet to reboot instead of failing a Y_VERIFY on database damage
 #define KIKIMR_KEYVALUE_ALLOW_DAMAGE 0
@@ -24,41 +24,41 @@ namespace NKeyValue {
 
 constexpr ui64 KeyValuePairSizeEstimation = 1 + 5 // Key id, length
     + 1 + 5 // Value id, length
-    + 1 + 4 // ValueSize id, value 
-    + 1 + 8 // CreationUnixTime id, value 
+    + 1 + 4 // ValueSize id, value
+    + 1 + 8 // CreationUnixTime id, value
     + 1 + 1 // StorageChannel id, value
     + 1 + 1 // Status id, value
     ;
 
-constexpr ui64 KeyValuePairSizeEstimationNewApi = 1 + 5 // Key id, length 
-    + 1 + 5 // Value id, length 
-    + 1 + 4 // ValueSize id, value 
-    + 1 + 8 // CreationUnixTime id, value 
-    + 1 + 4 // StorageChannel id, value 
-    + 1 + 1 // Status id, value 
-    ; 
- 
-constexpr ui64 KeyInfoSizeEstimation = 1 + 5 // Key id, length 
-    + 1 + 4 // ValueSize id, value 
-    + 1 + 8 // CreationUnixTime id, value 
-    + 1 + 4 // StorageChannel id, value 
-    ; 
- 
-constexpr ui64 ReadRangeRequestMetaDataSizeEstimation = 1 + 5 // pair id, length 
-    + 1 + 1 // Status id, value 
-    ; 
- 
+constexpr ui64 KeyValuePairSizeEstimationNewApi = 1 + 5 // Key id, length
+    + 1 + 5 // Value id, length
+    + 1 + 4 // ValueSize id, value
+    + 1 + 8 // CreationUnixTime id, value
+    + 1 + 4 // StorageChannel id, value
+    + 1 + 1 // Status id, value
+    ;
+
+constexpr ui64 KeyInfoSizeEstimation = 1 + 5 // Key id, length
+    + 1 + 4 // ValueSize id, value
+    + 1 + 8 // CreationUnixTime id, value
+    + 1 + 4 // StorageChannel id, value
+    ;
+
+constexpr ui64 ReadRangeRequestMetaDataSizeEstimation = 1 + 5 // pair id, length
+    + 1 + 1 // Status id, value
+    ;
+
 constexpr ui64 ReadResultSizeEstimation = 1 + 1 // Status id, value
     + 1 + 5 // Value id, length OR Message id, length
     ;
 
-constexpr ui64 ReadResultSizeEstimationNewApi = 1 + 5 // Key id, length 
-    + 1 + 5 // Value id, length 
-    + 1 + 8 // Offset id, value 
-    + 1 + 8 // Size id, value 
-    + 1 + 1 // Status id, value 
-    ; 
- 
+constexpr ui64 ReadResultSizeEstimationNewApi = 1 + 5 // Key id, length
+    + 1 + 5 // Value id, length
+    + 1 + 8 // Offset id, value
+    + 1 + 8 // Size id, value
+    + 1 + 1 // Status id, value
+    ;
+
 constexpr ui64 ErrorMessageSizeEstimation = 128;
 
 // Guideline:
@@ -134,9 +134,9 @@ void TKeyValueState::SetupResourceMetrics(NMetrics::TResourceMetrics* resourceMe
     ResourceMetrics = resourceMetrics;
 }
 
-void TKeyValueState::CountRequestComplete(NMsgBusProxy::EResponseStatus status, 
-        const TRequestStat &stat, const TActorContext &ctx) 
-{ 
+void TKeyValueState::CountRequestComplete(NMsgBusProxy::EResponseStatus status,
+        const TRequestStat &stat, const TActorContext &ctx)
+{
     ui64 fullLatencyMs = (TAppData::TimeProvider->Now() - stat.IntermediateCreatedAt).MilliSeconds();
     if (stat.RequestType == TRequestType::WriteOnly) {
         TabletCounters->Percentile()[COUNTER_LATENCY_FULL_WO].IncrementFor(fullLatencyMs);
@@ -807,8 +807,8 @@ void TKeyValueState::RequestExecute(THolder<TIntermediate> &intermediate, ISimpl
     // Process CmdIncrementGeneration()
     if (intermediate->HasIncrementGeneration) {
 
-        bool IsOk = intermediate->Commands.size() == 0 
-            && intermediate->Deletes.size() == 0 && intermediate->RangeReads.size() == 0 
+        bool IsOk = intermediate->Commands.size() == 0
+            && intermediate->Deletes.size() == 0 && intermediate->RangeReads.size() == 0
             && intermediate->Reads.size() == 0 && intermediate->Renames.size() == 0
             && intermediate->Writes.size() == 0 && intermediate->GetStatuses.size() == 0;
 
@@ -819,7 +819,7 @@ void TKeyValueState::RequestExecute(THolder<TIntermediate> &intermediate, ISimpl
             TStringStream str;
             str << "KeyValue# " << TabletId;
             str << " CmdIncrementGeneration can't be grouped with any other Cmd!";
-            str << " Commands# " << intermediate->Commands.size(); 
+            str << " Commands# " << intermediate->Commands.size();
             str << " Deletes# " << intermediate->Deletes.size();
             str << " RangeReads# " << intermediate->RangeReads.size();
             str << " Reads# " << intermediate->Reads.size();
@@ -852,35 +852,35 @@ void TKeyValueState::RequestComplete(THolder<TIntermediate> &intermediate, const
 ///////////////////////////////////////////////////////////////////////////////
 // Request processing
 //
- 
+
 void TKeyValueState::Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx,
         const TTabletStorageInfo *info) {
     if (!intermediate->IsReplied) {
-        if (intermediate->EvType == TEvKeyValue::TEvRequest::EventType) { 
-            THolder<TEvKeyValue::TEvResponse> response(new TEvKeyValue::TEvResponse); 
-            response->Record = intermediate->Response; 
-            ResourceMetrics->Network.Increment(response->Record.ByteSize()); 
-            ctx.Send(intermediate->RespondTo, response.Release()); 
-        } 
-        if (intermediate->EvType == TEvKeyValue::TEvExecuteTransaction::EventType) { 
-            THolder<TEvKeyValue::TEvExecuteTransactionResponse> response(new TEvKeyValue::TEvExecuteTransactionResponse); 
-            response->Record = intermediate->ExecuteTransactionResponse; 
-            ResourceMetrics->Network.Increment(response->Record.ByteSize()); 
-            ctx.Send(intermediate->RespondTo, response.Release()); 
-        } 
-        if (intermediate->EvType == TEvKeyValue::TEvGetStatus::EventType) { 
-            THolder<TEvKeyValue::TEvGetStatusResponse> response(new TEvKeyValue::TEvGetStatusResponse); 
-            response->Record = intermediate->GetStatusResponse; 
-            ResourceMetrics->Network.Increment(response->Record.ByteSize()); 
-            ctx.Send(intermediate->RespondTo, response.Release()); 
-        } 
-        if (intermediate->EvType == TEvKeyValue::TEvObtainLock::EventType) { 
-            THolder<TEvKeyValue::TEvObtainLockResponse> response(new TEvKeyValue::TEvObtainLockResponse); 
-            response->Record.set_lock_generation(StoredState.GetUserGeneration()); 
-            response->Record.set_cookie(intermediate->Cookie); 
-            ResourceMetrics->Network.Increment(response->Record.ByteSize()); 
-            ctx.Send(intermediate->RespondTo, response.Release()); 
-        } 
+        if (intermediate->EvType == TEvKeyValue::TEvRequest::EventType) {
+            THolder<TEvKeyValue::TEvResponse> response(new TEvKeyValue::TEvResponse);
+            response->Record = intermediate->Response;
+            ResourceMetrics->Network.Increment(response->Record.ByteSize());
+            ctx.Send(intermediate->RespondTo, response.Release());
+        }
+        if (intermediate->EvType == TEvKeyValue::TEvExecuteTransaction::EventType) {
+            THolder<TEvKeyValue::TEvExecuteTransactionResponse> response(new TEvKeyValue::TEvExecuteTransactionResponse);
+            response->Record = intermediate->ExecuteTransactionResponse;
+            ResourceMetrics->Network.Increment(response->Record.ByteSize());
+            ctx.Send(intermediate->RespondTo, response.Release());
+        }
+        if (intermediate->EvType == TEvKeyValue::TEvGetStatus::EventType) {
+            THolder<TEvKeyValue::TEvGetStatusResponse> response(new TEvKeyValue::TEvGetStatusResponse);
+            response->Record = intermediate->GetStatusResponse;
+            ResourceMetrics->Network.Increment(response->Record.ByteSize());
+            ctx.Send(intermediate->RespondTo, response.Release());
+        }
+        if (intermediate->EvType == TEvKeyValue::TEvObtainLock::EventType) {
+            THolder<TEvKeyValue::TEvObtainLockResponse> response(new TEvKeyValue::TEvObtainLockResponse);
+            response->Record.set_lock_generation(StoredState.GetUserGeneration());
+            response->Record.set_cookie(intermediate->Cookie);
+            ResourceMetrics->Network.Increment(response->Record.ByteSize());
+            ctx.Send(intermediate->RespondTo, response.Release());
+        }
         intermediate->IsReplied = true;
         intermediate->UpdateStat();
 
@@ -891,338 +891,338 @@ void TKeyValueState::Reply(THolder<TIntermediate> &intermediate, const TActorCon
     }
 }
 
-void TKeyValueState::ProcessCmd(TIntermediate::TRead &request, 
-        NKikimrClient::TKeyValueResponse::TReadResult *legacyResponse, 
-        NKikimrKeyValue::Channel */*response*/, 
-        ISimpleDb &/*db*/, const TActorContext &/*ctx*/, TRequestStat &/*stat*/, ui64 /*unixTime*/) 
-{ 
-    NKikimrProto::EReplyStatus outStatus = request.CumulativeStatus(); 
-    request.Status = outStatus; 
-    legacyResponse->SetStatus(outStatus); 
-    if (outStatus == NKikimrProto::OK) { 
-        legacyResponse->SetValue(request.Value); 
-        Y_VERIFY(request.Value.size() == request.ValueSize); 
-    } else { 
-        legacyResponse->SetMessage(request.Message); 
-        if (outStatus == NKikimrProto::NODATA) { 
-            for (ui32 itemIdx = 0; itemIdx < request.ReadItems.size(); ++itemIdx) { 
-                TIntermediate::TRead::TReadItem &item = request.ReadItems[itemIdx]; 
-                // Make sure the blob is not referenced anymore 
-                auto refCountIt = RefCounts.find(item.LogoBlobId); 
-                if (refCountIt != RefCounts.end()) { 
-                    TStringStream str; 
-                    str << "KeyValue# " << TabletId 
-                        << " CmdRead " 
-                        //<< " ReadIdx# " << i 
-                        << " key# " << EscapeC(request.Key) 
-                        << " ItemIdx# " << itemIdx 
-                        << " BlobId# " << item.LogoBlobId.ToString() 
-                        << " Status# " << NKikimrProto::EReplyStatus_Name(item.Status) 
-                        << " outStatus# " << NKikimrProto::EReplyStatus_Name(outStatus) 
-                        << " but blob has RefCount# " << refCountIt->second 
-                        << " ! KEYVALUE CONSISTENCY ERROR!" 
-                        << " Message# " << request.Message 
-                        << " Marker# KV46"; 
-                    Y_VERIFY(false, "%s", str.Str().c_str()); 
-                } 
-            } 
-        } 
-    } 
-} 
+void TKeyValueState::ProcessCmd(TIntermediate::TRead &request,
+        NKikimrClient::TKeyValueResponse::TReadResult *legacyResponse,
+        NKikimrKeyValue::Channel */*response*/,
+        ISimpleDb &/*db*/, const TActorContext &/*ctx*/, TRequestStat &/*stat*/, ui64 /*unixTime*/)
+{
+    NKikimrProto::EReplyStatus outStatus = request.CumulativeStatus();
+    request.Status = outStatus;
+    legacyResponse->SetStatus(outStatus);
+    if (outStatus == NKikimrProto::OK) {
+        legacyResponse->SetValue(request.Value);
+        Y_VERIFY(request.Value.size() == request.ValueSize);
+    } else {
+        legacyResponse->SetMessage(request.Message);
+        if (outStatus == NKikimrProto::NODATA) {
+            for (ui32 itemIdx = 0; itemIdx < request.ReadItems.size(); ++itemIdx) {
+                TIntermediate::TRead::TReadItem &item = request.ReadItems[itemIdx];
+                // Make sure the blob is not referenced anymore
+                auto refCountIt = RefCounts.find(item.LogoBlobId);
+                if (refCountIt != RefCounts.end()) {
+                    TStringStream str;
+                    str << "KeyValue# " << TabletId
+                        << " CmdRead "
+                        //<< " ReadIdx# " << i
+                        << " key# " << EscapeC(request.Key)
+                        << " ItemIdx# " << itemIdx
+                        << " BlobId# " << item.LogoBlobId.ToString()
+                        << " Status# " << NKikimrProto::EReplyStatus_Name(item.Status)
+                        << " outStatus# " << NKikimrProto::EReplyStatus_Name(outStatus)
+                        << " but blob has RefCount# " << refCountIt->second
+                        << " ! KEYVALUE CONSISTENCY ERROR!"
+                        << " Message# " << request.Message
+                        << " Marker# KV46";
+                    Y_VERIFY(false, "%s", str.Str().c_str());
+                }
+            }
+        }
+    }
+}
 
-void TKeyValueState::ProcessCmd(TIntermediate::TRangeRead &request, 
-        NKikimrClient::TKeyValueResponse::TReadRangeResult *legacyResponse, 
-        NKikimrKeyValue::Channel */*response*/, 
-        ISimpleDb &/*db*/, const TActorContext &/*ctx*/, TRequestStat &/*stat*/, ui64 /*unixTime*/) 
-{ 
-    for (ui64 r = 0; r < request.Reads.size(); ++r) { 
-        auto &read = request.Reads[r]; 
-        auto *resultKv = legacyResponse->AddPair(); 
- 
-        NKikimrProto::EReplyStatus outStatus = read.CumulativeStatus(); 
-        read.Status = outStatus; 
-        if (outStatus != NKikimrProto::OK && outStatus != NKikimrProto::OVERRUN) { 
-            // LOG_ERROR_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " CmdReadRange " << r 
-            //    << " status " << NKikimrProto::EReplyStatus_Name(outStatus) 
-            //    << " message " << read.Message 
-            //    << " key " << EscapeC(read.Key)); 
- 
+void TKeyValueState::ProcessCmd(TIntermediate::TRangeRead &request,
+        NKikimrClient::TKeyValueResponse::TReadRangeResult *legacyResponse,
+        NKikimrKeyValue::Channel */*response*/,
+        ISimpleDb &/*db*/, const TActorContext &/*ctx*/, TRequestStat &/*stat*/, ui64 /*unixTime*/)
+{
+    for (ui64 r = 0; r < request.Reads.size(); ++r) {
+        auto &read = request.Reads[r];
+        auto *resultKv = legacyResponse->AddPair();
+
+        NKikimrProto::EReplyStatus outStatus = read.CumulativeStatus();
+        read.Status = outStatus;
+        if (outStatus != NKikimrProto::OK && outStatus != NKikimrProto::OVERRUN) {
+            // LOG_ERROR_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " CmdReadRange " << r
+            //    << " status " << NKikimrProto::EReplyStatus_Name(outStatus)
+            //    << " message " << read.Message
+            //    << " key " << EscapeC(read.Key));
+
             if (outStatus == NKikimrProto::NODATA) {
-                for (ui32 itemIdx = 0; itemIdx < read.ReadItems.size(); ++itemIdx) { 
-                    TIntermediate::TRead::TReadItem &item = read.ReadItems[itemIdx]; 
+                for (ui32 itemIdx = 0; itemIdx < read.ReadItems.size(); ++itemIdx) {
+                    TIntermediate::TRead::TReadItem &item = read.ReadItems[itemIdx];
                     // Make sure the blob is not referenced anymore
                     auto refCountIt = RefCounts.find(item.LogoBlobId);
                     if (refCountIt != RefCounts.end()) {
                         TStringStream str;
                         str << "KeyValue# " << TabletId
-                            << " CmdReadRange " 
-                            // << " RangeReadIdx# " << i 
-                            << " ReadIdx# " << r 
+                            << " CmdReadRange "
+                            // << " RangeReadIdx# " << i
+                            << " ReadIdx# " << r
                             << " ItemIdx# " << itemIdx
-                            << " key# " << EscapeC(read.Key) 
+                            << " key# " << EscapeC(read.Key)
                             << " BlobId# " << item.LogoBlobId.ToString()
                             << " Status# " << NKikimrProto::EReplyStatus_Name(item.Status)
                             << " outStatus# " << NKikimrProto::EReplyStatus_Name(outStatus)
                             << " but blob has RefCount# " << refCountIt->second
                             << " ! KEYVALUE CONSISTENCY ERROR!"
-                            << " Message# " << read.Message 
-                            << " Marker# KV47"; 
+                            << " Message# " << read.Message
+                            << " Marker# KV47";
                         Y_VERIFY(false, "%s", str.Str().c_str());
                     }
                 }
             }
         }
- 
-        resultKv->SetStatus(outStatus); 
-        resultKv->SetKey(read.Key); 
-        if (request.IncludeData && (outStatus == NKikimrProto::OK || outStatus == NKikimrProto::OVERRUN)) { 
-            resultKv->SetValue(read.Value); 
-            Y_VERIFY(read.Value.size() == read.ValueSize); 
-        } 
-        resultKv->SetValueSize(read.ValueSize); 
-        resultKv->SetCreationUnixTime(read.CreationUnixTime); 
-        resultKv->SetStorageChannel(read.StorageChannel); 
+
+        resultKv->SetStatus(outStatus);
+        resultKv->SetKey(read.Key);
+        if (request.IncludeData && (outStatus == NKikimrProto::OK || outStatus == NKikimrProto::OVERRUN)) {
+            resultKv->SetValue(read.Value);
+            Y_VERIFY(read.Value.size() == read.ValueSize);
+        }
+        resultKv->SetValueSize(read.ValueSize);
+        resultKv->SetCreationUnixTime(read.CreationUnixTime);
+        resultKv->SetStorageChannel(read.StorageChannel);
     }
- 
-    legacyResponse->SetStatus(request.Status); 
+
+    legacyResponse->SetStatus(request.Status);
 }
 
 
-void SetStatusFlags(NKikimrKeyValue::Flags *flags, const TStorageStatusFlags &statusFlags) { 
-    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceCyan)) { 
-        flags->set_disk_space_cyan(true); 
-    } 
-    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) { 
-        flags->set_disk_space_light_yellow_move(true); 
-    } 
-    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) { 
-        flags->set_disk_space_yellow_stop(true); 
-    } 
-    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightOrange)) { 
-        flags->set_disk_space_light_orange(true); 
-    } 
-    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceOrange)) { 
-        flags->set_disk_space_orange(true); 
-    } 
-    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceRed)) { 
-        flags->set_disk_space_red(true); 
-    } 
-    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceBlack)) { 
-        flags->set_disk_space_black(true); 
-    } 
-} 
- 
-void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request, 
-        NKikimrClient::TKeyValueResponse::TWriteResult *legacyResponse, 
-        NKikimrKeyValue::Channel *response, 
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime) 
-{ 
-    TIndexRecord& record = Index[request.Key]; 
-    Dereference(record, db, ctx); 
+void SetStatusFlags(NKikimrKeyValue::Flags *flags, const TStorageStatusFlags &statusFlags) {
+    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceCyan)) {
+        flags->set_disk_space_cyan(true);
+    }
+    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
+        flags->set_disk_space_light_yellow_move(true);
+    }
+    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
+        flags->set_disk_space_yellow_stop(true);
+    }
+    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightOrange)) {
+        flags->set_disk_space_light_orange(true);
+    }
+    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceOrange)) {
+        flags->set_disk_space_orange(true);
+    }
+    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceRed)) {
+        flags->set_disk_space_red(true);
+    }
+    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceBlack)) {
+        flags->set_disk_space_black(true);
+    }
+}
 
-    record.Chain = {}; 
-    ui32 storage_channel = 0; 
-    if (request.Status == NKikimrProto::SCHEDULED) { 
-        TString inlineData = request.Data; 
-        record.Chain.push_back(TIndexRecord::TChainItem(inlineData, 0)); 
-        CountWriteRecord(0, inlineData.size()); 
-        request.Status = NKikimrProto::OK; 
-        storage_channel = InlineStorageChannelInPublicApi; 
-    } else { 
-        int channel = -1; 
+void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
+        NKikimrClient::TKeyValueResponse::TWriteResult *legacyResponse,
+        NKikimrKeyValue::Channel *response,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime)
+{
+    TIndexRecord& record = Index[request.Key];
+    Dereference(record, db, ctx);
 
-        ui64 offset = 0; 
-        for (const TLogoBlobID& logoBlobId : request.LogoBlobIds) { 
-            record.Chain.push_back(TIndexRecord::TChainItem(logoBlobId, offset)); 
-            offset += logoBlobId.BlobSize(); 
-            CountWriteRecord(logoBlobId.Channel(), logoBlobId.BlobSize()); 
-            if (channel == -1) { 
-                channel = logoBlobId.Channel(); 
-            } else { 
-                // all blobs from the same write must be within the same channel 
-                Y_VERIFY(channel == (int)logoBlobId.Channel()); 
+    record.Chain = {};
+    ui32 storage_channel = 0;
+    if (request.Status == NKikimrProto::SCHEDULED) {
+        TString inlineData = request.Data;
+        record.Chain.push_back(TIndexRecord::TChainItem(inlineData, 0));
+        CountWriteRecord(0, inlineData.size());
+        request.Status = NKikimrProto::OK;
+        storage_channel = InlineStorageChannelInPublicApi;
+    } else {
+        int channel = -1;
+
+        ui64 offset = 0;
+        for (const TLogoBlobID& logoBlobId : request.LogoBlobIds) {
+            record.Chain.push_back(TIndexRecord::TChainItem(logoBlobId, offset));
+            offset += logoBlobId.BlobSize();
+            CountWriteRecord(logoBlobId.Channel(), logoBlobId.BlobSize());
+            if (channel == -1) {
+                channel = logoBlobId.Channel();
+            } else {
+                // all blobs from the same write must be within the same channel
+                Y_VERIFY(channel == (int)logoBlobId.Channel());
             }
-        } 
-        storage_channel = channel + MainStorageChannelInPublicApi; 
+        }
+        storage_channel = channel + MainStorageChannelInPublicApi;
 
-        ctx.Send(ChannelBalancerActorId, new TChannelBalancer::TEvReportWriteLatency(channel, request.Latency)); 
-    } 
- 
-    record.CreationUnixTime = unixTime; 
-    UpdateKeyValue(request.Key, record, db, ctx); 
- 
-    if (legacyResponse) { 
-        legacyResponse->SetStatus(NKikimrProto::OK); 
-        legacyResponse->SetStatusFlags(request.StatusFlags.Raw); 
-    } 
-    if (response) { 
-        response->set_status(NKikimrKeyValue::Statuses::RSTATUS_OK); 
-        auto *flags = response->mutable_status_flags(); 
-        SetStatusFlags(flags, request.StatusFlags); 
-        response->set_storage_channel(storage_channel); 
-    } 
-} 
- 
-void TKeyValueState::ProcessCmd(const TIntermediate::TDelete &request, 
-        NKikimrClient::TKeyValueResponse::TDeleteRangeResult *legacyResponse, 
-        NKikimrKeyValue::Channel */*response*/, 
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 /*unixTime*/) 
-{ 
-    TraverseRange(request.Range, [&](TIndex::iterator it) { 
-        stat.Deletes++; 
-        stat.DeleteBytes += it->second.GetFullValueSize(); 
-        Dereference(it->second, db, ctx); 
-        THelpers::DbEraseUserKey(it->first, db, ctx); 
-        Index.erase(it); 
-    }); 
- 
-    if (legacyResponse) { 
-        legacyResponse->SetStatus(NKikimrProto::OK); 
-    } 
-} 
- 
-void TKeyValueState::ProcessCmd(const TIntermediate::TRename &request, 
-        NKikimrClient::TKeyValueResponse::TRenameResult *legacyResponse, 
-        NKikimrKeyValue::Channel */*response*/, 
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime) 
-{ 
-    auto oldIter = Index.find(request.OldKey); 
-    Y_VERIFY(oldIter != Index.end()); 
-    TIndexRecord& source = oldIter->second; 
- 
-    TIndexRecord& dest = Index[request.NewKey]; 
-    Dereference(dest, db, ctx); 
-    dest.Chain = std::move(source.Chain); 
-    dest.CreationUnixTime = unixTime; 
- 
-    THelpers::DbEraseUserKey(oldIter->first, db, ctx); 
-    Index.erase(oldIter); 
- 
-    UpdateKeyValue(request.NewKey, dest, db, ctx); 
- 
-    if (legacyResponse) { 
-        legacyResponse->SetStatus(NKikimrProto::OK); 
-    } 
-} 
- 
-void TKeyValueState::ProcessCmd(const TIntermediate::TCopyRange &request, 
-        NKikimrClient::TKeyValueResponse::TCopyRangeResult *legacyResponse, 
-        NKikimrKeyValue::Channel */*response*/, 
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 /*unixTime*/) 
-{ 
-    TVector<TIndex::iterator> itemsToClone; 
- 
-    TraverseRange(request.Range, [&](TIndex::iterator it) { 
-        if (it->first.StartsWith(request.PrefixToRemove)) { 
-            itemsToClone.push_back(it); 
-        } 
-    }); 
- 
-    for (TIndex::iterator it : itemsToClone) { 
-        const TIndexRecord& sourceRecord = it->second; 
-        for (const TIndexRecord::TChainItem& item : sourceRecord.Chain) { 
-            if (!item.IsInline()) { 
-                ++RefCounts[item.LogoBlobId]; 
+        ctx.Send(ChannelBalancerActorId, new TChannelBalancer::TEvReportWriteLatency(channel, request.Latency));
+    }
+
+    record.CreationUnixTime = unixTime;
+    UpdateKeyValue(request.Key, record, db, ctx);
+
+    if (legacyResponse) {
+        legacyResponse->SetStatus(NKikimrProto::OK);
+        legacyResponse->SetStatusFlags(request.StatusFlags.Raw);
+    }
+    if (response) {
+        response->set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
+        auto *flags = response->mutable_status_flags();
+        SetStatusFlags(flags, request.StatusFlags);
+        response->set_storage_channel(storage_channel);
+    }
+}
+
+void TKeyValueState::ProcessCmd(const TIntermediate::TDelete &request,
+        NKikimrClient::TKeyValueResponse::TDeleteRangeResult *legacyResponse,
+        NKikimrKeyValue::Channel */*response*/,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 /*unixTime*/)
+{
+    TraverseRange(request.Range, [&](TIndex::iterator it) {
+        stat.Deletes++;
+        stat.DeleteBytes += it->second.GetFullValueSize();
+        Dereference(it->second, db, ctx);
+        THelpers::DbEraseUserKey(it->first, db, ctx);
+        Index.erase(it);
+    });
+
+    if (legacyResponse) {
+        legacyResponse->SetStatus(NKikimrProto::OK);
+    }
+}
+
+void TKeyValueState::ProcessCmd(const TIntermediate::TRename &request,
+        NKikimrClient::TKeyValueResponse::TRenameResult *legacyResponse,
+        NKikimrKeyValue::Channel */*response*/,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime)
+{
+    auto oldIter = Index.find(request.OldKey);
+    Y_VERIFY(oldIter != Index.end());
+    TIndexRecord& source = oldIter->second;
+
+    TIndexRecord& dest = Index[request.NewKey];
+    Dereference(dest, db, ctx);
+    dest.Chain = std::move(source.Chain);
+    dest.CreationUnixTime = unixTime;
+
+    THelpers::DbEraseUserKey(oldIter->first, db, ctx);
+    Index.erase(oldIter);
+
+    UpdateKeyValue(request.NewKey, dest, db, ctx);
+
+    if (legacyResponse) {
+        legacyResponse->SetStatus(NKikimrProto::OK);
+    }
+}
+
+void TKeyValueState::ProcessCmd(const TIntermediate::TCopyRange &request,
+        NKikimrClient::TKeyValueResponse::TCopyRangeResult *legacyResponse,
+        NKikimrKeyValue::Channel */*response*/,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 /*unixTime*/)
+{
+    TVector<TIndex::iterator> itemsToClone;
+
+    TraverseRange(request.Range, [&](TIndex::iterator it) {
+        if (it->first.StartsWith(request.PrefixToRemove)) {
+            itemsToClone.push_back(it);
+        }
+    });
+
+    for (TIndex::iterator it : itemsToClone) {
+        const TIndexRecord& sourceRecord = it->second;
+        for (const TIndexRecord::TChainItem& item : sourceRecord.Chain) {
+            if (!item.IsInline()) {
+                ++RefCounts[item.LogoBlobId];
             }
         }
 
-        TString newKey = request.PrefixToAdd + it->first.substr(request.PrefixToRemove.size()); 
-        TIndexRecord& record = Index[newKey]; 
-        Dereference(record, db, ctx); 
-        record.Chain = sourceRecord.Chain; 
-        record.CreationUnixTime = sourceRecord.CreationUnixTime; 
-        UpdateKeyValue(newKey, record, db, ctx); 
+        TString newKey = request.PrefixToAdd + it->first.substr(request.PrefixToRemove.size());
+        TIndexRecord& record = Index[newKey];
+        Dereference(record, db, ctx);
+        record.Chain = sourceRecord.Chain;
+        record.CreationUnixTime = sourceRecord.CreationUnixTime;
+        UpdateKeyValue(newKey, record, db, ctx);
     }
- 
-    if (legacyResponse) { 
-        legacyResponse->SetStatus(NKikimrProto::OK); 
-    } 
+
+    if (legacyResponse) {
+        legacyResponse->SetStatus(NKikimrProto::OK);
+    }
 }
 
-void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request, 
-        NKikimrClient::TKeyValueResponse::TConcatResult *legacyResponse, 
-        NKikimrKeyValue::Channel */*response*/, 
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime) 
-{ 
-    TVector<TIndexRecord::TChainItem> chain; 
-    ui64 offset = 0; 
+void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
+        NKikimrClient::TKeyValueResponse::TConcatResult *legacyResponse,
+        NKikimrKeyValue::Channel */*response*/,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime)
+{
+    TVector<TIndexRecord::TChainItem> chain;
+    ui64 offset = 0;
 
-    for (const TString& key : request.InputKeys) { 
-        auto it = Index.find(key); 
-        Y_VERIFY(it != Index.end()); 
-        TIndexRecord& input = it->second; 
+    for (const TString& key : request.InputKeys) {
+        auto it = Index.find(key);
+        Y_VERIFY(it != Index.end());
+        TIndexRecord& input = it->second;
 
-        for (TIndexRecord::TChainItem& chainItem : input.Chain) { 
-            if (chainItem.IsInline()) { 
-                chain.push_back(TIndexRecord::TChainItem(chainItem.InlineData, offset)); 
-            } else { 
-                const TLogoBlobID& id = chainItem.LogoBlobId; 
-                chain.push_back(TIndexRecord::TChainItem(id, offset)); 
-                ++RefCounts[id]; 
-            } 
-            offset += chainItem.GetSize(); 
-        } 
+        for (TIndexRecord::TChainItem& chainItem : input.Chain) {
+            if (chainItem.IsInline()) {
+                chain.push_back(TIndexRecord::TChainItem(chainItem.InlineData, offset));
+            } else {
+                const TLogoBlobID& id = chainItem.LogoBlobId;
+                chain.push_back(TIndexRecord::TChainItem(id, offset));
+                ++RefCounts[id];
+            }
+            offset += chainItem.GetSize();
+        }
 
-        if (!request.KeepInputs) { 
-            Dereference(input, db, ctx); 
-            THelpers::DbEraseUserKey(it->first, db, ctx); 
-            Index.erase(it); 
-        } 
-    } 
-
-    TIndexRecord& record = Index[request.OutputKey]; 
-    Dereference(record, db, ctx); 
-    record.Chain = std::move(chain); 
-    record.CreationUnixTime = unixTime; 
-    UpdateKeyValue(request.OutputKey, record, db, ctx); 
-
-    if (legacyResponse) { 
-        legacyResponse->SetStatus(NKikimrProto::OK); 
-    } 
-} 
- 
-void TKeyValueState::CmdRead(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) { 
-    for (ui64 i = 0; i < intermediate->Reads.size(); ++i) { 
-        auto &request = intermediate->Reads[i]; 
-        auto *response = intermediate->Response.AddReadResult(); 
-        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, 0); 
+        if (!request.KeepInputs) {
+            Dereference(input, db, ctx);
+            THelpers::DbEraseUserKey(it->first, db, ctx);
+            Index.erase(it);
+        }
     }
-    if (intermediate->ReadCommand && std::holds_alternative<TIntermediate::TRead>(*intermediate->ReadCommand)) { 
-        auto &request = std::get<TIntermediate::TRead>(*intermediate->ReadCommand); 
-        auto *response = intermediate->Response.AddReadResult(); 
-        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, 0); 
-    } 
+
+    TIndexRecord& record = Index[request.OutputKey];
+    Dereference(record, db, ctx);
+    record.Chain = std::move(chain);
+    record.CreationUnixTime = unixTime;
+    UpdateKeyValue(request.OutputKey, record, db, ctx);
+
+    if (legacyResponse) {
+        legacyResponse->SetStatus(NKikimrProto::OK);
+    }
 }
 
-void TKeyValueState::CmdReadRange(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) { 
-    Y_UNUSED(ctx); 
-    Y_UNUSED(db); 
-    for (ui64 i = 0; i < intermediate->RangeReads.size(); ++i) { 
-        auto &rangeRead = intermediate->RangeReads[i]; 
-        auto *rangeReadResult = intermediate->Response.AddReadRangeResult(); 
-        ProcessCmd(rangeRead, rangeReadResult, nullptr, db, ctx, intermediate->Stat, 0); 
-    } 
-    if (intermediate->ReadCommand && std::holds_alternative<TIntermediate::TRangeRead>(*intermediate->ReadCommand)) { 
-        auto &request = std::get<TIntermediate::TRangeRead>(*intermediate->ReadCommand); 
-        auto *response = intermediate->Response.AddReadRangeResult(); 
-        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, 0); 
-    } 
-} 
- 
-void TKeyValueState::CmdRename(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) { 
-    ui64 unixTime = TAppData::TimeProvider->Now().Seconds(); 
-    for (ui32 i = 0; i < intermediate->Renames.size(); ++i) { 
-        auto& request = intermediate->Renames[i]; 
-        auto *response = intermediate->Response.AddRenameResult(); 
-        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, unixTime); 
-    } 
-} 
- 
+void TKeyValueState::CmdRead(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) {
+    for (ui64 i = 0; i < intermediate->Reads.size(); ++i) {
+        auto &request = intermediate->Reads[i];
+        auto *response = intermediate->Response.AddReadResult();
+        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, 0);
+    }
+    if (intermediate->ReadCommand && std::holds_alternative<TIntermediate::TRead>(*intermediate->ReadCommand)) {
+        auto &request = std::get<TIntermediate::TRead>(*intermediate->ReadCommand);
+        auto *response = intermediate->Response.AddReadResult();
+        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, 0);
+    }
+}
+
+void TKeyValueState::CmdReadRange(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(db);
+    for (ui64 i = 0; i < intermediate->RangeReads.size(); ++i) {
+        auto &rangeRead = intermediate->RangeReads[i];
+        auto *rangeReadResult = intermediate->Response.AddReadRangeResult();
+        ProcessCmd(rangeRead, rangeReadResult, nullptr, db, ctx, intermediate->Stat, 0);
+    }
+    if (intermediate->ReadCommand && std::holds_alternative<TIntermediate::TRangeRead>(*intermediate->ReadCommand)) {
+        auto &request = std::get<TIntermediate::TRangeRead>(*intermediate->ReadCommand);
+        auto *response = intermediate->Response.AddReadRangeResult();
+        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, 0);
+    }
+}
+
+void TKeyValueState::CmdRename(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) {
+    ui64 unixTime = TAppData::TimeProvider->Now().Seconds();
+    for (ui32 i = 0; i < intermediate->Renames.size(); ++i) {
+        auto& request = intermediate->Renames[i];
+        auto *response = intermediate->Response.AddRenameResult();
+        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, unixTime);
+    }
+}
+
 void TKeyValueState::CmdDelete(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) {
     for (ui32 i = 0; i < intermediate->Deletes.size(); ++i) {
         auto& request = intermediate->Deletes[i];
-        auto *response = intermediate->Response.AddDeleteRangeResult(); 
-        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, 0); 
+        auto *response = intermediate->Response.AddDeleteRangeResult();
+        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, 0);
     }
 }
 
@@ -1230,8 +1230,8 @@ void TKeyValueState::CmdWrite(THolder<TIntermediate> &intermediate, ISimpleDb &d
     ui64 unixTime = TAppData::TimeProvider->Now().Seconds();
     for (ui32 i = 0; i < intermediate->Writes.size(); ++i) {
         auto& request = intermediate->Writes[i];
-        auto *response = intermediate->Response.AddWriteResult(); 
-        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, unixTime); 
+        auto *response = intermediate->Response.AddWriteResult();
+        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, unixTime);
     }
     ResourceMetrics->TryUpdate(ctx);
 }
@@ -1241,47 +1241,47 @@ void TKeyValueState::CmdGetStatus(THolder<TIntermediate> &intermediate, ISimpleD
     Y_UNUSED(ctx);
     for (ui32 i = 0; i < intermediate->GetStatuses.size(); ++i) {
         auto& request = intermediate->GetStatuses[i];
-        if (intermediate->EvType == TEvKeyValue::TEvRequest::EventType) { 
-            auto& response = *intermediate->Response.AddGetStatusResult(); 
+        if (intermediate->EvType == TEvKeyValue::TEvRequest::EventType) {
+            auto& response = *intermediate->Response.AddGetStatusResult();
 
-            response.SetStatus(request.Status); 
-            response.SetStorageChannel(request.StorageChannel); 
-            response.SetStatusFlags(request.StatusFlags.Raw); 
-        } else if ((intermediate->EvType == TEvKeyValue::TEvGetStatus::EventType)) { 
-            auto response = intermediate->GetStatusResponse.add_channel(); 
- 
-            if (request.Status == NKikimrProto::OK) { 
-                response->set_status(NKikimrKeyValue::Statuses::RSTATUS_OK); 
-            } else if (request.Status == NKikimrProto::TIMEOUT) { 
-                response->set_status(NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT); 
-            } else { 
-                response->set_status(NKikimrKeyValue::Statuses::RSTATUS_ERROR); 
-            } 
- 
-            if (request.StorageChannel == NKikimrClient::TKeyValueRequest::INLINE) { 
-                response->set_storage_channel(1); 
-            } else { 
-                response->set_storage_channel(request.StorageChannel - BLOB_CHANNEL + MainStorageChannelInPublicApi); 
-            } 
- 
-            SetStatusFlags(response->mutable_status_flags(), request.StatusFlags); 
-        } 
+            response.SetStatus(request.Status);
+            response.SetStorageChannel(request.StorageChannel);
+            response.SetStatusFlags(request.StatusFlags.Raw);
+        } else if ((intermediate->EvType == TEvKeyValue::TEvGetStatus::EventType)) {
+            auto response = intermediate->GetStatusResponse.add_channel();
+
+            if (request.Status == NKikimrProto::OK) {
+                response->set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
+            } else if (request.Status == NKikimrProto::TIMEOUT) {
+                response->set_status(NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT);
+            } else {
+                response->set_status(NKikimrKeyValue::Statuses::RSTATUS_ERROR);
+            }
+
+            if (request.StorageChannel == NKikimrClient::TKeyValueRequest::INLINE) {
+                response->set_storage_channel(1);
+            } else {
+                response->set_storage_channel(request.StorageChannel - BLOB_CHANNEL + MainStorageChannelInPublicApi);
+            }
+
+            SetStatusFlags(response->mutable_status_flags(), request.StatusFlags);
+        }
     }
-    intermediate->GetStatusResponse.set_status(NKikimrKeyValue::Statuses::RSTATUS_OK); 
+    intermediate->GetStatusResponse.set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
 }
 
 void TKeyValueState::CmdCopyRange(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx) {
     for (const auto& request : intermediate->CopyRanges) {
-        auto *response = intermediate->Response.AddCopyRangeResult(); 
-        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, 0); 
+        auto *response = intermediate->Response.AddCopyRangeResult();
+        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, 0);
     }
 }
 
 void TKeyValueState::CmdConcat(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx) {
     ui64 unixTime = TAppData::TimeProvider->Now().Seconds();
     for (const auto& request : intermediate->Concats) {
-        auto *response = intermediate->Response.AddConcatResult(); 
-        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, unixTime); 
+        auto *response = intermediate->Response.AddConcatResult();
+        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, unixTime);
     }
 }
 
@@ -1320,220 +1320,220 @@ void TKeyValueState::CmdSetExecutorFastLogPolicy(THolder<TIntermediate> &interme
     }
 }
 
-void TKeyValueState::CmdCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) { 
-    ui64 unixTime = TAppData::TimeProvider->Now().Seconds(); 
-    bool wasWrite = false; 
-    auto getChannel = [&](auto &cmd) -> NKikimrKeyValue::Channel* { 
-        using Type = std::decay_t<decltype(cmd)>; 
-        if constexpr (std::is_same_v<Type, TIntermediate::TWrite>) { 
-            if (intermediate->EvType != TEvKeyValue::TEvExecuteTransaction::EventType) { 
-                return nullptr; 
-            } 
-            ui32 storageChannel = MainStorageChannelInPublicApi; 
-            if (cmd.Status == NKikimrProto::SCHEDULED) { 
-                storageChannel = InlineStorageChannelInPublicApi; 
-            } 
-            if (cmd.LogoBlobIds.size()) { 
-                storageChannel = cmd.LogoBlobIds.front().Channel() - BLOB_CHANNEL + MainStorageChannelInPublicApi; 
-            } 
-            auto it = intermediate->Channels.find(storageChannel); 
-            if (it == intermediate->Channels.end()) { 
-                auto channel = intermediate->ExecuteTransactionResponse.add_channel(); 
-                intermediate->Channels.emplace(storageChannel, channel); 
-                return channel; 
-            } 
-            return it->second; 
-        } 
-        return nullptr; 
-    }; 
-    auto getLegacyResponse = [&](auto &cmd) { 
-        using Type = std::decay_t<decltype(cmd)>; 
-        if constexpr (std::is_same_v<Type, TIntermediate::TWrite>) { 
-            wasWrite = true; 
-            return intermediate->Response.AddWriteResult(); 
+void TKeyValueState::CmdCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) {
+    ui64 unixTime = TAppData::TimeProvider->Now().Seconds();
+    bool wasWrite = false;
+    auto getChannel = [&](auto &cmd) -> NKikimrKeyValue::Channel* {
+        using Type = std::decay_t<decltype(cmd)>;
+        if constexpr (std::is_same_v<Type, TIntermediate::TWrite>) {
+            if (intermediate->EvType != TEvKeyValue::TEvExecuteTransaction::EventType) {
+                return nullptr;
+            }
+            ui32 storageChannel = MainStorageChannelInPublicApi;
+            if (cmd.Status == NKikimrProto::SCHEDULED) {
+                storageChannel = InlineStorageChannelInPublicApi;
+            }
+            if (cmd.LogoBlobIds.size()) {
+                storageChannel = cmd.LogoBlobIds.front().Channel() - BLOB_CHANNEL + MainStorageChannelInPublicApi;
+            }
+            auto it = intermediate->Channels.find(storageChannel);
+            if (it == intermediate->Channels.end()) {
+                auto channel = intermediate->ExecuteTransactionResponse.add_channel();
+                intermediate->Channels.emplace(storageChannel, channel);
+                return channel;
+            }
+            return it->second;
         }
-        if constexpr (std::is_same_v<Type, TIntermediate::TDelete>) { 
-            return intermediate->Response.AddDeleteRangeResult(); 
-        } 
-        if constexpr (std::is_same_v<Type, TIntermediate::TRename>) { 
-            return intermediate->Response.AddRenameResult(); 
-        } 
-        if constexpr (std::is_same_v<Type, TIntermediate::TCopyRange>) { 
-            return intermediate->Response.AddCopyRangeResult(); 
-        } 
-        if constexpr (std::is_same_v<Type, TIntermediate::TConcat>) { 
-            return intermediate->Response.AddConcatResult(); 
-        } 
-    }; 
-    auto process = [&](auto &cmd) { 
-        ProcessCmd(cmd, getLegacyResponse(cmd), getChannel(cmd), db, ctx, intermediate->Stat, unixTime); 
-    }; 
-    for (auto &cmd : intermediate->Commands) { 
-        std::visit(process, cmd); 
+        return nullptr;
+    };
+    auto getLegacyResponse = [&](auto &cmd) {
+        using Type = std::decay_t<decltype(cmd)>;
+        if constexpr (std::is_same_v<Type, TIntermediate::TWrite>) {
+            wasWrite = true;
+            return intermediate->Response.AddWriteResult();
+        }
+        if constexpr (std::is_same_v<Type, TIntermediate::TDelete>) {
+            return intermediate->Response.AddDeleteRangeResult();
+        }
+        if constexpr (std::is_same_v<Type, TIntermediate::TRename>) {
+            return intermediate->Response.AddRenameResult();
+        }
+        if constexpr (std::is_same_v<Type, TIntermediate::TCopyRange>) {
+            return intermediate->Response.AddCopyRangeResult();
+        }
+        if constexpr (std::is_same_v<Type, TIntermediate::TConcat>) {
+            return intermediate->Response.AddConcatResult();
+        }
+    };
+    auto process = [&](auto &cmd) {
+        ProcessCmd(cmd, getLegacyResponse(cmd), getChannel(cmd), db, ctx, intermediate->Stat, unixTime);
+    };
+    for (auto &cmd : intermediate->Commands) {
+        std::visit(process, cmd);
     }
-    if (wasWrite) { 
-        ResourceMetrics->TryUpdate(ctx); 
-    } 
-} 
- 
-TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TCopyRange &cmd, TKeySet& keys, 
-        ui32 /*index*/) const 
-{ 
-    TVector<TString> nkeys; 
-    auto range = GetRange(cmd.Range, keys); 
-    for (auto it = range.first; it != range.second; ++it) { 
-        if (it->StartsWith(cmd.PrefixToRemove)) { 
-            nkeys.push_back(cmd.PrefixToAdd + it->substr(cmd.PrefixToRemove.size())); 
-        } 
-    } 
-    keys.insert(nkeys.begin(), nkeys.end()); 
-    return {}; 
-} 
- 
-TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TRename &cmd, TKeySet& keys, 
-        ui32 index) const 
-{ 
-    auto it = keys.find(cmd.OldKey); 
-    if (it == keys.end()) { 
-        TStringStream str; 
-        str << "KeyValue# " << TabletId 
-            << " OldKey# " << EscapeC(cmd.OldKey) << " does not exist in CmdRename(" << index << ")" 
-            << " Marker# KV18"; 
-        return {false, str.Str()}; 
-    } 
-    keys.erase(it); 
-    keys.insert(cmd.NewKey); 
-    return {}; 
-} 
- 
-TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TConcat &cmd, TKeySet& keys, 
-        ui32 index) const 
-{ 
-    for (const TString& key : cmd.InputKeys) { 
-        auto it = keys.find(key); 
-        if (it == keys.end()) { 
-            TStringStream str; 
-            str << "KeyValue# " << TabletId 
-                << " InputKey# " << EscapeC(key) << " does not exist in CmdConcat(" << index << ")" 
-                << " Marker# KV19"; 
-            return {false, str.Str()}; 
-        } 
-        if (!cmd.KeepInputs) { 
-            keys.erase(it); 
-        } 
-    } 
- 
-    keys.insert(cmd.OutputKey); 
-    return {}; 
-} 
- 
-TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TDelete &cmd, TKeySet& keys, 
-        ui32 /*index*/) const 
-{ 
-    auto r = GetRange(cmd.Range, keys); 
-    keys.erase(r.first, r.second); 
-    return {}; 
-} 
- 
-TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TWrite &cmd, TKeySet& keys, 
-        ui32 /*index*/) const 
-{ 
-    keys.insert(cmd.Key); 
-    return {}; 
-} 
- 
-bool TKeyValueState::CheckCmdCopyRanges(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/, 
-        TKeySet& keys, const TTabletStorageInfo* /*info*/) 
-{ 
-    for (const auto& cmd : intermediate->CopyRanges) { 
-        CheckCmd(cmd, keys, 0); 
-    } 
+    if (wasWrite) {
+        ResourceMetrics->TryUpdate(ctx);
+    }
+}
+
+TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TCopyRange &cmd, TKeySet& keys,
+        ui32 /*index*/) const
+{
+    TVector<TString> nkeys;
+    auto range = GetRange(cmd.Range, keys);
+    for (auto it = range.first; it != range.second; ++it) {
+        if (it->StartsWith(cmd.PrefixToRemove)) {
+            nkeys.push_back(cmd.PrefixToAdd + it->substr(cmd.PrefixToRemove.size()));
+        }
+    }
+    keys.insert(nkeys.begin(), nkeys.end());
+    return {};
+}
+
+TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TRename &cmd, TKeySet& keys,
+        ui32 index) const
+{
+    auto it = keys.find(cmd.OldKey);
+    if (it == keys.end()) {
+        TStringStream str;
+        str << "KeyValue# " << TabletId
+            << " OldKey# " << EscapeC(cmd.OldKey) << " does not exist in CmdRename(" << index << ")"
+            << " Marker# KV18";
+        return {false, str.Str()};
+    }
+    keys.erase(it);
+    keys.insert(cmd.NewKey);
+    return {};
+}
+
+TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TConcat &cmd, TKeySet& keys,
+        ui32 index) const
+{
+    for (const TString& key : cmd.InputKeys) {
+        auto it = keys.find(key);
+        if (it == keys.end()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId
+                << " InputKey# " << EscapeC(key) << " does not exist in CmdConcat(" << index << ")"
+                << " Marker# KV19";
+            return {false, str.Str()};
+        }
+        if (!cmd.KeepInputs) {
+            keys.erase(it);
+        }
+    }
+
+    keys.insert(cmd.OutputKey);
+    return {};
+}
+
+TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TDelete &cmd, TKeySet& keys,
+        ui32 /*index*/) const
+{
+    auto r = GetRange(cmd.Range, keys);
+    keys.erase(r.first, r.second);
+    return {};
+}
+
+TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TWrite &cmd, TKeySet& keys,
+        ui32 /*index*/) const
+{
+    keys.insert(cmd.Key);
+    return {};
+}
+
+bool TKeyValueState::CheckCmdCopyRanges(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/,
+        TKeySet& keys, const TTabletStorageInfo* /*info*/)
+{
+    for (const auto& cmd : intermediate->CopyRanges) {
+        CheckCmd(cmd, keys, 0);
+    }
     return true;
 }
 
-bool TKeyValueState::CheckCmdRenames(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys, 
-        const TTabletStorageInfo *info) 
-{ 
+bool TKeyValueState::CheckCmdRenames(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
+        const TTabletStorageInfo *info)
+{
     ui32 index = 0;
     for (const auto& cmd : intermediate->Renames) {
-        const auto &[ok, msg] = CheckCmd(cmd, keys, index++); 
-        if (!ok) { 
-            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, intermediate, info); 
+        const auto &[ok, msg] = CheckCmd(cmd, keys, index++);
+        if (!ok) {
+            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, intermediate, info);
             return false;
         }
     }
     return true;
 }
 
-bool TKeyValueState::CheckCmdConcats(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys, 
-        const TTabletStorageInfo *info) 
-{ 
+bool TKeyValueState::CheckCmdConcats(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
+        const TTabletStorageInfo *info)
+{
     ui32 index = 0;
     for (const auto& cmd : intermediate->Concats) {
-        const auto &[ok, msg] = CheckCmd(cmd, keys, index++); 
-        if (!ok) { 
-            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, intermediate, info); 
-            return false; 
+        const auto &[ok, msg] = CheckCmd(cmd, keys, index++);
+        if (!ok) {
+            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, intermediate, info);
+            return false;
         }
     }
 
     return true;
 }
 
-bool TKeyValueState::CheckCmdDeletes(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/, TKeySet& keys, 
-        const TTabletStorageInfo* /*info*/) 
-{ 
+bool TKeyValueState::CheckCmdDeletes(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/, TKeySet& keys,
+        const TTabletStorageInfo* /*info*/)
+{
     for (const auto& cmd : intermediate->Deletes) {
-        CheckCmd(cmd, keys, 0); 
+        CheckCmd(cmd, keys, 0);
     }
     return true;
 }
 
-bool TKeyValueState::CheckCmdWrites(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/, TKeySet& keys, 
-        const TTabletStorageInfo* /*info*/) 
-{ 
+bool TKeyValueState::CheckCmdWrites(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/, TKeySet& keys,
+        const TTabletStorageInfo* /*info*/)
+{
     for (const auto& cmd : intermediate->Writes) {
-        CheckCmd(cmd, keys, 0); 
+        CheckCmd(cmd, keys, 0);
     }
     return true;
 }
 
 bool TKeyValueState::CheckCmdGetStatus(THolder<TIntermediate>& /*intermediate*/, const TActorContext& /*ctx*/,
-        TKeySet& /*keys*/, const TTabletStorageInfo* /*info*/) 
-{ 
+        TKeySet& /*keys*/, const TTabletStorageInfo* /*info*/)
+{
     return true;
 }
 
-bool TKeyValueState::CheckCmds(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys, 
-        const TTabletStorageInfo* info) 
-{ 
-    ui32 renameIndex = 0; 
-    ui32 concatIndex = 0; 
- 
-    auto nextIdx = [&](auto &cmd) -> ui32 { 
-        using Type = std::decay_t<decltype(cmd)>; 
-        if constexpr (std::is_same_v<Type, TIntermediate::TRename>) { 
-            return renameIndex++; 
-        } 
-        if constexpr (std::is_same_v<Type, TIntermediate::TConcat>) { 
-            return concatIndex++; 
-        } 
-        return 0; 
-    }; 
-    auto visitor = [&](auto &cmd) { 
-        return CheckCmd(cmd, keys, nextIdx(cmd)); 
-    }; 
- 
-    for (const auto& cmd : intermediate->Commands) { 
-        const auto &[ok, msg] = std::visit(visitor, cmd); 
-        if (!ok) { 
-            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, intermediate, info); 
-            return false; 
-        } 
-    } 
-    return true; 
-} 
- 
+bool TKeyValueState::CheckCmds(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
+        const TTabletStorageInfo* info)
+{
+    ui32 renameIndex = 0;
+    ui32 concatIndex = 0;
+
+    auto nextIdx = [&](auto &cmd) -> ui32 {
+        using Type = std::decay_t<decltype(cmd)>;
+        if constexpr (std::is_same_v<Type, TIntermediate::TRename>) {
+            return renameIndex++;
+        }
+        if constexpr (std::is_same_v<Type, TIntermediate::TConcat>) {
+            return concatIndex++;
+        }
+        return 0;
+    };
+    auto visitor = [&](auto &cmd) {
+        return CheckCmd(cmd, keys, nextIdx(cmd));
+    };
+
+    for (const auto& cmd : intermediate->Commands) {
+        const auto &[ok, msg] = std::visit(visitor, cmd);
+        if (!ok) {
+            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, intermediate, info);
+            return false;
+        }
+    }
+    return true;
+}
+
 void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
         const TTabletStorageInfo *info) {
     LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " TTxRequest ProcessCmds");
@@ -1551,12 +1551,12 @@ void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb
         success = false;
     }
 
-    success = success && CheckCmdCopyRanges(intermediate, ctx, keys, info); 
-    success = success && CheckCmdRenames(intermediate, ctx, keys, info); 
-    success = success && CheckCmdConcats(intermediate, ctx, keys, info); 
-    success = success && CheckCmdDeletes(intermediate, ctx, keys, info); 
-    success = success && CheckCmdWrites(intermediate, ctx, keys, info); 
-    success = success && CheckCmds(intermediate, ctx, keys, info); 
+    success = success && CheckCmdCopyRanges(intermediate, ctx, keys, info);
+    success = success && CheckCmdRenames(intermediate, ctx, keys, info);
+    success = success && CheckCmdConcats(intermediate, ctx, keys, info);
+    success = success && CheckCmdDeletes(intermediate, ctx, keys, info);
+    success = success && CheckCmdWrites(intermediate, ctx, keys, info);
+    success = success && CheckCmds(intermediate, ctx, keys, info);
     success = success && CheckCmdGetStatus(intermediate, ctx, keys, info);
     if (!success) {
         for (const auto& cmd : intermediate->Writes) {
@@ -1564,15 +1564,15 @@ void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb
                 Dereference(logoBlobId, db, ctx, true);
             }
         }
-        for (const auto& cmd : intermediate->Commands) { 
-            if (!std::holds_alternative<TIntermediate::TWrite>(cmd)) { 
-                continue; 
-            } 
-            auto& write = std::get<TIntermediate::TWrite>(cmd); 
-            for (const TLogoBlobID& logoBlobId : write.LogoBlobIds) { 
-                Dereference(logoBlobId, db, ctx, true); 
-            } 
-        } 
+        for (const auto& cmd : intermediate->Commands) {
+            if (!std::holds_alternative<TIntermediate::TWrite>(cmd)) {
+                continue;
+            }
+            auto& write = std::get<TIntermediate::TWrite>(cmd);
+            for (const TLogoBlobID& logoBlobId : write.LogoBlobIds) {
+                Dereference(logoBlobId, db, ctx, true);
+            }
+        }
     } else {
         // Read + validate
         CmdRead(intermediate, db, ctx);
@@ -1585,7 +1585,7 @@ void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb
         CmdDelete(intermediate, db, ctx);
         CmdWrite(intermediate, db, ctx);
         CmdGetStatus(intermediate, db, ctx);
-        CmdCmds(intermediate, db, ctx); 
+        CmdCmds(intermediate, db, ctx);
 
         // Blob trimming
         CmdTrimLeakedBlobs(intermediate, db, ctx);
@@ -1688,16 +1688,16 @@ void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 st
     CountRequestComplete(status, stat, ctx);
     ResourceMetrics->TryUpdate(ctx);
 
-    if (Queue.size() && IntermediatesInFlight < IntermediatesInFlightLimit) { 
-        TRequestType::EType requestType = Queue.front()->Stat.RequestType; 
+    if (Queue.size() && IntermediatesInFlight < IntermediatesInFlightLimit) {
+        TRequestType::EType requestType = Queue.front()->Stat.RequestType;
 
-        CountLatencyQueue(Queue.front()->Stat); 
+        CountLatencyQueue(Queue.front()->Stat);
 
-        ProcessPostponedIntermediate(ctx, std::move(Queue.front()), info); 
-        Queue.pop_front(); 
-        ++IntermediatesInFlight; 
+        ProcessPostponedIntermediate(ctx, std::move(Queue.front()), info);
+        Queue.pop_front();
+        ++IntermediatesInFlight;
 
-        CountRequestTakeOffOrEnqueue(requestType); 
+        CountRequestTakeOffOrEnqueue(requestType);
     }
 
     if (StoredState.GetChannelGeneration() == generation) {
@@ -1752,209 +1752,209 @@ bool TKeyValueState::CheckGeneration(const TActorContext &ctx, NKikimrClient::TK
     return false;
 }
 
- 
-template <typename TypeWithPriority> 
-void SetPriority(NKikimrBlobStorage::EGetHandleClass *outHandleClass, ui8 priority) { 
-    *outHandleClass = NKikimrBlobStorage::FastRead; 
-    if constexpr (std::is_same_v<TypeWithPriority, NKikimrKeyValue::Priorities>) { 
-        switch (priority) { 
-            case TypeWithPriority::PRIORITY_UNSPECIFIED: 
-            case TypeWithPriority::PRIORITY_REALTIME: 
-                *outHandleClass = NKikimrBlobStorage::FastRead; 
-                break; 
-            case TypeWithPriority::PRIORITY_BACKGROUND: 
-                *outHandleClass = NKikimrBlobStorage::AsyncRead; 
-                break; 
-        } 
-    } else { 
-        switch (priority) { 
-            case TypeWithPriority::REALTIME: 
-                *outHandleClass = NKikimrBlobStorage::FastRead; 
-                break; 
-            case TypeWithPriority::BACKGROUND: 
-                *outHandleClass = NKikimrBlobStorage::AsyncRead; 
-                break; 
-        } 
-    } 
-} 
- 
-template <typename TypeWithPriority, bool WithOverrun = false, ui64 SpecificReadResultSizeEstimation=ReadResultSizeEstimation> 
-bool PrepareOneRead(const TString &key, TIndexRecord &indexRecord, ui64 offset, ui64 size, ui8 priority, 
-        ui64 cmdLimitBytes, THolder<TIntermediate> &intermediate, TIntermediate::TRead &response, bool &outIsInlineOnly) 
-{ 
-    for (ui64 idx = 0; idx < indexRecord.Chain.size(); ++idx) { 
-        if (!indexRecord.Chain[idx].IsInline()) { 
-            outIsInlineOnly = false; 
-            break; 
-        } 
-    } 
- 
-    if (!size) { 
-        size = std::numeric_limits<decltype(size)>::max(); 
-    } 
-    ui64 fullValueSize = indexRecord.GetFullValueSize(); 
-    offset = std::min(offset, fullValueSize); 
-    size = std::min(size, fullValueSize - offset); 
-    ui64 metaDataSize = key.size() + SpecificReadResultSizeEstimation; 
-    ui64 recSize = std::max(size, ErrorMessageSizeEstimation) + metaDataSize; 
- 
-    response.RequestedSize = size; 
-    bool isOverRun = false; 
- 
-    if (intermediate->IsTruncated 
-            || intermediate->TotalSize + recSize > intermediate->TotalSizeLimit 
-            || (cmdLimitBytes && intermediate->TotalSize + recSize > cmdLimitBytes)) { 
-        response.Status = NKikimrProto::OVERRUN; 
-        if (!WithOverrun 
-                || std::min(intermediate->TotalSizeLimit, cmdLimitBytes) < intermediate->TotalSize + metaDataSize) 
-        { 
-            return true; 
-        } 
-        if (cmdLimitBytes) { 
-            size = std::min(intermediate->TotalSizeLimit, cmdLimitBytes) - intermediate->TotalSize - metaDataSize; 
-        } else { 
-            size = intermediate->TotalSizeLimit - intermediate->TotalSize - metaDataSize; 
-        } 
-        isOverRun = true; 
-    } 
- 
-    response.ValueSize = size; 
-    response.CreationUnixTime = indexRecord.CreationUnixTime; 
-    response.Key = key; 
- 
-    SetPriority<TypeWithPriority>(&response.HandleClass, priority); 
- 
-    if (size) { 
-        const ui32 numReads = indexRecord.GetReadItems(offset, size, response); 
-        intermediate->TotalSize += recSize; 
-        intermediate->TotalReadsScheduled += numReads; 
-    } else if (response.Status != NKikimrProto::OVERRUN) { 
-        response.Status = NKikimrProto::OK; 
-    } 
-    return isOverRun; 
-} 
- 
-template <typename TypeWithPriority, ui64 SpecificKeyValuePairSizeEstimation> 
-bool PrepareOneReadFromRangeReadWithoutData(const TString &key, TIndexRecord &indexRecord, ui8 priority, 
-        THolder<TIntermediate> &intermediate, TIntermediate::TRangeRead &response, 
-        ui64 &cmdSizeBytes, ui64 cmdLimitBytes, bool *outIsInlineOnly) 
-{ 
-    if (intermediate->IsTruncated) { 
-        return false; 
-    } 
- 
-    NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel = 
-        NKikimrClient::TKeyValueRequest::MAIN; 
-    if (indexRecord.Chain.size()) { 
-        if (indexRecord.Chain[0].IsInline()) { 
-            storageChannel = NKikimrClient::TKeyValueRequest::INLINE; 
-        } else { 
-            *outIsInlineOnly = false; 
-            ui32 storageChannelIdx = indexRecord.Chain[0].LogoBlobId.Channel(); 
-            ui32 storageChannelOffset = storageChannelIdx - BLOB_CHANNEL; 
-            storageChannel = (NKikimrClient::TKeyValueRequest::EStorageChannel)storageChannelOffset; 
-        } 
-    } 
- 
-    ui64 metadataSize = key.size() + SpecificKeyValuePairSizeEstimation; 
-    if (intermediate->TotalSize + metadataSize > intermediate->TotalSizeLimit 
-            || cmdSizeBytes + metadataSize > cmdLimitBytes) { 
-        STLOG(NLog::PRI_TRACE, NKikimrServices::KEYVALUE, KV330, "Went beyond limits", 
-                (intermediate->TotalSize + metadataSize, intermediate->TotalSize + metadataSize), 
-                (intermediate->TotalSizeLimit, intermediate->TotalSizeLimit), 
-                (cmdSizeBytes + metadataSize, cmdSizeBytes + metadataSize), 
-                (cmdLimitBytes, cmdLimitBytes)); 
-        return true; 
-    } 
-    response.Reads.emplace_back(key, indexRecord.GetFullValueSize(), indexRecord.CreationUnixTime, 
-            storageChannel); 
-    intermediate->TotalSize += metadataSize; 
-    SetPriority<TypeWithPriority>(&response.HandleClass, priority); 
- 
-    cmdSizeBytes += metadataSize; 
-    return false; 
-} 
- 
-struct TSeqInfo { 
-    ui32 Reads = 0; 
-    ui32 RunLen = 0; 
-    ui32 Generation = 0; 
-    ui32 Step = 0; 
-    ui32 Cookie = 0; 
-}; 
- 
-template <typename TypeWithPriority, ui64 SpecificKeyValuePairSizeEstimation> 
-bool PrepareOneReadFromRangeReadWithData(const TString &key, TIndexRecord &indexRecord, ui8 priority, 
-        THolder<TIntermediate> &intermediate, TIntermediate::TRangeRead &response, 
-        ui64 &cmdSizeBytes, ui64 cmdLimitBytes, TSeqInfo &seq, bool *outIsInlineOnly) 
-{ 
-    if (intermediate->IsTruncated) { 
-        return false; 
-    } 
- 
-    NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel = 
-        NKikimrClient::TKeyValueRequest::MAIN; 
-    if (indexRecord.Chain.size()) { 
-        if (indexRecord.Chain[0].IsInline()) { 
-            storageChannel = NKikimrClient::TKeyValueRequest::INLINE; 
-        } else { 
-            *outIsInlineOnly = false; 
-            ui32 storageChannelIdx = indexRecord.Chain[0].LogoBlobId.Channel(); 
-            ui32 storageChannelOffset = storageChannelIdx - BLOB_CHANNEL; 
-            storageChannel = (NKikimrClient::TKeyValueRequest::EStorageChannel)storageChannelOffset; 
-        } 
-    } 
- 
-    bool isSeq = false; 
-    bool isInline = false; 
-    if (indexRecord.Chain.size() == 1) { 
-        if (indexRecord.Chain.front().IsInline()) { 
-            isSeq = true; 
-            isInline = true; 
-        } else { 
-            const TLogoBlobID& id = indexRecord.Chain.front().LogoBlobId; 
-            isSeq = id.Generation() == seq.Generation 
-                && id.Step() == seq.Step 
-                && id.Cookie() == seq.Cookie; 
-            seq.Generation = id.Generation(); 
-            seq.Step = id.Step(); 
-            seq.Cookie = id.Cookie() + 1; 
-        } 
-    } 
-    if (isSeq) { 
-        seq.Reads++; 
-        if (seq.Reads > intermediate->SequentialReadLimit && !isInline) { 
-            isSeq = false; 
-        } else { 
-            ++seq.RunLen; 
-        } 
-    } 
-    if (!isSeq) { 
-        seq.RunLen = 1; 
-    } 
- 
-    ui64 valueSize = indexRecord.GetFullValueSize(); 
-    ui64 metadataSize = key.size() + SpecificKeyValuePairSizeEstimation; 
-    if (intermediate->TotalSize + valueSize + metadataSize > intermediate->TotalSizeLimit 
-            || cmdSizeBytes + valueSize + metadataSize > cmdLimitBytes 
-            || (seq.RunLen == 1 && intermediate->TotalReadsScheduled >= intermediate->TotalReadsLimit)) { 
-        return true; 
-    } 
- 
-    TIntermediate::TRead read(key, valueSize, indexRecord.CreationUnixTime, storageChannel); 
-    const ui32 numReads = indexRecord.GetReadItems(0, valueSize, read); 
-    SetPriority<TypeWithPriority>(&response.HandleClass, priority); 
-    SetPriority<TypeWithPriority>(&read.HandleClass, priority); 
- 
-    response.Reads.push_back(std::move(read)); 
- 
-    intermediate->TotalSize += valueSize + metadataSize; 
-    intermediate->TotalReadsScheduled += numReads; 
- 
-    cmdSizeBytes += valueSize + metadataSize; 
-    return false; 
-} 
- 
+
+template <typename TypeWithPriority>
+void SetPriority(NKikimrBlobStorage::EGetHandleClass *outHandleClass, ui8 priority) {
+    *outHandleClass = NKikimrBlobStorage::FastRead;
+    if constexpr (std::is_same_v<TypeWithPriority, NKikimrKeyValue::Priorities>) {
+        switch (priority) {
+            case TypeWithPriority::PRIORITY_UNSPECIFIED:
+            case TypeWithPriority::PRIORITY_REALTIME:
+                *outHandleClass = NKikimrBlobStorage::FastRead;
+                break;
+            case TypeWithPriority::PRIORITY_BACKGROUND:
+                *outHandleClass = NKikimrBlobStorage::AsyncRead;
+                break;
+        }
+    } else {
+        switch (priority) {
+            case TypeWithPriority::REALTIME:
+                *outHandleClass = NKikimrBlobStorage::FastRead;
+                break;
+            case TypeWithPriority::BACKGROUND:
+                *outHandleClass = NKikimrBlobStorage::AsyncRead;
+                break;
+        }
+    }
+}
+
+template <typename TypeWithPriority, bool WithOverrun = false, ui64 SpecificReadResultSizeEstimation=ReadResultSizeEstimation>
+bool PrepareOneRead(const TString &key, TIndexRecord &indexRecord, ui64 offset, ui64 size, ui8 priority,
+        ui64 cmdLimitBytes, THolder<TIntermediate> &intermediate, TIntermediate::TRead &response, bool &outIsInlineOnly)
+{
+    for (ui64 idx = 0; idx < indexRecord.Chain.size(); ++idx) {
+        if (!indexRecord.Chain[idx].IsInline()) {
+            outIsInlineOnly = false;
+            break;
+        }
+    }
+
+    if (!size) {
+        size = std::numeric_limits<decltype(size)>::max();
+    }
+    ui64 fullValueSize = indexRecord.GetFullValueSize();
+    offset = std::min(offset, fullValueSize);
+    size = std::min(size, fullValueSize - offset);
+    ui64 metaDataSize = key.size() + SpecificReadResultSizeEstimation;
+    ui64 recSize = std::max(size, ErrorMessageSizeEstimation) + metaDataSize;
+
+    response.RequestedSize = size;
+    bool isOverRun = false;
+
+    if (intermediate->IsTruncated
+            || intermediate->TotalSize + recSize > intermediate->TotalSizeLimit
+            || (cmdLimitBytes && intermediate->TotalSize + recSize > cmdLimitBytes)) {
+        response.Status = NKikimrProto::OVERRUN;
+        if (!WithOverrun
+                || std::min(intermediate->TotalSizeLimit, cmdLimitBytes) < intermediate->TotalSize + metaDataSize)
+        {
+            return true;
+        }
+        if (cmdLimitBytes) {
+            size = std::min(intermediate->TotalSizeLimit, cmdLimitBytes) - intermediate->TotalSize - metaDataSize;
+        } else {
+            size = intermediate->TotalSizeLimit - intermediate->TotalSize - metaDataSize;
+        }
+        isOverRun = true;
+    }
+
+    response.ValueSize = size;
+    response.CreationUnixTime = indexRecord.CreationUnixTime;
+    response.Key = key;
+
+    SetPriority<TypeWithPriority>(&response.HandleClass, priority);
+
+    if (size) {
+        const ui32 numReads = indexRecord.GetReadItems(offset, size, response);
+        intermediate->TotalSize += recSize;
+        intermediate->TotalReadsScheduled += numReads;
+    } else if (response.Status != NKikimrProto::OVERRUN) {
+        response.Status = NKikimrProto::OK;
+    }
+    return isOverRun;
+}
+
+template <typename TypeWithPriority, ui64 SpecificKeyValuePairSizeEstimation>
+bool PrepareOneReadFromRangeReadWithoutData(const TString &key, TIndexRecord &indexRecord, ui8 priority,
+        THolder<TIntermediate> &intermediate, TIntermediate::TRangeRead &response,
+        ui64 &cmdSizeBytes, ui64 cmdLimitBytes, bool *outIsInlineOnly)
+{
+    if (intermediate->IsTruncated) {
+        return false;
+    }
+
+    NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel =
+        NKikimrClient::TKeyValueRequest::MAIN;
+    if (indexRecord.Chain.size()) {
+        if (indexRecord.Chain[0].IsInline()) {
+            storageChannel = NKikimrClient::TKeyValueRequest::INLINE;
+        } else {
+            *outIsInlineOnly = false;
+            ui32 storageChannelIdx = indexRecord.Chain[0].LogoBlobId.Channel();
+            ui32 storageChannelOffset = storageChannelIdx - BLOB_CHANNEL;
+            storageChannel = (NKikimrClient::TKeyValueRequest::EStorageChannel)storageChannelOffset;
+        }
+    }
+
+    ui64 metadataSize = key.size() + SpecificKeyValuePairSizeEstimation;
+    if (intermediate->TotalSize + metadataSize > intermediate->TotalSizeLimit
+            || cmdSizeBytes + metadataSize > cmdLimitBytes) {
+        STLOG(NLog::PRI_TRACE, NKikimrServices::KEYVALUE, KV330, "Went beyond limits",
+                (intermediate->TotalSize + metadataSize, intermediate->TotalSize + metadataSize),
+                (intermediate->TotalSizeLimit, intermediate->TotalSizeLimit),
+                (cmdSizeBytes + metadataSize, cmdSizeBytes + metadataSize),
+                (cmdLimitBytes, cmdLimitBytes));
+        return true;
+    }
+    response.Reads.emplace_back(key, indexRecord.GetFullValueSize(), indexRecord.CreationUnixTime,
+            storageChannel);
+    intermediate->TotalSize += metadataSize;
+    SetPriority<TypeWithPriority>(&response.HandleClass, priority);
+
+    cmdSizeBytes += metadataSize;
+    return false;
+}
+
+struct TSeqInfo {
+    ui32 Reads = 0;
+    ui32 RunLen = 0;
+    ui32 Generation = 0;
+    ui32 Step = 0;
+    ui32 Cookie = 0;
+};
+
+template <typename TypeWithPriority, ui64 SpecificKeyValuePairSizeEstimation>
+bool PrepareOneReadFromRangeReadWithData(const TString &key, TIndexRecord &indexRecord, ui8 priority,
+        THolder<TIntermediate> &intermediate, TIntermediate::TRangeRead &response,
+        ui64 &cmdSizeBytes, ui64 cmdLimitBytes, TSeqInfo &seq, bool *outIsInlineOnly)
+{
+    if (intermediate->IsTruncated) {
+        return false;
+    }
+
+    NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel =
+        NKikimrClient::TKeyValueRequest::MAIN;
+    if (indexRecord.Chain.size()) {
+        if (indexRecord.Chain[0].IsInline()) {
+            storageChannel = NKikimrClient::TKeyValueRequest::INLINE;
+        } else {
+            *outIsInlineOnly = false;
+            ui32 storageChannelIdx = indexRecord.Chain[0].LogoBlobId.Channel();
+            ui32 storageChannelOffset = storageChannelIdx - BLOB_CHANNEL;
+            storageChannel = (NKikimrClient::TKeyValueRequest::EStorageChannel)storageChannelOffset;
+        }
+    }
+
+    bool isSeq = false;
+    bool isInline = false;
+    if (indexRecord.Chain.size() == 1) {
+        if (indexRecord.Chain.front().IsInline()) {
+            isSeq = true;
+            isInline = true;
+        } else {
+            const TLogoBlobID& id = indexRecord.Chain.front().LogoBlobId;
+            isSeq = id.Generation() == seq.Generation
+                && id.Step() == seq.Step
+                && id.Cookie() == seq.Cookie;
+            seq.Generation = id.Generation();
+            seq.Step = id.Step();
+            seq.Cookie = id.Cookie() + 1;
+        }
+    }
+    if (isSeq) {
+        seq.Reads++;
+        if (seq.Reads > intermediate->SequentialReadLimit && !isInline) {
+            isSeq = false;
+        } else {
+            ++seq.RunLen;
+        }
+    }
+    if (!isSeq) {
+        seq.RunLen = 1;
+    }
+
+    ui64 valueSize = indexRecord.GetFullValueSize();
+    ui64 metadataSize = key.size() + SpecificKeyValuePairSizeEstimation;
+    if (intermediate->TotalSize + valueSize + metadataSize > intermediate->TotalSizeLimit
+            || cmdSizeBytes + valueSize + metadataSize > cmdLimitBytes
+            || (seq.RunLen == 1 && intermediate->TotalReadsScheduled >= intermediate->TotalReadsLimit)) {
+        return true;
+    }
+
+    TIntermediate::TRead read(key, valueSize, indexRecord.CreationUnixTime, storageChannel);
+    const ui32 numReads = indexRecord.GetReadItems(0, valueSize, read);
+    SetPriority<TypeWithPriority>(&response.HandleClass, priority);
+    SetPriority<TypeWithPriority>(&read.HandleClass, priority);
+
+    response.Reads.push_back(std::move(read));
+
+    intermediate->TotalSize += valueSize + metadataSize;
+    intermediate->TotalReadsScheduled += numReads;
+
+    cmdSizeBytes += valueSize + metadataSize;
+    return false;
+}
+
 bool TKeyValueState::PrepareCmdRead(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, bool &outIsInlineOnly) {
     outIsInlineOnly = true;
@@ -1971,21 +1971,21 @@ bool TKeyValueState::PrepareCmdRead(const TActorContext &ctx, NKikimrClient::TKe
             return true;
         }
 
-        ui64 offset = request.HasOffset() ? request.GetOffset() : 0; 
-        ui64 size = request.HasSize() ? request.GetSize() : 0; 
-        NKikimrClient::TKeyValueRequest::EPriority priority = NKikimrClient::TKeyValueRequest::REALTIME; 
-        if (request.HasPriority()) { 
-            priority = request.GetPriority(); 
-        } 
- 
+        ui64 offset = request.HasOffset() ? request.GetOffset() : 0;
+        ui64 size = request.HasSize() ? request.GetSize() : 0;
+        NKikimrClient::TKeyValueRequest::EPriority priority = NKikimrClient::TKeyValueRequest::REALTIME;
+        if (request.HasPriority()) {
+            priority = request.GetPriority();
+        }
+
         auto it = Index.find(request.GetKey());
         if (it == Index.end()) {
             response.Status = NKikimrProto::NODATA;
             response.Message = "No such key Marker# KV48";
         } else {
-            bool isOverrun = PrepareOneRead<NKikimrClient::TKeyValueRequest>(it->first, it->second, offset, size, 
-                    priority, 0, intermediate, response, outIsInlineOnly); 
-            if (isOverrun) { 
+            bool isOverrun = PrepareOneRead<NKikimrClient::TKeyValueRequest>(it->first, it->second, offset, size,
+                    priority, 0, intermediate, response, outIsInlineOnly);
+            if (isOverrun) {
                 if (!intermediate->IsTruncated) {
                     CountOverrun();
                     intermediate->IsTruncated = true;
@@ -1996,56 +1996,56 @@ bool TKeyValueState::PrepareCmdRead(const TActorContext &ctx, NKikimrClient::TKe
     return false;
 }
 
-template <typename TypeWithPriority, bool CheckUTF8 = false, 
-        ui64 MetaDataSizeWithData = KeyValuePairSizeEstimation, 
-        ui64 MetaDataSizeWithoutData = KeyValuePairSizeEstimation> 
-void ProcessOneCmdReadRange(TKeyValueState *self, const TKeyRange &range, ui64 cmdLimitBytes, bool includeData, 
-        ui8 priority, TIntermediate::TRangeRead &response, THolder<TIntermediate> &intermediate, bool *outIsInlineOnly) 
-{ 
-    ui64 cmdSizeBytes = 0; 
-    TSeqInfo seq; 
-    seq.RunLen = 1; 
- 
-    self->TraverseRange(range, [&](TKeyValueState::TIndex::iterator it) { 
-        if (intermediate->IsTruncated) { 
-            return; 
-        } 
- 
-        auto &[key, indexRecord] = *it; 
- 
-        if (CheckUTF8 && !IsUtf(key)) { 
-            TIntermediate::TRead read; 
-            read.CreationUnixTime = indexRecord.CreationUnixTime; 
-            EscapeC(key, read.Key); 
-            read.Status = NKikimrProto::ERROR; 
-            read.Message = "Key isn't UTF8"; 
-            response.Reads.push_back(std::move(read)); 
-            return; 
-        } 
- 
-        bool isOverRun = false; 
-        if (includeData) { 
-            isOverRun = PrepareOneReadFromRangeReadWithData<NKikimrClient::TKeyValueRequest, MetaDataSizeWithData>( 
-                    key, indexRecord, priority, intermediate, response, 
-                    cmdSizeBytes, cmdLimitBytes, seq, outIsInlineOnly); 
-        } else { 
-            isOverRun = PrepareOneReadFromRangeReadWithoutData<NKikimrClient::TKeyValueRequest, MetaDataSizeWithoutData>( 
-                    key, indexRecord, priority, intermediate, response, cmdSizeBytes, 
-                    cmdLimitBytes, outIsInlineOnly); 
-        } 
-        if (isOverRun) { 
-            self->CountOverrun(); 
-            intermediate->IsTruncated = true; 
-        } 
-    }); 
- 
-    if (intermediate->IsTruncated) { 
-        response.Status = NKikimrProto::OVERRUN; 
-    } else if (response.Reads.size() == 0) { 
-        response.Status = NKikimrProto::NODATA; 
-    } 
-} 
- 
+template <typename TypeWithPriority, bool CheckUTF8 = false,
+        ui64 MetaDataSizeWithData = KeyValuePairSizeEstimation,
+        ui64 MetaDataSizeWithoutData = KeyValuePairSizeEstimation>
+void ProcessOneCmdReadRange(TKeyValueState *self, const TKeyRange &range, ui64 cmdLimitBytes, bool includeData,
+        ui8 priority, TIntermediate::TRangeRead &response, THolder<TIntermediate> &intermediate, bool *outIsInlineOnly)
+{
+    ui64 cmdSizeBytes = 0;
+    TSeqInfo seq;
+    seq.RunLen = 1;
+
+    self->TraverseRange(range, [&](TKeyValueState::TIndex::iterator it) {
+        if (intermediate->IsTruncated) {
+            return;
+        }
+
+        auto &[key, indexRecord] = *it;
+
+        if (CheckUTF8 && !IsUtf(key)) {
+            TIntermediate::TRead read;
+            read.CreationUnixTime = indexRecord.CreationUnixTime;
+            EscapeC(key, read.Key);
+            read.Status = NKikimrProto::ERROR;
+            read.Message = "Key isn't UTF8";
+            response.Reads.push_back(std::move(read));
+            return;
+        }
+
+        bool isOverRun = false;
+        if (includeData) {
+            isOverRun = PrepareOneReadFromRangeReadWithData<NKikimrClient::TKeyValueRequest, MetaDataSizeWithData>(
+                    key, indexRecord, priority, intermediate, response,
+                    cmdSizeBytes, cmdLimitBytes, seq, outIsInlineOnly);
+        } else {
+            isOverRun = PrepareOneReadFromRangeReadWithoutData<NKikimrClient::TKeyValueRequest, MetaDataSizeWithoutData>(
+                    key, indexRecord, priority, intermediate, response, cmdSizeBytes,
+                    cmdLimitBytes, outIsInlineOnly);
+        }
+        if (isOverRun) {
+            self->CountOverrun();
+            intermediate->IsTruncated = true;
+        }
+    });
+
+    if (intermediate->IsTruncated) {
+        response.Status = NKikimrProto::OVERRUN;
+    } else if (response.Reads.size() == 0) {
+        response.Status = NKikimrProto::NODATA;
+    }
+}
+
 bool TKeyValueState::PrepareCmdReadRange(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, bool &inOutIsInlineOnly) {
     intermediate->RangeReads.resize(kvRequest.CmdReadRangeSize());
@@ -2068,12 +2068,12 @@ bool TKeyValueState::PrepareCmdReadRange(const TActorContext &ctx, NKikimrClient
 
         ui64 cmdLimitBytes = request.HasLimitBytes() ? request.GetLimitBytes() : Max<ui64>();
         bool includeData = request.HasIncludeData() && request.GetIncludeData();
-        ui8 priority = request.HasPriority() ? request.GetPriority() : Max<ui8>(); 
+        ui8 priority = request.HasPriority() ? request.GetPriority() : Max<ui8>();
         response.IncludeData = includeData;
-        response.LimitBytes = cmdLimitBytes; 
+        response.LimitBytes = cmdLimitBytes;
 
-        ProcessOneCmdReadRange<NKikimrClient::TKeyValueRequest>(this, range, cmdLimitBytes, includeData, priority, 
-                response, intermediate, &inOutIsInlineOnly); 
+        ProcessOneCmdReadRange<NKikimrClient::TKeyValueRequest>(this, range, cmdLimitBytes, includeData, priority,
+                response, intermediate, &inOutIsInlineOnly);
     }
     return false;
 }
@@ -2082,8 +2082,8 @@ bool TKeyValueState::PrepareCmdRename(const TActorContext &ctx, NKikimrClient::T
         THolder<TIntermediate> &intermediate) {
     for (ui32 i = 0; i < kvRequest.CmdRenameSize(); ++i) {
         auto& request = kvRequest.GetCmdRename(i);
-        intermediate->Commands.emplace_back(TIntermediate::TRename()); 
-        auto& interm = std::get<TIntermediate::TRename>(intermediate->Commands.back()); 
+        intermediate->Commands.emplace_back(TIntermediate::TRename());
+        auto& interm = std::get<TIntermediate::TRename>(intermediate->Commands.back());
 
         if (!request.HasOldKey()) {
             TStringStream str;
@@ -2111,8 +2111,8 @@ bool TKeyValueState::PrepareCmdDelete(const TActorContext &ctx, NKikimrClient::T
     ui64 nToDelete = 0;
     for (ui32 i = 0; i < kvRequest.CmdDeleteRangeSize(); ++i) {
         auto& request = kvRequest.GetCmdDeleteRange(i);
-        intermediate->Commands.emplace_back(TIntermediate::TDelete()); 
-        auto& interm = std::get<TIntermediate::TDelete>(intermediate->Commands.back()); 
+        intermediate->Commands.emplace_back(TIntermediate::TDelete());
+        auto& interm = std::get<TIntermediate::TDelete>(intermediate->Commands.back());
 
         if (!request.HasRange()) {
             TStringStream str;
@@ -2141,39 +2141,39 @@ bool TKeyValueState::PrepareCmdDelete(const TActorContext &ctx, NKikimrClient::T
     return false;
 }
 
-void TKeyValueState::SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, ui32 storageChannelIdx) { 
-    if (isInline) { 
-        cmd.Status = NKikimrProto::SCHEDULED; 
-        cmd.StatusFlags = TStorageStatusFlags(ui32(NKikimrBlobStorage::StatusIsValid)); 
-        if (GetIsTabletYellowMove()) { 
-            cmd.StatusFlags.Merge(ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)); 
-        } 
-        if (GetIsTabletYellowStop()) { 
-            cmd.StatusFlags.Merge(ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop)); 
-        } 
-    } else { 
-        cmd.Status = NKikimrProto::UNKNOWN; 
-        ui64 sizeRemain = cmd.Data.size(); 
-        while (sizeRemain) { 
-            ui32 blobSize = Min<ui64>(sizeRemain, 8 << 20); 
-            cmd.LogoBlobIds.push_back(AllocateLogoBlobId(blobSize, storageChannelIdx)); 
-            sizeRemain -= blobSize; 
-        } 
-        for (const TLogoBlobID& logoBlobId : cmd.LogoBlobIds) { 
-            ui32 newRefCount = ++RefCounts[logoBlobId]; 
-            Y_VERIFY(newRefCount == 1); 
-        } 
-    } 
-} 
- 
+void TKeyValueState::SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, ui32 storageChannelIdx) {
+    if (isInline) {
+        cmd.Status = NKikimrProto::SCHEDULED;
+        cmd.StatusFlags = TStorageStatusFlags(ui32(NKikimrBlobStorage::StatusIsValid));
+        if (GetIsTabletYellowMove()) {
+            cmd.StatusFlags.Merge(ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove));
+        }
+        if (GetIsTabletYellowStop()) {
+            cmd.StatusFlags.Merge(ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop));
+        }
+    } else {
+        cmd.Status = NKikimrProto::UNKNOWN;
+        ui64 sizeRemain = cmd.Data.size();
+        while (sizeRemain) {
+            ui32 blobSize = Min<ui64>(sizeRemain, 8 << 20);
+            cmd.LogoBlobIds.push_back(AllocateLogoBlobId(blobSize, storageChannelIdx));
+            sizeRemain -= blobSize;
+        }
+        for (const TLogoBlobID& logoBlobId : cmd.LogoBlobIds) {
+            ui32 newRefCount = ++RefCounts[logoBlobId];
+            Y_VERIFY(newRefCount == 1);
+        }
+    }
+}
+
 bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) {
-    intermediate->WriteIndices.reserve(kvRequest.CmdWriteSize()); 
+    intermediate->WriteIndices.reserve(kvRequest.CmdWriteSize());
     for (ui32 i = 0; i < kvRequest.CmdWriteSize(); ++i) {
         auto& request = kvRequest.GetCmdWrite(i);
-        intermediate->WriteIndices.push_back(intermediate->Commands.size()); 
-        auto& cmd = intermediate->Commands.emplace_back(TIntermediate::TWrite()); 
-        auto& interm = std::get<TIntermediate::TWrite>(cmd); 
+        intermediate->WriteIndices.push_back(intermediate->Commands.size());
+        auto& cmd = intermediate->Commands.emplace_back(TIntermediate::TWrite());
+        auto& interm = std::get<TIntermediate::TWrite>(cmd);
 
         if (!request.HasKey()) {
             TStringStream str;
@@ -2249,45 +2249,45 @@ bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TK
                     break;
             }
         }
-        SplitIntoBlobs(interm, isInline, storageChannelIdx); 
+        SplitIntoBlobs(interm, isInline, storageChannelIdx);
     }
     return false;
 }
 
- 
-TKeyValueState::TPrepareResult TKeyValueState::InitGetStatusCommand(TIntermediate::TGetStatus &cmd, 
-        NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info) 
-{ 
-    TString msg; 
-    if (storageChannel == NKikimrClient::TKeyValueRequest::INLINE) { 
-        cmd.StorageChannel = storageChannel; 
-        cmd.LogoBlobId = TLogoBlobID(); 
-        cmd.Status = NKikimrProto::OK; 
-        cmd.StatusFlags = TStorageStatusFlags(ui32(NKikimrBlobStorage::StatusIsValid)); 
-        if (GetIsTabletYellowMove()) { 
-            cmd.StatusFlags.Merge(ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)); 
-        } 
-        if (GetIsTabletYellowStop()) { 
-            cmd.StatusFlags.Merge(ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop)); 
-        } 
-    } else { 
-        ui32 storageChannelOffset = (ui32)storageChannel; 
-        ui32 storageChannelIdx = storageChannelOffset + BLOB_CHANNEL; 
-        ui32 endChannel = info->Channels.size(); 
-        if (storageChannelIdx >= endChannel) { 
-            storageChannelIdx = BLOB_CHANNEL; 
-            msg = TStringBuilder() << "KeyValue# " << TabletId 
-                    << " CmdGetStatus StorageChannel# " << storageChannelOffset 
-                    << " does not exist, using MAIN"; 
-        } 
- 
-        cmd.StorageChannel = storageChannel; 
-        cmd.LogoBlobId = AllocateLogoBlobId(1, storageChannelIdx); 
-        cmd.Status = NKikimrProto::UNKNOWN; 
-    } 
-    return {false, msg}; 
-} 
- 
+
+TKeyValueState::TPrepareResult TKeyValueState::InitGetStatusCommand(TIntermediate::TGetStatus &cmd,
+        NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info)
+{
+    TString msg;
+    if (storageChannel == NKikimrClient::TKeyValueRequest::INLINE) {
+        cmd.StorageChannel = storageChannel;
+        cmd.LogoBlobId = TLogoBlobID();
+        cmd.Status = NKikimrProto::OK;
+        cmd.StatusFlags = TStorageStatusFlags(ui32(NKikimrBlobStorage::StatusIsValid));
+        if (GetIsTabletYellowMove()) {
+            cmd.StatusFlags.Merge(ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove));
+        }
+        if (GetIsTabletYellowStop()) {
+            cmd.StatusFlags.Merge(ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop));
+        }
+    } else {
+        ui32 storageChannelOffset = (ui32)storageChannel;
+        ui32 storageChannelIdx = storageChannelOffset + BLOB_CHANNEL;
+        ui32 endChannel = info->Channels.size();
+        if (storageChannelIdx >= endChannel) {
+            storageChannelIdx = BLOB_CHANNEL;
+            msg = TStringBuilder() << "KeyValue# " << TabletId
+                    << " CmdGetStatus StorageChannel# " << storageChannelOffset
+                    << " does not exist, using MAIN";
+        }
+
+        cmd.StorageChannel = storageChannel;
+        cmd.LogoBlobId = AllocateLogoBlobId(1, storageChannelIdx);
+        cmd.Status = NKikimrProto::UNKNOWN;
+    }
+    return {false, msg};
+}
+
 bool TKeyValueState::PrepareCmdGetStatus(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) {
     intermediate->GetStatuses.resize(kvRequest.CmdGetStatusSize());
@@ -2301,9 +2301,9 @@ bool TKeyValueState::PrepareCmdGetStatus(const TActorContext &ctx, NKikimrClient
         if (request.HasStorageChannel()) {
             storageChannel = request.GetStorageChannel();
         }
-        TPrepareResult result = InitGetStatusCommand(interm, storageChannel, info); 
-        if (result.ErrorMsg && !result.WithError) { 
-            LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, result.ErrorMsg  << " Marker# KV76"); 
+        TPrepareResult result = InitGetStatusCommand(interm, storageChannel, info);
+        if (result.ErrorMsg && !result.WithError) {
+            LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, result.ErrorMsg  << " Marker# KV76");
         }
     }
     return false;
@@ -2314,8 +2314,8 @@ bool TKeyValueState::PrepareCmdCopyRange(const TActorContext& ctx, NKikimrClient
         THolder<TIntermediate>& intermediate) {
     for (ui32 i = 0; i < kvRequest.CmdCopyRangeSize(); ++i) {
         auto& request = kvRequest.GetCmdCopyRange(i);
-        intermediate->Commands.emplace_back(TIntermediate::TCopyRange()); 
-        auto& interm = std::get<TIntermediate::TCopyRange>(intermediate->Commands.back()); 
+        intermediate->Commands.emplace_back(TIntermediate::TCopyRange());
+        auto& interm = std::get<TIntermediate::TCopyRange>(intermediate->Commands.back());
 
         if ((!request.HasPrefixToAdd() || request.GetPrefixToAdd().empty()) &&
                 (!request.HasPrefixToRemove() || request.GetPrefixToRemove().empty())) {
@@ -2340,8 +2340,8 @@ bool TKeyValueState::PrepareCmdConcat(const TActorContext& ctx, NKikimrClient::T
         THolder<TIntermediate>& intermediate) {
     for (ui32 i = 0; i < kvRequest.CmdConcatSize(); ++i) {
         auto& request = kvRequest.GetCmdConcat(i);
-        intermediate->Commands.emplace_back(TIntermediate::TConcat()); 
-        auto& interm = std::get<TIntermediate::TConcat>(intermediate->Commands.back()); 
+        intermediate->Commands.emplace_back(TIntermediate::TConcat());
+        auto& interm = std::get<TIntermediate::TConcat>(intermediate->Commands.back());
 
         if (!request.HasOutputKey()) {
             TStringStream str;
@@ -2389,150 +2389,150 @@ bool TKeyValueState::PrepareCmdSetExecutorFastLogPolicy(const TActorContext & /*
     return false;
 }
 
-using TPrepareResult = TKeyValueState::TPrepareResult; 
- 
-TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Rename &request, THolder<TIntermediate> &intermediate) { 
-    intermediate->Commands.emplace_back(TIntermediate::TRename()); 
-    auto &cmd = std::get<TIntermediate::TRename>(intermediate->Commands.back()); 
-    cmd.OldKey = request.old_key(); 
-    cmd.NewKey = request.new_key(); 
-    return {}; 
-} 
- 
-TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Concat &request, THolder<TIntermediate> &intermediate) { 
-    intermediate->Commands.emplace_back(TIntermediate::TConcat()); 
-    auto &cmd = std::get<TIntermediate::TConcat>(intermediate->Commands.back()); 
-    auto inputKeys = request.input_keys(); 
-    cmd.InputKeys.insert(cmd.InputKeys.end(), inputKeys.begin(), inputKeys.end()); 
- 
-    cmd.OutputKey = request.output_key(); 
-    cmd.KeepInputs = request.keep_inputs(); 
-    return {}; 
-} 
- 
-TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::CopyRange &request, THolder<TIntermediate> &intermediate) { 
-    intermediate->Commands.emplace_back(TIntermediate::TCopyRange()); 
-    auto &cmd = std::get<TIntermediate::TCopyRange>(intermediate->Commands.back()); 
-    auto convResult = ConvertRange(request.range(), &cmd.Range, "CopyRange"); 
-    if (convResult.WithError) { 
-        return {true, convResult.ErrorMsg}; 
-    } 
-    cmd.PrefixToAdd = request.prefix_to_add(); 
-    cmd.PrefixToRemove = request.prefix_to_remove(); 
-    return {}; 
-} 
- 
-TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Write &request, THolder<TIntermediate> &intermediate, 
-        const TTabletStorageInfo *info) 
-{ 
-    intermediate->Commands.emplace_back(TIntermediate::TWrite()); 
-    auto &cmd = std::get<TIntermediate::TWrite>(intermediate->Commands.back()); 
-    cmd.Key = request.key(); 
-    cmd.Data = request.value(); 
-    switch (request.tactic()) { 
-    case TCommand::Write::TACTIC_MIN_LATENCY: 
-        cmd.Tactic = TEvBlobStorage::TEvPut::TacticMinLatency; 
-        break; 
-    case TCommand::Write::TACTIC_MAX_THROUGHPUT: 
-        cmd.Tactic = TEvBlobStorage::TEvPut::TacticMaxThroughput; 
-        break; 
-    default: 
-        cmd.Tactic = TEvBlobStorage::TEvPut::TacticDefault; 
-        break; 
-    } 
- 
-    cmd.HandleClass = NKikimrBlobStorage::UserData; 
-    if (request.priority() == NKikimrKeyValue::Priorities::PRIORITY_BACKGROUND) { 
-        cmd.HandleClass = NKikimrBlobStorage::AsyncBlob; 
-    } 
- 
-    bool isInline = false; 
-    ui32 storageChannelIdx = BLOB_CHANNEL; 
-    ui32 storageChannel = request.storage_channel(); 
-    if (!storageChannel) { 
-        storageChannel = MainStorageChannelInPublicApi; 
-    } 
-    ui32 storageChannelOffset = storageChannel - MainStorageChannelInPublicApi; 
- 
-    if (storageChannel == InlineStorageChannelInPublicApi) { 
-        isInline = true; 
-    } else { 
-        storageChannelIdx = storageChannelOffset + BLOB_CHANNEL; 
-        ui32 endChannel = info->Channels.size(); 
-        if (storageChannelIdx >= endChannel) { 
-            storageChannelIdx = BLOB_CHANNEL; 
-        } 
-    } 
-    SplitIntoBlobs(cmd, isInline, storageChannelIdx); 
-    return {}; 
-} 
- 
-TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::DeleteRange &request, THolder<TIntermediate> &intermediate, 
-        const TActorContext &ctx) 
-{ 
-    intermediate->Commands.emplace_back(TIntermediate::TDelete()); 
-    auto &cmd = std::get<TIntermediate::TDelete>(intermediate->Commands.back()); 
-    auto convResult = ConvertRange(request.range(), &cmd.Range, "DeleteRange"); 
-    if (convResult.WithError) { 
-        return {true, convResult.ErrorMsg}; 
-    } 
-    ui32 nToDelete = 0; 
-    TraverseRange(cmd.Range, [&](TIndex::iterator it) { 
-        Y_UNUSED(it); 
-        nToDelete++; 
-    }); 
-    // The use of >, not >= is important here. 
-    if (nToDelete > DeletesPerRequestLimit && !AppData(ctx)->AllowHugeKeyValueDeletes) { 
-        TStringBuilder str; 
-        str << "KeyValue# " << TabletId; 
-        str << " Can't delete Range, in DeleteRange, total limit of deletions per request (" 
-            << DeletesPerRequestLimit << ") reached, Marker# KV90"; 
-        TString msg = str; 
-        ReplyError<TEvKeyValue::TEvExecuteTransactionResponse>(ctx, msg, 
-                NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate, nullptr); 
-        return {true, msg}; 
-    } 
-    return {}; 
-} 
- 
-TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand &request, THolder<TIntermediate> &intermediate, 
-        const TTabletStorageInfo *info, const TActorContext &ctx) 
-{ 
-    switch (request.action_case()) { 
-    case NKikimrKeyValue::ExecuteTransactionRequest::Command::ACTION_NOT_SET: 
-        return {true, "Command not specified Marker# KV68"}; 
-    case NKikimrKeyValue::ExecuteTransactionRequest::Command::kDeleteRange: 
-        return PrepareOneCmd(request.delete_range(), intermediate, ctx); 
-    case NKikimrKeyValue::ExecuteTransactionRequest::Command::kRename: 
-        return PrepareOneCmd(request.rename(), intermediate); 
-    case NKikimrKeyValue::ExecuteTransactionRequest::Command::kCopyRange: 
-        return PrepareOneCmd(request.copy_range(), intermediate); 
-    case NKikimrKeyValue::ExecuteTransactionRequest::Command::kConcat: 
-        return PrepareOneCmd(request.concat(), intermediate); 
-    case NKikimrKeyValue::ExecuteTransactionRequest::Command::kWrite: 
-        return PrepareOneCmd(request.write(), intermediate, info); 
-    } 
-} 
- 
-TPrepareResult TKeyValueState::PrepareCommands(NKikimrKeyValue::ExecuteTransactionRequest &kvRequest, 
-    THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info, const TActorContext &ctx) 
-{ 
-    for (i32 idx = 0; idx < kvRequest.commands_size(); ++idx) { 
-        auto &cmd = kvRequest.commands(idx); 
-        TPrepareResult result = PrepareOneCmd(cmd, intermediate, info, ctx); 
-        if (cmd.has_write()) { 
-            intermediate->WriteIndices.push_back(idx); 
-        } 
-        if (result.WithError) { 
-            return result; 
-        } 
-    } 
-    if (intermediate->EvType == TEvKeyValue::TEvExecuteTransaction::EventType) { 
-        intermediate->ExecuteTransactionResponse.set_status(NKikimrKeyValue::Statuses::RSTATUS_OK); 
-    } 
-    return {}; 
-} 
- 
+using TPrepareResult = TKeyValueState::TPrepareResult;
+
+TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Rename &request, THolder<TIntermediate> &intermediate) {
+    intermediate->Commands.emplace_back(TIntermediate::TRename());
+    auto &cmd = std::get<TIntermediate::TRename>(intermediate->Commands.back());
+    cmd.OldKey = request.old_key();
+    cmd.NewKey = request.new_key();
+    return {};
+}
+
+TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Concat &request, THolder<TIntermediate> &intermediate) {
+    intermediate->Commands.emplace_back(TIntermediate::TConcat());
+    auto &cmd = std::get<TIntermediate::TConcat>(intermediate->Commands.back());
+    auto inputKeys = request.input_keys();
+    cmd.InputKeys.insert(cmd.InputKeys.end(), inputKeys.begin(), inputKeys.end());
+
+    cmd.OutputKey = request.output_key();
+    cmd.KeepInputs = request.keep_inputs();
+    return {};
+}
+
+TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::CopyRange &request, THolder<TIntermediate> &intermediate) {
+    intermediate->Commands.emplace_back(TIntermediate::TCopyRange());
+    auto &cmd = std::get<TIntermediate::TCopyRange>(intermediate->Commands.back());
+    auto convResult = ConvertRange(request.range(), &cmd.Range, "CopyRange");
+    if (convResult.WithError) {
+        return {true, convResult.ErrorMsg};
+    }
+    cmd.PrefixToAdd = request.prefix_to_add();
+    cmd.PrefixToRemove = request.prefix_to_remove();
+    return {};
+}
+
+TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Write &request, THolder<TIntermediate> &intermediate,
+        const TTabletStorageInfo *info)
+{
+    intermediate->Commands.emplace_back(TIntermediate::TWrite());
+    auto &cmd = std::get<TIntermediate::TWrite>(intermediate->Commands.back());
+    cmd.Key = request.key();
+    cmd.Data = request.value();
+    switch (request.tactic()) {
+    case TCommand::Write::TACTIC_MIN_LATENCY:
+        cmd.Tactic = TEvBlobStorage::TEvPut::TacticMinLatency;
+        break;
+    case TCommand::Write::TACTIC_MAX_THROUGHPUT:
+        cmd.Tactic = TEvBlobStorage::TEvPut::TacticMaxThroughput;
+        break;
+    default:
+        cmd.Tactic = TEvBlobStorage::TEvPut::TacticDefault;
+        break;
+    }
+
+    cmd.HandleClass = NKikimrBlobStorage::UserData;
+    if (request.priority() == NKikimrKeyValue::Priorities::PRIORITY_BACKGROUND) {
+        cmd.HandleClass = NKikimrBlobStorage::AsyncBlob;
+    }
+
+    bool isInline = false;
+    ui32 storageChannelIdx = BLOB_CHANNEL;
+    ui32 storageChannel = request.storage_channel();
+    if (!storageChannel) {
+        storageChannel = MainStorageChannelInPublicApi;
+    }
+    ui32 storageChannelOffset = storageChannel - MainStorageChannelInPublicApi;
+
+    if (storageChannel == InlineStorageChannelInPublicApi) {
+        isInline = true;
+    } else {
+        storageChannelIdx = storageChannelOffset + BLOB_CHANNEL;
+        ui32 endChannel = info->Channels.size();
+        if (storageChannelIdx >= endChannel) {
+            storageChannelIdx = BLOB_CHANNEL;
+        }
+    }
+    SplitIntoBlobs(cmd, isInline, storageChannelIdx);
+    return {};
+}
+
+TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::DeleteRange &request, THolder<TIntermediate> &intermediate,
+        const TActorContext &ctx)
+{
+    intermediate->Commands.emplace_back(TIntermediate::TDelete());
+    auto &cmd = std::get<TIntermediate::TDelete>(intermediate->Commands.back());
+    auto convResult = ConvertRange(request.range(), &cmd.Range, "DeleteRange");
+    if (convResult.WithError) {
+        return {true, convResult.ErrorMsg};
+    }
+    ui32 nToDelete = 0;
+    TraverseRange(cmd.Range, [&](TIndex::iterator it) {
+        Y_UNUSED(it);
+        nToDelete++;
+    });
+    // The use of >, not >= is important here.
+    if (nToDelete > DeletesPerRequestLimit && !AppData(ctx)->AllowHugeKeyValueDeletes) {
+        TStringBuilder str;
+        str << "KeyValue# " << TabletId;
+        str << " Can't delete Range, in DeleteRange, total limit of deletions per request ("
+            << DeletesPerRequestLimit << ") reached, Marker# KV90";
+        TString msg = str;
+        ReplyError<TEvKeyValue::TEvExecuteTransactionResponse>(ctx, msg,
+                NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate, nullptr);
+        return {true, msg};
+    }
+    return {};
+}
+
+TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand &request, THolder<TIntermediate> &intermediate,
+        const TTabletStorageInfo *info, const TActorContext &ctx)
+{
+    switch (request.action_case()) {
+    case NKikimrKeyValue::ExecuteTransactionRequest::Command::ACTION_NOT_SET:
+        return {true, "Command not specified Marker# KV68"};
+    case NKikimrKeyValue::ExecuteTransactionRequest::Command::kDeleteRange:
+        return PrepareOneCmd(request.delete_range(), intermediate, ctx);
+    case NKikimrKeyValue::ExecuteTransactionRequest::Command::kRename:
+        return PrepareOneCmd(request.rename(), intermediate);
+    case NKikimrKeyValue::ExecuteTransactionRequest::Command::kCopyRange:
+        return PrepareOneCmd(request.copy_range(), intermediate);
+    case NKikimrKeyValue::ExecuteTransactionRequest::Command::kConcat:
+        return PrepareOneCmd(request.concat(), intermediate);
+    case NKikimrKeyValue::ExecuteTransactionRequest::Command::kWrite:
+        return PrepareOneCmd(request.write(), intermediate, info);
+    }
+}
+
+TPrepareResult TKeyValueState::PrepareCommands(NKikimrKeyValue::ExecuteTransactionRequest &kvRequest,
+    THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info, const TActorContext &ctx)
+{
+    for (i32 idx = 0; idx < kvRequest.commands_size(); ++idx) {
+        auto &cmd = kvRequest.commands(idx);
+        TPrepareResult result = PrepareOneCmd(cmd, intermediate, info, ctx);
+        if (cmd.has_write()) {
+            intermediate->WriteIndices.push_back(idx);
+        }
+        if (result.WithError) {
+            return result;
+        }
+    }
+    if (intermediate->EvType == TEvKeyValue::TEvExecuteTransaction::EventType) {
+        intermediate->ExecuteTransactionResponse.set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
+    }
+    return {};
+}
+
 void TKeyValueState::ReplyError(const TActorContext &ctx, TString errorDescription,
         NMsgBusProxy::EResponseStatus status, THolder<TIntermediate> &intermediate,
         const TTabletStorageInfo *info) {
@@ -2559,423 +2559,423 @@ void TKeyValueState::ReplyError(const TActorContext &ctx, TString errorDescripti
     }
 }
 
-bool TKeyValueState::PrepareReadRequest(const TActorContext &ctx, TEvKeyValue::TEvRead::TPtr &ev, 
-        THolder<TIntermediate> &intermediate, TRequestType::EType *outRequestType) 
-{ 
-    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " PrepareReadRequest Marker# KV53"); 
- 
-    NKikimrKeyValue::ReadRequest &request = ev->Get()->Record; 
-    StoredState.SetChannelGeneration(ExecutorGeneration); 
-    StoredState.SetChannelStep(NextLogoBlobStep - 1); 
- 
-    intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID, 
-            StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), TRequestType::ReadOnly)); 
- 
-    intermediate->HasCookie = true; 
-    intermediate->Cookie = request.cookie(); 
- 
-    intermediate->RequestUid = NextRequestUid; 
-    ++NextRequestUid; 
-    RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now(); 
-    intermediate->EvType = TEvKeyValue::TEvRead::EventType; 
- 
-    bool isInlineOnly = true; 
-    intermediate->ReadCommand = TIntermediate::TRead(); 
-    auto &response = std::get<TIntermediate::TRead>(*intermediate->ReadCommand); 
-    response.Key = request.key(); 
- 
-    if (CheckDeadline(ctx, ev->Get(), intermediate)) { 
-        return false; 
-    } 
- 
-    if (CheckGeneration(ctx, ev->Get(), intermediate)) { 
-        return false; 
-    } 
- 
-    auto it = Index.find(request.key()); 
-    if (it == Index.end()) { 
-        response.Status = NKikimrProto::NODATA; 
-        response.Message = "No such key Marker# KV55"; 
-        ReplyError<TEvKeyValue::TEvReadResponse>(ctx, response.Message, 
-                NKikimrKeyValue::Statuses::RSTATUS_NO_DATA, intermediate); 
-        return false; 
-    } 
-    bool isOverRun = PrepareOneRead<NKikimrKeyValue::Priorities, true, ReadResultSizeEstimationNewApi>( 
-            it->first, it->second, request.offset(), request.size(), request.priority(), request.limit_bytes(), 
-            intermediate, response, isInlineOnly); 
- 
-    if (isInlineOnly) { 
-        *outRequestType = TRequestType::ReadOnlyInline; 
-        intermediate->Stat.RequestType = *outRequestType; 
-    } 
-    intermediate->IsTruncated = isOverRun; 
-    return true; 
-} 
- 
-bool TKeyValueState::PrepareReadRangeRequest(const TActorContext &ctx, TEvKeyValue::TEvReadRange::TPtr &ev, 
-        THolder<TIntermediate> &intermediate, TRequestType::EType *outRequestType) 
-{ 
-    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " PrepareReadRangeRequest Marker# KV57"); 
- 
-    NKikimrKeyValue::ReadRangeRequest &request = ev->Get()->Record; 
-    StoredState.SetChannelGeneration(ExecutorGeneration); 
-    StoredState.SetChannelStep(NextLogoBlobStep - 1); 
- 
-    TRequestType::EType requestType = TRequestType::ReadOnly; 
-    intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID, 
-        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType)); 
- 
-    intermediate->HasCookie = true; 
-    intermediate->Cookie = request.cookie(); 
- 
-    intermediate->RequestUid = NextRequestUid; 
-    ++NextRequestUid; 
-    RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now(); 
-    intermediate->EvType = TEvKeyValue::TEvReadRange::EventType; 
-    intermediate->TotalSize = ReadRangeRequestMetaDataSizeEstimation; 
- 
-    intermediate->ReadCommand = TIntermediate::TRangeRead(); 
-    auto &response = std::get<TIntermediate::TRangeRead>(*intermediate->ReadCommand); 
- 
-    if (CheckDeadline(ctx, ev->Get(), intermediate)) { 
-        response.Status = NKikimrProto::ERROR; 
-        return false; 
-    } 
- 
-    if (CheckGeneration(ctx, ev->Get(), intermediate)) { 
-        response.Status = NKikimrProto::ERROR; 
-        return false; 
-    } 
- 
-    TKeyRange range; 
-    auto convResult = ConvertRange(request.range(), &range, "ReadRange"); 
-    if (convResult.WithError) { 
-        response.Status = NKikimrProto::ERROR; 
-        return false; 
-    } 
-    response.Status = NKikimrProto::OK; 
- 
-    ui64 cmdLimitBytes = request.limit_bytes(); 
-    if (!cmdLimitBytes) { 
-        cmdLimitBytes = Max<ui64>(); 
-    } 
-    bool includeData = request.include_data(); 
-    ui8 priority = request.priority(); 
-    response.LimitBytes = cmdLimitBytes; 
-    response.IncludeData = includeData; 
- 
-    bool isInlineOnly = true; 
-    auto processOneCmdReadRange = ProcessOneCmdReadRange<NKikimrKeyValue::Priorities, true, 
-            KeyValuePairSizeEstimationNewApi, KeyInfoSizeEstimation>; 
-    processOneCmdReadRange(this, range, cmdLimitBytes, includeData, priority, response, intermediate, &isInlineOnly); 
- 
-    if (isInlineOnly) { 
-        *outRequestType = TRequestType::ReadOnlyInline; 
-        intermediate->Stat.RequestType = *outRequestType; 
-    } 
-    return true; 
-} 
- 
- 
-bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx, 
-        TEvKeyValue::TEvExecuteTransaction::TPtr &ev, THolder<TIntermediate> &intermediate, 
-        const TTabletStorageInfo *info) 
-{ 
-    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-            << " PrepareExecuteTransactionRequest Marker# KV72"); 
- 
-    NKikimrKeyValue::ExecuteTransactionRequest &request = ev->Get()->Record; 
-    StoredState.SetChannelGeneration(ExecutorGeneration); 
-    StoredState.SetChannelStep(NextLogoBlobStep - 1); 
- 
-    TRequestType::EType requestType = TRequestType::WriteOnly; 
-    intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID, 
-        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType)); 
- 
-    intermediate->HasCookie = true; 
-    intermediate->Cookie = request.cookie(); 
-    intermediate->ExecuteTransactionResponse.set_cookie(request.cookie()); 
- 
-    intermediate->RequestUid = NextRequestUid; 
-    ++NextRequestUid; 
-    RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now(); 
-    intermediate->EvType = TEvKeyValue::TEvExecuteTransaction::EventType; 
- 
-    if (CheckDeadline(ctx, ev->Get(), intermediate)) { 
-        return false; 
-    } 
- 
-    if (CheckGeneration(ctx, ev->Get(), intermediate)) { 
-        return false; 
-    } 
- 
-    TPrepareResult result = PrepareCommands(request, intermediate, info, ctx); 
- 
-    if (result.WithError) { 
-        // discard allocated LogoBlobIds from the Write commands 
-        for (ui32 idx : intermediate->WriteIndices) { 
-            const auto &cmd = intermediate->Commands[idx]; 
-            Y_VERIFY(std::holds_alternative<TIntermediate::TWrite>(cmd)); 
-            auto &write = std::get<TIntermediate::TWrite>(cmd); 
-            for (const TLogoBlobID &id : write.LogoBlobIds) { 
-                const ui32 count = RefCounts.erase(id); 
-                Y_VERIFY(count == 1); 
-            } 
-        } 
- 
-        LOG_ERROR_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-                << " PrepareExecuteTransactionRequest return flase, Marker# KV73" 
-                << " Submsg# " << result.ErrorMsg); 
-        return false; 
-    } 
- 
-    return true; 
-} 
- 
- 
-TKeyValueState::TPrepareResult TKeyValueState::PrepareOneGetStatus(TIntermediate::TGetStatus &cmd, 
-        ui64 publicStorageChannel, const TTabletStorageInfo *info) 
-{ 
-    NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel = NKikimrClient::TKeyValueRequest::MAIN; 
-    if (publicStorageChannel == 1) { 
-        storageChannel = NKikimrClient::TKeyValueRequest::INLINE; 
-    } else if (publicStorageChannel) { 
-        ui32 storageChannelIdx = BLOB_CHANNEL + publicStorageChannel - MainStorageChannelInPublicApi; 
-        storageChannel = NKikimrClient::TKeyValueRequest::EStorageChannel(storageChannelIdx); 
-    } 
-    return InitGetStatusCommand(cmd, storageChannel, info);; 
-} 
- 
- 
-bool TKeyValueState::PrepareGetStatusRequest(const TActorContext &ctx, TEvKeyValue::TEvGetStatus::TPtr &ev, 
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) 
-{ 
-    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " PrepareGetStatusRequest Marker# KV78"); 
- 
-    NKikimrKeyValue::GetStatusRequest &request = ev->Get()->Record; 
-    StoredState.SetChannelGeneration(ExecutorGeneration); 
-    StoredState.SetChannelStep(NextLogoBlobStep - 1); 
- 
-    TRequestType::EType requestType = TRequestType::ReadOnly; 
-    intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID, 
-        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType)); 
- 
-    intermediate->RequestUid = NextRequestUid; 
-    ++NextRequestUid; 
-    RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now(); 
-    intermediate->EvType = TEvKeyValue::TEvGetStatus::EventType; 
- 
-    if (CheckDeadline(ctx, ev->Get(), intermediate)) { 
-        return false; 
-    } 
- 
-    if (CheckGeneration(ctx, ev->Get(), intermediate)) { 
-        return false; 
-    } 
- 
-    intermediate->GetStatuses.resize(request.storage_channel_size()); 
-    for (i32 idx = 0; idx < request.storage_channel_size(); ++idx) { 
-        TPrepareResult result = PrepareOneGetStatus(intermediate->GetStatuses[idx], request.storage_channel(idx), info); 
-        if (result.ErrorMsg && !result.WithError) { 
-            LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, result.ErrorMsg  << " Marker# KV77"); 
-        } 
-    } 
-    return true; 
-} 
- 
-bool TKeyValueState::PrepareObtainLockRequest(const TActorContext &ctx, TEvKeyValue::TEvObtainLock::TPtr &ev, 
-        THolder<TIntermediate> &intermediate) 
-{ 
-    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " PrepareObtainLockRequest Marker# KV79"); 
- 
-    StoredState.SetChannelGeneration(ExecutorGeneration); 
-    StoredState.SetChannelStep(NextLogoBlobStep - 1); 
- 
-    TRequestType::EType requestType = TRequestType::ReadOnly; 
-    intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID, 
-        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType)); 
- 
-    intermediate->RequestUid = NextRequestUid; 
-    ++NextRequestUid; 
-    RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now(); 
-    intermediate->EvType = TEvKeyValue::TEvObtainLock::EventType; 
-    intermediate->HasIncrementGeneration = true; 
-    return true; 
-} 
- 
-void RegisterReadRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate, 
-        const TTabletStorageInfo *info) 
-{ 
-    ctx.RegisterWithSameMailbox(CreateKeyValueStorageReadRequest(std::move(intermediate), info)); 
-} 
- 
-void RegisterRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate, 
-        const TTabletStorageInfo *info) 
-{ 
-    ctx.RegisterWithSameMailbox(CreateKeyValueStorageRequest(std::move(intermediate), info)); 
-} 
- 
-void TKeyValueState::ProcessPostponedIntermediate(const TActorContext& ctx, THolder<TIntermediate> &&intermediate, 
-            const TTabletStorageInfo *info) 
-{ 
-    switch(intermediate->EvType) { 
-    case TEvKeyValue::TEvRequest::EventType: 
-        return RegisterRequestActor(ctx, std::move(intermediate), info); 
-    case TEvKeyValue::TEvRead::EventType: 
-    case TEvKeyValue::TEvReadRange::EventType: 
-        return RegisterReadRequestActor(ctx, std::move(intermediate), info); 
-    default: 
-        Y_FAIL_S("Unexpected event type# " << intermediate->EvType); 
-    } 
-} 
- 
-void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActorContext &ctx, 
-        const TTabletStorageInfo *info) 
-{ 
-    THolder<TIntermediate> intermediate; 
- 
-    ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize()); 
-    ResourceMetrics->TryUpdate(ctx); 
- 
-    TRequestType::EType requestType = TRequestType::ReadOnly; 
-    CountRequestIncoming(requestType); 
- 
-    if (PrepareReadRequest(ctx, ev, intermediate, &requestType)) { 
-        ++InFlightForStep[StoredState.GetChannelStep()]; 
-        if (requestType == TRequestType::ReadOnlyInline) { 
-            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-                << " Create storage inline read request, Marker# KV49"); 
-            RegisterReadRequestActor(ctx, std::move(intermediate), info); 
-            ++RoInlineIntermediatesInFlight; 
-        } else { 
-            if (IntermediatesInFlight < IntermediatesInFlightLimit) { 
-                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-                    << " Create storage read request, Marker# KV54"); 
-                RegisterReadRequestActor(ctx, std::move(intermediate), info); 
-                ++IntermediatesInFlight; 
-            } else { 
-                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-                    << " Enqueue storage read request, Marker# KV56"); 
-                PostponeIntermediate<TEvKeyValue::TEvRead>(std::move(intermediate)); 
-            } 
-        } 
-        CountRequestTakeOffOrEnqueue(requestType); 
-    } else { 
-        intermediate->UpdateStat(); 
-        CountRequestOtherError(requestType); 
-    } 
-} 
- 
-void TKeyValueState::OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, const TActorContext &ctx, 
-        const TTabletStorageInfo *info) 
-{ 
-    THolder<TIntermediate> intermediate; 
- 
-    ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize()); 
-    ResourceMetrics->TryUpdate(ctx); 
- 
-    TRequestType::EType requestType = TRequestType::ReadOnly; 
-    CountRequestIncoming(requestType); 
- 
-    if (PrepareReadRangeRequest(ctx, ev, intermediate, &requestType)) { 
-        ++InFlightForStep[StoredState.GetChannelStep()]; 
-        if (requestType == TRequestType::ReadOnlyInline) { 
-            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-                << " Create storage inline read range request, Marker# KV58"); 
-            RegisterReadRequestActor(ctx, std::move(intermediate), info); 
-            ++RoInlineIntermediatesInFlight; 
-        } else { 
-            if (IntermediatesInFlight < IntermediatesInFlightLimit) { 
-                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-                    << " Create storage read range request, Marker# KV66"); 
-                RegisterReadRequestActor(ctx, std::move(intermediate), info); 
-                ++IntermediatesInFlight; 
-            } else { 
-                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-                    << " Enqueue storage read range request, Marker# KV59"); 
-                PostponeIntermediate<TEvKeyValue::TEvReadRange>(std::move(intermediate)); 
-            } 
-        } 
-        CountRequestTakeOffOrEnqueue(requestType); 
-    } else { 
-        intermediate->UpdateStat(); 
-        CountRequestOtherError(requestType); 
-    } 
-    CountRequestTakeOffOrEnqueue(requestType); 
-} 
- 
-void TKeyValueState::OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::TPtr &ev, const TActorContext &ctx, 
-        const TTabletStorageInfo *info) 
-{ 
-    THolder<TIntermediate> intermediate; 
- 
-    ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize()); 
-    ResourceMetrics->TryUpdate(ctx); 
- 
-    TRequestType::EType requestType = TRequestType::WriteOnly; 
-    CountRequestIncoming(requestType); 
- 
-    if (PrepareExecuteTransactionRequest(ctx, ev, intermediate, info)) { 
-        ++InFlightForStep[StoredState.GetChannelStep()]; 
-        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-            << " Create storage request for WO, Marker# KV67"); 
-        RegisterRequestActor(ctx, std::move(intermediate), info); 
- 
-        CountRequestTakeOffOrEnqueue(requestType); 
-    } else { 
-        intermediate->UpdateStat(); 
-        CountRequestOtherError(requestType); 
-    } 
-} 
- 
-void TKeyValueState::OnEvGetStatus(TEvKeyValue::TEvGetStatus::TPtr &ev, const TActorContext &ctx, 
-        const TTabletStorageInfo *info) 
-{ 
-    THolder<TIntermediate> intermediate; 
- 
-    ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize()); 
-    ResourceMetrics->TryUpdate(ctx); 
- 
-    TRequestType::EType requestType = TRequestType::ReadOnlyInline; 
-    CountRequestIncoming(requestType); 
- 
-    if (PrepareGetStatusRequest(ctx, ev, intermediate, info)) { 
-        ++InFlightForStep[StoredState.GetChannelStep()]; 
-        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-            << " Create GetStatus request, Marker# KV75"); 
-        RegisterRequestActor(ctx, std::move(intermediate), info); 
-        ++RoInlineIntermediatesInFlight; 
-        CountRequestTakeOffOrEnqueue(requestType); 
-    } else { 
-        intermediate->UpdateStat(); 
-        CountRequestOtherError(requestType); 
-    } 
-} 
- 
-void TKeyValueState::OnEvObtainLock(TEvKeyValue::TEvObtainLock::TPtr &ev, const TActorContext &ctx, 
-        const TTabletStorageInfo *info) 
-{ 
-    THolder<TIntermediate> intermediate; 
- 
-    ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize()); 
-    ResourceMetrics->TryUpdate(ctx); 
- 
-    TRequestType::EType requestType = TRequestType::ReadOnlyInline; 
- 
-    CountRequestIncoming(requestType); 
-    if (PrepareObtainLockRequest(ctx, ev, intermediate)) { 
-        ++InFlightForStep[StoredState.GetChannelStep()]; 
-        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
-            << " Create ObtainLock request, Marker# KV80"); 
-        RegisterRequestActor(ctx, std::move(intermediate), info); 
-        ++RoInlineIntermediatesInFlight; 
-        CountRequestTakeOffOrEnqueue(requestType); 
-    } else { 
-        intermediate->UpdateStat(); 
-        CountRequestOtherError(requestType); 
-    } 
-} 
- 
+bool TKeyValueState::PrepareReadRequest(const TActorContext &ctx, TEvKeyValue::TEvRead::TPtr &ev,
+        THolder<TIntermediate> &intermediate, TRequestType::EType *outRequestType)
+{
+    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " PrepareReadRequest Marker# KV53");
+
+    NKikimrKeyValue::ReadRequest &request = ev->Get()->Record;
+    StoredState.SetChannelGeneration(ExecutorGeneration);
+    StoredState.SetChannelStep(NextLogoBlobStep - 1);
+
+    intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
+            StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), TRequestType::ReadOnly));
+
+    intermediate->HasCookie = true;
+    intermediate->Cookie = request.cookie();
+
+    intermediate->RequestUid = NextRequestUid;
+    ++NextRequestUid;
+    RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now();
+    intermediate->EvType = TEvKeyValue::TEvRead::EventType;
+
+    bool isInlineOnly = true;
+    intermediate->ReadCommand = TIntermediate::TRead();
+    auto &response = std::get<TIntermediate::TRead>(*intermediate->ReadCommand);
+    response.Key = request.key();
+
+    if (CheckDeadline(ctx, ev->Get(), intermediate)) {
+        return false;
+    }
+
+    if (CheckGeneration(ctx, ev->Get(), intermediate)) {
+        return false;
+    }
+
+    auto it = Index.find(request.key());
+    if (it == Index.end()) {
+        response.Status = NKikimrProto::NODATA;
+        response.Message = "No such key Marker# KV55";
+        ReplyError<TEvKeyValue::TEvReadResponse>(ctx, response.Message,
+                NKikimrKeyValue::Statuses::RSTATUS_NO_DATA, intermediate);
+        return false;
+    }
+    bool isOverRun = PrepareOneRead<NKikimrKeyValue::Priorities, true, ReadResultSizeEstimationNewApi>(
+            it->first, it->second, request.offset(), request.size(), request.priority(), request.limit_bytes(),
+            intermediate, response, isInlineOnly);
+
+    if (isInlineOnly) {
+        *outRequestType = TRequestType::ReadOnlyInline;
+        intermediate->Stat.RequestType = *outRequestType;
+    }
+    intermediate->IsTruncated = isOverRun;
+    return true;
+}
+
+bool TKeyValueState::PrepareReadRangeRequest(const TActorContext &ctx, TEvKeyValue::TEvReadRange::TPtr &ev,
+        THolder<TIntermediate> &intermediate, TRequestType::EType *outRequestType)
+{
+    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " PrepareReadRangeRequest Marker# KV57");
+
+    NKikimrKeyValue::ReadRangeRequest &request = ev->Get()->Record;
+    StoredState.SetChannelGeneration(ExecutorGeneration);
+    StoredState.SetChannelStep(NextLogoBlobStep - 1);
+
+    TRequestType::EType requestType = TRequestType::ReadOnly;
+    intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
+        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType));
+
+    intermediate->HasCookie = true;
+    intermediate->Cookie = request.cookie();
+
+    intermediate->RequestUid = NextRequestUid;
+    ++NextRequestUid;
+    RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now();
+    intermediate->EvType = TEvKeyValue::TEvReadRange::EventType;
+    intermediate->TotalSize = ReadRangeRequestMetaDataSizeEstimation;
+
+    intermediate->ReadCommand = TIntermediate::TRangeRead();
+    auto &response = std::get<TIntermediate::TRangeRead>(*intermediate->ReadCommand);
+
+    if (CheckDeadline(ctx, ev->Get(), intermediate)) {
+        response.Status = NKikimrProto::ERROR;
+        return false;
+    }
+
+    if (CheckGeneration(ctx, ev->Get(), intermediate)) {
+        response.Status = NKikimrProto::ERROR;
+        return false;
+    }
+
+    TKeyRange range;
+    auto convResult = ConvertRange(request.range(), &range, "ReadRange");
+    if (convResult.WithError) {
+        response.Status = NKikimrProto::ERROR;
+        return false;
+    }
+    response.Status = NKikimrProto::OK;
+
+    ui64 cmdLimitBytes = request.limit_bytes();
+    if (!cmdLimitBytes) {
+        cmdLimitBytes = Max<ui64>();
+    }
+    bool includeData = request.include_data();
+    ui8 priority = request.priority();
+    response.LimitBytes = cmdLimitBytes;
+    response.IncludeData = includeData;
+
+    bool isInlineOnly = true;
+    auto processOneCmdReadRange = ProcessOneCmdReadRange<NKikimrKeyValue::Priorities, true,
+            KeyValuePairSizeEstimationNewApi, KeyInfoSizeEstimation>;
+    processOneCmdReadRange(this, range, cmdLimitBytes, includeData, priority, response, intermediate, &isInlineOnly);
+
+    if (isInlineOnly) {
+        *outRequestType = TRequestType::ReadOnlyInline;
+        intermediate->Stat.RequestType = *outRequestType;
+    }
+    return true;
+}
+
+
+bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx,
+        TEvKeyValue::TEvExecuteTransaction::TPtr &ev, THolder<TIntermediate> &intermediate,
+        const TTabletStorageInfo *info)
+{
+    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+            << " PrepareExecuteTransactionRequest Marker# KV72");
+
+    NKikimrKeyValue::ExecuteTransactionRequest &request = ev->Get()->Record;
+    StoredState.SetChannelGeneration(ExecutorGeneration);
+    StoredState.SetChannelStep(NextLogoBlobStep - 1);
+
+    TRequestType::EType requestType = TRequestType::WriteOnly;
+    intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
+        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType));
+
+    intermediate->HasCookie = true;
+    intermediate->Cookie = request.cookie();
+    intermediate->ExecuteTransactionResponse.set_cookie(request.cookie());
+
+    intermediate->RequestUid = NextRequestUid;
+    ++NextRequestUid;
+    RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now();
+    intermediate->EvType = TEvKeyValue::TEvExecuteTransaction::EventType;
+
+    if (CheckDeadline(ctx, ev->Get(), intermediate)) {
+        return false;
+    }
+
+    if (CheckGeneration(ctx, ev->Get(), intermediate)) {
+        return false;
+    }
+
+    TPrepareResult result = PrepareCommands(request, intermediate, info, ctx);
+
+    if (result.WithError) {
+        // discard allocated LogoBlobIds from the Write commands
+        for (ui32 idx : intermediate->WriteIndices) {
+            const auto &cmd = intermediate->Commands[idx];
+            Y_VERIFY(std::holds_alternative<TIntermediate::TWrite>(cmd));
+            auto &write = std::get<TIntermediate::TWrite>(cmd);
+            for (const TLogoBlobID &id : write.LogoBlobIds) {
+                const ui32 count = RefCounts.erase(id);
+                Y_VERIFY(count == 1);
+            }
+        }
+
+        LOG_ERROR_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                << " PrepareExecuteTransactionRequest return flase, Marker# KV73"
+                << " Submsg# " << result.ErrorMsg);
+        return false;
+    }
+
+    return true;
+}
+
+
+TKeyValueState::TPrepareResult TKeyValueState::PrepareOneGetStatus(TIntermediate::TGetStatus &cmd,
+        ui64 publicStorageChannel, const TTabletStorageInfo *info)
+{
+    NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel = NKikimrClient::TKeyValueRequest::MAIN;
+    if (publicStorageChannel == 1) {
+        storageChannel = NKikimrClient::TKeyValueRequest::INLINE;
+    } else if (publicStorageChannel) {
+        ui32 storageChannelIdx = BLOB_CHANNEL + publicStorageChannel - MainStorageChannelInPublicApi;
+        storageChannel = NKikimrClient::TKeyValueRequest::EStorageChannel(storageChannelIdx);
+    }
+    return InitGetStatusCommand(cmd, storageChannel, info);;
+}
+
+
+bool TKeyValueState::PrepareGetStatusRequest(const TActorContext &ctx, TEvKeyValue::TEvGetStatus::TPtr &ev,
+        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info)
+{
+    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " PrepareGetStatusRequest Marker# KV78");
+
+    NKikimrKeyValue::GetStatusRequest &request = ev->Get()->Record;
+    StoredState.SetChannelGeneration(ExecutorGeneration);
+    StoredState.SetChannelStep(NextLogoBlobStep - 1);
+
+    TRequestType::EType requestType = TRequestType::ReadOnly;
+    intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
+        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType));
+
+    intermediate->RequestUid = NextRequestUid;
+    ++NextRequestUid;
+    RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now();
+    intermediate->EvType = TEvKeyValue::TEvGetStatus::EventType;
+
+    if (CheckDeadline(ctx, ev->Get(), intermediate)) {
+        return false;
+    }
+
+    if (CheckGeneration(ctx, ev->Get(), intermediate)) {
+        return false;
+    }
+
+    intermediate->GetStatuses.resize(request.storage_channel_size());
+    for (i32 idx = 0; idx < request.storage_channel_size(); ++idx) {
+        TPrepareResult result = PrepareOneGetStatus(intermediate->GetStatuses[idx], request.storage_channel(idx), info);
+        if (result.ErrorMsg && !result.WithError) {
+            LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, result.ErrorMsg  << " Marker# KV77");
+        }
+    }
+    return true;
+}
+
+bool TKeyValueState::PrepareObtainLockRequest(const TActorContext &ctx, TEvKeyValue::TEvObtainLock::TPtr &ev,
+        THolder<TIntermediate> &intermediate)
+{
+    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " PrepareObtainLockRequest Marker# KV79");
+
+    StoredState.SetChannelGeneration(ExecutorGeneration);
+    StoredState.SetChannelStep(NextLogoBlobStep - 1);
+
+    TRequestType::EType requestType = TRequestType::ReadOnly;
+    intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
+        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType));
+
+    intermediate->RequestUid = NextRequestUid;
+    ++NextRequestUid;
+    RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now();
+    intermediate->EvType = TEvKeyValue::TEvObtainLock::EventType;
+    intermediate->HasIncrementGeneration = true;
+    return true;
+}
+
+void RegisterReadRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate,
+        const TTabletStorageInfo *info)
+{
+    ctx.RegisterWithSameMailbox(CreateKeyValueStorageReadRequest(std::move(intermediate), info));
+}
+
+void RegisterRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate,
+        const TTabletStorageInfo *info)
+{
+    ctx.RegisterWithSameMailbox(CreateKeyValueStorageRequest(std::move(intermediate), info));
+}
+
+void TKeyValueState::ProcessPostponedIntermediate(const TActorContext& ctx, THolder<TIntermediate> &&intermediate,
+            const TTabletStorageInfo *info)
+{
+    switch(intermediate->EvType) {
+    case TEvKeyValue::TEvRequest::EventType:
+        return RegisterRequestActor(ctx, std::move(intermediate), info);
+    case TEvKeyValue::TEvRead::EventType:
+    case TEvKeyValue::TEvReadRange::EventType:
+        return RegisterReadRequestActor(ctx, std::move(intermediate), info);
+    default:
+        Y_FAIL_S("Unexpected event type# " << intermediate->EvType);
+    }
+}
+
+void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActorContext &ctx,
+        const TTabletStorageInfo *info)
+{
+    THolder<TIntermediate> intermediate;
+
+    ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize());
+    ResourceMetrics->TryUpdate(ctx);
+
+    TRequestType::EType requestType = TRequestType::ReadOnly;
+    CountRequestIncoming(requestType);
+
+    if (PrepareReadRequest(ctx, ev, intermediate, &requestType)) {
+        ++InFlightForStep[StoredState.GetChannelStep()];
+        if (requestType == TRequestType::ReadOnlyInline) {
+            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                << " Create storage inline read request, Marker# KV49");
+            RegisterReadRequestActor(ctx, std::move(intermediate), info);
+            ++RoInlineIntermediatesInFlight;
+        } else {
+            if (IntermediatesInFlight < IntermediatesInFlightLimit) {
+                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                    << " Create storage read request, Marker# KV54");
+                RegisterReadRequestActor(ctx, std::move(intermediate), info);
+                ++IntermediatesInFlight;
+            } else {
+                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                    << " Enqueue storage read request, Marker# KV56");
+                PostponeIntermediate<TEvKeyValue::TEvRead>(std::move(intermediate));
+            }
+        }
+        CountRequestTakeOffOrEnqueue(requestType);
+    } else {
+        intermediate->UpdateStat();
+        CountRequestOtherError(requestType);
+    }
+}
+
+void TKeyValueState::OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, const TActorContext &ctx,
+        const TTabletStorageInfo *info)
+{
+    THolder<TIntermediate> intermediate;
+
+    ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize());
+    ResourceMetrics->TryUpdate(ctx);
+
+    TRequestType::EType requestType = TRequestType::ReadOnly;
+    CountRequestIncoming(requestType);
+
+    if (PrepareReadRangeRequest(ctx, ev, intermediate, &requestType)) {
+        ++InFlightForStep[StoredState.GetChannelStep()];
+        if (requestType == TRequestType::ReadOnlyInline) {
+            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                << " Create storage inline read range request, Marker# KV58");
+            RegisterReadRequestActor(ctx, std::move(intermediate), info);
+            ++RoInlineIntermediatesInFlight;
+        } else {
+            if (IntermediatesInFlight < IntermediatesInFlightLimit) {
+                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                    << " Create storage read range request, Marker# KV66");
+                RegisterReadRequestActor(ctx, std::move(intermediate), info);
+                ++IntermediatesInFlight;
+            } else {
+                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                    << " Enqueue storage read range request, Marker# KV59");
+                PostponeIntermediate<TEvKeyValue::TEvReadRange>(std::move(intermediate));
+            }
+        }
+        CountRequestTakeOffOrEnqueue(requestType);
+    } else {
+        intermediate->UpdateStat();
+        CountRequestOtherError(requestType);
+    }
+    CountRequestTakeOffOrEnqueue(requestType);
+}
+
+void TKeyValueState::OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::TPtr &ev, const TActorContext &ctx,
+        const TTabletStorageInfo *info)
+{
+    THolder<TIntermediate> intermediate;
+
+    ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize());
+    ResourceMetrics->TryUpdate(ctx);
+
+    TRequestType::EType requestType = TRequestType::WriteOnly;
+    CountRequestIncoming(requestType);
+
+    if (PrepareExecuteTransactionRequest(ctx, ev, intermediate, info)) {
+        ++InFlightForStep[StoredState.GetChannelStep()];
+        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+            << " Create storage request for WO, Marker# KV67");
+        RegisterRequestActor(ctx, std::move(intermediate), info);
+
+        CountRequestTakeOffOrEnqueue(requestType);
+    } else {
+        intermediate->UpdateStat();
+        CountRequestOtherError(requestType);
+    }
+}
+
+void TKeyValueState::OnEvGetStatus(TEvKeyValue::TEvGetStatus::TPtr &ev, const TActorContext &ctx,
+        const TTabletStorageInfo *info)
+{
+    THolder<TIntermediate> intermediate;
+
+    ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize());
+    ResourceMetrics->TryUpdate(ctx);
+
+    TRequestType::EType requestType = TRequestType::ReadOnlyInline;
+    CountRequestIncoming(requestType);
+
+    if (PrepareGetStatusRequest(ctx, ev, intermediate, info)) {
+        ++InFlightForStep[StoredState.GetChannelStep()];
+        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+            << " Create GetStatus request, Marker# KV75");
+        RegisterRequestActor(ctx, std::move(intermediate), info);
+        ++RoInlineIntermediatesInFlight;
+        CountRequestTakeOffOrEnqueue(requestType);
+    } else {
+        intermediate->UpdateStat();
+        CountRequestOtherError(requestType);
+    }
+}
+
+void TKeyValueState::OnEvObtainLock(TEvKeyValue::TEvObtainLock::TPtr &ev, const TActorContext &ctx,
+        const TTabletStorageInfo *info)
+{
+    THolder<TIntermediate> intermediate;
+
+    ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize());
+    ResourceMetrics->TryUpdate(ctx);
+
+    TRequestType::EType requestType = TRequestType::ReadOnlyInline;
+
+    CountRequestIncoming(requestType);
+    if (PrepareObtainLockRequest(ctx, ev, intermediate)) {
+        ++InFlightForStep[StoredState.GetChannelStep()];
+        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+            << " Create ObtainLock request, Marker# KV80");
+        RegisterRequestActor(ctx, std::move(intermediate), info);
+        ++RoInlineIntermediatesInFlight;
+        CountRequestTakeOffOrEnqueue(requestType);
+    } else {
+        intermediate->UpdateStat();
+        CountRequestOtherError(requestType);
+    }
+}
+
 void TKeyValueState::OnEvIntermediate(TIntermediate &intermediate, const TActorContext &ctx) {
     Y_UNUSED(ctx);
     CountLatencyBsOps(intermediate.Stat);
@@ -3010,26 +3010,26 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
 
     if (PrepareIntermediate(ev, intermediate, requestType, ctx, info)) {
         // Spawn KeyValueStorageRequest actor on the same thread
-        ++InFlightForStep[StoredState.GetChannelStep()]; 
+        ++InFlightForStep[StoredState.GetChannelStep()];
         if (requestType == TRequestType::WriteOnly) {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                 << " Create storage request for WO, Marker# KV42");
-            RegisterRequestActor(ctx, std::move(intermediate), info); 
+            RegisterRequestActor(ctx, std::move(intermediate), info);
         } else if (requestType == TRequestType::ReadOnlyInline) {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                 << " Create storage request for RO_INLINE, Marker# KV45");
-            RegisterRequestActor(ctx, std::move(intermediate), info); 
+            RegisterRequestActor(ctx, std::move(intermediate), info);
             ++RoInlineIntermediatesInFlight;
         } else {
             if (IntermediatesInFlight < IntermediatesInFlightLimit) {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                     << " Create storage request for RO/RW, Marker# KV43");
-                RegisterRequestActor(ctx, std::move(intermediate), info); 
+                RegisterRequestActor(ctx, std::move(intermediate), info);
                 ++IntermediatesInFlight;
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                     << " Enqueue storage request for RO/RW, Marker# KV44");
-                PostponeIntermediate<TEvKeyValue::TEvRequest>(std::move(intermediate)); 
+                PostponeIntermediate<TEvKeyValue::TEvRequest>(std::move(intermediate));
             }
         }
 
@@ -3055,7 +3055,7 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
     intermediate->RequestUid = NextRequestUid;
     ++NextRequestUid;
     RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now();
-    intermediate->EvType = TEvKeyValue::TEvRequest::EventType; 
+    intermediate->EvType = TEvKeyValue::TEvRequest::EventType;
 
     intermediate->HasCookie = request.HasCookie();
     if (request.HasCookie()) {
@@ -3081,10 +3081,10 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
         intermediate->Stat.RequestType = inOutRequestType;
     }
 
-    ui32 cmdCount = request.CmdWriteSize() + request.CmdDeleteRangeSize() + request.CmdRenameSize() 
-            + request.CmdCopyRangeSize() + request.CmdConcatSize(); 
-    intermediate->Commands.reserve(cmdCount); 
- 
+    ui32 cmdCount = request.CmdWriteSize() + request.CmdDeleteRangeSize() + request.CmdRenameSize()
+            + request.CmdCopyRangeSize() + request.CmdConcatSize();
+    intermediate->Commands.reserve(cmdCount);
+
     error = error || PrepareCmdCopyRange(ctx, request, intermediate);
     error = error || PrepareCmdRename(ctx, request, intermediate);
     error = error || PrepareCmdConcat(ctx, request, intermediate);
@@ -3094,12 +3094,12 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
     error = error || PrepareCmdTrimLeakedBlobs(ctx, request, intermediate, info);
     error = error || PrepareCmdSetExecutorFastLogPolicy(ctx, request, intermediate, info);
 
-    intermediate->WriteCount = request.CmdWriteSize(); 
-    intermediate->DeleteCount = request.CmdDeleteRangeSize(); 
-    intermediate->RenameCount = request.CmdRenameSize(); 
-    intermediate->CopyRangeCount = request.CmdCopyRangeSize(); 
-    intermediate->ConcatCount = request.CmdConcatSize(); 
- 
+    intermediate->WriteCount = request.CmdWriteSize();
+    intermediate->DeleteCount = request.CmdDeleteRangeSize();
+    intermediate->RenameCount = request.CmdRenameSize();
+    intermediate->CopyRangeCount = request.CmdCopyRangeSize();
+    intermediate->ConcatCount = request.CmdConcatSize();
+
     if (error) {
         // discard allocated LogoBlobIds from the Write commands
         for (const auto &write : intermediate->Writes) {
@@ -3109,16 +3109,16 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
             }
         }
 
-        for (ui32 idx : intermediate->WriteIndices) { 
-            const auto &cmd = intermediate->Commands[idx]; 
-            Y_VERIFY(std::holds_alternative<TIntermediate::TWrite>(cmd)); 
-            auto &write = std::get<TIntermediate::TWrite>(cmd); 
-            for (const TLogoBlobID &id : write.LogoBlobIds) { 
-                const ui32 count = RefCounts.erase(id); 
-                Y_VERIFY(count == 1); 
-            } 
-        } 
- 
+        for (ui32 idx : intermediate->WriteIndices) {
+            const auto &cmd = intermediate->Commands[idx];
+            Y_VERIFY(std::holds_alternative<TIntermediate::TWrite>(cmd));
+            auto &write = std::get<TIntermediate::TWrite>(cmd);
+            for (const TLogoBlobID &id : write.LogoBlobIds) {
+                const ui32 count = RefCounts.erase(id);
+                Y_VERIFY(count == 1);
+            }
+        }
+
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                 << " PrepareIntermediate return flase, Marker# KV41");
         return false;

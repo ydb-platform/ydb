@@ -2642,332 +2642,332 @@ void TErasureType::IncrementalSplitData(ECrcMode crcMode, const TString& buffer,
     }
 }
 
-void MirrorSplitDiff(const TErasureType &type, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) { 
-    outDiffSet.PartDiffs.resize(type.TotalPartCount()); 
-    ui32 parityParts = type.ParityParts(); 
-    for (ui32 partIdx = 0; partIdx <= parityParts; ++partIdx) { 
-        outDiffSet.PartDiffs[partIdx].Diffs = diffs; 
-    } 
-} 
- 
-void EoBlockSplitDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, ui32 dataSize, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) { 
-    TBlockParams p(crcMode, type, dataSize); 
-    outDiffSet.PartDiffs.resize(type.TotalPartCount()); 
-    ui32 dataParts = type.DataParts(); 
- 
-    ui32 partOffset = 0; 
-    ui32 diffIdx = 0; 
-    for (ui32 partIdx = 0; partIdx < dataParts && diffIdx < diffs.size(); ++partIdx) { 
-        ui32 nextOffset = partOffset; 
-        if (partIdx < p.FirstSmallPartIdx) { 
-            nextOffset += p.LargePartSize; 
-        } else { 
-            nextOffset += p.SmallPartSize; 
-        } 
-        if (partIdx + 1 == dataParts) { 
-            nextOffset = dataSize; 
-        } 
-        if (partOffset == nextOffset) { 
-            continue; 
-        } 
-        TPartDiff &part = outDiffSet.PartDiffs[partIdx]; 
- 
-        while (diffIdx < diffs.size()) { 
-            const TDiff &diff = diffs[diffIdx]; 
-            ui32 lineOffset = diff.Offset % sizeof(ui64); 
-            ui32 diffEnd = diff.Offset + diff.GetDiffLength(); 
- 
-            if (diff.Offset <= partOffset && diffEnd >= partOffset) { 
-                ui32 diffEndForThisPart = Min(diffEnd, nextOffset); 
-                ui32 diffShift = partOffset - diff.Offset; 
- 
-                ui32 bufferSize = diffEndForThisPart - partOffset; 
-                Y_VERIFY(bufferSize); 
-                Y_VERIFY_S(diffShift + bufferSize <= diff.Buffer.size(), "diffShift# " << diffShift 
-                        << " bufferSize# " << bufferSize << " diff.GetDiffLength()# " << diff.GetDiffLength()); 
-                TString newBuffer = TString::Uninitialized(bufferSize); 
-                memcpy(newBuffer.begin(), diff.Buffer.begin() + diffShift, bufferSize); 
-                part.Diffs.emplace_back(newBuffer, 0, false, true); 
- 
-                if (diffEnd <= nextOffset) { 
-                    diffIdx++; 
-                } else { 
-                    break; 
-                } 
-            } else if (diffEnd <= nextOffset) { 
-                TString buffer; 
-                ui32 bufferSize = 0; 
-                if (lineOffset && !diff.IsAligned) { 
-                    bufferSize = diff.GetDiffLength() + lineOffset; 
-                    buffer = TString::Uninitialized(bufferSize); 
-                    memcpy(buffer.begin() + lineOffset, diff.Buffer.begin(), diff.GetDiffLength()); 
-                } else { 
-                    buffer = diff.Buffer; 
-                    bufferSize = diff.Buffer.size(); 
-                } 
-                Y_VERIFY(bufferSize); 
-                part.Diffs.emplace_back(buffer, diff.Offset - partOffset, false, true); 
-                diffIdx++; 
-            } else if (diff.Offset < nextOffset) { 
-                ui32 bufferSize = nextOffset - diff.Offset + lineOffset; 
-                TString newBuffer = TString::Uninitialized(bufferSize); 
-                memcpy(newBuffer.begin() + lineOffset, diff.Buffer.begin(), bufferSize - lineOffset); 
-                Y_VERIFY(bufferSize); 
-                part.Diffs.emplace_back(newBuffer, diff.Offset - partOffset, false, true); 
-                break; 
-            } else { 
-                break; 
-            } 
-        } 
- 
-        partOffset = nextOffset; 
-    } 
-} 
- 
-void TErasureType::SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) const { 
-    Y_VERIFY(crcMode == CrcModeNone, "crc's not implemented"); 
-    const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies]; 
- 
-    // change crc part only in during of applying diffs 
-    switch (erasure.ErasureFamily) { 
-        case TErasureType::ErasureMirror: 
-            MirrorSplitDiff(*this, diffs, outDiffSet); 
-            break; 
-        case TErasureType::ErasureParityStripe: 
-            Y_FAIL("Not implemented"); 
-            break; 
-        case TErasureType::ErasureParityBlock: 
-            Y_VERIFY(erasure.ParityParts == 2, "Other is not implemented"); 
-            EoBlockSplitDiff(crcMode, *this, dataSize, diffs, outDiffSet); 
-            break; 
-    } 
-} 
- 
-template <typename Bucket> 
-void XorCpy(Bucket *dest, const Bucket *orig, const Bucket *diff, ui32 count) { 
-    for (ui32 idx = 0; idx < count; ++idx) { 
-        dest[idx] = orig[idx] ^ diff[idx]; 
-    } 
-} 
- 
-void MakeEoBlockXorDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, ui32 dataSize, 
-        const ui8 *src, const TVector<TDiff> &inDiffs, TVector<TDiff> *outDiffs) 
-{ 
-    Y_VERIFY(crcMode == TErasureType::CrcModeNone, "crc's not implemented"); 
-    TBlockParams p(crcMode, type, dataSize); 
- 
-    for (const TDiff &diff : inDiffs) { 
-        const ui8 *diffBufferBytes = reinterpret_cast<const ui8*>(diff.Buffer.data()); 
- 
-        ui32 lineOffset = diff.Offset % sizeof(ui64); 
-        ui32 lowerStartPos = diff.Offset - lineOffset; 
-        ui32 upperStartPos = lowerStartPos + (lineOffset ? sizeof(ui64) : 0); 
- 
-        ui32 end = diff.Offset + diff.GetDiffLength(); 
-        ui32 endLineOffset = end % sizeof(ui64); 
-        ui32 lowerEndPos = end - endLineOffset; 
-        ui32 upperEndPos = lowerEndPos + (endLineOffset ? sizeof(ui64) : 0); 
- 
-        ui32 bufferSize = upperEndPos - lowerStartPos; 
-        Y_VERIFY(bufferSize); 
-        TString xorDiffBuffer = TString::Uninitialized(bufferSize); 
-        ui8 *xorDiffBufferBytes = reinterpret_cast<ui8*>(const_cast<char*>(xorDiffBuffer.data())); 
- 
-        if (lowerEndPos == lowerStartPos) { 
-            ui64 &val = *reinterpret_cast<ui64*>(xorDiffBufferBytes); 
-            val = 0; 
-            ui32 byteCount = diff.GetDiffLength(); 
-            XorCpy(xorDiffBufferBytes + lineOffset, src + diff.Offset, diffBufferBytes + lineOffset, byteCount); 
-            outDiffs->emplace_back(xorDiffBuffer, diff.Offset, true, true); 
-            continue; 
-        } 
- 
-        if (lineOffset) { 
-            ui64 &val = *reinterpret_cast<ui64*>(xorDiffBufferBytes); 
-            val = 0; 
-            ui32 byteCount = Min<ui32>(sizeof(ui64) - lineOffset, diff.GetDiffLength()); 
-            XorCpy(xorDiffBufferBytes + lineOffset, src + diff.Offset, diffBufferBytes + lineOffset, byteCount); 
-        } 
- 
-        ui32 firstLine = lowerStartPos / sizeof(ui64); 
-        ui32 lineStart = upperStartPos / sizeof(ui64); 
-        ui32 lineEnd = lowerEndPos / sizeof(ui64); 
-        ui64 *xorUI64 = reinterpret_cast<ui64*>(xorDiffBufferBytes) + (lineStart - firstLine); 
-        const ui64 *srcUI64 = reinterpret_cast<const ui64*>(src) + lineStart; 
-        const ui64 *diffUI64 = reinterpret_cast<const ui64*>(diffBufferBytes)+ (lineStart - firstLine); 
-        ui32 countUI64 = lineEnd - lineStart; 
-        XorCpy(xorUI64, srcUI64, diffUI64, countUI64); 
- 
-        if (endLineOffset) { 
-            ui64 &val = reinterpret_cast<ui64*>(xorDiffBufferBytes)[lineEnd - firstLine]; 
-            val = 0; 
-            ui32 diffOffset = lowerEndPos - lowerStartPos; 
-            XorCpy(xorDiffBufferBytes + diffOffset, src + lowerEndPos, diffBufferBytes + diffOffset, endLineOffset); 
-        } 
-        outDiffs->emplace_back(xorDiffBuffer, diff.Offset, true, true); 
-    } 
-} 
- 
-void TErasureType::MakeXorDiff(ECrcMode crcMode, ui32 dataSize, const ui8 *src, 
-        const TVector<TDiff> &inDiffs, TVector<TDiff> *outDiffs) const 
-{ 
-    Y_VERIFY(crcMode == CrcModeNone, "crc's not implemented"); 
-    const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies]; 
-    switch (erasure.ErasureFamily) { 
-        case TErasureType::ErasureMirror: 
-            Y_FAIL("unreachable"); 
-            break; 
-        case TErasureType::ErasureParityStripe: 
-            Y_FAIL("Not implemented"); 
-            break; 
-        case TErasureType::ErasureParityBlock: 
-            Y_VERIFY(erasure.ParityParts == 2, "Other is not implemented"); 
-            MakeEoBlockXorDiff(crcMode, *this, dataSize, src, inDiffs, outDiffs); 
-            break; 
-    } 
-} 
- 
-void TErasureType::ApplyDiff(ECrcMode crcMode, ui8 *dst, const TVector<TDiff> &diffs) const { 
-    Y_VERIFY(crcMode == CrcModeNone, "crc's not implemented"); 
-    for (auto &diff : diffs) { 
-        memcpy(dst + diff.Offset, diff.GetDataBegin(), diff.GetDiffLength()); 
-    } 
-} 
- 
-template <bool forSecondParity> 
-void ApllyXorDiffForEoBlock(const TBlockParams &p, ui64 *buffer, const ui64 *diff, ui64 adj, 
-        ui32 begin, ui32 end, ui32 diffOffset, ui8 fromPart = 0) 
- { 
-    ui32 blockBegin = begin / p.LineCount; 
-    ui32 blockEnd = (end + p.LineCount - 1) / p.LineCount; 
- 
-    Y_VERIFY(!forSecondParity || (blockBegin == 0 && blockEnd == 1)); 
- 
-    if (forSecondParity && adj) { 
-        for (ui32 idx = 0; idx < p.LineCount; ++idx) { 
-            buffer[idx] ^= adj; 
-        } 
-    } 
- 
-    Y_VERIFY(begin < end); 
-    if constexpr (forSecondParity) { 
-        ui32 lineBorder = p.LineCount - fromPart; 
- 
-        if (begin < lineBorder) { 
-            ui32 bufferBegin = begin + fromPart; 
-            ui32 diffBegin = begin - diffOffset; 
-            ui32 count = Min(lineBorder, end) - begin; 
-            XorCpy(buffer + bufferBegin, buffer + bufferBegin, diff + diffBegin, count); 
-        } 
- 
-        if (end > lineBorder + 1) { 
-            ui32 currentBegin = Max(lineBorder + 1, begin); 
-            ui32 bufferBegin = currentBegin + fromPart - p.Prime; 
-            ui32 count = end - currentBegin; 
-            ui32 diffBegin = currentBegin - diffOffset; 
-            XorCpy(buffer + bufferBegin, buffer + bufferBegin, diff + diffBegin, count); 
-        } 
-    } else { 
-        ui32 count = end - begin; 
-        ui32 diffBegin = begin - diffOffset; 
-        XorCpy(buffer + begin, buffer + begin, diff + diffBegin, count); 
-    } 
-} 
- 
-void ApplyEoBlockXorDiffForFirstParityPart(TErasureType::ECrcMode crcMode, const TErasureType &type, ui32 dataSize, 
-        ui64 *dst, const TVector<TDiff> &xorDiffs) 
-{ 
-    Y_VERIFY(crcMode == TErasureType::CrcModeNone, "crc's not implemented"); 
-    TBlockParams p(crcMode, type, dataSize); 
- 
-    for (const TDiff &diff : xorDiffs) { 
-        Y_VERIFY(diff.Buffer.size() % sizeof(ui64) == 0); 
-        Y_VERIFY(diff.IsXor && diff.IsAligned); 
-        const ui64 *diffBuffer = reinterpret_cast<const ui64*>(diff.GetBufferBegin()); 
-        ui32 diffOffset = diff.Offset / sizeof(ui64); 
-        ui32 offset = diff.Offset / sizeof(ui64); 
-        ui32 lineCount = diff.Buffer.size() / sizeof(ui64); 
-        Y_VERIFY(diff.Offset < type.PartSize(crcMode, dataSize)); 
-        Y_VERIFY(diff.Offset + diff.GetDiffLength() <= type.PartSize(crcMode, dataSize)); 
-        ApllyXorDiffForEoBlock<false>(p, dst, diffBuffer, 0, offset, offset + lineCount, diffOffset); 
-    } 
-} 
- 
-void ApplyXorForSecondParityPart(const TBlockParams &p, ui64 *startBufferBlock, const ui64 *startDiffBlock, 
-        ui32 begin, ui32 end, ui8 fromPart, ui32 diffOffset) 
-{ 
-    ui32 m = p.Prime; 
-    const ui32 mint = (m - 2 < p.LineCount ? 1 : m - 2 - p.LineCount); 
-    ui64 adj = 0; 
-    ui32 adjRelatedBytesBegin = m - 1 - fromPart; 
-    bool isAdjChanged = (fromPart >= mint) 
-            && (adjRelatedBytesBegin >= begin) 
-            && (adjRelatedBytesBegin < end); 
- 
-    if (isAdjChanged) { 
-        adj = startDiffBlock[adjRelatedBytesBegin - diffOffset]; 
-    } 
- 
-    ApllyXorDiffForEoBlock<true>(p, startBufferBlock, startDiffBlock, adj, begin, end, diffOffset, fromPart); 
-} 
- 
-void ApplyEoBlockXorDiffForSecondParityPart(TErasureType::ECrcMode crcMode, const TErasureType &type, ui32 dataSize, 
-        ui8 fromPart, ui64 *dst, const TVector<TDiff> &xorDiffs) 
-{ 
-    Y_VERIFY(crcMode == TErasureType::CrcModeNone, "crc's not implemented"); 
-    TBlockParams p(crcMode, type, dataSize); 
- 
-    ui64 bytesInBlock = p.LineCount * sizeof(ui64); 
- 
-    for (const TDiff &diff : xorDiffs) { 
-        Y_VERIFY(diff.Buffer.size() % sizeof(ui64) == 0); 
-        Y_VERIFY(diff.IsXor && diff.IsAligned); 
- 
-        const ui64 *diffBuffer = reinterpret_cast<const ui64*>(diff.GetBufferBegin()); 
- 
-        ui32 firstBlock = diff.Offset / bytesInBlock * p.LineCount; 
-        ui32 begin = diff.Offset / sizeof(ui64); 
-        ui32 end = begin + diff.Buffer.size() / sizeof(ui64); 
-        ui32 endBlock = (end + p.LineCount - 1) / p.LineCount * p.LineCount; 
- 
-        for (ui32 idx = firstBlock; idx < endBlock; idx += p.LineCount) { 
-            ui32 lineBegin = Max(idx, begin) - idx; 
-            ui32 lineEnd = Min<ui32>(idx + p.LineCount, end) - idx; 
-            if (idx == firstBlock) { 
-                ui32 diffOffset = begin - idx; 
-                ApplyXorForSecondParityPart(p, dst + idx, diffBuffer, lineBegin, lineEnd, fromPart, diffOffset); 
-            } else { 
-                ui32 diffOffset = idx - begin; 
-                ApplyXorForSecondParityPart(p, dst + idx, diffBuffer + diffOffset, lineBegin, lineEnd, fromPart, 0); 
-            } 
-        } 
-    } 
-} 
- 
-void TErasureType::ApplyXorDiff(ECrcMode crcMode, ui32 dataSize, ui8 *dst, 
-        const TVector<TDiff> &diffs, ui8 fromPart, ui8 toPart) const 
-{ 
-    Y_VERIFY(crcMode == CrcModeNone, "crc's not implemented"); 
-    const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies]; 
-    switch (erasure.ErasureFamily) { 
-        case TErasureType::ErasureMirror: 
-            Y_FAIL("unreachable"); 
-            break; 
-        case TErasureType::ErasureParityStripe: 
-            Y_FAIL("Not implemented"); 
-            break; 
-        case TErasureType::ErasureParityBlock: 
-            Y_VERIFY(erasure.ParityParts == 2, "Other is not implemented"); 
-            ui64 *lineDst = reinterpret_cast<ui64*>(dst); 
-            if (toPart + 1 != TotalPartCount()) { 
-                ApplyEoBlockXorDiffForFirstParityPart(crcMode, *this, dataSize, lineDst, diffs); 
-            } else { 
-                ApplyEoBlockXorDiffForSecondParityPart(crcMode, *this, dataSize, fromPart, lineDst, diffs); 
-            } 
-            break; 
-    } 
-} 
- 
+void MirrorSplitDiff(const TErasureType &type, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) {
+    outDiffSet.PartDiffs.resize(type.TotalPartCount());
+    ui32 parityParts = type.ParityParts();
+    for (ui32 partIdx = 0; partIdx <= parityParts; ++partIdx) {
+        outDiffSet.PartDiffs[partIdx].Diffs = diffs;
+    }
+}
+
+void EoBlockSplitDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, ui32 dataSize, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) {
+    TBlockParams p(crcMode, type, dataSize);
+    outDiffSet.PartDiffs.resize(type.TotalPartCount());
+    ui32 dataParts = type.DataParts();
+
+    ui32 partOffset = 0;
+    ui32 diffIdx = 0;
+    for (ui32 partIdx = 0; partIdx < dataParts && diffIdx < diffs.size(); ++partIdx) {
+        ui32 nextOffset = partOffset;
+        if (partIdx < p.FirstSmallPartIdx) {
+            nextOffset += p.LargePartSize;
+        } else {
+            nextOffset += p.SmallPartSize;
+        }
+        if (partIdx + 1 == dataParts) {
+            nextOffset = dataSize;
+        }
+        if (partOffset == nextOffset) {
+            continue;
+        }
+        TPartDiff &part = outDiffSet.PartDiffs[partIdx];
+
+        while (diffIdx < diffs.size()) {
+            const TDiff &diff = diffs[diffIdx];
+            ui32 lineOffset = diff.Offset % sizeof(ui64);
+            ui32 diffEnd = diff.Offset + diff.GetDiffLength();
+
+            if (diff.Offset <= partOffset && diffEnd >= partOffset) {
+                ui32 diffEndForThisPart = Min(diffEnd, nextOffset);
+                ui32 diffShift = partOffset - diff.Offset;
+
+                ui32 bufferSize = diffEndForThisPart - partOffset;
+                Y_VERIFY(bufferSize);
+                Y_VERIFY_S(diffShift + bufferSize <= diff.Buffer.size(), "diffShift# " << diffShift
+                        << " bufferSize# " << bufferSize << " diff.GetDiffLength()# " << diff.GetDiffLength());
+                TString newBuffer = TString::Uninitialized(bufferSize);
+                memcpy(newBuffer.begin(), diff.Buffer.begin() + diffShift, bufferSize);
+                part.Diffs.emplace_back(newBuffer, 0, false, true);
+
+                if (diffEnd <= nextOffset) {
+                    diffIdx++;
+                } else {
+                    break;
+                }
+            } else if (diffEnd <= nextOffset) {
+                TString buffer;
+                ui32 bufferSize = 0;
+                if (lineOffset && !diff.IsAligned) {
+                    bufferSize = diff.GetDiffLength() + lineOffset;
+                    buffer = TString::Uninitialized(bufferSize);
+                    memcpy(buffer.begin() + lineOffset, diff.Buffer.begin(), diff.GetDiffLength());
+                } else {
+                    buffer = diff.Buffer;
+                    bufferSize = diff.Buffer.size();
+                }
+                Y_VERIFY(bufferSize);
+                part.Diffs.emplace_back(buffer, diff.Offset - partOffset, false, true);
+                diffIdx++;
+            } else if (diff.Offset < nextOffset) {
+                ui32 bufferSize = nextOffset - diff.Offset + lineOffset;
+                TString newBuffer = TString::Uninitialized(bufferSize);
+                memcpy(newBuffer.begin() + lineOffset, diff.Buffer.begin(), bufferSize - lineOffset);
+                Y_VERIFY(bufferSize);
+                part.Diffs.emplace_back(newBuffer, diff.Offset - partOffset, false, true);
+                break;
+            } else {
+                break;
+            }
+        }
+
+        partOffset = nextOffset;
+    }
+}
+
+void TErasureType::SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) const {
+    Y_VERIFY(crcMode == CrcModeNone, "crc's not implemented");
+    const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
+
+    // change crc part only in during of applying diffs
+    switch (erasure.ErasureFamily) {
+        case TErasureType::ErasureMirror:
+            MirrorSplitDiff(*this, diffs, outDiffSet);
+            break;
+        case TErasureType::ErasureParityStripe:
+            Y_FAIL("Not implemented");
+            break;
+        case TErasureType::ErasureParityBlock:
+            Y_VERIFY(erasure.ParityParts == 2, "Other is not implemented");
+            EoBlockSplitDiff(crcMode, *this, dataSize, diffs, outDiffSet);
+            break;
+    }
+}
+
+template <typename Bucket>
+void XorCpy(Bucket *dest, const Bucket *orig, const Bucket *diff, ui32 count) {
+    for (ui32 idx = 0; idx < count; ++idx) {
+        dest[idx] = orig[idx] ^ diff[idx];
+    }
+}
+
+void MakeEoBlockXorDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, ui32 dataSize,
+        const ui8 *src, const TVector<TDiff> &inDiffs, TVector<TDiff> *outDiffs)
+{
+    Y_VERIFY(crcMode == TErasureType::CrcModeNone, "crc's not implemented");
+    TBlockParams p(crcMode, type, dataSize);
+
+    for (const TDiff &diff : inDiffs) {
+        const ui8 *diffBufferBytes = reinterpret_cast<const ui8*>(diff.Buffer.data());
+
+        ui32 lineOffset = diff.Offset % sizeof(ui64);
+        ui32 lowerStartPos = diff.Offset - lineOffset;
+        ui32 upperStartPos = lowerStartPos + (lineOffset ? sizeof(ui64) : 0);
+
+        ui32 end = diff.Offset + diff.GetDiffLength();
+        ui32 endLineOffset = end % sizeof(ui64);
+        ui32 lowerEndPos = end - endLineOffset;
+        ui32 upperEndPos = lowerEndPos + (endLineOffset ? sizeof(ui64) : 0);
+
+        ui32 bufferSize = upperEndPos - lowerStartPos;
+        Y_VERIFY(bufferSize);
+        TString xorDiffBuffer = TString::Uninitialized(bufferSize);
+        ui8 *xorDiffBufferBytes = reinterpret_cast<ui8*>(const_cast<char*>(xorDiffBuffer.data()));
+
+        if (lowerEndPos == lowerStartPos) {
+            ui64 &val = *reinterpret_cast<ui64*>(xorDiffBufferBytes);
+            val = 0;
+            ui32 byteCount = diff.GetDiffLength();
+            XorCpy(xorDiffBufferBytes + lineOffset, src + diff.Offset, diffBufferBytes + lineOffset, byteCount);
+            outDiffs->emplace_back(xorDiffBuffer, diff.Offset, true, true);
+            continue;
+        }
+
+        if (lineOffset) {
+            ui64 &val = *reinterpret_cast<ui64*>(xorDiffBufferBytes);
+            val = 0;
+            ui32 byteCount = Min<ui32>(sizeof(ui64) - lineOffset, diff.GetDiffLength());
+            XorCpy(xorDiffBufferBytes + lineOffset, src + diff.Offset, diffBufferBytes + lineOffset, byteCount);
+        }
+
+        ui32 firstLine = lowerStartPos / sizeof(ui64);
+        ui32 lineStart = upperStartPos / sizeof(ui64);
+        ui32 lineEnd = lowerEndPos / sizeof(ui64);
+        ui64 *xorUI64 = reinterpret_cast<ui64*>(xorDiffBufferBytes) + (lineStart - firstLine);
+        const ui64 *srcUI64 = reinterpret_cast<const ui64*>(src) + lineStart;
+        const ui64 *diffUI64 = reinterpret_cast<const ui64*>(diffBufferBytes)+ (lineStart - firstLine);
+        ui32 countUI64 = lineEnd - lineStart;
+        XorCpy(xorUI64, srcUI64, diffUI64, countUI64);
+
+        if (endLineOffset) {
+            ui64 &val = reinterpret_cast<ui64*>(xorDiffBufferBytes)[lineEnd - firstLine];
+            val = 0;
+            ui32 diffOffset = lowerEndPos - lowerStartPos;
+            XorCpy(xorDiffBufferBytes + diffOffset, src + lowerEndPos, diffBufferBytes + diffOffset, endLineOffset);
+        }
+        outDiffs->emplace_back(xorDiffBuffer, diff.Offset, true, true);
+    }
+}
+
+void TErasureType::MakeXorDiff(ECrcMode crcMode, ui32 dataSize, const ui8 *src,
+        const TVector<TDiff> &inDiffs, TVector<TDiff> *outDiffs) const
+{
+    Y_VERIFY(crcMode == CrcModeNone, "crc's not implemented");
+    const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
+    switch (erasure.ErasureFamily) {
+        case TErasureType::ErasureMirror:
+            Y_FAIL("unreachable");
+            break;
+        case TErasureType::ErasureParityStripe:
+            Y_FAIL("Not implemented");
+            break;
+        case TErasureType::ErasureParityBlock:
+            Y_VERIFY(erasure.ParityParts == 2, "Other is not implemented");
+            MakeEoBlockXorDiff(crcMode, *this, dataSize, src, inDiffs, outDiffs);
+            break;
+    }
+}
+
+void TErasureType::ApplyDiff(ECrcMode crcMode, ui8 *dst, const TVector<TDiff> &diffs) const {
+    Y_VERIFY(crcMode == CrcModeNone, "crc's not implemented");
+    for (auto &diff : diffs) {
+        memcpy(dst + diff.Offset, diff.GetDataBegin(), diff.GetDiffLength());
+    }
+}
+
+template <bool forSecondParity>
+void ApllyXorDiffForEoBlock(const TBlockParams &p, ui64 *buffer, const ui64 *diff, ui64 adj,
+        ui32 begin, ui32 end, ui32 diffOffset, ui8 fromPart = 0)
+ {
+    ui32 blockBegin = begin / p.LineCount;
+    ui32 blockEnd = (end + p.LineCount - 1) / p.LineCount;
+
+    Y_VERIFY(!forSecondParity || (blockBegin == 0 && blockEnd == 1));
+
+    if (forSecondParity && adj) {
+        for (ui32 idx = 0; idx < p.LineCount; ++idx) {
+            buffer[idx] ^= adj;
+        }
+    }
+
+    Y_VERIFY(begin < end);
+    if constexpr (forSecondParity) {
+        ui32 lineBorder = p.LineCount - fromPart;
+
+        if (begin < lineBorder) {
+            ui32 bufferBegin = begin + fromPart;
+            ui32 diffBegin = begin - diffOffset;
+            ui32 count = Min(lineBorder, end) - begin;
+            XorCpy(buffer + bufferBegin, buffer + bufferBegin, diff + diffBegin, count);
+        }
+
+        if (end > lineBorder + 1) {
+            ui32 currentBegin = Max(lineBorder + 1, begin);
+            ui32 bufferBegin = currentBegin + fromPart - p.Prime;
+            ui32 count = end - currentBegin;
+            ui32 diffBegin = currentBegin - diffOffset;
+            XorCpy(buffer + bufferBegin, buffer + bufferBegin, diff + diffBegin, count);
+        }
+    } else {
+        ui32 count = end - begin;
+        ui32 diffBegin = begin - diffOffset;
+        XorCpy(buffer + begin, buffer + begin, diff + diffBegin, count);
+    }
+}
+
+void ApplyEoBlockXorDiffForFirstParityPart(TErasureType::ECrcMode crcMode, const TErasureType &type, ui32 dataSize,
+        ui64 *dst, const TVector<TDiff> &xorDiffs)
+{
+    Y_VERIFY(crcMode == TErasureType::CrcModeNone, "crc's not implemented");
+    TBlockParams p(crcMode, type, dataSize);
+
+    for (const TDiff &diff : xorDiffs) {
+        Y_VERIFY(diff.Buffer.size() % sizeof(ui64) == 0);
+        Y_VERIFY(diff.IsXor && diff.IsAligned);
+        const ui64 *diffBuffer = reinterpret_cast<const ui64*>(diff.GetBufferBegin());
+        ui32 diffOffset = diff.Offset / sizeof(ui64);
+        ui32 offset = diff.Offset / sizeof(ui64);
+        ui32 lineCount = diff.Buffer.size() / sizeof(ui64);
+        Y_VERIFY(diff.Offset < type.PartSize(crcMode, dataSize));
+        Y_VERIFY(diff.Offset + diff.GetDiffLength() <= type.PartSize(crcMode, dataSize));
+        ApllyXorDiffForEoBlock<false>(p, dst, diffBuffer, 0, offset, offset + lineCount, diffOffset);
+    }
+}
+
+void ApplyXorForSecondParityPart(const TBlockParams &p, ui64 *startBufferBlock, const ui64 *startDiffBlock,
+        ui32 begin, ui32 end, ui8 fromPart, ui32 diffOffset)
+{
+    ui32 m = p.Prime;
+    const ui32 mint = (m - 2 < p.LineCount ? 1 : m - 2 - p.LineCount);
+    ui64 adj = 0;
+    ui32 adjRelatedBytesBegin = m - 1 - fromPart;
+    bool isAdjChanged = (fromPart >= mint)
+            && (adjRelatedBytesBegin >= begin)
+            && (adjRelatedBytesBegin < end);
+
+    if (isAdjChanged) {
+        adj = startDiffBlock[adjRelatedBytesBegin - diffOffset];
+    }
+
+    ApllyXorDiffForEoBlock<true>(p, startBufferBlock, startDiffBlock, adj, begin, end, diffOffset, fromPart);
+}
+
+void ApplyEoBlockXorDiffForSecondParityPart(TErasureType::ECrcMode crcMode, const TErasureType &type, ui32 dataSize,
+        ui8 fromPart, ui64 *dst, const TVector<TDiff> &xorDiffs)
+{
+    Y_VERIFY(crcMode == TErasureType::CrcModeNone, "crc's not implemented");
+    TBlockParams p(crcMode, type, dataSize);
+
+    ui64 bytesInBlock = p.LineCount * sizeof(ui64);
+
+    for (const TDiff &diff : xorDiffs) {
+        Y_VERIFY(diff.Buffer.size() % sizeof(ui64) == 0);
+        Y_VERIFY(diff.IsXor && diff.IsAligned);
+
+        const ui64 *diffBuffer = reinterpret_cast<const ui64*>(diff.GetBufferBegin());
+
+        ui32 firstBlock = diff.Offset / bytesInBlock * p.LineCount;
+        ui32 begin = diff.Offset / sizeof(ui64);
+        ui32 end = begin + diff.Buffer.size() / sizeof(ui64);
+        ui32 endBlock = (end + p.LineCount - 1) / p.LineCount * p.LineCount;
+
+        for (ui32 idx = firstBlock; idx < endBlock; idx += p.LineCount) {
+            ui32 lineBegin = Max(idx, begin) - idx;
+            ui32 lineEnd = Min<ui32>(idx + p.LineCount, end) - idx;
+            if (idx == firstBlock) {
+                ui32 diffOffset = begin - idx;
+                ApplyXorForSecondParityPart(p, dst + idx, diffBuffer, lineBegin, lineEnd, fromPart, diffOffset);
+            } else {
+                ui32 diffOffset = idx - begin;
+                ApplyXorForSecondParityPart(p, dst + idx, diffBuffer + diffOffset, lineBegin, lineEnd, fromPart, 0);
+            }
+        }
+    }
+}
+
+void TErasureType::ApplyXorDiff(ECrcMode crcMode, ui32 dataSize, ui8 *dst,
+        const TVector<TDiff> &diffs, ui8 fromPart, ui8 toPart) const
+{
+    Y_VERIFY(crcMode == CrcModeNone, "crc's not implemented");
+    const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
+    switch (erasure.ErasureFamily) {
+        case TErasureType::ErasureMirror:
+            Y_FAIL("unreachable");
+            break;
+        case TErasureType::ErasureParityStripe:
+            Y_FAIL("Not implemented");
+            break;
+        case TErasureType::ErasureParityBlock:
+            Y_VERIFY(erasure.ParityParts == 2, "Other is not implemented");
+            ui64 *lineDst = reinterpret_cast<ui64*>(dst);
+            if (toPart + 1 != TotalPartCount()) {
+                ApplyEoBlockXorDiffForFirstParityPart(crcMode, *this, dataSize, lineDst, diffs);
+            } else {
+                ApplyEoBlockXorDiffForSecondParityPart(crcMode, *this, dataSize, fromPart, lineDst, diffs);
+            }
+            break;
+    }
+}
+
 void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, TString& outBuffer, bool restoreParts,
         bool restoreFullData, bool restoreParityParts) const {
     partSet.FullDataFragment.ReferenceTo(outBuffer);

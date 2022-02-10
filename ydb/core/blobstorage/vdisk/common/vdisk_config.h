@@ -201,7 +201,7 @@ namespace NKikimr {
         bool BarrierValidation;
         TDuration WhiteboardUpdateInterval;
         bool EnableVDiskCooldownTimeout;
-        TControlWrapper EnableVPatch = true; 
+        TControlWrapper EnableVPatch = true;
 
         TVDiskConfig(const TBaseInfo &baseInfo);
         void Merge(const NKikimrBlobStorage::TVDiskConfig &update);

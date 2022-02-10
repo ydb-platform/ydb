@@ -148,7 +148,7 @@ public:
     {}
 
     void Bootstrap() {
-        A_LOG_DEBUG_S("DSPB05", "bootstrap" 
+        A_LOG_DEBUG_S("DSPB05", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " TabletId# " << TabletId

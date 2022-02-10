@@ -40,14 +40,14 @@ public:
     }
 
     bool Send(TAutoPtr<IEventHandle>& ev) override {
-        if (TlsActivationContext) { 
-            const TActorContext& ctx = TActivationContext::AsActorContext(); 
-            IActor* sender = Context->GetActor(ctx.SelfID); 
-            TTestDecorator* decorator = dynamic_cast<TTestDecorator*>(sender); 
-            if (decorator && !decorator->BeforeSending(ev)) { 
-                ev = nullptr; 
-            } 
-        } 
+        if (TlsActivationContext) {
+            const TActorContext& ctx = TActivationContext::AsActorContext();
+            IActor* sender = Context->GetActor(ctx.SelfID);
+            TTestDecorator* decorator = dynamic_cast<TTestDecorator*>(sender);
+            if (decorator && !decorator->BeforeSending(ev)) {
+                ev = nullptr;
+            }
+        }
         return Context->Send(ev, NodeId);
     }
 
@@ -134,10 +134,10 @@ TActorId TTestActorSystem::CreateTestBootstrapper(TTabletStorageInfo *info, std:
 
 void TTestActorSystem::SetupTabletRuntime(bool isMirror3dc, ui32 stateStorageNodeId, ui32 targetNodeId) {
     auto setup = MakeIntrusive<TTableNameserverSetup>();
-    ui32 nodeCountInDC = (MaxNodeId + 2) / 3; 
+    ui32 nodeCountInDC = (MaxNodeId + 2) / 3;
     for (ui32 nodeId : GetNodes()) {
         const TString name = Sprintf("127.0.0.%u", nodeId);
-        ui32 dcNum = isMirror3dc ? ((nodeId + nodeCountInDC - 1) / nodeCountInDC) : 1; 
+        ui32 dcNum = isMirror3dc ? ((nodeId + nodeCountInDC - 1) / nodeCountInDC) : 1;
         NActorsInterconnect::TNodeLocation location;
         location.SetDataCenter(ToString(dcNum));
         location.SetRack(ToString(nodeId));

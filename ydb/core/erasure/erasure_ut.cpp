@@ -1,5 +1,5 @@
 #include "erasure.h"
-#include "ut_util.h" 
+#include "ut_util.h"
 
 
 namespace NKikimr {
@@ -122,112 +122,112 @@ void TestAllLossesDifferentSizes(TErasureType &groupType, ui32 maxParts) {
     } // missingVariant
 }
 
-void PrintBuffer(const TString &buffer) { 
-    Cerr << " ["; 
-    for (ui32 idx = 0; idx < buffer.size(); ++idx) { 
-        if (idx) { 
-            Cerr << " "; 
-        } 
-        Cerr << (ui32)(ui8)buffer[idx]; 
-    } 
-    Cerr << "]\n"; 
-} 
- 
-void PrintDiff(const TDiff &diff) { 
-    Cerr << "Offset# " << diff.Offset 
-        << " IsXor# " << (diff.IsXor ? "yes" : "no") 
-        << " IsAligned# " << (diff.IsAligned ? "yes" : "no"); 
-    PrintBuffer(diff.Buffer); 
-} 
- 
-void RunTestDiff(TErasureType &groupType, ui32 dataSize, const TString &testString, const TVector<TDiff> &diffs) { 
-    TDataPartSet partSet; 
-    groupType.SplitData(TErasureType::CrcModeNone, testString, partSet); 
-    ui64 partSize = groupType.PartSize(TErasureType::CrcModeNone, dataSize); 
-    for (ui32 part = 0; part < groupType.TotalPartCount(); ++part) { 
-        UNIT_ASSERT_EQUAL(partSize, partSet.Parts[part].size()); 
-    } 
- 
-    TString result = TString::Uninitialized(dataSize); 
-    memcpy(result.begin(), testString.begin(), dataSize); 
-    for (const auto &diff : diffs) { 
-        memcpy(result.begin() + diff.Offset, diff.GetDataBegin(), diff.GetDiffLength()); 
-    } 
- 
-    TDataPartSet resultPartSet; 
-    groupType.SplitData(TErasureType::CrcModeNone, result, resultPartSet); 
- 
-    TPartDiffSet diffSet; 
-    groupType.SplitDiffs(TErasureType::CrcModeNone, dataSize, diffs, diffSet); 
- 
-    ui32 dataParts = groupType.DataParts(); 
-    ui32 parityParts = groupType.ErasureFamily() == TErasureType::ErasureMirror ? 0 : groupType.ParityParts(); 
- 
-    for (ui32 partIdx = 0; partIdx < dataParts; ++partIdx) { 
-        if (!partSet.Parts[partIdx].Size) { 
-            continue; 
-        } 
-        const ui8 *src = reinterpret_cast<ui8*>(partSet.Parts[partIdx].GetDataAt(0)); 
-        const TVector<TDiff> &diffs = diffSet.PartDiffs[partIdx].Diffs; 
-        if (diffs.empty()) { 
-            continue; 
-        } 
- 
-        for (ui32 parityPartIdx = dataParts; parityPartIdx < dataParts + parityParts; ++parityPartIdx) { 
-            TVector<TDiff> xorDiffs; 
-            if (!partSet.Parts[parityPartIdx].Size) { 
-                continue; 
-            } 
-            ui8 *dst = reinterpret_cast<ui8*>(partSet.Parts[parityPartIdx].GetDataAt(0)); 
-            groupType.MakeXorDiff(TErasureType::CrcModeNone, dataSize, src, diffs, &xorDiffs); 
- 
-            groupType.ApplyXorDiff(TErasureType::CrcModeNone, dataSize, dst, 
-                    xorDiffs, partIdx, parityPartIdx); 
- 
-        } 
- 
-        ui8 *dst = reinterpret_cast<ui8*>(partSet.Parts[partIdx].GetDataAt(0));; 
-        groupType.ApplyDiff(TErasureType::CrcModeNone, dst, diffs); 
-    } 
- 
-    for (ui32 partIdx = 0; partIdx < dataParts + parityParts; ++partIdx) { 
-        UNIT_ASSERT_STRINGS_EQUAL(partSet.Parts[partIdx].OwnedString, resultPartSet.Parts[partIdx].OwnedString); 
-    } 
-} 
- 
-TVector<TDiff> GenerateRandomDiff(NPrivate::TMersenne64 &randGen, ui32 dataSize, ui32 diffCount, ui32 diffSize, 
-        ui32 offset = Max<ui32>()) { 
-    UNIT_ASSERT(dataSize >= diffCount * diffSize + diffCount - 1); 
-    TVector<TDiff> diffs; 
-    int leftPosition = 0; 
-    for (ui32 diffIdx = 0; diffIdx < diffCount; ++diffIdx) { 
-        ui32 diffPosition = 0; 
-        if (offset != Max<ui32>()) { 
-            diffPosition = leftPosition + offset; 
-        } else { 
-            ui32 nextDiffCount = diffCount - 1 - diffIdx; 
-            UNIT_ASSERT(nextDiffCount < diffCount); 
-            UNIT_ASSERT(dataSize >= leftPosition + nextDiffCount * (diffSize + 1) + diffSize); 
-            ui32 maxDiffOffset = dataSize - leftPosition - nextDiffCount * (diffSize + 1) - diffSize; 
-            UNIT_ASSERT(maxDiffOffset < dataSize); 
-            ui32 diffOffset = (maxDiffOffset ? randGen.GenRand() % maxDiffOffset : 0); 
-            UNIT_ASSERT(diffOffset < dataSize); 
-            UNIT_ASSERT(diffOffset + diffSize <= dataSize); 
-            diffPosition = leftPosition + diffOffset; 
-        } 
-        UNIT_ASSERT(diffPosition < dataSize); 
-        UNIT_ASSERT(diffPosition + diffSize <= dataSize); 
- 
-        TString buffer = TString::Uninitialized(diffSize); 
-        for (ui32 i = 0; i < diffSize; ++i) { 
-            buffer[i] = (char)randGen.GenRand(); 
-        } 
-        diffs.emplace_back(buffer, diffPosition, false, false); 
-        leftPosition = diffPosition + 1 + diffSize; 
-    } 
-    return diffs; 
-} 
- 
+void PrintBuffer(const TString &buffer) {
+    Cerr << " [";
+    for (ui32 idx = 0; idx < buffer.size(); ++idx) {
+        if (idx) {
+            Cerr << " ";
+        }
+        Cerr << (ui32)(ui8)buffer[idx];
+    }
+    Cerr << "]\n";
+}
+
+void PrintDiff(const TDiff &diff) {
+    Cerr << "Offset# " << diff.Offset
+        << " IsXor# " << (diff.IsXor ? "yes" : "no")
+        << " IsAligned# " << (diff.IsAligned ? "yes" : "no");
+    PrintBuffer(diff.Buffer);
+}
+
+void RunTestDiff(TErasureType &groupType, ui32 dataSize, const TString &testString, const TVector<TDiff> &diffs) {
+    TDataPartSet partSet;
+    groupType.SplitData(TErasureType::CrcModeNone, testString, partSet);
+    ui64 partSize = groupType.PartSize(TErasureType::CrcModeNone, dataSize);
+    for (ui32 part = 0; part < groupType.TotalPartCount(); ++part) {
+        UNIT_ASSERT_EQUAL(partSize, partSet.Parts[part].size());
+    }
+
+    TString result = TString::Uninitialized(dataSize);
+    memcpy(result.begin(), testString.begin(), dataSize);
+    for (const auto &diff : diffs) {
+        memcpy(result.begin() + diff.Offset, diff.GetDataBegin(), diff.GetDiffLength());
+    }
+
+    TDataPartSet resultPartSet;
+    groupType.SplitData(TErasureType::CrcModeNone, result, resultPartSet);
+
+    TPartDiffSet diffSet;
+    groupType.SplitDiffs(TErasureType::CrcModeNone, dataSize, diffs, diffSet);
+
+    ui32 dataParts = groupType.DataParts();
+    ui32 parityParts = groupType.ErasureFamily() == TErasureType::ErasureMirror ? 0 : groupType.ParityParts();
+
+    for (ui32 partIdx = 0; partIdx < dataParts; ++partIdx) {
+        if (!partSet.Parts[partIdx].Size) {
+            continue;
+        }
+        const ui8 *src = reinterpret_cast<ui8*>(partSet.Parts[partIdx].GetDataAt(0));
+        const TVector<TDiff> &diffs = diffSet.PartDiffs[partIdx].Diffs;
+        if (diffs.empty()) {
+            continue;
+        }
+
+        for (ui32 parityPartIdx = dataParts; parityPartIdx < dataParts + parityParts; ++parityPartIdx) {
+            TVector<TDiff> xorDiffs;
+            if (!partSet.Parts[parityPartIdx].Size) {
+                continue;
+            }
+            ui8 *dst = reinterpret_cast<ui8*>(partSet.Parts[parityPartIdx].GetDataAt(0));
+            groupType.MakeXorDiff(TErasureType::CrcModeNone, dataSize, src, diffs, &xorDiffs);
+
+            groupType.ApplyXorDiff(TErasureType::CrcModeNone, dataSize, dst,
+                    xorDiffs, partIdx, parityPartIdx);
+
+        }
+
+        ui8 *dst = reinterpret_cast<ui8*>(partSet.Parts[partIdx].GetDataAt(0));;
+        groupType.ApplyDiff(TErasureType::CrcModeNone, dst, diffs);
+    }
+
+    for (ui32 partIdx = 0; partIdx < dataParts + parityParts; ++partIdx) {
+        UNIT_ASSERT_STRINGS_EQUAL(partSet.Parts[partIdx].OwnedString, resultPartSet.Parts[partIdx].OwnedString);
+    }
+}
+
+TVector<TDiff> GenerateRandomDiff(NPrivate::TMersenne64 &randGen, ui32 dataSize, ui32 diffCount, ui32 diffSize,
+        ui32 offset = Max<ui32>()) {
+    UNIT_ASSERT(dataSize >= diffCount * diffSize + diffCount - 1);
+    TVector<TDiff> diffs;
+    int leftPosition = 0;
+    for (ui32 diffIdx = 0; diffIdx < diffCount; ++diffIdx) {
+        ui32 diffPosition = 0;
+        if (offset != Max<ui32>()) {
+            diffPosition = leftPosition + offset;
+        } else {
+            ui32 nextDiffCount = diffCount - 1 - diffIdx;
+            UNIT_ASSERT(nextDiffCount < diffCount);
+            UNIT_ASSERT(dataSize >= leftPosition + nextDiffCount * (diffSize + 1) + diffSize);
+            ui32 maxDiffOffset = dataSize - leftPosition - nextDiffCount * (diffSize + 1) - diffSize;
+            UNIT_ASSERT(maxDiffOffset < dataSize);
+            ui32 diffOffset = (maxDiffOffset ? randGen.GenRand() % maxDiffOffset : 0);
+            UNIT_ASSERT(diffOffset < dataSize);
+            UNIT_ASSERT(diffOffset + diffSize <= dataSize);
+            diffPosition = leftPosition + diffOffset;
+        }
+        UNIT_ASSERT(diffPosition < dataSize);
+        UNIT_ASSERT(diffPosition + diffSize <= dataSize);
+
+        TString buffer = TString::Uninitialized(diffSize);
+        for (ui32 i = 0; i < diffSize; ++i) {
+            buffer[i] = (char)randGen.GenRand();
+        }
+        diffs.emplace_back(buffer, diffPosition, false, false);
+        leftPosition = diffPosition + 1 + diffSize;
+    }
+    return diffs;
+}
+
 Y_UNIT_TEST_SUITE(TErasureTypeTest) {
 // Test if new version is capable to restore data splited by current version (which is right by definition)
     Y_UNIT_TEST(isSplittedDataEqualsToOldVerion) {
@@ -438,62 +438,62 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
         }
     }
 
-    void BaseCheckDiffSpliting(TErasureType type, ui32 dataSize, ui32 diffCount, 
-            ui32 diffSize, ui32 diffOffset) 
-    { 
-        NPrivate::TMersenne64 randGen(0); 
-        TString testString = GenerateRandomString(randGen, dataSize); 
-        TVector<TDiff> diffs = GenerateRandomDiff(randGen, dataSize, diffCount, diffSize, diffOffset); 
-        RunTestDiff(type, dataSize, testString, diffs); 
-    } 
- 
-    void CheckDifferentCasesInDiffSpliting(TErasureType type) { 
-        struct TTestCase { 
-            ui32 DataSize; 
-            ui32 DiffCount; 
-            ui32 DiffSize; 
-            ui32 DiffOffset; 
-        }; 
-        TVector<TTestCase> testCases = { 
-            TTestCase{31, 16, 1, 0}, 
-            TTestCase{120, 16, 3, 3}, 
-            TTestCase{511, 32, 10, 3}, 
-            TTestCase{50000, 100, 401, 89}, 
-            TTestCase{31, 1, 31, 0}, 
-            TTestCase{120, 1, 120, 0}, 
-            TTestCase{511, 1, 511, 0}, 
-            TTestCase{50000, 1, 50000, 0}, 
-            TTestCase{250, 1, 10, 240} 
-        }; 
-        for (auto [dataSize, diffCount, diffSize, diffOffset] : testCases) { 
-            BaseCheckDiffSpliting(type, dataSize, diffCount, diffSize, diffOffset); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(TestDifferentCasesInDiffSplitingMirror3Of4) { 
-        CheckDifferentCasesInDiffSpliting(TErasureType::EErasureSpecies::ErasureMirror3of4); 
-    } 
- 
-    Y_UNIT_TEST(TestDifferentCasesInDiffSplitingBlock4Plus2) { 
-        CheckDifferentCasesInDiffSpliting(TErasureType::EErasureSpecies::Erasure4Plus2Block); 
-    } 
- 
- 
-    Y_UNIT_TEST(TestSplitDiffBlock4Plus2SpecialCase1) { 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure4Plus2Block); 
-        ui32 dataSize = 100; 
-        TStringBuilder dataBuilder; 
-        for (ui32 idx = 0; idx < 100; ++idx) { 
-            dataBuilder << 'a'; 
-        } 
-        TString testString = dataBuilder; 
-        TVector<TDiff> diffs; 
-        diffs.reserve(2); 
-        diffs.emplace_back("b", 0); 
-        diffs.emplace_back("b", 99); 
-        RunTestDiff(groupType, dataSize, testString, diffs); 
-    } 
- 
+    void BaseCheckDiffSpliting(TErasureType type, ui32 dataSize, ui32 diffCount,
+            ui32 diffSize, ui32 diffOffset)
+    {
+        NPrivate::TMersenne64 randGen(0);
+        TString testString = GenerateRandomString(randGen, dataSize);
+        TVector<TDiff> diffs = GenerateRandomDiff(randGen, dataSize, diffCount, diffSize, diffOffset);
+        RunTestDiff(type, dataSize, testString, diffs);
+    }
+
+    void CheckDifferentCasesInDiffSpliting(TErasureType type) {
+        struct TTestCase {
+            ui32 DataSize;
+            ui32 DiffCount;
+            ui32 DiffSize;
+            ui32 DiffOffset;
+        };
+        TVector<TTestCase> testCases = {
+            TTestCase{31, 16, 1, 0},
+            TTestCase{120, 16, 3, 3},
+            TTestCase{511, 32, 10, 3},
+            TTestCase{50000, 100, 401, 89},
+            TTestCase{31, 1, 31, 0},
+            TTestCase{120, 1, 120, 0},
+            TTestCase{511, 1, 511, 0},
+            TTestCase{50000, 1, 50000, 0},
+            TTestCase{250, 1, 10, 240}
+        };
+        for (auto [dataSize, diffCount, diffSize, diffOffset] : testCases) {
+            BaseCheckDiffSpliting(type, dataSize, diffCount, diffSize, diffOffset);
+        }
+    }
+
+    Y_UNIT_TEST(TestDifferentCasesInDiffSplitingMirror3Of4) {
+        CheckDifferentCasesInDiffSpliting(TErasureType::EErasureSpecies::ErasureMirror3of4);
+    }
+
+    Y_UNIT_TEST(TestDifferentCasesInDiffSplitingBlock4Plus2) {
+        CheckDifferentCasesInDiffSpliting(TErasureType::EErasureSpecies::Erasure4Plus2Block);
+    }
+
+
+    Y_UNIT_TEST(TestSplitDiffBlock4Plus2SpecialCase1) {
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure4Plus2Block);
+        ui32 dataSize = 100;
+        TStringBuilder dataBuilder;
+        for (ui32 idx = 0; idx < 100; ++idx) {
+            dataBuilder << 'a';
+        }
+        TString testString = dataBuilder;
+        TVector<TDiff> diffs;
+        diffs.reserve(2);
+        diffs.emplace_back("b", 0);
+        diffs.emplace_back("b", 99);
+        RunTestDiff(groupType, dataSize, testString, diffs);
+    }
+
     // Mirror tests
     Y_UNIT_TEST(TestMirror3LossOfAllPossible3) {
         // Set up the erasure

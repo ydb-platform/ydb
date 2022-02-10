@@ -76,7 +76,7 @@ namespace NKikimr {
         void SendResponseAndDie(const TActorContext &ctx, T *self) {
             bool hasNotYet = false;
 
-            if (ResultSize.IsOverflow()) { 
+            if (ResultSize.IsOverflow()) {
                 Result->Record.SetStatus(NKikimrProto::ERROR);
                 Result->Record.MutableResult()->Clear();
                 // for every 'extreme' query add ERROR result, for 'range' would empty vec for now

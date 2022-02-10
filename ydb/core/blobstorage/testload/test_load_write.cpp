@@ -41,7 +41,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
 
     public:
         void Wakeup(const TActorContext& ctx) {
-            while (Events && TAppData::TimeProvider->Now() >= Events.top().Timestamp) { 
+            while (Events && TAppData::TimeProvider->Now() >= Events.top().Timestamp) {
                 TCallback callback = std::move(Events.top().Callback);
                 Events.pop();
                 callback(ctx);
@@ -248,7 +248,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
 
         // Issue TEvDiscover
         void Bootstrap(const TActorContext& ctx) {
-            NextWriteTimestamp = TAppData::TimeProvider->Now(); 
+            NextWriteTimestamp = TAppData::TimeProvider->Now();
             auto ev = std::make_unique<TEvBlobStorage::TEvDiscover>(TabletId, Generation, false, true, TInstant::Max(), 0);
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " is bootstrapped, going to send "
                     << ev->ToString());
@@ -326,8 +326,8 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
         }
 
         void StartWorking(const TActorContext& ctx) {
-            StartTimestamp = TAppData::TimeProvider->Now(); 
-            InitializeTrackers(StartTimestamp); 
+            StartTimestamp = TAppData::TimeProvider->Now();
+            InitializeTrackers(StartTimestamp);
             IssueWriteIfPossible(ctx);
             ScheduleGarbageCollect(ctx);
             ExposeCounters(ctx);
@@ -353,7 +353,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
             SendToBSProxy(ctx, GroupId, ev.Release(), QueryDispatcher.ObtainCookie(std::move(callback)));
         }
 
-        void InitializeTrackers(TInstant now) { 
+        void InitializeTrackers(TInstant now) {
             LastLatencyTrackerUpdate = now;
 
             MegabytesPerSecondST.Add(now, 0);
@@ -407,8 +407,8 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
             ReadBytesInFlightQT.CalculateQuantiles();
 
             using namespace std::placeholders;
-            WakeupQueue.Put(TAppData::TimeProvider->Now() + ExposePeriod, 
-                    std::bind(&TTabletWriter::ExposeCounters, this, _1), ctx); 
+            WakeupQueue.Put(TAppData::TimeProvider->Now() + ExposePeriod,
+                    std::bind(&TTabletWriter::ExposeCounters, this, _1), ctx);
         }
 
         void DumpState(IOutputStream& str) {
@@ -503,7 +503,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
         }
 
         void IssueWriteIfPossible(const TActorContext& ctx) {
-            const TInstant now = TAppData::TimeProvider->Now(); 
+            const TInstant now = TAppData::TimeProvider->Now();
 
             while ((WritesInFlight < MaxWritesInFlight || !MaxWritesInFlight) &&
                     (WriteBytesInFlight < MaxWriteBytesInFlight || !MaxWriteBytesInFlight) &&
@@ -575,7 +575,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
 
                 if (ConfirmedBlobIds.size() == 1) {
                     if (NextReadTimestamp == TInstant()) {
-                        NextReadTimestamp = TAppData::TimeProvider->Now(); 
+                        NextReadTimestamp = TAppData::TimeProvider->Now();
                     }
                     IssueReadIfPossible(ctx);
                 }
@@ -584,7 +584,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
             const auto nowCycles = GetCycleCountFast();
             WritesInFlightTimestamps.emplace_back(writeQueryId, nowCycles);
             SentTimestamp.emplace(writeQueryId, nowCycles);
-            IssuedWriteTimestamp.push_back(TAppData::TimeProvider->Now()); 
+            IssuedWriteTimestamp.push_back(TAppData::TimeProvider->Now());
             while (IssuedWriteTimestamp.size() > 10000 || IssuedWriteTimestamp.back() - IssuedWriteTimestamp.front() >= TDuration::Seconds(5)) {
                 IssuedWriteTimestamp.pop_front();
             }
@@ -638,8 +638,8 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
             TDuration duration = GarbageCollectIntervalGen.Generate();
             if (duration != TDuration()) {
                 using namespace std::placeholders;
-                WakeupQueue.Put(TAppData::TimeProvider->Now() + duration, 
-                        std::bind(&TTabletWriter::IssueGarbageCollectRequest, this, _1), ctx); 
+                WakeupQueue.Put(TAppData::TimeProvider->Now() + duration,
+                        std::bind(&TTabletWriter::IssueGarbageCollectRequest, this, _1), ctx);
             }
         }
 
@@ -665,7 +665,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
         }
 
         void IssueReadIfPossible(const TActorContext& ctx) {
-            const TInstant now = TAppData::TimeProvider->Now(); 
+            const TInstant now = TAppData::TimeProvider->Now();
 
             while (ReadsInFlight < MaxReadsInFlight &&
                     (ReadBytesInFlight < MaxReadBytesInFlight || !MaxReadBytesInFlight) &&
@@ -877,7 +877,7 @@ public:
     }
 
     void HandleUpdateQuantile(const TActorContext& ctx) {
-        TInstant now = TAppData::TimeProvider->Now(); 
+        TInstant now = TAppData::TimeProvider->Now();
         for (auto& writer : TabletWriters) {
             writer.UpdateQuantile(now);
         }
@@ -887,7 +887,7 @@ public:
     void HandleWakeup(const TActorContext& ctx) {
         // erase all scheduled items before this time point, including it
         WakeupScheduledAt.erase(WakeupScheduledAt.begin(), std::upper_bound(WakeupScheduledAt.begin(),
-            WakeupScheduledAt.end(), TAppData::TimeProvider->Now())); 
+            WakeupScheduledAt.end(), TAppData::TimeProvider->Now()));
         WakeupQueue.Wakeup(ctx);
         ScheduleWakeup(ctx);
     }
@@ -907,7 +907,7 @@ public:
         const TInstant scheduledWakeupTime = WakeupScheduledAt ? WakeupScheduledAt.front() : TInstant::Max();
         if (nextWakeupTime && *nextWakeupTime < scheduledWakeupTime) {
             WakeupScheduledAt.push_front(*nextWakeupTime);
-            TDuration delta = *nextWakeupTime - TAppData::TimeProvider->Now(); 
+            TDuration delta = *nextWakeupTime - TAppData::TimeProvider->Now();
             if (delta >= WakeupScheduleThreshold) {
                 ctx.Schedule(delta, new TEvents::TEvWakeup);
             } else {

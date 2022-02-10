@@ -185,26 +185,26 @@ IActor *CreateRangeGet(const TActorId &notifyID, const TAllVDisks::TVDiskInstanc
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class TManyPuts : public TActorBootstrapped<TManyPuts> {
-    struct TPut { 
-        ui64 Step; 
-        TString Data; 
-    }; 
- 
+    struct TPut {
+        ui64 Step;
+        TString Data;
+    };
+
     TConfiguration *Conf;
     TActorId NotifyID;
     const TAllVDisks::TVDiskInstance VDiskInfo;
- 
+
     std::shared_ptr<TVector<TMsgPackInfo>> MsgPacks;
-    ui32 MsgNum; 
- 
+    ui32 MsgNum;
+
     const ui64 TabletId;
     const ui32 Channel;
     const ui32 Gen;
     std::shared_ptr<IPutHandleClassGenerator> HandleClassGen;
     std::shared_ptr<TSet<ui32>> BadSteps;
     const TDuration RequestTimeout;
-    TVector<TPut> Puts; 
-    ui32 PutIdx; 
+    TVector<TPut> Puts;
+    ui32 PutIdx;
     TActorId QueueActorId;
     bool Started = false;
     // how many deadline statuses we got
@@ -243,30 +243,30 @@ class TManyPuts : public TActorBootstrapped<TManyPuts> {
         Die(ctx);
     }
 
-    bool IsEnd() { 
-        return PutIdx == MsgNum; 
-    } 
- 
+    bool IsEnd() {
+        return PutIdx == MsgNum;
+    }
+
     void SendPut(const TActorContext &ctx) {
         // put logo blob
-        while (!IsEnd()) { 
-            if (PutIdx % 100 == 0) 
-                LOG_NOTICE(ctx, NActorsServices::TEST, "PUT PutIdx=%u", PutIdx); 
+        while (!IsEnd()) {
+            if (PutIdx % 100 == 0)
+                LOG_NOTICE(ctx, NActorsServices::TEST, "PUT PutIdx=%u", PutIdx);
 
-            const TPut &put = Puts[PutIdx]; 
- 
-            TLogoBlobID logoBlobID(TabletId, Gen, put.Step, Channel, put.Data.size(), 0, 1); 
+            const TPut &put = Puts[PutIdx];
+
+            TLogoBlobID logoBlobID(TabletId, Gen, put.Step, Channel, put.Data.size(), 0, 1);
             TVDiskIdShort mainVDiskId = TIngress::GetMainReplica(&Conf->GroupInfo->GetTopology(), logoBlobID);
             if (mainVDiskId == VDiskInfo.VDiskID) {
                 const bool noTimeout = RequestTimeout == TDuration::Seconds(0);
                 const TInstant deadline = noTimeout ? TInstant::Max() : TInstant::Now() + RequestTimeout;
                 ctx.Send(QueueActorId,
-                         new TEvBlobStorage::TEvVPut(logoBlobID, put.Data, VDiskInfo.VDiskID, false, 
+                         new TEvBlobStorage::TEvVPut(logoBlobID, put.Data, VDiskInfo.VDiskID, false,
                                                      nullptr, deadline, HandleClassGen->GetHandleClass()));
                 return;
             } else {
-                BadSteps->insert(put.Step); 
-                PutIdx++; 
+                BadSteps->insert(put.Step);
+                PutIdx++;
             }
         }
 
@@ -286,8 +286,8 @@ class TManyPuts : public TActorBootstrapped<TManyPuts> {
             }
         }
 
-        PutIdx++; 
-        if (IsEnd()) { 
+        PutIdx++;
+        if (IsEnd()) {
             Finish(ctx);
         } else {
             SendPut(ctx);
@@ -299,23 +299,23 @@ class TManyPuts : public TActorBootstrapped<TManyPuts> {
         HFunc(TEvProxyQueueState, Handle);
     )
 
-    void Init() { 
-        MsgNum = 0; 
-        for (auto & el: *MsgPacks) { 
-            MsgNum += el.Count; 
-        } 
-        Puts.reserve(MsgNum); 
-        ui64 msgIdx = 0; 
-        for (ui32 packIdx = 0; packIdx < MsgPacks->size(); ++packIdx) { 
-            for (ui32 i = 0; i < MsgPacks->at(packIdx).Count; ++i) { 
-                Puts.push_back({msgIdx, MsgPacks->at(packIdx).MsgData}); 
-                msgIdx++; 
-            } 
-        } 
-        Shuffle(Puts.begin(), Puts.end()); 
-        Y_VERIFY(Puts.size() == MsgNum); 
-    } 
- 
+    void Init() {
+        MsgNum = 0;
+        for (auto & el: *MsgPacks) {
+            MsgNum += el.Count;
+        }
+        Puts.reserve(MsgNum);
+        ui64 msgIdx = 0;
+        for (ui32 packIdx = 0; packIdx < MsgPacks->size(); ++packIdx) {
+            for (ui32 i = 0; i < MsgPacks->at(packIdx).Count; ++i) {
+                Puts.push_back({msgIdx, MsgPacks->at(packIdx).MsgData});
+                msgIdx++;
+            }
+        }
+        Shuffle(Puts.begin(), Puts.end());
+        Y_VERIFY(Puts.size() == MsgNum);
+    }
+
 public:
     TManyPuts(TConfiguration *conf, const TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
               ui32 msgDataSize, ui32 msgNum, ui64 tabletId, ui32 channel, ui32 gen,
@@ -325,36 +325,36 @@ public:
         , Conf(conf)
         , NotifyID(notifyID)
         , VDiskInfo(vdiskInfo)
-        , MsgPacks(new TVector<TMsgPackInfo>{TMsgPackInfo(msgDataSize, msgNum)}) 
+        , MsgPacks(new TVector<TMsgPackInfo>{TMsgPackInfo(msgDataSize, msgNum)})
         , TabletId(tabletId)
         , Channel(channel)
         , Gen(gen)
         , HandleClassGen(cls)
         , BadSteps(badSteps)
         , RequestTimeout(requestTimeout)
-        , PutIdx(0) 
+        , PutIdx(0)
     {
-        Init(); 
-    } 
+        Init();
+    }
 
     TManyPuts(TConfiguration *conf, const TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
               std::shared_ptr<TVector<TMsgPackInfo>> msgPacks, ui64 tabletId, ui32 channel, ui32 gen,
               std::shared_ptr<IPutHandleClassGenerator> cls, std::shared_ptr<TSet<ui32>> badSteps,
-              TDuration requestTimeout) 
-        : TActorBootstrapped<TManyPuts>() 
-        , Conf(conf) 
-        , NotifyID(notifyID) 
-        , VDiskInfo(vdiskInfo) 
-        , MsgPacks(msgPacks) 
-        , TabletId(tabletId) 
-        , Channel(channel) 
-        , Gen(gen) 
-        , HandleClassGen(cls) 
-        , BadSteps(badSteps) 
-        , RequestTimeout(requestTimeout) 
-        , PutIdx(0) 
-    { 
-        Init(); 
+              TDuration requestTimeout)
+        : TActorBootstrapped<TManyPuts>()
+        , Conf(conf)
+        , NotifyID(notifyID)
+        , VDiskInfo(vdiskInfo)
+        , MsgPacks(msgPacks)
+        , TabletId(tabletId)
+        , Channel(channel)
+        , Gen(gen)
+        , HandleClassGen(cls)
+        , BadSteps(badSteps)
+        , RequestTimeout(requestTimeout)
+        , PutIdx(0)
+    {
+        Init();
     }
 };
 
@@ -369,10 +369,10 @@ IActor *CreateManyPuts(TConfiguration *conf, const TActorId &notifyID, const TAl
 IActor *CreateManyPuts(TConfiguration *conf, const TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
                        std::shared_ptr<TVector<TMsgPackInfo>> msgPacks, ui64 tabletId, ui32 channel, ui32 gen,
                        std::shared_ptr<IPutHandleClassGenerator> cls, std::shared_ptr<TSet<ui32>> badSteps,
-                       TDuration requestTimeout) { 
-    return new TManyPuts(conf, notifyID, vdiskInfo, msgPacks, tabletId, channel, gen, cls, badSteps, requestTimeout); 
-} 
- 
+                       TDuration requestTimeout) {
+    return new TManyPuts(conf, notifyID, vdiskInfo, msgPacks, tabletId, channel, gen, cls, badSteps, requestTimeout);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
     TConfiguration *Conf;
@@ -650,152 +650,152 @@ IActor *CreateManyGets(const TActorId &notifyID, const TAllVDisks::TVDiskInstanc
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class TGet : public TActorBootstrapped<TGet> { 
+class TGet : public TActorBootstrapped<TGet> {
     TActorId NotifyID;
-    const TAllVDisks::TVDiskInstance VDiskInfo; 
-    ui32 MsgNum; 
+    const TAllVDisks::TVDiskInstance VDiskInfo;
+    ui32 MsgNum;
     std::shared_ptr<TVector<TMsgPackInfo>> MsgPacks;
-    const ui64 TabletId; 
-    const ui32 Channel; 
-    const ui32 Gen; 
-    const ui64 Shift; 
-    TVector<TString> Data; 
- 
-    bool WithErrorResponse; 
- 
-    friend class TActorBootstrapped<TGet>; 
- 
-    void Bootstrap(const TActorContext &ctx) { 
-        Become(&TThis::StateReadFunc); 
- 
-        // get logo blob 
-        SendGet(ctx); 
-    } 
- 
-    void SendGet(const TActorContext &ctx) { 
-        // get logo blob 
-        auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID, 
-                                                                   TInstant::Max(), 
-                                                                   NKikimrBlobStorage::EGetHandleClass::AsyncRead, 
-                                                                   TEvBlobStorage::TEvVGet::EFlags::None, 
-                                                                   {}, 
-                                                                   {}); 
-        for (ui64 i = 0; i < MsgNum; ++i) { 
-            const TString data = Data[i]; 
-            TLogoBlobID logoBlobID(TabletId, Gen, i, Channel, data.size(), 0, 1); 
-            req->AddExtremeQuery(logoBlobID, Shift, data.size() - Shift, &i); 
-        } 
+    const ui64 TabletId;
+    const ui32 Channel;
+    const ui32 Gen;
+    const ui64 Shift;
+    TVector<TString> Data;
+
+    bool WithErrorResponse;
+
+    friend class TActorBootstrapped<TGet>;
+
+    void Bootstrap(const TActorContext &ctx) {
+        Become(&TThis::StateReadFunc);
+
+        // get logo blob
+        SendGet(ctx);
+    }
+
+    void SendGet(const TActorContext &ctx) {
+        // get logo blob
+        auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID,
+                                                                   TInstant::Max(),
+                                                                   NKikimrBlobStorage::EGetHandleClass::AsyncRead,
+                                                                   TEvBlobStorage::TEvVGet::EFlags::None,
+                                                                   {},
+                                                                   {});
+        for (ui64 i = 0; i < MsgNum; ++i) {
+            const TString data = Data[i];
+            TLogoBlobID logoBlobID(TabletId, Gen, i, Channel, data.size(), 0, 1);
+            req->AddExtremeQuery(logoBlobID, Shift, data.size() - Shift, &i);
+        }
         ctx.Send(VDiskInfo.ActorID, req.release());
-    } 
- 
-    void Check(const TActorContext &ctx, const NKikimrBlobStorage::TEvVGetResult &rec) { 
-        Y_UNUSED(ctx); 
-        ui32 size = rec.GetResult().size(); 
-        Y_VERIFY(size == MsgNum, "size=%d", size); 
-        for (ui64 i = 0; i < MsgNum; ++i) { 
-            const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i); 
-            const TString &data = Data[i]; 
-            if (q.GetBuffer() != data.substr(Shift)) { 
-                fprintf(stderr, "Original: %s\n", data.data()); 
-                fprintf(stderr, "Received: %s\n", q.GetBuffer().data()); 
-                Y_VERIFY(q.GetBuffer() == data.substr(Shift)); 
-            } 
-        } 
-        auto serial = rec.SerializeAsString(); 
-        if (serial.size() > MaxProtobufSize) { 
-            Y_FAIL(); 
-        } 
-    } 
- 
-    void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) { 
-        NKikimrProto::EReplyStatus status = ev->Get()->Record.GetStatus(); 
-        switch (status) { 
-        case NKikimrProto::OK: 
-            if (WithErrorResponse) { 
-                Y_FAIL("Expected ERROR status but given OK"); 
-            } 
-            Check(ctx, ev->Get()->Record); 
-            break; 
- 
-        case NKikimrProto::ERROR: 
-            if (!WithErrorResponse) { 
-                Y_FAIL("Expected OK status but given ERROR"); 
-            } 
-            break; 
- 
-        default: 
-            LOG_NOTICE(ctx, NActorsServices::TEST, "ERROR"); 
-            fprintf(stderr, "ERROR\n"); 
-        } 
- 
-        ctx.Send(NotifyID, new TEvents::TEvCompleted()); 
-        Die(ctx); 
-    } 
- 
-    STRICT_STFUNC(StateReadFunc, 
-        HFunc(TEvBlobStorage::TEvVGetResult, Handle); 
-        IgnoreFunc(TEvBlobStorage::TEvVWindowChange); 
-    ) 
- 
-    void Init() { 
-        MsgNum = 0; 
-        for (auto &el: *MsgPacks) { 
-            MsgNum += el.Count; 
-        } 
-        Data.reserve(MsgNum); 
-        for (ui32 packIdx = 0; packIdx < MsgPacks->size(); ++packIdx) { 
-            for (ui32 i = 0; i < MsgPacks->at(packIdx).Count; ++i) { 
-                Data.emplace_back(MsgPacks->at(packIdx).MsgData); 
-            } 
-        } 
-        Y_VERIFY(Data.size() == MsgNum); 
-    } 
- 
-public: 
+    }
+
+    void Check(const TActorContext &ctx, const NKikimrBlobStorage::TEvVGetResult &rec) {
+        Y_UNUSED(ctx);
+        ui32 size = rec.GetResult().size();
+        Y_VERIFY(size == MsgNum, "size=%d", size);
+        for (ui64 i = 0; i < MsgNum; ++i) {
+            const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i);
+            const TString &data = Data[i];
+            if (q.GetBuffer() != data.substr(Shift)) {
+                fprintf(stderr, "Original: %s\n", data.data());
+                fprintf(stderr, "Received: %s\n", q.GetBuffer().data());
+                Y_VERIFY(q.GetBuffer() == data.substr(Shift));
+            }
+        }
+        auto serial = rec.SerializeAsString();
+        if (serial.size() > MaxProtobufSize) {
+            Y_FAIL();
+        }
+    }
+
+    void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
+        NKikimrProto::EReplyStatus status = ev->Get()->Record.GetStatus();
+        switch (status) {
+        case NKikimrProto::OK:
+            if (WithErrorResponse) {
+                Y_FAIL("Expected ERROR status but given OK");
+            }
+            Check(ctx, ev->Get()->Record);
+            break;
+
+        case NKikimrProto::ERROR:
+            if (!WithErrorResponse) {
+                Y_FAIL("Expected OK status but given ERROR");
+            }
+            break;
+
+        default:
+            LOG_NOTICE(ctx, NActorsServices::TEST, "ERROR");
+            fprintf(stderr, "ERROR\n");
+        }
+
+        ctx.Send(NotifyID, new TEvents::TEvCompleted());
+        Die(ctx);
+    }
+
+    STRICT_STFUNC(StateReadFunc,
+        HFunc(TEvBlobStorage::TEvVGetResult, Handle);
+        IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
+    )
+
+    void Init() {
+        MsgNum = 0;
+        for (auto &el: *MsgPacks) {
+            MsgNum += el.Count;
+        }
+        Data.reserve(MsgNum);
+        for (ui32 packIdx = 0; packIdx < MsgPacks->size(); ++packIdx) {
+            for (ui32 i = 0; i < MsgPacks->at(packIdx).Count; ++i) {
+                Data.emplace_back(MsgPacks->at(packIdx).MsgData);
+            }
+        }
+        Y_VERIFY(Data.size() == MsgNum);
+    }
+
+public:
     TGet(const TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo, ui32 msgDataSize, ui32 msgNum,
-              ui64 tabletId, ui32 channel, ui32 gen, ui64 shift, bool withErrorResponse) 
-        : TActorBootstrapped<TGet>() 
-        , NotifyID(notifyID) 
-        , VDiskInfo(vdiskInfo) 
-        , MsgPacks(new TVector<TMsgPackInfo>{TMsgPackInfo(msgDataSize, msgNum)}) 
-        , TabletId(tabletId) 
-        , Channel(channel) 
-        , Gen(gen) 
-        , Shift(shift) 
-        , WithErrorResponse(withErrorResponse) 
-    { 
-        Init(); 
-    } 
- 
+              ui64 tabletId, ui32 channel, ui32 gen, ui64 shift, bool withErrorResponse)
+        : TActorBootstrapped<TGet>()
+        , NotifyID(notifyID)
+        , VDiskInfo(vdiskInfo)
+        , MsgPacks(new TVector<TMsgPackInfo>{TMsgPackInfo(msgDataSize, msgNum)})
+        , TabletId(tabletId)
+        , Channel(channel)
+        , Gen(gen)
+        , Shift(shift)
+        , WithErrorResponse(withErrorResponse)
+    {
+        Init();
+    }
+
     TGet(const TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
             std::shared_ptr<TVector<TMsgPackInfo>> msgPacks,
-            ui64 tabletId, ui32 channel, ui32 gen, ui64 shift, bool withErrorResponse) 
-        : TActorBootstrapped<TGet>() 
-        , NotifyID(notifyID) 
-        , VDiskInfo(vdiskInfo) 
-        , MsgPacks(msgPacks) 
-        , TabletId(tabletId) 
-        , Channel(channel) 
-        , Gen(gen) 
-        , Shift(shift) 
-        , WithErrorResponse(withErrorResponse) 
-    { 
-        Init(); 
-    } 
-}; 
- 
+            ui64 tabletId, ui32 channel, ui32 gen, ui64 shift, bool withErrorResponse)
+        : TActorBootstrapped<TGet>()
+        , NotifyID(notifyID)
+        , VDiskInfo(vdiskInfo)
+        , MsgPacks(msgPacks)
+        , TabletId(tabletId)
+        , Channel(channel)
+        , Gen(gen)
+        , Shift(shift)
+        , WithErrorResponse(withErrorResponse)
+    {
+        Init();
+    }
+};
+
 IActor *CreateGet(const TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo, ui32 msgDataSize,
-                       ui32 msgNum, ui64 tabletId, ui32 channel, ui32 gen, ui64 shift, bool withErrorResponse) { 
-    return new TGet(notifyID, vdiskInfo, msgDataSize, msgNum, tabletId, channel, gen, shift, withErrorResponse); 
-} 
- 
+                       ui32 msgNum, ui64 tabletId, ui32 channel, ui32 gen, ui64 shift, bool withErrorResponse) {
+    return new TGet(notifyID, vdiskInfo, msgDataSize, msgNum, tabletId, channel, gen, shift, withErrorResponse);
+}
+
 IActor *CreateGet(const TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
                   std::shared_ptr<TVector<TMsgPackInfo>> msgPacks, ui64 tabletId, ui32 channel, ui32 gen, ui64 shift,
-                  bool withErrorResponse) { 
-    return new TGet(notifyID, vdiskInfo, msgPacks, tabletId, channel, gen, shift, withErrorResponse); 
-} 
- 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+                  bool withErrorResponse) {
+    return new TGet(notifyID, vdiskInfo, msgPacks, tabletId, channel, gen, shift, withErrorResponse);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class TPutGC : public TActorBootstrapped<TPutGC> {
     const NActors::TActorId NotifyID;
     const TAllVDisks::TVDiskInstance VDiskInfo;

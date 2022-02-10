@@ -1,13 +1,13 @@
 #include "erasure_rope.h"
-#include "ut_util.h" 
+#include "ut_util.h"
 
 
 namespace NKikimr {
 namespace NErasureRope {
 
-TRope GenerateRandomRope(size_t dataSize) { 
+TRope GenerateRandomRope(size_t dataSize) {
     NPrivate::TMersenne64 randGen(Seed());
-    return TRopeHelpers::RopeFromStringMemcpy(GenerateRandomString(randGen, dataSize)); 
+    return TRopeHelpers::RopeFromStringMemcpy(GenerateRandomString(randGen, dataSize));
 }
 
 void TestMissingPartWithRandomData(TRopeErasureType &groupType, ui32 *missingPartIdx, ui32 missingParts,

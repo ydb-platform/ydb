@@ -113,7 +113,7 @@ namespace NActors {
             CpuNs += RelaxedLoad(&other.CpuNs);
             ElapsedTicks += RelaxedLoad(&other.ElapsedTicks);
             ParkedTicks += RelaxedLoad(&other.ParkedTicks);
-            BlockedTicks += RelaxedLoad(&other.BlockedTicks); 
+            BlockedTicks += RelaxedLoad(&other.BlockedTicks);
             MailboxPushedOutBySoftPreemption += RelaxedLoad(&other.MailboxPushedOutBySoftPreemption);
             MailboxPushedOutByTime += RelaxedLoad(&other.MailboxPushedOutByTime);
             MailboxPushedOutByEventCount += RelaxedLoad(&other.MailboxPushedOutByEventCount);

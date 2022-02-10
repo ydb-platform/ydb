@@ -15,7 +15,7 @@ public:
 
     void Check(ui64 tabletId, const TBlobStorageGroupInfo::TGroupVDisks& disks,
             NKikimrProto::EReplyStatus defaultExpectedStatus = NKikimrProto::OK) {
-        // Cerr << (TStringBuilder() << "]] " << disks.ToString() << Endl); 
+        // Cerr << (TStringBuilder() << "]] " << disks.ToString() << Endl);
         for (ui32 generation = 1; generation <= 4; ++generation) {
             NKikimrProto::EReplyStatus expectedStatus = defaultExpectedStatus;
             TVector<TEvBlobStorage::TEvRangeResult::TResponse> expectedResponse;
@@ -26,11 +26,11 @@ public:
 
             for (ui32 step = 1; step <= 2; ++step) {
                 TString buffer = Sprintf("%256s/%" PRIu64 "/%" PRIu32 "/%" PRIu32, "kikimr", tabletId, generation, step);
-                TStringBuilder b; 
-                for (int i = 0; i < 1024; ++i) { 
-                    b << 'a'; 
-                } 
-                buffer += b; 
+                TStringBuilder b;
+                for (int i = 0; i < 1024; ++i) {
+                    b << 'a';
+                }
+                buffer += b;
                 TLogoBlobID id(tabletId, generation, step, 0 /*channel*/, buffer.size(), 0);
                 if (defaultExpectedStatus == NKikimrProto::OK) {
                     UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::OK, PutWithResult(id, buffer, TEvBlobStorage::TEvPut::TacticMaxThroughput));
@@ -77,7 +77,7 @@ public:
                 }
                 for (ui32 i = 0; i < vdisks.size(); ++i) {
                     auto event = WaitForSpecificEvent<TEvBlobStorage::TEvVGetResult>();
-                    // Cerr << (TStringBuilder() << "]] Get: " << event->Get()->ToString() << Endl); 
+                    // Cerr << (TStringBuilder() << "]] Get: " << event->Get()->ToString() << Endl);
                     if (event->Get()->Record.GetStatus() == NKikimrProto::OK) {
                         for (const auto& item : event->Get()->Record.GetResult()) {
                             if (item.GetStatus() == NKikimrProto::OK) {

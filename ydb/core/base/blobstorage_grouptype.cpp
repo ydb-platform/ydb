@@ -10,7 +10,7 @@
 #if IS_VERBOSE
 #   include <util/stream/str.h>
 #   define VERBOSE_COUT(a) \
-       Cerr << a 
+       Cerr << a
 
 static TString DebugFormatBits(ui64 value) {
     TStringStream s;
@@ -96,7 +96,7 @@ ui32 ReverseMask(ui32 mask) {
 }
 
 bool TBlobStorageGroupType::CorrectLayout(const TPartLayout &layout, TPartPlacement &outCorrection) const {
-    VERBOSE_COUT("Start CorrectLayout" << Endl); 
+    VERBOSE_COUT("Start CorrectLayout" << Endl);
     // TODO: produce 'properly hosted part idx' for each VDisk available
     TReorderablePartLayout remaining;
     TStackVec<ui8, 8> missingParts;
@@ -107,33 +107,33 @@ bool TBlobStorageGroupType::CorrectLayout(const TPartLayout &layout, TPartPlacem
     const ui32 lastBit = 0x80000000;
 
     ui32 vDiskMask = layout.VDiskMask;
-    ui32 slowVDiskMask = layout.SlowVDiskMask; 
+    ui32 slowVDiskMask = layout.SlowVDiskMask;
 
-    VERBOSE_COUT("reverseVDiskMask# " << DebugFormatBits(vDiskMask) << Endl); 
- 
+    VERBOSE_COUT("reverseVDiskMask# " << DebugFormatBits(vDiskMask) << Endl);
+
     ui32 handoffDestinedPartMaskInv = 0;
     for (ui32 i = 0; i < totalPartCount; ++i) {
-        ui32 bit = (1 << i); 
-        if (vDiskMask & bit) { 
-            VERBOSE_COUT("layout.VDiskPartMask[" << i << "]# " << DebugFormatBits(layout.VDiskPartMask[i]) << Endl); 
+        ui32 bit = (1 << i);
+        if (vDiskMask & bit) {
+            VERBOSE_COUT("layout.VDiskPartMask[" << i << "]# " << DebugFormatBits(layout.VDiskPartMask[i]) << Endl);
             if (!(layout.VDiskPartMask[i] & (1 << i))) {
-                if (slowVDiskMask & bit) { 
-                    missingParts.push_back(i); 
-                    handoffDestinedPartMaskInv |= (lastBit >> i); 
-                } else { 
-                    outCorrection.Records.push_back(TPartPlacement::TVDiskPart(i, i)); 
-                } 
+                if (slowVDiskMask & bit) {
+                    missingParts.push_back(i);
+                    handoffDestinedPartMaskInv |= (lastBit >> i);
+                } else {
+                    outCorrection.Records.push_back(TPartPlacement::TVDiskPart(i, i));
+                }
             }
         } else {
             missingParts.push_back(i);
             handoffDestinedPartMaskInv |= (lastBit >> i);
         }
     }
-    VERBOSE_COUT("handoffDestinedPartMaskInv# " << DebugFormatBits(ReverseMask(handoffDestinedPartMaskInv)) << Endl); 
+    VERBOSE_COUT("handoffDestinedPartMaskInv# " << DebugFormatBits(ReverseMask(handoffDestinedPartMaskInv)) << Endl);
 
     for (ui32 i = totalPartCount; i < blobSubgroupSize; ++i) {
-        if (vDiskMask & ~slowVDiskMask & (1 << i)) { 
-            VERBOSE_COUT("layout.VDiskPartMask[" << i << "]# " << DebugFormatBits(layout.VDiskPartMask[i]) << Endl); 
+        if (vDiskMask & ~slowVDiskMask & (1 << i)) {
+            VERBOSE_COUT("layout.VDiskPartMask[" << i << "]# " << DebugFormatBits(layout.VDiskPartMask[i]) << Endl);
             remaining.Records.push_back(TReorderablePartLayout::TVDiskParts(i, handoffDestinedPartMaskInv &
                 ReverseMask(layout.VDiskPartMask[i]) ));
         }
@@ -174,14 +174,14 @@ bool TBlobStorageGroupType::CorrectLayout(const TPartLayout &layout, TPartPlacem
             }
         } else {
             if (missingParts.size()) {
-                VERBOSE_COUT(missingParts.size() << " missing part " << (ui64)missingParts[0] << Endl); 
+                VERBOSE_COUT(missingParts.size() << " missing part " << (ui64)missingParts[0] << Endl);
                 outCorrection.Records.push_back(
                     TPartPlacement::TVDiskPart(disk.VDiskIdx, missingParts[0]));
                 missingParts.erase(missingParts.begin());
             }
         }
     }
-    VERBOSE_COUT("End CorrectLayout" << Endl); 
+    VERBOSE_COUT("End CorrectLayout" << Endl);
     return (missingParts.size() == 0);
 }
 

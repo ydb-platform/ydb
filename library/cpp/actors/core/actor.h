@@ -207,8 +207,8 @@ namespace NActors {
         virtual TActorId RegisterWithSameMailbox(IActor*) const noexcept = 0;
     };
 
-    class TDecorator; 
- 
+    class TDecorator;
+
     class IActor : protected IActorOps {
     public:
         typedef void (IActor::*TReceiveFunc)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
@@ -220,7 +220,7 @@ namespace NActors {
         ui64 HandledEvents;
 
         friend void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&);
-        friend class TDecorator; 
+        friend class TDecorator;
 
     public:
         /// @sa services.proto NKikimrServices::TActivity::EType
@@ -376,11 +376,11 @@ namespace NActors {
         TActorId RegisterWithSameMailbox(IActor* actor) const noexcept final;
 
         std::pair<ui32, ui32> CountMailboxEvents(ui32 maxTraverse = Max<ui32>()) const;
- 
-    private: 
-        void ChangeSelfId(TActorId actorId) { 
-            SelfActorId = actorId; 
-        } 
+
+    private:
+        void ChangeSelfId(TActorId actorId) {
+            SelfActorId = actorId;
+        }
     };
 
     struct TActorActivityTag {};
@@ -458,63 +458,63 @@ namespace NActors {
         auto& tls = *TlsActivationContext;
         return TActorContext(tls.Mailbox, tls.ExecutorThread, tls.EventStart, id);
     }
- 
-    class TDecorator : public IActor { 
-    protected: 
-        THolder<IActor> Actor; 
- 
-    public: 
-        TDecorator(THolder<IActor>&& actor) 
-            : IActor(static_cast<TReceiveFunc>(&TDecorator::State), actor->GetActivityType()) 
-            , Actor(std::move(actor)) 
-        { 
-        } 
- 
-        void Registered(TActorSystem* sys, const TActorId& owner) override { 
-            Actor->ChangeSelfId(SelfId()); 
-            Actor->Registered(sys, owner); 
-        } 
- 
-        virtual bool DoBeforeReceiving(TAutoPtr<IEventHandle>& /*ev*/, const TActorContext& /*ctx*/) { 
-            return true; 
-        } 
 
-        virtual void DoAfterReceiving(const TActorContext& /*ctx*/) 
-        { 
-        } 
- 
-        STFUNC(State) { 
-            if (DoBeforeReceiving(ev, ctx)) { 
-                Actor->Receive(ev, ctx); 
-                DoAfterReceiving(ctx); 
-            } 
-        } 
-    }; 
- 
-    // TTestDecorator doesn't work with the real actor system 
-    struct TTestDecorator : public TDecorator { 
-        TTestDecorator(THolder<IActor>&& actor) 
-            : TDecorator(std::move(actor)) 
-        { 
-        } 
- 
-        virtual ~TTestDecorator() = default; 
- 
-        // This method must be called in the test actor system 
-        bool BeforeSending(TAutoPtr<IEventHandle>& ev) 
-        { 
-            bool send = true; 
-            TTestDecorator *decorator = dynamic_cast<TTestDecorator*>(Actor.Get()); 
-            if (decorator) { 
-                send = decorator->BeforeSending(ev); 
-            } 
-            return send && ev && DoBeforeSending(ev); 
-        } 
- 
-        virtual bool DoBeforeSending(TAutoPtr<IEventHandle>& /*ev*/) { 
-            return true; 
-        } 
-    }; 
+    class TDecorator : public IActor {
+    protected:
+        THolder<IActor> Actor;
+
+    public:
+        TDecorator(THolder<IActor>&& actor)
+            : IActor(static_cast<TReceiveFunc>(&TDecorator::State), actor->GetActivityType())
+            , Actor(std::move(actor))
+        {
+        }
+
+        void Registered(TActorSystem* sys, const TActorId& owner) override {
+            Actor->ChangeSelfId(SelfId());
+            Actor->Registered(sys, owner);
+        }
+
+        virtual bool DoBeforeReceiving(TAutoPtr<IEventHandle>& /*ev*/, const TActorContext& /*ctx*/) {
+            return true;
+        }
+
+        virtual void DoAfterReceiving(const TActorContext& /*ctx*/)
+        {
+        }
+
+        STFUNC(State) {
+            if (DoBeforeReceiving(ev, ctx)) {
+                Actor->Receive(ev, ctx);
+                DoAfterReceiving(ctx);
+            }
+        }
+    };
+
+    // TTestDecorator doesn't work with the real actor system
+    struct TTestDecorator : public TDecorator {
+        TTestDecorator(THolder<IActor>&& actor)
+            : TDecorator(std::move(actor))
+        {
+        }
+
+        virtual ~TTestDecorator() = default;
+
+        // This method must be called in the test actor system
+        bool BeforeSending(TAutoPtr<IEventHandle>& ev)
+        {
+            bool send = true;
+            TTestDecorator *decorator = dynamic_cast<TTestDecorator*>(Actor.Get());
+            if (decorator) {
+                send = decorator->BeforeSending(ev);
+            }
+            return send && ev && DoBeforeSending(ev);
+        }
+
+        virtual bool DoBeforeSending(TAutoPtr<IEventHandle>& /*ev*/) {
+            return true;
+        }
+    };
 }
 
 template <>

@@ -56,9 +56,9 @@ class TKeyValueState {
     };
 
 public:
-    using TIndex = TMap<TString, TIndexRecord>; 
-    using TCommand = NKikimrKeyValue::ExecuteTransactionRequest::Command; 
- 
+    using TIndex = TMap<TString, TIndexRecord>;
+    using TCommand = NKikimrKeyValue::ExecuteTransactionRequest::Command;
+
     class TIncrementalKeySet {
         TMap<TString, TIndexRecord>& Index;
         TSet<TString>                AddedKeys;
@@ -334,34 +334,34 @@ public:
     void OnEvEraseCollect(const TActorContext &ctx);
 
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
-    void ProcessCmd(TIntermediate::TRead &read, 
-        NKikimrClient::TKeyValueResponse::TReadResult *legacyResponse, 
-        NKikimrKeyValue::Channel *response, 
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime); 
-    void ProcessCmd(TIntermediate::TRangeRead &request, 
-        NKikimrClient::TKeyValueResponse::TReadRangeResult *legacyResponse, 
-        NKikimrKeyValue::Channel *response, 
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime); 
-    void ProcessCmd(TIntermediate::TWrite &request, 
-        NKikimrClient::TKeyValueResponse::TWriteResult *legacyResponse, 
-        NKikimrKeyValue::Channel *response, 
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime); 
-    void ProcessCmd(const TIntermediate::TDelete &request, 
-        NKikimrClient::TKeyValueResponse::TDeleteRangeResult *legacyResponse, 
-        NKikimrKeyValue::Channel *response, 
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime); 
-    void ProcessCmd(const TIntermediate::TRename &request, 
-        NKikimrClient::TKeyValueResponse::TRenameResult *legacyResponse, 
-        NKikimrKeyValue::Channel *response, 
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime); 
-    void ProcessCmd(const TIntermediate::TCopyRange &request, 
-        NKikimrClient::TKeyValueResponse::TCopyRangeResult *legacyResponse, 
-        NKikimrKeyValue::Channel *response, 
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime); 
-    void ProcessCmd(const TIntermediate::TConcat &request, 
-        NKikimrClient::TKeyValueResponse::TConcatResult *resplegacyResponseonse, 
-        NKikimrKeyValue::Channel *response, 
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime); 
+    void ProcessCmd(TIntermediate::TRead &read,
+        NKikimrClient::TKeyValueResponse::TReadResult *legacyResponse,
+        NKikimrKeyValue::Channel *response,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime);
+    void ProcessCmd(TIntermediate::TRangeRead &request,
+        NKikimrClient::TKeyValueResponse::TReadRangeResult *legacyResponse,
+        NKikimrKeyValue::Channel *response,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime);
+    void ProcessCmd(TIntermediate::TWrite &request,
+        NKikimrClient::TKeyValueResponse::TWriteResult *legacyResponse,
+        NKikimrKeyValue::Channel *response,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime);
+    void ProcessCmd(const TIntermediate::TDelete &request,
+        NKikimrClient::TKeyValueResponse::TDeleteRangeResult *legacyResponse,
+        NKikimrKeyValue::Channel *response,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime);
+    void ProcessCmd(const TIntermediate::TRename &request,
+        NKikimrClient::TKeyValueResponse::TRenameResult *legacyResponse,
+        NKikimrKeyValue::Channel *response,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime);
+    void ProcessCmd(const TIntermediate::TCopyRange &request,
+        NKikimrClient::TKeyValueResponse::TCopyRangeResult *legacyResponse,
+        NKikimrKeyValue::Channel *response,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime);
+    void ProcessCmd(const TIntermediate::TConcat &request,
+        NKikimrClient::TKeyValueResponse::TConcatResult *resplegacyResponseonse,
+        NKikimrKeyValue::Channel *response,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime);
     void CmdRead(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
     void CmdReadRange(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
     void CmdRename(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
@@ -372,36 +372,36 @@ public:
     void CmdConcat(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx);
     void CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx);
     void CmdSetExecutorFastLogPolicy(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
-    void CmdCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx); 
+    void CmdCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
     void ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
         const TTabletStorageInfo *info);
     bool IncrementGeneration(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
 
-    struct TCheckResult { 
-        bool Result = true; 
-        TString ErrorMsg; 
-    }; 
- 
-    TCheckResult CheckCmd(const TIntermediate::TRename &cmd, TKeySet& keys, ui32 index) const; 
-    TCheckResult CheckCmd(const TIntermediate::TDelete &cmd, TKeySet& keys, ui32 index) const; 
-    TCheckResult CheckCmd(const TIntermediate::TWrite &cmd, TKeySet& keys, ui32 index) const; 
-    TCheckResult CheckCmd(const TIntermediate::TCopyRange &cmd, TKeySet& keys, ui32 index) const; 
-    TCheckResult CheckCmd(const TIntermediate::TConcat &cmd, TKeySet& keys, ui32 index) const; 
- 
-    bool CheckCmdRenames(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys, 
+    struct TCheckResult {
+        bool Result = true;
+        TString ErrorMsg;
+    };
+
+    TCheckResult CheckCmd(const TIntermediate::TRename &cmd, TKeySet& keys, ui32 index) const;
+    TCheckResult CheckCmd(const TIntermediate::TDelete &cmd, TKeySet& keys, ui32 index) const;
+    TCheckResult CheckCmd(const TIntermediate::TWrite &cmd, TKeySet& keys, ui32 index) const;
+    TCheckResult CheckCmd(const TIntermediate::TCopyRange &cmd, TKeySet& keys, ui32 index) const;
+    TCheckResult CheckCmd(const TIntermediate::TConcat &cmd, TKeySet& keys, ui32 index) const;
+
+    bool CheckCmdRenames(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
             const TTabletStorageInfo *info);
-    bool CheckCmdDeletes(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys, 
+    bool CheckCmdDeletes(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
             const TTabletStorageInfo *info);
-    bool CheckCmdWrites(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys, 
+    bool CheckCmdWrites(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
             const TTabletStorageInfo *info);
-    bool CheckCmdCopyRanges(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys, 
+    bool CheckCmdCopyRanges(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
             const TTabletStorageInfo *info);
-    bool CheckCmdConcats(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys, 
+    bool CheckCmdConcats(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
             const TTabletStorageInfo *info);
     bool CheckCmdGetStatus(THolder<TIntermediate>& /*intermediate*/, const TActorContext& /*ctx*/,
         TKeySet& /*keys*/, const TTabletStorageInfo* /*info*/);
-    bool CheckCmds(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/, TKeySet& keys, 
-            const TTabletStorageInfo* /*info*/); 
+    bool CheckCmds(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/, TKeySet& keys,
+            const TTabletStorageInfo* /*info*/);
 
     void Step();
     TLogoBlobID AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx);
@@ -417,23 +417,23 @@ public:
         return PerGenerationCounter;
     }
 
-    void OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActorContext &ctx, 
-            const TTabletStorageInfo *info); 
-    void OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, const TActorContext &ctx, 
-            const TTabletStorageInfo *info); 
-    void OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::TPtr &ev, const TActorContext &ctx, 
-            const TTabletStorageInfo *info); 
-    void OnEvGetStatus(TEvKeyValue::TEvGetStatus::TPtr &ev, const TActorContext &ctx, 
-            const TTabletStorageInfo *info); 
-    void OnEvObtainLock(TEvKeyValue::TEvObtainLock::TPtr &ev, const TActorContext &ctx, 
-            const TTabletStorageInfo *info); 
- 
+    void OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActorContext &ctx,
+            const TTabletStorageInfo *info);
+    void OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, const TActorContext &ctx,
+            const TTabletStorageInfo *info);
+    void OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::TPtr &ev, const TActorContext &ctx,
+            const TTabletStorageInfo *info);
+    void OnEvGetStatus(TEvKeyValue::TEvGetStatus::TPtr &ev, const TActorContext &ctx,
+            const TTabletStorageInfo *info);
+    void OnEvObtainLock(TEvKeyValue::TEvObtainLock::TPtr &ev, const TActorContext &ctx,
+            const TTabletStorageInfo *info);
+
     void OnPeriodicRefresh(const TActorContext &ctx);
     void OnUpdateWeights(TChannelBalancer::TEvUpdateWeights::TPtr ev);
- 
+
     void OnRequestComplete(ui64 requestUid, ui64 generation, ui64 step, const TActorContext &ctx,
-        const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat); 
- 
+        const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat);
+
     void OnEvIntermediate(TIntermediate &intermediate, const TActorContext &ctx);
     void OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActorContext &ctx, const TTabletStorageInfo *info);
     bool PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THolder<TIntermediate> &intermediate,
@@ -443,57 +443,57 @@ public:
 
     bool CheckDeadline(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate);
- 
-    template <typename TRequest> 
-    bool CheckDeadline(const TActorContext &ctx, TRequest *request, 
-            THolder<TIntermediate> &intermediate) 
-    { 
-        ui64 deadlineInstantMs = request->Record.deadline_instant_ms(); 
-        if (!deadlineInstantMs) { 
-            return false; 
-        } 
-        intermediate->Deadline = TInstant::MicroSeconds(deadlineInstantMs * 1000ull); 
- 
-        TInstant now = TAppData::TimeProvider->Now(); 
-        if (intermediate->Deadline <= now) { 
-            TStringStream str; 
-            str << "KeyValue# " << TabletId; 
-            str << " Deadline reached before processing the request!"; 
-            str << " DeadlineInstantMs# " << deadlineInstantMs; 
-            str << " < Now# " << (ui64)now.MilliSeconds(); 
-            ReplyError<typename TRequest::TResponse>(ctx, str.Str(), 
-                    NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT, intermediate); 
-            return true; 
-        } 
- 
-        return false; 
-    } 
- 
+
+    template <typename TRequest>
+    bool CheckDeadline(const TActorContext &ctx, TRequest *request,
+            THolder<TIntermediate> &intermediate)
+    {
+        ui64 deadlineInstantMs = request->Record.deadline_instant_ms();
+        if (!deadlineInstantMs) {
+            return false;
+        }
+        intermediate->Deadline = TInstant::MicroSeconds(deadlineInstantMs * 1000ull);
+
+        TInstant now = TAppData::TimeProvider->Now();
+        if (intermediate->Deadline <= now) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
+            str << " Deadline reached before processing the request!";
+            str << " DeadlineInstantMs# " << deadlineInstantMs;
+            str << " < Now# " << (ui64)now.MilliSeconds();
+            ReplyError<typename TRequest::TResponse>(ctx, str.Str(),
+                    NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT, intermediate);
+            return true;
+        }
+
+        return false;
+    }
+
     bool CheckGeneration(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate);
- 
-    template <typename TGrpcRequestWithLockGeneration> 
-    bool CheckGeneration(const TActorContext &ctx, TGrpcRequestWithLockGeneration *kvRequest, 
-            THolder<TIntermediate> &intermediate) 
-    { 
-        auto &record = kvRequest->Record; 
-        intermediate->HasGeneration = true; 
-        intermediate->Generation = record.lock_generation(); 
-        if (record.lock_generation() != StoredState.GetUserGeneration()) { 
-            TStringStream str; 
-            str << "KeyValue# " << TabletId; 
-            str << " Generation mismatch! Requested# " << record.lock_generation(); 
-            str << " Actual# " << StoredState.GetUserGeneration(); 
-            str << " Marker# KV05"; 
-            ReplyError<typename TGrpcRequestWithLockGeneration::TResponse>(ctx, str.Str(), 
-                    NKikimrKeyValue::Statuses::RSTATUS_ERROR, intermediate); 
-            return true; 
-        } 
-        return false; 
-    } 
- 
-    void SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, ui32 storageChannelIdx); 
- 
+
+    template <typename TGrpcRequestWithLockGeneration>
+    bool CheckGeneration(const TActorContext &ctx, TGrpcRequestWithLockGeneration *kvRequest,
+            THolder<TIntermediate> &intermediate)
+    {
+        auto &record = kvRequest->Record;
+        intermediate->HasGeneration = true;
+        intermediate->Generation = record.lock_generation();
+        if (record.lock_generation() != StoredState.GetUserGeneration()) {
+            TStringStream str;
+            str << "KeyValue# " << TabletId;
+            str << " Generation mismatch! Requested# " << record.lock_generation();
+            str << " Actual# " << StoredState.GetUserGeneration();
+            str << " Marker# KV05";
+            ReplyError<typename TGrpcRequestWithLockGeneration::TResponse>(ctx, str.Str(),
+                    NKikimrKeyValue::Statuses::RSTATUS_ERROR, intermediate);
+            return true;
+        }
+        return false;
+    }
+
+    void SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, ui32 storageChannelIdx);
+
     bool PrepareCmdRead(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, bool &outIsInlineOnly);
     bool PrepareCmdReadRange(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
@@ -514,144 +514,144 @@ public:
         THolder<TIntermediate>& intermediate, const TTabletStorageInfo *info);
     bool PrepareCmdSetExecutorFastLogPolicy(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
- 
- 
-    struct TPrepareResult { 
-        bool WithError = false; 
-        TString ErrorMsg; 
-    }; 
-    TPrepareResult PrepareOneCmd(const TCommand::Rename &request, THolder<TIntermediate> &intermediate); 
-    TPrepareResult PrepareOneCmd(const TCommand::Concat &request, THolder<TIntermediate> &intermediate); 
-    TPrepareResult PrepareOneCmd(const TCommand::CopyRange &request, THolder<TIntermediate> &intermediate); 
-    TPrepareResult PrepareOneCmd(const TCommand::Write &request, THolder<TIntermediate> &intermediate, 
-        const TTabletStorageInfo *info); 
-    TPrepareResult PrepareOneCmd(const TCommand::DeleteRange &request, THolder<TIntermediate> &intermediate, 
-        const TActorContext &ctx); 
-    TPrepareResult PrepareOneCmd(const TCommand &request, THolder<TIntermediate> &intermediate, 
-        const TTabletStorageInfo *info, const TActorContext &ctx); 
-    TPrepareResult PrepareCommands(NKikimrKeyValue::ExecuteTransactionRequest &kvRequest, 
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info, const TActorContext &ctx); 
-    TPrepareResult InitGetStatusCommand(TIntermediate::TGetStatus &cmd, 
-        NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info); 
+
+
+    struct TPrepareResult {
+        bool WithError = false;
+        TString ErrorMsg;
+    };
+    TPrepareResult PrepareOneCmd(const TCommand::Rename &request, THolder<TIntermediate> &intermediate);
+    TPrepareResult PrepareOneCmd(const TCommand::Concat &request, THolder<TIntermediate> &intermediate);
+    TPrepareResult PrepareOneCmd(const TCommand::CopyRange &request, THolder<TIntermediate> &intermediate);
+    TPrepareResult PrepareOneCmd(const TCommand::Write &request, THolder<TIntermediate> &intermediate,
+        const TTabletStorageInfo *info);
+    TPrepareResult PrepareOneCmd(const TCommand::DeleteRange &request, THolder<TIntermediate> &intermediate,
+        const TActorContext &ctx);
+    TPrepareResult PrepareOneCmd(const TCommand &request, THolder<TIntermediate> &intermediate,
+        const TTabletStorageInfo *info, const TActorContext &ctx);
+    TPrepareResult PrepareCommands(NKikimrKeyValue::ExecuteTransactionRequest &kvRequest,
+        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info, const TActorContext &ctx);
+    TPrepareResult InitGetStatusCommand(TIntermediate::TGetStatus &cmd,
+        NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info);
     void ReplyError(const TActorContext &ctx, TString errorDescription,
         NMsgBusProxy::EResponseStatus status, THolder<TIntermediate> &intermediate,
         const TTabletStorageInfo *info = nullptr);
 
-    template <typename TResponse> 
-    void ReplyError(const TActorContext &ctx, TString errorDescription, 
-        NKikimrKeyValue::Statuses::ReplyStatus status, THolder<TIntermediate> &intermediate, 
-        const TTabletStorageInfo *info = nullptr) 
-    { 
-        LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, errorDescription); 
-        Y_VERIFY(!intermediate->IsReplied); 
-        std::unique_ptr<TResponse> response = std::make_unique<TResponse>(); 
-        response->Record.set_status(status); 
- 
-        if constexpr (std::is_same_v<TResponse, TEvKeyValue::TEvReadResponse>) { 
-            auto &cmd = *intermediate->ReadCommand; 
-            Y_VERIFY(std::holds_alternative<TIntermediate::TRead>(cmd)); 
-            TIntermediate::TRead &interRead = std::get<TIntermediate::TRead>(cmd); 
-            response->Record.set_requested_offset(interRead.Offset); 
-            response->Record.set_requested_size(interRead.ValueSize); 
-            response->Record.set_requested_key(interRead.Key); 
-        } 
-        if constexpr (!std::is_same_v<TResponse, TEvKeyValue::TEvGetStatusResponse>) { 
-            if (intermediate->HasCookie) { 
-                response->Record.set_cookie(intermediate->Cookie); 
-            } 
-        } 
- 
-        if (errorDescription) { 
-            response->Record.set_msg(errorDescription); 
-        } 
- 
-        ResourceMetrics->Network.Increment(response->Record.ByteSize()); 
- 
-        intermediate->IsReplied = true; 
-        ctx.Send(intermediate->RespondTo, response.release()); 
-        if (info) { 
-            intermediate->UpdateStat(); 
-            OnRequestComplete(intermediate->RequestUid, intermediate->CreatedAtGeneration, intermediate->CreatedAtStep, 
-                    ctx, info, TEvKeyValue::TEvNotify::ConvertStatus(status), intermediate->Stat); 
-        } else { //metrics change report in OnRequestComplete is not done 
-            ResourceMetrics->TryUpdate(ctx); 
-            RequestInputTime.erase(intermediate->RequestUid); 
-        } 
-    } 
- 
-    bool PrepareReadRequest(const TActorContext &ctx, TEvKeyValue::TEvRead::TPtr &ev, 
-        THolder<TIntermediate> &intermediate, TRequestType::EType *outRequestTyp); 
-    bool PrepareReadRangeRequest(const TActorContext &ctx, TEvKeyValue::TEvReadRange::TPtr &ev, 
-        THolder<TIntermediate> &intermediate, TRequestType::EType *outRequestType); 
-    bool PrepareExecuteTransactionRequest(const TActorContext &ctx, TEvKeyValue::TEvExecuteTransaction::TPtr &ev, 
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info); 
-    TPrepareResult PrepareOneGetStatus(TIntermediate::TGetStatus &cmd, ui64 publicStorageChannel, 
-        const TTabletStorageInfo *info); 
-    bool PrepareGetStatusRequest(const TActorContext &ctx, TEvKeyValue::TEvGetStatus::TPtr &ev, 
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info); 
-    bool PrepareObtainLockRequest(const TActorContext &ctx, TEvKeyValue::TEvObtainLock::TPtr &ev, 
-        THolder<TIntermediate> &intermediate); 
- 
-    template <typename TRequestType> 
-    void PostponeIntermediate(THolder<TIntermediate> &&intermediate) { 
-        intermediate->Stat.EnqueuedAs = Queue.size() + 1; 
-        Queue.push_back(std::move(intermediate)); 
-    } 
-    void ProcessPostponedIntermediate(const TActorContext& ctx, THolder<TIntermediate> &&intermediate, 
-             const TTabletStorageInfo *info); 
- 
+    template <typename TResponse>
+    void ReplyError(const TActorContext &ctx, TString errorDescription,
+        NKikimrKeyValue::Statuses::ReplyStatus status, THolder<TIntermediate> &intermediate,
+        const TTabletStorageInfo *info = nullptr)
+    {
+        LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, errorDescription);
+        Y_VERIFY(!intermediate->IsReplied);
+        std::unique_ptr<TResponse> response = std::make_unique<TResponse>();
+        response->Record.set_status(status);
+
+        if constexpr (std::is_same_v<TResponse, TEvKeyValue::TEvReadResponse>) {
+            auto &cmd = *intermediate->ReadCommand;
+            Y_VERIFY(std::holds_alternative<TIntermediate::TRead>(cmd));
+            TIntermediate::TRead &interRead = std::get<TIntermediate::TRead>(cmd);
+            response->Record.set_requested_offset(interRead.Offset);
+            response->Record.set_requested_size(interRead.ValueSize);
+            response->Record.set_requested_key(interRead.Key);
+        }
+        if constexpr (!std::is_same_v<TResponse, TEvKeyValue::TEvGetStatusResponse>) {
+            if (intermediate->HasCookie) {
+                response->Record.set_cookie(intermediate->Cookie);
+            }
+        }
+
+        if (errorDescription) {
+            response->Record.set_msg(errorDescription);
+        }
+
+        ResourceMetrics->Network.Increment(response->Record.ByteSize());
+
+        intermediate->IsReplied = true;
+        ctx.Send(intermediate->RespondTo, response.release());
+        if (info) {
+            intermediate->UpdateStat();
+            OnRequestComplete(intermediate->RequestUid, intermediate->CreatedAtGeneration, intermediate->CreatedAtStep,
+                    ctx, info, TEvKeyValue::TEvNotify::ConvertStatus(status), intermediate->Stat);
+        } else { //metrics change report in OnRequestComplete is not done
+            ResourceMetrics->TryUpdate(ctx);
+            RequestInputTime.erase(intermediate->RequestUid);
+        }
+    }
+
+    bool PrepareReadRequest(const TActorContext &ctx, TEvKeyValue::TEvRead::TPtr &ev,
+        THolder<TIntermediate> &intermediate, TRequestType::EType *outRequestTyp);
+    bool PrepareReadRangeRequest(const TActorContext &ctx, TEvKeyValue::TEvReadRange::TPtr &ev,
+        THolder<TIntermediate> &intermediate, TRequestType::EType *outRequestType);
+    bool PrepareExecuteTransactionRequest(const TActorContext &ctx, TEvKeyValue::TEvExecuteTransaction::TPtr &ev,
+        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
+    TPrepareResult PrepareOneGetStatus(TIntermediate::TGetStatus &cmd, ui64 publicStorageChannel,
+        const TTabletStorageInfo *info);
+    bool PrepareGetStatusRequest(const TActorContext &ctx, TEvKeyValue::TEvGetStatus::TPtr &ev,
+        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
+    bool PrepareObtainLockRequest(const TActorContext &ctx, TEvKeyValue::TEvObtainLock::TPtr &ev,
+        THolder<TIntermediate> &intermediate);
+
+    template <typename TRequestType>
+    void PostponeIntermediate(THolder<TIntermediate> &&intermediate) {
+        intermediate->Stat.EnqueuedAs = Queue.size() + 1;
+        Queue.push_back(std::move(intermediate));
+    }
+    void ProcessPostponedIntermediate(const TActorContext& ctx, THolder<TIntermediate> &&intermediate,
+             const TTabletStorageInfo *info);
+
     bool ConvertRange(const NKikimrClient::TKeyValueRequest::TKeyRange& from, TKeyRange *to,
                       const TActorContext& ctx, THolder<TIntermediate>& intermediate, const char *cmd, ui32 index);
 
-    struct TConvertRangeResult { 
-        TString ErrorMsg; 
-        bool WithError = false; 
-    }; 
- 
-    TConvertRangeResult ConvertRange(const NKikimrKeyValue::KVRange& range, TKeyRange *to, const char *cmd) 
-    { 
-        if (range.has_from_key_inclusive()) { 
-            to->HasFrom = true; 
-            to->KeyFrom = range.from_key_inclusive(); 
-            to->IncludeFrom = true; 
-        } else if (range.has_from_key_exclusive()) { 
-            to->HasFrom = true; 
-            to->KeyFrom = range.from_key_exclusive(); 
-            to->IncludeFrom = false; 
-        } else { 
-            to->HasFrom = false; 
-        } 
- 
-        if (range.has_to_key_inclusive()) { 
-            to->HasTo = true; 
-            to->KeyTo = range.to_key_inclusive(); 
-            to->IncludeTo = true; 
-        } else if (range.has_to_key_exclusive()) { 
-            to->HasTo = true; 
-            to->KeyTo = range.to_key_exclusive(); 
-            to->IncludeTo = false; 
-        } else { 
-            to->HasTo = false; 
-        } 
- 
-        if (to->HasFrom && to->HasTo) { 
-            if (!to->IncludeFrom && !to->IncludeTo && to->KeyFrom >= to->KeyTo) { 
-                TString msg = TStringBuilder() << "KeyValue# " << TabletId 
-                        << " Range.KeyFrom >= Range.KeyTo and both exclusive in " << cmd 
-                        << " Marker# KV31"; 
-                return TConvertRangeResult{msg, true}; 
-            } 
-            if (to->KeyFrom > to->KeyTo) { 
-                TString msg = TStringBuilder() << "KeyValue# " << TabletId 
-                        << " Range.KeyFrom > Range.KeyTo and both exclusive in " << cmd 
-                        << " Marker# KV33"; 
-                return TConvertRangeResult{msg, true}; 
-            } 
-        } 
- 
-        return {}; 
-    } 
- 
+    struct TConvertRangeResult {
+        TString ErrorMsg;
+        bool WithError = false;
+    };
+
+    TConvertRangeResult ConvertRange(const NKikimrKeyValue::KVRange& range, TKeyRange *to, const char *cmd)
+    {
+        if (range.has_from_key_inclusive()) {
+            to->HasFrom = true;
+            to->KeyFrom = range.from_key_inclusive();
+            to->IncludeFrom = true;
+        } else if (range.has_from_key_exclusive()) {
+            to->HasFrom = true;
+            to->KeyFrom = range.from_key_exclusive();
+            to->IncludeFrom = false;
+        } else {
+            to->HasFrom = false;
+        }
+
+        if (range.has_to_key_inclusive()) {
+            to->HasTo = true;
+            to->KeyTo = range.to_key_inclusive();
+            to->IncludeTo = true;
+        } else if (range.has_to_key_exclusive()) {
+            to->HasTo = true;
+            to->KeyTo = range.to_key_exclusive();
+            to->IncludeTo = false;
+        } else {
+            to->HasTo = false;
+        }
+
+        if (to->HasFrom && to->HasTo) {
+            if (!to->IncludeFrom && !to->IncludeTo && to->KeyFrom >= to->KeyTo) {
+                TString msg = TStringBuilder() << "KeyValue# " << TabletId
+                        << " Range.KeyFrom >= Range.KeyTo and both exclusive in " << cmd
+                        << " Marker# KV31";
+                return TConvertRangeResult{msg, true};
+            }
+            if (to->KeyFrom > to->KeyTo) {
+                TString msg = TStringBuilder() << "KeyValue# " << TabletId
+                        << " Range.KeyFrom > Range.KeyTo and both exclusive in " << cmd
+                        << " Marker# KV33";
+                return TConvertRangeResult{msg, true};
+            }
+        }
+
+        return {};
+    }
+
     template<typename Container, typename Iterator = typename Container::iterator>
     static std::pair<Iterator, Iterator> GetRange(const TKeyRange& range, Container& container) {
         auto first = !range.HasFrom ? container.begin()

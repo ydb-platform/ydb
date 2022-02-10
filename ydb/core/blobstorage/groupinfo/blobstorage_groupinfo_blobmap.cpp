@@ -15,24 +15,24 @@ namespace NKikimr {
                 ui32 domainIdx = hash % numFailDomains;
 
                 // get shift of this disk inside ring
-                ui32 shift = failDomainOrderNumber + numFailDomains - domainIdx; 
-                if (shift >= numFailDomains) { 
-                    shift -= numFailDomains; 
-                } 
+                ui32 shift = failDomainOrderNumber + numFailDomains - domainIdx;
+                if (shift >= numFailDomains) {
+                    shift -= numFailDomains;
+                }
                 if (shift >= BlobSubgroupSize) {
                     return BlobSubgroupSize;
                 }
 
-                const TBlobStorageGroupInfo::TFailDomain& domain = Topology->GetFailDomain(vdisk); 
-                if (domain.VDisks.size() == 1) { 
-                    return shift; 
-                } else { 
-                    TReallyFastRng32 rng(hash); 
-                    for (ui32 i = 0; i < shift; ++i) { 
-                        rng(); 
-                    } 
- 
-                    return vdisk.VDisk == rng() % domain.VDisks.size() ? shift : BlobSubgroupSize; 
+                const TBlobStorageGroupInfo::TFailDomain& domain = Topology->GetFailDomain(vdisk);
+                if (domain.VDisks.size() == 1) {
+                    return shift;
+                } else {
+                    TReallyFastRng32 rng(hash);
+                    for (ui32 i = 0; i < shift; ++i) {
+                        rng();
+                    }
+
+                    return vdisk.VDisk == rng() % domain.VDisks.size() ? shift : BlobSubgroupSize;
                 }
             }
 
@@ -48,28 +48,28 @@ namespace NKikimr {
                 const ui32 numFailDomains = Topology->GetTotalFailDomainsNum();
                 ui32 domainIdx = hash % numFailDomains;
 
-                if (Topology->GetNumVDisksPerFailDomain() == 1) { 
-                    for (ui32 i = 0; i < BlobSubgroupSize; ++i) { 
-                        const TBlobStorageGroupInfo::TFailDomain& domain = Topology->GetFailDomain(domainIdx); 
-                        if (++domainIdx == numFailDomains) { 
-                            domainIdx = 0; 
-                        } 
-                        Y_VERIFY_DEBUG(domain.VDisks.size() == 1); 
-                        const TBlobStorageGroupInfo::TVDiskInfo& vdisk = domain.VDisks[0]; 
-                        orderNums.push_back(vdisk.OrderNumber); 
+                if (Topology->GetNumVDisksPerFailDomain() == 1) {
+                    for (ui32 i = 0; i < BlobSubgroupSize; ++i) {
+                        const TBlobStorageGroupInfo::TFailDomain& domain = Topology->GetFailDomain(domainIdx);
+                        if (++domainIdx == numFailDomains) {
+                            domainIdx = 0;
+                        }
+                        Y_VERIFY_DEBUG(domain.VDisks.size() == 1);
+                        const TBlobStorageGroupInfo::TVDiskInfo& vdisk = domain.VDisks[0];
+                        orderNums.push_back(vdisk.OrderNumber);
                     }
-                } else { 
-                    TReallyFastRng32 rng(hash); 
- 
-                    for (ui32 i = 0; i < BlobSubgroupSize; ++i) { 
-                        const TBlobStorageGroupInfo::TFailDomain& domain = Topology->GetFailDomain(domainIdx); 
-                        if (++domainIdx == numFailDomains) { 
-                            domainIdx = 0; 
-                        } 
-                        const ui32 vdiskIdx = rng() % domain.VDisks.size(); 
-                        const TBlobStorageGroupInfo::TVDiskInfo& vdisk = domain.VDisks[vdiskIdx]; 
-                        orderNums.push_back(vdisk.OrderNumber); 
-                    } 
+                } else {
+                    TReallyFastRng32 rng(hash);
+
+                    for (ui32 i = 0; i < BlobSubgroupSize; ++i) {
+                        const TBlobStorageGroupInfo::TFailDomain& domain = Topology->GetFailDomain(domainIdx);
+                        if (++domainIdx == numFailDomains) {
+                            domainIdx = 0;
+                        }
+                        const ui32 vdiskIdx = rng() % domain.VDisks.size();
+                        const TBlobStorageGroupInfo::TVDiskInfo& vdisk = domain.VDisks[vdiskIdx];
+                        orderNums.push_back(vdisk.OrderNumber);
+                    }
                 }
             }
 
@@ -83,19 +83,19 @@ namespace NKikimr {
 
             TVDiskIdShort GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) override final {
                 const ui32 numFailDomains = Topology->GetTotalFailDomainsNum();
-                ui32 domainIdx = (static_cast<ui64>(hash) + idxInSubgroup) % numFailDomains; 
+                ui32 domainIdx = (static_cast<ui64>(hash) + idxInSubgroup) % numFailDomains;
                 const TBlobStorageGroupInfo::TFailDomain& domain = Topology->GetFailDomain(domainIdx);
 
-                if (domain.VDisks.size() == 1) { 
-                    return domain.VDisks[0].VDiskIdShort; 
-                } else { 
-                    TReallyFastRng32 rng(hash); 
-                    for (ui32 i = 0; i < idxInSubgroup; ++i) { 
-                        rng(); 
-                    } 
- 
-                    const ui32 vdiskIdx = rng() % domain.VDisks.size(); 
-                    return domain.VDisks[vdiskIdx].VDiskIdShort; 
+                if (domain.VDisks.size() == 1) {
+                    return domain.VDisks[0].VDiskIdShort;
+                } else {
+                    TReallyFastRng32 rng(hash);
+                    for (ui32 i = 0; i < idxInSubgroup; ++i) {
+                        rng();
+                    }
+
+                    const ui32 vdiskIdx = rng() % domain.VDisks.size();
+                    return domain.VDisks[vdiskIdx].VDiskIdShort;
                 }
             }
         };

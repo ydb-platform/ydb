@@ -36,10 +36,10 @@ namespace NKikimr {
     ///////////////////////////////////////////////////////////////////////////////////////////////////
     // Handlers for postponed events
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    using TVMovedPatchHandler = std::function<void(const TActorContext &ctx, 
-            TEvBlobStorage::TEvVMovedPatch::TPtr ev)>; 
-    using TVPatchStartHandler = std::function<void(const TActorContext &ctx, 
-            TEvBlobStorage::TEvVPatchStart::TPtr ev)>; 
+    using TVMovedPatchHandler = std::function<void(const TActorContext &ctx,
+            TEvBlobStorage::TEvVMovedPatch::TPtr ev)>;
+    using TVPatchStartHandler = std::function<void(const TActorContext &ctx,
+            TEvBlobStorage::TEvVPatchStart::TPtr ev)>;
     using TVPutHandler = std::function<void(const TActorContext &ctx,
             TEvBlobStorage::TEvVPut::TPtr ev)>;
     using TVMultiPutHandler = std::function<void(const TActorContext &ctx,
@@ -63,8 +63,8 @@ namespace NKikimr {
                 const TPDiskCtxPtr &pdiskCtx,
                 std::shared_ptr<THull> hull,
                 NMonGroup::TSkeletonOverloadGroup &&mon,
-                TVMovedPatchHandler &&vMovedPatch, 
-                TVPatchStartHandler &&vPatchStart, 
+                TVMovedPatchHandler &&vMovedPatch,
+                TVPatchStartHandler &&vPatchStart,
                 TVPutHandler &&vput,
                 TVMultiPutHandler &&vMultiPut,
                 TLocalSyncDataHandler &&loc,
@@ -78,8 +78,8 @@ namespace NKikimr {
         bool ProcessPostponedEvents(const TActorContext &ctx, int batchSize, bool actualizeLevels);
 
         // Postpone event in case of overload
-        bool PostponeEvent(TEvBlobStorage::TEvVMovedPatch::TPtr &ev, const TActorContext &ctx, IActor *skeleton); 
-        bool PostponeEvent(TEvBlobStorage::TEvVPatchStart::TPtr &ev, const TActorContext &ctx, IActor *skeleton); 
+        bool PostponeEvent(TEvBlobStorage::TEvVMovedPatch::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
+        bool PostponeEvent(TEvBlobStorage::TEvVPatchStart::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
         bool PostponeEvent(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
         bool PostponeEvent(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
         bool PostponeEvent(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx, IActor *skeleton);

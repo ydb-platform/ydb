@@ -32,7 +32,7 @@ SRCS(
     intrusive_heap.cpp
     intrusive_heap.h
     intrusive_stack.h
-    log_priority_mute_checker.h 
+    log_priority_mute_checker.h
     memory_tracker.cpp
     memory_tracker.h
     operation_queue.h

@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include "skeleton_vmultiput_actor.h" 
+#include "skeleton_vmultiput_actor.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksst_add.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
@@ -62,25 +62,25 @@ namespace NKikimr {
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
-    // TLoggedRecVMultiPutItem -- incapsulates TEvVMultiPut item replay action (for small blobs) 
-    /////////////////////////////////////////////////////////////////////////////////////////////////////// 
-    class TLoggedRecVMultiPutItem : public ILoggedRec { 
-    public: 
-        TLoggedRecVMultiPutItem(TLsnSeg seg, bool confirmSyncLogAlso, const TLogoBlobID &id, const TIngress &ingress, 
+    // TLoggedRecVMultiPutItem -- incapsulates TEvVMultiPut item replay action (for small blobs)
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
+    class TLoggedRecVMultiPutItem : public ILoggedRec {
+    public:
+        TLoggedRecVMultiPutItem(TLsnSeg seg, bool confirmSyncLogAlso, const TLogoBlobID &id, const TIngress &ingress,
                 TRope &&buffer, std::unique_ptr<TEvVMultiPutItemResult> result, const TActorId &recipient,
-                ui64 recipientCookie); 
-        void Replay(THull &hull, const TActorContext &ctx, const IActor& actor) override; 
- 
-    private: 
-        TLogoBlobID Id; 
-        TIngress Ingress; 
-        TRope Buffer; 
+                ui64 recipientCookie);
+        void Replay(THull &hull, const TActorContext &ctx, const IActor& actor) override;
+
+    private:
+        TLogoBlobID Id;
+        TIngress Ingress;
+        TRope Buffer;
         std::unique_ptr<TEvVMultiPutItemResult> Result;
         TActorId Recipient;
-        ui64 RecipientCookie; 
-    }; 
- 
-    /////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        ui64 RecipientCookie;
+    };
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
     // TLoggedRecVPut -- incapsulates TEvVPut replay action (for huge blobs)
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
     class TLoggedRecVPutHuge : public ILoggedRec {

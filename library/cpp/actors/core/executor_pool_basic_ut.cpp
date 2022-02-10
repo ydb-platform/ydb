@@ -1,382 +1,382 @@
-#include "actorsystem.h" 
-#include "executor_pool_basic.h" 
-#include "hfunc.h" 
-#include "scheduler_basic.h" 
- 
+#include "actorsystem.h"
+#include "executor_pool_basic.h"
+#include "hfunc.h"
+#include "scheduler_basic.h"
+
 #include <library/cpp/actors/util/should_continue.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/actors/protos/unittests.pb.h>
- 
-using namespace NActors; 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-struct TEvMsg : public NActors::TEventBase<TEvMsg, 10347> { 
-    DEFINE_SIMPLE_LOCAL_EVENT(TEvMsg, "ExecutorPoolTest: Msg"); 
-}; 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-class TTestSenderActor : public IActor { 
-private: 
-    using EActivityType = IActor::EActivityType ; 
-    using EActorActivity = IActor::EActorActivity; 
- 
-private: 
-    TAtomic Counter; 
+
+using namespace NActors;
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TEvMsg : public NActors::TEventBase<TEvMsg, 10347> {
+    DEFINE_SIMPLE_LOCAL_EVENT(TEvMsg, "ExecutorPoolTest: Msg");
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TTestSenderActor : public IActor {
+private:
+    using EActivityType = IActor::EActivityType ;
+    using EActorActivity = IActor::EActorActivity;
+
+private:
+    TAtomic Counter;
     TActorId Receiver;
- 
-    std::function<void(void)> Action; 
- 
-public: 
-    TTestSenderActor(std::function<void(void)> action = [](){}, 
-                     EActivityType activityType =  EActorActivity::OTHER) 
-        : IActor(static_cast<TReceiveFunc>(&TTestSenderActor::Execute), activityType) 
-        , Action(action) 
-    {} 
- 
+
+    std::function<void(void)> Action;
+
+public:
+    TTestSenderActor(std::function<void(void)> action = [](){},
+                     EActivityType activityType =  EActorActivity::OTHER)
+        : IActor(static_cast<TReceiveFunc>(&TTestSenderActor::Execute), activityType)
+        , Action(action)
+    {}
+
     void Start(TActorId receiver, size_t count)
-    { 
-        AtomicSet(Counter, count); 
-        Receiver = receiver; 
-    } 
- 
-    void Stop() { 
-        while (true) { 
-            if (GetCounter() == 0) { 
-                break; 
-            } 
+    {
+        AtomicSet(Counter, count);
+        Receiver = receiver;
+    }
+
+    void Stop() {
+        while (true) {
+            if (GetCounter() == 0) {
+                break;
+            }
 
             Sleep(TDuration::MilliSeconds(1));
-        } 
-    } 
- 
-    size_t GetCounter() const { 
-        return AtomicGet(Counter); 
-    } 
- 
-private: 
-    STFUNC(Execute) 
-    { 
-        Y_UNUSED(ctx); 
-        switch (ev->GetTypeRewrite()) { 
-            hFunc(TEvMsg, Handle); 
-        } 
-    } 
- 
-    void Handle(TEvMsg::TPtr &ev) 
-    { 
-        Y_UNUSED(ev); 
-        Action(); 
+        }
+    }
+
+    size_t GetCounter() const {
+        return AtomicGet(Counter);
+    }
+
+private:
+    STFUNC(Execute)
+    {
+        Y_UNUSED(ctx);
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvMsg, Handle);
+        }
+    }
+
+    void Handle(TEvMsg::TPtr &ev)
+    {
+        Y_UNUSED(ev);
+        Action();
         TAtomicBase count = AtomicDecrement(Counter);
         Y_VERIFY(count != Max<TAtomicBase>());
-        if (count) { 
-            Send(Receiver, new TEvMsg()); 
-        } 
-    } 
-}; 
- 
-THolder<TActorSystemSetup> GetActorSystemSetup(TBasicExecutorPool* pool) 
-{ 
-    auto setup = MakeHolder<NActors::TActorSystemSetup>(); 
-    setup->NodeId = 1; 
-    setup->ExecutorsCount = 1; 
+        if (count) {
+            Send(Receiver, new TEvMsg());
+        }
+    }
+};
+
+THolder<TActorSystemSetup> GetActorSystemSetup(TBasicExecutorPool* pool)
+{
+    auto setup = MakeHolder<NActors::TActorSystemSetup>();
+    setup->NodeId = 1;
+    setup->ExecutorsCount = 1;
     setup->Executors.Reset(new TAutoPtr<NActors::IExecutorPool>[1]);
-    setup->Executors[0] = pool; 
-    setup->Scheduler = new TBasicSchedulerThread(NActors::TSchedulerConfig(512, 0)); 
-    return setup; 
-} 
- 
-Y_UNIT_TEST_SUITE(BasicExecutorPool) { 
- 
-    Y_UNIT_TEST(DecreaseIncreaseThreadsCount) { 
-        const size_t msgCount = 1e4; 
-        const size_t size = 4; 
-        const size_t halfSize = size / 2; 
-        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50); 
- 
-        auto setup = GetActorSystemSetup(executorPool); 
-        TActorSystem actorSystem(setup); 
-        actorSystem.Start(); 
- 
-        executorPool->SetThreadCount(halfSize); 
-        TTestSenderActor* actors[size]; 
+    setup->Executors[0] = pool;
+    setup->Scheduler = new TBasicSchedulerThread(NActors::TSchedulerConfig(512, 0));
+    return setup;
+}
+
+Y_UNIT_TEST_SUITE(BasicExecutorPool) {
+
+    Y_UNIT_TEST(DecreaseIncreaseThreadsCount) {
+        const size_t msgCount = 1e4;
+        const size_t size = 4;
+        const size_t halfSize = size / 2;
+        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50);
+
+        auto setup = GetActorSystemSetup(executorPool);
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        executorPool->SetThreadCount(halfSize);
+        TTestSenderActor* actors[size];
         TActorId actorIds[size];
-        for (size_t i = 0; i < size; ++i) { 
-            actors[i] = new TTestSenderActor(); 
-            actorIds[i] = actorSystem.Register(actors[i]); 
-        } 
- 
-        const int testCount = 2; 
- 
-        TExecutorPoolStats poolStats[testCount]; 
-        TVector<TExecutorThreadStats> statsCopy[testCount]; 
- 
-        for (size_t testIdx = 0; testIdx < testCount; ++testIdx) { 
-            for (size_t i = 0; i < size; ++i) { 
-                actors[i]->Start(actors[i]->SelfId(), msgCount); 
+        for (size_t i = 0; i < size; ++i) {
+            actors[i] = new TTestSenderActor();
+            actorIds[i] = actorSystem.Register(actors[i]);
+        }
+
+        const int testCount = 2;
+
+        TExecutorPoolStats poolStats[testCount];
+        TVector<TExecutorThreadStats> statsCopy[testCount];
+
+        for (size_t testIdx = 0; testIdx < testCount; ++testIdx) {
+            for (size_t i = 0; i < size; ++i) {
+                actors[i]->Start(actors[i]->SelfId(), msgCount);
             }
             for (size_t i = 0; i < size; ++i) {
-                actorSystem.Send(actorIds[i], new TEvMsg()); 
-            } 
- 
-            Sleep(TDuration::MilliSeconds(100)); 
- 
-            for (size_t i = 0; i < size; ++i) { 
-                actors[i]->Stop(); 
-            } 
- 
-            executorPool->GetCurrentStats(poolStats[testIdx], statsCopy[testIdx]); 
-        } 
- 
-        for (size_t i = 1; i <= halfSize; ++i) { 
-            UNIT_ASSERT_UNEQUAL(statsCopy[0][i].ReceivedEvents, statsCopy[1][i].ReceivedEvents); 
-        } 
- 
-        for (size_t i = halfSize + 1; i <= size; ++i) { 
-            UNIT_ASSERT_EQUAL(statsCopy[0][i].ReceivedEvents, statsCopy[1][i].ReceivedEvents); 
-        } 
- 
-        executorPool->SetThreadCount(size); 
- 
-        for (size_t testIdx = 0; testIdx < testCount; ++testIdx) { 
-            for (size_t i = 0; i < size; ++i) { 
-                actors[i]->Start(actors[i]->SelfId(), msgCount); 
+                actorSystem.Send(actorIds[i], new TEvMsg());
+            }
+
+            Sleep(TDuration::MilliSeconds(100));
+
+            for (size_t i = 0; i < size; ++i) {
+                actors[i]->Stop();
+            }
+
+            executorPool->GetCurrentStats(poolStats[testIdx], statsCopy[testIdx]);
+        }
+
+        for (size_t i = 1; i <= halfSize; ++i) {
+            UNIT_ASSERT_UNEQUAL(statsCopy[0][i].ReceivedEvents, statsCopy[1][i].ReceivedEvents);
+        }
+
+        for (size_t i = halfSize + 1; i <= size; ++i) {
+            UNIT_ASSERT_EQUAL(statsCopy[0][i].ReceivedEvents, statsCopy[1][i].ReceivedEvents);
+        }
+
+        executorPool->SetThreadCount(size);
+
+        for (size_t testIdx = 0; testIdx < testCount; ++testIdx) {
+            for (size_t i = 0; i < size; ++i) {
+                actors[i]->Start(actors[i]->SelfId(), msgCount);
             }
             for (size_t i = 0; i < size; ++i) {
-                actorSystem.Send(actorIds[i], new TEvMsg()); 
-            } 
- 
-            Sleep(TDuration::MilliSeconds(100)); 
- 
-            for (size_t i = 0; i < size; ++i) { 
-                actors[i]->Stop(); 
-            } 
- 
-            executorPool->GetCurrentStats(poolStats[testIdx], statsCopy[testIdx]); 
-        } 
- 
-        for (size_t i = 1; i <= size; ++i) { 
-            UNIT_ASSERT_UNEQUAL(statsCopy[0][i].ReceivedEvents, statsCopy[1][i].ReceivedEvents); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(ChangeCount) { 
-        const size_t msgCount = 1e3; 
-        const size_t size = 4; 
-        const size_t halfSize = size / 2; 
-        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50); 
- 
-        auto begin = TInstant::Now(); 
- 
-        auto setup = GetActorSystemSetup(executorPool); 
-        TActorSystem actorSystem(setup); 
-        actorSystem.Start(); 
-        executorPool->SetThreadCount(halfSize); 
- 
-        TTestSenderActor* actors[size]; 
+                actorSystem.Send(actorIds[i], new TEvMsg());
+            }
+
+            Sleep(TDuration::MilliSeconds(100));
+
+            for (size_t i = 0; i < size; ++i) {
+                actors[i]->Stop();
+            }
+
+            executorPool->GetCurrentStats(poolStats[testIdx], statsCopy[testIdx]);
+        }
+
+        for (size_t i = 1; i <= size; ++i) {
+            UNIT_ASSERT_UNEQUAL(statsCopy[0][i].ReceivedEvents, statsCopy[1][i].ReceivedEvents);
+        }
+    }
+
+    Y_UNIT_TEST(ChangeCount) {
+        const size_t msgCount = 1e3;
+        const size_t size = 4;
+        const size_t halfSize = size / 2;
+        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50);
+
+        auto begin = TInstant::Now();
+
+        auto setup = GetActorSystemSetup(executorPool);
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+        executorPool->SetThreadCount(halfSize);
+
+        TTestSenderActor* actors[size];
         TActorId actorIds[size];
-        for (size_t i = 0; i < size; ++i) { 
-            actors[i] = new TTestSenderActor(); 
-            actorIds[i] = actorSystem.Register(actors[i]); 
-        } 
- 
-        for (size_t i = 0; i < size; ++i) { 
-            actors[i]->Start(actorIds[i], msgCount); 
+        for (size_t i = 0; i < size; ++i) {
+            actors[i] = new TTestSenderActor();
+            actorIds[i] = actorSystem.Register(actors[i]);
+        }
+
+        for (size_t i = 0; i < size; ++i) {
+            actors[i]->Start(actorIds[i], msgCount);
         }
         for (size_t i = 0; i < size; ++i) {
-            actorSystem.Send(actorIds[i], new TEvMsg()); 
-        } 
- 
-        const i32 N = 6; 
-        const i32 threadsCouns[N] = { 1, 3, 2, 3, 1, 4 }; 
- 
-        ui64 counter = 0; 
- 
-        TTestSenderActor* changerActor = new TTestSenderActor([&]{ 
-            executorPool->SetThreadCount(threadsCouns[counter]); 
-            counter++; 
-            if (counter == N) { 
-                counter = 0; 
-            } 
-        }); 
+            actorSystem.Send(actorIds[i], new TEvMsg());
+        }
+
+        const i32 N = 6;
+        const i32 threadsCouns[N] = { 1, 3, 2, 3, 1, 4 };
+
+        ui64 counter = 0;
+
+        TTestSenderActor* changerActor = new TTestSenderActor([&]{
+            executorPool->SetThreadCount(threadsCouns[counter]);
+            counter++;
+            if (counter == N) {
+                counter = 0;
+            }
+        });
         TActorId changerActorId = actorSystem.Register(changerActor);
-        changerActor->Start(changerActorId, msgCount); 
-        actorSystem.Send(changerActorId, new TEvMsg()); 
- 
-        while (true) { 
+        changerActor->Start(changerActorId, msgCount);
+        actorSystem.Send(changerActorId, new TEvMsg());
+
+        while (true) {
             size_t maxCounter = 0;
-            for (size_t i = 0; i < size; ++i) { 
+            for (size_t i = 0; i < size; ++i) {
                 maxCounter = Max(maxCounter, actors[i]->GetCounter());
-            } 
- 
+            }
+
             if (maxCounter == 0) {
                 break;
             }
 
-            auto now = TInstant::Now(); 
+            auto now = TInstant::Now();
             UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter);
- 
+
             Sleep(TDuration::MilliSeconds(1));
-        } 
- 
-        changerActor->Stop(); 
-    } 
- 
-    Y_UNIT_TEST(CheckCompleteOne) { 
-        const size_t size = 4; 
-        const size_t msgCount = 1e4; 
-        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50); 
- 
-        auto setup = GetActorSystemSetup(executorPool); 
-        TActorSystem actorSystem(setup); 
-        actorSystem.Start(); 
- 
-        auto begin = TInstant::Now(); 
- 
-        auto actor = new TTestSenderActor(); 
-        auto actorId = actorSystem.Register(actor); 
-        actor->Start(actor->SelfId(), msgCount); 
-        actorSystem.Send(actorId, new TEvMsg()); 
- 
-        while (actor->GetCounter()) { 
-            auto now = TInstant::Now(); 
+        }
+
+        changerActor->Stop();
+    }
+
+    Y_UNIT_TEST(CheckCompleteOne) {
+        const size_t size = 4;
+        const size_t msgCount = 1e4;
+        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50);
+
+        auto setup = GetActorSystemSetup(executorPool);
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        auto begin = TInstant::Now();
+
+        auto actor = new TTestSenderActor();
+        auto actorId = actorSystem.Register(actor);
+        actor->Start(actor->SelfId(), msgCount);
+        actorSystem.Send(actorId, new TEvMsg());
+
+        while (actor->GetCounter()) {
+            auto now = TInstant::Now();
             UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Counter is " << actor->GetCounter());
 
             Sleep(TDuration::MilliSeconds(1));
-        } 
-    } 
- 
-    Y_UNIT_TEST(CheckCompleteAll) { 
-        const size_t size = 4; 
-        const size_t msgCount = 1e4; 
-        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50); 
- 
-        auto setup = GetActorSystemSetup(executorPool); 
-        TActorSystem actorSystem(setup); 
-        actorSystem.Start(); 
- 
-        auto begin = TInstant::Now(); 
- 
-        TTestSenderActor* actors[size]; 
+        }
+    }
+
+    Y_UNIT_TEST(CheckCompleteAll) {
+        const size_t size = 4;
+        const size_t msgCount = 1e4;
+        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50);
+
+        auto setup = GetActorSystemSetup(executorPool);
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        auto begin = TInstant::Now();
+
+        TTestSenderActor* actors[size];
         TActorId actorIds[size];
- 
-        for (size_t i = 0; i < size; ++i) { 
-            actors[i] = new TTestSenderActor(); 
-            actorIds[i] = actorSystem.Register(actors[i]); 
-        } 
-        for (size_t i = 0; i < size; ++i) { 
-            actors[i]->Start(actors[i]->SelfId(), msgCount); 
+
+        for (size_t i = 0; i < size; ++i) {
+            actors[i] = new TTestSenderActor();
+            actorIds[i] = actorSystem.Register(actors[i]);
         }
         for (size_t i = 0; i < size; ++i) {
-            actorSystem.Send(actorIds[i], new TEvMsg()); 
-        } 
- 
- 
-        while (true) { 
+            actors[i]->Start(actors[i]->SelfId(), msgCount);
+        }
+        for (size_t i = 0; i < size; ++i) {
+            actorSystem.Send(actorIds[i], new TEvMsg());
+        }
+
+
+        while (true) {
             size_t maxCounter = 0;
-            for (size_t i = 0; i < size; ++i) { 
+            for (size_t i = 0; i < size; ++i) {
                 maxCounter = Max(maxCounter, actors[i]->GetCounter());
-            } 
- 
+            }
+
             if (maxCounter == 0) {
                 break;
             }
 
-            auto now = TInstant::Now(); 
+            auto now = TInstant::Now();
             UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter);
- 
+
             Sleep(TDuration::MilliSeconds(1));
-        } 
-    } 
- 
-    Y_UNIT_TEST(CheckCompleteOver) { 
-        const size_t size = 4; 
-        const size_t actorsCount = size * 2; 
-        const size_t msgCount = 1e4; 
-        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50); 
- 
-        auto setup = GetActorSystemSetup(executorPool); 
-        TActorSystem actorSystem(setup); 
-        actorSystem.Start(); 
- 
-        auto begin = TInstant::Now(); 
- 
-        TTestSenderActor* actors[actorsCount]; 
+        }
+    }
+
+    Y_UNIT_TEST(CheckCompleteOver) {
+        const size_t size = 4;
+        const size_t actorsCount = size * 2;
+        const size_t msgCount = 1e4;
+        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50);
+
+        auto setup = GetActorSystemSetup(executorPool);
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        auto begin = TInstant::Now();
+
+        TTestSenderActor* actors[actorsCount];
         TActorId actorIds[actorsCount];
- 
-        for (size_t i = 0; i < actorsCount; ++i) { 
-            actors[i] = new TTestSenderActor(); 
-            actorIds[i] = actorSystem.Register(actors[i]); 
-        } 
-        for (size_t i = 0; i < actorsCount; ++i) { 
-            actors[i]->Start(actors[i]->SelfId(), msgCount); 
+
+        for (size_t i = 0; i < actorsCount; ++i) {
+            actors[i] = new TTestSenderActor();
+            actorIds[i] = actorSystem.Register(actors[i]);
         }
         for (size_t i = 0; i < actorsCount; ++i) {
-            actorSystem.Send(actorIds[i], new TEvMsg()); 
-        } 
- 
- 
-        while (true) { 
-            size_t maxCounter = 0;
-            for (size_t i = 0; i < actorsCount; ++i) { 
-                maxCounter = Max(maxCounter, actors[i]->GetCounter());
-            } 
- 
-            if (maxCounter == 0) {
-                break;
-            }
-
-            auto now = TInstant::Now(); 
-            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter);
- 
-            Sleep(TDuration::MilliSeconds(1));
-        } 
-    } 
- 
-    Y_UNIT_TEST(CheckCompleteRoundRobinOver) { 
-        const size_t size = 4; 
-        const size_t actorsCount = size * 2; 
-        const size_t msgCount = 1e2; 
-        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50); 
- 
-        auto setup = GetActorSystemSetup(executorPool); 
-        TActorSystem actorSystem(setup); 
-        actorSystem.Start(); 
- 
-        auto begin = TInstant::Now(); 
- 
-        TTestSenderActor* actors[actorsCount]; 
-        TActorId actorIds[actorsCount];
- 
-        for (size_t i = 0; i < actorsCount; ++i) { 
-            actors[i] = new TTestSenderActor(); 
-            actorIds[i] = actorSystem.Register(actors[i]); 
-        } 
-        for (size_t i = 0; i < actorsCount; ++i) { 
-            actors[i]->Start(actorIds[(i + 1) % actorsCount], msgCount); 
+            actors[i]->Start(actors[i]->SelfId(), msgCount);
         }
         for (size_t i = 0; i < actorsCount; ++i) {
-            actorSystem.Send(actorIds[i], new TEvMsg()); 
-        } 
- 
-        while (true) { 
+            actorSystem.Send(actorIds[i], new TEvMsg());
+        }
+
+
+        while (true) {
             size_t maxCounter = 0;
-            for (size_t i = 0; i < actorsCount; ++i) { 
+            for (size_t i = 0; i < actorsCount; ++i) {
                 maxCounter = Max(maxCounter, actors[i]->GetCounter());
-            } 
- 
+            }
+
             if (maxCounter == 0) {
                 break;
             }
 
-            auto now = TInstant::Now(); 
+            auto now = TInstant::Now();
             UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter);
- 
+
             Sleep(TDuration::MilliSeconds(1));
-        } 
-    } 
+        }
+    }
+
+    Y_UNIT_TEST(CheckCompleteRoundRobinOver) {
+        const size_t size = 4;
+        const size_t actorsCount = size * 2;
+        const size_t msgCount = 1e2;
+        TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50);
+
+        auto setup = GetActorSystemSetup(executorPool);
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        auto begin = TInstant::Now();
+
+        TTestSenderActor* actors[actorsCount];
+        TActorId actorIds[actorsCount];
+
+        for (size_t i = 0; i < actorsCount; ++i) {
+            actors[i] = new TTestSenderActor();
+            actorIds[i] = actorSystem.Register(actors[i]);
+        }
+        for (size_t i = 0; i < actorsCount; ++i) {
+            actors[i]->Start(actorIds[(i + 1) % actorsCount], msgCount);
+        }
+        for (size_t i = 0; i < actorsCount; ++i) {
+            actorSystem.Send(actorIds[i], new TEvMsg());
+        }
+
+        while (true) {
+            size_t maxCounter = 0;
+            for (size_t i = 0; i < actorsCount; ++i) {
+                maxCounter = Max(maxCounter, actors[i]->GetCounter());
+            }
+
+            if (maxCounter == 0) {
+                break;
+            }
+
+            auto now = TInstant::Now();
+            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter);
+
+            Sleep(TDuration::MilliSeconds(1));
+        }
+    }
 
     Y_UNIT_TEST(CheckStats) {
         const size_t size = 4;
@@ -432,4 +432,4 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         UNIT_ASSERT(stats[0].MailboxPushedOutByTime + stats[0].MailboxPushedOutByEventCount >= msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].MailboxPushedOutBySoftPreemption, 0);
     }
-} 
+}

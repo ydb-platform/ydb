@@ -172,26 +172,26 @@ namespace NKikimr {
             AllocForSyncLog->Allocated(seg);
             return seg;
         }
- 
-        // hull db update 
-        TLsnSeg AllocDiscreteLsnBatchForHull(ui64 lsnAdvance) { 
-            TLsnSeg seg = AllocLsn(lsnAdvance); 
-            for (ui64 lsn = seg.First; lsn <= seg.Last; ++lsn) { 
-                TLsnSeg point(lsn, lsn); 
-                AllocForHull->Allocated(point); 
-            } 
-            return seg; 
-        } 
- 
-        // hull db and synclog update 
-        TLsnSeg AllocDiscreteLsnBatchForHullAndSyncLog(ui64 lsnAdvance) { 
-            TLsnSeg seg = AllocDiscreteLsnBatchForHull(lsnAdvance); 
-            for (ui64 lsn = seg.First; lsn <= seg.Last; ++lsn) { 
-                TLsnSeg point(lsn, lsn); 
-                AllocForSyncLog->Allocated(point); 
-            } 
-            return seg; 
-        } 
+
+        // hull db update
+        TLsnSeg AllocDiscreteLsnBatchForHull(ui64 lsnAdvance) {
+            TLsnSeg seg = AllocLsn(lsnAdvance);
+            for (ui64 lsn = seg.First; lsn <= seg.Last; ++lsn) {
+                TLsnSeg point(lsn, lsn);
+                AllocForHull->Allocated(point);
+            }
+            return seg;
+        }
+
+        // hull db and synclog update
+        TLsnSeg AllocDiscreteLsnBatchForHullAndSyncLog(ui64 lsnAdvance) {
+            TLsnSeg seg = AllocDiscreteLsnBatchForHull(lsnAdvance);
+            for (ui64 lsn = seg.First; lsn <= seg.Last; ++lsn) {
+                TLsnSeg point(lsn, lsn);
+                AllocForSyncLog->Allocated(point);
+            }
+            return seg;
+        }
         ////////////////////////////// LSN ALLOCATION //////////////////////////////////////
 
         ////////////////////////////// LSN CONFIRMATION ////////////////////////////////////

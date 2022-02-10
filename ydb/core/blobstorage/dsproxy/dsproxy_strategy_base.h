@@ -15,8 +15,8 @@ protected:
         EDE_NORMAL
     };
 
-    static constexpr ui32 InvalidVDiskIdx = Max<ui32>(); 
- 
+    static constexpr ui32 InvalidVDiskIdx = Max<ui32>();
+
     void Finish(NKikimrProto::EReplyStatus status);
     // Altruistic - suppose all ERROR and non-responding disks have all the data
     // Optimistic - suppose all non-responding disks have the data, but ERROR disks are wiped
@@ -35,7 +35,7 @@ protected:
             TBlobState::TDisk &disk, TIntervalSet<i32> &intervalSet, const char *logMarker);
     bool VerifyTheWholeSituation(TBlobState &state);
     void PreparePartLayout(const TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlobStorageGroupType::TPartLayout *layout, ui32 slowDiskIdx); 
+            TBlobStorageGroupType::TPartLayout *layout, ui32 slowDiskIdx);
     bool IsPutNeeded(const TBlobState &state, const TBlobStorageGroupType::TPartPlacement &partPlacement);
     void PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState &state,
             const TBlobStorageGroupInfo &info, TGroupDiskRequests &groupDiskRequests,

@@ -212,7 +212,7 @@ bool TStrategyBase::VerifyTheWholeSituation(TBlobState &state) {
 }
 
 void TStrategyBase::PreparePartLayout(const TBlobState &state, const TBlobStorageGroupInfo &info,
-        TBlobStorageGroupType::TPartLayout *layout, ui32 slowDiskIdx) { 
+        TBlobStorageGroupType::TPartLayout *layout, ui32 slowDiskIdx) {
     Y_VERIFY(layout);
     const ui32 totalPartCount = info.Type.TotalPartCount();
     const ui32 blobSubringSize = info.Type.BlobSubgroupSize();
@@ -235,19 +235,19 @@ void TStrategyBase::PreparePartLayout(const TBlobState &state, const TBlobStorag
             for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
                 TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
                 if (partSituation == TBlobState::ESituation::Present ||
-                        (diskIdx != slowDiskIdx && partSituation == TBlobState::ESituation::Sent)) { 
+                        (diskIdx != slowDiskIdx && partSituation == TBlobState::ESituation::Sent)) {
                     layout->VDiskPartMask[diskIdx] |= (1ul << partIdx);
                 }
                 layout->VDiskMask |= (1ul << diskIdx);
             }
         }
     }
-    if (slowDiskIdx == InvalidVDiskIdx) { 
-        layout->SlowVDiskMask = 0; 
-    } else { 
-        Y_VERIFY_DEBUG(slowDiskIdx < sizeof(layout->SlowVDiskMask) * 8); 
-        layout->SlowVDiskMask = (1ull << slowDiskIdx); 
-    } 
+    if (slowDiskIdx == InvalidVDiskIdx) {
+        layout->SlowVDiskMask = 0;
+    } else {
+        Y_VERIFY_DEBUG(slowDiskIdx < sizeof(layout->SlowVDiskMask) * 8);
+        layout->SlowVDiskMask = (1ull << slowDiskIdx);
+    }
 }
 
 bool TStrategyBase::IsPutNeeded(const TBlobState &state, const TBlobStorageGroupType::TPartPlacement &partPlacement) {
@@ -307,9 +307,9 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
         // send record.PartIdx to record.VDiskIdx if needed
         TBlobState::TDisk &disk = state.Disks[record.VDiskIdx];
         TBlobState::ESituation partSituation = disk.DiskParts[record.PartIdx].Situation;
-        A_LOG_DEBUG_SX(logCtx, "BPG33 ", "partPlacement record partSituation# " << TBlobState::SituationToString(partSituation) 
-                << " to# " << (ui32)record.VDiskIdx 
-                << " blob Id# " << TLogoBlobID(state.Id, record.PartIdx + 1).ToString()); 
+        A_LOG_DEBUG_SX(logCtx, "BPG33 ", "partPlacement record partSituation# " << TBlobState::SituationToString(partSituation)
+                << " to# " << (ui32)record.VDiskIdx
+                << " blob Id# " << TLogoBlobID(state.Id, record.PartIdx + 1).ToString());
         bool isNeeded = false;
         switch (partSituation) {
             case TBlobState::ESituation::Unknown:
@@ -333,7 +333,7 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
                     << " blob Id# " << partId.ToString());
             Y_VERIFY(state.Parts[record.PartIdx].Data.IsMonolith());
             groupDiskRequests.AddPut(disk.OrderNumber, partId, state.Parts[record.PartIdx].Data.GetMonolith(),
-                    TDiskPutRequest::ReasonInitial, info.Type.IsHandoffInSubgroup(record.VDiskIdx), state.BlobIdx); 
+                    TDiskPutRequest::ReasonInitial, info.Type.IsHandoffInSubgroup(record.VDiskIdx), state.BlobIdx);
             disk.DiskParts[record.PartIdx].Situation = TBlobState::ESituation::Sent;
         }
     }

@@ -6,10 +6,10 @@
 namespace NKikimr::NBsQueue {
 
 template<typename T> struct TMatchingResultType;
-template<> struct TMatchingResultType<TEvBlobStorage::TEvVMovedPatch> { using Type = TEvBlobStorage::TEvVMovedPatchResult; }; 
-template<> struct TMatchingResultType<TEvBlobStorage::TEvVPatchStart> { using Type = TEvBlobStorage::TEvVPatchFoundParts; }; 
-template<> struct TMatchingResultType<TEvBlobStorage::TEvVPatchDiff> { using Type = TEvBlobStorage::TEvVPatchResult; }; 
-template<> struct TMatchingResultType<TEvBlobStorage::TEvVPatchXorDiff> { using Type = TEvBlobStorage::TEvVPatchXorDiffResult; }; 
+template<> struct TMatchingResultType<TEvBlobStorage::TEvVMovedPatch> { using Type = TEvBlobStorage::TEvVMovedPatchResult; };
+template<> struct TMatchingResultType<TEvBlobStorage::TEvVPatchStart> { using Type = TEvBlobStorage::TEvVPatchFoundParts; };
+template<> struct TMatchingResultType<TEvBlobStorage::TEvVPatchDiff> { using Type = TEvBlobStorage::TEvVPatchResult; };
+template<> struct TMatchingResultType<TEvBlobStorage::TEvVPatchXorDiff> { using Type = TEvBlobStorage::TEvVPatchXorDiffResult; };
 template<> struct TMatchingResultType<TEvBlobStorage::TEvVPut> { using Type = TEvBlobStorage::TEvVPutResult; };
 template<> struct TMatchingResultType<TEvBlobStorage::TEvVMultiPut> { using Type = TEvBlobStorage::TEvVMultiPutResult; };
 template<> struct TMatchingResultType<TEvBlobStorage::TEvVGet> { using Type = TEvBlobStorage::TEvVGetResult; };
@@ -98,10 +98,10 @@ public:
     auto Apply(TCallable&& callable) {
         switch (Type) {
 #define CASE(T) case TEvBlobStorage::T::EventType: return callable(static_cast<TEvBlobStorage::T*>(LocalEvent.get()))
-            CASE(TEvVMovedPatch); 
-            CASE(TEvVPatchStart); 
-            CASE(TEvVPatchDiff); 
-            CASE(TEvVPatchXorDiff); 
+            CASE(TEvVMovedPatch);
+            CASE(TEvVPatchStart);
+            CASE(TEvVPatchDiff);
+            CASE(TEvVPatchXorDiff);
             CASE(TEvVPut);
             CASE(TEvVMultiPut);
             CASE(TEvVGet);

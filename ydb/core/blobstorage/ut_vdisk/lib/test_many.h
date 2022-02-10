@@ -2,42 +2,42 @@
 
 #include "defs.h"
 #include "prepare.h"
-#include "helpers.h" 
+#include "helpers.h"
 
 ///////////////////////////////////////////////////////////////////////////
-struct TManyPutOneGet { 
-    const bool WaitForCompaction; 
+struct TManyPutOneGet {
+    const bool WaitForCompaction;
     std::shared_ptr<TVector<TMsgPackInfo>> MsgPacks;
-    const NKikimrBlobStorage::EPutHandleClass HandleClass; 
-    const ui64 TabletId; 
-    const ui64 Shift; 
-    const bool WithErrorResponse; 
- 
-    TManyPutOneGet(bool waitForCompaction, ui32 msgNum, ui32 msgSize, NKikimrBlobStorage::EPutHandleClass cls, 
-                   ui64 tabletId = 0, ui64 shift = 0, bool withErrorResponse = false) 
-        : WaitForCompaction(waitForCompaction) 
-        , MsgPacks(new TVector<TMsgPackInfo>{TMsgPackInfo(msgSize, msgNum)}) 
-        , HandleClass(cls) 
-        , TabletId(tabletId) 
-        , Shift(shift) 
-        , WithErrorResponse(withErrorResponse) 
-    {} 
- 
+    const NKikimrBlobStorage::EPutHandleClass HandleClass;
+    const ui64 TabletId;
+    const ui64 Shift;
+    const bool WithErrorResponse;
+
+    TManyPutOneGet(bool waitForCompaction, ui32 msgNum, ui32 msgSize, NKikimrBlobStorage::EPutHandleClass cls,
+                   ui64 tabletId = 0, ui64 shift = 0, bool withErrorResponse = false)
+        : WaitForCompaction(waitForCompaction)
+        , MsgPacks(new TVector<TMsgPackInfo>{TMsgPackInfo(msgSize, msgNum)})
+        , HandleClass(cls)
+        , TabletId(tabletId)
+        , Shift(shift)
+        , WithErrorResponse(withErrorResponse)
+    {}
+
     TManyPutOneGet(bool waitForCompaction, std::shared_ptr<TVector<TMsgPackInfo>> msgPacks,
-                   NKikimrBlobStorage::EPutHandleClass cls, ui64 tabletId = 0, ui64 shift = 0, 
-                   bool withErrorResponse = false) 
-        : WaitForCompaction(waitForCompaction) 
-        , MsgPacks(msgPacks) 
-        , HandleClass(cls) 
-        , TabletId(tabletId) 
-        , Shift(shift) 
-        , WithErrorResponse(withErrorResponse) 
-    {} 
- 
-    void operator ()(TConfiguration *conf); 
-}; 
- 
-/////////////////////////////////////////////////////////////////////////// 
+                   NKikimrBlobStorage::EPutHandleClass cls, ui64 tabletId = 0, ui64 shift = 0,
+                   bool withErrorResponse = false)
+        : WaitForCompaction(waitForCompaction)
+        , MsgPacks(msgPacks)
+        , HandleClass(cls)
+        , TabletId(tabletId)
+        , Shift(shift)
+        , WithErrorResponse(withErrorResponse)
+    {}
+
+    void operator ()(TConfiguration *conf);
+};
+
+///////////////////////////////////////////////////////////////////////////
 struct TManyPutGet {
     const bool WaitForCompaction;
     const ui32 MsgNum;

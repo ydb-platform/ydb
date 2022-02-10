@@ -42,26 +42,26 @@ namespace NKikimr {
         }
     }
 
-    void TEvBlobStorage::TEvVPut::StorePayload(TRope&& buffer) { 
-        Y_VERIFY(KIKIMR_USE_PROTOBUF_WITH_PAYLOAD); 
-        AddPayload(std::move(buffer)); 
-    } 
- 
-    void TEvBlobStorage::TEvVMultiPut::StorePayload(NKikimrBlobStorage::TVMultiPutItem &item, const TString& buffer) { 
-        if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) { 
+    void TEvBlobStorage::TEvVPut::StorePayload(TRope&& buffer) {
+        Y_VERIFY(KIKIMR_USE_PROTOBUF_WITH_PAYLOAD);
+        AddPayload(std::move(buffer));
+    }
+
+    void TEvBlobStorage::TEvVMultiPut::StorePayload(NKikimrBlobStorage::TVMultiPutItem &item, const TString& buffer) {
+        if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
             AddPayload(TRope(buffer));
             Y_VERIFY_DEBUG(Record.ItemsSize() == GetPayloadCount());
-        } else { 
-            item.SetBuffer(buffer); 
-        } 
-    } 
- 
-    TRope TEvBlobStorage::TEvVMultiPut::GetItemBuffer(ui64 itemIdx) const { 
-        auto &item = Record.GetItems(itemIdx); 
-        if (item.HasBuffer()) { 
+        } else {
+            item.SetBuffer(buffer);
+        }
+    }
+
+    TRope TEvBlobStorage::TEvVMultiPut::GetItemBuffer(ui64 itemIdx) const {
+        auto &item = Record.GetItems(itemIdx);
+        if (item.HasBuffer()) {
             return TRope(item.GetBuffer());
-        } else { 
-            return GetPayload(itemIdx); 
-        } 
-    } 
+        } else {
+            return GetPayload(itemIdx);
+        }
+    }
 } // NKikimr

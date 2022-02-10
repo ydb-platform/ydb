@@ -149,7 +149,7 @@ public:
         if (slowDiskSubgroupIdx >= 0) {
             // If there is an exceptionally slow disk, try not touching it, mark isDone
             TBlobStorageGroupType::TPartLayout layout;
-            PreparePartLayout(state, info, &layout, slowDiskSubgroupIdx); 
+            PreparePartLayout(state, info, &layout, slowDiskSubgroupIdx);
 
             TBlobStorageGroupType::TPartPlacement partPlacement;
             bool isCorrectable = info.Type.CorrectLayout(layout, partPlacement);
@@ -163,7 +163,7 @@ public:
         if (!isDone) {
             // Fill in the part layout
             TBlobStorageGroupType::TPartLayout layout;
-            PreparePartLayout(state, info, &layout, InvalidVDiskIdx); 
+            PreparePartLayout(state, info, &layout, InvalidVDiskIdx);
             TBlobStorageGroupType::TPartPlacement partPlacement;
             bool isCorrectable = info.Type.CorrectLayout(layout, partPlacement);
             Y_VERIFY(isCorrectable);

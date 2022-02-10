@@ -787,17 +787,17 @@ void TBlobStorageGroupInfo::PickSubgroup(ui32 hash, TVDiskIds *outVDisk, TServic
 }
 
 bool TBlobStorageGroupInfo::BelongsToSubgroup(const TVDiskID &vdisk, ui32 hash) const {
-    Y_VERIFY_DEBUG_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID); 
-    Y_VERIFY_DEBUG_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration 
-            << ", given GroupGeneration# " << vdisk.GroupGeneration); 
+    Y_VERIFY_DEBUG_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
+    Y_VERIFY_DEBUG_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration
+            << ", given GroupGeneration# " << vdisk.GroupGeneration);
     return Topology->BelongsToSubgroup(TVDiskIdShort(vdisk), hash);
 }
 
 // Returns either vdisk idx in the blob subgroup, or BlobSubgroupSize if the vdisk is not in the blob subgroup
 ui32 TBlobStorageGroupInfo::GetIdxInSubgroup(const TVDiskID &vdisk, ui32 hash) const {
-    Y_VERIFY_DEBUG_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID); 
-    Y_VERIFY_DEBUG_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration 
-            << ", given GroupGeneration# " << vdisk.GroupGeneration); 
+    Y_VERIFY_DEBUG_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
+    Y_VERIFY_DEBUG_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration
+            << ", given GroupGeneration# " << vdisk.GroupGeneration);
     return Topology->GetIdxInSubgroup(vdisk, hash);
 }
 
@@ -807,9 +807,9 @@ TVDiskID TBlobStorageGroupInfo::GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash
 }
 
 ui32 TBlobStorageGroupInfo::GetOrderNumber(const TVDiskID &vdisk) const {
-    Y_VERIFY_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID); 
-    Y_VERIFY_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration 
-            << ", given GroupGeneration# " << vdisk.GroupGeneration); 
+    Y_VERIFY_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
+    Y_VERIFY_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration
+            << ", given GroupGeneration# " << vdisk.GroupGeneration);
     return Topology->GetOrderNumber(vdisk);
 }
 

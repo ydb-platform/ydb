@@ -77,8 +77,8 @@ public:
         : BSProxyCtx(bspctx)
         , QueueName(queueName)
         , Counters(counters->GetSubgroup("queue", queueName))
-        , Queue(Counters, LogPrefix, bspctx, clientId, interconnectChannel, 
-                (info ? info->Type : TErasureType::ErasureNone), visibility) 
+        , Queue(Counters, LogPrefix, bspctx, clientId, interconnectChannel,
+                (info ? info->Type : TErasureType::ErasureNone), visibility)
         , VDiskIdShort(vdiskId)
         , QueueId(queueId)
         , QueueWatchdogTimeout(watchdogTimeout)
@@ -218,10 +218,10 @@ private:
         if (ev->InterconnectSession) { // analyze only messages coming through IC
             ui32 expected = -1;
             switch (const ui32 type = ev->GetTypeRewrite()) {
-                case TEvBlobStorage::EvVMovedPatchResult: 
-                case TEvBlobStorage::EvVPatchFoundParts: 
-                case TEvBlobStorage::EvVPatchXorDiffResult: 
-                case TEvBlobStorage::EvVPatchResult: 
+                case TEvBlobStorage::EvVMovedPatchResult:
+                case TEvBlobStorage::EvVPatchFoundParts:
+                case TEvBlobStorage::EvVPatchXorDiffResult:
+                case TEvBlobStorage::EvVPatchResult:
                 case TEvBlobStorage::EvVPutResult:
                 case TEvBlobStorage::EvVMultiPutResult:
                 case TEvBlobStorage::EvVBlockResult:
@@ -339,7 +339,7 @@ private:
                         throw TExFatal() << "window Status# " << NKikimrBlobStorage::TWindowFeedback_EStatus_Name(ws)
                             << " != expected Status# " << NKikimrBlobStorage::TWindowFeedback_EStatus_Name(expected);
                     }
- 
+
                     ////////////////////////////////////////////////////////////////////////////////////////////////////
                     // check that the failed message id is correct
                     ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -431,7 +431,7 @@ private:
     }
 
     void Handle(TEvBlobStorage::TEvVWindowChange::TPtr &ev, const TActorContext &ctx) {
-        QLOG_DEBUG_S("BSQ09", "WindowChange# " << ev->Get()->ToString()); 
+        QLOG_DEBUG_S("BSQ09", "WindowChange# " << ev->Get()->ToString());
         auto record = ev->Get()->Record;
         if (record.GetDropConnection()) {
             ResetConnection(ctx, NKikimrProto::VDISK_ERROR_STATE, "VDisk disconnected due to error", TDuration::Seconds(10));
@@ -738,27 +738,27 @@ private:
         SessionId = {};
     }
 
-    void Handle(TEvRequestProxyQueueState::TPtr &ev, const TActorContext &ctx) { 
-        bool isConnected = State == EState::READY; 
-        QLOG_DEBUG_S("BSQ35", "RequestProxyQueueState" 
-            << " RemoteVDisk# " << RemoteVDisk 
-            << " VDiskId# " << VDiskId 
-            << " IsConnected# " << isConnected); 
-        ctx.Send(ev->Sender, new TEvProxyQueueState(VDiskId, QueueId, isConnected)); 
-    } 
- 
+    void Handle(TEvRequestProxyQueueState::TPtr &ev, const TActorContext &ctx) {
+        bool isConnected = State == EState::READY;
+        QLOG_DEBUG_S("BSQ35", "RequestProxyQueueState"
+            << " RemoteVDisk# " << RemoteVDisk
+            << " VDiskId# " << VDiskId
+            << " IsConnected# " << isConnected);
+        ctx.Send(ev->Sender, new TEvProxyQueueState(VDiskId, QueueId, isConnected));
+    }
+
 #define QueueRequestHFunc(TEvType) \
     case TEvType::EventType: { \
         TEvType::TPtr *x = reinterpret_cast<TEvType::TPtr *>(&ev); \
         HandleRequest<TEvType::TPtr, TEvType, TEvType##Result>(*x, ctx); \
         break; \
     }
-#define QueueRequestSpecialHFunc(TEvType, TEvResult) \ 
-    case TEvType::EventType: { \ 
-        TEvType::TPtr *x = reinterpret_cast<TEvType::TPtr *>(&ev); \ 
-        HandleRequest<TEvType::TPtr, TEvType, TEvResult>(*x, ctx); \ 
-        break; \ 
-    } 
+#define QueueRequestSpecialHFunc(TEvType, TEvResult) \
+    case TEvType::EventType: { \
+        TEvType::TPtr *x = reinterpret_cast<TEvType::TPtr *>(&ev); \
+        HandleRequest<TEvType::TPtr, TEvType, TEvResult>(*x, ctx); \
+        break; \
+    }
 
     void ChangeGroupInfo(const TBlobStorageGroupInfo& info, const TActorContext& ctx) {
         if (info.GroupGeneration > VDiskId.GroupGeneration) { // ignore any possible races with old generations
@@ -787,7 +787,7 @@ private:
 #if BSQUEUE_EVENT_COUNTERS
 
 #define DEFINE_EVENTS(XX) \
-    XX(TEvBlobStorage::EvVMovedPatch, EvVMovedPatch) \ 
+    XX(TEvBlobStorage::EvVMovedPatch, EvVMovedPatch) \
     XX(TEvBlobStorage::EvVPut, EvVPut) \
     XX(TEvBlobStorage::EvVMultiPut, EvVMultiPut) \
     XX(TEvBlobStorage::EvVGet, EvVGet) \
@@ -795,7 +795,7 @@ private:
     XX(TEvBlobStorage::EvVGetBlock, EvVGetBlock) \
     XX(TEvBlobStorage::EvVCollectGarbage, EvVCollectGarbage) \
     XX(TEvBlobStorage::EvVGetBarrier, EvVGetBarrier) \
-    XX(TEvBlobStorage::EvVMovedPatchResult, EvVMovedPatchResult) \ 
+    XX(TEvBlobStorage::EvVMovedPatchResult, EvVMovedPatchResult) \
     XX(TEvBlobStorage::EvVPutResult, EvVPutResult) \
     XX(TEvBlobStorage::EvVMultiPutResult, EvVMultiPutResult) \
     XX(TEvBlobStorage::EvVGetResult, EvVGetResult) \
@@ -850,10 +850,10 @@ private:
         }
 #endif
         switch (type) {
-            QueueRequestHFunc(TEvBlobStorage::TEvVMovedPatch) 
-            QueueRequestSpecialHFunc(TEvBlobStorage::TEvVPatchStart, TEvBlobStorage::TEvVPatchFoundParts) 
-            QueueRequestSpecialHFunc(TEvBlobStorage::TEvVPatchDiff, TEvBlobStorage::TEvVPatchResult) 
-            QueueRequestHFunc(TEvBlobStorage::TEvVPatchXorDiff) 
+            QueueRequestHFunc(TEvBlobStorage::TEvVMovedPatch)
+            QueueRequestSpecialHFunc(TEvBlobStorage::TEvVPatchStart, TEvBlobStorage::TEvVPatchFoundParts)
+            QueueRequestSpecialHFunc(TEvBlobStorage::TEvVPatchDiff, TEvBlobStorage::TEvVPatchResult)
+            QueueRequestHFunc(TEvBlobStorage::TEvVPatchXorDiff)
             QueueRequestHFunc(TEvBlobStorage::TEvVPut)
             QueueRequestHFunc(TEvBlobStorage::TEvVMultiPut)
             QueueRequestHFunc(TEvBlobStorage::TEvVGet)
@@ -862,10 +862,10 @@ private:
             QueueRequestHFunc(TEvBlobStorage::TEvVCollectGarbage)
             QueueRequestHFunc(TEvBlobStorage::TEvVGetBarrier)
 
-            HFunc(TEvBlobStorage::TEvVMovedPatchResult, HandleResponse) 
-            HFunc(TEvBlobStorage::TEvVPatchFoundParts, HandleResponse) 
-            HFunc(TEvBlobStorage::TEvVPatchXorDiffResult, HandleResponse) 
-            HFunc(TEvBlobStorage::TEvVPatchResult, HandleResponse) 
+            HFunc(TEvBlobStorage::TEvVMovedPatchResult, HandleResponse)
+            HFunc(TEvBlobStorage::TEvVPatchFoundParts, HandleResponse)
+            HFunc(TEvBlobStorage::TEvVPatchXorDiffResult, HandleResponse)
+            HFunc(TEvBlobStorage::TEvVPatchResult, HandleResponse)
             HFunc(TEvBlobStorage::TEvVPutResult, HandleResponse)
             HFunc(TEvBlobStorage::TEvVMultiPutResult, HandleResponse)
             HFunc(TEvBlobStorage::TEvVGetResult, HandleResponse)

@@ -34,7 +34,7 @@ namespace NActors {
         , ThreadUtilization(0)
         , MaxUtilizationCounter(0)
         , MaxUtilizationAccumulator(0)
-        , ThreadCount(threads) 
+        , ThreadCount(threads)
     {
     }
 
@@ -62,26 +62,26 @@ namespace NActors {
 
         NHPTimer::STime elapsed = 0;
         NHPTimer::STime parked = 0;
-        NHPTimer::STime blocked = 0; 
+        NHPTimer::STime blocked = 0;
         NHPTimer::STime hpstart = GetCycleCountFast();
         NHPTimer::STime hpnow;
 
         TThreadCtx& threadCtx = Threads[workerId];
-        AtomicSet(threadCtx.WaitingFlag, TThreadCtx::WS_NONE); 
- 
-        if (Y_UNLIKELY(AtomicGet(threadCtx.BlockedFlag) != TThreadCtx::BS_NONE)) { 
-            do { 
-                if (AtomicCas(&threadCtx.BlockedFlag, TThreadCtx::BS_BLOCKED, TThreadCtx::BS_BLOCKING)) { 
+        AtomicSet(threadCtx.WaitingFlag, TThreadCtx::WS_NONE);
+
+        if (Y_UNLIKELY(AtomicGet(threadCtx.BlockedFlag) != TThreadCtx::BS_NONE)) {
+            do {
+                if (AtomicCas(&threadCtx.BlockedFlag, TThreadCtx::BS_BLOCKED, TThreadCtx::BS_BLOCKING)) {
                     hpnow = GetCycleCountFast();
-                    elapsed += hpnow - hpstart; 
-                    if (threadCtx.BlockedPad.Park()) // interrupted 
-                        return 0; 
+                    elapsed += hpnow - hpstart;
+                    if (threadCtx.BlockedPad.Park()) // interrupted
+                        return 0;
                     hpstart = GetCycleCountFast();
-                    blocked += hpstart - hpnow; 
-                } 
-            } while (AtomicGet(threadCtx.BlockedFlag) != TThreadCtx::BS_NONE && !AtomicLoad(&StopFlag)); 
-        } 
- 
+                    blocked += hpstart - hpnow;
+                }
+            } while (AtomicGet(threadCtx.BlockedFlag) != TThreadCtx::BS_NONE && !AtomicLoad(&StopFlag));
+        }
+
         const TAtomic x = AtomicDecrement(Semaphore);
 
         if (x < 0) {
@@ -101,7 +101,7 @@ namespace NActors {
             }
 #endif
 
-            Y_VERIFY(AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_NONE); 
+            Y_VERIFY(AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_NONE);
 
             if (SpinThreshold > 0) {
                 // spin configured period
@@ -155,7 +155,7 @@ namespace NActors {
                 } while (AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_BLOCKED);
             }
 
-            Y_VERIFY_DEBUG(AtomicLoad(&StopFlag) || AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_RUNNING); 
+            Y_VERIFY_DEBUG(AtomicLoad(&StopFlag) || AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_RUNNING);
 
 #if defined ACTORSLIB_COLLECT_EXEC_STATS
             if (AtomicDecrement(ThreadUtilization) == 0) {
@@ -176,8 +176,8 @@ namespace NActors {
                     AtomicStore(&MaxUtilizationAccumulator, x);
             }
 #endif
-        } else { 
-            AtomicSet(threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING); 
+        } else {
+            AtomicSet(threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING);
         }
 
         // ok, has work suggested, must dequeue
@@ -189,9 +189,9 @@ namespace NActors {
                 if (parked > 0) {
                     wctx.AddParkedCycles(parked);
                 }
-                if (blocked > 0) { 
+                if (blocked > 0) {
                     wctx.AddBlockedCycles(blocked);
-                } 
+                }
                 return activation;
             }
             SpinLockPause();
@@ -202,30 +202,30 @@ namespace NActors {
     }
 
     inline void TBasicExecutorPool::WakeUpLoop() {
-        for (ui32 i = 0;;) { 
-            TThreadCtx& threadCtx = Threads[i % PoolThreads]; 
-            switch (AtomicLoad(&threadCtx.WaitingFlag)) { 
-                case TThreadCtx::WS_NONE: 
-                case TThreadCtx::WS_RUNNING: 
-                    ++i; 
-                    break; 
-                case TThreadCtx::WS_ACTIVE: // in active spin-lock, just set flag 
-                    if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING, TThreadCtx::WS_ACTIVE)) { 
-                        return; 
-                    } 
-                    break; 
-                case TThreadCtx::WS_BLOCKED: 
-                    if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING, TThreadCtx::WS_BLOCKED)) { 
-                        threadCtx.Pad.Unpark(); 
-                        return; 
-                    } 
-                    break; 
-                default: 
-                    Y_FAIL(); 
-            } 
-        } 
-    } 
- 
+        for (ui32 i = 0;;) {
+            TThreadCtx& threadCtx = Threads[i % PoolThreads];
+            switch (AtomicLoad(&threadCtx.WaitingFlag)) {
+                case TThreadCtx::WS_NONE:
+                case TThreadCtx::WS_RUNNING:
+                    ++i;
+                    break;
+                case TThreadCtx::WS_ACTIVE: // in active spin-lock, just set flag
+                    if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING, TThreadCtx::WS_ACTIVE)) {
+                        return;
+                    }
+                    break;
+                case TThreadCtx::WS_BLOCKED:
+                    if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING, TThreadCtx::WS_BLOCKED)) {
+                        threadCtx.Pad.Unpark();
+                        return;
+                    }
+                    break;
+                default:
+                    Y_FAIL();
+            }
+        }
+    }
+
     void TBasicExecutorPool::ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) {
         Activations.Push(activation, revolvingCounter);
         const TAtomic x = AtomicIncrement(Semaphore);
@@ -286,10 +286,10 @@ namespace NActors {
 
     void TBasicExecutorPool::PrepareStop() {
         AtomicStore(&StopFlag, true);
-        for (ui32 i = 0; i != PoolThreads; ++i) { 
+        for (ui32 i = 0; i != PoolThreads; ++i) {
             Threads[i].Pad.Interrupt();
-            Threads[i].BlockedPad.Interrupt(); 
-        } 
+            Threads[i].BlockedPad.Interrupt();
+        }
     }
 
     void TBasicExecutorPool::Shutdown() {
@@ -335,97 +335,97 @@ namespace NActors {
         Y_UNUSED(RealtimePriority);
 #endif
     }
- 
-    ui32 TBasicExecutorPool::GetThreadCount() const { 
-        return AtomicGet(ThreadCount); 
-    } 
- 
-    void TBasicExecutorPool::SetThreadCount(ui32 threads) { 
-        threads = Max(1u, Min(PoolThreads, threads)); 
-        with_lock (ChangeThreadsLock) { 
-            size_t prevCount = GetThreadCount(); 
-            AtomicSet(ThreadCount, threads); 
-            if (prevCount < threads) { 
-                for (size_t i = prevCount; i < threads; ++i) { 
-                    bool repeat = true; 
-                    while (repeat) { 
-                        switch (AtomicGet(Threads[i].BlockedFlag)) { 
-                        case TThreadCtx::BS_BLOCKING: 
-                            if (AtomicCas(&Threads[i].BlockedFlag, TThreadCtx::BS_NONE, TThreadCtx::BS_BLOCKING)) { 
-                                // thread not entry to blocked loop 
-                                repeat = false; 
-                            } 
-                            break; 
-                        case TThreadCtx::BS_BLOCKED: 
-                            // thread entry to blocked loop and we wake it 
-                            AtomicSet(Threads[i].BlockedFlag, TThreadCtx::BS_NONE); 
-                            Threads[i].BlockedPad.Unpark(); 
-                            repeat = false; 
-                            break; 
-                        default: 
-                            // thread mustn't has TThreadCtx::BS_NONE because last time it was started to block 
-                            Y_FAIL("BlockedFlag is not TThreadCtx::BS_BLOCKING and TThreadCtx::BS_BLOCKED when thread was waked up"); 
-                        } 
-                    } 
-                } 
-            } else if (prevCount > threads) { 
-                // at first, start to block 
-                for (size_t i = threads; i < prevCount; ++i) { 
-                    Y_VERIFY(AtomicGet(Threads[i].BlockedFlag) == TThreadCtx::BS_NONE); 
-                    AtomicSet(Threads[i].BlockedFlag, TThreadCtx::BS_BLOCKING); 
-                } 
-                // after check need to wake up threads 
-                for (size_t idx = threads; idx < prevCount; ++idx) { 
-                    TThreadCtx& threadCtx = Threads[idx]; 
-                    auto waitingFlag = AtomicGet(threadCtx.WaitingFlag); 
-                    auto blockedFlag = AtomicGet(threadCtx.BlockedFlag); 
-                    // while thread has this states (WS_NONE and BS_BLOCKING) we can't guess which way thread will go. 
-                    // Either go to sleep and it will have to wake up, 
-                    // or go to execute task and after completion will be blocked. 
-                    while (waitingFlag == TThreadCtx::WS_NONE && blockedFlag == TThreadCtx::BS_BLOCKING) { 
-                        waitingFlag = AtomicGet(threadCtx.WaitingFlag); 
-                        blockedFlag = AtomicGet(threadCtx.BlockedFlag); 
-                    } 
-                    // next states: 
-                    // 1) WS_ACTIVE  BS_BLOCKING - waiting and start spinig | need wake up to block 
-                    // 2) WS_BLOCKED BS_BLOCKING - waiting and start sleep  | need wake up to block 
-                    // 3) WS_RUNNING BS_BLOCKING - start execute | not need wake up, will block after executing 
-                    // 4) WS_NONE    BS_BLOCKED  - blocked       | not need wake up, already blocked 
- 
-                    if (waitingFlag == TThreadCtx::WS_ACTIVE || waitingFlag == TThreadCtx::WS_BLOCKED) { 
-                        // need wake up 
-                        Y_VERIFY(blockedFlag == TThreadCtx::BS_BLOCKING); 
- 
-                        // creaty empty mailBoxHint, where LineIndex == 1 and LineHint == 0, and activations will be ignored 
-                        constexpr auto emptyMailBoxHint = TMailboxTable::LineIndexMask & -TMailboxTable::LineIndexMask; 
-                        ui64 revolvingCounter = AtomicGet(ActivationsRevolvingCounter); 
- 
-                        Activations.Push(emptyMailBoxHint, revolvingCounter); 
- 
-                        auto x = AtomicIncrement(Semaphore); 
-                        if (x <= 0) { 
-                            // try wake up. if success then go to next thread 
-                            switch (waitingFlag){ 
-                                case TThreadCtx::WS_ACTIVE: // in active spin-lock, just set flag 
-                                    if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING, TThreadCtx::WS_ACTIVE)) { 
-                                        continue; 
-                                    } 
-                                    break; 
-                                case TThreadCtx::WS_BLOCKED: 
-                                    if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING, TThreadCtx::WS_BLOCKED)) { 
-                                        threadCtx.Pad.Unpark(); 
-                                        continue; 
-                                    } 
-                                    break; 
-                                default: 
-                                    ; // other thread woke this sleeping thread 
-                            } 
-                            // if thread has already been awakened then we must awaken the other 
+
+    ui32 TBasicExecutorPool::GetThreadCount() const {
+        return AtomicGet(ThreadCount);
+    }
+
+    void TBasicExecutorPool::SetThreadCount(ui32 threads) {
+        threads = Max(1u, Min(PoolThreads, threads));
+        with_lock (ChangeThreadsLock) {
+            size_t prevCount = GetThreadCount();
+            AtomicSet(ThreadCount, threads);
+            if (prevCount < threads) {
+                for (size_t i = prevCount; i < threads; ++i) {
+                    bool repeat = true;
+                    while (repeat) {
+                        switch (AtomicGet(Threads[i].BlockedFlag)) {
+                        case TThreadCtx::BS_BLOCKING:
+                            if (AtomicCas(&Threads[i].BlockedFlag, TThreadCtx::BS_NONE, TThreadCtx::BS_BLOCKING)) {
+                                // thread not entry to blocked loop
+                                repeat = false;
+                            }
+                            break;
+                        case TThreadCtx::BS_BLOCKED:
+                            // thread entry to blocked loop and we wake it
+                            AtomicSet(Threads[i].BlockedFlag, TThreadCtx::BS_NONE);
+                            Threads[i].BlockedPad.Unpark();
+                            repeat = false;
+                            break;
+                        default:
+                            // thread mustn't has TThreadCtx::BS_NONE because last time it was started to block
+                            Y_FAIL("BlockedFlag is not TThreadCtx::BS_BLOCKING and TThreadCtx::BS_BLOCKED when thread was waked up");
+                        }
+                    }
+                }
+            } else if (prevCount > threads) {
+                // at first, start to block
+                for (size_t i = threads; i < prevCount; ++i) {
+                    Y_VERIFY(AtomicGet(Threads[i].BlockedFlag) == TThreadCtx::BS_NONE);
+                    AtomicSet(Threads[i].BlockedFlag, TThreadCtx::BS_BLOCKING);
+                }
+                // after check need to wake up threads
+                for (size_t idx = threads; idx < prevCount; ++idx) {
+                    TThreadCtx& threadCtx = Threads[idx];
+                    auto waitingFlag = AtomicGet(threadCtx.WaitingFlag);
+                    auto blockedFlag = AtomicGet(threadCtx.BlockedFlag);
+                    // while thread has this states (WS_NONE and BS_BLOCKING) we can't guess which way thread will go.
+                    // Either go to sleep and it will have to wake up,
+                    // or go to execute task and after completion will be blocked.
+                    while (waitingFlag == TThreadCtx::WS_NONE && blockedFlag == TThreadCtx::BS_BLOCKING) {
+                        waitingFlag = AtomicGet(threadCtx.WaitingFlag);
+                        blockedFlag = AtomicGet(threadCtx.BlockedFlag);
+                    }
+                    // next states:
+                    // 1) WS_ACTIVE  BS_BLOCKING - waiting and start spinig | need wake up to block
+                    // 2) WS_BLOCKED BS_BLOCKING - waiting and start sleep  | need wake up to block
+                    // 3) WS_RUNNING BS_BLOCKING - start execute | not need wake up, will block after executing
+                    // 4) WS_NONE    BS_BLOCKED  - blocked       | not need wake up, already blocked
+
+                    if (waitingFlag == TThreadCtx::WS_ACTIVE || waitingFlag == TThreadCtx::WS_BLOCKED) {
+                        // need wake up
+                        Y_VERIFY(blockedFlag == TThreadCtx::BS_BLOCKING);
+
+                        // creaty empty mailBoxHint, where LineIndex == 1 and LineHint == 0, and activations will be ignored
+                        constexpr auto emptyMailBoxHint = TMailboxTable::LineIndexMask & -TMailboxTable::LineIndexMask;
+                        ui64 revolvingCounter = AtomicGet(ActivationsRevolvingCounter);
+
+                        Activations.Push(emptyMailBoxHint, revolvingCounter);
+
+                        auto x = AtomicIncrement(Semaphore);
+                        if (x <= 0) {
+                            // try wake up. if success then go to next thread
+                            switch (waitingFlag){
+                                case TThreadCtx::WS_ACTIVE: // in active spin-lock, just set flag
+                                    if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING, TThreadCtx::WS_ACTIVE)) {
+                                        continue;
+                                    }
+                                    break;
+                                case TThreadCtx::WS_BLOCKED:
+                                    if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING, TThreadCtx::WS_BLOCKED)) {
+                                        threadCtx.Pad.Unpark();
+                                        continue;
+                                    }
+                                    break;
+                                default:
+                                    ; // other thread woke this sleeping thread
+                            }
+                            // if thread has already been awakened then we must awaken the other
                             WakeUpLoop();
-                        } 
-                    } 
-                } 
-            } 
-        } 
-    } 
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

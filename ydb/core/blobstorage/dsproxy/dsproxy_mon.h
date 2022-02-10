@@ -25,7 +25,7 @@ enum class ERequestType {
     Put,
     Discover,
     Range,
-    Patch, 
+    Patch,
 };
 
 struct TRequestMonGroup {
@@ -35,7 +35,7 @@ struct TRequestMonGroup {
     NMonitoring::TDynamicCounters::TCounterPtr VGetBlobsReturnedWithNoData;
     NMonitoring::TDynamicCounters::TCounterPtr VGetBlobsReturnedWithErrors;
     NMonitoring::TDynamicCounters::TCounterPtr VPutBlobsIssued;
-    NMonitoring::TDynamicCounters::TCounterPtr VMovedPatchBlobsIssued; 
+    NMonitoring::TDynamicCounters::TCounterPtr VMovedPatchBlobsIssued;
 
     void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters> &group) {
         VGetBlobsIssued = group->GetCounter("VGetBlobsIssued", true);
@@ -44,27 +44,27 @@ struct TRequestMonGroup {
         VGetBlobsReturnedWithNoData = group->GetCounter("VGetBlobsReturnedWithNoData", true);
         VGetBlobsReturnedWithErrors = group->GetCounter("VGetBlobsReturnedWithErrors", true);
         VPutBlobsIssued = group->GetCounter("VPutBlobsIssued", true);
-        VMovedPatchBlobsIssued = group->GetCounter("VMovedPatchBlobsIssued", true); 
+        VMovedPatchBlobsIssued = group->GetCounter("VMovedPatchBlobsIssued", true);
     }
 
     void CountEvent(const TEvBlobStorage::TEvVPut& /*ev*/) {
         VPutBlobsIssued->Inc();
     }
 
-    void CountEvent(const TEvBlobStorage::TEvVMultiPut& ev) { 
-        *VPutBlobsIssued += ev.Record.ItemsSize(); 
-    } 
- 
-    void CountEvent(const TEvBlobStorage::TEvVMovedPatch& /*ev*/) { 
-        VPutBlobsIssued->Inc(); 
-    } 
- 
-    void CountEvent(const TEvBlobStorage::TEvVPatchStart& /*ev*/) { 
-    } 
- 
-    void CountEvent(const TEvBlobStorage::TEvVPatchDiff& /*ev*/) { 
-    } 
- 
+    void CountEvent(const TEvBlobStorage::TEvVMultiPut& ev) {
+        *VPutBlobsIssued += ev.Record.ItemsSize();
+    }
+
+    void CountEvent(const TEvBlobStorage::TEvVMovedPatch& /*ev*/) {
+        VPutBlobsIssued->Inc();
+    }
+
+    void CountEvent(const TEvBlobStorage::TEvVPatchStart& /*ev*/) {
+    }
+
+    void CountEvent(const TEvBlobStorage::TEvVPatchDiff& /*ev*/) {
+    }
+
     void CountEvent(const TEvBlobStorage::TEvVGet &ev) {
         *VGetBlobsIssued += ev.Record.ExtremeQueriesSize();
         if (ev.Record.HasRangeQuery()) {
@@ -169,7 +169,7 @@ protected:
     NMonitoring::TPercentileTrackerLg<3, 4, 3> DiscoverResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> IndexRestoreGetResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> RangeResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PatchResponseTime; 
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> PatchResponseTime;
 
     // event counters
     TIntrusivePtr<NMonitoring::TDynamicCounters> EventGroup;
@@ -187,7 +187,7 @@ protected:
     TRequestMonGroup PutGroup;
     TRequestMonGroup DiscoverGroup;
     TRequestMonGroup RangeGroup;
-    TRequestMonGroup PatchGroup; 
+    TRequestMonGroup PatchGroup;
 
 public:
     TBlobStorageGroupProxyTimeStats TimeStats;
@@ -209,13 +209,13 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr EventIndexRestoreGet;
     NMonitoring::TDynamicCounters::TCounterPtr EventMultiCollect;
     NMonitoring::TDynamicCounters::TCounterPtr EventStatus;
-    NMonitoring::TDynamicCounters::TCounterPtr EventStopPutBatching; 
-    NMonitoring::TDynamicCounters::TCounterPtr EventStopGetBatching; 
-    NMonitoring::TDynamicCounters::TCounterPtr EventPatch; 
+    NMonitoring::TDynamicCounters::TCounterPtr EventStopPutBatching;
+    NMonitoring::TDynamicCounters::TCounterPtr EventStopGetBatching;
+    NMonitoring::TDynamicCounters::TCounterPtr EventPatch;
 
-    NMonitoring::TDynamicCounters::TCounterPtr PutsSentViaPutBatching; 
-    NMonitoring::TDynamicCounters::TCounterPtr PutBatchesSent; 
- 
+    NMonitoring::TDynamicCounters::TCounterPtr PutsSentViaPutBatching;
+    NMonitoring::TDynamicCounters::TCounterPtr PutBatchesSent;
+
     // active event counters
     TIntrusivePtr<NMonitoring::TDynamicCounters> ActiveRequestsGroup;
     NMonitoring::TDynamicCounters::TCounterPtr ActivePut;
@@ -230,7 +230,7 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr ActiveIndexRestoreGet;
     NMonitoring::TDynamicCounters::TCounterPtr ActiveMultiCollect;
     NMonitoring::TDynamicCounters::TCounterPtr ActiveStatus;
-    NMonitoring::TDynamicCounters::TCounterPtr ActivePatch; 
+    NMonitoring::TDynamicCounters::TCounterPtr ActivePatch;
 
     std::optional<TResponseStatusGroup> RespStatPut;
     std::optional<TResponseStatusGroup> RespStatGet;
@@ -239,20 +239,20 @@ public:
     std::optional<TResponseStatusGroup> RespStatRange;
     std::optional<TResponseStatusGroup> RespStatCollectGarbage;
     std::optional<TResponseStatusGroup> RespStatStatus;
-    std::optional<TResponseStatusGroup> RespStatPatch; 
+    std::optional<TResponseStatusGroup> RespStatPatch;
 
-    // special patch counters 
-    NMonitoring::TDynamicCounters::TCounterPtr VPatchContinueFailed; 
-    NMonitoring::TDynamicCounters::TCounterPtr VPatchPartPlacementVerifyFailed; 
+    // special patch counters
+    NMonitoring::TDynamicCounters::TCounterPtr VPatchContinueFailed;
+    NMonitoring::TDynamicCounters::TCounterPtr VPatchPartPlacementVerifyFailed;
     NMonitoring::TDynamicCounters::TCounterPtr PatchesWithFallback;
- 
+
     TRequestMonGroup& GetRequestMonGroup(ERequestType request) {
         switch (request) {
             case ERequestType::Get: return GetGroup;
             case ERequestType::Put: return PutGroup;
             case ERequestType::Discover: return DiscoverGroup;
             case ERequestType::Range: return RangeGroup;
-            case ERequestType::Patch: return PatchGroup; 
+            case ERequestType::Patch: return PatchGroup;
         }
         Y_FAIL();
     }
@@ -351,11 +351,11 @@ public:
         NodeMon->RangeResponseTime.Increment(duration.MilliSeconds());
     }
 
-    void CountPatchResponseTime(TPDiskCategory::EDeviceType type, TDuration duration) { 
-        PatchResponseTime.Increment(duration.MilliSeconds()); 
-        NodeMon->CountPatchResponseTime(type, duration); 
-    } 
- 
+    void CountPatchResponseTime(TPDiskCategory::EDeviceType type, TDuration duration) {
+        PatchResponseTime.Increment(duration.MilliSeconds());
+        NodeMon->CountPatchResponseTime(type, duration);
+    }
+
     void Update();
     void ThroughputUpdate();
 };

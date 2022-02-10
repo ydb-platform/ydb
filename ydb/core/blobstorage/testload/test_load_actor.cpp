@@ -1,10 +1,10 @@
 #include "test_load_actor.h"
- 
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/public/lib/base/msgbus.h>
- 
+
 #include <google/protobuf/text_format.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -238,7 +238,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Load actor with tag# " << msg->Tag << " finished");
         LoadActors.erase(iter);
 
-        FinishedTests.push_back({msg->Tag, msg->ErrorReason, TAppData::TimeProvider->Now()}); 
+        FinishedTests.push_back({msg->Tag, msg->ErrorReason, TAppData::TimeProvider->Now()});
 
         auto it = InfoRequests.begin();
         while (it != InfoRequests.end()) {

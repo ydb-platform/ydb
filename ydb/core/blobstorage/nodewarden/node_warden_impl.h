@@ -5,7 +5,7 @@
 
 #include <ydb/core/blobstorage/dsproxy/group_sessions.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
- 
+
 namespace NKikimr::NStorage {
 
     constexpr ui32 ProxyConfigurationTimeoutMilliseconds = 200;
@@ -105,9 +105,9 @@ namespace NKikimr::NStorage {
             struct TEvUpdateNodeDrives : TEventLocal<TEvUpdateNodeDrives, EvUpdateNodeDrives> {};
         };
 
-        TControlWrapper EnablePutBatching; 
-        TControlWrapper EnableVPatch; 
- 
+        TControlWrapper EnablePutBatching;
+        TControlWrapper EnableVPatch;
+
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
 
@@ -118,8 +118,8 @@ namespace NKikimr::NStorage {
 
         TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
             : Cfg(cfg)
-            , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true) 
-            , EnableVPatch(Cfg->FeatureFlags.GetEnableVPatch(), false, true) 
+            , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true)
+            , EnableVPatch(Cfg->FeatureFlags.GetEnableVPatch(), false, true)
         {
             Y_VERIFY(Cfg->ServiceSet.AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;
@@ -409,7 +409,7 @@ namespace NKikimr::NStorage {
         void RenderWholePage(IOutputStream&);
         void RenderLocalDrives(IOutputStream&);
         void RenderDSProxies(IOutputStream& out);
- 
+
         void SendDiskMetrics(bool reportMetrics);
         void Handle(TEvStatusUpdate::TPtr ev);
 
@@ -418,7 +418,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvBlobStorage::TEvRestartPDiskResult::TPtr ev);
 
         void FillInVDiskStatus(google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus> *pb, bool initial);
- 
+
         void HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev);
         void HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev);
 
@@ -449,13 +449,13 @@ namespace NKikimr::NStorage {
                 fFunc(TEvBlobStorage::TEvPut::EventType, HandleForwarded);
                 fFunc(TEvBlobStorage::TEvGet::EventType, HandleForwarded);
                 fFunc(TEvBlobStorage::TEvBlock::EventType, HandleForwarded);
-                fFunc(TEvBlobStorage::TEvPatch::EventType, HandleForwarded); 
+                fFunc(TEvBlobStorage::TEvPatch::EventType, HandleForwarded);
                 fFunc(TEvBlobStorage::TEvDiscover::EventType, HandleForwarded);
                 fFunc(TEvBlobStorage::TEvRange::EventType, HandleForwarded);
                 fFunc(TEvBlobStorage::TEvCollectGarbage::EventType, HandleForwarded);
                 fFunc(TEvBlobStorage::TEvStatus::EventType, HandleForwarded);
                 fFunc(TEvBlobStorage::TEvBunchOfEvents::EventType, HandleForwarded);
-                fFunc(TEvRequestProxySessionsState::EventType, HandleForwarded); 
+                fFunc(TEvRequestProxySessionsState::EventType, HandleForwarded);
 
                 hFunc(NIncrHuge::TEvIncrHugeInit, HandleIncrHugeInit);
 

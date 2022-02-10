@@ -76,15 +76,15 @@ TIntermediate::TIntermediate(TActorId respondTo, TActorId keyValueActorId, ui64 
 }
 
 void TIntermediate::UpdateStat() {
-    auto checkRead = [&] (const auto &read) { 
+    auto checkRead = [&] (const auto &read) {
         if (read.Status == NKikimrProto::NODATA) {
             Stat.ReadNodata++;
         } else if (read.Status == NKikimrProto::OK) {
             Stat.Reads++;
             Stat.ReadBytes += read.Value.size();
         }
-    }; 
-    auto checkRangeRead = [&] (const auto &range) { 
+    };
+    auto checkRangeRead = [&] (const auto &range) {
         if (range.IncludeData) {
             for (const auto &read: range.Reads) {
                 if (read.Status == NKikimrProto::NODATA) {
@@ -95,50 +95,50 @@ void TIntermediate::UpdateStat() {
                 }
             }
         } else {
-        Stat.IndexRangeRead++; 
+        Stat.IndexRangeRead++;
         }
-    }; 
- 
-    if (ReadCommand) { 
-        auto checkReadCommand = [&] (auto &cmd) { 
-            using Type = std::decay_t<decltype(cmd)>; 
-            if constexpr (std::is_same_v<Type, TIntermediate::TRead>) { 
-                checkRead(cmd); 
-            } 
-            if constexpr (std::is_same_v<Type, TIntermediate::TRangeRead>) { 
-                checkRangeRead(cmd); 
-            } 
-        }; 
-        std::visit(checkReadCommand, *ReadCommand); 
+    };
+
+    if (ReadCommand) {
+        auto checkReadCommand = [&] (auto &cmd) {
+            using Type = std::decay_t<decltype(cmd)>;
+            if constexpr (std::is_same_v<Type, TIntermediate::TRead>) {
+                checkRead(cmd);
+            }
+            if constexpr (std::is_same_v<Type, TIntermediate::TRangeRead>) {
+                checkRangeRead(cmd);
+            }
+        };
+        std::visit(checkReadCommand, *ReadCommand);
     }
- 
-    for (const auto &read: Reads) { 
-        checkRead(read); 
-    } 
-    for (const auto &range: RangeReads) { 
-        checkRangeRead(range); 
-    } 
+
+    for (const auto &read: Reads) {
+        checkRead(read);
+    }
+    for (const auto &range: RangeReads) {
+        checkRangeRead(range);
+    }
     for (const auto &write: Writes) {
         if (write.Status == NKikimrProto::OK) {
             Stat.WriteBytes += write.Data.size();
         }
     }
 
-    for (const auto &cmd : Commands) { 
-        if (!std::holds_alternative<TIntermediate::TWrite>(cmd)) { 
-            continue; 
-        } 
-        const auto &write = std::get<TIntermediate::TWrite>(cmd); 
-        if (write.Status == NKikimrProto::OK) { 
-            Stat.WriteBytes += write.Data.size(); 
-        } 
-    } 
- 
-    Stat.Writes = WriteCount; 
+    for (const auto &cmd : Commands) {
+        if (!std::holds_alternative<TIntermediate::TWrite>(cmd)) {
+            continue;
+        }
+        const auto &write = std::get<TIntermediate::TWrite>(cmd);
+        if (write.Status == NKikimrProto::OK) {
+            Stat.WriteBytes += write.Data.size();
+        }
+    }
+
+    Stat.Writes = WriteCount;
     Stat.GetStatuses = GetStatuses.size();
-    Stat.Renames = RenameCount; 
-    Stat.CopyRanges = CopyRangeCount; 
-    Stat.Concats = ConcatCount; 
+    Stat.Renames = RenameCount;
+    Stat.CopyRanges = CopyRangeCount;
+    Stat.Concats = ConcatCount;
 }
 
 } // NKeyValue

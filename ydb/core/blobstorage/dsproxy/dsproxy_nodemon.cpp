@@ -36,7 +36,7 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &c
     IndexRestoreGetResponseTime.Initialize(Group, "event", "indexRestoreGet", "latency",
             percentiles1);
     RangeResponseTime.Initialize(Group, "event", "range", "latency", percentiles1);
-    PatchResponseTime.Initialize(Group, "event", "patch", "latency", percentiles4); 
+    PatchResponseTime.Initialize(Group, "event", "patch", "latency", percentiles4);
 
     IsCountersPresentedForIdx.fill(false);
     if (initForAllDeviceTypes) {
@@ -51,7 +51,7 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &c
         auto group = Group->GetSubgroup("subsystem", "restart");
         RestartPut = group->GetCounter("EvPut", true);
         RestartGet = group->GetCounter("EvGet", true);
-        RestartPatch = group->GetCounter("EvPatch", true); 
+        RestartPatch = group->GetCounter("EvPatch", true);
         RestartBlock = group->GetCounter("EvBlock", true);
         RestartDiscover = group->GetCounter("EvDiscover", true);
         RestartRange = group->GetCounter("EvRange", true);
@@ -170,15 +170,15 @@ void TDsProxyNodeMon::CountGetResponseTime(TPDiskCategory::EDeviceType type, NKi
     }
 }
 
-void TDsProxyNodeMon::CountPatchResponseTime(TPDiskCategory::EDeviceType type, TDuration duration) { 
-    const ui32 durationMs = duration.MilliSeconds(); 
-    const double durationMsFloat = duration.MicroSeconds() / 1000.0; 
-    PatchResponseTime.Increment(durationMs); 
-    const ui32 idx = IdxForType(type); 
-    Y_VERIFY(IsCountersPresentedForIdx[idx]); 
-    PatchResponseTimeHist[idx]->Collect(durationMsFloat); 
-} 
- 
+void TDsProxyNodeMon::CountPatchResponseTime(TPDiskCategory::EDeviceType type, TDuration duration) {
+    const ui32 durationMs = duration.MilliSeconds();
+    const double durationMsFloat = duration.MicroSeconds() / 1000.0;
+    PatchResponseTime.Increment(durationMs);
+    const ui32 idx = IdxForType(type);
+    Y_VERIFY(IsCountersPresentedForIdx[idx]);
+    PatchResponseTimeHist[idx]->Collect(durationMsFloat);
+}
+
 void TDsProxyNodeMon::CheckNodeMonCountersForDeviceType(TPDiskCategory::EDeviceType type) {
     const ui32 idx = IdxForType(type);
 
@@ -201,7 +201,7 @@ void TDsProxyNodeMon::CheckNodeMonCountersForDeviceType(TPDiskCategory::EDeviceT
         GetFastReadResponseTimeHistInf[idx] = getNamedHisto("getFastReadInfMs");
         GetDiscoverResponseTimeHist[idx] = getNamedHisto("getDiscoverMs");
         GetLowReadResponseTimeHist[idx] = getNamedHisto("getLowReadMs");
-        PatchResponseTimeHist[idx] = getNamedHisto("patchMs"); 
+        PatchResponseTimeHist[idx] = getNamedHisto("patchMs");
     }
 }
 } // NKikimr

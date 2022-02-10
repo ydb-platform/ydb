@@ -4,24 +4,24 @@
 namespace NKikimr {
 
     TCostModel::TCostModel(ui64 seekTimeUs, ui64 readSpeedBps, ui64 writeSpeedBps, ui64 readBlockSize,
-                           ui64 writeBlockSize, ui32 minREALHugeBlobInBytes, TBlobStorageGroupType gType) 
+                           ui64 writeBlockSize, ui32 minREALHugeBlobInBytes, TBlobStorageGroupType gType)
         : SeekTimeUs(seekTimeUs)
         , ReadSpeedBps(readSpeedBps)
         , WriteSpeedBps(writeSpeedBps)
         , ReadBlockSize(readBlockSize)
         , WriteBlockSize(writeBlockSize)
         , MinREALHugeBlobInBytes(minREALHugeBlobInBytes)
-        , GType(gType) 
+        , GType(gType)
     {}
 
-    TCostModel::TCostModel(const NKikimrBlobStorage::TVDiskCostSettings &settings, TBlobStorageGroupType gType) 
+    TCostModel::TCostModel(const NKikimrBlobStorage::TVDiskCostSettings &settings, TBlobStorageGroupType gType)
         : SeekTimeUs(settings.GetSeekTimeUs())
         , ReadSpeedBps(settings.GetReadSpeedBps())
         , WriteSpeedBps(settings.GetWriteSpeedBps())
         , ReadBlockSize(settings.GetReadBlockSize())
         , WriteBlockSize(settings.GetWriteBlockSize())
         , MinREALHugeBlobInBytes(settings.GetMinREALHugeBlobInBytes())
-        , GType(gType) 
+        , GType(gType)
     {}
 
     void TCostModel::FillInSettings(NKikimrBlobStorage::TVDiskCostSettings &settings) const {
@@ -33,26 +33,26 @@ namespace NKikimr {
         settings.SetMinREALHugeBlobInBytes(MinREALHugeBlobInBytes);
     }
 
-    ui64 TCostModel::GetCost(const TEvBlobStorage::TEvVPatchStart &) const { 
-        return InMemReadCost(); 
-    } 
- 
-    ui64 TCostModel::GetCost(const TEvBlobStorage::TEvVPatchDiff &ev) const { 
-        TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(ev.Record.GetPatchedPartBlobId()); 
-        ui32 size = blobId.BlobSize(); 
-        return ReadCostBySize(size) + HugeWriteCost(size); 
-    } 
- 
-    ui64 TCostModel::GetCost(const TEvBlobStorage::TEvVPatchXorDiff &ev) const { 
-        const ui64 bufSize = ev.DiffSizeSum(); 
-        return HugeWriteCost(bufSize); 
-    } 
- 
-    ui64 TCostModel::GetCost(const TEvBlobStorage::TEvVMovedPatch &ev) const { 
-        TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(ev.Record.GetPatchedBlobId()); 
-        return MovedPatchCostBySize(blobId.BlobSize()); 
-    } 
- 
+    ui64 TCostModel::GetCost(const TEvBlobStorage::TEvVPatchStart &) const {
+        return InMemReadCost();
+    }
+
+    ui64 TCostModel::GetCost(const TEvBlobStorage::TEvVPatchDiff &ev) const {
+        TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(ev.Record.GetPatchedPartBlobId());
+        ui32 size = blobId.BlobSize();
+        return ReadCostBySize(size) + HugeWriteCost(size);
+    }
+
+    ui64 TCostModel::GetCost(const TEvBlobStorage::TEvVPatchXorDiff &ev) const {
+        const ui64 bufSize = ev.DiffSizeSum();
+        return HugeWriteCost(bufSize);
+    }
+
+    ui64 TCostModel::GetCost(const TEvBlobStorage::TEvVMovedPatch &ev) const {
+        TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(ev.Record.GetPatchedBlobId());
+        return MovedPatchCostBySize(blobId.BlobSize());
+    }
+
     ui64 TCostModel::GetCost(const TEvBlobStorage::TEvVPut &ev, bool *logPutInternalQueue) const {
         const auto &record = ev.Record;
         const NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
@@ -86,18 +86,18 @@ namespace NKikimr {
         return cost;
     }
 
-    ui64 TCostModel::MovedPatchCostBySize(ui32 blobSize) const { 
-        ui32 partSize = GType.TErasureType::PartSize(TErasureType::CrcModeNone, blobSize); 
-        ui32 memMultiply = 3; // in the worst case (buffer + parts + serealized events) 
-        return memMultiply * GType.TotalPartCount() * (ReadCostBySize(partSize) + HugeWriteCost(partSize)); 
-    } 
- 
-    ui64 TCostModel::ReadCostBySize(ui64 size) const { 
-        ui64 seekCost = (size / ReadBlockSize + 1) * SeekTimeUs; 
-        ui64 readCost = size * ui64(1000000000) / ReadSpeedBps; 
-        return seekCost + readCost; 
-    } 
- 
+    ui64 TCostModel::MovedPatchCostBySize(ui32 blobSize) const {
+        ui32 partSize = GType.TErasureType::PartSize(TErasureType::CrcModeNone, blobSize);
+        ui32 memMultiply = 3; // in the worst case (buffer + parts + serealized events)
+        return memMultiply * GType.TotalPartCount() * (ReadCostBySize(partSize) + HugeWriteCost(partSize));
+    }
+
+    ui64 TCostModel::ReadCostBySize(ui64 size) const {
+        ui64 seekCost = (size / ReadBlockSize + 1) * SeekTimeUs;
+        ui64 readCost = size * ui64(1000000000) / ReadSpeedBps;
+        return seekCost + readCost;
+    }
+
     ui64 TCostModel::ReadCost(const TEvBlobStorage::TEvVGet &ev) const {
         const auto &record = ev.Record;
         ui64 cost = 0;
@@ -123,7 +123,7 @@ namespace NKikimr {
                 size = id.BlobSize();
             }
 
-            cost += ReadCostBySize(size); 
+            cost += ReadCostBySize(size);
         }
 
         Y_VERIFY_DEBUG(cost);
@@ -133,14 +133,14 @@ namespace NKikimr {
     ui64 TCostModel::CalculateCost(const TMessageCostEssence& essence) const {
         ui64 cost = essence.BaseCost;
         for (ui64 size : essence.ReadSizes) {
-            cost += ReadCostBySize(size); 
+            cost += ReadCostBySize(size);
         }
         if (essence.SmallWriteSize != -1) {
             cost += SmallWriteCost(essence.SmallWriteSize);
         }
-        if (essence.MovedPatchBlobSize != -1) { 
-            cost += MovedPatchCostBySize(essence.MovedPatchBlobSize); 
-        } 
+        if (essence.MovedPatchBlobSize != -1) {
+            cost += MovedPatchCostBySize(essence.MovedPatchBlobSize);
+        }
         for (ui64 size : essence.PutBufferSizes) {
             NPriPut::EHandleType handleType = NPriPut::HandleType(MinREALHugeBlobInBytes, essence.HandleClass, size);
             if (handleType == NPriPut::Log) {

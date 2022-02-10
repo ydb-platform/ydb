@@ -1,5 +1,5 @@
 #include "dsproxy_get_impl.h"
-#include "dsproxy_put_impl.h" 
+#include "dsproxy_put_impl.h"
 
 #include "dsproxy_strategy_base.h"
 #include "dsproxy_blackboard.h"
@@ -211,10 +211,10 @@ TString TGetImpl::DumpFullState() const {
     str << Endl;
     str << " VPutResponses# " << VPutResponses;
     str << Endl;
-    str << " VMultiPutRequests# " << VMultiPutRequests; 
-    str << Endl; 
-    str << " VMultiPutResponses# " << VMultiPutResponses; 
-    str << Endl; 
+    str << " VMultiPutRequests# " << VMultiPutRequests;
+    str << Endl;
+    str << " VMultiPutResponses# " << VMultiPutResponses;
+    str << Endl;
 
     str << " IsNoData# " << IsNoData;
     str << Endl;
@@ -304,71 +304,71 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx,
             TVDiskID vDiskId = Info->GetVDiskId(diskOrderNumber);
             for (ui32 idx = beginIdx; idx < endIdx; ++idx) {
                 const TDiskPutRequest &put = requests.PutsToSend[idx];
-                ui64 cookie = TBlobCookie(diskOrderNumber, put.BlobIdx, put.Id.PartId(), 
-                        VPutRequests); 
+                ui64 cookie = TBlobCookie(diskOrderNumber, put.BlobIdx, put.Id.PartId(),
+                        VPutRequests);
                 auto vPut = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vDiskId, true, &cookie,
                     Deadline, Blackboard.PutHandleClass);
                 R_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << diskOrderNumber << " idx# " << idx
                         << " vPut# " << vPut->ToString());
                 outVPuts.push_back(std::move(vPut));
                 ++VPutRequests;
-                ReceivedVPutResponses.push_back(false); 
+                ReceivedVPutResponses.push_back(false);
             }
             Blackboard.GroupDiskRequests.DiskRequestsForOrderNumber[diskOrderNumber].FirstUnsentPutIdx = endIdx;
         }
     }
 }
 
-void TGetImpl::PrepareVPuts(TLogContext &logCtx, 
+void TGetImpl::PrepareVPuts(TLogContext &logCtx,
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> &outVMultiPuts) {
-    for (ui32 diskOrderNumber = 0; diskOrderNumber < Blackboard.GroupDiskRequests.DiskRequestsForOrderNumber.size(); 
-            ++diskOrderNumber) { 
-        const TDiskRequests &requests = Blackboard.GroupDiskRequests.DiskRequestsForOrderNumber[diskOrderNumber]; 
-        ui32 endIdx = requests.PutsToSend.size(); 
-        ui32 beginIdx = requests.FirstUnsentPutIdx; 
-        if (beginIdx < endIdx) { 
-            TVDiskID vDiskId = Info->GetVDiskId(diskOrderNumber); 
-            // set cookie after adding items 
+    for (ui32 diskOrderNumber = 0; diskOrderNumber < Blackboard.GroupDiskRequests.DiskRequestsForOrderNumber.size();
+            ++diskOrderNumber) {
+        const TDiskRequests &requests = Blackboard.GroupDiskRequests.DiskRequestsForOrderNumber[diskOrderNumber];
+        ui32 endIdx = requests.PutsToSend.size();
+        ui32 beginIdx = requests.FirstUnsentPutIdx;
+        if (beginIdx < endIdx) {
+            TVDiskID vDiskId = Info->GetVDiskId(diskOrderNumber);
+            // set cookie after adding items
             auto vMultiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vDiskId, Deadline, Blackboard.PutHandleClass,
                 true, nullptr);
-            ui64 bytes = 0; 
-            ui64 lastItemCount = 0; 
-            for (ui32 idx = beginIdx; idx < endIdx; ++idx) { 
-                const TDiskPutRequest &put = requests.PutsToSend[idx]; 
-                ui64 cookie = TBlobCookie(diskOrderNumber, put.BlobIdx, put.Id.PartId(), VMultiPutRequests); 
-                ui64 itemSize = vMultiPut->Record.ItemsSize(); 
-                if (itemSize == MaxBatchedPutRequests || bytes + put.Buffer.size() > MaxBatchedPutSize) { 
-                    vMultiPut->Record.SetCookie(TVMultiPutCookie(diskOrderNumber, lastItemCount, VMultiPutRequests)); 
-                    ++VMultiPutRequests; 
-                    ReceivedVMultiPutResponses.push_back(false); 
-                    R_LOG_DEBUG_SX(logCtx, "BPG16", "Send multiPut to orderNumber# " << diskOrderNumber << " count# " 
-                            << vMultiPut->Record.ItemsSize() << " vMultiPut# " << vMultiPut->ToString()); 
+            ui64 bytes = 0;
+            ui64 lastItemCount = 0;
+            for (ui32 idx = beginIdx; idx < endIdx; ++idx) {
+                const TDiskPutRequest &put = requests.PutsToSend[idx];
+                ui64 cookie = TBlobCookie(diskOrderNumber, put.BlobIdx, put.Id.PartId(), VMultiPutRequests);
+                ui64 itemSize = vMultiPut->Record.ItemsSize();
+                if (itemSize == MaxBatchedPutRequests || bytes + put.Buffer.size() > MaxBatchedPutSize) {
+                    vMultiPut->Record.SetCookie(TVMultiPutCookie(diskOrderNumber, lastItemCount, VMultiPutRequests));
+                    ++VMultiPutRequests;
+                    ReceivedVMultiPutResponses.push_back(false);
+                    R_LOG_DEBUG_SX(logCtx, "BPG16", "Send multiPut to orderNumber# " << diskOrderNumber << " count# "
+                            << vMultiPut->Record.ItemsSize() << " vMultiPut# " << vMultiPut->ToString());
                     outVMultiPuts.push_back(std::move(vMultiPut));
-                    // set cookie after adding items 
+                    // set cookie after adding items
                     vMultiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vDiskId, Deadline,
                         Blackboard.PutHandleClass, true, nullptr);
-                    bytes = 0; 
-                    lastItemCount = 0; 
-                } 
-                bytes += put.Buffer.size(); 
-                lastItemCount++; 
-                vMultiPut->AddVPut(put.Id, put.Buffer, &cookie); 
-            } 
-            vMultiPut->Record.SetCookie(TVMultiPutCookie(diskOrderNumber, lastItemCount, VMultiPutRequests)); 
-            ++VMultiPutRequests; 
-            ReceivedVMultiPutResponses.push_back(false); 
-            R_LOG_DEBUG_SX(logCtx, "BPG17", "Send multiPut to orderNumber# " << diskOrderNumber << " count# " 
-                    << vMultiPut->Record.ItemsSize() << " vMultiPut# " << vMultiPut->ToString()); 
+                    bytes = 0;
+                    lastItemCount = 0;
+                }
+                bytes += put.Buffer.size();
+                lastItemCount++;
+                vMultiPut->AddVPut(put.Id, put.Buffer, &cookie);
+            }
+            vMultiPut->Record.SetCookie(TVMultiPutCookie(diskOrderNumber, lastItemCount, VMultiPutRequests));
+            ++VMultiPutRequests;
+            ReceivedVMultiPutResponses.push_back(false);
+            R_LOG_DEBUG_SX(logCtx, "BPG17", "Send multiPut to orderNumber# " << diskOrderNumber << " count# "
+                    << vMultiPut->Record.ItemsSize() << " vMultiPut# " << vMultiPut->ToString());
             outVMultiPuts.push_back(std::move(vMultiPut));
-            Blackboard.GroupDiskRequests.DiskRequestsForOrderNumber[diskOrderNumber].FirstUnsentPutIdx = endIdx; 
-        } 
-    } 
-} 
- 
+            Blackboard.GroupDiskRequests.DiskRequestsForOrderNumber[diskOrderNumber].FirstUnsentPutIdx = endIdx;
+        }
+    }
+}
+
 EStrategyOutcome TGetImpl::RunBoldStrategy(TLogContext &logCtx) {
     EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, TBoldStrategy(PhantomCheck));
     if (outcome == EStrategyOutcome::DONE && MustRestoreFirst) {
-        Blackboard.ChangeAll(); 
+        Blackboard.ChangeAll();
         outcome = Blackboard.RunStrategy(logCtx, TRestoreStrategy());
     }
     return outcome;
@@ -384,7 +384,7 @@ EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
     // run basic get strategy and, if blob restoration is required and we have successful get, restore the blob to full amount of parts
     EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, TMirror3of4GetStrategy());
     if (outcome == EStrategyOutcome::DONE && MustRestoreFirst) {
-        Blackboard.ChangeAll(); 
+        Blackboard.ChangeAll();
         outcome = Blackboard.RunStrategy(logCtx, TPut3of4Strategy(TEvBlobStorage::TEvPut::TacticMaxThroughput));
     }
     return outcome;
@@ -416,17 +416,17 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &
     ui32 orderNumber = Info->GetOrderNumber(shortId);
     const TLogoBlobID blob = LogoBlobIDFromLogoBlobID(record.GetBlobID());
 
-    Y_VERIFY(record.HasCookie()); 
-    TBlobCookie cookie(record.GetCookie()); 
-    Y_VERIFY(cookie.GetVDiskOrderNumber() == orderNumber); 
-    Y_VERIFY(cookie.GetPartId() == blob.PartId()); 
- 
-    ui64 requestIdx = cookie.GetRequestIdx(); 
-    Y_VERIFY_S(!ReceivedVPutResponses[requestIdx], "the response is received twice" 
-            << " Event# " << ev.ToString() 
-            << " State# " << DumpFullState()); 
-    ReceivedVPutResponses[requestIdx] = true; 
- 
+    Y_VERIFY(record.HasCookie());
+    TBlobCookie cookie(record.GetCookie());
+    Y_VERIFY(cookie.GetVDiskOrderNumber() == orderNumber);
+    Y_VERIFY(cookie.GetPartId() == blob.PartId());
+
+    ui64 requestIdx = cookie.GetRequestIdx();
+    Y_VERIFY_S(!ReceivedVPutResponses[requestIdx], "the response is received twice"
+            << " Event# " << ev.ToString()
+            << " State# " << DumpFullState());
+    ReceivedVPutResponses[requestIdx] = true;
+
     const NKikimrProto::EReplyStatus status = record.GetStatus();
     ++VPutResponses;
     switch (status) {
@@ -445,50 +445,50 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &
     Step(logCtx, outVGets, outVPuts, outGetResult);
 }
 
-void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVMultiPutResult &ev, 
+void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVMultiPutResult &ev,
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets,
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> &outVMultiPuts,
-        TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult) { 
-    const NKikimrBlobStorage::TEvVMultiPutResult &record = ev.Record; 
-    Y_VERIFY(record.HasVDiskID()); 
-    TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID()); 
-    TVDiskIdShort shortId(vdisk); 
-    ui32 orderNumber = Info->GetOrderNumber(shortId); 
- 
-    Y_VERIFY(record.HasCookie()); 
-    TVMultiPutCookie cookie(record.GetCookie()); 
-    Y_VERIFY(cookie.GetVDiskOrderNumber() == orderNumber); 
-    Y_VERIFY(cookie.GetItemCount() == record.ItemsSize()); 
- 
-    ui64 requestIdx = cookie.GetRequestIdx(); 
-    Y_VERIFY_S(!ReceivedVMultiPutResponses[requestIdx], "the response is received twice" 
-            << " Event# " << ev.ToString() 
-            << " State# " << DumpFullState()); 
-    ReceivedVMultiPutResponses[requestIdx] = true; 
- 
-    ++VMultiPutResponses; 
-    for (auto &item : record.GetItems()) { 
-        const NKikimrProto::EReplyStatus status = item.GetStatus(); 
-        const TLogoBlobID blob = LogoBlobIDFromLogoBlobID(item.GetBlobID()); 
-        Y_VERIFY(item.HasCookie()); 
-        TBlobCookie itemCookie(item.GetCookie()); 
-        Y_VERIFY(itemCookie.GetVDiskOrderNumber() == orderNumber); 
-        Y_VERIFY(itemCookie.GetPartId() == blob.PartId()); 
-        switch (status) { 
-            case NKikimrProto::ERROR: 
-            case NKikimrProto::VDISK_ERROR_STATE: 
-            case NKikimrProto::OUT_OF_SPACE: 
-                Blackboard.AddErrorResponse(blob, orderNumber); 
-                break; 
-            case NKikimrProto::OK: 
-            case NKikimrProto::ALREADY: 
-                Blackboard.AddPutOkResponse(blob, orderNumber); 
-                break; 
-            default: 
-            Y_FAIL("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data()); 
-        } 
-    } 
-    Step(logCtx, outVGets, outVMultiPuts, outGetResult); 
-} 
- 
+        TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult) {
+    const NKikimrBlobStorage::TEvVMultiPutResult &record = ev.Record;
+    Y_VERIFY(record.HasVDiskID());
+    TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
+    TVDiskIdShort shortId(vdisk);
+    ui32 orderNumber = Info->GetOrderNumber(shortId);
+
+    Y_VERIFY(record.HasCookie());
+    TVMultiPutCookie cookie(record.GetCookie());
+    Y_VERIFY(cookie.GetVDiskOrderNumber() == orderNumber);
+    Y_VERIFY(cookie.GetItemCount() == record.ItemsSize());
+
+    ui64 requestIdx = cookie.GetRequestIdx();
+    Y_VERIFY_S(!ReceivedVMultiPutResponses[requestIdx], "the response is received twice"
+            << " Event# " << ev.ToString()
+            << " State# " << DumpFullState());
+    ReceivedVMultiPutResponses[requestIdx] = true;
+
+    ++VMultiPutResponses;
+    for (auto &item : record.GetItems()) {
+        const NKikimrProto::EReplyStatus status = item.GetStatus();
+        const TLogoBlobID blob = LogoBlobIDFromLogoBlobID(item.GetBlobID());
+        Y_VERIFY(item.HasCookie());
+        TBlobCookie itemCookie(item.GetCookie());
+        Y_VERIFY(itemCookie.GetVDiskOrderNumber() == orderNumber);
+        Y_VERIFY(itemCookie.GetPartId() == blob.PartId());
+        switch (status) {
+            case NKikimrProto::ERROR:
+            case NKikimrProto::VDISK_ERROR_STATE:
+            case NKikimrProto::OUT_OF_SPACE:
+                Blackboard.AddErrorResponse(blob, orderNumber);
+                break;
+            case NKikimrProto::OK:
+            case NKikimrProto::ALREADY:
+                Blackboard.AddPutOkResponse(blob, orderNumber);
+                break;
+            default:
+            Y_FAIL("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
+        }
+    }
+    Step(logCtx, outVGets, outVMultiPuts, outGetResult);
+}
+
 }//NKikimr

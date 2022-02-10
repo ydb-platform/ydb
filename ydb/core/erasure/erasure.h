@@ -15,46 +15,46 @@
 
 namespace NKikimr {
 
-struct TDiff { 
-    TString Buffer; 
-    ui32 Offset = 0; 
-    bool IsXor = false; 
-    bool IsAligned = false; 
- 
-    TDiff(const TString &buffer, ui32 offset, bool isXor, bool isAligned) 
-        : Buffer(buffer) 
-        , Offset(offset) 
-        , IsXor(isXor) 
-        , IsAligned(isAligned) 
-    { 
-    } 
- 
-    TDiff(const TString &buffer, ui32 offset) 
-        : TDiff(buffer, offset, false, false) 
-    { 
-    } 
- 
-    ui32 GetDiffLength() const { 
-        return (IsAligned ? Buffer.size() - Offset % sizeof(ui64) : Buffer.size()); 
-    } 
- 
-    const ui8* GetBufferBegin() const { 
-        return reinterpret_cast<const ui8*>((Buffer.data())); 
-    } 
- 
-    const ui8* GetDataBegin() const { 
-        return GetBufferBegin() + (IsAligned ? Offset % sizeof(ui64) : 0); 
-    } 
-}; 
- 
-struct TPartDiff { 
-    TVector<TDiff> Diffs; 
-}; 
- 
-struct TPartDiffSet { 
-    TVector<TPartDiff> PartDiffs; 
-}; 
- 
+struct TDiff {
+    TString Buffer;
+    ui32 Offset = 0;
+    bool IsXor = false;
+    bool IsAligned = false;
+
+    TDiff(const TString &buffer, ui32 offset, bool isXor, bool isAligned)
+        : Buffer(buffer)
+        , Offset(offset)
+        , IsXor(isXor)
+        , IsAligned(isAligned)
+    {
+    }
+
+    TDiff(const TString &buffer, ui32 offset)
+        : TDiff(buffer, offset, false, false)
+    {
+    }
+
+    ui32 GetDiffLength() const {
+        return (IsAligned ? Buffer.size() - Offset % sizeof(ui64) : Buffer.size());
+    }
+
+    const ui8* GetBufferBegin() const {
+        return reinterpret_cast<const ui8*>((Buffer.data()));
+    }
+
+    const ui8* GetDataBegin() const {
+        return GetBufferBegin() + (IsAligned ? Offset % sizeof(ui64) : 0);
+    }
+};
+
+struct TPartDiff {
+    TVector<TDiff> Diffs;
+};
+
+struct TPartDiffSet {
+    TVector<TPartDiff> PartDiffs;
+};
+
 // Part fragment, contains only some data
 struct TPartFragment {
     TString OwnedString; // Used for ownership only
@@ -320,13 +320,13 @@ struct TErasureType {
     void SplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const;
     void IncrementalSplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const;
 
-    void SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) const; 
-    void ApplyDiff(ECrcMode crcMode, ui8 *dst, const TVector<TDiff> &diffs) const; 
-    void MakeXorDiff(ECrcMode crcMode, ui32 dataSize, const ui8 *src, const TVector<TDiff> &inDiffs, 
-            TVector<TDiff> *outDiffs) const; 
-    void ApplyXorDiff(ECrcMode crcMode, ui32 dataSize, ui8 *dst, 
-            const TVector<TDiff> &diffs, ui8 fromPart, ui8 toPart) const; 
- 
+    void SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) const;
+    void ApplyDiff(ECrcMode crcMode, ui8 *dst, const TVector<TDiff> &diffs) const;
+    void MakeXorDiff(ECrcMode crcMode, ui32 dataSize, const ui8 *src, const TVector<TDiff> &inDiffs,
+            TVector<TDiff> *outDiffs) const;
+    void ApplyXorDiff(ECrcMode crcMode, ui32 dataSize, ui8 *dst,
+            const TVector<TDiff> &diffs, ui8 fromPart, ui8 toPart) const;
+
     void RestoreData(ECrcMode crcMode, TDataPartSet& partSet, TString& outBuffer, bool restoreParts,
             bool restoreFullData, bool restoreParityParts) const;
     void RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool restoreParts, bool restoreFullData,

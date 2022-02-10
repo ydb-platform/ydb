@@ -156,7 +156,7 @@ public:
 public:
     TBlobStorageQueue(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, TString& logPrefix,
             const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, ui32 interconnectChannel,
-            const TBlobStorageGroupType &gType, 
+            const TBlobStorageGroupType &gType,
             NMonitoring::TCountableBase::EVisibility visibility = NMonitoring::TCountableBase::EVisibility::Public);
 
     ~TBlobStorageQueue();
@@ -183,8 +183,8 @@ public:
         return Queues.InFlight.size();
     }
 
-    void UpdateCostModel(TInstant now, const NKikimrBlobStorage::TVDiskCostSettings& settings, 
-            const TBlobStorageGroupType& type); 
+    void UpdateCostModel(TInstant now, const NKikimrBlobStorage::TVDiskCostSettings& settings,
+            const TBlobStorageGroupType& type);
     void InvalidateCosts();
     bool SetMaxWindowSize(ui64 maxWindowSize);
 

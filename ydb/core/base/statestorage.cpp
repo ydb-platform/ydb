@@ -41,9 +41,9 @@ static const ui32 Primes[128] = {
     106013, 106303, 106591, 106823,
 };
 
-constexpr ui64 MaxRingCount = 1024; 
-constexpr ui64 MaxNodeCount = 1024; 
- 
+constexpr ui64 MaxRingCount = 1024;
+constexpr ui64 MaxNodeCount = 1024;
+
 class TStateStorageRingWalker {
     const ui32 Sz;
     const ui32 Delta;
@@ -195,7 +195,7 @@ static void CopyStateStorageRingInfo(
 
     if (hasRings) { // has explicitely defined rings, use them as info rings
         Y_VERIFY(!hasNodes);
-        Y_VERIFY(source.RingSize() < MaxRingCount); 
+        Y_VERIFY(source.RingSize() < MaxRingCount);
         info->Rings.resize(source.RingSize());
 
         for (ui32 iring = 0, ering = source.RingSize(); iring != ering; ++iring) {
@@ -227,7 +227,7 @@ static void CopyStateStorageRingInfo(
 
     if (hasNodes) { // has explicitely defined replicas, use nodes as 1-node rings
         Y_VERIFY(!hasRings);
-        Y_VERIFY(source.NodeSize() < MaxNodeCount); 
+        Y_VERIFY(source.NodeSize() < MaxNodeCount);
 
         info->Rings.resize(source.NodeSize());
         for (ui32 inode = 0, enode = source.NodeSize(); inode != enode; ++inode) {

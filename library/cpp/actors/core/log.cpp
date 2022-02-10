@@ -228,7 +228,7 @@ namespace NActors {
             Sleep(settings.ThrottleDelay);
     }
 
-    void TLoggerActor::LogIgnoredCount(TInstant now) { 
+    void TLoggerActor::LogIgnoredCount(TInstant now) {
         TString message = Sprintf("Ignored IgnoredCount# %" PRIu64 " log records due to logger overflow!", IgnoredCount);
         if (!OutputRecord(now, NActors::NLog::EPrio::Error, Settings->LoggerComponent, message)) {
             BecomeDefunct();
@@ -237,7 +237,7 @@ namespace NActors {
 
     void TLoggerActor::HandleIgnoredEvent(TLogIgnored::TPtr& ev, const NActors::TActorContext& ctx) {
         Y_UNUSED(ev);
-        LogIgnoredCount(ctx.Now()); 
+        LogIgnoredCount(ctx.Now());
         IgnoredCount = 0;
         PassedCount = 0;
     }

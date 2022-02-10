@@ -38,34 +38,34 @@ namespace NKikimr {
         return pipeConfig;
     }
 
-    struct TPDiskReplyChecker : IReplyChecker { 
-        ~TPDiskReplyChecker() 
-        { 
-        } 
- 
-        void OnRequest(IEventHandle *request) override { 
-            if (request->Type == TEvBlobStorage::EvMultiLog) { 
-                NPDisk::TEvMultiLog *evLogs = request->Get<NPDisk::TEvMultiLog>(); 
-                LastLsn = evLogs->LsnSeg.Last; 
-            } else { 
-                LastLsn = {}; 
-            } 
-        } 
- 
-        bool IsWaitingForMoreResponses(IEventHandle *response) override { 
-            if (!LastLsn) { 
-                return false; 
-            } 
-            Y_VERIFY_S(response->Type == TEvBlobStorage::EvLogResult, "expected EvLogResult " 
-                    << (ui64)TEvBlobStorage::EvLogResult << ", but given " << response->Type); 
-            NPDisk::TEvLogResult *evResult = response->Get<NPDisk::TEvLogResult>(); 
-            ui64 responseLastLsn = evResult->Results.back().Lsn; 
-            return *LastLsn > responseLastLsn; 
-        } 
- 
-        TMaybe<ui64> LastLsn; 
-    }; 
- 
+    struct TPDiskReplyChecker : IReplyChecker {
+        ~TPDiskReplyChecker()
+        {
+        }
+
+        void OnRequest(IEventHandle *request) override {
+            if (request->Type == TEvBlobStorage::EvMultiLog) {
+                NPDisk::TEvMultiLog *evLogs = request->Get<NPDisk::TEvMultiLog>();
+                LastLsn = evLogs->LsnSeg.Last;
+            } else {
+                LastLsn = {};
+            }
+        }
+
+        bool IsWaitingForMoreResponses(IEventHandle *response) override {
+            if (!LastLsn) {
+                return false;
+            }
+            Y_VERIFY_S(response->Type == TEvBlobStorage::EvLogResult, "expected EvLogResult "
+                    << (ui64)TEvBlobStorage::EvLogResult << ", but given " << response->Type);
+            NPDisk::TEvLogResult *evResult = response->Get<NPDisk::TEvLogResult>();
+            ui64 responseLastLsn = evResult->Results.back().Lsn;
+            return *LastLsn > responseLastLsn;
+        }
+
+        TMaybe<ui64> LastLsn;
+    };
+
     void TStrandedPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID,
             const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TKey &mainKey, ui32 poolId, ui32 nodeId)
     {

@@ -25,11 +25,11 @@ struct TBlobStorageGroupType : public TErasureType {
     struct TPartLayout {
         TStackVec<ui32, 32> VDiskPartMask;
         ui32 VDiskMask;
-        ui32 SlowVDiskMask; 
+        ui32 SlowVDiskMask;
 
         TPartLayout()
             : VDiskMask(0)
-            , SlowVDiskMask(0) 
+            , SlowVDiskMask(0)
         {}
 
         TString ToString() const {
@@ -51,10 +51,10 @@ struct TBlobStorageGroupType : public TErasureType {
                 bool isPresent = (VDiskMask & (1 << i));
                 if (isPresent) {
                     str << (isFirst ? "" : ", ") << "VDiskPartMask[" << i << "]# {";
-                    bool isSlow = (SlowVDiskMask & (1 << i)); 
-                    if (isSlow) { 
-                        str << "SlowDisk "; 
-                    } 
+                    bool isSlow = (SlowVDiskMask & (1 << i));
+                    if (isSlow) {
+                        str << "SlowDisk ";
+                    }
                     bool isFirstPart = true;
                     for (ui32 partIdx = 0; partIdx < 32; ++partIdx) {
                         bool isPartPresent = (VDiskPartMask[i] & (1 << partIdx));

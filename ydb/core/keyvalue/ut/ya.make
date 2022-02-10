@@ -15,7 +15,7 @@ IF (WITH_VALGRIND OR SANITIZER_TYPE)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
-    SPLIT_FACTOR(10) 
+    SPLIT_FACTOR(10)
 ENDIF()
 
 PEERDIR(
@@ -30,7 +30,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     keyvalue_ut.cpp
     keyvalue_collector_ut.cpp
-    keyvalue_storage_read_request_ut.cpp 
+    keyvalue_storage_read_request_ut.cpp
 )
 
 END()

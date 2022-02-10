@@ -36,7 +36,7 @@ void TBlobPutTactics::ToString(ui64 value, TString *out) {
 void TEventTypeField::ToString(ui64 value, TString* out) {
 #define CASE(EVENT) case TEvBlobStorage::EVENT: *out = #EVENT; break;
     switch(TEvBlobStorage::EEv(value)) {
-    CASE(EvPatch); 
+    CASE(EvPatch);
     CASE(EvPut);
     CASE(EvVPut);
     CASE(EvGet);

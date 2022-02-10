@@ -53,7 +53,7 @@ public:
         const ui32 totalPartCount = info.Type.TotalPartCount();
         const i32 handoff = info.Type.Handoff();
         ui32 partsMissing = 0;
-        ui32 responsesPending = 0; 
+        ui32 responsesPending = 0;
         for (ui32 partIdx = 0; partIdx < totalPartCount; ++partIdx) {
             bool isMissing = true;
             for (i32 niche = -1; niche < handoff; ++niche) {
@@ -64,16 +64,16 @@ public:
                 if (partSituation == TBlobState::ESituation::Present) {
                     isMissing = false;
                 }
-                if (!requested.IsEmpty()) { 
-                    responsesPending++; 
-                } 
+                if (!requested.IsEmpty()) {
+                    responsesPending++;
+                }
             }
             if (isMissing) {
                 partsMissing++;
             }
         }
 
-        if (partsMissing > info.Type.ParityParts() && responsesPending > 0) { 
+        if (partsMissing > info.Type.ParityParts() && responsesPending > 0) {
             return std::nullopt;
         }
 

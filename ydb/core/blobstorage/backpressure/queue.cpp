@@ -4,14 +4,14 @@ namespace NKikimr::NBsQueue {
 
 TBlobStorageQueue::TBlobStorageQueue(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, TString& logPrefix,
         const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, ui32 interconnectChannel,
-        const TBlobStorageGroupType& gType, NMonitoring::TCountableBase::EVisibility visibility) 
+        const TBlobStorageGroupType& gType, NMonitoring::TCountableBase::EVisibility visibility)
     : Queues(bspctx)
     , WindowSize(0)
     , InFlightCost(0)
     , NextMsgId(0)
     , CurrentSequenceId(1)
     , LogPrefix(logPrefix)
-    , CostModel(2000, 100000000, 50000000, 540000, 540000, 500000, gType) // default cost model 
+    , CostModel(2000, 100000000, 50000000, 540000, 540000, 500000, gType) // default cost model
     , BSProxyCtx(bspctx)
     , ClientId(clientId)
     , BytesWaiting(0)
@@ -49,9 +49,9 @@ TBlobStorageQueue::~TBlobStorageQueue() {
     }
 }
 
-void TBlobStorageQueue::UpdateCostModel(TInstant now, const NKikimrBlobStorage::TVDiskCostSettings& settings, 
-        const TBlobStorageGroupType& type) { 
-    TCostModel newCostModel(settings, type); 
+void TBlobStorageQueue::UpdateCostModel(TInstant now, const NKikimrBlobStorage::TVDiskCostSettings& settings,
+        const TBlobStorageGroupType& type) {
+    TCostModel newCostModel(settings, type);
     if (newCostModel != CostModel) {
         CostModel = std::move(newCostModel);
         InvalidateCosts();
@@ -146,7 +146,7 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
         auto getTypeName = [&]() -> TString {
             switch (item.Event.GetType()) {
 #define TYPE_CASE(X) case X::EventType: return #X;
-                TYPE_CASE(TEvBlobStorage::TEvVMovedPatch) 
+                TYPE_CASE(TEvBlobStorage::TEvVMovedPatch)
                 TYPE_CASE(TEvBlobStorage::TEvVPut)
                 TYPE_CASE(TEvBlobStorage::TEvVMultiPut)
                 TYPE_CASE(TEvBlobStorage::TEvVGet)

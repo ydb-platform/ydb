@@ -95,7 +95,7 @@ namespace NKikimr {
         void MainCycleIndexOnly(const TActorContext &ctx) {
             if (DirectionForward) {
                 // forward direction
-                while (Counter > 0 && !ResultSize.IsOverflow() && ForwardIt.Valid() && ForwardIt.GetCurKey() <= Last) { 
+                while (Counter > 0 && !ResultSize.IsOverflow() && ForwardIt.Valid() && ForwardIt.GetCurKey() <= Last) {
                     ForwardIt.PutToMerger(&Merger);
                     Merger.Finish();
                     AddIndexOnly(ForwardIt.GetCurKey().LogoBlobID(), Merger);
@@ -104,7 +104,7 @@ namespace NKikimr {
                 }
             } else {
                 // backward direction
-                while (Counter > 0 && !ResultSize.IsOverflow() && BackwardIt.Valid() && BackwardIt.GetCurKey() >= First) { 
+                while (Counter > 0 && !ResultSize.IsOverflow() && BackwardIt.Valid() && BackwardIt.GetCurKey() >= First) {
                     BackwardIt.PutToMerger(&Merger);
                     Merger.Finish();
                     AddIndexOnly(BackwardIt.GetCurKey().LogoBlobID(), Merger);

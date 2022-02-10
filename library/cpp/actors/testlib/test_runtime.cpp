@@ -358,12 +358,12 @@ namespace NActors {
             if (!Runtime->EventFilterFunc(*Runtime, ev)) {
                 ui32 nodeId = ev->GetRecipientRewrite().NodeId();
                 Y_VERIFY(nodeId != 0);
-                TNodeDataBase* node = Runtime->Nodes[nodeId].Get(); 
- 
-                if (!AllowSendFrom(node, ev)) { 
-                    return true; 
-                } 
- 
+                TNodeDataBase* node = Runtime->Nodes[nodeId].Get();
+
+                if (!AllowSendFrom(node, ev)) {
+                    return true;
+                }
+
                 ui32 mailboxHint = ev->GetRecipientRewrite().Hint();
                 if (ev->GetTypeRewrite() == ui32(NActors::NLog::EEv::Log)) {
                     const NActors::TActorId loggerActorId = NActors::TActorId(nodeId, "logger");
@@ -373,10 +373,10 @@ namespace NActors {
                         IActor* recipientActor = mailbox->FindActor(ev->GetRecipientRewrite().LocalId());
                         if (recipientActor) {
                             TActorContext ctx(*mailbox, *node->ExecutorThread, GetCycleCountFast(), ev->GetRecipientRewrite());
-                            TActivationContext *prevTlsActivationContext = TlsActivationContext; 
-                            TlsActivationContext = &ctx; 
+                            TActivationContext *prevTlsActivationContext = TlsActivationContext;
+                            TlsActivationContext = &ctx;
                             recipientActor->Receive(ev, ctx);
-                            TlsActivationContext = prevTlsActivationContext; 
+                            TlsActivationContext = prevTlsActivationContext;
                             // we expect the logger to never die in tests
                         }
                     }
@@ -515,18 +515,18 @@ namespace NActors {
         node->ActorSystem->Start();
     }
 
-    bool TTestActorRuntimeBase::AllowSendFrom(TNodeDataBase* node, TAutoPtr<IEventHandle>& ev) { 
-        ui64 senderLocalId = ev->Sender.LocalId(); 
-        ui64 senderMailboxHint = ev->Sender.Hint(); 
-        TMailboxHeader* senderMailbox = node->MailboxTable->Get(senderMailboxHint); 
-        if (senderMailbox) { 
-            IActor* senderActor = senderMailbox->FindActor(senderLocalId); 
-            TTestDecorator *decorator = dynamic_cast<TTestDecorator*>(senderActor); 
-            return !decorator || decorator->BeforeSending(ev); 
-        } 
-        return true; 
-    } 
- 
+    bool TTestActorRuntimeBase::AllowSendFrom(TNodeDataBase* node, TAutoPtr<IEventHandle>& ev) {
+        ui64 senderLocalId = ev->Sender.LocalId();
+        ui64 senderMailboxHint = ev->Sender.Hint();
+        TMailboxHeader* senderMailbox = node->MailboxTable->Get(senderMailboxHint);
+        if (senderMailbox) {
+            IActor* senderActor = senderMailbox->FindActor(senderLocalId);
+            TTestDecorator *decorator = dynamic_cast<TTestDecorator*>(senderActor);
+            return !decorator || decorator->BeforeSending(ev);
+        }
+        return true;
+    }
+
     TTestActorRuntimeBase::TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount)
         : TTestActorRuntimeBase(nodeCount, dataCenterCount, false) {
     }
@@ -1547,10 +1547,10 @@ namespace NActors {
         Y_VERIFY(!ev->GetRecipientRewrite().IsService() && (targetNodeIndex == nodeIndex));
         TAutoPtr<IEventHandle> evHolder(ev);
 
-        if (!AllowSendFrom(node, evHolder)) { 
-            return; 
-        } 
- 
+        if (!AllowSendFrom(node, evHolder)) {
+            return;
+        }
+
         ui32 mailboxHint = ev->GetRecipientRewrite().Hint();
         TEventMailBox& mbox = GetMailbox(nodeId, mailboxHint);
         if (!mbox.IsActive(TInstant::MicroSeconds(CurrentTimestamp))) {
@@ -1774,15 +1774,15 @@ namespace NActors {
         }
 
         TStrandingActorDecorator(const TActorId& delegatee, bool isSync, const TVector<TActorId>& additionalActors,
-            TSimpleSharedPtr<TStrandingActorDecoratorContext> context, TTestActorRuntimeBase* runtime, 
-            TReplyCheckerCreator createReplyChecker) 
+            TSimpleSharedPtr<TStrandingActorDecoratorContext> context, TTestActorRuntimeBase* runtime,
+            TReplyCheckerCreator createReplyChecker)
             : Delegatee(delegatee)
             , IsSync(isSync)
             , AdditionalActors(additionalActors)
             , Context(context)
             , HasReply(false)
             , Runtime(runtime)
-            , ReplyChecker(createReplyChecker()) 
+            , ReplyChecker(createReplyChecker())
         {
             if (IsSync) {
                 Y_VERIFY(!runtime->IsRealThreads());
@@ -1812,12 +1812,12 @@ namespace NActors {
 
         STFUNC(Reply) {
             Y_VERIFY(!HasReply);
-            IEventHandle *requestEv = Context->Queue->Head(); 
+            IEventHandle *requestEv = Context->Queue->Head();
             TActorId originalSender = requestEv->Sender;
-            HasReply = !ReplyChecker->IsWaitingForMoreResponses(ev.Get()); 
-            if (HasReply) { 
-                delete Context->Queue->Pop(); 
-            } 
+            HasReply = !ReplyChecker->IsWaitingForMoreResponses(ev.Get());
+            if (HasReply) {
+                delete Context->Queue->Pop();
+            }
             ctx.ExecutorThread.Send(ev->Forward(originalSender));
             if (!IsSync && Context->Queue->Head()) {
                 SendHead(ctx);
@@ -1849,7 +1849,7 @@ namespace NActors {
 
         TAutoPtr<IEventHandle> GetForwardedEvent() {
             IEventHandle* ev = Context->Queue->Head();
-            ReplyChecker->OnRequest(ev); 
+            ReplyChecker->OnRequest(ev);
             TAutoPtr<IEventHandle> forwardedEv = ev->HasEvent()
                 ? new IEventHandle(Delegatee, ReplyId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie)
                 : new IEventHandle(ev->GetTypeRewrite(), ev->Flags, Delegatee, ReplyId, ev->ReleaseChainBuffer(), ev->Cookie);
@@ -1865,7 +1865,7 @@ namespace NActors {
         bool HasReply;
         TDispatchOptions DelegateeOptions;
         TTestActorRuntimeBase* Runtime;
-        THolder<IReplyChecker> ReplyChecker; 
+        THolder<IReplyChecker> ReplyChecker;
     };
 
     void TStrandingActorDecorator::TReplyActor::StateFunc(STFUNC_SIG) {
@@ -1874,28 +1874,28 @@ namespace NActors {
 
     class TStrandingDecoratorFactory : public IStrandingDecoratorFactory {
     public:
-        TStrandingDecoratorFactory(TTestActorRuntimeBase* runtime, 
-            TReplyCheckerCreator createReplyChecker) 
+        TStrandingDecoratorFactory(TTestActorRuntimeBase* runtime,
+            TReplyCheckerCreator createReplyChecker)
             : Context(new TStrandingActorDecoratorContext())
             , Runtime(runtime)
-            , CreateReplyChecker(createReplyChecker) 
+            , CreateReplyChecker(createReplyChecker)
         {
         }
 
         IActor* Wrap(const TActorId& delegatee, bool isSync, const TVector<TActorId>& additionalActors) override {
-            return new TStrandingActorDecorator(delegatee, isSync, additionalActors, Context, Runtime, 
-                CreateReplyChecker); 
+            return new TStrandingActorDecorator(delegatee, isSync, additionalActors, Context, Runtime,
+                CreateReplyChecker);
         }
 
     private:
         TSimpleSharedPtr<TStrandingActorDecoratorContext> Context;
         TTestActorRuntimeBase* Runtime;
-        TReplyCheckerCreator CreateReplyChecker; 
+        TReplyCheckerCreator CreateReplyChecker;
     };
 
-    TAutoPtr<IStrandingDecoratorFactory> CreateStrandingDecoratorFactory(TTestActorRuntimeBase* runtime, 
-            TReplyCheckerCreator createReplyChecker) { 
-        return TAutoPtr<IStrandingDecoratorFactory>(new TStrandingDecoratorFactory(runtime, createReplyChecker)); 
+    TAutoPtr<IStrandingDecoratorFactory> CreateStrandingDecoratorFactory(TTestActorRuntimeBase* runtime,
+            TReplyCheckerCreator createReplyChecker) {
+        return TAutoPtr<IStrandingDecoratorFactory>(new TStrandingDecoratorFactory(runtime, createReplyChecker));
     }
 
     ui64 DefaultRandomSeed = 9999;

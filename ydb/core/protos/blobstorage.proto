@@ -122,7 +122,7 @@ message TMsgQoS {
         uint32 ProxyNodeId = 10; // set when client is DS Proxy from specific node
         uint32 ReplVDiskId = 11; // set when client is replication actor from specific vdisk
         uint64 VDiskLoadId = 13; // set when client is load test with specific tag
-        uint32 VPatchVDiskId = 14; // set when client is vpatch actor from specific vdisk 
+        uint32 VPatchVDiskId = 14; // set when client is vpatch actor from specific vdisk
     }
     optional TExecTimeStats ExecTimeStats = 12;
     optional NActorsProto.TActorId SenderActorId = 15;
@@ -188,172 +188,172 @@ message TGroupInfo {
     optional EPDiskType DeviceType = 14;
 }
 
-message TEvVPatchStart { 
-    optional NKikimrProto.TLogoBlobID OriginalBlobId = 1; 
-    optional NKikimrProto.TLogoBlobID PatchedBlobId = 2; 
-    optional NKikimrBlobStorage.TVDiskID VDiskID = 3; 
- 
-    optional bool NotifyIfNotReady = 4; 
-    optional uint64 Cookie = 5; 
- 
-    optional TMsgQoS MsgQoS = 10; 
-    optional TTimestamps Timestamps = 23; 
-} 
- 
-message TEvVPatchFoundParts { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
-    optional string ErrorReason = 200; // textual description of error 
-    optional NKikimrProto.TLogoBlobID OriginalBlobId = 2; 
-    optional NKikimrProto.TLogoBlobID PatchedBlobId = 3; 
-    optional NKikimrBlobStorage.TVDiskID VDiskID = 4; 
- 
-    optional uint64 Cookie = 5; 
-    repeated uint32 OriginalParts = 6; 
- 
-    optional TMsgQoS MsgQoS = 10; 
-    optional TTimestamps Timestamps = 23; 
- 
-    optional fixed64 IncarnationGuid = 30; 
- 
-    optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation 
-} 
- 
-message TDiffBlock { 
-    optional uint64 Offset = 1; 
-    optional bytes Buffer = 2; 
-} 
- 
-message TXorDiffReceiver { 
-    optional NKikimrBlobStorage.TVDiskID VDiskID = 1; 
-    optional uint32 PartId = 2; 
-} 
- 
-message TEvVPatchDiff { 
-    optional NKikimrProto.TLogoBlobID OriginalPartBlobId = 1; 
-    optional NKikimrProto.TLogoBlobID PatchedPartBlobId = 2; 
-    optional NKikimrBlobStorage.TVDiskID VDiskID = 3; 
-    repeated TDiffBlock Diffs = 4; 
-    optional uint64 Cookie = 5; 
- 
-    repeated TXorDiffReceiver XorReceivers= 6; 
-    optional uint32 ExpectedXorDiffs = 7; 
-    optional bool ForceEnd = 8; 
-    optional bool NotifyIfNotReady = 9; 
- 
-    optional TMsgQoS MsgQoS = 10; 
-    optional TTimestamps Timestamps = 23; 
-} 
- 
-message TEvVPatchXorDiff { 
-    optional NKikimrProto.TLogoBlobID OriginalPartBlobId = 1; 
-    optional NKikimrProto.TLogoBlobID PatchedPartBlobId = 2; 
-    optional NKikimrBlobStorage.TVDiskID VDiskID = 3; 
-    repeated TDiffBlock Diffs = 4; 
-    optional uint64 Cookie = 5; 
-    optional uint32 FromPartId = 6; 
-    optional bool NotifyIfNotReady = 7; 
- 
-    optional TMsgQoS MsgQoS = 10; 
-    optional TTimestamps Timestamps = 23; 
-} 
- 
-message TEvVPatchXorDiffResult { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
-    optional TMsgQoS MsgQoS = 10; 
-    optional TTimestamps Timestamps = 23; 
-}; 
- 
-message TEvVPatchResult { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
-    optional string ErrorReason = 200; // textual description of error 
-    optional NKikimrProto.TLogoBlobID OriginalPartBlobId = 2; 
-    optional NKikimrProto.TLogoBlobID PatchedPartBlobId = 3; 
-    optional NKikimrBlobStorage.TVDiskID VDiskID = 4; 
- 
-    optional uint64 Cookie = 5; 
-    optional uint32 StatusFlags = 6; 
- 
-    optional TMsgQoS MsgQoS = 10; 
-    optional TTimestamps Timestamps = 23; 
- 
-    optional float ApproximateFreeSpaceShare = 25 [default = 0]; // 0 is a special value for 'unknown 
-    optional fixed64 IncarnationGuid = 30; 
- 
-    optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation 
-} 
- 
-message TEvVMovedPatch { 
-    optional NKikimrProto.TLogoBlobID OriginalBlobId = 1; 
-    optional NKikimrProto.TLogoBlobID PatchedBlobId = 2; 
-    optional uint32 OriginalGroupId = 3; 
-    optional uint32 PatchedGroupId = 4; 
-    repeated TDiffBlock Diffs = 5; 
- 
-    optional NKikimrBlobStorage.TVDiskID VDiskID = 6; 
- 
-    optional bool IgnoreBlock = 7; 
-    optional bool NotifyIfNotReady = 8; 
-    optional uint64 Cookie = 9; 
- 
-    optional TMsgQoS MsgQoS = 10; 
-    optional TTimestamps Timestamps = 23; 
-} 
- 
-message TEvVMovedPatchResult { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
-    optional string ErrorReason = 200; // textual description of error 
-    optional NKikimrProto.TLogoBlobID OriginalBlobId = 2; 
-    optional NKikimrProto.TLogoBlobID PatchedBlobId = 3; 
- 
-    optional NKikimrBlobStorage.TVDiskID VDiskID = 4; 
-    optional uint64 Cookie = 5; 
-    optional uint32 StatusFlags = 6; 
- 
-    optional TMsgQoS MsgQoS = 10; 
-    optional TTimestamps Timestamps = 23; 
- 
-    optional float ApproximateFreeSpaceShare = 25 [default = 0]; // 0 is a special value for 'unknown' 
-    optional fixed64 IncarnationGuid = 30; 
- 
-    optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation 
-} 
- 
-message TEvVInplacePatch { 
-    optional NKikimrProto.TLogoBlobID OriginalBlobId = 1; 
-    optional NKikimrProto.TLogoBlobID PatchedBlobId = 2; 
-    optional uint32 OriginalGroupId = 3; 
-    optional uint32 PatchedGroupId = 4; 
-    repeated TDiffBlock Diffs = 5; 
- 
-    optional NKikimrBlobStorage.TVDiskID VDiskID = 6; 
- 
-    optional bool IgnoreBlock = 7; 
-    optional bool NotifyIfNotReady = 8; 
-    optional uint64 Cookie = 9; 
- 
-    optional TMsgQoS MsgQoS = 10; 
-    optional TTimestamps Timestamps = 23; 
-} 
- 
-message TEvVInplacePatchResult { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
-    optional string ErrorReason = 200; // textual description of error 
-    optional NKikimrProto.TLogoBlobID OriginalBlobId = 2; 
-    optional NKikimrProto.TLogoBlobID PatchedBlobId = 3; 
- 
-    optional NKikimrBlobStorage.TVDiskID VDiskID = 4; 
-    optional uint64 Cookie = 5; 
-    optional uint32 StatusFlags = 6; 
- 
-    optional TMsgQoS MsgQoS = 10; 
-    optional TTimestamps Timestamps = 23; 
- 
-    optional float ApproximateFreeSpaceShare = 25 [default = 0]; // 0 is a special value for 'unknown' 
-    optional fixed64 IncarnationGuid = 30; 
- 
-    optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation 
-} 
- 
+message TEvVPatchStart {
+    optional NKikimrProto.TLogoBlobID OriginalBlobId = 1;
+    optional NKikimrProto.TLogoBlobID PatchedBlobId = 2;
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
+
+    optional bool NotifyIfNotReady = 4;
+    optional uint64 Cookie = 5;
+
+    optional TMsgQoS MsgQoS = 10;
+    optional TTimestamps Timestamps = 23;
+}
+
+message TEvVPatchFoundParts {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 200; // textual description of error
+    optional NKikimrProto.TLogoBlobID OriginalBlobId = 2;
+    optional NKikimrProto.TLogoBlobID PatchedBlobId = 3;
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 4;
+
+    optional uint64 Cookie = 5;
+    repeated uint32 OriginalParts = 6;
+
+    optional TMsgQoS MsgQoS = 10;
+    optional TTimestamps Timestamps = 23;
+
+    optional fixed64 IncarnationGuid = 30;
+
+    optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
+}
+
+message TDiffBlock {
+    optional uint64 Offset = 1;
+    optional bytes Buffer = 2;
+}
+
+message TXorDiffReceiver {
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 1;
+    optional uint32 PartId = 2;
+}
+
+message TEvVPatchDiff {
+    optional NKikimrProto.TLogoBlobID OriginalPartBlobId = 1;
+    optional NKikimrProto.TLogoBlobID PatchedPartBlobId = 2;
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
+    repeated TDiffBlock Diffs = 4;
+    optional uint64 Cookie = 5;
+
+    repeated TXorDiffReceiver XorReceivers= 6;
+    optional uint32 ExpectedXorDiffs = 7;
+    optional bool ForceEnd = 8;
+    optional bool NotifyIfNotReady = 9;
+
+    optional TMsgQoS MsgQoS = 10;
+    optional TTimestamps Timestamps = 23;
+}
+
+message TEvVPatchXorDiff {
+    optional NKikimrProto.TLogoBlobID OriginalPartBlobId = 1;
+    optional NKikimrProto.TLogoBlobID PatchedPartBlobId = 2;
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
+    repeated TDiffBlock Diffs = 4;
+    optional uint64 Cookie = 5;
+    optional uint32 FromPartId = 6;
+    optional bool NotifyIfNotReady = 7;
+
+    optional TMsgQoS MsgQoS = 10;
+    optional TTimestamps Timestamps = 23;
+}
+
+message TEvVPatchXorDiffResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional TMsgQoS MsgQoS = 10;
+    optional TTimestamps Timestamps = 23;
+};
+
+message TEvVPatchResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 200; // textual description of error
+    optional NKikimrProto.TLogoBlobID OriginalPartBlobId = 2;
+    optional NKikimrProto.TLogoBlobID PatchedPartBlobId = 3;
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 4;
+
+    optional uint64 Cookie = 5;
+    optional uint32 StatusFlags = 6;
+
+    optional TMsgQoS MsgQoS = 10;
+    optional TTimestamps Timestamps = 23;
+
+    optional float ApproximateFreeSpaceShare = 25 [default = 0]; // 0 is a special value for 'unknown
+    optional fixed64 IncarnationGuid = 30;
+
+    optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
+}
+
+message TEvVMovedPatch {
+    optional NKikimrProto.TLogoBlobID OriginalBlobId = 1;
+    optional NKikimrProto.TLogoBlobID PatchedBlobId = 2;
+    optional uint32 OriginalGroupId = 3;
+    optional uint32 PatchedGroupId = 4;
+    repeated TDiffBlock Diffs = 5;
+
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 6;
+
+    optional bool IgnoreBlock = 7;
+    optional bool NotifyIfNotReady = 8;
+    optional uint64 Cookie = 9;
+
+    optional TMsgQoS MsgQoS = 10;
+    optional TTimestamps Timestamps = 23;
+}
+
+message TEvVMovedPatchResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 200; // textual description of error
+    optional NKikimrProto.TLogoBlobID OriginalBlobId = 2;
+    optional NKikimrProto.TLogoBlobID PatchedBlobId = 3;
+
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 4;
+    optional uint64 Cookie = 5;
+    optional uint32 StatusFlags = 6;
+
+    optional TMsgQoS MsgQoS = 10;
+    optional TTimestamps Timestamps = 23;
+
+    optional float ApproximateFreeSpaceShare = 25 [default = 0]; // 0 is a special value for 'unknown'
+    optional fixed64 IncarnationGuid = 30;
+
+    optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
+}
+
+message TEvVInplacePatch {
+    optional NKikimrProto.TLogoBlobID OriginalBlobId = 1;
+    optional NKikimrProto.TLogoBlobID PatchedBlobId = 2;
+    optional uint32 OriginalGroupId = 3;
+    optional uint32 PatchedGroupId = 4;
+    repeated TDiffBlock Diffs = 5;
+
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 6;
+
+    optional bool IgnoreBlock = 7;
+    optional bool NotifyIfNotReady = 8;
+    optional uint64 Cookie = 9;
+
+    optional TMsgQoS MsgQoS = 10;
+    optional TTimestamps Timestamps = 23;
+}
+
+message TEvVInplacePatchResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 200; // textual description of error
+    optional NKikimrProto.TLogoBlobID OriginalBlobId = 2;
+    optional NKikimrProto.TLogoBlobID PatchedBlobId = 3;
+
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 4;
+    optional uint64 Cookie = 5;
+    optional uint32 StatusFlags = 6;
+
+    optional TMsgQoS MsgQoS = 10;
+    optional TTimestamps Timestamps = 23;
+
+    optional float ApproximateFreeSpaceShare = 25 [default = 0]; // 0 is a special value for 'unknown'
+    optional fixed64 IncarnationGuid = 30;
+
+    optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
+}
+
 message TEvVPut {
     optional NKikimrProto.TLogoBlobID BlobID = 1;
     optional bytes Buffer = 2;
@@ -386,53 +386,53 @@ message TEvVPutResult {
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
 }
 
-message TVMultiPutItem { 
-    optional NKikimrProto.TLogoBlobID BlobID = 1; 
-    optional bytes Buffer = 2; 
- 
-    optional uint64 FullDataSize = 3; 
-    optional uint64 Cookie = 4; 
-} 
- 
-message TEvVMultiPut { 
-    repeated TVMultiPutItem Items = 1; 
- 
-    optional TVDiskID VDiskID = 2; 
- 
+message TVMultiPutItem {
+    optional NKikimrProto.TLogoBlobID BlobID = 1;
+    optional bytes Buffer = 2;
+
+    optional uint64 FullDataSize = 3;
+    optional uint64 Cookie = 4;
+}
+
+message TEvVMultiPut {
+    repeated TVMultiPutItem Items = 1;
+
+    optional TVDiskID VDiskID = 2;
+
     optional bool IgnoreBlock = 3 [default = false];
-    optional bool NotifyIfNotReady = 4; 
-    optional uint64 Cookie = 5; 
-    optional EPutHandleClass HandleClass = 6; 
-    optional TMsgQoS MsgQoS = 10; 
-    optional TTimestamps Timestamps = 23; 
-} 
- 
-message TVMultiPutResultItem { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
+    optional bool NotifyIfNotReady = 4;
+    optional uint64 Cookie = 5;
+    optional EPutHandleClass HandleClass = 6;
+    optional TMsgQoS MsgQoS = 10;
+    optional TTimestamps Timestamps = 23;
+}
+
+message TVMultiPutResultItem {
+    optional NKikimrProto.EReplyStatus Status = 1;
     optional string ErrorReason = 200;
-    optional NKikimrProto.TLogoBlobID BlobID = 2; 
- 
-    optional uint64 Cookie = 3; 
-    optional uint32 StatusFlags = 4 [default = 0]; 
-} 
- 
-message TEvVMultiPutResult { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
+    optional NKikimrProto.TLogoBlobID BlobID = 2;
+
+    optional uint64 Cookie = 3;
+    optional uint32 StatusFlags = 4 [default = 0];
+}
+
+message TEvVMultiPutResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
     optional string ErrorReason = 200;
-    repeated TVMultiPutResultItem Items = 2; 
- 
-    optional TVDiskID VDiskID = 3; 
-    optional uint64 Cookie = 4; 
-    optional uint32 StatusFlags = 5 [default = 0]; 
-    optional TMsgQoS MsgQoS = 10; 
-    optional TTimestamps Timestamps = 23; 
- 
-    optional float ApproximateFreeSpaceShare = 25 [default = 0]; // 0 is a special value for 'unknown' 
+    repeated TVMultiPutResultItem Items = 2;
+
+    optional TVDiskID VDiskID = 3;
+    optional uint64 Cookie = 4;
+    optional uint32 StatusFlags = 5 [default = 0];
+    optional TMsgQoS MsgQoS = 10;
+    optional TTimestamps Timestamps = 23;
+
+    optional float ApproximateFreeSpaceShare = 25 [default = 0]; // 0 is a special value for 'unknown'
     optional fixed64 IncarnationGuid = 30;
 
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
-} 
- 
+}
+
 message TRangeQuery {
     optional NKikimrProto.TLogoBlobID From = 1;
     optional NKikimrProto.TLogoBlobID To = 2;

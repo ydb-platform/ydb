@@ -56,26 +56,26 @@ namespace NKikimr {
         return vctx->IFaceMonGroup->GetBarrierResMsgsPtr();
     }
 
-    inline const NMonitoring::TDynamicCounters::TCounterPtr &ResultingCounterForEvent(const TVDiskContextPtr &vctx, 
-                TEvBlobStorage::TEvVMovedPatch::TPtr &) { 
-        return vctx->IFaceMonGroup->MovedPatchMsgsPtr(); 
-    } 
- 
-    inline const NMonitoring::TDynamicCounters::TCounterPtr &ResultingCounterForEvent(const TVDiskContextPtr &vctx, 
-                TEvBlobStorage::TEvVPatchFoundParts::TPtr &) { 
-        return vctx->IFaceMonGroup->PatchFoundPartsMsgsPtr(); 
-    } 
- 
-    inline const NMonitoring::TDynamicCounters::TCounterPtr &ResultingCounterForEvent(const TVDiskContextPtr &vctx, 
-                TEvBlobStorage::TEvVPatchXorDiffResult::TPtr &) { 
-        return vctx->IFaceMonGroup->PatchXorDiffResMsgsPtr(); 
-    } 
- 
-    inline const NMonitoring::TDynamicCounters::TCounterPtr &ResultingCounterForEvent(const TVDiskContextPtr &vctx, 
-                TEvBlobStorage::TEvVPatchResult::TPtr &) { 
-        return vctx->IFaceMonGroup->PatchResMsgsPtr(); 
-    } 
- 
+    inline const NMonitoring::TDynamicCounters::TCounterPtr &ResultingCounterForEvent(const TVDiskContextPtr &vctx,
+                TEvBlobStorage::TEvVMovedPatch::TPtr &) {
+        return vctx->IFaceMonGroup->MovedPatchMsgsPtr();
+    }
+
+    inline const NMonitoring::TDynamicCounters::TCounterPtr &ResultingCounterForEvent(const TVDiskContextPtr &vctx,
+                TEvBlobStorage::TEvVPatchFoundParts::TPtr &) {
+        return vctx->IFaceMonGroup->PatchFoundPartsMsgsPtr();
+    }
+
+    inline const NMonitoring::TDynamicCounters::TCounterPtr &ResultingCounterForEvent(const TVDiskContextPtr &vctx,
+                TEvBlobStorage::TEvVPatchXorDiffResult::TPtr &) {
+        return vctx->IFaceMonGroup->PatchXorDiffResMsgsPtr();
+    }
+
+    inline const NMonitoring::TDynamicCounters::TCounterPtr &ResultingCounterForEvent(const TVDiskContextPtr &vctx,
+                TEvBlobStorage::TEvVPatchResult::TPtr &) {
+        return vctx->IFaceMonGroup->PatchResMsgsPtr();
+    }
+
     template<typename TRequest, typename TResponse>
     inline void SetRacingGroupInfo(const TRequest& request, TResponse& response,
             const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo) {
@@ -87,11 +87,11 @@ namespace NKikimr {
         }
     }
 
-    inline void SetRacingGroupInfo(const NKikimrBlobStorage::TEvVPatchXorDiff&, 
-            NKikimrBlobStorage::TEvVPatchXorDiffResult&, const TIntrusivePtr<TBlobStorageGroupInfo>&) 
-    {} 
+    inline void SetRacingGroupInfo(const NKikimrBlobStorage::TEvVPatchXorDiff&,
+            NKikimrBlobStorage::TEvVPatchXorDiffResult&, const TIntrusivePtr<TBlobStorageGroupInfo>&)
+    {}
 
- 
+
     ////////////////////////////////////////////////////////////////////////////////////////////
     // CreateResult -- create result from original message and status
     ////////////////////////////////////////////////////////////////////////////////////////////
@@ -108,12 +108,12 @@ namespace NKikimr {
         }
         const auto oosStatus = vctx->GetOutOfSpaceState().GetGlobalStatusFlags();
         const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr = ResultingCounterForEvent(vctx, ev);
- 
+
         return std::make_unique<TEvBlobStorage::TEvVMovedPatchResult>(status, originalId, patchedId, vdiskID, cookie,
             oosStatus, now, ev->Get()->GetCachedByteSize(), &record, skeletonFrontIDPtr, counterPtr, nullptr,
             std::move(ev->TraceId), vdiskIncarnationGuid, errorReason);
     }
- 
+
     static inline std::unique_ptr<TEvBlobStorage::TEvVPatchFoundParts>
     CreateResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,
             TEvBlobStorage::TEvVPatchStart::TPtr &ev, const TInstant &now, const TActorIDPtr &skeletonFrontIDPtr,
@@ -124,50 +124,50 @@ namespace NKikimr {
         TMaybe<ui64> cookie;
         if (record.HasCookie()) {
             cookie = record.GetCookie();
-        } 
+        }
         const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr = ResultingCounterForEvent(vctx, ev);
- 
+
         return std::make_unique<TEvBlobStorage::TEvVPatchFoundParts>(status, originalId, patchedId, vdiskID, cookie, now,
             errorReason, &record, skeletonFrontIDPtr, counterPtr, nullptr, std::move(ev->TraceId), vdiskIncarnationGuid);
     }
- 
+
     static inline std::unique_ptr<TEvBlobStorage::TEvVPatchResult>
     CreateResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,
             TEvBlobStorage::TEvVPatchDiff::TPtr &ev, const TInstant &now, const TActorIDPtr &skeletonFrontIDPtr,
             const TVDiskID &vdiskID, ui64 vdiskIncarnationGuid) {
- 
+
         auto &record = ev->Get()->Record;
         TLogoBlobID originalId = LogoBlobIDFromLogoBlobID(record.GetOriginalPartBlobId());
         TLogoBlobID patchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedPartBlobId());
         TMaybe<ui64> cookie;
         if (record.HasCookie()) {
             cookie = record.GetCookie();
-        } 
+        }
         const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr = ResultingCounterForEvent(vctx, ev);
- 
+
         auto res = std::make_unique<TEvBlobStorage::TEvVPatchResult>(status, originalId, patchedId, vdiskID, cookie,
             now, &record, skeletonFrontIDPtr, counterPtr, nullptr, std::move(ev->TraceId), vdiskIncarnationGuid);
         res->SetStatus(status, errorReason);
         return res;
     }
- 
+
     static inline std::unique_ptr<TEvBlobStorage::TEvVPatchXorDiffResult>
     CreateResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,
             TEvBlobStorage::TEvVPatchXorDiff::TPtr &ev, const TInstant &now, const TActorIDPtr &skeletonFrontIDPtr,
             const TVDiskID &vdiskID, ui64 vdiskIncarnationGuid) {
- 
+
         Y_UNUSED(errorReason, vdiskID, vdiskIncarnationGuid);
         auto &record = ev->Get()->Record;
         const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr = ResultingCounterForEvent(vctx, ev);
         return std::make_unique<TEvBlobStorage::TEvVPatchXorDiffResult>(status, now, &record, skeletonFrontIDPtr,
             counterPtr, nullptr, std::move(ev->TraceId));
     }
- 
+
     static inline std::unique_ptr<TEvBlobStorage::TEvVPutResult>
     CreateResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,
             TEvBlobStorage::TEvVPut::TPtr &ev, const TInstant &now, const TActorIDPtr &skeletonFrontIDPtr,
             const TVDiskID &vdiskID, ui64 vdiskIncarnationGuid) {
- 
+
         NKikimrBlobStorage::TEvVPut &record = ev->Get()->Record;
         const TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetBlobID());
         const ui64 bufferSizeBytes = ev->Get()->GetBufferBytes();
@@ -177,7 +177,7 @@ namespace NKikimr {
         const auto handleClass = record.GetHandleClass();
         const NVDiskMon::TLtcHistoPtr &histoPtr = vctx->Histograms.GetHistogram(handleClass);
         const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr = ResultingCounterForEvent(vctx, ev);
- 
+
         return std::make_unique<TEvBlobStorage::TEvVPutResult>(status, id, vdiskID, cookie, oosStatus, now,
                 ev->Get()->GetCachedByteSize(), &record, skeletonFrontIDPtr, counterPtr, histoPtr,
                 bufferSizeBytes, std::move(ev->TraceId), vdiskIncarnationGuid, errorReason);
@@ -214,47 +214,47 @@ namespace NKikimr {
     // NErrBuilder -- routines for error results
     ////////////////////////////////////////////////////////////////////////////
     namespace NErrBuilder {
-        template <typename TEvPtr> 
+        template <typename TEvPtr>
         static inline std::unique_ptr<IEventBase>
         ErroneousResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,
-                        TEvPtr &ev, const TInstant &now, const TActorIDPtr &skeletonFrontIDPtr, 
-                        const TVDiskID &vdiskID, ui64 vdiskIncarnationGuid, 
-                        const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo) 
-        { 
-            if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVMovedPatch::TPtr>) { 
-                TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetOriginalBlobId()); 
-                LWTRACK(VDiskSkeletonFrontVMovedPatchRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId, 
-                    vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize()); 
-            } 
-            if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchStart::TPtr>) { 
-                TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetOriginalBlobId()); 
-                LWTRACK(VDiskSkeletonFrontVPatchStartRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId, 
-                    vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize()); 
-            } 
-            if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchDiff::TPtr>) { 
-                TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetOriginalPartBlobId()); 
-                LWTRACK(VDiskSkeletonFrontVPatchDiffRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId, 
-                    vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize()); 
-            } 
-            if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchXorDiff::TPtr>) { 
-                TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetOriginalPartBlobId()); 
-                LWTRACK(VDiskSkeletonFrontVPatchXorDiffRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId, 
-                    vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize()); 
-            } 
-            if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPut::TPtr>) { 
-                TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetBlobID()); 
-                LWTRACK(VDiskSkeletonFrontVPutRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId, 
-                    vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize()); 
-            } 
- 
+                        TEvPtr &ev, const TInstant &now, const TActorIDPtr &skeletonFrontIDPtr,
+                        const TVDiskID &vdiskID, ui64 vdiskIncarnationGuid,
+                        const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo)
+        {
+            if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVMovedPatch::TPtr>) {
+                TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetOriginalBlobId());
+                LWTRACK(VDiskSkeletonFrontVMovedPatchRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId,
+                    vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
+            }
+            if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchStart::TPtr>) {
+                TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetOriginalBlobId());
+                LWTRACK(VDiskSkeletonFrontVPatchStartRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId,
+                    vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
+            }
+            if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchDiff::TPtr>) {
+                TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetOriginalPartBlobId());
+                LWTRACK(VDiskSkeletonFrontVPatchDiffRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId,
+                    vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
+            }
+            if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPatchXorDiff::TPtr>) {
+                TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetOriginalPartBlobId());
+                LWTRACK(VDiskSkeletonFrontVPatchXorDiffRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId,
+                    vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
+            }
+            if constexpr (std::is_same_v<TEvPtr, TEvBlobStorage::TEvVPut::TPtr>) {
+                TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetBlobID());
+                LWTRACK(VDiskSkeletonFrontVPutRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId,
+                    vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
+            }
+
             auto result = CreateResult(vctx, status, errorReason, ev, now, skeletonFrontIDPtr, vdiskID,
                 vdiskIncarnationGuid);
-            SetRacingGroupInfo(ev->Get()->Record, result->Record, groupInfo); 
+            SetRacingGroupInfo(ev->Get()->Record, result->Record, groupInfo);
             return result;
-        } 
- 
+        }
+
         static inline std::unique_ptr<IEventBase>
-        ErroneousResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason, 
+        ErroneousResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,
                         TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TInstant &now,
                         const TActorIDPtr &skeletonFrontIDPtr, const TVDiskID &vdiskID,
                         const TBatchedVec<NKikimrProto::EReplyStatus> &statuses, ui64 vdiskIncarnationGuid,
@@ -273,9 +273,9 @@ namespace NKikimr {
             auto result = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>(status, vdiskID, cookie, now,
                 ev->Get()->GetCachedByteSize(), &record, skeletonFrontIDPtr, counterPtr, histoPtr, bufferSizeBytes,
                 std::move(ev->TraceId), vdiskIncarnationGuid, errorReason);
-            Y_VERIFY(record.ItemsSize() == statuses.size()); 
-            for (ui64 itemIdx = 0; itemIdx < record.ItemsSize(); ++itemIdx) { 
-                auto &item = record.GetItems(itemIdx); 
+            Y_VERIFY(record.ItemsSize() == statuses.size());
+            for (ui64 itemIdx = 0; itemIdx < record.ItemsSize(); ++itemIdx) {
+                auto &item = record.GetItems(itemIdx);
                 ui64 cookieValue = 0;
                 ui64 *cookiePtr = nullptr;
                 if (item.HasCookie()) {
@@ -291,17 +291,17 @@ namespace NKikimr {
 
         static inline std::unique_ptr<IEventBase>
         ErroneousResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,
-                        TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TInstant &now, 
-                        const TActorIDPtr &skeletonFrontIDPtr, 
+                        TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TInstant &now,
+                        const TActorIDPtr &skeletonFrontIDPtr,
                         const TVDiskID &vdiskID, ui64 vdiskIncarnationGuid,
                         const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo)
-        { 
-            NKikimrBlobStorage::TEvVMultiPut &record = ev->Get()->Record; 
-            TBatchedVec<NKikimrProto::EReplyStatus> statuses(record.ItemsSize(), status); 
+        {
+            NKikimrBlobStorage::TEvVMultiPut &record = ev->Get()->Record;
+            TBatchedVec<NKikimrProto::EReplyStatus> statuses(record.ItemsSize(), status);
             return ErroneousResult(vctx, status, errorReason, ev, now, skeletonFrontIDPtr, vdiskID, statuses,
                 vdiskIncarnationGuid, groupInfo);
-        } 
- 
+        }
+
         static inline std::unique_ptr<IEventBase>
         ErroneousResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
                         TEvBlobStorage::TEvVGet::TPtr &ev, const TInstant &now, const TActorIDPtr &skeletonFrontIDPtr,

@@ -46,9 +46,9 @@ enum EServiceKikimr {
     BS_PROXY_MULTICOLLECT = 289;
     BS_CONTROLLER_AUDIT = 304;
     BS_SELFHEAL = 342;
-    BS_PROXY_PATCH = 343; 
+    BS_PROXY_PATCH = 343;
     BS_VDISK_SCRUB = 344;
-    BS_VDISK_PATCH = 345; 
+    BS_VDISK_PATCH = 345;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //

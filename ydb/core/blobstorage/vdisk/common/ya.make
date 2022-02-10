@@ -52,7 +52,7 @@ SRCS(
     vdisk_pdisk_error.h
     vdisk_pdiskctx.h
     vdisk_private_events.h
-    vdisk_queues.h 
+    vdisk_queues.h
     vdisk_recoverylogwriter.cpp
     vdisk_recoverylogwriter.h
     vdisk_response.cpp

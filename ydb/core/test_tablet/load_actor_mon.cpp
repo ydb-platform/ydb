@@ -116,11 +116,11 @@ namespace NKikimr::NTestShard {
                                         TABLED() { str << num; }
                                     }
 
-                                    TABLER() { 
-                                        TABLED() { str << "Count of validation runnings"; } 
-                                        TABLED() { str << self->ValidationRunningCount; } 
-                                    } 
- 
+                                    TABLER() {
+                                        TABLED() { str << "Count of validation runnings"; }
+                                        TABLED() { str << self->ValidationRunningCount; }
+                                    }
+
                                     const std::vector<double> ps{0.0, 0.5, 0.9, 0.99, 1.0};
 
                                     auto output = [&](auto& r, const char *name) {

@@ -15,7 +15,7 @@ namespace NKikimr {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupRangeRequest> {
-    static constexpr ui32 MaxBlobsToQueryAtOnce = 8096; 
+    static constexpr ui32 MaxBlobsToQueryAtOnce = 8096;
 
     const ui64 TabletId;
     const TLogoBlobID From;
@@ -180,7 +180,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
                         }
                     }
 
-                    from = TLogoBlobID(TabletId, generation, step, channel, TLogoBlobID::MaxBlobSize, cookie); 
+                    from = TLogoBlobID(TabletId, generation, step, channel, TLogoBlobID::MaxBlobSize, cookie);
                     send = send && to < from;
                 }
 

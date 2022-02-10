@@ -80,7 +80,7 @@ namespace NActors {
         IExecutorPool* const ExecutorPool;
 
         // Event-specific (currently executing)
-        TVector<THolder<IActor>> DyingActors; 
+        TVector<THolder<IActor>> DyingActors;
         TActorId CurrentRecipient;
         ui64 CurrentActorScheduledEventsCounter = 0;
 

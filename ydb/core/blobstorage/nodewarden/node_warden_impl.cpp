@@ -33,14 +33,14 @@ void TNodeWarden::StartInvalidGroupProxy() {
     STLOG(PRI_DEBUG, BS_NODE, NW11, "StartInvalidGroupProxy", (GroupId, groupId));
     TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(MakeBlobStorageProxyID(groupId), Register(
         CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId));
-} 
- 
+}
+
 void TNodeWarden::StopInvalidGroupProxy() {
-    ui32 groupId = Max<ui32>(); 
+    ui32 groupId = Max<ui32>();
     STLOG(PRI_DEBUG, BS_NODE, NW15, "StopInvalidGroupProxy", (GroupId, groupId));
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, MakeBlobStorageProxyID(groupId), {}, nullptr, 0));
-} 
- 
+}
+
 void TNodeWarden::PassAway() {
     STLOG(PRI_DEBUG, BS_NODE, NW25, "PassAway");
     NTabletPipe::CloseClient(SelfId(), PipeClientId);
@@ -74,11 +74,11 @@ void TNodeWarden::Bootstrap() {
     DsProxyNodeMonActor = Register(CreateDsProxyNodeMon(DsProxyNodeMon));
     DsProxyPerPoolCounters = new TDsProxyPerPoolCounters(AppData()->Counters);
 
-    if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) { 
-        actorSystem->AppData<TAppData>()->Icb->RegisterLocalControl(EnablePutBatching, "BlobStorage_EnablePutBatching"); 
-        actorSystem->AppData<TAppData>()->Icb->RegisterLocalControl(EnableVPatch, "BlobStorage_EnableVPatch"); 
-    } 
- 
+    if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
+        actorSystem->AppData<TAppData>()->Icb->RegisterLocalControl(EnablePutBatching, "BlobStorage_EnablePutBatching");
+        actorSystem->AppData<TAppData>()->Icb->RegisterLocalControl(EnableVPatch, "BlobStorage_EnableVPatch");
+    }
+
     // start replication broker
     const auto& replBrokerConfig = Cfg->ServiceSet.GetReplBrokerConfig();
 
@@ -147,7 +147,7 @@ void TNodeWarden::HandleReadCache() {
                 if (!proto.HasInstanceId() && !proto.HasAvailDomain() && !proto.HasServiceSet()) {
                     return;
                 }
- 
+
                 Y_VERIFY(proto.HasInstanceId());
                 Y_VERIFY(proto.HasAvailDomain() && proto.GetAvailDomain() == AvailDomainId);
                 if (!InstanceId) {

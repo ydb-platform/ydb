@@ -413,7 +413,7 @@ public:
     // origin of the group info content
     std::optional<NKikimrBlobStorage::TGroupInfo> Group;
 
-    TAtomicLogPriorityMuteChecker<NLog::PRI_ERROR, NLog::PRI_DEBUG> PutErrorMuteChecker; 
+    TAtomicLogPriorityMuteChecker<NLog::PRI_ERROR, NLog::PRI_DEBUG> PutErrorMuteChecker;
 
 private:
     // group topology -- all disks inside this group

@@ -593,8 +593,8 @@ namespace NActors {
         void CleanupNodes();
         virtual void InitNodeImpl(TNodeDataBase*, size_t);
 
-        static bool AllowSendFrom(TNodeDataBase* node, TAutoPtr<IEventHandle>& ev); 
- 
+        static bool AllowSendFrom(TNodeDataBase* node, TAutoPtr<IEventHandle>& ev);
+
     protected:
         THolder<INodeFactory> NodeFactory{new TDefaultNodeFactory};
 
@@ -689,28 +689,28 @@ namespace NActors {
         virtual IActor* Wrap(const TActorId& delegatee, bool isSync, const TVector<TActorId>& additionalActors) = 0;
     };
 
-    struct IReplyChecker { 
-        virtual ~IReplyChecker() {} 
-        virtual void OnRequest(IEventHandle *request) = 0; 
-        virtual bool IsWaitingForMoreResponses(IEventHandle *response) = 0; 
-    }; 
- 
-    struct TNoneReplyChecker : IReplyChecker { 
-        void OnRequest(IEventHandle*) override { 
-        } 
- 
-        bool IsWaitingForMoreResponses(IEventHandle*) override { 
-            return false; 
-        } 
-    }; 
- 
-    using TReplyCheckerCreator = std::function<THolder<IReplyChecker>(void)>; 
- 
-    inline THolder<IReplyChecker> CreateNoneReplyChecker() { 
+    struct IReplyChecker {
+        virtual ~IReplyChecker() {}
+        virtual void OnRequest(IEventHandle *request) = 0;
+        virtual bool IsWaitingForMoreResponses(IEventHandle *response) = 0;
+    };
+
+    struct TNoneReplyChecker : IReplyChecker {
+        void OnRequest(IEventHandle*) override {
+        }
+
+        bool IsWaitingForMoreResponses(IEventHandle*) override {
+            return false;
+        }
+    };
+
+    using TReplyCheckerCreator = std::function<THolder<IReplyChecker>(void)>;
+
+    inline THolder<IReplyChecker> CreateNoneReplyChecker() {
         return MakeHolder<TNoneReplyChecker>();
-    } 
- 
-    TAutoPtr<IStrandingDecoratorFactory> CreateStrandingDecoratorFactory(TTestActorRuntimeBase* runtime, 
-            TReplyCheckerCreator createReplyChecker = CreateNoneReplyChecker); 
+    }
+
+    TAutoPtr<IStrandingDecoratorFactory> CreateStrandingDecoratorFactory(TTestActorRuntimeBase* runtime,
+            TReplyCheckerCreator createReplyChecker = CreateNoneReplyChecker);
     extern ui64 DefaultRandomSeed;
 }

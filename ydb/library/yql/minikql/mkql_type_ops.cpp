@@ -1034,10 +1034,10 @@ bool IsValidUuid(NUdf::TStringRef buf) {
     return true;
 }
 
- 
-static bool ParseUuidToArray(NUdf::TStringRef buf, ui16* dw, bool shortForm) { 
-    if (buf.Size() != (shortForm ? 32 : 36)) { 
-        return false; 
+
+static bool ParseUuidToArray(NUdf::TStringRef buf, ui16* dw, bool shortForm) {
+    if (buf.Size() != (shortForm ? 32 : 36)) {
+        return false;
     }
 
     size_t partId = 0;
@@ -1047,17 +1047,17 @@ static bool ParseUuidToArray(NUdf::TStringRef buf, ui16* dw, bool shortForm) {
     for (size_t i = 0; i < buf.Size(); ++i) {
         const char c = buf.Data()[i];
 
-        if (!shortForm && (i == 8 || i == 13 || i == 18 || i == 23)) { 
-            if (c == '-') { 
-                continue; 
-            } else { 
-                return false; 
+        if (!shortForm && (i == 8 || i == 13 || i == 18 || i == 23)) {
+            if (c == '-') {
+                continue;
+            } else {
+                return false;
             }
         }
 
         ui32 digit = 0;
         if (!GetDigit(c, digit)) {
-            return false; 
+            return false;
         }
 
         partValue = partValue * 16 + digit;
@@ -1073,24 +1073,24 @@ static bool ParseUuidToArray(NUdf::TStringRef buf, ui16* dw, bool shortForm) {
         dw[i] = ((dw[i] >> 8) & 0xff) | ((dw[i] & 0xff) << 8);
     }
 
-    return true; 
+    return true;
 }
 
-NUdf::TUnboxedValuePod ParseUuid(NUdf::TStringRef buf, bool shortForm) { 
+NUdf::TUnboxedValuePod ParseUuid(NUdf::TStringRef buf, bool shortForm) {
     ui16 dw[8];
- 
-    if (!ParseUuidToArray(buf, dw, shortForm)) { 
-        return NUdf::TUnboxedValuePod(); 
+
+    if (!ParseUuidToArray(buf, dw, shortForm)) {
+        return NUdf::TUnboxedValuePod();
     }
 
-    return MakeString(NUdf::TStringRef(reinterpret_cast<char*>(dw), sizeof(dw))); 
-} 
+    return MakeString(NUdf::TStringRef(reinterpret_cast<char*>(dw), sizeof(dw)));
+}
 
-bool ParseUuid(NUdf::TStringRef buf, void* out, bool shortForm) { 
-    ui16 dw[8]; 
+bool ParseUuid(NUdf::TStringRef buf, void* out, bool shortForm) {
+    ui16 dw[8];
 
-    if (!ParseUuidToArray(buf, dw, shortForm)) { 
-        return false; 
+    if (!ParseUuidToArray(buf, dw, shortForm)) {
+        return false;
     }
 
     if (out) {

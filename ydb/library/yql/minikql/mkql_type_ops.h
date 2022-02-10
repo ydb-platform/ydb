@@ -28,8 +28,8 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
 
 NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePod value);
 
-NUdf::TUnboxedValuePod ParseUuid(NUdf::TStringRef buf, bool shortForm=false); 
-bool ParseUuid(NUdf::TStringRef buf, void* output, bool shortForm=false); 
+NUdf::TUnboxedValuePod ParseUuid(NUdf::TStringRef buf, bool shortForm=false);
+bool ParseUuid(NUdf::TStringRef buf, void* output, bool shortForm=false);
 
 bool IsValidDecimal(NUdf::TStringRef buf);
 

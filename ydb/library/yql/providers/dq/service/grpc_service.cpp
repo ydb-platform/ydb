@@ -33,31 +33,31 @@
 #include <util/system/env.h>
 
 namespace NYql::NDqs {
-    using namespace NYql::NDqs; 
-    using namespace NKikimr; 
+    using namespace NYql::NDqs;
+    using namespace NKikimr;
     using namespace NThreading;
     using namespace NMonitoring;
     using namespace NActors;
 
-    namespace { 
+    namespace {
         NGrpc::ICounterBlockPtr BuildCB(TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, const TString& name) {
-            auto grpcCB = counters->GetSubgroup("rpc_name", name); 
+            auto grpcCB = counters->GetSubgroup("rpc_name", name);
             return MakeIntrusive<NGrpc::TCounterBlock>(
-                grpcCB->GetCounter("total", true), 
-                grpcCB->GetCounter("infly", true), 
-                grpcCB->GetCounter("notOkReq", true), 
-                grpcCB->GetCounter("notOkResp", true), 
-                grpcCB->GetCounter("reqBytes", true), 
-                grpcCB->GetCounter("inflyReqBytes", true), 
-                grpcCB->GetCounter("resBytes", true), 
-                grpcCB->GetCounter("notAuth", true), 
-                grpcCB->GetCounter("resExh", true), 
-                grpcCB); 
-        } 
+                grpcCB->GetCounter("total", true),
+                grpcCB->GetCounter("infly", true),
+                grpcCB->GetCounter("notOkReq", true),
+                grpcCB->GetCounter("notOkResp", true),
+                grpcCB->GetCounter("reqBytes", true),
+                grpcCB->GetCounter("inflyReqBytes", true),
+                grpcCB->GetCounter("resBytes", true),
+                grpcCB->GetCounter("notAuth", true),
+                grpcCB->GetCounter("resExh", true),
+                grpcCB);
+        }
 
         template<typename RequestType, typename ResponseType>
         class TServiceProxyActor: public TSynchronizableRichActor<TServiceProxyActor<RequestType, ResponseType>> {
-        public: 
+        public:
             static constexpr char ActorName[] = "SERVICE_PROXY";
 
             explicit TServiceProxyActor(
@@ -76,23 +76,23 @@ namespace NYql::NDqs {
                 , TraceId(traceId)
                 , Username(username)
                 , Promise(NewPromise<void>())
-            { 
+            {
                 Settings->Dispatch(Request->GetSettings());
                 Settings->FreezeDefaults();
 
                 MaxRetries = Settings->MaxRetries.Get().GetOrElse(MaxRetries);
                 RetryBackoff = TDuration::MilliSeconds(Settings->RetryBackoffMs.Get().GetOrElse(RetryBackoff.MilliSeconds()));
-            } 
+            }
 
-            STRICT_STFUNC(Handler, { 
-                HFunc(TEvQueryResponse, OnReturnResult); 
+            STRICT_STFUNC(Handler, {
+                HFunc(TEvQueryResponse, OnReturnResult);
                 cFunc(TEvents::TEvPoison::EventType, OnPoison);
                 SFunc(TEvents::TEvBootstrap, DoBootstrap)
-            }) 
+            })
 
             TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
                 return new IEventHandle(self, parentId, new TEvents::TEvBootstrap(), 0);
-            } 
+            }
 
             void OnPoison() {
                 YQL_LOG_CTX_SCOPE(TraceId);
@@ -126,8 +126,8 @@ namespace NYql::NDqs {
             void SendResponse(TEvQueryResponse::TPtr& ev)
             {
                 auto& result = ev->Get()->Record;
-                Yql::DqsProto::ExecuteQueryResult queryResult; 
-                queryResult.Mutableresult()->CopyFrom(result.resultset()); 
+                Yql::DqsProto::ExecuteQueryResult queryResult;
+                queryResult.Mutableresult()->CopyFrom(result.resultset());
                 queryResult.set_yson(result.yson());
 
                 if (result.GetNeedFallback()) {
@@ -160,9 +160,9 @@ namespace NYql::NDqs {
                 aggregatedQueryStat.FlushCounters(ResponseBuffer);
 
                 auto& operation = *ResponseBuffer.mutable_operation();
-                operation.Setready(true); 
-                operation.Mutableresult()->PackFrom(queryResult); 
-                *operation.Mutableissues() = result.GetIssues(); 
+                operation.Setready(true);
+                operation.Mutableresult()->PackFrom(queryResult);
+                *operation.Mutableissues() = result.GetIssues();
                 ResponseBuffer.SetTruncated(result.GetTruncated());
 
                 Reply(Ydb::StatusIds::SUCCESS, result.GetIssues().size() > 0);
@@ -201,7 +201,7 @@ namespace NYql::NDqs {
                     }
                     SendResponse(ev);
                 }
-            } 
+            }
 
             TFuture<void> GetFuture() {
                 return Promise.GetFuture();
@@ -249,7 +249,7 @@ namespace NYql::NDqs {
             void RestoreRequest() {
                 Request = dynamic_cast<const RequestType*>(Ctx->GetRequest());
             }
-        }; 
+        };
 
         class TExecuteGraphProxyActor: public TServiceProxyActor<Yql::DqsProto::ExecuteGraphRequest, Yql::DqsProto::ExecuteGraphResponse> {
         public:
@@ -414,25 +414,25 @@ namespace NYql::NDqs {
             NActors::TActorId GraphExecutionEventsActorId;
         };
 
-        TString GetVersionString() { 
-            TStringBuilder sb; 
-            sb << GetProgramSvnVersion() << "\n"; 
-            sb << GetBuildInfo(); 
-            TString sandboxTaskId = GetSandboxTaskId(); 
-            if (sandboxTaskId != TString("0")) { 
-                sb << "\nSandbox task id: " << sandboxTaskId; 
-            } 
- 
-            return sb; 
-        } 
+        TString GetVersionString() {
+            TStringBuilder sb;
+            sb << GetProgramSvnVersion() << "\n";
+            sb << GetBuildInfo();
+            TString sandboxTaskId = GetSandboxTaskId();
+            if (sandboxTaskId != TString("0")) {
+                sb << "\nSandbox task id: " << sandboxTaskId;
+            }
+
+            return sb;
+        }
     }
 
     TDqsGrpcService::TDqsGrpcService(
             NActors::TActorSystem& system,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
             const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories)
-        : ActorSystem(system) 
-        , Counters(std::move(counters)) 
+        : ActorSystem(system)
+        , Counters(std::move(counters))
         , DqTaskPreprocessorFactories(dqTaskPreprocessorFactories)
         , Promise(NewPromise<void>())
         , RunningRequests(0)
@@ -455,9 +455,9 @@ namespace NYql::NDqs {
     } while (0)
 
     void TDqsGrpcService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) {
-        using namespace google::protobuf; 
+        using namespace google::protobuf;
 
-        CQ = cq; 
+        CQ = cq;
 
         using TDqTaskPreprocessorCollection = std::vector<NYql::IDqTaskPreprocessor::TPtr>;
 
@@ -500,12 +500,12 @@ namespace NYql::NDqs {
             session->AddRequest(actorId);
         });
 
-        ADD_REQUEST(SvnRevision, SvnRevisionRequest, SvnRevisionResponse, { 
-            Y_UNUSED(this); 
-            Yql::DqsProto::SvnRevisionResponse result; 
-            result.SetRevision(GetVersionString()); 
+        ADD_REQUEST(SvnRevision, SvnRevisionRequest, SvnRevisionResponse, {
+            Y_UNUSED(this);
+            Yql::DqsProto::SvnRevisionResponse result;
+            result.SetRevision(GetVersionString());
             ctx->Reply(&result, Ydb::StatusIds::SUCCESS);
-        }); 
+        });
 
         ADD_REQUEST(CloseSession, CloseSessionRequest, CloseSessionResponse, {
             Y_UNUSED(this);
@@ -797,20 +797,20 @@ namespace NYql::NDqs {
             ctx->Reply(result, Ydb::StatusIds::SUCCESS);
             });
 */
-    } 
+    }
 
     void TDqsGrpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
-        Limiter = limiter; 
-    } 
+        Limiter = limiter;
+    }
 
-    bool TDqsGrpcService::IncRequest() { 
-        return Limiter->Inc(); 
-    } 
+    bool TDqsGrpcService::IncRequest() {
+        return Limiter->Inc();
+    }
 
-    void TDqsGrpcService::DecRequest() { 
-        Limiter->Dec(); 
-        Y_ASSERT(Limiter->GetCurrentInFlight() >= 0); 
-    } 
+    void TDqsGrpcService::DecRequest() {
+        Limiter->Dec();
+        Y_ASSERT(Limiter->GetCurrentInFlight() >= 0);
+    }
 
     TFuture<void> TDqsGrpcService::Stop() {
         TGuard<TMutex> lock(Mutex);

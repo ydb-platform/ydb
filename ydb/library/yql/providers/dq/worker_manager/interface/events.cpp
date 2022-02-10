@@ -11,17 +11,17 @@ namespace NYql::NDqs {
         const TString& user,
         const TMaybe<ui64>& globalResourceId)
     {
-        Record.SetCount(count); 
+        Record.SetCount(count);
         Record.SetUser(user);
         if (globalResourceId) {
             Record.SetResourceId(*globalResourceId);
         }
         Record.SetIsForwarded(false);
-    } 
+    }
 
-    TEvAllocateWorkersResponse::TEvAllocateWorkersResponse() { 
+    TEvAllocateWorkersResponse::TEvAllocateWorkersResponse() {
         Record.MutableError()->SetMessage("Unknown error");
-    } 
+    }
 
     TEvAllocateWorkersResponse::TEvAllocateWorkersResponse(const TString& error, NYql::NDqProto::EErrorCode code) {
         Record.MutableError()->SetMessage(error);
@@ -29,12 +29,12 @@ namespace NYql::NDqs {
     }
 
     TEvAllocateWorkersResponse::TEvAllocateWorkersResponse(ui64 resourceId, const TVector<NActors::TActorId>& ids) {
-        auto& group = *Record.MutableWorkers(); 
+        auto& group = *Record.MutableWorkers();
         group.SetResourceId(resourceId);
-        for (const auto& actorId : ids) { 
+        for (const auto& actorId : ids) {
             NActors::ActorIdToProto(actorId, group.AddWorkerActor());
-        } 
-    } 
+        }
+    }
 
     TEvAllocateWorkersResponse::TEvAllocateWorkersResponse(ui64 resourceId, const TVector<ui32>& nodes) {
         auto& group = *Record.MutableNodes();

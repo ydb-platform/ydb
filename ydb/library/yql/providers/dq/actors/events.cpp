@@ -13,9 +13,9 @@ namespace NYql::NDqs {
         Record.SetNeedFallback(needFallback);
     }
 
-    TEvQueryResponse::TEvQueryResponse(NDqProto::TQueryResponse&& queryResult) { 
-        Record = std::move(queryResult); 
-    } 
+    TEvQueryResponse::TEvQueryResponse(NDqProto::TQueryResponse&& queryResult) {
+        Record = std::move(queryResult);
+    }
 
     TEvGraphRequest::TEvGraphRequest(const Yql::DqsProto::ExecuteGraphRequest& request, NActors::TActorId controlId, NActors::TActorId resultId, NActors::TActorId checkPointCoordinatorId)
     {
@@ -29,8 +29,8 @@ namespace NYql::NDqs {
 
     TEvReadyState::TEvReadyState(NActors::TActorId sourceId, TString type) {
         NActors::ActorIdToProto(sourceId, Record.MutableSourceId());
-        *Record.MutableResultType() = std::move(type); 
-    } 
+        *Record.MutableResultType() = std::move(type);
+    }
 
     TEvReadyState::TEvReadyState(NDqProto::TReadyState&& proto) {
         Record = std::move(proto);
@@ -40,13 +40,13 @@ namespace NYql::NDqs {
         Record = evt;
     }
 
-    TEvPullDataRequest::TEvPullDataRequest(ui32 rowThreshold) { 
-        Record.SetRowThreshold(rowThreshold); 
-    } 
+    TEvPullDataRequest::TEvPullDataRequest(ui32 rowThreshold) {
+        Record.SetRowThreshold(rowThreshold);
+    }
 
-    TEvPullDataResponse::TEvPullDataResponse(NYql::NDqProto::TPullResponse& data) { 
-        Record.Swap(&data); 
-    } 
+    TEvPullDataResponse::TEvPullDataResponse(NYql::NDqProto::TPullResponse& data) {
+        Record.Swap(&data);
+    }
 
     TEvFullResultWriterStatusResponse::TEvFullResultWriterStatusResponse(NDqProto::TFullResultWriterStatusResponse& data) {
         Record.CopyFrom(data);

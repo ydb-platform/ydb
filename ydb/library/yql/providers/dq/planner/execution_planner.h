@@ -15,7 +15,7 @@
 
 namespace NYql::NDqs {
     class IDqsExecutionPlanner {
-    public: 
+    public:
         virtual ~IDqsExecutionPlanner() = default;
         virtual TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) = 0;
         virtual TVector<NDqProto::TDqTask>& GetTasks() = 0;
@@ -26,7 +26,7 @@ namespace NYql::NDqs {
     class TDqsExecutionPlanner: public IDqsExecutionPlanner {
     public:
         explicit TDqsExecutionPlanner(TIntrusivePtr<TTypeAnnotationContext> typeContext,
-                                      NYql::TExprContext& exprContext, 
+                                      NYql::TExprContext& exprContext,
                                       const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
                                       NYql::TExprNode::TPtr dqExprRoot,
                                       NActors::TActorId executerID = NActors::TActorId(),
@@ -49,35 +49,35 @@ namespace NYql::NDqs {
             PublicIds = publicIds;
         }
 
-    private: 
+    private:
         bool BuildReadStage(const TDqSettings::TPtr& settings, const NNodes::TDqPhyStage& stage, bool dqSource, bool canFallback);
         void BuildConnections(const NNodes::TDqPhyStage& stage);
         THashMap<NDq::TStageId, std::tuple<TString,ui64>> BuildAllPrograms();
-        void FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel); 
+        void FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel);
         void FillInputDesc(NDqProto::TTaskInput& inputDesc, const TTaskInput& input);
-        void FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output); 
+        void FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output);
 
         void GatherPhyMapping(THashMap<std::tuple<TString, TString>, TString>& clusters, THashMap<std::tuple<TString, TString, TString>, TString>& tables);
         void BuildCheckpointingMode();
         bool IsEgressTask(const TDqsTasksGraph::TTaskType& task) const;
 
-    private: 
-        TIntrusivePtr<TTypeAnnotationContext> TypeContext; 
-        NYql::TExprContext& ExprContext; 
+    private:
+        TIntrusivePtr<TTypeAnnotationContext> TypeContext;
+        NYql::TExprContext& ExprContext;
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
         NYql::TExprNode::TPtr DqExprRoot;
-        TVector<const TTypeAnnotationNode*> InputType; 
+        TVector<const TTypeAnnotationNode*> InputType;
         NActors::TActorId ExecuterID;
         NActors::TActorId ResultID;
         TMaybe<NActors::TActorId> SourceID = {};
-        ui64 SourceTaskID = 0; 
+        ui64 SourceTaskID = 0;
         ui64 _MaxDataSizePerJob = 0;
 
-        TDqsTasksGraph TasksGraph; 
+        TDqsTasksGraph TasksGraph;
         TVector<NDqProto::TDqTask> Tasks;
 
         THashMap<ui64, ui32> PublicIds;
-    }; 
+    };
 
     // Execution planner for TRuntimeNode
     class TDqsSingleExecutionPlanner: public IDqsExecutionPlanner {
@@ -132,4 +132,4 @@ namespace NYql::NDqs {
 
         TMaybe<NActors::TActorId> SourceID = {};
     };
-} 
+}

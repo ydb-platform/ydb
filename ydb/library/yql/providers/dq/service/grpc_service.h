@@ -19,10 +19,10 @@
 #include "grpc_session.h"
 
 namespace NYql::NDqs {
-    class TDatabaseManager; 
+    class TDatabaseManager;
 
     class TDqsGrpcService: public NGrpc::TGrpcServiceBase<Yql::DqsProto::DqService> {
-    public: 
+    public:
         TDqsGrpcService(NActors::TActorSystem& system,
                         TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
                         const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories);
@@ -30,23 +30,23 @@ namespace NYql::NDqs {
         void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
         void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override;
 
-        bool IncRequest(); 
-        void DecRequest(); 
+        bool IncRequest();
+        void DecRequest();
 
         NThreading::TFuture<void> Stop();
 
-    private: 
-        NActors::TActorSystem& ActorSystem; 
-        grpc::ServerCompletionQueue* CQ = nullptr; 
+    private:
+        NActors::TActorSystem& ActorSystem;
+        grpc::ServerCompletionQueue* CQ = nullptr;
         NGrpc::TGlobalLimiter* Limiter = nullptr;
 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> Counters; 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
         TDqTaskPreprocessorFactoryCollection DqTaskPreprocessorFactories;
         TMutex Mutex;
-        NThreading::TPromise<void> Promise; 
+        NThreading::TPromise<void> Promise;
         std::atomic<ui64> RunningRequests;
         std::atomic<bool> Stopping;
 
         TSessionStorage Sessions;
-    }; 
-} 
+    };
+}

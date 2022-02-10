@@ -111,9 +111,9 @@ private:
     void DoPassAway() override {
         for (const auto& [resourceId, _] : AllocatedWorkers) {
             FreeGroup(resourceId);
-        } 
+        }
 
-        AllocatedWorkers.clear(); 
+        AllocatedWorkers.clear();
         _exit(0);
     }
 
@@ -215,7 +215,7 @@ private:
         auto traceId = ev->Get()->Record.GetTraceId();
         allocationInfo.TxId = traceId;
 
-        auto count = ev->Get()->Record.GetCount(); 
+        auto count = ev->Get()->Record.GetCount();
 
         Y_VERIFY(count > 0);
 
@@ -270,8 +270,8 @@ private:
             }
 
             Options.Counters.ActiveWorkers->Add(count);
-        } 
- 
+        }
+
         Send(ev->Sender,
             MakeHolder<TEvAllocateWorkersResponse>(resourceId, allocationInfo.WorkerActors),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,

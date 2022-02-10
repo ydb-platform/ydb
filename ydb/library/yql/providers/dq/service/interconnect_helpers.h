@@ -30,7 +30,7 @@ struct TServiceNodeConfig {
     NYql::NProto::TDqConfig::TICSettings ICSettings = NYql::NProto::TDqConfig::TICSettings();
     TNameserverFactory NameserverFactory = [](const TIntrusivePtr<NActors::TTableNameserverSetup>& setup) {
         return CreateNameserverTable(setup);
-    }; 
+    };
 };
 
 std::tuple<TString, TString> GetLocalAddress(const TString* hostname = nullptr);

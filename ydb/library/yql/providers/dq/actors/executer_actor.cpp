@@ -90,7 +90,7 @@ private:
             Finish(/*retriable=*/ false, /*needFallback=*/ true);
         })
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup)
-    }) 
+    })
 
     Yql::DqsProto::TWorkerFilter GetPragmaFilter() {
         Yql::DqsProto::TWorkerFilter pragmaFilter;
@@ -304,30 +304,30 @@ private:
         AddCounters(ev->Get()->Record);
         FlushCounter("AllocateWorkers");
 
-        auto& response = ev->Get()->Record; 
-        switch (response.GetTResponseCase()) { 
-            case TAllocateWorkersResponse::kWorkers: 
-                break; 
-            case TAllocateWorkersResponse::kError: { 
+        auto& response = ev->Get()->Record;
+        switch (response.GetTResponseCase()) {
+            case TAllocateWorkersResponse::kWorkers:
+                break;
+            case TAllocateWorkersResponse::kError: {
                 YQL_LOG(ERROR) << "Error on allocate workers "
                     << ev->Get()->Record.GetError().GetMessage() << ":"
                     << static_cast<int>(ev->Get()->Record.GetError().GetErrorCode());
                 Issues.AddIssue(TIssue(ev->Get()->Record.GetError().GetMessage()).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR));
                 Finish(/*retriable = */ true, /*fallback = */ true);
-                return; 
-            } 
+                return;
+            }
             case TAllocateWorkersResponse::kNodes:
-            case TAllocateWorkersResponse::TRESPONSE_NOT_SET: 
-                YQL_ENSURE(false, "Unexpected allocate result"); 
+            case TAllocateWorkersResponse::TRESPONSE_NOT_SET:
+                YQL_ENSURE(false, "Unexpected allocate result");
         }
 
-        auto& workerGroup = response.GetWorkers(); 
+        auto& workerGroup = response.GetWorkers();
         ResourceId = workerGroup.GetResourceId();
         YQL_LOG(DEBUG) << "Allocated resource " << ResourceId;
         TVector<NActors::TActorId> workers;
         for (const auto& actorIdProto : workerGroup.GetWorkerActor()) {
             workers.emplace_back(NActors::ActorIdFromProto(actorIdProto));
-        } 
+        }
 
         auto tasks = ExecutionPlanner->GetTasks(workers);
 
@@ -354,7 +354,7 @@ private:
 
         YQL_LOG(INFO) << workers.size() << " workers allocated";
 
-        YQL_ENSURE(workers.size() == tasks.size()); 
+        YQL_ENSURE(workers.size() == tasks.size());
 
         auto res = MakeHolder<TEvReadyState>(ExecutionPlanner->GetSourceID(), ExecutionPlanner->GetResultType());
 
@@ -376,8 +376,8 @@ private:
                 *res->Record.AddTask() = tasks[i];
                 ActorIdToProto(workers[i], res->Record.AddActorId());
             }
-        } 
- 
+        }
+
         WorkersAllocated = true;
 
         ExecutionStart = TInstant::Now();

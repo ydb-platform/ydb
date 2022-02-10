@@ -27,77 +27,77 @@
     } while (0)
 
 namespace NYql::NDqs {
-    using namespace NYql; 
-    using namespace NYql::NDq; 
-    using namespace NYql::NNodes; 
+    using namespace NYql;
+    using namespace NYql::NDq;
+    using namespace NYql::NNodes;
 
-    using TStatus = IGraphTransformer::TStatus; 
+    using TStatus = IGraphTransformer::TStatus;
 
-    THolder<IGraphTransformer> CreateDqsWrapListsOptTransformer() { 
-        return CreateFunctorTransformer( 
-            [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus { 
-                YQL_ENSURE(input->GetTypeAnn() != nullptr); 
-                YQL_ENSURE(input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List); 
-                if (TExprBase(input).Maybe<TDqCnUnionAll>()) { 
-                    return TStatus(TStatus::ELevel::Ok, false); 
-                } 
+    THolder<IGraphTransformer> CreateDqsWrapListsOptTransformer() {
+        return CreateFunctorTransformer(
+            [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
+                YQL_ENSURE(input->GetTypeAnn() != nullptr);
+                YQL_ENSURE(input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List);
+                if (TExprBase(input).Maybe<TDqCnUnionAll>()) {
+                    return TStatus(TStatus::ELevel::Ok, false);
+                }
 
-                output = Build<TDqCnUnionAll>(ctx, input->Pos()) // clang-format off 
-                    .Output() 
+                output = Build<TDqCnUnionAll>(ctx, input->Pos()) // clang-format off
+                    .Output()
                         .Stage<TDqStage>()
-                            .Inputs() 
-                                .Build() 
-                            .Program() 
-                                .Args({}) 
+                            .Inputs()
+                                .Build()
+                            .Program()
+                                .Args({})
                                 .Body<TCoIterator>()
                                     .List(input)
-                                    .Build() 
-                                .Build() 
+                                    .Build()
+                                .Build()
                             .Settings(TDqStageSettings().BuildNode(ctx, input->Pos()))
-                            .Build() 
-                        .Index() 
-                            .Build("0") 
-                        .Build() 
-                    .Done().Ptr(); // clang-format on 
- 
-                return TStatus(TStatus::ELevel::Repeat, true); 
-            }); 
-    } 
- 
-    THolder<NYql::IGraphTransformer> CreateDqsBuildTransformer() { 
-        return CreateFunctorTransformer([](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus { 
-            TExprBase node(input); 
-            if (node.Maybe<TDqCnResult>()) { 
-                return TStatus::Ok; 
+                            .Build()
+                        .Index()
+                            .Build("0")
+                        .Build()
+                    .Done().Ptr(); // clang-format on
+
+                return TStatus(TStatus::ELevel::Repeat, true);
+            });
+    }
+
+    THolder<NYql::IGraphTransformer> CreateDqsBuildTransformer() {
+        return CreateFunctorTransformer([](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
+            TExprBase node(input);
+            if (node.Maybe<TDqCnResult>()) {
+                return TStatus::Ok;
             }
 
-            if (!node.Maybe<TDqCnUnionAll>()) { 
-                ctx.AddError(TIssue(input->Pos(ctx), "Last connection must be union all")); 
-                output = input; 
-                return TStatus::Error; 
+            if (!node.Maybe<TDqCnUnionAll>()) {
+                ctx.AddError(TIssue(input->Pos(ctx), "Last connection must be union all"));
+                output = input;
+                return TStatus::Error;
             }
 
-            output = Build<TDqCnResult>(ctx, input->Pos()) // clang-format off 
-              .Output() 
+            output = Build<TDqCnResult>(ctx, input->Pos()) // clang-format off
+              .Output()
                 .Stage<TDqStage>()
-                    .Inputs() 
-                        .Add(node.Cast<TDqCnUnionAll>()) 
-                        .Build() 
-                    .Program() 
-                        .Args({"row"}) 
+                    .Inputs()
+                        .Add(node.Cast<TDqCnUnionAll>())
+                        .Build()
+                    .Program()
+                        .Args({"row"})
                         .Body("row")
                         .Build()
                     .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
                     .Build()
-                .Index() 
-                    .Build("0") 
+                .Index()
+                    .Build("0")
                 .Build()
               .ColumnHints() // TODO: set column hints
                 .Build()
-              .Done().Ptr(); // clang-format on 
-            return TStatus(IGraphTransformer::TStatus::Repeat, true); 
-        }); 
-    } 
+              .Done().Ptr(); // clang-format on
+            return TStatus(IGraphTransformer::TStatus::Repeat, true);
+        });
+    }
 
     THolder<IGraphTransformer> CreateDqsRewritePhyCallablesTransformer() {
         return CreateFunctorTransformer([](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -116,22 +116,22 @@ namespace NYql::NDqs {
         });
     }
 
-    namespace NPeephole { 
+    namespace NPeephole {
 
         class TDqsPeepholeTransformer: public TSyncTransformerBase {
-        public: 
+        public:
             TDqsPeepholeTransformer(THolder<IGraphTransformer>&& typeAnnTransformer,
                                     TTypeAnnotationContext& typesCtx)
-                : TypeAnnTransformer(std::move(typeAnnTransformer)) 
-                , TypesCtx(typesCtx) 
-            { 
-            } 
+                : TypeAnnTransformer(std::move(typeAnnTransformer))
+                , TypesCtx(typesCtx)
+            {
+            }
 
-            TStatus DoTransform(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) final { 
-                if (Optimized) { 
-                    outputExpr = inputExpr; 
-                    return TStatus::Ok; 
-                } 
+            TStatus DoTransform(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) final {
+                if (Optimized) {
+                    outputExpr = inputExpr;
+                    return TStatus::Ok;
+                }
 
                 auto transformer = CreateDqsRewritePhyCallablesTransformer();
                 auto status = InstantTransform(*transformer, inputExpr, ctx);
@@ -150,20 +150,20 @@ namespace NYql::NDqs {
                 outputExpr = inputExpr;
                 Optimized = true;
                 return TStatus::Ok;
-            } 
+            }
 
-            void Rewind() final { 
-                Optimized = false; 
-            } 
- 
-        private: 
-            THolder<IGraphTransformer> TypeAnnTransformer; 
-            TTypeAnnotationContext& TypesCtx; 
-            bool Optimized = false; 
-        }; 
+            void Rewind() final {
+                Optimized = false;
+            }
+
+        private:
+            THolder<IGraphTransformer> TypeAnnTransformer;
+            TTypeAnnotationContext& TypesCtx;
+            bool Optimized = false;
+        };
     }
 
-    THolder<IGraphTransformer> CreateDqsPeepholeTransformer(THolder<IGraphTransformer>&& typeAnnTransformer, TTypeAnnotationContext& typesCtx) { 
+    THolder<IGraphTransformer> CreateDqsPeepholeTransformer(THolder<IGraphTransformer>&& typeAnnTransformer, TTypeAnnotationContext& typesCtx) {
         return MakeHolder<NPeephole::TDqsPeepholeTransformer>(std::move(typeAnnTransformer), typesCtx);
     }
 
@@ -176,5 +176,5 @@ namespace NYql::NDqs {
                 }
                 return status;
             });
-    } 
+    }
 }

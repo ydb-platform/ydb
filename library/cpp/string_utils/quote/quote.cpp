@@ -223,16 +223,16 @@ char* CGIUnescape(char* to, const char* from, size_t len) {
 }
 
 void CGIUnescape(TString& url) {
-    if (url.empty()) { 
-        return; 
-    } 
-    if (url.IsDetached()) { // in-place when refcount == 1 
-        char* resBegin = url.begin(); 
-        const char* resEnd = CGIUnescape(resBegin, resBegin, url.size()); 
-        url.resize(resEnd - resBegin); 
-    } else { 
-        url = CGIUnescapeRet(url); 
-    } 
+    if (url.empty()) {
+        return;
+    }
+    if (url.IsDetached()) { // in-place when refcount == 1
+        char* resBegin = url.begin();
+        const char* resEnd = CGIUnescape(resBegin, resBegin, url.size());
+        url.resize(resEnd - resBegin);
+    } else {
+        url = CGIUnescapeRet(url);
+    }
 }
 
 TString CGIUnescapeRet(const TStringBuf from) {
@@ -257,25 +257,25 @@ char* UrlUnescape(char* to, TStringBuf from) {
 }
 
 void UrlUnescape(TString& url) {
-    if (url.empty()) { 
-        return; 
-    } 
-    if (url.IsDetached()) { // in-place when refcount == 1 
-        char* resBegin = url.begin(); 
-        const char* resEnd = UrlUnescape(resBegin, url); 
-        url.resize(resEnd - resBegin); 
-    } else { 
-        url = UrlUnescapeRet(url); 
-    } 
+    if (url.empty()) {
+        return;
+    }
+    if (url.IsDetached()) { // in-place when refcount == 1
+        char* resBegin = url.begin();
+        const char* resEnd = UrlUnescape(resBegin, url);
+        url.resize(resEnd - resBegin);
+    } else {
+        url = UrlUnescapeRet(url);
+    }
 }
 
 TString UrlUnescapeRet(const TStringBuf from) {
     TString to;
     to.ReserveAndResize(CgiUnescapeBufLen(from.size()));
     to.resize(UrlUnescape(to.begin(), from) - to.data());
-    return to; 
-} 
- 
+    return to;
+}
+
 char* UrlEscape(char* to, const char* from, bool forceEscape) {
     from = FixZero(from);
 

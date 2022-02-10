@@ -149,8 +149,8 @@ TResolvedSymbol ResolveSymbol(void* sym, char* buf, size_t len) {
     return ret;
 }
 #elif defined(_win_)
-    #include <util/generic/singleton.h>
-
+    #include <util/generic/singleton.h> 
+ 
 namespace {
     struct TWinSymbolResolverImpl {
         typedef BOOL(WINAPI* TSymInitializeFunc)(HANDLE, PCSTR, BOOL);

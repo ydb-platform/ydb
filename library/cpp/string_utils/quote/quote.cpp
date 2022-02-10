@@ -114,7 +114,7 @@ static inline It1 Escape(It1 to, It2 from, It3 end, const bool* escape_map = cha
             *to++ = (*from == ' ' ? '+' : *from);
         }
 
-        ++from;
+        ++from; 
     }
 
     *to = 0;
@@ -129,12 +129,12 @@ static inline It1 Unescape(It1 to, It2 from, It3 end, FromHex fromHex) {
     while (from != end) {
         switch (*from) {
             case '%':
-                ++from;
+                ++from; 
                 *to++ = fromHex.x2c(from);
                 break;
             case '+':
                 *to++ = ' ';
-                ++from;
+                ++from; 
                 break;
             default:
                 *to++ = *from++;
@@ -289,7 +289,7 @@ char* UrlEscape(char* to, const char* from, bool forceEscape) {
             *to++ = d2x((unsigned char)*from & 0xF);
         } else
             *to++ = *from;
-        ++from;
+        ++from; 
     }
 
     *to = 0;

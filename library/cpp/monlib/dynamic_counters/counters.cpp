@@ -44,7 +44,7 @@ namespace {
     }
 }
 
-static constexpr TStringBuf INDENT = "    ";
+static constexpr TStringBuf INDENT = "    "; 
 
 TDynamicCounters::TDynamicCounters(EVisibility vis)
 {
@@ -223,10 +223,10 @@ void TDynamicCounters::OutputPlainText(IOutputStream& os, const TString& indent)
 
             auto snapshot = histogram->Snapshot();
             for (ui32 i = 0, count = snapshot->Count(); i < count; i++) {
-                os << indent << INDENT << TStringBuf("bin=");
+                os << indent << INDENT << TStringBuf("bin="); 
                 TBucketBound bound = snapshot->UpperBound(i);
                 if (bound == Max<TBucketBound>()) {
-                    os << TStringBuf("inf");
+                    os << TStringBuf("inf"); 
                 } else {
                    os << bound;
                 }

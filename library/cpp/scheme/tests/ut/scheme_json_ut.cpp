@@ -9,8 +9,8 @@
 #include <type_traits>
 #include <library/cpp/string_utils/quote/quote.h>
 
-using namespace std::string_view_literals;
-
+using namespace std::string_view_literals; 
+ 
 Y_UNIT_TEST_SUITE(TSchemeJsonTest) {
     Y_UNIT_TEST(TestJson) {
         const char* json = "[\n"
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(TSchemeJsonTest) {
     }
 
     Y_UNIT_TEST(TestJsonEscape) {
-        NSc::TValue v("\10\7\6\5\4\3\2\1\0"sv);
+        NSc::TValue v("\10\7\6\5\4\3\2\1\0"sv); 
         UNIT_ASSERT_VALUES_EQUAL(v.ToJson(), "\"\\b\\u0007\\u0006\\u0005\\u0004\\u0003\\u0002\\u0001\\u0000\"");
     }
 

@@ -16,8 +16,8 @@
 namespace NKikimr {
 namespace NTxProxy {
 
-static constexpr TStringBuf DocApiRequestType = "_document_api_request";
-static constexpr TStringBuf DocApiTableVersionAttribute = "__document_api_version";
+static constexpr TStringBuf DocApiRequestType = "_document_api_request"; 
+static constexpr TStringBuf DocApiTableVersionAttribute = "__document_api_version"; 
 
 template<typename TDerived>
 struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {

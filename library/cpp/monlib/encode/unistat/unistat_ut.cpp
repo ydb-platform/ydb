@@ -9,7 +9,7 @@ using namespace NMonitoring;
 
 Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
     Y_UNIT_TEST(ScalarMetric) {
-        constexpr auto input = TStringBuf(R"([["something_axxx", 42]])");
+        constexpr auto input = TStringBuf(R"([["something_axxx", 42]])"); 
 
         NProto::TMultiSamplesList samples;
         auto encoder = EncoderProtobuf(&samples);
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
     }
 
     Y_UNIT_TEST(ThrowsOnTopLevelObject) {
-        constexpr auto input = TStringBuf(R"({["something_axxx", 42]})");
+        constexpr auto input = TStringBuf(R"({["something_axxx", 42]})"); 
 
         NProto::TMultiSamplesList samples;
         auto encoder = EncoderProtobuf(&samples);
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
     }
 
     Y_UNIT_TEST(ThrowsOnUnwrappedMetric) {
-        constexpr auto input = TStringBuf(R"(["something_axxx", 42])");
+        constexpr auto input = TStringBuf(R"(["something_axxx", 42])"); 
 
         NProto::TMultiSamplesList samples;
         auto encoder = EncoderProtobuf(&samples);
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
     }
 
     Y_UNIT_TEST(HistogramMetric) {
-        constexpr auto input = TStringBuf(R"([["something_hgram", [[0, 1], [200, 2], [500, 3]] ]])");
+        constexpr auto input = TStringBuf(R"([["something_hgram", [[0, 1], [200, 2], [500, 3]] ]])"); 
 
         NProto::TMultiSamplesList samples;
         auto encoder = EncoderProtobuf(&samples);
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
     }
 
     Y_UNIT_TEST(AbsoluteHistogram) {
-        constexpr auto input = TStringBuf(R"([["something_ahhh", [[0, 1], [200, 2], [500, 3]] ]])");
+        constexpr auto input = TStringBuf(R"([["something_ahhh", [[0, 1], [200, 2], [500, 3]] ]])"); 
 
         NProto::TMultiSamplesList samples;
         auto encoder = EncoderProtobuf(&samples);
@@ -134,23 +134,23 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
         auto encoder = EncoderProtobuf(&samples);
 
         {
-            constexpr auto input = TStringBuf(R"([["someth!ng_ahhh", [[0, 1], [200, 2], [500, 3]] ]])");
+            constexpr auto input = TStringBuf(R"([["someth!ng_ahhh", [[0, 1], [200, 2], [500, 3]] ]])"); 
             UNIT_ASSERT_EXCEPTION(DecodeUnistat(input, encoder.Get()), yexception);
         }
 
         {
-            constexpr auto input = TStringBuf(R"([["foo_a", [[0, 1], [200, 2], [500, 3]] ]])");
+            constexpr auto input = TStringBuf(R"([["foo_a", [[0, 1], [200, 2], [500, 3]] ]])"); 
             UNIT_ASSERT_EXCEPTION(DecodeUnistat(input, encoder.Get()), yexception);
         }
 
         {
-            constexpr auto input = TStringBuf(R"([["foo_ahhh;tag=value", [[0, 1], [200, 2], [500, 3]] ]])");
+            constexpr auto input = TStringBuf(R"([["foo_ahhh;tag=value", [[0, 1], [200, 2], [500, 3]] ]])"); 
             UNIT_ASSERT_EXCEPTION(DecodeUnistat(input, encoder.Get()), yexception);
         }
     }
 
     Y_UNIT_TEST(MultipleMetrics) {
-        constexpr auto input = TStringBuf(R"([["something_axxx", 42], ["some-other_dhhh", 53]])");
+        constexpr auto input = TStringBuf(R"([["something_axxx", 42], ["some-other_dhhh", 53]])"); 
 
         NProto::TMultiSamplesList samples;
         auto encoder = EncoderProtobuf(&samples);
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
     }
 
     Y_UNIT_TEST(UnderscoreName) {
-        constexpr auto input = TStringBuf(R"([["something_anything_dmmm", 42]])");
+        constexpr auto input = TStringBuf(R"([["something_anything_dmmm", 42]])"); 
 
         NProto::TMultiSamplesList samples;
         auto encoder = EncoderProtobuf(&samples);
@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(TUnistatDecoderTest) {
     }
 
     Y_UNIT_TEST(MaxAggr) {
-        constexpr auto input = TStringBuf(R"([["something_anything_max", 42]])");
+        constexpr auto input = TStringBuf(R"([["something_anything_max", 42]])"); 
 
         NProto::TMultiSamplesList samples;
         auto encoder = EncoderProtobuf(&samples);

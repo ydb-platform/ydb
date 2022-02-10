@@ -5,8 +5,8 @@
 #include <util/generic/string.h>
 #include <util/charset/wide.h>
 
-using namespace std::string_view_literals;
-
+using namespace std::string_view_literals; 
+ 
 namespace {
     struct TExample {
         TString Expected;
@@ -22,11 +22,11 @@ namespace {
 
 static const TExample CommonTestData[] = {
     // Should be valid UTF-8.
-    {"http://ya.ru/", "http://ya.ru/"},
-    {"http://ya.ru/\\x17\\n", "http://ya.ru/\x17\n"},
+    {"http://ya.ru/", "http://ya.ru/"}, 
+    {"http://ya.ru/\\x17\\n", "http://ya.ru/\x17\n"}, 
 
-    {"http://ya.ru/\\0", "http://ya.ru/\0"sv},
-    {"http://ya.ru/\\0\\0", "http://ya.ru/\0\0"sv},
+    {"http://ya.ru/\\0", "http://ya.ru/\0"sv}, 
+    {"http://ya.ru/\\0\\0", "http://ya.ru/\0\0"sv}, 
     {"http://ya.ru/\\0\\0000", "http://ya.ru/\0\0"
                                "0"sv},
     {"http://ya.ru/\\0\\0001", "http://ya.ru/\0\x00"
@@ -37,13 +37,13 @@ static const TExample CommonTestData[] = {
     {R"(\2\4\689)", "\2\4\6"
                     "89"sv}, // \6 -> \6 because next char '8' is not "octal"
 
-    {R"(\"Hello\", Alice said.)", "\"Hello\", Alice said."},
-    {"Slash\\\\dash!", "Slash\\dash!"},
-    {R"(There\nare\r\nnewlines.)", "There\nare\r\nnewlines."},
-    {"There\\tare\\ttabs.", "There\tare\ttabs."},
+    {R"(\"Hello\", Alice said.)", "\"Hello\", Alice said."}, 
+    {"Slash\\\\dash!", "Slash\\dash!"}, 
+    {R"(There\nare\r\nnewlines.)", "There\nare\r\nnewlines."}, 
+    {"There\\tare\\ttabs.", "There\tare\ttabs."}, 
 
-    {"There are questions \\x3F\\x3F?", "There are questions ???"},
-    {"There are questions \\x3F?", "There are questions ??"},
+    {"There are questions \\x3F\\x3F?", "There are questions ???"}, 
+    {"There are questions \\x3F?", "There are questions ??"}, 
 };
 
 Y_UNIT_TEST_SUITE(TEscapeCTest) {

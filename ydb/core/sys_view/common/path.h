@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NSysView {
 
-constexpr TStringBuf SysPathName = ".sys";
+constexpr TStringBuf SysPathName = ".sys"; 
 
 } // NSysView
 } // NKikimr

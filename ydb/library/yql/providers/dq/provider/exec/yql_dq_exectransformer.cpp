@@ -226,8 +226,8 @@ public:
         , DqTypeAnnotationTransformer(
             CreateTypeAnnotationTransformer(NDq::CreateDqTypeAnnotationTransformer(*State->TypeCtx), *State->TypeCtx))
     {
-        AddHandler({TStringBuf("Result")}, RequireNone(), Hndl(&TInMemoryExecTransformer::HandleResult));
-        AddHandler({TStringBuf("Pull")}, RequireNone(), Hndl(&TInMemoryExecTransformer::HandlePull));
+        AddHandler({TStringBuf("Result")}, RequireNone(), Hndl(&TInMemoryExecTransformer::HandleResult)); 
+        AddHandler({TStringBuf("Pull")}, RequireNone(), Hndl(&TInMemoryExecTransformer::HandlePull)); 
         AddHandler({TDqCnResult::CallableName()}, RequireNone(), Pass());
         AddHandler({TDqQuery::CallableName()}, RequireFirst(), Pass());
     }
@@ -333,7 +333,7 @@ private:
                 if (!callable.HasResult()) {
                     const auto& callableType = callable.GetType();
                     const auto& name = callableType->GetNameStr();
-                    if (name == TStringBuf("FolderPath"))
+                    if (name == TStringBuf("FolderPath")) 
                     {
                         const TString folderName(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
                         auto blocks = TUserDataStorage::FindUserDataFolder(files, folderName);
@@ -368,7 +368,7 @@ private:
                         if (result.GetNode() != node) {
                             callable.SetResult(result, typeEnv);
                         }
-                    } else if (name == TStringBuf("FileContent") || name == TStringBuf("FilePath")) {
+                    } else if (name == TStringBuf("FileContent") || name == TStringBuf("FilePath")) { 
                         const TString fileName(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
 
                         auto block = TUserDataStorage::FindUserDataBlock(files, fileName);
@@ -382,14 +382,14 @@ private:
                         switch (block->Type) {
                             case EUserDataType::URL:
                             case EUserDataType::PATH: {
-                                TString content = (name == TStringBuf("FilePath"))
+                                TString content = (name == TStringBuf("FilePath")) 
                                     ? fullFileName
                                     : TFileInput(block->FrozenFile->GetPath()).ReadAll();
                                 result = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(content);
                                 break;
                             }
                             case EUserDataType::RAW_INLINE_DATA: {
-                                TString content = (name == TStringBuf("FilePath"))
+                                TString content = (name == TStringBuf("FilePath")) 
                                     ? fullFileName
                                     : block->Data;
                                 result = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(content);
@@ -402,7 +402,7 @@ private:
                         if (result.GetNode() != node) {
                             callable.SetResult(result, typeEnv);
                         }
-                        if (name == TStringBuf("FilePath")) {
+                        if (name == TStringBuf("FilePath")) { 
                             // filePath, fileName, md5
                             auto f = IDqGateway::TFileResource();
                             f.SetLocalPath(filePath);
@@ -412,7 +412,7 @@ private:
                             f.SetSize(block->FrozenFile->GetSize());
                             uploadList->emplace(f);
                         }
-                    } else if (name == TStringBuf("Udf") || name == TStringBuf("ScriptUdf")) {
+                    } else if (name == TStringBuf("Udf") || name == TStringBuf("ScriptUdf")) { 
                         const TString udfName(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
                         const auto moduleName = ModuleName(udfName);
 
@@ -435,7 +435,7 @@ private:
                             uploadList->emplace(f);
                         }
 
-                        if (moduleName == TStringBuf("Geo")) {
+                        if (moduleName == TStringBuf("Geo")) { 
                             TString fileName = "/home/geodata6.bin";
                             auto block = TUserDataStorage::FindUserDataBlock(files, fileName);
                             MKQL_ENSURE(block, "File not found: " << fileName);
@@ -536,14 +536,14 @@ private:
                     const auto& callableType = callable.GetType();
                     const auto& name = callableType->GetNameStr();
 
-                    if (name == TStringBuf("Udf") || name == TStringBuf("ScriptUdf")) {
+                    if (name == TStringBuf("Udf") || name == TStringBuf("ScriptUdf")) { 
                         const TString udfName(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
                         const auto moduleName = ModuleName(udfName);
 
                         *untrustedUdfFlag = *untrustedUdfFlag ||
-                            callable.GetType()->GetName() == TStringBuf("ScriptUdf") ||
+                            callable.GetType()->GetName() == TStringBuf("ScriptUdf") || 
                             !State->FunctionRegistry->IsLoadedUdfModule(moduleName) ||
-                            moduleName == TStringBuf("Geo");
+                            moduleName == TStringBuf("Geo"); 
                     }
                 }
             }

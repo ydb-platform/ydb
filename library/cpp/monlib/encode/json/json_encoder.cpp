@@ -36,7 +36,7 @@ namespace NMonitoring {
 
             void WriteTime(TInstant time) {
                 if (time != TInstant::Zero()) {
-                    Buf_.WriteKey(TStringBuf("ts"));
+                    Buf_.WriteKey(TStringBuf("ts")); 
                     if (Style_ == EJsonStyle::Solomon) {
                         Buf_.WriteULongLong(time.Seconds());
                     } else {
@@ -46,24 +46,24 @@ namespace NMonitoring {
             }
 
             void WriteValue(double value) {
-                Buf_.WriteKey(TStringBuf("value"));
+                Buf_.WriteKey(TStringBuf("value")); 
                 Buf_.WriteDouble(value);
             }
 
             void WriteValue(i64 value) {
-                Buf_.WriteKey(TStringBuf("value"));
+                Buf_.WriteKey(TStringBuf("value")); 
                 Buf_.WriteLongLong(value);
             }
 
             void WriteValue(ui64 value) {
-                Buf_.WriteKey(TStringBuf("value"));
+                Buf_.WriteKey(TStringBuf("value")); 
                 Buf_.WriteULongLong(value);
             }
 
             void WriteValue(IHistogramSnapshot* s) {
                 Y_ENSURE(Style_ == EJsonStyle::Solomon);
 
-                Buf_.WriteKey(TStringBuf("hist"));
+                Buf_.WriteKey(TStringBuf("hist")); 
                 Buf_.BeginObject();
                 if (ui32 count = s->Count()) {
                     bool hasInf = (s->UpperBound(count - 1) == Max<double>());
@@ -71,14 +71,14 @@ namespace NMonitoring {
                         count--;
                     }
 
-                    Buf_.WriteKey(TStringBuf("bounds"));
+                    Buf_.WriteKey(TStringBuf("bounds")); 
                     Buf_.BeginList();
                     for (ui32 i = 0; i < count; i++) {
                         Buf_.WriteDouble(s->UpperBound(i));
                     }
                     Buf_.EndList();
 
-                    Buf_.WriteKey(TStringBuf("buckets"));
+                    Buf_.WriteKey(TStringBuf("buckets")); 
                     Buf_.BeginList();
                     for (ui32 i = 0; i < count; i++) {
                         Buf_.WriteULongLong(s->Value(i));
@@ -86,7 +86,7 @@ namespace NMonitoring {
                     Buf_.EndList();
 
                     if (hasInf) {
-                        Buf_.WriteKey(TStringBuf("inf"));
+                        Buf_.WriteKey(TStringBuf("inf")); 
                         Buf_.WriteULongLong(s->Value(count));
                     }
                 }
@@ -96,22 +96,22 @@ namespace NMonitoring {
             void WriteValue(ISummaryDoubleSnapshot* s) {
                 Y_ENSURE(Style_ == EJsonStyle::Solomon);
 
-                Buf_.WriteKey(TStringBuf("summary"));
+                Buf_.WriteKey(TStringBuf("summary")); 
                 Buf_.BeginObject();
 
-                Buf_.WriteKey(TStringBuf("sum"));
+                Buf_.WriteKey(TStringBuf("sum")); 
                 Buf_.WriteDouble(s->GetSum());
 
-                Buf_.WriteKey(TStringBuf("min"));
+                Buf_.WriteKey(TStringBuf("min")); 
                 Buf_.WriteDouble(s->GetMin());
 
-                Buf_.WriteKey(TStringBuf("max"));
+                Buf_.WriteKey(TStringBuf("max")); 
                 Buf_.WriteDouble(s->GetMax());
 
-                Buf_.WriteKey(TStringBuf("last"));
+                Buf_.WriteKey(TStringBuf("last")); 
                 Buf_.WriteDouble(s->GetLast());
 
-                Buf_.WriteKey(TStringBuf("count"));
+                Buf_.WriteKey(TStringBuf("count")); 
                 Buf_.WriteULongLong(s->GetCount());
 
                 Buf_.EndObject();
@@ -120,19 +120,19 @@ namespace NMonitoring {
             void WriteValue(TLogHistogramSnapshot* s) {
                 Y_ENSURE(Style_ == EJsonStyle::Solomon);
 
-                Buf_.WriteKey(TStringBuf("log_hist"));
+                Buf_.WriteKey(TStringBuf("log_hist")); 
                 Buf_.BeginObject();
 
-                Buf_.WriteKey(TStringBuf("base"));
+                Buf_.WriteKey(TStringBuf("base")); 
                 Buf_.WriteDouble(s->Base());
 
-                Buf_.WriteKey(TStringBuf("zeros_count"));
+                Buf_.WriteKey(TStringBuf("zeros_count")); 
                 Buf_.WriteULongLong(s->ZerosCount());
 
-                Buf_.WriteKey(TStringBuf("start_power"));
+                Buf_.WriteKey(TStringBuf("start_power")); 
                 Buf_.WriteInt(s->StartPower());
 
-                Buf_.WriteKey(TStringBuf("buckets"));
+                Buf_.WriteKey(TStringBuf("buckets")); 
                 Buf_.BeginList();
                 for (size_t i = 0; i < s->Count(); ++i) {
                     Buf_.WriteDouble(s->Bucket(i));
@@ -239,7 +239,7 @@ namespace NMonitoring {
             {
             }
 
-            ~TEncoderJson() override {
+            ~TEncoderJson() override { 
                 Close();
             }
 
@@ -303,7 +303,7 @@ namespace NMonitoring {
                     Buf_.WriteKey(TStringBuf(Style_ == EJsonStyle::Solomon ? "commonLabels" : "labels"));
                 } else if (State_ == TEncoderState::EState::METRIC) {
                     State_ = TEncoderState::EState::METRIC_LABELS;
-                    Buf_.WriteKey(TStringBuf("labels"));
+                    Buf_.WriteKey(TStringBuf("labels")); 
                 } else {
                     State_.ThrowInvalid("expected METRIC or ROOT");
                 }
@@ -381,7 +381,7 @@ namespace NMonitoring {
                              "mixed metric value types in one metric");
 
                     if (!TimeSeries_) {
-                        Buf_.WriteKey(TStringBuf("timeseries"));
+                        Buf_.WriteKey(TStringBuf("timeseries")); 
                         Buf_.BeginList();
                         Buf_.BeginObject();
                         Y_ENSURE(LastPoint_.GetTime() != TInstant::Zero(),
@@ -426,7 +426,7 @@ namespace NMonitoring {
                 MetricsMergingMode_ = EMetricsMergingMode::MERGE_METRICS;
             }
 
-            ~TBufferedJsonEncoder() override {
+            ~TBufferedJsonEncoder() override { 
                 Close();
             }
 
@@ -490,7 +490,7 @@ namespace NMonitoring {
 
                 WriteMetricType(metric.MetricType);
 
-                Buf_.WriteKey(TStringBuf("labels"));
+                Buf_.WriteKey(TStringBuf("labels")); 
                 WriteLabels(metric.Labels, false);
 
                 metric.TimeSeries.SortByTs();
@@ -499,7 +499,7 @@ namespace NMonitoring {
                     WriteTime(point.GetTime());
                     WriteValue(metric.TimeSeries.GetValueType(), point.GetValue());
                 } else if (metric.TimeSeries.Size() > 1) {
-                    Buf_.WriteKey(TStringBuf("timeseries"));
+                    Buf_.WriteKey(TStringBuf("timeseries")); 
                     Buf_.BeginList();
                     metric.TimeSeries.ForEach([this](TInstant time, EMetricValueType type, TMetricValue value) {
                         Buf_.BeginObject();

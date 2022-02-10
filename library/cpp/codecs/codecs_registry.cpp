@@ -72,7 +72,7 @@ namespace NCodecs {
                 if (TSolarCodec::MyName() == name) {
                     return new TSolarCodec();
                 }
-                if (name.EndsWith(TStringBuf("-a"))) {
+                if (name.EndsWith(TStringBuf("-a"))) { 
                     return MakeCodecImpl<TAdaptiveSolarCodec>(name, name.SubStr(TSolarCodec::MyName().size()).Chop(2));
                 } else {
                     return MakeCodecImpl<TSolarCodec>(name, name.SubStr(TSolarCodec::MyName().size()));
@@ -81,19 +81,19 @@ namespace NCodecs {
 
             template <class TCodecCls>
             TCodecPtr MakeCodecImpl(const TStringBuf& name, const TStringBuf& type) const {
-                if (TStringBuf("-8k") == type) {
+                if (TStringBuf("-8k") == type) { 
                     return new TCodecCls(1 << 13);
                 }
-                if (TStringBuf("-16k") == type) {
+                if (TStringBuf("-16k") == type) { 
                     return new TCodecCls(1 << 14);
                 }
-                if (TStringBuf("-32k") == type) {
+                if (TStringBuf("-32k") == type) { 
                     return new TCodecCls(1 << 15);
                 }
-                if (TStringBuf("-64k") == type) {
+                if (TStringBuf("-64k") == type) { 
                     return new TCodecCls(1 << 16);
                 }
-                if (TStringBuf("-256k") == type) {
+                if (TStringBuf("-256k") == type) { 
                     return new TCodecCls(1 << 18);
                 }
                 ythrow TNoCodecException(name);

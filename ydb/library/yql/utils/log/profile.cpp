@@ -21,16 +21,16 @@ TProfilingScope::~TProfilingScope() {
     TStringBuf unit("us");
     if (elapsed > 1000000) {
         elapsed /= 1000000;
-        unit = TStringBuf("s");
+        unit = TStringBuf("s"); 
     } else if (elapsed > 1000) {
         elapsed /= 1000;
-        unit = TStringBuf("ms");
+        unit = TStringBuf("ms"); 
     }
 
     auto doLog = [&]() {
         YQL_PERF_LOG(Level_, File_, Line_)
-                << TStringBuf("Execution of [") << Name_
-                << TStringBuf("] took ") << Prec(elapsed, 3) << unit;
+                << TStringBuf("Execution of [") << Name_ 
+                << TStringBuf("] took ") << Prec(elapsed, 3) << unit; 
     };
 
     if (!LogCtxPath_.empty()) {

@@ -56,7 +56,7 @@ namespace {
             : Func(func)
         {
         }
-        void DoExecute() override {
+        void DoExecute() override { 
             THolder<TThreadFactoryFuncObj> self(this);
             Func();
         }

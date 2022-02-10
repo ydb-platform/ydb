@@ -183,7 +183,7 @@ TStringBuf TType::KindAsStr(EKind kind) {
         MKQL_TYPE_KINDS(MKQL_SWITCH_ENUM_TYPE_TO_STR)
     }
 
-    return TStringBuf("unknown");
+    return TStringBuf("unknown"); 
 }
 
 TStringBuf TType::GetKindAsStr() const {

@@ -9,7 +9,7 @@
 namespace {
     class THeadersExistence {
     public:
-        THeadersExistence() = default;
+        THeadersExistence() = default; 
 
         THeadersExistence(const THttpHeaders& headers) {
             for (THttpHeaders::TConstIterator it = headers.Begin();
@@ -155,7 +155,7 @@ void THttpHeadersTest::TestAddHeaderTemplateness() {
     THttpHeaders h1;
     h1.AddHeader("h1", "v1");
     h1.AddHeader("h2", TString("v2"));
-    h1.AddHeader("h3", TStringBuf("v3"));
+    h1.AddHeader("h3", TStringBuf("v3")); 
     h1.AddHeader("h4", TStringBuf("v4"));
 
     THeadersExistence h2;

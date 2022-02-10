@@ -8,7 +8,7 @@ namespace NYql {
 
 class TGatewaysConfig;
 
-const TStringBuf ConfReadName = "ConfRead!";
+const TStringBuf ConfReadName = "ConfRead!"; 
 
 using TAllowSettingPolicy = std::function<bool(TStringBuf settingName)>;
 

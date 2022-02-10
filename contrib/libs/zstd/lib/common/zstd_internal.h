@@ -198,43 +198,43 @@ static void ZSTD_copy16(void* dst, const void* src) {
 }
 #define COPY16(d,s) { ZSTD_copy16(d,s); d+=16; s+=16; }
 
-#define WILDCOPY_OVERLENGTH 32
-#define WILDCOPY_VECLEN 16
+#define WILDCOPY_OVERLENGTH 32 
+#define WILDCOPY_VECLEN 16 
 
 typedef enum {
     ZSTD_no_overlap,
-    ZSTD_overlap_src_before_dst
+    ZSTD_overlap_src_before_dst 
     /*  ZSTD_overlap_dst_before_src, */
 } ZSTD_overlap_e;
 
 /*! ZSTD_wildcopy() :
  *  Custom version of ZSTD_memcpy(), can over read/write up to WILDCOPY_OVERLENGTH bytes (if length==0)
- *  @param ovtype controls the overlap detection
- *         - ZSTD_no_overlap: The source and destination are guaranteed to be at least WILDCOPY_VECLEN bytes apart.
- *         - ZSTD_overlap_src_before_dst: The src and dst may overlap, but they MUST be at least 8 bytes apart.
- *           The src buffer must be before the dst buffer.
- */
+ *  @param ovtype controls the overlap detection 
+ *         - ZSTD_no_overlap: The source and destination are guaranteed to be at least WILDCOPY_VECLEN bytes apart. 
+ *         - ZSTD_overlap_src_before_dst: The src and dst may overlap, but they MUST be at least 8 bytes apart. 
+ *           The src buffer must be before the dst buffer. 
+ */ 
 MEM_STATIC FORCE_INLINE_ATTR
-void ZSTD_wildcopy(void* dst, const void* src, ptrdiff_t length, ZSTD_overlap_e const ovtype)
+void ZSTD_wildcopy(void* dst, const void* src, ptrdiff_t length, ZSTD_overlap_e const ovtype) 
 {
     ptrdiff_t diff = (BYTE*)dst - (const BYTE*)src;
     const BYTE* ip = (const BYTE*)src;
     BYTE* op = (BYTE*)dst;
     BYTE* const oend = op + length;
 
-    if (ovtype == ZSTD_overlap_src_before_dst && diff < WILDCOPY_VECLEN) {
-        /* Handle short offset copies. */
-        do {
-            COPY8(op, ip)
-        } while (op < oend);
-    } else {
-        assert(diff >= WILDCOPY_VECLEN || diff <= -WILDCOPY_VECLEN);
+    if (ovtype == ZSTD_overlap_src_before_dst && diff < WILDCOPY_VECLEN) { 
+        /* Handle short offset copies. */ 
+        do { 
+            COPY8(op, ip) 
+        } while (op < oend); 
+    } else { 
+        assert(diff >= WILDCOPY_VECLEN || diff <= -WILDCOPY_VECLEN); 
         /* Separate out the first COPY16() call because the copy length is
-         * almost certain to be short, so the branches have different
+         * almost certain to be short, so the branches have different 
          * probabilities. Since it is almost certain to be short, only do
          * one COPY16() in the first call. Then, do two calls per loop since
          * at that point it is more likely to have a high trip count.
-         */
+         */ 
 #ifdef __aarch64__
         do {
             COPY16(op, ip);
@@ -245,11 +245,11 @@ void ZSTD_wildcopy(void* dst, const void* src, ptrdiff_t length, ZSTD_overlap_e 
         if (16 >= length) return;
         op += 16;
         ip += 16;
-        do {
-            COPY16(op, ip);
-            COPY16(op, ip);
-        }
-        while (op < oend);
+        do { 
+            COPY16(op, ip); 
+            COPY16(op, ip); 
+        } 
+        while (op < oend); 
 #endif
     }
 }
@@ -378,9 +378,9 @@ MEM_STATIC U32 ZSTD_highbit32(U32 val)   /* compress, dictBuilder, decodeCorpus 
             }
 #       endif
 #   elif defined(__GNUC__) && (__GNUC__ >= 3)   /* GCC Intrinsic */
-        return __builtin_clz (val) ^ 31;
-#   elif defined(__ICCARM__)    /* IAR Intrinsic */
-        return 31 - __CLZ(val);
+        return __builtin_clz (val) ^ 31; 
+#   elif defined(__ICCARM__)    /* IAR Intrinsic */ 
+        return 31 - __CLZ(val); 
 #   else   /* Software version */
         static const U32 DeBruijnClz[32] = { 0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30, 8, 12, 20, 28, 15, 17, 24, 7, 19, 27, 23, 6, 26, 5, 4, 31 };
         U32 v = val;

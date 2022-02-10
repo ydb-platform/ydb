@@ -25,7 +25,7 @@
     #include <Windows.h>
     #include <util/generic/ptr.h>
 
-using NTSTATUS = LONG;
+using NTSTATUS = LONG; 
     #define STATUS_INFO_LENGTH_MISMATCH 0xC0000004
     #define STATUS_BUFFER_TOO_SMALL 0xC0000023
 
@@ -38,7 +38,7 @@ typedef struct _CLIENT_ID {
     HANDLE UniqueProcess;
     HANDLE UniqueThread;
 } CLIENT_ID, *PCLIENT_ID;
-using KWAIT_REASON = ULONG;
+using KWAIT_REASON = ULONG; 
 typedef struct _SYSTEM_THREAD_INFORMATION {
     LARGE_INTEGER KernelTime;
     LARGE_INTEGER UserTime;

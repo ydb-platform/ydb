@@ -22,7 +22,7 @@ namespace {
             Y_VERIFY(metric != nullptr, "Passing nullptr metric is not allowed");
         }
 
-        ~TExpMovingAverage() override = default;
+        ~TExpMovingAverage() override = default; 
 
         // This method NOT thread safe
         void Tick() override {

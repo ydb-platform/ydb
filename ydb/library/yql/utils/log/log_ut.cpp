@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
             UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "ctx1");
             YQL_LOG(INFO) << "level1 - begin";
 
-            YQL_LOG_CTX_BLOCK(TStringBuf("ctx2")) {
+            YQL_LOG_CTX_BLOCK(TStringBuf("ctx2")) { 
                 UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "ctx1/ctx2");
                 YQL_LOG(WARN) << "level2";
             }
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
             UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "ctx1");
             YQL_LOG(INFO) << "level1 - begin";
 
-            YQL_LOG_CTX_BLOCK(TStringBuf("ctx2")) {
+            YQL_LOG_CTX_BLOCK(TStringBuf("ctx2")) { 
                 UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "ctx1/ctx2");
                 YQL_LOG(WARN) << "level2 - begin";
 

@@ -462,7 +462,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
                 : TCustomActionExecutor(probe, false /* not destructive */)
             {}
         private:
-            bool DoExecute(TOrbit&, const TParams& params) override {
+            bool DoExecute(TOrbit&, const TParams& params) override { 
                 (void)params;
                 nCustomActionsCalls++;
                 return true;

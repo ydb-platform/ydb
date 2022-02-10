@@ -65,40 +65,40 @@ namespace NCodecs {
     class TSolarCodec: public ICodec {
     public:
         static TStringBuf MyName8k() {
-            return TStringBuf("solar-8k");
+            return TStringBuf("solar-8k"); 
         }
         static TStringBuf MyName16k() {
-            return TStringBuf("solar-16k");
+            return TStringBuf("solar-16k"); 
         }
         static TStringBuf MyName32k() {
-            return TStringBuf("solar-32k");
+            return TStringBuf("solar-32k"); 
         }
         static TStringBuf MyName64k() {
-            return TStringBuf("solar-64k");
+            return TStringBuf("solar-64k"); 
         }
         static TStringBuf MyName256k() {
-            return TStringBuf("solar-256k");
+            return TStringBuf("solar-256k"); 
         }
         static TStringBuf MyName() {
-            return TStringBuf("solar");
+            return TStringBuf("solar"); 
         }
         static TStringBuf MyName8kAdapt() {
-            return TStringBuf("solar-8k-a");
+            return TStringBuf("solar-8k-a"); 
         }
         static TStringBuf MyName16kAdapt() {
-            return TStringBuf("solar-16k-a");
+            return TStringBuf("solar-16k-a"); 
         }
         static TStringBuf MyName32kAdapt() {
-            return TStringBuf("solar-32k-a");
+            return TStringBuf("solar-32k-a"); 
         }
         static TStringBuf MyName64kAdapt() {
-            return TStringBuf("solar-64k-a");
+            return TStringBuf("solar-64k-a"); 
         }
         static TStringBuf MyName256kAdapt() {
-            return TStringBuf("solar-256k-a");
+            return TStringBuf("solar-256k-a"); 
         }
         static TStringBuf MyNameShortInt() {
-            return TStringBuf("solar-si");
+            return TStringBuf("solar-si"); 
         }
 
         explicit TSolarCodec(ui32 maxentries = 1 << 14, ui32 maxiter = 16, const NGreedyDict::TBuildSettings& s = NGreedyDict::TBuildSettings())

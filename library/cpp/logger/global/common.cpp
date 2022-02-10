@@ -15,7 +15,7 @@ namespace NLoggingImpl {
             TString newPath = Sprintf("%s_%s_%" PRIu64, logType.data(), NLoggingImpl::GetLocalTimeSSimple().data(), static_cast<ui64>(Now().MicroSeconds()));
             TFsPath(logType).RenameTo(newPath);
         }
-        if (startAsDaemon && (logType == "console"sv || logType == "cout"sv || logType == "cerr"sv)) {
+        if (startAsDaemon && (logType == "console"sv || logType == "cout"sv || logType == "cerr"sv)) { 
             logType = "null";
         }
 

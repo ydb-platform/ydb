@@ -41,7 +41,7 @@ def onfat_resource(unit, *args):
     # we make several calls of rescompiler
     # https://msdn.microsoft.com/ru-ru/library/windows/desktop/ms682425.aspx
     for part_args in split(args, 8000):
-        output = listid(part_args) + '.cpp'
+        output = listid(part_args) + '.cpp' 
         inputs = [x for x, y in iterpair(part_args) if x != '-']
         if inputs:
             inputs = ['IN'] + inputs

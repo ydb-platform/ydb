@@ -109,7 +109,7 @@ namespace {
 
 // temporary measure to avoid rewriting all poll calls on win TPipeHandle
 #if defined(_win_)
-using REALPIPEHANDLE = HANDLE;
+using REALPIPEHANDLE = HANDLE; 
     #define INVALID_REALPIPEHANDLE INVALID_HANDLE_VALUE
 
 class TRealPipeHandle
@@ -183,7 +183,7 @@ private:
 
 #else
 using TRealPipeHandle = TPipeHandle;
-using REALPIPEHANDLE = PIPEHANDLE;
+using REALPIPEHANDLE = PIPEHANDLE; 
     #define INVALID_REALPIPEHANDLE INVALID_PIPEHANDLE
 #endif
 
@@ -756,7 +756,7 @@ void TShellCommand::TImpl::OnFork(TPipes& pipes, sigset_t oldmask, char* const* 
 #endif
 
 void TShellCommand::TImpl::Run() {
-    Y_ENSURE(AtomicGet(ExecutionStatus) != SHELL_RUNNING, TStringBuf("Process is already running"));
+    Y_ENSURE(AtomicGet(ExecutionStatus) != SHELL_RUNNING, TStringBuf("Process is already running")); 
     // Prepare I/O streams
     CollectedOutput.clear();
     CollectedError.clear();

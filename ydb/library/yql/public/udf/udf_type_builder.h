@@ -436,7 +436,7 @@ struct TSourcePosition {
 UDF_ASSERT_TYPE_SIZE(TSourcePosition, 24);
 
 inline IOutputStream& operator<<(IOutputStream& os, const TSourcePosition& pos) {
-    os << (pos.File_.Size() ? TStringBuf(pos.File_) : TStringBuf("<main>")) << ':' << pos.Row_ << ':' << pos.Column_ << ':';
+    os << (pos.File_.Size() ? TStringBuf(pos.File_) : TStringBuf("<main>")) << ':' << pos.Row_ << ':' << pos.Column_ << ':'; 
     return os;
 }
 

@@ -8,7 +8,7 @@ static void OutputLabels(IOutputStream& out, const NMonitoring::ILabels& labels)
     out << '{';
     for (const auto& label: labels) {
         if (i++ > 0) {
-            out << TStringBuf(", ");
+            out << TStringBuf(", "); 
         }
         out << label;
     }

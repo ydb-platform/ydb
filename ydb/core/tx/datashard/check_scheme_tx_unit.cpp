@@ -416,7 +416,7 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
     Y_VERIFY(!Pipeline.HasDrop());
 
-    const TStringBuf kind = "Alter";
+    const TStringBuf kind = "Alter"; 
     if (HasDuplicate(activeTx, kind, &TPipeline::HasAlter)) {
         return false;
     }
@@ -520,7 +520,7 @@ bool TCheckSchemeTxUnit::CheckBackup(TActiveTransaction *activeTx)
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
     Y_VERIFY(!Pipeline.HasDrop());
 
-    const TStringBuf kind = "Backup";
+    const TStringBuf kind = "Backup"; 
     if (HasDuplicate(activeTx, kind, &TPipeline::HasBackup)) {
         return false;
     }
@@ -544,7 +544,7 @@ bool TCheckSchemeTxUnit::CheckRestore(TActiveTransaction *activeTx)
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
     Y_VERIFY(!Pipeline.HasDrop());
 
-    const TStringBuf kind = "Restore";
+    const TStringBuf kind = "Restore"; 
     if (HasDuplicate(activeTx, kind, &TPipeline::HasRestore)) {
         return false;
     }

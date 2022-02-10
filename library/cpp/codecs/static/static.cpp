@@ -13,10 +13,10 @@
 #include <util/ysaveload.h>
 
 namespace NCodecs {
-    static constexpr TStringBuf STATIC_CODEC_INFO_MAGIC = "CodecInf";
+    static constexpr TStringBuf STATIC_CODEC_INFO_MAGIC = "CodecInf"; 
 
     static TStringBuf GetStaticCodecInfoMagic() {
-        return STATIC_CODEC_INFO_MAGIC;
+        return STATIC_CODEC_INFO_MAGIC; 
     }
 
     void SaveCodecInfoToStream(IOutputStream& out, const TStaticCodecInfo& info) {

@@ -688,21 +688,21 @@ U32 ZSTD_insertBtAndGetAllMatches (
 
     for (; nbCompares && (matchIndex >= matchLow); --nbCompares) {
         U32* const nextPtr = bt + 2*(matchIndex & btMask);
-        const BYTE* match;
+        const BYTE* match; 
         size_t matchLength = MIN(commonLengthSmaller, commonLengthLarger);   /* guaranteed minimum nb of common bytes */
         assert(curr > matchIndex);
 
         if ((dictMode == ZSTD_noDict) || (dictMode == ZSTD_dictMatchState) || (matchIndex+matchLength >= dictLimit)) {
             assert(matchIndex+matchLength >= dictLimit);  /* ensure the condition is correct when !extDict */
             match = base + matchIndex;
-            if (matchIndex >= dictLimit) assert(memcmp(match, ip, matchLength) == 0);  /* ensure early section of match is equal as expected */
+            if (matchIndex >= dictLimit) assert(memcmp(match, ip, matchLength) == 0);  /* ensure early section of match is equal as expected */ 
             matchLength += ZSTD_count(ip+matchLength, match+matchLength, iLimit);
         } else {
             match = dictBase + matchIndex;
-            assert(memcmp(match, ip, matchLength) == 0);  /* ensure early section of match is equal as expected */
+            assert(memcmp(match, ip, matchLength) == 0);  /* ensure early section of match is equal as expected */ 
             matchLength += ZSTD_count_2segments(ip+matchLength, match+matchLength, iLimit, dictEnd, prefixStart);
             if (matchIndex+matchLength >= dictLimit)
-                match = base + matchIndex;   /* prepare for match[matchLength] read */
+                match = base + matchIndex;   /* prepare for match[matchLength] read */ 
         }
 
         if (matchLength > bestLength) {

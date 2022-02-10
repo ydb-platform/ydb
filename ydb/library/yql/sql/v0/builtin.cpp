@@ -1477,7 +1477,7 @@ public:
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        const bool isPython = ModuleName.find(TStringBuf("Python")) != TString::npos;
+        const bool isPython = ModuleName.find(TStringBuf("Python")) != TString::npos; 
         if (!isPython) {
             if (Args.size() != 2) {
                 ctx.Error(Pos) << ModuleName << " script declaration requires exactly two parameters";

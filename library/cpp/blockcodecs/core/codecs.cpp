@@ -83,7 +83,7 @@ TCodecList NBlockCodecs::ListAllCodecs() {
 }
 
 TString NBlockCodecs::ListAllCodecsAsString() {
-    return JoinSeq(TStringBuf(","), ListAllCodecs());
+    return JoinSeq(TStringBuf(","), ListAllCodecs()); 
 }
 
 void NBlockCodecs::RegisterCodec(TCodecPtr codec) {

@@ -13,9 +13,9 @@ using namespace NNodes;
 
 namespace {
 
-const TStringBuf CommitModeFlush = "flush";
-const TStringBuf CommitModeRollback = "rollback";
-const TStringBuf CommitModeScheme = "scheme";
+const TStringBuf CommitModeFlush = "flush"; 
+const TStringBuf CommitModeRollback = "rollback"; 
+const TStringBuf CommitModeScheme = "scheme"; 
 
 struct TKikimrData {
     THashSet<TStringBuf> DataSourceNames;
@@ -234,40 +234,40 @@ void TKikimrTableDescription::ToYson(NYson::TYsonWriter& writer) const {
     auto& meta = *Metadata;
 
     writer.OnBeginMap();
-    writer.OnKeyedItem(TStringBuf("Cluster"));
+    writer.OnKeyedItem(TStringBuf("Cluster")); 
     writer.OnStringScalar(meta.Cluster);
-    writer.OnKeyedItem(TStringBuf("Name"));
+    writer.OnKeyedItem(TStringBuf("Name")); 
     writer.OnStringScalar(meta.Name);
-    writer.OnKeyedItem(TStringBuf("Id"));
+    writer.OnKeyedItem(TStringBuf("Id")); 
     writer.OnStringScalar(meta.PathId.ToString());
 
-    writer.OnKeyedItem(TStringBuf("DoesExist"));
+    writer.OnKeyedItem(TStringBuf("DoesExist")); 
     writer.OnBooleanScalar(DoesExist());
-    writer.OnKeyedItem(TStringBuf("IsSorted"));
+    writer.OnKeyedItem(TStringBuf("IsSorted")); 
     writer.OnBooleanScalar(true);
-    writer.OnKeyedItem(TStringBuf("IsDynamic"));
+    writer.OnKeyedItem(TStringBuf("IsDynamic")); 
     writer.OnBooleanScalar(true);
-    writer.OnKeyedItem(TStringBuf("UniqueKeys"));
+    writer.OnKeyedItem(TStringBuf("UniqueKeys")); 
     writer.OnBooleanScalar(true);
-    writer.OnKeyedItem(TStringBuf("CanWrite"));
+    writer.OnKeyedItem(TStringBuf("CanWrite")); 
     writer.OnBooleanScalar(true);
-    writer.OnKeyedItem(TStringBuf("IsRealData"));
+    writer.OnKeyedItem(TStringBuf("IsRealData")); 
     writer.OnBooleanScalar(true);
-    writer.OnKeyedItem(TStringBuf("YqlCompatibleSchema"));
+    writer.OnKeyedItem(TStringBuf("YqlCompatibleSchema")); 
     writer.OnBooleanScalar(true);
 
-    writer.OnKeyedItem(TStringBuf("RecordsCount"));
+    writer.OnKeyedItem(TStringBuf("RecordsCount")); 
     writer.OnInt64Scalar(meta.RecordsCount);
-    writer.OnKeyedItem(TStringBuf("DataSize"));
+    writer.OnKeyedItem(TStringBuf("DataSize")); 
     writer.OnInt64Scalar(meta.DataSize);
-    writer.OnKeyedItem(TStringBuf("MemorySize"));
+    writer.OnKeyedItem(TStringBuf("MemorySize")); 
     writer.OnInt64Scalar(meta.MemorySize);
-    writer.OnKeyedItem(TStringBuf("ChunkCount"));
+    writer.OnKeyedItem(TStringBuf("ChunkCount")); 
     writer.OnInt64Scalar(meta.ShardsCount);
 
-    writer.OnKeyedItem(TStringBuf("AccessTime"));
+    writer.OnKeyedItem(TStringBuf("AccessTime")); 
     writer.OnInt64Scalar(meta.LastAccessTime.Seconds());
-    writer.OnKeyedItem(TStringBuf("ModifyTime"));
+    writer.OnKeyedItem(TStringBuf("ModifyTime")); 
     writer.OnInt64Scalar(meta.LastUpdateTime.Seconds());
 
     writer.OnKeyedItem("Fields");
@@ -358,7 +358,7 @@ bool TKikimrKey::Extract(const TExprNode& key) {
     if (key.ChildrenSize() > 1) {
         for (ui32 i = 1; i < key.ChildrenSize(); ++i) {
             auto tag = key.Child(i)->Child(0);
-            if (tag->Content() == TStringBuf("view")) {
+            if (tag->Content() == TStringBuf("view")) { 
                 const TExprNode* viewNode = key.Child(i)->Child(1);
                 if (!viewNode->IsCallable("String")) {
                     Ctx.AddError(TIssue(Ctx.GetPosition(viewNode->Pos()), "Expected String"));

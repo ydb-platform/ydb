@@ -11,24 +11,24 @@ namespace NKikimr::NSQS {
 
 inline TActorId MakeSqsServiceID(ui32 nodeId) {
     Y_VERIFY(nodeId != 0);
-    return TActorId(nodeId, TStringBuf("SQS_SERVICE"));
+    return TActorId(nodeId, TStringBuf("SQS_SERVICE")); 
 }
 
 inline TActorId MakeSqsProxyServiceID(ui32 nodeId) {
     Y_VERIFY(nodeId != 0);
-    return TActorId(nodeId, TStringBuf("SQS_PROXY"));
+    return TActorId(nodeId, TStringBuf("SQS_PROXY")); 
 }
 
 inline TActorId MakeSqsAccessServiceID() {
-    return TActorId(0, TStringBuf("SQS_ACCESS"));
+    return TActorId(0, TStringBuf("SQS_ACCESS")); 
 }
 
 inline TActorId MakeSqsFolderServiceID() {
-    return TActorId(0, TStringBuf("SQS_FOLDER"));
+    return TActorId(0, TStringBuf("SQS_FOLDER")); 
 }
 
 inline TActorId MakeSqsMeteringServiceID() {
-    return TActorId(0, TStringBuf("SQS_METER"));
+    return TActorId(0, TStringBuf("SQS_METER")); 
 }
 
 IActor* CreateSqsService(TMaybe<ui32> ydbPort = Nothing());

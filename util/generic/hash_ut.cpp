@@ -306,7 +306,7 @@ void THashTest::TestHMMap1() {
 
     UNIT_ASSERT((*i).first == 'X');
     UNIT_ASSERT((*i).second == 10);
-    ++i;
+    ++i; 
     UNIT_ASSERT((*i).first == 'X');
     UNIT_ASSERT((*i).second == 20);
 
@@ -746,7 +746,7 @@ void THashTest::TestInvariants() {
 
     int count1 = 0;
     for (auto pos = set.begin(); pos != set.end(); pos++) {
-        ++count1;
+        ++count1; 
     }
     UNIT_ASSERT_VALUES_EQUAL(count1, 1000);
 
@@ -1143,7 +1143,7 @@ void THashTest::TestAt() {
 
     char key[] = {11, 12, 0, 1, 2, 11, 0};
     TEST_AT_THROWN_EXCEPTION(TString, TString, char*, key, "\\x0B\\x0C");
-    TEST_AT_THROWN_EXCEPTION(TString, TString, TStringBuf, TStringBuf(key, sizeof(key) - 1), "\\x0B\\x0C\\0\\1\\2\\x0B");
+    TEST_AT_THROWN_EXCEPTION(TString, TString, TStringBuf, TStringBuf(key, sizeof(key) - 1), "\\x0B\\x0C\\0\\1\\2\\x0B"); 
 
 #undef TEST_AT_THROWN_EXCEPTION
 }

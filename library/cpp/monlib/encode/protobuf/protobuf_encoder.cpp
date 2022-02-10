@@ -213,7 +213,7 @@ namespace NMonitoring {
                 FillHistogram(*snapshot, point->MutableHistogram());
             }
 
-            void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override {
+            void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override { 
                 Y_ENSURE(Sample_, "metric not started");
                 NProto::TPoint* point = Sample_->AddPoints();
                 point->SetTime(time.MilliSeconds());

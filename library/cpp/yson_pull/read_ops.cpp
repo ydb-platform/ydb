@@ -4,7 +4,7 @@ using namespace NYsonPull;
 using namespace NYsonPull::NReadOps;
 
 namespace {
-    bool TrySkipValueUntil(EEventType end, TReader& reader) {
+    bool TrySkipValueUntil(EEventType end, TReader& reader) { 
         const auto& event = reader.NextEvent();
         if (event.Type() == end) {
             return false;
@@ -13,7 +13,7 @@ namespace {
         return true;
     }
 
-    bool TrySkipKeyValueUntil(EEventType end, TReader& reader) {
+    bool TrySkipKeyValueUntil(EEventType end, TReader& reader) { 
         const auto& event = reader.NextEvent();
         if (event.Type() == end) {
             return false;

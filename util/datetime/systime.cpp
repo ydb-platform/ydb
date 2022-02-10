@@ -113,14 +113,14 @@ struct tm* GmTimeR(const time_t* timer, struct tm* tmbuf) {
     tmbuf->tm_wday = (dayno + 4) % 7; // Day 0 was a thursday
     while (dayno >= (ui64)YEARSIZE(year)) {
         dayno -= YEARSIZE(year);
-        ++year;
+        ++year; 
     }
     tmbuf->tm_year = year - YEAR0;
     tmbuf->tm_yday = dayno;
     tmbuf->tm_mon = 0;
     while (dayno >= (ui64)_ytab[LEAPYEAR(year)][tmbuf->tm_mon]) {
         dayno -= _ytab[LEAPYEAR(year)][tmbuf->tm_mon];
-        ++tmbuf->tm_mon;
+        ++tmbuf->tm_mon; 
     }
     tmbuf->tm_mday = dayno + 1;
     tmbuf->tm_isdst = 0;

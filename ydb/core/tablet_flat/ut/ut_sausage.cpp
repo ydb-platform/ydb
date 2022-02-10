@@ -114,17 +114,17 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         TWriter writer(cookieAllocator, 1 /* channel */, 8192 * 1024);
 
         const auto r1 = writer.AddPage(chunk1, 1);
-        writer.AddInplace(r1, TStringBuf("chunk 1"));
+        writer.AddInplace(r1, TStringBuf("chunk 1")); 
 
         UNIT_ASSERT(r1 == 0 && checkGlobs(writer.Grab()) == 0);
 
         const auto r2 = writer.AddPage(chunk2, 2);
-        writer.AddInplace(r2, TStringBuf("chunk 2"));
+        writer.AddInplace(r2, TStringBuf("chunk 2")); 
 
         UNIT_ASSERT(r2 == 1 && checkGlobs(writer.Grab()) == 2);
 
         const auto r3 = writer.AddPage(chunk3, 3);
-        writer.AddInplace(r3, TStringBuf("chunk 3"));
+        writer.AddInplace(r3, TStringBuf("chunk 3")); 
 
         UNIT_ASSERT(r3 == 2 && checkGlobs(writer.Grab()) == 1);
 

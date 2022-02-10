@@ -84,5 +84,5 @@ struct TRWSpinLockWriteOps {
     }
 };
 
-using TReadSpinLockGuard = TGuard<TRWSpinLock, TRWSpinLockReadOps>;
-using TWriteSpinLockGuard = TGuard<TRWSpinLock, TRWSpinLockWriteOps>;
+using TReadSpinLockGuard = TGuard<TRWSpinLock, TRWSpinLockReadOps>; 
+using TWriteSpinLockGuard = TGuard<TRWSpinLock, TRWSpinLockWriteOps>; 

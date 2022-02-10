@@ -78,7 +78,7 @@ TStringBuf ExtractDomain(const TString& path) noexcept {
 
 TStringBuf ExtractDomain(TStringBuf path) noexcept {
     //  coherence with SplitPath and JoinPath that allow no / leading path
-    path.SkipPrefix(TStringBuf("/"));
+    path.SkipPrefix(TStringBuf("/")); 
 
     return path.Before('/');
 }
@@ -86,23 +86,23 @@ TStringBuf ExtractDomain(TStringBuf path) noexcept {
 bool IsEqualPaths(const TString& l, const TString& r) noexcept {
     auto left = TStringBuf(l);
     // coherence with SplitPath and JoinPath that allow no / leading path
-    left.SkipPrefix(TStringBuf("/"));
+    left.SkipPrefix(TStringBuf("/")); 
     // also do not accaunt / at the end
-    left.ChopSuffix(TStringBuf("/"));
+    left.ChopSuffix(TStringBuf("/")); 
 
     auto right = TStringBuf(r);
-    right.SkipPrefix(TStringBuf("/"));
-    right.ChopSuffix(TStringBuf("/"));
+    right.SkipPrefix(TStringBuf("/")); 
+    right.ChopSuffix(TStringBuf("/")); 
 
     return left == right;
 }
 
 bool IsStartWithSlash(const TString &l) {
-    return TStringBuf(l).StartsWith(TStringBuf("/"));
+    return TStringBuf(l).StartsWith(TStringBuf("/")); 
 }
 
 TString::const_iterator PathPartBrokenAt(const TString &part, const TStringBuf extraSymbols) {
-    static constexpr TStringBuf basicSymbols = "-_.";
+    static constexpr TStringBuf basicSymbols = "-_."; 
     for (auto it = part.begin(); it != part.end(); ++it) {
         if (!isalnum(*it)
                 && !basicSymbols.Contains(*it)
@@ -147,7 +147,7 @@ TStringBuf ExtractParent(const TString &path) noexcept {
     TStringBuf parent = TStringBuf(path);
 
     //  coherence with SplitPath and JoinPath that allow no / leading path
-    parent.ChopSuffix(TStringBuf("/"));
+    parent.ChopSuffix(TStringBuf("/")); 
 
     return parent.RBefore('/');
 }
@@ -156,7 +156,7 @@ TStringBuf ExtractBase(const TString &path) noexcept {
     TStringBuf parent = TStringBuf(path);
 
     //  coherence with SplitPath and JoinPath that allow no / leading path
-    parent.ChopSuffix(TStringBuf("/"));
+    parent.ChopSuffix(TStringBuf("/")); 
 
     return parent.RAfter('/');
 }

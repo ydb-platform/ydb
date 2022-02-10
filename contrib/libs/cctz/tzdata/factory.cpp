@@ -19,7 +19,7 @@ namespace cctz_extension {
 
         public:
             static std::unique_ptr<cctz::ZoneInfoSource> LoadZone(const std::string& zoneName) {
-                TString resourceName = TStringBuilder() << "/cctz/tzdata/"sv << zoneName;
+                TString resourceName = TStringBuilder() << "/cctz/tzdata/"sv << zoneName; 
                 TString tzData;
                 if (!NResource::FindExact(resourceName, &tzData)) {
                     return nullptr;

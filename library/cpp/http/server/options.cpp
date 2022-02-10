@@ -7,14 +7,14 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
 
-using TAddr = THttpServerOptions::TAddr;
+using TAddr = THttpServerOptions::TAddr; 
 
 static inline TString AddrToString(const TAddr& addr) {
     return addr.Addr + ":" + ToString(addr.Port);
 }
 
 static inline TNetworkAddress ToNetworkAddr(const TString& address, ui16 port) {
-    if (address.empty() || address == TStringBuf("*")) {
+    if (address.empty() || address == TStringBuf("*")) { 
         return TNetworkAddress(port);
     }
 

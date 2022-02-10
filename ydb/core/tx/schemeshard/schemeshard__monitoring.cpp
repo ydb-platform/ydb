@@ -77,36 +77,36 @@ struct TCgi {
     static const TParam UpdateCoordinatorsConfigDryRun;
 
     struct TPages {
-        static constexpr TStringBuf MainPage = "Main";
-        static constexpr TStringBuf AdminPage = "Admin";
-        static constexpr TStringBuf AdminRequest = "AdminRequest";
-        static constexpr TStringBuf TransactionList = "TxList";
-        static constexpr TStringBuf TransactionInfo = "TxInfo";
-        static constexpr TStringBuf PathInfo = "PathInfo";
-        static constexpr TStringBuf ShardInfoByTabletId = "ShardInfoByTabletId";
-        static constexpr TStringBuf ShardInfoByShardIdx = "ShardInfoByShardIdx";
-        static constexpr TStringBuf BuildIndexInfo = "BuildIndexInfo";
+        static constexpr TStringBuf MainPage = "Main"; 
+        static constexpr TStringBuf AdminPage = "Admin"; 
+        static constexpr TStringBuf AdminRequest = "AdminRequest"; 
+        static constexpr TStringBuf TransactionList = "TxList"; 
+        static constexpr TStringBuf TransactionInfo = "TxInfo"; 
+        static constexpr TStringBuf PathInfo = "PathInfo"; 
+        static constexpr TStringBuf ShardInfoByTabletId = "ShardInfoByTabletId"; 
+        static constexpr TStringBuf ShardInfoByShardIdx = "ShardInfoByShardIdx"; 
+        static constexpr TStringBuf BuildIndexInfo = "BuildIndexInfo"; 
     };
 };
 
-const TCgi::TParam TCgi::TabletID = TStringBuf("TabletID");
-const TCgi::TParam TCgi::TxId = TStringBuf("TxId");
-const TCgi::TParam TCgi::PartId = TStringBuf("PartId");
-const TCgi::TParam TCgi::OperationId = TStringBuf("OperationId");
-const TCgi::TParam TCgi::OwnerShardIdx = TStringBuf("OwnerShardIdx");
-const TCgi::TParam TCgi::LocalShardIdx = TStringBuf("LocalShardIdx");
-const TCgi::TParam TCgi::ShardID = TStringBuf("ShardID");
-const TCgi::TParam TCgi::OwnerPathId = TStringBuf("OwnerPathId");
-const TCgi::TParam TCgi::LocalPathId = TStringBuf("LocalPathId");
-const TCgi::TParam TCgi::IsReadOnlyMode = TStringBuf("IsReadOnlyMode");
-const TCgi::TParam TCgi::UpdateAccessDatabaseRights = TStringBuf("UpdateAccessDatabaseRights");
-const TCgi::TParam TCgi::UpdateAccessDatabaseRightsDryRun = TStringBuf("UpdateAccessDatabaseRightsDryRun");
-const TCgi::TParam TCgi::FixAccessDatabaseInheritance = TStringBuf("FixAccessDatabaseInheritance");
-const TCgi::TParam TCgi::FixAccessDatabaseInheritanceDryRun = TStringBuf("FixAccessDatabaseInheritanceDryRun");
-const TCgi::TParam TCgi::Page = TStringBuf("Page");
-const TCgi::TParam TCgi::BuildIndexId = TStringBuf("BuildIndexId");
-const TCgi::TParam TCgi::UpdateCoordinatorsConfig = TStringBuf("UpdateCoordinatorsConfig");
-const TCgi::TParam TCgi::UpdateCoordinatorsConfigDryRun = TStringBuf("UpdateCoordinatorsConfigDryRun");
+const TCgi::TParam TCgi::TabletID = TStringBuf("TabletID"); 
+const TCgi::TParam TCgi::TxId = TStringBuf("TxId"); 
+const TCgi::TParam TCgi::PartId = TStringBuf("PartId"); 
+const TCgi::TParam TCgi::OperationId = TStringBuf("OperationId"); 
+const TCgi::TParam TCgi::OwnerShardIdx = TStringBuf("OwnerShardIdx"); 
+const TCgi::TParam TCgi::LocalShardIdx = TStringBuf("LocalShardIdx"); 
+const TCgi::TParam TCgi::ShardID = TStringBuf("ShardID"); 
+const TCgi::TParam TCgi::OwnerPathId = TStringBuf("OwnerPathId"); 
+const TCgi::TParam TCgi::LocalPathId = TStringBuf("LocalPathId"); 
+const TCgi::TParam TCgi::IsReadOnlyMode = TStringBuf("IsReadOnlyMode"); 
+const TCgi::TParam TCgi::UpdateAccessDatabaseRights = TStringBuf("UpdateAccessDatabaseRights"); 
+const TCgi::TParam TCgi::UpdateAccessDatabaseRightsDryRun = TStringBuf("UpdateAccessDatabaseRightsDryRun"); 
+const TCgi::TParam TCgi::FixAccessDatabaseInheritance = TStringBuf("FixAccessDatabaseInheritance"); 
+const TCgi::TParam TCgi::FixAccessDatabaseInheritanceDryRun = TStringBuf("FixAccessDatabaseInheritanceDryRun"); 
+const TCgi::TParam TCgi::Page = TStringBuf("Page"); 
+const TCgi::TParam TCgi::BuildIndexId = TStringBuf("BuildIndexId"); 
+const TCgi::TParam TCgi::UpdateCoordinatorsConfig = TStringBuf("UpdateCoordinatorsConfig"); 
+const TCgi::TParam TCgi::UpdateCoordinatorsConfigDryRun = TStringBuf("UpdateCoordinatorsConfigDryRun"); 
 
 
 class TUpdateCoordinatorsConfigActor : public TActorBootstrapped<TUpdateCoordinatorsConfigActor> {
@@ -786,7 +786,7 @@ private:
                             }
                             TABLED() {
                                 str << status.DebugMessage;
-                            }
+                            } 
                             TABLED() {
                                 str << Self->Generation() << ":" << status.SeqNoRound;
                             }

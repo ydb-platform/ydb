@@ -195,7 +195,7 @@ namespace NUri {
         // process #! fragments
         // https://developers.google.com/webmasters/ajax-crawling/docs/specification
 
-        static const TStringBuf escFragPrefix(TStringBuf("_escaped_fragment_="));
+        static const TStringBuf escFragPrefix(TStringBuf("_escaped_fragment_=")); 
 
         bool encHashBangFrag = false;
         TStringBuf qryBeforeEscapedFragment;

@@ -17,7 +17,7 @@ using grpc::Status;
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
+constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://"; 
 
 ///////////////////////////////////////////////////////////////////////////////
 

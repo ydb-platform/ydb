@@ -31,7 +31,7 @@ void TDefaultValueBuilder::SetCalleePositionHolder(const NUdf::TSourcePosition*&
 }
 
 void TDefaultValueBuilder::Terminate(const char* message) const {
-    TStringBuf reason = (message ? TStringBuf(message) : TStringBuf("(unknown)"));
+    TStringBuf reason = (message ? TStringBuf(message) : TStringBuf("(unknown)")); 
     TString fullMessage = TStringBuilder() <<
         "Terminate was called, reason(" << reason.size() << "): " << reason << Endl;
     HolderFactory_.CleanupModulesOnTerminate();

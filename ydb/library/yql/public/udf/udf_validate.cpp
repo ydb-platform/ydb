@@ -21,7 +21,7 @@ TStringBuf ValidateModeAsStr(EValidateMode validateMode) {
         UDF_VALIDATE_MODE(SWITCH_ENUM_TYPE_TO_STR)
     }
 
-    return TStringBuf("unknown");
+    return TStringBuf("unknown"); 
 }
 
 EValidateMode ValidateModeByStr(const TString& validateModeStr) {
@@ -39,7 +39,7 @@ TStringBuf ValidatePolicyAsStr(EValidatePolicy validatePolicy) {
         UDF_VALIDATE_POLICY(SWITCH_ENUM_TYPE_TO_STR)
     }
 
-    return TStringBuf("unknown");
+    return TStringBuf("unknown"); 
 }
 
 EValidatePolicy ValidatePolicyByStr(const TString& validatePolicyStr) {

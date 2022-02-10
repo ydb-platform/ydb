@@ -381,16 +381,16 @@ struct TBinaryJsonValidator {
         TPODReader reader(Buffer);
         const auto header = reader.Read<THeader>();
         if (!header.Defined()) {
-            return "Missing header"sv;
+            return "Missing header"sv; 
         }
         if (header->Version != CURRENT_VERSION) {
-            return "Version does not match current"sv;
+            return "Version does not match current"sv; 
         }
         if (header->Version > EVersion::MaxVersion) {
-            return "Invalid version"sv;
+            return "Invalid version"sv; 
         }
         if (header->StringOffset >= Buffer.Size()) {
-            return "String index offset points outside of buffer"sv;
+            return "String index offset points outside of buffer"sv; 
         }
         StringIndexStart = header->StringOffset;
 
@@ -398,7 +398,7 @@ struct TBinaryJsonValidator {
         TPODReader stringReader(Buffer, /* start */ StringIndexStart, /* end */ Buffer.Size());
         const auto stringCount = stringReader.Read<ui32>();
         if (!stringCount.Defined()) {
-            return "Missing string index size"sv;
+            return "Missing string index size"sv; 
         }
         StringEntryStart = StringIndexStart + sizeof(ui32);
         StringDataStart = StringEntryStart + (*stringCount) * sizeof(TSEntry);
@@ -408,13 +408,13 @@ struct TBinaryJsonValidator {
         for (ui32 i = 0; i < *stringCount; i++) {
             const auto entry = stringReader.Read<TSEntry>();
             if (!entry.Defined()) {
-                return "Missing entry in string index"sv;
+                return "Missing entry in string index"sv; 
             }
             if (entry->Type != EStringType::RawNullTerminated) {
-                return "String entry type is invalid"sv;
+                return "String entry type is invalid"sv; 
             }
             if (lastStringOffset >= entry->Value) {
-                return "String entry offset points to invalid location"sv;
+                return "String entry offset points to invalid location"sv; 
             }
             totalLength += entry->Value - lastStringOffset;
             lastStringOffset = entry->Value;
@@ -422,22 +422,22 @@ struct TBinaryJsonValidator {
 
         NumberIndexStart = StringDataStart + totalLength;
         if (NumberIndexStart > Buffer.Size()) {
-            return "Total length of strings in String index exceeds Buffer size"sv;
+            return "Total length of strings in String index exceeds Buffer size"sv; 
         }
 
         // Validate Number index
         if ((Buffer.Size() - NumberIndexStart) % sizeof(double) != 0) {
-            return "Number index cannot be split into doubles"sv;
+            return "Number index cannot be split into doubles"sv; 
         }
 
         TPODReader numberReader(Buffer, /* start */ NumberIndexStart, /* end */ Buffer.Size());
         TMaybe<double> current;
         while (current = numberReader.Read<double>()) {
             if (std::isnan(*current)) {
-                return "Number index element is NaN"sv;
+                return "Number index element is NaN"sv; 
             }
             if (std::isinf(*current)) {
-                return "Number index element is infinite"sv;
+                return "Number index element is infinite"sv; 
             }
         }
 
@@ -448,10 +448,10 @@ struct TBinaryJsonValidator {
 private:
     TMaybe<TStringBuf> IsValidStringOffset(ui32 offset) {
         if (offset < StringEntryStart || offset >= StringDataStart) {
-            return "String offset is out of String index entries section"sv;
+            return "String offset is out of String index entries section"sv; 
         }
         if ((offset - StringEntryStart) % sizeof(TSEntry) != 0) {
-            return "String offset does not point to the start of entry"sv;
+            return "String offset does not point to the start of entry"sv; 
         }
         return Nothing();
     }
@@ -459,7 +459,7 @@ private:
     TMaybe<TStringBuf> IsValidEntry(TPODReader& reader, ui32 depth, bool containersAllowed = true) {
         const auto entry = reader.Read<TEntry>();
         if (!entry.Defined()) {
-            return "Missing entry"sv;
+            return "Missing entry"sv; 
         }
 
         switch (entry->Type) {
@@ -473,29 +473,29 @@ private:
             case EEntryType::Number: {
                 const auto numberOffset = entry->Value;
                 if (numberOffset < NumberIndexStart || numberOffset >= Buffer.Size()) {
-                    return "Number offset cannot point outside of Number index"sv;
+                    return "Number offset cannot point outside of Number index"sv; 
                 }
                 if ((numberOffset - NumberIndexStart) % sizeof(double) != 0) {
-                    return "Number offset does not point to the start of number"sv;
+                    return "Number offset does not point to the start of number"sv; 
                 }
                 break;
             }
             case EEntryType::Container: {
                 if (!containersAllowed) {
-                    return "This entry cannot be a container"sv;
+                    return "This entry cannot be a container"sv; 
                 }
                 const auto metaOffset = entry->Value;
                 if (metaOffset < reader.Pos) {
-                    return "Offset to container cannot point before element"sv;
+                    return "Offset to container cannot point before element"sv; 
                 }
                 if (metaOffset >= StringIndexStart) {
-                    return "Offset to container cannot point outside of Tree section"sv;
+                    return "Offset to container cannot point outside of Tree section"sv; 
                 }
                 TPODReader containerReader(reader.Buffer, metaOffset, StringIndexStart);
                 return IsValidContainer(containerReader, depth + 1);
             }
             default:
-                return "Invalid entry type"sv;
+                return "Invalid entry type"sv; 
         }
 
         return Nothing();
@@ -504,13 +504,13 @@ private:
     TMaybe<TStringBuf> IsValidContainer(TPODReader& reader, ui32 depth) {
         const auto meta = reader.Read<TMeta>();
         if (!meta.Defined()) {
-            return "Missing Meta for container"sv;
+            return "Missing Meta for container"sv; 
         }
 
         switch (meta->Type) {
             case EContainerType::TopLevelScalar: {
                 if (depth > 0) {
-                    return "Top level scalar can be located only at the root of BinaryJson tree"sv;
+                    return "Top level scalar can be located only at the root of BinaryJson tree"sv; 
                 }
 
                 return IsValidEntry(reader, depth, /* containersAllowed */ false);
@@ -531,7 +531,7 @@ private:
                 for (ui32 i = 0; i < meta->Size; i++) {
                     const auto keyOffset = keyReader.Read<TKeyEntry>();
                     if (!keyOffset.Defined()) {
-                        return "Cannot read key offset"sv;
+                        return "Cannot read key offset"sv; 
                     }
                     auto error = IsValidStringOffset(*keyOffset);
                     if (error.Defined()) {
@@ -546,7 +546,7 @@ private:
                 break;
             }
             default:
-                return "Invalid container type"sv;
+                return "Invalid container type"sv; 
         }
 
         return Nothing();

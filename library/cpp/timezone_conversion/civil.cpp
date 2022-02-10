@@ -20,7 +20,7 @@ namespace {
         return true;
     }
 
-    bool TryParseUTCOffsetTimezone(TStringBuf name, int& offset) {
+    bool TryParseUTCOffsetTimezone(TStringBuf name, int& offset) { 
         static constexpr TStringBuf OFFSET_PREFIX = "UTC";
         if (!name.SkipPrefix(OFFSET_PREFIX)) {
             return false;
@@ -210,25 +210,25 @@ void Out<NDatetime::TWeekday>(IOutputStream& out, NDatetime::TWeekday wd) {
     using namespace cctz;
     switch (wd) {
         case weekday::monday:
-            out << TStringBuf("Monday");
+            out << TStringBuf("Monday"); 
             break;
         case weekday::tuesday:
-            out << TStringBuf("Tuesday");
+            out << TStringBuf("Tuesday"); 
             break;
         case weekday::wednesday:
-            out << TStringBuf("Wednesday");
+            out << TStringBuf("Wednesday"); 
             break;
         case weekday::thursday:
-            out << TStringBuf("Thursday");
+            out << TStringBuf("Thursday"); 
             break;
         case weekday::friday:
-            out << TStringBuf("Friday");
+            out << TStringBuf("Friday"); 
             break;
         case weekday::saturday:
-            out << TStringBuf("Saturday");
+            out << TStringBuf("Saturday"); 
             break;
         case weekday::sunday:
-            out << TStringBuf("Sunday");
+            out << TStringBuf("Sunday"); 
             break;
     }
 }

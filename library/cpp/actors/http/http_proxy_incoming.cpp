@@ -56,11 +56,11 @@ public:
         response = nullptr;
     }
 
-    TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parent) override {
+    TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parent) override { 
         return new IEventHandle(self, parent, new TEvents::TEvBootstrap());
     }
 
-    void Die(const TActorContext& ctx) override {
+    void Die(const TActorContext& ctx) override { 
         ctx.Send(Endpoint.Owner, new TEvHttpProxy::TEvHttpConnectionClosed(ctx.SelfID, std::move(RecycledRequests)));
         TSocketImpl::Shutdown();
         TBase::Die(ctx);

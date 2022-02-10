@@ -9,7 +9,7 @@ extern "C" void EnableBalloc();
 extern "C" bool BallocDisabled();
 
 namespace {
-    bool SetAllocParam(const char* name, const char* value) {
+    bool SetAllocParam(const char* name, const char* value) { 
         if (strcmp(name, "disable") == 0) {
             if (value == nullptr || strcmp(value, "false") != 0) {
                 // all values other than "false" are considred to be "true" for compatibility
@@ -22,7 +22,7 @@ namespace {
         return false;
     }
 
-    bool CheckAllocParam(const char* name, bool defaultValue) {
+    bool CheckAllocParam(const char* name, bool defaultValue) { 
         if (strcmp(name, "disable") == 0) {
             return BallocDisabled();
         }

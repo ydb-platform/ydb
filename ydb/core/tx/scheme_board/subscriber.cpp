@@ -364,7 +364,7 @@ public:
     }
 
     static constexpr TStringBuf LogPrefix() {
-        return "replica"sv;
+        return "replica"sv; 
     }
 
     explicit TReplicaSubscriber(
@@ -512,7 +512,7 @@ public:
     }
 
     static constexpr TStringBuf LogPrefix() {
-        return "proxy"sv;
+        return "proxy"sv; 
     }
 
     explicit TSubscriberProxy(
@@ -920,7 +920,7 @@ public:
     }
 
     static constexpr TStringBuf LogPrefix() {
-        return "main"sv;
+        return "main"sv; 
     }
 
     explicit TSubscriber(

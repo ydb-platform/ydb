@@ -30,7 +30,7 @@ enum class EPhysicalTxType {
 };
 
 struct TKqpPhyTxSettings {
-    static constexpr TStringBuf TypeSettingName = "type";
+    static constexpr TStringBuf TypeSettingName = "type"; 
     std::optional<EPhysicalTxType> Type;
 
     static constexpr std::string_view WithEffectsSettingName = "with_effects"sv;
@@ -41,7 +41,7 @@ struct TKqpPhyTxSettings {
 };
 
 struct TKqpReadTableSettings {
-    static constexpr TStringBuf SkipNullKeysSettingName = "SkipNullKeys";
+    static constexpr TStringBuf SkipNullKeysSettingName = "SkipNullKeys"; 
     static constexpr TStringBuf ItemsLimitSettingName = "ItemsLimit";
     static constexpr TStringBuf ReverseSettingName = "Reverse";
 

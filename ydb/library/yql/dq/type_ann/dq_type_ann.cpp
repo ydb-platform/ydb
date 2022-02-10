@@ -357,7 +357,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
     auto leftStructType = leftInputItemType->Cast<TStructExprType>();
     auto leftTableLabel = join.LeftLabel().Maybe<TCoAtom>()
         ? join.LeftLabel().Cast<TCoAtom>().Value()
-        : TStringBuf("");
+        : TStringBuf(""); 
 
     auto rightInputItemType = GetSeqItemType(rightInputType);
     if (!EnsureStructType(join.Pos(), *rightInputItemType, ctx)) {
@@ -366,7 +366,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
     auto rightStructType = rightInputItemType->Cast<TStructExprType>();
     auto rightTableLabel = join.RightLabel().Maybe<TCoAtom>()
         ? join.RightLabel().Cast<TCoAtom>().Value()
-        : TStringBuf("");
+        : TStringBuf(""); 
 
     return GetDqJoinResultType<IsMapJoin>(join.Pos(), *leftStructType, leftTableLabel, *rightStructType,
         rightTableLabel, join.JoinType(), join.JoinKeys(), ctx);

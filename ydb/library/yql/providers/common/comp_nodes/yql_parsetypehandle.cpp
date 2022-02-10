@@ -35,7 +35,7 @@ public:
         auto exprCtxPtr = GetExprContextPtr(ctx, ExprCtxMutableIndex_);
         auto astRoot = NYql::TAstNode::NewList({}, pool,
             NYql::TAstNode::NewList({}, pool,
-                NYql::TAstNode::NewLiteralAtom({}, TStringBuf("return"), pool), parsedType));
+                NYql::TAstNode::NewLiteralAtom({}, TStringBuf("return"), pool), parsedType)); 
         NYql::TExprNode::TPtr exprRoot;
         if (!CompileExpr(*astRoot, exprRoot, *exprCtxPtr, nullptr)) {
             UdfTerminate(exprCtxPtr->IssueManager.GetIssues().ToString().data());

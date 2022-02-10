@@ -15,8 +15,8 @@
 namespace NKikimr {
 namespace NKqp {
 
-const TStringBuf DefaultKikimrClusterName = "kikimr";
-const TStringBuf DefaultKikimrPublicClusterName = "db";
+const TStringBuf DefaultKikimrClusterName = "kikimr"; 
+const TStringBuf DefaultKikimrPublicClusterName = "db"; 
 
 inline NActors::TActorId MakeKqpProxyID(ui32 nodeId) {
     const char name[12] = "kqp_proxy";

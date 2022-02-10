@@ -92,7 +92,7 @@ protected:
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
-        if (!CheckResult(result, TStringBuf("PutObject (scheme)"))) {
+        if (!CheckResult(result, TStringBuf("PutObject (scheme)"))) { 
             return;
         }
 
@@ -171,7 +171,7 @@ protected:
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
-        if (!CheckResult(result, TStringBuf("PutObject (data)"))) {
+        if (!CheckResult(result, TStringBuf("PutObject (data)"))) { 
             return;
         }
 
@@ -241,7 +241,7 @@ protected:
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
-        if (!CheckResult(result, TStringBuf("CreateMultipartUpload"))) {
+        if (!CheckResult(result, TStringBuf("CreateMultipartUpload"))) { 
             return;
         }
 
@@ -255,7 +255,7 @@ protected:
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
-        if (!CheckResult(result, TStringBuf("UploadPart"))) {
+        if (!CheckResult(result, TStringBuf("UploadPart"))) { 
             return;
         }
 
@@ -371,7 +371,7 @@ public:
     }
 
     static constexpr TStringBuf LogPrefix() {
-        return "s3"sv;
+        return "s3"sv; 
     }
 
     explicit TS3UploaderBase(

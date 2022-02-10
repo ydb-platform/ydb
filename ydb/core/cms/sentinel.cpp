@@ -399,7 +399,7 @@ public:
     }
 
     static TStringBuf Name() {
-        return "ConfigUpdater"sv;
+        return "ConfigUpdater"sv; 
     }
 
     using TBase::TBase;
@@ -588,7 +588,7 @@ public:
     }
 
     static TStringBuf Name() {
-        return "StateUpdater"sv;
+        return "StateUpdater"sv; 
     }
 
     using TBase::TBase;
@@ -684,7 +684,7 @@ public:
     }
 
     static TStringBuf Name() {
-        return "StatusChanger"sv;
+        return "StatusChanger"sv; 
     }
 
     explicit TStatusChanger(
@@ -1018,7 +1018,7 @@ public:
     }
 
     static TStringBuf Name() {
-        return "Main"sv;
+        return "Main"sv; 
     }
 
     explicit TSentinel(TCmsStatePtr cmsState)

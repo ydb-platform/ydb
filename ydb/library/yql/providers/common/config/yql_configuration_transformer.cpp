@@ -63,7 +63,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
             }
 
             auto atom = node->Child(2)->Content();
-            if (atom == TStringBuf("Attr")) {
+            if (atom == TStringBuf("Attr")) { 
                 if (!EnsureMinArgsCount(*node, 4, ctx)) {
                     return nullptr;
                 }
@@ -99,7 +99,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
                 if (!HandleAttr(node->Child(3)->Pos(), clusterName, name, value, ctx)) {
                     return nullptr;
                 }
-            } else if (atom == TStringBuf("Auth")) {
+            } else if (atom == TStringBuf("Auth")) { 
                 if (!EnsureArgsCount(*node, 4, ctx)) {
                     return nullptr;
                 }

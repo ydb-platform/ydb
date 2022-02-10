@@ -8,27 +8,27 @@
 namespace NKikimr {
 namespace NSysView {
 
-constexpr TStringBuf PartitionStatsName = "partition_stats";
-constexpr TStringBuf NodesName = "nodes";
+constexpr TStringBuf PartitionStatsName = "partition_stats"; 
+constexpr TStringBuf NodesName = "nodes"; 
 
-constexpr TStringBuf TopQueriesByDuration1MinuteName = "top_queries_by_duration_one_minute";
-constexpr TStringBuf TopQueriesByDuration1HourName = "top_queries_by_duration_one_hour";
-constexpr TStringBuf TopQueriesByReadBytes1MinuteName = "top_queries_by_read_bytes_one_minute";
-constexpr TStringBuf TopQueriesByReadBytes1HourName = "top_queries_by_read_bytes_one_hour";
-constexpr TStringBuf TopQueriesByCpuTime1MinuteName = "top_queries_by_cpu_time_one_minute";
-constexpr TStringBuf TopQueriesByCpuTime1HourName = "top_queries_by_cpu_time_one_hour";
+constexpr TStringBuf TopQueriesByDuration1MinuteName = "top_queries_by_duration_one_minute"; 
+constexpr TStringBuf TopQueriesByDuration1HourName = "top_queries_by_duration_one_hour"; 
+constexpr TStringBuf TopQueriesByReadBytes1MinuteName = "top_queries_by_read_bytes_one_minute"; 
+constexpr TStringBuf TopQueriesByReadBytes1HourName = "top_queries_by_read_bytes_one_hour"; 
+constexpr TStringBuf TopQueriesByCpuTime1MinuteName = "top_queries_by_cpu_time_one_minute"; 
+constexpr TStringBuf TopQueriesByCpuTime1HourName = "top_queries_by_cpu_time_one_hour"; 
 constexpr TStringBuf TopQueriesByRequestUnits1MinuteName = "top_queries_by_request_units_one_minute";
 constexpr TStringBuf TopQueriesByRequestUnits1HourName = "top_queries_by_request_units_one_hour";
 
-constexpr TStringBuf PDisksName = "ds_pdisks";
-constexpr TStringBuf VSlotsName = "ds_vslots";
-constexpr TStringBuf GroupsName = "ds_groups";
-constexpr TStringBuf StoragePoolsName = "ds_storage_pools";
+constexpr TStringBuf PDisksName = "ds_pdisks"; 
+constexpr TStringBuf VSlotsName = "ds_vslots"; 
+constexpr TStringBuf GroupsName = "ds_groups"; 
+constexpr TStringBuf StoragePoolsName = "ds_storage_pools"; 
 constexpr TStringBuf StorageStatsName = "ds_storage_stats";
 
-constexpr TStringBuf TabletsName = "hive_tablets";
+constexpr TStringBuf TabletsName = "hive_tablets"; 
 
-constexpr TStringBuf QueryMetricsName = "query_metrics_one_minute";
+constexpr TStringBuf QueryMetricsName = "query_metrics_one_minute"; 
 
 constexpr TStringBuf StorePrimaryIndexStatsName = "store_primary_index_stats";
 constexpr TStringBuf TablePrimaryIndexStatsName = "primary_index_stats";

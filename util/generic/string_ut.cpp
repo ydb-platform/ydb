@@ -724,7 +724,7 @@ protected:
 class TStringTest: public TTestBase, private TStringTestImpl<TString, TTestData<char>> {
 public:
     UNIT_TEST_SUITE(TStringTest);
-    UNIT_TEST(TestMaxSize);
+    UNIT_TEST(TestMaxSize); 
     UNIT_TEST(TestConstructors);
     UNIT_TEST(TestReplace);
 #ifndef TSTRING_IS_STD_STRING

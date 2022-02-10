@@ -22,7 +22,7 @@ public:
         FirstCounter = true;
     }
 
-    void OnCounter(const TString&, const TString& value, const TCounterForPtr* counter) override {
+    void OnCounter(const TString&, const TString& value, const TCounterForPtr* counter) override { 
         if (FirstCounter) {
             FirstCounter = false;
         } else {
@@ -42,14 +42,14 @@ public:
     void OnHistogram(const TString&, const TString&, IHistogramSnapshotPtr, bool) override {
     }
 
-    void OnGroupBegin(const TString&, const TString& value, const TDynamicCounters*) override {
+    void OnGroupBegin(const TString&, const TString& value, const TDynamicCounters*) override { 
         prefix += value;
         if (!value.empty()) {
             prefix += "_";
         }
     }
 
-    void OnGroupEnd(const TString&, const TString&, const TDynamicCounters*) override {
+    void OnGroupEnd(const TString&, const TString&, const TDynamicCounters*) override { 
         prefix = "";
     }
 

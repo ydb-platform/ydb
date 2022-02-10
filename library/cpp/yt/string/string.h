@@ -25,13 +25,13 @@ struct TDefaultFormatter
     template <class T>
     void operator()(TStringBuilderBase* builder, const T& obj) const
     {
-        FormatValue(builder, obj, TStringBuf("v"));
+        FormatValue(builder, obj, TStringBuf("v")); 
     }
 };
 
-static constexpr TStringBuf DefaultJoinToStringDelimiter = ", ";
-static constexpr TStringBuf DefaultKeyValueDelimiter = ": ";
-static constexpr TStringBuf DefaultRangeEllipsisFormat = "...";
+static constexpr TStringBuf DefaultJoinToStringDelimiter = ", "; 
+static constexpr TStringBuf DefaultKeyValueDelimiter = ": "; 
+static constexpr TStringBuf DefaultRangeEllipsisFormat = "..."; 
 
 // ASCII characters from 0x20 = ' ' to 0x7e = '~' are printable.
 static constexpr char PrintableASCIILow = 0x20;

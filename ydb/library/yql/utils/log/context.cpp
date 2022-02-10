@@ -46,7 +46,7 @@ void OutputLogCtx(IOutputStream* out, bool withBraces) {
         }
 
         if (withBraces) {
-            (*out) << TStringBuf("} ");
+            (*out) << TStringBuf("} "); 
         }
     }
 }
@@ -75,7 +75,7 @@ TAutoPtr<TLogElement> TContextPreprocessor::Preprocess(
 
 void TYqlLogContextLocation::SetThrowedLogContextPath() const {
     TStringStream ss;
-    ss << Location_ << TStringBuf(": ");
+    ss << Location_ << TStringBuf(": "); 
     OutputLogCtx(&ss, true);
     TThrowedLogContext* tlc = FastTlsSingleton<TThrowedLogContext>();
     tlc->LocationWithLogContext = ss.Str();

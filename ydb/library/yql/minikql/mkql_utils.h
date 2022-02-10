@@ -24,7 +24,7 @@ public:
     }
 
     inline static TStatus Error() {
-        return TStatus(TString(TStringBuf("Error: ")));
+        return TStatus(TString(TStringBuf("Error: "))); 
     }
 
     template <class T>

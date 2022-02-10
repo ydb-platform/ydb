@@ -15,5 +15,5 @@ Y_UNIT_TEST_SUITE(StringHashFunctorTests) {
         // If either `THash` or `TEqualTo` is not transparent compilation will fail.
         UNIT_ASSERT_UNEQUAL(s.find(TStringBuf("foo")), s.end());
         UNIT_ASSERT_EQUAL(s.find(TStringBuf("bar")), s.end());
-    }
+    } 
 }

@@ -54,7 +54,7 @@ namespace NBus {
     struct TMaxConnectedException: public yexception {
         TMaxConnectedException(unsigned maxConnect) {
             yexception& exc = *this;
-            exc << TStringBuf("Exceeded maximum number of outstanding connections: ");
+            exc << TStringBuf("Exceeded maximum number of outstanding connections: "); 
             exc << maxConnect;
         }
     };

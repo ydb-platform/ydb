@@ -116,17 +116,17 @@ template <>
 NMonitoring::EFormat FromStringImpl<NMonitoring::EFormat>(const char* str, size_t len) {
     using NMonitoring::EFormat;
     TStringBuf value(str, len);
-    if (value == TStringBuf("SPACK")) {
+    if (value == TStringBuf("SPACK")) { 
         return EFormat::SPACK;
-    } else if (value == TStringBuf("JSON")) {
+    } else if (value == TStringBuf("JSON")) { 
         return EFormat::JSON;
-    } else if (value == TStringBuf("PROTOBUF")) {
+    } else if (value == TStringBuf("PROTOBUF")) { 
         return EFormat::PROTOBUF;
-    } else if (value == TStringBuf("TEXT")) {
+    } else if (value == TStringBuf("TEXT")) { 
         return EFormat::TEXT;
-    } else if (value == TStringBuf("PROMETHEUS")) {
+    } else if (value == TStringBuf("PROMETHEUS")) { 
         return EFormat::PROMETHEUS;
-    } else if (value == TStringBuf("UNKNOWN")) {
+    } else if (value == TStringBuf("UNKNOWN")) { 
         return EFormat::UNKNOWN;
     }
     ythrow yexception() << "unknown format: " << value;
@@ -137,22 +137,22 @@ void Out<NMonitoring::EFormat>(IOutputStream& o, NMonitoring::EFormat f) {
     using NMonitoring::EFormat;
     switch (f) {
         case EFormat::SPACK:
-            o << TStringBuf("SPACK");
+            o << TStringBuf("SPACK"); 
             return;
         case EFormat::JSON:
-            o << TStringBuf("JSON");
+            o << TStringBuf("JSON"); 
             return;
         case EFormat::PROTOBUF:
-            o << TStringBuf("PROTOBUF");
+            o << TStringBuf("PROTOBUF"); 
             return;
         case EFormat::TEXT:
-            o << TStringBuf("TEXT");
+            o << TStringBuf("TEXT"); 
             return;
         case EFormat::PROMETHEUS:
-            o << TStringBuf("PROMETHEUS");
+            o << TStringBuf("PROMETHEUS"); 
             return;
         case EFormat::UNKNOWN:
-            o << TStringBuf("UNKNOWN");
+            o << TStringBuf("UNKNOWN"); 
             return;
     }
 
@@ -163,15 +163,15 @@ template <>
 NMonitoring::ECompression FromStringImpl<NMonitoring::ECompression>(const char* str, size_t len) {
     using NMonitoring::ECompression;
     TStringBuf value(str, len);
-    if (value == TStringBuf("IDENTITY")) {
+    if (value == TStringBuf("IDENTITY")) { 
         return ECompression::IDENTITY;
-    } else if (value == TStringBuf("ZLIB")) {
+    } else if (value == TStringBuf("ZLIB")) { 
         return ECompression::ZLIB;
-    } else if (value == TStringBuf("LZ4")) {
+    } else if (value == TStringBuf("LZ4")) { 
         return ECompression::LZ4;
-    } else if (value == TStringBuf("ZSTD")) {
+    } else if (value == TStringBuf("ZSTD")) { 
         return ECompression::ZSTD;
-    } else if (value == TStringBuf("UNKNOWN")) {
+    } else if (value == TStringBuf("UNKNOWN")) { 
         return ECompression::UNKNOWN;
     }
     ythrow yexception() << "unknown compression: " << value;
@@ -182,19 +182,19 @@ void Out<NMonitoring::ECompression>(IOutputStream& o, NMonitoring::ECompression 
     using NMonitoring::ECompression;
     switch (c) {
         case ECompression::IDENTITY:
-            o << TStringBuf("IDENTITY");
+            o << TStringBuf("IDENTITY"); 
             return;
         case ECompression::ZLIB:
-            o << TStringBuf("ZLIB");
+            o << TStringBuf("ZLIB"); 
             return;
         case ECompression::LZ4:
-            o << TStringBuf("LZ4");
+            o << TStringBuf("LZ4"); 
             return;
         case ECompression::ZSTD:
-            o << TStringBuf("ZSTD");
+            o << TStringBuf("ZSTD"); 
             return;
         case ECompression::UNKNOWN:
-            o << TStringBuf("UNKNOWN");
+            o << TStringBuf("UNKNOWN"); 
             return;
     }
 

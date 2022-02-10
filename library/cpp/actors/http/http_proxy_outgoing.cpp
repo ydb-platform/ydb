@@ -29,7 +29,7 @@ public:
         TSocketImpl::SetTimeout(SOCKET_TIMEOUT);
     }
 
-    void Die(const NActors::TActorContext& ctx) override {
+    void Die(const NActors::TActorContext& ctx) override { 
         ctx.Send(Owner, new TEvHttpProxy::TEvHttpConnectionClosed(ctx.SelfID));
         TSocketImpl::Shutdown(); // to avoid errors when connection already closed
         TBase::Die(ctx);

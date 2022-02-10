@@ -25,7 +25,7 @@
 #  define INLINE_KEYWORD
 #endif
 
-#if defined(__GNUC__) || defined(__ICCARM__)
+#if defined(__GNUC__) || defined(__ICCARM__) 
 #  define FORCE_INLINE_ATTR __attribute__((always_inline))
 #elif defined(_MSC_VER)
 #  define FORCE_INLINE_ATTR __forceinline
@@ -74,18 +74,18 @@
 #  define HINT_INLINE static INLINE_KEYWORD FORCE_INLINE_ATTR
 #endif
 
-/* UNUSED_ATTR tells the compiler it is okay if the function is unused. */
-#if defined(__GNUC__)
-#  define UNUSED_ATTR __attribute__((unused))
-#else
-#  define UNUSED_ATTR
-#endif
-
+/* UNUSED_ATTR tells the compiler it is okay if the function is unused. */ 
+#if defined(__GNUC__) 
+#  define UNUSED_ATTR __attribute__((unused)) 
+#else 
+#  define UNUSED_ATTR 
+#endif 
+ 
 /* force no inlining */
 #ifdef _MSC_VER
 #  define FORCE_NOINLINE static __declspec(noinline)
 #else
-#  if defined(__GNUC__) || defined(__ICCARM__)
+#  if defined(__GNUC__) || defined(__ICCARM__) 
 #    define FORCE_NOINLINE static __attribute__((__noinline__))
 #  else
 #    define FORCE_NOINLINE static
@@ -94,7 +94,7 @@
 
 
 /* target attribute */
-#if defined(__GNUC__) || defined(__ICCARM__)
+#if defined(__GNUC__) || defined(__ICCARM__) 
 #  define TARGET_ATTRIBUTE(target) __attribute__((__target__(target)))
 #else
 #  define TARGET_ATTRIBUTE(target)
@@ -139,15 +139,15 @@
     }                                     \
 }
 
-/* vectorization
+/* vectorization 
  * older GCC (pre gcc-4.3 picked as the cutoff) uses a different syntax,
  * and some compilers, like Intel ICC and MCST LCC, do not support it at all. */
 #if !defined(__INTEL_COMPILER) && !defined(__clang__) && defined(__GNUC__) && !defined(__LCC__)
-#  if (__GNUC__ == 4 && __GNUC_MINOR__ > 3) || (__GNUC__ >= 5)
-#    define DONT_VECTORIZE __attribute__((optimize("no-tree-vectorize")))
-#  else
-#    define DONT_VECTORIZE _Pragma("GCC optimize(\"no-tree-vectorize\")")
-#  endif
+#  if (__GNUC__ == 4 && __GNUC_MINOR__ > 3) || (__GNUC__ >= 5) 
+#    define DONT_VECTORIZE __attribute__((optimize("no-tree-vectorize"))) 
+#  else 
+#    define DONT_VECTORIZE _Pragma("GCC optimize(\"no-tree-vectorize\")") 
+#  endif 
 #else
 #  define DONT_VECTORIZE
 #endif

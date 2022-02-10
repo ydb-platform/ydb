@@ -125,8 +125,8 @@ TConfig Config;
 ////////////////////////////////////////////////////////////////
 /// \brief Fast message
 
-using TPerftestRequest = TBusBufferMessage<TPerftestRequestRecord, 77>;
-using TPerftestResponse = TBusBufferMessage<TPerftestResponseRecord, 79>;
+using TPerftestRequest = TBusBufferMessage<TPerftestRequestRecord, 77>; 
+using TPerftestResponse = TBusBufferMessage<TPerftestResponseRecord, 79>; 
 
 static size_t RequestSize() {
     return RandomNumber<size_t>(TheConfig->MessageSize * 2 + 1);

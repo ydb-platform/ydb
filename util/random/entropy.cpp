@@ -107,7 +107,7 @@ namespace {
         using TRnd = TMersenne<TKey>;
 
     public:
-        inline explicit TMersenneInput(const TBuffer& rnd)
+        inline explicit TMersenneInput(const TBuffer& rnd) 
             : Rnd_((const TKey*)rnd.Data(), rnd.Size() / sizeof(TKey))
         {
         }
@@ -136,7 +136,7 @@ namespace {
 
     class TEntropyPoolStream: public IInputStream {
     public:
-        inline explicit TEntropyPoolStream(const TBuffer& buffer)
+        inline explicit TEntropyPoolStream(const TBuffer& buffer) 
             : Mi_(buffer)
             , Bi_(&Mi_, 8192)
         {

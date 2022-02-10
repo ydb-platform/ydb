@@ -163,10 +163,10 @@ namespace NMonitoring {
                 TRACE("found fixed label " << l);
             }
 
-            EType Type() const override {
+            EType Type() const override { 
                 return EType::Fixed;
             }
-            TLabel Get(const NProtoBuf::Message&) override {
+            TLabel Get(const NProtoBuf::Message&) override { 
                 return Label_;
             }
 
@@ -184,10 +184,10 @@ namespace NMonitoring {
                 TRACE("found lazy label");
             }
 
-            EType Type() const override {
+            EType Type() const override { 
                 return EType::Lazy;
             }
-            TLabel Get(const NProtoBuf::Message& msg) override {
+            TLabel Get(const NProtoBuf::Message& msg) override { 
                 return Fn_(msg);
             }
 
@@ -289,7 +289,7 @@ namespace NMonitoring {
                     TStringBuf lhs, rhs;
 
                     const bool isDynamic = str.TrySplit(':', lhs, rhs);
-                    const bool isIndexing = isDynamic && rhs == TStringBuf("#");
+                    const bool isIndexing = isDynamic && rhs == TStringBuf("#"); 
 
                     if (isIndexing) {
                         TRACE("parsed index labels");

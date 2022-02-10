@@ -25,14 +25,14 @@ void THttpResponse::OutTo(IOutputStream& os) const {
     parts.reserve(FIRST_LINE_PARTS + HEADERS_PARTS + CONTENT_PARTS);
 
     // first line
-    parts.push_back(IOutputStream::TPart(TStringBuf("HTTP/1.1 ")));
+    parts.push_back(IOutputStream::TPart(TStringBuf("HTTP/1.1 "))); 
     parts.push_back(IOutputStream::TPart(HttpCodeStrEx(Code)));
     parts.push_back(IOutputStream::TPart::CrLf());
 
     // headers
     for (THttpHeaders::TConstIterator i = Headers.Begin(); i != Headers.End(); ++i) {
         parts.push_back(IOutputStream::TPart(i->Name()));
-        parts.push_back(IOutputStream::TPart(TStringBuf(": ")));
+        parts.push_back(IOutputStream::TPart(TStringBuf(": "))); 
         parts.push_back(IOutputStream::TPart(i->Value()));
         parts.push_back(IOutputStream::TPart::CrLf());
     }
@@ -44,7 +44,7 @@ void THttpResponse::OutTo(IOutputStream& os) const {
 
         mo << Content.size();
 
-        parts.push_back(IOutputStream::TPart(TStringBuf("Content-Length: ")));
+        parts.push_back(IOutputStream::TPart(TStringBuf("Content-Length: "))); 
         parts.push_back(IOutputStream::TPart(buf, mo.Buf() - buf));
         parts.push_back(IOutputStream::TPart::CrLf());
     }

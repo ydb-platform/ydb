@@ -426,13 +426,13 @@ namespace {
     inline bool IsQuoteNode(const TAstNode& node) {
         return node.GetChildrenCount() == 2
                 && node.GetChild(0)->GetType() == TAstNode::Atom
-                && node.GetChild(0)->GetContent() == TStringBuf("quote");
+                && node.GetChild(0)->GetContent() == TStringBuf("quote"); 
     }
 
     inline bool IsBlockNode(const TAstNode& node) {
         return node.GetChildrenCount() == 2
                 && node.GetChild(0)->GetType() == TAstNode::Atom
-                && node.GetChild(0)->GetContent() == TStringBuf("block");
+                && node.GetChild(0)->GetContent() == TStringBuf("block"); 
     }
 
     Y_NO_INLINE void Indent(IOutputStream& out, ui32 indentation) {
@@ -442,7 +442,7 @@ namespace {
     }
 
     void MultilineAtomPrint(IOutputStream& out, const TStringBuf& str) {
-        out << TStringBuf("@@");
+        out << TStringBuf("@@"); 
         size_t idx = str.find('@');
         if (idx == TString::npos) {
             out << str;
@@ -459,14 +459,14 @@ namespace {
                     begin = str.data() + idx;
 
                     while (count--) {
-                        out.Write(TStringBuf("@@"));
+                        out.Write(TStringBuf("@@")); 
                     }
                 }
                 idx = str.find('@', idx);
             } while (idx != TString::npos);
             out.Write(begin, str.end() - begin);
         }
-        out << TStringBuf("@@");
+        out << TStringBuf("@@"); 
     }
 
     void PrintNode(IOutputStream& out, const TAstNode& node) {
@@ -484,7 +484,7 @@ namespace {
             }
         } else if (node.GetType() == TAstNode::List) {
             if (!node.GetChildrenCount()) {
-                out << TStringBuf("()");
+                out << TStringBuf("()"); 
             } else if (IsQuoteNode(node)) {
                 out << '\'';
                 PrintNode(out, *node.GetChild(1));
@@ -641,7 +641,7 @@ void TAstNode::PrettyPrintTo(IOutputStream& out, ui32 flags) const {
     PrettyPrintNode(out, *this, 0, 0, 0, flags);
 }
 
-TAstNode TAstNode::QuoteAtom(TPosition(0, 0), TStringBuf("quote"), TNodeFlags::Default);
+TAstNode TAstNode::QuoteAtom(TPosition(0, 0), TStringBuf("quote"), TNodeFlags::Default); 
 
 } // namespace NYql
 

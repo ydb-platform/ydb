@@ -17,7 +17,7 @@ struct TFsPath::TSplit: public TAtomicRefCount<TSplit>, public TPathSplit {
 
 void TFsPath::CheckDefined() const {
     if (!IsDefined()) {
-        ythrow TIoException() << TStringBuf("must be defined");
+        ythrow TIoException() << TStringBuf("must be defined"); 
     }
 }
 
@@ -83,7 +83,7 @@ TFsPath TFsPath::RelativePath(const TFsPath& root) const {
     size_t cnt = 0;
 
     while (split.size() > cnt && rsplit.size() > cnt && split[cnt] == rsplit[cnt]) {
-        ++cnt;
+        ++cnt; 
     }
     bool absboth = split.IsAbsolute && rsplit.IsAbsolute;
     if (cnt == 0 && !absboth) {

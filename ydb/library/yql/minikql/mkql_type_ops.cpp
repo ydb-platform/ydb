@@ -46,7 +46,7 @@ struct TTimezones {
 
     TTimezones() {
         NResource::TResources resList;
-        const TStringBuf prefix = "/cctz/tzdata/";
+        const TStringBuf prefix = "/cctz/tzdata/"; 
         NResource::FindMatch(prefix, &resList);
         const auto allTimezones = NUdf::GetTimezones();
         for (ui16 id = 0; id < allTimezones.size(); ++id) {
@@ -1581,7 +1581,7 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
 bool IsValidStringValue(NUdf::EDataSlot type, NUdf::TStringRef buf) {
     switch (type) {
     case NUdf::EDataSlot::Bool:
-        return AsciiEqualsIgnoreCase(buf, TStringBuf("true")) || AsciiEqualsIgnoreCase(buf, TStringBuf("false"));
+        return AsciiEqualsIgnoreCase(buf, TStringBuf("true")) || AsciiEqualsIgnoreCase(buf, TStringBuf("false")); 
 
     case NUdf::EDataSlot::Int8:
         return IsValidNumberString<i8>(buf);
@@ -1639,10 +1639,10 @@ bool IsValidStringValue(NUdf::EDataSlot type, NUdf::TStringRef buf) {
 NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef buf) {
     switch (type) {
     case NUdf::EDataSlot::Bool: {
-        if (AsciiEqualsIgnoreCase(buf, TStringBuf("true"))) {
+        if (AsciiEqualsIgnoreCase(buf, TStringBuf("true"))) { 
             return NUdf::TUnboxedValuePod(true);
         }
-        if (AsciiEqualsIgnoreCase(buf, TStringBuf("false"))) {
+        if (AsciiEqualsIgnoreCase(buf, TStringBuf("false"))) { 
             return NUdf::TUnboxedValuePod(false);
         }
         return NUdf::TUnboxedValuePod();

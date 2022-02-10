@@ -75,7 +75,7 @@ namespace NPrivateException {
 
     template <class T>
     static inline T&& operator+(const TSourceLocation& sl, T&& t) {
-        return std::forward<T>(t << sl << TStringBuf(": "));
+        return std::forward<T>(t << sl << TStringBuf(": ")); 
     }
 }
 
@@ -180,7 +180,7 @@ TString FormatExc(const std::exception& exception);
         if (Y_UNLIKELY(!(CONDITION))) {          \
             ythrow THROW_EXPRESSION;             \
         }                                        \
-    } while (false)
+    } while (false) 
 
 /// @def Y_ENSURE_SIMPLE
 /// This macro works like the Y_ENSURE, but requires the second argument to be a constant string view.
@@ -194,10 +194,10 @@ TString FormatExc(const std::exception& exception);
         }                                                                                                                   \
     } while (false)
 
-#define Y_ENSURE_IMPL_1(CONDITION) Y_ENSURE_SIMPLE(CONDITION, ::TStringBuf("Condition violated: `" Y_STRINGIZE(CONDITION) "'"), ::NPrivate::ThrowYException)
+#define Y_ENSURE_IMPL_1(CONDITION) Y_ENSURE_SIMPLE(CONDITION, ::TStringBuf("Condition violated: `" Y_STRINGIZE(CONDITION) "'"), ::NPrivate::ThrowYException) 
 #define Y_ENSURE_IMPL_2(CONDITION, MESSAGE) Y_ENSURE_EX(CONDITION, yexception() << MESSAGE)
 
-#define Y_ENSURE_BT_IMPL_1(CONDITION) Y_ENSURE_SIMPLE(CONDITION, ::TStringBuf("Condition violated: `" Y_STRINGIZE(CONDITION) "'"), ::NPrivate::ThrowYExceptionWithBacktrace)
+#define Y_ENSURE_BT_IMPL_1(CONDITION) Y_ENSURE_SIMPLE(CONDITION, ::TStringBuf("Condition violated: `" Y_STRINGIZE(CONDITION) "'"), ::NPrivate::ThrowYExceptionWithBacktrace) 
 #define Y_ENSURE_BT_IMPL_2(CONDITION, MESSAGE) Y_ENSURE_EX(CONDITION, TWithBackTrace<yexception>() << MESSAGE)
 
 /**

@@ -16,7 +16,7 @@ static constexpr size_t ArchiveWriterDefaultDataAlignment = 16;
 
 class TArchiveWriter {
 public:
-    explicit TArchiveWriter(IOutputStream* out, bool compress = true);
+    explicit TArchiveWriter(IOutputStream* out, bool compress = true); 
     ~TArchiveWriter();
 
     void Flush();
@@ -31,16 +31,16 @@ private:
 
 class TArchiveReader : public IModelsArchiveReader {
 public:
-    explicit TArchiveReader(const TBlob& data);
-    ~TArchiveReader() override;
+    explicit TArchiveReader(const TBlob& data); 
+    ~TArchiveReader() override; 
 
-    size_t Count() const noexcept override;
-    TString KeyByIndex(size_t n) const override;
-    bool Has(TStringBuf key) const override;
-    TAutoPtr<IInputStream> ObjectByKey(TStringBuf key) const override;
-    TBlob ObjectBlobByKey(TStringBuf key) const override;
-    TBlob BlobByKey(TStringBuf key) const override;
-    bool Compressed() const override;
+    size_t Count() const noexcept override; 
+    TString KeyByIndex(size_t n) const override; 
+    bool Has(TStringBuf key) const override; 
+    TAutoPtr<IInputStream> ObjectByKey(TStringBuf key) const override; 
+    TBlob ObjectBlobByKey(TStringBuf key) const override; 
+    TBlob BlobByKey(TStringBuf key) const override; 
+    bool Compressed() const override; 
 
 private:
     class TImpl;

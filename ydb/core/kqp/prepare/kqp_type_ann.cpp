@@ -573,7 +573,7 @@ TStatus AnnotateInsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     TStringBuf onConflict = node->Child(TKqlInsertRows::idx_OnConflict)->Content();
-    if (onConflict != "abort"sv && onConflict != "revert"sv) {
+    if (onConflict != "abort"sv && onConflict != "revert"sv) { 
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
             << "Unsupported insert on-conflict policy `" << onConflict << "`."));
         return TStatus::Error;

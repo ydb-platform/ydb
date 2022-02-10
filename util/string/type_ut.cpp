@@ -2,8 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/charset/wide.h>
-
+#include <util/charset/wide.h> 
+ 
 Y_UNIT_TEST_SUITE(TStringClassify) {
     Y_UNIT_TEST(TestIsSpace) {
         UNIT_ASSERT_EQUAL(IsSpace(" "), true);
@@ -38,32 +38,32 @@ Y_UNIT_TEST_SUITE(TStringClassify) {
         UNIT_ASSERT(!IsFalse("fa"));
         UNIT_ASSERT(!IsFalse("foobar"));
     }
-
+ 
     Y_UNIT_TEST(TestIsNumber) {
-        UNIT_ASSERT(IsNumber("0"));
-        UNIT_ASSERT(IsNumber("12345678901234567890"));
-        UNIT_ASSERT(!IsNumber("1234567890a"));
-        UNIT_ASSERT(!IsNumber("12345xx67890a"));
-        UNIT_ASSERT(!IsNumber("foobar"));
+        UNIT_ASSERT(IsNumber("0")); 
+        UNIT_ASSERT(IsNumber("12345678901234567890")); 
+        UNIT_ASSERT(!IsNumber("1234567890a")); 
+        UNIT_ASSERT(!IsNumber("12345xx67890a")); 
+        UNIT_ASSERT(!IsNumber("foobar")); 
         UNIT_ASSERT(!IsNumber(""));
-
+ 
         UNIT_ASSERT(IsNumber(u"0"));
         UNIT_ASSERT(IsNumber(u"12345678901234567890"));
         UNIT_ASSERT(!IsNumber(u"1234567890a"));
         UNIT_ASSERT(!IsNumber(u"12345xx67890a"));
         UNIT_ASSERT(!IsNumber(u"foobar"));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestIsHexNumber) {
-        UNIT_ASSERT(IsHexNumber("0"));
-        UNIT_ASSERT(IsHexNumber("aaaadddAAAAA"));
-        UNIT_ASSERT(IsHexNumber("0123456789ABCDEFabcdef"));
-        UNIT_ASSERT(IsHexNumber("12345678901234567890"));
-        UNIT_ASSERT(IsHexNumber("1234567890a"));
-        UNIT_ASSERT(!IsHexNumber("12345xx67890a"));
-        UNIT_ASSERT(!IsHexNumber("foobar"));
+        UNIT_ASSERT(IsHexNumber("0")); 
+        UNIT_ASSERT(IsHexNumber("aaaadddAAAAA")); 
+        UNIT_ASSERT(IsHexNumber("0123456789ABCDEFabcdef")); 
+        UNIT_ASSERT(IsHexNumber("12345678901234567890")); 
+        UNIT_ASSERT(IsHexNumber("1234567890a")); 
+        UNIT_ASSERT(!IsHexNumber("12345xx67890a")); 
+        UNIT_ASSERT(!IsHexNumber("foobar")); 
         UNIT_ASSERT(!IsHexNumber(TString()));
-
+ 
         UNIT_ASSERT(IsHexNumber(u"0"));
         UNIT_ASSERT(IsHexNumber(u"aaaadddAAAAA"));
         UNIT_ASSERT(IsHexNumber(u"0123456789ABCDEFabcdef"));
@@ -72,5 +72,5 @@ Y_UNIT_TEST_SUITE(TStringClassify) {
         UNIT_ASSERT(!IsHexNumber(u"12345xx67890a"));
         UNIT_ASSERT(!IsHexNumber(u"foobar"));
         UNIT_ASSERT(!IsHexNumber(TUtf16String()));
-    }
+    } 
 }

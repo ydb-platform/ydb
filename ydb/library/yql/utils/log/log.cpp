@@ -146,16 +146,16 @@ void TYqlLog::WriteLogPrefix(IOutputStream* out, EComponent component, ELevel le
     WriteLocalTime(out);
     *out << ' '
              << ELevelHelpers::ToString(level) << ' '
-             << ProcName_ << TStringBuf("(pid=") << ProcId_
-             << TStringBuf(", tid=")
+             << ProcName_ << TStringBuf("(pid=") << ProcId_ 
+             << TStringBuf(", tid=") 
 #ifdef _unix_
              << Hex(SystemCurrentThreadIdImpl())
 #else
              << SystemCurrentThreadIdImpl()
 #endif
-             << TStringBuf(") [") << EComponentHelpers::ToString(component)
-             << TStringBuf("] ")
-             << file.RAfter(LOCSLASH_C) << ':' << line << TStringBuf(": ");
+             << TStringBuf(") [") << EComponentHelpers::ToString(component) 
+             << TStringBuf("] ") 
+             << file.RAfter(LOCSLASH_C) << ':' << line << TStringBuf(": "); 
 }
 
 void TYqlLog::SetMaxLogLimit(ui64 limit) {
@@ -174,15 +174,15 @@ void InitLogger(const TString& logType, bool startAsDaemon) {
         levels.fill(ELevel::INFO);
 
         if (startAsDaemon && (
-                TStringBuf("console") == logType ||
-                TStringBuf("cout") == logType ||
-                TStringBuf("cerr") == logType))
+                TStringBuf("console") == logType || 
+                TStringBuf("cout") == logType || 
+                TStringBuf("cerr") == logType)) 
         {
             TLoggerOperator<TYqlLog>::Set(new TYqlLog("null", levels));
             return;
         }
 
-        if (TStringBuf("syslog") == logType) {
+        if (TStringBuf("syslog") == logType) { 
             auto backend = MakeHolder<TSysLogBackend>(
                         GetProgramName().data(), TSysLogBackend::TSYSLOG_LOCAL1);
             auto& logger = TLoggerOperator<TYqlLog>::Log();

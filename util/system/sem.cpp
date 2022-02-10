@@ -49,12 +49,12 @@ namespace {
     class TSemaphoreImpl {
     private:
 #ifdef _win_
-        using SEMHANDLE = HANDLE;
+        using SEMHANDLE = HANDLE; 
 #else
     #ifdef USE_SYSV_SEMAPHORES
-        using SEMHANDLE = int;
+        using SEMHANDLE = int; 
     #else
-        using SEMHANDLE = sem_t*;
+        using SEMHANDLE = sem_t*; 
     #endif
 #endif
 
@@ -76,7 +76,7 @@ namespace {
                 while (*p) {
                     if (*p == '\\')
                         *p = '/';
-                    ++p;
+                    ++p; 
                 }
             }
             // non-blocking on init

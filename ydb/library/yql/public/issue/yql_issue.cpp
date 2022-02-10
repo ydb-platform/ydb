@@ -224,7 +224,7 @@ TIssue ExceptionToIssue(const std::exception& e, const TPosition& pos) {
     return issue;
 }
 
-static constexpr TStringBuf TerminationMessageMarker = "Terminate was called, reason(";
+static constexpr TStringBuf TerminationMessageMarker = "Terminate was called, reason("; 
 
 TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message) {
     size_t len = 0;

@@ -44,24 +44,24 @@ void THttpClient::SendHttpRequest(const TStringBuf relativeUrl,
     TString contentLength;
     parts.reserve(16);
     parts.push_back(IOutputStream::TPart(method));
-    parts.push_back(TStringBuf(" "));
+    parts.push_back(TStringBuf(" ")); 
     parts.push_back(relativeUrl);
-    parts.push_back(TStringBuf(" HTTP/1.1"));
+    parts.push_back(TStringBuf(" HTTP/1.1")); 
     parts.push_back(IOutputStream::TPart::CrLf());
-    parts.push_back(TStringBuf("Host: "));
+    parts.push_back(TStringBuf("Host: ")); 
     parts.push_back(TStringBuf(Host));
     parts.push_back(IOutputStream::TPart::CrLf());
-    parts.push_back(TStringBuf("From: oxygen@yandex-team.ru"));
+    parts.push_back(TStringBuf("From: oxygen@yandex-team.ru")); 
     parts.push_back(IOutputStream::TPart::CrLf());
     if (body.size() > 0) {
         contentLength = ToString(body.size());
-        parts.push_back(TStringBuf("Content-Length: "));
+        parts.push_back(TStringBuf("Content-Length: ")); 
         parts.push_back(TStringBuf(contentLength));
         parts.push_back(IOutputStream::TPart::CrLf());
     }
     for (const auto& entry: headers) {
         parts.push_back(IOutputStream::TPart(entry.first));
-        parts.push_back(IOutputStream::TPart(TStringBuf(": ")));
+        parts.push_back(IOutputStream::TPart(TStringBuf(": "))); 
         parts.push_back(IOutputStream::TPart(entry.second));
         parts.push_back(IOutputStream::TPart::CrLf());
     }

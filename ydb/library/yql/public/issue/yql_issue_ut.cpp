@@ -83,10 +83,10 @@ Y_UNIT_TEST_SUITE(TextWalkerTest) {
         pos.Row = 1;
 
         TTextWalker walker(pos);
-        walker.Advance(TStringBuf("a\r\taa"));
+        walker.Advance(TStringBuf("a\r\taa")); 
 
         UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(5, 1));
-        walker.Advance(TStringBuf("\na"));
+        walker.Advance(TStringBuf("\na")); 
         UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(1, 2));
     }
 
@@ -95,11 +95,11 @@ Y_UNIT_TEST_SUITE(TextWalkerTest) {
         pos.Row = 1;
 
         TTextWalker walker(pos);
-        walker.Advance(TStringBuf("a\raa\r"));
+        walker.Advance(TStringBuf("a\raa\r")); 
         UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 1));
         walker.Advance('\n');
         UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 1));
-        walker.Advance(TStringBuf("\r\r\ra"));
+        walker.Advance(TStringBuf("\r\r\ra")); 
         UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 2));
         walker.Advance('\r');
         UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 2));

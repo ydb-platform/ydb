@@ -25,10 +25,10 @@ using namespace NKikimr::NMiniKQL;
 using namespace NNodes;
 
 static THashSet<TStringBuf> EvaluationFuncs = {
-    TStringBuf("EvaluateAtom"),
-    TStringBuf("EvaluateExpr"),
-    TStringBuf("EvaluateType"),
-    TStringBuf("EvaluateCode")
+    TStringBuf("EvaluateAtom"), 
+    TStringBuf("EvaluateExpr"), 
+    TStringBuf("EvaluateType"), 
+    TStringBuf("EvaluateCode") 
 };
 
 static THashSet<TStringBuf> SubqueryExpandFuncs = {

@@ -8,7 +8,7 @@ This library allows us to erase these charset conversions.
 # Interface
 
 Before starting with interface details, let's consider simplest library usage example:
-`UNIT_ASSERT(NPcre::TPcre<wchar16>(u"ba+d").Matches(TWtringBuf(u"baaad")));`
+`UNIT_ASSERT(NPcre::TPcre<wchar16>(u"ba+d").Matches(TWtringBuf(u"baaad")));` 
 
 Here we see regular expression construction for UTF-16 charset:
 
@@ -16,7 +16,7 @@ Here we see regular expression construction for UTF-16 charset:
 
 and matching of the subject string `baaad` against this pattern:
 
-`.Matches(TWtringBuf(u"baaad"))`;
+`.Matches(TWtringBuf(u"baaad"))`; 
 
 Let's consider both of them in details.
 

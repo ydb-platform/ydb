@@ -183,7 +183,7 @@ struct TEvMediatorTimecast {
 IActor* CreateMediatorTimecastProxy();
 
 inline TActorId MakeMediatorTimecastProxyID() {
-    return TActorId(0, TStringBuf("txmdtimecast"));
+    return TActorId(0, TStringBuf("txmdtimecast")); 
 }
 
 }

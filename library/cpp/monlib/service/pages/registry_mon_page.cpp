@@ -15,10 +15,10 @@ namespace NMonitoring {
             IMetricEncoderPtr encoder;
             TString resp;
 
-            if (formatStr == TStringBuf("json")) {
+            if (formatStr == TStringBuf("json")) { 
                 resp = HTTPOKJSON;
                 encoder = NMonitoring::EncoderJson(&out);
-            } else if (formatStr == TStringBuf("spack")) {
+            } else if (formatStr == TStringBuf("spack")) { 
                 resp = HTTPOKSPACK;
                 const auto compression = ParseCompression(request);
                 encoder = NMonitoring::EncoderSpackV1(&out, ETimePrecision::SECONDS, compression);

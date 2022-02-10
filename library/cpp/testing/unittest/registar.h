@@ -135,7 +135,7 @@ namespace NUnitTest {
         // Should execute a test whitin suite?
         virtual bool CheckAccessTest(TString /*suite*/, const char* /*name*/);
 
-        virtual void Run(std::function<void()> f, const TString& /*suite*/, const char* /*name*/, bool /*forceFork*/);
+        virtual void Run(std::function<void()> f, const TString& /*suite*/, const char* /*name*/, bool /*forceFork*/); 
 
         // This process is forked for current test
         virtual bool GetIsForked() const;
@@ -219,11 +219,11 @@ namespace NUnitTest {
 
         void AtEnd();
 
-        void Run(std::function<void()> f, const TString& suite, const char* name, bool forceFork);
+        void Run(std::function<void()> f, const TString& suite, const char* name, bool forceFork); 
 
         class TCleanUp {
         public:
-            explicit TCleanUp(TTestBase* base);
+            explicit TCleanUp(TTestBase* base); 
 
             ~TCleanUp();
 
@@ -771,7 +771,7 @@ public:                       \
         ITestSuiteProcessor* Processor() const noexcept;
 
     private:
-        explicit TTestFactory(ITestSuiteProcessor* processor);
+        explicit TTestFactory(ITestSuiteProcessor* processor); 
 
         ~TTestFactory();
 
@@ -805,15 +805,15 @@ public:                       \
         {
         }
 
-        inline TBaseTestCase(const char* name, std::function<void(TTestContext&)> body, bool forceFork)
+        inline TBaseTestCase(const char* name, std::function<void(TTestContext&)> body, bool forceFork) 
             : Name_(name)
-            , Body_(std::move(body))
+            , Body_(std::move(body)) 
             , ForceFork_(forceFork)
         {
         }
 
         virtual ~TBaseTestCase() = default;
-
+ 
         // Each test case is executed in 3 steps:
         //
         // 1. SetUp() (from fixture)
@@ -850,7 +850,7 @@ public:                       \
                 Parent->SetHandler();
             }
 
-            TInvokeGuard(TInvokeGuard&& guard) noexcept
+            TInvokeGuard(TInvokeGuard&& guard) noexcept 
                 : Parent(guard.Parent)
             {
                 guard.Parent = nullptr;
@@ -912,7 +912,7 @@ public:                       \
     };
 
 #define UNIT_TEST_SUITE_REGISTRATION(T) \
-    static const ::NUnitTest::TTestBaseFactory<T> Y_GENERATE_UNIQUE_ID(UTREG_);
+    static const ::NUnitTest::TTestBaseFactory<T> Y_GENERATE_UNIQUE_ID(UTREG_); 
 
 #define Y_UNIT_TEST_SUITE_IMPL_F(N, T, F)                                                                          \
     namespace NTestSuite##N {                                                                                           \
@@ -936,9 +936,9 @@ public:                       \
                 return StaticName();                                                                                    \
             }                                                                                                           \
                                                                                                                         \
-            static void AddTest(const char* name,                                                                       \
-                const std::function<void(NUnitTest::TTestContext&)>& body, bool forceFork)                              \
-            {                                                                                                           \
+            static void AddTest(const char* name,                                                                       \ 
+                const std::function<void(NUnitTest::TTestContext&)>& body, bool forceFork)                              \ 
+            {                                                                                                           \ 
                 Tests().push_back([=]{ return MakeHolder<NUnitTest::TBaseTestCase>(name, body, forceFork); });          \
             }                                                                                                           \
                                                                                                                         \
@@ -1005,7 +1005,7 @@ public:                       \
             TCurrentTest::AddTest(TTestCase##N::Create);    \
         }                                                   \
     };                                                      \
-    static const TTestRegistration##N testRegistration##N;
+    static const TTestRegistration##N testRegistration##N; 
 
 #define Y_UNIT_TEST_IMPL(N, FF, F)      \
     Y_UNIT_TEST_IMPL_REGISTER(N, FF, F) \

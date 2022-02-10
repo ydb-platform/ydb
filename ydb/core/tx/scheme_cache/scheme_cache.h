@@ -524,7 +524,7 @@ public:
 };
 
 inline TActorId MakeSchemeCacheID() {
-    return TActorId(0, TStringBuf("SchmCcheSrv"));
+    return TActorId(0, TStringBuf("SchmCcheSrv")); 
 }
 
 } // NKikimr

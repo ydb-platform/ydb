@@ -15,9 +15,9 @@ namespace {
 }
 
 TMaybe<EFormat> ParseFormat(TStringBuf str) {
-    if (str == TStringBuf("json")) {
+    if (str == TStringBuf("json")) { 
         return EFormat::JSON;
-    } else if (str == TStringBuf("spack")) {
+    } else if (str == TStringBuf("spack")) { 
         return EFormat::SPACK;
     } else if (str == TStringBuf("prometheus")) {
         return EFormat::PROMETHEUS;
@@ -46,7 +46,7 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
         parts.pop_back();
     }
 
-    if (!parts.empty() && parts.back() == TStringBuf("private")) {
+    if (!parts.empty() && parts.back() == TStringBuf("private")) { 
         visibility = TCountableBase::EVisibility::Private;
         parts.pop_back();
     }

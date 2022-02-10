@@ -144,10 +144,10 @@ public:
     inline ui64 GetPeak() const { return Peak_; }
 
     inline void PrintTo(IOutputStream& out) const {
-        out << Title_ << TStringBuf(": usage=") << GetUsage()
-            << TStringBuf(" (allocated=") << GetAllocated()
-            << TStringBuf(", freed=") << GetFreed()
-            << TStringBuf(", peak=") << GetPeak()
+        out << Title_ << TStringBuf(": usage=") << GetUsage() 
+            << TStringBuf(" (allocated=") << GetAllocated() 
+            << TStringBuf(", freed=") << GetFreed() 
+            << TStringBuf(", peak=") << GetPeak() 
             << ')';
     }
 
@@ -159,9 +159,9 @@ public:
                 continue;
             }
             ++leakCount;
-            Cerr << TStringBuf("Not freed ")
-                << it.first << TStringBuf(" size: ") << it.second.Size
-                << TStringBuf(", location: ") << it.second.Location
+            Cerr << TStringBuf("Not freed ") 
+                << it.first << TStringBuf(" size: ") << it.second.Size 
+                << TStringBuf(", location: ") << it.second.Location 
                 << Endl;
         }
 

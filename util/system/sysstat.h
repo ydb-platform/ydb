@@ -23,9 +23,9 @@
 int Chmod(const char* fname, int mode);
 int Umask(int mode);
 
-static constexpr int MODE0777 = (S_IRWXU | S_IRWXG | S_IRWXO);
-static constexpr int MODE0775 = (S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-static constexpr int MODE0755 = (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+static constexpr int MODE0777 = (S_IRWXU | S_IRWXG | S_IRWXO); 
+static constexpr int MODE0775 = (S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH); 
+static constexpr int MODE0755 = (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH); 
 
 int Mkdir(const char* path, int mode);
 

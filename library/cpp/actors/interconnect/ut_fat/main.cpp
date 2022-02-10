@@ -29,11 +29,11 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         {
         }
 
-        ~TSenderActor() override {
+        ~TSenderActor() override { 
             Cerr << "Sent " << SequenceNumber << " messages\n";
         }
 
-        void SendMessage(const TActorContext& ctx) override {
+        void SendMessage(const TActorContext& ctx) override { 
             const ui32 flags = IEventHandle::MakeFlags(0, SendFlags);
             const ui64 cookie = SequenceNumber;
             const TString payload('@', RandomNumber<size_t>(65536) + 4096);
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
             ++SequenceNumber;
         }
 
-        void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) override {
+        void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) override { 
             auto record = std::find(InFly.begin(), InFly.end(), ev->Cookie);
             if (SendFlags & IEventHandle::FlagGenerateUnsureUndelivered) {
                 if (record != InFly.end()) {
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
             }
         }
 
-        void Handle(TEvTestResponse::TPtr& ev, const TActorContext& ctx) override {
+        void Handle(TEvTestResponse::TPtr& ev, const TActorContext& ctx) override { 
             Y_VERIFY(InFly);
             const NInterconnectTest::TEvTestResponse& record = ev->Get()->Record;
             Y_VERIFY(record.HasConfirmedSequenceNumber());
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         {
         }
 
-        void Handle(TEvTest::TPtr& ev, const TActorContext& /*ctx*/) override {
+        void Handle(TEvTest::TPtr& ev, const TActorContext& /*ctx*/) override { 
             const NInterconnectTest::TEvTest& m = ev->Get()->Record;
             Y_VERIFY(m.HasSequenceNumber());
             Y_VERIFY(m.GetSequenceNumber() >= ReceivedCount, "got #%" PRIu64 " expected at least #%" PRIu64,
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
             SenderNode->Send(ev->Sender, new TEvTestResponse(m.GetSequenceNumber()));
         }
 
-        ~TReceiverActor() override {
+        ~TReceiverActor() override { 
             Cerr << "Received " << ReceivedCount << " messages\n";
         }
     };

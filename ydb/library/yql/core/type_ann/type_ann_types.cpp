@@ -892,7 +892,7 @@ namespace NTypeAnnImpl {
         auto inputPos = ctx.Expr.GetPosition(input->Pos());
         auto astRoot = TAstNode::NewList(inputPos, pool,
             TAstNode::NewList(inputPos, pool,
-                TAstNode::NewLiteralAtom(inputPos, TStringBuf("return"), pool), parsedType));
+                TAstNode::NewLiteralAtom(inputPos, TStringBuf("return"), pool), parsedType)); 
         TExprNode::TPtr exprRoot;
         if (!CompileExpr(*astRoot, exprRoot, ctx.Expr, nullptr)) {
             return IGraphTransformer::TStatus::Error;

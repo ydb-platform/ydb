@@ -25,7 +25,7 @@ public:
         return ret;
     }
 
-    TGUID GenUuid4() noexcept override {
+    TGUID GenUuid4() noexcept override { 
         TGUID ret;
         WriteUnaligned<ui64>(ret.dw, RandomNumber<ui64>());
         WriteUnaligned<ui64>(ret.dw + 2, RandomNumber<ui64>());
@@ -53,7 +53,7 @@ public:
         return ret;
     }
 
-    TGUID GenUuid4() noexcept override {
+    TGUID GenUuid4() noexcept override { 
         TGUID ret;
         WriteUnaligned<ui64>(ret.dw, Gen.GenRand());
         WriteUnaligned<ui64>(ret.dw + 2, Gen.GenRand());

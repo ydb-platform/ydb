@@ -72,7 +72,7 @@ size_t ZSTD_compressLiterals (ZSTD_hufCTables_t const* prevHuf,
                               ZSTD_strategy strategy, int disableLiteralCompression,
                               void* dst, size_t dstCapacity,
                         const void* src, size_t srcSize,
-                              void* entropyWorkspace, size_t entropyWorkspaceSize,
+                              void* entropyWorkspace, size_t entropyWorkspaceSize, 
                         const int bmi2,
                         unsigned suspectUncompressible)
 {
@@ -102,13 +102,13 @@ size_t ZSTD_compressLiterals (ZSTD_hufCTables_t const* prevHuf,
     {   HUF_repeat repeat = prevHuf->repeatMode;
         int const preferRepeat = strategy < ZSTD_lazy ? srcSize <= 1024 : 0;
         if (repeat == HUF_repeat_valid && lhSize == 3) singleStream = 1;
-        cLitSize = singleStream ?
-            HUF_compress1X_repeat(
-                ostart+lhSize, dstCapacity-lhSize, src, srcSize,
+        cLitSize = singleStream ? 
+            HUF_compress1X_repeat( 
+                ostart+lhSize, dstCapacity-lhSize, src, srcSize, 
                 HUF_SYMBOLVALUE_MAX, HUF_TABLELOG_DEFAULT, entropyWorkspace, entropyWorkspaceSize,
                 (HUF_CElt*)nextHuf->CTable, &repeat, preferRepeat, bmi2, suspectUncompressible) :
-            HUF_compress4X_repeat(
-                ostart+lhSize, dstCapacity-lhSize, src, srcSize,
+            HUF_compress4X_repeat( 
+                ostart+lhSize, dstCapacity-lhSize, src, srcSize, 
                 HUF_SYMBOLVALUE_MAX, HUF_TABLELOG_DEFAULT, entropyWorkspace, entropyWorkspaceSize,
                 (HUF_CElt*)nextHuf->CTable, &repeat, preferRepeat, bmi2, suspectUncompressible);
         if (repeat != HUF_repeat_none) {

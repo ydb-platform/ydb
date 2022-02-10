@@ -28,7 +28,7 @@ size_t IInputStream::DoReadTo(TString& st, char to) {
 
     size_t result = 0;
     do {
-        ++result;
+        ++result; 
 
         if (ch == to) {
             break;

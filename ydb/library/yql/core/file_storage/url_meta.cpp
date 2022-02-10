@@ -43,22 +43,22 @@ void TUrlMeta::TryReadFrom(const TString& path) {
     TIFStream in(file);
     THttpHeaders headers(&in);
     for (auto it = headers.Begin(); it != headers.End(); ++it) {
-        if (it->Name() == TStringBuf("ETag")) {
+        if (it->Name() == TStringBuf("ETag")) { 
             ETag = it->Value();
             continue;
         }
 
-        if (it->Name() == TStringBuf("ContentFile")) {
+        if (it->Name() == TStringBuf("ContentFile")) { 
             ContentFile = it->Value();
             continue;
         }
 
-        if (it->Name() == TStringBuf("Md5")) {
+        if (it->Name() == TStringBuf("Md5")) { 
             Md5 = it->Value();
             continue;
         }
 
-        if (it->Name() == TStringBuf("LastModified")) {
+        if (it->Name() == TStringBuf("LastModified")) { 
             LastModified = it->Value();
             continue;
         }

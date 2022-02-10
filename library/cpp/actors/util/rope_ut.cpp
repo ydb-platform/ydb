@@ -40,7 +40,7 @@ TString RopeToString(const TRope& rope) {
         res.append(iter.ContiguousData(), iter.ContiguousSize());
         iter.AdvanceToNextContiguousBlock();
     }
-
+ 
     UNIT_ASSERT_VALUES_EQUAL(rope.GetSize(), res.size());
 
     TString temp = TString::Uninitialized(rope.GetSize());

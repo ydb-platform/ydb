@@ -57,7 +57,7 @@ public:
     void BeforeTest(const char* test) {
         Cerr << "-- Before test " << test << Endl;
         AppCfg.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1);
-        if (test == "AbortOnDisconnect"sv) {
+        if (test == "AbortOnDisconnect"sv) { 
             AppCfg.MutableTableServiceConfig()->MutableResourceManager()->SetScanBufferSize(1);
         }
         TTestBase::BeforeTest(test);

@@ -14,7 +14,7 @@ using THI = THashMap<int, int>;
 using TMI = TMap<int, int>;
 using THSI = THashSet<int>;
 using TSI = TSet<int>;
-using TPI = std::pair<int, int>;
+using TPI = std::pair<int, int>; 
 
 Y_UNIT_TEST_SUITE(TSchemeCastTest) {
     Y_UNIT_TEST(TestYVector) {

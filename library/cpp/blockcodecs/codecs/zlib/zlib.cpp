@@ -60,5 +60,5 @@ namespace {
             RegisterAlias("zlib", "zlib-6");
         }
     };
-    const TZLibRegistrar Registrar{};
+    const TZLibRegistrar Registrar{}; 
 }

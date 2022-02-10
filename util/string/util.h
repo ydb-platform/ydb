@@ -73,13 +73,13 @@ public:
     /// [DIFFERENCE FOR NOT_FOUND CASE: Returns end of string, not NULL]
     const char* brk(const char* s) const {
         while (c_chars_table[(ui8)*s])
-            ++s;
+            ++s; 
         return s;
     }
 
     const char* brk(const char* s, const char* e) const {
         while (s < e && c_chars_table[(ui8)*s])
-            ++s;
+            ++s; 
         return s;
     }
 
@@ -87,13 +87,13 @@ public:
     /// That is, skip all characters in table
     const char* cbrk(const char* s) const {
         while (chars_table[(ui8)*s])
-            ++s;
+            ++s; 
         return s;
     }
 
     const char* cbrk(const char* s, const char* e) const {
         while (s < e && chars_table[(ui8)*s])
-            ++s;
+            ++s; 
         return s;
     }
 
@@ -148,7 +148,7 @@ public:
 
 protected:
     void init(const char* charset, bool extended);
-    str_spn() = default;
+    str_spn() = default; 
 };
 
 // an analogue of tr/$from/$to/

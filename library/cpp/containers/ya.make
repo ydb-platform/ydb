@@ -66,6 +66,6 @@ RECURSE(
     top_keeper/ut
     two_level_hash
     two_level_hash/ut
-    vp_tree
-    vp_tree/ut
+    vp_tree 
+    vp_tree/ut 
 )

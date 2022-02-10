@@ -205,7 +205,7 @@ protected:
         return {new TStdStr(std::forward<A>(a)...), typename TStorage::TNoIncrement()};
     }
 
-    static TStorage Construct() noexcept {
+    static TStorage Construct() noexcept { 
         return TStdStr::NullStr();
     }
 
@@ -372,7 +372,7 @@ public:
     }
 
     // ~~~ Constructor ~~~ : FAMILY0(,TBasicString)
-    TBasicString() noexcept
+    TBasicString() noexcept 
 #ifndef TSTRING_IS_STD_STRING
         : S_(Construct())
 #endif

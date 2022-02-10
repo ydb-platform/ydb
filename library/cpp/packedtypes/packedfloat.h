@@ -8,7 +8,7 @@
 #include <cfloat>
 #include <limits>
 #include <algorithm>
-#include <cassert>
+#include <cassert> 
 
 namespace NPackedFloat {
     /*
@@ -146,66 +146,66 @@ namespace NPackedFloat {
     };
 }
 
-using f64 = double;
-using f32 = float;
+using f64 = double; 
+using f32 = float; 
 static_assert(sizeof(f32) == 4, "expect sizeof(f32) == 4");
 static_assert(sizeof(f64) == 8, "expect sizeof(f64) == 8");
-using f16 = NPackedFloat::float16<1>;
-using uf16 = NPackedFloat::float16<0>;
-using f8 = NPackedFloat::float8<1>;
-using uf8 = NPackedFloat::float8<0>;
-using f8d = NPackedFloat::float8<1, 1>;
-using uf8d = NPackedFloat::float8<0, 1>;
+using f16 = NPackedFloat::float16<1>; 
+using uf16 = NPackedFloat::float16<0>; 
+using f8 = NPackedFloat::float8<1>; 
+using uf8 = NPackedFloat::float8<0>; 
+using f8d = NPackedFloat::float8<1, 1>; 
+using uf8d = NPackedFloat::float8<0, 1>; 
 
 // [0,1) value in 1/255s.
-using frac8 = ui8;
+using frac8 = ui8; 
 
-using frac16 = ui16;
+using frac16 = ui16; 
 
 template <class T>
-inline constexpr T Float2Frac(float fac) {
+inline constexpr T Float2Frac(float fac) { 
     return T(fac * float(Max<T>()));
 }
 
 template <class T>
-inline constexpr T Float2FracR(float fac) {
+inline constexpr T Float2FracR(float fac) { 
     float v = fac * float(Max<T>());
     return T(v + 0.5f);
 }
 
 template <class T>
-inline constexpr float Frac2Float(T pf) {
-    constexpr float multiplier = float(1.0 / Max<T>());
-    return pf * multiplier;
+inline constexpr float Frac2Float(T pf) { 
+    constexpr float multiplier = float(1.0 / Max<T>()); 
+    return pf * multiplier; 
 }
 
-class TUi82FloatMapping {
-private:
-    float Mapping[Max<ui8>() + 1] = {};
-
-public:
-    constexpr TUi82FloatMapping() noexcept {
-        for (ui32 i = 0; i < Y_ARRAY_SIZE(Mapping); ++i) {
-            Mapping[i] = static_cast<float>(i) / Max<ui8>();
-        }
-    }
-
-    inline float operator [] (ui8 index) const {
-        return Mapping[index];
-    }
-};
-
-constexpr TUi82FloatMapping Ui82FloatMapping{};
-
-template <>
-inline float Frac2Float(ui8 pf) {
-    return Ui82FloatMapping[pf];
-}
-
-// Probably you don't want to use it, since sizeof(float) == sizeof(ui32)
-template <>
-inline float Frac2Float(ui32 pf) = delete;
-
+class TUi82FloatMapping { 
+private: 
+    float Mapping[Max<ui8>() + 1] = {}; 
+ 
+public: 
+    constexpr TUi82FloatMapping() noexcept { 
+        for (ui32 i = 0; i < Y_ARRAY_SIZE(Mapping); ++i) { 
+            Mapping[i] = static_cast<float>(i) / Max<ui8>(); 
+        } 
+    } 
+ 
+    inline float operator [] (ui8 index) const { 
+        return Mapping[index]; 
+    } 
+}; 
+ 
+constexpr TUi82FloatMapping Ui82FloatMapping{}; 
+ 
+template <> 
+inline float Frac2Float(ui8 pf) { 
+    return Ui82FloatMapping[pf]; 
+} 
+ 
+// Probably you don't want to use it, since sizeof(float) == sizeof(ui32) 
+template <> 
+inline float Frac2Float(ui32 pf) = delete; 
+ 
 template <class T>
 inline float FracOrFloatToFloat(T t) {
     return Frac2Float(t);

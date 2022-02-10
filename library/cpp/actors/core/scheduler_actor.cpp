@@ -24,11 +24,11 @@ namespace NActors {
             Y_VERIFY(Descriptor != -1, "timerfd_create() failed with %s", strerror(errno));
         }
 
-        ~TTimerDescriptor() override {
+        ~TTimerDescriptor() override { 
             close(Descriptor);
         }
 
-        int GetDescriptor() override {
+        int GetDescriptor() override { 
             return Descriptor;
         }
     };

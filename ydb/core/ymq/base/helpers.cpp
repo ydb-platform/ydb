@@ -34,12 +34,12 @@ bool IsAlphaNumAndPunctuation(TStringBuf str) {
 
 
 static bool MessageAttributesCharacters[256] = {};
-constexpr TStringBuf AWS_RESERVED_PREFIX = "AWS.";
-constexpr TStringBuf AMAZON_RESERVED_PREFIX = "Amazon.";
-constexpr TStringBuf YA_RESERVED_PREFIX = "Ya.";
-constexpr TStringBuf YC_RESERVED_PREFIX = "YC.";
-constexpr TStringBuf YANDEX_RESERVED_PREFIX = "Yandex.";
-constexpr TStringBuf FIFO_SUFFIX = ".fifo";
+constexpr TStringBuf AWS_RESERVED_PREFIX = "AWS."; 
+constexpr TStringBuf AMAZON_RESERVED_PREFIX = "Amazon."; 
+constexpr TStringBuf YA_RESERVED_PREFIX = "Ya."; 
+constexpr TStringBuf YC_RESERVED_PREFIX = "YC."; 
+constexpr TStringBuf YANDEX_RESERVED_PREFIX = "Yandex."; 
+constexpr TStringBuf FIFO_SUFFIX = ".fifo"; 
 
 static bool MakeMessageAttributesCharacters() {
     char src[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-.";

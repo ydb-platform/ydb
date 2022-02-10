@@ -51,7 +51,7 @@ void TRWMutex::TImpl::AcquireRead() noexcept {
             ReadCond_.Wait(Lock_);
         }
 
-        ++State_;
+        ++State_; 
     }
 
     ReadCond_.Signal();
@@ -63,7 +63,7 @@ bool TRWMutex::TImpl::TryAcquireRead() noexcept {
             return false;
         }
 
-        ++State_;
+        ++State_; 
     }
 
     return true;

@@ -98,17 +98,17 @@ public:
 
         auto write = maybeWrite.Cast();
         auto& key = write.Arg(2).Ref();
-        if (!key.IsCallable(TStringBuf("Key"))) {
-            ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), TStringBuf("Expected key")));
+        if (!key.IsCallable(TStringBuf("Key"))) { 
+            ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), TStringBuf("Expected key"))); 
             return {};
         }
         if (key.ChildrenSize() < 1) {
-            ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), TStringBuf("Key must have at least one component")));
+            ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), TStringBuf("Key must have at least one component"))); 
             return {};
         }
 
         auto tagName = key.Child(0)->Child(0)->Content();
-        if (tagName != TStringBuf("table")) {
+        if (tagName != TStringBuf("table")) { 
             ctx.AddError(TIssue(ctx.GetPosition(key.Child(0)->Pos()),
                 TStringBuilder() << "Unexpected tag: " << tagName));
             return {};

@@ -425,10 +425,10 @@ namespace NYson {
 
             template <bool AllowFinish>
             double ReadNanOrInf() {
-                static const TStringBuf nanString = "nan";
-                static const TStringBuf infString = "inf";
-                static const TStringBuf plusInfString = "+inf";
-                static const TStringBuf minusInfString = "-inf";
+                static const TStringBuf nanString = "nan"; 
+                static const TStringBuf infString = "inf"; 
+                static const TStringBuf plusInfString = "+inf"; 
+                static const TStringBuf minusInfString = "-inf"; 
 
                 TStringBuf expectedString;
                 double expectedValue;
@@ -560,8 +560,8 @@ namespace NYson {
             bool ReadBoolean() {
                 Buffer_.clear();
 
-                static TStringBuf trueString = "true";
-                static TStringBuf falseString = "false";
+                static TStringBuf trueString = "true"; 
+                static TStringBuf falseString = "false"; 
 
                 auto throwIncorrectBoolean = [&]() {
                     ythrow TYsonException() << "Incorrect boolean string " << TString(Buffer_.data(), Buffer_.size());

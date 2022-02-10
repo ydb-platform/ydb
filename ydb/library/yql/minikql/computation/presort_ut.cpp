@@ -9,8 +9,8 @@
 
 #include <util/string/hex.h>
 
-using namespace std::literals::string_view_literals;
-
+using namespace std::literals::string_view_literals; 
+ 
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -337,24 +337,24 @@ Y_UNIT_TEST(Double) {
 
 Y_UNIT_TEST(String) {
     const TVector<std::tuple<TStringBuf, TString, TString>> values = {
-        {TStringBuf(""), "00", "FF"},
-        {"\x00"sv, "1F00000000000000000000000000000001",
+        {TStringBuf(""), "00", "FF"}, 
+        {"\x00"sv, "1F00000000000000000000000000000001", 
             "E0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
-        {"\x01", "1F01000000000000000000000000000001",
+        {"\x01", "1F01000000000000000000000000000001", 
             "E0FEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
-        {"0", "1F30000000000000000000000000000001",
+        {"0", "1F30000000000000000000000000000001", 
             "E0CFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
-        {"0123", "1F30313233000000000000000000000004",
+        {"0123", "1F30313233000000000000000000000004", 
             "E0CFCECDCCFFFFFFFFFFFFFFFFFFFFFFFB"},
-        {"0123456789abcde", "1F3031323334353637383961626364650F",
+        {"0123456789abcde", "1F3031323334353637383961626364650F", 
             "E0CFCECDCCCBCAC9C8C7C69E9D9C9B9AF0"},
-        {"a", "1F61000000000000000000000000000001",
+        {"a", "1F61000000000000000000000000000001", 
             "E09EFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
-        {"a\x00"sv, "1F61000000000000000000000000000002",
+        {"a\x00"sv, "1F61000000000000000000000000000002", 
             "E09EFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD"},
-        {"abc", "1F61626300000000000000000000000003",
+        {"abc", "1F61626300000000000000000000000003", 
             "E09E9D9CFFFFFFFFFFFFFFFFFFFFFFFFFC"},
-        {"b", "1F62000000000000000000000000000001",
+        {"b", "1F62000000000000000000000000000001", 
             "E09DFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
     };
     TPresortTest().ValidateEncoding<NUdf::EDataSlot::String>(values);
@@ -362,13 +362,13 @@ Y_UNIT_TEST(String) {
 
 Y_UNIT_TEST(Uuid) {
     const TVector<std::tuple<TStringBuf, TString, TString>> values = {
-        {"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"sv,
+        {"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"sv, 
             "00000000000000000000000000000000",
             "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"},
-        {"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1"sv,
+        {"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1"sv, 
             "00000000000000000000000000000001",
             "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
-        {"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
+        {"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff", 
             "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
             "00000000000000000000000000000000"},
     };
@@ -439,7 +439,7 @@ Y_UNIT_TEST(GenericVoid) {
     NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod::Void();
     TGenericPresortEncoder encoder(type);
     auto buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf(""));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("")); 
 }
 
 Y_UNIT_TEST(GenericBool) {
@@ -449,9 +449,9 @@ Y_UNIT_TEST(GenericBool) {
     NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod(true);
     TGenericPresortEncoder encoder(type);
     auto buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01"));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01")); 
     buf = encoder.Encode(value, true);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\xFE"));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\xFE")); 
 }
 
 Y_UNIT_TEST(GenericNumber) {
@@ -461,7 +461,7 @@ Y_UNIT_TEST(GenericNumber) {
     NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod(ui32(1234));
     TGenericPresortEncoder encoder(type);
     auto buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00\x00\x04\xD2"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00\x00\x04\xD2"sv)); 
 }
 
 Y_UNIT_TEST(GenericString) {
@@ -471,7 +471,7 @@ Y_UNIT_TEST(GenericString) {
     NUdf::TUnboxedValue value = MakeString("ALongStringExample");
     TGenericPresortEncoder encoder(type);
     auto buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x1F" "ALongStringExam\x1Fple\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x1F" "ALongStringExam\x1Fple\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03"sv)); 
 }
 
 Y_UNIT_TEST(GenericOptional) {
@@ -481,10 +481,10 @@ Y_UNIT_TEST(GenericOptional) {
     NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod(true);
     TGenericPresortEncoder encoder(type);
     auto buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01"));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01")); 
     value = {};
     buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00"sv)); 
 }
 
 Y_UNIT_TEST(NestedOptional) {
@@ -523,17 +523,17 @@ Y_UNIT_TEST(GenericList) {
     auto value = holderFactory.GetEmptyContainer();
     TGenericPresortEncoder encoder(type);
     auto buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00"sv)); 
     NUdf::TUnboxedValue* items;
     value = holderFactory.CreateDirectArrayHolder(1, items);
     items[0] = NUdf::TUnboxedValuePod(true);
     buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01\x00"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01\x00"sv)); 
     value = holderFactory.CreateDirectArrayHolder(2, items);
     items[0] = NUdf::TUnboxedValuePod(true);
     items[1] = NUdf::TUnboxedValuePod(false);
     buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01\x01\x00\x00"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01\x01\x00\x00"sv)); 
 }
 
 Y_UNIT_TEST(GenericTuple) {
@@ -551,7 +551,7 @@ Y_UNIT_TEST(GenericTuple) {
     items[1] = NUdf::TUnboxedValuePod(ui32(1234));
     TGenericPresortEncoder encoder(type);
     auto buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2"sv)); 
 }
 
 Y_UNIT_TEST(GenericStruct) {
@@ -569,7 +569,7 @@ Y_UNIT_TEST(GenericStruct) {
     items[1] = NUdf::TUnboxedValuePod(ui32(1234));
     TGenericPresortEncoder encoder(type);
     auto buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2"sv)); 
 }
 
 Y_UNIT_TEST(GenericTupleVariant) {
@@ -585,10 +585,10 @@ Y_UNIT_TEST(GenericTupleVariant) {
     TGenericPresortEncoder encoder(type);
     auto value = holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(true), 0);
     auto buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00\x01"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00\x01"sv)); 
     value = holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(ui32(1234)), 1);
     buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2"sv)); 
 }
 
 Y_UNIT_TEST(GenericStructVariant) {
@@ -604,10 +604,10 @@ Y_UNIT_TEST(GenericStructVariant) {
     TGenericPresortEncoder encoder(type);
     auto value = holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(true), 0);
     auto buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00\x01"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00\x01"sv)); 
     value = holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(ui32(1234)), 1);
     buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2"sv)); 
 }
 
 Y_UNIT_TEST(GenericDict) {
@@ -626,18 +626,18 @@ Y_UNIT_TEST(GenericDict) {
     auto value = holderFactory.GetEmptyContainer();
     TGenericPresortEncoder encoder(type);
     auto buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00"sv)); 
     value = holderFactory.CreateDirectHashedDictHolder([](TValuesDictHashMap& map) {
         map.emplace(NUdf::TUnboxedValuePod(ui32(1234)), NUdf::TUnboxedValuePod(true));
     }, keyTypes, false, true, nullptr);
     buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2\x01\x00"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2\x01\x00"sv)); 
     value = holderFactory.CreateDirectHashedDictHolder([](TValuesDictHashMap& map) {
         map.emplace(NUdf::TUnboxedValuePod(ui32(5678)), NUdf::TUnboxedValuePod(false));
         map.emplace(NUdf::TUnboxedValuePod(ui32(1234)), NUdf::TUnboxedValuePod(true));
     }, keyTypes, false, true, nullptr);
     buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2\x01\x01\x00\x00\x16\x2E\x00\x00"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2\x01\x01\x00\x00\x16\x2E\x00\x00"sv)); 
 }
 
 }

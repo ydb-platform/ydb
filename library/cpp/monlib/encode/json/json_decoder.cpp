@@ -172,11 +172,11 @@ private:
 };
 
 std::pair<double, bool> ParseSpecDouble(TStringBuf string) {
-    if (string == TStringBuf("nan") || string == TStringBuf("NaN")) {
+    if (string == TStringBuf("nan") || string == TStringBuf("NaN")) { 
         return {std::numeric_limits<double>::quiet_NaN(), true};
-    } else if (string == TStringBuf("inf") || string == TStringBuf("Infinity")) {
+    } else if (string == TStringBuf("inf") || string == TStringBuf("Infinity")) { 
         return {std::numeric_limits<double>::infinity(), true};
-    } else if (string == TStringBuf("-inf") || string == TStringBuf("-Infinity")) {
+    } else if (string == TStringBuf("-inf") || string == TStringBuf("-Infinity")) { 
         return  {-std::numeric_limits<double>::infinity(), true};
     } else {
         return {0, false};
@@ -762,7 +762,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 break;
 
             case TState::METRIC_MODE:
-                if (value == TStringBuf("deriv")) {
+                if (value == TStringBuf("deriv")) { 
                     LastMetric_.Type = EMetricType::RATE;
                 }
                 State_.ToPrev();
@@ -814,11 +814,11 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
     bool OnMapKey(const TStringBuf& key) override {
         switch (State_.Current()) {
             case TState::ROOT_OBJECT:
-                if (key == TStringBuf("commonLabels") || key == TStringBuf("labels")) {
+                if (key == TStringBuf("commonLabels") || key == TStringBuf("labels")) { 
                     State_.ToNext(TState::COMMON_LABELS);
-                } else if (key == TStringBuf("ts")) {
+                } else if (key == TStringBuf("ts")) { 
                     State_.ToNext(TState::COMMON_TS);
-                } else if (key == TStringBuf("sensors") || key == TStringBuf("metrics")) {
+                } else if (key == TStringBuf("sensors") || key == TStringBuf("metrics")) { 
                     State_.ToNext(TState::METRICS_ARRAY);
                 }
                 break;
@@ -829,36 +829,36 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 break;
 
             case TState::METRIC_OBJECT:
-                if (key == TStringBuf("labels")) {
+                if (key == TStringBuf("labels")) { 
                     State_.ToNext(TState::METRIC_LABELS);
                 } else if (key == TStringBuf("name")) {
                     State_.ToNext(TState::METRIC_NAME);
-                } else if (key == TStringBuf("ts")) {
+                } else if (key == TStringBuf("ts")) { 
                     PARSE_ENSURE(!LastMetric_.SeenTimeseries,
                              "mixed timeseries and ts attributes");
                     LastMetric_.SeenTsOrValue = true;
                     State_.ToNext(TState::METRIC_TS);
-                } else if (key == TStringBuf("value")) {
+                } else if (key == TStringBuf("value")) { 
                     PARSE_ENSURE(!LastMetric_.SeenTimeseries,
                              "mixed timeseries and value attributes");
                     LastMetric_.SeenTsOrValue = true;
                     State_.ToNext(TState::METRIC_VALUE);
-                } else if (key == TStringBuf("timeseries")) {
+                } else if (key == TStringBuf("timeseries")) { 
                     PARSE_ENSURE(!LastMetric_.SeenTsOrValue,
                              "mixed timeseries and ts/value attributes");
                     LastMetric_.SeenTimeseries = true;
                     State_.ToNext(TState::METRIC_TIMESERIES);
-                } else if (key == TStringBuf("mode")) {
+                } else if (key == TStringBuf("mode")) { 
                     State_.ToNext(TState::METRIC_MODE);
-                } else if (key == TStringBuf("kind") || key == TStringBuf("type")) {
+                } else if (key == TStringBuf("kind") || key == TStringBuf("type")) { 
                     State_.ToNext(TState::METRIC_TYPE);
-                } else if (key == TStringBuf("hist")) {
+                } else if (key == TStringBuf("hist")) { 
                     State_.ToNext(TState::METRIC_HIST);
-                } else if (key == TStringBuf("summary")) {
+                } else if (key == TStringBuf("summary")) { 
                     State_.ToNext(TState::METRIC_DSUMMARY);
-                } else if (key == TStringBuf("log_hist")) {
+                } else if (key == TStringBuf("log_hist")) { 
                     State_.ToNext(TState::METRIC_LOG_HIST);
-                } else if (key == TStringBuf("memOnly")) {
+                } else if (key == TStringBuf("memOnly")) { 
                     // deprecated. Skip it without errors for backward compatibility
                 } else {
                     ErrorMsg_ = TStringBuilder() << "unexpected key \"" << key << "\" in a metric schema";
@@ -867,51 +867,51 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 break;
 
             case TState::METRIC_TIMESERIES:
-                if (key == TStringBuf("ts")) {
+                if (key == TStringBuf("ts")) { 
                     State_.ToNext(TState::METRIC_TS);
-                } else if (key == TStringBuf("value")) {
+                } else if (key == TStringBuf("value")) { 
                     State_.ToNext(TState::METRIC_VALUE);
-                } else if (key == TStringBuf("hist")) {
+                } else if (key == TStringBuf("hist")) { 
                     State_.ToNext(TState::METRIC_HIST);
-                } else if (key == TStringBuf("summary")) {
+                } else if (key == TStringBuf("summary")) { 
                     State_.ToNext(TState::METRIC_DSUMMARY);
-                } else if (key == TStringBuf("log_hist")) {
+                } else if (key == TStringBuf("log_hist")) { 
                     State_.ToNext(TState::METRIC_LOG_HIST);
                 }
                 break;
 
             case TState::METRIC_HIST:
-                if (key == TStringBuf("bounds")) {
+                if (key == TStringBuf("bounds")) { 
                     State_.ToNext(TState::METRIC_HIST_BOUNDS);
-                } else if (key == TStringBuf("buckets")) {
+                } else if (key == TStringBuf("buckets")) { 
                     State_.ToNext(TState::METRIC_HIST_BUCKETS);
-                } else if (key == TStringBuf("inf")) {
+                } else if (key == TStringBuf("inf")) { 
                     State_.ToNext(TState::METRIC_HIST_INF);
                 }
                 break;
 
             case TState::METRIC_LOG_HIST:
-                if (key == TStringBuf("base")) {
+                if (key == TStringBuf("base")) { 
                     State_.ToNext(TState::METRIC_LOG_HIST_BASE);
-                } else if (key == TStringBuf("zeros_count")) {
+                } else if (key == TStringBuf("zeros_count")) { 
                     State_.ToNext(TState::METRIC_LOG_HIST_ZEROS);
-                } else if (key == TStringBuf("start_power")) {
+                } else if (key == TStringBuf("start_power")) { 
                     State_.ToNext(TState::METRIC_LOG_HIST_START_POWER);
-                } else if (key == TStringBuf("buckets")) {
+                } else if (key == TStringBuf("buckets")) { 
                     State_.ToNext(TState::METRIC_LOG_HIST_BUCKETS);
                 }
                 break;
 
             case TState::METRIC_DSUMMARY:
-                if (key == TStringBuf("sum")) {
+                if (key == TStringBuf("sum")) { 
                     State_.ToNext(TState::METRIC_DSUMMARY_SUM);
-                } else if (key == TStringBuf("min")) {
+                } else if (key == TStringBuf("min")) { 
                     State_.ToNext(TState::METRIC_DSUMMARY_MIN);
-                } else if (key == TStringBuf("max")) {
+                } else if (key == TStringBuf("max")) { 
                     State_.ToNext(TState::METRIC_DSUMMARY_MAX);
-                } else if (key == TStringBuf("last")) {
+                } else if (key == TStringBuf("last")) { 
                     State_.ToNext(TState::METRIC_DSUMMARY_LAST);
-                } else if (key == TStringBuf("count")) {
+                } else if (key == TStringBuf("count")) { 
                     State_.ToNext(TState::METRIC_DSUMMARY_COUNT);
                 }
 

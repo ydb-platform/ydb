@@ -7,11 +7,11 @@ Y_UNIT_TEST_SUITE(THttpTestMedium) {
         TStringBuf data = "aaaaaaaaaaaaaaaaaaaaaaa";
 
         for (auto codec : SupportedCodings()) {
-            if (codec == TStringBuf("z-zlib-0")) {
+            if (codec == TStringBuf("z-zlib-0")) { 
                 continue;
             }
 
-            if (codec == TStringBuf("z-null")) {
+            if (codec == TStringBuf("z-null")) { 
                 continue;
             }
 

@@ -81,7 +81,7 @@ namespace NBitOps {
             value >>= 1;
             while (value) {
                 value >>= 1;
-                ++result;
+                ++result; 
             }
 
             return result;
@@ -282,7 +282,7 @@ Y_FORCE_INLINE ui64 MostSignificantBit(ui64 v) {
     ui64 res = 0;
     if (v)
         while (v >>= 1)
-            ++res;
+            ++res; 
 #endif
     return res;
 }
@@ -301,7 +301,7 @@ Y_FORCE_INLINE ui64 LeastSignificantBit(ui64 v) {
     ui64 res = 0;
     if (v) {
         while (!(v & 1)) {
-            ++res;
+            ++res; 
             v >>= 1;
         }
     }

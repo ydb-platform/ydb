@@ -9,7 +9,7 @@
 #include <util/folder/dirut.h>
 
 namespace {
-    struct TInit {
+    struct TInit { 
         inline TInit() {
             NXml::InitEngine();
         }

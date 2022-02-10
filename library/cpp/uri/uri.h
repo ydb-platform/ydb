@@ -183,8 +183,8 @@ namespace NUri {
         // uses directly, doesn't mark dirty
         template <size_t size>
         bool FldMemSet(EField field, const char (&value)[size]) {
-            static_assert(size > 0);
-            return FldSetImpl(field, TStringBuf(value, size - 1), true);
+            static_assert(size > 0); 
+            return FldSetImpl(field, TStringBuf(value, size - 1), true); 
         }
 
         // duplicate one field to another

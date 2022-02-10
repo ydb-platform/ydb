@@ -13,10 +13,10 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-const TStringBuf TxInternalResultPrefix = "__";
-const TStringBuf TxLocksResultLabel = "__tx_locks";
-const TStringBuf TxLocksResultLabel2 = "__tx_locks2";
-const TStringBuf TxInfoResultLabel = "__tx_info";
+const TStringBuf TxInternalResultPrefix = "__"; 
+const TStringBuf TxLocksResultLabel = "__tx_locks"; 
+const TStringBuf TxLocksResultLabel2 = "__tx_locks2"; 
+const TStringBuf TxInfoResultLabel = "__tx_info"; 
 
 // Should be strictly less than NActors::TEventPB::MaxByteSize to avoid VERIFY in actorlib
 const ui32 MaxDatashardReplySize = 48 * 1024 * 1024; // 48 MB

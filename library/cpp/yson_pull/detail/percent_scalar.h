@@ -10,12 +10,12 @@ namespace NYsonPull::NDetail {
 
     struct percent_scalar {
         //! Text boolean literals
-        static constexpr TStringBuf true_literal = "%true";
-        static constexpr TStringBuf false_literal = "%false";
+        static constexpr TStringBuf true_literal = "%true"; 
+        static constexpr TStringBuf false_literal = "%false"; 
         //! Text floating-point literals
-        static constexpr TStringBuf nan_literal = "%nan";
-        static constexpr TStringBuf positive_inf_literal = "%inf";
-        static constexpr TStringBuf negative_inf_literal = "%-inf";
+        static constexpr TStringBuf nan_literal = "%nan"; 
+        static constexpr TStringBuf positive_inf_literal = "%inf"; 
+        static constexpr TStringBuf negative_inf_literal = "%-inf"; 
 
         percent_scalar_type type;
         union {

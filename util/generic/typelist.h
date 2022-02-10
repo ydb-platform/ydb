@@ -78,12 +78,12 @@ namespace NTL {
     template <bool isSigned, class T, class TS, class TU>
     struct TTypeSelectorBase {
         using TSignedInts = typename TConcat<TTypeList<T>, TS>::type;
-        using TUnsignedInts = TU;
+        using TUnsignedInts = TU; 
     };
 
     template <class T, class TS, class TU>
     struct TTypeSelectorBase<false, T, TS, TU> {
-        using TSignedInts = TS;
+        using TSignedInts = TS; 
         using TUnsignedInts = typename TConcat<TTypeList<T>, TU>::type;
     };
 
@@ -91,8 +91,8 @@ namespace NTL {
     struct TTypeSelector: public TTypeSelectorBase<((T)(-1) < 0), T, TS, TU> {
     };
 
-    using T1 = TTypeSelector<char, TCommonSignedInts, TCommonUnsignedInts>;
-    using T2 = TTypeSelector<wchar_t, T1::TSignedInts, T1::TUnsignedInts>;
+    using T1 = TTypeSelector<char, TCommonSignedInts, TCommonUnsignedInts>; 
+    using T2 = TTypeSelector<wchar_t, T1::TSignedInts, T1::TUnsignedInts>; 
 }
 
 using TSignedInts = NTL::T2::TSignedInts;

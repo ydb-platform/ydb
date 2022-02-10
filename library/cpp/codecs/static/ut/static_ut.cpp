@@ -8,7 +8,7 @@ class TStaticCodecUsageTest: public NUnitTest::TTestBase {
 
 private:
     void DoTestUsage(NStaticCodecExample::EDictVersion dv, size_t expectedSize) {
-        const TStringBuf letov = "Всё идёт по плану";
+        const TStringBuf letov = "Всё идёт по плану"; 
 
         TBuffer outEnc, outDec;
         NStaticCodecExample::Encode(outEnc, letov, dv);

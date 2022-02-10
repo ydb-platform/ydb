@@ -11,8 +11,8 @@
 #include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-using namespace std::string_view_literals;
-
+using namespace std::string_view_literals; 
+ 
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
 
     Y_UNIT_TEST(TestExportUuidTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Uuid>("\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"sv);
+            auto pgmReturn = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Uuid>("\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"sv); 
             return pgmReturn;
         },
         "type_id: UUID\n");
@@ -187,8 +187,8 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
 
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
             std::vector<std::pair<std::string_view, TType*>> structElemenTypes;
-            structElemenTypes.push_back({"a", pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
-            structElemenTypes.push_back({"b", pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id)});
+            structElemenTypes.push_back({"a", pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)}); 
+            structElemenTypes.push_back({"b", pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id)}); 
             TType* structType = pgmBuilder.NewStructType(structElemenTypes);
             auto pgmReturn = pgmBuilder.NewVariant(
                 pgmBuilder.NewDataLiteral<ui32>(66),
@@ -236,7 +236,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
 
     Y_UNIT_TEST(TestExportUuidYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Uuid>("\1\0\0\0\0\0\0\0\2\0\0\0\0\0\0\0"sv);
+            auto pgmReturn = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Uuid>("\1\0\0\0\0\0\0\0\2\0\0\0\0\0\0\0"sv); 
             return pgmReturn;
         }, "low_128: 1\n"
            "high_128: 2\n");

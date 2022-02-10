@@ -64,7 +64,7 @@ RECURSE(
     consistent_hash_ring/ut
     consistent_hashing
     consistent_hashing/ut
-    containers
+    containers 
     coroutine
     cppparser
     cpuid_check
@@ -394,9 +394,9 @@ RECURSE(
     vec4
     vec4/ut
     vl_feat
-    vowpalwabbit
-    vowpalwabbit/tools
-    vowpalwabbit/ut
+    vowpalwabbit 
+    vowpalwabbit/tools 
+    vowpalwabbit/ut 
     watchdog
     watchdog/timeout/ut
     wordlistreader

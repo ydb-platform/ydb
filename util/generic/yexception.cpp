@@ -23,7 +23,7 @@ TString CurrentExceptionMessage() {
             const TBackTrace* bt = e.BackTrace();
 
             if (bt) {
-                return TString::Join(bt->PrintToString(), TStringBuf("\n"), FormatExc(e));
+                return TString::Join(bt->PrintToString(), TStringBuf("\n"), FormatExc(e)); 
             }
 
             return FormatExc(e);
@@ -70,9 +70,9 @@ std::string CurrentExceptionTypeName() {
 void TSystemError::Init() {
     yexception& exc = *this;
 
-    exc << TStringBuf("(");
+    exc << TStringBuf("("); 
     exc << TStringBuf(LastSystemErrorText(Status_));
-    exc << TStringBuf(") ");
+    exc << TStringBuf(") "); 
 }
 
 NPrivateException::yexception::yexception() {

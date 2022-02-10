@@ -142,7 +142,7 @@ inline TStringBuf ModuleName(const TStringBuf& name) {
     return name;
 }
 
-const TStringBuf StaticModulePrefix(TStringBuf("<static>::"));
+const TStringBuf StaticModulePrefix(TStringBuf("<static>::")); 
 
 void FillStaticModules(IMutableFunctionRegistry& registry);
 

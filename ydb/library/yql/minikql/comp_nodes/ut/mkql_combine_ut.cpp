@@ -155,8 +155,8 @@ TRuntimeNode MakeStream(TSetup_<LLVM>& setup, ui64 peakStep) {
     TCallableBuilder callableBuilder(*setup.Env, WithYields ? "TestYieldStream" : "TestStream",
         pb.NewStreamType(
             pb.NewStructType({
-                {TStringBuf("a"), pb.NewDataType(NUdf::EDataSlot::Uint64)},
-                {TStringBuf("b"), pb.NewDataType(NUdf::EDataSlot::String)}
+                {TStringBuf("a"), pb.NewDataType(NUdf::EDataSlot::Uint64)}, 
+                {TStringBuf("b"), pb.NewDataType(NUdf::EDataSlot::String)} 
             })
         )
     );
@@ -177,8 +177,8 @@ TRuntimeNode Combine(TProgramBuilder& pb, TRuntimeNode stream, std::function<TRu
         const auto a = pb.Add(pb.Member(item, "a"), pb.Member(state, "a"));
         const auto b = pb.Concat(pb.Member(item, "b"), pb.Member(state, "b"));
         return pb.NewStruct({
-            {TStringBuf("a"), a},
-            {TStringBuf("b"), b},
+            {TStringBuf("a"), a}, 
+            {TStringBuf("b"), b}, 
         });
     };
 

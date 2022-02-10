@@ -12,7 +12,7 @@
     #define SIG_UNBLOCK 2
     #define SIG_SETMASK 3
 
-using sigset_t = ui32;
+using sigset_t = ui32; 
 
 #else
     #error not supported yet

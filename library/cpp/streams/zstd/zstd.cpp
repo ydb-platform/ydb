@@ -9,7 +9,7 @@
 namespace {
     inline void CheckError(const char* op, size_t code) {
         if (::ZSTD_isError(code)) {
-            ythrow yexception() << op << TStringBuf(" zstd error: ") << ::ZSTD_getErrorName(code);
+            ythrow yexception() << op << TStringBuf(" zstd error: ") << ::ZSTD_getErrorName(code); 
         }
     }
 

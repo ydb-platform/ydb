@@ -49,7 +49,7 @@ inline void FormatValue(TStringBuilderBase* builder, TStringBuf value, TStringBu
         hasAlign = true;
         alignSize = 10 * alignSize + (*current - '0');
         if (alignSize > 1000000) {
-            builder->AppendString(TStringBuf("<alignment overflow>"));
+            builder->AppendString(TStringBuf("<alignment overflow>")); 
             return;
         }
         ++current;
@@ -144,8 +144,8 @@ inline void FormatValue(TStringBuilderBase* builder, bool value, TStringBuf form
     }
 
     auto str = lowercase
-        ? (value ? TStringBuf("true") : TStringBuf("false"))
-        : (value ? TStringBuf("True") : TStringBuf("False"));
+        ? (value ? TStringBuf("true") : TStringBuf("false")) 
+        : (value ? TStringBuf("True") : TStringBuf("False")); 
 
     builder->AppendString(str);
 }
@@ -406,7 +406,7 @@ struct TValueFormatter<std::pair<T1, T2>>
     {
         builder->AppendChar('{');
         FormatValue(builder, value.first, format);
-        builder->AppendString(TStringBuf(", "));
+        builder->AppendString(TStringBuf(", ")); 
         FormatValue(builder, value.second, format);
         builder->AppendChar('}');
     }
@@ -415,7 +415,7 @@ struct TValueFormatter<std::pair<T1, T2>>
 // std::optional
 inline void FormatValue(TStringBuilderBase* builder, std::nullopt_t, TStringBuf /*format*/)
 {
-    builder->AppendString(TStringBuf("<null>"));
+    builder->AppendString(TStringBuf("<null>")); 
 }
 
 template <class T>
@@ -487,7 +487,7 @@ char* WriteIntToBufferBackwards(char* buffer, TValue value);
 template <class TValue>
 void FormatValueViaHelper(TStringBuilderBase* builder, TValue value, TStringBuf format, TStringBuf genericSpec)
 {
-    if (format == TStringBuf("v")) {
+    if (format == TStringBuf("v")) { 
         const int MaxResultSize = 64;
         char buffer[MaxResultSize];
         char* end = buffer + MaxResultSize;
@@ -504,14 +504,14 @@ void FormatValueViaHelper(TStringBuilderBase* builder, TValue value, TStringBuf 
         FormatValueViaHelper(builder, static_cast<castType>(value), format, genericSpec); \
     }
 
-XX(i8,              int,                TStringBuf("d"))
-XX(ui8,             unsigned int,       TStringBuf("u"))
-XX(i16,             int,                TStringBuf("d"))
-XX(ui16,            unsigned int,       TStringBuf("u"))
-XX(i32,             int,                TStringBuf("d"))
-XX(ui32,            unsigned int,       TStringBuf("u"))
-XX(long,            long,               TStringBuf("ld"))
-XX(unsigned long,   unsigned long,      TStringBuf("lu"))
+XX(i8,              int,                TStringBuf("d")) 
+XX(ui8,             unsigned int,       TStringBuf("u")) 
+XX(i16,             int,                TStringBuf("d")) 
+XX(ui16,            unsigned int,       TStringBuf("u")) 
+XX(i32,             int,                TStringBuf("d")) 
+XX(ui32,            unsigned int,       TStringBuf("u")) 
+XX(long,            long,               TStringBuf("ld")) 
+XX(unsigned long,   unsigned long,      TStringBuf("lu")) 
 
 #undef XX
 
@@ -521,8 +521,8 @@ XX(unsigned long,   unsigned long,      TStringBuf("lu"))
         FormatValueViaSprintf(builder, static_cast<castType>(value), format, genericSpec); \
     }
 
-XX(double,          double,             TStringBuf("lf"))
-XX(float,           float,              TStringBuf("f"))
+XX(double,          double,             TStringBuf("lf")) 
+XX(float,           float,              TStringBuf("f")) 
 
 #undef XX
 
@@ -530,7 +530,7 @@ XX(float,           float,              TStringBuf("f"))
 template <class T>
 void FormatValue(TStringBuilderBase* builder, T* value, TStringBuf format)
 {
-    FormatValueViaSprintf(builder, value, format, TStringBuf("p"));
+    FormatValueViaSprintf(builder, value, format, TStringBuf("p")); 
 }
 
 // TDuration (specialize for performance reasons)
@@ -672,7 +672,7 @@ struct TArgFormatterImpl<IndexBase>
 {
     void operator() (size_t /*index*/, TStringBuilderBase* builder, TStringBuf /*format*/) const
     {
-        builder->AppendString(TStringBuf("<missing argument>"));
+        builder->AppendString(TStringBuf("<missing argument>")); 
     }
 };
 

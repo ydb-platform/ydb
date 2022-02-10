@@ -42,8 +42,8 @@ Y_UNIT_TEST_SUITE(TSchemeMergeTest) {
         UNIT_ASSERT(0. == v["a"][1]["f"]);
         UNIT_ASSERT(v["a"][1]["g"].IsArray());
         UNIT_ASSERT(v["a"][1]["g"].Has(1));
-        UNIT_ASSERT(TStringBuf("h") == v["a"][1]["g"][0]);
-        UNIT_ASSERT(TStringBuf("i") == v["a"][1]["g"][1]);
+        UNIT_ASSERT(TStringBuf("h") == v["a"][1]["g"][0]); 
+        UNIT_ASSERT(TStringBuf("i") == v["a"][1]["g"][1]); 
 
         {
             TStringBuf data = "{ a : [ { d : 42 }, { g : [ 3 ] } ], q : r }";
@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TSchemeMergeTest) {
 
         UNIT_ASSERT(v.Has("a"));
         UNIT_ASSERT(v.Has("q"));
-        UNIT_ASSERT(TStringBuf("r") == v["q"]);
+        UNIT_ASSERT(TStringBuf("r") == v["q"]); 
         UNIT_ASSERT(v["a"].Has(1));
         UNIT_ASSERT(!v["a"][0].Has("b"));
         UNIT_ASSERT(v["a"][0].Has("d"));

@@ -106,11 +106,11 @@ size_t NSystemInfo::NumberOfCpus() {
                 column = 0;
             } else if (column != -1) {
                 if (AsciiToLower(ch) == matchstr[column]) {
-                    ++column;
+                    ++column; 
 
                     if (column == sizeof(matchstr) - 1) {
                         column = -1;
-                        ++ret;
+                        ++ret; 
                     }
                 } else {
                     column = -1;

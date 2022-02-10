@@ -756,20 +756,20 @@ TExprBase GetEquiJoinTreeExpr(const TExprBase& joinScope, const TVector<TCoEquiJ
 }
 
 TMaybe<TStringBuf> TryFlipJoinType(TStringBuf joinType) {
-    if (joinType == TStringBuf("Inner")) {
-        return TStringBuf("Inner");
+    if (joinType == TStringBuf("Inner")) { 
+        return TStringBuf("Inner"); 
     }
-    if (joinType == TStringBuf("LeftSemi")) {
-        return TStringBuf("RightSemi");
+    if (joinType == TStringBuf("LeftSemi")) { 
+        return TStringBuf("RightSemi"); 
     }
-    if (joinType == TStringBuf("RightSemi")) {
-        return TStringBuf("LeftSemi");
+    if (joinType == TStringBuf("RightSemi")) { 
+        return TStringBuf("LeftSemi"); 
     }
-    if (joinType == TStringBuf("Right")) {
-        return TStringBuf("Left");
+    if (joinType == TStringBuf("Right")) { 
+        return TStringBuf("Left"); 
     }
-    if (joinType == TStringBuf("RightOnly")) {
-        return TStringBuf("LeftOnly");
+    if (joinType == TStringBuf("RightOnly")) { 
+        return TStringBuf("LeftOnly"); 
     }
     return Nothing();
 }
@@ -809,7 +809,7 @@ bool RewriteEquiJoinInternal(const TCoEquiJoinTuple& joinTree, const TVector<TCo
             return true;
         }
 
-        bool tryFlip = joinTree.Type().Value() == TStringBuf("LeftSemi")
+        bool tryFlip = joinTree.Type().Value() == TStringBuf("LeftSemi") 
             ? !config.HasOptDisableJoinReverseTableLookupLeftSemi()
             : !config.HasOptDisableJoinReverseTableLookup();
 

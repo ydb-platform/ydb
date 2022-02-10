@@ -14,8 +14,8 @@ Y_UNIT_TEST_SUITE(TestSimpleMap) {
         UNIT_ASSERT_VALUES_UNEQUAL(map.FindPtr(TString("a")), nullptr);
         UNIT_ASSERT_VALUES_EQUAL(map.FindPtr(TString("c")), nullptr);
 
-        UNIT_ASSERT_VALUES_UNEQUAL(map.FindPtr(TStringBuf("a")), nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(map.FindPtr(TStringBuf("c")), nullptr);
+        UNIT_ASSERT_VALUES_UNEQUAL(map.FindPtr(TStringBuf("a")), nullptr); 
+        UNIT_ASSERT_VALUES_EQUAL(map.FindPtr(TStringBuf("c")), nullptr); 
 
         UNIT_ASSERT_VALUES_UNEQUAL(map.FindPtr("a"), nullptr);
         UNIT_ASSERT_VALUES_EQUAL(map.FindPtr("c"), nullptr);

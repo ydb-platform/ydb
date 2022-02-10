@@ -27,14 +27,14 @@ TLogQueueName::TLogQueueName(const TQueuePath& queuePath, ui64 shard)
 }
 
 void TLogQueueName::OutTo(IOutputStream& out) const {
-    out << "["sv << UserName;
+    out << "["sv << UserName; 
     if (QueueName) {
-        out << "/"sv << QueueName;
+        out << "/"sv << QueueName; 
     }
     if (Shard != std::numeric_limits<ui64>::max()) {
-        out << "/"sv << Shard;
+        out << "/"sv << Shard; 
     }
-    out << "]"sv;
+    out << "]"sv; 
 }
 
 } // namespace NKikimr::NSQS

@@ -51,7 +51,7 @@ struct TEvMetering
 void SendMeteringJson(const NActors::TActorContext& ctx, TString message);
 
 inline NActors::TActorId MakeMeteringServiceID() {
-    return NActors::TActorId(0, TStringBuf("YDB_METER"));
+    return NActors::TActorId(0, TStringBuf("YDB_METER")); 
 }
 
 THolder<NActors::IActor> CreateMeteringWriter(

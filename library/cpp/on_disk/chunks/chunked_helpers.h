@@ -14,7 +14,7 @@
 #include "reader.h"
 #include "writer.h"
 
-#include <cmath>
+#include <cmath> 
 #include <cstddef>
 
 template <typename T>
@@ -48,7 +48,7 @@ public:
         return sizeof(ui64) + Size * sizeof(T);
     }
 
-    ~TYVector() = default;
+    ~TYVector() = default; 
 };
 
 template <typename T>
@@ -57,7 +57,7 @@ private:
     TVector<T> Vector;
 
 public:
-    TYVectorWriter() = default;
+    TYVectorWriter() = default; 
 
     void PushBack(const T& value) {
         Vector.push_back(value);
@@ -423,7 +423,7 @@ private:
     T Value;
 
 public:
-    TSingleValueWriter() = default;
+    TSingleValueWriter() = default; 
 
     TSingleValueWriter(const T& value)
         : Value(value)

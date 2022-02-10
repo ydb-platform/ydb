@@ -40,7 +40,7 @@ RECURSE(
     tf
     tpce-benchmark
     tpch-benchmark
-    tre
+    tre 
     unbound
     unbound/build
     vowpal_wabbit

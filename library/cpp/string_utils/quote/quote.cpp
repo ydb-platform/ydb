@@ -3,7 +3,7 @@
 #include <util/memory/tempbuf.h>
 #include <util/string/ascii.h>
 #include <util/string/cstriter.h>
-
+ 
 #include <cctype>
 
 /* note: (x & 0xdf) makes x upper case */
@@ -34,7 +34,7 @@ namespace {
             GETXC;
             return c;
         }
-
+ 
         static inline char x2c(TStringBuf& x) {
             if (!IsAsciiHex((ui8)x[0]) || !IsAsciiHex((ui8)x[1]))
                 return '%';
@@ -66,8 +66,8 @@ namespace {
 
 static inline char d2x(unsigned x) {
     return (char)((x < 10) ? ('0' + x) : ('A' + x - 10));
-}
-
+} 
+ 
 static inline const char* FixZero(const char* s) noexcept {
     return s ? s : "";
 }
@@ -120,7 +120,7 @@ static inline It1 Escape(It1 to, It2 from, It3 end, const bool* escape_map = cha
     *to = 0;
 
     return to;
-}
+} 
 
 template <class It1, class It2, class It3, class FromHex>
 static inline It1 Unescape(It1 to, It2 from, It3 end, FromHex fromHex) {
@@ -161,7 +161,7 @@ void CGIEscape(TString& url) {
 
     url.AssignNoAlias(to, CGIEscape(to, url.data(), url.size()));
 }
-
+ 
 TString CGIEscapeRet(const TStringBuf url) {
     TString to;
     to.ReserveAndResize(CgiEscapeBufLen(url.size()));

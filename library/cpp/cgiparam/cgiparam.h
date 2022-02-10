@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <library/cpp/iterator/iterate_values.h>
 
 #include <util/generic/iterator_range.h>
@@ -19,17 +19,17 @@ struct TStringLess {
 class TCgiParameters: public TMultiMap<TString, TString> {
 public:
     TCgiParameters() = default;
-
+ 
     explicit TCgiParameters(const TStringBuf cgiParamStr) {
         Scan(cgiParamStr);
     }
-
+ 
     TCgiParameters(std::initializer_list<std::pair<TString, TString>> il);
 
     void Flush() {
         erase(begin(), end());
     }
-
+ 
     size_t EraseAll(const TStringBuf name);
 
     size_t NumOfValues(const TStringBuf name) const noexcept {
@@ -131,7 +131,7 @@ public:
 
         return it->second.data();
     }
-};
+}; 
 
 template <typename TIter>
 void TCgiParameters::ReplaceUnescaped(const TStringBuf key, TIter valuesBegin, const TIter valuesEnd) {

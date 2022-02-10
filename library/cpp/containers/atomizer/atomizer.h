@@ -64,7 +64,7 @@ public:
         return (ui32)(*ins.first).second;        // == size()+1
     }
     ui32 find_atom(const char* key) const {
-        const_iterator it = find(key);
+        const_iterator it = find(key); 
         if (it == end())
             return 0; // INVALID_ATOM
         else

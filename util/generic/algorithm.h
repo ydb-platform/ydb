@@ -694,25 +694,25 @@ static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2, I2 e2, P p) {
     return std::make_pair(b1, b2);
 }
 
-template <class It, class Val>
-static inline bool BinarySearch(It begin, It end, const Val& val) {
+template <class It, class Val> 
+static inline bool BinarySearch(It begin, It end, const Val& val) { 
     return std::binary_search(begin, end, val);
-}
+} 
 
-template <class It, class Val, class Comp>
-static inline bool BinarySearch(It begin, It end, const Val& val, Comp comp) {
+template <class It, class Val, class Comp> 
+static inline bool BinarySearch(It begin, It end, const Val& val, Comp comp) { 
     return std::binary_search(begin, end, val, comp);
-}
-
-template <class It, class Val>
+} 
+ 
+template <class It, class Val> 
 static inline std::pair<It, It> EqualRange(It begin, It end, const Val& val) {
     return std::equal_range(begin, end, val);
-}
-
-template <class It, class Val, class Comp>
+} 
+ 
+template <class It, class Val, class Comp> 
 static inline std::pair<It, It> EqualRange(It begin, It end, const Val& val, Comp comp) {
     return std::equal_range(begin, end, val, comp);
-}
+} 
 
 template <class ForwardIt>
 bool IsSorted(ForwardIt begin, ForwardIt end) {
@@ -723,36 +723,36 @@ template <class ForwardIt, class Compare>
 bool IsSorted(ForwardIt begin, ForwardIt end, Compare comp) {
     return std::is_sorted(begin, end, comp);
 }
-
+ 
 template <class TIterator, typename TGetKey>
 bool IsSortedBy(TIterator begin, TIterator end, const TGetKey& getKey) {
     return IsSorted(begin, end, [&](auto&& left, auto&& right) { return getKey(left) < getKey(right); });
 }
 
-template <class It, class Val>
-void Iota(It begin, It end, Val val) {
+template <class It, class Val> 
+void Iota(It begin, It end, Val val) { 
     std::iota(begin, end, val);
-}
-
-template <class TI, class TO, class S>
-TO CopyN(TI from, S s, TO to) {
-    return std::copy_n(from, s, to);
-}
-
-template <class TI, class TO, class P>
-TO CopyIf(TI begin, TI end, TO to, P pred) {
-    return std::copy_if(begin, end, to, pred);
-}
-
-template <class T>
+} 
+ 
+template <class TI, class TO, class S> 
+TO CopyN(TI from, S s, TO to) { 
+    return std::copy_n(from, s, to); 
+} 
+ 
+template <class TI, class TO, class P> 
+TO CopyIf(TI begin, TI end, TO to, P pred) { 
+    return std::copy_if(begin, end, to, pred); 
+} 
+ 
+template <class T> 
 std::pair<const T&, const T&> MinMax(const T& first, const T& second) {
-    return std::minmax(first, second);
-}
-
-template <class It>
+    return std::minmax(first, second); 
+} 
+ 
+template <class It> 
 std::pair<It, It> MinMaxElement(It first, It last) {
-    return std::minmax_element(first, last);
-}
+    return std::minmax_element(first, last); 
+} 
 
 template <class TIterator, class TGenerator>
 void Generate(TIterator first, TIterator last, TGenerator generator) {

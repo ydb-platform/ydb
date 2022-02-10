@@ -347,74 +347,74 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
             }
         }
     }
-
+ 
     Y_UNIT_TEST(BinarySearchTest) {
-        {
+        { 
             TVector<TString> v;
-            bool test = BinarySearch(v.begin(), v.end(), "test");
-            UNIT_ASSERT_EQUAL(test, false);
-        }
-
-        {
-            int data[] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
-
+            bool test = BinarySearch(v.begin(), v.end(), "test"); 
+            UNIT_ASSERT_EQUAL(test, false); 
+        } 
+ 
+        { 
+            int data[] = {1, 2, 3, 4, 5, 6, 7, 8, 9}; 
+ 
             bool test = BinarySearch(data, data + Y_ARRAY_SIZE(data), 2);
-            UNIT_ASSERT_EQUAL(test, true);
-
+            UNIT_ASSERT_EQUAL(test, true); 
+ 
             test = BinarySearch(data, data + Y_ARRAY_SIZE(data), 10);
-            UNIT_ASSERT_EQUAL(test, false);
-        }
-
-        {
+            UNIT_ASSERT_EQUAL(test, false); 
+        } 
+ 
+        { 
             TVector<size_t> data = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
-
+ 
             bool test = BinarySearch(data.begin(), data.end(), (size_t)9, TGreater<size_t>());
-            UNIT_ASSERT_EQUAL(test, true);
-
+            UNIT_ASSERT_EQUAL(test, true); 
+ 
             test = BinarySearch(data.begin(), data.end(), (size_t)11, TGreater<size_t>());
-            UNIT_ASSERT_EQUAL(test, false);
-
+            UNIT_ASSERT_EQUAL(test, false); 
+ 
             test = BinarySearch(data.rbegin(), data.rend(), (size_t)1);
-            UNIT_ASSERT_EQUAL(test, true);
-        }
-    }
-
+            UNIT_ASSERT_EQUAL(test, true); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(EqualRangeTest) {
-        {
+        { 
             TVector<TString> v;
             using PairOfVector = std::pair<TVector<TString>::iterator, TVector<TString>::iterator>;
-            PairOfVector tmp = EqualRange(v.begin(), v.end(), "tmp");
-
-            UNIT_ASSERT_EQUAL(tmp.first, tmp.second);
-            UNIT_ASSERT_EQUAL(tmp.first, v.end());
-        }
-
-        {
-            int data[] = {1, 1, 1, 1, 1, 2, 2, 3, 3, 3, 3, 4, 5};
+            PairOfVector tmp = EqualRange(v.begin(), v.end(), "tmp"); 
+ 
+            UNIT_ASSERT_EQUAL(tmp.first, tmp.second); 
+            UNIT_ASSERT_EQUAL(tmp.first, v.end()); 
+        } 
+ 
+        { 
+            int data[] = {1, 1, 1, 1, 1, 2, 2, 3, 3, 3, 3, 4, 5}; 
             using PairOfInt = std::pair<int*, int*>;
             PairOfInt tmp = EqualRange(data, data + Y_ARRAY_SIZE(data), 3);
-
-            UNIT_ASSERT_EQUAL(tmp.second - tmp.first, 4);
-            UNIT_ASSERT_EQUAL(tmp.first - data, 7);
+ 
+            UNIT_ASSERT_EQUAL(tmp.second - tmp.first, 4); 
+            UNIT_ASSERT_EQUAL(tmp.first - data, 7); 
             UNIT_ASSERT_EQUAL(data + Y_ARRAY_SIZE(data) - tmp.second, 2);
-        }
-
-        {
+        } 
+ 
+        { 
             TVector<size_t> data = {9, 9, 8, 8, 8, 5, 4, 3, 3, 0, 0};
-
+ 
             using PairOfVector = std::pair<TVector<size_t>::iterator, TVector<size_t>::iterator>;
-            PairOfVector tmp = EqualRange(data.begin(), data.end(), 8, TGreater<size_t>());
-
-            UNIT_ASSERT_EQUAL(tmp.first - data.begin(), 2);
-            UNIT_ASSERT_EQUAL(tmp.second - tmp.first, 3);
-
+            PairOfVector tmp = EqualRange(data.begin(), data.end(), 8, TGreater<size_t>()); 
+ 
+            UNIT_ASSERT_EQUAL(tmp.first - data.begin(), 2); 
+            UNIT_ASSERT_EQUAL(tmp.second - tmp.first, 3); 
+ 
             using PairOfVectorReverse = std::pair<TVector<size_t>::reverse_iterator, TVector<size_t>::reverse_iterator>;
             PairOfVectorReverse tmpR = EqualRange(data.rbegin(), data.rend(), (size_t)0);
-
-            UNIT_ASSERT_EQUAL(tmpR.first, data.rbegin());
-            UNIT_ASSERT_EQUAL(tmpR.second - tmpR.first, 2);
-        }
-    }
+ 
+            UNIT_ASSERT_EQUAL(tmpR.first, data.rbegin()); 
+            UNIT_ASSERT_EQUAL(tmpR.second - tmpR.first, 2); 
+        } 
+    } 
 
     Y_UNIT_TEST(IsSortedTest) {
         TVector<int> v0;
@@ -507,7 +507,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         TVector<int> expected = {10, 7, 2};
         UNIT_ASSERT_VALUES_EQUAL(collection, expected);
     }
-
+ 
     Y_UNIT_TEST(StableSortByTest) {
         TVector<int> collection = {404, 101, 106, 203, 102, 205, 401};
         StableSortBy(collection, [](int x) { return x / 100; });
@@ -531,86 +531,86 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
 
     Y_UNIT_TEST(IotaTest) {
         TVector<int> v(10);
-
-        Iota(v.begin(), v.end(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(v[0], 0);
-        UNIT_ASSERT_VALUES_EQUAL(v[5], 5);
-        UNIT_ASSERT_VALUES_EQUAL(v[9], 9);
-
-        Iota(v.begin() + 2, v.begin() + 5, 162);
-        UNIT_ASSERT_VALUES_EQUAL(v[0], 0);
-        UNIT_ASSERT_VALUES_EQUAL(v[3], 163);
-        UNIT_ASSERT_VALUES_EQUAL(v[9], 9);
-    }
-
+ 
+        Iota(v.begin(), v.end(), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(v[0], 0); 
+        UNIT_ASSERT_VALUES_EQUAL(v[5], 5); 
+        UNIT_ASSERT_VALUES_EQUAL(v[9], 9); 
+ 
+        Iota(v.begin() + 2, v.begin() + 5, 162); 
+        UNIT_ASSERT_VALUES_EQUAL(v[0], 0); 
+        UNIT_ASSERT_VALUES_EQUAL(v[3], 163); 
+        UNIT_ASSERT_VALUES_EQUAL(v[9], 9); 
+    } 
+ 
     Y_UNIT_TEST(CopyNTest) {
         int data[] = {1, 2, 3, 4, 8, 7, 6, 5};
-        const size_t vSize = 10;
+        const size_t vSize = 10; 
         TVector<int> result(10, 0);
-        size_t toCopy = 5;
-
+        size_t toCopy = 5; 
+ 
         TVector<int>::iterator iter = CopyN(data, toCopy, result.begin());
-        UNIT_ASSERT_VALUES_EQUAL(iter - result.begin(), toCopy);
+        UNIT_ASSERT_VALUES_EQUAL(iter - result.begin(), toCopy); 
         UNIT_ASSERT_VALUES_EQUAL(result.size(), 10);
-        for (size_t idx = 0; idx < toCopy; ++idx) {
-            UNIT_ASSERT_VALUES_EQUAL(data[idx], result[idx]);
-        }
-        for (size_t idx = toCopy; idx < vSize; ++idx) {
-            UNIT_ASSERT_VALUES_EQUAL(result[idx], 0);
-        }
-
-        toCopy = 8;
-        const size_t start = 1;
-        result.assign(vSize, 0);
-        iter = CopyN(data, toCopy, result.begin() + start);
-        UNIT_ASSERT_VALUES_EQUAL(iter - result.begin(), start + toCopy);
-        for (size_t idx = 0; idx < start; ++idx) {
-            UNIT_ASSERT_VALUES_EQUAL(result[idx], 0);
-        }
-        for (size_t idx = 0; idx < toCopy; ++idx) {
-            UNIT_ASSERT_VALUES_EQUAL(result[start + idx], data[idx]);
-        }
-        for (size_t idx = start + toCopy; idx < vSize; ++idx) {
-            UNIT_ASSERT_VALUES_EQUAL(result[idx], 0);
-        }
-    }
-
+        for (size_t idx = 0; idx < toCopy; ++idx) { 
+            UNIT_ASSERT_VALUES_EQUAL(data[idx], result[idx]); 
+        } 
+        for (size_t idx = toCopy; idx < vSize; ++idx) { 
+            UNIT_ASSERT_VALUES_EQUAL(result[idx], 0); 
+        } 
+ 
+        toCopy = 8; 
+        const size_t start = 1; 
+        result.assign(vSize, 0); 
+        iter = CopyN(data, toCopy, result.begin() + start); 
+        UNIT_ASSERT_VALUES_EQUAL(iter - result.begin(), start + toCopy); 
+        for (size_t idx = 0; idx < start; ++idx) { 
+            UNIT_ASSERT_VALUES_EQUAL(result[idx], 0); 
+        } 
+        for (size_t idx = 0; idx < toCopy; ++idx) { 
+            UNIT_ASSERT_VALUES_EQUAL(result[start + idx], data[idx]); 
+        } 
+        for (size_t idx = start + toCopy; idx < vSize; ++idx) { 
+            UNIT_ASSERT_VALUES_EQUAL(result[idx], 0); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(CopyIfTest) {
-        const size_t count = 9;
-        int data[] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
-        const size_t vSize = 10;
+        const size_t count = 9; 
+        int data[] = {1, 2, 3, 4, 5, 6, 7, 8, 9}; 
+        const size_t vSize = 10; 
         TVector<int> v(vSize, 0);
-
+ 
         TVector<int>::iterator iter = CopyIf(data, data + count, v.begin(), [](int x) { return !(x % 3); });
         UNIT_ASSERT_VALUES_EQUAL(v.size(), vSize);
-        UNIT_ASSERT_VALUES_EQUAL(iter - v.begin(), 3);
-        v.resize(iter - v.begin());
-        for (size_t idx = 0; idx < v.size(); ++idx) {
-            UNIT_ASSERT_VALUES_EQUAL(v[idx], 3 * (idx + 1));
-        }
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(iter - v.begin(), 3); 
+        v.resize(iter - v.begin()); 
+        for (size_t idx = 0; idx < v.size(); ++idx) { 
+            UNIT_ASSERT_VALUES_EQUAL(v[idx], 3 * (idx + 1)); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(MinMaxElementTest) {
         TVector<int> v(10);
-        Iota(v.begin(), v.end(), 0);
-        UNIT_ASSERT_EQUAL(*MinMaxElement(v.begin(), v.end()).first, 0);
-        UNIT_ASSERT_EQUAL(*MinMaxElement(v.begin(), v.end()).second, 9);
-
-        v[3] = -2;
-        v[7] = 11;
-        UNIT_ASSERT_EQUAL(*MinMaxElement(v.begin(), v.end()).first, -2);
-        UNIT_ASSERT_EQUAL(*MinMaxElement(v.begin(), v.end()).second, 11);
-    }
-
+        Iota(v.begin(), v.end(), 0); 
+        UNIT_ASSERT_EQUAL(*MinMaxElement(v.begin(), v.end()).first, 0); 
+        UNIT_ASSERT_EQUAL(*MinMaxElement(v.begin(), v.end()).second, 9); 
+ 
+        v[3] = -2; 
+        v[7] = 11; 
+        UNIT_ASSERT_EQUAL(*MinMaxElement(v.begin(), v.end()).first, -2); 
+        UNIT_ASSERT_EQUAL(*MinMaxElement(v.begin(), v.end()).second, 11); 
+    } 
+ 
     Y_UNIT_TEST(MinMaxTest) {
         std::pair<int, int> p1 = MinMax(5, 12);
-        UNIT_ASSERT_EQUAL(p1.first, 5);
-        UNIT_ASSERT_EQUAL(p1.second, 12);
-
+        UNIT_ASSERT_EQUAL(p1.first, 5); 
+        UNIT_ASSERT_EQUAL(p1.second, 12); 
+ 
         std::pair<TString, TString> p2 = MinMax(TString("test"), TString("data"));
         UNIT_ASSERT_EQUAL(p2.first, TString("data"));
         UNIT_ASSERT_EQUAL(p2.second, TString("test"));
-    }
+    } 
 
     Y_UNIT_TEST(TestMaxElementBy) {
         const int array[] = {1, 2, 5, 3, 4, 5};

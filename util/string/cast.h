@@ -236,15 +236,15 @@ inline bool TryFromString(const TChar* data, T& result) {
     return TryFromString<T>(data, std::char_traits<TChar>::length(data), result);
 }
 
-template <class T, class TChar>
-inline bool TryFromString(const TChar* data, const size_t len, T& result, const T& def) {
-    if (TryFromString<T>(data, len, result)) {
-        return true;
-    }
-    result = def;
-    return false;
-}
-
+template <class T, class TChar> 
+inline bool TryFromString(const TChar* data, const size_t len, T& result, const T& def) { 
+    if (TryFromString<T>(data, len, result)) { 
+        return true; 
+    } 
+    result = def; 
+    return false; 
+} 
+ 
 template <class T>
 inline bool TryFromString(const TStringBuf& s, T& result) {
     return TryFromString<T>(s.data(), s.size(), result);
@@ -275,39 +275,39 @@ inline bool TryFromStringWithDefault(const TStringType& s, T& result, const T& d
     return TryFromString<T>(s.data(), s.size(), result, def);
 }
 
-template <class T>
-inline bool TryFromStringWithDefault(const char* s, T& result, const T& def) {
-    return TryFromStringWithDefault<T>(TStringBuf(s), result, def);
-}
-
+template <class T> 
+inline bool TryFromStringWithDefault(const char* s, T& result, const T& def) { 
+    return TryFromStringWithDefault<T>(TStringBuf(s), result, def); 
+} 
+ 
 template <class T, class TStringType>
 inline bool TryFromStringWithDefault(const TStringType& s, T& result) {
-    return TryFromStringWithDefault<T>(s, result, T());
-}
-
-// FromString methods with default value if data is invalid
-template <class T, class TChar>
-inline T FromString(const TChar* data, const size_t len, const T& def) {
-    T result;
-    TryFromString<T>(data, len, result, def);
-    return result;
-}
-
+    return TryFromStringWithDefault<T>(s, result, T()); 
+} 
+ 
+// FromString methods with default value if data is invalid 
+template <class T, class TChar> 
+inline T FromString(const TChar* data, const size_t len, const T& def) { 
+    T result; 
+    TryFromString<T>(data, len, result, def); 
+    return result; 
+} 
+ 
 template <class T, class TStringType>
 inline T FromStringWithDefault(const TStringType& s, const T& def) {
     return FromString<T>(s.data(), s.size(), def);
 }
 
-template <class T>
-inline T FromStringWithDefault(const char* s, const T& def) {
-    return FromStringWithDefault<T>(TStringBuf(s), def);
-}
-
+template <class T> 
+inline T FromStringWithDefault(const char* s, const T& def) { 
+    return FromStringWithDefault<T>(TStringBuf(s), def); 
+} 
+ 
 template <class T, class TStringType>
 inline T FromStringWithDefault(const TStringType& s) {
-    return FromStringWithDefault<T>(s, T());
-}
-
+    return FromStringWithDefault<T>(s, T()); 
+} 
+ 
 double StrToD(const char* b, char** se);
 double StrToD(const char* b, const char* e, char** se);
 

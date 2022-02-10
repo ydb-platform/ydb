@@ -55,11 +55,11 @@ namespace {
 TEST_F(TFixture, Test1) {
     ASSERT_EQ(I, 5);
 }
-
-TEST(ETest, Test1) {
-    UNIT_CHECK_GENERATED_EXCEPTION(ythrow yexception(), yexception);
-    UNIT_CHECK_GENERATED_NO_EXCEPTION(true, yexception);
-}
+ 
+TEST(ETest, Test1) { 
+    UNIT_CHECK_GENERATED_EXCEPTION(ythrow yexception(), yexception); 
+    UNIT_CHECK_GENERATED_NO_EXCEPTION(true, yexception); 
+} 
 
 Y_UNIT_TEST_SUITE(TestSingleTestFixture)
 {

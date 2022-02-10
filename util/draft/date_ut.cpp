@@ -24,13 +24,13 @@ Y_UNIT_TEST_SUITE(TDateTest) {
             UNIT_ASSERT_EQUAL(d.ToStroka("____%Y__%m____%d"), "____2005__06____03");
             UNIT_ASSERT_EQUAL(d.GetStartUTC(), 1117756800);
         }
-        {
-            TDate d("2011-02-15", "%Y-%m-%d");
-            UNIT_ASSERT_EQUAL(d.GetYear(), 2011);
-            UNIT_ASSERT_EQUAL(d.GetMonth(), 2);
-            UNIT_ASSERT_EQUAL(d.GetMonthDay(), 15);
-            UNIT_ASSERT_EQUAL(d.ToStroka("%Y%m%d"), "20110215");
+        { 
+            TDate d("2011-02-15", "%Y-%m-%d"); 
+            UNIT_ASSERT_EQUAL(d.GetYear(), 2011); 
+            UNIT_ASSERT_EQUAL(d.GetMonth(), 2); 
+            UNIT_ASSERT_EQUAL(d.GetMonthDay(), 15); 
+            UNIT_ASSERT_EQUAL(d.ToStroka("%Y%m%d"), "20110215"); 
             UNIT_ASSERT_EQUAL(d.GetStartUTC(), 1297728000);
-        }
+        } 
     }
 }

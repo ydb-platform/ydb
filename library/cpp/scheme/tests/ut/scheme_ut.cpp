@@ -372,8 +372,8 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
     Y_UNIT_TEST(TestFrontBack) {
         NSc::TValue v;
         const NSc::TValue& vv = v;
-        UNIT_ASSERT(NSc::TValue::Same(vv.Front(), NSc::Null()));
-        UNIT_ASSERT(NSc::TValue::Same(vv.Back(), NSc::Null()));
+        UNIT_ASSERT(NSc::TValue::Same(vv.Front(), NSc::Null())); 
+        UNIT_ASSERT(NSc::TValue::Same(vv.Back(), NSc::Null())); 
         UNIT_ASSERT(!vv.IsArray());
         v.Back() = "a";
         UNIT_ASSERT_VALUES_EQUAL("a", vv.Front().GetString());
@@ -390,8 +390,8 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
 
         UNIT_ASSERT_VALUES_EQUAL("a", v.Pop().GetString());
 
-        UNIT_ASSERT(NSc::TValue::Same(vv.Front(), NSc::Null()));
-        UNIT_ASSERT(NSc::TValue::Same(vv.Back(), NSc::Null()));
+        UNIT_ASSERT(NSc::TValue::Same(vv.Front(), NSc::Null())); 
+        UNIT_ASSERT(NSc::TValue::Same(vv.Back(), NSc::Null())); 
 
         v.Front() = "a";
         UNIT_ASSERT_VALUES_EQUAL("a", vv.Front().GetString());

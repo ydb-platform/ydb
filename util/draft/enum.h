@@ -3,7 +3,7 @@
 #include <bitset>
 
 #include <util/generic/strbuf.h>
-#include <util/stream/str.h>
+#include <util/stream/str.h> 
 #include <util/string/cast.h>
 #include <util/string/split.h>
 #include <utility>
@@ -12,11 +12,11 @@ class TEnumNotFoundException: public yexception {
 };
 
 #define EnumFromString(key, entries) EnumFromStringImpl(key, entries, Y_ARRAY_SIZE(entries))
-#define EnumFromStringWithSize(key, entries, size) EnumFromStringImpl(key, entries, size)
+#define EnumFromStringWithSize(key, entries, size) EnumFromStringImpl(key, entries, size) 
 #define FindEnumFromString(key, entries) FindEnumFromStringImpl(key, entries, Y_ARRAY_SIZE(entries))
-#define FindEnumFromStringWithSize(key, entries, size) FindEnumFromStringImpl(key, entries, size)
+#define FindEnumFromStringWithSize(key, entries, size) FindEnumFromStringImpl(key, entries, size) 
 #define EnumToString(key, entries) EnumToStringImpl(key, entries, Y_ARRAY_SIZE(entries))
-#define EnumToStringWithSize(key, entries, size) EnumToStringImpl(key, entries, size)
+#define EnumToStringWithSize(key, entries, size) EnumToStringImpl(key, entries, size) 
 #define PrintEnumItems(entries) PrintEnumItemsImpl(entries, Y_ARRAY_SIZE(entries))
 
 template <class K1, class K2, class V>
@@ -80,39 +80,39 @@ const K* EnumToStringImpl(V value, const std::pair<K, V>* entries, size_t arrayS
 
 ///////////////////////////////////
 
-template <class B>
-inline void SetEnumFlagsForEmptySpec(B& flags, bool allIfEmpty) {
-    if (allIfEmpty) {
-        flags.set();
-    } else {
-        flags.reset();
-    }
-}
-
+template <class B> 
+inline void SetEnumFlagsForEmptySpec(B& flags, bool allIfEmpty) { 
+    if (allIfEmpty) { 
+        flags.set(); 
+    } else { 
+        flags.reset(); 
+    } 
+} 
+ 
 // all set by default
 template <class E, size_t N, size_t B>
 inline void SetEnumFlags(const std::pair<const char*, E> (&str2Enum)[N], TStringBuf optSpec,
                          std::bitset<B>& flags, bool allIfEmpty = true) {
     if (optSpec.empty()) {
-        SetEnumFlagsForEmptySpec(flags, allIfEmpty);
-    } else {
-        flags.reset();
-        for (const auto& it : StringSplitter(optSpec).Split(',')) {
+        SetEnumFlagsForEmptySpec(flags, allIfEmpty); 
+    } else { 
+        flags.reset(); 
+        for (const auto& it : StringSplitter(optSpec).Split(',')) { 
             E e = *EnumFromStringImpl(ToString(it.Token()).data(), str2Enum, N);
-            flags.set(e);
+            flags.set(e); 
         }
-    }
-}
-
-template <class E, size_t B>
+    } 
+} 
+ 
+template <class E, size_t B> 
 inline void SetEnumFlags(const std::pair<const char*, E>* str2Enum, TStringBuf optSpec,
-                         std::bitset<B>& flags, const size_t size,
+                         std::bitset<B>& flags, const size_t size, 
                          bool allIfEmpty = true) {
-    if (optSpec.empty()) {
-        SetEnumFlagsForEmptySpec(flags, allIfEmpty);
+    if (optSpec.empty()) { 
+        SetEnumFlagsForEmptySpec(flags, allIfEmpty); 
     } else {
         flags.reset();
-        for (const auto& it : StringSplitter(optSpec).Split(',')) {
+        for (const auto& it : StringSplitter(optSpec).Split(',')) { 
             E e = *EnumFromStringImpl(ToString(it.Token()).data(), str2Enum, size);
             flags.set(e);
         }
@@ -123,13 +123,13 @@ inline void SetEnumFlags(const std::pair<const char*, E>* str2Enum, TStringBuf o
 template <class E, size_t B>
 inline void SetEnumFlags(TStringBuf optSpec, std::bitset<B>& flags, bool allIfEmpty = true) {
     if (optSpec.empty()) {
-        SetEnumFlagsForEmptySpec(flags, allIfEmpty);
+        SetEnumFlagsForEmptySpec(flags, allIfEmpty); 
     } else {
         flags.reset();
-        for (const auto& it : StringSplitter(optSpec).Split(',')) {
+        for (const auto& it : StringSplitter(optSpec).Split(',')) { 
             E e;
             if (!TryFromString(it.Token(), e))
-                ythrow yexception() << "Unknown enum value '" << it.Token() << "'";
+                ythrow yexception() << "Unknown enum value '" << it.Token() << "'"; 
             flags.set((size_t)e);
         }
     }

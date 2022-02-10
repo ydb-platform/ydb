@@ -50,13 +50,13 @@ namespace NPrivate {
         }
 
         const TPtr Get(TArgs... args) const {
-            return GetValue<true>(args...);
+            return GetValue<true>(args...); 
         }
 
-        const TPtr GetUnsafe(TArgs... args) const {
-            return GetValue<false>(args...);
-        }
-
+        const TPtr GetUnsafe(TArgs... args) const { 
+            return GetValue<false>(args...); 
+        } 
+ 
         void Clear() {
             TWriteGuard w(Mutex);
             Cache.Clear();
@@ -107,9 +107,9 @@ namespace NPrivate {
         }
 
     private:
-        template <bool AllowNullValues>
-        const TPtr GetValue(TArgs... args) const {
-            Key key = Callbacks.GetKey(args...);
+        template <bool AllowNullValues> 
+        const TPtr GetValue(TArgs... args) const { 
+            Key key = Callbacks.GetKey(args...); 
             switch (GettersPromotionPolicy) {
                 case EGettersPromotionPolicy::Promoted:
                     break;
@@ -120,21 +120,21 @@ namespace NPrivate {
                         return i.Value();
                     }
                     break;
-                }
-            }
-            TWriteGuard w(Mutex);
-            typename TInternalCache::TIterator i = Cache.Find(key);
-            if (i != Cache.End()) {
-                return i.Value();
-            }
-            TPtr value = Callbacks.CreateObject(args...);
-            if (value || AllowNullValues) {
-                Cache.Insert(key, value);
-            }
-            return value;
-        }
-
-    private:
+                } 
+            } 
+            TWriteGuard w(Mutex); 
+            typename TInternalCache::TIterator i = Cache.Find(key); 
+            if (i != Cache.End()) { 
+                return i.Value(); 
+            } 
+            TPtr value = Callbacks.CreateObject(args...); 
+            if (value || AllowNullValues) { 
+                Cache.Insert(key, value); 
+            } 
+            return value; 
+        } 
+ 
+    private: 
         using TInternalCache = TCache<Key, TPtr, List<Key, TPtr>, TNoopDelete>;
 
         template <class TCallbacks>

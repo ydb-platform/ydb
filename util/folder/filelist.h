@@ -41,11 +41,11 @@ public:
     }
 
     inline void Fill(const TString& dirname, bool sort = false) {
-        Fill(dirname, TStringBuf(), sort);
+        Fill(dirname, TStringBuf(), sort); 
     }
 
     inline void Fill(const TString& dirname, TStringBuf prefix, bool sort = false) {
-        Fill(dirname, prefix, TStringBuf(), 1, sort);
+        Fill(dirname, prefix, TStringBuf(), 1, sort); 
     }
 
     void Fill(const TString& dirname, TStringBuf prefix, TStringBuf suffix, int depth, bool sort = false);

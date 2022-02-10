@@ -173,8 +173,8 @@ bool UncaughtException() noexcept;
 
 std::string CurrentExceptionTypeName();
 
-TString FormatExc(const std::exception& exception); 
- 
+TString FormatExc(const std::exception& exception);
+
 #define Y_ENSURE_EX(CONDITION, THROW_EXPRESSION) \
     do {                                         \
         if (Y_UNLIKELY(!(CONDITION))) {          \

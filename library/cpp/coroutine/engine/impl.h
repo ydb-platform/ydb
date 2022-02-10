@@ -6,7 +6,7 @@
 #include "poller.h"
 #include "stack/stack_common.h"
 #include "trampoline.h"
-#include "custom_time.h" 
+#include "custom_time.h"
 
 #include <library/cpp/containers/intrusive_rb_tree/rb_tree.h>
 
@@ -15,7 +15,7 @@
 #include <util/generic/intrlist.h>
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
-#include <util/generic/function.h> 
+#include <util/generic/function.h>
 
 
 #define EWAKEDUP 34567
@@ -49,7 +49,7 @@ private:
         NCoro::NStack::IAllocator& allocator,
         uint32_t stackSize,
         TContExecutor& executor,
-        NCoro::TTrampoline::TFunc func, 
+        NCoro::TTrampoline::TFunc func,
         const char* name
     ) noexcept;
 
@@ -156,8 +156,8 @@ public:
         NCoro::IScheduleCallback* = nullptr,
         NCoro::IEnterPollerCallback* = nullptr,
         NCoro::NStack::EGuard stackGuard = NCoro::NStack::EGuard::Canary,
-        TMaybe<NCoro::NStack::TPoolAllocatorSettings> poolSettings = Nothing(), 
-        NCoro::ITime* time = nullptr 
+        TMaybe<NCoro::NStack::TPoolAllocatorSettings> poolSettings = Nothing(),
+        NCoro::ITime* time = nullptr
     );
 
     ~TContExecutor();
@@ -202,12 +202,12 @@ public:
         TMaybe<ui32> customStackSize = Nothing()
     ) noexcept;
 
-    TCont* CreateOwned( 
-        NCoro::TTrampoline::TFunc func, 
-        const char* name, 
-        TMaybe<ui32> customStackSize = Nothing() 
-    ) noexcept; 
- 
+    TCont* CreateOwned(
+        NCoro::TTrampoline::TFunc func,
+        const char* name,
+        TMaybe<ui32> customStackSize = Nothing()
+    ) noexcept;
+
     NCoro::TContPoller* Poller() noexcept {
         return &Poller_;
     }
@@ -265,9 +265,9 @@ public:
     void ScheduleUserEvent(IUserEvent* event) {
         UserEvents_.PushBack(event);
     }
- 
-    void Pause(); 
-    TInstant Now(); 
+
+    void Pause();
+    TInstant Now();
 private:
     void Release(TCont* cont) noexcept;
 
@@ -308,6 +308,6 @@ private:
     size_t Allocated_ = 0;
     TCont* Current_ = nullptr;
     bool FailOnError_ = false;
-    bool Paused_ = false; 
-    NCoro::ITime* Time_ = nullptr; 
+    bool Paused_ = false;
+    NCoro::ITime* Time_ = nullptr;
 };

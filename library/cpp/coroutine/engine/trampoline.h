@@ -23,13 +23,13 @@ namespace NCoro {
 
     class TTrampoline : public ITrampoLine, TNonCopyable {
     public:
-        typedef std::function<void (TCont*)> TFunc; 
- 
+        typedef std::function<void (TCont*)> TFunc;
+
         TTrampoline(
             NCoro::NStack::IAllocator& allocator,
             uint32_t stackSize,
-            TFunc f, 
-            TCont* cont 
+            TFunc f,
+            TCont* cont
         ) noexcept;
 
         TArrayRef<char> Stack() noexcept;
@@ -46,15 +46,15 @@ namespace NCoro {
 
         void DoRun() override;
 
-        void DoRunNaked() override; 
- 
+        void DoRunNaked() override;
+
     private:
         const char* ContName() const noexcept;
     private:
         NStack::TStackHolder Stack_;
         const TContClosure Clo_;
         TExceptionSafeContext Ctx_;
-        TFunc Func_; 
+        TFunc Func_;
         TCont* const Cont_;
     };
 }

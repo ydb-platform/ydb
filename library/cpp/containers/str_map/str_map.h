@@ -171,8 +171,8 @@ public:
     }
 
     const yh& get_THashMap() const {
-        return static_cast<const yh&>(*this);
-    }
+        return static_cast<const yh&>(*this); 
+    } 
 };
 
 template <class T, class HashFcn, class EqualTo>

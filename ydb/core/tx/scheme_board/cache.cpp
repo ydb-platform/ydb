@@ -1705,9 +1705,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             keyDesc.ColumnInfos.clear();
             keyDesc.ColumnInfos.reserve(keyDesc.Columns.size());
             for (auto& columnOp : keyDesc.Columns) {
-                if (IsSystemColumn(columnOp.Column)) {
-                    continue;
-                }
+                if (IsSystemColumn(columnOp.Column)) { 
+                    continue; 
+                } 
 
                 if (IsSysTable() && columnOp.Operation == TKeyDesc::EColumnOperation::InplaceUpdate) {
                     SetError(context, entry, TResolve::EStatus::TypeCheckError, TKeyDesc::EStatus::OperationNotSupported);

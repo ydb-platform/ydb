@@ -57,10 +57,10 @@ public:
         }
 
         switch (req->mode()) {
-            // KIKIMR-10990
-            //case Ydb::Scripting::ExplainYqlRequest_Mode_PARSE:
-            //    ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_PARSE);
-            //    break;
+            // KIKIMR-10990 
+            //case Ydb::Scripting::ExplainYqlRequest_Mode_PARSE: 
+            //    ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_PARSE); 
+            //    break; 
             case Ydb::Scripting::ExplainYqlRequest_Mode_VALIDATE:
                 ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_VALIDATE);
                 break;
@@ -72,7 +72,7 @@ public:
                         << "Unknown explain mode"));
                 return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
         }
-
+ 
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
         ev->Record.MutableRequest()->SetQuery(script);
         ev->Record.MutableRequest()->SetKeepSession(false);
@@ -87,15 +87,15 @@ public:
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             const auto& kqpResponse = record.GetResponse();
             const auto& issueMessage = kqpResponse.GetQueryIssues();
-            const auto& queryParameters = kqpResponse.GetQueryParameters();
+            const auto& queryParameters = kqpResponse.GetQueryParameters(); 
 
             Ydb::Scripting::ExplainYqlResult queryResult;
             queryResult.set_plan(kqpResponse.GetQueryPlan());
-            for (const auto& queryParameter : queryParameters) {
-                Ydb::Type parameterType;
-                ConvertMiniKQLTypeToYdbType(queryParameter.GetType(), parameterType);
-                queryResult.mutable_parameters_types()->insert({ queryParameter.GetName(), parameterType });
-            }
+            for (const auto& queryParameter : queryParameters) { 
+                Ydb::Type parameterType; 
+                ConvertMiniKQLTypeToYdbType(queryParameter.GetType(), parameterType); 
+                queryResult.mutable_parameters_types()->insert({ queryParameter.GetName(), parameterType }); 
+            } 
 
             ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, queryResult, ctx);
         } else {

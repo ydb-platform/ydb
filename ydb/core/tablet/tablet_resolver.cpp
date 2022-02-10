@@ -268,11 +268,11 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
             LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER,
                 "SelectForward node %" PRIu32 " selfDC %s leaderDC %s %s"
-                " local %" PRIu32 " localDc %" PRIu32 " other %" PRIu32 " disallowed %" PRIu32
+                " local %" PRIu32 " localDc %" PRIu32 " other %" PRIu32 " disallowed %" PRIu32 
                 " tabletId: %" PRIu64 " followers: %" PRIu64 " countLeader %" PRIu32
                 " allowFollowers %" PRIu32 " winner: %s",
                 selfNode, dcName(selfDc), dcName(leaderDc), info.ResFlags.ToString().data(),
-                info.NumLocal, info.NumLocalDc, info.NumOtherDc, disallowed,
+                info.NumLocal, info.NumLocalDc, info.NumOtherDc, disallowed, 
                 tabletId, entry.KnownFollowers.size(), countLeader, info.ResFlags.AllowFollower(),
                 winner.KnownLeader.ToString().c_str());
 

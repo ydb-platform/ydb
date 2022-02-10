@@ -40,7 +40,7 @@ message ListDirectoryResponse {
 }
 
 message Permissions {
-    // SID (Security ID) of user or group
+    // SID (Security ID) of user or group 
     string subject = 1;
     repeated string permission_names = 2;
 }
@@ -58,10 +58,10 @@ message Entry {
         SEQUENCE = 15;
         REPLICATION = 16;
     }
-    
-    // Name of scheme entry (dir2 of /dir1/dir2)
+     
+    // Name of scheme entry (dir2 of /dir1/dir2) 
     string name = 1;
-    // SID (Security ID) of user or group
+    // SID (Security ID) of user or group 
     string owner = 2;
     Type type = 5;
     repeated Permissions effective_permissions = 6; 

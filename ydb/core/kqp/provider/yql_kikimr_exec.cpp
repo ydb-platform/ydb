@@ -16,111 +16,111 @@ using namespace NNodes;
 using namespace NCommon;
 using namespace NThreading;
 
-namespace {
-    bool EnsureNotPrepare(const TString featureName, TPositionHandle pos, const TKikimrQueryContext& queryCtx,
-        TExprContext& ctx)
-    {
-        if (queryCtx.PrepareOnly && !queryCtx.SuppressDdlChecks) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                << "'" << featureName << "' not supported in query prepare mode."));
-            return false;
-        }
-
-        return true;
+namespace { 
+    bool EnsureNotPrepare(const TString featureName, TPositionHandle pos, const TKikimrQueryContext& queryCtx, 
+        TExprContext& ctx) 
+    { 
+        if (queryCtx.PrepareOnly && !queryCtx.SuppressDdlChecks) { 
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() 
+                << "'" << featureName << "' not supported in query prepare mode.")); 
+            return false; 
+        } 
+ 
+        return true; 
     }
 
-    void FillExecDataQueryAst(TKiExecDataQuery exec, const TString& ast, TExprContext& ctx) {
-        auto astNode = Build<TCoAtom>(ctx, exec.Pos())
-            .Value(ast)
-            .Done();
+    void FillExecDataQueryAst(TKiExecDataQuery exec, const TString& ast, TExprContext& ctx) { 
+        auto astNode = Build<TCoAtom>(ctx, exec.Pos()) 
+            .Value(ast) 
+            .Done(); 
 
-        astNode.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+        astNode.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>()); 
 
-        exec.Ptr()->ChildRef(TKiExecDataQuery::idx_Ast) = astNode.Ptr();
-    }
+        exec.Ptr()->ChildRef(TKiExecDataQuery::idx_Ast) = astNode.Ptr(); 
+    } 
 
-    TCreateUserSettings ParseCreateUserSettings(TKiCreateUser createUser) {
-        TCreateUserSettings createUserSettings;
-        createUserSettings.UserName = TString(createUser.UserName());
-
-        for (auto setting : createUser.Settings()) {
-            auto name = setting.Name().Value();
-            if (name == "password") {
-                createUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
-            } else if (name == "nullPassword") {
-                // Default value
-            } else if (name == "passwordEncrypted") {
-                createUserSettings.PasswordEncrypted = true;
-            }
-        }
-        return createUserSettings;
-    }
-
-    TAlterUserSettings ParseAlterUserSettings(TKiAlterUser alterUser) {
-        TAlterUserSettings alterUserSettings;
-        alterUserSettings.UserName = TString(alterUser.UserName());
-
-        for (auto setting : alterUser.Settings()) {
-            auto name = setting.Name().Value();
-            if (name == "password") {
-                alterUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
-            } else if (name == "nullPassword") {
-                // Default value
-            } else if (name == "passwordEncrypted") {
-                alterUserSettings.PasswordEncrypted = true;
-            }
-        }
-        return alterUserSettings;
-    }
-
-    TDropUserSettings ParseDropUserSettings(TKiDropUser dropUser) {
-        TDropUserSettings dropUserSettings;
-        dropUserSettings.UserName = TString(dropUser.UserName());
-
-        for (auto setting : dropUser.Settings()) {
-            auto name = setting.Name().Value();
-            if (name == "force") {
-                dropUserSettings.Force = true;
-            }
-        }
-        return dropUserSettings;
-    }
-
-    TCreateGroupSettings ParseCreateGroupSettings(TKiCreateGroup createGroup) {
-        TCreateGroupSettings createGroupSettings;
-        createGroupSettings.GroupName = TString(createGroup.GroupName());
-        return createGroupSettings;
-    }
-
-    TAlterGroupSettings ParseAlterGroupSettings(TKiAlterGroup alterGroup) {
-        TAlterGroupSettings alterGroupSettings;
-        alterGroupSettings.GroupName = TString(alterGroup.GroupName());
-
-        TString action = TString(alterGroup.Action());
-        if (action == "addUsersToGroup") {
-            alterGroupSettings.Action = TAlterGroupSettings::EAction::AddRoles;
-        } else if (action == "dropUsersFromGroup") {
-            alterGroupSettings.Action = TAlterGroupSettings::EAction::RemoveRoles;
-        }
-
-        for (auto role : alterGroup.Roles()) {
-            alterGroupSettings.Roles.push_back(role.Cast<TCoAtom>().StringValue());
-        }
-        return alterGroupSettings;
-    }
-
-    TDropGroupSettings ParseDropGroupSettings(TKiDropGroup dropGroup) {
-        TDropGroupSettings dropGroupSettings;
-        dropGroupSettings.GroupName = TString(dropGroup.GroupName());
-
-        for (auto setting : dropGroup.Settings()) {
-            auto name = setting.Name().Value();
-            if (name == "force") {
-                dropGroupSettings.Force = true;
-            }
-        }
-        return dropGroupSettings;
-    }
+    TCreateUserSettings ParseCreateUserSettings(TKiCreateUser createUser) { 
+        TCreateUserSettings createUserSettings; 
+        createUserSettings.UserName = TString(createUser.UserName()); 
+ 
+        for (auto setting : createUser.Settings()) { 
+            auto name = setting.Name().Value(); 
+            if (name == "password") { 
+                createUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue(); 
+            } else if (name == "nullPassword") { 
+                // Default value 
+            } else if (name == "passwordEncrypted") { 
+                createUserSettings.PasswordEncrypted = true; 
+            } 
+        } 
+        return createUserSettings; 
+    } 
+ 
+    TAlterUserSettings ParseAlterUserSettings(TKiAlterUser alterUser) { 
+        TAlterUserSettings alterUserSettings; 
+        alterUserSettings.UserName = TString(alterUser.UserName()); 
+ 
+        for (auto setting : alterUser.Settings()) { 
+            auto name = setting.Name().Value(); 
+            if (name == "password") { 
+                alterUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue(); 
+            } else if (name == "nullPassword") { 
+                // Default value 
+            } else if (name == "passwordEncrypted") { 
+                alterUserSettings.PasswordEncrypted = true; 
+            } 
+        } 
+        return alterUserSettings; 
+    } 
+ 
+    TDropUserSettings ParseDropUserSettings(TKiDropUser dropUser) { 
+        TDropUserSettings dropUserSettings; 
+        dropUserSettings.UserName = TString(dropUser.UserName()); 
+ 
+        for (auto setting : dropUser.Settings()) { 
+            auto name = setting.Name().Value(); 
+            if (name == "force") { 
+                dropUserSettings.Force = true; 
+            } 
+        } 
+        return dropUserSettings; 
+    } 
+ 
+    TCreateGroupSettings ParseCreateGroupSettings(TKiCreateGroup createGroup) { 
+        TCreateGroupSettings createGroupSettings; 
+        createGroupSettings.GroupName = TString(createGroup.GroupName()); 
+        return createGroupSettings; 
+    } 
+ 
+    TAlterGroupSettings ParseAlterGroupSettings(TKiAlterGroup alterGroup) { 
+        TAlterGroupSettings alterGroupSettings; 
+        alterGroupSettings.GroupName = TString(alterGroup.GroupName()); 
+ 
+        TString action = TString(alterGroup.Action()); 
+        if (action == "addUsersToGroup") { 
+            alterGroupSettings.Action = TAlterGroupSettings::EAction::AddRoles; 
+        } else if (action == "dropUsersFromGroup") { 
+            alterGroupSettings.Action = TAlterGroupSettings::EAction::RemoveRoles; 
+        } 
+ 
+        for (auto role : alterGroup.Roles()) { 
+            alterGroupSettings.Roles.push_back(role.Cast<TCoAtom>().StringValue()); 
+        } 
+        return alterGroupSettings; 
+    } 
+ 
+    TDropGroupSettings ParseDropGroupSettings(TKiDropGroup dropGroup) { 
+        TDropGroupSettings dropGroupSettings; 
+        dropGroupSettings.GroupName = TString(dropGroup.GroupName()); 
+ 
+        for (auto setting : dropGroup.Settings()) { 
+            auto name = setting.Name().Value(); 
+            if (name == "force") { 
+                dropGroupSettings.Force = true; 
+            } 
+        } 
+        return dropGroupSettings; 
+    } 
 }
 
 class TKiSinkPlanInfoTransformer : public TGraphTransformerBase {
@@ -220,11 +220,11 @@ public:
                 YQL_ENSURE(key.Extract(maybeTableScheme.Cast().TableKey().Ref()));
 
                 auto& tableDesc = SessionCtx->Tables().ExistingTable(TString(cluster), key.GetTablePath());
-                TKikimrTableDescription rawTableDesc;
-                rawTableDesc.Metadata = tableDesc.Metadata;
-                rawTableDesc.Load(ctx);
+                TKikimrTableDescription rawTableDesc; 
+                rawTableDesc.Metadata = tableDesc.Metadata; 
+                rawTableDesc.Load(ctx); 
 
-                auto result = GetTableMetadataResult(rawTableDesc, fillSettings, ctx);
+                auto result = GetTableMetadataResult(rawTableDesc, fillSettings, ctx); 
                 YQL_ENSURE(result);
 
                 auto resultNode = ctx.NewAtom(input->Pos(), *result);
@@ -463,7 +463,7 @@ public:
             auto cluster = TString(maybeCreate.Cast().DataSink().Cluster());
             auto& table = SessionCtx->Tables().GetTable(cluster, TString(maybeCreate.Cast().Table()));
 
-            if (!ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TYdbOperation::CreateTable, ctx)) {
+            if (!ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TYdbOperation::CreateTable, ctx)) { 
                 return SyncError();
             }
 
@@ -490,7 +490,7 @@ public:
             auto cluster = TString(maybeDrop.Cast().DataSink().Cluster());
             auto& table = SessionCtx->Tables().GetTable(cluster, TString(maybeDrop.Cast().Table()));
 
-            if (!ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TYdbOperation::DropTable, ctx)) {
+            if (!ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TYdbOperation::DropTable, ctx)) { 
                 return SyncError();
             }
 
@@ -521,15 +521,15 @@ public:
             auto cluster = TString(maybeAlter.Cast().DataSink().Cluster());
             auto& table = SessionCtx->Tables().GetTable(cluster, TString(maybeAlter.Cast().Table()));
 
-            if (!ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TYdbOperation::AlterTable, ctx)) {
+            if (!ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TYdbOperation::AlterTable, ctx)) { 
                 return SyncError();
             }
 
             Ydb::Table::AlterTableRequest alterTableRequest;
             alterTableRequest.set_path(table.Metadata->Name);
 
-            for (auto action : maybeAlter.Cast().Actions()) {
-                auto name = action.Name().Value();
+            for (auto action : maybeAlter.Cast().Actions()) { 
+                auto name = action.Name().Value(); 
                 if (name == "renameTo") {
                     auto destination = action.Value().Cast<TCoAtom>().StringValue();
                     auto future = Gateway->RenameTable(table.Metadata->Name, destination, cluster);
@@ -540,80 +540,80 @@ public:
                             return resultNode;
                         });
                 } else if (name == "addColumns") {
-                    auto listNode = action.Value().Cast<TExprList>();
-                    for (size_t i = 0; i < listNode.Size(); ++i) {
+                    auto listNode = action.Value().Cast<TExprList>(); 
+                    for (size_t i = 0; i < listNode.Size(); ++i) { 
                         auto add_column = alterTableRequest.add_add_columns();
-                        auto item = listNode.Item(i);
-                        auto columnTuple = item.Cast<TExprList>();
-                        auto columnName = columnTuple.Item(0).Cast<TCoAtom>();
+                        auto item = listNode.Item(i); 
+                        auto columnTuple = item.Cast<TExprList>(); 
+                        auto columnName = columnTuple.Item(0).Cast<TCoAtom>(); 
                         add_column->set_name(TString(columnName));
 
-                        auto typeNode = columnTuple.Item(1);
-                        auto columnType = typeNode.Ref().GetTypeAnn();
-                        auto type = columnType->Cast<TTypeExprType>()->GetType();
+                        auto typeNode = columnTuple.Item(1); 
+                        auto columnType = typeNode.Ref().GetTypeAnn(); 
+                        auto type = columnType->Cast<TTypeExprType>()->GetType(); 
                         auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
                         auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
-                        auto dataType = actualType->Cast<TDataExprType>();
+                        auto dataType = actualType->Cast<TDataExprType>(); 
                         SetColumnType(*add_column->mutable_type(), TString(dataType->GetName()), notNull);
-                        if (columnTuple.Size() > 2) {
-                            auto families = columnTuple.Item(2).Cast<TCoAtomList>();
+                        if (columnTuple.Size() > 2) { 
+                            auto families = columnTuple.Item(2).Cast<TCoAtomList>(); 
                             if (families.Size() > 1) {
                                 ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
                                     "Unsupported number of families"));
                                 return SyncError();
                             }
-                            for (auto family : families) {
+                            for (auto family : families) { 
                                 add_column->set_family(TString(family.Value()));
-                            }
-                        }
-                    }
-                } else if (name == "dropColumns") {
-                    auto listNode = action.Value().Cast<TCoAtomList>();
-                    for (auto dropColumn : listNode) {
+                            } 
+                        } 
+                    } 
+                } else if (name == "dropColumns") { 
+                    auto listNode = action.Value().Cast<TCoAtomList>(); 
+                    for (auto dropColumn : listNode) { 
                         alterTableRequest.add_drop_columns(TString(dropColumn.Value()));
-                    }
-                } else if (name == "alterColumns") {
-                    auto listNode = action.Value().Cast<TExprList>();
-                    for (size_t i = 0; i < listNode.Size(); ++i) {
+                    } 
+                } else if (name == "alterColumns") { 
+                    auto listNode = action.Value().Cast<TExprList>(); 
+                    for (size_t i = 0; i < listNode.Size(); ++i) { 
                         auto alter_columns = alterTableRequest.add_alter_columns();
-                        auto item = listNode.Item(i);
-                        auto columnTuple = item.Cast<TExprList>();
-                        auto columnName = columnTuple.Item(0).Cast<TCoAtom>();
+                        auto item = listNode.Item(i); 
+                        auto columnTuple = item.Cast<TExprList>(); 
+                        auto columnName = columnTuple.Item(0).Cast<TCoAtom>(); 
                         alter_columns->set_name(TString(columnName));
 
-                        auto families = columnTuple.Item(1).Cast<TCoAtomList>();
+                        auto families = columnTuple.Item(1).Cast<TCoAtomList>(); 
                         if (families.Size() > 1) {
                             ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
                                 "Unsupported number of families"));
                             return SyncError();
                         }
-                        for (auto family : families) {
+                        for (auto family : families) { 
                             alter_columns->set_family(TString(family.Value()));
-                        }
-                    }
-                } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {
-                    auto listNode = action.Value().Cast<TExprList>();
-                    for (size_t i = 0; i < listNode.Size(); ++i) {
-                        auto item = listNode.Item(i);
-                        if (auto maybeTupleList = item.Maybe<TCoNameValueTupleList>()) {
+                        } 
+                    } 
+                } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") { 
+                    auto listNode = action.Value().Cast<TExprList>(); 
+                    for (size_t i = 0; i < listNode.Size(); ++i) { 
+                        auto item = listNode.Item(i); 
+                        if (auto maybeTupleList = item.Maybe<TCoNameValueTupleList>()) { 
                             auto f = (name == "addColumnFamilies") ?
                                 alterTableRequest.add_add_column_families() :
                                 alterTableRequest.add_alter_column_families();
 
-                            for (auto familySetting : maybeTupleList.Cast()) {
-                                auto name = familySetting.Name().Value();
-                                if (name == "name") {
+                            for (auto familySetting : maybeTupleList.Cast()) { 
+                                auto name = familySetting.Name().Value(); 
+                                if (name == "name") { 
                                     f->set_name(TString(familySetting.Value().Cast<TCoAtom>().Value()));
-                                } else if (name == "data") {
+                                } else if (name == "data") { 
                                     auto data = TString(
                                                 familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>()
                                                     .Value());
                                     f->mutable_data()->set_media(data);
-                                } else if (name == "compression") {
+                                } else if (name == "compression") { 
                                     auto comp = TString(
-                                        familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>()
-                                            .Value()
-                                    );
+                                        familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>() 
+                                            .Value() 
+                                    ); 
                                     if (to_lower(comp) == "off") {
                                         f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
                                     } else if (to_lower(comp) == "lz4") {
@@ -626,24 +626,24 @@ public:
                                         return SyncError();
                                     }
 
-                                } else {
-                                    ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
-                                        TStringBuilder() << "Unknown column family setting name: " << name));
-                                    return SyncError();
-                                }
-                            }
-                        }
-                    }
-                } else if (name == "setTableSettings") {
-                    auto listNode = action.Value().Cast<TCoNameValueTupleList>();
-
-                    for (const auto& setting : listNode) {
-                        auto name = setting.Name().Value();
-                        if (name == "compactionPolicy") {
+                                } else { 
+                                    ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()), 
+                                        TStringBuilder() << "Unknown column family setting name: " << name)); 
+                                    return SyncError(); 
+                                } 
+                            } 
+                        } 
+                    } 
+                } else if (name == "setTableSettings") { 
+                    auto listNode = action.Value().Cast<TCoNameValueTupleList>(); 
+ 
+                    for (const auto& setting : listNode) { 
+                        auto name = setting.Name().Value(); 
+                        if (name == "compactionPolicy") { 
                             alterTableRequest.set_set_compaction_policy(TString(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value() 
                             ));
-                        } else if (name == "autoPartitioningBySize") {
+                        } else if (name == "autoPartitioningBySize") { 
                             auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
                             auto val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value()));
                             if (val == "enabled") {
@@ -658,20 +658,20 @@ public:
                                     errText));
                                 return SyncError();
                             }
-                        } else if (name == "partitionSizeMb") {
-                            ui64 value = FromString<ui64>(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                                );
-                            if (value) {
+                        } else if (name == "partitionSizeMb") { 
+                            ui64 value = FromString<ui64>( 
+                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value() 
+                                ); 
+                            if (value) { 
                                 auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
                                 partitioningSettings->set_partition_size_mb(value);
-                            } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                    "Can't set preferred partition size to 0. "
-                                    "To disable auto partitioning by size use 'SET AUTO_PARTITIONING_BY_SIZE DISABLED'"));
-                                return SyncError();
-                            }
-                        } else if (name == "autoPartitioningByLoad") {
+                            } else { 
+                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), 
+                                    "Can't set preferred partition size to 0. " 
+                                    "To disable auto partitioning by size use 'SET AUTO_PARTITIONING_BY_SIZE DISABLED'")); 
+                                return SyncError(); 
+                            } 
+                        } else if (name == "autoPartitioningByLoad") { 
                             auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
                             TString val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value()));
                             if (val == "enabled") {
@@ -686,31 +686,31 @@ public:
                                     errText));
                                 return SyncError();
                             }
-                        } else if (name == "minPartitions") {
-                            ui64 value = FromString<ui64>(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                                );
-                            if (value) {
+                        } else if (name == "minPartitions") { 
+                            ui64 value = FromString<ui64>( 
+                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value() 
+                                ); 
+                            if (value) { 
                                 auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
                                 partitioningSettings->set_min_partitions_count(value);
-                            } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                    "Can't set min partition count to 0"));
-                                return SyncError();
-                            }
-                        } else if (name == "maxPartitions") {
-                            ui64 value = FromString<ui64>(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                                );
-                            if (value) {
+                            } else { 
+                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), 
+                                    "Can't set min partition count to 0")); 
+                                return SyncError(); 
+                            } 
+                        } else if (name == "maxPartitions") { 
+                            ui64 value = FromString<ui64>( 
+                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value() 
+                                ); 
+                            if (value) { 
                                 auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
                                 partitioningSettings->set_max_partitions_count(value);
-                            } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                    "Can't set max partition count to 0"));
-                                return SyncError();
-                            }
-                        } else if (name == "keyBloomFilter") {
+                            } else { 
+                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), 
+                                    "Can't set max partition count to 0")); 
+                                return SyncError(); 
+                            } 
+                        } else if (name == "keyBloomFilter") { 
                             auto val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value()));
                             if (val == "enabled") {
                                 alterTableRequest.set_set_key_bloom_filter(Ydb::FeatureFlag::ENABLED);
@@ -725,10 +725,10 @@ public:
                                 return SyncError();
                             }
 
-                        } else if (name == "readReplicasSettings") {
+                        } else if (name == "readReplicasSettings") { 
                             const auto replicasSettings = TString(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                            );
+                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value() 
+                            ); 
                             Ydb::StatusIds::StatusCode code;
                             TString errText;
                             if (!ConvertReadReplicasSettingsToProto(replicasSettings,
@@ -753,12 +753,12 @@ public:
                             ConvertTtlSettingsToProto(ttlSettings, *alterTableRequest.mutable_set_ttl_settings());
                         } else if (name == "resetTtlSettings") {
                             alterTableRequest.mutable_drop_ttl_settings();
-                        } else {
-                            ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                TStringBuilder() << "Unknown table profile setting: " << name));
-                            return SyncError();
-                        }
-                    }
+                        } else { 
+                            ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), 
+                                TStringBuilder() << "Unknown table profile setting: " << name)); 
+                            return SyncError(); 
+                        } 
+                    } 
                 } else if (name == "addIndex") {
                     auto listNode = action.Value().Cast<TExprList>();
                     auto add_index = alterTableRequest.add_add_indexes();
@@ -811,10 +811,10 @@ public:
                 } else if (name == "dropIndex") {
                     auto nameNode = action.Value().Cast<TCoAtom>();
                     alterTableRequest.add_drop_indexes(TString(nameNode.Value()));
-                } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
-                        TStringBuilder() << "Unknown alter table action: " << name));
-                    return SyncError();
+                } else { 
+                    ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()), 
+                        TStringBuilder() << "Unknown alter table action: " << name)); 
+                    return SyncError(); 
                 }
             }
 
@@ -829,144 +829,144 @@ public:
 
         }
 
-        if (auto maybeCreateUser = TMaybeNode<TKiCreateUser>(input)) {
-            if (!EnsureNotPrepare("CREATE USER", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
-            auto requireStatus = RequireChild(*input, 0);
-            if (requireStatus.Level != TStatus::Ok) {
-                return SyncStatus(requireStatus);
-            }
-
-            auto cluster = TString(maybeCreateUser.Cast().DataSink().Cluster());
-            TCreateUserSettings createUserSettings = ParseCreateUserSettings(maybeCreateUser.Cast());
-
-            auto future = Gateway->CreateUser(cluster, createUserSettings);
-
-            return WrapFuture(future,
-                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
-                Y_UNUSED(res);
-                auto resultNode = ctx.NewWorld(input->Pos());
-                return resultNode;
-            }, "Executing CREATE USER");
-        }
-
-        if (auto maybeAlterUser = TMaybeNode<TKiAlterUser>(input)) {
-            if (!EnsureNotPrepare("ALTER USER", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
-            auto requireStatus = RequireChild(*input, 0);
-            if (requireStatus.Level != TStatus::Ok) {
-                return SyncStatus(requireStatus);
-            }
-
-            auto cluster = TString(maybeAlterUser.Cast().DataSink().Cluster());
-            TAlterUserSettings alterUserSettings = ParseAlterUserSettings(maybeAlterUser.Cast());
-
-            auto future = Gateway->AlterUser(cluster, alterUserSettings);
-
-            return WrapFuture(future,
-                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
-                Y_UNUSED(res);
-                auto resultNode = ctx.NewWorld(input->Pos());
-                return resultNode;
-            }, "Executing ALTER USER");
-        }
-
-        if (auto maybeDropUser = TMaybeNode<TKiDropUser>(input)) {
-            if (!EnsureNotPrepare("DROP USER", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
-            auto requireStatus = RequireChild(*input, 0);
-            if (requireStatus.Level != TStatus::Ok) {
-                return SyncStatus(requireStatus);
-            }
-
-            auto cluster = TString(maybeDropUser.Cast().DataSink().Cluster());
-            TDropUserSettings dropUserSettings = ParseDropUserSettings(maybeDropUser.Cast());
-
-            auto future = Gateway->DropUser(cluster, dropUserSettings);
-
-            return WrapFuture(future,
-                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
-                Y_UNUSED(res);
-                auto resultNode = ctx.NewWorld(input->Pos());
-                return resultNode;
-            }, "Executing DROP USER");
-        }
-
-        if (auto maybeCreateGroup = TMaybeNode<TKiCreateGroup>(input)) {
-            if (!EnsureNotPrepare("CREATE GROUP", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
-            auto requireStatus = RequireChild(*input, 0);
-            if (requireStatus.Level != TStatus::Ok) {
-                return SyncStatus(requireStatus);
-            }
-
-            auto cluster = TString(maybeCreateGroup.Cast().DataSink().Cluster());
-            TCreateGroupSettings createGroupSettings = ParseCreateGroupSettings(maybeCreateGroup.Cast());
-
-            auto future = Gateway->CreateGroup(cluster, createGroupSettings);
-
-            return WrapFuture(future,
-                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
-                Y_UNUSED(res);
-                auto resultNode = ctx.NewWorld(input->Pos());
-                return resultNode;
-            }, "Executing CREATE GROUP");
-        }
-
-        if (auto maybeAlterGroup = TMaybeNode<TKiAlterGroup>(input)) {
-            if (!EnsureNotPrepare("ALTER GROUP", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
-            auto requireStatus = RequireChild(*input, 0);
-            if (requireStatus.Level != TStatus::Ok) {
-                return SyncStatus(requireStatus);
-            }
-
-            auto cluster = TString(maybeAlterGroup.Cast().DataSink().Cluster());
-            TAlterGroupSettings alterGroupSettings = ParseAlterGroupSettings(maybeAlterGroup.Cast());
-
-            auto future = Gateway->AlterGroup(cluster, alterGroupSettings);
-
-            return WrapFuture(future,
-                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
-                Y_UNUSED(res);
-                auto resultNode = ctx.NewWorld(input->Pos());
-                return resultNode;
-            }, "Executing ALTER GROUP");
-        }
-
-        if (auto maybeDropGroup = TMaybeNode<TKiDropGroup>(input)) {
-            if (!EnsureNotPrepare("DROP GROUP", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
-            auto requireStatus = RequireChild(*input, 0);
-            if (requireStatus.Level != TStatus::Ok) {
-                return SyncStatus(requireStatus);
-            }
-
-            auto cluster = TString(maybeDropGroup.Cast().DataSink().Cluster());
-            TDropGroupSettings dropGroupSettings = ParseDropGroupSettings(maybeDropGroup.Cast());
-
-            auto future = Gateway->DropGroup(cluster, dropGroupSettings);
-
-            return WrapFuture(future,
-                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
-                Y_UNUSED(res);
-                auto resultNode = ctx.NewWorld(input->Pos());
-                return resultNode;
-            }, "Executing DROP GROUP");
-        }
-
+        if (auto maybeCreateUser = TMaybeNode<TKiCreateUser>(input)) { 
+            if (!EnsureNotPrepare("CREATE USER", input->Pos(), SessionCtx->Query(), ctx)) { 
+                return SyncError(); 
+            } 
+ 
+            auto requireStatus = RequireChild(*input, 0); 
+            if (requireStatus.Level != TStatus::Ok) { 
+                return SyncStatus(requireStatus); 
+            } 
+ 
+            auto cluster = TString(maybeCreateUser.Cast().DataSink().Cluster()); 
+            TCreateUserSettings createUserSettings = ParseCreateUserSettings(maybeCreateUser.Cast()); 
+ 
+            auto future = Gateway->CreateUser(cluster, createUserSettings); 
+ 
+            return WrapFuture(future, 
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) { 
+                Y_UNUSED(res); 
+                auto resultNode = ctx.NewWorld(input->Pos()); 
+                return resultNode; 
+            }, "Executing CREATE USER"); 
+        } 
+ 
+        if (auto maybeAlterUser = TMaybeNode<TKiAlterUser>(input)) { 
+            if (!EnsureNotPrepare("ALTER USER", input->Pos(), SessionCtx->Query(), ctx)) { 
+                return SyncError(); 
+            } 
+ 
+            auto requireStatus = RequireChild(*input, 0); 
+            if (requireStatus.Level != TStatus::Ok) { 
+                return SyncStatus(requireStatus); 
+            } 
+ 
+            auto cluster = TString(maybeAlterUser.Cast().DataSink().Cluster()); 
+            TAlterUserSettings alterUserSettings = ParseAlterUserSettings(maybeAlterUser.Cast()); 
+ 
+            auto future = Gateway->AlterUser(cluster, alterUserSettings); 
+ 
+            return WrapFuture(future, 
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) { 
+                Y_UNUSED(res); 
+                auto resultNode = ctx.NewWorld(input->Pos()); 
+                return resultNode; 
+            }, "Executing ALTER USER"); 
+        } 
+ 
+        if (auto maybeDropUser = TMaybeNode<TKiDropUser>(input)) { 
+            if (!EnsureNotPrepare("DROP USER", input->Pos(), SessionCtx->Query(), ctx)) { 
+                return SyncError(); 
+            } 
+ 
+            auto requireStatus = RequireChild(*input, 0); 
+            if (requireStatus.Level != TStatus::Ok) { 
+                return SyncStatus(requireStatus); 
+            } 
+ 
+            auto cluster = TString(maybeDropUser.Cast().DataSink().Cluster()); 
+            TDropUserSettings dropUserSettings = ParseDropUserSettings(maybeDropUser.Cast()); 
+ 
+            auto future = Gateway->DropUser(cluster, dropUserSettings); 
+ 
+            return WrapFuture(future, 
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) { 
+                Y_UNUSED(res); 
+                auto resultNode = ctx.NewWorld(input->Pos()); 
+                return resultNode; 
+            }, "Executing DROP USER"); 
+        } 
+ 
+        if (auto maybeCreateGroup = TMaybeNode<TKiCreateGroup>(input)) { 
+            if (!EnsureNotPrepare("CREATE GROUP", input->Pos(), SessionCtx->Query(), ctx)) { 
+                return SyncError(); 
+            } 
+ 
+            auto requireStatus = RequireChild(*input, 0); 
+            if (requireStatus.Level != TStatus::Ok) { 
+                return SyncStatus(requireStatus); 
+            } 
+ 
+            auto cluster = TString(maybeCreateGroup.Cast().DataSink().Cluster()); 
+            TCreateGroupSettings createGroupSettings = ParseCreateGroupSettings(maybeCreateGroup.Cast()); 
+ 
+            auto future = Gateway->CreateGroup(cluster, createGroupSettings); 
+ 
+            return WrapFuture(future, 
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) { 
+                Y_UNUSED(res); 
+                auto resultNode = ctx.NewWorld(input->Pos()); 
+                return resultNode; 
+            }, "Executing CREATE GROUP"); 
+        } 
+ 
+        if (auto maybeAlterGroup = TMaybeNode<TKiAlterGroup>(input)) { 
+            if (!EnsureNotPrepare("ALTER GROUP", input->Pos(), SessionCtx->Query(), ctx)) { 
+                return SyncError(); 
+            } 
+ 
+            auto requireStatus = RequireChild(*input, 0); 
+            if (requireStatus.Level != TStatus::Ok) { 
+                return SyncStatus(requireStatus); 
+            } 
+ 
+            auto cluster = TString(maybeAlterGroup.Cast().DataSink().Cluster()); 
+            TAlterGroupSettings alterGroupSettings = ParseAlterGroupSettings(maybeAlterGroup.Cast()); 
+ 
+            auto future = Gateway->AlterGroup(cluster, alterGroupSettings); 
+ 
+            return WrapFuture(future, 
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) { 
+                Y_UNUSED(res); 
+                auto resultNode = ctx.NewWorld(input->Pos()); 
+                return resultNode; 
+            }, "Executing ALTER GROUP"); 
+        } 
+ 
+        if (auto maybeDropGroup = TMaybeNode<TKiDropGroup>(input)) { 
+            if (!EnsureNotPrepare("DROP GROUP", input->Pos(), SessionCtx->Query(), ctx)) { 
+                return SyncError(); 
+            } 
+ 
+            auto requireStatus = RequireChild(*input, 0); 
+            if (requireStatus.Level != TStatus::Ok) { 
+                return SyncStatus(requireStatus); 
+            } 
+ 
+            auto cluster = TString(maybeDropGroup.Cast().DataSink().Cluster()); 
+            TDropGroupSettings dropGroupSettings = ParseDropGroupSettings(maybeDropGroup.Cast()); 
+ 
+            auto future = Gateway->DropGroup(cluster, dropGroupSettings); 
+ 
+            return WrapFuture(future, 
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) { 
+                Y_UNUSED(res); 
+                auto resultNode = ctx.NewWorld(input->Pos()); 
+                return resultNode; 
+            }, "Executing DROP GROUP"); 
+        } 
+ 
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
             << "(Kikimr DataSink) Failed to execute node: " << input->Content()));
         return SyncError();
@@ -1116,7 +1116,7 @@ private:
     }
 
     bool ApplyDdlOperation(const TString& cluster, TPositionHandle pos, const TString& table,
-        TYdbOperation op, TExprContext& ctx)
+        TYdbOperation op, TExprContext& ctx) 
     {
         YQL_ENSURE(op & KikimrSchemeOps());
 

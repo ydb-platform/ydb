@@ -301,40 +301,40 @@ message TEvSystemStateResponse {
     optional uint32 ResponseDuration = 3; // filled during collect
 }
 
-message TEvTabletLookupRequest {
-}
-
-message TEvTabletLookupResponse {
-    repeated uint64 TabletIDs = 1;
-}
-
-message TEvTraceLookupRequest {
-    optional uint64 TabletID = 1;
-}
-
-message TEvTraceLookupResponse {
-    repeated NKikimrTracing.TTraceID TraceIDs = 1;
-}
-
-message TEvTraceRequest {
-    optional uint64 TabletID = 1;
-    optional NKikimrTracing.TTraceID TraceID = 2;
-    optional uint32 Mode = 3;
-    optional uint32 Precision = 4;
-}
-
-message TEvTraceResponse {
-    optional string Trace = 1;
-}
-
-message TEvSignalBodyRequest {
-    optional uint64 TabletID = 1;
-    optional NKikimrTracing.TTraceID TraceID = 2;
-    optional uint32 Mode = 3;
-    optional uint32 Precision = 4;
-    optional string SignalID = 5;
-}
-
-message TEvSignalBodyResponse {
-    optional string SignalBody = 1;
-}
+message TEvTabletLookupRequest { 
+} 
+ 
+message TEvTabletLookupResponse { 
+    repeated uint64 TabletIDs = 1; 
+} 
+ 
+message TEvTraceLookupRequest { 
+    optional uint64 TabletID = 1; 
+} 
+ 
+message TEvTraceLookupResponse { 
+    repeated NKikimrTracing.TTraceID TraceIDs = 1; 
+} 
+ 
+message TEvTraceRequest { 
+    optional uint64 TabletID = 1; 
+    optional NKikimrTracing.TTraceID TraceID = 2; 
+    optional uint32 Mode = 3; 
+    optional uint32 Precision = 4; 
+} 
+ 
+message TEvTraceResponse { 
+    optional string Trace = 1; 
+} 
+ 
+message TEvSignalBodyRequest { 
+    optional uint64 TabletID = 1; 
+    optional NKikimrTracing.TTraceID TraceID = 2; 
+    optional uint32 Mode = 3; 
+    optional uint32 Precision = 4; 
+    optional string SignalID = 5; 
+} 
+ 
+message TEvSignalBodyResponse { 
+    optional string SignalBody = 1; 
+} 

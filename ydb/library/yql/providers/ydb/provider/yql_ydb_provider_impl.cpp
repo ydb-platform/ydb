@@ -28,18 +28,18 @@ bool TYdbKey::Extract(const TExprNode& key, TExprContext& ctx) {
             return false;
         }
 
-        Target = nameNode->Head().Content();
+        Target = nameNode->Head().Content(); 
     } else if (tagName == "tablescheme") {
         KeyType = Type::TableScheme;
-        Target = key.Head().Child(1)->Head().Content();
+        Target = key.Head().Child(1)->Head().Content(); 
     } else if (tagName == "tablelist") {
         KeyType = Type::TableList;
-        Target = key.Head().Child(1)->Head().Content();
-    } else if (tagName == "role") {
-        KeyType = Type::Role;
-        Target = key.Head().Child(1)->Head().Content();
+        Target = key.Head().Child(1)->Head().Content(); 
+    } else if (tagName == "role") { 
+        KeyType = Type::Role; 
+        Target = key.Head().Child(1)->Head().Content(); 
     } else {
-        ctx.AddError(TIssue(ctx.GetPosition(key.Head().Pos()), TString("Unexpected tag for YDB key: ") += tagName));
+        ctx.AddError(TIssue(ctx.GetPosition(key.Head().Pos()), TString("Unexpected tag for YDB key: ") += tagName)); 
         return false;
     }
 
@@ -63,7 +63,7 @@ bool TYdbKey::Extract(const TExprNode& key, TExprContext& ctx) {
                 View = viewNode->Head().Content();
 
             } else {
-                ctx.AddError(TIssue(ctx.GetPosition(tag.Pos()), TString("Unexpected tag for YDB key child: ") += tag.Content()));
+                ctx.AddError(TIssue(ctx.GetPosition(tag.Pos()), TString("Unexpected tag for YDB key child: ") += tag.Content())); 
                 return false;
             }
         }

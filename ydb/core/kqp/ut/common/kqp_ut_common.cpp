@@ -114,7 +114,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
     Server->EnableGRpc(grpcPort);
-    Server->SetupDefaultProfiles();
+    Server->SetupDefaultProfiles(); 
 
     Client.Reset(MakeHolder<Tests::TClient>(*ServerSettings));
 
@@ -348,29 +348,29 @@ void TKikimrRunner::CreateSampleTables() {
             ("kikimr-db", 3, "kikimr-db-21", "Stream Read Data"),
             ("kikimr-db", 4, "kikimr-db-53", "Discover"),
             ("ydb", 0, "ydb-1000", "some very very very very long string");
-
+ 
         REPLACE INTO `Join1` (Key, Fk21, Fk22, Value) VALUES
-            (1, 101, "One", "Value1"),
-            (2, 102, "Two", "Value1"),
-            (3, 103, "One", "Value2"),
-            (4, 104, "Two", "Value2"),
-            (5, 105, "One", "Value3"),
-            (6, 106, "Two", "Value3"),
-            (7, 107, "One", "Value4"),
+            (1, 101, "One", "Value1"), 
+            (2, 102, "Two", "Value1"), 
+            (3, 103, "One", "Value2"), 
+            (4, 104, "Two", "Value2"), 
+            (5, 105, "One", "Value3"), 
+            (6, 106, "Two", "Value3"), 
+            (7, 107, "One", "Value4"), 
             (8, 108, "One", "Value5"),
             (9, 101, "Two", "Value1");
-
+ 
         REPLACE INTO `Join2` (Key1, Key2, Name, Value2) VALUES
-            (101, "One",   "Name1", "Value21"),
-            (101, "Two",   "Name1", "Value22"),
-            (101, "Three", "Name3", "Value23"),
-            (102, "One",   "Name2", "Value24"),
-            (103, "One",   "Name1", "Value25"),
-            (104, "One",   "Name3", "Value26"),
-            (105, "One",   "Name2", "Value27"),
-            (105, "Two",   "Name4", "Value28"),
-            (106, "One",   "Name3", "Value29"),
-            (108, "One",    NULL,   "Value31");
+            (101, "One",   "Name1", "Value21"), 
+            (101, "Two",   "Name1", "Value22"), 
+            (101, "Three", "Name3", "Value23"), 
+            (102, "One",   "Name2", "Value24"), 
+            (103, "One",   "Name1", "Value25"), 
+            (104, "One",   "Name3", "Value26"), 
+            (105, "One",   "Name2", "Value27"), 
+            (105, "Two",   "Name4", "Value28"), 
+            (106, "One",   "Name3", "Value29"), 
+            (108, "One",    NULL,   "Value31"); 
     )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync());
 
 }
@@ -550,20 +550,20 @@ void FillProfile(NYdb::NExperimental::TStreamPart& streamPart, NYson::TYsonWrite
 }
 
 void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& writer) {
-    auto columns = resultSet.GetColumnsMeta();
-
-    NYdb::TResultSetParser parser(resultSet);
-    while (parser.TryNextRow()) {
-        writer.OnListItem();
-        writer.OnBeginList();
-        for (ui32 i = 0; i < columns.size(); ++i) {
-            writer.OnListItem();
-            FormatValueYson(parser.GetValue(i), writer);
-        }
-        writer.OnEndList();
-    }
-}
-
+    auto columns = resultSet.GetColumnsMeta(); 
+ 
+    NYdb::TResultSetParser parser(resultSet); 
+    while (parser.TryNextRow()) { 
+        writer.OnListItem(); 
+        writer.OnBeginList(); 
+        for (ui32 i = 0; i < columns.size(); ++i) { 
+            writer.OnListItem(); 
+            FormatValueYson(parser.GetValue(i), writer); 
+        } 
+        writer.OnEndList(); 
+    } 
+} 
+ 
 template<typename TIterator>
 TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles) {
     TStringStream out;
@@ -580,8 +580,8 @@ TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles) {
         }
 
         if (streamPart.HasResultSet()) {
-            auto resultSet = streamPart.ExtractResultSet();
-            PrintResultSet(resultSet, writer);
+            auto resultSet = streamPart.ExtractResultSet(); 
+            PrintResultSet(resultSet, writer); 
         }
 
         FillProfile(streamPart, writer, profiles, profileIndex);
@@ -601,43 +601,43 @@ TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it) {
     return StreamResultToYsonImpl(it, nullptr);
 }
 
-TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it) {
-    TStringStream out;
+TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it) { 
+    TStringStream out; 
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
-    writer.OnBeginList();
-
-    ui32 currentIndex = 0;
-    writer.OnListItem();
-    writer.OnBeginList();
-
-    for (;;) {
-        auto streamPart = it.ReadNext().GetValueSync();
-        if (!streamPart.IsSuccess()) {
-            UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
-            break;
-        }
-
-        if (streamPart.HasPartialResult()) {
-            const auto& partialResult = streamPart.GetPartialResult();
-
-            ui32 resultSetIndex = partialResult.GetResultSetIndex();
-            if (currentIndex != resultSetIndex) {
-                currentIndex = resultSetIndex;
-                writer.OnEndList();
-                writer.OnListItem();
-                writer.OnBeginList();
-            }
-
-            PrintResultSet(partialResult.GetResultSet(), writer);
-        }
-    }
-
-    writer.OnEndList();
-    writer.OnEndList();
-
-    return out.Str();
-}
-
+    writer.OnBeginList(); 
+ 
+    ui32 currentIndex = 0; 
+    writer.OnListItem(); 
+    writer.OnBeginList(); 
+ 
+    for (;;) { 
+        auto streamPart = it.ReadNext().GetValueSync(); 
+        if (!streamPart.IsSuccess()) { 
+            UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString()); 
+            break; 
+        } 
+ 
+        if (streamPart.HasPartialResult()) { 
+            const auto& partialResult = streamPart.GetPartialResult(); 
+ 
+            ui32 resultSetIndex = partialResult.GetResultSetIndex(); 
+            if (currentIndex != resultSetIndex) { 
+                currentIndex = resultSetIndex; 
+                writer.OnEndList(); 
+                writer.OnListItem(); 
+                writer.OnBeginList(); 
+            } 
+ 
+            PrintResultSet(partialResult.GetResultSet(), writer); 
+        } 
+    } 
+ 
+    writer.OnEndList(); 
+    writer.OnEndList(); 
+ 
+    return out.Str(); 
+} 
+ 
 template<typename TIterator>
 TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
     TCollectedStreamResult res;
@@ -659,8 +659,8 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
         }
 
         if (streamPart.HasResultSet()) {
-            auto resultSet = streamPart.ExtractResultSet();
-            PrintResultSet(resultSet, resultSetWriter);
+            auto resultSet = streamPart.ExtractResultSet(); 
+            PrintResultSet(resultSet, resultSetWriter); 
         }
 
         if constexpr (std::is_same_v<TIterator, NYdb::NTable::TScanQueryPartIterator>) {

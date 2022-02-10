@@ -24,7 +24,7 @@ class TProtoAccessor;
 namespace NScripting {
 
 class TScriptingClient;
-class TYqlResultPartIterator;
+class TYqlResultPartIterator; 
 
 } // namespace NScripting
 
@@ -40,7 +40,7 @@ class TQueryStats {
     friend class TTableClient;
     friend class NYdb::TProtoAccessor;
     friend class NYdb::NScripting::TScriptingClient;
-    friend class NYdb::NScripting::TYqlResultPartIterator;
+    friend class NYdb::NScripting::TYqlResultPartIterator; 
     friend class TScanQueryPartIterator;
 
 public:

@@ -37,25 +37,25 @@ const TVector<TEndpointInfo>& TListEndpointsResult::GetEndpointsInfo() const {
     return Info_;
 }
 
-TWhoAmIResult::TWhoAmIResult(TStatus&& status, const Ydb::Discovery::WhoAmIResult& proto)
-    : TStatus(std::move(status))
-{
-    UserName_ = proto.user();
-    const auto& groups = proto.groups();
-    Groups_.reserve(groups.size());
-    for (const auto& group : groups) {
-        Groups_.emplace_back(group);
-    }
-}
-
-const TString& TWhoAmIResult::GetUserName() const {
-    return UserName_;
-}
-
-const TVector<TString>& TWhoAmIResult::GetGroups() const {
-    return Groups_;
-}
-
+TWhoAmIResult::TWhoAmIResult(TStatus&& status, const Ydb::Discovery::WhoAmIResult& proto) 
+    : TStatus(std::move(status)) 
+{ 
+    UserName_ = proto.user(); 
+    const auto& groups = proto.groups(); 
+    Groups_.reserve(groups.size()); 
+    for (const auto& group : groups) { 
+        Groups_.emplace_back(group); 
+    } 
+} 
+ 
+const TString& TWhoAmIResult::GetUserName() const { 
+    return UserName_; 
+} 
+ 
+const TVector<TString>& TWhoAmIResult::GetGroups() const { 
+    return Groups_; 
+} 
+ 
 class TDiscoveryClient::TImpl : public TClientImplCommon<TDiscoveryClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
@@ -89,36 +89,36 @@ public:
 
         return promise.GetFuture();
     }
-
-    TAsyncWhoAmIResult WhoAmI(const TWhoAmISettings& settings) {
-        Ydb::Discovery::WhoAmIRequest request;
-        if (settings.WithGroups_) {
-            request.set_include_groups(true);
-        }
-
-        auto promise = NThreading::NewPromise<TWhoAmIResult>();
-
+ 
+    TAsyncWhoAmIResult WhoAmI(const TWhoAmISettings& settings) { 
+        Ydb::Discovery::WhoAmIRequest request; 
+        if (settings.WithGroups_) { 
+            request.set_include_groups(true); 
+        } 
+ 
+        auto promise = NThreading::NewPromise<TWhoAmIResult>(); 
+ 
         auto extractor = [promise]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
-            Ydb::Discovery::WhoAmIResult result;
-            if (any) {
-                any->UnpackTo(&result);
-            }
+            Ydb::Discovery::WhoAmIResult result; 
+            if (any) { 
+                any->UnpackTo(&result); 
+            } 
             TWhoAmIResult val{ TStatus(std::move(status)), result };
-            promise.SetValue(std::move(val));
-        };
-
-        Connections_->RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::WhoAmIRequest, Ydb::Discovery::WhoAmIResponse>(
-            std::move(request),
-            extractor,
-            &Ydb::Discovery::V1::DiscoveryService::Stub::AsyncWhoAmI,
-            DbDriverState_,
+            promise.SetValue(std::move(val)); 
+        }; 
+ 
+        Connections_->RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::WhoAmIRequest, Ydb::Discovery::WhoAmIResponse>( 
+            std::move(request), 
+            extractor, 
+            &Ydb::Discovery::V1::DiscoveryService::Stub::AsyncWhoAmI, 
+            DbDriverState_, 
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
-
-        return promise.GetFuture();
-    }
+            settings.ClientTimeout_); 
+ 
+        return promise.GetFuture(); 
+    } 
 };
 
 TDiscoveryClient::TDiscoveryClient(const TDriver& driver, const TCommonClientSettings& settings)
@@ -129,9 +129,9 @@ TAsyncListEndpointsResult TDiscoveryClient::ListEndpoints(const TListEndpointsSe
     return Impl_->ListEndpoints(settings);
 }
 
-TAsyncWhoAmIResult TDiscoveryClient::WhoAmI(const TWhoAmISettings& settings) {
-    return Impl_->WhoAmI(settings);
-}
-
+TAsyncWhoAmIResult TDiscoveryClient::WhoAmI(const TWhoAmISettings& settings) { 
+    return Impl_->WhoAmI(settings); 
+} 
+ 
 } // namespace NDiscovery
 } // namespace NYdb

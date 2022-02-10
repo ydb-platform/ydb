@@ -25,7 +25,7 @@ private:
             return TStatus::Error;
         }
 
-        return HandleKey(cluster, key);
+        return HandleKey(cluster, key); 
     }
 
     TStatus HandleRead(TExprBase node, TExprContext& ctx) override {
@@ -35,7 +35,7 @@ private:
             return TStatus::Error;
         }
 
-        return HandleKey(cluster, key);
+        return HandleKey(cluster, key); 
     }
 
     TStatus HandleLength(TExprBase node, TExprContext& ctx) override {
@@ -51,7 +51,7 @@ private:
     }
 
 private:
-    TStatus HandleKey(const TStringBuf& cluster, const TKikimrKey& key) {
+    TStatus HandleKey(const TStringBuf& cluster, const TKikimrKey& key) { 
         switch (key.GetKeyType()) {
             case TKikimrKey::Type::Table:
             case TKikimrKey::Type::TableScheme: {
@@ -66,9 +66,9 @@ private:
 
             case TKikimrKey::Type::TableList:
                 return TStatus::Ok;
-
-            case TKikimrKey::Type::Role:
-                return TStatus::Ok;
+ 
+            case TKikimrKey::Type::Role: 
+                return TStatus::Ok; 
         }
 
         return TStatus::Error;
@@ -167,16 +167,16 @@ public:
                 YQL_ENSURE(res.Metadata);
                 tableDesc.Metadata = res.Metadata;
 
-                bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
+                bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled(); 
                 YQL_ENSURE(res.Metadata->Indexes.size() == res.Metadata->SecondaryGlobalIndexMetadata.size());
                 for (const auto& indexMeta : res.Metadata->SecondaryGlobalIndexMetadata) {
                     YQL_ENSURE(indexMeta);
                     auto& desc = SessionCtx->Tables().GetOrAddTable(indexMeta->Cluster, SessionCtx->GetDatabase(), indexMeta->Name);
                     desc.Metadata = indexMeta;
-                    desc.Load(ctx, sysColumnsEnabled);
+                    desc.Load(ctx, sysColumnsEnabled); 
                 }
 
-                if (!tableDesc.Load(ctx, sysColumnsEnabled)) {
+                if (!tableDesc.Load(ctx, sysColumnsEnabled)) { 
                     LoadResults.clear();
                     return TStatus::Error;
                 }
@@ -233,7 +233,7 @@ protected:
                     break;
 
                 case EKikimrQueryType::YqlScript:
-                case EKikimrQueryType::YqlScriptStreaming:
+                case EKikimrQueryType::YqlScriptStreaming: 
                     pragmaAllowed = AllowedScriptingPragmas.contains(name);
                     break;
 

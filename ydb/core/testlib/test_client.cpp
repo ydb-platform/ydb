@@ -423,60 +423,60 @@ namespace Tests {
         UNIT_ASSERT(configureResponse->Record.GetResponse().GetSuccess());
     }
 
-    void TServer::SetupDefaultProfiles() {
-        NKikimr::Tests::TClient client(*Settings);
-        TAutoPtr<NMsgBusProxy::TBusConsoleRequest> request(new NMsgBusProxy::TBusConsoleRequest());
-        auto &item = *request->Record.MutableConfigureRequest()->AddActions()->MutableAddConfigItem()->MutableConfigItem();
-        item.SetKind((ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem);
-        auto &profiles = *item.MutableConfig()->MutableTableProfilesConfig();
-        {
-            // Storage policy:
-            auto& policy = *profiles.AddStoragePolicies();
-            policy.SetName("default");
-            auto& family = *policy.AddColumnFamilies();
-            family.SetId(0);
-            family.MutableStorageConfig()->MutableSysLog()->SetPreferredPoolKind("test");
-            family.MutableStorageConfig()->MutableLog()->SetPreferredPoolKind("test");
-            family.MutableStorageConfig()->MutableData()->SetPreferredPoolKind("test");
-        }
-        {
-            // Compaction policy:
-            NLocalDb::TCompactionPolicyPtr defaultPolicy = NLocalDb::CreateDefaultUserTablePolicy();
+    void TServer::SetupDefaultProfiles() { 
+        NKikimr::Tests::TClient client(*Settings); 
+        TAutoPtr<NMsgBusProxy::TBusConsoleRequest> request(new NMsgBusProxy::TBusConsoleRequest()); 
+        auto &item = *request->Record.MutableConfigureRequest()->AddActions()->MutableAddConfigItem()->MutableConfigItem(); 
+        item.SetKind((ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem); 
+        auto &profiles = *item.MutableConfig()->MutableTableProfilesConfig(); 
+        { 
+            // Storage policy: 
+            auto& policy = *profiles.AddStoragePolicies(); 
+            policy.SetName("default"); 
+            auto& family = *policy.AddColumnFamilies(); 
+            family.SetId(0); 
+            family.MutableStorageConfig()->MutableSysLog()->SetPreferredPoolKind("test"); 
+            family.MutableStorageConfig()->MutableLog()->SetPreferredPoolKind("test"); 
+            family.MutableStorageConfig()->MutableData()->SetPreferredPoolKind("test"); 
+        } 
+        { 
+            // Compaction policy: 
+            NLocalDb::TCompactionPolicyPtr defaultPolicy = NLocalDb::CreateDefaultUserTablePolicy(); 
             NKikimrSchemeOp::TCompactionPolicy defaultflatSchemePolicy;
-            defaultPolicy->Serialize(defaultflatSchemePolicy);
-            auto &defaultCompactionPolicy = *profiles.AddCompactionPolicies();
-            defaultCompactionPolicy.SetName("default");
-            defaultCompactionPolicy.MutableCompactionPolicy()->CopyFrom(defaultflatSchemePolicy);
-
-            NLocalDb::TCompactionPolicy policy1;
-            policy1.Generations.push_back({ 0, 8, 8, 128 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true });
+            defaultPolicy->Serialize(defaultflatSchemePolicy); 
+            auto &defaultCompactionPolicy = *profiles.AddCompactionPolicies(); 
+            defaultCompactionPolicy.SetName("default"); 
+            defaultCompactionPolicy.MutableCompactionPolicy()->CopyFrom(defaultflatSchemePolicy); 
+ 
+            NLocalDb::TCompactionPolicy policy1; 
+            policy1.Generations.push_back({ 0, 8, 8, 128 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true }); 
             NKikimrSchemeOp::TCompactionPolicy flatSchemePolicy1;
-            policy1.Serialize(flatSchemePolicy1);
-            auto &compactionPolicy1 = *profiles.AddCompactionPolicies();
-            compactionPolicy1.SetName("compaction1");
-            compactionPolicy1.MutableCompactionPolicy()->CopyFrom(flatSchemePolicy1);
-
-            NLocalDb::TCompactionPolicy policy2;
-            policy2.Generations.push_back({ 0, 8, 8, 128 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true });
-            policy2.Generations.push_back({ 40 * 1024 * 1024, 5, 16, 512 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(2), false });
+            policy1.Serialize(flatSchemePolicy1); 
+            auto &compactionPolicy1 = *profiles.AddCompactionPolicies(); 
+            compactionPolicy1.SetName("compaction1"); 
+            compactionPolicy1.MutableCompactionPolicy()->CopyFrom(flatSchemePolicy1); 
+ 
+            NLocalDb::TCompactionPolicy policy2; 
+            policy2.Generations.push_back({ 0, 8, 8, 128 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true }); 
+            policy2.Generations.push_back({ 40 * 1024 * 1024, 5, 16, 512 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(2), false }); 
             NKikimrSchemeOp::TCompactionPolicy flatSchemePolicy2;
-            policy2.Serialize(flatSchemePolicy2);
-            auto &compactionPolicy2 = *profiles.AddCompactionPolicies();
-            compactionPolicy2.SetName("compaction2");
-            compactionPolicy2.MutableCompactionPolicy()->CopyFrom(flatSchemePolicy2);
-        }
-        {
-            auto& profile = *profiles.AddTableProfiles();
-            profile.SetName("default");
-            profile.SetStoragePolicy("default");
-        }
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus msgStatus = client.SyncCall(request, reply);
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
-        auto resp = dynamic_cast<NMsgBusProxy::TBusConsoleResponse*>(reply.Get())->Record;
-        UNIT_ASSERT_VALUES_EQUAL(resp.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-    }
-
+            policy2.Serialize(flatSchemePolicy2); 
+            auto &compactionPolicy2 = *profiles.AddCompactionPolicies(); 
+            compactionPolicy2.SetName("compaction2"); 
+            compactionPolicy2.MutableCompactionPolicy()->CopyFrom(flatSchemePolicy2); 
+        } 
+        { 
+            auto& profile = *profiles.AddTableProfiles(); 
+            profile.SetName("default"); 
+            profile.SetStoragePolicy("default"); 
+        } 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus msgStatus = client.SyncCall(request, reply); 
+        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK); 
+        auto resp = dynamic_cast<NMsgBusProxy::TBusConsoleResponse*>(reply.Get())->Record; 
+        UNIT_ASSERT_VALUES_EQUAL(resp.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS); 
+    } 
+ 
     void TServer::SetupDomainLocalService(ui32 nodeIdx) {
         SetupLocalService(nodeIdx, Settings->DomainName);
     }

@@ -72,14 +72,14 @@ float TStatus::GetConsumedRu() const {
     return Impl_->Status.ConstInfo.consumed_units();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-TStreamPartStatus::TStreamPartStatus(TStatus&& status)
-    : TStatus(std::move(status))
-{}
-
-bool TStreamPartStatus::EOS() const {
-    return GetStatus() == EStatus::CLIENT_OUT_OF_RANGE;
-}
-
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+TStreamPartStatus::TStreamPartStatus(TStatus&& status) 
+    : TStatus(std::move(status)) 
+{} 
+ 
+bool TStreamPartStatus::EOS() const { 
+    return GetStatus() == EStatus::CLIENT_OUT_OF_RANGE; 
+} 
+ 
 } // namespace NYdb

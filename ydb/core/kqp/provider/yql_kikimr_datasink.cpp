@@ -84,42 +84,42 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "CreateUser is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
-    }
-
-    TStatus HandleAlterUser(TKiAlterUser node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "AlterUser is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
-    }
-
-    TStatus HandleDropUser(TKiDropUser node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "DropUser is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
-    }
-
-    TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "CreateGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
-    }
-
-    TStatus HandleAlterGroup(TKiAlterGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "AlterGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
-    }
-
-    TStatus HandleDropGroup(TKiDropGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "DropGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
-    }
-
+    TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override { 
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
+            << "CreateUser is not yet implemented for intent determination transformer")); 
+        return TStatus::Error; 
+    } 
+ 
+    TStatus HandleAlterUser(TKiAlterUser node, TExprContext& ctx) override { 
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
+            << "AlterUser is not yet implemented for intent determination transformer")); 
+        return TStatus::Error; 
+    } 
+ 
+    TStatus HandleDropUser(TKiDropUser node, TExprContext& ctx) override { 
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
+            << "DropUser is not yet implemented for intent determination transformer")); 
+        return TStatus::Error; 
+    } 
+ 
+    TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override { 
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
+            << "CreateGroup is not yet implemented for intent determination transformer")); 
+        return TStatus::Error; 
+    } 
+ 
+    TStatus HandleAlterGroup(TKiAlterGroup node, TExprContext& ctx) override { 
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
+            << "AlterGroup is not yet implemented for intent determination transformer")); 
+        return TStatus::Error; 
+    } 
+ 
+    TStatus HandleDropGroup(TKiDropGroup node, TExprContext& ctx) override { 
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
+            << "DropGroup is not yet implemented for intent determination transformer")); 
+        return TStatus::Error; 
+    } 
+ 
     TStatus HandleWrite(TExprBase node, TExprContext& ctx) override {
         auto cluster = node.Ref().Child(1)->Child(1)->Content();
         TKikimrKey key(ctx);
@@ -129,8 +129,8 @@ private:
 
         switch (key.GetKeyType()) {
             case TKikimrKey::Type::Table: {
-                NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(
-                    TExprList(node.Ref().ChildPtr(4)), ctx);
+                NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings( 
+                    TExprList(node.Ref().ChildPtr(4)), ctx); 
                 if (!settings.Mode) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                         << "Mode option is required for Kikimr table writes."));
@@ -181,8 +181,8 @@ private:
             }
 
             case TKikimrKey::Type::TableScheme: {
-                NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(
-                    TExprList(node.Ref().ChildPtr(4)), ctx);
+                NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings( 
+                    TExprList(node.Ref().ChildPtr(4)), ctx); 
                 if (!settings.Mode) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                         << "Mode option is required for Kikimr scheme writes."));
@@ -200,9 +200,9 @@ private:
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "alter") {
-                    if (!settings.AlterActions) {
+                    if (!settings.AlterActions) { 
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                            << "No actions provided for alter mode."));
+                            << "No actions provided for alter mode.")); 
                         return TStatus::Error;
                     }
 
@@ -217,9 +217,9 @@ private:
 
             case TKikimrKey::Type::TableList:
                 break;
-
-            case TKikimrKey::Type::Role:
-                return TStatus::Ok;
+ 
+            case TKikimrKey::Type::Role: 
+                return TStatus::Ok; 
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid table key type."));
@@ -428,15 +428,15 @@ public:
             return true;
         }
 
-        if (node.IsCallable(TKiCreateUser::CallableName())
-            || node.IsCallable(TKiAlterUser::CallableName())
-            || node.IsCallable(TKiDropUser::CallableName())
-            || node.IsCallable(TKiCreateGroup::CallableName())
-            || node.IsCallable(TKiAlterGroup::CallableName())
-            || node.IsCallable(TKiDropGroup::CallableName())) {
-            return true;
-        }
-
+        if (node.IsCallable(TKiCreateUser::CallableName()) 
+            || node.IsCallable(TKiAlterUser::CallableName()) 
+            || node.IsCallable(TKiDropUser::CallableName()) 
+            || node.IsCallable(TKiCreateGroup::CallableName()) 
+            || node.IsCallable(TKiAlterGroup::CallableName()) 
+            || node.IsCallable(TKiDropGroup::CallableName())) { 
+            return true; 
+        } 
+ 
         if (auto maybeRight = TMaybeNode<TCoNth>(&node).Tuple().Maybe<TCoRight>()) {
             if (maybeRight.Input().Maybe<TKiExecDataQuery>()) {
                 return true;
@@ -480,11 +480,11 @@ public:
         YQL_ENSURE(node->IsCallable(WriteName), "Expected Write!, got: " << node->Content());
 
         TKikimrKey key(ctx);
-        YQL_ENSURE(key.Extract(*node->Child(2)), "Failed to extract ydb key.");
+        YQL_ENSURE(key.Extract(*node->Child(2)), "Failed to extract ydb key."); 
 
         switch (key.GetKeyType()) {
             case TKikimrKey::Type::Table: {
-                NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
+                NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx); 
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
 
@@ -531,22 +531,22 @@ public:
             }
 
             case TKikimrKey::Type::TableScheme: {
-                NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
+                NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx); 
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
                 if (mode == "create") {
-                    YQL_ENSURE(settings.Columns);
-                    YQL_ENSURE(!settings.Columns.Cast().Empty());
+                    YQL_ENSURE(settings.Columns); 
+                    YQL_ENSURE(!settings.Columns.Cast().Empty()); 
 
                     if (!settings.PrimaryKey) {
                         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Primary key is required for ydb tables."));
                         return nullptr;
                     }
 
-                    if (!settings.PartitionBy.IsValid()) {
-                        settings.PartitionBy = Build<TCoAtomList>(ctx, node->Pos()).Done();
-                    }
-
+                    if (!settings.PartitionBy.IsValid()) { 
+                        settings.PartitionBy = Build<TCoAtomList>(ctx, node->Pos()).Done(); 
+                    } 
+ 
                     return Build<TKiCreateTable>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
@@ -556,95 +556,95 @@ public:
                         .Settings(settings.Other)
                         .Indexes(settings.Indexes.Cast())
                         .Changefeeds(settings.Changefeeds.Cast())
-                        .PartitionBy(settings.PartitionBy.Cast())
-                        .ColumnFamilies(settings.ColumnFamilies.Cast())
-                        .TableSettings(settings.TableSettings.Cast())
+                        .PartitionBy(settings.PartitionBy.Cast()) 
+                        .ColumnFamilies(settings.ColumnFamilies.Cast()) 
+                        .TableSettings(settings.TableSettings.Cast()) 
                         .Done()
                         .Ptr();
                 } else if (mode == "alter") {
                     for (auto setting : settings.Other) {
                         if (setting.Name().Value() == "intent") {
-                            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Old AST format for AlterTable"));
-                            return nullptr;
+                            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Old AST format for AlterTable")); 
+                            return nullptr; 
                         }
                     }
 
-                    YQL_ENSURE(settings.AlterActions);
-                    YQL_ENSURE(!settings.AlterActions.Cast().Empty());
-
+                    YQL_ENSURE(settings.AlterActions); 
+                    YQL_ENSURE(!settings.AlterActions.Cast().Empty()); 
+ 
                     return Build<TKiAlterTable>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
-                        .Actions(settings.AlterActions.Cast())
+                        .Actions(settings.AlterActions.Cast()) 
                         .Done()
                         .Ptr();
                 } else {
-                    YQL_ENSURE(false, "unknown TableScheme mode \"" << TString(mode) << "\"");
+                    YQL_ENSURE(false, "unknown TableScheme mode \"" << TString(mode) << "\""); 
                 }
             }
 
             case TKikimrKey::Type::TableList:
                 break;
-
-            case TKikimrKey::Type::Role: {
-                NCommon::TWriteRoleSettings settings = NCommon::ParseWriteRoleSettings(TExprList(node->Child(4)), ctx);
-                YQL_ENSURE(settings.Mode);
-                auto mode = settings.Mode.Cast();
-
-                if (mode == "createUser") {
-                    return Build<TKiCreateUser>(ctx, node->Pos())
-                        .World(node->Child(0))
-                        .DataSink(node->Child(1))
-                        .UserName().Build(key.GetRoleName())
-                        .Settings(settings.Other)
-                        .Done()
-                        .Ptr();
-                } else if (mode == "alterUser") {
-                    return Build<TKiAlterUser>(ctx, node->Pos())
-                        .World(node->Child(0))
-                        .DataSink(node->Child(1))
-                        .UserName().Build(key.GetRoleName())
-                        .Settings(settings.Other)
-                        .Done()
-                        .Ptr();
-                } else if (mode == "dropUser") {
-                    return Build<TKiDropUser>(ctx, node->Pos())
-                        .World(node->Child(0))
-                        .DataSink(node->Child(1))
-                        .UserName().Build(key.GetRoleName())
-                        .Settings(settings.Other)
-                        .Done()
-                        .Ptr();
-                } else if (mode == "createGroup") {
-                    return Build<TKiCreateGroup>(ctx, node->Pos())
-                        .World(node->Child(0))
-                        .DataSink(node->Child(1))
-                        .GroupName().Build(key.GetRoleName())
-                        .Done()
-                        .Ptr();
-                } else if (mode == "addUsersToGroup" || mode == "dropUsersFromGroup") {
-                    return Build<TKiAlterGroup>(ctx, node->Pos())
-                        .World(node->Child(0))
-                        .DataSink(node->Child(1))
-                        .GroupName().Build(key.GetRoleName())
-                        .Action().Build(mode)
-                        .Roles(settings.Roles.Cast())
-                        .Done()
-                        .Ptr();
-                } else if (mode == "dropGroup") {
-                    return Build<TKiDropGroup>(ctx, node->Pos())
-                        .World(node->Child(0))
-                        .DataSink(node->Child(1))
-                        .GroupName().Build(key.GetRoleName())
-                        .Settings(settings.Other)
-                        .Done()
-                        .Ptr();
-                } else {
-                    YQL_ENSURE(false, "unknown Role mode \"" << TString(mode) << "\"");
-                }
-                break;
-            }
+ 
+            case TKikimrKey::Type::Role: { 
+                NCommon::TWriteRoleSettings settings = NCommon::ParseWriteRoleSettings(TExprList(node->Child(4)), ctx); 
+                YQL_ENSURE(settings.Mode); 
+                auto mode = settings.Mode.Cast(); 
+ 
+                if (mode == "createUser") { 
+                    return Build<TKiCreateUser>(ctx, node->Pos()) 
+                        .World(node->Child(0)) 
+                        .DataSink(node->Child(1)) 
+                        .UserName().Build(key.GetRoleName()) 
+                        .Settings(settings.Other) 
+                        .Done() 
+                        .Ptr(); 
+                } else if (mode == "alterUser") { 
+                    return Build<TKiAlterUser>(ctx, node->Pos()) 
+                        .World(node->Child(0)) 
+                        .DataSink(node->Child(1)) 
+                        .UserName().Build(key.GetRoleName()) 
+                        .Settings(settings.Other) 
+                        .Done() 
+                        .Ptr(); 
+                } else if (mode == "dropUser") { 
+                    return Build<TKiDropUser>(ctx, node->Pos()) 
+                        .World(node->Child(0)) 
+                        .DataSink(node->Child(1)) 
+                        .UserName().Build(key.GetRoleName()) 
+                        .Settings(settings.Other) 
+                        .Done() 
+                        .Ptr(); 
+                } else if (mode == "createGroup") { 
+                    return Build<TKiCreateGroup>(ctx, node->Pos()) 
+                        .World(node->Child(0)) 
+                        .DataSink(node->Child(1)) 
+                        .GroupName().Build(key.GetRoleName()) 
+                        .Done() 
+                        .Ptr(); 
+                } else if (mode == "addUsersToGroup" || mode == "dropUsersFromGroup") { 
+                    return Build<TKiAlterGroup>(ctx, node->Pos()) 
+                        .World(node->Child(0)) 
+                        .DataSink(node->Child(1)) 
+                        .GroupName().Build(key.GetRoleName()) 
+                        .Action().Build(mode) 
+                        .Roles(settings.Roles.Cast()) 
+                        .Done() 
+                        .Ptr(); 
+                } else if (mode == "dropGroup") { 
+                    return Build<TKiDropGroup>(ctx, node->Pos()) 
+                        .World(node->Child(0)) 
+                        .DataSink(node->Child(1)) 
+                        .GroupName().Build(key.GetRoleName()) 
+                        .Settings(settings.Other) 
+                        .Done() 
+                        .Ptr(); 
+                } else { 
+                    YQL_ENSURE(false, "unknown Role mode \"" << TString(mode) << "\""); 
+                } 
+                break; 
+            } 
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Failed to rewrite IO."));
@@ -726,30 +726,30 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleDropTable(node.Cast(), ctx);
     }
 
-    if (auto node = TMaybeNode<TKiCreateUser>(input)) {
-        return HandleCreateUser(node.Cast(), ctx);
-    }
-
-    if (auto node = TMaybeNode<TKiAlterUser>(input)) {
-        return HandleAlterUser(node.Cast(), ctx);
-    }
-
-    if (auto node = TMaybeNode<TKiDropUser>(input)) {
-        return HandleDropUser(node.Cast(), ctx);
-    }
-
-    if (auto node = TMaybeNode<TKiCreateGroup>(input)) {
-        return HandleCreateGroup(node.Cast(), ctx);
-    }
-
-    if (auto node = TMaybeNode<TKiAlterGroup>(input)) {
-        return HandleAlterGroup(node.Cast(), ctx);
-    }
-
-    if (auto node = TMaybeNode<TKiDropGroup>(input)) {
-        return HandleDropGroup(node.Cast(), ctx);
-    }
-
+    if (auto node = TMaybeNode<TKiCreateUser>(input)) { 
+        return HandleCreateUser(node.Cast(), ctx); 
+    } 
+ 
+    if (auto node = TMaybeNode<TKiAlterUser>(input)) { 
+        return HandleAlterUser(node.Cast(), ctx); 
+    } 
+ 
+    if (auto node = TMaybeNode<TKiDropUser>(input)) { 
+        return HandleDropUser(node.Cast(), ctx); 
+    } 
+ 
+    if (auto node = TMaybeNode<TKiCreateGroup>(input)) { 
+        return HandleCreateGroup(node.Cast(), ctx); 
+    } 
+ 
+    if (auto node = TMaybeNode<TKiAlterGroup>(input)) { 
+        return HandleAlterGroup(node.Cast(), ctx); 
+    } 
+ 
+    if (auto node = TMaybeNode<TKiDropGroup>(input)) { 
+        return HandleDropGroup(node.Cast(), ctx); 
+    } 
+ 
     if (input->IsCallable(WriteName)) {
         return HandleWrite(TExprBase(input), ctx);
     }

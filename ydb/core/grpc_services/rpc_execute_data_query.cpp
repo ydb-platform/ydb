@@ -216,7 +216,7 @@ public:
             const auto& issueMessage = kqpResponse.GetQueryIssues();
 
             auto queryResult = TEvExecuteDataQueryRequest::AllocateResult<Ydb::Table::ExecuteQueryResult>(Request_);
-            ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
+            ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult); 
             ConvertQueryStats(kqpResponse, queryResult);
             if (kqpResponse.HasTxMeta()) {
                 queryResult->mutable_tx_meta()->CopyFrom(kqpResponse.GetTxMeta());

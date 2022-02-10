@@ -3,7 +3,7 @@
 import os
 import itertools
 import logging
-import subprocess
+import subprocess 
 import time
 import pprint
 from concurrent import futures
@@ -71,11 +71,11 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
     def stop(self):
         return self
 
-    def restart(self):
-        self._stop()
-        self._start()
-        return self
-
+    def restart(self): 
+        self._stop() 
+        self._start() 
+        return self 
+ 
     def _start(self):
         for inst_set in [self.nodes, self.slots, self.nbs]:
             self._run_on(inst_set, lambda x: x.start())
@@ -233,37 +233,37 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
                     start += 10
 
         return self._slots
-
-    def _run_discovery_command(self, tenant_name):
-        discovery_cmd = [
+ 
+    def _run_discovery_command(self, tenant_name): 
+        discovery_cmd = [ 
             self.__binary_path, '--server', self.nodes[1].host, 'discovery', 'list', '-d', tenant_name
-        ]
-        logger.info('Executing discovery command: %s' % ' '.join(list(discovery_cmd)))
-        ds_result = subprocess.check_output(discovery_cmd)
-        logger.info('Discovery command result: "{}"'.format(ds_result))
-        return ds_result
-
-    def _get_node(self, host, grpc_port):
-        nodes = self._slots if self._slots else self.nodes
-        for node in nodes.values():
-            if node.host == host and str(node.grpc_port) == grpc_port:
-                return node
-        logger.error('Cant find node with host {} and grpc_port {}'.format(host, grpc_port))
-
-    def get_active_tenant_nodes(self, tenant_name):
-        for try_num in range(5):
-            ds_result = self._run_discovery_command(tenant_name)
-            if not len(ds_result) or ds_result[:2] != 'OK':
-                continue
-            lines = ds_result.splitlines()
-            nodes = []
-            for line_num in range(1, len(lines)):
-                # 'grpc://ydb-ru-testing-vla-0000.search.yandex.net:31010 [VLA]'
-                line = lines[line_num]
-                words = line.split(':')
-                host = words[1][2:]
-                port = words[2].split(' ')[0]
-                node = self._get_node(host, port)
-                if node is not None:
-                    nodes.append(node)
-            return nodes
+        ] 
+        logger.info('Executing discovery command: %s' % ' '.join(list(discovery_cmd))) 
+        ds_result = subprocess.check_output(discovery_cmd) 
+        logger.info('Discovery command result: "{}"'.format(ds_result)) 
+        return ds_result 
+ 
+    def _get_node(self, host, grpc_port): 
+        nodes = self._slots if self._slots else self.nodes 
+        for node in nodes.values(): 
+            if node.host == host and str(node.grpc_port) == grpc_port: 
+                return node 
+        logger.error('Cant find node with host {} and grpc_port {}'.format(host, grpc_port)) 
+ 
+    def get_active_tenant_nodes(self, tenant_name): 
+        for try_num in range(5): 
+            ds_result = self._run_discovery_command(tenant_name) 
+            if not len(ds_result) or ds_result[:2] != 'OK': 
+                continue 
+            lines = ds_result.splitlines() 
+            nodes = [] 
+            for line_num in range(1, len(lines)): 
+                # 'grpc://ydb-ru-testing-vla-0000.search.yandex.net:31010 [VLA]' 
+                line = lines[line_num] 
+                words = line.split(':') 
+                host = words[1][2:] 
+                port = words[2].split(' ')[0] 
+                node = self._get_node(host, port) 
+                if node is not None: 
+                    nodes.append(node) 
+            return nodes 

@@ -74,7 +74,7 @@ protected:
     void Handle(TEvBeginTransactionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCommitTransactionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvRollbackTransactionRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvListEndpointsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvListEndpointsRequest::TPtr& ev, const TActorContext& ctx); 
     void Handle(TEvDescribeTenantOptionsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeTableOptionsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCreateCoordinationNode::TPtr& ev, const TActorContext& ctx);
@@ -102,7 +102,7 @@ protected:
     void Handle(TEvImportDataRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBulkUpsertRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvWhoAmIRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvWhoAmIRequest::TPtr& ev, const TActorContext& ctx); 
     void Handle(TEvCreateRateLimiterResource::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvAlterRateLimiterResource::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDropRateLimiterResource::TPtr& ev, const TActorContext& ctx);

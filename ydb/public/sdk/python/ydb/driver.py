@@ -132,7 +132,7 @@ class DriverConfig(object):
         private key should be used.
         :param certificate_chain: The PEM-encoded certificate chain as a byte string\
         to use or or None if no certificate chain should be used.
-        :param grpc_keep_alive_timeout: GRpc KeepAlive timeout, ms
+        :param grpc_keep_alive_timeout: GRpc KeepAlive timeout, ms 
         :param ydb.Tracer tracer: ydb.Tracer instance to trace requests in driver.\
         If tracing aio ScopeManager must be ContextVarsScopeManager
         :param grpc_lb_policy_name: A load balancing policy to be used for discovery channel construction. Default value is `round_round`
@@ -155,7 +155,7 @@ class DriverConfig(object):
         self.root_certificates = root_certificates
         self.certificate_chain = certificate_chain
         self.private_key = private_key
-        self.grpc_keep_alive_timeout = grpc_keep_alive_timeout
+        self.grpc_keep_alive_timeout = grpc_keep_alive_timeout 
         self.table_client_settings = table_client_settings
         self.primary_user_agent = primary_user_agent
         self.tracer = tracer if tracer is not None else ydb.Tracer(None)
@@ -191,11 +191,11 @@ class DriverConfig(object):
             **kwargs
         )
 
-    def set_grpc_keep_alive_timeout(self, timeout):
-        self.grpc_keep_alive_timeout = timeout
-        return self
+    def set_grpc_keep_alive_timeout(self, timeout): 
+        self.grpc_keep_alive_timeout = timeout 
+        return self 
 
-
+ 
 ConnectionParams = DriverConfig
 
 

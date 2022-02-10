@@ -33,7 +33,7 @@ public:
     static const Ydb::Value& GetProto(const TValue& value);
     static const Ydb::ResultSet& GetProto(const TResultSet& resultSet);
     static const Ydb::TableStats::QueryStats& GetProto(const NTable::TQueryStats& queryStats);
-    static const Ydb::Table::DescribeTableResult& GetProto(const NTable::TTableDescription& tableDescription);
+    static const Ydb::Table::DescribeTableResult& GetProto(const NTable::TTableDescription& tableDescription); 
     static const Ydb::PersQueue::V1::DescribeTopicResult& GetProto(const NYdb::NPersQueue::TDescribeTopicResult& topicDescription);
 
     static NTable::TQueryStats FromProto(const Ydb::TableStats::QueryStats& queryStats);

@@ -4003,7 +4003,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["ReplaceMember"] = std::bind(&ExpandReplaceMember, _1, _2);
 
     map["RemovePrefixMembers"] = std::bind(&ExpandRemovePrefixMembers, _1, _2);
-
+ 
     map["FlattenByColumns"] = std::bind(&ExpandFlattenByColumns, _1, _2);
 
     map["AsStruct"] = std::bind(&OptimizeAsStruct, _1, _2);

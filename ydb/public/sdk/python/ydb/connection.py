@@ -186,7 +186,7 @@ def _construct_channel_options(driver_config, endpoint_options=None):
             getattr(driver_config, "grpc_lb_policy_name", "round_robin"),
         ),
     ]
-    if driver_config.grpc_keep_alive_timeout is not None:
+    if driver_config.grpc_keep_alive_timeout is not None: 
         _default_connect_options.extend(
             [
                 ("grpc.keepalive_time_ms", driver_config.grpc_keep_alive_timeout >> 3),

@@ -58,7 +58,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseNewEngine);
     REGISTER_SETTING(*this, UnwrapReadTableValues);
     REGISTER_SETTING(*this, AllowNullCompareInIndex);
-    REGISTER_SETTING(*this, EnableSystemColumns);
+    REGISTER_SETTING(*this, EnableSystemColumns); 
     REGISTER_SETTING(*this, EnableLlvm);
 
     REGISTER_SETTING(*this, OptDisableJoinRewrite);
@@ -111,10 +111,10 @@ bool TKikimrSettings::HasDefaultCluster() const {
     return _DefaultCluster.Get() && !_DefaultCluster.Get().GetRef().empty();
 }
 
-bool TKikimrSettings::SystemColumnsEnabled() const {
-    return GetFlagValue(EnableSystemColumns.Get());
-}
-
+bool TKikimrSettings::SystemColumnsEnabled() const { 
+    return GetFlagValue(EnableSystemColumns.Get()); 
+} 
+ 
 bool TKikimrSettings::SpillingEnabled() const {
     return GetFlagValue(_KqpEnableSpilling.Get());
 }

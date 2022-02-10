@@ -167,7 +167,7 @@ bool CalcKeyColumnsCount(TExprContext& ctx, const TPositionHandle pos, const TSt
 }
 
 TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
-    const TKikimrTablesData& tablesData, bool withSystemColumns)
+    const TKikimrTablesData& tablesData, bool withSystemColumns) 
 {
     const bool readIndex = TKqlReadTableIndex::Match(node.Get());
     if (readIndex && !EnsureArgsCount(*node, 5, ctx)) {
@@ -1027,12 +1027,12 @@ TStatus AnnotateKqpEnsure(const TExprNode::TPtr& node, TExprContext& ctx) {
 } // namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cluster,
-    TIntrusivePtr<TKikimrTablesData> tablesData, TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config)
+    TIntrusivePtr<TKikimrTablesData> tablesData, TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config) 
 {
     TAutoPtr<IGraphTransformer> dqTransformer = CreateDqTypeAnnotationTransformer(typesCtx);
 
     return CreateFunctorTransformer(
-        [cluster, tablesData, dqTransformer, config](const TExprNode::TPtr& input, TExprNode::TPtr& output,
+        [cluster, tablesData, dqTransformer, config](const TExprNode::TPtr& input, TExprNode::TPtr& output, 
             TExprContext& ctx) -> TStatus
         {
             output = input;

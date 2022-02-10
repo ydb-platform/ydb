@@ -457,32 +457,32 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(InvalidationAfterDropCreateTable2MultiStageTxNoEffects) {
         CheckInvalidationAfterDropCreateTable2(true, true);
     }
-
-    Y_UNIT_TEST(CreateTableWithDefaultSettings) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithPartitioningBySize";
-        auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        {
-            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false);
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
-        }
-    }
-
+ 
+    Y_UNIT_TEST(CreateTableWithDefaultSettings) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithPartitioningBySize"; 
+        auto query = TStringBuilder() << R"( 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value String, 
+                PRIMARY KEY (Key) 
+            );)"; 
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        { 
+            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS); 
+            const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings(); 
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false); 
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false); 
+        } 
+    } 
+ 
     void AlterTableSetttings(
             NYdb::NTable::TSession& session, const TString& tableName,
             const THashMap<TString, TString>& settings, bool compat,
@@ -523,37 +523,37 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     void CreateTableWithCompactionPolicy(bool compat) {
-        TKikimrRunner kikimr = TKikimrRunner();
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithCompactionPolicy";
-        auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                COMPACTION_POLICY = "compaction2"
-            );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        {
-            auto describeResult = kikimr.GetTestClient().Ls(tableName);
-            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable()
-                .GetPartitionConfig().GetCompactionPolicy().GetGeneration().size(), 2);
-        }
+        TKikimrRunner kikimr = TKikimrRunner(); 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithCompactionPolicy"; 
+        auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value String, 
+                PRIMARY KEY (Key) 
+            ) 
+            WITH ( 
+                COMPACTION_POLICY = "compaction2" 
+            );)"; 
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        { 
+            auto describeResult = kikimr.GetTestClient().Ls(tableName); 
+            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable() 
+                .GetPartitionConfig().GetCompactionPolicy().GetGeneration().size(), 2); 
+        } 
 
         AlterTableSetttings(session, tableName, {{"COMPACTION_POLICY", "\"default\""}}, compat);
-        {
-            auto describeResult = kikimr.GetTestClient().Ls(tableName);
-            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable()
-                .GetPartitionConfig().GetCompactionPolicy().GetGeneration().size(), 3);
-        }
-    }
-
+        { 
+            auto describeResult = kikimr.GetTestClient().Ls(tableName); 
+            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable() 
+                .GetPartitionConfig().GetCompactionPolicy().GetGeneration().size(), 3); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(CreateTableWithCompactionPolicyUncompat) {
         CreateTableWithCompactionPolicy(false);
     }
@@ -562,123 +562,123 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateTableWithCompactionPolicy(true);
     }
 
-    Y_UNIT_TEST(CreateAndAlterTableWithPartitionBy) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithPartitionBy";
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key1 Uint64,
-                Key2 Uint64,
-                Key3 Uint64,
-                Value String,
-                PRIMARY KEY (Key1, Key2, Key3),
-                PARTITION BY (Key1, Key2, Key3, Value)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "\"Partition by\" contains more columns than primary key does",
-                "Unexpected error message");
-        }
-
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key1 Uint64,
-                Key2 Uint64,
-                Key3 Uint64,
-                Value String,
-                PRIMARY KEY (Key1, Key2, Key3),
-                PARTITION BY (Key1, Key3, Key2)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "\"Partition by\" doesn't match primary key",
-                "Unexpected error message");
-        }
-
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key1 Uint64,
-                Key2 Uint64,
-                Key3 Uint64,
-                Value String,
-                PRIMARY KEY (Key1, Key2, Key3),
-                PARTITION BY (Key1, Key2)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "\"Partition by\" is not supported yet",
-                "Unexpected error message");
-        }
-
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key1 Uint64,
-                Key2 Uint64,
-                Key3 Uint64,
-                Value String,
-                PRIMARY KEY (Key1, Key2, Key3),
-                PARTITION BY (Key1, Key2, Key3)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-    }
-
+    Y_UNIT_TEST(CreateAndAlterTableWithPartitionBy) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithPartitionBy"; 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key1 Uint64, 
+                Key2 Uint64, 
+                Key3 Uint64, 
+                Value String, 
+                PRIMARY KEY (Key1, Key2, Key3), 
+                PARTITION BY (Key1, Key2, Key3, Value) 
+            );)"; 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString()); 
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), 
+                "\"Partition by\" contains more columns than primary key does", 
+                "Unexpected error message"); 
+        } 
+ 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key1 Uint64, 
+                Key2 Uint64, 
+                Key3 Uint64, 
+                Value String, 
+                PRIMARY KEY (Key1, Key2, Key3), 
+                PARTITION BY (Key1, Key3, Key2) 
+            );)"; 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString()); 
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), 
+                "\"Partition by\" doesn't match primary key", 
+                "Unexpected error message"); 
+        } 
+ 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key1 Uint64, 
+                Key2 Uint64, 
+                Key3 Uint64, 
+                Value String, 
+                PRIMARY KEY (Key1, Key2, Key3), 
+                PARTITION BY (Key1, Key2) 
+            );)"; 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString()); 
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), 
+                "\"Partition by\" is not supported yet", 
+                "Unexpected error message"); 
+        } 
+ 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key1 Uint64, 
+                Key2 Uint64, 
+                Key3 Uint64, 
+                Value String, 
+                PRIMARY KEY (Key1, Key2, Key3), 
+                PARTITION BY (Key1, Key2, Key3) 
+            );)"; 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+    } 
+ 
     void CreateAndAlterTableWithPartitioningBySize(bool compat) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithPartitioningBySize";
-        auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                AUTO_PARTITIONING_BY_SIZE = ENABLED
-            );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        {
-            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true);
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 2048);
-        }
-
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithPartitioningBySize"; 
+        auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value String, 
+                PRIMARY KEY (Key) 
+            ) 
+            WITH ( 
+                AUTO_PARTITIONING_BY_SIZE = ENABLED 
+            );)"; 
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        { 
+            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS); 
+            const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings(); 
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true); 
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 1); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 2048); 
+        } 
+ 
         AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_BY_SIZE", "DISABLED"}}, compat);
-        {
-            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false);
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
-        }
-    }
-
+        { 
+            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS); 
+            const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings(); 
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false); 
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(CreateAndAlterTableWithPartitioningBySizeUncompat) {
         CreateAndAlterTableWithPartitioningBySize(false);
     }
@@ -688,65 +688,65 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     void CreateAndAlterTableWithPartitionSize(bool compat) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithPartitionSize";
-        auto queryCreate1 = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                AUTO_PARTITIONING_PARTITION_SIZE_MB = 0
-            );)";
-        auto resultCreate1 = session.ExecuteSchemeQuery(queryCreate1).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resultCreate1.GetStatus(), EStatus::GENERIC_ERROR, resultCreate1.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(resultCreate1.GetIssues().ToString(), "Can't set preferred partition size to 0",
-            "Unexpected error message");
-
-        auto queryCreate2 = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000
-            );)";
-        auto resultCreate2 = session.ExecuteSchemeQuery(queryCreate2).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resultCreate2.GetStatus(), EStatus::SUCCESS, resultCreate2.GetIssues().ToString());
-
-        {
-            auto describeResult = kikimr.GetTestClient().Ls(tableName);
-            size_t sizeToSplit = describeResult->Record.GetPathDescription().GetTable()
-                .GetPartitionConfig().GetPartitioningPolicy().GetSizeToSplit();
-            UNIT_ASSERT_VALUES_EQUAL(sizeToSplit, 1000 * 1024 * 1024);
-        }
-
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithPartitionSize"; 
+        auto queryCreate1 = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value String, 
+                PRIMARY KEY (Key) 
+            ) 
+            WITH ( 
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 0 
+            );)"; 
+        auto resultCreate1 = session.ExecuteSchemeQuery(queryCreate1).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(resultCreate1.GetStatus(), EStatus::GENERIC_ERROR, resultCreate1.GetIssues().ToString()); 
+        UNIT_ASSERT_STRING_CONTAINS_C(resultCreate1.GetIssues().ToString(), "Can't set preferred partition size to 0", 
+            "Unexpected error message"); 
+ 
+        auto queryCreate2 = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value String, 
+                PRIMARY KEY (Key) 
+            ) 
+            WITH ( 
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000 
+            );)"; 
+        auto resultCreate2 = session.ExecuteSchemeQuery(queryCreate2).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(resultCreate2.GetStatus(), EStatus::SUCCESS, resultCreate2.GetIssues().ToString()); 
+ 
+        { 
+            auto describeResult = kikimr.GetTestClient().Ls(tableName); 
+            size_t sizeToSplit = describeResult->Record.GetPathDescription().GetTable() 
+                .GetPartitionConfig().GetPartitioningPolicy().GetSizeToSplit(); 
+            UNIT_ASSERT_VALUES_EQUAL(sizeToSplit, 1000 * 1024 * 1024); 
+        } 
+ 
         AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_PARTITION_SIZE_MB", "0"}}, compat,
             EStatus::GENERIC_ERROR, "Can't set preferred partition size to 0");
-
+ 
         AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_BY_SIZE", "DISABLED"}}, compat);
-        {
-            auto describeResult = kikimr.GetTestClient().Ls(tableName);
-            size_t sizeToSplit = describeResult->Record.GetPathDescription().GetTable()
-                .GetPartitionConfig().GetPartitioningPolicy().GetSizeToSplit();
-            UNIT_ASSERT_VALUES_EQUAL(sizeToSplit, 0);
-        }
-
+        { 
+            auto describeResult = kikimr.GetTestClient().Ls(tableName); 
+            size_t sizeToSplit = describeResult->Record.GetPathDescription().GetTable() 
+                .GetPartitionConfig().GetPartitioningPolicy().GetSizeToSplit(); 
+            UNIT_ASSERT_VALUES_EQUAL(sizeToSplit, 0); 
+        } 
+ 
         AlterTableSetttings(session, tableName, {{"AUTO_PARTITIONING_PARTITION_SIZE_MB", "500"}}, compat);
-        {
-            auto describeResult = kikimr.GetTestClient().Ls(tableName);
-            size_t sizeToSplit = describeResult->Record.GetPathDescription().GetTable()
-                .GetPartitionConfig().GetPartitioningPolicy().GetSizeToSplit();
-            UNIT_ASSERT_VALUES_EQUAL(sizeToSplit, 500 * 1024 * 1024);
-        }
-    }
-
+        { 
+            auto describeResult = kikimr.GetTestClient().Ls(tableName); 
+            size_t sizeToSplit = describeResult->Record.GetPathDescription().GetTable() 
+                .GetPartitionConfig().GetPartitioningPolicy().GetSizeToSplit(); 
+            UNIT_ASSERT_VALUES_EQUAL(sizeToSplit, 500 * 1024 * 1024); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(CreateAndAlterTableWithPartitionSizeUncompat) {
         CreateAndAlterTableWithPartitionSize(false);
     }
@@ -867,26 +867,26 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     void CreateAndAlterTableWithPartitioningByLoad(bool compat) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithPartitioningByLoad";
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                AUTO_PARTITIONING_BY_LOAD = ENABLED
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithPartitioningByLoad"; 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value String, 
+                PRIMARY KEY (Key) 
+            ) 
+            WITH ( 
+                AUTO_PARTITIONING_BY_LOAD = ENABLED 
+            );)"; 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
+        } 
+ 
+        { 
             auto describeResult = kikimr.GetTestClient().Ls(tableName);
             bool enabled = describeResult->Record.GetPathDescription().GetTable()
                     .GetPartitionConfig().GetPartitioningPolicy().GetSplitByLoadSettings().GetEnabled();
@@ -908,8 +908,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     .GetPartitionConfig().GetPartitioningPolicy().GetSplitByLoadSettings().GetEnabled();
             UNIT_ASSERT_VALUES_EQUAL(enabled, true);
         }
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CreateAndAlterTableWithPartitioningByLoadUncompat) {
         CreateAndAlterTableWithPartitioningByLoad(false);
     }
@@ -919,67 +919,67 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     void CreateAndAlterTableWithMinMaxPartitions(bool compat) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithMinMaxPartitions";
-        auto queryCreate1 = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 0,
-                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 100
-            );)";
-        auto resultCreate1 = session.ExecuteSchemeQuery(queryCreate1).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resultCreate1.GetStatus(), EStatus::GENERIC_ERROR, resultCreate1.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(resultCreate1.GetIssues().ToString(), "Can't set min partition count to 0",
-            "Unexpected error message");
-
-        auto queryCreate2 = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10,
-                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 100
-            );)";
-        auto resultCreate2 = session.ExecuteSchemeQuery(queryCreate2).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resultCreate2.GetStatus(), EStatus::SUCCESS, resultCreate2.GetIssues().ToString());
-
-        {
-            auto describeResult = kikimr.GetTestClient().Ls(tableName);
-            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig()
-                .GetPartitioningPolicy().GetMinPartitionsCount(), 10);
-            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig()
-                .GetPartitioningPolicy().GetMaxPartitionsCount(), 100);
-        }
-
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithMinMaxPartitions"; 
+        auto queryCreate1 = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value String, 
+                PRIMARY KEY (Key) 
+            ) 
+            WITH ( 
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 0, 
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 100 
+            );)"; 
+        auto resultCreate1 = session.ExecuteSchemeQuery(queryCreate1).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(resultCreate1.GetStatus(), EStatus::GENERIC_ERROR, resultCreate1.GetIssues().ToString()); 
+        UNIT_ASSERT_STRING_CONTAINS_C(resultCreate1.GetIssues().ToString(), "Can't set min partition count to 0", 
+            "Unexpected error message"); 
+ 
+        auto queryCreate2 = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value String, 
+                PRIMARY KEY (Key) 
+            ) 
+            WITH ( 
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10, 
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 100 
+            );)"; 
+        auto resultCreate2 = session.ExecuteSchemeQuery(queryCreate2).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(resultCreate2.GetStatus(), EStatus::SUCCESS, resultCreate2.GetIssues().ToString()); 
+ 
+        { 
+            auto describeResult = kikimr.GetTestClient().Ls(tableName); 
+            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig() 
+                .GetPartitioningPolicy().GetMinPartitionsCount(), 10); 
+            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig() 
+                .GetPartitioningPolicy().GetMaxPartitionsCount(), 100); 
+        } 
+ 
         AlterTableSetttings(session, tableName, {
             {"AUTO_PARTITIONING_MIN_PARTITIONS_COUNT", "20"},
             {"AUTO_PARTITIONING_MAX_PARTITIONS_COUNT", "0"}
         }, compat, EStatus::GENERIC_ERROR, "Can't set max partition count to 0");
-
+ 
         AlterTableSetttings(session, tableName, {
             {"AUTO_PARTITIONING_MIN_PARTITIONS_COUNT", "20"},
             {"AUTO_PARTITIONING_MAX_PARTITIONS_COUNT", "50"}
         }, compat);
-
-        {
-            auto describeResult = kikimr.GetTestClient().Ls(tableName);
-            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig()
-                .GetPartitioningPolicy().GetMinPartitionsCount(), 20);
-            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig()
-                .GetPartitioningPolicy().GetMaxPartitionsCount(), 50);
-        }
-    }
-
+ 
+        { 
+            auto describeResult = kikimr.GetTestClient().Ls(tableName); 
+            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig() 
+                .GetPartitioningPolicy().GetMinPartitionsCount(), 20); 
+            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig() 
+                .GetPartitioningPolicy().GetMaxPartitionsCount(), 50); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(CreateAndAlterTableWithMinMaxPartitionsUncompat) {
         CreateAndAlterTableWithMinMaxPartitions(false);
     }
@@ -989,44 +989,44 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     void CreateAndAlterTableWithBloomFilter(bool compat) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithBloomFilter";
-        auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                KEY_BLOOM_FILTER = ENABLED
-            );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        {
-            auto describeResult = kikimr.GetTestClient().Ls(tableName);
-            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig()
-                .GetEnableFilterByKey(), true);
-        }
-
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithBloomFilter"; 
+        auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value String, 
+                PRIMARY KEY (Key) 
+            ) 
+            WITH ( 
+                KEY_BLOOM_FILTER = ENABLED 
+            );)"; 
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        { 
+            auto describeResult = kikimr.GetTestClient().Ls(tableName); 
+            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig() 
+                .GetEnableFilterByKey(), true); 
+        } 
+ 
         AlterTableSetttings(session, tableName, {{"KEY_BLOOM_FILTER", "DISABLED"}}, compat);
-        {
-            auto describeResult = kikimr.GetTestClient().Ls(tableName);
-            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig()
-                .GetEnableFilterByKey(), false);
-        }
-
+        { 
+            auto describeResult = kikimr.GetTestClient().Ls(tableName); 
+            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig() 
+                .GetEnableFilterByKey(), false); 
+        } 
+ 
         AlterTableSetttings(session, tableName, {{"KEY_BLOOM_FILTER", "ENABLED"}}, compat);
-        {
-            auto describeResult = kikimr.GetTestClient().Ls(tableName);
-            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig()
-                .GetEnableFilterByKey(), true);
-        }
-    }
-
+        { 
+            auto describeResult = kikimr.GetTestClient().Ls(tableName); 
+            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable().GetPartitionConfig() 
+                .GetEnableFilterByKey(), true); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(CreateAndAlterTableWithBloomFilterUncompat) {
         CreateAndAlterTableWithBloomFilter(false);
     }
@@ -1036,77 +1036,77 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     void CreateTableWithReadReplicas(bool compat) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithReadReplicas";
-        {
-            auto queryCreate = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                READ_REPLICAS_SETTINGS = "SOME_AZ:2"
-            );)";
-            auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultCreate.GetStatus(), EStatus::GENERIC_ERROR, resultCreate.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(resultCreate.GetIssues().ToString(),
-                "Specifying read replicas count for each AZ in cluster is not supported yet",
-                "Unexpected error message");
-        }
-        {
-            auto queryCreate = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                READ_REPLICAS_SETTINGS = "VLA: 2, MAN:1 "
-            );)";
-            auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultCreate.GetStatus(), EStatus::GENERIC_ERROR, resultCreate.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(resultCreate.GetIssues().ToString(),
-                "Specifying read replicas count for each AZ in cluster is not supported yet",
-                "Unexpected error message");
-        }
-        {
-            auto queryCreate = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                READ_REPLICAS_SETTINGS = "any_az:1"
-            );)";
-            auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resultCreate.GetStatus(), EStatus::SUCCESS, resultCreate.GetIssues().ToString());
-        }
-
-        {
-            const auto tableDesc = session.DescribeTable(tableName).GetValueSync().GetTableDescription();
-            const auto readReplicasSettings = tableDesc.GetReadReplicasSettings();
-            UNIT_ASSERT(readReplicasSettings);
-            UNIT_ASSERT(readReplicasSettings->GetMode() == NYdb::NTable::TReadReplicasSettings::EMode::AnyAz);
-            UNIT_ASSERT_VALUES_EQUAL(readReplicasSettings->GetReadReplicasCount(), 1);
-        }
-
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithReadReplicas"; 
+        { 
+            auto queryCreate = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value String, 
+                PRIMARY KEY (Key) 
+            ) 
+            WITH ( 
+                READ_REPLICAS_SETTINGS = "SOME_AZ:2" 
+            );)"; 
+            auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(resultCreate.GetStatus(), EStatus::GENERIC_ERROR, resultCreate.GetIssues().ToString()); 
+            UNIT_ASSERT_STRING_CONTAINS_C(resultCreate.GetIssues().ToString(), 
+                "Specifying read replicas count for each AZ in cluster is not supported yet", 
+                "Unexpected error message"); 
+        } 
+        { 
+            auto queryCreate = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value String, 
+                PRIMARY KEY (Key) 
+            ) 
+            WITH ( 
+                READ_REPLICAS_SETTINGS = "VLA: 2, MAN:1 " 
+            );)"; 
+            auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(resultCreate.GetStatus(), EStatus::GENERIC_ERROR, resultCreate.GetIssues().ToString()); 
+            UNIT_ASSERT_STRING_CONTAINS_C(resultCreate.GetIssues().ToString(), 
+                "Specifying read replicas count for each AZ in cluster is not supported yet", 
+                "Unexpected error message"); 
+        } 
+        { 
+            auto queryCreate = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value String, 
+                PRIMARY KEY (Key) 
+            ) 
+            WITH ( 
+                READ_REPLICAS_SETTINGS = "any_az:1" 
+            );)"; 
+            auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(resultCreate.GetStatus(), EStatus::SUCCESS, resultCreate.GetIssues().ToString()); 
+        } 
+ 
+        { 
+            const auto tableDesc = session.DescribeTable(tableName).GetValueSync().GetTableDescription(); 
+            const auto readReplicasSettings = tableDesc.GetReadReplicasSettings(); 
+            UNIT_ASSERT(readReplicasSettings); 
+            UNIT_ASSERT(readReplicasSettings->GetMode() == NYdb::NTable::TReadReplicasSettings::EMode::AnyAz); 
+            UNIT_ASSERT_VALUES_EQUAL(readReplicasSettings->GetReadReplicasCount(), 1); 
+        } 
+ 
         AlterTableSetttings(session, tableName, {{"READ_REPLICAS_SETTINGS", "\"PER_AZ:2\""}}, compat);
-        {
-            const auto tableDesc = session.DescribeTable(tableName).GetValueSync().GetTableDescription();
-            const auto readReplicasSettings = tableDesc.GetReadReplicasSettings();
-            UNIT_ASSERT(readReplicasSettings);
-            UNIT_ASSERT(readReplicasSettings->GetMode() == NYdb::NTable::TReadReplicasSettings::EMode::PerAz);
-            UNIT_ASSERT_VALUES_EQUAL(readReplicasSettings->GetReadReplicasCount(), 2);
-        }
-    }
-
+        { 
+            const auto tableDesc = session.DescribeTable(tableName).GetValueSync().GetTableDescription(); 
+            const auto readReplicasSettings = tableDesc.GetReadReplicasSettings(); 
+            UNIT_ASSERT(readReplicasSettings); 
+            UNIT_ASSERT(readReplicasSettings->GetMode() == NYdb::NTable::TReadReplicasSettings::EMode::PerAz); 
+            UNIT_ASSERT_VALUES_EQUAL(readReplicasSettings->GetReadReplicasCount(), 2); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(CreateTableWithReadReplicasUncompat) {
         CreateTableWithReadReplicas(false);
     }
@@ -1254,32 +1254,32 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     void CreateTableWithUniformPartitions(bool compat) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithUniformPartitions";
-        auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                UNIFORM_PARTITIONS = 4
-            );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto describeResult = session.DescribeTable(tableName,
-            NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 4);
-
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithUniformPartitions"; 
+        auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value String, 
+                PRIMARY KEY (Key) 
+            ) 
+            WITH ( 
+                UNIFORM_PARTITIONS = 4 
+            );)"; 
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        auto describeResult = session.DescribeTable(tableName, 
+            NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).GetValueSync(); 
+        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString()); 
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 4); 
+ 
         AlterTableSetttings(session, tableName, {{"UNIFORM_PARTITIONS", "8"}}, compat,
             EStatus::GENERIC_ERROR, "UNIFORM_PARTITIONS alter is not supported");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CreateTableWithUniformPartitionsUncompat) {
         CreateTableWithUniformPartitions(false);
     }
@@ -1289,63 +1289,63 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     void CreateTableWithPartitionAtKeysSimple(bool compat) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithPartitionAtKeysSimple";
-        auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key1 Uint64,
-                Key2 String,
-                Value String,
-                PRIMARY KEY (Key1, Key2)
-            )
-            WITH (
-                PARTITION_AT_KEYS = (10, 100, 1000, 10000)
-            );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto describeResult = session.DescribeTable(tableName,
-            TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 5);
-
-        auto extractValue = [](const TValue& val) {
-            auto parser = TValueParser(val);
-            parser.OpenTuple();
-            UNIT_ASSERT(parser.TryNextElement());
-            return parser.GetOptionalUint64().GetRef();
-        };
-
-        const TVector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
-
-        size_t n = 0;
-        const TVector<ui64> expectedRanges = { 10ul, 100ul, 1000ul, 10000ul };
-
-        for (const auto& range : keyRanges) {
-            if (n == 0) {
-                UNIT_ASSERT(!range.From());
-            } else {
-                UNIT_ASSERT(range.From()->IsInclusive());
-                auto left = extractValue(range.From()->GetValue());
-                UNIT_ASSERT_VALUES_EQUAL(left, expectedRanges[n - 1]);
-            }
-            if (n == expectedRanges.size()) {
-                UNIT_ASSERT(!range.To());
-            } else {
-                UNIT_ASSERT(!range.To()->IsInclusive());
-                auto right = extractValue(range.To()->GetValue());
-                UNIT_ASSERT_VALUES_EQUAL(right, expectedRanges[n]);
-            }
-            ++n;
-        }
-
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithPartitionAtKeysSimple"; 
+        auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key1 Uint64, 
+                Key2 String, 
+                Value String, 
+                PRIMARY KEY (Key1, Key2) 
+            ) 
+            WITH ( 
+                PARTITION_AT_KEYS = (10, 100, 1000, 10000) 
+            );)"; 
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        auto describeResult = session.DescribeTable(tableName, 
+            TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)).GetValueSync(); 
+        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString()); 
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 5); 
+ 
+        auto extractValue = [](const TValue& val) { 
+            auto parser = TValueParser(val); 
+            parser.OpenTuple(); 
+            UNIT_ASSERT(parser.TryNextElement()); 
+            return parser.GetOptionalUint64().GetRef(); 
+        }; 
+ 
+        const TVector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges(); 
+ 
+        size_t n = 0; 
+        const TVector<ui64> expectedRanges = { 10ul, 100ul, 1000ul, 10000ul }; 
+ 
+        for (const auto& range : keyRanges) { 
+            if (n == 0) { 
+                UNIT_ASSERT(!range.From()); 
+            } else { 
+                UNIT_ASSERT(range.From()->IsInclusive()); 
+                auto left = extractValue(range.From()->GetValue()); 
+                UNIT_ASSERT_VALUES_EQUAL(left, expectedRanges[n - 1]); 
+            } 
+            if (n == expectedRanges.size()) { 
+                UNIT_ASSERT(!range.To()); 
+            } else { 
+                UNIT_ASSERT(!range.To()->IsInclusive()); 
+                auto right = extractValue(range.To()->GetValue()); 
+                UNIT_ASSERT_VALUES_EQUAL(right, expectedRanges[n]); 
+            } 
+            ++n; 
+        } 
+ 
         AlterTableSetttings(session, tableName, {{"PARTITION_AT_KEYS", "(100, 500, 1000, 10000)"}}, compat,
             EStatus::GENERIC_ERROR, "PARTITION_AT_KEYS alter is not supported");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CreateTableWithPartitionAtKeysSimpleUncompat) {
         CreateTableWithPartitionAtKeysSimple(false);
     }
@@ -1354,254 +1354,254 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateTableWithPartitionAtKeysSimple(true);
     }
 
-    Y_UNIT_TEST(CreateTableWithPartitionAtKeysComplex) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithPartitionAtKeysComplex";
-        auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key1 Uint64,
-                Key2 String,
-                Value String,
-                PRIMARY KEY (Key1, Key2)
-            )
-            WITH (
-                PARTITION_AT_KEYS = ((10), (100, "123"), (1000, "cde"))
-            );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto describeResult = session.DescribeTable(tableName,
-            TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 4);
-
-        auto extractValue = [](const TValue& val) {
-            auto parser = TValueParser(val);
-            parser.OpenTuple();
-            UNIT_ASSERT(parser.TryNextElement());
-            ui64 pk1 = parser.GetOptionalUint64().GetRef();
-            UNIT_ASSERT(parser.TryNextElement());
-            auto pk2 = parser.GetOptionalString();
-            return std::pair<ui64, TMaybe<TString>>(pk1, pk2);
-        };
-
-        const TVector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
-
-        size_t n = 0;
-        const TVector<std::pair<ui64, TString>> expectedRanges = {
-            { 10ul, "" },
-            { 100ul, "123" },
-            { 1000ul, "cde" }
-        };
-
-        for (const auto& range : keyRanges) {
-            if (n == 0) {
-                UNIT_ASSERT(!range.From());
-            } else {
-                UNIT_ASSERT(range.From()->IsInclusive());
-                const auto& [pk1, pk2] = extractValue(range.From()->GetValue());
-                const auto& [expectedPk1, expectedPk2] = expectedRanges[n - 1];
-
-                UNIT_ASSERT_VALUES_EQUAL(pk1, expectedPk1);
-                if (pk2.Defined()) {
-                    UNIT_ASSERT_VALUES_EQUAL(pk2.GetRef(), expectedPk2);
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL("", expectedPk2);
-                }
-            }
-            if (n == expectedRanges.size()) {
-                UNIT_ASSERT(!range.To());
-            } else {
-                UNIT_ASSERT(!range.To()->IsInclusive());
-                const auto&[pk1, pk2] = extractValue(range.To()->GetValue());
-                const auto&[expectedPk1, expectedPk2] = expectedRanges[n];
-
-                UNIT_ASSERT_VALUES_EQUAL(pk1, expectedPk1);
-                if (pk2.Defined()) {
-                    UNIT_ASSERT_VALUES_EQUAL(pk2.GetRef(), expectedPk2);
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL("", expectedPk2);
-                }
-            }
-            ++n;
-        }
-    }
-
-    Y_UNIT_TEST(CreateTableWithWrongPartitionAtKeys) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `/Root/TableWithWrongPartitionAtKeysComplex` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                PARTITION_AT_KEYS = ((10), (100, "123"), (1000, "cde"))
-            );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-            "Partition at keys has 2 key values while there are only 1 key columns", "Unexpected error message");
-    }
-
-    Y_UNIT_TEST(CreateTableWithFamiliesRegular) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithFamiliesRegular";
-        auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value1 String FAMILY Family1,
-                Value2 Uint32 FAMILY Family2,
-                PRIMARY KEY (Key),
-                FAMILY Family1 (
-                     DATA = "test",
-                     COMPRESSION = "off"
-                ),
-                FAMILY Family2
-            );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
-        const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies();
-        UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 3);
-        for (const auto& family : columnFamilies) {
-            if (family.GetName() == "Family1") {
-                UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::None);
-            } else {
-                UNIT_ASSERT(family.GetName() == "default" || family.GetName() == "Family2");
-            }
-        }
-    }
-
-    Y_UNIT_TEST(CreateTableWithDefaultFamily) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithDefaultFamily";
-        auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value1 String FAMILY Family1,
-                Value2 String,
-                PRIMARY KEY (Key),
-                FAMILY default (
-                     DATA = "test",
-                     COMPRESSION = "lz4"
-                ),
-                FAMILY Family1 (
-                     DATA = "test",
-                     COMPRESSION = "off"
-                )
-            );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        {
-            auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
-            const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies();
-            UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 2);
-            for (const auto& family : columnFamilies) {
-                if (family.GetName() == "Family1") {
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::None);
-                } else {
-                    UNIT_ASSERT(family.GetName() == "default");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::LZ4);
-                }
-            }
-        }
-
-        auto queryAlter1 = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(`
-                ADD FAMILY  Family2 (
-                     DATA = "test",
-                     COMPRESSION = "off"
-                ),
-                ADD COLUMN Value3 Uint32 FAMILY Family1,
-                ADD COLUMN Value4 Uint32 FAMILY Family2,
-                DROP COLUMN Value2,
-                ALTER COLUMN Value1 SET FAMILY Family2,
-                ALTER FAMILY Family1 SET COMPRESSION "LZ4";)";
-        auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
-
-        {
-            auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
-            const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies();
-            UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 3);
-            for (const auto& family : columnFamilies) {
-                if (family.GetName() == "Family1") {
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::LZ4);
-                } else if (family.GetName() == "Family2") {
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::None);
-                } else {
-                    UNIT_ASSERT(family.GetName() == "default");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::LZ4);
-                }
-            }
-            const auto& columns = describeResult.GetTableDescription().GetColumns();
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4);
-            for (const auto& column : columns) {
-                UNIT_ASSERT_C(column.Name == "Key" || column.Name == "Value1"
-                    || column.Name == "Value3" || column.Name == "Value4", column.Name);
-            }
-        }
-    }
-
-    Y_UNIT_TEST(CreateAndAlterTableComplex) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `/Root/TableToAlter` (
-                Key Uint64,
-                Value1 String FAMILY Family1,
-                PRIMARY KEY (Key),
-                FAMILY Family1 (
-                     DATA = "test",
-                     COMPRESSION = "off"
-                ),
-                FAMILY Family2 (
-                     DATA = "test",
-                     COMPRESSION = "lz4"
-                )
-            );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto queryAddColumn = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `/Root/TableToAlter` ADD COLUMN Value2 Uint32 FAMILY Family2;)";
-        auto resultAddColumn = session.ExecuteSchemeQuery(queryAddColumn).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resultAddColumn.GetStatus(), EStatus::SUCCESS, resultAddColumn.GetIssues().ToString());
-
-        auto queryDropColumn = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER TABLE `/Root/TableToAlter` DROP COLUMN Value2;)";
-        auto resultDropColumn = session.ExecuteSchemeQuery(queryDropColumn).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resultDropColumn.GetStatus(), EStatus::SUCCESS, resultDropColumn.GetIssues().ToString());
-    }
+    Y_UNIT_TEST(CreateTableWithPartitionAtKeysComplex) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithPartitionAtKeysComplex"; 
+        auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key1 Uint64, 
+                Key2 String, 
+                Value String, 
+                PRIMARY KEY (Key1, Key2) 
+            ) 
+            WITH ( 
+                PARTITION_AT_KEYS = ((10), (100, "123"), (1000, "cde")) 
+            );)"; 
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        auto describeResult = session.DescribeTable(tableName, 
+            TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)).GetValueSync(); 
+        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString()); 
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 4); 
+ 
+        auto extractValue = [](const TValue& val) { 
+            auto parser = TValueParser(val); 
+            parser.OpenTuple(); 
+            UNIT_ASSERT(parser.TryNextElement()); 
+            ui64 pk1 = parser.GetOptionalUint64().GetRef(); 
+            UNIT_ASSERT(parser.TryNextElement()); 
+            auto pk2 = parser.GetOptionalString(); 
+            return std::pair<ui64, TMaybe<TString>>(pk1, pk2); 
+        }; 
+ 
+        const TVector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges(); 
+ 
+        size_t n = 0; 
+        const TVector<std::pair<ui64, TString>> expectedRanges = { 
+            { 10ul, "" }, 
+            { 100ul, "123" }, 
+            { 1000ul, "cde" } 
+        }; 
+ 
+        for (const auto& range : keyRanges) { 
+            if (n == 0) { 
+                UNIT_ASSERT(!range.From()); 
+            } else { 
+                UNIT_ASSERT(range.From()->IsInclusive()); 
+                const auto& [pk1, pk2] = extractValue(range.From()->GetValue()); 
+                const auto& [expectedPk1, expectedPk2] = expectedRanges[n - 1]; 
+ 
+                UNIT_ASSERT_VALUES_EQUAL(pk1, expectedPk1); 
+                if (pk2.Defined()) { 
+                    UNIT_ASSERT_VALUES_EQUAL(pk2.GetRef(), expectedPk2); 
+                } else { 
+                    UNIT_ASSERT_VALUES_EQUAL("", expectedPk2); 
+                } 
+            } 
+            if (n == expectedRanges.size()) { 
+                UNIT_ASSERT(!range.To()); 
+            } else { 
+                UNIT_ASSERT(!range.To()->IsInclusive()); 
+                const auto&[pk1, pk2] = extractValue(range.To()->GetValue()); 
+                const auto&[expectedPk1, expectedPk2] = expectedRanges[n]; 
+ 
+                UNIT_ASSERT_VALUES_EQUAL(pk1, expectedPk1); 
+                if (pk2.Defined()) { 
+                    UNIT_ASSERT_VALUES_EQUAL(pk2.GetRef(), expectedPk2); 
+                } else { 
+                    UNIT_ASSERT_VALUES_EQUAL("", expectedPk2); 
+                } 
+            } 
+            ++n; 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CreateTableWithWrongPartitionAtKeys) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `/Root/TableWithWrongPartitionAtKeysComplex` ( 
+                Key Uint64, 
+                Value String, 
+                PRIMARY KEY (Key) 
+            ) 
+            WITH ( 
+                PARTITION_AT_KEYS = ((10), (100, "123"), (1000, "cde")) 
+            );)"; 
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString()); 
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), 
+            "Partition at keys has 2 key values while there are only 1 key columns", "Unexpected error message"); 
+    } 
+ 
+    Y_UNIT_TEST(CreateTableWithFamiliesRegular) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithFamiliesRegular"; 
+        auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value1 String FAMILY Family1, 
+                Value2 Uint32 FAMILY Family2, 
+                PRIMARY KEY (Key), 
+                FAMILY Family1 ( 
+                     DATA = "test", 
+                     COMPRESSION = "off" 
+                ), 
+                FAMILY Family2 
+            );)"; 
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync(); 
+        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString()); 
+        const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies(); 
+        UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 3); 
+        for (const auto& family : columnFamilies) { 
+            if (family.GetName() == "Family1") { 
+                UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test"); 
+                UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::None); 
+            } else { 
+                UNIT_ASSERT(family.GetName() == "default" || family.GetName() == "Family2"); 
+            } 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CreateTableWithDefaultFamily) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithDefaultFamily"; 
+        auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value1 String FAMILY Family1, 
+                Value2 String, 
+                PRIMARY KEY (Key), 
+                FAMILY default ( 
+                     DATA = "test", 
+                     COMPRESSION = "lz4" 
+                ), 
+                FAMILY Family1 ( 
+                     DATA = "test", 
+                     COMPRESSION = "off" 
+                ) 
+            );)"; 
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        { 
+            auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync(); 
+            UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString()); 
+            const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies(); 
+            UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 2); 
+            for (const auto& family : columnFamilies) { 
+                if (family.GetName() == "Family1") { 
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test"); 
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::None); 
+                } else { 
+                    UNIT_ASSERT(family.GetName() == "default"); 
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test"); 
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::LZ4); 
+                } 
+            } 
+        } 
+ 
+        auto queryAlter1 = TStringBuilder() << R"( 
+            --!syntax_v1 
+            ALTER TABLE `)" << tableName << R"(` 
+                ADD FAMILY  Family2 ( 
+                     DATA = "test", 
+                     COMPRESSION = "off" 
+                ), 
+                ADD COLUMN Value3 Uint32 FAMILY Family1, 
+                ADD COLUMN Value4 Uint32 FAMILY Family2, 
+                DROP COLUMN Value2, 
+                ALTER COLUMN Value1 SET FAMILY Family2, 
+                ALTER FAMILY Family1 SET COMPRESSION "LZ4";)"; 
+        auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), EStatus::SUCCESS, resultAlter1.GetIssues().ToString()); 
+ 
+        { 
+            auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync(); 
+            UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString()); 
+            const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies(); 
+            UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 3); 
+            for (const auto& family : columnFamilies) { 
+                if (family.GetName() == "Family1") { 
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test"); 
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::LZ4); 
+                } else if (family.GetName() == "Family2") { 
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test"); 
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::None); 
+                } else { 
+                    UNIT_ASSERT(family.GetName() == "default"); 
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test"); 
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::LZ4); 
+                } 
+            } 
+            const auto& columns = describeResult.GetTableDescription().GetColumns(); 
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4); 
+            for (const auto& column : columns) { 
+                UNIT_ASSERT_C(column.Name == "Key" || column.Name == "Value1" 
+                    || column.Name == "Value3" || column.Name == "Value4", column.Name); 
+            } 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CreateAndAlterTableComplex) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE TABLE `/Root/TableToAlter` ( 
+                Key Uint64, 
+                Value1 String FAMILY Family1, 
+                PRIMARY KEY (Key), 
+                FAMILY Family1 ( 
+                     DATA = "test", 
+                     COMPRESSION = "off" 
+                ), 
+                FAMILY Family2 ( 
+                     DATA = "test", 
+                     COMPRESSION = "lz4" 
+                ) 
+            );)"; 
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        auto queryAddColumn = TStringBuilder() << R"( 
+            --!syntax_v1 
+            ALTER TABLE `/Root/TableToAlter` ADD COLUMN Value2 Uint32 FAMILY Family2;)"; 
+        auto resultAddColumn = session.ExecuteSchemeQuery(queryAddColumn).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(resultAddColumn.GetStatus(), EStatus::SUCCESS, resultAddColumn.GetIssues().ToString()); 
+ 
+        auto queryDropColumn = TStringBuilder() << R"( 
+            --!syntax_v1 
+            ALTER TABLE `/Root/TableToAlter` DROP COLUMN Value2;)"; 
+        auto resultDropColumn = session.ExecuteSchemeQuery(queryDropColumn).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(resultDropColumn.GetStatus(), EStatus::SUCCESS, resultDropColumn.GetIssues().ToString()); 
+    } 
 
     Y_UNIT_TEST(AddDropColumn) {
         TKikimrRunner kikimr;
@@ -1682,64 +1682,64 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::CORE_EXEC));
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR));
     }
-
-    Y_UNIT_TEST(CreateTableWithDecimalColumn) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithDecimalColumn";
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value Decimal(35,9),
-                PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value Decimal(22,20),
-                PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value Decimal(22,9),
-                PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            auto tableDesc = describe.GetTableDescription();
-            TVector<TTableColumn> columns = tableDesc.GetTableColumns();
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
-            TType valueType = columns[1].Type;
-            TTypeParser parser(valueType);
-            auto optionalKind = parser.GetKind();
-            UNIT_ASSERT_EQUAL(optionalKind, TTypeParser::ETypeKind::Optional);
-            parser.OpenOptional();
-            auto kind = parser.GetKind();
-            UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
-            TDecimalType decimalType = parser.GetDecimal();
-            UNIT_ASSERT_EQUAL(decimalType.Precision, 22);
-            UNIT_ASSERT_EQUAL(decimalType.Scale, 9);
-        }
-    }
-
+ 
+    Y_UNIT_TEST(CreateTableWithDecimalColumn) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithDecimalColumn"; 
+        { 
+            auto query = TStringBuilder() << R"( 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value Decimal(35,9), 
+                PRIMARY KEY (Key) 
+            );)"; 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString()); 
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE)); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value Decimal(22,20), 
+                PRIMARY KEY (Key) 
+            );)"; 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString()); 
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE)); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value Decimal(22,9), 
+                PRIMARY KEY (Key) 
+            );)"; 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+ 
+        { 
+            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS); 
+            auto tableDesc = describe.GetTableDescription(); 
+            TVector<TTableColumn> columns = tableDesc.GetTableColumns(); 
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2); 
+            TType valueType = columns[1].Type; 
+            TTypeParser parser(valueType); 
+            auto optionalKind = parser.GetKind(); 
+            UNIT_ASSERT_EQUAL(optionalKind, TTypeParser::ETypeKind::Optional); 
+            parser.OpenOptional(); 
+            auto kind = parser.GetKind(); 
+            UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal); 
+            TDecimalType decimalType = parser.GetDecimal(); 
+            UNIT_ASSERT_EQUAL(decimalType.Precision, 22); 
+            UNIT_ASSERT_EQUAL(decimalType.Scale, 9); 
+        } 
+    } 
+ 
     void AlterTableAddIndex(EIndexTypeSql type, bool enableAsyncIndexes = false) {
         TKikimrRunner kikimr(TKikimrSettings().SetEnableAsyncIndexes(enableAsyncIndexes));
         auto db = kikimr.GetTableClient();
@@ -1827,331 +1827,331 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         AlterTableAddIndex(EIndexTypeSql::GlobalAsync, true);
     }
 
-    Y_UNIT_TEST(AlterTableWithDecimalColumn) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithDecimalColumn";
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value1 String,
-                PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            ALTER TABLE `)" << tableName << R"(`
-                 ADD COLUMN Value2 Decimal(35,9);
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            ALTER TABLE `)" << tableName << R"(`
-                 ADD COLUMN Value2 Decimal(22,20);
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE));
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            ALTER TABLE `)" << tableName << R"(`
-                 ADD COLUMN Value2 Decimal(22,9);
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            auto tableDesc = describe.GetTableDescription();
-            TVector<TTableColumn> columns = tableDesc.GetTableColumns();
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
-            TType valueType = columns[2].Type;
-            TTypeParser parser(valueType);
-            auto optionalKind = parser.GetKind();
-            UNIT_ASSERT_EQUAL(optionalKind, TTypeParser::ETypeKind::Optional);
-            parser.OpenOptional();
-            auto kind = parser.GetKind();
-            UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal);
-            TDecimalType decimalType = parser.GetDecimal();
-            UNIT_ASSERT_EQUAL(decimalType.Precision, 22);
-            UNIT_ASSERT_EQUAL(decimalType.Scale, 9);
-        }
-    }
-
-    Y_UNIT_TEST(CreateUserWithPassword) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE USER user1 ENCRYPTED PASSWORD 'password1';
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE USER user1 PASSWORD NULL;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        }
-    }
-
-    Y_UNIT_TEST(CreateUserWithoutPassword) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE USER user1;
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-    }
-
-    Y_UNIT_TEST(CreateAndDropUser) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        {
-            // Drop non-existing user force
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            DROP USER IF EXISTS user1;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE USER user1 PASSWORD 'password1';
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            // Drop existing user
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            DROP USER user1;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE USER user1 PASSWORD NULL;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            // Drop existing user force
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            DROP USER IF EXISTS user1;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            // Drop non-existing user
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            DROP USER user1;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        }
-    }
-
-    Y_UNIT_TEST(AlterUser) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE USER user1 PASSWORD 'password1';
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER USER user1 WITH PASSWORD 'password2';
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER USER user1 WITH ENCRYPTED PASSWORD 'password3';
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER USER user1 WITH PASSWORD NULL;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-    }
-
-    Y_UNIT_TEST(CreateAndDropGroup) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        {
-            // Drop non-existing group force
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            DROP GROUP IF EXISTS group1;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE GROUP group1;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            // Drop existing group
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            DROP GROUP group1;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE GROUP group1;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            // Drop existing group force
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            DROP GROUP IF EXISTS group1;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            // Drop non-existing group
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            DROP GROUP group1;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        }
-    }
-
-    Y_UNIT_TEST(AlterGroup) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE USER user1 PASSWORD 'password1';
-            CREATE USER user2 PASSWORD 'password2';
-            CREATE USER user3;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE GROUP group1;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER GROUP group1 ADD USER user1;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER GROUP group1 DROP USER user1;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER GROUP group1 ADD USER user1, user2;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            ALTER GROUP group1 DROP USER user1, user2;
-            )";
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-    }
+    Y_UNIT_TEST(AlterTableWithDecimalColumn) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        TString tableName = "/Root/TableWithDecimalColumn"; 
+        { 
+            auto query = TStringBuilder() << R"( 
+            CREATE TABLE `)" << tableName << R"(` ( 
+                Key Uint64, 
+                Value1 String, 
+                PRIMARY KEY (Key) 
+            );)"; 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            ALTER TABLE `)" << tableName << R"(` 
+                 ADD COLUMN Value2 Decimal(35,9); 
+            )"; 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString()); 
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE)); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            ALTER TABLE `)" << tableName << R"(` 
+                 ADD COLUMN Value2 Decimal(22,20); 
+            )"; 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString()); 
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE)); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            ALTER TABLE `)" << tableName << R"(` 
+                 ADD COLUMN Value2 Decimal(22,9); 
+            )"; 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS); 
+            auto tableDesc = describe.GetTableDescription(); 
+            TVector<TTableColumn> columns = tableDesc.GetTableColumns(); 
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3); 
+            TType valueType = columns[2].Type; 
+            TTypeParser parser(valueType); 
+            auto optionalKind = parser.GetKind(); 
+            UNIT_ASSERT_EQUAL(optionalKind, TTypeParser::ETypeKind::Optional); 
+            parser.OpenOptional(); 
+            auto kind = parser.GetKind(); 
+            UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Decimal); 
+            TDecimalType decimalType = parser.GetDecimal(); 
+            UNIT_ASSERT_EQUAL(decimalType.Precision, 22); 
+            UNIT_ASSERT_EQUAL(decimalType.Scale, 9); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CreateUserWithPassword) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE USER user1 ENCRYPTED PASSWORD 'password1'; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE USER user1 PASSWORD NULL; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString()); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CreateUserWithoutPassword) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE USER user1; 
+            )"; 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CreateAndDropUser) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        { 
+            // Drop non-existing user force 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            DROP USER IF EXISTS user1; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE USER user1 PASSWORD 'password1'; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            // Drop existing user 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            DROP USER user1; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE USER user1 PASSWORD NULL; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            // Drop existing user force 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            DROP USER IF EXISTS user1; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            // Drop non-existing user 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            DROP USER user1; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString()); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(AlterUser) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE USER user1 PASSWORD 'password1'; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            ALTER USER user1 WITH PASSWORD 'password2'; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            ALTER USER user1 WITH ENCRYPTED PASSWORD 'password3'; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            ALTER USER user1 WITH PASSWORD NULL; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CreateAndDropGroup) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        { 
+            // Drop non-existing group force 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            DROP GROUP IF EXISTS group1; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE GROUP group1; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            // Drop existing group 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            DROP GROUP group1; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE GROUP group1; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            // Drop existing group force 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            DROP GROUP IF EXISTS group1; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            // Drop non-existing group 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            DROP GROUP group1; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString()); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(AlterGroup) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE USER user1 PASSWORD 'password1'; 
+            CREATE USER user2 PASSWORD 'password2'; 
+            CREATE USER user3; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            CREATE GROUP group1; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            ALTER GROUP group1 ADD USER user1; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            ALTER GROUP group1 DROP USER user1; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            ALTER GROUP group1 ADD USER user1, user2; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            auto query = TStringBuilder() << R"( 
+            --!syntax_v1 
+            ALTER GROUP group1 DROP USER user1, user2; 
+            )"; 
+            auto session = db.CreateSession().GetValueSync().GetSession(); 
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+    } 
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

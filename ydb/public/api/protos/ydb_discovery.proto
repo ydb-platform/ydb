@@ -44,19 +44,19 @@ message ListEndpointsResult {
 message ListEndpointsResponse {
     Ydb.Operations.Operation operation = 1;
 }
-
-message WhoAmIRequest {
-    // Include user groups in response
-    bool include_groups = 1;
-}
-	
-message WhoAmIResult {
-    // User SID (Security ID)
-    string user = 1;
-    // List of group SIDs (Security IDs) for the user
-    repeated string groups = 2;
-}
-
-message WhoAmIResponse {
-    Ydb.Operations.Operation operation = 1;
-}
+ 
+message WhoAmIRequest { 
+    // Include user groups in response 
+    bool include_groups = 1; 
+} 
+	 
+message WhoAmIResult { 
+    // User SID (Security ID) 
+    string user = 1; 
+    // List of group SIDs (Security IDs) for the user 
+    repeated string groups = 2; 
+} 
+ 
+message WhoAmIResponse { 
+    Ydb.Operations.Operation operation = 1; 
+} 

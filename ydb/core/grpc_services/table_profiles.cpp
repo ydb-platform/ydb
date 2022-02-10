@@ -427,7 +427,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
             followerGroup.SetRequireAllDataCenters(false);
         if (replicationPolicy.HasAllowFollowerPromotion()) {
             followerGroup.SetAllowLeaderPromotion(replicationPolicy.GetAllowFollowerPromotion());
-        }
+        } 
     }
 
     if (cachingPolicy.HasExecutorCacheSize())
@@ -436,28 +436,28 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
     return true;
 }
 
-bool TTableProfiles::ApplyCompactionPolicy(const TString &name,
+bool TTableProfiles::ApplyCompactionPolicy(const TString &name, 
     NKikimrSchemeOp::TPartitionConfig &partitionConfig, Ydb::StatusIds::StatusCode &code,
-    TString &error, const TAppData* appData) const
-{
-    NKikimrConfig::TCompactionPolicy compactionPolicy;
+    TString &error, const TAppData* appData) const 
+{ 
+    NKikimrConfig::TCompactionPolicy compactionPolicy; 
 
-    if (!CompactionPolicies.contains(name)) {
-        code = Ydb::StatusIds::BAD_REQUEST;
-        error = Sprintf("unknown compaction policy preset '%s'", name.c_str());
-        return false;
-    }
-    compactionPolicy = CompactionPolicies.at(name);
-    // Apply compaction policy to table description.
-    if (compactionPolicy.HasCompactionPolicy()) {
-        partitionConfig.MutableCompactionPolicy()->CopyFrom(compactionPolicy.GetCompactionPolicy());
-    } else if (appData) {
-        TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> defaultPolicy = appData->DomainsInfo->GetDefaultUserTablePolicy();
-        defaultPolicy->Serialize(*partitionConfig.MutableCompactionPolicy());
-    }
-    return true;
-}
-
-
+    if (!CompactionPolicies.contains(name)) { 
+        code = Ydb::StatusIds::BAD_REQUEST; 
+        error = Sprintf("unknown compaction policy preset '%s'", name.c_str()); 
+        return false; 
+    } 
+    compactionPolicy = CompactionPolicies.at(name); 
+    // Apply compaction policy to table description. 
+    if (compactionPolicy.HasCompactionPolicy()) { 
+        partitionConfig.MutableCompactionPolicy()->CopyFrom(compactionPolicy.GetCompactionPolicy()); 
+    } else if (appData) { 
+        TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> defaultPolicy = appData->DomainsInfo->GetDefaultUserTablePolicy(); 
+        defaultPolicy->Serialize(*partitionConfig.MutableCompactionPolicy()); 
+    } 
+    return true; 
+} 
+ 
+ 
 } // namespace NGRpcService
 } // namespace NKikimr

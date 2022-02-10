@@ -46,15 +46,15 @@ struct TEvWhiteboard{
         EvSystemStateSetTenant,
         EvSystemStateRemoveTenant,
         EvBSGroupStateDelete,
-        EvIntrospectionData,
-        EvTabletLookupRequest,
-        EvTabletLookupResponse,
-        EvTraceLookupRequest,
-        EvTraceLookupResponse,
-        EvTraceRequest,
-        EvTraceResponse,
-        EvSignalBodyRequest,
-        EvSignalBodyResponse,
+        EvIntrospectionData, 
+        EvTabletLookupRequest, 
+        EvTabletLookupResponse, 
+        EvTraceLookupRequest, 
+        EvTraceLookupResponse, 
+        EvTraceRequest, 
+        EvTraceResponse, 
+        EvSignalBodyRequest, 
+        EvSignalBodyResponse, 
         EvPDiskStateDelete,
         EvVDiskStateGenerationChange,
         EvEnd
@@ -375,29 +375,29 @@ struct TEvWhiteboard{
 
     struct TEvNodeStateResponse : TEventPB<TEvNodeStateResponse, NKikimrWhiteboard::TEvNodeStateResponse, EvNodeStateResponse>
     {};
-
-    struct TEvIntrospectionData : TEventLocal<TEvIntrospectionData, EvIntrospectionData> {
-
-        THolder<NTracing::ITrace> Trace;
-        TTabletId TabletId;
-
-        TEvIntrospectionData(TTabletId tabletId, NTracing::ITrace* trace)
-            : Trace(trace)
-            , TabletId(tabletId)
-        {}
-    };
-
-    struct TEvTabletLookupRequest : TEventPB<TEvTabletLookupRequest, NKikimrWhiteboard::TEvTabletLookupRequest, EvTabletLookupRequest> {};
-    struct TEvTabletLookupResponse : TEventPB<TEvTabletLookupResponse, NKikimrWhiteboard::TEvTabletLookupResponse, EvTabletLookupResponse> {};
-
-    struct TEvTraceLookupRequest : TEventPB<TEvTraceLookupRequest, NKikimrWhiteboard::TEvTraceLookupRequest, EvTraceLookupRequest> {};
-    struct TEvTraceLookupResponse : TEventPB<TEvTraceLookupResponse, NKikimrWhiteboard::TEvTraceLookupResponse, EvTraceLookupResponse> {};
-
-    struct TEvTraceRequest : TEventPB<TEvTraceRequest, NKikimrWhiteboard::TEvTraceRequest, EvTraceRequest> {};
-    struct TEvTraceResponse : TEventPB<TEvTraceResponse, NKikimrWhiteboard::TEvTraceResponse, EvTraceResponse> {};
-
-    struct TEvSignalBodyRequest : TEventPB<TEvSignalBodyRequest, NKikimrWhiteboard::TEvSignalBodyRequest, EvSignalBodyRequest> {};
-    struct TEvSignalBodyResponse : TEventPB<TEvSignalBodyResponse, NKikimrWhiteboard::TEvSignalBodyResponse, EvSignalBodyResponse> {};
+ 
+    struct TEvIntrospectionData : TEventLocal<TEvIntrospectionData, EvIntrospectionData> { 
+ 
+        THolder<NTracing::ITrace> Trace; 
+        TTabletId TabletId; 
+ 
+        TEvIntrospectionData(TTabletId tabletId, NTracing::ITrace* trace) 
+            : Trace(trace) 
+            , TabletId(tabletId) 
+        {} 
+    }; 
+ 
+    struct TEvTabletLookupRequest : TEventPB<TEvTabletLookupRequest, NKikimrWhiteboard::TEvTabletLookupRequest, EvTabletLookupRequest> {}; 
+    struct TEvTabletLookupResponse : TEventPB<TEvTabletLookupResponse, NKikimrWhiteboard::TEvTabletLookupResponse, EvTabletLookupResponse> {}; 
+ 
+    struct TEvTraceLookupRequest : TEventPB<TEvTraceLookupRequest, NKikimrWhiteboard::TEvTraceLookupRequest, EvTraceLookupRequest> {}; 
+    struct TEvTraceLookupResponse : TEventPB<TEvTraceLookupResponse, NKikimrWhiteboard::TEvTraceLookupResponse, EvTraceLookupResponse> {}; 
+ 
+    struct TEvTraceRequest : TEventPB<TEvTraceRequest, NKikimrWhiteboard::TEvTraceRequest, EvTraceRequest> {}; 
+    struct TEvTraceResponse : TEventPB<TEvTraceResponse, NKikimrWhiteboard::TEvTraceResponse, EvTraceResponse> {}; 
+ 
+    struct TEvSignalBodyRequest : TEventPB<TEvSignalBodyRequest, NKikimrWhiteboard::TEvSignalBodyRequest, EvSignalBodyRequest> {}; 
+    struct TEvSignalBodyResponse : TEventPB<TEvSignalBodyResponse, NKikimrWhiteboard::TEvSignalBodyResponse, EvSignalBodyResponse> {}; 
 };
 
 inline TActorId MakeNodeWhiteboardServiceId(ui32 node) {

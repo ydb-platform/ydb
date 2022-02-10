@@ -515,7 +515,7 @@ private:
         LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Client lost, send abort event to executer " << ExecuterActorId_);
 
         if (ExecuterActorId_) {
-            auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Client lost"); // any status code can be here
+            auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Client lost"); // any status code can be here 
 
             ctx.Send(ExecuterActorId_, abortEv.Release());
         }

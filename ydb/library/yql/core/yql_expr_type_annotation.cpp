@@ -4815,8 +4815,8 @@ TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& 
 
 bool IsSystemMember(const TStringBuf& memberName) {
     return memberName.StartsWith(TStringBuf("_yql_"));
-}
-
+} 
+ 
 IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx,
     bool deduplicate)
 {

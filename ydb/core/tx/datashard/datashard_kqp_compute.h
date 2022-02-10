@@ -34,7 +34,7 @@ public:
     void ReadTable(const TTableId& tableId, const TArrayRef<const TCell>& key) const;
     void BreakSetLocks() const;
     void SetLockTxId(ui64 lockTxId);
-    ui64 GetShardId() const;
+    ui64 GetShardId() const; 
 
     TVector<std::pair<NScheme::TTypeId, TString>> GetKeyColumnsInfo(const TTableId &tableId) const;
     THashMap<TString, NScheme::TTypeId> GetKeyColumnsMap(const TTableId &tableId) const;

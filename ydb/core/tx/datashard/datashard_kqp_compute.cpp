@@ -169,10 +169,10 @@ void TKqpDatashardComputeContext::SetLockTxId(ui64 lockTxId) {
     LockTxId = lockTxId;
 }
 
-ui64 TKqpDatashardComputeContext::GetShardId() const {
-    return Shard->TabletID();
-}
-
+ui64 TKqpDatashardComputeContext::GetShardId() const { 
+    return Shard->TabletID(); 
+} 
+ 
 void TKqpDatashardComputeContext::SetReadVersion(TRowVersion readVersion) {
     ReadVersion = readVersion;
 }

@@ -10,7 +10,7 @@
 namespace NKikimr {
 namespace NDriverClient {
 
-class TCmsClientCommand : public TClientCommandConfig {
+class TCmsClientCommand : public TClientCommandConfig { 
 public:
     TString Domain;
     NKikimrClient::TCmsRequest Request;
@@ -18,7 +18,7 @@ public:
     TCmsClientCommand(const TString &name,
                       const std::initializer_list<TString> &aliases,
                       const TString &description)
-        : TClientCommandConfig(name, aliases, description)
+        : TClientCommandConfig(name, aliases, description) 
     {
     }
 
@@ -99,7 +99,7 @@ public:
 
         config.Opts->AddLongOption("host", "Get state for specified host(s)")
             .RequiredArgument("NAME").AppendTo(&Hosts);
-        config.SetFreeArgsNum(0);
+        config.SetFreeArgsNum(0); 
     }
 
     void Parse(TConfig& config) override
@@ -200,10 +200,10 @@ public:
         config.Opts->AddLongOption("user", "User name").Required()
             .RequiredArgument("NAME").StoreResult(&User);
         if (HasId) {
-            config.SetFreeArgsNum(1);
-            SetFreeArgTitle(0, "<ID>", "Request ID");
+            config.SetFreeArgsNum(1); 
+            SetFreeArgTitle(0, "<ID>", "Request ID"); 
         } else {
-            config.SetFreeArgsNum(0);
+            config.SetFreeArgsNum(0); 
         }
         config.Opts->AddLongOption("dry", "Dry run").NoArgument().SetFlag(&DryRun);
     }
@@ -274,8 +274,8 @@ public:
 
         config.Opts->AddLongOption("user", "User name").Required()
             .RequiredArgument("NAME").StoreResult(&User);
-        config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<ID>", "Request ID");
+        config.SetFreeArgsNum(1); 
+        SetFreeArgTitle(0, "<ID>", "Request ID"); 
         config.Opts->AddLongOption("dry", "Dry run").NoArgument().SetFlag(&DryRun);
     }
 
@@ -331,7 +331,7 @@ public:
         if (HasDuration)
             config.Opts->AddLongOption("duration", "Action duration in minutes")
                 .Required().RequiredArgument("NUM").StoreResult(&Duration);
-        config.SetFreeArgsMin(1);
+        config.SetFreeArgsMin(1); 
         config.Opts->SetFreeArgDefaultTitle("<NAME>", FreeArgDescr(FreeArgField));
     }
 
@@ -697,10 +697,10 @@ public:
         config.Opts->AddLongOption("user", "User name").Required()
             .RequiredArgument("NAME").StoreResult(&User);
         if (HasId) {
-            config.SetFreeArgsNum(1);
-            SetFreeArgTitle(0, "<ID>", "Notification ID");
+            config.SetFreeArgsNum(1); 
+            SetFreeArgTitle(0, "<ID>", "Notification ID"); 
         } else {
-            config.SetFreeArgsNum(0);
+            config.SetFreeArgsNum(0); 
         }
         config.Opts->AddLongOption("dry", "Dry run").NoArgument().SetFlag(&DryRun);
     }
@@ -819,10 +819,10 @@ public:
         config.Opts->AddLongOption("user", "User name").Required()
             .RequiredArgument("NAME").StoreResult(&User);
         if (HasId) {
-            config.SetFreeArgsNum(1);
-            SetFreeArgTitle(0, "<ID>", "Permission ID");
+            config.SetFreeArgsNum(1); 
+            SetFreeArgTitle(0, "<ID>", "Permission ID"); 
         } else {
-            config.SetFreeArgsNum(0);
+            config.SetFreeArgsNum(0); 
         }
         if (HasDeadline) {
             config.Opts->AddLongOption("hours", "New permission duration")
@@ -945,8 +945,8 @@ public:
     virtual void Config(TConfig& config) override {
         TCmsClientCommand::Config(config);
 
-        config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<CONFIG>", "Config protobuf or file with config protobuf");
+        config.SetFreeArgsNum(1); 
+        SetFreeArgTitle(0, "<CONFIG>", "Config protobuf or file with config protobuf"); 
     }
 
     void Parse(TConfig& config) override
@@ -997,8 +997,8 @@ public:
                 allMarkers.push_back(static_cast<NKikimrCms::EMarker>(i));
         TString desc = Sprintf("Marker name (%s)", JoinSeq(", ", allMarkers).data());
 
-        config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<MARKER>", desc);
+        config.SetFreeArgsNum(1); 
+        SetFreeArgTitle(0, "<MARKER>", desc); 
         config.Opts->AddLongOption("host", "Host(s) to mark")
             .RequiredArgument("NAME").AppendTo(&Hosts);
         config.Opts->AddLongOption("node", "Node(s) to mark")

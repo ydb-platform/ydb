@@ -301,7 +301,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
     }
 
     static void CreateVeryPartitionedTable(NClient::TKikimr& kikimr) {
-        const ui64 numParts = NValgrind::PlainOrUnderValgrind(3000, 10);
+        const ui64 numParts = NValgrind::PlainOrUnderValgrind(3000, 10); 
 
         auto dc = kikimr.GetSchemaRoot("dc-1");
         auto zoo = dc.MakeDirectory("Zoo");

@@ -566,18 +566,18 @@ TExprBase WriteTableSimple(const TKiWriteTable& write, const TCoAtomList& inputC
 {
     auto op = GetTableOp(write);
     switch (op) {
-        case TYdbOperation::Upsert:
+        case TYdbOperation::Upsert: 
             return BuildUpsertTable(write, inputColumns, tableData, ctx);
-        case TYdbOperation::Replace:
+        case TYdbOperation::Replace: 
             return BuildReplaceTable(write, inputColumns, tableData, ctx);
-        case TYdbOperation::InsertAbort:
-        case TYdbOperation::InsertRevert:
-            return BuildInsertTable(write, op == TYdbOperation::InsertAbort, inputColumns, tableData, ctx);
-        case TYdbOperation::UpdateOn:
+        case TYdbOperation::InsertAbort: 
+        case TYdbOperation::InsertRevert: 
+            return BuildInsertTable(write, op == TYdbOperation::InsertAbort, inputColumns, tableData, ctx); 
+        case TYdbOperation::UpdateOn: 
             return BuildUpdateOnTable(write, inputColumns, tableData, ctx);
-        case TYdbOperation::Delete:
+        case TYdbOperation::Delete: 
             return BuildDeleteTable(write, tableData, ctx);
-        case TYdbOperation::DeleteOn:
+        case TYdbOperation::DeleteOn: 
             return BuildDeleteTable(write, tableData, ctx);
         default:
             YQL_ENSURE(false, "Unsupported table operation: " << op << ", table: " << tableData.Metadata->Name);
@@ -589,16 +589,16 @@ TExprBase WriteTableWithIndexUpdate(const TKiWriteTable& write, const TCoAtomLis
 {
     auto op = GetTableOp(write);
     switch (op) {
-        case TYdbOperation::Upsert:
+        case TYdbOperation::Upsert: 
             return BuildUpsertTableWithIndex(write, inputColumns, tableData, ctx);
-        case TYdbOperation::Replace:
+        case TYdbOperation::Replace: 
             return BuildReplaceTableWithIndex(write, inputColumns, tableData, ctx);
-        case TYdbOperation::InsertAbort:
-        case TYdbOperation::InsertRevert:
-            return BuildInsertTableWithIndex(write, op == TYdbOperation::InsertAbort, inputColumns, tableData, ctx);
-        case TYdbOperation::UpdateOn:
+        case TYdbOperation::InsertAbort: 
+        case TYdbOperation::InsertRevert: 
+            return BuildInsertTableWithIndex(write, op == TYdbOperation::InsertAbort, inputColumns, tableData, ctx); 
+        case TYdbOperation::UpdateOn: 
             return BuildUpdateOnTableWithIndex(write, inputColumns, tableData, ctx);
-        case TYdbOperation::DeleteOn:
+        case TYdbOperation::DeleteOn: 
             return BuildDeleteTableWithIndex(write, tableData, ctx);
         default:
             YQL_ENSURE(false, "Unsupported table operation: " << (ui32)op << ", table: " << tableData.Metadata->Name);

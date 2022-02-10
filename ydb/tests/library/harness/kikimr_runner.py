@@ -120,18 +120,18 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             command.append("--suppress-version-check")
 
         if self.__node_broker_port is not None:
-            command.append("--node-broker=%s%s:%d" % (
-                "grpcs://" if self.__configurator.grpc_ssl_enable else "",
-                self.host,
-                self.__node_broker_port))
+            command.append("--node-broker=%s%s:%d" % ( 
+                "grpcs://" if self.__configurator.grpc_ssl_enable else "", 
+                self.host, 
+                self.__node_broker_port)) 
         else:
             command.append("--node=%d" % self.node_id)
 
-        if self.__configurator.grpc_ssl_enable:
-            command.append(
-                "--ca=%s" % self.__configurator.grpc_tls_ca_path
-            )
-
+        if self.__configurator.grpc_ssl_enable: 
+            command.append( 
+                "--ca=%s" % self.__configurator.grpc_tls_ca_path 
+            ) 
+ 
         if self.__role == 'slot':
             command.append(
                 "--tenant=%s" % self._tenant_affiliation
@@ -348,10 +348,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
     def _register_slot(self, tenant_affiliation=None, encryption_key=None):
         slot_index = next(self._slot_index_allocator)
-        node_broker_port = (
-            self.nodes[1].grpc_ssl_port if self.__configurator.grpc_ssl_enable
-            else self.nodes[1].grpc_port
-        )
+        node_broker_port = ( 
+            self.nodes[1].grpc_ssl_port if self.__configurator.grpc_ssl_enable 
+            else self.nodes[1].grpc_port 
+        ) 
         self._slots[slot_index] = KiKiMRNode(
             slot_index,
             self.config_path,
@@ -360,7 +360,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             configurator=self.__configurator,
             udfs_dir=self.__common_udfs_dir,
             role='slot',
-            node_broker_port=node_broker_port,
+            node_broker_port=node_broker_port, 
             tenant_affiliation=tenant_affiliation,
             encryption_key=encryption_key,
         )

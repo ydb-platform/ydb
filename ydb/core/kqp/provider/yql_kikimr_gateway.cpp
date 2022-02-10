@@ -232,12 +232,12 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
     return true;
 }
 
-bool TTableSettings::IsSet() const {
-    return CompactionPolicy || PartitionBy || AutoPartitioningBySize || UniformPartitions || PartitionAtKeys
-        || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || KeyBloomFilter
+bool TTableSettings::IsSet() const { 
+    return CompactionPolicy || PartitionBy || AutoPartitioningBySize || UniformPartitions || PartitionAtKeys 
+        || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || KeyBloomFilter 
         || ReadReplicasSettings || TtlSettings;
-}
-
+} 
+ 
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
     switch (ydbStatus) {
         case Ydb::StatusIds::SUCCESS:
@@ -258,16 +258,16 @@ EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
             return TIssuesIds::KIKIMR_SCHEME_ERROR;
         case Ydb::StatusIds::GENERIC_ERROR:
             return TIssuesIds::DEFAULT_ERROR;
-        case Ydb::StatusIds::TIMEOUT:
-            return TIssuesIds::KIKIMR_TIMEOUT;
+        case Ydb::StatusIds::TIMEOUT: 
+            return TIssuesIds::KIKIMR_TIMEOUT; 
         case Ydb::StatusIds::BAD_SESSION:
             return TIssuesIds::KIKIMR_TOO_MANY_TRANSACTIONS;
         case Ydb::StatusIds::PRECONDITION_FAILED:
             return TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION;
-        case Ydb::StatusIds::CANCELLED:
-            return TIssuesIds::KIKIMR_OPERATION_CANCELLED;
-        case Ydb::StatusIds::UNSUPPORTED:
-            return TIssuesIds::KIKIMR_UNSUPPORTED;
+        case Ydb::StatusIds::CANCELLED: 
+            return TIssuesIds::KIKIMR_OPERATION_CANCELLED; 
+        case Ydb::StatusIds::UNSUPPORTED: 
+            return TIssuesIds::KIKIMR_UNSUPPORTED; 
         default:
             return TIssuesIds::DEFAULT_ERROR;
     }

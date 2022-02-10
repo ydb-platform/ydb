@@ -132,11 +132,11 @@ def execute_request_factory(
             parameters_types = data_query.parameters_types
         elif isinstance(query, types.DataQuery):
             if settings is not None and hasattr(settings, "keep_in_cache"):
-                keep_in_cache = settings.keep_in_cache
-            else:
-                # that is an instance of a data query and we don't know query id for id.
-                # so let's prepare it to keep in cache
-                keep_in_cache = True
+                keep_in_cache = settings.keep_in_cache 
+            else: 
+                # that is an instance of a data query and we don't know query id for id. 
+                # so let's prepare it to keep in cache 
+                keep_in_cache = True 
             yql_text = query.yql_text
             parameters_types = query.parameters_types
         else:

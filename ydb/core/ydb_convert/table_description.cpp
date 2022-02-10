@@ -368,7 +368,7 @@ void FillTableStats(Ydb::Table::DescribeTableResult& out,
         stats->mutable_modification_time()->CopyFrom(modificationTime);
     }
 
-    ui64 creationTimeMs = in.GetSelf().GetCreateStep();
+    ui64 creationTimeMs = in.GetSelf().GetCreateStep(); 
     if (creationTimeMs) {
         auto creationTime = MillisecToProtoTimeStamp(creationTimeMs);
         stats->mutable_creation_time()->CopyFrom(creationTime);
@@ -546,63 +546,63 @@ void FillAttributes(Ydb::Table::CreateTableRequest& out,
 
 template <typename TYdbProto>
 static void FillDefaultPartitioningSettings(TYdbProto& out) {
-    // (!) We assume that all partitioning methods are disabled by default. But we don't know it for sure.
-    auto& outPartSettings = *out.mutable_partitioning_settings();
-    outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
-    outPartSettings.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
-}
-
+    // (!) We assume that all partitioning methods are disabled by default. But we don't know it for sure. 
+    auto& outPartSettings = *out.mutable_partitioning_settings(); 
+    outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED); 
+    outPartSettings.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED); 
+} 
+ 
 template <typename TYdbProto>
 void FillPartitioningSettingsImpl(TYdbProto& out,
         const NKikimrSchemeOp::TTableDescription& in) {
 
-    if (!in.HasPartitionConfig()) {
-        FillDefaultPartitioningSettings(out);
-        return;
-    }
-
-    const auto& partConfig = in.GetPartitionConfig();
-    if (!partConfig.HasPartitioningPolicy()) {
-        FillDefaultPartitioningSettings(out);
-        return;
-    }
-
-    auto& outPartSettings = *out.mutable_partitioning_settings();
-    const auto& inPartPolicy = partConfig.GetPartitioningPolicy();
-    if (inPartPolicy.HasSizeToSplit()) {
-        if (inPartPolicy.GetSizeToSplit()) {
-            outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::ENABLED);
-            outPartSettings.set_partition_size_mb(inPartPolicy.GetSizeToSplit() / (1 << 20));
-        } else {
-            outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
-        }
-    } else {
-        // (!) We assume that partitioning by size is disabled by default. But we don't know it for sure.
-        outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
-    }
-
+    if (!in.HasPartitionConfig()) { 
+        FillDefaultPartitioningSettings(out); 
+        return; 
+    } 
+ 
+    const auto& partConfig = in.GetPartitionConfig(); 
+    if (!partConfig.HasPartitioningPolicy()) { 
+        FillDefaultPartitioningSettings(out); 
+        return; 
+    } 
+ 
+    auto& outPartSettings = *out.mutable_partitioning_settings(); 
+    const auto& inPartPolicy = partConfig.GetPartitioningPolicy(); 
+    if (inPartPolicy.HasSizeToSplit()) { 
+        if (inPartPolicy.GetSizeToSplit()) { 
+            outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::ENABLED); 
+            outPartSettings.set_partition_size_mb(inPartPolicy.GetSizeToSplit() / (1 << 20)); 
+        } else { 
+            outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED); 
+        } 
+    } else { 
+        // (!) We assume that partitioning by size is disabled by default. But we don't know it for sure. 
+        outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED); 
+    } 
+ 
     if (inPartPolicy.HasSplitByLoadSettings()) {
         bool enabled = inPartPolicy.GetSplitByLoadSettings().GetEnabled();
         outPartSettings.set_partitioning_by_load(enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
-    } else {
-        // (!) We assume that partitioning by load is disabled by default. But we don't know it for sure.
-        outPartSettings.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
+    } else { 
+        // (!) We assume that partitioning by load is disabled by default. But we don't know it for sure. 
+        outPartSettings.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED); 
     }
 
-    if (inPartPolicy.HasMinPartitionsCount() && inPartPolicy.GetMinPartitionsCount()) {
-        outPartSettings.set_min_partitions_count(inPartPolicy.GetMinPartitionsCount());
-    }
-
-    if (inPartPolicy.HasMaxPartitionsCount() && inPartPolicy.GetMaxPartitionsCount()) {
-        outPartSettings.set_max_partitions_count(inPartPolicy.GetMaxPartitionsCount());
-    }
+    if (inPartPolicy.HasMinPartitionsCount() && inPartPolicy.GetMinPartitionsCount()) { 
+        outPartSettings.set_min_partitions_count(inPartPolicy.GetMinPartitionsCount()); 
+    } 
+ 
+    if (inPartPolicy.HasMaxPartitionsCount() && inPartPolicy.GetMaxPartitionsCount()) { 
+        outPartSettings.set_max_partitions_count(inPartPolicy.GetMaxPartitionsCount()); 
+    } 
 }
-
+ 
 void FillPartitioningSettings(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TTableDescription& in) {
     FillPartitioningSettingsImpl(out, in);
-}
-
+} 
+ 
 void FillPartitioningSettings(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in) {
     FillPartitioningSettingsImpl(out, in);
@@ -629,22 +629,22 @@ template <typename TYdbProto>
 void FillKeyBloomFilterImpl(TYdbProto& out,
         const NKikimrSchemeOp::TTableDescription& in) {
 
-    if (!in.HasPartitionConfig()) {
-        return;
-    }
-
-    const auto& partConfig = in.GetPartitionConfig();
-    if (!partConfig.HasEnableFilterByKey()) {
-        return;
-    }
-
-    if (partConfig.GetEnableFilterByKey()) {
-        out.set_key_bloom_filter(Ydb::FeatureFlag::ENABLED);
-    } else {
-        out.set_key_bloom_filter(Ydb::FeatureFlag::DISABLED);
-    }
-}
-
+    if (!in.HasPartitionConfig()) { 
+        return; 
+    } 
+ 
+    const auto& partConfig = in.GetPartitionConfig(); 
+    if (!partConfig.HasEnableFilterByKey()) { 
+        return; 
+    } 
+ 
+    if (partConfig.GetEnableFilterByKey()) { 
+        out.set_key_bloom_filter(Ydb::FeatureFlag::ENABLED); 
+    } else { 
+        out.set_key_bloom_filter(Ydb::FeatureFlag::DISABLED); 
+    } 
+} 
+ 
 void FillKeyBloomFilter(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TTableDescription& in) {
     FillKeyBloomFilterImpl(out, in);
@@ -659,33 +659,33 @@ template <typename TYdbProto>
 void FillReadReplicasSettingsImpl(TYdbProto& out,
         const NKikimrSchemeOp::TTableDescription& in) {
 
-    if (!in.HasPartitionConfig()) {
-        return;
-    }
-
-    const auto& partConfig = in.GetPartitionConfig();
+    if (!in.HasPartitionConfig()) { 
+        return; 
+    } 
+ 
+    const auto& partConfig = in.GetPartitionConfig(); 
     if (!partConfig.FollowerGroupsSize() && !partConfig.HasCrossDataCenterFollowerCount() && !partConfig.HasFollowerCount()) {
-        return;
-    }
-
+        return; 
+    } 
+ 
     if (partConfig.FollowerGroupsSize()) {
         if (partConfig.FollowerGroupsSize() > 1) {
-            // Not supported yet
-            return;
-        }
+            // Not supported yet 
+            return; 
+        } 
         const auto& followerGroup = partConfig.GetFollowerGroups(0);
         if (followerGroup.GetFollowerCountPerDataCenter()) {
             out.mutable_read_replicas_settings()->set_per_az_read_replicas_count(followerGroup.GetFollowerCount());
-        } else {
+        } else { 
             out.mutable_read_replicas_settings()->set_any_az_read_replicas_count(followerGroup.GetFollowerCount());
-        }
+        } 
     } else if (partConfig.HasCrossDataCenterFollowerCount()) {
         out.mutable_read_replicas_settings()->set_per_az_read_replicas_count(partConfig.GetCrossDataCenterFollowerCount());
     } else if (partConfig.HasFollowerCount()) {
         out.mutable_read_replicas_settings()->set_any_az_read_replicas_count(partConfig.GetFollowerCount());
-    }
-}
-
+    } 
+} 
+ 
 void FillReadReplicasSettings(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TTableDescription& in) {
     FillReadReplicasSettingsImpl(out, in);

@@ -67,7 +67,7 @@ void CollectQueryStats(const TActorContext& ctx, const NKqpProto::TKqpStatsQuery
         strType = "scan";
         break;
     case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
-    case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
+    case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: 
         strType = "script";
         break;
     default:

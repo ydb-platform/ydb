@@ -40,7 +40,7 @@ void TProtoToJson::EscapeJsonString(IOutputStream& os, const TString& s) {
 TString TProtoToJson::EscapeJsonString(const TString& s) {
     TStringStream str;
     EscapeJsonString(str, s);
-    return str.Str();
+    return str.Str(); 
 }
 
 void TProtoToJson::ProtoToJson(IOutputStream& to, const ::google::protobuf::EnumValueDescriptor* descriptor, const TJsonSettings& jsonSettings) {

@@ -533,22 +533,22 @@ namespace NSQLTranslationV1 {
         TString Name;
         TNodePtr Type;
         bool Nullable;
-        TVector<TIdentifier> Families;
+        TVector<TIdentifier> Families; 
 
-        TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
-            TVector<TIdentifier> families);
+        TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable, 
+            TVector<TIdentifier> families); 
     };
 
     struct TColumns: public TSimpleRefCount<TColumns> {
         TSet<TString> Real;
         TSet<TString> Artificial;
         TVector<TString> List;
-        TVector<bool> NamedColumns;
+        TVector<bool> NamedColumns; 
         bool All = false;
         bool QualifiedAll = false;
         bool HasUnreliable = false;
 
-        bool Add(const TString* column, bool countHint, bool isArtificial = false, bool isReliable = true, bool hasName = true);
+        bool Add(const TString* column, bool countHint, bool isArtificial = false, bool isReliable = true, bool hasName = true); 
         void Merge(const TColumns& columns);
         void SetPrefix(const TString& prefix);
         void SetAll();
@@ -864,7 +864,7 @@ namespace NSQLTranslationV1 {
         virtual IJoin* GetJoin();
         virtual ISource* GetCompositeSource();
         virtual bool IsSelect() const;
-        virtual bool IsTableSource() const;
+        virtual bool IsTableSource() const; 
         virtual bool ShouldUseSourceAsColumn(const TString& source) const;
         virtual bool IsJoinKeysInitializing() const;
         virtual const TString* GetWindowName() const;
@@ -1051,7 +1051,7 @@ namespace NSQLTranslationV1 {
 
     TMaybe<TStringContent> StringContent(TContext& ctx, TPosition pos, const TString& input);
     TMaybe<TStringContent> StringContentOrIdContent(TContext& ctx, TPosition pos, const TString& input);
-
+ 
     struct TTtlSettings {
         TIdentifier ColumnName;
         TNodePtr Expr;
@@ -1059,36 +1059,36 @@ namespace NSQLTranslationV1 {
         TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr);
     };
 
-    struct TTableSettings {
-        TNodePtr CompactionPolicy;
-        TMaybe<TIdentifier> AutoPartitioningBySize;
-        TNodePtr PartitionSizeMb;
-        TMaybe<TIdentifier> AutoPartitioningByLoad;
-        TNodePtr MinPartitions;
-        TNodePtr MaxPartitions;
-        TNodePtr UniformPartitions;
-        TVector<TVector<TNodePtr>> PartitionAtKeys;
-        TMaybe<TIdentifier> KeyBloomFilter;
-        TNodePtr ReadReplicasSettings;
+    struct TTableSettings { 
+        TNodePtr CompactionPolicy; 
+        TMaybe<TIdentifier> AutoPartitioningBySize; 
+        TNodePtr PartitionSizeMb; 
+        TMaybe<TIdentifier> AutoPartitioningByLoad; 
+        TNodePtr MinPartitions; 
+        TNodePtr MaxPartitions; 
+        TNodePtr UniformPartitions; 
+        TVector<TVector<TNodePtr>> PartitionAtKeys; 
+        TMaybe<TIdentifier> KeyBloomFilter; 
+        TNodePtr ReadReplicasSettings; 
         NYql::TResetableSetting<TTtlSettings, void> TtlSettings;
 
-        bool IsSet() const {
-            return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad
-                || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter
+        bool IsSet() const { 
+            return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad 
+                || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter 
                 || ReadReplicasSettings || TtlSettings;
-        }
-    };
-
-    struct TFamilyEntry {
-        TFamilyEntry(const TIdentifier& name)
-            :Name(name)
-        {}
-
-        TIdentifier Name;
-        TNodePtr Data;
-        TNodePtr Compression;
-    };
-
+        } 
+    }; 
+ 
+    struct TFamilyEntry { 
+        TFamilyEntry(const TIdentifier& name) 
+            :Name(name) 
+        {} 
+ 
+        TIdentifier Name; 
+        TNodePtr Data; 
+        TNodePtr Compression; 
+    }; 
+ 
     struct TIndexDescription {
         enum class EType {
             GlobalSync,
@@ -1127,24 +1127,24 @@ namespace NSQLTranslationV1 {
         bool Disable;
     };
 
-    struct TCreateTableParameters {
-        TVector<TColumnSchema> Columns;
-        TVector<TIdentifier> PkColumns;
-        TVector<TIdentifier> PartitionByColumns;
-        TVector<std::pair<TIdentifier, bool>> OrderByColumns;
+    struct TCreateTableParameters { 
+        TVector<TColumnSchema> Columns; 
+        TVector<TIdentifier> PkColumns; 
+        TVector<TIdentifier> PartitionByColumns; 
+        TVector<std::pair<TIdentifier, bool>> OrderByColumns; 
         TVector<TIndexDescription> Indexes;
-        TVector<TFamilyEntry> ColumnFamilies;
+        TVector<TFamilyEntry> ColumnFamilies; 
         TVector<TChangefeedDescription> Changefeeds;
-        TTableSettings TableSettings;
-    };
-
-    struct TAlterTableParameters {
-        TVector<TColumnSchema> AddColumns;
-        TVector<TString> DropColumns;
-        TVector<TColumnSchema> AlterColumns;
-        TVector<TFamilyEntry> AddColumnFamilies;
-        TVector<TFamilyEntry> AlterColumnFamilies;
-        TTableSettings TableSettings;
+        TTableSettings TableSettings; 
+    }; 
+ 
+    struct TAlterTableParameters { 
+        TVector<TColumnSchema> AddColumns; 
+        TVector<TString> DropColumns; 
+        TVector<TColumnSchema> AlterColumns; 
+        TVector<TFamilyEntry> AddColumnFamilies; 
+        TVector<TFamilyEntry> AlterColumnFamilies; 
+        TTableSettings TableSettings; 
         TVector<TIndexDescription> AddIndexes;
         TVector<TIdentifier> DropIndexes;
         TMaybe<TIdentifier> RenameTo;
@@ -1160,8 +1160,8 @@ namespace NSQLTranslationV1 {
                 && !RenameTo.Defined()
                 && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty();
         }
-    };
-
+    }; 
+ 
     struct TRoleParameters {
         TMaybe<TDeferredAtom> Password;
         bool IsPasswordEncrypted = false;
@@ -1321,8 +1321,8 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildTableKeys(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& func, const TVector<TTableArg>& args);
     TNodePtr BuildInputOptions(TPosition pos, const TTableHints& hints);
     TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubquery, TScopedStatePtr scoped);
-    TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TCreateTableParameters& params, TScopedStatePtr scoped);
-    TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped);
+    TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TCreateTableParameters& params, TScopedStatePtr scoped); 
+    TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped); 
     TNodePtr BuildDropTable(TPosition pos, const TTableRef& table, TScopedStatePtr scoped);
     TNodePtr BuildCreateUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TRoleParameters>& params, TScopedStatePtr scoped);
     TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, TScopedStatePtr scoped);

@@ -254,7 +254,7 @@ TKqpScanComputeContext::TScanData::TScanData(const TTableId& tableId, const TTab
     , Range(range)
     , SkipNullKeys(skipNullKeys)
     , Columns(columns)
-    , SystemColumns(systemColumns)
+    , SystemColumns(systemColumns) 
 {}
 
 TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
@@ -446,8 +446,8 @@ TIntrusivePtr<IKqpTableReader> TKqpScanComputeContext::ReadTable(ui32) const {
 class TKqpTableReader : public IKqpTableReader {
 public:
     TKqpTableReader(TKqpScanComputeContext::TScanData& scanData)
-        : ScanData(scanData)
-    {}
+        : ScanData(scanData) 
+    {} 
 
     NUdf::EFetchStatus Next(NUdf::TUnboxedValue& result) override {
         if (ScanData.IsEmpty()) {

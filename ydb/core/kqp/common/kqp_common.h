@@ -27,8 +27,8 @@ struct TKqpEvents {
         EvInitiateShutdownRequest,
         EvInitiateSessionShutdown,
         EvContinueShutdown,
-        EvDataQueryStreamPart,
-        EvDataQueryStreamPartAck,
+        EvDataQueryStreamPart, 
+        EvDataQueryStreamPartAck, 
         EvRecompileRequest,
     };
 

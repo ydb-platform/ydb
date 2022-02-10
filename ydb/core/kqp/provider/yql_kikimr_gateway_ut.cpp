@@ -161,33 +161,33 @@ void TestRunSimpleCommon(TIntrusivePtr<IKqpGateway> gateway) {
 }
 
 void CheckPolicies(Tests::TClient& client, const TString& tableName) {
-    auto describeResult = client.Ls(tableName);
-    UNIT_ASSERT(describeResult->Record.GetPathDescription().HasTableStats());
-    const auto& desc = describeResult->Record.GetPathDescription();
-    UNIT_ASSERT_VALUES_EQUAL(desc.GetTableStats().GetPartCount(), 4);
-    for (const auto column : desc.GetTable().GetColumns()) {
-        if (column.GetName() == "Column2") {
-            UNIT_ASSERT_VALUES_EQUAL(column.GetFamilyName(), "Family2");
-        }
-    }
-    for (const auto family : desc.GetTable().GetPartitionConfig().GetColumnFamilies()) {
-        if (family.HasId() && family.GetId() == 0) {
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(family.GetColumnCodec()),
+    auto describeResult = client.Ls(tableName); 
+    UNIT_ASSERT(describeResult->Record.GetPathDescription().HasTableStats()); 
+    const auto& desc = describeResult->Record.GetPathDescription(); 
+    UNIT_ASSERT_VALUES_EQUAL(desc.GetTableStats().GetPartCount(), 4); 
+    for (const auto column : desc.GetTable().GetColumns()) { 
+        if (column.GetName() == "Column2") { 
+            UNIT_ASSERT_VALUES_EQUAL(column.GetFamilyName(), "Family2"); 
+        } 
+    } 
+    for (const auto family : desc.GetTable().GetPartitionConfig().GetColumnFamilies()) { 
+        if (family.HasId() && family.GetId() == 0) { 
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(family.GetColumnCodec()), 
                 static_cast<size_t>(NKikimrSchemeOp::ColumnCodecPlain));
-        } else if (family.HasName() && family.GetName() == "Family2") {
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(family.GetColumnCodec()),
+        } else if (family.HasName() && family.GetName() == "Family2") { 
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(family.GetColumnCodec()), 
                 static_cast<size_t>(NKikimrSchemeOp::ColumnCodecLZ4));
-        }
-    }
-}
-
+        } 
+    } 
+} 
+ 
 struct TTestIndexSettings {
     const bool WithDataColumns;
 };
 
 void TestCreateTableCommon(TIntrusivePtr<IKikimrGateway> gateway, Tests::TClient& client,
         bool createFolders = true, const TMaybe<TTestIndexSettings> withIndex = Nothing(), bool withExtendedDdl = false,
-        const TMaybe<bool>& shouldCreate = Nothing()) {
+        const TMaybe<bool>& shouldCreate = Nothing()) { 
     auto metadata = MakeIntrusive<TKikimrTableMetadata>();
 
     metadata->Cluster = TestCluster;
@@ -200,11 +200,11 @@ void TestCreateTableCommon(TIntrusivePtr<IKikimrGateway> gateway, Tests::TClient
 
     metadata->Columns.insert(std::make_pair("Column2", TKikimrColumnMetadata{"Column2", 0, "String", false}));
     metadata->ColumnOrder.push_back("Column2");
-
-    if (withExtendedDdl) {
-        metadata->Columns["Column2"].Families.push_back("Family2");
-    }
-
+ 
+    if (withExtendedDdl) { 
+        metadata->Columns["Column2"].Families.push_back("Family2"); 
+    } 
+ 
     metadata->KeyColumnNames.push_back("Column1");
 
     if (withIndex) {
@@ -227,19 +227,19 @@ void TestCreateTableCommon(TIntrusivePtr<IKikimrGateway> gateway, Tests::TClient
         metadata->Indexes.push_back(indexDesc);
     }
 
-    if (withExtendedDdl) {
-        metadata->TableSettings.AutoPartitioningBySize = "disabled";
-        metadata->TableSettings.PartitionAtKeys = {
-            {std::make_pair(EDataSlot::Uint32, "10")},
-            {std::make_pair(EDataSlot::Uint32, "100")},
-            {std::make_pair(EDataSlot::Uint32, "1000")}
-        };
-        metadata->ColumnFamilies = {
-            {"default", "test", "off"},
-            {"Family2", "test", "lz4"}
-        };
-    }
-
+    if (withExtendedDdl) { 
+        metadata->TableSettings.AutoPartitioningBySize = "disabled"; 
+        metadata->TableSettings.PartitionAtKeys = { 
+            {std::make_pair(EDataSlot::Uint32, "10")}, 
+            {std::make_pair(EDataSlot::Uint32, "100")}, 
+            {std::make_pair(EDataSlot::Uint32, "1000")} 
+        }; 
+        metadata->ColumnFamilies = { 
+            {"default", "test", "off"}, 
+            {"Family2", "test", "lz4"} 
+        }; 
+    } 
+ 
     auto responseFuture = gateway->CreateTable(metadata, createFolders);
     responseFuture.Wait();
     auto response = responseFuture.GetValue();
@@ -282,10 +282,10 @@ void TestCreateTableCommon(TIntrusivePtr<IKikimrGateway> gateway, Tests::TClient
                 UNIT_ASSERT_VALUES_EQUAL(indexDescResult.second.DataColumns[i], expectedDesc->second.DataColumns[i]);
             }
         }
-
-        if (withExtendedDdl) {
+ 
+        if (withExtendedDdl) { 
             CheckPolicies(client, metadata->Name);
-        }
+        } 
     }
 }
 
@@ -371,12 +371,12 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         CreateSampleTables(kikimr);
         TestDropTableCommon(GetIcGateway(kikimr.GetTestServer()));
     }
-
-    Y_UNIT_TEST(TestCreateTableWithExtendedDdl) {
+ 
+    Y_UNIT_TEST(TestCreateTableWithExtendedDdl) { 
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);
         TestCreateTableCommon(GetIcGateway(kikimr.GetTestServer()), kikimr.GetTestClient(), true, Nothing(), true);
-    }
+    } 
 }
 
 } // namespace NYql

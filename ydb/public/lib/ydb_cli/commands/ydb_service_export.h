@@ -16,7 +16,7 @@ namespace NConsoleClient {
 
 class TCommandExport : public TClientCommandTree {
 public:
-    TCommandExport(bool useExportToYt);
+    TCommandExport(bool useExportToYt); 
 };
 
 class TCommandExportToYt : public TYdbOperationCommand,

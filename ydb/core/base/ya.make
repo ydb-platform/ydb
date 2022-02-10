@@ -79,9 +79,9 @@ SRCS(
     tablet_status_checker.cpp
     tabletid.h
     tablet_types.h
-    traceid.cpp
-    traceid.h
-    tracing.h
+    traceid.cpp 
+    traceid.h 
+    tracing.h 
     tx_processing.h
     tx_processing.cpp
     user_registry.h

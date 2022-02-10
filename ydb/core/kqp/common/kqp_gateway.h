@@ -173,13 +173,13 @@ public:
     virtual NThreading::TFuture<TQueryResult> ExecScanQueryAst(const TString& cluster, const TString& query,
         TKqpParamsMap&& params, const TAstQuerySettings& settings, ui64 rowsLimit) = 0;
 
-    virtual NThreading::TFuture<TQueryResult> StreamExecDataQueryAst(const TString& cluster, const TString& query,
+    virtual NThreading::TFuture<TQueryResult> StreamExecDataQueryAst(const TString& cluster, const TString& query, 
         TKqpParamsMap&& params, const TAstQuerySettings& settings,
-        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) = 0;
-
-    virtual NThreading::TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query,
+        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) = 0; 
+ 
+    virtual NThreading::TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query, 
         TKqpParamsMap&& params, const TAstQuerySettings& settings, const NActors::TActorId& target) = 0;
-
+ 
 public:
     virtual TInstant GetCurrentTime() const = 0;
 };

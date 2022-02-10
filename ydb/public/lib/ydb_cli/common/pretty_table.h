@@ -33,7 +33,7 @@ public:
     class TRow {
         friend class TPrettyTable;
 
-        explicit TRow(const TVector<TString>& columnNames) {
+        explicit TRow(const TVector<TString>& columnNames) { 
             for (const auto& name : columnNames) {
                 Columns.push_back({name});
             }
@@ -75,7 +75,7 @@ public:
     };
 
 public:
-    explicit TPrettyTable(const TVector<TString>& columnNames, const TPrettyTableConfig& config = TPrettyTableConfig())
+    explicit TPrettyTable(const TVector<TString>& columnNames, const TPrettyTableConfig& config = TPrettyTableConfig()) 
         : Columns(columnNames.size())
         , Config(config)
     {

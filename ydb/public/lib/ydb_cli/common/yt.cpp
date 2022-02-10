@@ -34,7 +34,7 @@ const TString TCommandWithYtToken::YtTokenFile = "~/.yt/token";
 
 void TCommandWithYtToken::ReadYtToken() {
     TString tokenFile = YtTokenFile;
-    YtToken = ReadFromFile(tokenFile, "YT token");
+    YtToken = ReadFromFile(tokenFile, "YT token"); 
 }
 
 }

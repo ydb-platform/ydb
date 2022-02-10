@@ -224,7 +224,7 @@ class TTablet : public TActor<TTablet> {
     ui32 GcNextStep;
     TResourceProfilesPtr ResourceProfiles;
     TSharedQuotaPtr TxCacheQuota;
-    THolder<NTracing::ITrace> IntrospectionTrace;
+    THolder<NTracing::ITrace> IntrospectionTrace; 
     TActorId RebuildGraphRequest;
 
     // Delayed cancellation reason
@@ -359,7 +359,7 @@ class TTablet : public TActor<TTablet> {
     void RetryFollowerBootstrapOrWait();
 
     void SendIntrospectionData();
-
+ 
     STATEFN(StateResolveStateStorage) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvInfo, HandleStateStorageInfoResolve);

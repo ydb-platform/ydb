@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 
-from hamcrest import assert_that, has_length, has_property, equal_to
+from hamcrest import assert_that, has_length, has_property, equal_to 
 
 from ydb.tests.library.common.protobuf_ss import SchemeDescribeRequest
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
@@ -91,14 +91,14 @@ class TestSchemeShardCopyOps(object):
 
         assert_that(
             description.PathDescription.Table.PartitionConfig.FollowerGroups,
-            has_length(
-                equal_to(
-                    1
-                )
-            )
-        )
-
-        assert_that(
+            has_length( 
+                equal_to( 
+                    1 
+                ) 
+            ) 
+        ) 
+ 
+        assert_that( 
             description.PathDescription.Table.PartitionConfig.FollowerGroups[0],
             has_property(
                 'FollowerCount',
@@ -113,17 +113,17 @@ class TestSchemeShardCopyOps(object):
         description = self.cluster.client.send(
             SchemeDescribeRequest(destination_table_full_name).with_partition_config().protobuf, 'SchemeDescribe'
         )
-
+ 
         assert_that(
             description.PathDescription.Table.PartitionConfig.FollowerGroups,
-            has_length(
-                equal_to(
-                    1
-                )
-            )
-        )
-
-        assert_that(
+            has_length( 
+                equal_to( 
+                    1 
+                ) 
+            ) 
+        ) 
+ 
+        assert_that( 
             description.PathDescription.Table.PartitionConfig.FollowerGroups[0],
             has_property(
                 'FollowerCount',

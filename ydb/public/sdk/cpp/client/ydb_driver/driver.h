@@ -37,26 +37,26 @@ public:
     //! of this pool is blocked somewhere in user code.
     //! default: 0
     TDriverConfig& SetClientThreadsNum(size_t sz);
-    //! Warning: not recommended to change
+    //! Warning: not recommended to change 
     //! Set max number of queued responses. 0 - no limit
     //! There is a queue to perform async calls to user code,
     //! if this queue is full, attempts to enqueue responses inside sdk will be blocked
-    //! Size of this queue must be greater than max size of all requests inflight
+    //! Size of this queue must be greater than max size of all requests inflight 
     //! Note: if this limit is reached network threads will be blocked.
     //! Note: set of this limit can cause deadlock in some case of using async interface
     //! This value doesn't make sense if SetClientThreadsNum is 0
     //! default: 0
     TDriverConfig& SetMaxClientQueueSize(size_t sz);
-    //! Enable Ssl.
-    //! caCerts  - The buffer containing the PEM encoding of the server root certificates.
-    //!            If this parameter is empty, the default roots will be used.
+    //! Enable Ssl. 
+    //! caCerts  - The buffer containing the PEM encoding of the server root certificates. 
+    //!            If this parameter is empty, the default roots will be used. 
     TDriverConfig& UseSecureConnection(const TStringType& caCerts = TStringType());
-    //! Set token, this option can be overridden for client by ClientSettings
+    //! Set token, this option can be overridden for client by ClientSettings 
     TDriverConfig& SetAuthToken(const TStringType& token);
-    //! Set database, this option can be overridden for client by ClientSettings
+    //! Set database, this option can be overridden for client by ClientSettings 
     TDriverConfig& SetDatabase(const TStringType& database);
-    //! Set credentials data, this option can be overridden for client by ClientSettings
-    TDriverConfig& SetCredentialsProviderFactory(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
+    //! Set credentials data, this option can be overridden for client by ClientSettings 
+    TDriverConfig& SetCredentialsProviderFactory(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory); 
     //! Set behaviour of discovery routine
     //! See EDiscoveryMode enum comments
     //! default: EDiscoveryMode::Sync
@@ -71,7 +71,7 @@ public:
     //! Specify tcp keep alive settings
     //! This option allows to adjust tcp keep alive settings, useful to work
     //! with balancers or to detect unexpected connectivity problem.
-    //! enable   - if true enable tcp keep alive and use following settings
+    //! enable   - if true enable tcp keep alive and use following settings 
     //!          - if false disable tcp keep alive
     //! idle     - (Linux only) the interval between the last data packet sent and the first keepalive probe, sec
     //!            if zero use OS default
@@ -85,11 +85,11 @@ public:
     //! Enable or disable drain of client logic (e.g. session pool drain) during dtor call
     TDriverConfig& SetDrainOnDtors(bool allowed);
     //! Set policy for balancing
-    //! Params is a optionally field to set policy settings
+    //! Params is a optionally field to set policy settings 
     //! default: EBalancingPolicy::UsePreferableLocation
     TDriverConfig& SetBalancingPolicy(EBalancingPolicy policy, const TStringType& params = TStringType());
     //! !!! EXPERIMENTAL !!!
-    //! Set grpc level keep alive. If keepalive ping was delayed more than given timeout
+    //! Set grpc level keep alive. If keepalive ping was delayed more than given timeout 
     //! internal grpc routine fails request with TRANSIENT_FAILURE or TRANSPORT_UNAVAILABLE error
     //! Note: this timeout should not be too small to prevent fail due to
     //! network buffers delay. I.e. values less than 5 seconds may cause request failure

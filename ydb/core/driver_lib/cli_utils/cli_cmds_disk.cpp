@@ -22,7 +22,7 @@ public:
         IsVerbose = false;
         LockDevice = false;
         MainKey = 0;
-        config.SetFreeArgsNum(1);
+        config.SetFreeArgsNum(1); 
         SetFreeArgTitle(0, "<PATH>", "Disk path");
         config.Opts->AddLongOption('k', "main-key", "encryption main-key to use while reading").RequiredArgument("NUM")
             .Optional().StoreResult(&MainKey); // TODO: make required
@@ -120,7 +120,7 @@ public:
         SectorSize = 4 << 10;
         Guid = 0;
         IsErasureEncode = false;
-        config.SetFreeArgsNum(1);
+        config.SetFreeArgsNum(1); 
         SetFreeArgTitle(0, "<PATH>", "Disk path");
         config.Opts->AddLongOption('d', "disk-size", "disk size to set (supports K/M/G/T suffixes, 0 to autodetect, default = 0)\n"
             "kikimr needs disk of at least 16 GiB, disk must be large enough to contain at least 100 chunks")
@@ -144,7 +144,7 @@ public:
         config.Opts->AddLongOption('e', "erasure-encode", "erasure-encode data to recover from single-sector failures")
             .Optional().NoArgument().SetFlag(&IsErasureEncode);
 
-        config.Opts->SetCmdLineDescr("\n\n"
+        config.Opts->SetCmdLineDescr("\n\n" 
             "Kikimr was designed to work with large block-devices, like 4 TiB HDDs and 1 TiB SSDs\n"
             "It will work with files, but don't expect good performance.\n"
             "If you still want to run kikimr with a tiny file, specify --disk-size 17179869184 --chunk-size 33554432");

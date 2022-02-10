@@ -28,8 +28,8 @@
 
 namespace NYql {
 
-using NUdf::EDataSlot;
-
+using NUdf::EDataSlot; 
+ 
 class TKikimrGatewayConfig;
 class TKikimrClusterConfig;
 
@@ -147,12 +147,12 @@ struct TIndexDescription {
     }
 };
 
-struct TColumnFamily {
-    TString Name;
-    TMaybe<TString> Data;
-    TMaybe<TString> Compression;
-};
-
+struct TColumnFamily { 
+    TString Name; 
+    TMaybe<TString> Data; 
+    TMaybe<TString> Compression; 
+}; 
+ 
 struct TTtlSettings {
     TString ColumnName;
     TDuration ExpireAfter;
@@ -160,23 +160,23 @@ struct TTtlSettings {
     static bool TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error);
 };
 
-struct TTableSettings {
-    TMaybe<TString> CompactionPolicy;
-    TVector<TString> PartitionBy;
-    TMaybe<TString> AutoPartitioningBySize;
-    TMaybe<ui64> PartitionSizeMb;
-    TMaybe<TString> AutoPartitioningByLoad;
-    TMaybe<ui64> MinPartitions;
-    TMaybe<ui64> MaxPartitions;
-    TMaybe<ui64> UniformPartitions;
-    TVector<TVector<std::pair<EDataSlot, TString>>> PartitionAtKeys;
-    TMaybe<TString> KeyBloomFilter;
-    TMaybe<TString> ReadReplicasSettings;
+struct TTableSettings { 
+    TMaybe<TString> CompactionPolicy; 
+    TVector<TString> PartitionBy; 
+    TMaybe<TString> AutoPartitioningBySize; 
+    TMaybe<ui64> PartitionSizeMb; 
+    TMaybe<TString> AutoPartitioningByLoad; 
+    TMaybe<ui64> MinPartitions; 
+    TMaybe<ui64> MaxPartitions; 
+    TMaybe<ui64> UniformPartitions; 
+    TVector<TVector<std::pair<EDataSlot, TString>>> PartitionAtKeys; 
+    TMaybe<TString> KeyBloomFilter; 
+    TMaybe<TString> ReadReplicasSettings; 
     TResetableSetting<TTtlSettings, void> TtlSettings;
-
-    bool IsSet() const;
-};
-
+ 
+    bool IsSet() const; 
+}; 
+ 
 struct TKikimrColumnMetadata {
     TString Name;
     ui32 Id = 0;
@@ -296,8 +296,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TVector<TIndexDescription> Indexes;
     TVector<TIntrusivePtr<TKikimrTableMetadata>> SecondaryGlobalIndexMetadata;
 
-    TVector<TColumnFamily> ColumnFamilies;
-    TTableSettings TableSettings;
+    TVector<TColumnFamily> ColumnFamilies; 
+    TTableSettings TableSettings; 
 
     TKikimrTableMetadata(const TString& cluster, const TString& table)
         : Cluster(cluster)
@@ -421,43 +421,43 @@ struct TKikimrTableMetadata : public TThrRefBase {
     }
 };
 
-struct TCreateUserSettings {
-    TString UserName;
-    TString Password;
-    bool PasswordEncrypted = false;
-};
+struct TCreateUserSettings { 
+    TString UserName; 
+    TString Password; 
+    bool PasswordEncrypted = false; 
+}; 
 
-struct TAlterUserSettings {
-    TString UserName;
-    TString Password;
-    bool PasswordEncrypted = false;
-};
-
-struct TDropUserSettings {
-    TString UserName;
-    bool Force = false;
-};
-
-struct TCreateGroupSettings {
-    TString GroupName;
-};
-
-struct TAlterGroupSettings {
-    enum class EAction : ui32 {
-        AddRoles = 0,
-        RemoveRoles = 1,
-    };
-
-    TString GroupName;
-    EAction Action;
-    std::vector<TString> Roles;
-};
-
-struct TDropGroupSettings {
-    TString GroupName;
-    bool Force = false;
-};
-
+struct TAlterUserSettings { 
+    TString UserName; 
+    TString Password; 
+    bool PasswordEncrypted = false; 
+}; 
+ 
+struct TDropUserSettings { 
+    TString UserName; 
+    bool Force = false; 
+}; 
+ 
+struct TCreateGroupSettings { 
+    TString GroupName; 
+}; 
+ 
+struct TAlterGroupSettings { 
+    enum class EAction : ui32 { 
+        AddRoles = 0, 
+        RemoveRoles = 1, 
+    }; 
+ 
+    TString GroupName; 
+    EAction Action; 
+    std::vector<TString> Roles; 
+}; 
+ 
+struct TDropGroupSettings { 
+    TString GroupName; 
+    bool Force = false; 
+}; 
+ 
 struct TKikimrListPathItem {
     TKikimrListPathItem(TString name, bool isDirectory) {
         Name = name;
@@ -603,18 +603,18 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) = 0;
-
-    virtual NThreading::TFuture<TGenericResult> AlterUser(const TString& cluster, const TAlterUserSettings& settings) = 0;
-
-    virtual NThreading::TFuture<TGenericResult> DropUser(const TString& cluster, const TDropUserSettings& settings) = 0;
-
-    virtual NThreading::TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) = 0;
-
-    virtual NThreading::TFuture<TGenericResult> AlterGroup(const TString& cluster, TAlterGroupSettings& settings) = 0;
-
-    virtual NThreading::TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) = 0;
-
+    virtual NThreading::TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) = 0; 
+ 
+    virtual NThreading::TFuture<TGenericResult> AlterUser(const TString& cluster, const TAlterUserSettings& settings) = 0; 
+ 
+    virtual NThreading::TFuture<TGenericResult> DropUser(const TString& cluster, const TDropUserSettings& settings) = 0; 
+ 
+    virtual NThreading::TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) = 0; 
+ 
+    virtual NThreading::TFuture<TGenericResult> AlterGroup(const TString& cluster, TAlterGroupSettings& settings) = 0; 
+ 
+    virtual NThreading::TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) = 0; 
+ 
     virtual TVector<TString> GetCollectedSchemeData() = 0;
 
 public:

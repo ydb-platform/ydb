@@ -8,7 +8,7 @@
 #include <ydb/library/yql/core/yql_type_annotation.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <library/cpp/actors/core/actor.h> 
 #include <library/cpp/cache/cache.h>
 
 #include <util/generic/strbuf.h>
@@ -71,8 +71,8 @@ enum class EKikimrQueryType {
     Ddl,
     YqlScript,
     YqlInternal,
-    Scan,
-    YqlScriptStreaming,
+    Scan, 
+    YqlScriptStreaming, 
 };
 
 struct TKikimrQueryContext : TThrRefBase {
@@ -108,9 +108,9 @@ struct TKikimrQueryContext : TThrRefBase {
     THashMap<ui64, TIntrusivePtr<IKikimrQueryExecutor::TAsyncQueryResult>> InProgress;
     TVector<ui64> ExecutionOrder;
 
-    NActors::TActorId ReplyTarget;
+    NActors::TActorId ReplyTarget; 
     TMaybe<NKikimrKqp::TRlPath> RlPath;
-
+ 
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
 
@@ -187,7 +187,7 @@ public:
     const TStructExprType* SchemeNode = nullptr;
     TMaybe<TString> RelativePath;
 
-    bool Load(TExprContext& ctx, bool withVirtualColumns = false);
+    bool Load(TExprContext& ctx, bool withVirtualColumns = false); 
     void ToYson(NYson::TYsonWriter& writer) const;
 
     TMaybe<ui32> GetKeyColumnIndex(const TString& name) const;
@@ -231,10 +231,10 @@ private:
     THashMap<std::pair<TString, TString>, TKikimrTableDescription> Tables;
 };
 
-enum class TYdbOperation : ui32 {
-    CreateTable          = 1 << 0,
-    DropTable            = 1 << 1,
-    AlterTable           = 1 << 2,
+enum class TYdbOperation : ui32 { 
+    CreateTable          = 1 << 0, 
+    DropTable            = 1 << 1, 
+    AlterTable           = 1 << 2, 
     Select               = 1 << 3,
     Upsert               = 1 << 4,
     Replace              = 1 << 5,
@@ -245,16 +245,16 @@ enum class TYdbOperation : ui32 {
     ReservedInsertIgnore = 1 << 10,
     UpdateOn             = 1 << 11,
     DeleteOn             = 1 << 12,
-    CreateUser           = 1 << 13,
-    AlterUser            = 1 << 14,
-    DropUser             = 1 << 15,
-    CreateGroup           = 1 << 16,
-    AlterGroup            = 1 << 17,
-    DropGroup             = 1 << 18
+    CreateUser           = 1 << 13, 
+    AlterUser            = 1 << 14, 
+    DropUser             = 1 << 15, 
+    CreateGroup           = 1 << 16, 
+    AlterGroup            = 1 << 17, 
+    DropGroup             = 1 << 18 
 };
 
-Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation)
-Y_DECLARE_OPERATORS_FOR_FLAGS(TYdbOperations)
+Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation) 
+Y_DECLARE_OPERATORS_FOR_FLAGS(TYdbOperations) 
 
 class IKikimrTransactionContext : public TThrRefBase {
 public:
@@ -273,7 +273,7 @@ public:
 
 class TKikimrTransactionContextBase : public IKikimrTransactionContext {
 public:
-    THashMap<TString, TYdbOperations> TableOperations;
+    THashMap<TString, TYdbOperations> TableOperations; 
     THashMap<TKikimrPathId, TString> TableByIdMap;
     TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
     bool Readonly = false;

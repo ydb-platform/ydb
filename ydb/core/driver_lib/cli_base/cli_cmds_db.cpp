@@ -21,10 +21,10 @@
 namespace NKikimr {
 namespace NDriverClient {
 
-void WarnProfilePathSet() {
-    Cout << "FYI: profile path is set. You can use short pathnames. Try --help for more info." << Endl;
-}
-
+void WarnProfilePathSet() { 
+    Cout << "FYI: profile path is set. You can use short pathnames. Try --help for more info." << Endl; 
+} 
+ 
 class TClientCommandSchemaMkdir : public TClientCommand {
 public:
     TClientCommandSchemaMkdir()
@@ -35,9 +35,9 @@ public:
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<NAME>", "Full pathname of a directory (e.g. /ru/home/user/mydb/test1/test2).\n"
-            "          Or short pathname if profile path is set (e.g. test1/test2).");
+        config.SetFreeArgsNum(1); 
+        SetFreeArgTitle(0, "<NAME>", "Full pathname of a directory (e.g. /ru/home/user/mydb/test1/test2).\n" 
+            "          Or short pathname if profile path is set (e.g. test1/test2)."); 
     }
 
     TString Base;
@@ -45,20 +45,20 @@ public:
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
-        TString pathname = config.ParseResult->GetFreeArgs()[0];
-        size_t pos = pathname.rfind('/');
-        if (config.Path) {
-            // Profile path is set
-            if (!pathname.StartsWith('/')) {
-                Base = config.Path;
-                Name = pathname;
-                return;
-            } else {
-                WarnProfilePathSet();
-            }
-        }
-        Base = pathname.substr(0, pos);
-        Name = pathname.substr(pos + 1);
+        TString pathname = config.ParseResult->GetFreeArgs()[0]; 
+        size_t pos = pathname.rfind('/'); 
+        if (config.Path) { 
+            // Profile path is set 
+            if (!pathname.StartsWith('/')) { 
+                Base = config.Path; 
+                Name = pathname; 
+                return; 
+            } else { 
+                WarnProfilePathSet(); 
+            } 
+        } 
+        Base = pathname.substr(0, pos); 
+        Name = pathname.substr(pos + 1); 
     }
 
     virtual int Run(TConfig& config) override {
@@ -80,9 +80,9 @@ public:
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<NAME>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n"
-            "          Or short pathname if profile path is set (e.g. test1/test2).");
+        config.SetFreeArgsNum(1); 
+        SetFreeArgTitle(0, "<NAME>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n" 
+            "          Or short pathname if profile path is set (e.g. test1/test2)."); 
     }
 
     TString Base;
@@ -90,20 +90,20 @@ public:
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
-        TString pathname = config.ParseResult->GetFreeArgs()[0];
-        size_t pos = pathname.rfind('/');
-        if (config.Path) {
-            // Profile path is set
-            if (!pathname.StartsWith('/')) {
-                Base = config.Path;
-                Name = pathname;
-                return;
-            } else {
-                WarnProfilePathSet();
-            }
-        }
-        Base = pathname.substr(0, pos);
-        Name = pathname.substr(pos + 1);
+        TString pathname = config.ParseResult->GetFreeArgs()[0]; 
+        size_t pos = pathname.rfind('/'); 
+        if (config.Path) { 
+            // Profile path is set 
+            if (!pathname.StartsWith('/')) { 
+                Base = config.Path; 
+                Name = pathname; 
+                return; 
+            } else { 
+                WarnProfilePathSet(); 
+            } 
+        } 
+        Base = pathname.substr(0, pos); 
+        Name = pathname.substr(pos + 1); 
     }
 
     virtual int Run(TConfig& config) override {
@@ -115,10 +115,10 @@ public:
     }
 };
 
-class TClientCommandSchemaExec : public TClientCommandConfig {
+class TClientCommandSchemaExec : public TClientCommandConfig { 
 public:
     TClientCommandSchemaExec()
-        : TClientCommandConfig("execute", { "exec" }, "Execute schema protobuf")
+        : TClientCommandConfig("execute", { "exec" }, "Execute schema protobuf") 
     {}
 
     bool ReturnTxId;
@@ -129,8 +129,8 @@ public:
         TClientCommand::Config(config);
         ReturnTxId = false;
         config.Opts->AddLongOption('t', "txid", "Print TxId").NoArgument().SetFlag(&ReturnTxId);
-        config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<SCHEMA-PROTO>", "Schema protobuf or file with schema protobuf");
+        config.SetFreeArgsNum(1); 
+        SetFreeArgTitle(0, "<SCHEMA-PROTO>", "Schema protobuf or file with schema protobuf"); 
     }
 
     virtual void Parse(TConfig& config) override {
@@ -200,8 +200,8 @@ public:
         Protobuf = false;
         PartitionStats = false;
         Boundaries = false;
-        config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<PATH>", "Schema path or pathId (e.g. 72075186232623600/1225)");
+        config.SetFreeArgsNum(1); 
+        SetFreeArgTitle(0, "<PATH>", "Schema path or pathId (e.g. 72075186232623600/1225)"); 
         config.Opts->AddLongOption('t', "tree", "Show schema path tree").NoArgument().SetFlag(&Tree);
         config.Opts->AddLongOption('d', "details", "Show detailed information (like columns in a table)").NoArgument().SetFlag(&Details);
         config.Opts->AddLongOption('a', "acl", "Show owner and acl information").NoArgument().SetFlag(&AccessRights);
@@ -438,8 +438,8 @@ public:
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<PATH>", "Schema path");
+        config.SetFreeArgsNum(1); 
+        SetFreeArgTitle(0, "<PATH>", "Schema path"); 
     }
 
     virtual void Parse(TConfig& config) override {
@@ -523,8 +523,8 @@ public:
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
         config.Opts->AddLongOption("pool", "default storage pool").RequiredArgument("NAME").StoreResult(&DefaultStoragePool);
-        config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<ROOT>", "Schema root name");
+        config.SetFreeArgsNum(1); 
+        SetFreeArgTitle(0, "<ROOT>", "Schema root name"); 
     }
 
     virtual void Parse(TConfig& config) override {
@@ -565,10 +565,10 @@ public:
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.SetFreeArgsNum(2);
-        SetFreeArgTitle(0, "<USER>", "User");
-        SetFreeArgTitle(1, "<PATH>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n"
-            "          Or short pathname if profile path is set (e.g. test1/test2).");
+        config.SetFreeArgsNum(2); 
+        SetFreeArgTitle(0, "<USER>", "User"); 
+        SetFreeArgTitle(1, "<PATH>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n" 
+            "          Or short pathname if profile path is set (e.g. test1/test2)."); 
         config.Opts->AddLongOption('R', "recursive", "Change owner on schema objects recursively").NoArgument().SetFlag(&Recursive);
         config.Opts->AddLongOption('v', "verbose", "Verbose output").NoArgument().SetFlag(&Verbose);
     }
@@ -579,17 +579,17 @@ public:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         Owner = config.ParseResult->GetFreeArgs()[0];
-        TString pathname = config.ParseResult->GetFreeArgs()[1];
-        if (config.Path) {
-            // Profile path is set
-            if (!pathname.StartsWith('/')) {
-                Path = config.Path + '/' + pathname;
-                return;
-            } else {
-                WarnProfilePathSet();
-            }
-        }
-        Path = pathname;
+        TString pathname = config.ParseResult->GetFreeArgs()[1]; 
+        if (config.Path) { 
+            // Profile path is set 
+            if (!pathname.StartsWith('/')) { 
+                Path = config.Path + '/' + pathname; 
+                return; 
+            } else { 
+                WarnProfilePathSet(); 
+            } 
+        } 
+        Path = pathname; 
     }
 
     int Chown(TConfig& config, const TString& path) {
@@ -662,10 +662,10 @@ public:
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.SetFreeArgsNum(2);
-        SetFreeArgTitle(0, "<PATH>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n"
-            "            Or short pathname if profile path is set (e.g. test1/test2).");
-        SetFreeArgTitle(1, "<ACCESS>", "ACCESS");
+        config.SetFreeArgsNum(2); 
+        SetFreeArgTitle(0, "<PATH>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n" 
+            "            Or short pathname if profile path is set (e.g. test1/test2)."); 
+        SetFreeArgTitle(1, "<ACCESS>", "ACCESS"); 
     }
 
     TString Access;
@@ -674,22 +674,22 @@ public:
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
-        TString pathname = config.ParseResult->GetFreeArgs()[0];
-        size_t pos = pathname.rfind('/');
-        if (config.Path) {
-            // Profile path is set
-            if (!pathname.StartsWith('/')) {
-                Base = config.Path;
-                Name = pathname;
-            } else {
-                WarnProfilePathSet();
-                Base = pathname.substr(0, pos);
-                Name = pathname.substr(pos + 1);
-            }
-        } else {
-            Base = pathname.substr(0, pos);
-            Name = pathname.substr(pos + 1);
-        }
+        TString pathname = config.ParseResult->GetFreeArgs()[0]; 
+        size_t pos = pathname.rfind('/'); 
+        if (config.Path) { 
+            // Profile path is set 
+            if (!pathname.StartsWith('/')) { 
+                Base = config.Path; 
+                Name = pathname; 
+            } else { 
+                WarnProfilePathSet(); 
+                Base = pathname.substr(0, pos); 
+                Name = pathname.substr(pos + 1); 
+            } 
+        } else { 
+            Base = pathname.substr(0, pos); 
+            Name = pathname.substr(pos + 1); 
+        } 
         Access = config.ParseResult->GetFreeArgs()[1];
     }
 
@@ -733,10 +733,10 @@ public:
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.SetFreeArgsNum(2);
-        SetFreeArgTitle(0, "<PATH>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n"
-            "            Or short pathname if profile path is set (e.g. test1/test2).");
-        SetFreeArgTitle(1, "<ACCESS>", "ACCESS");
+        config.SetFreeArgsNum(2); 
+        SetFreeArgTitle(0, "<PATH>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n" 
+            "            Or short pathname if profile path is set (e.g. test1/test2)."); 
+        SetFreeArgTitle(1, "<ACCESS>", "ACCESS"); 
     }
 
     TString Access;
@@ -745,22 +745,22 @@ public:
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
-        TString pathname = config.ParseResult->GetFreeArgs()[0];
-        size_t pos = pathname.rfind('/');
-        if (config.Path) {
-            // Profile path is set
-            if (!pathname.StartsWith('/')) {
-                Base = config.Path;
-                Name = pathname;
-            } else {
-                WarnProfilePathSet();
-                Base = pathname.substr(0, pos);
-                Name = pathname.substr(pos + 1);
-            }
-        } else {
-            Base = pathname.substr(0, pos);
-            Name = pathname.substr(pos + 1);
-        }
+        TString pathname = config.ParseResult->GetFreeArgs()[0]; 
+        size_t pos = pathname.rfind('/'); 
+        if (config.Path) { 
+            // Profile path is set 
+            if (!pathname.StartsWith('/')) { 
+                Base = config.Path; 
+                Name = pathname; 
+            } else { 
+                WarnProfilePathSet(); 
+                Base = pathname.substr(0, pos); 
+                Name = pathname.substr(pos + 1); 
+            } 
+        } else { 
+            Base = pathname.substr(0, pos); 
+            Name = pathname.substr(pos + 1); 
+        } 
         Access = config.ParseResult->GetFreeArgs()[1];
     }
 
@@ -818,15 +818,15 @@ public:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
-        if (CommandConfig.ClientConfig.Defined()) {
+        if (CommandConfig.ClientConfig.Defined()) { 
             auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&CommandConfig.ClientConfig.GetRef());
             if (p) {
                 ClientConfig.Locator = p->Locator;
                 ClientConfig.Timeout = p->Timeout;
                 ClientConfig.MaxMessageSize = p->MaxMessageSize;
                 ClientConfig.MaxInFlight = p->MaxInFlight;
-                ClientConfig.EnableSsl = p->EnableSsl;
-                ClientConfig.SslCaCert = p->SslCaCert;
+                ClientConfig.EnableSsl = p->EnableSsl; 
+                ClientConfig.SslCaCert = p->SslCaCert; 
             }
         }
     }
@@ -936,15 +936,15 @@ public:
         TClientCommand::Config(config);
 
         config.SetFreeArgsNum(0);
-        config.Opts->AddLongOption("database", "Database name").AddLongName("db").Required().RequiredArgument("DB").StoreResult(&DatabaseName);
-        config.Opts->AddLongOption("source", "Source table path").AddLongName("src").RequiredArgument("PATH").AppendTo(&SrcValues);
-        config.Opts->AddLongOption("destination", "Destination table path").AddLongName("dst").RequiredArgument("PATH").AppendTo(&DstValues);
+        config.Opts->AddLongOption("database", "Database name").AddLongName("db").Required().RequiredArgument("DB").StoreResult(&DatabaseName); 
+        config.Opts->AddLongOption("source", "Source table path").AddLongName("src").RequiredArgument("PATH").AppendTo(&SrcValues); 
+        config.Opts->AddLongOption("destination", "Destination table path").AddLongName("dst").RequiredArgument("PATH").AppendTo(&DstValues); 
     }
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
-        if (!CommandConfig.ClientConfig.Defined()) {
+        if (!CommandConfig.ClientConfig.Defined()) { 
             return;
         }
 
@@ -1256,9 +1256,9 @@ public:
     }
 };
 
-TClientCommandSchemaLite::TClientCommandSchemaLite()
-    : TClientCommandTree("schema", {}, "Schema operations")
-{
+TClientCommandSchemaLite::TClientCommandSchemaLite() 
+    : TClientCommandTree("schema", {}, "Schema operations") 
+{ 
     AddCommand(std::make_unique<TClientCommandSchemaExec>());
     AddCommand(std::make_unique<TClientCommandSchemaDescribe>());
     AddCommand(std::make_unique<TClientCommandSchemaLs>());
@@ -1268,20 +1268,20 @@ TClientCommandSchemaLite::TClientCommandSchemaLite()
     AddCommand(std::make_unique<TClientCommandSchemaAccess>());
     AddCommand(std::make_unique<TClientCommandSchemaTable>());
     AddCommand(std::make_unique<TClientCommandSchemaUserAttribute>());
-}
+} 
 
-class TClientCommandSchema : public TClientCommandSchemaLite {
-public:
-    TClientCommandSchema()
-    {
+class TClientCommandSchema : public TClientCommandSchemaLite { 
+public: 
+    TClientCommandSchema() 
+    { 
         AddCommand(std::make_unique<TClientCommandSchemaInit>());
-    }
-};
-
-class TClientCommandDbExec : public TClientCommandConfig {
+    } 
+}; 
+ 
+class TClientCommandDbExec : public TClientCommandConfig { 
 public:
     TClientCommandDbExec()
-        : TClientCommandConfig("minikql", { "execute", "exec", "mkql" }, "Execute Mini-KQL query")
+        : TClientCommandConfig("minikql", { "execute", "exec", "mkql" }, "Execute Mini-KQL query") 
     {}
 
     TString MiniKQL;
@@ -1290,9 +1290,9 @@ public:
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.SetFreeArgsNum(1, 2);
-        SetFreeArgTitle(0, "<MINIKQL>", "Text MiniKQL");
-        SetFreeArgTitle(1, "<PARAMS>", "Text MiniKQL parameters");
+        config.SetFreeArgsNum(1, 2); 
+        SetFreeArgTitle(0, "<MINIKQL>", "Text MiniKQL"); 
+        SetFreeArgTitle(1, "<PARAMS>", "Text MiniKQL parameters"); 
         config.Opts->AddLongOption('p', "proto", "MiniKQL parameters are in protobuf format").NoArgument().SetFlag(&Proto);
     }
 
@@ -1350,8 +1350,8 @@ public:
             .RequiredArgument("NUM").StoreResult(&MaxKeys).DefaultValue("1000");
         config.Opts->AddLongOption("columns", "Comma separated list of columns to read")
             .RequiredArgument("NAMES").StoreResult(&Columns);
-        config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<PATH>", "path to table");
+        config.SetFreeArgsNum(1); 
+        SetFreeArgTitle(0, "<PATH>", "path to table"); 
     }
 
     virtual void Parse(TConfig& config) override {

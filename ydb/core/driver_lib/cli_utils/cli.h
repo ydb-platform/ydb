@@ -4,7 +4,7 @@
 
 #include <ydb/core/driver_lib/cli_base/cli.h>
 #include <ydb/core/driver_lib/run/factories.h>
-
+ 
 #include <library/cpp/actors/interconnect/poller_tcp.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 
@@ -37,8 +37,8 @@ namespace NDriverClient {
     int PersQueueDiscoverClustersRequest(TCommandConfig &cmdConf, int argc, char **argv);
     int LoadRequest(TCommandConfig &cmdConf, int argc, char **argv);
     int ActorsysPerfTest(TCommandConfig &cmdConf, int argc, char **argv);
-    void HideOptions(NLastGetopt::TOpts& opts, const TString& prefix);
-    void HideOptions(NLastGetopt::TOpts& opts);
+    void HideOptions(NLastGetopt::TOpts& opts, const TString& prefix); 
+    void HideOptions(NLastGetopt::TOpts& opts); 
     int NewClient(int argc, char** argv, std::shared_ptr<TModuleFactories> factories);
     TString NewClientCommandsDescription(std::shared_ptr<TModuleFactories> factories);
 }

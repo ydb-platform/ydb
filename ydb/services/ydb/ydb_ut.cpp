@@ -1265,10 +1265,10 @@ columns {
   }
 }
 primary_key: "Key"
-partitioning_settings {
-  partitioning_by_size: DISABLED
-  partitioning_by_load: DISABLED
-}
+partitioning_settings { 
+  partitioning_by_size: DISABLED 
+  partitioning_by_load: DISABLED 
+} 
 )___";
            UNIT_ASSERT_NO_DIFF(tmp, expected);
         }
@@ -1606,10 +1606,10 @@ indexes {
   }
   status: STATUS_READY
 }
-partitioning_settings {
-  partitioning_by_size: DISABLED
-  partitioning_by_load: DISABLED
-}
+partitioning_settings { 
+  partitioning_by_size: DISABLED 
+  partitioning_by_load: DISABLED 
+} 
 )___";
            UNIT_ASSERT_NO_DIFF(tmp, expected);
         }
@@ -3661,14 +3661,14 @@ void Apply(const NKikimrConfig::TReplicationPolicy &policy,
     if (policy.HasFollowerCount()) {
         auto& followerGroup = *partition.AddFollowerGroups();
         followerGroup.SetFollowerCount(policy.GetFollowerCount());
-        if (policy.GetCrossDataCenter()) {
+        if (policy.GetCrossDataCenter()) { 
             followerGroup.SetRequireAllDataCenters(true);
-        } else {
+        } else { 
             followerGroup.SetRequireAllDataCenters(false);
-        }
+        } 
         if (policy.HasAllowFollowerPromotion()) {
             followerGroup.SetAllowLeaderPromotion(policy.GetAllowFollowerPromotion());
-        }
+        } 
     }
 }
 

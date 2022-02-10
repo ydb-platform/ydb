@@ -107,8 +107,8 @@ SRCS(
     tenant_pool.proto
     tenant_slot_broker.proto
     test_shard.proto
-    tracing.proto
-    tablet_tracing_signals.proto
+    tracing.proto 
+    tablet_tracing_signals.proto 
     node_whiteboard.proto
     tx.proto
     tx_columnshard.proto

@@ -43,23 +43,23 @@ struct TWriteTableSettings {
     NNodes::TMaybeNode<NNodes::TCoIndexList> Indexes;
     NNodes::TMaybeNode<NNodes::TCoChangefeedList> Changefeeds;
     NNodes::TCoNameValueTupleList Other;
-    NNodes::TMaybeNode<NNodes::TExprList> ColumnFamilies;
-    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TableSettings;
-    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> AlterActions;
+    NNodes::TMaybeNode<NNodes::TExprList> ColumnFamilies; 
+    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TableSettings; 
+    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> AlterActions; 
 
     TWriteTableSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other) {}
 };
 
-struct TWriteRoleSettings {
-    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
-    NNodes::TMaybeNode<NNodes::TCoAtomList> Roles;
-    NNodes::TCoNameValueTupleList Other;
-
-    TWriteRoleSettings(const NNodes::TCoNameValueTupleList& other)
-        : Other(other) {}
-};
-
+struct TWriteRoleSettings { 
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode; 
+    NNodes::TMaybeNode<NNodes::TCoAtomList> Roles; 
+    NNodes::TCoNameValueTupleList Other; 
+ 
+    TWriteRoleSettings(const NNodes::TCoNameValueTupleList& other) 
+        : Other(other) {} 
+}; 
+ 
 struct TCommitSettings
 {
     TPositionHandle Pos;
@@ -87,8 +87,8 @@ TVector<TString> GetResOrPullColumnHints(const TExprNode& node);
 
 TWriteTableSettings ParseWriteTableSettings(NNodes::TExprList node, TExprContext& ctx);
 
-TWriteRoleSettings ParseWriteRoleSettings(NNodes::TExprList node, TExprContext& ctx);
-
+TWriteRoleSettings ParseWriteRoleSettings(NNodes::TExprList node, TExprContext& ctx); 
+ 
 TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx);
 
 TString FullTableName(const TStringBuf& cluster, const TStringBuf& table);

@@ -274,7 +274,7 @@ TExprNode::TPtr KiUpsertTableToKql(const TKiWriteTable& node, TExprContext& ctx,
             valueTuples.push_back(tuple);
         } else if (replace) {
             auto type = table.GetColumnType(name);
-            YQL_ENSURE(type, "No such column: " << name);
+            YQL_ENSURE(type, "No such column: " << name); 
             auto tuple = Build<TCoNameValueTuple>(ctx, node.Pos())
                 .Name().Build(name)
                 .Value<TCoNothing>()
@@ -325,7 +325,7 @@ TExprNode::TPtr KiUpsertTableToKql(const TKiWriteTable& node, TExprContext& ctx,
 }
 
 TExprNode::TPtr KiInsertTableToKql(const TKiWriteTable& node, TExprContext& ctx, const TKikimrTableDescription& table,
-    const TYdbOperation& op, TExprNode::TPtr& effect)
+    const TYdbOperation& op, TExprNode::TPtr& effect) 
 {
     auto fetchItemArg = Build<TCoArgument>(ctx, node.Pos())
         .Name("fetchItem")
@@ -394,14 +394,14 @@ TExprNode::TPtr KiInsertTableToKql(const TKiWriteTable& node, TExprContext& ctx,
     TExprNode::TPtr insertEffect;
     auto insertKql = KiUpsertTableToKql(node, ctx, table, false, true, insertEffect);
 
-    if (op == TYdbOperation::InsertAbort) {
+    if (op == TYdbOperation::InsertAbort) { 
         effect = Build<TKiAbortIf>(ctx, node.Pos())
             .Predicate(predicate)
             .Effect(insertEffect)
             .Constraint().Build("insert_pk")
             .Done()
             .Ptr();
-    } else if (op == TYdbOperation::InsertRevert) {
+    } else if (op == TYdbOperation::InsertRevert) { 
         effect = Build<TKiRevertIf>(ctx, node.Pos())
             .Predicate(predicate)
             .Effect(insertEffect)
@@ -515,7 +515,7 @@ TExprNode::TPtr KiDeleteOnTableToKql(const TKiWriteTable& node, TExprContext& ct
         .Ptr();
 }
 
-TExprNode::TPtr KiReadTableToKql(TCoRight right, TExprContext& ctx, const TKikimrTablesData& tablesData, bool withSystemColumns) {
+TExprNode::TPtr KiReadTableToKql(TCoRight right, TExprContext& ctx, const TKikimrTablesData& tablesData, bool withSystemColumns) { 
     const auto& read = right.Input().Cast<TKiReadTable>();
     bool unwrapValues = HasSetting(read.Settings().Ref(), "unwrap_values");
 
@@ -560,7 +560,7 @@ TExprNode::TPtr KiReadTableToKql(TCoRight right, TExprContext& ctx, const TKikim
             .Cluster(cluster)
             .Table(versionedTable)
             .Range(range.ToRangeExpr(read, ctx))
-            .Select(read.GetSelectColumns(ctx, tablesData, withSystemColumns))
+            .Select(read.GetSelectColumns(ctx, tablesData, withSystemColumns)) 
             .Settings()
                 .Build()
             .IndexName()
@@ -580,7 +580,7 @@ TExprNode::TPtr KiReadTableToKql(TCoRight right, TExprContext& ctx, const TKikim
             .Cluster(cluster)
             .Table(versionedTable)
             .Range(range.ToRangeExpr(read, ctx))
-            .Select(read.GetSelectColumns(ctx, tablesData, withSystemColumns))
+            .Select(read.GetSelectColumns(ctx, tablesData, withSystemColumns)) 
             .Settings()
                 .Build()
             .Done();
@@ -790,15 +790,15 @@ TExprNode::TPtr KiWriteTableToKql(TKiWriteTable write, TExprContext& ctx,
     auto& tableDesc = tablesData.ExistingTable(TString(cluster), TString(table));
 
     switch (op) {
-        case TYdbOperation::Upsert:
-        case TYdbOperation::Replace:
-            return KiUpsertTableToKql(write, ctx, tableDesc, op == TYdbOperation::Replace, false, effect);
-        case TYdbOperation::InsertRevert:
-        case TYdbOperation::InsertAbort:
+        case TYdbOperation::Upsert: 
+        case TYdbOperation::Replace: 
+            return KiUpsertTableToKql(write, ctx, tableDesc, op == TYdbOperation::Replace, false, effect); 
+        case TYdbOperation::InsertRevert: 
+        case TYdbOperation::InsertAbort: 
             return KiInsertTableToKql(write, ctx, tableDesc, op, effect);
-        case TYdbOperation::DeleteOn:
+        case TYdbOperation::DeleteOn: 
             return KiDeleteOnTableToKql(write, ctx, tableDesc, effect);
-        case TYdbOperation::UpdateOn:
+        case TYdbOperation::UpdateOn: 
             return KiUpdateOnTableToKql(write, ctx, tableDesc, effect);
         default:
             return nullptr;
@@ -806,7 +806,7 @@ TExprNode::TPtr KiWriteTableToKql(TKiWriteTable write, TExprContext& ctx,
 }
 
 TExprNode::TPtr KiUpdateTableToKql(TKiUpdateTable update, TExprContext& ctx,
-    const TKikimrTablesData& tablesData, TExprNode::TPtr& effect, bool withSystemColumns)
+    const TKikimrTablesData& tablesData, TExprNode::TPtr& effect, bool withSystemColumns) 
 {
     YQL_ENSURE(update.Update().Ref().GetTypeAnn());
 
@@ -987,7 +987,7 @@ TExprNode::TPtr KiUpdateTableToKql(TKiUpdateTable update, TExprContext& ctx,
 }
 
 TExprNode::TPtr KiDeleteTableToKql(TKiDeleteTable del, TExprContext& ctx,
-    const TKikimrTablesData& tablesData, TExprNode::TPtr& effect, bool withSystemColumns)
+    const TKikimrTablesData& tablesData, TExprNode::TPtr& effect, bool withSystemColumns) 
 {
     const auto& cluster = del.DataSink().Cluster();
     const auto& table = del.Table();
@@ -1094,23 +1094,23 @@ TExprNode::TPtr KiDeleteTableToKql(TKiDeleteTable del, TExprContext& ctx,
 } // namespace
 
 TKiProgram BuildKiProgram(TKiDataQuery query, const TKikimrTablesData& tablesData,
-    TExprContext& ctx, bool withSystemColumns)
+    TExprContext& ctx, bool withSystemColumns) 
 {
     TExprNode::TPtr optResult;
     TOptimizeExprSettings optSettings(nullptr);
     optSettings.VisitChanges = true;
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
     status = OptimizeExpr(query.Effects().Ptr(), optResult,
-        [&tablesData, withSystemColumns](const TExprNode::TPtr& input, TExprContext& ctx) {
+        [&tablesData, withSystemColumns](const TExprNode::TPtr& input, TExprContext& ctx) { 
             auto node = TExprBase(input);
             auto ret = input;
 
             if (auto maybeWrite = node.Maybe<TKiWriteTable>()) {
                 KiWriteTableToKql(maybeWrite.Cast(), ctx, tablesData, ret);
             } else if (auto maybeUpdate = node.Maybe<TKiUpdateTable>()) {
-                KiUpdateTableToKql(maybeUpdate.Cast(), ctx, tablesData, ret, withSystemColumns);
+                KiUpdateTableToKql(maybeUpdate.Cast(), ctx, tablesData, ret, withSystemColumns); 
             } else if (auto maybeDelete = node.Maybe<TKiDeleteTable>()) {
-                KiDeleteTableToKql(maybeDelete.Cast(), ctx, tablesData, ret, withSystemColumns);
+                KiDeleteTableToKql(maybeDelete.Cast(), ctx, tablesData, ret, withSystemColumns); 
             }
 
             return ret;
@@ -1149,11 +1149,11 @@ TKiProgram BuildKiProgram(TKiDataQuery query, const TKikimrTablesData& tablesDat
 
     TExprNode::TPtr newProgram;
     status = OptimizeExpr(program.Ptr(), newProgram,
-        [&tablesData, withSystemColumns](const TExprNode::TPtr& input, TExprContext& ctx) {
+        [&tablesData, withSystemColumns](const TExprNode::TPtr& input, TExprContext& ctx) { 
             auto node = TExprBase(input);
 
             if (node.Maybe<TCoRight>().Input().Maybe<TKiReadTable>()) {
-                return KiReadTableToKql(node.Cast<TCoRight>(), ctx, tablesData, withSystemColumns);
+                return KiReadTableToKql(node.Cast<TCoRight>(), ctx, tablesData, withSystemColumns); 
             }
 
             return input;
@@ -1175,7 +1175,7 @@ TExprBase UnwrapKiReadTableValues(TExprBase input, const TKikimrTableDescription
     TVector<TExprBase> structItems;
     for (auto atom : columns) {
         auto columnType = tableDesc.GetColumnType(TString(atom.Value()));
-        YQL_ENSURE(columnType);
+        YQL_ENSURE(columnType); 
 
         auto item = Build<TCoNameValueTuple>(ctx, input.Pos())
             .Name(atom)

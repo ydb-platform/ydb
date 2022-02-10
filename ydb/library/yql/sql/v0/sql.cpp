@@ -4815,13 +4815,13 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disablepullupflatmapoverjoin") {
             Ctx.PragmaPullUpFlatMapOverJoin = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisablePullUpFlatMapOverJoin");
-        } else if (normalizedPragma == "enablesystemcolumns") {
-            if (values.size() != 1 || !TryFromString(*values[0].GetLiteral(), Ctx.EnableSystemColumns)) {
-                Error() << "Expected single boolean argument for: " << pragma;
-                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-            Ctx.IncrementMonCounter("sql_pragma", "EnableSystemColumns");
+        } else if (normalizedPragma == "enablesystemcolumns") { 
+            if (values.size() != 1 || !TryFromString(*values[0].GetLiteral(), Ctx.EnableSystemColumns)) { 
+                Error() << "Expected single boolean argument for: " << pragma; 
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue"); 
+                return {}; 
+            } 
+            Ctx.IncrementMonCounter("sql_pragma", "EnableSystemColumns"); 
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

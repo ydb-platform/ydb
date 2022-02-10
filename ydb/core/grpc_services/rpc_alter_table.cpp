@@ -3,7 +3,7 @@
 #include "rpc_scheme_base.h"
 #include "rpc_common.h"
 #include "operation_helpers.h"
-#include "table_settings.h"
+#include "table_settings.h" 
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -25,7 +25,7 @@ namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
-using namespace NConsole;
+using namespace NConsole; 
 using namespace Ydb;
 
 static bool CheckAccess(const NACLib::TUserToken& userToken, const NSchemeCache::TSchemeCacheNavigate* navigate) {
@@ -106,10 +106,10 @@ class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTab
         if (req->add_columns_size() || req->drop_columns_size() || req->alter_columns_size()
             || req->ttl_action_case() != Ydb::Table::AlterTableRequest::TTL_ACTION_NOT_SET
             || req->has_alter_storage_settings()
-            || req->add_column_families_size() || req->alter_column_families_size()
-            || req->set_compaction_policy() || req->has_alter_partitioning_settings()
-            || req->set_key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED
-            || req->has_set_read_replicas_settings()) {
+            || req->add_column_families_size() || req->alter_column_families_size() 
+            || req->set_compaction_policy() || req->has_alter_partitioning_settings() 
+            || req->set_key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED 
+            || req->has_set_read_replicas_settings()) { 
             ops.emplace(EOp::Common);
         }
 
@@ -152,11 +152,11 @@ public:
 
         switch (*ops.begin()) {
         case EOp::Common:
-            // Altering table settings will need table profiles
-            SendConfigRequest(ctx);
-            ctx.Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup(WakeupTagGetConfig));
-            Become(&TAlterTableRPC::AlterStateGetConfig);
-            return;
+            // Altering table settings will need table profiles 
+            SendConfigRequest(ctx); 
+            ctx.Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup(WakeupTagGetConfig)); 
+            Become(&TAlterTableRPC::AlterStateGetConfig); 
+            return; 
 
         case EOp::AddIndex:
             if (req->add_indexes_size() == 1) {
@@ -200,52 +200,52 @@ private:
         }
     }
 
-    void AlterStateGetConfig(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
-            HFunc(TEvents::TEvUndelivered, Handle);
-            HFunc(TEvents::TEvWakeup, HandleWakeup);
-        default: TBase::StateFuncBase(ev, ctx);
-        }
-    }
-
-    void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
-    {
-        LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY,
-            "TAlterTableRPC: cannot deliver config request to Configs Dispatcher"
-            " (empty default profile is available only)");
-        AlterTable(ctx);
-        Become(&TAlterTableRPC::AlterStateWork);
-    }
-
-    void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) {
-        auto &config = ev->Get()->Config->GetTableProfilesConfig();
-        Profiles.Load(config);
-
-        AlterTable(ctx);
-        Become(&TAlterTableRPC::AlterStateWork);
-    }
-
-    void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
-        switch (ev->Get()->Tag) {
-        case WakeupTagGetConfig: {
-            LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY, "TAlterTableRPC: cannot get table profiles (timeout)");
-            NYql::TIssues issues;
-            issues.AddIssue(NYql::TIssue("Tables profiles config not available."));
-            return Reply(StatusIds::UNAVAILABLE, issues, ctx);
-        }
-        default:
-            TBase::HandleWakeup(ev, ctx);
-        }
-    }
-
-    void SendConfigRequest(const TActorContext &ctx) {
-        ui32 configKind = (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem;
-        ctx.Send(MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-            new TEvConfigsDispatcher::TEvGetConfigRequest(configKind),
-            IEventHandle::FlagTrackDelivery);
-    }
-
+    void AlterStateGetConfig(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
+        switch (ev->GetTypeRewrite()) { 
+            HFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle); 
+            HFunc(TEvents::TEvUndelivered, Handle); 
+            HFunc(TEvents::TEvWakeup, HandleWakeup); 
+        default: TBase::StateFuncBase(ev, ctx); 
+        } 
+    } 
+ 
+    void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx) 
+    { 
+        LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY, 
+            "TAlterTableRPC: cannot deliver config request to Configs Dispatcher" 
+            " (empty default profile is available only)"); 
+        AlterTable(ctx); 
+        Become(&TAlterTableRPC::AlterStateWork); 
+    } 
+ 
+    void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) { 
+        auto &config = ev->Get()->Config->GetTableProfilesConfig(); 
+        Profiles.Load(config); 
+ 
+        AlterTable(ctx); 
+        Become(&TAlterTableRPC::AlterStateWork); 
+    } 
+ 
+    void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) { 
+        switch (ev->Get()->Tag) { 
+        case WakeupTagGetConfig: { 
+            LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY, "TAlterTableRPC: cannot get table profiles (timeout)"); 
+            NYql::TIssues issues; 
+            issues.AddIssue(NYql::TIssue("Tables profiles config not available.")); 
+            return Reply(StatusIds::UNAVAILABLE, issues, ctx); 
+        } 
+        default: 
+            TBase::HandleWakeup(ev, ctx); 
+        } 
+    } 
+ 
+    void SendConfigRequest(const TActorContext &ctx) { 
+        ui32 configKind = (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem; 
+        ctx.Send(MakeConfigsDispatcherID(ctx.SelfID.NodeId()), 
+            new TEvConfigsDispatcher::TEvGetConfigRequest(configKind), 
+            IEventHandle::FlagTrackDelivery); 
+    } 
+ 
     void PrepareAlterTableAddIndex() {
         using namespace NTxProxy;
         LogPrefix = TStringBuilder() << "[AlterTableAddIndexOp " << SelfId() << "] ";
@@ -479,11 +479,11 @@ private:
         }
 
         if (!FillAlterTableSettingsDesc(*desc, *req, Profiles, code, error, AppData())) {
-            NYql::TIssues issues;
-            issues.AddIssue(NYql::TIssue(error));
-            return Reply(code, issues, ctx);
-        }
-
+            NYql::TIssues issues; 
+            issues.AddIssue(NYql::TIssue(error)); 
+            return Reply(code, issues, ctx); 
+        } 
+ 
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 
@@ -534,7 +534,7 @@ private:
     TString LogPrefix;
     TActorId SSPipeClient;
     THolder<const NACLib::TUserToken> UserToken;
-    TTableProfiles Profiles;
+    TTableProfiles Profiles; 
 };
 
 void TGRpcRequestProxy::Handle(TEvAlterTableRequest::TPtr& ev, const TActorContext& ctx) {

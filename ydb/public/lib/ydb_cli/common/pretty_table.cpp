@@ -1,5 +1,5 @@
 #include "pretty_table.h"
-#include "common.h"
+#include "common.h" 
 
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>

@@ -12,7 +12,7 @@ namespace NDriverClient {
 using NBsController::TCandidate;
 using NBsController::GroupFromCandidates;
 
-class TClientCommandGenConfigStatic : public TClientCommandConfig {
+class TClientCommandGenConfigStatic : public TClientCommandConfig { 
     TString ErasureList;
 
     TString ErasureStr;
@@ -109,7 +109,7 @@ class TClientCommandGenConfigStatic : public TClientCommandConfig {
 
 public:
     TClientCommandGenConfigStatic()
-        : TClientCommandConfig("static", {}, "Generate configuration for static group")
+        : TClientCommandConfig("static", {}, "Generate configuration for static group") 
     {
         TStringStream erasureList("{");
         for (ui32 species = 0; species < TBlobStorageGroupType::ErasureSpeciesCount; ++species) {

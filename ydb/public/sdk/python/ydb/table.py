@@ -52,15 +52,15 @@ class DescribeTableSettings(settings_impl.BaseRequestSettings):
 
 
 class ExecDataQuerySettings(settings_impl.BaseRequestSettings):
-    def __init__(self):
-        super(ExecDataQuerySettings, self).__init__()
-        self.keep_in_cache = True
-
-    def with_keep_in_cache(self, value):
-        self.keep_in_cache = value
-        return self
-
-
+    def __init__(self): 
+        super(ExecDataQuerySettings, self).__init__() 
+        self.keep_in_cache = True 
+ 
+    def with_keep_in_cache(self, value): 
+        self.keep_in_cache = value 
+        return self 
+ 
+ 
 class KeyBound(object):
     __slots__ = ("_equal", "value", "type")
 
@@ -2224,7 +2224,7 @@ class BaseTxContext(ITxContext):
         :return: A result sets or exception in case of execution errors
         """
         return self._driver(
-            _tx_ctx_impl.execute_request_factory(
+            _tx_ctx_impl.execute_request_factory( 
                 self._session_state,
                 self._tx_state,
                 query,

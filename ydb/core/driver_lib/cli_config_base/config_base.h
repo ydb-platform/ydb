@@ -44,14 +44,14 @@ struct TCommandConfig {
     struct TServerEndpoint {
         EServerType ServerType;
         TString Address;
-        TMaybe<bool> EnableSsl = Nothing();
+        TMaybe<bool> EnableSsl = Nothing(); 
     };
 
     static TServerEndpoint ParseServerAddress(const TString& address);
 };
 
-extern TCommandConfig CommandConfig;
-
+extern TCommandConfig CommandConfig; 
+ 
 } // namespace NKikimr
 
 
@@ -87,10 +87,10 @@ template<> struct TCliCommands<MODES_ENUM> {\
 \
     static TString CommandsDescription(const TString& toolName) {\
         TStringStream helpStream;\
-        helpStream << "[global options...] <command> [command options...] [mbus] [messagebus options...]";\
+        helpStream << "[global options...] <command> [command options...] [mbus] [messagebus options...]";\ 
         helpStream << "\n\nAvailable commands are:\n";\
         MODES_MAP(MODE_GEN_HELP);\
-        helpStream << "\nSee '" << toolName << " <command> --help' for mode options\n";\
+        helpStream << "\nSee '" << toolName << " <command> --help' for mode options\n";\ 
         return helpStream.Str();\
     } \
 \

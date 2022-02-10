@@ -97,7 +97,7 @@ public:
         const auto& issueMessage = kqpResponse.GetQueryIssues();
 
         auto queryResult = TEvExecuteYqlScriptRequest::AllocateResult<TResult>(Request_);
-        ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
+        ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult); 
 
         if (kqpResponse.HasQueryStats()) {
             FillQueryStats(*queryResult->mutable_query_stats(), kqpResponse);

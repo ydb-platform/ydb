@@ -124,7 +124,7 @@
 #include <util/system/hostname.h>
 
 #include <ydb/core/tracing/tablet_info.h>
-
+ 
 namespace NKikimr {
 
 class TDomainsInitializer : public IAppDataInitializer {
@@ -919,9 +919,9 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
         AppData->ResourceProfiles->LoadProfiles(runConfig.AppConfig.GetBootstrapConfig().GetResourceProfiles());
 
-    if (runConfig.AppConfig.GetBootstrapConfig().HasEnableIntrospection())
-        AppData->EnableIntrospection = runConfig.AppConfig.GetBootstrapConfig().GetEnableIntrospection();
-
+    if (runConfig.AppConfig.GetBootstrapConfig().HasEnableIntrospection()) 
+        AppData->EnableIntrospection = runConfig.AppConfig.GetBootstrapConfig().GetEnableIntrospection(); 
+ 
     TAppDataInitializersList appDataInitializers;
     // setup domain info
     appDataInitializers.AddAppDataInitializer(new TDomainsInitializer(runConfig));
@@ -1288,10 +1288,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TConfigsCacheInitializer(runConfig));
     }
 
-    if (serviceMask.EnableTabletInfo) {
-        sil->AddServiceInitializer(new TTabletInfoInitializer(runConfig));
-    }
-
+    if (serviceMask.EnableTabletInfo) { 
+        sil->AddServiceInitializer(new TTabletInfoInitializer(runConfig)); 
+    } 
+ 
     sil->AddServiceInitializer(new TLeaseHolderInitializer(runConfig));
     sil->AddServiceInitializer(new TConfigValidatorsInitializer(runConfig));
 

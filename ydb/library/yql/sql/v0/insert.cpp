@@ -194,30 +194,30 @@ public:
         const auto& sourceColumns = Source->GetColumns();
         const auto numColumns = !ColumnsHint.empty() && sourceColumns ? sourceColumns->List.size() : 0;
         if (ColumnsHint.size() != numColumns) {
-            ctx.Error(Pos) << "SELECT has " << numColumns << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size();
+            ctx.Error(Pos) << "SELECT has " << numColumns << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size(); 
             return false;
         }
-        if (numColumns) {
-            TStringStream str;
-            bool mismatchFound = false;
-            for (size_t i = 0; i < numColumns; ++i) {
-                bool hasName = sourceColumns->NamedColumns[i];
-                if (hasName) {
-                    const auto& hintColumn = ColumnsHint[i];
-                    const auto& sourceColumn = sourceColumns->List[i];
-                    if (hintColumn != sourceColumn) {
-                        if (!mismatchFound) {
-                            str << "Column names in SELECT don't match column specification in parenthesis";
-                            mismatchFound = true;
-                        }
-                        str << ". \"" << hintColumn << "\" doesn't match \"" << sourceColumn << "\"";
-                    }
-                }
-            }
-            if (mismatchFound) {
-                ctx.Warning(Pos, TIssuesIds::YQL_SOURCE_SELECT_COLUMN_MISMATCH) << str.Str();
-            }
-        }
+        if (numColumns) { 
+            TStringStream str; 
+            bool mismatchFound = false; 
+            for (size_t i = 0; i < numColumns; ++i) { 
+                bool hasName = sourceColumns->NamedColumns[i]; 
+                if (hasName) { 
+                    const auto& hintColumn = ColumnsHint[i]; 
+                    const auto& sourceColumn = sourceColumns->List[i]; 
+                    if (hintColumn != sourceColumn) { 
+                        if (!mismatchFound) { 
+                            str << "Column names in SELECT don't match column specification in parenthesis"; 
+                            mismatchFound = true; 
+                        } 
+                        str << ". \"" << hintColumn << "\" doesn't match \"" << sourceColumn << "\""; 
+                    } 
+                } 
+            } 
+            if (mismatchFound) { 
+                ctx.Warning(Pos, TIssuesIds::YQL_SOURCE_SELECT_COLUMN_MISMATCH) << str.Str(); 
+            } 
+        } 
         return true;
     }
 

@@ -30,29 +30,29 @@ void TKeyDesc::Out(IOutputStream& o, TKeyDesc::EStatus x) {
     }
 }
 
-struct TSystemColumnsData {
-    const TString PartitionColumnName = "_yql_partition_id";
-
-    const TMap<TString, TSystemColumnInfo> SystemColumns = {
-        {PartitionColumnName, {TKeyDesc::EColumnIdDataShard, NScheme::NTypeIds::Uint64}}
-    };
-};
-
-bool IsSystemColumn(ui32 columnId) {
-    switch (columnId) {
-    case TKeyDesc::EColumnIdDataShard:
-        return true;
-    default:
-        return false;
-    }
+struct TSystemColumnsData { 
+    const TString PartitionColumnName = "_yql_partition_id"; 
+ 
+    const TMap<TString, TSystemColumnInfo> SystemColumns = { 
+        {PartitionColumnName, {TKeyDesc::EColumnIdDataShard, NScheme::NTypeIds::Uint64}} 
+    }; 
+}; 
+ 
+bool IsSystemColumn(ui32 columnId) { 
+    switch (columnId) { 
+    case TKeyDesc::EColumnIdDataShard: 
+        return true; 
+    default: 
+        return false; 
+    } 
 }
-
-bool IsSystemColumn(const TStringBuf columnName) {
-    return GetSystemColumns().FindPtr(columnName);
-}
-
-const TMap<TString, TSystemColumnInfo>& GetSystemColumns() {
-    return Singleton<TSystemColumnsData>()->SystemColumns;
-}
-
-}
+ 
+bool IsSystemColumn(const TStringBuf columnName) { 
+    return GetSystemColumns().FindPtr(columnName); 
+} 
+ 
+const TMap<TString, TSystemColumnInfo>& GetSystemColumns() { 
+    return Singleton<TSystemColumnsData>()->SystemColumns; 
+} 
+ 
+} 

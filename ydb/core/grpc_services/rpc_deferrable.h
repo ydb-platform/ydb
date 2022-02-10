@@ -19,11 +19,11 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-template <typename TDerived, typename TRequest, bool IsOperation>
-class TRpcRequestWithOperationParamsActor : public TActorBootstrapped<TDerived> {
+template <typename TDerived, typename TRequest, bool IsOperation> 
+class TRpcRequestWithOperationParamsActor : public TActorBootstrapped<TDerived> { 
 private:
     typedef TActorBootstrapped<TDerived> TBase;
-    typedef typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type TRequestBase;
+    typedef typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type TRequestBase; 
 
 public:
     enum EWakeupTag {
@@ -34,7 +34,7 @@ public:
     };
 
 public:
-    TRpcRequestWithOperationParamsActor(TRequestBase* request)
+    TRpcRequestWithOperationParamsActor(TRequestBase* request) 
         : Request_(request)
     {
         auto& operationParams = GetProtoRequest()->operation_params();
@@ -43,14 +43,14 @@ public:
         ReportCostInfo_ = operationParams.report_cost_info() == Ydb::FeatureFlag::ENABLED;
     }
 
-    const typename TRequest::TRequest* GetProtoRequest() const {
-        return TRequest::GetProtoRequest(Request_);
+    const typename TRequest::TRequest* GetProtoRequest() const { 
+        return TRequest::GetProtoRequest(Request_); 
     }
 
-    Ydb::Operations::OperationParams::OperationMode GetOperationMode() const {
-        return GetProtoRequest()->operation_params().operation_mode();
-    }
-
+    Ydb::Operations::OperationParams::OperationMode GetOperationMode() const { 
+        return GetProtoRequest()->operation_params().operation_mode(); 
+    } 
+ 
     void Bootstrap(const TActorContext &ctx) {
         HasCancel_ = static_cast<TDerived*>(this)->HasCancelOperation();
 
@@ -75,68 +75,68 @@ public:
         Request_->SetClientLostAction(std::move(clientLostCb));
     }
 
-    bool HasCancelOperation() {
-        return false;
-    }
-
-    TRequestBase& Request() const {
+    bool HasCancelOperation() { 
+        return false; 
+    } 
+ 
+    TRequestBase& Request() const { 
         return *Request_;
     }
 
-protected:
-    TDuration GetOperationTimeout() {
-        return OperationTimeout_;
+protected: 
+    TDuration GetOperationTimeout() { 
+        return OperationTimeout_; 
     }
 
-    TDuration GetCancelAfter() {
-        return CancelAfter_;
-    }
-
-    void DestroyTimers() {
-        auto& ctx = TlsActivationContext->AsActorContext();
-        if (OperationTimeoutTimer) {
-            ctx.Send(OperationTimeoutTimer, new TEvents::TEvPoisonPill);
-        }
-        if (CancelAfterTimer) {
-            ctx.Send(CancelAfterTimer, new TEvents::TEvPoisonPill);
-        }
-    }
-
-    void PassAway() override {
-        DestroyTimers();
-        TBase::PassAway();
-    }
-
-    TRequest* RequestPtr() {
-        return static_cast<TRequest*>(Request_.get());
-    }
-
-protected:
-    std::unique_ptr<TRequestBase> Request_;
+    TDuration GetCancelAfter() { 
+        return CancelAfter_; 
+    } 
+ 
+    void DestroyTimers() { 
+        auto& ctx = TlsActivationContext->AsActorContext(); 
+        if (OperationTimeoutTimer) { 
+            ctx.Send(OperationTimeoutTimer, new TEvents::TEvPoisonPill); 
+        } 
+        if (CancelAfterTimer) { 
+            ctx.Send(CancelAfterTimer, new TEvents::TEvPoisonPill); 
+        } 
+    } 
+ 
+    void PassAway() override { 
+        DestroyTimers(); 
+        TBase::PassAway(); 
+    } 
+ 
+    TRequest* RequestPtr() { 
+        return static_cast<TRequest*>(Request_.get()); 
+    } 
+ 
+protected: 
+    std::unique_ptr<TRequestBase> Request_; 
 
     TActorId OperationTimeoutTimer;
     TActorId CancelAfterTimer;
-    TDuration OperationTimeout_;
-    TDuration CancelAfter_;
-    bool HasCancel_ = false;
+    TDuration OperationTimeout_; 
+    TDuration CancelAfter_; 
+    bool HasCancel_ = false; 
     bool ReportCostInfo_ = false;
-};
-
-template <typename TDerived, typename TRequest>
-class TRpcOperationRequestActor : public TRpcRequestWithOperationParamsActor<TDerived, TRequest, true> {
-private:
-    typedef TRpcRequestWithOperationParamsActor<TDerived, TRequest, true> TBase;
-
-public:
-
-    TRpcOperationRequestActor(IRequestOpCtx* request)
-        : TBase(request)
-    {}
-
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::DEFERRABLE_RPC;
-    }
-
+}; 
+ 
+template <typename TDerived, typename TRequest> 
+class TRpcOperationRequestActor : public TRpcRequestWithOperationParamsActor<TDerived, TRequest, true> { 
+private: 
+    typedef TRpcRequestWithOperationParamsActor<TDerived, TRequest, true> TBase; 
+ 
+public: 
+ 
+    TRpcOperationRequestActor(IRequestOpCtx* request) 
+        : TBase(request) 
+    {} 
+ 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::DEFERRABLE_RPC; 
+    } 
+ 
     void OnCancelOperation(const TActorContext& ctx) {
         Y_UNUSED(ctx);
     }
@@ -173,7 +173,7 @@ protected:
     }
 
 protected:
-    using TBase::Request_;
+    using TBase::Request_; 
 
     void Reply(Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext& ctx)
@@ -240,10 +240,10 @@ protected:
 protected:
     void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
         switch (ev->Get()->Tag) {
-            case TBase::WakeupTagTimeout:
+            case TBase::WakeupTagTimeout: 
                 static_cast<TDerived*>(this)->OnOperationTimeout(ctx);
                 break;
-            case TBase::WakeupTagCancel:
+            case TBase::WakeupTagCancel: 
                 static_cast<TDerived*>(this)->OnCancelOperation(ctx);
                 break;
             default:

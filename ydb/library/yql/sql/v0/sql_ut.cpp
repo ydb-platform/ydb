@@ -1715,12 +1715,12 @@ select FormatType($f());
         UNIT_ASSERT(res.Root);
     }
 
-    Y_UNIT_TEST(WarnSourceColumnMismatch) {
-        NYql::TAstParseResult res = SqlToYql(
-            "insert into plato.Output (key, subkey, new_value, one_more_value) select key as Key, subkey, value, \"x\" from plato.Input;");
-        UNIT_ASSERT(res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:51: Warning: Column names in SELECT don't match column specification in parenthesis. \"key\" doesn't match \"Key\". \"new_value\" doesn't match \"value\", code: 4517\n");
-    }
+    Y_UNIT_TEST(WarnSourceColumnMismatch) { 
+        NYql::TAstParseResult res = SqlToYql( 
+            "insert into plato.Output (key, subkey, new_value, one_more_value) select key as Key, subkey, value, \"x\" from plato.Input;"); 
+        UNIT_ASSERT(res.Root); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:51: Warning: Column names in SELECT don't match column specification in parenthesis. \"key\" doesn't match \"Key\". \"new_value\" doesn't match \"value\", code: 4517\n"); 
+    } 
 
     Y_UNIT_TEST(YtCaseInsensitive) {
         NYql::TAstParseResult res = SqlToYql("select * from PlatO.foo;");

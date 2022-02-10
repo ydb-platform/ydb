@@ -196,7 +196,7 @@ public:
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("PhysicalOptimizeTransformer", logComp, logLevel), "LogPhysicalOptimize")
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(),
-                *typesCtx, Config))
+                *typesCtx, Config)) 
             .Add(CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
             .AddPostTypeAnnotation()
             .AddCommonOptimization()
@@ -383,7 +383,7 @@ private:
             // scan query
         }
 
-        bool sysColumnsEnabled = TransformCtx->Config->SystemColumnsEnabled();
+        bool sysColumnsEnabled = TransformCtx->Config->SystemColumnsEnabled(); 
 
         std::optional<TKqpTransactionInfo::EEngine> engine;
         if (settings.UseNewEngine.Defined()) {
@@ -419,7 +419,7 @@ private:
             }
         }
 
-        auto program = BuildKiProgram(dataQuery, *TransformCtx->Tables, ctx, sysColumnsEnabled);
+        auto program = BuildKiProgram(dataQuery, *TransformCtx->Tables, ctx, sysColumnsEnabled); 
 
         KqlOptimizeTransformer->Rewind();
 

@@ -25,7 +25,7 @@ using namespace NYdb::NTable;
 TSession CreateSession(TDriver driver, const TString& token = "", const TString& discoveryEndpoint = "") {
     NYdb::NTable::TClientSettings settings;
     if (token)
-        settings.AuthToken(token);
+        settings.AuthToken(token); 
     if (discoveryEndpoint)
         settings.DiscoveryEndpoint(discoveryEndpoint);
     NYdb::NTable::TTableClient client(driver, settings);
@@ -60,14 +60,14 @@ static void MultiTenantSDK(bool asyncDiscovery) {
 
 
     NYdb::NTable::TClientSettings settings;
-    settings.AuthToken("root@builtin");
+    settings.AuthToken("root@builtin"); 
 
     NYdb::NTable::TTableClient clientgood(driver, settings);
     NYdb::NTable::TTableClient clientbad(driver);
 //TODO: No discovery in ut
 /*
     NYdb::NTable::TClientSettings settings2;
-    settings2.AuthToken("root@builtin");
+    settings2.AuthToken("root@builtin"); 
     settings2.Database_ = "/balabla";
     NYdb::NTable::TTableClient clientbad2(driver, settings2);
 */
@@ -3960,280 +3960,280 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         EnsureTablePartitions(client, "/Root/Foo", 3);
     }
-
-    Y_UNIT_TEST(CreateAndAltertTableWithCompactionPolicy) {
-        TKikimrWithGrpcAndRootSchema server;
-        server.Server_->SetupDefaultProfiles();
-
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(driver);
-        auto getSessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
-        auto session = getSessionResult.GetSession();
-        const TString tableName = "Root/Test";
-
-        {
-            auto builder = TTableBuilder()
-                .AddNullableColumn("key", EPrimitiveType::Uint64)
-                .AddNullableColumn("value", EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .SetCompactionPolicy("compaction2");
-
-            auto desc = builder.Build();
-
-            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync();
-
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TClient client(*server.ServerSettings);
-            auto describeResult = client.Ls(tableName);
-            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable()
-                .GetPartitionConfig().GetCompactionPolicy().GetGeneration().size(), 2);
-        }
-        {
-            auto settings = NYdb::NTable::TAlterTableSettings()
-                .SetCompactionPolicy("default");
-
-            auto result = session.AlterTable(tableName, settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TClient client(*server.ServerSettings);
-            auto describeResult = client.Ls(tableName);
-            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable()
-                .GetPartitionConfig().GetCompactionPolicy().GetGeneration().size(), 3);
-        }
-    }
-
-    Y_UNIT_TEST(CreateTableWithUniformPartitions) {
-        TKikimrWithGrpcAndRootSchema server;
-
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(driver);
-        auto getSessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
-        auto session = getSessionResult.GetSession();
-        const TString tableName = "Root/Test";
-
-        {
-            auto builder = TTableBuilder()
-                .AddNullableColumn("key", EPrimitiveType::Uint64)
-                .AddNullableColumn("value", EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .SetUniformPartitions(4);
-
-            auto desc = builder.Build();
-
-            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync();
-
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        EnsureTablePartitions(client, tableName, 4);
-    }
-
-    Y_UNIT_TEST(CreateTableWithUniformPartitionsAndAutoPartitioning) {
-        TKikimrWithGrpcAndRootSchema server;
-
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(driver);
-        auto getSessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
-        auto session = getSessionResult.GetSession();
-        const TString tableName = "Root/Test";
-
-        {
-            auto builder = TTableBuilder()
-                .AddNullableColumn("key", EPrimitiveType::Uint64)
-                .AddNullableColumn("value", EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .SetUniformPartitions(4)
-                .BeginPartitioningSettings()
-                    .SetPartitioningBySize(true)
-                .EndPartitioningSettings();
-
-            auto desc = builder.Build();
-
-            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync();
-
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describeResult = session.DescribeTable(tableName)
-                .GetValueSync();
-            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 2048);
-        }
-    }
-
-    Y_UNIT_TEST(CreateTableWithPartitionAtKeys) {
-        TKikimrWithGrpcAndRootSchema server;
-
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(driver);
-        auto getSessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
-        auto session = getSessionResult.GetSession();
-        const TString tableName = "Root/Test";
-
-        {
-            TExplicitPartitions partitions;
-            partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint32(10).EndTuple().Build());
-            partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint32(20).EndTuple().Build());
-
-            auto builder = TTableBuilder()
-                .AddNullableColumn("Value", EPrimitiveType::Utf8)
-                .AddNullableColumn("SubKey", EPrimitiveType::Utf8)
-                .AddNullableColumn("Key", EPrimitiveType::Uint32)
-                .SetPrimaryKeyColumn("Key")
-                .SetPartitionAtKeys(partitions);
-
-            auto desc = builder.Build();
-
-            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync();
-
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        EnsureTablePartitions(client, tableName, 3);
-    }
-
-    Y_UNIT_TEST(CreateTableWithPartitionAtKeysAndAutoPartitioning) {
-        TKikimrWithGrpcAndRootSchema server;
-
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(driver);
-        auto getSessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
-        auto session = getSessionResult.GetSession();
-        const TString tableName = "Root/Test";
-
-        {
-            TExplicitPartitions partitions;
-            partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint32(10).EndTuple().Build());
-            partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint32(20).EndTuple().Build());
-
-            auto builder = TTableBuilder()
-                .AddNullableColumn("Value", EPrimitiveType::Utf8)
-                .AddNullableColumn("SubKey", EPrimitiveType::Utf8)
-                .AddNullableColumn("Key", EPrimitiveType::Uint32)
-                .SetPrimaryKeyColumn("Key")
-                .SetPartitionAtKeys(partitions)
-                .BeginPartitioningSettings()
-                    .SetPartitioningBySize(true)
-                .EndPartitioningSettings();
-
-            auto desc = builder.Build();
-
-            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync();
-
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describeResult = session.DescribeTable(tableName)
-                .GetValueSync();
-            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 2048);
-        }
-    }
-
-    Y_UNIT_TEST(CreateAndAltertTableWithPartitioningBySize) {
-        TKikimrWithGrpcAndRootSchema server;
-
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(driver);
-        auto getSessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
-        auto session = getSessionResult.GetSession();
-        const TString tableName = "Root/Test";
-
-        {
-            auto builder = TTableBuilder()
-                .AddNullableColumn("key", EPrimitiveType::Uint64)
-                .AddNullableColumn("value", EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .BeginPartitioningSettings()
-                    .SetPartitioningBySize(true)
-                    .SetPartitionSizeMb(100)
-                    .SetMinPartitionsCount(2)
-                    .SetMaxPartitionsCount(50)
-                .EndPartitioningSettings();
-
-            auto desc = builder.Build();
-
-            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync();
-
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describeResult = session.DescribeTable(tableName)
-                .GetValueSync();
-            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 100);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMaxPartitionsCount(), 50);
-        }
-        {
-            auto settings = NYdb::NTable::TAlterTableSettings()
-                .BeginAlterPartitioningSettings()
-                    .SetPartitionSizeMb(50)
-                    .SetMinPartitionsCount(4)
-                    .SetMaxPartitionsCount(100)
-                .EndAlterPartitioningSettings();
-
-            auto result = session.AlterTable(tableName, settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describeResult = session.DescribeTable(tableName)
-                .GetValueSync();
-            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 50);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMaxPartitionsCount(), 100);
-        }
-        {
-            auto settings = NYdb::NTable::TAlterTableSettings()
-                .BeginAlterPartitioningSettings()
-                    .SetPartitioningBySize(false)
-                .EndAlterPartitioningSettings();
-
-            auto result = session.AlterTable(tableName, settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describeResult = session.DescribeTable(tableName)
-                .GetValueSync();
-            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false);
-        }
+ 
+    Y_UNIT_TEST(CreateAndAltertTableWithCompactionPolicy) { 
+        TKikimrWithGrpcAndRootSchema server; 
+        server.Server_->SetupDefaultProfiles(); 
+ 
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(driver); 
+        auto getSessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString()); 
+        auto session = getSessionResult.GetSession(); 
+        const TString tableName = "Root/Test"; 
+ 
+        { 
+            auto builder = TTableBuilder() 
+                .AddNullableColumn("key", EPrimitiveType::Uint64) 
+                .AddNullableColumn("value", EPrimitiveType::Utf8) 
+                .SetPrimaryKeyColumn("key") 
+                .SetCompactionPolicy("compaction2"); 
+ 
+            auto desc = builder.Build(); 
+ 
+            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync(); 
+ 
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TClient client(*server.ServerSettings); 
+            auto describeResult = client.Ls(tableName); 
+            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable() 
+                .GetPartitionConfig().GetCompactionPolicy().GetGeneration().size(), 2); 
+        } 
+        { 
+            auto settings = NYdb::NTable::TAlterTableSettings() 
+                .SetCompactionPolicy("default"); 
+ 
+            auto result = session.AlterTable(tableName, settings).ExtractValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TClient client(*server.ServerSettings); 
+            auto describeResult = client.Ls(tableName); 
+            UNIT_ASSERT_VALUES_EQUAL(describeResult->Record.GetPathDescription().GetTable() 
+                .GetPartitionConfig().GetCompactionPolicy().GetGeneration().size(), 3); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CreateTableWithUniformPartitions) { 
+        TKikimrWithGrpcAndRootSchema server; 
+ 
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(driver); 
+        auto getSessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString()); 
+        auto session = getSessionResult.GetSession(); 
+        const TString tableName = "Root/Test"; 
+ 
+        { 
+            auto builder = TTableBuilder() 
+                .AddNullableColumn("key", EPrimitiveType::Uint64) 
+                .AddNullableColumn("value", EPrimitiveType::Utf8) 
+                .SetPrimaryKeyColumn("key") 
+                .SetUniformPartitions(4); 
+ 
+            auto desc = builder.Build(); 
+ 
+            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync(); 
+ 
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        EnsureTablePartitions(client, tableName, 4); 
+    } 
+ 
+    Y_UNIT_TEST(CreateTableWithUniformPartitionsAndAutoPartitioning) { 
+        TKikimrWithGrpcAndRootSchema server; 
+ 
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(driver); 
+        auto getSessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString()); 
+        auto session = getSessionResult.GetSession(); 
+        const TString tableName = "Root/Test"; 
+ 
+        { 
+            auto builder = TTableBuilder() 
+                .AddNullableColumn("key", EPrimitiveType::Uint64) 
+                .AddNullableColumn("value", EPrimitiveType::Utf8) 
+                .SetPrimaryKeyColumn("key") 
+                .SetUniformPartitions(4) 
+                .BeginPartitioningSettings() 
+                    .SetPartitioningBySize(true) 
+                .EndPartitioningSettings(); 
+ 
+            auto desc = builder.Build(); 
+ 
+            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync(); 
+ 
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TDescribeTableResult describeResult = session.DescribeTable(tableName) 
+                .GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS); 
+            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings(); 
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined()); 
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 4); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 2048); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CreateTableWithPartitionAtKeys) { 
+        TKikimrWithGrpcAndRootSchema server; 
+ 
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(driver); 
+        auto getSessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString()); 
+        auto session = getSessionResult.GetSession(); 
+        const TString tableName = "Root/Test"; 
+ 
+        { 
+            TExplicitPartitions partitions; 
+            partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint32(10).EndTuple().Build()); 
+            partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint32(20).EndTuple().Build()); 
+ 
+            auto builder = TTableBuilder() 
+                .AddNullableColumn("Value", EPrimitiveType::Utf8) 
+                .AddNullableColumn("SubKey", EPrimitiveType::Utf8) 
+                .AddNullableColumn("Key", EPrimitiveType::Uint32) 
+                .SetPrimaryKeyColumn("Key") 
+                .SetPartitionAtKeys(partitions); 
+ 
+            auto desc = builder.Build(); 
+ 
+            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync(); 
+ 
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        EnsureTablePartitions(client, tableName, 3); 
+    } 
+ 
+    Y_UNIT_TEST(CreateTableWithPartitionAtKeysAndAutoPartitioning) { 
+        TKikimrWithGrpcAndRootSchema server; 
+ 
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(driver); 
+        auto getSessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString()); 
+        auto session = getSessionResult.GetSession(); 
+        const TString tableName = "Root/Test"; 
+ 
+        { 
+            TExplicitPartitions partitions; 
+            partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint32(10).EndTuple().Build()); 
+            partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint32(20).EndTuple().Build()); 
+ 
+            auto builder = TTableBuilder() 
+                .AddNullableColumn("Value", EPrimitiveType::Utf8) 
+                .AddNullableColumn("SubKey", EPrimitiveType::Utf8) 
+                .AddNullableColumn("Key", EPrimitiveType::Uint32) 
+                .SetPrimaryKeyColumn("Key") 
+                .SetPartitionAtKeys(partitions) 
+                .BeginPartitioningSettings() 
+                    .SetPartitioningBySize(true) 
+                .EndPartitioningSettings(); 
+ 
+            auto desc = builder.Build(); 
+ 
+            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync(); 
+ 
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TDescribeTableResult describeResult = session.DescribeTable(tableName) 
+                .GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS); 
+            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings(); 
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined()); 
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 3); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 2048); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CreateAndAltertTableWithPartitioningBySize) { 
+        TKikimrWithGrpcAndRootSchema server; 
+ 
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(driver); 
+        auto getSessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString()); 
+        auto session = getSessionResult.GetSession(); 
+        const TString tableName = "Root/Test"; 
+ 
+        { 
+            auto builder = TTableBuilder() 
+                .AddNullableColumn("key", EPrimitiveType::Uint64) 
+                .AddNullableColumn("value", EPrimitiveType::Utf8) 
+                .SetPrimaryKeyColumn("key") 
+                .BeginPartitioningSettings() 
+                    .SetPartitioningBySize(true) 
+                    .SetPartitionSizeMb(100) 
+                    .SetMinPartitionsCount(2) 
+                    .SetMaxPartitionsCount(50) 
+                .EndPartitioningSettings(); 
+ 
+            auto desc = builder.Build(); 
+ 
+            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync(); 
+ 
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TDescribeTableResult describeResult = session.DescribeTable(tableName) 
+                .GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS); 
+            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings(); 
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined()); 
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 100); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 2); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMaxPartitionsCount(), 50); 
+        } 
+        { 
+            auto settings = NYdb::NTable::TAlterTableSettings() 
+                .BeginAlterPartitioningSettings() 
+                    .SetPartitionSizeMb(50) 
+                    .SetMinPartitionsCount(4) 
+                    .SetMaxPartitionsCount(100) 
+                .EndAlterPartitioningSettings(); 
+ 
+            auto result = session.AlterTable(tableName, settings).ExtractValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TDescribeTableResult describeResult = session.DescribeTable(tableName) 
+                .GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS); 
+            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings(); 
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 50); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 4); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMaxPartitionsCount(), 100); 
+        } 
+        { 
+            auto settings = NYdb::NTable::TAlterTableSettings() 
+                .BeginAlterPartitioningSettings() 
+                    .SetPartitioningBySize(false) 
+                .EndAlterPartitioningSettings(); 
+ 
+            auto result = session.AlterTable(tableName, settings).ExtractValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TDescribeTableResult describeResult = session.DescribeTable(tableName) 
+                .GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS); 
+            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings(); 
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false); 
+        } 
         {
             auto settings = NYdb::NTable::TAlterTableSettings()
                 .BeginAlterPartitioningSettings()
@@ -4251,8 +4251,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), true);
         }
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CreateAndAltertTableWithPartitioningByLoad) {
         TKikimrWithGrpcAndRootSchema server;
 
@@ -4288,7 +4288,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false);
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), true);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 1); 
         }
         {
             auto settings = NYdb::NTable::TAlterTableSettings()
@@ -4307,9 +4307,9 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true);
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), true);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 2048);
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), true); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 1); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 2048); 
         }
         {
             auto settings = NYdb::NTable::TAlterTableSettings()
@@ -4330,242 +4330,242 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         }
     }
 
-    Y_UNIT_TEST(CheckDefaultTableSettings1) {
-        TKikimrWithGrpcAndRootSchema server;
-
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(driver);
-        auto getSessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
-        auto session = getSessionResult.GetSession();
-        const TString tableName = "Root/Test";
-
-        {
-            auto builder = TTableBuilder()
-                .AddNullableColumn("key", EPrimitiveType::Uint64)
-                .AddNullableColumn("value", EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key");
-
-            auto desc = builder.Build();
-            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync();
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describeResult = session.DescribeTable(tableName)
-                .GetValueSync();
-            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false);
-        }
-    }
-
-    Y_UNIT_TEST(CheckDefaultTableSettings2) {
-        TKikimrWithGrpcAndRootSchema server;
-
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(driver);
-        auto getSessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
-        auto session = getSessionResult.GetSession();
-        const TString tableName = "Root/Test";
-
-        {
-            auto builder = TTableBuilder()
-                .AddNullableColumn("key", EPrimitiveType::Uint64)
-                .AddNullableColumn("value", EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .BeginPartitioningSettings()
-                    .SetPartitioningBySize(true)
-                .EndPartitioningSettings();
-
-            auto desc = builder.Build();
-            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync();
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describeResult = session.DescribeTable(tableName)
-                .GetValueSync();
-            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 2048);
-        }
-    }
-
-    Y_UNIT_TEST(CheckDefaultTableSettings3) {
-        TKikimrWithGrpcAndRootSchema server;
-
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(driver);
-        auto getSessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
-        auto session = getSessionResult.GetSession();
-        const TString tableName = "Root/Test";
-
-        {
-            auto builder = TTableBuilder()
-                .AddNullableColumn("key", EPrimitiveType::Uint64)
-                .AddNullableColumn("value", EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .BeginPartitioningSettings()
-                    .SetPartitioningByLoad(true)
-                .EndPartitioningSettings();
-
-            auto desc = builder.Build();
-            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync();
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describeResult = session.DescribeTable(tableName)
-                .GetValueSync();
-            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), true);
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false);
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 1);
-        }
-    }
-
-    Y_UNIT_TEST(CreateAndAltertTableWithKeyBloomFilter) {
-        TKikimrWithGrpcAndRootSchema server;
-
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(driver);
-        auto getSessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
-        auto session = getSessionResult.GetSession();
-        const TString tableName = "Root/Test";
-
-        {
-            auto builder = TTableBuilder()
-                .AddNullableColumn("key", EPrimitiveType::Uint64)
-                .AddNullableColumn("value", EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .SetKeyBloomFilter(true);
-
-            auto desc = builder.Build();
-
-            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync();
-
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describeResult = session.DescribeTable(tableName)
-                .GetValueSync();
-            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT(describeResult.GetTableDescription().GetKeyBloomFilter().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetKeyBloomFilter().GetRef(), true);
-        }
-        {
-            auto settings = NYdb::NTable::TAlterTableSettings()
-                .SetKeyBloomFilter(false);
-
-            auto result = session.AlterTable(tableName, settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describeResult = session.DescribeTable(tableName)
-                .GetValueSync();
-            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT(describeResult.GetTableDescription().GetKeyBloomFilter().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetKeyBloomFilter().GetRef(), false);
-        }
-    }
-
-    Y_UNIT_TEST(CreateAndAltertTableWithReadReplicasSettings) {
-        TKikimrWithGrpcAndRootSchema server;
-
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(driver);
-        auto getSessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
-        auto session = getSessionResult.GetSession();
-        const TString tableName = "Root/Test";
-
-        {
-            auto builder = TTableBuilder()
-                .AddNullableColumn("key", EPrimitiveType::Uint64)
-                .AddNullableColumn("value", EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .SetReadReplicasSettings(TReadReplicasSettings::EMode::AnyAz, 2);
-
-            auto desc = builder.Build();
-
-            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync();
-
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describeResult = session.DescribeTable(tableName)
-                .GetValueSync();
-            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT(describeResult.GetTableDescription().GetReadReplicasSettings().Defined());
-            UNIT_ASSERT(describeResult.GetTableDescription().GetReadReplicasSettings()->GetMode()
-                == TReadReplicasSettings::EMode::AnyAz);
-            UNIT_ASSERT_VALUES_EQUAL(
-                describeResult.GetTableDescription().GetReadReplicasSettings()->GetReadReplicasCount(), 2);
-        }
-        {
-            auto settings = NYdb::NTable::TAlterTableSettings()
-                .SetReadReplicasSettings(TReadReplicasSettings::EMode::PerAz, 1);
-
-            auto result = session.AlterTable(tableName, settings).ExtractValueSync();
-
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TDescribeTableResult describeResult = session.DescribeTable(tableName)
-                .GetValueSync();
-            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT(describeResult.GetTableDescription().GetReadReplicasSettings().Defined());
-            UNIT_ASSERT(describeResult.GetTableDescription().GetReadReplicasSettings()->GetMode()
-                == TReadReplicasSettings::EMode::PerAz);
-            UNIT_ASSERT_VALUES_EQUAL(
-                describeResult.GetTableDescription().GetReadReplicasSettings()->GetReadReplicasCount(), 1);
-        }
-    }
-
-    Y_UNIT_TEST(CreateTableWithMESettings) {
-        TKikimrWithGrpcAndRootSchema server;
-
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        NYdb::NTable::TTableClient client(driver);
-        auto getSessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
-        auto session = getSessionResult.GetSession();
-        auto builder = TTableBuilder()
-            .AddNullableColumn("key", EPrimitiveType::Uint64)
-            .AddNullableColumn("value", EPrimitiveType::Utf8)
-            .SetPrimaryKeyColumn("key")
-            .SetReadReplicasSettings(TReadReplicasSettings::EMode::AnyAz, 1);
-
-        auto desc = builder.Build();
-
-        TCreateTableSettings createTableSettings =
-            TCreateTableSettings()
-            .ReplicationPolicy(TReplicationPolicy().ReplicasCount(1).CreatePerAvailabilityZone(false));
-        auto result = session.CreateTable("Root/Test", std::move(desc), createTableSettings).GetValueSync();
-        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        UNIT_ASSERT_STRING_CONTAINS_C(
-            result.GetIssues().ToString(),
-            "Warning: Table profile and ReadReplicasSettings are set. They are mutually exclusive. Use either one of them.",
-            "Unexpected error message");
-    }
+    Y_UNIT_TEST(CheckDefaultTableSettings1) { 
+        TKikimrWithGrpcAndRootSchema server; 
+ 
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(driver); 
+        auto getSessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString()); 
+        auto session = getSessionResult.GetSession(); 
+        const TString tableName = "Root/Test"; 
+ 
+        { 
+            auto builder = TTableBuilder() 
+                .AddNullableColumn("key", EPrimitiveType::Uint64) 
+                .AddNullableColumn("value", EPrimitiveType::Utf8) 
+                .SetPrimaryKeyColumn("key"); 
+ 
+            auto desc = builder.Build(); 
+            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync(); 
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TDescribeTableResult describeResult = session.DescribeTable(tableName) 
+                .GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS); 
+            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings(); 
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false); 
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CheckDefaultTableSettings2) { 
+        TKikimrWithGrpcAndRootSchema server; 
+ 
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(driver); 
+        auto getSessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString()); 
+        auto session = getSessionResult.GetSession(); 
+        const TString tableName = "Root/Test"; 
+ 
+        { 
+            auto builder = TTableBuilder() 
+                .AddNullableColumn("key", EPrimitiveType::Uint64) 
+                .AddNullableColumn("value", EPrimitiveType::Utf8) 
+                .SetPrimaryKeyColumn("key") 
+                .BeginPartitioningSettings() 
+                    .SetPartitioningBySize(true) 
+                .EndPartitioningSettings(); 
+ 
+            auto desc = builder.Build(); 
+            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync(); 
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TDescribeTableResult describeResult = session.DescribeTable(tableName) 
+                .GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS); 
+            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings(); 
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false); 
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 1); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 2048); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CheckDefaultTableSettings3) { 
+        TKikimrWithGrpcAndRootSchema server; 
+ 
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(driver); 
+        auto getSessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString()); 
+        auto session = getSessionResult.GetSession(); 
+        const TString tableName = "Root/Test"; 
+ 
+        { 
+            auto builder = TTableBuilder() 
+                .AddNullableColumn("key", EPrimitiveType::Uint64) 
+                .AddNullableColumn("value", EPrimitiveType::Utf8) 
+                .SetPrimaryKeyColumn("key") 
+                .BeginPartitioningSettings() 
+                    .SetPartitioningByLoad(true) 
+                .EndPartitioningSettings(); 
+ 
+            auto desc = builder.Build(); 
+            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync(); 
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TDescribeTableResult describeResult = session.DescribeTable(tableName) 
+                .GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS); 
+            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings(); 
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), true); 
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false); 
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 1); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CreateAndAltertTableWithKeyBloomFilter) { 
+        TKikimrWithGrpcAndRootSchema server; 
+ 
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(driver); 
+        auto getSessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString()); 
+        auto session = getSessionResult.GetSession(); 
+        const TString tableName = "Root/Test"; 
+ 
+        { 
+            auto builder = TTableBuilder() 
+                .AddNullableColumn("key", EPrimitiveType::Uint64) 
+                .AddNullableColumn("value", EPrimitiveType::Utf8) 
+                .SetPrimaryKeyColumn("key") 
+                .SetKeyBloomFilter(true); 
+ 
+            auto desc = builder.Build(); 
+ 
+            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync(); 
+ 
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TDescribeTableResult describeResult = session.DescribeTable(tableName) 
+                .GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS); 
+            UNIT_ASSERT(describeResult.GetTableDescription().GetKeyBloomFilter().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetKeyBloomFilter().GetRef(), true); 
+        } 
+        { 
+            auto settings = NYdb::NTable::TAlterTableSettings() 
+                .SetKeyBloomFilter(false); 
+ 
+            auto result = session.AlterTable(tableName, settings).ExtractValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TDescribeTableResult describeResult = session.DescribeTable(tableName) 
+                .GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS); 
+            UNIT_ASSERT(describeResult.GetTableDescription().GetKeyBloomFilter().Defined()); 
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetKeyBloomFilter().GetRef(), false); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CreateAndAltertTableWithReadReplicasSettings) { 
+        TKikimrWithGrpcAndRootSchema server; 
+ 
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(driver); 
+        auto getSessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString()); 
+        auto session = getSessionResult.GetSession(); 
+        const TString tableName = "Root/Test"; 
+ 
+        { 
+            auto builder = TTableBuilder() 
+                .AddNullableColumn("key", EPrimitiveType::Uint64) 
+                .AddNullableColumn("value", EPrimitiveType::Utf8) 
+                .SetPrimaryKeyColumn("key") 
+                .SetReadReplicasSettings(TReadReplicasSettings::EMode::AnyAz, 2); 
+ 
+            auto desc = builder.Build(); 
+ 
+            auto result = session.CreateTable(tableName, std::move(desc)).GetValueSync(); 
+ 
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TDescribeTableResult describeResult = session.DescribeTable(tableName) 
+                .GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS); 
+            UNIT_ASSERT(describeResult.GetTableDescription().GetReadReplicasSettings().Defined()); 
+            UNIT_ASSERT(describeResult.GetTableDescription().GetReadReplicasSettings()->GetMode() 
+                == TReadReplicasSettings::EMode::AnyAz); 
+            UNIT_ASSERT_VALUES_EQUAL( 
+                describeResult.GetTableDescription().GetReadReplicasSettings()->GetReadReplicasCount(), 2); 
+        } 
+        { 
+            auto settings = NYdb::NTable::TAlterTableSettings() 
+                .SetReadReplicasSettings(TReadReplicasSettings::EMode::PerAz, 1); 
+ 
+            auto result = session.AlterTable(tableName, settings).ExtractValueSync(); 
+ 
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        } 
+        { 
+            TDescribeTableResult describeResult = session.DescribeTable(tableName) 
+                .GetValueSync(); 
+            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS); 
+            UNIT_ASSERT(describeResult.GetTableDescription().GetReadReplicasSettings().Defined()); 
+            UNIT_ASSERT(describeResult.GetTableDescription().GetReadReplicasSettings()->GetMode() 
+                == TReadReplicasSettings::EMode::PerAz); 
+            UNIT_ASSERT_VALUES_EQUAL( 
+                describeResult.GetTableDescription().GetReadReplicasSettings()->GetReadReplicasCount(), 1); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(CreateTableWithMESettings) { 
+        TKikimrWithGrpcAndRootSchema server; 
+ 
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        NYdb::NTable::TTableClient client(driver); 
+        auto getSessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString()); 
+        auto session = getSessionResult.GetSession(); 
+        auto builder = TTableBuilder() 
+            .AddNullableColumn("key", EPrimitiveType::Uint64) 
+            .AddNullableColumn("value", EPrimitiveType::Utf8) 
+            .SetPrimaryKeyColumn("key") 
+            .SetReadReplicasSettings(TReadReplicasSettings::EMode::AnyAz, 1); 
+ 
+        auto desc = builder.Build(); 
+ 
+        TCreateTableSettings createTableSettings = 
+            TCreateTableSettings() 
+            .ReplicationPolicy(TReplicationPolicy().ReplicasCount(1).CreatePerAvailabilityZone(false)); 
+        auto result = session.CreateTable("Root/Test", std::move(desc), createTableSettings).GetValueSync(); 
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+        UNIT_ASSERT_STRING_CONTAINS_C( 
+            result.GetIssues().ToString(), 
+            "Warning: Table profile and ReadReplicasSettings are set. They are mutually exclusive. Use either one of them.", 
+            "Unexpected error message"); 
+    } 
 
     Y_UNIT_TEST(TableKeyRangesSinglePartition) {
         TKikimrWithGrpcAndRootSchema server;

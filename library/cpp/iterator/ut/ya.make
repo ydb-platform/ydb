@@ -12,7 +12,7 @@ SRCS(
     iterate_keys_ut.cpp
     iterate_values_ut.cpp
     mapped_ut.cpp
-    zip_ut.cpp 
+    zip_ut.cpp
 )
 
 END()

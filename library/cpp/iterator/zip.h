@@ -58,16 +58,16 @@ namespace NPrivate {
                 TValue operator*() const {
                     return {*std::get<I>(Iterators_)...};
                 }
- 
-                TIterator& operator++() { 
+
+                TIterator& operator++() {
                     (++std::get<I>(Iterators_), ...);
-                    return *this; 
+                    return *this;
                 }
- 
-                TIterator operator++(int) { 
-                    return TIterator{TIteratorState{std::get<I>(Iterators_)++...}}; 
-                } 
- 
+
+                TIterator operator++(int) {
+                    return TIterator{TIteratorState{std::get<I>(Iterators_)++...}};
+                }
+
                 bool operator!=(const TSentinel& other) const {
                     if constexpr (LimitByFirstContainer) {
                         return std::get<0>(Iterators_) != std::get<0>(other.Iterators_);

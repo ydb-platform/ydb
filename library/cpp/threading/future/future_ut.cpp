@@ -236,7 +236,7 @@ namespace {
             UNIT_ASSERT(!promise.HasValue());
             UNIT_ASSERT(promise.HasException());
             UNIT_ASSERT_EXCEPTION(promise.GetValue(), TCustomException);
-            UNIT_ASSERT_EXCEPTION(promise.TryRethrow(), TCustomException); 
+            UNIT_ASSERT_EXCEPTION(promise.TryRethrow(), TCustomException);
         }
 
         Y_UNIT_TEST(ShouldRethrowCallbackException) {
@@ -537,22 +537,22 @@ namespace {
             UNIT_ASSERT(future4.HasValue());
             UNIT_CHECK_GENERATED_NO_EXCEPTION(future4.GetValue(), TFutureException);
         }
- 
-        Y_UNIT_TEST(WaitAllowsExtract) { 
-            auto future = MakeFuture<int>(42); 
-            TVector vec{future, future, future}; 
+
+        Y_UNIT_TEST(WaitAllowsExtract) {
+            auto future = MakeFuture<int>(42);
+            TVector vec{future, future, future};
             WaitExceptionOrAll(vec).GetValue();
-            WaitAny(vec).GetValue(); 
- 
-            UNIT_ASSERT_EQUAL(future.ExtractValue(), 42); 
-        } 
- 
-        Y_UNIT_TEST(IgnoreAllowsExtract) { 
-            auto future = MakeFuture<int>(42); 
-            future.IgnoreResult().GetValue(); 
- 
-            UNIT_ASSERT_EQUAL(future.ExtractValue(), 42); 
-        } 
+            WaitAny(vec).GetValue();
+
+            UNIT_ASSERT_EQUAL(future.ExtractValue(), 42);
+        }
+
+        Y_UNIT_TEST(IgnoreAllowsExtract) {
+            auto future = MakeFuture<int>(42);
+            future.IgnoreResult().GetValue();
+
+            UNIT_ASSERT_EQUAL(future.ExtractValue(), 42);
+        }
 
         Y_UNIT_TEST(WaitExceptionOrAllException) {
             auto promise1 = NewPromise();

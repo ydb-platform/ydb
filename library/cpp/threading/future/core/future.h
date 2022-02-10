@@ -93,7 +93,7 @@ namespace NThreading {
         T ExtractValue(TDuration timeout = TDuration::Zero());
         T ExtractValueSync();
 
-        void TryRethrow() const; 
+        void TryRethrow() const;
         bool HasException() const;
 
         void Wait() const;
@@ -103,12 +103,12 @@ namespace NThreading {
         template <typename F>
         const TFuture<T>& Subscribe(F&& callback) const;
 
-        // precondition: EnsureInitialized() passes 
-        // postcondition: std::terminate is highly unlikely 
+        // precondition: EnsureInitialized() passes
+        // postcondition: std::terminate is highly unlikely
         template <typename F>
-        const TFuture<T>& NoexceptSubscribe(F&& callback) const noexcept; 
- 
-        template <typename F> 
+        const TFuture<T>& NoexceptSubscribe(F&& callback) const noexcept;
+
+        template <typename F>
         TFuture<TFutureType<TFutureCallResult<F, T>>> Apply(F&& func) const;
 
         TFuture<void> IgnoreResult() const;
@@ -148,7 +148,7 @@ namespace NThreading {
         void GetValue(TDuration timeout = TDuration::Zero()) const;
         void GetValueSync() const;
 
-        void TryRethrow() const; 
+        void TryRethrow() const;
         bool HasException() const;
 
         void Wait() const;
@@ -158,12 +158,12 @@ namespace NThreading {
         template <typename F>
         const TFuture<void>& Subscribe(F&& callback) const;
 
-        // precondition: EnsureInitialized() passes 
-        // postcondition: std::terminate is highly unlikely 
+        // precondition: EnsureInitialized() passes
+        // postcondition: std::terminate is highly unlikely
         template <typename F>
-        const TFuture<void>& NoexceptSubscribe(F&& callback) const noexcept; 
- 
-        template <typename F> 
+        const TFuture<void>& NoexceptSubscribe(F&& callback) const noexcept;
+
+        template <typename F>
         TFuture<TFutureType<TFutureCallResult<F, void>>> Apply(F&& func) const;
 
         template <typename R>
@@ -212,7 +212,7 @@ namespace NThreading {
         bool TrySetValue(const T& value);
         bool TrySetValue(T&& value);
 
-        void TryRethrow() const; 
+        void TryRethrow() const;
         bool HasException() const;
         void SetException(const TString& e);
         void SetException(std::exception_ptr e);
@@ -252,7 +252,7 @@ namespace NThreading {
         void SetValue();
         bool TrySetValue();
 
-        void TryRethrow() const; 
+        void TryRethrow() const;
         bool HasException() const;
         void SetException(const TString& e);
         void SetException(std::exception_ptr e);

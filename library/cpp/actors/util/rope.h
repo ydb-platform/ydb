@@ -993,130 +993,130 @@ public:
     }
 };
 
-struct TRopeUtils {
-    static void Memset(TRope::TConstIterator dst, char c, size_t size) {
-        while (size) {
-            Y_VERIFY_DEBUG(dst.Valid());
-            size_t len = std::min(size, dst.ContiguousSize());
-            memset(const_cast<char*>(dst.ContiguousData()), c, len);
-            dst += len;
-            size -= len;
-        }
-    }
-
-    static void Memcpy(TRope::TConstIterator dst, TRope::TConstIterator src, size_t size) {
-        while (size) {
-            Y_VERIFY_DEBUG(dst.Valid() && src.Valid(),
-                    "Invalid iterator in memcpy: dst.Valid() - %" PRIu32 ", src.Valid() - %" PRIu32,
-                      (ui32)dst.Valid(), (ui32)src.Valid());
-            size_t len = std::min(size, std::min(dst.ContiguousSize(), src.ContiguousSize()));
-            memcpy(const_cast<char*>(dst.ContiguousData()), src.ContiguousData(), len);
-            dst += len;
-            src += len;
-            size -= len;
-        }
-    }
-
-    static void Memcpy(TRope::TConstIterator dst, const char* src, size_t size) {
-        while (size) {
-            Y_VERIFY_DEBUG(dst.Valid());
-            size_t len = std::min(size, dst.ContiguousSize());
-            memcpy(const_cast<char*>(dst.ContiguousData()), src, len);
-            size -= len;
-            dst += len;
-            src += len;
-        }
-    }
-
-    static void Memcpy(char* dst, TRope::TConstIterator src, size_t size) {
-        while (size) {
-            Y_VERIFY_DEBUG(src.Valid());
-            size_t len = std::min(size, src.ContiguousSize());
-            memcpy(dst, src.ContiguousData(), len);
-            size -= len;
-            dst += len;
-            src += len;
-        }
-    }
-
-    // copy less or equal to sizeBound bytes, until src is valid
-    static size_t SafeMemcpy(char* dst, TRope::TIterator src, size_t sizeBound) {
-        size_t origSize = sizeBound;
-        while (sizeBound && src.Valid()) {
-            size_t len = Min(sizeBound, src.ContiguousSize());
-            memcpy(dst, src.ContiguousData(), len);
-            sizeBound -= len;
-            dst += len;
-            src += len;
-        }
-        return origSize - sizeBound;
-    }
-};
-
-template<size_t BLOCK, size_t ALIGN = 16>
-class TRopeSlideView {
-    alignas(ALIGN) char Slide[BLOCK]; // use if distance from current point and next chunk is less than BLOCK
-    TRope::TIterator Position; // current position at rope
-    size_t Size;
-    char* Head; // points to data, it might be current rope chunk or Slide
-
-private:
-    void FillBlock() {
-        size_t chunkSize = Position.ContiguousSize();
-        if (chunkSize >= BLOCK) {
-            Size = chunkSize;
-            Head = const_cast<char*>(Position.ContiguousData());
-        } else {
-            Size = TRopeUtils::SafeMemcpy(Slide, Position, BLOCK);
-            Head = Slide;
-        }
-    }
-
-public:
-    TRopeSlideView(TRope::TIterator position)
-        : Position(position)
-    {
-        FillBlock();
-    }
-
-    TRopeSlideView(TRope &rope)
-        : TRopeSlideView(rope.Begin())
-    {}
-
-    // if view on slide then copy slide to rope
-    void FlushBlock() {
-        if (Head == Slide) {
-            TRopeUtils::Memcpy(Position, Head, Size);
-        }
-    }
-
-    TRope::TIterator operator+=(size_t amount) {
-        Position += amount;
-        FillBlock();
-        return Position;
-    }
-
-    TRope::TIterator GetPosition() const {
-        return Position;
-    }
-
-    char* GetHead() const {
-        return Head;
-    }
-
-    ui8* GetUi8Head() const {
-        return reinterpret_cast<ui8*>(Head);
-    }
-
-    size_t ContiguousSize() const {
-        return Size;
-    }
-
-    bool IsOnChunk() const {
-        return Head != Slide;
-    }
-};
-
+struct TRopeUtils { 
+    static void Memset(TRope::TConstIterator dst, char c, size_t size) { 
+        while (size) { 
+            Y_VERIFY_DEBUG(dst.Valid()); 
+            size_t len = std::min(size, dst.ContiguousSize()); 
+            memset(const_cast<char*>(dst.ContiguousData()), c, len); 
+            dst += len; 
+            size -= len; 
+        } 
+    } 
+ 
+    static void Memcpy(TRope::TConstIterator dst, TRope::TConstIterator src, size_t size) { 
+        while (size) { 
+            Y_VERIFY_DEBUG(dst.Valid() && src.Valid(), 
+                    "Invalid iterator in memcpy: dst.Valid() - %" PRIu32 ", src.Valid() - %" PRIu32, 
+                      (ui32)dst.Valid(), (ui32)src.Valid()); 
+            size_t len = std::min(size, std::min(dst.ContiguousSize(), src.ContiguousSize())); 
+            memcpy(const_cast<char*>(dst.ContiguousData()), src.ContiguousData(), len); 
+            dst += len; 
+            src += len; 
+            size -= len; 
+        } 
+    } 
+ 
+    static void Memcpy(TRope::TConstIterator dst, const char* src, size_t size) { 
+        while (size) { 
+            Y_VERIFY_DEBUG(dst.Valid()); 
+            size_t len = std::min(size, dst.ContiguousSize()); 
+            memcpy(const_cast<char*>(dst.ContiguousData()), src, len); 
+            size -= len; 
+            dst += len; 
+            src += len; 
+        } 
+    } 
+ 
+    static void Memcpy(char* dst, TRope::TConstIterator src, size_t size) { 
+        while (size) { 
+            Y_VERIFY_DEBUG(src.Valid()); 
+            size_t len = std::min(size, src.ContiguousSize()); 
+            memcpy(dst, src.ContiguousData(), len); 
+            size -= len; 
+            dst += len; 
+            src += len; 
+        } 
+    } 
+ 
+    // copy less or equal to sizeBound bytes, until src is valid 
+    static size_t SafeMemcpy(char* dst, TRope::TIterator src, size_t sizeBound) { 
+        size_t origSize = sizeBound; 
+        while (sizeBound && src.Valid()) { 
+            size_t len = Min(sizeBound, src.ContiguousSize()); 
+            memcpy(dst, src.ContiguousData(), len); 
+            sizeBound -= len; 
+            dst += len; 
+            src += len; 
+        } 
+        return origSize - sizeBound; 
+    } 
+}; 
+ 
+template<size_t BLOCK, size_t ALIGN = 16> 
+class TRopeSlideView { 
+    alignas(ALIGN) char Slide[BLOCK]; // use if distance from current point and next chunk is less than BLOCK 
+    TRope::TIterator Position; // current position at rope 
+    size_t Size; 
+    char* Head; // points to data, it might be current rope chunk or Slide 
+ 
+private: 
+    void FillBlock() { 
+        size_t chunkSize = Position.ContiguousSize(); 
+        if (chunkSize >= BLOCK) { 
+            Size = chunkSize; 
+            Head = const_cast<char*>(Position.ContiguousData()); 
+        } else { 
+            Size = TRopeUtils::SafeMemcpy(Slide, Position, BLOCK); 
+            Head = Slide; 
+        } 
+    } 
+ 
+public: 
+    TRopeSlideView(TRope::TIterator position) 
+        : Position(position) 
+    { 
+        FillBlock(); 
+    } 
+ 
+    TRopeSlideView(TRope &rope) 
+        : TRopeSlideView(rope.Begin()) 
+    {} 
+ 
+    // if view on slide then copy slide to rope 
+    void FlushBlock() { 
+        if (Head == Slide) { 
+            TRopeUtils::Memcpy(Position, Head, Size); 
+        } 
+    } 
+ 
+    TRope::TIterator operator+=(size_t amount) { 
+        Position += amount; 
+        FillBlock(); 
+        return Position; 
+    } 
+ 
+    TRope::TIterator GetPosition() const { 
+        return Position; 
+    } 
+ 
+    char* GetHead() const { 
+        return Head; 
+    } 
+ 
+    ui8* GetUi8Head() const { 
+        return reinterpret_cast<ui8*>(Head); 
+    } 
+ 
+    size_t ContiguousSize() const { 
+        return Size; 
+    } 
+ 
+    bool IsOnChunk() const { 
+        return Head != Slide; 
+    } 
+}; 
+ 
 inline TRope TRope::CopySpaceOptimized(TRope&& origin, size_t worstRatioPer1k, TRopeArena& arena) {
     TRope res;
     for (TChunk& chunk : origin.Chain) {

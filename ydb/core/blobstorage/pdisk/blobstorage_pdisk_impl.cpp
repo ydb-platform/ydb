@@ -2011,7 +2011,7 @@ void TPDisk::TryTrimChunk(bool prevDone, ui64 trimmedSize) {
     }
 
     if (ChunkBeingTrimmed) { // Initiate trim of next part of chunk
-        const ui64 trimStep = (Keeper.GetTrimmedFreeChunkCount() > 100 ? 2 << 20 : 32 << 20);
+        const ui64 trimStep = (Keeper.GetTrimmedFreeChunkCount() > 100 ? 2 << 20 : 32 << 20); 
         ui64 trimSize = Min<ui64>(Format.ChunkSize - TrimOffset, trimStep);
         TChunkTrim* trim = ReqCreator.CreateChunkTrim(ChunkBeingTrimmed, TrimOffset, trimSize);
         InputRequest(trim);

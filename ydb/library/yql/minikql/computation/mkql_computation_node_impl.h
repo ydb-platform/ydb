@@ -5,7 +5,7 @@
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 
-#include <util/system/type_name.h>
+#include <util/system/type_name.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -1030,7 +1030,7 @@ protected:
     }
 
     [[noreturn]] void ThrowNotSupported(const char* func) const {
-        THROW yexception() << "Unsupported access to '" << func << "' method of: " << TypeName(*this);
+        THROW yexception() << "Unsupported access to '" << func << "' method of: " << TypeName(*this); 
     }
 
 private:

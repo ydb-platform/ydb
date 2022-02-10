@@ -20,13 +20,13 @@
         LOG_LOG(::NActors::TActivationContext::AsActorContext(), (priority), (component), "%s " marker " %s", LogPrefix.data(), Sprintf(__VA_ARGS__).data()); \
     } while (false)
 
-#define LOG_LOG_NET(priority, NODE_ID, FMT, ...) \
-    do { \
-        const TActorContext& ctx = ::NActors::TActivationContext::AsActorContext(); \
-        LOG_LOG(ctx, (priority), ::NActorsServices::INTERCONNECT_NETWORK, "[%" PRIu32 " <-> %" PRIu32 "] %s", \
-                ctx.SelfID.NodeId(), (NODE_ID), Sprintf(FMT, __VA_ARGS__).data()); \
-    } while (false)
-
+#define LOG_LOG_NET(priority, NODE_ID, FMT, ...) \ 
+    do { \ 
+        const TActorContext& ctx = ::NActors::TActivationContext::AsActorContext(); \ 
+        LOG_LOG(ctx, (priority), ::NActorsServices::INTERCONNECT_NETWORK, "[%" PRIu32 " <-> %" PRIu32 "] %s", \ 
+                ctx.SelfID.NodeId(), (NODE_ID), Sprintf(FMT, __VA_ARGS__).data()); \ 
+    } while (false) 
+ 
 #define LOG_EMER_IC(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT, marker, ::NActors::NLog::PRI_EMER, __VA_ARGS__)
 #define LOG_ALERT_IC(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT, marker, ::NActors::NLog::PRI_ALERT, __VA_ARGS__)
 #define LOG_CRIT_IC(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT, marker, ::NActors::NLog::PRI_CRIT, __VA_ARGS__)
@@ -45,8 +45,8 @@
 #define LOG_INFO_IC_SESSION(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, marker, ::NActors::NLog::PRI_INFO, __VA_ARGS__)
 #define LOG_DEBUG_IC_SESSION(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, marker, ::NActors::NLog::PRI_DEBUG, __VA_ARGS__)
 
-#define LOG_NOTICE_NET(NODE_ID, FMT, ...) LOG_LOG_NET(::NActors::NLog::PRI_NOTICE, NODE_ID, FMT, __VA_ARGS__)
-#define LOG_DEBUG_NET(NODE_ID, FMT, ...) LOG_LOG_NET(::NActors::NLog::PRI_DEBUG, NODE_ID, FMT, __VA_ARGS__)
+#define LOG_NOTICE_NET(NODE_ID, FMT, ...) LOG_LOG_NET(::NActors::NLog::PRI_NOTICE, NODE_ID, FMT, __VA_ARGS__) 
+#define LOG_DEBUG_NET(NODE_ID, FMT, ...) LOG_LOG_NET(::NActors::NLog::PRI_DEBUG, NODE_ID, FMT, __VA_ARGS__) 
 
 namespace NActors {
     class TInterconnectLoggingBase {

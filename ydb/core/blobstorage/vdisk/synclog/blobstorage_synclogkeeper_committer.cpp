@@ -149,7 +149,7 @@ namespace NKikimr {
                 CHECK_PDISK_RESPONSE(SlCtx->VCtx, ev, ctx);
                 Y_VERIFY(ev->Get()->Results.size() == 1);
                 const ui64 entryPointLsn = ev->Get()->Results[0].Lsn;
-                TCommitHistory commitHistory(TAppData::TimeProvider->Now(), entryPointLsn, EntryPointSerializer.RecoveryLogConfirmedLsn);
+                TCommitHistory commitHistory(TAppData::TimeProvider->Now(), entryPointLsn, EntryPointSerializer.RecoveryLogConfirmedLsn); 
                 ctx.Send(NotifyID, new TEvSyncLogCommitDone(commitHistory,
                     EntryPointSerializer.GetEntryPointDbgInfo(), std::move(Delta)));
                 Die(ctx);

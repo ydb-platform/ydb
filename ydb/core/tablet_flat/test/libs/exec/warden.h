@@ -6,7 +6,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/tablet_flat/util_fmt_logger.h>
-#include <util/system/type_name.h>
+#include <util/system/type_name.h> 
 
 #include <array>
 
@@ -54,7 +54,7 @@ namespace NFake {
                     if (auto logl = Logger->Log(ELnLev::Abort)) {
                         logl
                             << "BS group " << group << " is not configured"
-                            << ", ev " << TypeName(*eh->GetBase());
+                            << ", ev " << TypeName(*eh->GetBase()); 
                     }
 
                     return; /* cannot process unknown groups */
@@ -70,7 +70,7 @@ namespace NFake {
                     if (auto logl = Logger->Log(ELnLev::Crit)) {
                         logl
                             << "BS group " << group << " is unavailable"
-                            << ", ev " << TypeName(*eh->GetBase());
+                            << ", ev " << TypeName(*eh->GetBase()); 
                     }
 
                     auto why = TEvents::TEvUndelivered::ReasonActorUnknown;

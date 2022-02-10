@@ -1396,7 +1396,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
-    auto prepare = [resultSets=resultSets, resultSetIndex, user, permissions] {
+    auto prepare = [resultSets=resultSets, resultSetIndex, user, permissions] { 
         if (resultSets->size() != 2) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets->size() << ". Please contact internal support";
         }

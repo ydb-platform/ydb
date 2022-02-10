@@ -4,7 +4,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <library/cpp/actors/core/actor.h>
-#include <util/system/type_name.h>
+#include <util/system/type_name.h> 
 
 namespace NKikimr {
 namespace NFake {
@@ -80,13 +80,13 @@ namespace NFake {
             } else if (eh->CastAsLocal<TEvTabletPipe::TEvServerDisconnected>()){
 
             } else if (!TTabletExecutedFlat::HandleDefaultEvents(eh, ctx)) {
-                Y_Fail("Unexpected event " << TypeName(*eh->GetBase()));
+                Y_Fail("Unexpected event " << TypeName(*eh->GetBase())); 
             }
         }
 
         void Enqueue(TEventHandlePtr &eh, const ::NActors::TActorContext&) override
         {
-            const auto *name = TypeName(*eh->GetBase()).c_str();
+            const auto *name = TypeName(*eh->GetBase()).c_str(); 
 
             Y_FAIL("Got unexpected event %s on tablet booting", name);
         }

@@ -113,7 +113,7 @@ Y_UNIT_TEST(TestKeyValueCollectorEmpty) {
 
     TVector<TLogoBlobID> keep;
     TVector<TLogoBlobID> doNotKeep;
-    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep)));
+    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep))); 
     context.SetActor(CreateKeyValueCollector(
                 context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200, true));
 
@@ -140,7 +140,7 @@ Y_UNIT_TEST(TestKeyValueCollectorSingle) {
     TVector<TLogoBlobID> keep;
     keep.emplace_back(0x10010000001000Bull, 5, 58949, NKeyValue::BLOB_CHANNEL, 1209816, 10);
     TVector<TLogoBlobID> doNotKeep;
-    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep)));
+    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep))); 
     context.SetActor(CreateKeyValueCollector(
                 context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200, true));
 
@@ -190,7 +190,7 @@ Y_UNIT_TEST(TestKeyValueCollectorMultiple) {
         ids.insert(doNotKeep[i]);
     }
 
-    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep)));
+    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep))); 
     context.SetActor(CreateKeyValueCollector(
                 context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200, true));
 

@@ -2,7 +2,7 @@
 
 #include "world.h"
 #include "events.h"
-#include <util/system/type_name.h>
+#include <util/system/type_name.h> 
 #include <library/cpp/actors/core/actor.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -77,7 +77,7 @@ namespace NFake {
 
                 Send(Agent, new TEvents::TEvPoison);
             } else {
-                Y_Fail("Unexpected event " << TypeName(*eh->GetBase()));
+                Y_Fail("Unexpected event " << TypeName(*eh->GetBase())); 
             }
         }
 

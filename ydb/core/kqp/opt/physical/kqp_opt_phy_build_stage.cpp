@@ -64,7 +64,7 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
     TVector<TExprBase> values;
     TNodeOnNodeOwnedMap replaceMap;
 
-    auto checkRange = [&values](const TVarArgCallable<TExprBase>& tuple) {
+    auto checkRange = [&values](const TVarArgCallable<TExprBase>& tuple) { 
         for (const auto& value : tuple) {
             if (!IsDqPureExpr(value)) {
                 return false;

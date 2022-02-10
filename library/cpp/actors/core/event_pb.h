@@ -268,7 +268,7 @@ namespace NActors {
                 // parse the protobuf
                 TRopeStream stream(iter, size);
                 if (!ev->Record.ParseFromZeroCopyStream(&stream)) {
-                    Y_FAIL("Failed to parse protobuf event type %" PRIu32 " class %s", TEventType, TypeName(ev->Record).data());
+                    Y_FAIL("Failed to parse protobuf event type %" PRIu32 " class %s", TEventType, TypeName(ev->Record).data()); 
                 }
             }
             ev->CachedByteSize = input->GetSize();

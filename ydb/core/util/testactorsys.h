@@ -417,7 +417,7 @@ public:
     TActorId Register(IActor *actor, const TActorId& parentId = TActorId(), ui32 poolId = 0, std::optional<ui32> hint = std::nullopt,
             ui32 nodeId = 0) {
         // count stats
-        TString name = TypeName(*actor);
+        TString name = TypeName(*actor); 
         ++ActorStats[name].Created;
         const bool inserted = ActorName.emplace(actor, std::move(name)).second;
         Y_VERIFY(inserted);

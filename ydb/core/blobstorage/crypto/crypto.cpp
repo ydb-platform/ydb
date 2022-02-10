@@ -279,26 +279,26 @@ static void Xor(void* destination, const void* a, const void* b, ui32 size) {
         ++srcB;
     }
 }
-
-static void Xor(TRope::TIterator destination, TRope::TConstIterator a, const void* b, ui32 size) {
-    while (size) {
-        ui8 *dst = (ui8*)destination.ContiguousData();
-        const ui8 *srcA = (const ui8*)a.ContiguousData();
-        const ui8 *srcB = (const ui8*)b;
-        const ui32 blockSize = Min(destination.ContiguousSize(), a.ContiguousSize());
-        ui32 offset = 0;
-        for (offset = 0; offset < blockSize && offset < size; offset++) {
-            *dst = *srcA ^ *srcB;
-            ++dst;
-            ++srcA;
-            ++srcB;
-        }
-        destination += offset;
-        a += offset;
-        b = srcB;
-        size -= offset;
-    }
-}
+ 
+static void Xor(TRope::TIterator destination, TRope::TConstIterator a, const void* b, ui32 size) { 
+    while (size) { 
+        ui8 *dst = (ui8*)destination.ContiguousData(); 
+        const ui8 *srcA = (const ui8*)a.ContiguousData(); 
+        const ui8 *srcB = (const ui8*)b; 
+        const ui32 blockSize = Min(destination.ContiguousSize(), a.ContiguousSize()); 
+        ui32 offset = 0; 
+        for (offset = 0; offset < blockSize && offset < size; offset++) { 
+            *dst = *srcA ^ *srcB; 
+            ++dst; 
+            ++srcA; 
+            ++srcB; 
+        } 
+        destination += offset; 
+        a += offset; 
+        b = srcB; 
+        size -= offset; 
+    } 
+} 
 #endif
 
 void TStreamCypher::Encrypt(void* destination, const void* source, ui32 size) {
@@ -372,44 +372,44 @@ void TStreamCypher::Encrypt(void* destination, const void* source, ui32 size) {
 #endif
 }
 
-void TStreamCypher::Encrypt(TRope::TIterator destination, TRope::TIterator source, ui32 size) {
-#if ENABLE_ENCRYPTION
-    if (UnusedBytes) {
-        if (size <= UnusedBytes) {
-            Xor(destination, source, Leftover + BLOCK_BYTES - UnusedBytes, size);
-            UnusedBytes -= size;
-            return;
-        }
-        Xor(destination, source, Leftover + BLOCK_BYTES - UnusedBytes, UnusedBytes);
-        size -= UnusedBytes;
-        destination += UnusedBytes;
-        source += UnusedBytes;
-        UnusedBytes = 0;
-    }
-
-    if (Y_UNLIKELY(size == 0)) { // prevent slideView init
-        return;
-    }
-
-    constexpr ui32 PACK = 8 * BLOCK_BYTES;
-    TRopeSlideView<PACK> slideDst(destination);
-    TRopeSlideView<PACK> slideSrc(source);
-
-    while (size >= PACK) {
-        Encrypt(slideDst.GetHead(), slideSrc.GetHead(), PACK);
-        slideDst.FlushBlock();
-
-        slideDst += PACK;
-        slideSrc += PACK;
-        size -= PACK;
-    }
-    Encrypt(slideDst.GetHead(), slideSrc.GetHead(), size);
-    slideDst.FlushBlock();
-#else
-    TRopeUtils::Memcpy(destination, source, size);
-#endif
-}
-
+void TStreamCypher::Encrypt(TRope::TIterator destination, TRope::TIterator source, ui32 size) { 
+#if ENABLE_ENCRYPTION 
+    if (UnusedBytes) { 
+        if (size <= UnusedBytes) { 
+            Xor(destination, source, Leftover + BLOCK_BYTES - UnusedBytes, size); 
+            UnusedBytes -= size; 
+            return; 
+        } 
+        Xor(destination, source, Leftover + BLOCK_BYTES - UnusedBytes, UnusedBytes); 
+        size -= UnusedBytes; 
+        destination += UnusedBytes; 
+        source += UnusedBytes; 
+        UnusedBytes = 0; 
+    } 
+ 
+    if (Y_UNLIKELY(size == 0)) { // prevent slideView init 
+        return; 
+    } 
+ 
+    constexpr ui32 PACK = 8 * BLOCK_BYTES; 
+    TRopeSlideView<PACK> slideDst(destination); 
+    TRopeSlideView<PACK> slideSrc(source); 
+ 
+    while (size >= PACK) { 
+        Encrypt(slideDst.GetHead(), slideSrc.GetHead(), PACK); 
+        slideDst.FlushBlock(); 
+ 
+        slideDst += PACK; 
+        slideSrc += PACK; 
+        size -= PACK; 
+    } 
+    Encrypt(slideDst.GetHead(), slideSrc.GetHead(), size); 
+    slideDst.FlushBlock(); 
+#else 
+    TRopeUtils::Memcpy(destination, source, size); 
+#endif 
+} 
+ 
 void TStreamCypher::InplaceEncrypt(void *source, ui32 size) {
 #if ENABLE_ENCRYPTION
     Encrypt(source, source, size);
@@ -419,15 +419,15 @@ void TStreamCypher::InplaceEncrypt(void *source, ui32 size) {
 #endif
 }
 
-void TStreamCypher::InplaceEncrypt(TRope::TIterator source, ui32 size) {
-#if ENABLE_ENCRYPTION
-    Encrypt(source, source, size);
-#else
-    Y_UNUSED(source);
-    Y_UNUSED(size);
-#endif
-}
-
+void TStreamCypher::InplaceEncrypt(TRope::TIterator source, ui32 size) { 
+#if ENABLE_ENCRYPTION 
+    Encrypt(source, source, size); 
+#else 
+    Y_UNUSED(source); 
+    Y_UNUSED(size); 
+#endif 
+} 
+ 
 TStreamCypher::~TStreamCypher() {
     SecureWipeBuffer((ui8*)Key, GetKeySizeBytes());
     SecureWipeBuffer((ui8*)Leftover, sizeof(Leftover));

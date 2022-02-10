@@ -1,4 +1,4 @@
-#include "tempfile.h"
+#include "tempfile.h" 
 
 #include <util/folder/dirut.h>
 #include <util/generic/yexception.h>
@@ -17,57 +17,57 @@
 
 extern "C" int mkstemps(char* path, int slen);
 
-TString MakeTempName(const char* wrkDir, const char* prefix, const char* extension) {
+TString MakeTempName(const char* wrkDir, const char* prefix, const char* extension) { 
 #ifndef _win32_
-    TString filePath;
+    TString filePath; 
 
     if (wrkDir && *wrkDir) {
-        filePath += wrkDir;
+        filePath += wrkDir; 
     } else {
-        filePath += GetSystemTempDir();
+        filePath += GetSystemTempDir(); 
     }
 
-    if (filePath.back() != '/') {
-        filePath += '/';
+    if (filePath.back() != '/') { 
+        filePath += '/'; 
     }
 
-    if (prefix) {
-        filePath += prefix;
+    if (prefix) { 
+        filePath += prefix; 
     }
 
-    filePath += "XXXXXX"; // mkstemps requirement
+    filePath += "XXXXXX"; // mkstemps requirement 
 
-    size_t extensionPartLength = 0;
-    if (extension && *extension) {
-        if (extension[0] != '.') {
-            filePath += '.';
-            extensionPartLength += 1;
-        }
-        filePath += extension;
-        extensionPartLength += strlen(extension);
+    size_t extensionPartLength = 0; 
+    if (extension && *extension) { 
+        if (extension[0] != '.') { 
+            filePath += '.'; 
+            extensionPartLength += 1; 
+        } 
+        filePath += extension; 
+        extensionPartLength += strlen(extension); 
     }
 
-    int fd = mkstemps(const_cast<char*>(filePath.data()), extensionPartLength);
-    if (fd >= 0) {
+    int fd = mkstemps(const_cast<char*>(filePath.data()), extensionPartLength); 
+    if (fd >= 0) { 
         close(fd);
-        return filePath;
+        return filePath; 
     }
 #else
-    char tmpDir[MAX_PATH + 1]; // +1 -- for terminating null character
-    char filePath[MAX_PATH];
+    char tmpDir[MAX_PATH + 1]; // +1 -- for terminating null character 
+    char filePath[MAX_PATH]; 
     const char* pDir = 0;
 
-    if (wrkDir && *wrkDir) {
+    if (wrkDir && *wrkDir) { 
         pDir = wrkDir;
-    } else if (GetTempPath(MAX_PATH + 1, tmpDir)) {
-        pDir = tmpDir;
-    }
+    } else if (GetTempPath(MAX_PATH + 1, tmpDir)) { 
+        pDir = tmpDir; 
+    } 
 
-    // it always takes up to 3 characters, no more
-    if (GetTempFileName(pDir, (prefix) ? (prefix) : "yan", 0, filePath)) {
-        return filePath;
-    }
+    // it always takes up to 3 characters, no more 
+    if (GetTempFileName(pDir, (prefix) ? (prefix) : "yan", 0, filePath)) { 
+        return filePath; 
+    } 
 #endif
 
-    ythrow TSystemError() << "can not create temp name(" << wrkDir << ", " << prefix << ", " << extension << ")";
+    ythrow TSystemError() << "can not create temp name(" << wrkDir << ", " << prefix << ", " << extension << ")"; 
 }

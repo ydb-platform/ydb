@@ -104,7 +104,7 @@ void sigchld_service::_handle_signal(const boost::system::error_code & ec)
         _signal_set.async_wait(
             [this](const boost::system::error_code & ec, int)
             {
-                _strand.post([]{});
+                _strand.post([]{}); 
                 this->_handle_signal(ec);
             });
     }

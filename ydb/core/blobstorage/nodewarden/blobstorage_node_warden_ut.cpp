@@ -428,22 +428,22 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         }
     };
 
-    void BlockGroup(TTestBasicRuntime& runtime, TActorId sender, ui64 tabletId, ui32 groupId, ui32 generation, bool isMonitored,
-            NKikimrProto::EReplyStatus expectAnsver = NKikimrProto::EReplyStatus::OK) {
+    void BlockGroup(TTestBasicRuntime& runtime, TActorId sender, ui64 tabletId, ui32 groupId, ui32 generation, bool isMonitored, 
+            NKikimrProto::EReplyStatus expectAnsver = NKikimrProto::EReplyStatus::OK) { 
         auto request = std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, generation, TInstant::Max());
-        request->IsMonitored = isMonitored;
+        request->IsMonitored = isMonitored; 
         SendToBsProxy(runtime, sender, groupId, request.release());
         auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvBlockResult>(sender);
         UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, expectAnsver);
     }
 
-    void CollectGroup(TTestBasicRuntime& runtime, TActorId sender, ui64 tabletId, ui32 groupId, bool isMonitored,
-            NKikimrProto::EReplyStatus expectAnsver = NKikimrProto::EReplyStatus::OK) {
+    void CollectGroup(TTestBasicRuntime& runtime, TActorId sender, ui64 tabletId, ui32 groupId, bool isMonitored, 
+            NKikimrProto::EReplyStatus expectAnsver = NKikimrProto::EReplyStatus::OK) { 
         auto request = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, Max<ui32>(), Max<ui32>(), ui32(0),
                                                                      true, Max<ui32>(), Max<ui32>(),
                                                                      nullptr, nullptr, TInstant::Max(),
                                                                      true, true);
-        request->IsMonitored = isMonitored;
+        request->IsMonitored = isMonitored; 
         SendToBsProxy(runtime, sender, groupId, request.release());
         auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvCollectGarbageResult>(sender);
         UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, expectAnsver);
@@ -460,9 +460,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         ui64 tabletId = 1234;
         ui32 generation = 1;
-        BlockGroup(runtime, sender0, tabletId, groupId, generation, true);
-        BlockGroup(runtime, sender0, tabletId, groupId, generation, true, NKikimrProto::EReplyStatus::RACE);
-        BlockGroup(runtime, sender0, tabletId, groupId, generation-1, true, NKikimrProto::EReplyStatus::RACE);
+        BlockGroup(runtime, sender0, tabletId, groupId, generation, true); 
+        BlockGroup(runtime, sender0, tabletId, groupId, generation, true, NKikimrProto::EReplyStatus::RACE); 
+        BlockGroup(runtime, sender0, tabletId, groupId, generation-1, true, NKikimrProto::EReplyStatus::RACE); 
 
         auto describePool = DescribeStoragePool(runtime, DOMAIN_ID, "test_storage");
         {
@@ -470,17 +470,17 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             RemoveStoragePool(runtime, DOMAIN_ID, describePool);
 
             ++generation;
-            BlockGroup(runtime, sender0, tabletId, groupId, generation++, true);
+            BlockGroup(runtime, sender0, tabletId, groupId, generation++, true); 
         }
 
         ++generation;
-        BlockGroup(runtime, sender0, tabletId, groupId, generation++, true);
+        BlockGroup(runtime, sender0, tabletId, groupId, generation++, true); 
 
         auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID);
         RebootTablet(runtime, MakeBSControllerID(stateStorage), sender0, sender0.NodeId() - runtime.GetNodeId(0));
 
         ++generation;
-        BlockGroup(runtime, sender0, tabletId, groupId, generation++, true, NKikimrProto::EReplyStatus::NO_GROUP);
+        BlockGroup(runtime, sender0, tabletId, groupId, generation++, true, NKikimrProto::EReplyStatus::NO_GROUP); 
     }
 
     CUSTOM_UNIT_TEST(TestSendToInvalidGroupId) {
@@ -494,10 +494,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         ui64 tabletId = 1234;
         ui32 generation = 1;
-        BlockGroup(runtime, sender, tabletId, groupId, generation, true, NKikimrProto::ERROR);
+        BlockGroup(runtime, sender, tabletId, groupId, generation, true, NKikimrProto::ERROR); 
         Put(runtime, sender, groupId, TLogoBlobID(tabletId, generation, 0, 0, 5, 0), "hello",
                 NKikimrProto::EReplyStatus::ERROR);
-        CollectGroup(runtime, sender, tabletId, groupId, true, NKikimrProto::EReplyStatus::ERROR);
+        CollectGroup(runtime, sender, tabletId, groupId, true, NKikimrProto::EReplyStatus::ERROR); 
     }
 
     CUSTOM_UNIT_TEST(TestBlockEncriptedGroup) {
@@ -512,135 +512,135 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         ui64 tabletId = 1234;
         ui32 generation = 1;
-        BlockGroup(runtime, sender0, tabletId, groupId, generation, true);
+        BlockGroup(runtime, sender0, tabletId, groupId, generation, true); 
 
         Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation, 0, 0, 5, 0), "hello", NKikimrProto::EReplyStatus::BLOCKED);
         Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation+1, 0, 0, 5, 0), "hello");
 
-        BlockGroup(runtime, sender1, tabletId, groupId, generation+2, true);
+        BlockGroup(runtime, sender1, tabletId, groupId, generation+2, true); 
         Put(runtime, sender1, groupId, TLogoBlobID(tabletId, generation+2, 0, 0, 10, 0), "hellohello", NKikimrProto::EReplyStatus::ERROR);
         Put(runtime, sender1, groupId, TLogoBlobID(tabletId, generation+3, 0, 0, 10, 0), "hellohello", NKikimrProto::EReplyStatus::ERROR);
 
         Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation+1, 0, 0, 11, 0), "hello_again", NKikimrProto::EReplyStatus::BLOCKED);
 
-        CollectGroup(runtime, sender1, tabletId, groupId, true);
+        CollectGroup(runtime, sender1, tabletId, groupId, true); 
     }
 
-    void AssertMonitoringExists(TTestBasicRuntime& runtime, ui32 nodeIdx, TString groupName) {
-        auto rootStats = runtime.GetDynamicCounters(nodeIdx);
-        auto stats = GetServiceCounters(rootStats, "dsproxy_percentile")->GetSubgroup("blobstorageproxy", groupName);
-        auto responseStats = stats->GetSubgroup("subsystem", "response");
-        auto putTabletStats = responseStats->GetSubgroup("event", "putTabletLog");
+    void AssertMonitoringExists(TTestBasicRuntime& runtime, ui32 nodeIdx, TString groupName) { 
+        auto rootStats = runtime.GetDynamicCounters(nodeIdx); 
+        auto stats = GetServiceCounters(rootStats, "dsproxy_percentile")->GetSubgroup("blobstorageproxy", groupName); 
+        auto responseStats = stats->GetSubgroup("subsystem", "response"); 
+        auto putTabletStats = responseStats->GetSubgroup("event", "putTabletLog"); 
+ 
+        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "putTabletLogAll"), nullptr); 
+        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "putAsyncBlob"), nullptr); 
+        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "putUserData"), nullptr); 
+        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "get"), nullptr); 
+        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "block"), nullptr); 
+        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "discover"), nullptr); 
+        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "indexRestoreGet"), nullptr); 
+        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "range"), nullptr); 
+ 
+        UNIT_ASSERT_UNEQUAL(putTabletStats->FindSubgroup("size", "256"), nullptr); 
+        UNIT_ASSERT_UNEQUAL(putTabletStats->FindSubgroup("size", "512"), nullptr); 
+    } 
+ 
+    void AssertMonitoringDoesNotExist(TTestBasicRuntime& runtime, ui32 nodeIdx, TString groupName) { 
+        auto rootStats = runtime.GetDynamicCounters(nodeIdx); 
+        auto stats = GetServiceCounters(rootStats, "dsproxy_percentile")->GetSubgroup("blobstorageproxy", groupName); 
+        auto responseStats = stats->GetSubgroup("subsystem", "response"); 
+        auto putTabletStats = responseStats->GetSubgroup("event", "putTabletLog"); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(responseStats->FindSubgroup("event", "putTabletLogAll"), nullptr); 
+        UNIT_ASSERT_VALUES_EQUAL(responseStats->FindSubgroup("event", "putAsyncBlob"), nullptr); 
+        UNIT_ASSERT_VALUES_EQUAL(responseStats->FindSubgroup("event", "putUserData"), nullptr); 
+        UNIT_ASSERT_VALUES_EQUAL(responseStats->FindSubgroup("event", "get"), nullptr); 
+        UNIT_ASSERT_VALUES_EQUAL(responseStats->FindSubgroup("event", "discover"), nullptr); 
+        UNIT_ASSERT_VALUES_EQUAL(responseStats->FindSubgroup("event", "indexRestoreGet"), nullptr); 
+        UNIT_ASSERT_VALUES_EQUAL(responseStats->FindSubgroup("event", "range"), nullptr); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(putTabletStats->FindSubgroup("size", "256"), nullptr); 
+        UNIT_ASSERT_VALUES_EQUAL(putTabletStats->FindSubgroup("size", "512"), nullptr); 
+ 
+        // always send BlockResponseTime 
+        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "block"), nullptr); 
+    } 
+ 
+    CUSTOM_UNIT_TEST(TestLimitedKeylessGroupThenNoMonitoring) { 
+        TTestBasicRuntime runtime(2, false); 
+        Setup(runtime, "", nullptr); 
 
-        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "putTabletLogAll"), nullptr);
-        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "putAsyncBlob"), nullptr);
-        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "putUserData"), nullptr);
-        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "get"), nullptr);
-        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "block"), nullptr);
-        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "discover"), nullptr);
-        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "indexRestoreGet"), nullptr);
-        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "range"), nullptr);
-
-        UNIT_ASSERT_UNEQUAL(putTabletStats->FindSubgroup("size", "256"), nullptr);
-        UNIT_ASSERT_UNEQUAL(putTabletStats->FindSubgroup("size", "512"), nullptr);
-    }
-
-    void AssertMonitoringDoesNotExist(TTestBasicRuntime& runtime, ui32 nodeIdx, TString groupName) {
-        auto rootStats = runtime.GetDynamicCounters(nodeIdx);
-        auto stats = GetServiceCounters(rootStats, "dsproxy_percentile")->GetSubgroup("blobstorageproxy", groupName);
-        auto responseStats = stats->GetSubgroup("subsystem", "response");
-        auto putTabletStats = responseStats->GetSubgroup("event", "putTabletLog");
-
-        UNIT_ASSERT_VALUES_EQUAL(responseStats->FindSubgroup("event", "putTabletLogAll"), nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(responseStats->FindSubgroup("event", "putAsyncBlob"), nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(responseStats->FindSubgroup("event", "putUserData"), nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(responseStats->FindSubgroup("event", "get"), nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(responseStats->FindSubgroup("event", "discover"), nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(responseStats->FindSubgroup("event", "indexRestoreGet"), nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(responseStats->FindSubgroup("event", "range"), nullptr);
-
-        UNIT_ASSERT_VALUES_EQUAL(putTabletStats->FindSubgroup("size", "256"), nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(putTabletStats->FindSubgroup("size", "512"), nullptr);
-
-        // always send BlockResponseTime
-        UNIT_ASSERT_UNEQUAL(responseStats->FindSubgroup("event", "block"), nullptr);
-    }
-
-    CUSTOM_UNIT_TEST(TestLimitedKeylessGroupThenNoMonitoring) {
-        TTestBasicRuntime runtime(2, false);
-        Setup(runtime, "", nullptr);
-
-        auto sender0 = runtime.AllocateEdgeActor(0);
-        auto sender1 = runtime.AllocateEdgeActor(1);
-
-        CreateStoragePool(runtime, DOMAIN_ID, "test_storage", "pool-kind-1");
-
-        ui32 generation = 1;
-        ui64 tabletId = 1234;
-        ui32 groupId = GetGroupFromPool(runtime, DOMAIN_ID, "test_storage");
-        TString name = Sprintf("%09" PRIu32, groupId);
-
-        BlockGroup(runtime, sender0, tabletId, groupId, generation, true);
-
-        Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation, 0, 0, 5, 0), "hello", NKikimrProto::EReplyStatus::BLOCKED);
-        Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation+1, 0, 0, 5, 0), "hello");
-
-        BlockGroup(runtime, sender1, tabletId, groupId, generation+2, true);
-        Put(runtime, sender1, groupId, TLogoBlobID(tabletId, generation+2, 0, 0, 10, 0), "hellohello", NKikimrProto::EReplyStatus::ERROR);
-        Put(runtime, sender1, groupId, TLogoBlobID(tabletId, generation+3, 0, 0, 10, 0), "hellohello", NKikimrProto::EReplyStatus::ERROR);
-
-        Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation+1, 0, 0, 11, 0), "hello_again", NKikimrProto::EReplyStatus::BLOCKED);
-
-        CollectGroup(runtime, sender1, tabletId, groupId, true);
-
-        AssertMonitoringDoesNotExist(runtime, 1, name); // expect IsLimitedKeyLess on node 1
-    }
-
-    CUSTOM_UNIT_TEST(TestUnmonitoredEventsThenNoMonitorings) {
-        TTestBasicRuntime runtime(1, false);
-        Setup(runtime, "", nullptr);
-
-        auto sender0 = runtime.AllocateEdgeActor(0);
-
-        CreateStoragePool(runtime, DOMAIN_ID, "test_storage", "pool-kind-1");
-
-        ui32 generation = 1;
-        ui64 tabletId = 1234;
-        ui32 groupId = GetGroupFromPool(runtime, DOMAIN_ID, "test_storage");
-        TString name = Sprintf("%09" PRIu32, groupId);
-
-        BlockGroup(runtime, sender0, tabletId, groupId, generation, false);
-        CollectGroup(runtime, sender0, tabletId, groupId, false);
-
-        AssertMonitoringDoesNotExist(runtime, 0, name);
-
-        BlockGroup(runtime, sender0, tabletId, groupId, generation + 2, true);
-        AssertMonitoringExists(runtime, 0, name);
-
-        BlockGroup(runtime, sender0, tabletId, groupId, generation + 3, false);
-        AssertMonitoringExists(runtime, 0, name); // it cannot disappear
-    }
-
-    CUSTOM_UNIT_TEST(TestSendUsefulMonitoring) {
-        TTestBasicRuntime runtime(2, false);
-        Setup(runtime, "", nullptr);
-
-        auto sender0 = runtime.AllocateEdgeActor(0);
-        auto sender1 = runtime.AllocateEdgeActor(1);
-
-        CreateStoragePool(runtime, DOMAIN_ID, "test_storage", "pool-kind-1");
-
-        ui32 generation = 1;
-        ui64 tabletId = 1234;
-        ui32 groupId = GetGroupFromPool(runtime, DOMAIN_ID, "test_storage");
-        TString name = Sprintf("%09" PRIu32, groupId);
-
-        Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation+1, 0, 0, 5, 0), "hello");
-        CollectGroup(runtime, sender1, tabletId, groupId, true);
-
-        AssertMonitoringExists(runtime, 0, name);
-    }
-
+        auto sender0 = runtime.AllocateEdgeActor(0); 
+        auto sender1 = runtime.AllocateEdgeActor(1); 
+ 
+        CreateStoragePool(runtime, DOMAIN_ID, "test_storage", "pool-kind-1"); 
+ 
+        ui32 generation = 1; 
+        ui64 tabletId = 1234; 
+        ui32 groupId = GetGroupFromPool(runtime, DOMAIN_ID, "test_storage"); 
+        TString name = Sprintf("%09" PRIu32, groupId); 
+ 
+        BlockGroup(runtime, sender0, tabletId, groupId, generation, true); 
+ 
+        Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation, 0, 0, 5, 0), "hello", NKikimrProto::EReplyStatus::BLOCKED); 
+        Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation+1, 0, 0, 5, 0), "hello"); 
+ 
+        BlockGroup(runtime, sender1, tabletId, groupId, generation+2, true); 
+        Put(runtime, sender1, groupId, TLogoBlobID(tabletId, generation+2, 0, 0, 10, 0), "hellohello", NKikimrProto::EReplyStatus::ERROR); 
+        Put(runtime, sender1, groupId, TLogoBlobID(tabletId, generation+3, 0, 0, 10, 0), "hellohello", NKikimrProto::EReplyStatus::ERROR); 
+ 
+        Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation+1, 0, 0, 11, 0), "hello_again", NKikimrProto::EReplyStatus::BLOCKED); 
+ 
+        CollectGroup(runtime, sender1, tabletId, groupId, true); 
+ 
+        AssertMonitoringDoesNotExist(runtime, 1, name); // expect IsLimitedKeyLess on node 1 
+    } 
+ 
+    CUSTOM_UNIT_TEST(TestUnmonitoredEventsThenNoMonitorings) { 
+        TTestBasicRuntime runtime(1, false); 
+        Setup(runtime, "", nullptr); 
+ 
+        auto sender0 = runtime.AllocateEdgeActor(0); 
+ 
+        CreateStoragePool(runtime, DOMAIN_ID, "test_storage", "pool-kind-1"); 
+ 
+        ui32 generation = 1; 
+        ui64 tabletId = 1234; 
+        ui32 groupId = GetGroupFromPool(runtime, DOMAIN_ID, "test_storage"); 
+        TString name = Sprintf("%09" PRIu32, groupId); 
+ 
+        BlockGroup(runtime, sender0, tabletId, groupId, generation, false); 
+        CollectGroup(runtime, sender0, tabletId, groupId, false); 
+ 
+        AssertMonitoringDoesNotExist(runtime, 0, name); 
+ 
+        BlockGroup(runtime, sender0, tabletId, groupId, generation + 2, true); 
+        AssertMonitoringExists(runtime, 0, name); 
+ 
+        BlockGroup(runtime, sender0, tabletId, groupId, generation + 3, false); 
+        AssertMonitoringExists(runtime, 0, name); // it cannot disappear 
+    } 
+ 
+    CUSTOM_UNIT_TEST(TestSendUsefulMonitoring) { 
+        TTestBasicRuntime runtime(2, false); 
+        Setup(runtime, "", nullptr); 
+ 
+        auto sender0 = runtime.AllocateEdgeActor(0); 
+        auto sender1 = runtime.AllocateEdgeActor(1); 
+ 
+        CreateStoragePool(runtime, DOMAIN_ID, "test_storage", "pool-kind-1"); 
+ 
+        ui32 generation = 1; 
+        ui64 tabletId = 1234; 
+        ui32 groupId = GetGroupFromPool(runtime, DOMAIN_ID, "test_storage"); 
+        TString name = Sprintf("%09" PRIu32, groupId); 
+ 
+        Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation+1, 0, 0, 5, 0), "hello"); 
+        CollectGroup(runtime, sender1, tabletId, groupId, true); 
+ 
+        AssertMonitoringExists(runtime, 0, name); 
+    } 
+ 
     CUSTOM_UNIT_TEST(TestGivenPDiskFormatedWithGuid1AndCreatedWithGuid2WhenYardInitThenError) {
         TTempDir tempDir;
         TTestBasicRuntime runtime(2, false);

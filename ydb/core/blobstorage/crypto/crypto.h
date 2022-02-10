@@ -1,5 +1,5 @@
 #pragma once
-#include <library/cpp/actors/util/rope.h>
+#include <library/cpp/actors/util/rope.h> 
 #include <util/generic/ptr.h>
 #include <util/system/types.h>
 
@@ -107,9 +107,9 @@ public:
     void StartMessage(ui64 nonce, ui64 offsetBytes);
     void EncryptZeroes(void* destination, ui32 size);
     void Encrypt(void* destination, const void* source, ui32 size);
-    void Encrypt(TRope::TIterator destination, TRope::TIterator source, ui32 size);
+    void Encrypt(TRope::TIterator destination, TRope::TIterator source, ui32 size); 
     void InplaceEncrypt(void *source, ui32 size);
-    void InplaceEncrypt(TRope::TIterator source, ui32 size);
+    void InplaceEncrypt(TRope::TIterator source, ui32 size); 
     ~TStreamCypher();
 };
 

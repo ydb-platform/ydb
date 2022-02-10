@@ -421,10 +421,10 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
                 if (!item.IsInline()) {
                     const ui32 newRefCount = ++RefCounts[item.LogoBlobId];
                     if (newRefCount == 1) {
-                        CountWriteRecord(item.LogoBlobId.Channel(), item.LogoBlobId.BlobSize());
+                        CountWriteRecord(item.LogoBlobId.Channel(), item.LogoBlobId.BlobSize()); 
                     }
-                } else {
-                    CountWriteRecord(0, item.InlineData.size());
+                } else { 
+                    CountWriteRecord(0, item.InlineData.size()); 
                 }
             }
             break;
@@ -459,7 +459,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
                 memcpy((char *) &doNotKeep[0], data, sizeof(TLogoBlobID) * doNotKeep.size());
             }
             CollectOperation.Reset(new TCollectOperation(
-                header->CollectGeneration, header->CollectStep, std::move(keep), std::move(doNotKeep)));
+                header->CollectGeneration, header->CollectStep, std::move(keep), std::move(doNotKeep))); 
             break;
         }
         case EIT_STATE: {
@@ -504,7 +504,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
     // Issue hard barriers
     {
         using TGroupChannel = std::tuple<ui32, ui8>;
-        THashMap<TGroupChannel, THelpers::TGenerationStep> hardBarriers;
+        THashMap<TGroupChannel, THelpers::TGenerationStep> hardBarriers; 
         for (const auto &kv : RefCounts) {
             // extract blob id and validate its channel
             const TLogoBlobID &id = kv.first;
@@ -515,11 +515,11 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             // are always inclusive
             const ui32 generation = id.Generation();
             const ui32 step = id.Step();
-            TMaybe<THelpers::TGenerationStep> current;
+            TMaybe<THelpers::TGenerationStep> current; 
             if (step) {
-                current = THelpers::TGenerationStep(generation, step - 1);
+                current = THelpers::TGenerationStep(generation, step - 1); 
             } else if (generation) {
-                current = THelpers::TGenerationStep(generation - 1, Max<ui32>());
+                current = THelpers::TGenerationStep(generation - 1, Max<ui32>()); 
             }
 
             // update minimum barrier value for this channel/group
@@ -543,7 +543,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             for (const auto &history : channel.History) {
                 const TGroupChannel key(history.GroupID, channel.Channel);
                 if (!hardBarriers.count(key)) {
-                    hardBarriers.emplace(key, THelpers::TGenerationStep(executorGeneration - 1, Max<ui32>()));
+                    hardBarriers.emplace(key, THelpers::TGenerationStep(executorGeneration - 1, Max<ui32>())); 
                 }
             }
         }
@@ -580,8 +580,8 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             const TLogoBlobID &id = refInfo.first;
             Y_VERIFY(id.Channel() >= BLOB_CHANNEL);
 
-            const THelpers::TGenerationStep blobGenStep = THelpers::GenerationStep(id);
-            const THelpers::TGenerationStep storedGenStep(StoredState.GetCollectGeneration(), StoredState.GetCollectStep());
+            const THelpers::TGenerationStep blobGenStep = THelpers::GenerationStep(id); 
+            const THelpers::TGenerationStep storedGenStep(StoredState.GetCollectGeneration(), StoredState.GetCollectStep()); 
             // Mark with keep flag only new blobs
             if (storedGenStep < blobGenStep) {
                 const ui32 group = info->GroupFor(id.Channel(), id.Generation());
@@ -613,7 +613,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
                 }
             }
         }
-        InitialCollectsSent = keepForGroupChannel.size();
+        InitialCollectsSent = keepForGroupChannel.size(); 
         for (auto &keepInfo : keepForGroupChannel) {
             ui32 group;
             ui8 channel;
@@ -627,7 +627,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
 
             const TActorId nodeWarden = MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId());
             const TActorId proxy = MakeBlobStorageProxyID(group);
-            ctx.ExecutorThread.Send(new IEventHandle(proxy, KeyValueActorId, ev.Release(),
+            ctx.ExecutorThread.Send(new IEventHandle(proxy, KeyValueActorId, ev.Release(), 
                 IEventHandle::FlagForwardOnNondelivery, 0, &nodeWarden));
         }
     }
@@ -635,18 +635,18 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
     // Make a copy of the channel history (need a way to map channel/generation to history record)
     // History entry contains data on from-to generation for each channel
     auto &channels = info->Channels;
-    ChannelRangeSets.reserve(channels.size());
+    ChannelRangeSets.reserve(channels.size()); 
     for (ui64 idx = 0; idx < channels.size(); ++idx) {
         auto &channelInfo = channels[idx];
         if (channelInfo.Channel < BLOB_CHANNEL) {
              // Remove (do not add) non-KV tablet managed channels
             continue;
         }
-        if (channelInfo.Channel >= ChannelRangeSets.size()) {
-            ChannelRangeSets.resize(channelInfo.Channel + 1);
+        if (channelInfo.Channel >= ChannelRangeSets.size()) { 
+            ChannelRangeSets.resize(channelInfo.Channel + 1); 
         }
         auto &history = channelInfo.History;
-        auto &rangeSet = ChannelRangeSets[channelInfo.Channel];
+        auto &rangeSet = ChannelRangeSets[channelInfo.Channel]; 
         // Remove (do not add) the latest entries for all channels
         auto endIt = history.end();
         if (endIt != history.begin()) {
@@ -665,30 +665,30 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
         auto &chain = recordIt->second.Chain;
         for (auto itemIt = chain.begin(); itemIt != chain.end(); ++itemIt) {
             TLogoBlobID &id = itemIt->LogoBlobId;
-            if (id.Channel() < ChannelRangeSets.size()) {
-                ChannelRangeSets[id.Channel()].Remove(id.Generation());
+            if (id.Channel() < ChannelRangeSets.size()) { 
+                ChannelRangeSets[id.Channel()].Remove(id.Generation()); 
             }
         }
     }
     for (auto it = Trash.begin(); it != Trash.end(); ++it) {
         const TLogoBlobID &id = *it;
-        if (id.Channel() < ChannelRangeSets.size()) {
-            ChannelRangeSets[id.Channel()].Remove(id.Generation());
+        if (id.Channel() < ChannelRangeSets.size()) { 
+            ChannelRangeSets[id.Channel()].Remove(id.Generation()); 
         }
     }
     if (CollectOperation.Get()) {
         auto &keep = CollectOperation->Keep;
         for (auto it = keep.begin(); it != keep.end(); ++it) {
             const TLogoBlobID &id = *it;
-            if (id.Channel() < ChannelRangeSets.size()) {
-                ChannelRangeSets[id.Channel()].Remove(id.Generation());
+            if (id.Channel() < ChannelRangeSets.size()) { 
+                ChannelRangeSets[id.Channel()].Remove(id.Generation()); 
             }
         }
         auto &doNotKeep = CollectOperation->DoNotKeep;
         for (auto it = doNotKeep.begin(); it != doNotKeep.end(); ++it) {
             const TLogoBlobID &id = *it;
-            if (id.Channel() < ChannelRangeSets.size()) {
-                ChannelRangeSets[id.Channel()].Remove(id.Generation());
+            if (id.Channel() < ChannelRangeSets.size()) { 
+                ChannelRangeSets[id.Channel()].Remove(id.Generation()); 
             }
         }
         // Patch collect operation generation and step
@@ -696,36 +696,36 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
         CollectOperation->Header.SetCollectGeneration(ExecutorGeneration);
         CollectOperation->Header.SetCollectStep(0);
     }
-    THelpers::DbUpdateState(StoredState, db, ctx);
-
-    // corner case, if no CollectGarbage events were sent
-    if (InitialCollectsSent == 0) {
-        SendCutHistory(ctx);
-    }
-    if (CollectOperation.Get()) {
-        // finish collect operation from local base
-        IsCollectEventSent = true;
-        StoreCollectComplete(ctx);
-    } else {
-        // initiate collection if trash was loaded from local base
-        PrepareCollectIfNeeded(ctx);
-    }
-}
-
-void TKeyValueState::RegisterInitialCollectResult(const TActorContext &ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-        << " InitialCollectsSent# " << InitialCollectsSent << " Marker# KV50");
-    if (--InitialCollectsSent == 0) {
-        SendCutHistory(ctx);
-    }
-}
-
-void TKeyValueState::SendCutHistory(const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-        << " SendCutHistory Marker# KV51");
+    THelpers::DbUpdateState(StoredState, db, ctx); 
+ 
+    // corner case, if no CollectGarbage events were sent 
+    if (InitialCollectsSent == 0) { 
+        SendCutHistory(ctx); 
+    } 
+    if (CollectOperation.Get()) { 
+        // finish collect operation from local base 
+        IsCollectEventSent = true; 
+        StoreCollectComplete(ctx); 
+    } else { 
+        // initiate collection if trash was loaded from local base 
+        PrepareCollectIfNeeded(ctx); 
+    } 
+} 
+ 
+void TKeyValueState::RegisterInitialCollectResult(const TActorContext &ctx) { 
+    LOG_TRACE_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
+        << " InitialCollectsSent# " << InitialCollectsSent << " Marker# KV50"); 
+    if (--InitialCollectsSent == 0) { 
+        SendCutHistory(ctx); 
+    } 
+} 
+ 
+void TKeyValueState::SendCutHistory(const TActorContext &ctx) { 
+    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId 
+        << " SendCutHistory Marker# KV51"); 
     // Prepare and send a messages to the Local
-    for (ui64 channel = 0; channel < ChannelRangeSets.size(); ++channel) {
-        auto endForBegin = ChannelRangeSets[channel].EndForBegin;
+    for (ui64 channel = 0; channel < ChannelRangeSets.size(); ++channel) { 
+        auto endForBegin = ChannelRangeSets[channel].EndForBegin; 
         for (auto it = endForBegin.begin(); it != endForBegin.end(); ++it) {
             ui32 fromGeneration = it->first;
             TAutoPtr<TEvTablet::TEvCutTabletHistory> ev(new TEvTablet::TEvCutTabletHistory);
@@ -737,7 +737,7 @@ void TKeyValueState::SendCutHistory(const TActorContext &ctx) {
             ctx.Send(localActorId, ev.Release());
         }
     }
-    ChannelRangeSets.clear();
+    ChannelRangeSets.clear(); 
 }
 
 void TKeyValueState::OnInitQueueEmpty(const TActorContext &ctx) {
@@ -772,8 +772,8 @@ TLogoBlobID TKeyValueState::AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx
     } else {
         Step();
     }
-    Y_VERIFY(!CollectOperation || THelpers::GenerationStep(id) >
-        THelpers::TGenerationStep(CollectOperation->Header.GetCollectGeneration(), CollectOperation->Header.GetCollectStep()));
+    Y_VERIFY(!CollectOperation || THelpers::GenerationStep(id) > 
+        THelpers::TGenerationStep(CollectOperation->Header.GetCollectGeneration(), CollectOperation->Header.GetCollectStep())); 
     return id;
 }
 
@@ -1299,7 +1299,7 @@ void TKeyValueState::CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, IS
                 if (numItems < intermediate->TrimLeakedBlobs->MaxItemsToTrim) {
                     LOG_WARN_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " trimming " << id.ToString());
                     Trash.insert(id);
-                    CountTrashRecord(id.BlobSize());
+                    CountTrashRecord(id.BlobSize()); 
                     THelpers::DbUpdateTrash(id, db, ctx);
                     ++numItems;
                 } else {
@@ -1708,7 +1708,7 @@ void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 st
             InFlightForStep.erase(it);
 
             // Initiate Garbage collection process if needed
-           StartCollectingIfPossible(ctx);
+           StartCollectingIfPossible(ctx); 
         }
     }
 }
@@ -1716,15 +1716,15 @@ void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 st
 bool TKeyValueState::CheckDeadline(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate) {
     if (kvRequest.HasDeadlineInstantMs()) {
-        TInstant now = TAppData::TimeProvider->Now();
+        TInstant now = TAppData::TimeProvider->Now(); 
         intermediate->Deadline = TInstant::MicroSeconds(kvRequest.GetDeadlineInstantMs() * 1000ull);
 
-        if (intermediate->Deadline <= now) {
+        if (intermediate->Deadline <= now) { 
             TStringStream str;
             str << "KeyValue# " << TabletId;
             str << " Deadline reached before processing the request!";
             str << " DeadlineInstantMs# " << (ui64)kvRequest.GetDeadlineInstantMs();
-            str << " < Now# " << (ui64)now.MilliSeconds();
+            str << " < Now# " << (ui64)now.MilliSeconds(); 
             ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_TIMEOUT, intermediate);
             return true;
         }

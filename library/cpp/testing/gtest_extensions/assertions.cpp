@@ -2,12 +2,12 @@
 
 #include <util/string/builder.h>
 #include <util/string/split.h>
-#include <util/system/type_name.h>
+#include <util/system/type_name.h> 
 
 namespace NGTest::NInternal {
     namespace {
         void FormatActual(const std::exception& err, const TBackTrace* bt, TStringBuilder& out) {
-            out << "an exception of type " << TypeName(err) << " "
+            out << "an exception of type " << TypeName(err) << " " 
                 << "with message " << TString(err.what()).Quote() << ".";
             if (bt) {
                 out << "\n   Trace: ";

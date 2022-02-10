@@ -9,8 +9,8 @@
 #include <utility>
 #include <variant>
 
-#include <util/system/type_name.h>
-
+#include <util/system/type_name.h> 
+ 
 namespace NActors {
 
     struct TEvents::TEvInvokeResult
@@ -55,7 +55,7 @@ namespace NActors {
                     return std::move(*value);
                 } else {
                     Y_FAIL("unspported return type for TEvInvokeResult: actual# %s != expected# %s",
-                        TypeName(arg.type()).data(), TypeName<T>().data());
+                        TypeName(arg.type()).data(), TypeName<T>().data()); 
                 }
             }, Result);
         }

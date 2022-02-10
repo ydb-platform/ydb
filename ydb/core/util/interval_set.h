@@ -64,7 +64,7 @@ struct TIntervalMap {
     }
 
     bool IsSubsetOf(const TIntervalSet<T>& b) const {
-        return std::visit([this](auto& var) -> bool { return this->IsSubsetOf(var); }, b.Var);
+        return std::visit([this](auto& var) -> bool { return this->IsSubsetOf(var); }, b.Var); 
     }
 
     template <class B>
@@ -403,7 +403,7 @@ struct TIntervalVec {
     }
 
     bool IsSubsetOf(const TIntervalSet<T>& b) const {
-        return std::visit([this](auto& var) -> bool { return this->IsSubsetOf(var); }, b.Var);
+        return std::visit([this](auto& var) -> bool { return this->IsSubsetOf(var); }, b.Var); 
     }
 
     template <class B>
@@ -826,7 +826,7 @@ struct TIntervalSet {
     }
 
     bool IsSubsetOf(const TIntervalSet& y) const {
-        return std::visit([this](auto& var) -> bool { return this->IsSubsetOf(var); }, y.Var);
+        return std::visit([this](auto& var) -> bool { return this->IsSubsetOf(var); }, y.Var); 
     }
 
     template <class Y>

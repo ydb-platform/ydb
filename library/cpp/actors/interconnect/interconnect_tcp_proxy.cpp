@@ -451,12 +451,12 @@ namespace NActors {
                 break;
 
             case TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT:
-                TString timeExplanation = " LastSessionDieTime# " + LastSessionDieTime.ToString();
+                TString timeExplanation = " LastSessionDieTime# " + LastSessionDieTime.ToString(); 
                 if (Session) {
                     InvokeOtherActor(*Session, &TInterconnectSessionTCP::Terminate,
                         TDisconnectReason::HandshakeFailPermanent());
                 }
-                TransitToErrorState(ev->Get()->Explanation + timeExplanation, false);
+                TransitToErrorState(ev->Get()->Explanation + timeExplanation, false); 
                 break;
         }
     }

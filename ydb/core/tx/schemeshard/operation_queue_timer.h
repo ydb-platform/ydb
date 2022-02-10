@@ -93,8 +93,8 @@ struct TShardCompactionInfo {
         , SearchHeight(searchHeight)
     {}
 
-    TShardCompactionInfo(const TShardCompactionInfo&) = default;
-
+    TShardCompactionInfo(const TShardCompactionInfo&) = default; 
+ 
     bool operator ==(const TShardCompactionInfo& rhs) const {
         // note that only identity intentionally checked
         return ShardIdx == rhs.ShardIdx;

@@ -16,7 +16,7 @@
 
 #include <util/generic/is_in.h>
 #include <util/string/join.h>
-#include <util/system/type_name.h>
+#include <util/system/type_name.h> 
 
 #include <list>
 #include <typeinfo>
@@ -391,7 +391,7 @@ protected:
                 } else {
                     UNIT_ASSERT_C(IsIn(destroyedActors, actorId),
                                   "Test actor or its child wasn't destroyed. Actor id: " << actorId
-                                  << ". Type: " << TypeName(*actor));
+                                  << ". Type: " << TypeName(*actor)); 
                 }
             }
         }

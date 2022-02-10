@@ -198,8 +198,8 @@ public:
             , Timestamp(s)
         { }
 
-        TItemWithTs(const TItemWithTs&) = default;
-
+        TItemWithTs(const TItemWithTs&) = default; 
+ 
         bool operator ==(const TItemWithTs& rhs) const {
             return Item == rhs.Item;
         }

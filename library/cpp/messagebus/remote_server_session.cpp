@@ -103,8 +103,8 @@ void TRemoteServerSession::InvokeOnMessage(TBusMessagePtrAndHeader& request, TIn
         ident.RecvTime = request.MessagePtr->RecvTime;
 
 #ifndef NDEBUG
-        auto& message = *request.MessagePtr;
-        ident.SetMessageType(typeid(message));
+        auto& message = *request.MessagePtr; 
+        ident.SetMessageType(typeid(message)); 
 #endif
 
         TOnMessageContext context(request.MessagePtr.Release(), ident, this);

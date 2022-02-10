@@ -24,7 +24,7 @@ namespace NBus {
     // TODO: print local flags
 #ifndef NDEBUG
         Y_VERIFY(LocalFlags == 0, "local flags must be zero at this point; message type is %s",
-                 MessageType.value_or("unknown").c_str());
+                 MessageType.value_or("unknown").c_str()); 
 #else
         Y_VERIFY(LocalFlags == 0, "local flags must be zero at this point");
 #endif
@@ -83,7 +83,7 @@ namespace NBus {
     }
 
     TString TBusMessage::Describe() const {
-        return Sprintf("object type: %s, message type: %d", TypeName(*this).data(), int(GetHeader()->Type));
+        return Sprintf("object type: %s, message type: %d", TypeName(*this).data(), int(GetHeader()->Type)); 
     }
 
     TBusMessage::~TBusMessage() {
@@ -184,7 +184,7 @@ namespace NBus {
             << " flags=" << Flags
             << " local-flags=" << LocalFlags
 #ifndef NDEBUG
-            << " msg-type= " << MessageType.value_or("unknown").c_str()
+            << " msg-type= " << MessageType.value_or("unknown").c_str() 
 #endif
             ;
         return ss.Str();

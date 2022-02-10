@@ -46,7 +46,7 @@ namespace NErasureRope {
 
 static void Refurbish(TRope &str, ui64 size) {
     if (str.GetSize() != size) {
-        str = TRopeHelpers::RopeUninitialized(size);
+        str = TRopeHelpers::RopeUninitialized(size); 
     }
 }
 
@@ -111,13 +111,13 @@ static const std::array<TErasureParameters, TRopeErasureType::ErasureSpeciesCoun
     ,{TRopeErasureType::ErasureMirror,       1, 2, 1} // 18 = ErasureSpicies::ErasureMirror3of4
 }};
 
-void PadAndCrcAtTheEnd(TRopeHelpers::Iterator data, ui64 dataSize, ui64 bufferSize) {
+void PadAndCrcAtTheEnd(TRopeHelpers::Iterator data, ui64 dataSize, ui64 bufferSize) { 
     ui64 marginSize = bufferSize - dataSize - sizeof(ui32);
     if (marginSize) {
-        TRopeUtils::Memset(data + dataSize, 0, marginSize);
+        TRopeUtils::Memset(data + dataSize, 0, marginSize); 
     }
-    ui32 hash = TRopeHelpers::GetCrc32c(data, dataSize);
-    TRopeUtils::Memcpy(data + (bufferSize - sizeof(ui32)), (const char *)&hash, sizeof(ui32));
+    ui32 hash = TRopeHelpers::GetCrc32c(data, dataSize); 
+    TRopeUtils::Memcpy(data + (bufferSize - sizeof(ui32)), (const char *)&hash, sizeof(ui32)); 
 }
 
 bool CheckCrcAtTheEnd(TRopeErasureType::ECrcMode crcMode, const TRope& buf) {
@@ -130,7 +130,7 @@ bool CheckCrcAtTheEnd(TRopeErasureType::ECrcMode crcMode, const TRope& buf) {
         } else {
             Y_VERIFY(buf.GetSize() >= sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
                     " is less then crcSize# %" PRIu64, (ui64)buf.GetSize(), (ui64)sizeof(ui32));
-            ui32 crc = TRopeHelpers::GetCrc32c(buf.Begin(), buf.GetSize() - sizeof(ui32));
+            ui32 crc = TRopeHelpers::GetCrc32c(buf.Begin(), buf.GetSize() - sizeof(ui32)); 
             TString expectedStringCrc = TRope(buf.Begin() + buf.GetSize() - sizeof(ui32), buf.End()).ConvertToString();
             ui32 expectedCrc = ReadUnaligned<ui32>(expectedStringCrc.data());
             return crc == expectedCrc;
@@ -168,9 +168,9 @@ public:
     ui32 Prime;
     TRopeErasureType::ECrcMode CrcMode;
 
-    using TBufferDataPart = TStackVec<TRopeHelpers::TRopeFastView, MAX_TOTAL_PARTS>;
+    using TBufferDataPart = TStackVec<TRopeHelpers::TRopeFastView, MAX_TOTAL_PARTS>; 
     TBufferDataPart BufferDataPart;
-    TRopeHelpers::TRopeFastView Data;
+    TRopeHelpers::TRopeFastView Data; 
 
     TBlockParams(TRopeErasureType::ECrcMode crcMode, const TRopeErasureType &type, ui64 dataSize) {
         DataSize = dataSize;
@@ -201,14 +201,14 @@ public:
         CrcMode = crcMode;
     }
 
-    inline void PrepareInputDataPointers(TRopeHelpers::Iterator data) {
+    inline void PrepareInputDataPointers(TRopeHelpers::Iterator data) { 
         BufferDataPart.resize(DataParts);
         for (ui32 i = 0; i < FirstSmallPartIdx; ++i) {
-            BufferDataPart[i] = TRopeHelpers::TRopeFastView(data);
+            BufferDataPart[i] = TRopeHelpers::TRopeFastView(data); 
             data += LargePartSize;
         }
         for (ui32 i = FirstSmallPartIdx; i < DataParts; ++i) {
-            BufferDataPart[i] = TRopeHelpers::TRopeFastView(data);
+            BufferDataPart[i] = TRopeHelpers::TRopeFastView(data); 
             data += SmallPartSize;
         }
     }
@@ -244,7 +244,7 @@ public:
         // Use the remaining parts to fill in the last block
         // Write the tail of the data
         if (TailSize) {
-            TRope lastBlockSource = TRopeHelpers::CreateRope(MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64));
+            TRope lastBlockSource = TRopeHelpers::CreateRope(MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)); 
             TBufferDataPart bufferDataPart;
             PrepareLastBlockData(lastBlockSource.Begin(), bufferDataPart);
 
@@ -404,7 +404,7 @@ public:
             } else {
                 char buffer[MAX_TOTAL_PARTS][(MAX_TOTAL_PARTS - 2) * sizeof(ui64)];
                 for (ui32 i = 0; i < DataParts; ++i) {
-                    TRopeUtils::Memcpy(buffer[i], outPartSet.Parts[i].FastViewer.GetCurrent(writePosition), ColumnSize);
+                    TRopeUtils::Memcpy(buffer[i], outPartSet.Parts[i].FastViewer.GetCurrent(writePosition), ColumnSize); 
                 }
                 EoSplitLoop<false>(outPartSet, writePosition, 1u, buffer);
             }
@@ -483,40 +483,40 @@ public:
 #undef IN_EL
     }
 
-    void PrepareLastBlockData(TRopeHelpers::Iterator lastBlockSource, TBufferDataPart &bufferDataPart) {
+    void PrepareLastBlockData(TRopeHelpers::Iterator lastBlockSource, TBufferDataPart &bufferDataPart) { 
         bufferDataPart.resize(DataParts);
         for (ui32 i = 0; i < FirstSmallPartIdx; ++i) {
-            bufferDataPart[i] = TRopeHelpers::TRopeFastView(lastBlockSource);
-            TRopeUtils::Memcpy(bufferDataPart[i].GetBegin(), BufferDataPart[i].GetBegin() + WholeBlocks * ColumnSize,
+            bufferDataPart[i] = TRopeHelpers::TRopeFastView(lastBlockSource); 
+            TRopeUtils::Memcpy(bufferDataPart[i].GetBegin(), BufferDataPart[i].GetBegin() + WholeBlocks * ColumnSize, 
                     ColumnSize);
             lastBlockSource += ColumnSize;
         }
         for (ui32 i = FirstSmallPartIdx; i < DataParts - 1; ++i) {
-            bufferDataPart[i] = TRopeHelpers::TRopeFastView(lastBlockSource);
-            TRopeUtils::Memset(bufferDataPart[i].GetBegin(), 0, ColumnSize);
+            bufferDataPart[i] = TRopeHelpers::TRopeFastView(lastBlockSource); 
+            TRopeUtils::Memset(bufferDataPart[i].GetBegin(), 0, ColumnSize); 
             lastBlockSource += ColumnSize;
         }
-        bufferDataPart[DataParts - 1] = TRopeHelpers::TRopeFastView(lastBlockSource);
+        bufferDataPart[DataParts - 1] = TRopeHelpers::TRopeFastView(lastBlockSource); 
         if (LastPartTailSize) {
-            TRopeUtils::Memcpy(bufferDataPart[DataParts - 1].GetBegin(), BufferDataPart[DataParts - 1].GetBegin() + WholeBlocks * ColumnSize,
+            TRopeUtils::Memcpy(bufferDataPart[DataParts - 1].GetBegin(), BufferDataPart[DataParts - 1].GetBegin() + WholeBlocks * ColumnSize, 
                 LastPartTailSize);
         }
-        TRopeUtils::Memset(bufferDataPart[DataParts - 1].GetBegin() + LastPartTailSize, 0, ColumnSize - LastPartTailSize);
+        TRopeUtils::Memset(bufferDataPart[DataParts - 1].GetBegin() + LastPartTailSize, 0, ColumnSize - LastPartTailSize); 
     }
 
-    void PrepareLastBlockPointers(TRopeHelpers::Iterator lastBlockSource, TBufferDataPart &bufferDataPart) {
+    void PrepareLastBlockPointers(TRopeHelpers::Iterator lastBlockSource, TBufferDataPart &bufferDataPart) { 
         bufferDataPart.resize(DataParts);
         for (ui32 i = 0; i < DataParts; ++i) {
-            bufferDataPart[i] = TRopeHelpers::TRopeFastView(lastBlockSource);
+            bufferDataPart[i] = TRopeHelpers::TRopeFastView(lastBlockSource); 
             lastBlockSource += ColumnSize;
         }
     }
 
     void PlaceLastBlock(TBufferDataPart& bufferDataPart) {
         for (ui32 i = 0; i < FirstSmallPartIdx; ++i) {
-            TRopeUtils::Memcpy(BufferDataPart[i].GetBegin() + WholeBlocks * ColumnSize, bufferDataPart[i].GetBegin(), ColumnSize);
+            TRopeUtils::Memcpy(BufferDataPart[i].GetBegin() + WholeBlocks * ColumnSize, bufferDataPart[i].GetBegin(), ColumnSize); 
         }
-        TRopeUtils::Memcpy(BufferDataPart[DataParts - 1].GetBegin() + WholeBlocks * ColumnSize,
+        TRopeUtils::Memcpy(BufferDataPart[DataParts - 1].GetBegin() + WholeBlocks * ColumnSize, 
                                 bufferDataPart[DataParts - 1].GetBegin(), LastPartTailSize);
     }
 
@@ -528,7 +528,7 @@ public:
         // Use the remaining parts to fill in the last block
         // Write the tail of the data
         if (TailSize) {
-            TRope lastBlockSource = TRopeHelpers::CreateRope(MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64));
+            TRope lastBlockSource = TRopeHelpers::CreateRope(MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)); 
             TBufferDataPart bufferDataPart;
             if (!isFromDataParts) {
                 PrepareLastBlockData(lastBlockSource.Begin(), bufferDataPart);
@@ -562,28 +562,28 @@ public:
             ui64 partSize = i < FirstSmallPartIdx ? LargePartSize : SmallPartSize;
             partSize = i == DataParts - 1 ? SmallPartSize + LastPartTailSize : partSize;
             if (!restoreParts && (i == missingPartIdxA || i == missingPartIdxB)) {
-                dst.Insert(dst.End(), TRopeHelpers::RopeUninitialized(partSize));
+                dst.Insert(dst.End(), TRopeHelpers::RopeUninitialized(partSize)); 
             } else {
                 dst.Insert(dst.End(), TRope(part.OwnedRope.Begin(), part.OwnedRope.Begin() + partSize));
             }
         }
     }
 
-    void GlueBlockPartsMemcpy(TRopeHelpers::Iterator dst, const TDataPartSet& partSet) const {
+    void GlueBlockPartsMemcpy(TRopeHelpers::Iterator dst, const TDataPartSet& partSet) const { 
         if (LargePartSize) {
             for (ui32 i = 0; i < FirstSmallPartIdx; ++i) {
-                TRopeUtils::Memcpy(dst, partSet.Parts[i].OwnedRope.Begin(), LargePartSize);
+                TRopeUtils::Memcpy(dst, partSet.Parts[i].OwnedRope.Begin(), LargePartSize); 
                 dst += LargePartSize;
             }
             if (SmallPartSize) {
                 for (ui32 i = FirstSmallPartIdx; i < DataParts - 1; ++i) {
-                    TRopeUtils::Memcpy(dst, partSet.Parts[i].OwnedRope.Begin(), SmallPartSize);
+                    TRopeUtils::Memcpy(dst, partSet.Parts[i].OwnedRope.Begin(), SmallPartSize); 
                     dst += SmallPartSize;
                 }
             }
         }
         if (SmallPartSize + LastPartTailSize) {
-            TRopeUtils::Memcpy(dst, partSet.Parts[DataParts - 1].OwnedRope.Begin(), SmallPartSize + LastPartTailSize);
+            TRopeUtils::Memcpy(dst, partSet.Parts[DataParts - 1].OwnedRope.Begin(), SmallPartSize + LastPartTailSize); 
         }
         return;
     }
@@ -731,16 +731,16 @@ public:
 
             for (ui32 i = 0; i < DataParts; ++i) {
                 if (i != missingDataPartIdx) {
-                    TRopeUtils::Memcpy(partsBuffer[i], partSet.Parts[i].FastViewer.GetCurrent(readPosition), ColumnSize);
+                    TRopeUtils::Memcpy(partsBuffer[i], partSet.Parts[i].FastViewer.GetCurrent(readPosition), ColumnSize); 
                 }
             }
 
             if (restoreParts) {
-                TRopeUtils::Memcpy(partsBuffer[missingDataPartIdx],
+                TRopeUtils::Memcpy(partsBuffer[missingDataPartIdx], 
                         partSet.Parts[missingDataPartIdx].FastViewer.GetCurrent(readPosition), ColumnSize);
             }
 
-            TRopeUtils::Memcpy(partsBuffer[lastColumn],
+            TRopeUtils::Memcpy(partsBuffer[lastColumn], 
                     partSet.Parts[lastColumn].FastViewer.GetCurrent(readPosition), ColumnSize);
 
             VERBOSE_COUT_BLOCK(true, IN_EL, IN_EL, IN_M, IN_M12);
@@ -814,13 +814,13 @@ public:
             VERBOSE_COUT_BLOCK(restoreFullData, OUT_EL_BLOCK, IN_EL, IN_M, IN_M12);
 
             if (restoreParts) {
-                TRopeUtils::Memcpy(partSet.Parts[missingDataPartIdx].FastViewer.GetCurrent(readPosition),
+                TRopeUtils::Memcpy(partSet.Parts[missingDataPartIdx].FastViewer.GetCurrent(readPosition), 
                                   partsBuffer[missingDataPartIdx], ColumnSize);
             }
 
             if (restoreFullData) {
                 for (ui32 i = 0; i < DataParts; ++i) {
-                    TRopeUtils::Memcpy(bufferDataPart[i].GetCurrent(blockIdx * LineCount * sizeof(ui64)),
+                    TRopeUtils::Memcpy(bufferDataPart[i].GetCurrent(blockIdx * LineCount * sizeof(ui64)), 
                                       (const char*)fullDataBuffer[i], LineCount * sizeof(ui64));
                 }
             }
@@ -858,7 +858,7 @@ public:
         // Read the tail of the data
         if (TailSize && (partSet.Parts[presentPartIdx].Size + readPosition > WholeBlocks * ColumnSize)) {
             TRACE("EoDiagonalRestorePart tail" << Endl);
-            TRope lastBlock = TRopeHelpers::CreateRope(MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64));
+            TRope lastBlock = TRopeHelpers::CreateRope(MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)); 
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers(lastBlock.Begin(), bufferDataPart);
 
@@ -1242,12 +1242,12 @@ public:
 
             for (ui32 i = 0; i <= DataParts; ++i) {
                 if (i != missingDataPartIdxA && i != missingDataPartIdxB) {
-                    TRopeUtils::Memcpy(partsBuffer[i],
+                    TRopeUtils::Memcpy(partsBuffer[i], 
                             partSet.Parts[i].FastViewer.GetCurrent(readPosition), ColumnSize);
                 }
             }
 
-            TRopeUtils::Memcpy(partsBuffer[lastColumn],
+            TRopeUtils::Memcpy(partsBuffer[lastColumn], 
                               partSet.Parts[lastColumn].FastViewer.GetCurrent(readPosition), ColumnSize);
 
             VERBOSE_COUT_BLOCK(true, IN_EL, IN_EL, IN_M, IN_M12);
@@ -1372,7 +1372,7 @@ public:
 
             if (restoreFullData) {
                 for (ui32 i = 0; i < DataParts; ++i) {
-                    TRopeUtils::Memcpy(bufferDataPart[i].GetCurrent(blockIdx * LineCount * sizeof(ui64)),
+                    TRopeUtils::Memcpy(bufferDataPart[i].GetCurrent(blockIdx * LineCount * sizeof(ui64)), 
                                       (const char *) fullDataBuffer[i], LineCount * sizeof(ui64));
                 }
             }
@@ -1390,7 +1390,7 @@ public:
                     partSet, 0ull, WholeBlocks, missingDataPartIdxA, missingDataPartIdxB);
 
         if (TailSize) {
-            TRope lastBlockSource = TRopeHelpers::CreateRope(MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64));
+            TRope lastBlockSource = TRopeHelpers::CreateRope(MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)); 
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers(lastBlockSource.Begin(), bufferDataPart);
 
@@ -1422,7 +1422,7 @@ public:
                     partSet, 0ull, WholeBlocks, missingDataPartIdxA, missingDataPartIdxB, missingDataPartIdxC);
 
         if (TailSize) {
-            TRope lastBlockSource = TRopeHelpers::CreateRope(MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64));
+            TRope lastBlockSource = TRopeHelpers::CreateRope(MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)); 
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers(lastBlockSource.Begin(), bufferDataPart);
 
@@ -1468,7 +1468,7 @@ public:
 
         if (TailSize && (partSet.Parts[presentPartIdx].Size + readPosition > WholeBlocks * ColumnSize)) {
             TRACE("EoMainRestoreParts restore tail" << Endl);
-            TRope lastBlockSource = TRopeHelpers::CreateRope(MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64));
+            TRope lastBlockSource = TRopeHelpers::CreateRope(MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)); 
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers(lastBlockSource.Begin(), bufferDataPart);
 
@@ -1575,7 +1575,7 @@ public:
 
             for (ui32 i = 0; i <= DataParts; ++i) {
                 if (i != missingDataPartIdx) {
-                    TRopeUtils::Memcpy((char*)partsBuffer[i],
+                    TRopeUtils::Memcpy((char*)partsBuffer[i], 
                                partSet.Parts[i].FastViewer.GetCurrent(readPosition), LineCount * sizeof(ui64));
                 }
             }
@@ -1612,7 +1612,7 @@ public:
 
             if (restoreFullData) {
                 for (ui32 i = 0; i < DataParts; ++i) {
-                    TRopeUtils::Memcpy(bufferDataPart[i].GetCurrent((writePosition - LineCount) * sizeof(ui64)),
+                    TRopeUtils::Memcpy(bufferDataPart[i].GetCurrent((writePosition - LineCount) * sizeof(ui64)), 
                                       (const char*)fullDataBuffer[i], LineCount * sizeof(ui64));
                 }
             }
@@ -1649,7 +1649,7 @@ public:
 
         if (TailSize && (partSet.Parts[presentPartIdx].Size + readPosition > WholeBlocks * ColumnSize)) {
             TRACE("Restore tail, restoreFullData# " << restoreFullData << " resotreParts# " << restoreParts << Endl);
-            TRope lastBlockSource = TRopeHelpers::CreateRope(MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64));
+            TRope lastBlockSource = TRopeHelpers::CreateRope(MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)); 
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers(lastBlockSource.Begin(), bufferDataPart);
 
@@ -1679,7 +1679,7 @@ public:
             if (DataSize) {
                 PadAndCrcAtTheEnd(inOutPartSet.Parts[partIdx].OwnedRope.Begin(), PartUserSize, PartContainerSize);
             } else {
-                TRopeUtils::Memset(inOutPartSet.Parts[partIdx].OwnedRope.Begin(), 0, PartContainerSize);
+                TRopeUtils::Memset(inOutPartSet.Parts[partIdx].OwnedRope.Begin(), 0, PartContainerSize); 
             }
             return;
         }
@@ -1701,7 +1701,7 @@ void PadAndCrcParts(TRopeErasureType::ECrcMode crcMode, const TBlockParams &p, T
             }
         } else {
             for (ui32 i = 0; i < p.TotalParts; ++i) {
-                TRopeUtils::Memset(inOutPartSet.Parts[i].OwnedRope.Begin(), 0, p.PartContainerSize);
+                TRopeUtils::Memset(inOutPartSet.Parts[i].OwnedRope.Begin(), 0, p.PartContainerSize); 
             }
         }
         return;
@@ -1711,7 +1711,7 @@ void PadAndCrcParts(TRopeErasureType::ECrcMode crcMode, const TBlockParams &p, T
 
 inline void StarBlockSplit(TRopeErasureType::ECrcMode crcMode, const TRopeErasureType &type, const TRope &buffer,
         TDataPartSet &outPartSet) {
-    Y_VERIFY(TRopeHelpers::Is8Aligned(buffer));
+    Y_VERIFY(TRopeHelpers::Is8Aligned(buffer)); 
     TBlockParams p(crcMode, type, buffer.GetSize());
 
     // Prepare input data pointers
@@ -1753,7 +1753,7 @@ inline void EoBlockSplit(TRopeErasureType::ECrcMode crcMode, const TRopeErasureT
             rope.Insert(rope.End(), TRope(iterator, buffer.End()));
         }
 
-        TRopeHelpers::Resize(rope, p.PartContainerSize);
+        TRopeHelpers::Resize(rope, p.PartContainerSize); 
         outPartSet.Parts[i].ReferenceTo(rope);
     }
 
@@ -1771,7 +1771,7 @@ inline void EoBlockSplit(TRopeErasureType::ECrcMode crcMode, const TRopeErasureT
 
 inline void XorBlockSplit(TRopeErasureType::ECrcMode crcMode, const TRopeErasureType &type, const TRope& buffer,
         TDataPartSet& outPartSet) {
-    Y_VERIFY(TRopeHelpers::Is8Aligned(buffer));
+    Y_VERIFY(TRopeHelpers::Is8Aligned(buffer)); 
     TBlockParams p(crcMode, type, buffer.GetSize());
 
     // Prepare input data pointers
@@ -2577,7 +2577,7 @@ void MirrorSplit(TRopeErasureType::ECrcMode crcMode, const TRopeErasureType &typ
             ui64 partSize = type.PartSize(crcMode, buffer.GetSize());
             TRope& part = outPartSet.FullDataFragment.OwnedRope;
             part = buffer;
-            TRopeHelpers::Resize(part, partSize);
+            TRopeHelpers::Resize(part, partSize); 
             if (buffer.GetSize() || part.GetSize()) {
                 Y_VERIFY(part.GetSize() >= buffer.GetSize() + sizeof(ui32), "Part size too small, buffer size# %" PRIu64
                         " partSize# %" PRIu64, (ui64)buffer.GetSize(), (ui64)partSize);
@@ -2617,7 +2617,7 @@ void MirrorRestore(TRopeErasureType::ECrcMode crcMode, const TRopeErasureType &t
                         TRope outBuffer = partSet.Parts[partIdx].OwnedRope;
                         Y_VERIFY(outBuffer.GetSize() >= partSet.FullDataSize, "Unexpected outBuffer.size# %" PRIu64
                                 " fullDataSize# %" PRIu64, (ui64)outBuffer.GetSize(), (ui64)partSet.FullDataSize);
-                        TRopeHelpers::Resize(outBuffer, partSet.FullDataSize); // To pad with zeroes!
+                        TRopeHelpers::Resize(outBuffer, partSet.FullDataSize); // To pad with zeroes! 
                         partSet.FullDataFragment.ReferenceTo(outBuffer);
                         return;
                 }

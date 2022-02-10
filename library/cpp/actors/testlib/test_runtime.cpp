@@ -890,7 +890,7 @@ namespace NActors {
 
         const ui64 localActorId = AllocateLocalId();
         if (VERBOSE) {
-            Cerr << "Register actor " << TypeName(*actor) << " as " << localActorId << ", mailbox: " << hint << "\n";
+            Cerr << "Register actor " << TypeName(*actor) << " as " << localActorId << ", mailbox: " << hint << "\n"; 
         }
 
         // ok, got mailbox
@@ -898,7 +898,7 @@ namespace NActors {
 
         // do init
         const TActorId actorId(FirstNodeId + nodeIndex, poolId, localActorId, hint);
-        ActorNames[actorId] = TypeName(*actor);
+        ActorNames[actorId] = TypeName(*actor); 
         RegistrationObserver(*this, parentId ? parentId : CurrentRecipient, actorId);
         DoActorInit(node->ActorSystem.Get(), actor, actorId, parentId ? parentId : CurrentRecipient);
 
@@ -937,12 +937,12 @@ namespace NActors {
 
         const ui64 localActorId = AllocateLocalId();
         if (VERBOSE) {
-            Cerr << "Register actor " << TypeName(*actor) << " as " << localActorId << "\n";
+            Cerr << "Register actor " << TypeName(*actor) << " as " << localActorId << "\n"; 
         }
 
         mailbox->AttachActor(localActorId, actor);
         const TActorId actorId(FirstNodeId + nodeIndex, poolId, localActorId, hint);
-        ActorNames[actorId] = TypeName(*actor);
+        ActorNames[actorId] = TypeName(*actor); 
         RegistrationObserver(*this, parentId ? parentId : CurrentRecipient, actorId);
         DoActorInit(node->ActorSystem.Get(), actor, actorId, parentId ? parentId : CurrentRecipient);
 

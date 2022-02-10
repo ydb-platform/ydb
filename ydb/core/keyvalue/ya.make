@@ -37,7 +37,7 @@ SRCS(
     keyvalue_simple_db.h
     keyvalue_state.cpp
     keyvalue_state.h
-    keyvalue_state_collect.cpp
+    keyvalue_state_collect.cpp 
     keyvalue_storage_read_request.cpp
     keyvalue_storage_request.cpp
     keyvalue_storage_request.h

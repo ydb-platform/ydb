@@ -21,8 +21,8 @@ struct TPriorityItem {
     {
     }
 
-    TPriorityItem(const TPriorityItem&) = default;
-
+    TPriorityItem(const TPriorityItem&) = default; 
+ 
     bool operator ==(const TPriorityItem& rhs) const {
         // note that only identity intentionally checked
         return Id == rhs.Id;

@@ -1404,7 +1404,7 @@ void TExecutor::Execute(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
 
     TAutoPtr<TSeat> seat = new TSeat(++TransactionUniqCounter, self);
 
-    LWTRACK(TransactionBegin, seat->Self->Orbit, seat->UniqID, Owner->TabletID(), TypeName(*seat->Self));
+    LWTRACK(TransactionBegin, seat->Self->Orbit, seat->UniqID, Owner->TabletID(), TypeName(*seat->Self)); 
 
     ++Stats->TxInFly;
     Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;

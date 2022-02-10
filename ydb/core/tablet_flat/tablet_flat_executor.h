@@ -7,7 +7,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <library/cpp/lwtrace/shuttle.h>
 #include <util/generic/maybe.h>
-#include <util/system/type_name.h>
+#include <util/system/type_name.h> 
 #include <util/generic/variant.h>
 
 ////////////////////////////////////////////
@@ -277,7 +277,7 @@ public:
 
     virtual void Describe(IOutputStream &out) const noexcept
     {
-        out << TypeName(*this);
+        out << TypeName(*this); 
     }
 
 public:

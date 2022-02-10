@@ -170,8 +170,8 @@ class counting_iterator
     {
     }
 
-    counting_iterator& operator=(counting_iterator const&) = default;
-
+    counting_iterator& operator=(counting_iterator const&) = default; 
+ 
 # if 0
     template<class OtherIncrementable>
     counting_iterator(

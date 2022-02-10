@@ -408,7 +408,7 @@ struct expression<tag, Arg1, void, void, void>
    typedef tag tag_type;
 
    explicit expression(const Arg1& a) : arg(a) {}
-   expression(const expression& e) : arg(e.arg) {}
+   expression(const expression& e) : arg(e.arg) {} 
 
    left_type left()const { return left_type(arg); }
 
@@ -480,7 +480,7 @@ struct expression<terminal, Arg1, void, void, void>
    typedef terminal tag_type;
 
    explicit expression(const Arg1& a) : arg(a) {}
-   expression(const expression& e) : arg(e.arg) {}
+   expression(const expression& e) : arg(e.arg) {} 
 
    const Arg1& value()const BOOST_NOEXCEPT { return arg; }
 
@@ -554,7 +554,7 @@ struct expression<tag, Arg1, Arg2, void, void>
    typedef tag tag_type;
 
    expression(const Arg1& a1, const Arg2& a2) : arg1(a1), arg2(a2) {}
-   expression(const expression& e) : arg1(e.arg1), arg2(e.arg2) {}
+   expression(const expression& e) : arg1(e.arg1), arg2(e.arg2) {} 
 
    left_type left()const { return left_type(arg1); }
    right_type right()const { return right_type(arg2); }
@@ -638,7 +638,7 @@ struct expression<tag, Arg1, Arg2, Arg3, void>
    typedef tag tag_type;
 
    expression(const Arg1& a1, const Arg2& a2, const Arg3& a3) : arg1(a1), arg2(a2), arg3(a3) {}
-   expression(const expression& e) : arg1(e.arg1), arg2(e.arg2), arg3(e.arg3) {}
+   expression(const expression& e) : arg1(e.arg1), arg2(e.arg2), arg3(e.arg3) {} 
 
    left_type left()const { return left_type(arg1); }
    middle_type middle()const { return middle_type(arg2); }
@@ -731,7 +731,7 @@ struct expression
    typedef tag tag_type;
 
    expression(const Arg1& a1, const Arg2& a2, const Arg3& a3, const Arg4& a4) : arg1(a1), arg2(a2), arg3(a3), arg4(a4) {}
-   expression(const expression& e) : arg1(e.arg1), arg2(e.arg2), arg3(e.arg3), arg4(e.arg4) {}
+   expression(const expression& e) : arg1(e.arg1), arg2(e.arg2), arg3(e.arg3), arg4(e.arg4) {} 
 
    left_type left()const { return left_type(arg1); }
    left_middle_type left_middle()const { return left_middle_type(arg2); }

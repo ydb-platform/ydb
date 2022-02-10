@@ -365,13 +365,13 @@ protected:
         State.OnRequestComplete(event.RequestUid, event.Generation, event.Step, ctx, Info(), event.Status, event.Stat);
     }
 
-    void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-            << " Handle TEvCollectGarbageResult Marker# KV52");
-        State.RegisterInitialCollectResult(ctx);
-    }
-
+    void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev, const TActorContext &ctx) { 
+        Y_UNUSED(ev); 
+        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID() 
+            << " Handle TEvCollectGarbageResult Marker# KV52"); 
+        State.RegisterInitialCollectResult(ctx); 
+    } 
+ 
     void Handle(TEvKeyValue::TEvRequest::TPtr ev, const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " Handle TEvRequest " << ev->Get()->ToString());
@@ -483,7 +483,7 @@ public:
             HFunc(TEvKeyValue::TEvNotify, Handle);
             HFunc(TEvKeyValue::TEvPeriodicRefresh, Handle);
             HFunc(TChannelBalancer::TEvUpdateWeights, Handle);
-            HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
+            HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle); 
             HFunc(TEvents::TEvPoisonPill, Handle);
 
             default:

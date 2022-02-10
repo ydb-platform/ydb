@@ -3,7 +3,7 @@ OWNER(
     yazevnul
 )
 
-PY2TEST()
+PY2TEST() 
 
 SIZE(LARGE)
 

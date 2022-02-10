@@ -1,6 +1,6 @@
 OWNER(g:yatool)
 
-PY2TEST()
+PY2TEST() 
 
 TEST_SRCS(test_windows.py)
 

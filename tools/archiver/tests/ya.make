@@ -1,6 +1,6 @@
 OWNER(mvel)
 
-PY2TEST()
+PY2TEST() 
 
 TEST_SRCS(test.py)
 

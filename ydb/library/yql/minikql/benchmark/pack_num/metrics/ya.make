@@ -4,7 +4,7 @@ OWNER(
     udovichenko-r
 )
 
-PY2TEST()
+PY2TEST() 
 
 SIZE(LARGE)
 

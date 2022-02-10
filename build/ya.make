@@ -5,7 +5,7 @@ OWNER(
 
 NEED_CHECK()
 
-PY2_LIBRARY()
+PY2_LIBRARY() 
 
 PY_SRCS(
     ymake_conf.py

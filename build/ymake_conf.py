@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-from __future__ import print_function
-
+from __future__ import print_function 
+ 
 import base64
 import itertools
 import json
@@ -16,8 +16,8 @@ import subprocess
 import sys
 import tempfile
 
-import six
-
+import six 
+ 
 logger = logging.getLogger(__name__ if __name__ != '__main__' else 'ymake_conf.py')
 
 
@@ -169,7 +169,7 @@ class Platform(object):
     def find_in_dict(self, dict_, default=None):
         if dict_ is None:
             return default
-        for key in six.iterkeys(dict_):
+        for key in six.iterkeys(dict_): 
             if self._parse_os(key) == self.os:
                 return dict_[key]
         return default
@@ -265,11 +265,11 @@ def to_strings(o):
 
 
 def emit(key, *value):
-    print('{0}={1}'.format(key, ' '.join(to_strings(value))))
+    print('{0}={1}'.format(key, ' '.join(to_strings(value)))) 
 
 
 def emit_with_comment(comment, key, *value):
-    print('# {}'.format(comment))
+    print('# {}'.format(comment)) 
     emit(key, *value)
 
 
@@ -278,7 +278,7 @@ def emit_with_ignore_comment(key, *value):
 
 
 def append(key, *value):
-    print('{0}+={1}'.format(key, ' '.join(to_strings(value))))
+    print('{0}+={1}'.format(key, ' '.join(to_strings(value)))) 
 
 
 def emit_big(text):
@@ -294,10 +294,10 @@ def emit_big(text):
                 prefix += 1
 
         if first:  # Be pretty, prepend an empty line before the output
-            print()
+            print() 
             first = False
 
-        print(line[prefix:])
+        print(line[prefix:]) 
 
 
 class Variables(dict):
@@ -310,7 +310,7 @@ class Variables(dict):
                 emit(k, self[k])
 
     def update_from_presets(self):
-        for k in six.iterkeys(self):
+        for k in six.iterkeys(self): 
             v = preset(k)
             if v is not None:
                 self[k] = v
@@ -320,8 +320,8 @@ class Variables(dict):
             def value_check(v_):
                 return v_ is None
 
-        if any(map(value_check, six.itervalues(self))):
-            for k in six.iterkeys(self):
+        if any(map(value_check, six.itervalues(self))): 
+            for k in six.iterkeys(self): 
                 self[k] = reset_value
 
 
@@ -332,7 +332,7 @@ def format_env(env, list_separator=':'):
     def format(kv):
         return '${env:"%s=%s"}' % (kv[0], format_value(kv[1]))
 
-    return ' '.join(map(format, sorted(six.iteritems(env))))
+    return ' '.join(map(format, sorted(six.iteritems(env)))) 
 
 
 # TODO(somov): Проверить, используется ли это. Может быть, выпилить.
@@ -364,7 +364,7 @@ def is_negative_str(s):
 
 
 def to_bool(s, default=None):
-    if isinstance(s, six.string_types):
+    if isinstance(s, six.string_types): 
         if is_positive_str(s):
             return True
         if is_negative_str(s):
@@ -419,7 +419,7 @@ class Options(object):
 
         argv = self.arguments
         if len(argv) < 4:
-            print('Usage: ArcRoot, --BuildType--, Verbosity, [Path to local.ymake]', file=sys.stderr)
+            print('Usage: ArcRoot, --BuildType--, Verbosity, [Path to local.ymake]', file=sys.stderr) 
             sys.exit(1)
 
         self.arcadia_root = argv[1]
@@ -674,12 +674,12 @@ class Build(object):
         """
 
         def un_unicode(o):
-            if isinstance(o, six.text_type):
-                return six.ensure_str(o)
+            if isinstance(o, six.text_type): 
+                return six.ensure_str(o) 
             if isinstance(o, list):
                 return [un_unicode(oo) for oo in o]
             if isinstance(o, dict):
-                return {un_unicode(k): un_unicode(v) for k, v in six.iteritems(o)}
+                return {un_unicode(k): un_unicode(v) for k, v in six.iteritems(o)} 
             return o
 
         return un_unicode(json.loads(base64.b64decode(base64str)))
@@ -702,7 +702,7 @@ class YMake(object):
             print('@import "${CONF_ROOT}/conf/jbuild.ymake.conf"')
 
         if presets:
-            print('# Variables set from command line by -D options')
+            print('# Variables set from command line by -D options') 
             for key in sorted(presets):
                 if key in ('MY_YMAKE_BIN', 'REAL_YMAKE_BIN'):
                     emit_with_ignore_comment(key, opts().presets[key])
@@ -760,18 +760,18 @@ class System(object):
     def print_nix_host_const():
         emit('WRITE_COMMAND', '/bin/echo', '-e')
 
-        print('''
+        print(''' 
 when ($USE_PYTHON) {
     C_DEFINES+= -DUSE_PYTHON
-}''')
+}''') 
 
     @staticmethod
     def print_linux_const():
-        print('''
+        print(''' 
 when (($USEMPROF == "yes") || ($USE_MPROF == "yes")) {
     C_SYSTEM_LIBRARIES_INTERCEPT+=-ldmalloc
 }
-''')
+''') 
 
     def print_target_settings(self):
         emit('TARGET_PLATFORM', self.platform.os_compat)
@@ -937,7 +937,7 @@ class ToolchainOptions(object):
             self.c_compiler = detector.c_compiler
             self.cxx_compiler = detector.cxx_compiler
             self.compiler_version_list = detector.version_list
-            self.compiler_version = '.'.join(map(lambda part: six.ensure_str(str(part)), self.compiler_version_list))
+            self.compiler_version = '.'.join(map(lambda part: six.ensure_str(str(part)), self.compiler_version_list)) 
 
         else:
             self.type = self.params['type']
@@ -948,7 +948,7 @@ class ToolchainOptions(object):
 
             # TODO(somov): Требовать номер версии всегда.
             self.compiler_version = self.params.get('gcc_version') or self.params.get('version') or '0'
-            self.compiler_version_list = list(map(int, self.compiler_version.split('.')))
+            self.compiler_version_list = list(map(int, self.compiler_version.split('.'))) 
 
         # TODO(somov): Посмотреть, можно ли спрятать это поле.
         self.name_marker = '$(%s)' % self.params.get('match_root', self._name.upper())
@@ -1002,7 +1002,7 @@ class ToolchainOptions(object):
     def get_env(self, convert_list=None):
         convert_list = convert_list or (lambda x: x)
         r = {}
-        for k, v in six.iteritems(self._env):
+        for k, v in six.iteritems(self._env): 
             if isinstance(v, str):
                 r[k] = v
             elif isinstance(v, list):
@@ -2934,7 +2934,7 @@ class Perl(object):
     def _iter_config(self, config_keys):
         # Run perl -V:version -V:etc...
         perl_config = [self.perl] + ['-V:{}'.format(key) for key in config_keys]
-        config = six.ensure_str(get_stdout(perl_config) or '')
+        config = six.ensure_str(get_stdout(perl_config) or '') 
 
         start = 0
         while True:

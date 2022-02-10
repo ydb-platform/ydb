@@ -2541,7 +2541,7 @@ Add dependency on Perl to your LIBRARY
 ###### Macro [USE\_PLANTUML][]() <a name="macro_USE_PLANTUML"></a>
 Use PlantUML plug-in for yfm builder to render UML diagrams into documentation
 
-###### Macro [USE\_PYTHON2][]() <a name="macro_USE_PYTHON2"></a>
+###### Macro [USE\_PYTHON2][]() <a name="macro_USE_PYTHON2"></a> 
 This adds Python 2.x runtime library to your LIBRARY and makes it Python2-compatible.
 Compatibility means proper PEERDIRs, ADDINCLs and variant selection on PEERDIRs to multimodules.
 
@@ -2551,7 +2551,7 @@ If you'd like to use #include <Python.h> with both Python2 and Python3 convert y
 
 @see: [PY2\_LIBRARY](#module\_PY2\_LIBRARY), [PY3\_LIBRARY](#module\_PY3\_LIBRARY), [PY23\_LIBRARY](#multimodule\_PY23\_LIBRARY)
 
-###### Macro [USE\_PYTHON3][]() <a name="macro_USE_PYTHON3"></a>
+###### Macro [USE\_PYTHON3][]() <a name="macro_USE_PYTHON3"></a> 
 This adds Python3 library to your LIBRARY and makes it Python3-compatible.
 Compatibility means proper PEERDIRs, ADDINCLs and variant selection on PEERDIRs to multimodules.
 

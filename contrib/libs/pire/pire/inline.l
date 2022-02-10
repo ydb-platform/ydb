@@ -132,7 +132,7 @@ void eatComment(void (*action)(char));
 	bool first = true;
 	Pire::Scanner sc;
 	ystring pattern;
-	for (auto i = args.begin(), ie = args.end(); i != ie; i += 2) { 
+	for (auto i = args.begin(), ie = args.end(); i != ie; i += 2) {
 
 		Pire::Lexer lexer(i->c_str(), i->c_str() + i->size());
 		bool surround = false;
@@ -189,7 +189,7 @@ void eatComment(void (*action)(char));
 
 	fprintf(yyout, "Pire::MmappedScanner<Pire::Scanner>(PIRE_LITERAL( // %s \n    \"", pattern.c_str());
 	size_t pos = 5;
-	for (auto i = buf.Buffer().Begin(), ie = buf.Buffer().End(); i != ie; ++i) { 
+	for (auto i = buf.Buffer().Begin(), ie = buf.Buffer().End(); i != ie; ++i) {
 		pos += fprintf(yyout, "\\x%02X", static_cast<unsigned char>(*i));
 		if (pos >= 78) {
 			fprintf(yyout, "\"\n    \"");

@@ -65,13 +65,13 @@ namespace {
 	namespace UtfRanges {
 
 		static const size_t MaxLen = 4;
-		static const size_t First[MaxLen][2] = { 
-			{0x00, 0x80}, 
-			{0xC0, 0xE0}, 
-			{0xE0, 0xF0}, 
-			{0xF0, 0xF8} 
+		static const size_t First[MaxLen][2] = {
+			{0x00, 0x80},
+			{0xC0, 0xE0},
+			{0xE0, 0xF0},
+			{0xF0, 0xF8}
 		};
-		static const size_t Next[2] = {0x80, 0xC0}; 
+		static const size_t Next[2] = {0x80, 0xC0};
 	}
 
 
@@ -103,10 +103,10 @@ namespace {
 		{
 			size_t last = fsm.Resize(fsm.Size() + UtfRanges::MaxLen);
 			for (size_t i = 0; i < UtfRanges::MaxLen; ++i)
-				for (size_t letter = UtfRanges::First[i][0]; letter < UtfRanges::First[i][1]; ++letter) 
+				for (size_t letter = UtfRanges::First[i][0]; letter < UtfRanges::First[i][1]; ++letter)
 					fsm.ConnectFinal(fsm.Size() - i - 1, letter);
 			for (size_t i = 0; i < UtfRanges::MaxLen - 1; ++i)
-				for (size_t letter = UtfRanges::Next[0]; letter < UtfRanges::Next[1]; ++letter) 
+				for (size_t letter = UtfRanges::Next[0]; letter < UtfRanges::Next[1]; ++letter)
 					fsm.Connect(last + i, last + i + 1, letter);
 			fsm.ClearFinal();
 			fsm.SetFinal(fsm.Size() - 1, true);

@@ -187,20 +187,20 @@ namespace Impl {
 
 	/// The main function: runs a scanner through given memory range.
 	template<class Scanner, class Pred>
-	inline void DoRun(const Scanner& scanner, typename Scanner::State& st, TStringBuf str, Pred pred) 
+	inline void DoRun(const Scanner& scanner, typename Scanner::State& st, TStringBuf str, Pred pred)
 	{
 
-		const size_t* head = reinterpret_cast<const size_t*>((reinterpret_cast<uintptr_t>(str.begin())) & ~(sizeof(size_t)-1)); 
-		const size_t* tail = reinterpret_cast<const size_t*>((reinterpret_cast<uintptr_t>(str.end())) & ~(sizeof(size_t)-1)); 
+		const size_t* head = reinterpret_cast<const size_t*>((reinterpret_cast<uintptr_t>(str.begin())) & ~(sizeof(size_t)-1));
+		const size_t* tail = reinterpret_cast<const size_t*>((reinterpret_cast<uintptr_t>(str.end())) & ~(sizeof(size_t)-1));
 
 		size_t headSize = (sizeof(size_t) - (str.begin() - (const char*)head)); // The distance from @p begin to the end of the word containing @p begin
-		size_t tailSize = str.end() - (const char*) tail; // The distance from the beginning of the word containing @p end to the @p end 
+		size_t tailSize = str.end() - (const char*) tail; // The distance from the beginning of the word containing @p end to the @p end
 
-		Y_ASSERT(headSize >= 1 && headSize <= sizeof(size_t)); 
-		Y_ASSERT(tailSize < sizeof(size_t)); 
+		Y_ASSERT(headSize >= 1 && headSize <= sizeof(size_t));
+		Y_ASSERT(tailSize < sizeof(size_t));
 
 		if (head == tail) {
-			Impl::SafeRunChunk(scanner, st, head, sizeof(size_t) - headSize, str.end() - str.begin(), pred); 
+			Impl::SafeRunChunk(scanner, st, head, sizeof(size_t) - headSize, str.end() - str.begin(), pred);
 			return;
 		}
 
@@ -209,8 +209,8 @@ namespace Impl {
 		// compiler to store it in a register. This saves some instructions and cycles
 		typename Scanner::State state = st;
 
-		if (str.begin() != (const char*) head) { 
-			if (Impl::RunChunk(scanner, state, head, sizeof(size_t) - headSize, headSize, pred) == Stop) { 
+		if (str.begin() != (const char*) head) {
+			if (Impl::RunChunk(scanner, state, head, sizeof(size_t) - headSize, headSize, pred) == Stop) {
 				st = state;
 				return;
 			}
@@ -233,12 +233,12 @@ namespace Impl {
 /// Runs two scanners through given memory range simultaneously.
 /// This is several percent faster than running them independently.
 template<class Scanner1, class Scanner2>
-inline void Run(const Scanner1& scanner1, const Scanner2& scanner2, typename Scanner1::State& state1, typename Scanner2::State& state2, TStringBuf str) 
+inline void Run(const Scanner1& scanner1, const Scanner2& scanner2, typename Scanner1::State& state1, typename Scanner2::State& state2, TStringBuf str)
 {
 	typedef ScannerPair<Scanner1, Scanner2> Scanners;
 	Scanners pair(scanner1, scanner2);
 	typename Scanners::State states(state1, state2);
-	Run(pair, states, str); 
+	Run(pair, states, str);
 	state1 = states.first;
 	state2 = states.second;
 }
@@ -272,15 +272,15 @@ namespace Impl {
 #endif
 	
 template<class Scanner>
-void Run(const Scanner& sc, typename Scanner::State& st, TStringBuf str) 
-{ 
-	Impl::DoRun(sc, st, str, Impl::RunPred<Scanner>()); 
-} 
- 
-template<class Scanner> 
+void Run(const Scanner& sc, typename Scanner::State& st, TStringBuf str)
+{
+	Impl::DoRun(sc, st, str, Impl::RunPred<Scanner>());
+}
+
+template<class Scanner>
 void Run(const Scanner& sc, typename Scanner::State& st, const char* begin, const char* end)
 {
-	Run(sc, st, TStringBuf(begin, end)); 
+	Run(sc, st, TStringBuf(begin, end));
 }
 
 /// Returns default constructed string_view{} if there is no matching prefix
@@ -293,7 +293,7 @@ std::string_view LongestPrefix(const Scanner& sc, std::string_view str, bool thr
 	if (throughBeginMark)
 		Pire::Step(sc, st, BeginMark);
 	const char* pos = (sc.Final(st) ? str.data() : nullptr);
-	Impl::DoRun(sc, st, str, Impl::LongestPrefixPred<Scanner>(pos)); 
+	Impl::DoRun(sc, st, str, Impl::LongestPrefixPred<Scanner>(pos));
 	if (throughEndMark) {
 		Pire::Step(sc, st, EndMark);
 		if (sc.Final(st))
@@ -303,17 +303,17 @@ std::string_view LongestPrefix(const Scanner& sc, std::string_view str, bool thr
 }
 
 template<class Scanner>
-const char* LongestPrefix(const Scanner& sc, const char* begin, const char* end, bool throughBeginMark = false, bool throughEndMark = false) 
+const char* LongestPrefix(const Scanner& sc, const char* begin, const char* end, bool throughBeginMark = false, bool throughEndMark = false)
 {
 	auto prefix = LongestPrefix(sc, std::string_view(begin, end - begin), throughBeginMark, throughEndMark);
 	return prefix.data() + prefix.size();
-} 
- 
+}
+
 /// Returns default constructed string_view{} if there is no matching prefix
 /// Returns str.substr(0, 0) if matching prefix is empty
-template<class Scanner> 
+template<class Scanner>
 std::string_view ShortestPrefix(const Scanner& sc, std::string_view str, bool throughBeginMark = false, bool throughEndMark = false)
-{ 
+{
 	typename Scanner::State st;
 	sc.Initialize(st);
 	if (throughBeginMark)
@@ -321,7 +321,7 @@ std::string_view ShortestPrefix(const Scanner& sc, std::string_view str, bool th
 	if (sc.Final(st))
 		return str.substr(0, 0);
 	const char* pos = nullptr;
-	Impl::DoRun(sc, st, str, Impl::ShortestPrefixPred<Scanner>(pos)); 
+	Impl::DoRun(sc, st, str, Impl::ShortestPrefixPred<Scanner>(pos));
 	if (throughEndMark) {
 		Pire::Step(sc, st, EndMark);
 		if (sc.Final(st) && !pos)
@@ -330,13 +330,13 @@ std::string_view ShortestPrefix(const Scanner& sc, std::string_view str, bool th
 	return pos ? str.substr(0, pos - str.data()) : std::string_view{};
 }
 
-template<class Scanner> 
-const char* ShortestPrefix(const Scanner& sc, const char* begin, const char* end, bool throughBeginMark = false, bool throughEndMark = false) 
-{ 
+template<class Scanner>
+const char* ShortestPrefix(const Scanner& sc, const char* begin, const char* end, bool throughBeginMark = false, bool throughEndMark = false)
+{
     auto prefix = ShortestPrefix(sc, std::string_view(begin, end - begin), throughBeginMark, throughEndMark);
     return prefix.data() + prefix.size();
-} 
- 
+}
+
 	
 /// The same as above, but scans string in reverse direction
 /// (consider using Fsm::Reverse() for using in this function).
@@ -349,7 +349,7 @@ inline std::string_view LongestSuffix(const Scanner& scanner, std::string_view s
 	scanner.Initialize(state);
 	if (throughEndMark)
 		Step(scanner, state, EndMark);
-	PIRE_IFDEBUG(Cdbg << "Running LongestSuffix on string " << ystring(str) << Endl); 
+	PIRE_IFDEBUG(Cdbg << "Running LongestSuffix on string " << ystring(str) << Endl);
 	PIRE_IFDEBUG(Cdbg << "Initial state " << StDump(scanner, state) << Endl);
 
 	std::string_view suffix{};
@@ -371,12 +371,12 @@ inline std::string_view LongestSuffix(const Scanner& scanner, std::string_view s
 	return suffix;
 }
 
-template<class Scanner> 
-inline const char* LongestSuffix(const Scanner& scanner, const char* rbegin, const char* rend, bool throughEndMark = false, bool throughBeginMark = false) { 
+template<class Scanner>
+inline const char* LongestSuffix(const Scanner& scanner, const char* rbegin, const char* rend, bool throughEndMark = false, bool throughBeginMark = false) {
 	auto suffix = LongestSuffix(scanner, std::string_view(rend + 1, rbegin - rend), throughEndMark, throughBeginMark);
     return suffix.data() ? suffix.data() - 1 : nullptr;
-} 
- 
+}
+
 /// The same as above, but scans string in reverse direction
 /// Returns default constructed string_view{} if there is no matching suffix
 /// Returns str.substr(str.size(), 0) if matching suffix is empty
@@ -388,7 +388,7 @@ inline std::string_view ShortestSuffix(const Scanner& scanner, std::string_view 
 	scanner.Initialize(state);
 	if (throughEndMark)
 		Step(scanner, state, EndMark);
-	PIRE_IFDEBUG(Cdbg << "Running ShortestSuffix on string " << ystring(str) << Endl); 
+	PIRE_IFDEBUG(Cdbg << "Running ShortestSuffix on string " << ystring(str) << Endl);
 	PIRE_IFDEBUG(Cdbg << "Initial state " << StDump(scanner, state) << Endl);
 
 	while (begin != str.data() && !scanner.Final(state) && !scanner.Dead(state)) {
@@ -401,13 +401,13 @@ inline std::string_view ShortestSuffix(const Scanner& scanner, std::string_view 
 	return scanner.Final(state) ? str.substr(begin - str.data()) : std::string_view{};
 }
 
-template<class Scanner> 
-inline const char* ShortestSuffix(const Scanner& scanner, const char* rbegin, const char* rend, bool throughEndMark = false, bool throughBeginMark = false) { 
+template<class Scanner>
+inline const char* ShortestSuffix(const Scanner& scanner, const char* rbegin, const char* rend, bool throughEndMark = false, bool throughBeginMark = false) {
 	auto suffix = ShortestSuffix(scanner, std::string_view(rend + 1, rbegin - rend), throughEndMark, throughBeginMark);
 	return suffix.data() ? suffix.data() - 1 : nullptr;
-} 
+}
 
- 
+
 template<class Scanner>
 class RunHelper {
 public:
@@ -415,9 +415,9 @@ public:
 	explicit RunHelper(const Scanner& sc): Sc(&sc) { Sc->Initialize(St); }
 
 	RunHelper<Scanner>& Step(Char letter) { Pire::Step(*Sc, St, letter); return *this; }
-	RunHelper<Scanner>& Run(TStringBuf str) { Pire::Run(*Sc, St, str); return *this; } 
-	RunHelper<Scanner>& Run(const char* begin, const char* end) { return Run(TStringBuf(begin, end)); } 
-	RunHelper<Scanner>& Run(const char* begin, size_t size) { return Run(TStringBuf(begin, begin + size)); } 
+	RunHelper<Scanner>& Run(TStringBuf str) { Pire::Run(*Sc, St, str); return *this; }
+	RunHelper<Scanner>& Run(const char* begin, const char* end) { return Run(TStringBuf(begin, end)); }
+	RunHelper<Scanner>& Run(const char* begin, size_t size) { return Run(TStringBuf(begin, begin + size)); }
 	RunHelper<Scanner>& Begin() { return Step(BeginMark); }
 	RunHelper<Scanner>& End() { return Step(EndMark); }
 
@@ -440,15 +440,15 @@ RunHelper<Scanner> Runner(const Scanner& sc, typename Scanner::State st) { retur
 
 /// Provided for testing purposes and convinience
 template<class Scanner>
-bool Matches(const Scanner& scanner, TStringBuf str) 
-{ 
-	return Runner(scanner).Run(str); 
-} 
- 
-template<class Scanner> 
+bool Matches(const Scanner& scanner, TStringBuf str)
+{
+	return Runner(scanner).Run(str);
+}
+
+template<class Scanner>
 bool Matches(const Scanner& scanner, const char* begin, const char* end)
 {
-	return Runner(scanner).Run(TStringBuf(begin, end)); 
+	return Runner(scanner).Run(TStringBuf(begin, end));
 }
 
 /// Constructs an inline scanner in one statement

@@ -46,21 +46,21 @@ namespace Pire {
 ystring CharDump(Char c)
 {
 	char buf[8];
-	if (c == '"') 
-		return ystring("\\\""); 
-	else if (c == '[' || c == ']' || c == '-' || c == '^') { 
-		snprintf(buf, sizeof(buf)-1, "\\\\%c", c); 
-		return ystring(buf); 
-	} else if (c >= 32 && c < 127) 
+	if (c == '"')
+		return ystring("\\\"");
+	else if (c == '[' || c == ']' || c == '-' || c == '^') {
+		snprintf(buf, sizeof(buf)-1, "\\\\%c", c);
+		return ystring(buf);
+	} else if (c >= 32 && c < 127)
 		return ystring(1, static_cast<char>(c));
 	else if (c == '\n')
-		return ystring("\\\\n"); 
+		return ystring("\\\\n");
 	else if (c == '\t')
-		return ystring("\\\\t"); 
+		return ystring("\\\\t");
 	else if (c == '\r')
-		return ystring("\\\\r"); 
+		return ystring("\\\\r");
 	else if (c < 256) {
-		snprintf(buf, sizeof(buf)-1, "\\\\%03o", static_cast<int>(c)); 
+		snprintf(buf, sizeof(buf)-1, "\\\\%03o", static_cast<int>(c));
 		return ystring(buf);
 	} else if (c == Epsilon)
 		return ystring("<Epsilon>");
@@ -76,84 +76,84 @@ void Fsm::DumpState(yostream& s, size_t state) const
 {
 	// Fill in a 'row': Q -> exp(V) (for current state)
 	TVector< ybitset<MaxChar> > row(Size());
-	for (auto&& transition : m_transitions[state]) 
-		for (auto&& transitionState : transition.second) { 
-			if (transitionState >= Size()) { 
-				std::cerr << "WTF?! Transition from " << state << " on letter " << transition.first << " leads to non-existing state " << transitionState << "\n"; 
+	for (auto&& transition : m_transitions[state])
+		for (auto&& transitionState : transition.second) {
+			if (transitionState >= Size()) {
+				std::cerr << "WTF?! Transition from " << state << " on letter " << transition.first << " leads to non-existing state " << transitionState << "\n";
 				Y_ASSERT(false);
 			}
-			if (Letters().Contains(transition.first)) { 
-				const TVector<Char>& letters = Letters().Klass(Letters().Representative(transition.first)); 
-				for (auto&& letter : letters) 
-					row[transitionState].set(letter); 
+			if (Letters().Contains(transition.first)) {
+				const TVector<Char>& letters = Letters().Klass(Letters().Representative(transition.first));
+				for (auto&& letter : letters)
+					row[transitionState].set(letter);
 			} else
-				row[transitionState].set(transition.first); 
+				row[transitionState].set(transition.first);
 		}
 
-	bool statePrinted = false; 
+	bool statePrinted = false;
 	// Display each destination state
-	for (auto rit = row.begin(), rie = row.end(); rit != rie; ++rit) { 
+	for (auto rit = row.begin(), rie = row.end(); rit != rie; ++rit) {
 		unsigned begin = 0, end = 0;
 
-		ystring delimiter; 
-		ystring label; 
+		ystring delimiter;
+		ystring label;
 		if (rit->test(Epsilon)) {
-			label += delimiter + CharDump(Epsilon); 
-			delimiter = " "; 
+			label += delimiter + CharDump(Epsilon);
+			delimiter = " ";
 		}
 		if (rit->test(BeginMark)) {
-			label += delimiter + CharDump(BeginMark); 
-			delimiter = " "; 
+			label += delimiter + CharDump(BeginMark);
+			delimiter = " ";
 		}
 		if (rit->test(EndMark)) {
-			label += delimiter + CharDump(EndMark); 
-			delimiter = " "; 
+			label += delimiter + CharDump(EndMark);
+			delimiter = " ";
 		}
-		unsigned count = 0; 
-		for (unsigned i = 0; i < 256; ++i) 
-			if (rit->test(i)) 
-				++count; 
-		if (count != 0 && count != 256) { 
-			label += delimiter + "["; 
-			bool complementary = (count > 128); 
-			if (count > 128) 
-				label += "^"; 
-			while (begin < 256) { 
-				for (begin = end; begin < 256 && (rit->test(begin) == complementary); ++begin) 
-					; 
-				for (end = begin; end < 256 && (rit->test(end) == !complementary); ++end) 
-					; 
-				if (begin + 1 == end) { 
-					label += CharDump(begin); 
-					delimiter = " "; 
-				} else if (begin != end) { 
-					label += CharDump(begin) + "-" + (CharDump(end-1)); 
-					delimiter = " "; 
-				} 
+		unsigned count = 0;
+		for (unsigned i = 0; i < 256; ++i)
+			if (rit->test(i))
+				++count;
+		if (count != 0 && count != 256) {
+			label += delimiter + "[";
+			bool complementary = (count > 128);
+			if (count > 128)
+				label += "^";
+			while (begin < 256) {
+				for (begin = end; begin < 256 && (rit->test(begin) == complementary); ++begin)
+					;
+				for (end = begin; end < 256 && (rit->test(end) == !complementary); ++end)
+					;
+				if (begin + 1 == end) {
+					label += CharDump(begin);
+					delimiter = " ";
+				} else if (begin != end) {
+					label += CharDump(begin) + "-" + (CharDump(end-1));
+					delimiter = " ";
+				}
 			}
-			label += "]"; 
-			delimiter = " "; 
-		} else if (count == 256) { 
-			label += delimiter + "."; 
-			delimiter = " "; 
+			label += "]";
+			delimiter = " ";
+		} else if (count == 256) {
+			label += delimiter + ".";
+			delimiter = " ";
 		}
-		if (!label.empty()) { 
-			if (!statePrinted) { 
-				s << "    " << state << "[shape=\"" << (IsFinal(state) ? "double" : "") << "circle\",label=\"" << state; 
-				auto ti = tags.find(state); 
-				if (ti != tags.end()) 
-					s << " (tags: " << ti->second << ")"; 
-				s << "\"]\n"; 
-				if (Initial() == state) 
-					s << "    \"initial\" -> " << state << '\n'; 
-				statePrinted = true; 
-			} 
-			s << "    " << state << " -> " << std::distance(row.begin(), rit) << "[label=\"" << label; 
+		if (!label.empty()) {
+			if (!statePrinted) {
+				s << "    " << state << "[shape=\"" << (IsFinal(state) ? "double" : "") << "circle\",label=\"" << state;
+				auto ti = tags.find(state);
+				if (ti != tags.end())
+					s << " (tags: " << ti->second << ")";
+				s << "\"]\n";
+				if (Initial() == state)
+					s << "    \"initial\" -> " << state << '\n';
+				statePrinted = true;
+			}
+			s << "    " << state << " -> " << std::distance(row.begin(), rit) << "[label=\"" << label;
 
 			// Display outputs
-			auto oit = outputs.find(state); 
+			auto oit = outputs.find(state);
 			if (oit != outputs.end()) {
-				auto oit2 = oit->second.find(std::distance(row.begin(), rit)); 
+				auto oit2 = oit->second.find(std::distance(row.begin(), rit));
 				if (oit2 == oit->second.end())
 					;
 				else {
@@ -162,25 +162,25 @@ void Fsm::DumpState(yostream& s, size_t state) const
 						if (oit2->second & (1ul << i))
 							payload.push_back(i);
 					if (!payload.empty())
-						s << " (outputs: " << Join(payload.begin(), payload.end(), ", ") << ")"; 
+						s << " (outputs: " << Join(payload.begin(), payload.end(), ", ") << ")";
 				}
 			}
- 
-			s << "\"]\n"; 
+
+			s << "\"]\n";
 		}
 	}
- 
-	if (statePrinted) 
-		s << '\n'; 
+
+	if (statePrinted)
+		s << '\n';
 }
 
-void Fsm::DumpTo(yostream& s, const ystring& name) const 
+void Fsm::DumpTo(yostream& s, const ystring& name) const
 {
-	s << "digraph {\n    \"initial\"[shape=\"plaintext\",label=\"" << name << "\"]\n\n"; 
+	s << "digraph {\n    \"initial\"[shape=\"plaintext\",label=\"" << name << "\"]\n\n";
 	for (size_t state = 0; state < Size(); ++state) {
 		DumpState(s, state);
 	}
-	s << "}\n\n"; 
+	s << "}\n\n";
 }
 
 yostream& operator << (yostream& s, const Fsm& fsm) { fsm.DumpTo(s); return s; }
@@ -218,13 +218,13 @@ Char Fsm::Translate(Char c) const
 
 bool Fsm::Connected(size_t from, size_t to, Char c) const
 {
-	auto it = m_transitions[from].find(Translate(c)); 
+	auto it = m_transitions[from].find(Translate(c));
 	return (it != m_transitions[from].end() && it->second.find(to) != it->second.end());
 }
 
 bool Fsm::Connected(size_t from, size_t to) const
 {
-	for (auto i = m_transitions[from].begin(), ie = m_transitions[from].end(); i != ie; ++i) 
+	for (auto i = m_transitions[from].begin(), ie = m_transitions[from].end(); i != ie; ++i)
 		if (i->second.find(to) != i->second.end())
 			return true;
 	return false;
@@ -232,15 +232,15 @@ bool Fsm::Connected(size_t from, size_t to) const
 
 const Fsm::StatesSet& Fsm::Destinations(size_t from, Char c) const
 {
-	auto i = m_transitions[from].find(Translate(c)); 
+	auto i = m_transitions[from].find(Translate(c));
 	return (i != m_transitions[from].end()) ? i->second : DefaultValue<StatesSet>();
 }
 
 TSet<Char> Fsm::OutgoingLetters(size_t state) const
 {
 	TSet<Char> ret;
-	for (auto&& i : m_transitions[state]) 
-		ret.insert(i.first); 
+	for (auto&& i : m_transitions[state])
+		ret.insert(i.first);
 	return ret;
 }
 
@@ -294,8 +294,8 @@ Fsm& Fsm::Append(char c)
 
 Fsm& Fsm::Append(const ystring& str)
 {
-    for (auto&& i : str) 
-        Append(i); 
+    for (auto&& i : str)
+        Append(i);
     return *this;
 }
 
@@ -311,8 +311,8 @@ Fsm& Fsm::AppendSpecial(Char c)
 
 Fsm& Fsm::AppendStrings(const TVector<ystring>& strings)
 {
-	for (auto&& i : strings) 
-		if (i.empty()) 
+	for (auto&& i : strings)
+		if (i.empty())
 			throw Error("None of strings passed to appendStrings() can be empty");
 
 	Resize(Size() + 1);
@@ -336,7 +336,7 @@ Fsm& Fsm::AppendStrings(const TVector<ystring>& strings)
 	TSet<Transition> usedTransitions;
 	TSet<char> usedFirsts;
 
-	for (const auto& str : strings) { 
+	for (const auto& str : strings) {
 		if (str.size() > 1) {
 
 			// First letter: all previously final states are connected to the new state
@@ -349,7 +349,7 @@ Fsm& Fsm::AppendStrings(const TVector<ystring>& strings)
 
 			// All other letters except last one
 			size_t state = firstJump;
-			for (auto cit = str.begin() + 1, cie = str.end() - 1; cit != cie; ++cit) { 
+			for (auto cit = str.begin() + 1, cie = str.end() - 1; cit != cie; ++cit) {
 				size_t& newState = ltr[ymake_pair(state, *cit)];
 				if (!newState) {
 					newState = Resize(Size() + 1);
@@ -384,46 +384,46 @@ void Fsm::Import(const Fsm& rhs)
 
 	size_t oldsize = Resize(Size() + rhs.Size());
 
-	for (auto&& outer : m_transitions) { 
-		for (auto&& letter : letters) { 
-			auto targets = outer.find(letter.first); 
-			if (targets == outer.end()) 
+	for (auto&& outer : m_transitions) {
+		for (auto&& letter : letters) {
+			auto targets = outer.find(letter.first);
+			if (targets == outer.end())
 				continue;
-			for (auto&& character : letter.second.second) 
-				if (character != letter.first) 
-					outer.insert(ymake_pair(character, targets->second)); 
+			for (auto&& character : letter.second.second)
+				if (character != letter.first)
+					outer.insert(ymake_pair(character, targets->second));
 		}
 	}
 
-	auto dest = m_transitions.begin() + oldsize; 
-	for (auto outer = rhs.m_transitions.begin(), outerEnd = rhs.m_transitions.end(); outer != outerEnd; ++outer, ++dest) { 
-		for (auto&& inner : *outer) { 
+	auto dest = m_transitions.begin() + oldsize;
+	for (auto outer = rhs.m_transitions.begin(), outerEnd = rhs.m_transitions.end(); outer != outerEnd; ++outer, ++dest) {
+		for (auto&& inner : *outer) {
 			TSet<size_t> targets;
-			std::transform(inner.second.begin(), inner.second.end(), std::inserter(targets, targets.begin()), 
+			std::transform(inner.second.begin(), inner.second.end(), std::inserter(targets, targets.begin()),
 				std::bind2nd(std::plus<size_t>(), oldsize));
-			dest->insert(ymake_pair(inner.first, targets)); 
+			dest->insert(ymake_pair(inner.first, targets));
 		}
 
-		for (auto&& letter : rhs.letters) { 
-			auto targets = dest->find(letter.first); 
-			if (targets == dest->end()) 
+		for (auto&& letter : rhs.letters) {
+			auto targets = dest->find(letter.first);
+			if (targets == dest->end())
 				continue;
-			for (auto&& character : letter.second.second) 
-				if (character != letter.first) 
-					dest->insert(ymake_pair(character, targets->second)); 
+			for (auto&& character : letter.second.second)
+				if (character != letter.first)
+					dest->insert(ymake_pair(character, targets->second));
 		}
 	}
 
 	// Import outputs
-	for (auto&& output : rhs.outputs) { 
-		auto& dest = outputs[output.first + oldsize]; 
-		for (auto&& element : output.second) 
-			dest.insert(ymake_pair(element.first + oldsize, element.second)); 
+	for (auto&& output : rhs.outputs) {
+		auto& dest = outputs[output.first + oldsize];
+		for (auto&& element : output.second)
+			dest.insert(ymake_pair(element.first + oldsize, element.second));
 	}
 
 	// Import tags
-	for (auto&& tag : rhs.tags) 
-		tags.insert(ymake_pair(tag.first + oldsize, tag.second)); 
+	for (auto&& tag : rhs.tags)
+		tags.insert(ymake_pair(tag.first + oldsize, tag.second));
 
 	letters = LettersTbl(LettersEquality(m_transitions));
 }
@@ -436,14 +436,14 @@ void Fsm::Connect(size_t from, size_t to, Char c /* = Epsilon */)
 
 void Fsm::ConnectFinal(size_t to, Char c /* = Epsilon */)
 {
-	for (auto&& final : m_final) 
-		Connect(final, to, c); 
+	for (auto&& final : m_final)
+		Connect(final, to, c);
 	ClearHints();
 }
 
 void Fsm::Disconnect(size_t from, size_t to, Char c)
 {
-	auto i = m_transitions[from].find(c); 
+	auto i = m_transitions[from].find(c);
 	if (i != m_transitions[from].end())
 		i->second.erase(to);
 	ClearHints();
@@ -451,17 +451,17 @@ void Fsm::Disconnect(size_t from, size_t to, Char c)
 
 void Fsm::Disconnect(size_t from, size_t to)
 {
-	for (auto&& i : m_transitions[from]) 
-		i.second.erase(to); 
+	for (auto&& i : m_transitions[from])
+		i.second.erase(to);
 	ClearHints();
 }
 
 unsigned long Fsm::Output(size_t from, size_t to) const
 {
-	auto i = outputs.find(from); 
+	auto i = outputs.find(from);
 	if (i == outputs.end())
 		return 0;
-	auto j = i->second.find(to); 
+	auto j = i->second.find(to);
 	if (j == i->second.end())
 		return 0;
 	else
@@ -475,20 +475,20 @@ Fsm& Fsm::operator += (const Fsm& rhs)
 
 	const TransitionRow& row = m_transitions[lhsSize + rhs.initial];
 
-	for (auto&& outer : row) 
-		for (auto&& inner : outer.second) 
-			ConnectFinal(inner, outer.first); 
+	for (auto&& outer : row)
+		for (auto&& inner : outer.second)
+			ConnectFinal(inner, outer.first);
 
-	auto out = rhs.outputs.find(rhs.initial); 
+	auto out = rhs.outputs.find(rhs.initial);
 	if (out != rhs.outputs.end())
-		for (auto&& toAndOutput : out->second) { 
-			for (auto&& final : m_final) 
-				outputs[final].insert(ymake_pair(toAndOutput.first + lhsSize, toAndOutput.second)); 
+		for (auto&& toAndOutput : out->second) {
+			for (auto&& final : m_final)
+				outputs[final].insert(ymake_pair(toAndOutput.first + lhsSize, toAndOutput.second));
 		}
 
 	ClearFinal();
-	for (auto&& letter : rhs.m_final) 
-		SetFinal(letter + lhsSize, true); 
+	for (auto&& letter : rhs.m_final)
+		SetFinal(letter + lhsSize, true);
 	determined = false;
 
 	ClearHints();
@@ -502,8 +502,8 @@ Fsm& Fsm::operator |= (const Fsm& rhs)
 	size_t lhsSize = Size();
 
 	Import(rhs);
-	for (auto&& final : rhs.m_final) 
-		m_final.insert(final + lhsSize); 
+	for (auto&& final : rhs.m_final)
+		m_final.insert(final + lhsSize);
 
 	if (!isAlternative && !rhs.isAlternative) {
 		Resize(Size() + 1);
@@ -517,9 +517,9 @@ Fsm& Fsm::operator |= (const Fsm& rhs)
 		initial = rhs.initial + lhsSize;
 	} else if (isAlternative && rhs.isAlternative) {
 		const StatesSet& tos = rhs.Destinations(rhs.initial, Epsilon);
-		for (auto&& to : tos) { 
-			Connect(initial, to + lhsSize, Epsilon); 
-			Disconnect(rhs.initial + lhsSize, to + lhsSize, Epsilon); 
+		for (auto&& to : tos) {
+			Connect(initial, to + lhsSize, Epsilon);
+			Disconnect(rhs.initial + lhsSize, to + lhsSize, Epsilon);
 		}
 	}
 
@@ -607,21 +607,21 @@ Fsm& Fsm::Reverse()
 
 	// Invert transitions
 	for (size_t from = 0; from < Size(); ++from)
-		for (auto&& i : m_transitions[from]) 
-			for (auto&& j : i.second) 
-				out.Connect(j, from, i.first); 
+		for (auto&& i : m_transitions[from])
+			for (auto&& j : i.second)
+				out.Connect(j, from, i.first);
 
 	// Invert initial and final states
 	out.m_final.clear();
 	out.SetFinal(initial, true);
-	for (auto i : m_final) 
-		out.Connect(Size(), i, Epsilon); 
+	for (auto i : m_final)
+		out.Connect(Size(), i, Epsilon);
 	out.SetInitial(Size());
 
 	// Invert outputs
-	for (auto&& i : outputs) 
-		for (auto&& j : i.second) 
-			out.SetOutput(j.first, i.first, j.second); 
+	for (auto&& i : outputs)
+		for (auto&& j : i.second)
+			out.SetOutput(j.first, i.first, j.second);
 
 	// Preserve tags (although thier semantics are usually heavily broken at this point)
 	out.tags = tags;
@@ -633,60 +633,60 @@ Fsm& Fsm::Reverse()
 
 TSet<size_t> Fsm::DeadStates() const
 {
-	TSet<size_t> res; 
- 
-	for (int invert = 0; invert <= 1; ++invert) { 
-		Fsm digraph; 
-		digraph.Resize(Size()); 
-		for (TransitionTable::const_iterator j = m_transitions.begin(), je = m_transitions.end(); j != je; ++j) { 
-			for (TransitionRow::const_iterator k = j->begin(), ke = j->end(); k != ke; ++k) { 
-				for (StatesSet::const_iterator toSt = k->second.begin(), toSte = k->second.end(); toSt != toSte; ++toSt) { 
-					// We only care if the states are connected or not regerdless through what letter 
-					if (invert) { 
-						// Build an FSM with inverted transitions 
-						digraph.Connect(*toSt, j - m_transitions.begin(), 0); 
-					} else { 
-						digraph.Connect(j - m_transitions.begin(), *toSt, 0); 
-					} 
-				} 
+	TSet<size_t> res;
+
+	for (int invert = 0; invert <= 1; ++invert) {
+		Fsm digraph;
+		digraph.Resize(Size());
+		for (TransitionTable::const_iterator j = m_transitions.begin(), je = m_transitions.end(); j != je; ++j) {
+			for (TransitionRow::const_iterator k = j->begin(), ke = j->end(); k != ke; ++k) {
+				for (StatesSet::const_iterator toSt = k->second.begin(), toSte = k->second.end(); toSt != toSte; ++toSt) {
+					// We only care if the states are connected or not regerdless through what letter
+					if (invert) {
+						// Build an FSM with inverted transitions
+						digraph.Connect(*toSt, j - m_transitions.begin(), 0);
+					} else {
+						digraph.Connect(j - m_transitions.begin(), *toSt, 0);
+					}
+				}
 			}
 		}
 
-		TVector<bool> unchecked(Size(), true); 
-		TVector<bool> useless(Size(), true); 
-		TDeque<size_t> queue; 
+		TVector<bool> unchecked(Size(), true);
+		TVector<bool> useless(Size(), true);
+		TDeque<size_t> queue;
 
-		// Put all final (or initial) states into queue, marking them useful 
-		for (size_t i = 0; i < Size(); ++i) 
-			if ((invert && IsFinal(i)) || (!invert && Initial() == i)) { 
-				useless[i] = false; 
-				queue.push_back(i); 
-			} 
-
-		// Do the breadth-first search, marking all states 
-		// from which already marked states are reachable 
-		while (!queue.empty()) { 
-			size_t to = queue.front(); 
-			queue.pop_front(); 
-
-			// All the states that are connected to this state in the transition matrix are useful 
-			const StatesSet& connections = (digraph.m_transitions[to])[0]; 
-			for (auto&& fr : connections) { 
-				// Enqueue the state for further traversal if it hasnt been already checked 
-				if (unchecked[fr] && useless[fr]) { 
-					useless[fr] = false; 
-					queue.push_back(fr); 
-				} 
+		// Put all final (or initial) states into queue, marking them useful
+		for (size_t i = 0; i < Size(); ++i)
+			if ((invert && IsFinal(i)) || (!invert && Initial() == i)) {
+				useless[i] = false;
+				queue.push_back(i);
 			}
- 
-			// Now we consider this state checked 
-			unchecked[to] = false; 
+
+		// Do the breadth-first search, marking all states
+		// from which already marked states are reachable
+		while (!queue.empty()) {
+			size_t to = queue.front();
+			queue.pop_front();
+
+			// All the states that are connected to this state in the transition matrix are useful
+			const StatesSet& connections = (digraph.m_transitions[to])[0];
+			for (auto&& fr : connections) {
+				// Enqueue the state for further traversal if it hasnt been already checked
+				if (unchecked[fr] && useless[fr]) {
+					useless[fr] = false;
+					queue.push_back(fr);
+				}
+			}
+
+			// Now we consider this state checked
+			unchecked[to] = false;
 		}
 
-		for (size_t i = 0; i < Size(); ++i) { 
-			if (useless[i]) { 
-				res.insert(i); 
-			} 
+		for (size_t i = 0; i < Size(); ++i) {
+			if (useless[i]) {
+				res.insert(i);
+			}
 		}
 	}
 
@@ -699,12 +699,12 @@ void Fsm::RemoveDeadEnds()
 
 	TSet<size_t> dead = DeadStates();
 	// Erase all useless states
-	for (auto&& i : dead) { 
-		PIRE_IFDEBUG(Cdbg << "Removing useless state " << i << Endl); 
-		m_transitions[i].clear(); 
-		for (auto&& j : m_transitions) 
-			for (auto&& k : j) 
-				k.second.erase(i); 
+	for (auto&& i : dead) {
+		PIRE_IFDEBUG(Cdbg << "Removing useless state " << i << Endl);
+		m_transitions[i].clear();
+		for (auto&& j : m_transitions)
+			for (auto&& k : j)
+				k.second.erase(i);
 	}
 	ClearHints();
 
@@ -725,20 +725,20 @@ void Fsm::MergeEpsilonConnection(size_t from, size_t to)
 	}
 
 	// Merge transitions from 'to' state into transitions from 'from' state
-	for (auto&& transition : m_transitions[to]) { 
+	for (auto&& transition : m_transitions[to]) {
 		TSet<size_t> connStates;
-		std::copy(transition.second.begin(), transition.second.end(), 
-			std::inserter(m_transitions[from][transition.first], m_transitions[from][transition.first].end())); 
+		std::copy(transition.second.begin(), transition.second.end(),
+			std::inserter(m_transitions[from][transition.first], m_transitions[from][transition.first].end()));
 
 		// If there is an output of the 'from'->'to' connection it has to be set to all
 		// new connections that were merged from 'to' state
 		if (fsEpsOutputExists) {
 			// Compute the set of states that are reachable from 'to' state
-			std::copy(transition.second.begin(), transition.second.end(), std::inserter(connStates, connStates.end())); 
+			std::copy(transition.second.begin(), transition.second.end(), std::inserter(connStates, connStates.end()));
 
 			// For each of these states add an output equal to the Epsilon-connection output
-			for (auto&& newConnSt : connStates) { 
-				outputs[from][newConnSt] |= frEpsOutput; 
+			for (auto&& newConnSt : connStates) {
+				outputs[from][newConnSt] |= frEpsOutput;
 			}
 		}
 	}
@@ -748,16 +748,16 @@ void Fsm::MergeEpsilonConnection(size_t from, size_t to)
 		SetFinal(from, true);
 
 	// Combine tags
-	auto ti = tags.find(to); 
+	auto ti = tags.find(to);
 	if (ti != tags.end())
 		tags[from] |= ti->second;
 
 	// Merge all 'to' into 'from' outputs:
 	//      outputs[from][i] |= (outputs[from][to] | outputs[to][i])
-	auto toOit = outputs.find(to); 
+	auto toOit = outputs.find(to);
 	if (toOit != outputs.end()) {
-		for (auto&& output : toOit->second) { 
-			outputs[from][output.first] |= (frEpsOutput | output.second); 
+		for (auto&& output : toOit->second) {
+			outputs[from][output.first] |= (frEpsOutput | output.second);
 		}
 	}
 }
@@ -772,12 +772,12 @@ void Fsm::ShortCutEpsilon(size_t from, size_t thru, TVector< TSet<size_t> >& inv
 	const StatesSet& to = Destinations(thru, Epsilon);
 	Outputs::iterator outIt = outputs.find(from);
 	unsigned long fromThruOut = Output(from, thru);
-	for (auto&& toElement : to) { 
-		PIRE_IFDEBUG(Cdbg << "Epsilon connecting " << from << " --> " << thru << " --> " << toElement << "\n"); 
-		Connect(from, toElement, Epsilon); 
-		inveps[toElement].insert(from); 
+	for (auto&& toElement : to) {
+		PIRE_IFDEBUG(Cdbg << "Epsilon connecting " << from << " --> " << thru << " --> " << toElement << "\n");
+		Connect(from, toElement, Epsilon);
+		inveps[toElement].insert(from);
 		if (outIt != outputs.end())
-			outIt->second[toElement] |= (fromThruOut | Output(thru, toElement)); 
+			outIt->second[toElement] |= (fromThruOut | Output(thru, toElement));
 	}
 }
 
@@ -791,33 +791,33 @@ void Fsm::RemoveEpsilons()
 	TVector< TSet<size_t> > inveps(Size()); // We have to use TSet<> here since we want it sorted
 	for (size_t from = 0; from != Size(); ++from) {
 		const StatesSet& tos = Destinations(from, Epsilon);
-		for (auto&& to : tos) 
-			inveps[to].insert(from); 
+		for (auto&& to : tos)
+			inveps[to].insert(from);
 	}
 
 	// Make a transitive closure of all epsilon transitions (Floyd-Warshall algorithm)
 	// (if there exists an epsilon-path between two states, epsilon-connect them directly)
 	for (size_t thru = 0; thru != Size(); ++thru)
-		for (auto&& from : inveps[thru]) 
+		for (auto&& from : inveps[thru])
 			// inveps[thru] may alter during loop body, hence we cannot cache ivneps[thru].end()
-			if (from != thru) 
-				ShortCutEpsilon(from, thru, inveps); 
+			if (from != thru)
+				ShortCutEpsilon(from, thru, inveps);
 
 	PIRE_IFDEBUG(Cdbg << "=== After epsilons shortcut\n" << *this << Endl);
 
 	// Iterate through all epsilon-connected state pairs, merging states together
 	for (size_t from = 0; from != Size(); ++from) {
 		const StatesSet& to = Destinations(from, Epsilon);
-		for (auto&& toElement : to) 
-			if (toElement != from) 
-				MergeEpsilonConnection(from, toElement); // it's a NOP if to == from, so don't waste time 
+		for (auto&& toElement : to)
+			if (toElement != from)
+				MergeEpsilonConnection(from, toElement); // it's a NOP if to == from, so don't waste time
 	}
 
 	PIRE_IFDEBUG(Cdbg << "=== After epsilons merged\n" << *this << Endl);
 
 	// Drop all epsilon transitions
-	for (auto&& i : m_transitions) 
-		i.erase(Epsilon); 
+	for (auto&& i : m_transitions)
+		i.erase(Epsilon);
 
 	Sparse();
 	ClearHints();
@@ -825,12 +825,12 @@ void Fsm::RemoveEpsilons()
 
 bool Fsm::LettersEquality::operator()(Char a, Char b) const
 {
-	for (auto&& outer : *m_tbl) { 
-		auto ia = outer.find(a); 
-		auto ib = outer.find(b); 
-		if (ia == outer.end() && ib == outer.end()) 
+	for (auto&& outer : *m_tbl) {
+		auto ia = outer.find(a);
+		auto ib = outer.find(b);
+		if (ia == outer.end() && ib == outer.end())
 			continue;
-		else if (ia == outer.end() || ib == outer.end() || ia->second != ib->second) { 
+		else if (ia == outer.end() || ib == outer.end() || ia->second != ib->second) {
 			return false;
 		}
 	}
@@ -850,10 +850,10 @@ void Fsm::Sparse(bool needEpsilons /* = false */)
 
 void Fsm::Unsparse()
 {
-	for (auto&& letter : letters) 
-		for (auto&& i : m_transitions) 
-			for (auto&& j : letter.second.second) 
-				i[j] = i[letter.first]; 
+	for (auto&& letter : letters)
+		for (auto&& i : m_transitions)
+			for (auto&& j : letter.second.second)
+				i[j] = i[letter.first];
 	m_sparsed = false;
 }
 
@@ -862,14 +862,14 @@ void Fsm::Unsparse()
 TSet<size_t> Fsm::TerminalStates() const
 {
 	TSet<size_t> terminals;
-	for (auto&& final : m_final) { 
+	for (auto&& final : m_final) {
 		bool ok = true;
-		for (auto&& letter : letters) { 
-			auto dests = m_transitions[final].find(letter.first); 
-			ok = ok && (dests != m_transitions[final].end() && dests->second.find(final) != dests->second.end()); 
+		for (auto&& letter : letters) {
+			auto dests = m_transitions[final].find(letter.first);
+			ok = ok && (dests != m_transitions[final].end() && dests->second.find(final) != dests->second.end());
 		}
 		if (ok)
-			terminals.insert(final); 
+			terminals.insert(final);
 	}
 	return terminals;
 }
@@ -892,8 +892,8 @@ public:
 	State Initial() const { return State(1, mFsm.initial); }
 	bool IsRequired(const State& state) const
 	{
-		for (auto&& i : state) 
-			if (mTerminals.find(i) != mTerminals.end()) 
+		for (auto&& i : state)
+			if (mTerminals.find(i) != mTerminals.end())
 				return false;
 		return true;
 	}
@@ -902,8 +902,8 @@ public:
 	{
 		State next;
 		next.reserve(20);
-		for (auto&& from : state) { 
-			const auto& part = mFsm.Destinations(from, letter); 
+		for (auto&& from : state) {
+			const auto& part = mFsm.Destinations(from, letter);
 			std::copy(part.begin(), part.end(), std::back_inserter(next));
 		}
 
@@ -923,20 +923,20 @@ public:
 		mNewFsm.m_final.clear();
 		for (size_t ns = 0; ns < states.size(); ++ns) {
 			PIRE_IFDEBUG(Cdbg << "State " << ns << " = [" << Join(states[ns].begin(), states[ns].end(), ", ") << "]" << Endl);
-			for (auto&& j : states[ns]) { 
+			for (auto&& j : states[ns]) {
 
 				// If it was a terminal state, connect it to itself
-				if (mTerminals.find(j) != mTerminals.end()) { 
-					for (auto&& letter : Letters()) 
-						mNewFsm.Connect(ns, ns, letter.first); 
+				if (mTerminals.find(j) != mTerminals.end()) {
+					for (auto&& letter : Letters())
+						mNewFsm.Connect(ns, ns, letter.first);
 					mNewTerminals.insert(ns);
-					PIRE_IFDEBUG(Cdbg << "State " << ns << " becomes terminal because of old state " << j << Endl); 
+					PIRE_IFDEBUG(Cdbg << "State " << ns << " becomes terminal because of old state " << j << Endl);
 				}
 			}
-			for (auto&& j : states[ns]) { 
+			for (auto&& j : states[ns]) {
 				// If any state containing in our one is marked final, mark the new state final as well
-				if (mFsm.IsFinal(j)) { 
-					PIRE_IFDEBUG(Cdbg << "State " << ns << " becomes final because of old state " << j << Endl); 
+				if (mFsm.IsFinal(j)) {
+					PIRE_IFDEBUG(Cdbg << "State " << ns << " becomes final because of old state " << j << Endl);
 					mNewFsm.SetFinal(ns, true);
 					if (mFsm.tags.empty())
 						// Weve got no tags and already know that the state is final,
@@ -945,9 +945,9 @@ public:
 				}
 
 				// Bitwise OR all tags in states
-				auto ti = mFsm.tags.find(j); 
+				auto ti = mFsm.tags.find(j);
 				if (ti != mFsm.tags.end()) {
-					PIRE_IFDEBUG(Cdbg << "State " << ns << " carries tag " << ti->second << " because of old state " << j << Endl); 
+					PIRE_IFDEBUG(Cdbg << "State " << ns << " carries tag " << ti->second << " because of old state " << j << Endl);
 					mNewFsm.tags[ns] |= ti->second;
 				}
 			}
@@ -956,18 +956,18 @@ public:
 		typedef TMap< size_t, TVector<size_t> > Old2New;
 		Old2New old2new;
 		for (size_t ns = 0; ns < states.size(); ++ns)
-			for (auto&& j : states[ns]) 
-				old2new[j].push_back(ns); 
+			for (auto&& j : states[ns])
+				old2new[j].push_back(ns);
 
 		// Copy all outputs
-		for (auto&& i : mFsm.outputs) { 
-			for (auto&& j : i.second) { 
-				auto from = old2new.find(i.first); 
-				auto to = old2new.find(j.first); 
+		for (auto&& i : mFsm.outputs) {
+			for (auto&& j : i.second) {
+				auto from = old2new.find(i.first);
+				auto to = old2new.find(j.first);
 				if (from != old2new.end() && to != old2new.end()) {
-					for (auto&& k : from->second) 
-						for (auto&& l : to->second) 
-							mNewFsm.outputs[k][l] |= j.second; 
+					for (auto&& k : from->second)
+						for (auto&& l : to->second)
+							mNewFsm.outputs[k][l] |= j.second;
 				}
 			}
 		}
@@ -987,13 +987,13 @@ public:
 		// remove redundant outputs
 		oldOutputs.swap(mNewFsm.outputs);
 		for (size_t from = 0; from < mNewFsm.Size(); ++from) {
-			auto fromOutput = oldOutputs.find(from); 
+			auto fromOutput = oldOutputs.find(from);
 			if (fromOutput == oldOutputs.end())
 				continue;
-			const auto& newTransitionsRow = mNewFsm.m_transitions[from]; 
-			for (auto&& row : newTransitionsRow) { 
-				for (auto&& stateIt : row.second) { 
-					auto toOutput = fromOutput->second.find(stateIt); 
+			const auto& newTransitionsRow = mNewFsm.m_transitions[from];
+			for (auto&& row : newTransitionsRow) {
+				for (auto&& stateIt : row.second) {
+					auto toOutput = fromOutput->second.find(stateIt);
 					if (toOutput != fromOutput->second.end()) {
 						mNewFsm.outputs[from].insert(*toOutput);
 					}
@@ -1098,11 +1098,11 @@ public:
 
 		// Unite equality classes into new states
 		size_t fromIdx = 0;
-		for (auto from = mFsm.m_transitions.begin(), fromEnd = mFsm.m_transitions.end(); from != fromEnd; ++from, ++fromIdx) { 
+		for (auto from = mFsm.m_transitions.begin(), fromEnd = mFsm.m_transitions.end(); from != fromEnd; ++from, ++fromIdx) {
 			size_t dest = StateClass[fromIdx];
 			PIRE_IFDEBUG(Cdbg << "[min] State " << fromIdx << " becomes state " << dest << Endl);
-			for (auto&& letter : *from) { 
-				Y_ASSERT(letter.second.size() == 1 || !"FSM::minimize(): FSM not deterministic"); 
+			for (auto&& letter : *from) {
+				Y_ASSERT(letter.second.size() == 1 || !"FSM::minimize(): FSM not deterministic");
 				mNewFsm.Connect(dest, StateClass[*letter.second.begin()], letter.first);
 			}
 			if (mFsm.IsFinal(fromIdx)) {
@@ -1111,7 +1111,7 @@ public:
 			}
 
 			// Append tags
-			auto ti = mFsm.tags.find(fromIdx); 
+			auto ti = mFsm.tags.find(fromIdx);
 			if (ti != mFsm.tags.end()) {
 				mNewFsm.tags[dest] |= ti->second;
 				PIRE_IFDEBUG(Cdbg << "[min] New state " << dest << " carries tag " << ti->second << " because of old state " << fromIdx << Endl);
@@ -1120,8 +1120,8 @@ public:
 		mNewFsm.initial = StateClass[mFsm.initial];
 
 		// Restore outputs
-		for (auto&& output : mFsm.outputs) 
-			for (auto&& output2 : output.second) 
+		for (auto&& output : mFsm.outputs)
+			for (auto&& output2 : output.second)
 				mNewFsm.outputs[StateClass[output.first]].insert(ymake_pair(StateClass[output2.first], output2.second));
 	}
 
@@ -1209,9 +1209,9 @@ void Fsm::Divert(size_t from, size_t to, size_t dest)
 		return;
 
 	// Assign the output
-	auto oi = outputs.find(from); 
+	auto oi = outputs.find(from);
 	if (oi != outputs.end()) {
-		auto oi2 = oi->second.find(to); 
+		auto oi2 = oi->second.find(to);
 		if (oi2 != oi->second.end()) {
 			unsigned long output = oi2->second;
 			oi->second.erase(oi2);
@@ -1220,11 +1220,11 @@ void Fsm::Divert(size_t from, size_t to, size_t dest)
 	}
 
 	// Assign the transition
-	for (auto&& i : m_transitions[from]) { 
-		auto di = i.second.find(to); 
-		if (di != i.second.end()) { 
-			i.second.erase(di); 
-			i.second.insert(dest); 
+	for (auto&& i : m_transitions[from]) {
+		auto di = i.second.find(to);
+		if (di != i.second.end()) {
+			i.second.erase(di);
+			i.second.insert(dest);
 		}
 	}
 

@@ -231,7 +231,7 @@ public:
 		for (size_t from = 0; from != Size(); ++from) {
 			const auto fromMinimized = StateClass[from];
 			for (auto&& letter : mFsm.Letters()) {
-				const auto representative = letter.first; 
+				const auto representative = letter.first;
 				const auto next = Next(from, representative);
 				const auto nextMinimized = StateClass[next];
 				Connect(fromMinimized, nextMinimized, representative);
@@ -301,9 +301,9 @@ public:
 		, mReInitial{reInitial}
 	{
 		mDeadStates = fsm.DeadStates();
-		for (auto&& letter : fsm.Letters()) { 
-			if (InvalidCharRange(letter.second.second)) { 
-				mInvalidLetters.insert(letter.first); 
+		for (auto&& letter : fsm.Letters()) {
+			if (InvalidCharRange(letter.second.second)) {
+				mInvalidLetters.insert(letter.first);
 			}
 		}
 	}
@@ -855,8 +855,8 @@ AdvancedScanner MakeAdvancedCountingScanner(const Fsm& re, const Fsm& sep, bool*
 	AdvancedScanner scanner;
 	scanner.Init(determined.Size(), letters, determined.Initial(), 1);
 	for (size_t from = 0; from != determined.Size(); ++from) {
-		for (auto&& lettersEl : letters) { 
-			const auto letter = lettersEl.first; 
+		for (auto&& lettersEl : letters) {
+			const auto letter = lettersEl.first;
 			const auto& tos = determined.Destinations(from, letter);
 			Y_ASSERT(tos.size() == 1);
 			scanner.SetJump(from, letter, *tos.begin(), scanner.RemapAction(countingFsm.Output(from, letter)));
@@ -895,7 +895,7 @@ public:
 	void AcceptStates(const TVector<State>& states)
 	{
 		States = states;
-		this->SetSc(THolder<Scanner>(new Scanner)); 
+		this->SetSc(THolder<Scanner>(new Scanner));
 		this->Sc().Init(states.size(), this->Letters(), 0, this->Lhs().RegexpsCount() + this->Rhs().RegexpsCount());
 
 		for (size_t i = 0; i < states.size(); ++i)
@@ -987,7 +987,7 @@ CountingScanner CountingScanner::Glue(const CountingScanner& lhs, const Counting
 	if (lhs.RegexpsCount() + rhs.RegexpsCount() > MAX_RE_COUNT) {
 		return CountingScanner();
 	}
-	static constexpr size_t DefMaxSize = 250000; 
+	static constexpr size_t DefMaxSize = 250000;
 	Impl::CountingScannerGlueTask<CountingScanner> task(lhs, rhs);
 	return Impl::Determine(task, maxSize ? maxSize : DefMaxSize);
 }
@@ -997,7 +997,7 @@ AdvancedCountingScanner AdvancedCountingScanner::Glue(const AdvancedCountingScan
 	if (lhs.RegexpsCount() + rhs.RegexpsCount() > MAX_RE_COUNT) {
 		return AdvancedCountingScanner();
 	}
-	static constexpr size_t DefMaxSize = 250000; 
+	static constexpr size_t DefMaxSize = 250000;
 	Impl::CountingScannerGlueTask<AdvancedCountingScanner> task(lhs, rhs);
 	return Impl::Determine(task, maxSize ? maxSize : DefMaxSize);
 }

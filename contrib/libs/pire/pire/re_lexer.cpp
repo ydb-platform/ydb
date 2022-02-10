@@ -46,7 +46,7 @@ Term Term::Dot() { return Term(TokenTypes::Dot, DotTag()); }
 Term Term::BeginMark() { return Term(TokenTypes::BeginMark, BeginTag()); }
 Term Term::EndMark() { return Term(TokenTypes::EndMark, EndTag()); }
 
-Lexer::~Lexer() = default; 
+Lexer::~Lexer() = default;
 
 wchar32 Lexer::GetChar()
 {
@@ -81,29 +81,29 @@ void Lexer::UngetChar(wchar32 c)
 }
 
 namespace {
-    class CompareFeaturesByPriority: public ybinary_function<const Feature::Ptr&, const Feature::Ptr&, bool> { 
+    class CompareFeaturesByPriority: public ybinary_function<const Feature::Ptr&, const Feature::Ptr&, bool> {
     public:
-        bool operator()(const Feature::Ptr& a, const Feature::Ptr& b) const 
+        bool operator()(const Feature::Ptr& a, const Feature::Ptr& b) const
         {
             return a->Priority() < b->Priority();
         }
     };
 }
 
-Lexer& Lexer::AddFeature(Feature::Ptr& feature) 
+Lexer& Lexer::AddFeature(Feature::Ptr& feature)
 {
     feature->m_lexer = this;
-    m_features.insert(LowerBound(m_features.begin(), m_features.end(), feature, CompareFeaturesByPriority()), std::move(feature)); 
+    m_features.insert(LowerBound(m_features.begin(), m_features.end(), feature, CompareFeaturesByPriority()), std::move(feature));
     return *this;
 }
 
-Lexer& Lexer::AddFeature(Feature::Ptr&& feature) 
-{ 
-    feature->m_lexer = this; 
-    m_features.insert(LowerBound(m_features.begin(), m_features.end(), feature, CompareFeaturesByPriority()), std::move(feature)); 
-    return *this; 
-} 
- 
+Lexer& Lexer::AddFeature(Feature::Ptr&& feature)
+{
+    feature->m_lexer = this;
+    m_features.insert(LowerBound(m_features.begin(), m_features.end(), feature, CompareFeaturesByPriority()), std::move(feature));
+    return *this;
+}
+
 Term Lexer::DoLex()
 {
     static const char* controls = "|().*+?^$\\";
@@ -112,9 +112,9 @@ Term Lexer::DoLex()
         wchar32 ch = PeekChar();
         if (ch == End)
             return Term(TokenTypes::End);
-        for (auto&& i : m_features) { 
-            if (i->Accepts(ch)) { 
-                Term ret = i->Lex(); 
+        for (auto&& i : m_features) {
+            if (i->Accepts(ch)) {
+                Term ret = i->Lex();
                 if (ret.Type())
                     return ret;
             }
@@ -150,15 +150,15 @@ Term Lexer::Lex()
 {
     Term t = DoLex();
 
-    for (auto i = m_features.rbegin(), ie = m_features.rend(); i != ie; ++i) 
+    for (auto i = m_features.rbegin(), ie = m_features.rend(); i != ie; ++i)
         (*i)->Alter(t);
 
     if (t.Value().IsA<Term::CharacterRange>()) {
-        const auto& chars = t.Value().As<Term::CharacterRange>(); 
+        const auto& chars = t.Value().As<Term::CharacterRange>();
         //std::cerr << "lex: type " << t.type() << "; chars = { " << join(chars.first.begin(), chars.first.end(), ", ") << " }" << std::endl;
-        for (auto&& i : chars.first) 
-            for (auto&& j : i) 
-                if ((j & ControlMask) == Control) 
+        for (auto&& i : chars.first)
+            for (auto&& j : i)
+                if ((j & ControlMask) == Control)
                     Error("Control character in tokens sequence");
     }
 
@@ -187,10 +187,10 @@ Term Lexer::Lex()
         type = 0;
     return Term(type, t.Value());
 }
- 
+
 void Lexer::Parenthesized(Fsm& fsm)
 {
-    for (auto i = m_features.rbegin(), ie = m_features.rend(); i != ie; ++i) 
+    for (auto i = m_features.rbegin(), ie = m_features.rend(); i != ie; ++i)
         (*i)->Parenthesized(fsm);
 }
 
@@ -330,12 +330,12 @@ namespace {
                 typedef Term::CharacterRange::first_type CharSet;
                 const CharSet& old = t.Value().As<Term::CharacterRange>().first;
                 CharSet altered;
-                for (auto&& i : old) { 
-                    if (i.size() == 1) { 
-                        altered.insert(Term::String(1, to_upper(i[0]))); 
-                        altered.insert(Term::String(1, to_lower(i[0]))); 
+                for (auto&& i : old) {
+                    if (i.size() == 1) {
+                        altered.insert(Term::String(1, to_upper(i[0])));
+                        altered.insert(Term::String(1, to_lower(i[0])));
                     } else
-                        altered.insert(i); 
+                        altered.insert(i);
                 }
                 t = Term(t.Type(), Term::CharacterRange(altered, t.Value().As<Term::CharacterRange>().second));
             }
@@ -366,15 +366,15 @@ namespace {
 }
 
 namespace Features {
-    Feature::Ptr CaseInsensitive() { return Feature::Ptr(new CaseInsensitiveImpl); } 
-    Feature::Ptr CharClasses(); 
-    Feature::Ptr AndNotSupport() { return Feature::Ptr(new AndNotSupportImpl); } 
+    Feature::Ptr CaseInsensitive() { return Feature::Ptr(new CaseInsensitiveImpl); }
+    Feature::Ptr CharClasses();
+    Feature::Ptr AndNotSupport() { return Feature::Ptr(new AndNotSupportImpl); }
 };
 
 void Lexer::InstallDefaultFeatures()
 {
-    AddFeature(Feature::Ptr(new CharacterRangeReader)); 
-    AddFeature(Feature::Ptr(new RepetitionCountReader)); 
+    AddFeature(Feature::Ptr(new CharacterRangeReader));
+    AddFeature(Feature::Ptr(new RepetitionCountReader));
     AddFeature(Features::CharClasses());
     AddFeature(Feature::Ptr(new EnableUnicodeSequencesImpl));
 }

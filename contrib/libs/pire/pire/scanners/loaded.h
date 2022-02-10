@@ -81,9 +81,9 @@ protected:
 	LoadedScanner(const LoadedScanner& s): m(s.m)
 	{
 		if (s.m_buffer) {
-			m_buffer = BufferType(new char [BufSize()]); 
-			memcpy(m_buffer.Get(), s.m_buffer.Get(), BufSize()); 
-			Markup(m_buffer.Get()); 
+			m_buffer = BufferType(new char [BufSize()]);
+			memcpy(m_buffer.Get(), s.m_buffer.Get(), BufSize());
+			Markup(m_buffer.Get());
 			m.initial = (InternalState)m_jumps + (s.m.initial - (InternalState)s.m_jumps);
 		} else {
 			Alias(s);
@@ -163,17 +163,17 @@ public:
 		m.statesCount = states;
 		m.lettersCount = letters.Size();
 		m.regexpsCount = regexpsCount;
-		m_buffer = BufferType(new char[BufSize()]); 
-		memset(m_buffer.Get(), 0, BufSize()); 
-		Markup(m_buffer.Get()); 
+		m_buffer = BufferType(new char[BufSize()]);
+		memset(m_buffer.Get(), 0, BufSize());
+		Markup(m_buffer.Get());
 
 		m.initial = reinterpret_cast<size_t>(m_jumps + startState * m.lettersCount);
 
 		// Build letter translation table
 		Fill(m_letters, m_letters + MaxChar, 0);
-		for (auto&& letter : letters) 
-			for (auto&& character : letter.second.second) 
-				m_letters[character] = letter.second.first; 
+		for (auto&& letter : letters)
+			for (auto&& character : letter.second.second)
+				m_letters[character] = letter.second.first;
 	}
 
 	size_t StateSize() const
@@ -235,8 +235,8 @@ protected:
 		size_t initial;
 	} m;
 
-	using BufferType = TArrayHolder<char>; 
-	BufferType m_buffer; 
+	using BufferType = TArrayHolder<char>;
+	BufferType m_buffer;
 
 	Letter* m_letters;
 	Transition* m_jumps;
@@ -286,7 +286,7 @@ private:
 	friend class Fsm;
 };
 
-inline LoadedScanner::~LoadedScanner() = default; 
+inline LoadedScanner::~LoadedScanner() = default;
 
 }
 

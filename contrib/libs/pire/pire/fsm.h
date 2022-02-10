@@ -120,7 +120,7 @@ namespace Pire {
 		Scanner Compile(size_t distance = 0);
 
 		void DumpState(yostream& s, size_t state) const;
-		void DumpTo(yostream& s, const ystring& name = "") const; 
+		void DumpTo(yostream& s, const ystring& name = "") const;
 
 		typedef TSet<size_t> StatesSet;
 		typedef TMap<size_t, StatesSet> TransitionRow;

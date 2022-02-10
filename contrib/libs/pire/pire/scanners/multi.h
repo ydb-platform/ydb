@@ -194,7 +194,7 @@ public:
 
 	void TakeAction(State&, Action) const {}
 
-	Scanner(const Scanner& s): m(s.m) 
+	Scanner(const Scanner& s): m(s.m)
 	{
 		if (!s.m_buffer) {
 			// Empty or mmap()-ed scanner
@@ -212,7 +212,7 @@ public:
 	}
 
 	template<class AnotherRelocation>
-	Scanner(const Scanner<AnotherRelocation, Shortcutting>& s) 
+	Scanner(const Scanner<AnotherRelocation, Shortcutting>& s)
 	{
 		if (s.Empty())
 			Alias(Null());
@@ -323,8 +323,8 @@ protected:
 		size_t shortcuttingSignature;
 	} m;
 
-	using BufferType = TArrayHolder<char>; 
-	BufferType m_buffer; 
+	using BufferType = TArrayHolder<char>;
+	BufferType m_buffer;
 	Letter* m_letters;
 
 	size_t* m_final;
@@ -356,9 +356,9 @@ protected:
 		m.regexpsCount = regexpsCount;
 		m.finalTableSize = finalStatesCount + states;
 
-		m_buffer = BufferType(new char[BufSize() + sizeof(size_t)]); 
-		memset(m_buffer.Get(), 0, BufSize() + sizeof(size_t)); 
-		Markup(AlignUp(m_buffer.Get(), sizeof(size_t))); 
+		m_buffer = BufferType(new char[BufSize() + sizeof(size_t)]);
+		memset(m_buffer.Get(), 0, BufSize() + sizeof(size_t));
+		Markup(AlignUp(m_buffer.Get(), sizeof(size_t)));
 
 		for (size_t i = 0; i != Size(); ++i)
 			Header(IndexToState(i)) = ScannerRowHeader();
@@ -366,9 +366,9 @@ protected:
 		m.initial = reinterpret_cast<size_t>(m_transitions + startState * RowSize());
 
 		// Build letter translation table
-		for (auto&& letter : letters) 
-			for (auto&& character : letter.second.second) 
-				m_letters[character] = letter.second.first + HEADER_SIZE; 
+		for (auto&& letter : letters)
+			for (auto&& character : letter.second.second)
+				m_letters[character] = letter.second.first + HEADER_SIZE;
 	}
 
 	/*
@@ -388,7 +388,7 @@ protected:
 	void Alias(const Scanner<Relocation, Shortcutting>& s)
 	{
 		memcpy(&m, &s.m, sizeof(m));
-		m_buffer.Reset(); 
+		m_buffer.Reset();
 		m_letters = s.m_letters;
 		m_final = s.m_final;
 		m_finalIndex = s.m_finalIndex;
@@ -399,16 +399,16 @@ protected:
 	void DeepCopy(const Scanner<AnotherRelocation, Shortcutting>& s)
 	{
 		// Don't want memory leaks, but we cannot free the buffer because there might be aliased instances
-		Y_ASSERT(m_buffer == nullptr); 
+		Y_ASSERT(m_buffer == nullptr);
 
 		// Ensure that specializations of Scanner across different Relocations do not touch its Locals
 		static_assert(sizeof(m) == sizeof(s.m), "sizeof(m) == sizeof(s.m)");
 		memcpy(&m, &s.m, sizeof(s.m));
 		m.relocationSignature = Relocation::Signature;
 		m.shortcuttingSignature = Shortcutting::Signature;
-		m_buffer = BufferType(new char[BufSize() + sizeof(size_t)]); 
+		m_buffer = BufferType(new char[BufSize() + sizeof(size_t)]);
 		std::memset(m_buffer.Get(), 0, BufSize() + sizeof(size_t));
-		Markup(AlignUp(m_buffer.Get(), sizeof(size_t))); 
+		Markup(AlignUp(m_buffer.Get(), sizeof(size_t)));
 
 		// Values in letter-to-leterclass table take into account row header size
 		for (size_t c = 0; c < MaxChar; ++c) {
@@ -493,8 +493,8 @@ protected:
 					if (ind + letters[let].size() > Shortcutting::ExitMaskCount)
 						break;
 					// For each character setup a mask
-					for (auto&& character : letters[let]) { 
-						Shortcutting::SetMask(header, ind, character); 
+					for (auto&& character : letters[let]) {
+						Shortcutting::SetMask(header, ind, character);
 						++ind;
 					}
 				}
@@ -565,7 +565,7 @@ struct ScannerSaver {
 		SavePodType(s, scanner.Empty());
 		Impl::AlignSave(s, sizeof(scanner.Empty()));
 		if (!scanner.Empty())
-			Impl::AlignedSaveArray(s, scanner.m_buffer.Get(), scanner.BufSize()); 
+			Impl::AlignedSaveArray(s, scanner.m_buffer.Get(), scanner.BufSize());
 	}
 
 	template<class Shortcutting>
@@ -586,9 +586,9 @@ struct ScannerSaver {
 		if (empty) {
 			sc.Alias(ScannerType::Null());
 		} else {
-			sc.m_buffer = TArrayHolder<char>(new char[sc.BufSize()]); 
-			Impl::AlignedLoadArray(s, sc.m_buffer.Get(), sc.BufSize()); 
-			sc.Markup(sc.m_buffer.Get()); 
+			sc.m_buffer = TArrayHolder<char>(new char[sc.BufSize()]);
+			Impl::AlignedLoadArray(s, sc.m_buffer.Get(), sc.BufSize());
+			sc.Markup(sc.m_buffer.Get());
 			sc.m.initial += reinterpret_cast<size_t>(sc.m_transitions);
 		}
 		scanner.Swap(sc);
@@ -1017,9 +1017,9 @@ public:
 		// Make up a new scanner and fill in the final table
 
 		size_t finalTableSize = 0;
-		for (auto&& i : states) 
-			finalTableSize += RangeLen(Lhs().AcceptedRegexps(i.first)) + RangeLen(Rhs().AcceptedRegexps(i.second)); 
-		this->SetSc(THolder<Scanner>(new Scanner)); 
+		for (auto&& i : states)
+			finalTableSize += RangeLen(Lhs().AcceptedRegexps(i.first)) + RangeLen(Rhs().AcceptedRegexps(i.second));
+		this->SetSc(THolder<Scanner>(new Scanner));
 		Sc().Init(states.size(), Letters(), finalTableSize, size_t(0), Lhs().RegexpsCount() + Rhs().RegexpsCount());
 
 		auto finalWriter = Sc().m_final;

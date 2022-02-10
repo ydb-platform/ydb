@@ -56,8 +56,8 @@ namespace {
 			TSet<wchar32> ToSet() const
 			{
 				TSet<wchar32> ret;
-				for (auto&& bound : m_bounds) 
-					for (wchar32 c = bound.first; c <= bound.second; ++c) 
+				for (auto&& bound : m_bounds)
+					for (wchar32 c = bound.first; c <= bound.second; ++c)
 						ret.insert(c);
 				return ret;
 			}
@@ -74,7 +74,7 @@ namespace {
 
 		TSet<wchar32> Get(wchar32 wc) const
 		{
-			auto it = m_classes.find(to_lower(wc & ~ControlMask)); 
+			auto it = m_classes.find(to_lower(wc & ~ControlMask));
 			if (it == m_classes.end())
 				throw Error("Unknown character class");
 			return it->second.ToSet();
@@ -119,18 +119,18 @@ namespace {
 				CharSet altered;
 				bool pos = false;
 				bool neg = false;
-				for (auto&& i : old) 
-					if (i.size() == 1 && (i[0] & ControlMask) == Control && m_table->Has(i[0])) { 
-						if (is_upper(i[0] & ~ControlMask)) 
+				for (auto&& i : old)
+					if (i.size() == 1 && (i[0] & ControlMask) == Control && m_table->Has(i[0])) {
+						if (is_upper(i[0] & ~ControlMask))
 							neg = true;
 						else
 							pos = true;
 
-						TSet<wchar32> klass = m_table->Get(i[0]); 
-						for (auto&& j : klass) 
-							altered.insert(Term::String(1, j)); 
+						TSet<wchar32> klass = m_table->Get(i[0]);
+						for (auto&& j : klass)
+							altered.insert(Term::String(1, j));
 					} else
-						altered.insert(i); 
+						altered.insert(i);
 
 				if (neg && (pos || range.second))
 					Error("Positive and negative character ranges mixed");
@@ -145,7 +145,7 @@ namespace {
 }
 
 namespace Features {
-	Feature::Ptr CharClasses() { return Feature::Ptr(new CharClassesImpl); } 
+	Feature::Ptr CharClasses() { return Feature::Ptr(new CharClassesImpl); }
 }
 
 }

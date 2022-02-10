@@ -38,7 +38,7 @@ namespace NActors {
         task.AppendBuf(part, amount);
         *weightConsumed += amount;
         OutputQueueSize -= part->Size;
-        Metrics->UpdateOutputChannelEvents(ChannelId);
+        Metrics->UpdateOutputChannelEvents(ChannelId); 
 
         return true;
     }

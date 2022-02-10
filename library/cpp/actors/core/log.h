@@ -15,7 +15,7 @@
 #include <util/string/builder.h>
 #include <library/cpp/logger/all.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <library/cpp/monlib/metrics/metric_registry.h>
+#include <library/cpp/monlib/metrics/metric_registry.h> 
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/svnversion/svnversion.h>
 
@@ -175,21 +175,21 @@ namespace NActors {
     ////////////////////////////////////////////////////////////////////////////////
     // LOGGER ACTOR
     ////////////////////////////////////////////////////////////////////////////////
-    class ILoggerMetrics {
-    public:
-        virtual ~ILoggerMetrics() = default;
-
-        virtual void IncActorMsgs() = 0;
-        virtual void IncDirectMsgs() = 0;
-        virtual void IncLevelRequests() = 0;
-        virtual void IncIgnoredMsgs() = 0;
-        virtual void IncAlertMsgs() = 0;
-        virtual void IncEmergMsgs() = 0;
-        virtual void IncDroppedMsgs() = 0;
-
-        virtual void GetOutputHtml(IOutputStream&) = 0;
-    };
-
+    class ILoggerMetrics { 
+    public: 
+        virtual ~ILoggerMetrics() = default; 
+ 
+        virtual void IncActorMsgs() = 0; 
+        virtual void IncDirectMsgs() = 0; 
+        virtual void IncLevelRequests() = 0; 
+        virtual void IncIgnoredMsgs() = 0; 
+        virtual void IncAlertMsgs() = 0; 
+        virtual void IncEmergMsgs() = 0; 
+        virtual void IncDroppedMsgs() = 0; 
+ 
+        virtual void GetOutputHtml(IOutputStream&) = 0; 
+    }; 
+ 
     class TLoggerActor: public TActor<TLoggerActor> {
     public:
         static constexpr IActor::EActivityType ActorActivityType() {
@@ -202,12 +202,12 @@ namespace NActors {
         TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
                      std::shared_ptr<TLogBackend> logBackend,
                      TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
-        TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
-                     TAutoPtr<TLogBackend> logBackend,
-                     std::shared_ptr<NMonitoring::TMetricRegistry> metrics);
-        TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
-                     std::shared_ptr<TLogBackend> logBackend,
-                     std::shared_ptr<NMonitoring::TMetricRegistry> metrics);
+        TLoggerActor(TIntrusivePtr<NLog::TSettings> settings, 
+                     TAutoPtr<TLogBackend> logBackend, 
+                     std::shared_ptr<NMonitoring::TMetricRegistry> metrics); 
+        TLoggerActor(TIntrusivePtr<NLog::TSettings> settings, 
+                     std::shared_ptr<TLogBackend> logBackend, 
+                     std::shared_ptr<NMonitoring::TMetricRegistry> metrics); 
         ~TLoggerActor();
 
         void StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
@@ -241,7 +241,7 @@ namespace NActors {
         ui64 PassedCount = 0;
         static TAtomic IsOverflow;
         TDuration WakeupInterval{TDuration::Seconds(5)};
-        std::unique_ptr<ILoggerMetrics> Metrics;
+        std::unique_ptr<ILoggerMetrics> Metrics; 
 
         void BecomeDefunct();
         void HandleIgnoredEvent(TLogIgnored::TPtr& ev, const NActors::TActorContext& ctx);

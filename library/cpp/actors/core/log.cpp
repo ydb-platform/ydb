@@ -33,137 +33,137 @@ namespace {
 }
 
 namespace NActors {
-
-    class TLoggerCounters : public ILoggerMetrics {
-    public:
-        TLoggerCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
-            : DynamicCounters(counters)
-        {
-            ActorMsgs_ = DynamicCounters->GetCounter("ActorMsgs", true);
-            DirectMsgs_ = DynamicCounters->GetCounter("DirectMsgs", true);
-            LevelRequests_ = DynamicCounters->GetCounter("LevelRequests", true);
-            IgnoredMsgs_ = DynamicCounters->GetCounter("IgnoredMsgs", true);
-            DroppedMsgs_ = DynamicCounters->GetCounter("DroppedMsgs", true);
-
-            AlertMsgs_ = DynamicCounters->GetCounter("AlertMsgs", true);
-            EmergMsgs_ = DynamicCounters->GetCounter("EmergMsgs", true);
-        }
-
-        ~TLoggerCounters() = default;
-
-        void IncActorMsgs() override {
-            ++*ActorMsgs_;
-        }
-        void IncDirectMsgs() override {
-            ++*DirectMsgs_;
-        }
-        void IncLevelRequests() override {
-            ++*LevelRequests_;
-        }
-        void IncIgnoredMsgs() override {
-            ++*IgnoredMsgs_;
-        }
-        void IncAlertMsgs() override {
-            ++*AlertMsgs_;
-        }
-        void IncEmergMsgs() override {
-            ++*EmergMsgs_;
-        }
-        void IncDroppedMsgs() override {
-            DroppedMsgs_->Inc();
-        };
-
-        void GetOutputHtml(IOutputStream& str) override {
-            HTML(str) {
-                DIV_CLASS("row") {
-                    DIV_CLASS("col-md-12") {
-                        H4() {
-                            str << "Counters" << Endl;
-                        }
-                        DynamicCounters->OutputHtml(str);
-                    }
-                }
-            }
-        }
-
-    private:
-        NMonitoring::TDynamicCounters::TCounterPtr ActorMsgs_;
-        NMonitoring::TDynamicCounters::TCounterPtr DirectMsgs_;
-        NMonitoring::TDynamicCounters::TCounterPtr LevelRequests_;
-        NMonitoring::TDynamicCounters::TCounterPtr IgnoredMsgs_;
-        NMonitoring::TDynamicCounters::TCounterPtr AlertMsgs_;
-        NMonitoring::TDynamicCounters::TCounterPtr EmergMsgs_;
-        // Dropped while the logger backend was unavailable
-        NMonitoring::TDynamicCounters::TCounterPtr DroppedMsgs_;
-
-        TIntrusivePtr<NMonitoring::TDynamicCounters> DynamicCounters;
-    };
-
-    class TLoggerMetrics : public ILoggerMetrics {
-    public:
-        TLoggerMetrics(std::shared_ptr<NMonitoring::TMetricRegistry> metrics)
-            : Metrics(metrics)
-        {
-            ActorMsgs_ = Metrics->Rate(NMonitoring::TLabels{{"sensor", "logger.actor_msgs"}});
-            DirectMsgs_ = Metrics->Rate(NMonitoring::TLabels{{"sensor", "logger.direct_msgs"}});
-            LevelRequests_ = Metrics->Rate(NMonitoring::TLabels{{"sensor", "logger.level_requests"}});
-            IgnoredMsgs_ = Metrics->Rate(NMonitoring::TLabels{{"sensor", "logger.ignored_msgs"}});
-            DroppedMsgs_ = Metrics->Rate(NMonitoring::TLabels{{"sensor", "logger.dropped_msgs"}});
-
-            AlertMsgs_ = Metrics->Rate(NMonitoring::TLabels{{"sensor", "logger.alert_msgs"}});
-            EmergMsgs_ = Metrics->Rate(NMonitoring::TLabels{{"sensor", "logger.emerg_msgs"}});
-        }
-
-        ~TLoggerMetrics() = default;
-
-        void IncActorMsgs() override {
-            ActorMsgs_->Inc();
-        }
-        void IncDirectMsgs() override {
-            DirectMsgs_->Inc();
-        }
-        void IncLevelRequests() override {
-            LevelRequests_->Inc();
-        }
-        void IncIgnoredMsgs() override {
-            IgnoredMsgs_->Inc();
-        }
-        void IncAlertMsgs() override {
-            AlertMsgs_->Inc();
-        }
-        void IncEmergMsgs() override {
-            EmergMsgs_->Inc();
-        }
-        void IncDroppedMsgs() override {
-            DroppedMsgs_->Inc();
-        };
-
-        void GetOutputHtml(IOutputStream& str) override {
-            HTML(str) {
-                DIV_CLASS("row") {
-                    DIV_CLASS("col-md-12") {
-                        H4() {
-                            str << "Metrics" << Endl;
-                        }
-                        // TODO: Now, TMetricRegistry does not have the GetOutputHtml function
-                    }
-                }
-            }
-        }
-
-    private:
-        NMonitoring::TRate* ActorMsgs_;
-        NMonitoring::TRate* DirectMsgs_;
-        NMonitoring::TRate* LevelRequests_;
-        NMonitoring::TRate* IgnoredMsgs_;
-        NMonitoring::TRate* AlertMsgs_;
-        NMonitoring::TRate* EmergMsgs_;
-        // Dropped while the logger backend was unavailable
-        NMonitoring::TRate* DroppedMsgs_;
-
-        std::shared_ptr<NMonitoring::TMetricRegistry> Metrics;
-    };
-
+ 
+    class TLoggerCounters : public ILoggerMetrics { 
+    public: 
+        TLoggerCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) 
+            : DynamicCounters(counters) 
+        { 
+            ActorMsgs_ = DynamicCounters->GetCounter("ActorMsgs", true); 
+            DirectMsgs_ = DynamicCounters->GetCounter("DirectMsgs", true); 
+            LevelRequests_ = DynamicCounters->GetCounter("LevelRequests", true); 
+            IgnoredMsgs_ = DynamicCounters->GetCounter("IgnoredMsgs", true); 
+            DroppedMsgs_ = DynamicCounters->GetCounter("DroppedMsgs", true); 
+ 
+            AlertMsgs_ = DynamicCounters->GetCounter("AlertMsgs", true); 
+            EmergMsgs_ = DynamicCounters->GetCounter("EmergMsgs", true); 
+        } 
+ 
+        ~TLoggerCounters() = default; 
+ 
+        void IncActorMsgs() override { 
+            ++*ActorMsgs_; 
+        } 
+        void IncDirectMsgs() override { 
+            ++*DirectMsgs_; 
+        } 
+        void IncLevelRequests() override { 
+            ++*LevelRequests_; 
+        } 
+        void IncIgnoredMsgs() override { 
+            ++*IgnoredMsgs_; 
+        } 
+        void IncAlertMsgs() override { 
+            ++*AlertMsgs_; 
+        } 
+        void IncEmergMsgs() override { 
+            ++*EmergMsgs_; 
+        } 
+        void IncDroppedMsgs() override { 
+            DroppedMsgs_->Inc(); 
+        }; 
+ 
+        void GetOutputHtml(IOutputStream& str) override { 
+            HTML(str) { 
+                DIV_CLASS("row") { 
+                    DIV_CLASS("col-md-12") { 
+                        H4() { 
+                            str << "Counters" << Endl; 
+                        } 
+                        DynamicCounters->OutputHtml(str); 
+                    } 
+                } 
+            } 
+        } 
+ 
+    private: 
+        NMonitoring::TDynamicCounters::TCounterPtr ActorMsgs_; 
+        NMonitoring::TDynamicCounters::TCounterPtr DirectMsgs_; 
+        NMonitoring::TDynamicCounters::TCounterPtr LevelRequests_; 
+        NMonitoring::TDynamicCounters::TCounterPtr IgnoredMsgs_; 
+        NMonitoring::TDynamicCounters::TCounterPtr AlertMsgs_; 
+        NMonitoring::TDynamicCounters::TCounterPtr EmergMsgs_; 
+        // Dropped while the logger backend was unavailable 
+        NMonitoring::TDynamicCounters::TCounterPtr DroppedMsgs_; 
+ 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> DynamicCounters; 
+    }; 
+ 
+    class TLoggerMetrics : public ILoggerMetrics { 
+    public: 
+        TLoggerMetrics(std::shared_ptr<NMonitoring::TMetricRegistry> metrics) 
+            : Metrics(metrics) 
+        { 
+            ActorMsgs_ = Metrics->Rate(NMonitoring::TLabels{{"sensor", "logger.actor_msgs"}}); 
+            DirectMsgs_ = Metrics->Rate(NMonitoring::TLabels{{"sensor", "logger.direct_msgs"}}); 
+            LevelRequests_ = Metrics->Rate(NMonitoring::TLabels{{"sensor", "logger.level_requests"}}); 
+            IgnoredMsgs_ = Metrics->Rate(NMonitoring::TLabels{{"sensor", "logger.ignored_msgs"}}); 
+            DroppedMsgs_ = Metrics->Rate(NMonitoring::TLabels{{"sensor", "logger.dropped_msgs"}}); 
+ 
+            AlertMsgs_ = Metrics->Rate(NMonitoring::TLabels{{"sensor", "logger.alert_msgs"}}); 
+            EmergMsgs_ = Metrics->Rate(NMonitoring::TLabels{{"sensor", "logger.emerg_msgs"}}); 
+        } 
+ 
+        ~TLoggerMetrics() = default; 
+ 
+        void IncActorMsgs() override { 
+            ActorMsgs_->Inc(); 
+        } 
+        void IncDirectMsgs() override { 
+            DirectMsgs_->Inc(); 
+        } 
+        void IncLevelRequests() override { 
+            LevelRequests_->Inc(); 
+        } 
+        void IncIgnoredMsgs() override { 
+            IgnoredMsgs_->Inc(); 
+        } 
+        void IncAlertMsgs() override { 
+            AlertMsgs_->Inc(); 
+        } 
+        void IncEmergMsgs() override { 
+            EmergMsgs_->Inc(); 
+        } 
+        void IncDroppedMsgs() override { 
+            DroppedMsgs_->Inc(); 
+        }; 
+ 
+        void GetOutputHtml(IOutputStream& str) override { 
+            HTML(str) { 
+                DIV_CLASS("row") { 
+                    DIV_CLASS("col-md-12") { 
+                        H4() { 
+                            str << "Metrics" << Endl; 
+                        } 
+                        // TODO: Now, TMetricRegistry does not have the GetOutputHtml function 
+                    } 
+                } 
+            } 
+        } 
+ 
+    private: 
+        NMonitoring::TRate* ActorMsgs_; 
+        NMonitoring::TRate* DirectMsgs_; 
+        NMonitoring::TRate* LevelRequests_; 
+        NMonitoring::TRate* IgnoredMsgs_; 
+        NMonitoring::TRate* AlertMsgs_; 
+        NMonitoring::TRate* EmergMsgs_; 
+        // Dropped while the logger backend was unavailable 
+        NMonitoring::TRate* DroppedMsgs_; 
+ 
+        std::shared_ptr<NMonitoring::TMetricRegistry> Metrics; 
+    }; 
+ 
     TAtomic TLoggerActor::IsOverflow = 0;
 
     TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
@@ -172,7 +172,7 @@ namespace NActors {
         : TActor(&TLoggerActor::StateFunc)
         , Settings(settings)
         , LogBackend(logBackend.Release())
-        , Metrics(std::make_unique<TLoggerCounters>(counters))
+        , Metrics(std::make_unique<TLoggerCounters>(counters)) 
     {
     }
 
@@ -182,35 +182,35 @@ namespace NActors {
         : TActor(&TLoggerActor::StateFunc)
         , Settings(settings)
         , LogBackend(logBackend)
-        , Metrics(std::make_unique<TLoggerCounters>(counters))
+        , Metrics(std::make_unique<TLoggerCounters>(counters)) 
     {
     }
 
-    TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
-                               TAutoPtr<TLogBackend> logBackend,
-                               std::shared_ptr<NMonitoring::TMetricRegistry> metrics)
-        : TActor(&TLoggerActor::StateFunc)
-        , Settings(settings)
-        , LogBackend(logBackend.Release())
-        , Metrics(std::make_unique<TLoggerMetrics>(metrics))
+    TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings, 
+                               TAutoPtr<TLogBackend> logBackend, 
+                               std::shared_ptr<NMonitoring::TMetricRegistry> metrics) 
+        : TActor(&TLoggerActor::StateFunc) 
+        , Settings(settings) 
+        , LogBackend(logBackend.Release()) 
+        , Metrics(std::make_unique<TLoggerMetrics>(metrics)) 
     {
-    }
+    } 
 
-    TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
-                               std::shared_ptr<TLogBackend> logBackend,
-                               std::shared_ptr<NMonitoring::TMetricRegistry> metrics)
-        : TActor(&TLoggerActor::StateFunc)
-        , Settings(settings)
-        , LogBackend(logBackend)
-        , Metrics(std::make_unique<TLoggerMetrics>(metrics))
-    {
+    TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings, 
+                               std::shared_ptr<TLogBackend> logBackend, 
+                               std::shared_ptr<NMonitoring::TMetricRegistry> metrics) 
+        : TActor(&TLoggerActor::StateFunc) 
+        , Settings(settings) 
+        , LogBackend(logBackend) 
+        , Metrics(std::make_unique<TLoggerMetrics>(metrics)) 
+    { 
     }
 
     TLoggerActor::~TLoggerActor() {
     }
 
     void TLoggerActor::Log(TInstant time, NLog::EPriority priority, NLog::EComponent component, const char* c, ...) {
-        Metrics->IncDirectMsgs();
+        Metrics->IncDirectMsgs(); 
         if (Settings && Settings->Satisfies(priority, component, 0ull)) {
             va_list params;
             va_start(params, c);
@@ -247,16 +247,16 @@ namespace NActors {
     }
 
     void TLoggerActor::WriteMessageStat(const NLog::TEvLog& ev) {
-        Metrics->IncActorMsgs();
+        Metrics->IncActorMsgs(); 
 
         const auto prio = ev.Level.ToPrio();
 
         switch (prio) {
             case ::NActors::NLog::EPrio::Alert:
-                Metrics->IncAlertMsgs();
+                Metrics->IncAlertMsgs(); 
                 break;
             case ::NActors::NLog::EPrio::Emerg:
-                Metrics->IncEmergMsgs();
+                Metrics->IncEmergMsgs(); 
                 break;
             default:
                 break;
@@ -274,7 +274,7 @@ namespace NActors {
 
             // Check if some records have to be dropped
             if ((PassedCount > 10 && delayMillisec > (i64)Settings->TimeThresholdMs) || IgnoredCount > 0) {
-                Metrics->IncIgnoredMsgs();
+                Metrics->IncIgnoredMsgs(); 
                 if (IgnoredCount == 0) {
                     ctx.Send(ctx.SelfID, new TLogIgnored());
                 }
@@ -303,7 +303,7 @@ namespace NActors {
     }
 
     void TLoggerActor::HandleLogComponentLevelRequest(TLogComponentLevelRequest::TPtr& ev, const NActors::TActorContext& ctx) {
-        Metrics->IncLevelRequests();
+        Metrics->IncLevelRequests(); 
         TString explanation;
         int code = Settings->SetLevel(ev->Get()->Priority, ev->Get()->Component, explanation);
         ctx.Send(ev->Sender, new TLogComponentLevelResponse(code, explanation));
@@ -565,7 +565,7 @@ namespace NActors {
                         str << "</form>" << Endl;
                     }
                 }
-                Metrics->GetOutputHtml(str);
+                Metrics->GetOutputHtml(str); 
             }
         }
 
@@ -642,7 +642,7 @@ namespace NActors {
 
     void TLoggerActor::HandleLogEventDrop(const NLog::TEvLog::TPtr& ev) {
         WriteMessageStat(*ev->Get());
-        Metrics->IncDroppedMsgs();
+        Metrics->IncDroppedMsgs(); 
     }
 
     void TLoggerActor::HandleWakeup() {

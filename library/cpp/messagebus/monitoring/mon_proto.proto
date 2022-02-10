@@ -1,9 +1,9 @@
 import "library/cpp/monlib/encode/legacy_protobuf/protos/metric_meta.proto";
 
 package NBus;
-
-option java_package = "ru.yandex.messagebus.monitoring.proto";
-
+ 
+option java_package = "ru.yandex.messagebus.monitoring.proto"; 
+ 
 message TMessageStatusRecord {
     enum EMessageStatus {
         MESSAGE_OK = 0;

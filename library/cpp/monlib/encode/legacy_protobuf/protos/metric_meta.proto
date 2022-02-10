@@ -32,17 +32,17 @@ enum THistogramBase {
     MINUTE      = 12;
     HOUR        = 15;
 }
-
-message THistogramEntry {
-    optional uint64 Multiplier = 1;
-    optional double Value = 2;
-}
-
-message THistogram {
-    optional THistogramBase Base = 1;
+ 
+message THistogramEntry { 
+    optional uint64 Multiplier = 1; 
+    optional double Value = 2; 
+} 
+ 
+message THistogram { 
+    optional THistogramBase Base = 1; 
     optional string BaseStr = 2;
-    repeated THistogramEntry Entries = 5;
-}
+    repeated THistogramEntry Entries = 5; 
+} 
 
 // field of this type is recognized by Solomon
 message TExtraLabelMetrics {

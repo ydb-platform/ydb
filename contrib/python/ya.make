@@ -861,7 +861,7 @@ RECURSE(
     pytest-allure-adaptor
     pytest-asyncio
     pytest-bdd
-    pytest-datadir
+    pytest-datadir 
     pytest-datafixtures
     pytest-django
     pytest-falcon
@@ -883,7 +883,7 @@ RECURSE(
     pytest-shutil
     pytest-timeout
     pytest-tornado
-    pytest-twisted
+    pytest-twisted 
     pytest-vcr
     pytest-xdist
     pytest-xprocess

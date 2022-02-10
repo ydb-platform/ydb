@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ***************************************************************************
@@ -20,15 +20,15 @@
 #include "unicode/uspoof.h"
 #include "unicode/uscript.h"
 #include "unicode/udata.h"
-#include "udataswp.h" 
+#include "udataswp.h"
 #include "utrie2.h"
 
 #if !UCONFIG_NO_NORMALIZATION
 
 #ifdef __cplusplus
 
-#include "capi_helper.h" 
- 
+#include "capi_helper.h"
+
 U_NAMESPACE_BEGIN
 
 // The maximium length (in UTF-16 UChars) of the skeleton replacement string resulting from
@@ -54,8 +54,8 @@ class ConfusableDataUtils;
   *  Class SpoofImpl corresponds directly to the plain C API opaque type
   *  USpoofChecker.  One can be cast to the other.
   */
-class SpoofImpl : public UObject, 
-        public IcuCApiHelper<USpoofChecker, SpoofImpl, USPOOF_MAGIC> { 
+class SpoofImpl : public UObject,
+        public IcuCApiHelper<USpoofChecker, SpoofImpl, USPOOF_MAGIC> {
 public:
     SpoofImpl(SpoofData *data, UErrorCode& status);
     SpoofImpl(UErrorCode& status);
@@ -86,9 +86,9 @@ public:
     void getNumerics(const UnicodeString& input, UnicodeSet& result, UErrorCode& status) const;
     URestrictionLevel getRestrictionLevel(const UnicodeString& input, UErrorCode& status) const;
 
-    int32_t findHiddenOverlay(const UnicodeString& input, UErrorCode& status) const; 
-    bool isIllegalCombiningDotLeadCharacter(UChar32 cp) const; 
- 
+    int32_t findHiddenOverlay(const UnicodeString& input, UErrorCode& status) const;
+    bool isIllegalCombiningDotLeadCharacter(UChar32 cp) const;
+
     /** parse a hex number.  Untility used by the builders.   */
     static UChar32 ScanHex(const UChar *s, int32_t start, int32_t limit, UErrorCode &status);
 
@@ -114,8 +114,8 @@ public:
  *  Class CheckResult corresponds directly to the plain C API opaque type
  *  USpoofCheckResult.  One can be cast to the other.
  */
-class CheckResult : public UObject, 
-        public IcuCApiHelper<USpoofCheckResult, CheckResult, USPOOF_CHECK_MAGIC> { 
+class CheckResult : public UObject,
+        public IcuCApiHelper<USpoofCheckResult, CheckResult, USPOOF_CHECK_MAGIC> {
 public:
     CheckResult();
     virtual ~CheckResult();

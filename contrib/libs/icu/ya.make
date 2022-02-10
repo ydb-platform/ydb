@@ -4,7 +4,7 @@ LIBRARY()
 
 OWNER(g:cpp-contrib)
 
-VERSION(67.1) 
+VERSION(67.1)
 
 ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-67-1/icu4c-67_1-src.tgz)
 
@@ -19,27 +19,27 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 ADDINCL(
-    GLOBAL contrib/libs/icu/include 
+    GLOBAL contrib/libs/icu/include
     contrib/libs/icu/common
     contrib/libs/icu/i18n
-    contrib/libs/icu/io 
+    contrib/libs/icu/io
 )
 
-NO_COMPILER_WARNINGS() 
- 
-NO_UTIL() 
- 
+NO_COMPILER_WARNINGS()
+
+NO_UTIL()
+
 CFLAGS(
     -DU_COMMON_IMPLEMENTATION
     -DU_I18N_IMPLEMENTATION
     -DU_IO_IMPLEMENTATION
 )
 
-IF (OS_WINDOWS) 
+IF (OS_WINDOWS)
     CFLAGS(
         GLOBAL -DU_STATIC_IMPLEMENTATION
     )
-ELSE() 
+ELSE()
     CFLAGS(
         -DU_STATIC_IMPLEMENTATION
     )
@@ -52,44 +52,44 @@ SRCS(
     common/bmpset.cpp
     common/brkeng.cpp
     common/brkiter.cpp
-    common/bytesinkutil.cpp 
+    common/bytesinkutil.cpp
     common/bytestream.cpp
     common/bytestrie.cpp
     common/bytestriebuilder.cpp
     common/bytestrieiterator.cpp
     common/caniter.cpp
-    common/characterproperties.cpp 
+    common/characterproperties.cpp
     common/chariter.cpp
     common/charstr.cpp
-    common/cmemory.cpp 
+    common/cmemory.cpp
     common/cstr.cpp
-    common/cstring.cpp 
-    common/cwchar.cpp 
+    common/cstring.cpp
+    common/cwchar.cpp
     common/dictbe.cpp
     common/dictionarydata.cpp
     common/dtintrv.cpp
-    common/edits.cpp 
+    common/edits.cpp
     common/errorcode.cpp
     common/filteredbrk.cpp
     common/filterednormalizer2.cpp
-    common/icudataver.cpp 
+    common/icudataver.cpp
     common/icuplug.cpp
     common/loadednormalizer2impl.cpp
-    common/localebuilder.cpp 
-    common/localematcher.cpp 
-    common/localeprioritylist.cpp 
+    common/localebuilder.cpp
+    common/localematcher.cpp
+    common/localeprioritylist.cpp
     common/locavailable.cpp
     common/locbased.cpp
     common/locdispnames.cpp
-    common/locdistance.cpp 
+    common/locdistance.cpp
     common/locdspnm.cpp
     common/locid.cpp
     common/loclikely.cpp
-    common/loclikelysubtags.cpp 
-    common/locmap.cpp 
+    common/loclikelysubtags.cpp
+    common/locmap.cpp
     common/locresdata.cpp
     common/locutil.cpp
-    common/lsr.cpp 
+    common/lsr.cpp
     common/messagepattern.cpp
     common/normalizer2.cpp
     common/normalizer2impl.cpp
@@ -98,11 +98,11 @@ SRCS(
     common/patternprops.cpp
     common/pluralmap.cpp
     common/propname.cpp
-    common/propsvec.cpp 
+    common/propsvec.cpp
     common/punycode.cpp
     common/putil.cpp
     common/rbbi.cpp
-    common/rbbi_cache.cpp 
+    common/rbbi_cache.cpp
     common/rbbidata.cpp
     common/rbbinode.cpp
     common/rbbirb.cpp
@@ -113,7 +113,7 @@ SRCS(
     common/resbund.cpp
     common/resbund_cnv.cpp
     common/resource.cpp
-    common/restrace.cpp 
+    common/restrace.cpp
     common/ruleiter.cpp
     common/schriter.cpp
     common/serv.cpp
@@ -125,70 +125,70 @@ SRCS(
     common/servslkf.cpp
     common/sharedobject.cpp
     common/simpleformatter.cpp
-    common/static_unicode_sets.cpp 
+    common/static_unicode_sets.cpp
     common/stringpiece.cpp
     common/stringtriebuilder.cpp
-    common/uarrsort.cpp 
-    common/ubidi.cpp 
-    common/ubidi_props.cpp 
-    common/ubidiln.cpp 
-    common/ubiditransform.cpp 
-    common/ubidiwrt.cpp 
+    common/uarrsort.cpp
+    common/ubidi.cpp
+    common/ubidi_props.cpp
+    common/ubidiln.cpp
+    common/ubiditransform.cpp
+    common/ubidiwrt.cpp
     common/ubrk.cpp
     common/ucase.cpp
     common/ucasemap.cpp
     common/ucasemap_titlecase_brkiter.cpp
-    common/ucat.cpp 
-    common/uchar.cpp 
+    common/ucat.cpp
+    common/uchar.cpp
     common/ucharstrie.cpp
     common/ucharstriebuilder.cpp
     common/ucharstrieiterator.cpp
     common/uchriter.cpp
     common/ucln_cmn.cpp
-    common/ucmndata.cpp 
-    common/ucnv.cpp 
+    common/ucmndata.cpp
+    common/ucnv.cpp
     common/ucnv2022.cpp
     common/ucnv_bld.cpp
-    common/ucnv_cb.cpp 
-    common/ucnv_cnv.cpp 
-    common/ucnv_ct.cpp 
-    common/ucnv_err.cpp 
+    common/ucnv_cb.cpp
+    common/ucnv_cnv.cpp
+    common/ucnv_ct.cpp
+    common/ucnv_err.cpp
     common/ucnv_ext.cpp
     common/ucnv_io.cpp
-    common/ucnv_lmb.cpp 
-    common/ucnv_set.cpp 
-    common/ucnv_u16.cpp 
-    common/ucnv_u32.cpp 
-    common/ucnv_u7.cpp 
-    common/ucnv_u8.cpp 
+    common/ucnv_lmb.cpp
+    common/ucnv_set.cpp
+    common/ucnv_u16.cpp
+    common/ucnv_u32.cpp
+    common/ucnv_u7.cpp
+    common/ucnv_u8.cpp
     common/ucnvbocu.cpp
-    common/ucnvdisp.cpp 
-    common/ucnvhz.cpp 
-    common/ucnvisci.cpp 
-    common/ucnvlat1.cpp 
+    common/ucnvdisp.cpp
+    common/ucnvhz.cpp
+    common/ucnvisci.cpp
+    common/ucnvlat1.cpp
     common/ucnvmbcs.cpp
-    common/ucnvscsu.cpp 
+    common/ucnvscsu.cpp
     common/ucnvsel.cpp
     common/ucol_swp.cpp
-    common/ucptrie.cpp 
+    common/ucptrie.cpp
     common/ucurr.cpp
     common/udata.cpp
-    common/udatamem.cpp 
-    common/udataswp.cpp 
-    common/uenum.cpp 
-    common/uhash.cpp 
+    common/udatamem.cpp
+    common/udataswp.cpp
+    common/uenum.cpp
+    common/uhash.cpp
     common/uhash_us.cpp
     common/uidna.cpp
     common/uinit.cpp
-    common/uinvchar.cpp 
+    common/uinvchar.cpp
     common/uiter.cpp
-    common/ulist.cpp 
+    common/ulist.cpp
     common/uloc.cpp
     common/uloc_keytype.cpp
-    common/uloc_tag.cpp 
-    common/umapfile.cpp 
-    common/umath.cpp 
-    common/umutablecptrie.cpp 
+    common/uloc_tag.cpp
+    common/umapfile.cpp
+    common/umath.cpp
+    common/umutablecptrie.cpp
     common/umutex.cpp
     common/unames.cpp
     common/unifiedcache.cpp
@@ -208,11 +208,11 @@ SRCS(
     common/unormcmp.cpp
     common/uobject.cpp
     common/uprops.cpp
-    common/ures_cnv.cpp 
+    common/ures_cnv.cpp
     common/uresbund.cpp
     common/uresdata.cpp
-    common/usc_impl.cpp 
-    common/uscript.cpp 
+    common/usc_impl.cpp
+    common/uscript.cpp
     common/uscript_props.cpp
     common/uset.cpp
     common/uset_props.cpp
@@ -226,24 +226,24 @@ SRCS(
     common/ustrcase.cpp
     common/ustrcase_locale.cpp
     common/ustrenum.cpp
-    common/ustrfmt.cpp 
+    common/ustrfmt.cpp
     common/ustring.cpp
     common/ustrtrns.cpp
     common/utext.cpp
-    common/utf_impl.cpp 
+    common/utf_impl.cpp
     common/util.cpp
     common/util_props.cpp
-    common/utrace.cpp 
+    common/utrace.cpp
     common/utrie.cpp
     common/utrie2.cpp
     common/utrie2_builder.cpp
-    common/utrie_swap.cpp 
+    common/utrie_swap.cpp
     common/uts46.cpp
-    common/utypes.cpp 
+    common/utypes.cpp
     common/uvector.cpp
     common/uvectr32.cpp
     common/uvectr64.cpp
-    common/wintz.cpp 
+    common/wintz.cpp
     i18n/alphaindex.cpp
     i18n/anytrans.cpp
     i18n/astro.cpp
@@ -296,31 +296,31 @@ SRCS(
     i18n/datefmt.cpp
     i18n/dayperiodrules.cpp
     i18n/dcfmtsym.cpp
-    i18n/decContext.cpp 
-    i18n/decNumber.cpp 
+    i18n/decContext.cpp
+    i18n/decNumber.cpp
     i18n/decimfmt.cpp
-    i18n/double-conversion-bignum-dtoa.cpp 
-    i18n/double-conversion-bignum.cpp 
-    i18n/double-conversion-cached-powers.cpp 
-    i18n/double-conversion-double-to-string.cpp 
-    i18n/double-conversion-fast-dtoa.cpp 
-    i18n/double-conversion-string-to-double.cpp 
-    i18n/double-conversion-strtod.cpp 
+    i18n/double-conversion-bignum-dtoa.cpp
+    i18n/double-conversion-bignum.cpp
+    i18n/double-conversion-cached-powers.cpp
+    i18n/double-conversion-double-to-string.cpp
+    i18n/double-conversion-fast-dtoa.cpp
+    i18n/double-conversion-string-to-double.cpp
+    i18n/double-conversion-strtod.cpp
     i18n/dtfmtsym.cpp
     i18n/dtitvfmt.cpp
     i18n/dtitvinf.cpp
     i18n/dtptngen.cpp
     i18n/dtrule.cpp
-    i18n/erarules.cpp 
+    i18n/erarules.cpp
     i18n/esctrn.cpp
     i18n/ethpccal.cpp
     i18n/fmtable.cpp
     i18n/fmtable_cnv.cpp
     i18n/format.cpp
-    i18n/formatted_string_builder.cpp 
-    i18n/formattedval_iterimpl.cpp 
-    i18n/formattedval_sbimpl.cpp 
-    i18n/formattedvalue.cpp 
+    i18n/formatted_string_builder.cpp
+    i18n/formattedval_iterimpl.cpp
+    i18n/formattedval_sbimpl.cpp
+    i18n/formattedvalue.cpp
     i18n/fphdlimp.cpp
     i18n/fpositer.cpp
     i18n/funcrepl.cpp
@@ -332,10 +332,10 @@ SRCS(
     i18n/inputext.cpp
     i18n/islamcal.cpp
     i18n/japancal.cpp
-    i18n/listformatter.cpp 
+    i18n/listformatter.cpp
     i18n/measfmt.cpp
     i18n/measunit.cpp
-    i18n/measunit_extra.cpp 
+    i18n/measunit_extra.cpp
     i18n/measure.cpp
     i18n/msgfmt.cpp
     i18n/name2uni.cpp
@@ -343,44 +343,44 @@ SRCS(
     i18n/nfrule.cpp
     i18n/nfsubs.cpp
     i18n/nortrans.cpp
-    i18n/nounit.cpp 
+    i18n/nounit.cpp
     i18n/nultrans.cpp
-    i18n/number_affixutils.cpp 
-    i18n/number_asformat.cpp 
-    i18n/number_capi.cpp 
-    i18n/number_compact.cpp 
-    i18n/number_currencysymbols.cpp 
-    i18n/number_decimalquantity.cpp 
-    i18n/number_decimfmtprops.cpp 
-    i18n/number_fluent.cpp 
-    i18n/number_formatimpl.cpp 
-    i18n/number_grouping.cpp 
-    i18n/number_integerwidth.cpp 
-    i18n/number_longnames.cpp 
-    i18n/number_mapper.cpp 
-    i18n/number_modifiers.cpp 
-    i18n/number_multiplier.cpp 
-    i18n/number_notation.cpp 
-    i18n/number_output.cpp 
-    i18n/number_padding.cpp 
-    i18n/number_patternmodifier.cpp 
-    i18n/number_patternstring.cpp 
-    i18n/number_rounding.cpp 
-    i18n/number_scientific.cpp 
-    i18n/number_skeletons.cpp 
-    i18n/number_utils.cpp 
+    i18n/number_affixutils.cpp
+    i18n/number_asformat.cpp
+    i18n/number_capi.cpp
+    i18n/number_compact.cpp
+    i18n/number_currencysymbols.cpp
+    i18n/number_decimalquantity.cpp
+    i18n/number_decimfmtprops.cpp
+    i18n/number_fluent.cpp
+    i18n/number_formatimpl.cpp
+    i18n/number_grouping.cpp
+    i18n/number_integerwidth.cpp
+    i18n/number_longnames.cpp
+    i18n/number_mapper.cpp
+    i18n/number_modifiers.cpp
+    i18n/number_multiplier.cpp
+    i18n/number_notation.cpp
+    i18n/number_output.cpp
+    i18n/number_padding.cpp
+    i18n/number_patternmodifier.cpp
+    i18n/number_patternstring.cpp
+    i18n/number_rounding.cpp
+    i18n/number_scientific.cpp
+    i18n/number_skeletons.cpp
+    i18n/number_utils.cpp
     i18n/numfmt.cpp
-    i18n/numparse_affixes.cpp 
-    i18n/numparse_compositions.cpp 
-    i18n/numparse_currency.cpp 
-    i18n/numparse_decimal.cpp 
-    i18n/numparse_impl.cpp 
-    i18n/numparse_parsednumber.cpp 
-    i18n/numparse_scientific.cpp 
-    i18n/numparse_symbols.cpp 
-    i18n/numparse_validators.cpp 
-    i18n/numrange_fluent.cpp 
-    i18n/numrange_impl.cpp 
+    i18n/numparse_affixes.cpp
+    i18n/numparse_compositions.cpp
+    i18n/numparse_currency.cpp
+    i18n/numparse_decimal.cpp
+    i18n/numparse_impl.cpp
+    i18n/numparse_parsednumber.cpp
+    i18n/numparse_scientific.cpp
+    i18n/numparse_symbols.cpp
+    i18n/numparse_validators.cpp
+    i18n/numrange_fluent.cpp
+    i18n/numrange_impl.cpp
     i18n/numsys.cpp
     i18n/olsontz.cpp
     i18n/persncal.cpp
@@ -416,7 +416,7 @@ SRCS(
     i18n/smpdtfst.cpp
     i18n/sortkey.cpp
     i18n/standardplural.cpp
-    i18n/string_segment.cpp 
+    i18n/string_segment.cpp
     i18n/strmatch.cpp
     i18n/strrepl.cpp
     i18n/stsearch.cpp
@@ -449,8 +449,8 @@ SRCS(
     i18n/udatpg.cpp
     i18n/ufieldpositer.cpp
     i18n/uitercollationiterator.cpp
-    i18n/ulistformatter.cpp 
-    i18n/ulocdata.cpp 
+    i18n/ulistformatter.cpp
+    i18n/ulocdata.cpp
     i18n/umsg.cpp
     i18n/unesctrn.cpp
     i18n/uni2name.cpp
@@ -467,7 +467,7 @@ SRCS(
     i18n/uspoof_impl.cpp
     i18n/utf16collationiterator.cpp
     i18n/utf8collationiterator.cpp
-    i18n/utmscale.cpp 
+    i18n/utmscale.cpp
     i18n/utrans.cpp
     i18n/vtzone.cpp
     i18n/vzone.cpp
@@ -478,16 +478,16 @@ SRCS(
     i18n/zrule.cpp
     i18n/ztrans.cpp
     io/locbund.cpp
-    io/sprintf.cpp 
-    io/sscanf.cpp 
+    io/sprintf.cpp
+    io/sscanf.cpp
     io/ucln_io.cpp
-    io/ufile.cpp 
-    io/ufmt_cmn.cpp 
+    io/ufile.cpp
+    io/ufmt_cmn.cpp
     io/uprintf.cpp
-    io/uprntf_p.cpp 
-    io/uscanf.cpp 
-    io/uscanf_p.cpp 
-    io/ustdio.cpp 
+    io/uprntf_p.cpp
+    io/uscanf.cpp
+    io/uscanf_p.cpp
+    io/ustdio.cpp
     io/ustream.cpp
 )
 

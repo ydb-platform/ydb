@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -260,7 +260,7 @@ AlphabeticIndex::ImmutableIndex *AlphabeticIndex::buildImmutableIndex(UErrorCode
     // but that would be worth it only if this method is called multiple times,
     // or called after using the old-style bucket iterator API.
     LocalPointer<BucketList> immutableBucketList(createBucketList(errorCode));
-    LocalPointer<RuleBasedCollator> coll(collatorPrimaryOnly_->clone()); 
+    LocalPointer<RuleBasedCollator> coll(collatorPrimaryOnly_->clone());
     if (immutableBucketList.isNull() || coll.isNull()) {
         errorCode = U_MEMORY_ALLOCATION_ERROR;
         return NULL;
@@ -510,8 +510,8 @@ BucketList *AlphabeticIndex::createBucketList(UErrorCode &errorCode) const {
                                           ces, errorCode) &&
                 current.charAt(current.length() - 1) != 0xFFFF /* !current.endsWith("\uffff") */) {
             // "AE-ligature" or "Sch" etc.
-            for (int32_t j = bucketList->size() - 2;; --j) { 
-                Bucket *singleBucket = getBucket(*bucketList, j); 
+            for (int32_t j = bucketList->size() - 2;; --j) {
+                Bucket *singleBucket = getBucket(*bucketList, j);
                 if (singleBucket->labelType_ != U_ALPHAINDEX_NORMAL) {
                     // There is no single-character bucket since the last
                     // underflow or inflow label.
@@ -607,8 +607,8 @@ BucketList *AlphabeticIndex::createBucketList(UErrorCode &errorCode) const {
     }
     // Do not call publicBucketList->setDeleter():
     // This vector shares its objects with the bucketList.
-    for (int32_t j = 0; j < bucketList->size(); ++j) { 
-        bucket = getBucket(*bucketList, j); 
+    for (int32_t j = 0; j < bucketList->size(); ++j) {
+        bucket = getBucket(*bucketList, j);
         if (bucket->displayBucket_ == NULL) {
             publicBucketList->addElement(bucket, errorCode);
         }
@@ -724,7 +724,7 @@ void AlphabeticIndex::addIndexExemplars(const Locale &locale, UErrorCode &status
     }
 
     // question: should we add auxiliary exemplars?
-    if (exemplars.containsSome(0x61, 0x7A) /* a-z */ || exemplars.isEmpty()) { 
+    if (exemplars.containsSome(0x61, 0x7A) /* a-z */ || exemplars.isEmpty()) {
         exemplars.add(0x61, 0x7A);
     }
     if (exemplars.containsSome(0xAC00, 0xD7A3)) {  // Hangul syllables
@@ -739,9 +739,9 @@ void AlphabeticIndex::addIndexExemplars(const Locale &locale, UErrorCode &status
         // cut down to small list
         // make use of the fact that Ethiopic is allocated in 8's, where
         // the base is 0 mod 8.
-        UnicodeSet ethiopic(UnicodeString(u"[ሀለሐመሠረሰሸቀቈቐቘበቨተቸኀኈነኘአከኰኸዀወዐዘዠየደዸጀገጐጘጠጨጰጸፀፈፐፘ]"), status); 
-        ethiopic.retainAll(exemplars); 
-        exemplars.remove(u'ሀ', 0x137F).addAll(ethiopic); 
+        UnicodeSet ethiopic(UnicodeString(u"[ሀለሐመሠረሰሸቀቈቐቘበቨተቸኀኈነኘአከኰኸዀወዐዘዠየደዸጀገጐጘጠጨጰጸፀፈፐፘ]"), status);
+        ethiopic.retainAll(exemplars);
+        exemplars.remove(u'ሀ', 0x137F).addAll(ethiopic);
     }
 
     // Upper-case any that aren't already so.
@@ -906,7 +906,7 @@ void AlphabeticIndex::init(const Locale *locale, UErrorCode &status) {
             return;
         }
     }
-    collatorPrimaryOnly_ = collator_->clone(); 
+    collatorPrimaryOnly_ = collator_->clone();
     if (collatorPrimaryOnly_ == NULL) {
         status = U_MEMORY_ALLOCATION_ERROR;
         return;
@@ -957,7 +957,7 @@ collatorComparator(const void *context, const void *left, const void *right) {
     }
     if (leftString == NULL) {
         return 1;
-    } 
+    }
     if (rightString == NULL) {
         return -1;
     }

@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -6,7 +6,7 @@
 *   Corporation and others.  All Rights Reserved.
 *******************************************************************************
 *   file name:  ustrcase_locale.cpp
-*   encoding:   UTF-8 
+*   encoding:   UTF-8
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -18,24 +18,24 @@
 */
 
 #include "unicode/utypes.h"
-#include "uassert.h" 
-#include "unicode/brkiter.h" 
-#include "unicode/casemap.h" 
+#include "uassert.h"
+#include "unicode/brkiter.h"
+#include "unicode/casemap.h"
 #include "unicode/ucasemap.h"
 #include "unicode/uloc.h"
 #include "unicode/ustring.h"
 #include "ucase.h"
-#include "ucasemap_imp.h" 
+#include "ucasemap_imp.h"
 
-U_CFUNC int32_t 
-ustrcase_getCaseLocale(const char *locale) { 
-    if (locale == NULL) { 
-        locale = uloc_getDefault(); 
+U_CFUNC int32_t
+ustrcase_getCaseLocale(const char *locale) {
+    if (locale == NULL) {
+        locale = uloc_getDefault();
     }
-    if (*locale == 0) { 
-        return UCASE_LOC_ROOT; 
+    if (*locale == 0) {
+        return UCASE_LOC_ROOT;
     } else {
-        return ucase_getCaseLocale(locale); 
+        return ucase_getCaseLocale(locale);
     }
 }
 
@@ -46,11 +46,11 @@ u_strToLower(UChar *dest, int32_t destCapacity,
              const UChar *src, int32_t srcLength,
              const char *locale,
              UErrorCode *pErrorCode) {
-    return ustrcase_mapWithOverlap( 
-        ustrcase_getCaseLocale(locale), 0, UCASEMAP_BREAK_ITERATOR_NULL 
+    return ustrcase_mapWithOverlap(
+        ustrcase_getCaseLocale(locale), 0, UCASEMAP_BREAK_ITERATOR_NULL
         dest, destCapacity,
         src, srcLength,
-        ustrcase_internalToLower, *pErrorCode); 
+        ustrcase_internalToLower, *pErrorCode);
 }
 
 U_CAPI int32_t U_EXPORT2
@@ -58,37 +58,37 @@ u_strToUpper(UChar *dest, int32_t destCapacity,
              const UChar *src, int32_t srcLength,
              const char *locale,
              UErrorCode *pErrorCode) {
-    return ustrcase_mapWithOverlap( 
-        ustrcase_getCaseLocale(locale), 0, UCASEMAP_BREAK_ITERATOR_NULL 
-        dest, destCapacity, 
-        src, srcLength, 
-        ustrcase_internalToUpper, *pErrorCode); 
-} 
- 
-U_NAMESPACE_BEGIN 
- 
-int32_t CaseMap::toLower( 
-        const char *locale, uint32_t options, 
-        const UChar *src, int32_t srcLength, 
-        UChar *dest, int32_t destCapacity, Edits *edits, 
-        UErrorCode &errorCode) { 
-    return ustrcase_map(
-        ustrcase_getCaseLocale(locale), options, UCASEMAP_BREAK_ITERATOR_NULL 
+    return ustrcase_mapWithOverlap(
+        ustrcase_getCaseLocale(locale), 0, UCASEMAP_BREAK_ITERATOR_NULL
         dest, destCapacity,
         src, srcLength,
-        ustrcase_internalToLower, edits, errorCode); 
+        ustrcase_internalToUpper, *pErrorCode);
 }
- 
-int32_t CaseMap::toUpper( 
-        const char *locale, uint32_t options, 
-        const UChar *src, int32_t srcLength, 
-        UChar *dest, int32_t destCapacity, Edits *edits, 
-        UErrorCode &errorCode) { 
-    return ustrcase_map( 
-        ustrcase_getCaseLocale(locale), options, UCASEMAP_BREAK_ITERATOR_NULL 
-        dest, destCapacity, 
-        src, srcLength, 
-        ustrcase_internalToUpper, edits, errorCode); 
-} 
- 
-U_NAMESPACE_END 
+
+U_NAMESPACE_BEGIN
+
+int32_t CaseMap::toLower(
+        const char *locale, uint32_t options,
+        const UChar *src, int32_t srcLength,
+        UChar *dest, int32_t destCapacity, Edits *edits,
+        UErrorCode &errorCode) {
+    return ustrcase_map(
+        ustrcase_getCaseLocale(locale), options, UCASEMAP_BREAK_ITERATOR_NULL
+        dest, destCapacity,
+        src, srcLength,
+        ustrcase_internalToLower, edits, errorCode);
+}
+
+int32_t CaseMap::toUpper(
+        const char *locale, uint32_t options,
+        const UChar *src, int32_t srcLength,
+        UChar *dest, int32_t destCapacity, Edits *edits,
+        UErrorCode &errorCode) {
+    return ustrcase_map(
+        ustrcase_getCaseLocale(locale), options, UCASEMAP_BREAK_ITERATOR_NULL
+        dest, destCapacity,
+        src, srcLength,
+        ustrcase_internalToUpper, edits, errorCode);
+}
+
+U_NAMESPACE_END

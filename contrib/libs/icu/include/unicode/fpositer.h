@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ********************************************************************************
@@ -19,9 +19,9 @@
 #define FPOSITER_H
 
 #include "unicode/utypes.h"
- 
-#if U_SHOW_CPLUSPLUS_API 
- 
+
+#if U_SHOW_CPLUSPLUS_API
+
 #include "unicode/uobject.h"
 
 /**
@@ -109,8 +109,8 @@ private:
      */
     void setData(UVector32 *adopt, UErrorCode& status);
 
-    friend class FieldPositionIteratorHandler; 
- 
+    friend class FieldPositionIteratorHandler;
+
     UVector32 *data;
     int32_t pos;
 };
@@ -119,6 +119,6 @@ U_NAMESPACE_END
 
 #endif /* #if !UCONFIG_NO_FORMATTING */
 
-#endif /* U_SHOW_CPLUSPLUS_API */ 
- 
+#endif /* U_SHOW_CPLUSPLUS_API */
+
 #endif // FPOSITER_H

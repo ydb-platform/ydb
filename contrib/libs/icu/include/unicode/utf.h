@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -8,7 +8,7 @@
 *
 *******************************************************************************
 *   file name:  utf.h
-*   encoding:   UTF-8 
+*   encoding:   UTF-8
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -47,11 +47,11 @@
  * but are optimized for the much more frequently occurring BMP code points.
  *
  * umachine.h defines UChar to be an unsigned 16-bit integer.
- * Since ICU 59, ICU uses char16_t in C++, UChar only in C, 
- * and defines UChar=char16_t by default. See the UChar API docs for details. 
+ * Since ICU 59, ICU uses char16_t in C++, UChar only in C,
+ * and defines UChar=char16_t by default. See the UChar API docs for details.
  *
  * UChar32 is defined to be a signed 32-bit integer (int32_t), large enough for a 21-bit
- * Unicode code point (Unicode scalar value, 0..0x10ffff) and U_SENTINEL (-1). 
+ * Unicode code point (Unicode scalar value, 0..0x10ffff) and U_SENTINEL (-1).
  * Before ICU 2.4, the definition of UChar32 was similarly platform-dependent as
  * the definition of UChar. For details see the documentation for UChar32 itself.
  *
@@ -60,20 +60,20 @@
  * For actual Unicode character properties see uchar.h.
  *
  * By default, string operations must be done with error checking in case
- * a string is not well-formed UTF-16 or UTF-8. 
- * 
- * The U16_ macros detect if a surrogate code unit is unpaired 
+ * a string is not well-formed UTF-16 or UTF-8.
+ *
+ * The U16_ macros detect if a surrogate code unit is unpaired
  * (lead unit without trail unit or vice versa) and just return the unit itself
  * as the code point.
  *
- * The U8_ macros detect illegal byte sequences and return a negative value. 
- * Starting with ICU 60, the observable length of a single illegal byte sequence 
- * skipped by one of these macros follows the Unicode 6+ recommendation 
- * which is consistent with the W3C Encoding Standard. 
- * 
- * There are ..._OR_FFFD versions of both U16_ and U8_ macros 
- * that return U+FFFD for illegal code unit sequences. 
- * 
+ * The U8_ macros detect illegal byte sequences and return a negative value.
+ * Starting with ICU 60, the observable length of a single illegal byte sequence
+ * skipped by one of these macros follows the Unicode 6+ recommendation
+ * which is consistent with the W3C Encoding Standard.
+ *
+ * There are ..._OR_FFFD versions of both U16_ and U8_ macros
+ * that return U+FFFD for illegal code unit sequences.
+ *
  * The regular "safe" macros require that the initial, passed-in string index
  * is within bounds. They only check the index when they read more than one
  * code unit. This is usually done with code similar to the following loop:
@@ -97,7 +97,7 @@
  * The performance differences are much larger here because UTF-8 provides so
  * many opportunities for malformed sequences.
  * The unsafe UTF-8 macros are entirely implemented inside the macro definitions
- * and are fast, while the safe UTF-8 macros call functions for some complicated cases. 
+ * and are fast, while the safe UTF-8 macros call functions for some complicated cases.
  *
  * Unlike with UTF-16, malformed sequences cannot be expressed with distinct
  * code point values (0..U+10ffff). They are indicated with negative values instead.
@@ -129,7 +129,7 @@
  */
 #define U_IS_UNICODE_NONCHAR(c) \
     ((c)>=0xfdd0 && \
-     ((c)<=0xfdef || ((c)&0xfffe)==0xfffe) && (c)<=0x10ffff) 
+     ((c)<=0xfdef || ((c)&0xfffe)==0xfffe) && (c)<=0x10ffff)
 
 /**
  * Is c a Unicode code point value (0..U+10ffff)
@@ -150,7 +150,7 @@
  */
 #define U_IS_UNICODE_CHAR(c) \
     ((uint32_t)(c)<0xd800 || \
-        (0xdfff<(c) && (c)<=0x10ffff && !U_IS_UNICODE_NONCHAR(c))) 
+        (0xdfff<(c) && (c)<=0x10ffff && !U_IS_UNICODE_NONCHAR(c)))
 
 /**
  * Is this code point a BMP code point (U+0000..U+ffff)?

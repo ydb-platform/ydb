@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -286,7 +286,7 @@ fIsGregorian(source.fIsGregorian), fInvertGregorian(source.fInvertGregorian)
 
 // -------------------------------------
 
-GregorianCalendar* GregorianCalendar::clone() const 
+GregorianCalendar* GregorianCalendar::clone() const
 {
     return new GregorianCalendar(*this);
 }
@@ -330,20 +330,20 @@ GregorianCalendar::setGregorianChange(UDate date, UErrorCode& status)
     // normalized cutover is in pure date milliseconds; it contains no time
     // of day or timezone component, and it used to compare against other
     // pure date values.
-    double cutoverDay = ClockMath::floorDivide(date, (double)kOneDay); 
+    double cutoverDay = ClockMath::floorDivide(date, (double)kOneDay);
 
-    // Handle the rare case of numeric overflow where the user specifies a time 
-    // outside of INT32_MIN .. INT32_MAX number of days. 
-     
-    if (cutoverDay <= INT32_MIN) { 
-        cutoverDay = INT32_MIN; 
-        fGregorianCutover = fNormalizedGregorianCutover = cutoverDay * kOneDay; 
-    } else if (cutoverDay >= INT32_MAX) { 
-        cutoverDay = INT32_MAX; 
-        fGregorianCutover = fNormalizedGregorianCutover = cutoverDay * kOneDay; 
-    } else { 
-        fNormalizedGregorianCutover = cutoverDay * kOneDay; 
-        fGregorianCutover = date; 
+    // Handle the rare case of numeric overflow where the user specifies a time
+    // outside of INT32_MIN .. INT32_MAX number of days.
+    
+    if (cutoverDay <= INT32_MIN) {
+        cutoverDay = INT32_MIN;
+        fGregorianCutover = fNormalizedGregorianCutover = cutoverDay * kOneDay;
+    } else if (cutoverDay >= INT32_MAX) {
+        cutoverDay = INT32_MAX;
+        fGregorianCutover = fNormalizedGregorianCutover = cutoverDay * kOneDay;
+    } else {
+        fNormalizedGregorianCutover = cutoverDay * kOneDay;
+        fGregorianCutover = date;
     }
 
     // Normalize the year so BC values are represented as 0 and negative
@@ -360,7 +360,7 @@ GregorianCalendar::setGregorianChange(UDate date, UErrorCode& status)
     fGregorianCutoverYear = cal->get(UCAL_YEAR, status);
     if (cal->get(UCAL_ERA, status) == BC) 
         fGregorianCutoverYear = 1 - fGregorianCutoverYear;
-    fCutoverJulianDay = (int32_t)cutoverDay; 
+    fCutoverJulianDay = (int32_t)cutoverDay;
     delete cal;
 }
 
@@ -541,8 +541,8 @@ int32_t GregorianCalendar::handleComputeMonthStart(int32_t eyear, int32_t month,
     }
 
     UBool isLeap = eyear%4 == 0;
-    int64_t y = (int64_t)eyear-1; 
-    int64_t julianDay = 365*y + ClockMath::floorDivide(y, (int64_t)4) + (kJan1_1JulianDay - 3); 
+    int64_t y = (int64_t)eyear-1;
+    int64_t julianDay = 365*y + ClockMath::floorDivide(y, (int64_t)4) + (kJan1_1JulianDay - 3);
 
     nonConstThis->fIsGregorian = (eyear >= fGregorianCutoverYear);
 #if defined (U_DEBUG_CAL)
@@ -572,7 +572,7 @@ int32_t GregorianCalendar::handleComputeMonthStart(int32_t eyear, int32_t month,
         julianDay += isLeap?kLeapNumDays[month]:kNumDays[month];
     }
 
-    return static_cast<int32_t>(julianDay); 
+    return static_cast<int32_t>(julianDay);
 }
 
 int32_t GregorianCalendar::handleGetMonthLength(int32_t extendedYear, int32_t month)  const

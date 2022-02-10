@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  *****************************************************************************
@@ -68,7 +68,7 @@ U_NAMESPACE_BEGIN
  */
 
 
-class U_I18N_API IndianCalendar : public Calendar { 
+class U_I18N_API IndianCalendar : public Calendar {
 public:
   /**
    * Useful constants for IndianCalendar.
@@ -186,7 +186,7 @@ public:
   // TODO: copy c'tor, etc
 
   // clone
-  virtual IndianCalendar* clone() const; 
+  virtual IndianCalendar* clone() const;
 
  private:
   /**
@@ -274,10 +274,10 @@ public:
    * @return   The class ID for all objects of this class.
    * @internal
    */
-  static UClassID U_EXPORT2 getStaticClassID(void); 
+  static UClassID U_EXPORT2 getStaticClassID(void);
 
   /**
-   * return the calendar type, "indian". 
+   * return the calendar type, "indian".
    *
    * @return calendar type
    * @internal

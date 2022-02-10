@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -16,8 +16,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API 
- 
+#if U_SHOW_CPLUSPLUS_API
+
 /**
  * \file
  * \brief C++ API: PluralFormat object
@@ -450,7 +450,7 @@ public:
      * result and should delete it when done.
      * @stable ICU 4.0
      */
-    virtual PluralFormat* clone() const; 
+    virtual PluralFormat* clone() const;
 
    /**
     * Formats a plural message for a number taken from a Formattable object.
@@ -524,7 +524,7 @@ public:
 
 private:
      /**
-      * @internal (private) 
+      * @internal (private)
       */
     class U_I18N_API PluralSelector : public UMemory {
       public:
@@ -536,7 +536,7 @@ private:
          * @param number The number to be plural-formatted.
          * @param ec Error code.
          * @return The selected PluralFormat keyword.
-         * @internal (private) 
+         * @internal (private)
          */
         virtual UnicodeString select(void *context, double number, UErrorCode& ec) const = 0;
     };
@@ -548,7 +548,7 @@ private:
 
         virtual ~PluralSelectorAdapter();
 
-        virtual UnicodeString select(void *context, double number, UErrorCode& /*ec*/) const; 
+        virtual UnicodeString select(void *context, double number, UErrorCode& /*ec*/) const;
 
         void reset();
 
@@ -572,7 +572,7 @@ private:
     UnicodeString& format(const Formattable& numberObject, double number,
                           UnicodeString& appendTo,
                           FieldPosition& pos,
-                          UErrorCode& status) const; 
+                          UErrorCode& status) const;
 
     /**
      * Finds the PluralFormat sub-message for the given number, or the "other" sub-message.
@@ -600,7 +600,7 @@ U_NAMESPACE_END
 
 #endif /* #if !UCONFIG_NO_FORMATTING */
 
-#endif /* U_SHOW_CPLUSPLUS_API */ 
- 
+#endif /* U_SHOW_CPLUSPLUS_API */
+
 #endif // _PLURFMT
 //eof

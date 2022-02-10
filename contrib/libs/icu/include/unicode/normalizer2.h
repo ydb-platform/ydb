@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -8,7 +8,7 @@
 *
 *******************************************************************************
 *   file name:  normalizer2.h
-*   encoding:   UTF-8 
+*   encoding:   UTF-8
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -26,19 +26,19 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API 
- 
+#if U_SHOW_CPLUSPLUS_API
+
 #if !UCONFIG_NO_NORMALIZATION
 
-#include "unicode/stringpiece.h" 
+#include "unicode/stringpiece.h"
 #include "unicode/uniset.h"
 #include "unicode/unistr.h"
 #include "unicode/unorm2.h"
 
 U_NAMESPACE_BEGIN
 
-class ByteSink; 
- 
+class ByteSink;
+
 /**
  * Unicode normalization functionality for standard Unicode normalization or
  * for using custom mapping tables.
@@ -220,36 +220,36 @@ public:
     normalize(const UnicodeString &src,
               UnicodeString &dest,
               UErrorCode &errorCode) const = 0;
- 
+
     /**
-     * Normalizes a UTF-8 string and optionally records how source substrings 
-     * relate to changed and unchanged result substrings. 
-     * 
-     * Currently implemented completely only for "compose" modes, 
-     * such as for NFC, NFKC, and NFKC_Casefold 
-     * (UNORM2_COMPOSE and UNORM2_COMPOSE_CONTIGUOUS). 
-     * Otherwise currently converts to & from UTF-16 and does not support edits. 
-     * 
-     * @param options   Options bit set, usually 0. See U_OMIT_UNCHANGED_TEXT and U_EDITS_NO_RESET. 
-     * @param src       Source UTF-8 string. 
-     * @param sink      A ByteSink to which the normalized UTF-8 result string is written. 
-     *                  sink.Flush() is called at the end. 
-     * @param edits     Records edits for index mapping, working with styled text, 
-     *                  and getting only changes (if any). 
-     *                  The Edits contents is undefined if any error occurs. 
-     *                  This function calls edits->reset() first unless 
-     *                  options includes U_EDITS_NO_RESET. edits can be nullptr. 
-     * @param errorCode Standard ICU error code. Its input value must 
-     *                  pass the U_SUCCESS() test, or else the function returns 
-     *                  immediately. Check for U_FAILURE() on output or use with 
-     *                  function chaining. (See User Guide for details.) 
-     * @stable ICU 60 
-     */ 
-    virtual void 
-    normalizeUTF8(uint32_t options, StringPiece src, ByteSink &sink, 
-                  Edits *edits, UErrorCode &errorCode) const; 
- 
-    /** 
+     * Normalizes a UTF-8 string and optionally records how source substrings
+     * relate to changed and unchanged result substrings.
+     *
+     * Currently implemented completely only for "compose" modes,
+     * such as for NFC, NFKC, and NFKC_Casefold
+     * (UNORM2_COMPOSE and UNORM2_COMPOSE_CONTIGUOUS).
+     * Otherwise currently converts to & from UTF-16 and does not support edits.
+     *
+     * @param options   Options bit set, usually 0. See U_OMIT_UNCHANGED_TEXT and U_EDITS_NO_RESET.
+     * @param src       Source UTF-8 string.
+     * @param sink      A ByteSink to which the normalized UTF-8 result string is written.
+     *                  sink.Flush() is called at the end.
+     * @param edits     Records edits for index mapping, working with styled text,
+     *                  and getting only changes (if any).
+     *                  The Edits contents is undefined if any error occurs.
+     *                  This function calls edits->reset() first unless
+     *                  options includes U_EDITS_NO_RESET. edits can be nullptr.
+     * @param errorCode Standard ICU error code. Its input value must
+     *                  pass the U_SUCCESS() test, or else the function returns
+     *                  immediately. Check for U_FAILURE() on output or use with
+     *                  function chaining. (See User Guide for details.)
+     * @stable ICU 60
+     */
+    virtual void
+    normalizeUTF8(uint32_t options, StringPiece src, ByteSink &sink,
+                  Edits *edits, UErrorCode &errorCode) const;
+
+    /**
      * Appends the normalized form of the second string to the first string
      * (merging them at the boundary) and returns the first string.
      * The result is normalized if the first string was normalized.
@@ -316,7 +316,7 @@ public:
      *
      * When used on a standard NFC Normalizer2 instance,
      * it returns the Decomposition_Mapping only if the Decomposition_Type (dt) is Canonical (Can);
-     * in this case, the result contains either one or two code points (=1..4 char16_ts). 
+     * in this case, the result contains either one or two code points (=1..4 char16_ts).
      *
      * This function is independent of the mode of the Normalizer2.
      * The default implementation returns FALSE.
@@ -374,31 +374,31 @@ public:
      */
     virtual UBool
     isNormalized(const UnicodeString &s, UErrorCode &errorCode) const = 0;
-    /** 
-     * Tests if the UTF-8 string is normalized. 
-     * Internally, in cases where the quickCheck() method would return "maybe" 
-     * (which is only possible for the two COMPOSE modes) this method 
-     * resolves to "yes" or "no" to provide a definitive result, 
-     * at the cost of doing more work in those cases. 
-     * 
-     * This works for all normalization modes, 
-     * but it is currently optimized for UTF-8 only for "compose" modes, 
-     * such as for NFC, NFKC, and NFKC_Casefold 
-     * (UNORM2_COMPOSE and UNORM2_COMPOSE_CONTIGUOUS). 
-     * For other modes it currently converts to UTF-16 and calls isNormalized(). 
-     * 
-     * @param s UTF-8 input string 
-     * @param errorCode Standard ICU error code. Its input value must 
-     *                  pass the U_SUCCESS() test, or else the function returns 
-     *                  immediately. Check for U_FAILURE() on output or use with 
-     *                  function chaining. (See User Guide for details.) 
-     * @return TRUE if s is normalized 
-     * @stable ICU 60 
-     */ 
-    virtual UBool 
-    isNormalizedUTF8(StringPiece s, UErrorCode &errorCode) const; 
+    /**
+     * Tests if the UTF-8 string is normalized.
+     * Internally, in cases where the quickCheck() method would return "maybe"
+     * (which is only possible for the two COMPOSE modes) this method
+     * resolves to "yes" or "no" to provide a definitive result,
+     * at the cost of doing more work in those cases.
+     *
+     * This works for all normalization modes,
+     * but it is currently optimized for UTF-8 only for "compose" modes,
+     * such as for NFC, NFKC, and NFKC_Casefold
+     * (UNORM2_COMPOSE and UNORM2_COMPOSE_CONTIGUOUS).
+     * For other modes it currently converts to UTF-16 and calls isNormalized().
+     *
+     * @param s UTF-8 input string
+     * @param errorCode Standard ICU error code. Its input value must
+     *                  pass the U_SUCCESS() test, or else the function returns
+     *                  immediately. Check for U_FAILURE() on output or use with
+     *                  function chaining. (See User Guide for details.)
+     * @return TRUE if s is normalized
+     * @stable ICU 60
+     */
+    virtual UBool
+    isNormalizedUTF8(StringPiece s, UErrorCode &errorCode) const;
 
- 
+
     /**
      * Tests if the string is normalized.
      * For the two COMPOSE modes, the result could be "maybe" in cases that
@@ -537,37 +537,37 @@ public:
     virtual UnicodeString &
     normalize(const UnicodeString &src,
               UnicodeString &dest,
-              UErrorCode &errorCode) const U_OVERRIDE; 
- 
+              UErrorCode &errorCode) const U_OVERRIDE;
+
     /**
-     * Normalizes a UTF-8 string and optionally records how source substrings 
-     * relate to changed and unchanged result substrings. 
-     * 
-     * Currently implemented completely only for "compose" modes, 
-     * such as for NFC, NFKC, and NFKC_Casefold 
-     * (UNORM2_COMPOSE and UNORM2_COMPOSE_CONTIGUOUS). 
-     * Otherwise currently converts to & from UTF-16 and does not support edits. 
-     * 
-     * @param options   Options bit set, usually 0. See U_OMIT_UNCHANGED_TEXT and U_EDITS_NO_RESET. 
-     * @param src       Source UTF-8 string. 
-     * @param sink      A ByteSink to which the normalized UTF-8 result string is written. 
-     *                  sink.Flush() is called at the end. 
-     * @param edits     Records edits for index mapping, working with styled text, 
-     *                  and getting only changes (if any). 
-     *                  The Edits contents is undefined if any error occurs. 
-     *                  This function calls edits->reset() first unless 
-     *                  options includes U_EDITS_NO_RESET. edits can be nullptr. 
-     * @param errorCode Standard ICU error code. Its input value must 
-     *                  pass the U_SUCCESS() test, or else the function returns 
-     *                  immediately. Check for U_FAILURE() on output or use with 
-     *                  function chaining. (See User Guide for details.) 
-     * @stable ICU 60 
-     */ 
-    virtual void 
-    normalizeUTF8(uint32_t options, StringPiece src, ByteSink &sink, 
-                  Edits *edits, UErrorCode &errorCode) const U_OVERRIDE; 
- 
-    /** 
+     * Normalizes a UTF-8 string and optionally records how source substrings
+     * relate to changed and unchanged result substrings.
+     *
+     * Currently implemented completely only for "compose" modes,
+     * such as for NFC, NFKC, and NFKC_Casefold
+     * (UNORM2_COMPOSE and UNORM2_COMPOSE_CONTIGUOUS).
+     * Otherwise currently converts to & from UTF-16 and does not support edits.
+     *
+     * @param options   Options bit set, usually 0. See U_OMIT_UNCHANGED_TEXT and U_EDITS_NO_RESET.
+     * @param src       Source UTF-8 string.
+     * @param sink      A ByteSink to which the normalized UTF-8 result string is written.
+     *                  sink.Flush() is called at the end.
+     * @param edits     Records edits for index mapping, working with styled text,
+     *                  and getting only changes (if any).
+     *                  The Edits contents is undefined if any error occurs.
+     *                  This function calls edits->reset() first unless
+     *                  options includes U_EDITS_NO_RESET. edits can be nullptr.
+     * @param errorCode Standard ICU error code. Its input value must
+     *                  pass the U_SUCCESS() test, or else the function returns
+     *                  immediately. Check for U_FAILURE() on output or use with
+     *                  function chaining. (See User Guide for details.)
+     * @stable ICU 60
+     */
+    virtual void
+    normalizeUTF8(uint32_t options, StringPiece src, ByteSink &sink,
+                  Edits *edits, UErrorCode &errorCode) const U_OVERRIDE;
+
+    /**
      * Appends the normalized form of the second string to the first string
      * (merging them at the boundary) and returns the first string.
      * The result is normalized if the first string was normalized.
@@ -584,7 +584,7 @@ public:
     virtual UnicodeString &
     normalizeSecondAndAppend(UnicodeString &first,
                              const UnicodeString &second,
-                             UErrorCode &errorCode) const U_OVERRIDE; 
+                             UErrorCode &errorCode) const U_OVERRIDE;
     /**
      * Appends the second string to the first string
      * (merging them at the boundary) and returns the first string.
@@ -602,7 +602,7 @@ public:
     virtual UnicodeString &
     append(UnicodeString &first,
            const UnicodeString &second,
-           UErrorCode &errorCode) const U_OVERRIDE; 
+           UErrorCode &errorCode) const U_OVERRIDE;
 
     /**
      * Gets the decomposition mapping of c.
@@ -616,7 +616,7 @@ public:
      * @stable ICU 4.6
      */
     virtual UBool
-    getDecomposition(UChar32 c, UnicodeString &decomposition) const U_OVERRIDE; 
+    getDecomposition(UChar32 c, UnicodeString &decomposition) const U_OVERRIDE;
 
     /**
      * Gets the raw decomposition mapping of c.
@@ -630,7 +630,7 @@ public:
      * @stable ICU 49
      */
     virtual UBool
-    getRawDecomposition(UChar32 c, UnicodeString &decomposition) const U_OVERRIDE; 
+    getRawDecomposition(UChar32 c, UnicodeString &decomposition) const U_OVERRIDE;
 
     /**
      * Performs pairwise composition of a & b and returns the composite if there is one.
@@ -643,7 +643,7 @@ public:
      * @stable ICU 49
      */
     virtual UChar32
-    composePair(UChar32 a, UChar32 b) const U_OVERRIDE; 
+    composePair(UChar32 a, UChar32 b) const U_OVERRIDE;
 
     /**
      * Gets the combining class of c.
@@ -654,7 +654,7 @@ public:
      * @stable ICU 49
      */
     virtual uint8_t
-    getCombiningClass(UChar32 c) const U_OVERRIDE; 
+    getCombiningClass(UChar32 c) const U_OVERRIDE;
 
     /**
      * Tests if the string is normalized.
@@ -668,31 +668,31 @@ public:
      * @stable ICU 4.4
      */
     virtual UBool
-    isNormalized(const UnicodeString &s, UErrorCode &errorCode) const U_OVERRIDE; 
+    isNormalized(const UnicodeString &s, UErrorCode &errorCode) const U_OVERRIDE;
     /**
-     * Tests if the UTF-8 string is normalized. 
-     * Internally, in cases where the quickCheck() method would return "maybe" 
-     * (which is only possible for the two COMPOSE modes) this method 
-     * resolves to "yes" or "no" to provide a definitive result, 
-     * at the cost of doing more work in those cases. 
-     * 
-     * This works for all normalization modes, 
-     * but it is currently optimized for UTF-8 only for "compose" modes, 
-     * such as for NFC, NFKC, and NFKC_Casefold 
-     * (UNORM2_COMPOSE and UNORM2_COMPOSE_CONTIGUOUS). 
-     * For other modes it currently converts to UTF-16 and calls isNormalized(). 
-     * 
-     * @param s UTF-8 input string 
-     * @param errorCode Standard ICU error code. Its input value must 
-     *                  pass the U_SUCCESS() test, or else the function returns 
-     *                  immediately. Check for U_FAILURE() on output or use with 
-     *                  function chaining. (See User Guide for details.) 
-     * @return TRUE if s is normalized 
-     * @stable ICU 60 
-     */ 
-    virtual UBool 
-    isNormalizedUTF8(StringPiece s, UErrorCode &errorCode) const U_OVERRIDE; 
-    /** 
+     * Tests if the UTF-8 string is normalized.
+     * Internally, in cases where the quickCheck() method would return "maybe"
+     * (which is only possible for the two COMPOSE modes) this method
+     * resolves to "yes" or "no" to provide a definitive result,
+     * at the cost of doing more work in those cases.
+     *
+     * This works for all normalization modes,
+     * but it is currently optimized for UTF-8 only for "compose" modes,
+     * such as for NFC, NFKC, and NFKC_Casefold
+     * (UNORM2_COMPOSE and UNORM2_COMPOSE_CONTIGUOUS).
+     * For other modes it currently converts to UTF-16 and calls isNormalized().
+     *
+     * @param s UTF-8 input string
+     * @param errorCode Standard ICU error code. Its input value must
+     *                  pass the U_SUCCESS() test, or else the function returns
+     *                  immediately. Check for U_FAILURE() on output or use with
+     *                  function chaining. (See User Guide for details.)
+     * @return TRUE if s is normalized
+     * @stable ICU 60
+     */
+    virtual UBool
+    isNormalizedUTF8(StringPiece s, UErrorCode &errorCode) const U_OVERRIDE;
+    /**
      * Tests if the string is normalized.
      * For details see the Normalizer2 base class documentation.
      * @param s input string
@@ -704,7 +704,7 @@ public:
      * @stable ICU 4.4
      */
     virtual UNormalizationCheckResult
-    quickCheck(const UnicodeString &s, UErrorCode &errorCode) const U_OVERRIDE; 
+    quickCheck(const UnicodeString &s, UErrorCode &errorCode) const U_OVERRIDE;
     /**
      * Returns the end of the normalized substring of the input string.
      * For details see the Normalizer2 base class documentation.
@@ -717,7 +717,7 @@ public:
      * @stable ICU 4.4
      */
     virtual int32_t
-    spanQuickCheckYes(const UnicodeString &s, UErrorCode &errorCode) const U_OVERRIDE; 
+    spanQuickCheckYes(const UnicodeString &s, UErrorCode &errorCode) const U_OVERRIDE;
 
     /**
      * Tests if the character always has a normalization boundary before it,
@@ -727,7 +727,7 @@ public:
      * @return TRUE if c has a normalization boundary before it
      * @stable ICU 4.4
      */
-    virtual UBool hasBoundaryBefore(UChar32 c) const U_OVERRIDE; 
+    virtual UBool hasBoundaryBefore(UChar32 c) const U_OVERRIDE;
 
     /**
      * Tests if the character always has a normalization boundary after it,
@@ -737,7 +737,7 @@ public:
      * @return TRUE if c has a normalization boundary after it
      * @stable ICU 4.4
      */
-    virtual UBool hasBoundaryAfter(UChar32 c) const U_OVERRIDE; 
+    virtual UBool hasBoundaryAfter(UChar32 c) const U_OVERRIDE;
 
     /**
      * Tests if the character is normalization-inert.
@@ -746,7 +746,7 @@ public:
      * @return TRUE if c is normalization-inert
      * @stable ICU 4.4
      */
-    virtual UBool isInert(UChar32 c) const U_OVERRIDE; 
+    virtual UBool isInert(UChar32 c) const U_OVERRIDE;
 private:
     UnicodeString &
     normalize(const UnicodeString &src,
@@ -754,12 +754,12 @@ private:
               USetSpanCondition spanCondition,
               UErrorCode &errorCode) const;
 
-    void 
-    normalizeUTF8(uint32_t options, const char *src, int32_t length, 
-                  ByteSink &sink, Edits *edits, 
-                  USetSpanCondition spanCondition, 
-                  UErrorCode &errorCode) const; 
- 
+    void
+    normalizeUTF8(uint32_t options, const char *src, int32_t length,
+                  ByteSink &sink, Edits *edits,
+                  USetSpanCondition spanCondition,
+                  UErrorCode &errorCode) const;
+
     UnicodeString &
     normalizeSecondAndAppend(UnicodeString &first,
                              const UnicodeString &second,
@@ -773,7 +773,7 @@ private:
 U_NAMESPACE_END
 
 #endif  // !UCONFIG_NO_NORMALIZATION
- 
-#endif /* U_SHOW_CPLUSPLUS_API */ 
- 
+
+#endif /* U_SHOW_CPLUSPLUS_API */
+
 #endif  // __NORMALIZER2_H__

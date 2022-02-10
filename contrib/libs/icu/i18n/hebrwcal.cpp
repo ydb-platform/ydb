@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -169,7 +169,7 @@ const char *HebrewCalendar::getType() const {
     return "hebrew";
 }
 
-HebrewCalendar* HebrewCalendar::clone() const { 
+HebrewCalendar* HebrewCalendar::clone() const {
     return new HebrewCalendar(*this);
 }
 

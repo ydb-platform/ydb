@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -14,8 +14,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API 
- 
+#if U_SHOW_CPLUSPLUS_API
+
 /**
  * \file 
  * \brief C++ API: UnicodeReplacer
@@ -98,6 +98,6 @@ class U_I18N_API UnicodeReplacer /* not : public UObject because this is an inte
 
 U_NAMESPACE_END
 
-#endif /* U_SHOW_CPLUSPLUS_API */ 
- 
+#endif /* U_SHOW_CPLUSPLUS_API */
+
 #endif

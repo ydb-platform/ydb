@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -54,8 +54,8 @@
 #include <float.h>
 #include "sharednumberformat.h"
 #include "unifiedcache.h"
-#include "number_decimalquantity.h" 
-#include "number_utils.h" 
+#include "number_decimalquantity.h"
+#include "number_utils.h"
 
 //#define FMT_DEBUG
 
@@ -130,28 +130,28 @@ static const UChar * const gLastResortNumberPatterns[UNUM_FORMAT_STYLE_COUNT] = 
 
 // Keys used for accessing resource bundles
 
-static const icu::number::impl::CldrPatternStyle gFormatCldrStyles[UNUM_FORMAT_STYLE_COUNT] = { 
-    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_PATTERN_DECIMAL 
-    icu::number::impl::CLDR_PATTERN_STYLE_DECIMAL,  // UNUM_DECIMAL 
-    icu::number::impl::CLDR_PATTERN_STYLE_CURRENCY,  // UNUM_CURRENCY 
-    icu::number::impl::CLDR_PATTERN_STYLE_PERCENT,  // UNUM_PERCENT 
-    icu::number::impl::CLDR_PATTERN_STYLE_SCIENTIFIC,  // UNUM_SCIENTIFIC 
-    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_SPELLOUT 
-    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_ORDINAL 
-    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_DURATION 
-    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_NUMBERING_SYSTEM 
-    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_PATTERN_RULEBASED 
+static const icu::number::impl::CldrPatternStyle gFormatCldrStyles[UNUM_FORMAT_STYLE_COUNT] = {
+    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_PATTERN_DECIMAL
+    icu::number::impl::CLDR_PATTERN_STYLE_DECIMAL,  // UNUM_DECIMAL
+    icu::number::impl::CLDR_PATTERN_STYLE_CURRENCY,  // UNUM_CURRENCY
+    icu::number::impl::CLDR_PATTERN_STYLE_PERCENT,  // UNUM_PERCENT
+    icu::number::impl::CLDR_PATTERN_STYLE_SCIENTIFIC,  // UNUM_SCIENTIFIC
+    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_SPELLOUT
+    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_ORDINAL
+    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_DURATION
+    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_NUMBERING_SYSTEM
+    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_PATTERN_RULEBASED
     // For UNUM_CURRENCY_ISO and UNUM_CURRENCY_PLURAL,
     // the pattern is the same as the pattern of UNUM_CURRENCY
     // except for replacing the single currency sign with
     // double currency sign or triple currency sign.
-    icu::number::impl::CLDR_PATTERN_STYLE_CURRENCY,  // UNUM_CURRENCY_ISO 
-    icu::number::impl::CLDR_PATTERN_STYLE_CURRENCY,  // UNUM_CURRENCY_PLURAL 
-    icu::number::impl::CLDR_PATTERN_STYLE_ACCOUNTING,  // UNUM_CURRENCY_ACCOUNTING 
-    icu::number::impl::CLDR_PATTERN_STYLE_CURRENCY,  // UNUM_CASH_CURRENCY 
-    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_DECIMAL_COMPACT_SHORT 
-    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_DECIMAL_COMPACT_LONG 
-    icu::number::impl::CLDR_PATTERN_STYLE_CURRENCY,  // UNUM_CURRENCY_STANDARD 
+    icu::number::impl::CLDR_PATTERN_STYLE_CURRENCY,  // UNUM_CURRENCY_ISO
+    icu::number::impl::CLDR_PATTERN_STYLE_CURRENCY,  // UNUM_CURRENCY_PLURAL
+    icu::number::impl::CLDR_PATTERN_STYLE_ACCOUNTING,  // UNUM_CURRENCY_ACCOUNTING
+    icu::number::impl::CLDR_PATTERN_STYLE_CURRENCY,  // UNUM_CASH_CURRENCY
+    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_DECIMAL_COMPACT_SHORT
+    /* NULL */ icu::number::impl::CLDR_PATTERN_STYLE_COUNT,  // UNUM_DECIMAL_COMPACT_LONG
+    icu::number::impl::CLDR_PATTERN_STYLE_CURRENCY,  // UNUM_CURRENCY_STANDARD
 };
 
 // Static hashtable cache of NumberingSystem objects used by NumberFormat
@@ -521,17 +521,17 @@ ArgExtractor::ArgExtractor(const NumberFormat& /*nf*/, const Formattable& obj, U
 ArgExtractor::~ArgExtractor() {
 }
 
-UnicodeString& NumberFormat::format(const number::impl::DecimalQuantity &number, 
+UnicodeString& NumberFormat::format(const number::impl::DecimalQuantity &number,
                       UnicodeString& appendTo,
                       FieldPositionIterator* posIter,
                       UErrorCode& status) const {
     // DecimalFormat overrides this function, and handles DigitList based big decimals.
-    // Other subclasses (ChoiceFormat) do not (yet) handle DigitLists, 
+    // Other subclasses (ChoiceFormat) do not (yet) handle DigitLists,
     // so this default implementation falls back to formatting decimal numbers as doubles.
     if (U_FAILURE(status)) {
         return appendTo;
     }
-    double dnum = number.toDouble(); 
+    double dnum = number.toDouble();
     format(dnum, appendTo, posIter, status);
     return appendTo;
 }
@@ -539,17 +539,17 @@ UnicodeString& NumberFormat::format(const number::impl::DecimalQuantity &number,
 
 
 UnicodeString&
-NumberFormat::format(const number::impl::DecimalQuantity &number, 
+NumberFormat::format(const number::impl::DecimalQuantity &number,
                      UnicodeString& appendTo,
                      FieldPosition& pos,
-                     UErrorCode &status) const { 
+                     UErrorCode &status) const {
     // DecimalFormat overrides this function, and handles DigitList based big decimals.
-    // Other subclasses (ChoiceFormat) do not (yet) handle DigitLists, 
+    // Other subclasses (ChoiceFormat) do not (yet) handle DigitLists,
     // so this default implementation falls back to formatting decimal numbers as doubles.
     if (U_FAILURE(status)) {
         return appendTo;
     }
-    double dnum = number.toDouble(); 
+    double dnum = number.toDouble();
     format(dnum, appendTo, pos, status);
     return appendTo;
 }
@@ -569,13 +569,13 @@ NumberFormat::format(const Formattable& obj,
     if(arg.wasCurrency() && u_strcmp(iso, getCurrency())) {
       // trying to format a different currency.
       // Right now, we clone.
-      LocalPointer<NumberFormat> cloneFmt(this->clone()); 
+      LocalPointer<NumberFormat> cloneFmt(this->clone());
       cloneFmt->setCurrency(iso, status);
       // next line should NOT recurse, because n is numeric whereas obj was a wrapper around currency amount.
       return cloneFmt->format(*n, appendTo, pos, status);
     }
 
-    if (n->isNumeric() && n->getDecimalQuantity() != NULL) { 
+    if (n->isNumeric() && n->getDecimalQuantity() != NULL) {
         // Decimal Number.  We will have a DigitList available if the value was
         //   set to a decimal number, or if the value originated with a parse.
         //
@@ -584,17 +584,17 @@ NumberFormat::format(const Formattable& obj,
         // know about DigitList to continue to operate as they had.
         //
         // DecimalFormat overrides the DigitList formatting functions.
-        format(*n->getDecimalQuantity(), appendTo, pos, status); 
+        format(*n->getDecimalQuantity(), appendTo, pos, status);
     } else {
         switch (n->getType()) {
         case Formattable::kDouble:
-            format(n->getDouble(), appendTo, pos, status); 
+            format(n->getDouble(), appendTo, pos, status);
             break;
         case Formattable::kLong:
-            format(n->getLong(), appendTo, pos, status); 
+            format(n->getLong(), appendTo, pos, status);
             break;
         case Formattable::kInt64:
-            format(n->getInt64(), appendTo, pos, status); 
+            format(n->getInt64(), appendTo, pos, status);
             break;
         default:
             status = U_INVALID_FORMAT_ERROR;
@@ -624,15 +624,15 @@ NumberFormat::format(const Formattable& obj,
     if(arg.wasCurrency() && u_strcmp(iso, getCurrency())) {
       // trying to format a different currency.
       // Right now, we clone.
-      LocalPointer<NumberFormat> cloneFmt(this->clone()); 
+      LocalPointer<NumberFormat> cloneFmt(this->clone());
       cloneFmt->setCurrency(iso, status);
       // next line should NOT recurse, because n is numeric whereas obj was a wrapper around currency amount.
       return cloneFmt->format(*n, appendTo, posIter, status);
     }
 
-    if (n->isNumeric() && n->getDecimalQuantity() != NULL) { 
+    if (n->isNumeric() && n->getDecimalQuantity() != NULL) {
         // Decimal Number
-        format(*n->getDecimalQuantity(), appendTo, posIter, status); 
+        format(*n->getDecimalQuantity(), appendTo, posIter, status);
     } else {
         switch (n->getType()) {
         case Formattable::kDouble:
@@ -986,19 +986,19 @@ static UBool haveService() {
 URegistryKey U_EXPORT2
 NumberFormat::registerFactory(NumberFormatFactory* toAdopt, UErrorCode& status)
 {
-    if (U_FAILURE(status)) { 
-        delete toAdopt; 
-        return nullptr; 
-    } 
-    ICULocaleService *service = getNumberFormatService(); 
-    if (service) { 
-        NFFactory *tempnnf = new NFFactory(toAdopt); 
-        if (tempnnf != NULL) { 
-            return service->registerFactory(tempnnf, status); 
-        } 
-    } 
-    status = U_MEMORY_ALLOCATION_ERROR; 
-    return NULL; 
+    if (U_FAILURE(status)) {
+        delete toAdopt;
+        return nullptr;
+    }
+    ICULocaleService *service = getNumberFormatService();
+    if (service) {
+        NFFactory *tempnnf = new NFFactory(toAdopt);
+        if (tempnnf != NULL) {
+            return service->registerFactory(tempnnf, status);
+        }
+    }
+    status = U_MEMORY_ALLOCATION_ERROR;
+    return NULL;
 }
 
 // -------------------------------------
@@ -1059,7 +1059,7 @@ NumberFormat::createInstance(const Locale& loc, UNumberFormatStyle kind, UErrorC
     if (U_FAILURE(status)) {
         return NULL;
     }
-    NumberFormat *result = (*shared)->clone(); 
+    NumberFormat *result = (*shared)->clone();
     shared->removeRef();
     if (result == NULL) {
         status = U_MEMORY_ALLOCATION_ERROR;
@@ -1189,7 +1189,7 @@ void NumberFormat::setCurrency(const UChar* theCurrency, UErrorCode& ec) {
     }
 }
 
-const char16_t* NumberFormat::getCurrency() const { 
+const char16_t* NumberFormat::getCurrency() const {
     return fCurrency;
 }
 
@@ -1335,7 +1335,7 @@ NumberFormat::makeInstance(const Locale& desiredLocale,
             case UNUM_DECIMAL:
                 curr = FALSE;
                 // fall-through
-                U_FALLTHROUGH; 
+                U_FALLTHROUGH;
 
             case UNUM_CURRENCY:
             case UNUM_CURRENCY_ISO: // do not support plural formatting here
@@ -1343,13 +1343,13 @@ NumberFormat::makeInstance(const Locale& desiredLocale,
             case UNUM_CURRENCY_ACCOUNTING:
             case UNUM_CASH_CURRENCY:
             case UNUM_CURRENCY_STANDARD:
-            { 
-                LocalPointer<Win32NumberFormat> f(new Win32NumberFormat(desiredLocale, curr, status), status); 
+            {
+                LocalPointer<Win32NumberFormat> f(new Win32NumberFormat(desiredLocale, curr, status), status);
                 if (U_SUCCESS(status)) {
-                    return f.orphan(); 
+                    return f.orphan();
                 }
-            } 
-            break; 
+            }
+            break;
             default:
                 break;
             }
@@ -1366,7 +1366,7 @@ NumberFormat::makeInstance(const Locale& desiredLocale,
         // TODO: Bad hash key usage, see ticket #8504.
         int32_t hashKey = desiredLocale.hashCode();
 
-        static UMutex nscacheMutex; 
+        static UMutex nscacheMutex;
         Mutex lock(&nscacheMutex);
         ns = (NumberingSystem *)uhash_iget(NumberingSystem_cache, hashKey);
         if (ns == NULL) {
@@ -1401,13 +1401,13 @@ NumberFormat::makeInstance(const Locale& desiredLocale,
             return NULL;
         }
 
-        // Load the pattern from data using the common library function 
-        const char16_t* patternPtr = number::impl::utils::getPatternForStyle( 
-                desiredLocale, 
-                ns->getName(), 
-                gFormatCldrStyles[style], 
-                status); 
-        pattern = UnicodeString(TRUE, patternPtr, -1); 
+        // Load the pattern from data using the common library function
+        const char16_t* patternPtr = number::impl::utils::getPatternForStyle(
+                desiredLocale,
+                ns->getName(),
+                gFormatCldrStyles[style],
+                status);
+        pattern = UnicodeString(TRUE, patternPtr, -1);
     }
     if (U_FAILURE(status)) {
         return NULL;
@@ -1420,7 +1420,7 @@ NumberFormat::makeInstance(const Locale& desiredLocale,
         }
     }
 
-    LocalPointer<NumberFormat> f; 
+    LocalPointer<NumberFormat> f;
     if (ns->isAlgorithmic()) {
         UnicodeString nsDesc;
         UnicodeString nsRuleSetGroup;
@@ -1455,7 +1455,7 @@ NumberFormat::makeInstance(const Locale& desiredLocale,
             return NULL;
         }
         r->setDefaultRuleSet(nsRuleSetName,status);
-        f.adoptInstead(r); 
+        f.adoptInstead(r);
     } else {
         // replace single currency sign in the pattern with double currency sign
         // if the style is UNUM_CURRENCY_ISO
@@ -1464,33 +1464,33 @@ NumberFormat::makeInstance(const Locale& desiredLocale,
                                    UnicodeString(TRUE, gDoubleCurrencySign, 2));
         }
 
-        // "new DecimalFormat()" does not adopt the symbols argument if its memory allocation fails. 
-        // So we can't use adoptInsteadAndCheckErrorCode as we need to know if the 'new' failed. 
-        DecimalFormatSymbols *syms = symbolsToAdopt.getAlias(); 
-        LocalPointer<DecimalFormat> df(new DecimalFormat(pattern, syms, style, status)); 
+        // "new DecimalFormat()" does not adopt the symbols argument if its memory allocation fails.
+        // So we can't use adoptInsteadAndCheckErrorCode as we need to know if the 'new' failed.
+        DecimalFormatSymbols *syms = symbolsToAdopt.getAlias();
+        LocalPointer<DecimalFormat> df(new DecimalFormat(pattern, syms, style, status));
 
-        if (df.isValid()) { 
-            // if the DecimalFormat object was successfully new'ed, then it will own symbolsToAdopt, even if the status is a failure. 
-            symbolsToAdopt.orphan(); 
-        } 
-        else { 
-            status = U_MEMORY_ALLOCATION_ERROR; 
-        } 
- 
-        if (U_FAILURE(status)) { 
-            return nullptr; 
-        } 
- 
+        if (df.isValid()) {
+            // if the DecimalFormat object was successfully new'ed, then it will own symbolsToAdopt, even if the status is a failure.
+            symbolsToAdopt.orphan();
+        }
+        else {
+            status = U_MEMORY_ALLOCATION_ERROR;
+        }
+
+        if (U_FAILURE(status)) {
+            return nullptr;
+        }
+
         // if it is cash currency style, setCurrencyUsage with usage
         if (style == UNUM_CASH_CURRENCY){
             df->setCurrencyUsage(UCURR_USAGE_CASH, &status);
         }
 
         if (U_FAILURE(status)) {
-            return nullptr; 
+            return nullptr;
         }
 
-        f.adoptInstead(df.orphan()); 
+        f.adoptInstead(df.orphan());
     }
 
     f->setLocaleIDs(ures_getLocaleByType(ownedResource.getAlias(), ULOC_VALID_LOCALE, &status),
@@ -1498,27 +1498,27 @@ NumberFormat::makeInstance(const Locale& desiredLocale,
     if (U_FAILURE(status)) {
         return NULL;
     }
-    return f.orphan(); 
+    return f.orphan();
 }
 
-/** 
- * Get the rounding mode. 
- * @return A rounding mode 
- */ 
-NumberFormat::ERoundingMode NumberFormat::getRoundingMode() const { 
-    // Default value. ICU4J throws an exception and we can't change this API. 
-    return NumberFormat::ERoundingMode::kRoundUnnecessary; 
-} 
- 
-/** 
- * Set the rounding mode.  This has no effect unless the rounding 
- * increment is greater than zero. 
- * @param roundingMode A rounding mode 
- */ 
-void NumberFormat::setRoundingMode(NumberFormat::ERoundingMode /*roundingMode*/) { 
-    // No-op ICU4J throws an exception, and we can't change this API. 
-} 
- 
+/**
+ * Get the rounding mode.
+ * @return A rounding mode
+ */
+NumberFormat::ERoundingMode NumberFormat::getRoundingMode() const {
+    // Default value. ICU4J throws an exception and we can't change this API.
+    return NumberFormat::ERoundingMode::kRoundUnnecessary;
+}
+
+/**
+ * Set the rounding mode.  This has no effect unless the rounding
+ * increment is greater than zero.
+ * @param roundingMode A rounding mode
+ */
+void NumberFormat::setRoundingMode(NumberFormat::ERoundingMode /*roundingMode*/) {
+    // No-op ICU4J throws an exception, and we can't change this API.
+}
+
 U_NAMESPACE_END
 
 #endif /* #if !UCONFIG_NO_FORMATTING */

@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -71,7 +71,7 @@ public:
      * @return    A copy of the object.
      * @internal ICU 3.8
      */
-    virtual RelativeDateFormat* clone() const; 
+    virtual RelativeDateFormat* clone() const;
 
     /**
      * Return true if the given Format objects are semantically equal. Objects

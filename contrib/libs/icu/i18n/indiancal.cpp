@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  * Copyright (C) 2003-2014, International Business Machines Corporation
@@ -35,7 +35,7 @@ U_NAMESPACE_BEGIN
 //-------------------------------------------------------------------------
 
 
-IndianCalendar* IndianCalendar::clone() const { 
+IndianCalendar* IndianCalendar::clone() const {
   return new IndianCalendar(*this);
 }
 
@@ -348,14 +348,14 @@ IndianCalendar::inDaylightTime(UErrorCode& status) const
 }
 
 
-/** 
- * The system maintains a static default century start date and Year.  They are 
- * initialized the first time they are used.  Once the system default century date 
- * and year are set, they do not change. 
- */ 
-static UDate           gSystemDefaultCenturyStart       = DBL_MIN; 
-static int32_t         gSystemDefaultCenturyStartYear   = -1; 
-static icu::UInitOnce  gSystemDefaultCenturyInit        = U_INITONCE_INITIALIZER; 
+/**
+ * The system maintains a static default century start date and Year.  They are
+ * initialized the first time they are used.  Once the system default century date
+ * and year are set, they do not change.
+ */
+static UDate           gSystemDefaultCenturyStart       = DBL_MIN;
+static int32_t         gSystemDefaultCenturyStartYear   = -1;
+static icu::UInitOnce  gSystemDefaultCenturyInit        = U_INITONCE_INITIALIZER;
 
 
 UBool IndianCalendar::haveDefaultCentury() const
@@ -363,43 +363,43 @@ UBool IndianCalendar::haveDefaultCentury() const
     return TRUE;
 }
 
-static void U_CALLCONV 
-initializeSystemDefaultCentury() 
+static void U_CALLCONV
+initializeSystemDefaultCentury()
 {
-    // initialize systemDefaultCentury and systemDefaultCenturyYear based 
-    // on the current time.  They'll be set to 80 years before 
-    // the current time. 
-    UErrorCode status = U_ZERO_ERROR; 
+    // initialize systemDefaultCentury and systemDefaultCenturyYear based
+    // on the current time.  They'll be set to 80 years before
+    // the current time.
+    UErrorCode status = U_ZERO_ERROR;
 
-    IndianCalendar calendar ( Locale ( "@calendar=Indian" ), status); 
-    if ( U_SUCCESS ( status ) ) { 
-        calendar.setTime ( Calendar::getNow(), status ); 
-        calendar.add ( UCAL_YEAR, -80, status ); 
- 
-        UDate    newStart = calendar.getTime ( status ); 
-        int32_t  newYear  = calendar.get ( UCAL_YEAR, status ); 
- 
-        gSystemDefaultCenturyStart = newStart; 
-        gSystemDefaultCenturyStartYear = newYear; 
-    } 
-    // We have no recourse upon failure. 
+    IndianCalendar calendar ( Locale ( "@calendar=Indian" ), status);
+    if ( U_SUCCESS ( status ) ) {
+        calendar.setTime ( Calendar::getNow(), status );
+        calendar.add ( UCAL_YEAR, -80, status );
+
+        UDate    newStart = calendar.getTime ( status );
+        int32_t  newYear  = calendar.get ( UCAL_YEAR, status );
+
+        gSystemDefaultCenturyStart = newStart;
+        gSystemDefaultCenturyStartYear = newYear;
+    }
+    // We have no recourse upon failure.
 }
 
- 
+
 UDate
-IndianCalendar::defaultCenturyStart() const 
+IndianCalendar::defaultCenturyStart() const
 {
     // lazy-evaluate systemDefaultCenturyStart
-    umtx_initOnce(gSystemDefaultCenturyInit, &initializeSystemDefaultCentury); 
-    return gSystemDefaultCenturyStart; 
+    umtx_initOnce(gSystemDefaultCenturyInit, &initializeSystemDefaultCentury);
+    return gSystemDefaultCenturyStart;
 }
 
 int32_t
-IndianCalendar::defaultCenturyStartYear() const 
+IndianCalendar::defaultCenturyStartYear() const
 {
     // lazy-evaluate systemDefaultCenturyStartYear
-    umtx_initOnce(gSystemDefaultCenturyInit, &initializeSystemDefaultCentury); 
-    return    gSystemDefaultCenturyStartYear; 
+    umtx_initOnce(gSystemDefaultCenturyInit, &initializeSystemDefaultCentury);
+    return    gSystemDefaultCenturyStartYear;
 }
 
 

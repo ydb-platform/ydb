@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -16,8 +16,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API 
- 
+#if U_SHOW_CPLUSPLUS_API
+
 #if !UCONFIG_NO_FORMATTING
 
 #include "unicode/timezone.h"
@@ -44,14 +44,14 @@ public:
     virtual ~BasicTimeZone();
 
     /**
-     * Clones this object polymorphically. 
-     * The caller owns the result and should delete it when done. 
-     * @return clone, or nullptr if an error occurred 
-     * @stable ICU 3.8 
-     */ 
-    virtual BasicTimeZone* clone() const = 0; 
- 
-    /** 
+     * Clones this object polymorphically.
+     * The caller owns the result and should delete it when done.
+     * @return clone, or nullptr if an error occurred
+     * @stable ICU 3.8
+     */
+    virtual BasicTimeZone* clone() const = 0;
+
+    /**
      * Gets the first time zone transition after the base time.
      * @param base      The base time.
      * @param inclusive Whether the base time is inclusive or not.
@@ -207,12 +207,12 @@ protected:
     BasicTimeZone(const BasicTimeZone& source);
 
     /**
-     * Copy assignment. 
-     * @stable ICU 3.8 
-     */ 
-    BasicTimeZone& operator=(const BasicTimeZone&) = default; 
- 
-    /** 
+     * Copy assignment.
+     * @stable ICU 3.8
+     */
+    BasicTimeZone& operator=(const BasicTimeZone&) = default;
+
+    /**
      * Gets the set of TimeZoneRule instances applicable to the specified time and after.
      * @param start     The start date used for extracting time zone rules
      * @param initial   Receives the InitialTimeZone, always not NULL
@@ -227,8 +227,8 @@ U_NAMESPACE_END
 
 #endif /* #if !UCONFIG_NO_FORMATTING */
 
-#endif /* U_SHOW_CPLUSPLUS_API */ 
- 
+#endif /* U_SHOW_CPLUSPLUS_API */
+
 #endif // BASICTZ_H
 
 //eof

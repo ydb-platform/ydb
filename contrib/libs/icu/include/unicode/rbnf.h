@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -12,8 +12,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API 
- 
+#if U_SHOW_CPLUSPLUS_API
+
 /**
  * \file
  * \brief C++ API: Rule Based Number Format
@@ -698,7 +698,7 @@ public:
    * @return  A copy of the object.
    * @stable ICU 2.6
    */
-  virtual RuleBasedNumberFormat* clone() const; 
+  virtual RuleBasedNumberFormat* clone() const;
 
   /**
    * Return true if the given Format objects are semantically equal.
@@ -867,30 +867,30 @@ public:
                                 FieldPosition& pos,
                                 UErrorCode& status) const;
 
-protected: 
-    /** 
-     * Format a decimal number. 
-     * The number is a DigitList wrapper onto a floating point decimal number. 
-     * The default implementation in NumberFormat converts the decimal number 
-     * to a double and formats that.  Subclasses of NumberFormat that want 
-     * to specifically handle big decimal numbers must override this method. 
-     * class DecimalFormat does so. 
-     * 
-     * @param number    The number, a DigitList format Decimal Floating Point. 
-     * @param appendTo  Output parameter to receive result. 
-     *                  Result is appended to existing contents. 
-     * @param pos       On input: an alignment field, if desired. 
-     *                  On output: the offsets of the alignment field. 
-     * @param status    Output param filled with success/failure status. 
-     * @return          Reference to 'appendTo' parameter. 
-     * @internal 
-     */ 
-    virtual UnicodeString& format(const number::impl::DecimalQuantity &number, 
-                                  UnicodeString& appendTo, 
-                                  FieldPosition& pos, 
-                                  UErrorCode& status) const; 
-public: 
- 
+protected:
+    /**
+     * Format a decimal number.
+     * The number is a DigitList wrapper onto a floating point decimal number.
+     * The default implementation in NumberFormat converts the decimal number
+     * to a double and formats that.  Subclasses of NumberFormat that want
+     * to specifically handle big decimal numbers must override this method.
+     * class DecimalFormat does so.
+     *
+     * @param number    The number, a DigitList format Decimal Floating Point.
+     * @param appendTo  Output parameter to receive result.
+     *                  Result is appended to existing contents.
+     * @param pos       On input: an alignment field, if desired.
+     *                  On output: the offsets of the alignment field.
+     * @param status    Output param filled with success/failure status.
+     * @return          Reference to 'appendTo' parameter.
+     * @internal
+     */
+    virtual UnicodeString& format(const number::impl::DecimalQuantity &number,
+                                  UnicodeString& appendTo,
+                                  FieldPosition& pos,
+                                  UErrorCode& status) const;
+public:
+
   using NumberFormat::parse;
 
   /**
@@ -989,20 +989,20 @@ public:
    */
   virtual void setContext(UDisplayContext value, UErrorCode& status);
 
-    /** 
-     * Get the rounding mode. 
-     * @return A rounding mode 
-     * @stable ICU 60 
-     */ 
-    virtual ERoundingMode getRoundingMode(void) const; 
- 
-    /** 
-     * Set the rounding mode. 
-     * @param roundingMode A rounding mode 
-     * @stable ICU 60 
-     */ 
-    virtual void setRoundingMode(ERoundingMode roundingMode); 
- 
+    /**
+     * Get the rounding mode.
+     * @return A rounding mode
+     * @stable ICU 60
+     */
+    virtual ERoundingMode getRoundingMode(void) const;
+
+    /**
+     * Set the rounding mode.
+     * @param roundingMode A rounding mode
+     * @stable ICU 60
+     */
+    virtual void setRoundingMode(ERoundingMode roundingMode);
+
 public:
     /**
      * ICU "poor man's RTTI", returns a UClassID for this class.
@@ -1069,12 +1069,12 @@ private:
     NFRule * initializeDefaultNaNRule(UErrorCode &status);
     const NFRule * getDefaultNaNRule() const;
     PluralFormat *createPluralFormat(UPluralType pluralType, const UnicodeString &pattern, UErrorCode& status) const;
-    UnicodeString& adjustForCapitalizationContext(int32_t startPos, UnicodeString& currentResult, UErrorCode& status) const; 
-    UnicodeString& format(int64_t number, NFRuleSet *ruleSet, UnicodeString& toAppendTo, UErrorCode& status) const; 
-    void format(double number, NFRuleSet& rs, UnicodeString& toAppendTo, UErrorCode& status) const; 
+    UnicodeString& adjustForCapitalizationContext(int32_t startPos, UnicodeString& currentResult, UErrorCode& status) const;
+    UnicodeString& format(int64_t number, NFRuleSet *ruleSet, UnicodeString& toAppendTo, UErrorCode& status) const;
+    void format(double number, NFRuleSet& rs, UnicodeString& toAppendTo, UErrorCode& status) const;
 
 private:
-    NFRuleSet **fRuleSets; 
+    NFRuleSet **fRuleSets;
     UnicodeString* ruleSetDescriptions;
     int32_t numRuleSets;
     NFRuleSet *defaultRuleSet;
@@ -1083,7 +1083,7 @@ private:
     DecimalFormatSymbols* decimalFormatSymbols;
     NFRule *defaultInfinityRule;
     NFRule *defaultNaNRule;
-    ERoundingMode fRoundingMode; 
+    ERoundingMode fRoundingMode;
     UBool lenient;
     UnicodeString* lenientParseRules;
     LocalizationInfo* localizations;
@@ -1115,7 +1115,7 @@ U_NAMESPACE_END
 /* U_HAVE_RBNF */
 #endif
 
-#endif /* U_SHOW_CPLUSPLUS_API */ 
- 
+#endif /* U_SHOW_CPLUSPLUS_API */
+
 /* RBNF_H */
 #endif

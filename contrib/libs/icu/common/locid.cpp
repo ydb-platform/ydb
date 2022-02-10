@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  **********************************************************************
@@ -31,26 +31,26 @@
 ******************************************************************************
 */
 
-#include <utility> 
+#include <utility>
 
-#include "unicode/bytestream.h" 
+#include "unicode/bytestream.h"
 #include "unicode/locid.h"
-#include "unicode/strenum.h" 
-#include "unicode/stringpiece.h" 
+#include "unicode/strenum.h"
+#include "unicode/stringpiece.h"
 #include "unicode/uloc.h"
-#include "unicode/ures.h" 
- 
-#include "bytesinkutil.h" 
-#include "charstr.h" 
+#include "unicode/ures.h"
+
+#include "bytesinkutil.h"
+#include "charstr.h"
 #include "cmemory.h"
 #include "cstring.h"
-#include "mutex.h" 
-#include "putilimp.h" 
+#include "mutex.h"
+#include "putilimp.h"
 #include "uassert.h"
-#include "ucln_cmn.h" 
+#include "ucln_cmn.h"
 #include "uhash.h"
-#include "ulocimp.h" 
-#include "umutex.h" 
+#include "ulocimp.h"
+#include "umutex.h"
 #include "ustr_imp.h"
 
 U_CDECL_BEGIN
@@ -63,7 +63,7 @@ static Locale   *gLocaleCache = NULL;
 static UInitOnce gLocaleCacheInitOnce = U_INITONCE_INITIALIZER;
 
 // gDefaultLocaleMutex protects all access to gDefaultLocalesHashT and gDefaultLocale.
-static UMutex gDefaultLocaleMutex; 
+static UMutex gDefaultLocaleMutex;
 static UHashtable *gDefaultLocalesHashT = NULL;
 static Locale *gDefaultLocale = NULL;
 
@@ -184,15 +184,15 @@ Locale *locale_set_default_internal(const char *id, UErrorCode& status) {
         canonicalize = TRUE; // always canonicalize host ID
     }
 
-    CharString localeNameBuf; 
-    { 
-        CharStringByteSink sink(&localeNameBuf); 
-        if (canonicalize) { 
-            ulocimp_canonicalize(id, sink, &status); 
-        } else { 
-            ulocimp_getName(id, sink, &status); 
-        } 
-    } 
+    CharString localeNameBuf;
+    {
+        CharStringByteSink sink(&localeNameBuf);
+        if (canonicalize) {
+            ulocimp_canonicalize(id, sink, &status);
+        } else {
+            ulocimp_getName(id, sink, &status);
+        }
+    }
 
     if (U_FAILURE(status)) {
         return gDefaultLocale;
@@ -207,14 +207,14 @@ Locale *locale_set_default_internal(const char *id, UErrorCode& status) {
         ucln_common_registerCleanup(UCLN_COMMON_LOCALE, locale_cleanup);
     }
 
-    Locale *newDefault = (Locale *)uhash_get(gDefaultLocalesHashT, localeNameBuf.data()); 
+    Locale *newDefault = (Locale *)uhash_get(gDefaultLocalesHashT, localeNameBuf.data());
     if (newDefault == NULL) {
         newDefault = new Locale(Locale::eBOGUS);
         if (newDefault == NULL) {
             status = U_MEMORY_ALLOCATION_ERROR;
             return gDefaultLocale;
         }
-        newDefault->init(localeNameBuf.data(), FALSE); 
+        newDefault->init(localeNameBuf.data(), FALSE);
         uhash_put(gDefaultLocalesHashT, (char*) newDefault->getName(), newDefault, &status);
         if (U_FAILURE(status)) {
             return gDefaultLocale;
@@ -428,59 +428,32 @@ Locale::Locale(const Locale &other)
     *this = other;
 }
 
-Locale::Locale(Locale&& other) U_NOEXCEPT 
-    : UObject(other), fullName(fullNameBuffer), baseName(fullName) { 
-  *this = std::move(other); 
-} 
- 
-Locale& Locale::operator=(const Locale& other) { 
+Locale::Locale(Locale&& other) U_NOEXCEPT
+    : UObject(other), fullName(fullNameBuffer), baseName(fullName) {
+  *this = std::move(other);
+}
+
+Locale& Locale::operator=(const Locale& other) {
     if (this == &other) {
         return *this;
     }
 
-    setToBogus(); 
- 
-    if (other.fullName == other.fullNameBuffer) { 
-        uprv_strcpy(fullNameBuffer, other.fullNameBuffer); 
-    } else if (other.fullName == nullptr) { 
-        fullName = nullptr; 
-    } else { 
-        fullName = uprv_strdup(other.fullName); 
-        if (fullName == nullptr) return *this; 
-    }
- 
-    if (other.baseName == other.fullName) { 
-        baseName = fullName; 
-    } else if (other.baseName != nullptr) { 
-        baseName = uprv_strdup(other.baseName); 
-        if (baseName == nullptr) return *this; 
-    }
+    setToBogus();
 
-    uprv_strcpy(language, other.language); 
-    uprv_strcpy(script, other.script); 
-    uprv_strcpy(country, other.country); 
- 
-    variantBegin = other.variantBegin; 
-    fIsBogus = other.fIsBogus; 
- 
-    return *this; 
-} 
- 
-Locale& Locale::operator=(Locale&& other) U_NOEXCEPT { 
-    if (baseName != fullName) uprv_free(baseName); 
-    if (fullName != fullNameBuffer) uprv_free(fullName); 
- 
-    if (other.fullName == other.fullNameBuffer) { 
-        uprv_strcpy(fullNameBuffer, other.fullNameBuffer); 
-        fullName = fullNameBuffer; 
-    } else { 
-        fullName = other.fullName; 
+    if (other.fullName == other.fullNameBuffer) {
+        uprv_strcpy(fullNameBuffer, other.fullNameBuffer);
+    } else if (other.fullName == nullptr) {
+        fullName = nullptr;
+    } else {
+        fullName = uprv_strdup(other.fullName);
+        if (fullName == nullptr) return *this;
     }
 
     if (other.baseName == other.fullName) {
         baseName = fullName;
-    } else {
-        baseName = other.baseName; 
+    } else if (other.baseName != nullptr) {
+        baseName = uprv_strdup(other.baseName);
+        if (baseName == nullptr) return *this;
     }
 
     uprv_strcpy(language, other.language);
@@ -489,9 +462,36 @@ Locale& Locale::operator=(Locale&& other) U_NOEXCEPT {
 
     variantBegin = other.variantBegin;
     fIsBogus = other.fIsBogus;
- 
-    other.baseName = other.fullName = other.fullNameBuffer; 
- 
+
+    return *this;
+}
+
+Locale& Locale::operator=(Locale&& other) U_NOEXCEPT {
+    if (baseName != fullName) uprv_free(baseName);
+    if (fullName != fullNameBuffer) uprv_free(fullName);
+
+    if (other.fullName == other.fullNameBuffer) {
+        uprv_strcpy(fullNameBuffer, other.fullNameBuffer);
+        fullName = fullNameBuffer;
+    } else {
+        fullName = other.fullName;
+    }
+
+    if (other.baseName == other.fullName) {
+        baseName = fullName;
+    } else {
+        baseName = other.baseName;
+    }
+
+    uprv_strcpy(language, other.language);
+    uprv_strcpy(script, other.script);
+    uprv_strcpy(country, other.country);
+
+    variantBegin = other.variantBegin;
+    fIsBogus = other.fIsBogus;
+
+    other.baseName = other.fullName = other.fullNameBuffer;
+
     return *this;
 }
 
@@ -508,36 +508,36 @@ Locale::operator==( const   Locale& other) const
 
 #define ISASCIIALPHA(c) (((c) >= 'a' && (c) <= 'z') || ((c) >= 'A' && (c) <= 'Z'))
 
-namespace { 
- 
-CharString& AppendLSCVE(CharString& out, const char* language, const char* script, 
-                 const char* country, const char* variants, const char* extension, 
-                 UErrorCode& status) { 
-    out.append(language, status); 
-    if (script && script[0] != '\0') { 
-        out.append('_', status); 
-        out.append(script, status); 
-    } 
-    if (country && country[0] != '\0') { 
-        out.append('_', status); 
-        out.append(country, status); 
-    } 
-    if (variants && variants[0] != '\0') { 
-        if ((script == nullptr || script[0] == '\0') && 
-            (country == nullptr || country[0] == '\0')) { 
-          out.append('_', status); 
-        } 
-        out.append('_', status); 
-        out.append(variants, status); 
-    } 
-    if (extension && extension[0] != '\0') { 
-        out.append(extension, status); 
-    } 
-    return out; 
-} 
- 
-}  // namespace 
- 
+namespace {
+
+CharString& AppendLSCVE(CharString& out, const char* language, const char* script,
+                 const char* country, const char* variants, const char* extension,
+                 UErrorCode& status) {
+    out.append(language, status);
+    if (script && script[0] != '\0') {
+        out.append('_', status);
+        out.append(script, status);
+    }
+    if (country && country[0] != '\0') {
+        out.append('_', status);
+        out.append(country, status);
+    }
+    if (variants && variants[0] != '\0') {
+        if ((script == nullptr || script[0] == '\0') &&
+            (country == nullptr || country[0] == '\0')) {
+          out.append('_', status);
+        }
+        out.append('_', status);
+        out.append(variants, status);
+    }
+    if (extension && extension[0] != '\0') {
+        out.append(extension, status);
+    }
+    return out;
+}
+
+}  // namespace
+
 /*This function initializes a Locale from a C locale ID*/
 Locale& Locale::init(const char* localeID, UBool canonicalize)
 {
@@ -598,13 +598,13 @@ Locale& Locale::init(const char* localeID, UBool canonicalize)
         variantBegin = length;
 
         /* after uloc_getName/canonicalize() we know that only '_' are separators */
-        /* But _ could also appeared in timezone such as "en@timezone=America/Los_Angeles" */ 
+        /* But _ could also appeared in timezone such as "en@timezone=America/Los_Angeles" */
         separator = field[0] = fullName;
         fieldIdx = 1;
-        char* at = uprv_strchr(fullName, '@'); 
-        while ((separator = uprv_strchr(field[fieldIdx-1], SEP_CHAR)) != 0 && 
-               fieldIdx < UPRV_LENGTHOF(field)-1 && 
-               (at == nullptr || separator < at)) { 
+        char* at = uprv_strchr(fullName, '@');
+        while ((separator = uprv_strchr(field[fieldIdx-1], SEP_CHAR)) != 0 &&
+               fieldIdx < UPRV_LENGTHOF(field)-1 &&
+               (at == nullptr || separator < at)) {
             field[fieldIdx] = separator + 1;
             fieldLen[fieldIdx-1] = (int32_t)(separator - field[fieldIdx-1]);
             fieldIdx++;
@@ -661,195 +661,195 @@ Locale& Locale::init(const char* localeID, UBool canonicalize)
             break;
         }
 
-        if (canonicalize) { 
-            UErrorCode status = U_ZERO_ERROR; 
-            // TODO: Try to use ResourceDataValue and ures_getValueWithFallback() etc. 
-            LocalUResourceBundlePointer metadata(ures_openDirect(NULL, "metadata", &status)); 
-            LocalUResourceBundlePointer metadataAlias(ures_getByKey(metadata.getAlias(), "alias", NULL, &status)); 
-            // Look up the metadata:alias:language:$key:replacement entries 
-            // key could be one of the following: 
-            //   language 
-            //   language_Script_REGION 
-            //   language_REGION 
-            //   language_variant 
-            do { 
-                // The resource structure looks like 
-                // metadata { 
-                //   alias { 
-                //     language { 
-                //       art_lojban { 
-                //         replacement{"jbo"} 
-                //       } 
-                //       ... 
-                //       ks_Arab_IN { 
-                //         replacement{"ks_IN"} 
-                //       } 
-                //       ... 
-                //       no { 
-                //         replacement{"nb"} 
-                //       } 
-                //       .... 
-                //       zh_CN { 
-                //         replacement{"zh_Hans_CN"} 
-                //       } 
-                //     } 
-                //     ... 
-                //   } 
-                // } 
-                LocalUResourceBundlePointer languageAlias(ures_getByKey(metadataAlias.getAlias(), "language", NULL, &status)); 
-                if (U_FAILURE(status)) 
-                    break; 
-                CharString temp; 
-                // Handle cases of key pattern "language _ variant" 
-                // ex: Map "art_lojban" to "jbo" 
-                const char* variants = getVariant(); 
-                if (variants != nullptr && variants[0] != '\0') { 
-                    const char* begin = variants; 
-                    const char* end = begin; 
-                    // We may have multiple variants, need to look at each of 
-                    // them. 
-                    do { 
-                        status = U_ZERO_ERROR; 
-                        end = uprv_strchr(begin, '_'); 
-                        int32_t len = (end == nullptr) ? int32_t(uprv_strlen(begin)) : int32_t(end - begin); 
-                        temp.clear().append(getLanguage(), status).append("_", status).append(begin, len, status); 
-                        LocalUResourceBundlePointer languageVariantAlias( 
-                            ures_getByKey(languageAlias.getAlias(), 
-                                          temp.data(), 
-                                          NULL, &status)); 
-                        temp.clear().appendInvariantChars( 
-                            UnicodeString(ures_getStringByKey(languageVariantAlias.getAlias(), "replacement", nullptr, &status)), status); 
-                        if (U_SUCCESS(status)) { 
-                            CharString newVar; 
-                            if (begin != variants) { 
-                                newVar.append(variants, static_cast<int32_t>(begin - variants - 1), status); 
-                            } 
-                            if (end != nullptr) { 
-                                if (begin != variants) { 
-                                    newVar.append("_", status); 
-                                } 
-                                newVar.append(end + 1, status); 
-                            } 
-                            Locale l(temp.data()); 
-                            init(AppendLSCVE(temp.clear(), 
-                                             l.getLanguage(), 
-                                             (getScript() != nullptr && getScript()[0] != '\0') ? getScript() : l.getScript(), 
-                                             (getCountry() != nullptr && getCountry()[0] != '\0') ? getCountry() : l.getCountry(), 
-                                             newVar.data(), 
-                                             uprv_strchr(fullName, '@'), status).data(), false); 
-                            break; 
-                        } 
-                        begin = end + 1; 
-                    } while (end != nullptr); 
-                }  // End of handle language _ variant 
-                // Handle cases of key pattern "language _ Script _ REGION" 
-                // ex: Map "ks_Arab_IN" to "ks_IN" 
-                if (getScript() != nullptr && getScript()[0] != '\0' && 
-                        getCountry() != nullptr && getCountry()[0] != '\0') { 
-                    status = U_ZERO_ERROR; 
-                    LocalUResourceBundlePointer replacedAlias( 
-                        ures_getByKey(languageAlias.getAlias(), 
-                                      AppendLSCVE(temp.clear(), getLanguage(), getScript(), getCountry(), 
-                                                  nullptr, nullptr, status).data(), NULL, &status)); 
-                    temp.clear().appendInvariantChars( 
-                        UnicodeString(ures_getStringByKey(replacedAlias.getAlias(), "replacement", nullptr, &status)), status); 
-                    if (U_SUCCESS(status)) { 
-                        Locale l(temp.data()); 
-                        init(AppendLSCVE(temp.clear(), 
-                                         l.getLanguage(), 
-                                         l.getScript(), 
-                                         l.getCountry(), 
-                                         getVariant(), 
-                                         uprv_strchr(fullName, '@'), status).data(), false); 
-                    } 
-                }  // End of handle language _ Script _ REGION 
-                // Handle cases of key pattern "language _ REGION" 
-                // ex: Map "zh_CN" to "zh_Hans_CN" 
-                if (getCountry() != nullptr && getCountry()[0] != '\0') { 
-                    status = U_ZERO_ERROR; 
-                    LocalUResourceBundlePointer replacedAlias( 
-                        ures_getByKey(languageAlias.getAlias(), 
-                                      AppendLSCVE(temp.clear(), getLanguage(), nullptr, getCountry(), 
-                                                  nullptr, nullptr, status).data(), NULL, &status)); 
-                    temp.clear().appendInvariantChars( 
-                        UnicodeString(ures_getStringByKey(replacedAlias.getAlias(), "replacement", nullptr, &status)), status); 
-                    if (U_SUCCESS(status)) { 
-                        Locale l(temp.data()); 
-                        init(AppendLSCVE(temp.clear(), 
-                                         l.getLanguage(), 
-                                         (getScript() != nullptr && getScript()[0] != '\0') ? getScript() : l.getScript(), 
-                                         l.getCountry(), 
-                                         getVariant(), 
-                                         uprv_strchr(fullName, '@'), status).data(), false); 
-                    } 
-                }  // End of handle "language _ REGION" 
-                // Handle cases of key pattern "language" 
-                // ex: Map "no" to "nb" 
-                { 
-                    status = U_ZERO_ERROR; 
-                    LocalUResourceBundlePointer replaceLanguageAlias(ures_getByKey(languageAlias.getAlias(), getLanguage(), NULL, &status)); 
-                    temp.clear().appendInvariantChars( 
-                        UnicodeString(ures_getStringByKey(replaceLanguageAlias.getAlias(), "replacement", nullptr, &status)), status); 
-                    if (U_SUCCESS(status)) { 
-                        Locale l(temp.data()); 
-                        init(AppendLSCVE(temp.clear(), 
-                                         l.getLanguage(), 
-                                         (getScript() != nullptr && getScript()[0] != '\0') ? getScript() : l.getScript(), 
-                                         (getCountry() != nullptr && getCountry()[0] != '\0') ? getCountry() : l.getCountry(), 
-                                         getVariant(), 
-                                         uprv_strchr(fullName, '@'), status).data(), false); 
-                    } 
-                }  // End of handle "language" 
- 
-                // Look up the metadata:alias:territory:$key:replacement entries 
-                // key is region code. 
-                if (getCountry() != nullptr) { 
-                    status = U_ZERO_ERROR; 
-                    // The resource structure looks like 
-                    // metadata { 
-                    //   alias { 
-                    //     ... 
-                    //     territory: { 
-                    //       172 { 
-                    //         replacement{"RU AM AZ BY GE KG KZ MD TJ TM UA UZ"} 
-                    //       } 
-                    //       ... 
-                    //       554 { 
-                    //         replacement{"NZ"} 
-                    //       } 
-                    //     } 
-                    //   } 
-                    // } 
-                    LocalUResourceBundlePointer territoryAlias(ures_getByKey(metadataAlias.getAlias(), "territory", NULL, &status)); 
-                    LocalUResourceBundlePointer countryAlias(ures_getByKey(territoryAlias.getAlias(), getCountry(), NULL, &status)); 
-                    UnicodeString replacements( 
-                        ures_getStringByKey(countryAlias.getAlias(), "replacement", nullptr, &status)); 
-                    if (U_SUCCESS(status)) { 
-                        CharString replacedCountry; 
-                        int32_t delPos = replacements.indexOf(' '); 
-                        if (delPos == -1) { 
-                            replacedCountry.appendInvariantChars(replacements, status); 
-                        } else { 
-                            Locale l(AppendLSCVE(temp.clear(), getLanguage(), nullptr, getScript(), 
-                                                 nullptr, nullptr, status).data()); 
-                            l.addLikelySubtags(status); 
-                            if (replacements.indexOf(UnicodeString(l.getCountry())) != -1) { 
-                                replacedCountry.append(l.getCountry(), status); 
-                            } else { 
-                                replacedCountry.appendInvariantChars(replacements.getBuffer(), delPos, status); 
-                            } 
-                        } 
-                        init(AppendLSCVE(temp.clear(), 
-                                         getLanguage(), 
-                                         getScript(), 
-                                         replacedCountry.data(), 
-                                         getVariant(), 
-                                         uprv_strchr(fullName, '@'), status).data(), false); 
-                    } 
-                }   // End of handle REGION 
-            } while (0); 
-        }   // if (canonicalize) { 
- 
+        if (canonicalize) {
+            UErrorCode status = U_ZERO_ERROR;
+            // TODO: Try to use ResourceDataValue and ures_getValueWithFallback() etc.
+            LocalUResourceBundlePointer metadata(ures_openDirect(NULL, "metadata", &status));
+            LocalUResourceBundlePointer metadataAlias(ures_getByKey(metadata.getAlias(), "alias", NULL, &status));
+            // Look up the metadata:alias:language:$key:replacement entries
+            // key could be one of the following:
+            //   language
+            //   language_Script_REGION
+            //   language_REGION
+            //   language_variant
+            do {
+                // The resource structure looks like
+                // metadata {
+                //   alias {
+                //     language {
+                //       art_lojban {
+                //         replacement{"jbo"}
+                //       }
+                //       ...
+                //       ks_Arab_IN {
+                //         replacement{"ks_IN"}
+                //       }
+                //       ...
+                //       no {
+                //         replacement{"nb"}
+                //       }
+                //       ....
+                //       zh_CN {
+                //         replacement{"zh_Hans_CN"}
+                //       }
+                //     }
+                //     ...
+                //   }
+                // }
+                LocalUResourceBundlePointer languageAlias(ures_getByKey(metadataAlias.getAlias(), "language", NULL, &status));
+                if (U_FAILURE(status))
+                    break;
+                CharString temp;
+                // Handle cases of key pattern "language _ variant"
+                // ex: Map "art_lojban" to "jbo"
+                const char* variants = getVariant();
+                if (variants != nullptr && variants[0] != '\0') {
+                    const char* begin = variants;
+                    const char* end = begin;
+                    // We may have multiple variants, need to look at each of
+                    // them.
+                    do {
+                        status = U_ZERO_ERROR;
+                        end = uprv_strchr(begin, '_');
+                        int32_t len = (end == nullptr) ? int32_t(uprv_strlen(begin)) : int32_t(end - begin);
+                        temp.clear().append(getLanguage(), status).append("_", status).append(begin, len, status);
+                        LocalUResourceBundlePointer languageVariantAlias(
+                            ures_getByKey(languageAlias.getAlias(),
+                                          temp.data(),
+                                          NULL, &status));
+                        temp.clear().appendInvariantChars(
+                            UnicodeString(ures_getStringByKey(languageVariantAlias.getAlias(), "replacement", nullptr, &status)), status);
+                        if (U_SUCCESS(status)) {
+                            CharString newVar;
+                            if (begin != variants) {
+                                newVar.append(variants, static_cast<int32_t>(begin - variants - 1), status);
+                            }
+                            if (end != nullptr) {
+                                if (begin != variants) {
+                                    newVar.append("_", status);
+                                }
+                                newVar.append(end + 1, status);
+                            }
+                            Locale l(temp.data());
+                            init(AppendLSCVE(temp.clear(),
+                                             l.getLanguage(),
+                                             (getScript() != nullptr && getScript()[0] != '\0') ? getScript() : l.getScript(),
+                                             (getCountry() != nullptr && getCountry()[0] != '\0') ? getCountry() : l.getCountry(),
+                                             newVar.data(),
+                                             uprv_strchr(fullName, '@'), status).data(), false);
+                            break;
+                        }
+                        begin = end + 1;
+                    } while (end != nullptr);
+                }  // End of handle language _ variant
+                // Handle cases of key pattern "language _ Script _ REGION"
+                // ex: Map "ks_Arab_IN" to "ks_IN"
+                if (getScript() != nullptr && getScript()[0] != '\0' &&
+                        getCountry() != nullptr && getCountry()[0] != '\0') {
+                    status = U_ZERO_ERROR;
+                    LocalUResourceBundlePointer replacedAlias(
+                        ures_getByKey(languageAlias.getAlias(),
+                                      AppendLSCVE(temp.clear(), getLanguage(), getScript(), getCountry(),
+                                                  nullptr, nullptr, status).data(), NULL, &status));
+                    temp.clear().appendInvariantChars(
+                        UnicodeString(ures_getStringByKey(replacedAlias.getAlias(), "replacement", nullptr, &status)), status);
+                    if (U_SUCCESS(status)) {
+                        Locale l(temp.data());
+                        init(AppendLSCVE(temp.clear(),
+                                         l.getLanguage(),
+                                         l.getScript(),
+                                         l.getCountry(),
+                                         getVariant(),
+                                         uprv_strchr(fullName, '@'), status).data(), false);
+                    }
+                }  // End of handle language _ Script _ REGION
+                // Handle cases of key pattern "language _ REGION"
+                // ex: Map "zh_CN" to "zh_Hans_CN"
+                if (getCountry() != nullptr && getCountry()[0] != '\0') {
+                    status = U_ZERO_ERROR;
+                    LocalUResourceBundlePointer replacedAlias(
+                        ures_getByKey(languageAlias.getAlias(),
+                                      AppendLSCVE(temp.clear(), getLanguage(), nullptr, getCountry(),
+                                                  nullptr, nullptr, status).data(), NULL, &status));
+                    temp.clear().appendInvariantChars(
+                        UnicodeString(ures_getStringByKey(replacedAlias.getAlias(), "replacement", nullptr, &status)), status);
+                    if (U_SUCCESS(status)) {
+                        Locale l(temp.data());
+                        init(AppendLSCVE(temp.clear(),
+                                         l.getLanguage(),
+                                         (getScript() != nullptr && getScript()[0] != '\0') ? getScript() : l.getScript(),
+                                         l.getCountry(),
+                                         getVariant(),
+                                         uprv_strchr(fullName, '@'), status).data(), false);
+                    }
+                }  // End of handle "language _ REGION"
+                // Handle cases of key pattern "language"
+                // ex: Map "no" to "nb"
+                {
+                    status = U_ZERO_ERROR;
+                    LocalUResourceBundlePointer replaceLanguageAlias(ures_getByKey(languageAlias.getAlias(), getLanguage(), NULL, &status));
+                    temp.clear().appendInvariantChars(
+                        UnicodeString(ures_getStringByKey(replaceLanguageAlias.getAlias(), "replacement", nullptr, &status)), status);
+                    if (U_SUCCESS(status)) {
+                        Locale l(temp.data());
+                        init(AppendLSCVE(temp.clear(),
+                                         l.getLanguage(),
+                                         (getScript() != nullptr && getScript()[0] != '\0') ? getScript() : l.getScript(),
+                                         (getCountry() != nullptr && getCountry()[0] != '\0') ? getCountry() : l.getCountry(),
+                                         getVariant(),
+                                         uprv_strchr(fullName, '@'), status).data(), false);
+                    }
+                }  // End of handle "language"
+
+                // Look up the metadata:alias:territory:$key:replacement entries
+                // key is region code.
+                if (getCountry() != nullptr) {
+                    status = U_ZERO_ERROR;
+                    // The resource structure looks like
+                    // metadata {
+                    //   alias {
+                    //     ...
+                    //     territory: {
+                    //       172 {
+                    //         replacement{"RU AM AZ BY GE KG KZ MD TJ TM UA UZ"}
+                    //       }
+                    //       ...
+                    //       554 {
+                    //         replacement{"NZ"}
+                    //       }
+                    //     }
+                    //   }
+                    // }
+                    LocalUResourceBundlePointer territoryAlias(ures_getByKey(metadataAlias.getAlias(), "territory", NULL, &status));
+                    LocalUResourceBundlePointer countryAlias(ures_getByKey(territoryAlias.getAlias(), getCountry(), NULL, &status));
+                    UnicodeString replacements(
+                        ures_getStringByKey(countryAlias.getAlias(), "replacement", nullptr, &status));
+                    if (U_SUCCESS(status)) {
+                        CharString replacedCountry;
+                        int32_t delPos = replacements.indexOf(' ');
+                        if (delPos == -1) {
+                            replacedCountry.appendInvariantChars(replacements, status);
+                        } else {
+                            Locale l(AppendLSCVE(temp.clear(), getLanguage(), nullptr, getScript(),
+                                                 nullptr, nullptr, status).data());
+                            l.addLikelySubtags(status);
+                            if (replacements.indexOf(UnicodeString(l.getCountry())) != -1) {
+                                replacedCountry.append(l.getCountry(), status);
+                            } else {
+                                replacedCountry.appendInvariantChars(replacements.getBuffer(), delPos, status);
+                            }
+                        }
+                        init(AppendLSCVE(temp.clear(),
+                                         getLanguage(),
+                                         getScript(),
+                                         replacedCountry.data(),
+                                         getVariant(),
+                                         uprv_strchr(fullName, '@'), status).data(), false);
+                    }
+                }   // End of handle REGION
+            } while (0);
+        }   // if (canonicalize) {
+
         // successful end of init()
         return *this;
     } while(0); /*loop doesn't iterate*/
@@ -900,7 +900,7 @@ Locale::initBaseName(UErrorCode &status) {
 int32_t
 Locale::hashCode() const
 {
-    return ustr_hashCharsN(fullName, static_cast<int32_t>(uprv_strlen(fullName))); 
+    return ustr_hashCharsN(fullName, static_cast<int32_t>(uprv_strlen(fullName)));
 }
 
 void
@@ -952,132 +952,132 @@ Locale::setDefault( const   Locale&     newLocale,
     locale_set_default_internal(localeID, status);
 }
 
-void 
-Locale::addLikelySubtags(UErrorCode& status) { 
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
- 
-    CharString maximizedLocaleID; 
-    { 
-        CharStringByteSink sink(&maximizedLocaleID); 
-        ulocimp_addLikelySubtags(fullName, sink, &status); 
-    } 
- 
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
- 
-    init(maximizedLocaleID.data(), /*canonicalize=*/FALSE); 
-    if (isBogus()) { 
-        status = U_ILLEGAL_ARGUMENT_ERROR; 
-    } 
-} 
- 
-void 
-Locale::minimizeSubtags(UErrorCode& status) { 
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
- 
-    CharString minimizedLocaleID; 
-    { 
-        CharStringByteSink sink(&minimizedLocaleID); 
-        ulocimp_minimizeSubtags(fullName, sink, &status); 
-    } 
- 
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
- 
-    init(minimizedLocaleID.data(), /*canonicalize=*/FALSE); 
-    if (isBogus()) { 
-        status = U_ILLEGAL_ARGUMENT_ERROR; 
-    } 
-} 
- 
-void 
-Locale::canonicalize(UErrorCode& status) { 
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
-    if (isBogus()) { 
-        status = U_ILLEGAL_ARGUMENT_ERROR; 
-        return; 
-    } 
-    CharString uncanonicalized(fullName, status); 
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
-    init(uncanonicalized.data(), /*canonicalize=*/TRUE); 
-    if (isBogus()) { 
-        status = U_ILLEGAL_ARGUMENT_ERROR; 
-    } 
-} 
- 
+void
+Locale::addLikelySubtags(UErrorCode& status) {
+    if (U_FAILURE(status)) {
+        return;
+    }
+
+    CharString maximizedLocaleID;
+    {
+        CharStringByteSink sink(&maximizedLocaleID);
+        ulocimp_addLikelySubtags(fullName, sink, &status);
+    }
+
+    if (U_FAILURE(status)) {
+        return;
+    }
+
+    init(maximizedLocaleID.data(), /*canonicalize=*/FALSE);
+    if (isBogus()) {
+        status = U_ILLEGAL_ARGUMENT_ERROR;
+    }
+}
+
+void
+Locale::minimizeSubtags(UErrorCode& status) {
+    if (U_FAILURE(status)) {
+        return;
+    }
+
+    CharString minimizedLocaleID;
+    {
+        CharStringByteSink sink(&minimizedLocaleID);
+        ulocimp_minimizeSubtags(fullName, sink, &status);
+    }
+
+    if (U_FAILURE(status)) {
+        return;
+    }
+
+    init(minimizedLocaleID.data(), /*canonicalize=*/FALSE);
+    if (isBogus()) {
+        status = U_ILLEGAL_ARGUMENT_ERROR;
+    }
+}
+
+void
+Locale::canonicalize(UErrorCode& status) {
+    if (U_FAILURE(status)) {
+        return;
+    }
+    if (isBogus()) {
+        status = U_ILLEGAL_ARGUMENT_ERROR;
+        return;
+    }
+    CharString uncanonicalized(fullName, status);
+    if (U_FAILURE(status)) {
+        return;
+    }
+    init(uncanonicalized.data(), /*canonicalize=*/TRUE);
+    if (isBogus()) {
+        status = U_ILLEGAL_ARGUMENT_ERROR;
+    }
+}
+
 Locale U_EXPORT2
-Locale::forLanguageTag(StringPiece tag, UErrorCode& status) 
-{ 
-    Locale result(Locale::eBOGUS); 
- 
-    if (U_FAILURE(status)) { 
-        return result; 
-    } 
- 
-    // If a BCP-47 language tag is passed as the language parameter to the 
-    // normal Locale constructor, it will actually fall back to invoking 
-    // uloc_forLanguageTag() to parse it if it somehow is able to detect that 
-    // the string actually is BCP-47. This works well for things like strings 
-    // using BCP-47 extensions, but it does not at all work for things like 
-    // BCP-47 grandfathered tags (eg. "en-GB-oed") which are possible to also 
-    // interpret as ICU locale IDs and because of that won't trigger the BCP-47 
-    // parsing. Therefore the code here explicitly calls uloc_forLanguageTag() 
-    // and then Locale::init(), instead of just calling the normal constructor. 
- 
-    CharString localeID; 
-    int32_t parsedLength; 
-    { 
-        CharStringByteSink sink(&localeID); 
-        ulocimp_forLanguageTag( 
-                tag.data(), 
-                tag.length(), 
-                sink, 
-                &parsedLength, 
-                &status); 
-    } 
- 
-    if (U_FAILURE(status)) { 
-        return result; 
-    } 
- 
-    if (parsedLength != tag.size()) { 
-        status = U_ILLEGAL_ARGUMENT_ERROR; 
-        return result; 
-    } 
- 
-    result.init(localeID.data(), /*canonicalize=*/FALSE); 
-    if (result.isBogus()) { 
-        status = U_ILLEGAL_ARGUMENT_ERROR; 
-    } 
-    return result; 
-} 
- 
-void 
-Locale::toLanguageTag(ByteSink& sink, UErrorCode& status) const 
-{ 
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
- 
-    if (fIsBogus) { 
-        status = U_ILLEGAL_ARGUMENT_ERROR; 
-        return; 
-    } 
- 
-    ulocimp_toLanguageTag(fullName, sink, /*strict=*/FALSE, &status); 
-} 
- 
-Locale U_EXPORT2 
+Locale::forLanguageTag(StringPiece tag, UErrorCode& status)
+{
+    Locale result(Locale::eBOGUS);
+
+    if (U_FAILURE(status)) {
+        return result;
+    }
+
+    // If a BCP-47 language tag is passed as the language parameter to the
+    // normal Locale constructor, it will actually fall back to invoking
+    // uloc_forLanguageTag() to parse it if it somehow is able to detect that
+    // the string actually is BCP-47. This works well for things like strings
+    // using BCP-47 extensions, but it does not at all work for things like
+    // BCP-47 grandfathered tags (eg. "en-GB-oed") which are possible to also
+    // interpret as ICU locale IDs and because of that won't trigger the BCP-47
+    // parsing. Therefore the code here explicitly calls uloc_forLanguageTag()
+    // and then Locale::init(), instead of just calling the normal constructor.
+
+    CharString localeID;
+    int32_t parsedLength;
+    {
+        CharStringByteSink sink(&localeID);
+        ulocimp_forLanguageTag(
+                tag.data(),
+                tag.length(),
+                sink,
+                &parsedLength,
+                &status);
+    }
+
+    if (U_FAILURE(status)) {
+        return result;
+    }
+
+    if (parsedLength != tag.size()) {
+        status = U_ILLEGAL_ARGUMENT_ERROR;
+        return result;
+    }
+
+    result.init(localeID.data(), /*canonicalize=*/FALSE);
+    if (result.isBogus()) {
+        status = U_ILLEGAL_ARGUMENT_ERROR;
+    }
+    return result;
+}
+
+void
+Locale::toLanguageTag(ByteSink& sink, UErrorCode& status) const
+{
+    if (U_FAILURE(status)) {
+        return;
+    }
+
+    if (fIsBogus) {
+        status = U_ILLEGAL_ARGUMENT_ERROR;
+        return;
+    }
+
+    ulocimp_toLanguageTag(fullName, sink, /*strict=*/FALSE, &status);
+}
+
+Locale U_EXPORT2
 Locale::createFromName (const char *name)
 {
     if (name) {
@@ -1383,55 +1383,55 @@ KeywordEnumeration::~KeywordEnumeration() {
     uprv_free(keywords);
 }
 
-// A wrapper around KeywordEnumeration that calls uloc_toUnicodeLocaleKey() in 
-// the next() method for each keyword before returning it. 
-class UnicodeKeywordEnumeration : public KeywordEnumeration { 
-public: 
-    using KeywordEnumeration::KeywordEnumeration; 
-    virtual ~UnicodeKeywordEnumeration(); 
- 
-    virtual const char* next(int32_t* resultLength, UErrorCode& status) { 
-        const char* legacy_key = KeywordEnumeration::next(nullptr, status); 
-        if (U_SUCCESS(status) && legacy_key != nullptr) { 
-            const char* key = uloc_toUnicodeLocaleKey(legacy_key); 
-            if (key == nullptr) { 
-                status = U_ILLEGAL_ARGUMENT_ERROR; 
-            } else { 
-                if (resultLength != nullptr) { 
-                    *resultLength = static_cast<int32_t>(uprv_strlen(key)); 
-                } 
-                return key; 
-            } 
-        } 
-        if (resultLength != nullptr) *resultLength = 0; 
-        return nullptr; 
-    } 
-}; 
- 
-// Out-of-line virtual destructor to serve as the "key function". 
-UnicodeKeywordEnumeration::~UnicodeKeywordEnumeration() = default; 
- 
+// A wrapper around KeywordEnumeration that calls uloc_toUnicodeLocaleKey() in
+// the next() method for each keyword before returning it.
+class UnicodeKeywordEnumeration : public KeywordEnumeration {
+public:
+    using KeywordEnumeration::KeywordEnumeration;
+    virtual ~UnicodeKeywordEnumeration();
+
+    virtual const char* next(int32_t* resultLength, UErrorCode& status) {
+        const char* legacy_key = KeywordEnumeration::next(nullptr, status);
+        if (U_SUCCESS(status) && legacy_key != nullptr) {
+            const char* key = uloc_toUnicodeLocaleKey(legacy_key);
+            if (key == nullptr) {
+                status = U_ILLEGAL_ARGUMENT_ERROR;
+            } else {
+                if (resultLength != nullptr) {
+                    *resultLength = static_cast<int32_t>(uprv_strlen(key));
+                }
+                return key;
+            }
+        }
+        if (resultLength != nullptr) *resultLength = 0;
+        return nullptr;
+    }
+};
+
+// Out-of-line virtual destructor to serve as the "key function".
+UnicodeKeywordEnumeration::~UnicodeKeywordEnumeration() = default;
+
 StringEnumeration *
 Locale::createKeywords(UErrorCode &status) const
 {
     char keywords[256];
-    int32_t keywordCapacity = sizeof keywords; 
+    int32_t keywordCapacity = sizeof keywords;
     StringEnumeration *result = NULL;
 
-    if (U_FAILURE(status)) { 
-        return result; 
-    } 
- 
+    if (U_FAILURE(status)) {
+        return result;
+    }
+
     const char* variantStart = uprv_strchr(fullName, '@');
     const char* assignment = uprv_strchr(fullName, '=');
     if(variantStart) {
         if(assignment > variantStart) {
-            int32_t keyLen = locale_getKeywords(variantStart+1, '@', keywords, keywordCapacity, FALSE, &status); 
-            if(U_SUCCESS(status) && keyLen) { 
+            int32_t keyLen = locale_getKeywords(variantStart+1, '@', keywords, keywordCapacity, FALSE, &status);
+            if(U_SUCCESS(status) && keyLen) {
                 result = new KeywordEnumeration(keywords, keyLen, 0, status);
-                if (!result) { 
-                    status = U_MEMORY_ALLOCATION_ERROR; 
-                } 
+                if (!result) {
+                    status = U_MEMORY_ALLOCATION_ERROR;
+                }
             }
         } else {
             status = U_INVALID_FORMAT_ERROR;
@@ -1440,35 +1440,35 @@ Locale::createKeywords(UErrorCode &status) const
     return result;
 }
 
-StringEnumeration * 
-Locale::createUnicodeKeywords(UErrorCode &status) const 
-{ 
-    char keywords[256]; 
-    int32_t keywordCapacity = sizeof keywords; 
-    StringEnumeration *result = NULL; 
- 
-    if (U_FAILURE(status)) { 
-        return result; 
-    } 
- 
-    const char* variantStart = uprv_strchr(fullName, '@'); 
-    const char* assignment = uprv_strchr(fullName, '='); 
-    if(variantStart) { 
-        if(assignment > variantStart) { 
-            int32_t keyLen = locale_getKeywords(variantStart+1, '@', keywords, keywordCapacity, FALSE, &status); 
-            if(U_SUCCESS(status) && keyLen) { 
-                result = new UnicodeKeywordEnumeration(keywords, keyLen, 0, status); 
-                if (!result) { 
-                    status = U_MEMORY_ALLOCATION_ERROR; 
-                } 
-            } 
-        } else { 
-            status = U_INVALID_FORMAT_ERROR; 
-        } 
-    } 
-    return result; 
-} 
- 
+StringEnumeration *
+Locale::createUnicodeKeywords(UErrorCode &status) const
+{
+    char keywords[256];
+    int32_t keywordCapacity = sizeof keywords;
+    StringEnumeration *result = NULL;
+
+    if (U_FAILURE(status)) {
+        return result;
+    }
+
+    const char* variantStart = uprv_strchr(fullName, '@');
+    const char* assignment = uprv_strchr(fullName, '=');
+    if(variantStart) {
+        if(assignment > variantStart) {
+            int32_t keyLen = locale_getKeywords(variantStart+1, '@', keywords, keywordCapacity, FALSE, &status);
+            if(U_SUCCESS(status) && keyLen) {
+                result = new UnicodeKeywordEnumeration(keywords, keyLen, 0, status);
+                if (!result) {
+                    status = U_MEMORY_ALLOCATION_ERROR;
+                }
+            }
+        } else {
+            status = U_INVALID_FORMAT_ERROR;
+        }
+    }
+    return result;
+}
+
 int32_t
 Locale::getKeywordValue(const char* keywordName, char *buffer, int32_t bufLen, UErrorCode &status) const
 {
@@ -1476,188 +1476,188 @@ Locale::getKeywordValue(const char* keywordName, char *buffer, int32_t bufLen, U
 }
 
 void
-Locale::getKeywordValue(StringPiece keywordName, ByteSink& sink, UErrorCode& status) const { 
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
- 
-    if (fIsBogus) { 
-        status = U_ILLEGAL_ARGUMENT_ERROR; 
-        return; 
-    } 
- 
-    // TODO: Remove the need for a const char* to a NUL terminated buffer. 
-    const CharString keywordName_nul(keywordName, status); 
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
- 
-    LocalMemory<char> scratch; 
-    int32_t scratch_capacity = 16;  // Arbitrarily chosen default size. 
- 
-    char* buffer; 
-    int32_t result_capacity, reslen; 
- 
-    for (;;) { 
-        if (scratch.allocateInsteadAndReset(scratch_capacity) == nullptr) { 
-            status = U_MEMORY_ALLOCATION_ERROR; 
-            return; 
-        } 
- 
-        buffer = sink.GetAppendBuffer( 
-                /*min_capacity=*/scratch_capacity, 
-                /*desired_capacity_hint=*/scratch_capacity, 
-                scratch.getAlias(), 
-                scratch_capacity, 
-                &result_capacity); 
- 
-        reslen = uloc_getKeywordValue( 
-                fullName, 
-                keywordName_nul.data(), 
-                buffer, 
-                result_capacity, 
-                &status); 
- 
-        if (status != U_BUFFER_OVERFLOW_ERROR) { 
-            break; 
-        } 
- 
-        scratch_capacity = reslen; 
-        status = U_ZERO_ERROR; 
-    } 
- 
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
- 
-    sink.Append(buffer, reslen); 
-    if (status == U_STRING_NOT_TERMINATED_WARNING) { 
-        status = U_ZERO_ERROR;  // Terminators not used. 
-    } 
-} 
- 
-void 
-Locale::getUnicodeKeywordValue(StringPiece keywordName, 
-                               ByteSink& sink, 
-                               UErrorCode& status) const { 
-    // TODO: Remove the need for a const char* to a NUL terminated buffer. 
-    const CharString keywordName_nul(keywordName, status); 
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
- 
-    const char* legacy_key = uloc_toLegacyKey(keywordName_nul.data()); 
- 
-    if (legacy_key == nullptr) { 
-        status = U_ILLEGAL_ARGUMENT_ERROR; 
-        return; 
-    } 
- 
-    CharString legacy_value; 
-    { 
-        CharStringByteSink sink(&legacy_value); 
-        getKeywordValue(legacy_key, sink, status); 
-    } 
- 
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
- 
-    const char* unicode_value = uloc_toUnicodeLocaleType( 
-            keywordName_nul.data(), legacy_value.data()); 
- 
-    if (unicode_value == nullptr) { 
-        status = U_ILLEGAL_ARGUMENT_ERROR; 
-        return; 
-    } 
- 
-    sink.Append(unicode_value, static_cast<int32_t>(uprv_strlen(unicode_value))); 
-} 
- 
-void 
+Locale::getKeywordValue(StringPiece keywordName, ByteSink& sink, UErrorCode& status) const {
+    if (U_FAILURE(status)) {
+        return;
+    }
+
+    if (fIsBogus) {
+        status = U_ILLEGAL_ARGUMENT_ERROR;
+        return;
+    }
+
+    // TODO: Remove the need for a const char* to a NUL terminated buffer.
+    const CharString keywordName_nul(keywordName, status);
+    if (U_FAILURE(status)) {
+        return;
+    }
+
+    LocalMemory<char> scratch;
+    int32_t scratch_capacity = 16;  // Arbitrarily chosen default size.
+
+    char* buffer;
+    int32_t result_capacity, reslen;
+
+    for (;;) {
+        if (scratch.allocateInsteadAndReset(scratch_capacity) == nullptr) {
+            status = U_MEMORY_ALLOCATION_ERROR;
+            return;
+        }
+
+        buffer = sink.GetAppendBuffer(
+                /*min_capacity=*/scratch_capacity,
+                /*desired_capacity_hint=*/scratch_capacity,
+                scratch.getAlias(),
+                scratch_capacity,
+                &result_capacity);
+
+        reslen = uloc_getKeywordValue(
+                fullName,
+                keywordName_nul.data(),
+                buffer,
+                result_capacity,
+                &status);
+
+        if (status != U_BUFFER_OVERFLOW_ERROR) {
+            break;
+        }
+
+        scratch_capacity = reslen;
+        status = U_ZERO_ERROR;
+    }
+
+    if (U_FAILURE(status)) {
+        return;
+    }
+
+    sink.Append(buffer, reslen);
+    if (status == U_STRING_NOT_TERMINATED_WARNING) {
+        status = U_ZERO_ERROR;  // Terminators not used.
+    }
+}
+
+void
+Locale::getUnicodeKeywordValue(StringPiece keywordName,
+                               ByteSink& sink,
+                               UErrorCode& status) const {
+    // TODO: Remove the need for a const char* to a NUL terminated buffer.
+    const CharString keywordName_nul(keywordName, status);
+    if (U_FAILURE(status)) {
+        return;
+    }
+
+    const char* legacy_key = uloc_toLegacyKey(keywordName_nul.data());
+
+    if (legacy_key == nullptr) {
+        status = U_ILLEGAL_ARGUMENT_ERROR;
+        return;
+    }
+
+    CharString legacy_value;
+    {
+        CharStringByteSink sink(&legacy_value);
+        getKeywordValue(legacy_key, sink, status);
+    }
+
+    if (U_FAILURE(status)) {
+        return;
+    }
+
+    const char* unicode_value = uloc_toUnicodeLocaleType(
+            keywordName_nul.data(), legacy_value.data());
+
+    if (unicode_value == nullptr) {
+        status = U_ILLEGAL_ARGUMENT_ERROR;
+        return;
+    }
+
+    sink.Append(unicode_value, static_cast<int32_t>(uprv_strlen(unicode_value)));
+}
+
+void
 Locale::setKeywordValue(const char* keywordName, const char* keywordValue, UErrorCode &status)
 {
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
-    int32_t bufferLength = uprv_max((int32_t)(uprv_strlen(fullName) + 1), ULOC_FULLNAME_CAPACITY); 
-    int32_t newLength = uloc_setKeywordValue(keywordName, keywordValue, fullName, 
-                                             bufferLength, &status) + 1; 
-    /* Handle the case the current buffer is not enough to hold the new id */ 
-    if (status == U_BUFFER_OVERFLOW_ERROR) { 
-        U_ASSERT(newLength > bufferLength); 
-        char* newFullName = (char *)uprv_malloc(newLength); 
-        if (newFullName == nullptr) { 
-            status = U_MEMORY_ALLOCATION_ERROR; 
-            return; 
-        } 
-        uprv_strcpy(newFullName, fullName); 
-        if (fullName != fullNameBuffer) { 
-            // if full Name is already on the heap, need to free it. 
-            uprv_free(fullName); 
-        } 
-        fullName = newFullName; 
-        status = U_ZERO_ERROR; 
-        uloc_setKeywordValue(keywordName, keywordValue, fullName, newLength, &status); 
-    } else { 
-        U_ASSERT(newLength <= bufferLength); 
-    } 
+    if (U_FAILURE(status)) {
+        return;
+    }
+    int32_t bufferLength = uprv_max((int32_t)(uprv_strlen(fullName) + 1), ULOC_FULLNAME_CAPACITY);
+    int32_t newLength = uloc_setKeywordValue(keywordName, keywordValue, fullName,
+                                             bufferLength, &status) + 1;
+    /* Handle the case the current buffer is not enough to hold the new id */
+    if (status == U_BUFFER_OVERFLOW_ERROR) {
+        U_ASSERT(newLength > bufferLength);
+        char* newFullName = (char *)uprv_malloc(newLength);
+        if (newFullName == nullptr) {
+            status = U_MEMORY_ALLOCATION_ERROR;
+            return;
+        }
+        uprv_strcpy(newFullName, fullName);
+        if (fullName != fullNameBuffer) {
+            // if full Name is already on the heap, need to free it.
+            uprv_free(fullName);
+        }
+        fullName = newFullName;
+        status = U_ZERO_ERROR;
+        uloc_setKeywordValue(keywordName, keywordValue, fullName, newLength, &status);
+    } else {
+        U_ASSERT(newLength <= bufferLength);
+    }
     if (U_SUCCESS(status) && baseName == fullName) {
         // May have added the first keyword, meaning that the fullName is no longer also the baseName.
         initBaseName(status);
     }
 }
 
-void 
-Locale::setKeywordValue(StringPiece keywordName, 
-                        StringPiece keywordValue, 
-                        UErrorCode& status) { 
-    // TODO: Remove the need for a const char* to a NUL terminated buffer. 
-    const CharString keywordName_nul(keywordName, status); 
-    const CharString keywordValue_nul(keywordValue, status); 
-    setKeywordValue(keywordName_nul.data(), keywordValue_nul.data(), status); 
-} 
- 
-void 
-Locale::setUnicodeKeywordValue(StringPiece keywordName, 
-                               StringPiece keywordValue, 
-                               UErrorCode& status) { 
-    // TODO: Remove the need for a const char* to a NUL terminated buffer. 
-    const CharString keywordName_nul(keywordName, status); 
-    const CharString keywordValue_nul(keywordValue, status); 
- 
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
- 
-    const char* legacy_key = uloc_toLegacyKey(keywordName_nul.data()); 
- 
-    if (legacy_key == nullptr) { 
-        status = U_ILLEGAL_ARGUMENT_ERROR; 
-        return; 
-    } 
- 
-    const char* legacy_value = nullptr; 
- 
-    if (!keywordValue_nul.isEmpty()) { 
-        legacy_value = 
-            uloc_toLegacyType(keywordName_nul.data(), keywordValue_nul.data()); 
- 
-        if (legacy_value == nullptr) { 
-            status = U_ILLEGAL_ARGUMENT_ERROR; 
-            return; 
-        } 
-    } 
- 
-    setKeywordValue(legacy_key, legacy_value, status); 
-} 
- 
+void
+Locale::setKeywordValue(StringPiece keywordName,
+                        StringPiece keywordValue,
+                        UErrorCode& status) {
+    // TODO: Remove the need for a const char* to a NUL terminated buffer.
+    const CharString keywordName_nul(keywordName, status);
+    const CharString keywordValue_nul(keywordValue, status);
+    setKeywordValue(keywordName_nul.data(), keywordValue_nul.data(), status);
+}
+
+void
+Locale::setUnicodeKeywordValue(StringPiece keywordName,
+                               StringPiece keywordValue,
+                               UErrorCode& status) {
+    // TODO: Remove the need for a const char* to a NUL terminated buffer.
+    const CharString keywordName_nul(keywordName, status);
+    const CharString keywordValue_nul(keywordValue, status);
+
+    if (U_FAILURE(status)) {
+        return;
+    }
+
+    const char* legacy_key = uloc_toLegacyKey(keywordName_nul.data());
+
+    if (legacy_key == nullptr) {
+        status = U_ILLEGAL_ARGUMENT_ERROR;
+        return;
+    }
+
+    const char* legacy_value = nullptr;
+
+    if (!keywordValue_nul.isEmpty()) {
+        legacy_value =
+            uloc_toLegacyType(keywordName_nul.data(), keywordValue_nul.data());
+
+        if (legacy_value == nullptr) {
+            status = U_ILLEGAL_ARGUMENT_ERROR;
+            return;
+        }
+    }
+
+    setKeywordValue(legacy_key, legacy_value, status);
+}
+
 const char *
 Locale::getBaseName() const {
     return baseName;
 }
 
-Locale::Iterator::~Iterator() = default; 
- 
+Locale::Iterator::~Iterator() = default;
+
 //eof
 U_NAMESPACE_END

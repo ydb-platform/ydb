@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -6,7 +6,7 @@
 *   Corporation and others.  All Rights Reserved.
 *******************************************************************************
 *   file name:  unistr_case_locale.cpp
-*   encoding:   UTF-8 
+*   encoding:   UTF-8
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -19,9 +19,9 @@
 
 #include "unicode/utypes.h"
 #include "unicode/locid.h"
-#include "unicode/ucasemap.h" 
+#include "unicode/ucasemap.h"
 #include "unicode/unistr.h"
-#include "ucasemap_imp.h" 
+#include "ucasemap_imp.h"
 
 U_NAMESPACE_BEGIN
 
@@ -31,26 +31,26 @@ U_NAMESPACE_BEGIN
 
 UnicodeString &
 UnicodeString::toLower() {
-  return caseMap(ustrcase_getCaseLocale(NULL), 0, 
-                 UCASEMAP_BREAK_ITERATOR_NULL ustrcase_internalToLower); 
+  return caseMap(ustrcase_getCaseLocale(NULL), 0,
+                 UCASEMAP_BREAK_ITERATOR_NULL ustrcase_internalToLower);
 }
 
 UnicodeString &
 UnicodeString::toLower(const Locale &locale) {
-  return caseMap(ustrcase_getCaseLocale(locale.getBaseName()), 0, 
-                 UCASEMAP_BREAK_ITERATOR_NULL ustrcase_internalToLower); 
+  return caseMap(ustrcase_getCaseLocale(locale.getBaseName()), 0,
+                 UCASEMAP_BREAK_ITERATOR_NULL ustrcase_internalToLower);
 }
 
 UnicodeString &
 UnicodeString::toUpper() {
-  return caseMap(ustrcase_getCaseLocale(NULL), 0, 
-                 UCASEMAP_BREAK_ITERATOR_NULL ustrcase_internalToUpper); 
+  return caseMap(ustrcase_getCaseLocale(NULL), 0,
+                 UCASEMAP_BREAK_ITERATOR_NULL ustrcase_internalToUpper);
 }
 
 UnicodeString &
 UnicodeString::toUpper(const Locale &locale) {
-  return caseMap(ustrcase_getCaseLocale(locale.getBaseName()), 0, 
-                 UCASEMAP_BREAK_ITERATOR_NULL ustrcase_internalToUpper); 
+  return caseMap(ustrcase_getCaseLocale(locale.getBaseName()), 0,
+                 UCASEMAP_BREAK_ITERATOR_NULL ustrcase_internalToUpper);
 }
 
 U_NAMESPACE_END

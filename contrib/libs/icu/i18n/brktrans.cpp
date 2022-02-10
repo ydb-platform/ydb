@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -10,8 +10,8 @@
 **********************************************************************
 */
 
-#include <utility> 
- 
+#include <utility>
+
 #include "unicode/utypes.h"
 
 #if  !UCONFIG_NO_TRANSLITERATION && !UCONFIG_NO_BREAK_ITERATION
@@ -64,7 +64,7 @@ BreakTransliterator::BreakTransliterator(const BreakTransliterator& o) :
 /**
  * Transliterator API.
  */
-BreakTransliterator* BreakTransliterator::clone() const { 
+BreakTransliterator* BreakTransliterator::clone() const {
     return new BreakTransliterator(*this);
 }
 
@@ -81,8 +81,8 @@ void BreakTransliterator::handleTransliterate(Replaceable& text, UTransPosition&
         {
             Mutex m;
             BreakTransliterator *nonConstThis = const_cast<BreakTransliterator *>(this);
-            boundaries = std::move(nonConstThis->cachedBoundaries); 
-            bi = std::move(nonConstThis->cachedBI); 
+            boundaries = std::move(nonConstThis->cachedBoundaries);
+            bi = std::move(nonConstThis->cachedBI);
         }
         if (bi.isNull()) {
             bi.adoptInstead(BreakIterator::createWordInstance(Locale::getEnglish(), status));
@@ -147,10 +147,10 @@ void BreakTransliterator::handleTransliterate(Replaceable& text, UTransPosition&
             Mutex m;
             BreakTransliterator *nonConstThis = const_cast<BreakTransliterator *>(this);
             if (nonConstThis->cachedBI.isNull()) {
-                nonConstThis->cachedBI = std::move(bi); 
+                nonConstThis->cachedBI = std::move(bi);
             }
             if (nonConstThis->cachedBoundaries.isNull()) {
-                nonConstThis->cachedBoundaries = std::move(boundaries); 
+                nonConstThis->cachedBoundaries = std::move(boundaries);
             }
         }
 

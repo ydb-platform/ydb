@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -8,7 +8,7 @@
 *
 *******************************************************************************
 *   file name:  std_string.h
-*   encoding:   UTF-8 
+*   encoding:   UTF-8
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -27,15 +27,15 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API 
+#if U_SHOW_CPLUSPLUS_API
 
-// Workaround for a libstdc++ bug before libstdc++4.6 (2011). 
-// https://bugs.llvm.org/show_bug.cgi?id=13364 
-#if defined(__GLIBCXX__) 
-namespace std { class type_info; } 
+// Workaround for a libstdc++ bug before libstdc++4.6 (2011).
+// https://bugs.llvm.org/show_bug.cgi?id=13364
+#if defined(__GLIBCXX__)
+namespace std { class type_info; }
 #endif
 #include <string>
 
-#endif /* U_SHOW_CPLUSPLUS_API */ 
+#endif /* U_SHOW_CPLUSPLUS_API */
 
 #endif  // __STD_STRING_H__

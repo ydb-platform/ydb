@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -58,7 +58,7 @@ UppercaseTransliterator::UppercaseTransliterator(const UppercaseTransliterator& 
 /**
  * Transliterator API.
  */
-UppercaseTransliterator* UppercaseTransliterator::clone() const { 
+UppercaseTransliterator* UppercaseTransliterator::clone() const {
     return new UppercaseTransliterator(*this);
 }
 

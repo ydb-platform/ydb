@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -12,10 +12,10 @@
 #ifndef STRENUM_H
 #define STRENUM_H
 
-#include "unicode/utypes.h" 
- 
-#if U_SHOW_CPLUSPLUS_API 
- 
+#include "unicode/utypes.h"
+
+#if U_SHOW_CPLUSPLUS_API
+
 #include "unicode/uobject.h"
 #include "unicode/unistr.h"
 
@@ -39,7 +39,7 @@ U_NAMESPACE_BEGIN
  * call, so the returned string still might not be 'valid' on
  * subsequent use.</p>
  *
- * <p>Strings may take the form of const char*, const char16_t*, or const 
+ * <p>Strings may take the form of const char*, const char16_t*, or const
  * UnicodeString*.  The type you get is determine by the variant of
  * 'next' that you call.  In general the StringEnumeration is
  * optimized for one of these types, but all StringEnumerations can
@@ -113,7 +113,7 @@ public:
      * <p>If the iterator is out of sync with its service, status is set
      * to U_ENUM_OUT_OF_SYNC_ERROR and NULL is returned.</p>
      *
-     * <p>If the native service string is a char16_t* string, it is 
+     * <p>If the native service string is a char16_t* string, it is
      * converted to char* with the invariant converter.  If the
      * conversion fails (because a character cannot be converted) then
      * status is set to U_INVARIANT_CONVERSION_ERROR and the return
@@ -132,7 +132,7 @@ public:
     virtual const char* next(int32_t *resultLength, UErrorCode& status);
 
     /**
-     * <p>Returns the next element as a NUL-terminated char16_t*.  If there 
+     * <p>Returns the next element as a NUL-terminated char16_t*.  If there
      * are no more elements, returns NULL.  If the resultLength pointer
      * is not NULL, the length of the string (not counting the
      * terminating NUL) is returned at that address.  If an error
@@ -154,7 +154,7 @@ public:
      *
      * @stable ICU 2.4 
      */
-    virtual const char16_t* unext(int32_t *resultLength, UErrorCode& status); 
+    virtual const char16_t* unext(int32_t *resultLength, UErrorCode& status);
 
     /**
      * <p>Returns the next element a UnicodeString*.  If there are no
@@ -275,7 +275,7 @@ protected:
 
 U_NAMESPACE_END
 
-#endif /* U_SHOW_CPLUSPLUS_API */ 
- 
+#endif /* U_SHOW_CPLUSPLUS_API */
+
 /* STRENUM_H */
 #endif

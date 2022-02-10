@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -167,14 +167,14 @@ udat_open(UDateFormatStyle  timeStyle,
         }
     }
 
-    if(fmt == nullptr) { 
+    if(fmt == nullptr) {
         *status = U_MEMORY_ALLOCATION_ERROR;
-        return nullptr; 
+        return nullptr;
     }
-    if (U_FAILURE(*status)) { 
-        delete fmt; 
-        return nullptr; 
-    } 
+    if (U_FAILURE(*status)) {
+        delete fmt;
+        return nullptr;
+    }
 
     if(tzID != 0) {
         TimeZone *zone = TimeZone::createTimeZone(UnicodeString((UBool)(tzIDLength == -1), tzID, tzIDLength));
@@ -607,7 +607,7 @@ udat_getSymbols(const   UDateFormat     *fmt,
     } else {
         return -1;
     }
-    int32_t count = 0; 
+    int32_t count = 0;
     const UnicodeString *res = NULL;
 
     switch(type) {

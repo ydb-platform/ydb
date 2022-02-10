@@ -237,8 +237,8 @@ RECURSE(
     nanosvg/ut
     nayuki_md5
     nghttp2
-    node-addon-api 
-    nodejs_12 
+    node-addon-api
+    nodejs_12
     node_nan
     nsync
     numa

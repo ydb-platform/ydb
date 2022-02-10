@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /**
 *******************************************************************************
@@ -333,7 +333,7 @@ U_CDECL_END
 ******************************************************************
 */
 
-static UMutex lock; 
+static UMutex lock;
 
 ICUService::ICUService()
 : name()
@@ -553,7 +553,7 @@ outerEnd:
                 if (cacheDescriptorList._obj != NULL) {
                     for (int32_t i = cacheDescriptorList._obj->size(); --i >= 0;) {
                         UnicodeString* desc = (UnicodeString*)cacheDescriptorList._obj->elementAt(i);
- 
+
                         serviceCache->put(*desc, result, status);
                         if (U_FAILURE(status)) {
                             return NULL;
@@ -702,9 +702,9 @@ ICUService::getDisplayName(const UnicodeString& id, UnicodeString& result, const
             }
 
             // fallback
-            status = U_ZERO_ERROR; 
+            status = U_ZERO_ERROR;
             ICUServiceKey* fallbackKey = createKey(&id, status);
-            while (fallbackKey != NULL && fallbackKey->fallback()) { 
+            while (fallbackKey != NULL && fallbackKey->fallback()) {
                 UnicodeString us;
                 fallbackKey->currentID(us);
                 f = (ICUServiceFactory*)map->get(us);

@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  ********************************************************************************
@@ -91,7 +91,7 @@ public:
      * @return    return a polymorphic copy of this calendar.
      * @internal
      */
-    virtual TaiwanCalendar* clone() const; 
+    virtual TaiwanCalendar* clone() const;
 
 public:
     /**

@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -6,7 +6,7 @@
 *   Corporation and others.  All Rights Reserved.
 *******************************************************************************
 *   file name:  ucharstrie.h
-*   encoding:   UTF-8 
+*   encoding:   UTF-8
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -24,9 +24,9 @@
  */
 
 #include "unicode/utypes.h"
- 
-#if U_SHOW_CPLUSPLUS_API 
- 
+
+#if U_SHOW_CPLUSPLUS_API
+
 #include "unicode/unistr.h"
 #include "unicode/uobject.h"
 #include "unicode/ustringtrie.h"
@@ -39,7 +39,7 @@ class UVector32;
 
 /**
  * Light-weight, non-const reader class for a UCharsTrie.
- * Traverses a char16_t-serialized data structure with minimal state, 
+ * Traverses a char16_t-serialized data structure with minimal state,
  * for mapping strings (16-bit-unit sequences) to non-negative integer values.
  *
  * This class owns the serialized trie data only if it was constructed by
@@ -55,18 +55,18 @@ public:
     /**
      * Constructs a UCharsTrie reader instance.
      *
-     * The trieUChars must contain a copy of a char16_t sequence from the UCharsTrieBuilder, 
-     * starting with the first char16_t of that sequence. 
-     * The UCharsTrie object will not read more char16_ts than 
+     * The trieUChars must contain a copy of a char16_t sequence from the UCharsTrieBuilder,
+     * starting with the first char16_t of that sequence.
+     * The UCharsTrie object will not read more char16_ts than
      * the UCharsTrieBuilder generated in the corresponding build() call.
      *
      * The array is not copied/cloned and must not be modified while
      * the UCharsTrie object is in use.
      *
-     * @param trieUChars The char16_t array that contains the serialized trie. 
+     * @param trieUChars The char16_t array that contains the serialized trie.
      * @stable ICU 4.8
      */
-    UCharsTrie(ConstChar16Ptr trieUChars) 
+    UCharsTrie(ConstChar16Ptr trieUChars)
             : ownedArray_(NULL), uchars_(trieUChars),
               pos_(uchars_), remainingMatchLength_(-1) {}
 
@@ -78,7 +78,7 @@ public:
 
     /**
      * Copy constructor, copies the other trie reader object and its state,
-     * but not the char16_t array which will be shared. (Shallow copy.) 
+     * but not the char16_t array which will be shared. (Shallow copy.)
      * @param other Another UCharsTrie object.
      * @stable ICU 4.8
      */
@@ -97,42 +97,42 @@ public:
         return *this;
     }
 
-#ifndef U_HIDE_DRAFT_API 
+#ifndef U_HIDE_DRAFT_API
     /**
-     * Returns the state of this trie as a 64-bit integer. 
-     * The state value is never 0. 
-     * 
-     * @return opaque state value 
-     * @see resetToState64 
-     * @draft ICU 65 
-     */ 
-    uint64_t getState64() const { 
-        return (static_cast<uint64_t>(remainingMatchLength_ + 2) << kState64RemainingShift) | 
-            (uint64_t)(pos_ - uchars_); 
-    } 
- 
-    /** 
-     * Resets this trie to the saved state. 
-     * Unlike resetToState(State), the 64-bit state value 
-     * must be from getState64() from the same trie object or 
-     * from one initialized the exact same way. 
-     * Because of no validation, this method is faster. 
-     * 
-     * @param state The opaque trie state value from getState64(). 
-     * @return *this 
-     * @see getState64 
-     * @see resetToState 
-     * @see reset 
-     * @draft ICU 65 
-     */ 
-    UCharsTrie &resetToState64(uint64_t state) { 
-        remainingMatchLength_ = static_cast<int32_t>(state >> kState64RemainingShift) - 2; 
-        pos_ = uchars_ + (state & kState64PosMask); 
-        return *this; 
-    } 
-#endif  /* U_HIDE_DRAFT_API */ 
- 
-    /** 
+     * Returns the state of this trie as a 64-bit integer.
+     * The state value is never 0.
+     *
+     * @return opaque state value
+     * @see resetToState64
+     * @draft ICU 65
+     */
+    uint64_t getState64() const {
+        return (static_cast<uint64_t>(remainingMatchLength_ + 2) << kState64RemainingShift) |
+            (uint64_t)(pos_ - uchars_);
+    }
+
+    /**
+     * Resets this trie to the saved state.
+     * Unlike resetToState(State), the 64-bit state value
+     * must be from getState64() from the same trie object or
+     * from one initialized the exact same way.
+     * Because of no validation, this method is faster.
+     *
+     * @param state The opaque trie state value from getState64().
+     * @return *this
+     * @see getState64
+     * @see resetToState
+     * @see reset
+     * @draft ICU 65
+     */
+    UCharsTrie &resetToState64(uint64_t state) {
+        remainingMatchLength_ = static_cast<int32_t>(state >> kState64RemainingShift) - 2;
+        pos_ = uchars_ + (state & kState64PosMask);
+        return *this;
+    }
+#endif  /* U_HIDE_DRAFT_API */
+
+    /**
      * UCharsTrie state object, for saving a trie's current state
      * and resetting the trie back to this state later.
      * @stable ICU 4.8
@@ -147,8 +147,8 @@ public:
     private:
         friend class UCharsTrie;
 
-        const char16_t *uchars; 
-        const char16_t *pos; 
+        const char16_t *uchars;
+        const char16_t *pos;
         int32_t remainingMatchLength;
     };
 
@@ -186,14 +186,14 @@ public:
 
     /**
      * Determines whether the string so far matches, whether it has a value,
-     * and whether another input char16_t can continue a matching string. 
+     * and whether another input char16_t can continue a matching string.
      * @return The match/value Result.
      * @stable ICU 4.8
      */
     UStringTrieResult current() const;
 
     /**
-     * Traverses the trie from the initial state for this input char16_t. 
+     * Traverses the trie from the initial state for this input char16_t.
      * Equivalent to reset().next(uchar).
      * @param uchar Input char value. Values below 0 and above 0xffff will never match.
      * @return The match/value Result.
@@ -215,7 +215,7 @@ public:
     UStringTrieResult firstForCodePoint(UChar32 cp);
 
     /**
-     * Traverses the trie from the current state for this input char16_t. 
+     * Traverses the trie from the current state for this input char16_t.
      * @param uchar Input char value. Values below 0 and above 0xffff will never match.
      * @return The match/value Result.
      * @stable ICU 4.8
@@ -246,7 +246,7 @@ public:
      * @return The match/value Result.
      * @stable ICU 4.8
      */
-    UStringTrieResult next(ConstChar16Ptr s, int32_t length); 
+    UStringTrieResult next(ConstChar16Ptr s, int32_t length);
 
     /**
      * Returns a matching string's value if called immediately after
@@ -258,7 +258,7 @@ public:
      * @stable ICU 4.8
      */
     inline int32_t getValue() const {
-        const char16_t *pos=pos_; 
+        const char16_t *pos=pos_;
         int32_t leadUnit=*pos++;
         // U_ASSERT(leadUnit>=kMinValueLead);
         return leadUnit&kValueIsFinal ?
@@ -275,16 +275,16 @@ public:
      * @stable ICU 4.8
      */
     inline UBool hasUniqueValue(int32_t &uniqueValue) const {
-        const char16_t *pos=pos_; 
+        const char16_t *pos=pos_;
         // Skip the rest of a pending linear-match node.
         return pos!=NULL && findUniqueValue(pos+remainingMatchLength_+1, FALSE, uniqueValue);
     }
 
     /**
-     * Finds each char16_t which continues the string from the current state. 
-     * That is, each char16_t c for which it would be next(c)!=USTRINGTRIE_NO_MATCH now. 
-     * @param out Each next char16_t is appended to this object. 
-     * @return the number of char16_ts which continue the string from here 
+     * Finds each char16_t which continues the string from the current state.
+     * That is, each char16_t c for which it would be next(c)!=USTRINGTRIE_NO_MATCH now.
+     * @param out Each next char16_t is appended to this object.
+     * @return the number of char16_ts which continue the string from here
      * @stable ICU 4.8
      */
     int32_t getNextUChars(Appendable &out) const;
@@ -296,8 +296,8 @@ public:
     class U_COMMON_API Iterator : public UMemory {
     public:
         /**
-         * Iterates from the root of a char16_t-serialized UCharsTrie. 
-         * @param trieUChars The trie char16_ts. 
+         * Iterates from the root of a char16_t-serialized UCharsTrie.
+         * @param trieUChars The trie char16_ts.
          * @param maxStringLength If 0, the iterator returns full strings.
          *                        Otherwise, the iterator returns strings with this maximum length.
          * @param errorCode Standard ICU error code. Its input value must
@@ -306,7 +306,7 @@ public:
          *                  function chaining. (See User Guide for details.)
          * @stable ICU 4.8
          */
-        Iterator(ConstChar16Ptr trieUChars, int32_t maxStringLength, UErrorCode &errorCode); 
+        Iterator(ConstChar16Ptr trieUChars, int32_t maxStringLength, UErrorCode &errorCode);
 
         /**
          * Iterates from the current state of the specified UCharsTrie.
@@ -374,11 +374,11 @@ public:
             return TRUE;
         }
 
-        const char16_t *branchNext(const char16_t *pos, int32_t length, UErrorCode &errorCode); 
+        const char16_t *branchNext(const char16_t *pos, int32_t length, UErrorCode &errorCode);
 
-        const char16_t *uchars_; 
-        const char16_t *pos_; 
-        const char16_t *initialPos_; 
+        const char16_t *uchars_;
+        const char16_t *pos_;
+        const char16_t *initialPos_;
         int32_t remainingMatchLength_;
         int32_t initialRemainingMatchLength_;
         UBool skipValue_;  // Skip intermediate value which was already delivered.
@@ -406,7 +406,7 @@ private:
      * this constructor adopts the builder's array.
      * This constructor is only called by the builder.
      */
-    UCharsTrie(char16_t *adoptUChars, const char16_t *trieUChars) 
+    UCharsTrie(char16_t *adoptUChars, const char16_t *trieUChars)
             : ownedArray_(adoptUChars), uchars_(trieUChars),
               pos_(uchars_), remainingMatchLength_(-1) {}
 
@@ -419,7 +419,7 @@ private:
 
     // Reads a compact 32-bit integer.
     // pos is already after the leadUnit, and the lead unit has bit 15 reset.
-    static inline int32_t readValue(const char16_t *pos, int32_t leadUnit) { 
+    static inline int32_t readValue(const char16_t *pos, int32_t leadUnit) {
         int32_t value;
         if(leadUnit<kMinTwoUnitValueLead) {
             value=leadUnit;
@@ -430,7 +430,7 @@ private:
         }
         return value;
     }
-    static inline const char16_t *skipValue(const char16_t *pos, int32_t leadUnit) { 
+    static inline const char16_t *skipValue(const char16_t *pos, int32_t leadUnit) {
         if(leadUnit>=kMinTwoUnitValueLead) {
             if(leadUnit<kThreeUnitValueLead) {
                 ++pos;
@@ -440,12 +440,12 @@ private:
         }
         return pos;
     }
-    static inline const char16_t *skipValue(const char16_t *pos) { 
+    static inline const char16_t *skipValue(const char16_t *pos) {
         int32_t leadUnit=*pos++;
         return skipValue(pos, leadUnit&0x7fff);
     }
 
-    static inline int32_t readNodeValue(const char16_t *pos, int32_t leadUnit) { 
+    static inline int32_t readNodeValue(const char16_t *pos, int32_t leadUnit) {
         // U_ASSERT(kMinValueLead<=leadUnit && leadUnit<kValueIsFinal);
         int32_t value;
         if(leadUnit<kMinTwoUnitNodeValueLead) {
@@ -457,7 +457,7 @@ private:
         }
         return value;
     }
-    static inline const char16_t *skipNodeValue(const char16_t *pos, int32_t leadUnit) { 
+    static inline const char16_t *skipNodeValue(const char16_t *pos, int32_t leadUnit) {
         // U_ASSERT(kMinValueLead<=leadUnit && leadUnit<kValueIsFinal);
         if(leadUnit>=kMinTwoUnitNodeValueLead) {
             if(leadUnit<kThreeUnitNodeValueLead) {
@@ -469,7 +469,7 @@ private:
         return pos;
     }
 
-    static inline const char16_t *jumpByDelta(const char16_t *pos) { 
+    static inline const char16_t *jumpByDelta(const char16_t *pos) {
         int32_t delta=*pos++;
         if(delta>=kMinTwoUnitDeltaLead) {
             if(delta==kThreeUnitDeltaLead) {
@@ -482,7 +482,7 @@ private:
         return pos+delta;
     }
 
-    static const char16_t *skipDelta(const char16_t *pos) { 
+    static const char16_t *skipDelta(const char16_t *pos) {
         int32_t delta=*pos++;
         if(delta>=kMinTwoUnitDeltaLead) {
             if(delta==kThreeUnitDeltaLead) {
@@ -499,28 +499,28 @@ private:
     }
 
     // Handles a branch node for both next(uchar) and next(string).
-    UStringTrieResult branchNext(const char16_t *pos, int32_t length, int32_t uchar); 
+    UStringTrieResult branchNext(const char16_t *pos, int32_t length, int32_t uchar);
 
     // Requires remainingLength_<0.
-    UStringTrieResult nextImpl(const char16_t *pos, int32_t uchar); 
+    UStringTrieResult nextImpl(const char16_t *pos, int32_t uchar);
 
     // Helper functions for hasUniqueValue().
     // Recursively finds a unique value (or whether there is not a unique one)
     // from a branch.
-    static const char16_t *findUniqueValueFromBranch(const char16_t *pos, int32_t length, 
+    static const char16_t *findUniqueValueFromBranch(const char16_t *pos, int32_t length,
                                                   UBool haveUniqueValue, int32_t &uniqueValue);
     // Recursively finds a unique value (or whether there is not a unique one)
     // starting from a position on a node lead unit.
-    static UBool findUniqueValue(const char16_t *pos, UBool haveUniqueValue, int32_t &uniqueValue); 
+    static UBool findUniqueValue(const char16_t *pos, UBool haveUniqueValue, int32_t &uniqueValue);
 
     // Helper functions for getNextUChars().
     // getNextUChars() when pos is on a branch node.
-    static void getNextBranchUChars(const char16_t *pos, int32_t length, Appendable &out); 
+    static void getNextBranchUChars(const char16_t *pos, int32_t length, Appendable &out);
 
     // UCharsTrie data structure
     //
-    // The trie consists of a series of char16_t-serialized nodes for incremental 
-    // Unicode string/char16_t sequence matching. (char16_t=16-bit unsigned integer) 
+    // The trie consists of a series of char16_t-serialized nodes for incremental
+    // Unicode string/char16_t sequence matching. (char16_t=16-bit unsigned integer)
     // The root node is at the beginning of the trie data.
     //
     // Types of nodes are distinguished by their node lead unit ranges.
@@ -529,9 +529,9 @@ private:
     //
     // Node types:
     //  - Final-value node: Stores a 32-bit integer in a compact, variable-length format.
-    //    The value is for the string/char16_t sequence so far. 
+    //    The value is for the string/char16_t sequence so far.
     //  - Match node, optionally with an intermediate value in a different compact format.
-    //    The value, if present, is for the string/char16_t sequence so far. 
+    //    The value, if present, is for the string/char16_t sequence so far.
     //
     //  Aside from the value, which uses the node lead unit's high bits:
     //
@@ -598,28 +598,28 @@ private:
 
     static const int32_t kMaxTwoUnitDelta=((kThreeUnitDeltaLead-kMinTwoUnitDeltaLead)<<16)-1;  // 0x03feffff
 
-    // For getState64(): 
-    // The remainingMatchLength_ is -1..14=(kMaxLinearMatchLength=0x10)-2 
-    // so we need at least 5 bits for that. 
-    // We add 2 to store it as a positive value 1..16=kMaxLinearMatchLength. 
-    static constexpr int32_t kState64RemainingShift = 59; 
-    static constexpr uint64_t kState64PosMask = (UINT64_C(1) << kState64RemainingShift) - 1; 
+    // For getState64():
+    // The remainingMatchLength_ is -1..14=(kMaxLinearMatchLength=0x10)-2
+    // so we need at least 5 bits for that.
+    // We add 2 to store it as a positive value 1..16=kMaxLinearMatchLength.
+    static constexpr int32_t kState64RemainingShift = 59;
+    static constexpr uint64_t kState64PosMask = (UINT64_C(1) << kState64RemainingShift) - 1;
 
-    char16_t *ownedArray_; 
- 
+    char16_t *ownedArray_;
+
     // Fixed value referencing the UCharsTrie words.
-    const char16_t *uchars_; 
+    const char16_t *uchars_;
 
     // Iterator variables.
 
     // Pointer to next trie unit to read. NULL if no more matches.
-    const char16_t *pos_; 
+    const char16_t *pos_;
     // Remaining length of a linear-match node, minus 1. Negative if not in such a node.
     int32_t remainingMatchLength_;
 };
 
 U_NAMESPACE_END
 
-#endif /* U_SHOW_CPLUSPLUS_API */ 
- 
+#endif /* U_SHOW_CPLUSPLUS_API */
+
 #endif  // __UCHARSTRIE_H__

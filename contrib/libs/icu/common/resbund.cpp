@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -51,7 +51,7 @@
 #include "unicode/utypes.h"
 #include "unicode/resbund.h"
 
-#include "cmemory.h" 
+#include "cmemory.h"
 #include "mutex.h"
 #include "uassert.h"
 #include "umutex.h"
@@ -378,7 +378,7 @@ void ResourceBundle::getVersion(UVersionInfo versionInfo) const {
 }
 
 const Locale &ResourceBundle::getLocale(void) const {
-    static UMutex gLocaleLock; 
+    static UMutex gLocaleLock;
     Mutex lock(&gLocaleLock);
     if (fLocale != NULL) {
         return *fLocale;

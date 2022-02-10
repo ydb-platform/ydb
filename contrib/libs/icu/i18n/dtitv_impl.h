@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -88,7 +88,7 @@
 #define MAX_E_COUNT      5
 #define MAX_M_COUNT      5
 //#define MAX_INTERVAL_INDEX 4
-#define MAX_POSITIVE_INT  56632 
+#define MAX_POSITIVE_INT  56632
 
 
 #endif /* #if !UCONFIG_NO_FORMATTING */

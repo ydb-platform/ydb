@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 // collunsafe.h
 //  Copyright (C) 2015-2016, International Business Machines Corporation and others.

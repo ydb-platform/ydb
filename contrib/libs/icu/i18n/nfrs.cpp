@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -6,7 +6,7 @@
 *   Corporation and others.  All Rights Reserved.
 ******************************************************************************
 *   file name:  nfrs.cpp
-*   encoding:   UTF-8 
+*   encoding:   UTF-8
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -23,7 +23,7 @@
 #include "nfrule.h"
 #include "nfrlist.h"
 #include "patternprops.h"
-#include "putilimp.h" 
+#include "putilimp.h"
 
 #ifdef RBNF_DEBUG
 #include "cmemory.h"
@@ -545,7 +545,7 @@ NFRuleSet::findNormalRule(int64_t number) const
         // an explanation of the rollback rule).  If we do, roll back
         // one rule and return that one instead of the one we'd normally
         // return
-        if (result->shouldRollBack(number)) { 
+        if (result->shouldRollBack(number)) {
             if (hi == 1) { // bad rule set, no prior rule to rollback to from this base
                 return NULL;
             }
@@ -681,7 +681,7 @@ static void dumpUS(FILE* f, const UnicodeString& us) {
 #endif
 
 UBool
-NFRuleSet::parse(const UnicodeString& text, ParsePosition& pos, double upperBound, uint32_t nonNumericalExecutedRuleMask, Formattable& result) const 
+NFRuleSet::parse(const UnicodeString& text, ParsePosition& pos, double upperBound, uint32_t nonNumericalExecutedRuleMask, Formattable& result) const
 {
     // try matching each rule in the rule set against the text being
     // parsed.  Whichever one matches the most characters is the one
@@ -707,12 +707,12 @@ NFRuleSet::parse(const UnicodeString& text, ParsePosition& pos, double upperBoun
 #endif
     // Try each of the negative rules, fraction rules, infinity rules and NaN rules
     for (int i = 0; i < NON_NUMERICAL_RULE_LENGTH; i++) {
-        if (nonNumericalRules[i] && ((nonNumericalExecutedRuleMask >> i) & 1) == 0) { 
-            // Mark this rule as being executed so that we don't try to execute it again. 
-            nonNumericalExecutedRuleMask |= 1 << i; 
- 
+        if (nonNumericalRules[i] && ((nonNumericalExecutedRuleMask >> i) & 1) == 0) {
+            // Mark this rule as being executed so that we don't try to execute it again.
+            nonNumericalExecutedRuleMask |= 1 << i;
+
             Formattable tempResult;
-            UBool success = nonNumericalRules[i]->doParse(text, workingPos, 0, upperBound, nonNumericalExecutedRuleMask, tempResult); 
+            UBool success = nonNumericalRules[i]->doParse(text, workingPos, 0, upperBound, nonNumericalExecutedRuleMask, tempResult);
             if (success && (workingPos.getIndex() > highWaterMark.getIndex())) {
                 result = tempResult;
                 highWaterMark = workingPos;
@@ -751,7 +751,7 @@ NFRuleSet::parse(const UnicodeString& text, ParsePosition& pos, double upperBoun
                 continue;
             }
             Formattable tempResult;
-            UBool success = rules[i]->doParse(text, workingPos, fIsFractionRuleSet, upperBound, nonNumericalExecutedRuleMask, tempResult); 
+            UBool success = rules[i]->doParse(text, workingPos, fIsFractionRuleSet, upperBound, nonNumericalExecutedRuleMask, tempResult);
             if (success && workingPos.getIndex() > highWaterMark.getIndex()) {
                 result = tempResult;
                 highWaterMark = workingPos;
@@ -833,23 +833,23 @@ int64_t util64_fromDouble(double d) {
     return result;
 }
 
-uint64_t util64_pow(uint32_t base, uint16_t exponent)  { 
-    if (base == 0) { 
+uint64_t util64_pow(uint32_t base, uint16_t exponent)  {
+    if (base == 0) {
         return 0;
-    } 
-    uint64_t result = 1; 
-    uint64_t pow = base; 
-    while (true) { 
-        if ((exponent & 1) == 1) { 
-            result *= pow; 
-        }
-        exponent >>= 1; 
-        if (exponent == 0) { 
-            break; 
-        } 
-        pow *= pow; 
     }
-    return result; 
+    uint64_t result = 1;
+    uint64_t pow = base;
+    while (true) {
+        if ((exponent & 1) == 1) {
+            result *= pow;
+        }
+        exponent >>= 1;
+        if (exponent == 0) {
+            break;
+        }
+        pow *= pow;
+    }
+    return result;
 }
 
 static const uint8_t asciiDigits[] = { 

@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -65,7 +65,7 @@ public:
 
     UChar getDecimalPoint() const { return decimalPoint; }
 
-    int64_t getDivisor() const; 
+    int64_t getDivisor() const;
 
     void doFormat(int64_t number, UnicodeString& toAppendTo, int32_t pos, int32_t recursionCount, UErrorCode& status) const;
     void doFormat(double  number, UnicodeString& toAppendTo, int32_t pos, int32_t recursionCount, UErrorCode& status) const;
@@ -74,10 +74,10 @@ public:
                   ParsePosition& pos, 
                   UBool isFractional, 
                   double upperBound,
-                  uint32_t nonNumericalExecutedRuleMask, 
+                  uint32_t nonNumericalExecutedRuleMask,
                   Formattable& result) const;
 
-    UBool shouldRollBack(int64_t number) const; 
+    UBool shouldRollBack(int64_t number) const;
 
     void _appendRuleText(UnicodeString& result) const;
 
@@ -95,7 +95,7 @@ private:
     int32_t indexOfAnyRulePrefix() const;
     double matchToDelimiter(const UnicodeString& text, int32_t startPos, double baseValue,
                             const UnicodeString& delimiter, ParsePosition& pp, const NFSubstitution* sub, 
-                            uint32_t nonNumericalExecutedRuleMask, 
+                            uint32_t nonNumericalExecutedRuleMask,
                             double upperBound) const;
     void stripPrefix(UnicodeString& text, const UnicodeString& prefix, ParsePosition& pp) const;
 
@@ -109,7 +109,7 @@ private:
     int32_t radix;
     int16_t exponent;
     UChar decimalPoint;
-    UnicodeString fRuleText; 
+    UnicodeString fRuleText;
     NFSubstitution* sub1;
     NFSubstitution* sub2;
     const RuleBasedNumberFormat* formatter;

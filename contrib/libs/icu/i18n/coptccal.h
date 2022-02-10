@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -145,7 +145,7 @@ public:
      * @return    return a polymorphic copy of this calendar.
      * @internal
      */
-    virtual CopticCalendar* clone() const; 
+    virtual CopticCalendar* clone() const;
 
     /**
      * return the calendar type, "coptic"

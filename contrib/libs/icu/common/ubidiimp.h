@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -8,7 +8,7 @@
 *
 ******************************************************************************
 *   file name:  ubidiimp.h
-*   encoding:   UTF-8 
+*   encoding:   UTF-8
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -198,8 +198,8 @@ typedef struct Run {
 /* in a Run, logicalStart will get this bit set if the run level is odd */
 #define INDEX_ODD_BIT (1UL<<31)
 
-#define MAKE_INDEX_ODD_PAIR(index, level) ((index)|((int32_t)((level)&1)<<31)) 
-#define ADD_ODD_BIT_FROM_LEVEL(x, level)  ((x)|=((int32_t)((level)&1)<<31)) 
+#define MAKE_INDEX_ODD_PAIR(index, level) ((index)|((int32_t)((level)&1)<<31))
+#define ADD_ODD_BIT_FROM_LEVEL(x, level)  ((x)|=((int32_t)((level)&1)<<31))
 #define REMOVE_ODD_BIT(x)                 ((x)&=~INDEX_ODD_BIT)
 
 #define GET_INDEX(x)   ((x)&~INDEX_ODD_BIT)
@@ -387,49 +387,49 @@ typedef union {
 } BidiMemoryForAllocation;
 
 /* Macros for initial checks at function entry */
-#define RETURN_IF_NULL_OR_FAILING_ERRCODE(pErrcode, retvalue) UPRV_BLOCK_MACRO_BEGIN { \ 
-    if((pErrcode)==NULL || U_FAILURE(*pErrcode)) return retvalue; \ 
-} UPRV_BLOCK_MACRO_END 
-#define RETURN_IF_NOT_VALID_PARA(bidi, errcode, retvalue) UPRV_BLOCK_MACRO_BEGIN { \ 
-    if(!IS_VALID_PARA(bidi)) { \ 
-        errcode=U_INVALID_STATE_ERROR; \ 
-        return retvalue; \ 
-    } \ 
-} UPRV_BLOCK_MACRO_END 
-#define RETURN_IF_NOT_VALID_PARA_OR_LINE(bidi, errcode, retvalue) UPRV_BLOCK_MACRO_BEGIN { \ 
-    if(!IS_VALID_PARA_OR_LINE(bidi)) { \ 
-        errcode=U_INVALID_STATE_ERROR; \ 
-        return retvalue; \ 
-    } \ 
-} UPRV_BLOCK_MACRO_END 
-#define RETURN_IF_BAD_RANGE(arg, start, limit, errcode, retvalue) UPRV_BLOCK_MACRO_BEGIN { \ 
-    if((arg)<(start) || (arg)>=(limit)) { \ 
-        (errcode)=U_ILLEGAL_ARGUMENT_ERROR; \ 
-        return retvalue; \ 
-    } \ 
-} UPRV_BLOCK_MACRO_END 
+#define RETURN_IF_NULL_OR_FAILING_ERRCODE(pErrcode, retvalue) UPRV_BLOCK_MACRO_BEGIN { \
+    if((pErrcode)==NULL || U_FAILURE(*pErrcode)) return retvalue; \
+} UPRV_BLOCK_MACRO_END
+#define RETURN_IF_NOT_VALID_PARA(bidi, errcode, retvalue) UPRV_BLOCK_MACRO_BEGIN { \
+    if(!IS_VALID_PARA(bidi)) { \
+        errcode=U_INVALID_STATE_ERROR; \
+        return retvalue; \
+    } \
+} UPRV_BLOCK_MACRO_END
+#define RETURN_IF_NOT_VALID_PARA_OR_LINE(bidi, errcode, retvalue) UPRV_BLOCK_MACRO_BEGIN { \
+    if(!IS_VALID_PARA_OR_LINE(bidi)) { \
+        errcode=U_INVALID_STATE_ERROR; \
+        return retvalue; \
+    } \
+} UPRV_BLOCK_MACRO_END
+#define RETURN_IF_BAD_RANGE(arg, start, limit, errcode, retvalue) UPRV_BLOCK_MACRO_BEGIN { \
+    if((arg)<(start) || (arg)>=(limit)) { \
+        (errcode)=U_ILLEGAL_ARGUMENT_ERROR; \
+        return retvalue; \
+    } \
+} UPRV_BLOCK_MACRO_END
 
-#define RETURN_VOID_IF_NULL_OR_FAILING_ERRCODE(pErrcode) UPRV_BLOCK_MACRO_BEGIN { \ 
-    if((pErrcode)==NULL || U_FAILURE(*pErrcode)) return; \ 
-} UPRV_BLOCK_MACRO_END 
-#define RETURN_VOID_IF_NOT_VALID_PARA(bidi, errcode) UPRV_BLOCK_MACRO_BEGIN { \ 
-    if(!IS_VALID_PARA(bidi)) { \ 
-        errcode=U_INVALID_STATE_ERROR; \ 
-        return; \ 
-    } \ 
-} UPRV_BLOCK_MACRO_END 
-#define RETURN_VOID_IF_NOT_VALID_PARA_OR_LINE(bidi, errcode) UPRV_BLOCK_MACRO_BEGIN { \ 
-    if(!IS_VALID_PARA_OR_LINE(bidi)) { \ 
-        errcode=U_INVALID_STATE_ERROR; \ 
-        return; \ 
-    } \ 
-} UPRV_BLOCK_MACRO_END 
-#define RETURN_VOID_IF_BAD_RANGE(arg, start, limit, errcode) UPRV_BLOCK_MACRO_BEGIN { \ 
-    if((arg)<(start) || (arg)>=(limit)) { \ 
-        (errcode)=U_ILLEGAL_ARGUMENT_ERROR; \ 
-        return; \ 
-    } \ 
-} UPRV_BLOCK_MACRO_END 
+#define RETURN_VOID_IF_NULL_OR_FAILING_ERRCODE(pErrcode) UPRV_BLOCK_MACRO_BEGIN { \
+    if((pErrcode)==NULL || U_FAILURE(*pErrcode)) return; \
+} UPRV_BLOCK_MACRO_END
+#define RETURN_VOID_IF_NOT_VALID_PARA(bidi, errcode) UPRV_BLOCK_MACRO_BEGIN { \
+    if(!IS_VALID_PARA(bidi)) { \
+        errcode=U_INVALID_STATE_ERROR; \
+        return; \
+    } \
+} UPRV_BLOCK_MACRO_END
+#define RETURN_VOID_IF_NOT_VALID_PARA_OR_LINE(bidi, errcode) UPRV_BLOCK_MACRO_BEGIN { \
+    if(!IS_VALID_PARA_OR_LINE(bidi)) { \
+        errcode=U_INVALID_STATE_ERROR; \
+        return; \
+    } \
+} UPRV_BLOCK_MACRO_END
+#define RETURN_VOID_IF_BAD_RANGE(arg, start, limit, errcode) UPRV_BLOCK_MACRO_BEGIN { \
+    if((arg)<(start) || (arg)>=(limit)) { \
+        (errcode)=U_ILLEGAL_ARGUMENT_ERROR; \
+        return; \
+    } \
+} UPRV_BLOCK_MACRO_END
 
 /* helper function to (re)allocate memory if allowed */
 U_CFUNC UBool

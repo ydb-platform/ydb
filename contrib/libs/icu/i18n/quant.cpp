@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -47,7 +47,7 @@ Quantifier::~Quantifier() {
 /**
  * Implement UnicodeFunctor
  */
-Quantifier* Quantifier::clone() const { 
+Quantifier* Quantifier::clone() const {
     return new Quantifier(*this);
 }
 

@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -191,8 +191,8 @@ RuleBasedTransliterator::~RuleBasedTransliterator() {
     }
 }
 
-RuleBasedTransliterator* 
-RuleBasedTransliterator::clone() const { 
+RuleBasedTransliterator*
+RuleBasedTransliterator::clone() const {
     return new RuleBasedTransliterator(*this);
 }
 
@@ -252,8 +252,8 @@ RuleBasedTransliterator::handleTransliterate(Replaceable& text, UTransPosition& 
     //  Shared RBT data protected by transliteratorDataMutex.
     //
     // TODO(andy): Need a better scheme for handling this.
- 
-    static UMutex transliteratorDataMutex; 
+
+    static UMutex transliteratorDataMutex;
     UBool needToLock;
     {
         Mutex m;

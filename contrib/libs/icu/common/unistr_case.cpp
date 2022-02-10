@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -8,7 +8,7 @@
 *
 *******************************************************************************
 *   file name:  unistr_case.cpp
-*   encoding:   UTF-8 
+*   encoding:   UTF-8
 *   tab size:   8 (not used)
 *   indentation:2
 *
@@ -19,17 +19,17 @@
 */
 
 #include "unicode/utypes.h"
-#include "unicode/brkiter.h" 
-#include "unicode/casemap.h" 
-#include "unicode/edits.h" 
+#include "unicode/brkiter.h"
+#include "unicode/casemap.h"
+#include "unicode/edits.h"
 #include "unicode/putil.h"
 #include "cstring.h"
 #include "cmemory.h"
 #include "unicode/ustring.h"
 #include "unicode/unistr.h"
 #include "unicode/uchar.h"
-#include "uassert.h" 
-#include "ucasemap_imp.h" 
+#include "uassert.h"
+#include "ucasemap_imp.h"
 #include "uelement.h"
 
 U_NAMESPACE_BEGIN
@@ -91,123 +91,123 @@ UnicodeString::doCaseCompare(int32_t start,
 //========================================
 
 UnicodeString &
-UnicodeString::caseMap(int32_t caseLocale, uint32_t options, UCASEMAP_BREAK_ITERATOR_PARAM 
+UnicodeString::caseMap(int32_t caseLocale, uint32_t options, UCASEMAP_BREAK_ITERATOR_PARAM
                        UStringCaseMapper *stringCaseMapper) {
   if(isEmpty() || !isWritable()) {
     // nothing to do
     return *this;
   }
 
-  UChar oldBuffer[2 * US_STACKBUF_SIZE]; 
+  UChar oldBuffer[2 * US_STACKBUF_SIZE];
   UChar *oldArray;
-  int32_t oldLength = length(); 
-  int32_t newLength; 
-  UBool writable = isBufferWritable(); 
-  UErrorCode errorCode = U_ZERO_ERROR; 
+  int32_t oldLength = length();
+  int32_t newLength;
+  UBool writable = isBufferWritable();
+  UErrorCode errorCode = U_ZERO_ERROR;
 
-#if !UCONFIG_NO_BREAK_ITERATION 
-  // Read-only alias to the original string contents for the titlecasing BreakIterator. 
-  // We cannot set the iterator simply to *this because *this is being modified. 
-  UnicodeString oldString; 
-#endif 
- 
-  // Try to avoid heap-allocating a new character array for this string. 
-  if (writable ? oldLength <= UPRV_LENGTHOF(oldBuffer) : oldLength < US_STACKBUF_SIZE) { 
-    // Short string: Copy the contents into a temporary buffer and 
-    // case-map back into the current array, or into the stack buffer. 
-    UChar *buffer = getArrayStart(); 
-    int32_t capacity; 
-    oldArray = oldBuffer; 
-    u_memcpy(oldBuffer, buffer, oldLength); 
-    if (writable) { 
-      capacity = getCapacity(); 
-    } else { 
-      // Switch from the read-only alias or shared heap buffer to the stack buffer. 
-      if (!cloneArrayIfNeeded(US_STACKBUF_SIZE, US_STACKBUF_SIZE, /* doCopyArray= */ FALSE)) { 
-        return *this; 
-      } 
-      U_ASSERT(fUnion.fFields.fLengthAndFlags & kUsingStackBuffer); 
-      buffer = fUnion.fStackFields.fBuffer; 
-      capacity = US_STACKBUF_SIZE; 
-    } 
-#if !UCONFIG_NO_BREAK_ITERATION 
-    if (iter != nullptr) { 
-      oldString.setTo(FALSE, oldArray, oldLength); 
-      iter->setText(oldString); 
-    } 
-#endif 
-    newLength = stringCaseMapper(caseLocale, options, UCASEMAP_BREAK_ITERATOR 
-                                 buffer, capacity, 
-                                 oldArray, oldLength, NULL, errorCode); 
-    if (U_SUCCESS(errorCode)) { 
-      setLength(newLength); 
-      return *this; 
-    } else if (errorCode == U_BUFFER_OVERFLOW_ERROR) { 
-      // common overflow handling below 
-    } else { 
-      setToBogus(); 
-      return *this; 
-    } 
+#if !UCONFIG_NO_BREAK_ITERATION
+  // Read-only alias to the original string contents for the titlecasing BreakIterator.
+  // We cannot set the iterator simply to *this because *this is being modified.
+  UnicodeString oldString;
+#endif
+
+  // Try to avoid heap-allocating a new character array for this string.
+  if (writable ? oldLength <= UPRV_LENGTHOF(oldBuffer) : oldLength < US_STACKBUF_SIZE) {
+    // Short string: Copy the contents into a temporary buffer and
+    // case-map back into the current array, or into the stack buffer.
+    UChar *buffer = getArrayStart();
+    int32_t capacity;
+    oldArray = oldBuffer;
+    u_memcpy(oldBuffer, buffer, oldLength);
+    if (writable) {
+      capacity = getCapacity();
+    } else {
+      // Switch from the read-only alias or shared heap buffer to the stack buffer.
+      if (!cloneArrayIfNeeded(US_STACKBUF_SIZE, US_STACKBUF_SIZE, /* doCopyArray= */ FALSE)) {
+        return *this;
+      }
+      U_ASSERT(fUnion.fFields.fLengthAndFlags & kUsingStackBuffer);
+      buffer = fUnion.fStackFields.fBuffer;
+      capacity = US_STACKBUF_SIZE;
+    }
+#if !UCONFIG_NO_BREAK_ITERATION
+    if (iter != nullptr) {
+      oldString.setTo(FALSE, oldArray, oldLength);
+      iter->setText(oldString);
+    }
+#endif
+    newLength = stringCaseMapper(caseLocale, options, UCASEMAP_BREAK_ITERATOR
+                                 buffer, capacity,
+                                 oldArray, oldLength, NULL, errorCode);
+    if (U_SUCCESS(errorCode)) {
+      setLength(newLength);
+      return *this;
+    } else if (errorCode == U_BUFFER_OVERFLOW_ERROR) {
+      // common overflow handling below
+    } else {
+      setToBogus();
+      return *this;
+    }
   } else {
-    // Longer string or read-only buffer: 
-    // Collect only changes and then apply them to this string. 
-    // Case mapping often changes only small parts of a string, 
-    // and often does not change its length. 
+    // Longer string or read-only buffer:
+    // Collect only changes and then apply them to this string.
+    // Case mapping often changes only small parts of a string,
+    // and often does not change its length.
     oldArray = getArrayStart();
-    Edits edits; 
-    UChar replacementChars[200]; 
-#if !UCONFIG_NO_BREAK_ITERATION 
-    if (iter != nullptr) { 
-      oldString.setTo(FALSE, oldArray, oldLength); 
-      iter->setText(oldString); 
-    } 
-#endif 
-    stringCaseMapper(caseLocale, options | U_OMIT_UNCHANGED_TEXT, UCASEMAP_BREAK_ITERATOR 
-                     replacementChars, UPRV_LENGTHOF(replacementChars), 
-                     oldArray, oldLength, &edits, errorCode); 
-    if (U_SUCCESS(errorCode)) { 
-      // Grow the buffer at most once, not for multiple doReplace() calls. 
-      newLength = oldLength + edits.lengthDelta(); 
-      if (newLength > oldLength && !cloneArrayIfNeeded(newLength, newLength)) { 
-        return *this; 
-      } 
-      for (Edits::Iterator ei = edits.getCoarseChangesIterator(); ei.next(errorCode);) { 
-        doReplace(ei.destinationIndex(), ei.oldLength(), 
-                  replacementChars, ei.replacementIndex(), ei.newLength()); 
-      } 
-      if (U_FAILURE(errorCode)) { 
-        setToBogus(); 
-      } 
-      return *this; 
-    } else if (errorCode == U_BUFFER_OVERFLOW_ERROR) { 
-      // common overflow handling below 
-      newLength = oldLength + edits.lengthDelta(); 
-    } else { 
-      setToBogus(); 
-      return *this; 
-    } 
+    Edits edits;
+    UChar replacementChars[200];
+#if !UCONFIG_NO_BREAK_ITERATION
+    if (iter != nullptr) {
+      oldString.setTo(FALSE, oldArray, oldLength);
+      iter->setText(oldString);
+    }
+#endif
+    stringCaseMapper(caseLocale, options | U_OMIT_UNCHANGED_TEXT, UCASEMAP_BREAK_ITERATOR
+                     replacementChars, UPRV_LENGTHOF(replacementChars),
+                     oldArray, oldLength, &edits, errorCode);
+    if (U_SUCCESS(errorCode)) {
+      // Grow the buffer at most once, not for multiple doReplace() calls.
+      newLength = oldLength + edits.lengthDelta();
+      if (newLength > oldLength && !cloneArrayIfNeeded(newLength, newLength)) {
+        return *this;
+      }
+      for (Edits::Iterator ei = edits.getCoarseChangesIterator(); ei.next(errorCode);) {
+        doReplace(ei.destinationIndex(), ei.oldLength(),
+                  replacementChars, ei.replacementIndex(), ei.newLength());
+      }
+      if (U_FAILURE(errorCode)) {
+        setToBogus();
+      }
+      return *this;
+    } else if (errorCode == U_BUFFER_OVERFLOW_ERROR) {
+      // common overflow handling below
+      newLength = oldLength + edits.lengthDelta();
+    } else {
+      setToBogus();
+      return *this;
+    }
   }
 
-  // Handle buffer overflow, newLength is known. 
-  // We need to allocate a new buffer for the internal string case mapping function. 
-  // This is very similar to how doReplace() keeps the old array pointer 
-  // and deletes the old array itself after it is done. 
-  // In addition, we are forcing cloneArrayIfNeeded() to always allocate a new array. 
+  // Handle buffer overflow, newLength is known.
+  // We need to allocate a new buffer for the internal string case mapping function.
+  // This is very similar to how doReplace() keeps the old array pointer
+  // and deletes the old array itself after it is done.
+  // In addition, we are forcing cloneArrayIfNeeded() to always allocate a new array.
   int32_t *bufferToDelete = 0;
-  if (!cloneArrayIfNeeded(newLength, newLength, FALSE, &bufferToDelete, TRUE)) { 
+  if (!cloneArrayIfNeeded(newLength, newLength, FALSE, &bufferToDelete, TRUE)) {
     return *this;
   }
-  errorCode = U_ZERO_ERROR; 
-  // No need to iter->setText() again: The case mapper restarts via iter->first(). 
-  newLength = stringCaseMapper(caseLocale, options, UCASEMAP_BREAK_ITERATOR 
-                               getArrayStart(), getCapacity(), 
-                               oldArray, oldLength, NULL, errorCode); 
+  errorCode = U_ZERO_ERROR;
+  // No need to iter->setText() again: The case mapper restarts via iter->first().
+  newLength = stringCaseMapper(caseLocale, options, UCASEMAP_BREAK_ITERATOR
+                               getArrayStart(), getCapacity(),
+                               oldArray, oldLength, NULL, errorCode);
   if (bufferToDelete) {
     uprv_free(bufferToDelete);
   }
-  if (U_SUCCESS(errorCode)) { 
-    setLength(newLength); 
-  } else { 
+  if (U_SUCCESS(errorCode)) {
+    setLength(newLength);
+  } else {
     setToBogus();
   }
   return *this;
@@ -215,7 +215,7 @@ UnicodeString::caseMap(int32_t caseLocale, uint32_t options, UCASEMAP_BREAK_ITER
 
 UnicodeString &
 UnicodeString::foldCase(uint32_t options) {
-  return caseMap(UCASE_LOC_ROOT, options, UCASEMAP_BREAK_ITERATOR_NULL ustrcase_internalFold); 
+  return caseMap(UCASE_LOC_ROOT, options, UCASEMAP_BREAK_ITERATOR_NULL ustrcase_internalFold);
 }
 
 U_NAMESPACE_END

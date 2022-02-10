@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -29,10 +29,10 @@ class TransliterationRuleData;
 
 /**
  * <code>RuleBasedTransliterator</code> is a transliterator
- * built from a set of rules as defined for 
- * Transliterator::createFromRules(). 
- * See the C++ class Transliterator documentation for the rule syntax. 
- * 
+ * built from a set of rules as defined for
+ * Transliterator::createFromRules().
+ * See the C++ class Transliterator documentation for the rule syntax.
+ *
  * @author Alan Liu
  * @internal Use transliterator factory methods instead since this class will be removed in that release.
  */
@@ -144,7 +144,7 @@ public:
      * Implement Transliterator API.
      * @internal Use transliterator factory methods instead since this class will be removed in that release.
      */
-    virtual RuleBasedTransliterator* clone() const; 
+    virtual RuleBasedTransliterator* clone() const;
 
 protected:
     /**

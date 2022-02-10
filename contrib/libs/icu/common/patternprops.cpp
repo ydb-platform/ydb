@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -6,7 +6,7 @@
 *   Corporation and others.  All Rights Reserved.
 *******************************************************************************
 *   file name:  patternprops.cpp
-*   encoding:   UTF-8 
+*   encoding:   UTF-8
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -173,16 +173,16 @@ PatternProps::skipWhiteSpace(const UChar *s, int32_t length) {
     return s;
 }
 
-int32_t 
-PatternProps::skipWhiteSpace(const UnicodeString& s, int32_t start) { 
-    int32_t i = start; 
-    int32_t length = s.length(); 
-    while(i<length && isWhiteSpace(s.charAt(i))) { 
-        ++i; 
-    } 
-    return i; 
-} 
- 
+int32_t
+PatternProps::skipWhiteSpace(const UnicodeString& s, int32_t start) {
+    int32_t i = start;
+    int32_t length = s.length();
+    while(i<length && isWhiteSpace(s.charAt(i))) {
+        ++i;
+    }
+    return i;
+}
+
 const UChar *
 PatternProps::trimWhiteSpace(const UChar *s, int32_t &length) {
     if(length<=0 || (!isWhiteSpace(s[0]) && !isWhiteSpace(s[length-1]))) {

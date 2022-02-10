@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -16,8 +16,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API 
- 
+#if U_SHOW_CPLUSPLUS_API
+
 #if !UCONFIG_NO_FORMATTING
 
 #include "unicode/uobject.h"
@@ -47,7 +47,7 @@ public:
      * @return  A copy of the object.
      * @stable ICU 3.8
      */
-    virtual TimeZoneRule* clone() const = 0; 
+    virtual TimeZoneRule* clone() const = 0;
 
     /**
      * Return true if the given <code>TimeZoneRule</code> objects are semantically equal. Objects
@@ -231,7 +231,7 @@ public:
      * @return    A copy of the object.
      * @stable ICU 3.8
      */
-    virtual InitialTimeZoneRule* clone() const; 
+    virtual InitialTimeZoneRule* clone() const;
 
     /**
      * Assignment operator.
@@ -442,7 +442,7 @@ public:
      * @return    A copy of the object.
      * @stable ICU 3.8
      */
-    virtual AnnualTimeZoneRule* clone() const; 
+    virtual AnnualTimeZoneRule* clone() const;
 
     /**
      * Assignment operator.
@@ -658,7 +658,7 @@ public:
      * @return    A copy of the object.
      * @stable ICU 3.8
      */
-    virtual TimeArrayTimeZoneRule* clone() const; 
+    virtual TimeArrayTimeZoneRule* clone() const;
 
     /**
      * Assignment operator.
@@ -827,8 +827,8 @@ U_NAMESPACE_END
 
 #endif /* #if !UCONFIG_NO_FORMATTING */
 
-#endif /* U_SHOW_CPLUSPLUS_API */ 
- 
+#endif /* U_SHOW_CPLUSPLUS_API */
+
 #endif // TZRULE_H
 
 //eof

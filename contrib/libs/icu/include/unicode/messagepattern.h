@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -6,7 +6,7 @@
 *   Corporation and others.  All Rights Reserved.
 *******************************************************************************
 *   file name:  messagepattern.h
-*   encoding:   UTF-8 
+*   encoding:   UTF-8
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -24,8 +24,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API 
- 
+#if U_SHOW_CPLUSPLUS_API
+
 #if !UCONFIG_NO_FORMATTING
 
 #include "unicode/parseerr.h"
@@ -773,8 +773,8 @@ public:
          * @stable ICU 4.8
          */
         UMessagePatternArgType getArgType() const {
-            UMessagePatternPartType msgType=getType(); 
-            if(msgType ==UMSGPAT_PART_TYPE_ARG_START || msgType ==UMSGPAT_PART_TYPE_ARG_LIMIT) { 
+            UMessagePatternPartType msgType=getType();
+            if(msgType ==UMSGPAT_PART_TYPE_ARG_START || msgType ==UMSGPAT_PART_TYPE_ARG_LIMIT) {
                 return (UMessagePatternArgType)value;
             } else {
                 return UMSGPAT_ARG_TYPE_NONE;
@@ -944,6 +944,6 @@ U_NAMESPACE_END
 
 #endif  // !UCONFIG_NO_FORMATTING
 
-#endif /* U_SHOW_CPLUSPLUS_API */ 
- 
+#endif /* U_SHOW_CPLUSPLUS_API */
+
 #endif  // __MESSAGEPATTERN_H__

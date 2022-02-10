@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -52,8 +52,8 @@
 U_CAPI UBool U_EXPORT2
 uprv_isASCIILetter(char c);
 
-// NOTE: For u_asciiToUpper that takes a UChar, see ustr_imp.h 
- 
+// NOTE: For u_asciiToUpper that takes a UChar, see ustr_imp.h
+
 U_CAPI char U_EXPORT2
 uprv_toupper(char c);
 

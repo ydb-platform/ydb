@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ********************************************************************************
@@ -26,8 +26,8 @@
 
 #include "unicode/utypes.h"
 
-#if U_SHOW_CPLUSPLUS_API 
- 
+#if U_SHOW_CPLUSPLUS_API
+
 /**
  * \file
  * \brief C++ API: Choice Format.
@@ -41,8 +41,8 @@
 #include "unicode/numfmt.h"
 #include "unicode/unistr.h"
 
-#ifndef U_HIDE_DEPRECATED_API 
- 
+#ifndef U_HIDE_DEPRECATED_API
+
 U_NAMESPACE_BEGIN
 
 class MessageFormat;
@@ -251,7 +251,7 @@ public:
      * @return a copy of this object
      * @deprecated ICU 49 Use MessageFormat instead, with plural and select arguments.
      */
-    virtual ChoiceFormat* clone() const; 
+    virtual ChoiceFormat* clone() const;
 
     /**
      * Returns true if the given Format objects are semantically equal.
@@ -595,7 +595,7 @@ U_NAMESPACE_END
 #endif  // U_HIDE_DEPRECATED_API
 #endif /* #if !UCONFIG_NO_FORMATTING */
 
-#endif /* U_SHOW_CPLUSPLUS_API */ 
- 
+#endif /* U_SHOW_CPLUSPLUS_API */
+
 #endif // CHOICFMT_H
 //eof

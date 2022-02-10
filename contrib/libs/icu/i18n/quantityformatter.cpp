@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -24,9 +24,9 @@
 #include "unicode/fieldpos.h"
 #include "standardplural.h"
 #include "uassert.h"
-#include "number_decimalquantity.h" 
-#include "number_utypes.h" 
-#include "formatted_string_builder.h" 
+#include "number_decimalquantity.h"
+#include "number_utypes.h"
+#include "formatted_string_builder.h"
 
 U_NAMESPACE_BEGIN
 
@@ -153,13 +153,13 @@ StandardPlural::Form QuantityFormatter::selectPlural(
     UnicodeString pluralKeyword;
     const DecimalFormat *decFmt = dynamic_cast<const DecimalFormat *>(&fmt);
     if (decFmt != NULL) {
-        number::impl::DecimalQuantity dq; 
-        decFmt->formatToDecimalQuantity(number, dq, status); 
+        number::impl::DecimalQuantity dq;
+        decFmt->formatToDecimalQuantity(number, dq, status);
         if (U_FAILURE(status)) {
             return StandardPlural::OTHER;
         }
-        pluralKeyword = rules.select(dq); 
-        decFmt->format(number, formattedNumber, pos, status); 
+        pluralKeyword = rules.select(dq);
+        decFmt->format(number, formattedNumber, pos, status);
     } else {
         if (number.getType() == Formattable::kDouble) {
             pluralKeyword = rules.select(number.getDouble());
@@ -176,44 +176,44 @@ StandardPlural::Form QuantityFormatter::selectPlural(
     return StandardPlural::orOtherFromString(pluralKeyword);
 }
 
-void QuantityFormatter::formatAndSelect( 
-        double quantity, 
-        const NumberFormat& fmt, 
-        const PluralRules& rules, 
-        FormattedStringBuilder& output, 
-        StandardPlural::Form& pluralForm, 
-        UErrorCode& status) { 
-    UnicodeString pluralKeyword; 
-    const DecimalFormat* df = dynamic_cast<const DecimalFormat*>(&fmt); 
-    if (df != nullptr) { 
-        number::impl::UFormattedNumberData fn; 
-        fn.quantity.setToDouble(quantity); 
-        const number::LocalizedNumberFormatter* lnf = df->toNumberFormatter(status); 
-        if (U_FAILURE(status)) { 
-            return; 
-        } 
-        lnf->formatImpl(&fn, status); 
-        if (U_FAILURE(status)) { 
-            return; 
-        } 
-        output = std::move(fn.getStringRef()); 
-        pluralKeyword = rules.select(fn.quantity); 
-    } else { 
-        UnicodeString result; 
-        fmt.format(quantity, result, status); 
-        if (U_FAILURE(status)) { 
-            return; 
-        } 
-        // This code path is probably RBNF. Use the generic numeric field. 
-        output.append(result, kGeneralNumericField, status); 
-        if (U_FAILURE(status)) { 
-            return; 
-        } 
-        pluralKeyword = rules.select(quantity); 
-    } 
-    pluralForm = StandardPlural::orOtherFromString(pluralKeyword); 
-} 
- 
+void QuantityFormatter::formatAndSelect(
+        double quantity,
+        const NumberFormat& fmt,
+        const PluralRules& rules,
+        FormattedStringBuilder& output,
+        StandardPlural::Form& pluralForm,
+        UErrorCode& status) {
+    UnicodeString pluralKeyword;
+    const DecimalFormat* df = dynamic_cast<const DecimalFormat*>(&fmt);
+    if (df != nullptr) {
+        number::impl::UFormattedNumberData fn;
+        fn.quantity.setToDouble(quantity);
+        const number::LocalizedNumberFormatter* lnf = df->toNumberFormatter(status);
+        if (U_FAILURE(status)) {
+            return;
+        }
+        lnf->formatImpl(&fn, status);
+        if (U_FAILURE(status)) {
+            return;
+        }
+        output = std::move(fn.getStringRef());
+        pluralKeyword = rules.select(fn.quantity);
+    } else {
+        UnicodeString result;
+        fmt.format(quantity, result, status);
+        if (U_FAILURE(status)) {
+            return;
+        }
+        // This code path is probably RBNF. Use the generic numeric field.
+        output.append(result, kGeneralNumericField, status);
+        if (U_FAILURE(status)) {
+            return;
+        }
+        pluralKeyword = rules.select(quantity);
+    }
+    pluralForm = StandardPlural::orOtherFromString(pluralKeyword);
+}
+
 UnicodeString &QuantityFormatter::format(
             const SimpleFormatter &pattern,
             const UnicodeString &value,

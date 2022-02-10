@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -8,7 +8,7 @@
 *
 *******************************************************************************
 *   file name:  uset.h
-*   encoding:   UTF-8 
+*   encoding:   UTF-8
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -33,14 +33,14 @@
 #include "unicode/uchar.h"
 #include "unicode/localpointer.h"
 
-#ifndef USET_DEFINED 
- 
-#ifndef U_IN_DOXYGEN 
-#define USET_DEFINED 
-#endif 
+#ifndef USET_DEFINED
+
+#ifndef U_IN_DOXYGEN
+#define USET_DEFINED
+#endif
 /**
- * USet is the C API type corresponding to C++ class UnicodeSet. 
- * Use the uset_* API to manipulate.  Create with 
+ * USet is the C API type corresponding to C++ class UnicodeSet.
+ * Use the uset_* API to manipulate.  Create with
  * uset_open*, and destroy with uset_close.
  * @stable ICU 2.4
  */

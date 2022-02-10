@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -8,7 +8,7 @@
 *
 *******************************************************************************
 *   file name:  umsg.cpp
-*   encoding:   UTF-8 
+*   encoding:   UTF-8
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -321,7 +321,7 @@ umsg_applyPattern(UMessageFormat *fmt,
     if(status ==NULL||U_FAILURE(*status)){
         return ;
     }
-    if(fmt==NULL || (pattern==NULL && patternLength!=0) || patternLength<-1) { 
+    if(fmt==NULL || (pattern==NULL && patternLength!=0) || patternLength<-1) {
         *status=U_ILLEGAL_ARGUMENT_ERROR;
         return ;
     }
@@ -330,7 +330,7 @@ umsg_applyPattern(UMessageFormat *fmt,
       parseError = &tErr;
     }
 
-    // UnicodeString(pattern, -1) calls u_strlen(). 
+    // UnicodeString(pattern, -1) calls u_strlen().
     ((MessageFormat*)fmt)->applyPattern(UnicodeString(pattern,patternLength),*parseError,*status);  
 }
 
@@ -463,7 +463,7 @@ umsg_vformat(   const UMessageFormat *fmt,
 
         default:
             // Unknown/unsupported argument type.
-            UPRV_UNREACHABLE; 
+            UPRV_UNREACHABLE;
         }
     }
     UnicodeString resultStr;
@@ -590,11 +590,11 @@ umsg_vparse(const UMessageFormat *fmt,
             // support kObject.  When MessageFormat is changed to
             // understand MeasureFormats, modify this code to do the
             // right thing. [alan]
-            UPRV_UNREACHABLE; 
+            UPRV_UNREACHABLE;
 
         // better not happen!
         case Formattable::kArray:
-            UPRV_UNREACHABLE; 
+            UPRV_UNREACHABLE;
         }
     }
 

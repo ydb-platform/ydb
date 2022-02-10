@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ******************************************************************************
@@ -8,7 +8,7 @@
 *
 ******************************************************************************
 *   file name:  udata.h
-*   encoding:   UTF-8 
+*   encoding:   UTF-8
 *   tab size:   8 (not used)
 *   indentation:4
 *
@@ -415,23 +415,23 @@ udata_setFileAccess(UDataFileAccess access, UErrorCode *status);
 
 U_CDECL_END
 
-#if U_SHOW_CPLUSPLUS_API 
- 
-U_NAMESPACE_BEGIN 
- 
-/** 
- * \class LocalUDataMemoryPointer 
- * "Smart pointer" class, closes a UDataMemory via udata_close(). 
- * For most methods see the LocalPointerBase base class. 
- * 
- * @see LocalPointerBase 
- * @see LocalPointer 
- * @stable ICU 4.4 
- */ 
-U_DEFINE_LOCAL_OPEN_POINTER(LocalUDataMemoryPointer, UDataMemory, udata_close); 
- 
-U_NAMESPACE_END 
- 
-#endif  // U_SHOW_CPLUSPLUS_API 
- 
+#if U_SHOW_CPLUSPLUS_API
+
+U_NAMESPACE_BEGIN
+
+/**
+ * \class LocalUDataMemoryPointer
+ * "Smart pointer" class, closes a UDataMemory via udata_close().
+ * For most methods see the LocalPointerBase base class.
+ *
+ * @see LocalPointerBase
+ * @see LocalPointer
+ * @stable ICU 4.4
+ */
+U_DEFINE_LOCAL_OPEN_POINTER(LocalUDataMemoryPointer, UDataMemory, udata_close);
+
+U_NAMESPACE_END
+
+#endif  // U_SHOW_CPLUSPLUS_API
+
 #endif

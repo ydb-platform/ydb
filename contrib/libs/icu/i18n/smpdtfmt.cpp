@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -48,12 +48,12 @@
 #include "unicode/simpletz.h"
 #include "unicode/rbtz.h"
 #include "unicode/tzfmt.h"
-#include "unicode/ucasemap.h" 
+#include "unicode/ucasemap.h"
 #include "unicode/utf16.h"
 #include "unicode/vtzone.h"
 #include "unicode/udisplaycontext.h"
 #include "unicode/brkiter.h"
-#include "unicode/rbnf.h" 
+#include "unicode/rbnf.h"
 #include "uresimp.h"
 #include "olsontz.h"
 #include "patternprops.h"
@@ -66,14 +66,14 @@
 #include <float.h>
 #include "smpdtfst.h"
 #include "sharednumberformat.h"
-#include "ucasemap_imp.h" 
+#include "ucasemap_imp.h"
 #include "ustr_imp.h"
 #include "charstr.h"
 #include "uvector.h"
 #include "cstr.h"
 #include "dayperiodrules.h"
-#include "tznames_impl.h"   // ZONE_NAME_U16_MAX 
-#include "number_utypes.h" 
+#include "tznames_impl.h"   // ZONE_NAME_U16_MAX
+#include "number_utypes.h"
 
 #if defined( U_DEBUG_CALSVC ) || defined (U_DEBUG_CAL)
 #include <stdio.h>
@@ -230,7 +230,7 @@ static const int32_t gFieldRangeBias[] = {
 static const int32_t HEBREW_CAL_CUR_MILLENIUM_START_YEAR = 5000;
 static const int32_t HEBREW_CAL_CUR_MILLENIUM_END_YEAR = 6000;
 
-static UMutex LOCK; 
+static UMutex LOCK;
 
 UOBJECT_DEFINE_RTTI_IMPLEMENTATION(SimpleDateFormat)
 
@@ -244,9 +244,9 @@ SimpleDateFormat::NSOverride::~NSOverride() {
 void SimpleDateFormat::NSOverride::free() {
     NSOverride *cur = this;
     while (cur) {
-        NSOverride *next_temp = cur->next; 
+        NSOverride *next_temp = cur->next;
         delete cur;
-        cur = next_temp; 
+        cur = next_temp;
     }
 }
 
@@ -325,7 +325,7 @@ SimpleDateFormat::~SimpleDateFormat()
     if (fTimeZoneFormat) {
         delete fTimeZoneFormat;
     }
-    freeFastNumberFormatters(); 
+    freeFastNumberFormatters();
 
 #if !UCONFIG_NO_BREAK_ITERATION
     delete fCapitalizationBrkIter;
@@ -583,14 +583,14 @@ SimpleDateFormat& SimpleDateFormat::operator=(const SimpleDateFormat& other)
     fHasMinute = other.fHasMinute;
     fHasSecond = other.fHasSecond;
 
-    fLocale = other.fLocale; 
- 
-    // TimeZoneFormat can now be set independently via setter. 
-    // If it is NULL, it will be lazily initialized from locale 
-    delete fTimeZoneFormat; 
-    fTimeZoneFormat = NULL; 
-    if (other.fTimeZoneFormat) { 
-        fTimeZoneFormat = new TimeZoneFormat(*other.fTimeZoneFormat); 
+    fLocale = other.fLocale;
+
+    // TimeZoneFormat can now be set independently via setter.
+    // If it is NULL, it will be lazily initialized from locale
+    delete fTimeZoneFormat;
+    fTimeZoneFormat = NULL;
+    if (other.fTimeZoneFormat) {
+        fTimeZoneFormat = new TimeZoneFormat(*other.fTimeZoneFormat);
     }
 
 #if !UCONFIG_NO_BREAK_ITERATION
@@ -614,16 +614,16 @@ SimpleDateFormat& SimpleDateFormat::operator=(const SimpleDateFormat& other)
         }
     }
 
-    UErrorCode localStatus = U_ZERO_ERROR; 
-    freeFastNumberFormatters(); 
-    initFastNumberFormatters(localStatus); 
- 
+    UErrorCode localStatus = U_ZERO_ERROR;
+    freeFastNumberFormatters();
+    initFastNumberFormatters(localStatus);
+
     return *this;
 }
 
 //----------------------------------------------------------------------
 
-SimpleDateFormat* 
+SimpleDateFormat*
 SimpleDateFormat::clone() const
 {
     return new SimpleDateFormat(*this);
@@ -859,17 +859,17 @@ SimpleDateFormat::initialize(const Locale& locale,
 {
     if (U_FAILURE(status)) return;
 
-    parsePattern(); // Need this before initNumberFormatters(), to set fHasHanYearChar 
- 
-    // Simple-minded hack to force Gannen year numbering for ja@calendar=japanese 
-    // if format is non-numeric (includes 年) and fDateOverride is not already specified. 
-    // Now this does get updated if applyPattern subsequently changes the pattern type. 
-    if (fDateOverride.isBogus() && fHasHanYearChar && 
-            fCalendar != nullptr && uprv_strcmp(fCalendar->getType(),"japanese") == 0 && 
-            uprv_strcmp(fLocale.getLanguage(),"ja") == 0) { 
-        fDateOverride.setTo(u"y=jpanyear", -1); 
-    } 
- 
+    parsePattern(); // Need this before initNumberFormatters(), to set fHasHanYearChar
+
+    // Simple-minded hack to force Gannen year numbering for ja@calendar=japanese
+    // if format is non-numeric (includes 年) and fDateOverride is not already specified.
+    // Now this does get updated if applyPattern subsequently changes the pattern type.
+    if (fDateOverride.isBogus() && fHasHanYearChar &&
+            fCalendar != nullptr && uprv_strcmp(fCalendar->getType(),"japanese") == 0 &&
+            uprv_strcmp(fLocale.getLanguage(),"ja") == 0) {
+        fDateOverride.setTo(u"y=jpanyear", -1);
+    }
+
     // We don't need to check that the row count is >= 1, since all 2d arrays have at
     // least one row
     fNumberFormat = NumberFormat::createInstance(locale, status);
@@ -878,8 +878,8 @@ SimpleDateFormat::initialize(const Locale& locale,
         fixNumberFormatForDates(*fNumberFormat);
         //fNumberFormat->setLenient(TRUE); // Java uses a custom DateNumberFormat to format/parse
 
-        initNumberFormatters(locale, status); 
-        initFastNumberFormatters(status); 
+        initNumberFormatters(locale, status);
+        initFastNumberFormatters(status);
 
     }
     else if (U_SUCCESS(status))
@@ -999,8 +999,8 @@ SimpleDateFormat::_format(Calendar& cal, UnicodeString& appendTo,
         // Use subFormat() to format a repeated pattern character
         // when a different pattern or non-pattern character is seen
         if (ch != prevCh && count > 0) {
-            subFormat(appendTo, prevCh, count, capitalizationContext, fieldNum++, 
-                      prevCh, handler, *workCal, status); 
+            subFormat(appendTo, prevCh, count, capitalizationContext, fieldNum++,
+                      prevCh, handler, *workCal, status);
             count = 0;
         }
         if (ch == QUOTE) {
@@ -1027,8 +1027,8 @@ SimpleDateFormat::_format(Calendar& cal, UnicodeString& appendTo,
 
     // Format the last item in the pattern, if any
     if (count > 0) {
-        subFormat(appendTo, prevCh, count, capitalizationContext, fieldNum++, 
-                  prevCh, handler, *workCal, status); 
+        subFormat(appendTo, prevCh, count, capitalizationContext, fieldNum++,
+                  prevCh, handler, *workCal, status);
     }
 
     if (calClone != NULL) {
@@ -1223,47 +1223,47 @@ _appendSymbolWithMonthPattern(UnicodeString& dst, int32_t value, const UnicodeSt
 }
 
 //----------------------------------------------------------------------
- 
-static number::LocalizedNumberFormatter* 
-createFastFormatter(const DecimalFormat* df, int32_t minInt, int32_t maxInt, UErrorCode& status) { 
-    const number::LocalizedNumberFormatter* lnfBase = df->toNumberFormatter(status); 
-    if (U_FAILURE(status)) { 
-        return nullptr; 
-    } 
-    return lnfBase->integerWidth( 
-        number::IntegerWidth::zeroFillTo(minInt).truncateAt(maxInt) 
-    ).clone().orphan(); 
-} 
- 
-void SimpleDateFormat::initFastNumberFormatters(UErrorCode& status) { 
-    if (U_FAILURE(status)) { 
-        return; 
-    } 
-    auto* df = dynamic_cast<const DecimalFormat*>(fNumberFormat); 
-    if (df == nullptr) { 
-        return; 
-    } 
-    fFastNumberFormatters[SMPDTFMT_NF_1x10] = createFastFormatter(df, 1, 10, status); 
-    fFastNumberFormatters[SMPDTFMT_NF_2x10] = createFastFormatter(df, 2, 10, status); 
-    fFastNumberFormatters[SMPDTFMT_NF_3x10] = createFastFormatter(df, 3, 10, status); 
-    fFastNumberFormatters[SMPDTFMT_NF_4x10] = createFastFormatter(df, 4, 10, status); 
-    fFastNumberFormatters[SMPDTFMT_NF_2x2] = createFastFormatter(df, 2, 2, status); 
-} 
- 
-void SimpleDateFormat::freeFastNumberFormatters() { 
-    delete fFastNumberFormatters[SMPDTFMT_NF_1x10]; 
-    delete fFastNumberFormatters[SMPDTFMT_NF_2x10]; 
-    delete fFastNumberFormatters[SMPDTFMT_NF_3x10]; 
-    delete fFastNumberFormatters[SMPDTFMT_NF_4x10]; 
-    delete fFastNumberFormatters[SMPDTFMT_NF_2x2]; 
-    fFastNumberFormatters[SMPDTFMT_NF_1x10] = nullptr; 
-    fFastNumberFormatters[SMPDTFMT_NF_2x10] = nullptr; 
-    fFastNumberFormatters[SMPDTFMT_NF_3x10] = nullptr; 
-    fFastNumberFormatters[SMPDTFMT_NF_4x10] = nullptr; 
-    fFastNumberFormatters[SMPDTFMT_NF_2x2] = nullptr; 
-} 
- 
- 
+
+static number::LocalizedNumberFormatter*
+createFastFormatter(const DecimalFormat* df, int32_t minInt, int32_t maxInt, UErrorCode& status) {
+    const number::LocalizedNumberFormatter* lnfBase = df->toNumberFormatter(status);
+    if (U_FAILURE(status)) {
+        return nullptr;
+    }
+    return lnfBase->integerWidth(
+        number::IntegerWidth::zeroFillTo(minInt).truncateAt(maxInt)
+    ).clone().orphan();
+}
+
+void SimpleDateFormat::initFastNumberFormatters(UErrorCode& status) {
+    if (U_FAILURE(status)) {
+        return;
+    }
+    auto* df = dynamic_cast<const DecimalFormat*>(fNumberFormat);
+    if (df == nullptr) {
+        return;
+    }
+    fFastNumberFormatters[SMPDTFMT_NF_1x10] = createFastFormatter(df, 1, 10, status);
+    fFastNumberFormatters[SMPDTFMT_NF_2x10] = createFastFormatter(df, 2, 10, status);
+    fFastNumberFormatters[SMPDTFMT_NF_3x10] = createFastFormatter(df, 3, 10, status);
+    fFastNumberFormatters[SMPDTFMT_NF_4x10] = createFastFormatter(df, 4, 10, status);
+    fFastNumberFormatters[SMPDTFMT_NF_2x2] = createFastFormatter(df, 2, 2, status);
+}
+
+void SimpleDateFormat::freeFastNumberFormatters() {
+    delete fFastNumberFormatters[SMPDTFMT_NF_1x10];
+    delete fFastNumberFormatters[SMPDTFMT_NF_2x10];
+    delete fFastNumberFormatters[SMPDTFMT_NF_3x10];
+    delete fFastNumberFormatters[SMPDTFMT_NF_4x10];
+    delete fFastNumberFormatters[SMPDTFMT_NF_2x2];
+    fFastNumberFormatters[SMPDTFMT_NF_1x10] = nullptr;
+    fFastNumberFormatters[SMPDTFMT_NF_2x10] = nullptr;
+    fFastNumberFormatters[SMPDTFMT_NF_3x10] = nullptr;
+    fFastNumberFormatters[SMPDTFMT_NF_4x10] = nullptr;
+    fFastNumberFormatters[SMPDTFMT_NF_2x2] = nullptr;
+}
+
+
 void
 SimpleDateFormat::initNumberFormatters(const Locale &locale,UErrorCode &status) {
     if (U_FAILURE(status)) {
@@ -1322,15 +1322,15 @@ SimpleDateFormat::processOverrideString(const Locale &locale, const UnicodeStrin
 
         int32_t nsNameHash = nsName.hashCode();
         // See if the numbering system is in the override list, if not, then add it.
-        NSOverride *curr = overrideList; 
+        NSOverride *curr = overrideList;
         const SharedNumberFormat *snf = NULL;
         UBool found = FALSE;
-        while ( curr && !found ) { 
-            if ( curr->hash == nsNameHash ) { 
-                snf = curr->snf; 
+        while ( curr && !found ) {
+            if ( curr->hash == nsNameHash ) {
+                snf = curr->snf;
                 found = TRUE;
             }
-            curr = curr->next; 
+            curr = curr->next;
         }
 
         if (!found) {
@@ -1407,11 +1407,11 @@ SimpleDateFormat::processOverrideString(const Locale &locale, const UnicodeStrin
 //---------------------------------------------------------------------
 void
 SimpleDateFormat::subFormat(UnicodeString &appendTo,
-                            char16_t ch, 
+                            char16_t ch,
                             int32_t count,
                             UDisplayContext capitalizationContext,
                             int32_t fieldNum,
-                            char16_t fieldToOutput, 
+                            char16_t fieldToOutput,
                             FieldPositionHandler& handler,
                             Calendar& cal,
                             UErrorCode& status) const
@@ -1426,7 +1426,7 @@ SimpleDateFormat::subFormat(UnicodeString &appendTo,
     UDateFormatField patternCharIndex = DateFormatSymbols::getPatternCharIndex(ch);
     const int32_t maxIntCount = 10;
     int32_t beginOffset = appendTo.length();
-    const NumberFormat *currentNumberFormat; 
+    const NumberFormat *currentNumberFormat;
     DateFormatSymbols::ECapitalizationContextUsageType capContextUsageType = DateFormatSymbols::kCapContextUsageOther;
 
     UBool isHebrewCalendar = (uprv_strcmp(cal.getType(),"hebrew") == 0);
@@ -1451,9 +1451,9 @@ SimpleDateFormat::subFormat(UnicodeString &appendTo,
         return;
     }
 
-    currentNumberFormat = getNumberFormatByIndex(patternCharIndex); 
+    currentNumberFormat = getNumberFormatByIndex(patternCharIndex);
     if (currentNumberFormat == NULL) {
-        status = U_INTERNAL_PROGRAM_ERROR; 
+        status = U_INTERNAL_PROGRAM_ERROR;
         return;
     }
     UnicodeString hebr("hebr", 4, US_INV);
@@ -1573,15 +1573,15 @@ SimpleDateFormat::subFormat(UnicodeString &appendTo,
     case UDAT_FRACTIONAL_SECOND_FIELD:
         // Fractional seconds left-justify
         {
-            int32_t minDigits = (count > 3) ? 3 : count; 
+            int32_t minDigits = (count > 3) ? 3 : count;
             if (count == 1) {
                 value /= 100;
             } else if (count == 2) {
                 value /= 10;
             }
-            zeroPaddingNumber(currentNumberFormat, appendTo, value, minDigits, maxIntCount); 
+            zeroPaddingNumber(currentNumberFormat, appendTo, value, minDigits, maxIntCount);
             if (count > 3) {
-                zeroPaddingNumber(currentNumberFormat, appendTo, 0, count - 3, maxIntCount); 
+                zeroPaddingNumber(currentNumberFormat, appendTo, 0, count - 3, maxIntCount);
             }
         }
         break;
@@ -1695,109 +1695,109 @@ SimpleDateFormat::subFormat(UnicodeString &appendTo,
     case UDAT_TIMEZONE_ISO_FIELD: // 'X'
     case UDAT_TIMEZONE_ISO_LOCAL_FIELD: // 'x'
         {
-            UChar zsbuf[ZONE_NAME_U16_MAX]; 
+            UChar zsbuf[ZONE_NAME_U16_MAX];
             UnicodeString zoneString(zsbuf, 0, UPRV_LENGTHOF(zsbuf));
             const TimeZone& tz = cal.getTimeZone();
             UDate date = cal.getTime(status);
-            const TimeZoneFormat *tzfmt = tzFormat(status); 
+            const TimeZoneFormat *tzfmt = tzFormat(status);
             if (U_SUCCESS(status)) {
                 if (patternCharIndex == UDAT_TIMEZONE_FIELD) {
                     if (count < 4) {
                         // "z", "zz", "zzz"
-                        tzfmt->format(UTZFMT_STYLE_SPECIFIC_SHORT, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_SPECIFIC_SHORT, tz, date, zoneString);
                         capContextUsageType = DateFormatSymbols::kCapContextUsageMetazoneShort;
                     } else {
                         // "zzzz" or longer
-                        tzfmt->format(UTZFMT_STYLE_SPECIFIC_LONG, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_SPECIFIC_LONG, tz, date, zoneString);
                         capContextUsageType = DateFormatSymbols::kCapContextUsageMetazoneLong;
                     }
                 }
                 else if (patternCharIndex == UDAT_TIMEZONE_RFC_FIELD) {
                     if (count < 4) {
                         // "Z"
-                        tzfmt->format(UTZFMT_STYLE_ISO_BASIC_LOCAL_FULL, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_ISO_BASIC_LOCAL_FULL, tz, date, zoneString);
                     } else if (count == 5) {
                         // "ZZZZZ"
-                        tzfmt->format(UTZFMT_STYLE_ISO_EXTENDED_FULL, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_ISO_EXTENDED_FULL, tz, date, zoneString);
                     } else {
                         // "ZZ", "ZZZ", "ZZZZ"
-                        tzfmt->format(UTZFMT_STYLE_LOCALIZED_GMT, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_LOCALIZED_GMT, tz, date, zoneString);
                     }
                 }
                 else if (patternCharIndex == UDAT_TIMEZONE_GENERIC_FIELD) {
                     if (count == 1) {
                         // "v"
-                        tzfmt->format(UTZFMT_STYLE_GENERIC_SHORT, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_GENERIC_SHORT, tz, date, zoneString);
                         capContextUsageType = DateFormatSymbols::kCapContextUsageMetazoneShort;
                     } else if (count == 4) {
                         // "vvvv"
-                        tzfmt->format(UTZFMT_STYLE_GENERIC_LONG, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_GENERIC_LONG, tz, date, zoneString);
                         capContextUsageType = DateFormatSymbols::kCapContextUsageMetazoneLong;
                     }
                 }
                 else if (patternCharIndex == UDAT_TIMEZONE_SPECIAL_FIELD) {
                     if (count == 1) {
                         // "V"
-                        tzfmt->format(UTZFMT_STYLE_ZONE_ID_SHORT, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_ZONE_ID_SHORT, tz, date, zoneString);
                     } else if (count == 2) {
                         // "VV"
-                        tzfmt->format(UTZFMT_STYLE_ZONE_ID, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_ZONE_ID, tz, date, zoneString);
                     } else if (count == 3) {
                         // "VVV"
-                        tzfmt->format(UTZFMT_STYLE_EXEMPLAR_LOCATION, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_EXEMPLAR_LOCATION, tz, date, zoneString);
                     } else if (count == 4) {
                         // "VVVV"
-                        tzfmt->format(UTZFMT_STYLE_GENERIC_LOCATION, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_GENERIC_LOCATION, tz, date, zoneString);
                         capContextUsageType = DateFormatSymbols::kCapContextUsageZoneLong;
                     }
                 }
                 else if (patternCharIndex == UDAT_TIMEZONE_LOCALIZED_GMT_OFFSET_FIELD) {
                     if (count == 1) {
                         // "O"
-                        tzfmt->format(UTZFMT_STYLE_LOCALIZED_GMT_SHORT, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_LOCALIZED_GMT_SHORT, tz, date, zoneString);
                     } else if (count == 4) {
                         // "OOOO"
-                        tzfmt->format(UTZFMT_STYLE_LOCALIZED_GMT, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_LOCALIZED_GMT, tz, date, zoneString);
                     }
                 }
                 else if (patternCharIndex == UDAT_TIMEZONE_ISO_FIELD) {
                     if (count == 1) {
                         // "X"
-                        tzfmt->format(UTZFMT_STYLE_ISO_BASIC_SHORT, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_ISO_BASIC_SHORT, tz, date, zoneString);
                     } else if (count == 2) {
                         // "XX"
-                        tzfmt->format(UTZFMT_STYLE_ISO_BASIC_FIXED, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_ISO_BASIC_FIXED, tz, date, zoneString);
                     } else if (count == 3) {
                         // "XXX"
-                        tzfmt->format(UTZFMT_STYLE_ISO_EXTENDED_FIXED, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_ISO_EXTENDED_FIXED, tz, date, zoneString);
                     } else if (count == 4) {
                         // "XXXX"
-                        tzfmt->format(UTZFMT_STYLE_ISO_BASIC_FULL, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_ISO_BASIC_FULL, tz, date, zoneString);
                     } else if (count == 5) {
                         // "XXXXX"
-                        tzfmt->format(UTZFMT_STYLE_ISO_EXTENDED_FULL, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_ISO_EXTENDED_FULL, tz, date, zoneString);
                     }
                 }
                 else if (patternCharIndex == UDAT_TIMEZONE_ISO_LOCAL_FIELD) {
                     if (count == 1) {
                         // "x"
-                        tzfmt->format(UTZFMT_STYLE_ISO_BASIC_LOCAL_SHORT, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_ISO_BASIC_LOCAL_SHORT, tz, date, zoneString);
                     } else if (count == 2) {
                         // "xx"
-                        tzfmt->format(UTZFMT_STYLE_ISO_BASIC_LOCAL_FIXED, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_ISO_BASIC_LOCAL_FIXED, tz, date, zoneString);
                     } else if (count == 3) {
                         // "xxx"
-                        tzfmt->format(UTZFMT_STYLE_ISO_EXTENDED_LOCAL_FIXED, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_ISO_EXTENDED_LOCAL_FIXED, tz, date, zoneString);
                     } else if (count == 4) {
                         // "xxxx"
-                        tzfmt->format(UTZFMT_STYLE_ISO_BASIC_LOCAL_FULL, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_ISO_BASIC_LOCAL_FULL, tz, date, zoneString);
                     } else if (count == 5) {
                         // "xxxxx"
-                        tzfmt->format(UTZFMT_STYLE_ISO_EXTENDED_LOCAL_FULL, tz, date, zoneString); 
+                        tzfmt->format(UTZFMT_STYLE_ISO_EXTENDED_LOCAL_FULL, tz, date, zoneString);
                     }
                 }
                 else {
-                    UPRV_UNREACHABLE; 
+                    UPRV_UNREACHABLE;
                 }
             }
             appendTo += zoneString;
@@ -1843,14 +1843,14 @@ SimpleDateFormat::subFormat(UnicodeString &appendTo,
             // Stealing am/pm value to use as our array index.
             // It works out: am/midnight are both 0, pm/noon are both 1,
             // 12 am is 12 midnight, and 12 pm is 12 noon.
-            int32_t val = cal.get(UCAL_AM_PM, status); 
+            int32_t val = cal.get(UCAL_AM_PM, status);
 
             if (count <= 3) {
-                toAppend = &fSymbols->fAbbreviatedDayPeriods[val]; 
+                toAppend = &fSymbols->fAbbreviatedDayPeriods[val];
             } else if (count == 4 || count > 5) {
-                toAppend = &fSymbols->fWideDayPeriods[val]; 
+                toAppend = &fSymbols->fWideDayPeriods[val];
             } else { // count == 5
-                toAppend = &fSymbols->fNarrowDayPeriods[val]; 
+                toAppend = &fSymbols->fNarrowDayPeriods[val];
             }
         }
 
@@ -1859,11 +1859,11 @@ SimpleDateFormat::subFormat(UnicodeString &appendTo,
         // In either case, fall back to am/pm.
         if (toAppend == NULL || toAppend->isBogus()) {
             // Reformat with identical arguments except ch, now changed to 'a'.
-            // We are passing a different fieldToOutput because we want to add 
-            // 'b' to field position. This makes this fallback stable when 
-            // there is a data change on locales. 
-            subFormat(appendTo, u'a', count, capitalizationContext, fieldNum, u'b', handler, cal, status); 
-            return; 
+            // We are passing a different fieldToOutput because we want to add
+            // 'b' to field position. This makes this fallback stable when
+            // there is a data change on locales.
+            subFormat(appendTo, u'a', count, capitalizationContext, fieldNum, u'b', handler, cal, status);
+            return;
         } else {
             appendTo += *toAppend;
         }
@@ -1883,11 +1883,11 @@ SimpleDateFormat::subFormat(UnicodeString &appendTo,
         if (ruleSet == NULL) {
             // Data doesn't exist for the locale we're looking for.
             // Falling back to am/pm.
-            // We are passing a different fieldToOutput because we want to add 
-            // 'B' to field position. This makes this fallback stable when 
-            // there is a data change on locales. 
-            subFormat(appendTo, u'a', count, capitalizationContext, fieldNum, u'B', handler, cal, status); 
-            return; 
+            // We are passing a different fieldToOutput because we want to add
+            // 'B' to field position. This makes this fallback stable when
+            // there is a data change on locales.
+            subFormat(appendTo, u'a', count, capitalizationContext, fieldNum, u'B', handler, cal, status);
+            return;
         }
 
         // Get current display time.
@@ -1956,11 +1956,11 @@ SimpleDateFormat::subFormat(UnicodeString &appendTo,
         if (periodType == DayPeriodRules::DAYPERIOD_AM ||
             periodType == DayPeriodRules::DAYPERIOD_PM ||
             toAppend->isBogus()) {
-            // We are passing a different fieldToOutput because we want to add 
-            // 'B' to field position iterator. This makes this fallback stable when 
-            // there is a data change on locales. 
-            subFormat(appendTo, u'a', count, capitalizationContext, fieldNum, u'B', handler, cal, status); 
-            return; 
+            // We are passing a different fieldToOutput because we want to add
+            // 'B' to field position iterator. This makes this fallback stable when
+            // there is a data change on locales.
+            subFormat(appendTo, u'a', count, capitalizationContext, fieldNum, u'B', handler, cal, status);
+            return;
         }
         else {
             appendTo += *toAppend;
@@ -1977,8 +1977,8 @@ SimpleDateFormat::subFormat(UnicodeString &appendTo,
     }
 #if !UCONFIG_NO_BREAK_ITERATION
     // if first field, check to see whether we need to and are able to titlecase it
-    if (fieldNum == 0 && fCapitalizationBrkIter != NULL && appendTo.length() > beginOffset && 
-            u_islower(appendTo.char32At(beginOffset))) { 
+    if (fieldNum == 0 && fCapitalizationBrkIter != NULL && appendTo.length() > beginOffset &&
+            u_islower(appendTo.char32At(beginOffset))) {
         UBool titlecase = FALSE;
         switch (capitalizationContext) {
             case UDISPCTX_CAPITALIZATION_FOR_BEGINNING_OF_SENTENCE:
@@ -1995,16 +1995,16 @@ SimpleDateFormat::subFormat(UnicodeString &appendTo,
                 break;
         }
         if (titlecase) {
-            BreakIterator* const mutableCapitalizationBrkIter = fCapitalizationBrkIter->clone(); 
+            BreakIterator* const mutableCapitalizationBrkIter = fCapitalizationBrkIter->clone();
             UnicodeString firstField(appendTo, beginOffset);
-            firstField.toTitle(mutableCapitalizationBrkIter, fLocale, U_TITLECASE_NO_LOWERCASE | U_TITLECASE_NO_BREAK_ADJUSTMENT); 
+            firstField.toTitle(mutableCapitalizationBrkIter, fLocale, U_TITLECASE_NO_LOWERCASE | U_TITLECASE_NO_BREAK_ADJUSTMENT);
             appendTo.replaceBetween(beginOffset, appendTo.length(), firstField);
-            delete mutableCapitalizationBrkIter; 
+            delete mutableCapitalizationBrkIter;
         }
     }
 #endif
 
-    handler.addAttribute(DateFormatSymbols::getPatternCharIndex(fieldToOutput), beginOffset, appendTo.length()); 
+    handler.addAttribute(DateFormatSymbols::getPatternCharIndex(fieldToOutput), beginOffset, appendTo.length());
 }
 
 //----------------------------------------------------------------------
@@ -2020,11 +2020,11 @@ void SimpleDateFormat::adoptNumberFormat(NumberFormat *formatToAdopt) {
         freeSharedNumberFormatters(fSharedNumberFormatters);
         fSharedNumberFormatters = NULL;
     }
- 
-    // Also re-compute the fast formatters. 
-    UErrorCode localStatus = U_ZERO_ERROR; 
-    freeFastNumberFormatters(); 
-    initFastNumberFormatters(localStatus); 
+
+    // Also re-compute the fast formatters.
+    UErrorCode localStatus = U_ZERO_ERROR;
+    freeFastNumberFormatters();
+    initFastNumberFormatters(localStatus);
 }
 
 void SimpleDateFormat::adoptNumberFormat(const UnicodeString& fields, NumberFormat *formatToAdopt, UErrorCode &status){
@@ -2076,58 +2076,58 @@ SimpleDateFormat::getNumberFormatForField(UChar field) const {
 //----------------------------------------------------------------------
 void
 SimpleDateFormat::zeroPaddingNumber(
-        const NumberFormat *currentNumberFormat, 
+        const NumberFormat *currentNumberFormat,
         UnicodeString &appendTo,
         int32_t value, int32_t minDigits, int32_t maxDigits) const
 {
-    const number::LocalizedNumberFormatter* fastFormatter = nullptr; 
-    // NOTE: This uses the heuristic that these five min/max int settings account for the vast majority 
-    // of SimpleDateFormat number formatting cases at the time of writing (ICU 62). 
-    if (currentNumberFormat == fNumberFormat) { 
-        if (maxDigits == 10) { 
-            if (minDigits == 1) { 
-                fastFormatter = fFastNumberFormatters[SMPDTFMT_NF_1x10]; 
-            } else if (minDigits == 2) { 
-                fastFormatter = fFastNumberFormatters[SMPDTFMT_NF_2x10]; 
-            } else if (minDigits == 3) { 
-                fastFormatter = fFastNumberFormatters[SMPDTFMT_NF_3x10]; 
-            } else if (minDigits == 4) { 
-                fastFormatter = fFastNumberFormatters[SMPDTFMT_NF_4x10]; 
-            } 
-        } else if (maxDigits == 2) { 
-            if (minDigits == 2) { 
-                fastFormatter = fFastNumberFormatters[SMPDTFMT_NF_2x2]; 
-            } 
-        } 
-    } 
-    if (fastFormatter != nullptr) { 
-        // Can use fast path 
-        number::impl::UFormattedNumberData result; 
-        result.quantity.setToInt(value); 
-        UErrorCode localStatus = U_ZERO_ERROR; 
-        fastFormatter->formatImpl(&result, localStatus); 
-        if (U_FAILURE(localStatus)) { 
-            return; 
-        } 
-        appendTo.append(result.getStringRef().toTempUnicodeString()); 
-        return; 
-    } 
- 
-    // Check for RBNF (no clone necessary) 
-    auto* rbnf = dynamic_cast<const RuleBasedNumberFormat*>(currentNumberFormat); 
-    if (rbnf != nullptr) { 
-        FieldPosition pos(FieldPosition::DONT_CARE);
-        rbnf->format(value, appendTo, pos);  // 3rd arg is there to speed up processing 
-        return; 
-    } 
+    const number::LocalizedNumberFormatter* fastFormatter = nullptr;
+    // NOTE: This uses the heuristic that these five min/max int settings account for the vast majority
+    // of SimpleDateFormat number formatting cases at the time of writing (ICU 62).
+    if (currentNumberFormat == fNumberFormat) {
+        if (maxDigits == 10) {
+            if (minDigits == 1) {
+                fastFormatter = fFastNumberFormatters[SMPDTFMT_NF_1x10];
+            } else if (minDigits == 2) {
+                fastFormatter = fFastNumberFormatters[SMPDTFMT_NF_2x10];
+            } else if (minDigits == 3) {
+                fastFormatter = fFastNumberFormatters[SMPDTFMT_NF_3x10];
+            } else if (minDigits == 4) {
+                fastFormatter = fFastNumberFormatters[SMPDTFMT_NF_4x10];
+            }
+        } else if (maxDigits == 2) {
+            if (minDigits == 2) {
+                fastFormatter = fFastNumberFormatters[SMPDTFMT_NF_2x2];
+            }
+        }
+    }
+    if (fastFormatter != nullptr) {
+        // Can use fast path
+        number::impl::UFormattedNumberData result;
+        result.quantity.setToInt(value);
+        UErrorCode localStatus = U_ZERO_ERROR;
+        fastFormatter->formatImpl(&result, localStatus);
+        if (U_FAILURE(localStatus)) {
+            return;
+        }
+        appendTo.append(result.getStringRef().toTempUnicodeString());
+        return;
+    }
 
-    // Fall back to slow path (clone and mutate the NumberFormat) 
-    if (currentNumberFormat != nullptr) { 
-        FieldPosition pos(FieldPosition::DONT_CARE); 
-        LocalPointer<NumberFormat> nf(currentNumberFormat->clone()); 
-        nf->setMinimumIntegerDigits(minDigits); 
-        nf->setMaximumIntegerDigits(maxDigits); 
-        nf->format(value, appendTo, pos);  // 3rd arg is there to speed up processing 
+    // Check for RBNF (no clone necessary)
+    auto* rbnf = dynamic_cast<const RuleBasedNumberFormat*>(currentNumberFormat);
+    if (rbnf != nullptr) {
+        FieldPosition pos(FieldPosition::DONT_CARE);
+        rbnf->format(value, appendTo, pos);  // 3rd arg is there to speed up processing
+        return;
+    }
+
+    // Fall back to slow path (clone and mutate the NumberFormat)
+    if (currentNumberFormat != nullptr) {
+        FieldPosition pos(FieldPosition::DONT_CARE);
+        LocalPointer<NumberFormat> nf(currentNumberFormat->clone());
+        nf->setMinimumIntegerDigits(minDigits);
+        nf->setMaximumIntegerDigits(maxDigits);
+        nf->format(value, appendTo, pos);  // 3rd arg is there to speed up processing
     }
 }
 
@@ -2287,7 +2287,7 @@ SimpleDateFormat::parse(const UnicodeString& text, Calendar& cal, ParsePosition&
                 }
 
                 pos = subParse(text, pos, ch, count,
-                               TRUE, FALSE, ambiguousYear, saveHebrewMonth, *workCal, i, numericLeapMonthFormatter, &tzTimeType); 
+                               TRUE, FALSE, ambiguousYear, saveHebrewMonth, *workCal, i, numericLeapMonthFormatter, &tzTimeType);
 
                 // If the parse fails anywhere in the run, back up to the
                 // start of the run and retry.
@@ -2302,7 +2302,7 @@ SimpleDateFormat::parse(const UnicodeString& text, Calendar& cal, ParsePosition&
             // fields.
             else if (ch != 0x6C) { // pattern char 'l' (SMALL LETTER L) just gets ignored
                 int32_t s = subParse(text, pos, ch, count,
-                               FALSE, TRUE, ambiguousYear, saveHebrewMonth, *workCal, i, numericLeapMonthFormatter, &tzTimeType, &dayPeriodInt); 
+                               FALSE, TRUE, ambiguousYear, saveHebrewMonth, *workCal, i, numericLeapMonthFormatter, &tzTimeType, &dayPeriodInt);
 
                 if (s == -pos-1) {
                     // era not present, in special cases allow this to continue
@@ -2311,10 +2311,10 @@ SimpleDateFormat::parse(const UnicodeString& text, Calendar& cal, ParsePosition&
 
                     if (i+1 < fPattern.length()) {
                         // move to next pattern character
-                        UChar c = fPattern.charAt(i+1); 
+                        UChar c = fPattern.charAt(i+1);
 
                         // check for whitespace
-                        if (PatternProps::isWhiteSpace(c)) { 
+                        if (PatternProps::isWhiteSpace(c)) {
                             i++;
                             // Advance over run in pattern
                             while ((i+1)<fPattern.length() &&
@@ -2920,7 +2920,7 @@ SimpleDateFormat::set2DigitYearStart(UDate d, UErrorCode& status)
  */
 int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UChar ch, int32_t count,
                            UBool obeyCount, UBool allowNegative, UBool ambiguousYear[], int32_t& saveHebrewMonth, Calendar& cal,
-                           int32_t patLoc, MessageFormat * numericLeapMonthFormatter, UTimeZoneFormatTimeType *tzTimeType, 
+                           int32_t patLoc, MessageFormat * numericLeapMonthFormatter, UTimeZoneFormatTimeType *tzTimeType,
                            int32_t *dayPeriod) const
 {
     Formattable number;
@@ -2930,7 +2930,7 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
     UErrorCode status = U_ZERO_ERROR;
     ParsePosition pos(0);
     UDateFormatField patternCharIndex = DateFormatSymbols::getPatternCharIndex(ch);
-    const NumberFormat *currentNumberFormat; 
+    const NumberFormat *currentNumberFormat;
     UnicodeString temp;
     UBool gotNumber = FALSE;
 
@@ -2942,7 +2942,7 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
         return -start;
     }
 
-    currentNumberFormat = getNumberFormatByIndex(patternCharIndex); 
+    currentNumberFormat = getNumberFormatByIndex(patternCharIndex);
     if (currentNumberFormat == NULL) {
         return -start;
     }
@@ -3116,9 +3116,9 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
         // is treated literally:  "2250", "-1", "1", "002".
         if (fDateOverride.compare(hebr)==0 && value < 1000) {
             value += HEBREW_CAL_CUR_MILLENIUM_START_YEAR;
-        } else if (text.moveIndex32(start, 2) == pos.getIndex() && !isChineseCalendar 
-            && u_isdigit(text.char32At(start)) 
-            && u_isdigit(text.char32At(text.moveIndex32(start, 1)))) 
+        } else if (text.moveIndex32(start, 2) == pos.getIndex() && !isChineseCalendar
+            && u_isdigit(text.char32At(start))
+            && u_isdigit(text.char32At(text.moveIndex32(start, 1))))
         {
             // only adjust year for patterns less than 3.
             if(count < 3) {
@@ -3156,9 +3156,9 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
         // Comment is the same as for UDAT_Year_FIELDs - look above
         if (fDateOverride.compare(hebr)==0 && value < 1000) {
             value += HEBREW_CAL_CUR_MILLENIUM_START_YEAR;
-        } else if (text.moveIndex32(start, 2) == pos.getIndex() 
-            && u_isdigit(text.char32At(start)) 
-            && u_isdigit(text.char32At(text.moveIndex32(start, 1))) 
+        } else if (text.moveIndex32(start, 2) == pos.getIndex()
+            && u_isdigit(text.char32At(start))
+            && u_isdigit(text.char32At(text.moveIndex32(start, 1)))
             && fHaveDefaultCentury )
         {
             int32_t ambiguousTwoDigitYear = fDefaultCenturyStartYear % 100;
@@ -3192,8 +3192,8 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
             if (!strcmp(cal.getType(),"hebrew")) {
                 HebrewCalendar *hc = (HebrewCalendar*)&cal;
                 if (cal.isSet(UCAL_YEAR)) {
-                   UErrorCode monthStatus = U_ZERO_ERROR; 
-                   if (!hc->isLeapYear(hc->get(UCAL_YEAR, monthStatus)) && value >= 6) { 
+                   UErrorCode monthStatus = U_ZERO_ERROR;
+                   if (!hc->isLeapYear(hc->get(UCAL_YEAR, monthStatus)) && value >= 6) {
                        cal.set(UCAL_MONTH, value);
                    } else {
                        cal.set(UCAL_MONTH, value - 1);
@@ -3264,7 +3264,7 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
 
     case UDAT_FRACTIONAL_SECOND_FIELD:
         // Fractional seconds left-justify
-        i = countDigits(text, start, pos.getIndex()); 
+        i = countDigits(text, start, pos.getIndex());
         if (i < 3) {
             while (i < 3) {
                 value *= 10;
@@ -3455,41 +3455,41 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
     case UDAT_TIMEZONE_FIELD: // 'z'
         {
             UTimeZoneFormatStyle style = (count < 4) ? UTZFMT_STYLE_SPECIFIC_SHORT : UTZFMT_STYLE_SPECIFIC_LONG;
-            const TimeZoneFormat *tzfmt = tzFormat(status); 
-            if (U_SUCCESS(status)) { 
-                TimeZone *tz = tzfmt->parse(style, text, pos, tzTimeType); 
-                if (tz != NULL) { 
-                    cal.adoptTimeZone(tz); 
-                    return pos.getIndex(); 
-                } 
+            const TimeZoneFormat *tzfmt = tzFormat(status);
+            if (U_SUCCESS(status)) {
+                TimeZone *tz = tzfmt->parse(style, text, pos, tzTimeType);
+                if (tz != NULL) {
+                    cal.adoptTimeZone(tz);
+                    return pos.getIndex();
+                }
             }
-            return -start; 
-    } 
+            return -start;
+    }
         break;
     case UDAT_TIMEZONE_RFC_FIELD: // 'Z'
         {
             UTimeZoneFormatStyle style = (count < 4) ?
                 UTZFMT_STYLE_ISO_BASIC_LOCAL_FULL : ((count == 5) ? UTZFMT_STYLE_ISO_EXTENDED_FULL: UTZFMT_STYLE_LOCALIZED_GMT);
-            const TimeZoneFormat *tzfmt = tzFormat(status); 
-            if (U_SUCCESS(status)) { 
-                TimeZone *tz = tzfmt->parse(style, text, pos, tzTimeType); 
-                if (tz != NULL) { 
-                    cal.adoptTimeZone(tz); 
-                    return pos.getIndex(); 
-                } 
+            const TimeZoneFormat *tzfmt = tzFormat(status);
+            if (U_SUCCESS(status)) {
+                TimeZone *tz = tzfmt->parse(style, text, pos, tzTimeType);
+                if (tz != NULL) {
+                    cal.adoptTimeZone(tz);
+                    return pos.getIndex();
+                }
             }
             return -start;
         }
     case UDAT_TIMEZONE_GENERIC_FIELD: // 'v'
         {
             UTimeZoneFormatStyle style = (count < 4) ? UTZFMT_STYLE_GENERIC_SHORT : UTZFMT_STYLE_GENERIC_LONG;
-            const TimeZoneFormat *tzfmt = tzFormat(status); 
-            if (U_SUCCESS(status)) { 
-                TimeZone *tz = tzfmt->parse(style, text, pos, tzTimeType); 
-                if (tz != NULL) { 
-                    cal.adoptTimeZone(tz); 
-                    return pos.getIndex(); 
-                } 
+            const TimeZoneFormat *tzfmt = tzFormat(status);
+            if (U_SUCCESS(status)) {
+                TimeZone *tz = tzfmt->parse(style, text, pos, tzTimeType);
+                if (tz != NULL) {
+                    cal.adoptTimeZone(tz);
+                    return pos.getIndex();
+                }
             }
             return -start;
         }
@@ -3510,26 +3510,26 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
                 style = UTZFMT_STYLE_GENERIC_LOCATION;
                 break;
             }
-            const TimeZoneFormat *tzfmt = tzFormat(status); 
-            if (U_SUCCESS(status)) { 
-                TimeZone *tz = tzfmt->parse(style, text, pos, tzTimeType); 
-                if (tz != NULL) { 
-                    cal.adoptTimeZone(tz); 
-                    return pos.getIndex(); 
-                } 
+            const TimeZoneFormat *tzfmt = tzFormat(status);
+            if (U_SUCCESS(status)) {
+                TimeZone *tz = tzfmt->parse(style, text, pos, tzTimeType);
+                if (tz != NULL) {
+                    cal.adoptTimeZone(tz);
+                    return pos.getIndex();
+                }
             }
             return -start;
         }
     case UDAT_TIMEZONE_LOCALIZED_GMT_OFFSET_FIELD: // 'O'
         {
             UTimeZoneFormatStyle style = (count < 4) ? UTZFMT_STYLE_LOCALIZED_GMT_SHORT : UTZFMT_STYLE_LOCALIZED_GMT;
-            const TimeZoneFormat *tzfmt = tzFormat(status); 
-            if (U_SUCCESS(status)) { 
-                TimeZone *tz = tzfmt->parse(style, text, pos, tzTimeType); 
-                if (tz != NULL) { 
-                    cal.adoptTimeZone(tz); 
-                    return pos.getIndex(); 
-                } 
+            const TimeZoneFormat *tzfmt = tzFormat(status);
+            if (U_SUCCESS(status)) {
+                TimeZone *tz = tzfmt->parse(style, text, pos, tzTimeType);
+                if (tz != NULL) {
+                    cal.adoptTimeZone(tz);
+                    return pos.getIndex();
+                }
             }
             return -start;
         }
@@ -3553,13 +3553,13 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
                 style = UTZFMT_STYLE_ISO_EXTENDED_FULL;
                 break;
             }
-            const TimeZoneFormat *tzfmt = tzFormat(status); 
-            if (U_SUCCESS(status)) { 
-                TimeZone *tz = tzfmt->parse(style, text, pos, tzTimeType); 
-                if (tz != NULL) { 
-                    cal.adoptTimeZone(tz); 
-                    return pos.getIndex(); 
-                } 
+            const TimeZoneFormat *tzfmt = tzFormat(status);
+            if (U_SUCCESS(status)) {
+                TimeZone *tz = tzfmt->parse(style, text, pos, tzTimeType);
+                if (tz != NULL) {
+                    cal.adoptTimeZone(tz);
+                    return pos.getIndex();
+                }
             }
             return -start;
         }
@@ -3583,13 +3583,13 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
                 style = UTZFMT_STYLE_ISO_EXTENDED_LOCAL_FULL;
                 break;
             }
-            const TimeZoneFormat *tzfmt = tzFormat(status); 
-            if (U_SUCCESS(status)) { 
-                TimeZone *tz = tzfmt->parse(style, text, pos, tzTimeType); 
-                if (tz != NULL) { 
-                    cal.adoptTimeZone(tz); 
-                    return pos.getIndex(); 
-                } 
+            const TimeZoneFormat *tzfmt = tzFormat(status);
+            if (U_SUCCESS(status)) {
+                TimeZone *tz = tzfmt->parse(style, text, pos, tzTimeType);
+                if (tz != NULL) {
+                    cal.adoptTimeZone(tz);
+                    return pos.getIndex();
+                }
             }
             return -start;
         }
@@ -3601,21 +3601,21 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
             static const UChar alt_sep = DateFormatSymbols::ALTERNATE_TIME_SEPARATOR;
 
             // Try matching a time separator.
-            int32_t count_sep = 1; 
+            int32_t count_sep = 1;
             UnicodeString data[3];
             fSymbols->getTimeSeparatorString(data[0]);
 
             // Add the default, if different from the locale.
             if (data[0].compare(&def_sep, 1) != 0) {
-                data[count_sep++].setTo(def_sep); 
+                data[count_sep++].setTo(def_sep);
             }
 
             // If lenient, add also the alternate, if different from the locale.
             if (isLenient() && data[0].compare(&alt_sep, 1) != 0) {
-                data[count_sep++].setTo(alt_sep); 
+                data[count_sep++].setTo(alt_sep);
             }
 
-            return matchString(text, start, UCAL_FIELD_COUNT /* => nothing to set */, data, count_sep, NULL, cal); 
+            return matchString(text, start, UCAL_FIELD_COUNT /* => nothing to set */, data, count_sep, NULL, cal);
         }
 
     case UDAT_AM_PM_MIDNIGHT_NOON_FIELD:
@@ -3623,7 +3623,7 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
         U_ASSERT(dayPeriod != NULL);
         int32_t ampmStart = subParse(text, start, 0x61, count,
                            obeyCount, allowNegative, ambiguousYear, saveHebrewMonth, cal,
-                           patLoc, numericLeapMonthFormatter, tzTimeType); 
+                           patLoc, numericLeapMonthFormatter, tzTimeType);
 
         if (ampmStart > 0) {
             return ampmStart;
@@ -3704,7 +3704,7 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
     }
     parseInt(*src, number, pos, allowNegative,currentNumberFormat);
     if (pos.getIndex() != parseStart) {
-        int32_t val = number.getLong(); 
+        int32_t val = number.getLong();
 
         // Don't need suffix processing here (as in number processing at the beginning of the function);
         // the new fields being handled as numeric values (month, weekdays, quarters) should not have suffixes.
@@ -3712,7 +3712,7 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
         if (!getBooleanAttribute(UDAT_PARSE_ALLOW_NUMERIC, status)) {
             // Check the range of the value
             int32_t bias = gFieldRangeBias[patternCharIndex];
-            if (bias >= 0 && (val > cal.getMaximum(field) + bias || val < cal.getMinimum(field) + bias)) { 
+            if (bias >= 0 && (val > cal.getMaximum(field) + bias || val < cal.getMinimum(field) + bias)) {
                 return -start;
             }
         }
@@ -3726,35 +3726,35 @@ int32_t SimpleDateFormat::subParse(const UnicodeString& text, int32_t& start, UC
             if (!strcmp(cal.getType(),"hebrew")) {
                 HebrewCalendar *hc = (HebrewCalendar*)&cal;
                 if (cal.isSet(UCAL_YEAR)) {
-                   UErrorCode monthStatus = U_ZERO_ERROR; 
-                   if (!hc->isLeapYear(hc->get(UCAL_YEAR, monthStatus)) && val >= 6) { 
-                       cal.set(UCAL_MONTH, val); 
+                   UErrorCode monthStatus = U_ZERO_ERROR;
+                   if (!hc->isLeapYear(hc->get(UCAL_YEAR, monthStatus)) && val >= 6) {
+                       cal.set(UCAL_MONTH, val);
                    } else {
-                       cal.set(UCAL_MONTH, val - 1); 
+                       cal.set(UCAL_MONTH, val - 1);
                    }
                 } else {
-                    saveHebrewMonth = val; 
+                    saveHebrewMonth = val;
                 }
             } else {
-                cal.set(UCAL_MONTH, val - 1); 
+                cal.set(UCAL_MONTH, val - 1);
             }
             break;
         case UDAT_STANDALONE_MONTH_FIELD:
-            cal.set(UCAL_MONTH, val - 1); 
+            cal.set(UCAL_MONTH, val - 1);
             break;
         case UDAT_DOW_LOCAL_FIELD:
         case UDAT_STANDALONE_DAY_FIELD:
-            cal.set(UCAL_DOW_LOCAL, val); 
+            cal.set(UCAL_DOW_LOCAL, val);
             break;
         case UDAT_QUARTER_FIELD:
         case UDAT_STANDALONE_QUARTER_FIELD:
-             cal.set(UCAL_MONTH, (val - 1) * 3); 
+             cal.set(UCAL_MONTH, (val - 1) * 3);
              break;
         case UDAT_RELATED_YEAR_FIELD:
-            cal.setRelatedYear(val); 
+            cal.setRelatedYear(val);
             break;
         default:
-            cal.set(field, val); 
+            cal.set(field, val);
             break;
         }
         return pos.getIndex();
@@ -3770,7 +3770,7 @@ void SimpleDateFormat::parseInt(const UnicodeString& text,
                                 Formattable& number,
                                 ParsePosition& pos,
                                 UBool allowNegative,
-                                const NumberFormat *fmt) const { 
+                                const NumberFormat *fmt) const {
     parseInt(text, number, -1, pos, allowNegative,fmt);
 }
 
@@ -3782,18 +3782,18 @@ void SimpleDateFormat::parseInt(const UnicodeString& text,
                                 int32_t maxDigits,
                                 ParsePosition& pos,
                                 UBool allowNegative,
-                                const NumberFormat *fmt) const { 
+                                const NumberFormat *fmt) const {
     UnicodeString oldPrefix;
-    auto* fmtAsDF = dynamic_cast<const DecimalFormat*>(fmt); 
-    LocalPointer<DecimalFormat> df; 
-    if (!allowNegative && fmtAsDF != nullptr) { 
-        df.adoptInstead(fmtAsDF->clone()); 
-        if (df.isNull()) { 
-            // Memory allocation error 
-            return; 
-        } 
+    auto* fmtAsDF = dynamic_cast<const DecimalFormat*>(fmt);
+    LocalPointer<DecimalFormat> df;
+    if (!allowNegative && fmtAsDF != nullptr) {
+        df.adoptInstead(fmtAsDF->clone());
+        if (df.isNull()) {
+            // Memory allocation error
+            return;
+        }
         df->setNegativePrefix(UnicodeString(TRUE, SUPPRESS_NEGATIVE_PREFIX, -1));
-        fmt = df.getAlias(); 
+        fmt = df.getAlias();
     }
     int32_t oldPos = pos.getIndex();
     fmt->parse(text, number, pos);
@@ -3815,19 +3815,19 @@ void SimpleDateFormat::parseInt(const UnicodeString& text,
     }
 }
 
-int32_t SimpleDateFormat::countDigits(const UnicodeString& text, int32_t start, int32_t end) const { 
-    int32_t numDigits = 0; 
-    int32_t idx = start; 
-    while (idx < end) { 
-        UChar32 cp = text.char32At(idx); 
-        if (u_isdigit(cp)) { 
-            numDigits++; 
-        } 
-        idx += U16_LENGTH(cp); 
-    } 
-    return numDigits; 
-} 
- 
+int32_t SimpleDateFormat::countDigits(const UnicodeString& text, int32_t start, int32_t end) const {
+    int32_t numDigits = 0;
+    int32_t idx = start;
+    while (idx < end) {
+        UChar32 cp = text.char32At(idx);
+        if (u_isdigit(cp)) {
+            numDigits++;
+        }
+        idx += U16_LENGTH(cp);
+    }
+    return numDigits;
+}
+
 //----------------------------------------------------------------------
 
 void SimpleDateFormat::translatePattern(const UnicodeString& originalPattern,
@@ -3902,42 +3902,42 @@ SimpleDateFormat::applyPattern(const UnicodeString& pattern)
 {
     fPattern = pattern;
     parsePattern();
- 
-    // Hack to update use of Gannen year numbering for ja@calendar=japanese - 
-    // use only if format is non-numeric (includes 年) and no other fDateOverride. 
-    if (fCalendar != nullptr && uprv_strcmp(fCalendar->getType(),"japanese") == 0 && 
-            uprv_strcmp(fLocale.getLanguage(),"ja") == 0) { 
-        if (fDateOverride==UnicodeString(u"y=jpanyear") && !fHasHanYearChar) { 
-            // Gannen numbering is set but new pattern should not use it, unset; 
-            // use procedure from adoptNumberFormat to clear overrides 
-            if (fSharedNumberFormatters) { 
-                freeSharedNumberFormatters(fSharedNumberFormatters); 
-                fSharedNumberFormatters = NULL; 
-            } 
-            fDateOverride.setToBogus(); // record status 
-        } else if (fDateOverride.isBogus() && fHasHanYearChar) { 
-            // No current override (=> no Gannen numbering) but new pattern needs it; 
-            // use procedures from initNUmberFormatters / adoptNumberFormat 
-            umtx_lock(&LOCK); 
-            if (fSharedNumberFormatters == NULL) { 
-                fSharedNumberFormatters = allocSharedNumberFormatters(); 
-            } 
-            umtx_unlock(&LOCK); 
-            if (fSharedNumberFormatters != NULL) { 
-                Locale ovrLoc(fLocale.getLanguage(),fLocale.getCountry(),fLocale.getVariant(),"numbers=jpanyear"); 
-                UErrorCode status = U_ZERO_ERROR; 
-                const SharedNumberFormat *snf = createSharedNumberFormat(ovrLoc, status); 
-                if (U_SUCCESS(status)) { 
-                    // Now that we have an appropriate number formatter, fill in the 
-                    // appropriate slot in the number formatters table. 
-                    UDateFormatField patternCharIndex = DateFormatSymbols::getPatternCharIndex(u'y'); 
-                    SharedObject::copyPtr(snf, fSharedNumberFormatters[patternCharIndex]); 
-                    snf->deleteIfZeroRefCount(); 
-                    fDateOverride.setTo(u"y=jpanyear", -1); // record status 
-                } 
-            } 
-        } 
-    } 
+
+    // Hack to update use of Gannen year numbering for ja@calendar=japanese -
+    // use only if format is non-numeric (includes 年) and no other fDateOverride.
+    if (fCalendar != nullptr && uprv_strcmp(fCalendar->getType(),"japanese") == 0 &&
+            uprv_strcmp(fLocale.getLanguage(),"ja") == 0) {
+        if (fDateOverride==UnicodeString(u"y=jpanyear") && !fHasHanYearChar) {
+            // Gannen numbering is set but new pattern should not use it, unset;
+            // use procedure from adoptNumberFormat to clear overrides
+            if (fSharedNumberFormatters) {
+                freeSharedNumberFormatters(fSharedNumberFormatters);
+                fSharedNumberFormatters = NULL;
+            }
+            fDateOverride.setToBogus(); // record status
+        } else if (fDateOverride.isBogus() && fHasHanYearChar) {
+            // No current override (=> no Gannen numbering) but new pattern needs it;
+            // use procedures from initNUmberFormatters / adoptNumberFormat
+            umtx_lock(&LOCK);
+            if (fSharedNumberFormatters == NULL) {
+                fSharedNumberFormatters = allocSharedNumberFormatters();
+            }
+            umtx_unlock(&LOCK);
+            if (fSharedNumberFormatters != NULL) {
+                Locale ovrLoc(fLocale.getLanguage(),fLocale.getCountry(),fLocale.getVariant(),"numbers=jpanyear");
+                UErrorCode status = U_ZERO_ERROR;
+                const SharedNumberFormat *snf = createSharedNumberFormat(ovrLoc, status);
+                if (U_SUCCESS(status)) {
+                    // Now that we have an appropriate number formatter, fill in the
+                    // appropriate slot in the number formatters table.
+                    UDateFormatField patternCharIndex = DateFormatSymbols::getPatternCharIndex(u'y');
+                    SharedObject::copyPtr(snf, fSharedNumberFormatters[patternCharIndex]);
+                    snf->deleteIfZeroRefCount();
+                    fDateOverride.setTo(u"y=jpanyear", -1); // record status
+                }
+            }
+        }
+    }
 }
 
 //----------------------------------------------------------------------
@@ -3979,13 +3979,13 @@ SimpleDateFormat::setDateFormatSymbols(const DateFormatSymbols& newFormatSymbols
 //----------------------------------------------------------------------
 const TimeZoneFormat*
 SimpleDateFormat::getTimeZoneFormat(void) const {
-    // TimeZoneFormat initialization might fail when out of memory. 
-    // If we always initialize TimeZoneFormat instance, we can return 
-    // such status there. For now, this implementation lazily instantiates 
-    // a TimeZoneFormat for performance optimization reasons, but cannot 
-    // propagate such error (probably just out of memory case) to the caller. 
-    UErrorCode status = U_ZERO_ERROR; 
-    return (const TimeZoneFormat*)tzFormat(status); 
+    // TimeZoneFormat initialization might fail when out of memory.
+    // If we always initialize TimeZoneFormat instance, we can return
+    // such status there. For now, this implementation lazily instantiates
+    // a TimeZoneFormat for performance optimization reasons, but cannot
+    // propagate such error (probably just out of memory case) to the caller.
+    UErrorCode status = U_ZERO_ERROR;
+    return (const TimeZoneFormat*)tzFormat(status);
 }
 
 //----------------------------------------------------------------------
@@ -4015,7 +4015,7 @@ void SimpleDateFormat::adoptCalendar(Calendar* calendarToAdopt)
   DateFormatSymbols *newSymbols =
           DateFormatSymbols::createForLocale(calLocale, status);
   if (U_FAILURE(status)) {
-      delete calendarToAdopt; 
+      delete calendarToAdopt;
       return;
   }
   DateFormat::adoptCalendar(calendarToAdopt);
@@ -4038,7 +4038,7 @@ SimpleDateFormat::setContext(UDisplayContext value, UErrorCode& status)
     if (U_SUCCESS(status)) {
         if ( fCapitalizationBrkIter == NULL && (value==UDISPCTX_CAPITALIZATION_FOR_BEGINNING_OF_SENTENCE ||
                 value==UDISPCTX_CAPITALIZATION_FOR_UI_LIST_OR_MENU || value==UDISPCTX_CAPITALIZATION_FOR_STANDALONE) ) {
-            status = U_ZERO_ERROR; 
+            status = U_ZERO_ERROR;
             fCapitalizationBrkIter = BreakIterator::createSentenceInstance(fLocale, status);
             if (U_FAILURE(status)) {
                 delete fCapitalizationBrkIter;
@@ -4253,7 +4253,7 @@ SimpleDateFormat::skipUWhiteSpace(const UnicodeString& text, int32_t pos) const 
 
 // Lazy TimeZoneFormat instantiation, semantically const.
 TimeZoneFormat *
-SimpleDateFormat::tzFormat(UErrorCode &status) const { 
+SimpleDateFormat::tzFormat(UErrorCode &status) const {
     if (fTimeZoneFormat == NULL) {
         umtx_lock(&LOCK);
         {
@@ -4274,7 +4274,7 @@ SimpleDateFormat::tzFormat(UErrorCode &status) const {
 void SimpleDateFormat::parsePattern() {
     fHasMinute = FALSE;
     fHasSecond = FALSE;
-    fHasHanYearChar = FALSE; 
+    fHasHanYearChar = FALSE;
 
     int len = fPattern.length();
     UBool inQuote = FALSE;
@@ -4283,9 +4283,9 @@ void SimpleDateFormat::parsePattern() {
         if (ch == QUOTE) {
             inQuote = !inQuote;
         }
-        if (ch == 0x5E74) { // don't care whether this is inside quotes 
-            fHasHanYearChar = TRUE; 
-        } 
+        if (ch == 0x5E74) { // don't care whether this is inside quotes
+            fHasHanYearChar = TRUE;
+        }
         if (!inQuote) {
             if (ch == 0x6D) {  // 0x6D == 'm'
                 fHasMinute = TRUE;

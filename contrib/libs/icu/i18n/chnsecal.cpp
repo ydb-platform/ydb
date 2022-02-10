@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  ******************************************************************************
@@ -51,7 +51,7 @@ static void debug_chnsecal_msg(const char *pat, ...)
 
 
 // --- The cache --
-static icu::UMutex astroLock; 
+static icu::UMutex astroLock;
 static icu::CalendarAstronomer *gChineseCalendarAstro = NULL;
 
 // Lazy Creation & Access synchronized by class CalendarCache with a mutex.
@@ -118,7 +118,7 @@ U_NAMESPACE_BEGIN
 //-------------------------------------------------------------------------
 
 
-ChineseCalendar* ChineseCalendar::clone() const { 
+ChineseCalendar* ChineseCalendar::clone() const {
     return new ChineseCalendar(*this);
 }
 

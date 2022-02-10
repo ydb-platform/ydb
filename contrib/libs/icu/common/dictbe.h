@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /**
  *******************************************************************************
@@ -15,7 +15,7 @@
 #include "unicode/utext.h"
 
 #include "brkeng.h"
-#include "uvectr32.h" 
+#include "uvectr32.h"
 
 U_NAMESPACE_BEGIN
 
@@ -42,10 +42,10 @@ class DictionaryBreakEngine : public LanguageBreakEngine {
 
   UnicodeSet    fSet;
 
- public: 
+ public:
 
   /**
-   * <p>Constructor </p> 
+   * <p>Constructor </p>
    */
   DictionaryBreakEngine();
 
@@ -62,23 +62,23 @@ class DictionaryBreakEngine : public LanguageBreakEngine {
    * @return TRUE if this engine handles the particular character and break
    * type.
    */
-  virtual UBool handles(UChar32 c) const; 
+  virtual UBool handles(UChar32 c) const;
 
   /**
    * <p>Find any breaks within a run in the supplied text.</p>
    *
    * @param text A UText representing the text. The iterator is left at
    * the end of the run of characters which the engine is capable of handling 
-   * that starts from the first character in the range. 
+   * that starts from the first character in the range.
    * @param startPos The start of the run within the supplied text.
    * @param endPos The end of the run within the supplied text.
-   * @param foundBreaks vector of int32_t to receive the break positions 
+   * @param foundBreaks vector of int32_t to receive the break positions
    * @return The number of breaks found.
    */
   virtual int32_t findBreaks( UText *text,
                               int32_t startPos,
                               int32_t endPos,
-                              UVector32 &foundBreaks ) const; 
+                              UVector32 &foundBreaks ) const;
 
  protected:
 
@@ -101,7 +101,7 @@ class DictionaryBreakEngine : public LanguageBreakEngine {
   virtual int32_t divideUpDictionaryRange( UText *text,
                                            int32_t rangeStart,
                                            int32_t rangeEnd,
-                                           UVector32 &foundBreaks ) const = 0; 
+                                           UVector32 &foundBreaks ) const = 0;
 
 };
 
@@ -158,7 +158,7 @@ class ThaiBreakEngine : public DictionaryBreakEngine {
   virtual int32_t divideUpDictionaryRange( UText *text,
                                            int32_t rangeStart,
                                            int32_t rangeEnd,
-                                           UVector32 &foundBreaks ) const; 
+                                           UVector32 &foundBreaks ) const;
 
 };
 
@@ -214,7 +214,7 @@ class LaoBreakEngine : public DictionaryBreakEngine {
   virtual int32_t divideUpDictionaryRange( UText *text,
                                            int32_t rangeStart,
                                            int32_t rangeEnd,
-                                           UVector32 &foundBreaks ) const; 
+                                           UVector32 &foundBreaks ) const;
 
 };
 
@@ -270,7 +270,7 @@ class BurmeseBreakEngine : public DictionaryBreakEngine {
   virtual int32_t divideUpDictionaryRange( UText *text, 
                                            int32_t rangeStart, 
                                            int32_t rangeEnd, 
-                                           UVector32 &foundBreaks ) const;  
+                                           UVector32 &foundBreaks ) const; 
  
 }; 
  
@@ -326,7 +326,7 @@ class KhmerBreakEngine : public DictionaryBreakEngine {
   virtual int32_t divideUpDictionaryRange( UText *text, 
                                            int32_t rangeStart, 
                                            int32_t rangeEnd, 
-                                           UVector32 &foundBreaks ) const;  
+                                           UVector32 &foundBreaks ) const; 
  
 }; 
  
@@ -390,7 +390,7 @@ class CjkBreakEngine : public DictionaryBreakEngine {
   virtual int32_t divideUpDictionaryRange( UText *text,
           int32_t rangeStart,
           int32_t rangeEnd,
-          UVector32 &foundBreaks ) const; 
+          UVector32 &foundBreaks ) const;
 
 };
 

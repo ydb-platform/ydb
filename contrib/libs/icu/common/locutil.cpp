@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  *******************************************************************************
@@ -11,7 +11,7 @@
 #if !UCONFIG_NO_SERVICE || !UCONFIG_NO_TRANSLITERATION
 
 #include "unicode/resbund.h"
-#include "unicode/uenum.h" 
+#include "unicode/uenum.h"
 #include "cmemory.h"
 #include "ustrfmt.h"
 #include "locutil.h"
@@ -230,9 +230,9 @@ LocaleUtility::getAvailableLocaleNames(const UnicodeString& bundleID)
             CharString cbundleID;
             cbundleID.appendInvariantChars(bundleID, status);
             const char* path = cbundleID.isEmpty() ? NULL : cbundleID.data();
-            icu::LocalUEnumerationPointer uenum(ures_openAvailableLocales(path, &status)); 
+            icu::LocalUEnumerationPointer uenum(ures_openAvailableLocales(path, &status));
             for (;;) {
-                const UChar* id = uenum_unext(uenum.getAlias(), NULL, &status); 
+                const UChar* id = uenum_unext(uenum.getAlias(), NULL, &status);
                 if (id == NULL) {
                     break;
                 }

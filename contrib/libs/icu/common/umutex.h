@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 **********************************************************************
@@ -20,53 +20,53 @@
 #ifndef UMUTEX_H
 #define UMUTEX_H
 
-#include <atomic> 
-#include <condition_variable> 
-#include <mutex> 
-#include <type_traits> 
- 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <type_traits>
+
 #include "unicode/utypes.h"
 #include "unicode/uclean.h"
-#include "unicode/uobject.h" 
- 
+#include "unicode/uobject.h"
+
 #include "putilimp.h"
 
-#if defined(U_USER_ATOMICS_H) || defined(U_USER_MUTEX_H) 
-// Support for including an alternate implementation of atomic & mutex operations has been withdrawn. 
-// See issue ICU-20185. 
-#error U_USER_ATOMICS and U_USER_MUTEX_H are not supported 
-#endif 
+#if defined(U_USER_ATOMICS_H) || defined(U_USER_MUTEX_H)
+// Support for including an alternate implementation of atomic & mutex operations has been withdrawn.
+// See issue ICU-20185.
+#error U_USER_ATOMICS and U_USER_MUTEX_H are not supported
+#endif
 
-// Export an explicit template instantiation of std::atomic<int32_t>.  
-// When building DLLs for Windows this is required as it is used as a data member of the exported SharedObject class. 
-// See digitlst.h, pluralaffix.h, datefmt.h, and others for similar examples. 
-// 
-// Similar story for std::atomic<std::mutex *>, and the exported UMutex class. 
-#if U_PF_WINDOWS <= U_PLATFORM && U_PLATFORM <= U_PF_CYGWIN && !defined(U_IN_DOXYGEN) 
-#if defined(__clang__) || defined(_MSC_VER) 
-  #if defined(__clang__) 
-    // Suppress the warning that the explicit instantiation after explicit specialization has no effect. 
-    #pragma clang diagnostic push 
-    #pragma clang diagnostic ignored "-Winstantiation-after-specialization" 
-  #endif 
-template struct U_COMMON_API std::atomic<int32_t>; 
-template struct U_COMMON_API std::atomic<std::mutex *>; 
-  #if defined(__clang__) 
-    #pragma clang diagnostic pop 
-  #endif 
-#elif defined(__GNUC__) 
-// For GCC this class is already exported/visible, so no need for U_COMMON_API. 
-template struct std::atomic<int32_t>; 
-template struct std::atomic<std::mutex *>; 
-#endif 
-#endif 
+// Export an explicit template instantiation of std::atomic<int32_t>. 
+// When building DLLs for Windows this is required as it is used as a data member of the exported SharedObject class.
+// See digitlst.h, pluralaffix.h, datefmt.h, and others for similar examples.
+//
+// Similar story for std::atomic<std::mutex *>, and the exported UMutex class.
+#if U_PF_WINDOWS <= U_PLATFORM && U_PLATFORM <= U_PF_CYGWIN && !defined(U_IN_DOXYGEN)
+#if defined(__clang__) || defined(_MSC_VER)
+  #if defined(__clang__)
+    // Suppress the warning that the explicit instantiation after explicit specialization has no effect.
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Winstantiation-after-specialization"
+  #endif
+template struct U_COMMON_API std::atomic<int32_t>;
+template struct U_COMMON_API std::atomic<std::mutex *>;
+  #if defined(__clang__)
+    #pragma clang diagnostic pop
+  #endif
+#elif defined(__GNUC__)
+// For GCC this class is already exported/visible, so no need for U_COMMON_API.
+template struct std::atomic<int32_t>;
+template struct std::atomic<std::mutex *>;
+#endif
+#endif
 
 
 U_NAMESPACE_BEGIN
 
 /****************************************************************************
  *
- *   Low Level Atomic Operations, ICU wrappers for. 
+ *   Low Level Atomic Operations, ICU wrappers for.
  *
  ****************************************************************************/
 
@@ -99,8 +99,8 @@ inline int32_t umtx_atomic_dec(u_atomic_int32_t *var) {
 struct UInitOnce {
     u_atomic_int32_t   fState;
     UErrorCode       fErrCode;
-    void reset() {fState = 0;} 
-    UBool isReset() {return umtx_loadAcquire(fState) == 0;} 
+    void reset() {fState = 0;}
+    UBool isReset() {return umtx_loadAcquire(fState) == 0;}
 // Note: isReset() is used by service registration code.
 //                 Thread safety of this usage needs review.
 };
@@ -184,76 +184,76 @@ template<class T> void umtx_initOnce(UInitOnce &uio, void (U_CALLCONV *fp)(T, UE
     }
 }
 
-// UMutex should be constexpr-constructible, so that no initialization code 
-// is run during startup. 
-// This works on all C++ libraries except MS VS before VS2019. 
-#if (defined(_CPPLIB_VER) && !defined(_MSVC_STL_VERSION)) || \ 
-    (defined(_MSVC_STL_VERSION) && _MSVC_STL_VERSION < 142) 
-    // (VS std lib older than VS2017) || (VS std lib version < VS2019) 
-#   define UMUTEX_CONSTEXPR 
-#else 
-#   define UMUTEX_CONSTEXPR constexpr 
-#endif 
+// UMutex should be constexpr-constructible, so that no initialization code
+// is run during startup.
+// This works on all C++ libraries except MS VS before VS2019.
+#if (defined(_CPPLIB_VER) && !defined(_MSVC_STL_VERSION)) || \
+    (defined(_MSVC_STL_VERSION) && _MSVC_STL_VERSION < 142)
+    // (VS std lib older than VS2017) || (VS std lib version < VS2019)
+#   define UMUTEX_CONSTEXPR
+#else
+#   define UMUTEX_CONSTEXPR constexpr
+#endif
 
-/** 
- * UMutex - ICU Mutex class. 
+/**
+ * UMutex - ICU Mutex class.
  *
- * This is the preferred Mutex class for use within ICU implementation code. 
- * It is a thin wrapper over C++ std::mutex, with these additions: 
- *    - Static instances are safe, not triggering static construction or destruction, 
- *      and the associated order of construction or destruction issues. 
- *    - Plumbed into u_cleanup() for destructing the underlying std::mutex, 
- *      which frees any OS level resources they may be holding. 
+ * This is the preferred Mutex class for use within ICU implementation code.
+ * It is a thin wrapper over C++ std::mutex, with these additions:
+ *    - Static instances are safe, not triggering static construction or destruction,
+ *      and the associated order of construction or destruction issues.
+ *    - Plumbed into u_cleanup() for destructing the underlying std::mutex,
+ *      which frees any OS level resources they may be holding.
  *
- * Limitations: 
- *    - Static or global instances only. Cannot be heap allocated. Cannot appear as a 
- *      member of another class. 
- *    - No condition variables or other advanced features. If needed, you will need to use 
- *      std::mutex and std::condition_variable directly. For an example, see unifiedcache.cpp 
- * 
- * Typical Usage: 
- *    static UMutex myMutex; 
- * 
- *    { 
- *       Mutex lock(myMutex); 
- *       ...    // Do stuff that is protected by myMutex; 
- *    }         // myMutex is released when lock goes out of scope. 
+ * Limitations:
+ *    - Static or global instances only. Cannot be heap allocated. Cannot appear as a
+ *      member of another class.
+ *    - No condition variables or other advanced features. If needed, you will need to use
+ *      std::mutex and std::condition_variable directly. For an example, see unifiedcache.cpp
+ *
+ * Typical Usage:
+ *    static UMutex myMutex;
+ *
+ *    {
+ *       Mutex lock(myMutex);
+ *       ...    // Do stuff that is protected by myMutex;
+ *    }         // myMutex is released when lock goes out of scope.
  */
 
-class U_COMMON_API UMutex { 
-public: 
-    UMUTEX_CONSTEXPR UMutex() {} 
-    ~UMutex() = default; 
+class U_COMMON_API UMutex {
+public:
+    UMUTEX_CONSTEXPR UMutex() {}
+    ~UMutex() = default;
 
-    UMutex(const UMutex &other) = delete; 
-    UMutex &operator =(const UMutex &other) = delete; 
-    void *operator new(size_t) = delete; 
+    UMutex(const UMutex &other) = delete;
+    UMutex &operator =(const UMutex &other) = delete;
+    void *operator new(size_t) = delete;
 
-    // requirements for C++ BasicLockable, allows UMutex to work with std::lock_guard 
-    void lock() { 
-        std::mutex *m = fMutex.load(std::memory_order_acquire); 
-        if (m == nullptr) { m = getMutex(); } 
-        m->lock(); 
-    } 
-    void unlock() { fMutex.load(std::memory_order_relaxed)->unlock(); } 
+    // requirements for C++ BasicLockable, allows UMutex to work with std::lock_guard
+    void lock() {
+        std::mutex *m = fMutex.load(std::memory_order_acquire);
+        if (m == nullptr) { m = getMutex(); }
+        m->lock();
+    }
+    void unlock() { fMutex.load(std::memory_order_relaxed)->unlock(); }
 
-    static void cleanup(); 
+    static void cleanup();
 
-private: 
-    alignas(std::mutex) char fStorage[sizeof(std::mutex)] {}; 
-    std::atomic<std::mutex *> fMutex { nullptr }; 
+private:
+    alignas(std::mutex) char fStorage[sizeof(std::mutex)] {};
+    std::atomic<std::mutex *> fMutex { nullptr };
 
-    /** All initialized UMutexes are kept in a linked list, so that they can be found, 
-     * and the underlying std::mutex destructed, by u_cleanup(). 
-     */ 
-    UMutex *fListLink { nullptr }; 
-    static UMutex *gListHead; 
+    /** All initialized UMutexes are kept in a linked list, so that they can be found,
+     * and the underlying std::mutex destructed, by u_cleanup().
+     */
+    UMutex *fListLink { nullptr };
+    static UMutex *gListHead;
 
-    /** Out-of-line function to lazily initialize a UMutex on first use. 
-     * Initial fast check is inline, in lock().  The returned value may never 
-     * be nullptr. 
-     */ 
-    std::mutex *getMutex(); 
+    /** Out-of-line function to lazily initialize a UMutex on first use.
+     * Initial fast check is inline, in lock().  The returned value may never
+     * be nullptr.
+     */
+    std::mutex *getMutex();
 };
 
 
@@ -271,7 +271,7 @@ U_INTERNAL void U_EXPORT2 umtx_lock(UMutex* mutex);
 U_INTERNAL void U_EXPORT2 umtx_unlock (UMutex* mutex);
 
 
-U_NAMESPACE_END 
+U_NAMESPACE_END
 
 #endif /* UMUTEX_H */
 /*eof*/

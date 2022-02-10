@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  ********************************************************************************
@@ -230,7 +230,7 @@ class U_I18N_API IslamicCalendar : public Calendar {
   // TODO: copy c'tor, etc
 
   // clone
-  virtual IslamicCalendar* clone() const; 
+  virtual IslamicCalendar* clone() const;
 
  private:
   /**

@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 ***************************************************************************
@@ -14,7 +14,7 @@
 #include "unicode/utypes.h"
 #include "rbbidata.h"
 #include "rbbirb.h"
-#include "utrie2.h" 
+#include "utrie2.h"
 #include "udatamem.h"
 #include "cmemory.h"
 #include "cstring.h"
@@ -54,8 +54,8 @@ RBBIDataWrapper::RBBIDataWrapper(UDataMemory* udm, UErrorCode &status) {
             dh->info.dataFormat[0] == 0x42 &&  // dataFormat="Brk "
             dh->info.dataFormat[1] == 0x72 &&
             dh->info.dataFormat[2] == 0x6b &&
-            dh->info.dataFormat[3] == 0x20 && 
-            isDataVersionAcceptable(dh->info.formatVersion)) 
+            dh->info.dataFormat[3] == 0x20 &&
+            isDataVersionAcceptable(dh->info.formatVersion))
         ) {
         status = U_INVALID_FORMAT_ERROR;
         return;
@@ -66,11 +66,11 @@ RBBIDataWrapper::RBBIDataWrapper(UDataMemory* udm, UErrorCode &status) {
     fUDataMem = udm;
 }
 
-UBool RBBIDataWrapper::isDataVersionAcceptable(const UVersionInfo version) { 
-    return RBBI_DATA_FORMAT_VERSION[0] == version[0]; 
-} 
- 
- 
+UBool RBBIDataWrapper::isDataVersionAcceptable(const UVersionInfo version) {
+    return RBBI_DATA_FORMAT_VERSION[0] == version[0];
+}
+
+
 //-----------------------------------------------------------------------------
 //
 //    init().   Does most of the work of construction, shared between the
@@ -81,11 +81,11 @@ void RBBIDataWrapper::init0() {
     fHeader = NULL;
     fForwardTable = NULL;
     fReverseTable = NULL;
-    fRuleSource   = NULL; 
+    fRuleSource   = NULL;
     fRuleStatusTable = NULL;
-    fTrie         = NULL; 
-    fUDataMem     = NULL; 
-    fRefCount     = 0; 
+    fTrie         = NULL;
+    fUDataMem     = NULL;
+    fRefCount     = 0;
     fDontFreeData = TRUE;
 }
 
@@ -94,7 +94,7 @@ void RBBIDataWrapper::init(const RBBIDataHeader *data, UErrorCode &status) {
         return;
     }
     fHeader = data;
-    if (fHeader->fMagic != 0xb1a0 || !isDataVersionAcceptable(fHeader->fFormatVersion)) { 
+    if (fHeader->fMagic != 0xb1a0 || !isDataVersionAcceptable(fHeader->fFormatVersion)) {
         status = U_INVALID_FORMAT_ERROR;
         return;
     }
@@ -110,11 +110,11 @@ void RBBIDataWrapper::init(const RBBIDataHeader *data, UErrorCode &status) {
         fReverseTable = (RBBIStateTable *)((char *)data + fHeader->fRTable);
     }
 
-    fTrie = utrie2_openFromSerialized(UTRIE2_16_VALUE_BITS, 
-                                      (uint8_t *)data + fHeader->fTrie, 
-                                      fHeader->fTrieLen, 
-                                      NULL,           // *actual length 
-                                      &status); 
+    fTrie = utrie2_openFromSerialized(UTRIE2_16_VALUE_BITS,
+                                      (uint8_t *)data + fHeader->fTrie,
+                                      fHeader->fTrieLen,
+                                      NULL,           // *actual length
+                                      &status);
     if (U_FAILURE(status)) {
         return;
     }
@@ -142,8 +142,8 @@ void RBBIDataWrapper::init(const RBBIDataHeader *data, UErrorCode &status) {
 //-----------------------------------------------------------------------------
 RBBIDataWrapper::~RBBIDataWrapper() {
     U_ASSERT(fRefCount == 0);
-    utrie2_close(fTrie); 
-    fTrie = NULL; 
+    utrie2_close(fTrie);
+    fTrie = NULL;
     if (fUDataMem) {
         udata_close(fUDataMem);
     } else if (!fDontFreeData) {
@@ -250,7 +250,7 @@ void  RBBIDataWrapper::printTable(const char *heading, const RBBIStateTable *tab
 #endif
 
 
-void  RBBIDataWrapper::printData() { 
+void  RBBIDataWrapper::printData() {
 #ifdef RBBI_DEBUG
     RBBIDebugPrintf("RBBI Data at %p\n", (void *)fHeader);
     RBBIDebugPrintf("   Version = {%d %d %d %d}\n", fHeader->fFormatVersion[0], fHeader->fFormatVersion[1],
@@ -266,7 +266,7 @@ void  RBBIDataWrapper::printData() {
         RBBIDebugPrintf("%c", fRuleSource[c]);
     }
     RBBIDebugPrintf("\n\n");
-#endif 
+#endif
 }
 
 
@@ -300,7 +300,7 @@ ubrk_swap(const UDataSwapper *ds, const void *inData, int32_t length, void *outD
            pInfo->dataFormat[1]==0x72 &&
            pInfo->dataFormat[2]==0x6b &&
            pInfo->dataFormat[3]==0x20 &&
-           RBBIDataWrapper::isDataVersionAcceptable(pInfo->formatVersion) )) { 
+           RBBIDataWrapper::isDataVersionAcceptable(pInfo->formatVersion) )) {
         udata_printError(ds, "ubrk_swap(): data format %02x.%02x.%02x.%02x (format version %02x) is not recognized\n",
                          pInfo->dataFormat[0], pInfo->dataFormat[1],
                          pInfo->dataFormat[2], pInfo->dataFormat[3],
@@ -324,8 +324,8 @@ ubrk_swap(const UDataSwapper *ds, const void *inData, int32_t length, void *outD
     const uint8_t  *inBytes =(const uint8_t *)inData+headerSize;
     RBBIDataHeader *rbbiDH = (RBBIDataHeader *)inBytes;
     if (ds->readUInt32(rbbiDH->fMagic) != 0xb1a0 || 
-            !RBBIDataWrapper::isDataVersionAcceptable(rbbiDH->fFormatVersion) || 
-            ds->readUInt32(rbbiDH->fLength)  <  sizeof(RBBIDataHeader)) { 
+            !RBBIDataWrapper::isDataVersionAcceptable(rbbiDH->fFormatVersion) ||
+            ds->readUInt32(rbbiDH->fLength)  <  sizeof(RBBIDataHeader)) {
         udata_printError(ds, "ubrk_swap(): RBBI Data header is invalid.\n");
         *status=U_UNSUPPORTED_ERROR;
         return 0;
@@ -400,8 +400,8 @@ ubrk_swap(const UDataSwapper *ds, const void *inData, int32_t length, void *outD
     }
 
     // Trie table for character categories
-    utrie2_swap(ds, inBytes+ds->readUInt32(rbbiDH->fTrie), ds->readUInt32(rbbiDH->fTrieLen), 
-                    outBytes+ds->readUInt32(rbbiDH->fTrie), status); 
+    utrie2_swap(ds, inBytes+ds->readUInt32(rbbiDH->fTrie), ds->readUInt32(rbbiDH->fTrieLen),
+                    outBytes+ds->readUInt32(rbbiDH->fTrie), status);
 
     // Source Rules Text.  It's UChar data
     ds->swapArray16(ds, inBytes+ds->readUInt32(rbbiDH->fRuleSource), ds->readUInt32(rbbiDH->fRuleSourceLen),

@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
  *******************************************************************************
@@ -16,12 +16,12 @@
  * \brief C++ API: time unit amount object.
  */
 
-#include "unicode/utypes.h" 
- 
-#if U_SHOW_CPLUSPLUS_API 
- 
-#if !UCONFIG_NO_FORMATTING 
- 
+#include "unicode/utypes.h"
+
+#if U_SHOW_CPLUSPLUS_API
+
+#if !UCONFIG_NO_FORMATTING
+
 #include "unicode/measure.h"
 #include "unicode/tmunit.h"
 
@@ -87,7 +87,7 @@ public:
      * @return a polymorphic clone of this object. The result will have the same               class as returned by getDynamicClassID().
      * @stable ICU 4.2
      */
-    virtual TimeUnitAmount* clone() const; 
+    virtual TimeUnitAmount* clone() const;
 
     
     /**
@@ -169,8 +169,8 @@ U_NAMESPACE_END
 
 #endif /* #if !UCONFIG_NO_FORMATTING */
 
-#endif /* U_SHOW_CPLUSPLUS_API */ 
- 
+#endif /* U_SHOW_CPLUSPLUS_API */
+
 #endif // __TMUTAMT_H__
 //eof
 //

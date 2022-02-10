@@ -1,4 +1,4 @@
-// © 2016 and later: Unicode, Inc. and others. 
+// © 2016 and later: Unicode, Inc. and others.
 // License & terms of use: http://www.unicode.org/copyright.html
 /*
 *******************************************************************************
@@ -21,9 +21,9 @@
 *   10/12/05    emmons      Added setters for eraNames, month/day by width/context
 *******************************************************************************
 */
- 
-#include <utility> 
- 
+
+#include <utility>
+
 #include "unicode/utypes.h"
 
 #if !UCONFIG_NO_FORMATTING
@@ -1246,7 +1246,7 @@ const UnicodeString**
 DateFormatSymbols::getZoneStrings(int32_t& rowCount, int32_t& columnCount) const
 {
     const UnicodeString **result = NULL;
-    static UMutex LOCK; 
+    static UMutex LOCK;
 
     umtx_lock(&LOCK);
     if (fZoneStrings == NULL) {
@@ -1313,7 +1313,7 @@ DateFormatSymbols::initZoneStringsArray(void) {
         UDate now = Calendar::getNow();
         UnicodeString tzDispName;
 
-        while ((tzid = tzids->snext(status)) != 0) { 
+        while ((tzid = tzids->snext(status)) != 0) {
             if (U_FAILURE(status)) {
                 break;
             }
@@ -1370,7 +1370,7 @@ DateFormatSymbols::setZoneStrings(const UnicodeString* const *strings, int32_t r
 
 //------------------------------------------------------
 
-const char16_t * U_EXPORT2 
+const char16_t * U_EXPORT2
 DateFormatSymbols::getPatternUChars(void)
 {
     return gPatternChars;
@@ -1502,7 +1502,7 @@ struct CalendarDataSink : public ResourceSink {
      * To avoid double deletion, 'maps' won't take ownership of the objects. Instead,
      * 'mapRefs' will own them and will delete them when CalendarDataSink is deleted.
      */
-    MemoryPool<Hashtable> mapRefs; 
+    MemoryPool<Hashtable> mapRefs;
 
     // Paths and the aliases they point to
     UVector aliasPathPairs;
@@ -1520,7 +1520,7 @@ struct CalendarDataSink : public ResourceSink {
     // Initializes CalendarDataSink with default values
     CalendarDataSink(UErrorCode& status)
     :   arrays(FALSE, status), arraySizes(FALSE, status), maps(FALSE, status),
-        mapRefs(), 
+        mapRefs(),
         aliasPathPairs(uprv_deleteUObject, uhash_compareUnicodeString, status),
         currentCalendarType(), nextCalendarType(),
         resourcesToVisit(NULL), aliasRelativePath() {
@@ -1633,23 +1633,23 @@ struct CalendarDataSink : public ResourceSink {
                 Hashtable *aliasMap;
                 if ((aliasArray = (UnicodeString*)arrays.get(*alias)) != NULL) {
                     UnicodeString *path = (UnicodeString*)aliasPathPairs[i + 1];
-                    if (arrays.get(*path) == NULL) { 
-                        // Clone the array 
-                        int32_t aliasArraySize = arraySizes.geti(*alias); 
-                        LocalArray<UnicodeString> aliasArrayCopy(new UnicodeString[aliasArraySize], errorCode); 
-                        if (U_FAILURE(errorCode)) { return; } 
-                        uprv_arrayCopy(aliasArray, aliasArrayCopy.getAlias(), aliasArraySize); 
-                        // Put the array on the 'arrays' map 
-                        arrays.put(*path, aliasArrayCopy.orphan(), errorCode); 
-                        arraySizes.puti(*path, aliasArraySize, errorCode); 
-                    } 
+                    if (arrays.get(*path) == NULL) {
+                        // Clone the array
+                        int32_t aliasArraySize = arraySizes.geti(*alias);
+                        LocalArray<UnicodeString> aliasArrayCopy(new UnicodeString[aliasArraySize], errorCode);
+                        if (U_FAILURE(errorCode)) { return; }
+                        uprv_arrayCopy(aliasArray, aliasArrayCopy.getAlias(), aliasArraySize);
+                        // Put the array on the 'arrays' map
+                        arrays.put(*path, aliasArrayCopy.orphan(), errorCode);
+                        arraySizes.puti(*path, aliasArraySize, errorCode);
+                    }
                     if (U_FAILURE(errorCode)) { return; }
                     mod = true;
                 } else if ((aliasMap = (Hashtable*)maps.get(*alias)) != NULL) {
                     UnicodeString *path = (UnicodeString*)aliasPathPairs[i + 1];
-                    if (maps.get(*path) == NULL) { 
-                        maps.put(*path, aliasMap, errorCode); 
-                    } 
+                    if (maps.get(*path) == NULL) {
+                        maps.put(*path, aliasMap, errorCode);
+                    }
                     if (U_FAILURE(errorCode)) { return; }
                     mod = true;
                 }
@@ -1665,7 +1665,7 @@ struct CalendarDataSink : public ResourceSink {
 
         // Set the resources to visit on the next calendar
         if (!resourcesToVisitNext.isNull()) {
-            resourcesToVisit = std::move(resourcesToVisitNext); 
+            resourcesToVisit = std::move(resourcesToVisitNext);
         }
     }
 
@@ -1690,12 +1690,12 @@ struct CalendarDataSink : public ResourceSink {
             if (value.getType() == URES_STRING) {
                 // We are on a leaf, store the map elements into the stringMap
                 if (i == 0) {
-                    // mapRefs will keep ownership of 'stringMap': 
-                    stringMap = mapRefs.create(FALSE, errorCode); 
-                    if (stringMap == NULL) { 
-                        errorCode = U_MEMORY_ALLOCATION_ERROR; 
-                        return; 
-                    } 
+                    // mapRefs will keep ownership of 'stringMap':
+                    stringMap = mapRefs.create(FALSE, errorCode);
+                    if (stringMap == NULL) {
+                        errorCode = U_MEMORY_ALLOCATION_ERROR;
+                        return;
+                    }
                     maps.put(path, stringMap, errorCode);
                     if (U_FAILURE(errorCode)) { return; }
                     stringMap->setValueDeleter(uprv_deleteUObject);
@@ -2177,16 +2177,16 @@ DateFormatSymbols::initializeData(const Locale& locale, const char *type, UError
             // The ordering of the following statements is important.
             if (fLeapMonthPatterns[kLeapMonthPatternFormatAbbrev].isEmpty()) {
                 fLeapMonthPatterns[kLeapMonthPatternFormatAbbrev].setTo(fLeapMonthPatterns[kLeapMonthPatternFormatWide]);
-            } 
+            }
             if (fLeapMonthPatterns[kLeapMonthPatternFormatNarrow].isEmpty()) {
                 fLeapMonthPatterns[kLeapMonthPatternFormatNarrow].setTo(fLeapMonthPatterns[kLeapMonthPatternStandaloneNarrow]);
-            } 
+            }
             if (fLeapMonthPatterns[kLeapMonthPatternStandaloneWide].isEmpty()) {
                 fLeapMonthPatterns[kLeapMonthPatternStandaloneWide].setTo(fLeapMonthPatterns[kLeapMonthPatternFormatWide]);
-            } 
+            }
             if (fLeapMonthPatterns[kLeapMonthPatternStandaloneAbbrev].isEmpty()) {
                 fLeapMonthPatterns[kLeapMonthPatternStandaloneAbbrev].setTo(fLeapMonthPatterns[kLeapMonthPatternFormatAbbrev]);
-            } 
+            }
             // end of hack
             fLeapMonthPatternsCount = kMonthPatternsCount;
         } else {
@@ -2221,8 +2221,8 @@ DateFormatSymbols::initializeData(const Locale& locale, const char *type, UError
                             ++typeMapPtr;
                         }
                         if (typeMapPtr->usageTypeName != NULL && compResult == 0) {
-                            fCapitalization[typeMapPtr->usageTypeEnumValue][0] = static_cast<UBool>(intVector[0]); 
-                            fCapitalization[typeMapPtr->usageTypeEnumValue][1] = static_cast<UBool>(intVector[1]); 
+                            fCapitalization[typeMapPtr->usageTypeEnumValue][0] = static_cast<UBool>(intVector[0]);
+                            fCapitalization[typeMapPtr->usageTypeEnumValue][1] = static_cast<UBool>(intVector[1]);
                         }
                     }
                 }
@@ -2338,21 +2338,21 @@ DateFormatSymbols::initializeData(const Locale& locale, const char *type, UError
         assignArray(fStandaloneNarrowMonths, fStandaloneNarrowMonthsCount, fShortMonths, fShortMonthsCount);
     }
 
-    // Load AM/PM markers; if wide or narrow not available, use short 
-    UErrorCode ampmStatus = U_ZERO_ERROR; 
+    // Load AM/PM markers; if wide or narrow not available, use short
+    UErrorCode ampmStatus = U_ZERO_ERROR;
     initField(&fAmPms, fAmPmsCount, calendarSink,
-              buildResourcePath(path, gAmPmMarkersTag, ampmStatus), ampmStatus); 
-    if (U_FAILURE(ampmStatus)) { 
-        initField(&fAmPms, fAmPmsCount, calendarSink, 
-                  buildResourcePath(path, gAmPmMarkersAbbrTag, status), status); 
-    } 
-    ampmStatus = U_ZERO_ERROR; 
+              buildResourcePath(path, gAmPmMarkersTag, ampmStatus), ampmStatus);
+    if (U_FAILURE(ampmStatus)) {
+        initField(&fAmPms, fAmPmsCount, calendarSink,
+                  buildResourcePath(path, gAmPmMarkersAbbrTag, status), status);
+    }
+    ampmStatus = U_ZERO_ERROR;
     initField(&fNarrowAmPms, fNarrowAmPmsCount, calendarSink,
-              buildResourcePath(path, gAmPmMarkersNarrowTag, ampmStatus), ampmStatus); 
-    if (U_FAILURE(ampmStatus)) { 
-        initField(&fNarrowAmPms, fNarrowAmPmsCount, calendarSink, 
-                  buildResourcePath(path, gAmPmMarkersAbbrTag, status), status); 
-    } 
+              buildResourcePath(path, gAmPmMarkersNarrowTag, ampmStatus), ampmStatus);
+    if (U_FAILURE(ampmStatus)) {
+        initField(&fNarrowAmPms, fNarrowAmPmsCount, calendarSink,
+                  buildResourcePath(path, gAmPmMarkersAbbrTag, status), status);
+    }
 
     // Load quarters
     initField(&fQuarters, fQuartersCount, calendarSink,

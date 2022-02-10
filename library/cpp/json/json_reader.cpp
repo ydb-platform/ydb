@@ -152,7 +152,7 @@ namespace NJson {
     size_t TJsonReaderConfig::GetBufferSize() const {
         return BufferSize;
     }
-
+ 
     namespace {
         struct TJsonValueBuilder {
 #ifdef NDEBUG

@@ -26,7 +26,7 @@ namespace NJson {
     private:
         size_t BufferSize;
     };
-
+ 
     bool ReadJsonTree(TStringBuf in, TJsonValue* out, bool throwOnError = false);
     bool ReadJsonTree(TStringBuf in, bool allowComments, TJsonValue* out, bool throwOnError = false);
     bool ReadJsonTree(TStringBuf in, const TJsonReaderConfig* config, TJsonValue* out, bool throwOnError = false);

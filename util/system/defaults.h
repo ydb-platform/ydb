@@ -1,7 +1,7 @@
 #pragma once
-
+ 
 #include "platform.h"
-
+ 
 #if defined _unix_
     #define LOCSLASH_C '/'
     #define LOCSLASH_S "/"
@@ -58,12 +58,12 @@
 
 #if defined(__GNUC__)
     #define alias_hack __attribute__((__may_alias__))
-#endif
-
-#ifndef alias_hack
+#endif 
+ 
+#ifndef alias_hack 
     #define alias_hack
-#endif
-
+#endif 
+ 
 #include "types.h"
 
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
@@ -80,7 +80,7 @@
 #elif defined(_sun_)
     #include <alloca.h>
 #endif
-
+ 
 #ifdef NDEBUG
     #define Y_IF_DEBUG(X)
     #ifdef __cplusplus

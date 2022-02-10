@@ -15,8 +15,8 @@
     #include <sys/time.h>
     #include <pthread.h>
     #include <cerrno>
-#endif
-
+#endif 
+ 
 namespace {
     class TCondVarImpl {
         using TLock = TAdaptiveLock;
@@ -85,17 +85,17 @@ public:
             ythrow yexception() << "can not create condvar(" << LastSystemErrorText() << ")";
         }
     }
-
+ 
     inline ~TImpl() {
         int ret = pthread_cond_destroy(&Cond_);
         Y_VERIFY(ret == 0, "pthread_cond_destroy failed: %s", LastSystemErrorText(ret));
     }
-
+ 
     inline void Signal() noexcept {
         int ret = pthread_cond_signal(&Cond_);
         Y_VERIFY(ret == 0, "pthread_cond_signal failed: %s", LastSystemErrorText(ret));
     }
-
+ 
     inline bool WaitD(TMutex& lock, TInstant deadLine) noexcept {
         if (deadLine == TInstant::Max()) {
             int ret = pthread_cond_wait(&Cond_, (pthread_mutex_t*)lock.Handle());
@@ -116,7 +116,7 @@ public:
             return ret == 0;
         }
     }
-
+ 
     inline void BroadCast() noexcept {
         int ret = pthread_cond_broadcast(&Cond_);
         Y_VERIFY(ret == 0, "pthread_cond_broadcast failed: %s", LastSystemErrorText(ret));
@@ -126,22 +126,22 @@ private:
     pthread_cond_t Cond_;
 };
 #endif
-
+ 
 TCondVar::TCondVar()
     : Impl_(new TImpl)
 {
-}
-
+} 
+ 
 TCondVar::~TCondVar() = default;
-
+ 
 void TCondVar::BroadCast() noexcept {
     Impl_->BroadCast();
 }
 
 void TCondVar::Signal() noexcept {
     Impl_->Signal();
-}
-
+} 
+ 
 bool TCondVar::WaitD(TMutex& mutex, TInstant deadLine) noexcept {
     return Impl_->WaitD(mutex, deadLine);
-}
+} 

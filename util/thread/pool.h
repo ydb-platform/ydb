@@ -381,7 +381,7 @@ inline void Delete(THolder<IThreadPool> q) {
     if (q.Get()) {
         q->Stop();
     }
-}
+} 
 
 /**
  * Creates and starts TThreadPool if threadsCount > 1, or TFakeThreadPool otherwise

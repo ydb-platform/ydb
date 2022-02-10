@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <cstdlib>
 
 #include <util/charset/recode_result.h>

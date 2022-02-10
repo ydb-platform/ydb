@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <util/system/defaults.h> // _BIDSCLASS _EXPCLASS
 #include <util/system/yassert.h>
 #include <util/system/unaligned_mem.h>
@@ -13,8 +13,8 @@
 #elif defined(_little_endian_)
 #define LO_SHIFT 0
 #define HI_SHIFT 1
-#endif
-
+#endif 
+ 
 #if !defined(_must_align2_)
 #define PUT_16(x, buf, shift) WriteUnaligned<ui16>(buf, (x) >> (shift)), (buf) += 2
 #define GET_16_OR(x, buf, type, shift) (x) |= (type)ReadUnaligned<ui16>(buf) << (shift), (buf) += 2

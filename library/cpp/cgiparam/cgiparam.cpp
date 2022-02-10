@@ -91,7 +91,7 @@ static inline TString DoUnescape(const TStringBuf s) {
 
 void TCgiParameters::InsertEscaped(const TStringBuf name, const TStringBuf value) {
     InsertUnescaped(DoUnescape(name), DoUnescape(value));
-}
+} 
 
 template <bool addAll, class F>
 static inline void DoScan(const TStringBuf s, F& f) {

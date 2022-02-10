@@ -60,7 +60,7 @@ public:
     }
 
     void clear_hash() {
-        yh::clear();
+        yh::clear(); 
         pool.Clear();
     }
     pool_size_type pool_size() const {
@@ -93,8 +93,8 @@ public:
     }
 
     mapped_type& operator[](const char* key) {
-        iterator I = yh::find(key);
-        if (I == yh::end())
+        iterator I = yh::find(key); 
+        if (I == yh::end()) 
             I = insert_copy(key, mapped_type()).first;
         return (*I).second;
     }

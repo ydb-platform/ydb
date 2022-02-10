@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "fwd.h"
 #include "mapfindptr.h"
 
@@ -25,8 +25,8 @@ public:
     inline bool contains(const K& key) const {
         return this->find(key) != this->end();
     }
-};
-
+}; 
+ 
 template <class K, class V, class Less, class A>
 class TMultiMap: public std::multimap<K, V, Less, TReboundAllocator<A, std::pair<const K, V>>> {
     using TBase = std::multimap<K, V, Less, TReboundAllocator<A, std::pair<const K, V>>>;
@@ -41,4 +41,4 @@ public:
     inline bool contains(const K& key) const {
         return this->find(key) != this->end();
     }
-};
+}; 

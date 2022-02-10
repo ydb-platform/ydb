@@ -1,7 +1,7 @@
 #pragma once
-
+ 
 #include "doccodes.h"
-
+ 
 #include <util/charset/recode_result.h>
 #include <util/charset/unidata.h> // all wchar32 functions
 #include <util/charset/utf8.h>
@@ -91,7 +91,7 @@ struct CodePage {
         return SingleByteCodepage() || CPEnum == CODES_UTF8;
     }
 };
-
+ 
 class TCodePageHash;
 
 namespace NCodepagePrivate {
@@ -193,7 +193,7 @@ ECharset EncodingHintByName(const char* name);
 struct Encoder {
     char* Table[256];
     const char* DefaultChar;
-
+ 
     inline char Code(wchar32 ch) const {
         if (ch > 0xFFFF)
             return 0;
@@ -222,7 +222,7 @@ struct Encoder {
 \*****************************************************************/
 struct Recoder {
     unsigned char Table[257];
-
+ 
     void Create(const CodePage& source, const CodePage& target);
     void Create(const CodePage& source, const Encoder* wideTarget);
 

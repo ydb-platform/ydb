@@ -1,14 +1,14 @@
 #include "util.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 class TStrUtilTest: public TTestBase {
     UNIT_TEST_SUITE(TStrUtilTest);
     UNIT_TEST(TestSpn);
     UNIT_TEST(TestRemoveAll);
     UNIT_TEST_SUITE_END();
 
-public:
+public: 
     void TestSpn() {
         str_spn rul("a-z", true);
         char s[] = "!@#$ab%^&c+-";
@@ -41,6 +41,6 @@ public:
             UNIT_ASSERT_EQUAL(t->Result, str);
         }
     }
-};
-
+}; 
+ 
 UNIT_TEST_SUITE_REGISTRATION(TStrUtilTest);

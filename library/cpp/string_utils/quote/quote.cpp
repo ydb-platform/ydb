@@ -6,14 +6,14 @@
 
 #include <cctype>
 
-/* note: (x & 0xdf) makes x upper case */
+/* note: (x & 0xdf) makes x upper case */ 
 #define GETXC                                                           \
     do {                                                                \
         c *= 16;                                                        \
         c += (x[0] >= 'A' ? ((x[0] & 0xdf) - 'A') + 10 : (x[0] - '0')); \
         ++x;                                                            \
     } while (0)
-
+ 
 #define GETSBXC                                                         \
     do {                                                                \
         c *= 16;                                                        \
@@ -62,8 +62,8 @@ namespace {
     private:
         const char* End;
     };
-}
-
+} 
+ 
 static inline char d2x(unsigned x) {
     return (char)((x < 10) ? ('0' + x) : ('A' + x - 10));
 }

@@ -905,7 +905,7 @@ RECURSE(
     python-ldap
     python-libarchive
     python-magic
-    python-memcached
+    python-memcached 
     python-mimeparse
     python-multipart
     python-pptx
@@ -925,10 +925,10 @@ RECURSE(
     PyYAML
     pyzmq
     qemu
-    qrcode
+    qrcode 
     quart
     queuelib
-    rarfile
+    rarfile 
     ratelimit
     raven
     razdel

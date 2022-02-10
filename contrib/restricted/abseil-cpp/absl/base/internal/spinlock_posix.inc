@@ -15,11 +15,11 @@
 // This file is a Posix-specific part of spinlock_wait.cc
 
 #include <sched.h>
-
+ 
 #include <atomic>
 #include <ctime>
 
-#include "absl/base/internal/errno_saver.h"
+#include "absl/base/internal/errno_saver.h" 
 #include "absl/base/internal/scheduling_mode.h"
 #include "absl/base/port.h"
 
@@ -28,7 +28,7 @@ extern "C" {
 ABSL_ATTRIBUTE_WEAK void ABSL_INTERNAL_C_SYMBOL(AbslInternalSpinLockDelay)(
     std::atomic<uint32_t>* /* lock_word */, uint32_t /* value */, int loop,
     absl::base_internal::SchedulingMode /* mode */) {
-  absl::base_internal::ErrnoSaver errno_saver;
+  absl::base_internal::ErrnoSaver errno_saver; 
   if (loop == 0) {
   } else if (loop == 1) {
     sched_yield();

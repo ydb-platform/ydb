@@ -48,7 +48,7 @@
 #include "absl/memory/memory.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace container_internal {
 template <class Key, class Value>
 class NodeHashMapPolicy;
@@ -225,8 +225,8 @@ class node_hash_map
   //
   // size_type erase(const key_type& key):
   //
-  //   Erases the element with the matching key, if it exists, returning the
-  //   number of elements erased (0 or 1).
+  //   Erases the element with the matching key, if it exists, returning the 
+  //   number of elements erased (0 or 1). 
   using Base::erase;
 
   // node_hash_map::insert()
@@ -375,11 +375,11 @@ class node_hash_map
   //   key value and returns a node handle owning that extracted data. If the
   //   `node_hash_map` does not contain an element with a matching key, this
   //   function returns an empty node handle.
-  //
-  // NOTE: when compiled in an earlier version of C++ than C++17,
-  // `node_type::key()` returns a const reference to the key instead of a
-  // mutable reference. We cannot safely return a mutable reference without
-  // std::launder (which is not available before C++17).
+  // 
+  // NOTE: when compiled in an earlier version of C++ than C++17, 
+  // `node_type::key()` returns a const reference to the key instead of a 
+  // mutable reference. We cannot safely return a mutable reference without 
+  // std::launder (which is not available before C++17). 
   using Base::extract;
 
   // node_hash_map::merge()
@@ -520,16 +520,16 @@ class node_hash_map
   //
   // Returns the function used for comparing keys equality.
   using Base::key_eq;
-};
+}; 
 
-// erase_if(node_hash_map<>, Pred)
-//
-// Erases all elements that satisfy the predicate `pred` from the container `c`.
-template <typename K, typename V, typename H, typename E, typename A,
-          typename Predicate>
-void erase_if(node_hash_map<K, V, H, E, A>& c, Predicate pred) {
-  container_internal::EraseIf(pred, &c);
-}
+// erase_if(node_hash_map<>, Pred) 
+// 
+// Erases all elements that satisfy the predicate `pred` from the container `c`. 
+template <typename K, typename V, typename H, typename E, typename A, 
+          typename Predicate> 
+void erase_if(node_hash_map<K, V, H, E, A>& c, Predicate pred) { 
+  container_internal::EraseIf(pred, &c); 
+} 
 
 namespace container_internal {
 
@@ -591,7 +591,7 @@ struct IsUnorderedContainer<
 
 }  // namespace container_algorithm_internal
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_CONTAINER_NODE_HASH_MAP_H_

@@ -41,7 +41,7 @@
 #include "absl/base/port.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 class once_flag;
 
@@ -175,7 +175,7 @@ void CallOnceImpl(std::atomic<uint32_t>* control,
                                        std::memory_order_relaxed) ||
       base_internal::SpinLockWait(control, ABSL_ARRAYSIZE(trans), trans,
                                   scheduling_mode) == kOnceInit) {
-    base_internal::invoke(std::forward<Callable>(fn),
+    base_internal::invoke(std::forward<Callable>(fn), 
                           std::forward<Args>(args)...);
     old_control =
         control->exchange(base_internal::kOnceDone, std::memory_order_release);
@@ -213,7 +213,7 @@ void call_once(absl::once_flag& flag, Callable&& fn, Args&&... args) {
   }
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_BASE_CALL_ONCE_H_

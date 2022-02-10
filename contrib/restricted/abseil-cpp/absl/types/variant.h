@@ -50,7 +50,7 @@
 #include <variant>  // IWYU pragma: export
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 using std::bad_variant_access;
 using std::get;
 using std::get_if;
@@ -63,7 +63,7 @@ using std::variant_npos;
 using std::variant_size;
 using std::variant_size_v;
 using std::visit;
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #else  // ABSL_USES_STD_VARIANT
@@ -79,7 +79,7 @@ ABSL_NAMESPACE_END
 #include "absl/types/internal/variant.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 // -----------------------------------------------------------------------------
 // absl::variant
@@ -803,7 +803,7 @@ operator>=(const variant<Types...>& a, const variant<Types...>& b) {
                    a.index());
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 namespace std {
@@ -824,7 +824,7 @@ struct hash<absl::variant<T...>>
 #endif  // ABSL_USES_STD_VARIANT
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace variant_internal {
 
 // Helper visitor for converting a variant<Ts...>` into another type (mostly
@@ -860,7 +860,7 @@ To ConvertVariantTo(Variant&& variant) {
                      std::forward<Variant>(variant));
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_TYPES_VARIANT_H_

@@ -22,7 +22,7 @@
 #include "absl/types/optional.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace container_internal {
 
 template <class, class = void>
@@ -56,7 +56,7 @@ class node_handle_base {
  public:
   using allocator_type = Alloc;
 
-  constexpr node_handle_base() = default;
+  constexpr node_handle_base() = default; 
   node_handle_base(node_handle_base&& other) noexcept {
     *this = std::move(other);
   }
@@ -109,8 +109,8 @@ class node_handle_base {
   allocator_type* alloc() { return std::addressof(*alloc_); }
 
  private:
-  absl::optional<allocator_type> alloc_ = {};
-  alignas(slot_type) mutable unsigned char slot_space_[sizeof(slot_type)] = {};
+  absl::optional<allocator_type> alloc_ = {}; 
+  alignas(slot_type) mutable unsigned char slot_space_[sizeof(slot_type)] = {}; 
 };
 
 // For sets.
@@ -138,7 +138,7 @@ class node_handle<Policy, PolicyTraits, Alloc,
                   absl::void_t<typename Policy::mapped_type>>
     : public node_handle_base<PolicyTraits, Alloc> {
   using Base = node_handle_base<PolicyTraits, Alloc>;
-  using slot_type = typename PolicyTraits::slot_type;
+  using slot_type = typename PolicyTraits::slot_type; 
 
  public:
   using key_type = typename Policy::key_type;
@@ -146,11 +146,11 @@ class node_handle<Policy, PolicyTraits, Alloc,
 
   constexpr node_handle() {}
 
-  // When C++17 is available, we can use std::launder to provide mutable
-  // access to the key. Otherwise, we provide const access.
-  auto key() const
-      -> decltype(PolicyTraits::mutable_key(std::declval<slot_type*>())) {
-    return PolicyTraits::mutable_key(this->slot());
+  // When C++17 is available, we can use std::launder to provide mutable 
+  // access to the key. Otherwise, we provide const access. 
+  auto key() const 
+      -> decltype(PolicyTraits::mutable_key(std::declval<slot_type*>())) { 
+    return PolicyTraits::mutable_key(this->slot()); 
   }
 
   mapped_type& mapped() const {
@@ -171,11 +171,11 @@ struct CommonAccess {
   }
 
   template <typename Node>
-  static void Destroy(Node* node) {
-    node->destroy();
-  }
-
-  template <typename Node>
+  static void Destroy(Node* node) { 
+    node->destroy(); 
+  } 
+ 
+  template <typename Node> 
   static void Reset(Node* node) {
     node->reset();
   }
@@ -200,7 +200,7 @@ struct InsertReturnType {
 };
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_CONTAINER_H_

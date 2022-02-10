@@ -51,7 +51,7 @@
 #include "absl/container/internal/btree_container.h"  // IWYU pragma: export
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 // absl::btree_map<>
 //
@@ -185,7 +185,7 @@ class btree_map
   // template <typename K> size_type erase(const K& key):
   //
   //   Erases the element with the matching key, if it exists, returning the
-  //   number of elements erased (0 or 1).
+  //   number of elements erased (0 or 1). 
   using Base::erase;
 
   // btree_map::insert()
@@ -226,30 +226,30 @@ class btree_map
   //   Inserts the elements within the initializer list `ilist`.
   using Base::insert;
 
-  // btree_map::insert_or_assign()
-  //
-  // Inserts an element of the specified value into the `btree_map` provided
-  // that a value with the given key does not already exist, or replaces the
-  // corresponding mapped type with the forwarded `obj` argument if a key for
-  // that value already exists, returning an iterator pointing to the newly
-  // inserted element. Overloads are listed below.
-  //
-  // pair<iterator, bool> insert_or_assign(const key_type& k, M&& obj):
-  // pair<iterator, bool> insert_or_assign(key_type&& k, M&& obj):
-  //
-  //   Inserts/Assigns (or moves) the element of the specified key into the
-  //   `btree_map`. If the returned bool is true, insertion took place, and if
-  //   it's false, assignment took place.
-  //
-  // iterator insert_or_assign(const_iterator hint,
-  //                           const key_type& k, M&& obj):
-  // iterator insert_or_assign(const_iterator hint, key_type&& k, M&& obj):
-  //
-  //   Inserts/Assigns (or moves) the element of the specified key into the
-  //   `btree_map` using the position of `hint` as a non-binding suggestion
-  //   for where to begin the insertion search.
-  using Base::insert_or_assign;
-
+  // btree_map::insert_or_assign() 
+  // 
+  // Inserts an element of the specified value into the `btree_map` provided 
+  // that a value with the given key does not already exist, or replaces the 
+  // corresponding mapped type with the forwarded `obj` argument if a key for 
+  // that value already exists, returning an iterator pointing to the newly 
+  // inserted element. Overloads are listed below. 
+  // 
+  // pair<iterator, bool> insert_or_assign(const key_type& k, M&& obj): 
+  // pair<iterator, bool> insert_or_assign(key_type&& k, M&& obj): 
+  // 
+  //   Inserts/Assigns (or moves) the element of the specified key into the 
+  //   `btree_map`. If the returned bool is true, insertion took place, and if 
+  //   it's false, assignment took place. 
+  // 
+  // iterator insert_or_assign(const_iterator hint, 
+  //                           const key_type& k, M&& obj): 
+  // iterator insert_or_assign(const_iterator hint, key_type&& k, M&& obj): 
+  // 
+  //   Inserts/Assigns (or moves) the element of the specified key into the 
+  //   `btree_map` using the position of `hint` as a non-binding suggestion 
+  //   for where to begin the insertion search. 
+  using Base::insert_or_assign; 
+ 
   // btree_map::emplace()
   //
   // Inserts an element of the specified value by constructing it in-place
@@ -318,18 +318,18 @@ class btree_map
   //   Extracts the element at the indicated position and returns a node handle
   //   owning that extracted data.
   //
-  // template <typename K> node_type extract(const K& k):
+  // template <typename K> node_type extract(const K& k): 
   //
   //   Extracts the element with the key matching the passed key value and
   //   returns a node handle owning that extracted data. If the `btree_map`
   //   does not contain an element with a matching key, this function returns an
   //   empty node handle.
   //
-  // NOTE: when compiled in an earlier version of C++ than C++17,
-  // `node_type::key()` returns a const reference to the key instead of a
-  // mutable reference. We cannot safely return a mutable reference without
-  // std::launder (which is not available before C++17).
-  //
+  // NOTE: when compiled in an earlier version of C++ than C++17, 
+  // `node_type::key()` returns a const reference to the key instead of a 
+  // mutable reference. We cannot safely return a mutable reference without 
+  // std::launder (which is not available before C++17). 
+  // 
   // NOTE: In this context, `node_type` refers to the C++17 concept of a
   // move-only type that owns and provides access to the elements in associative
   // containers (https://en.cppreference.com/w/cpp/container/node_handle).
@@ -464,20 +464,20 @@ void swap(btree_map<K, V, C, A> &x, btree_map<K, V, C, A> &y) {
   return x.swap(y);
 }
 
-// absl::erase_if(absl::btree_map<>, Pred)
-//
-// Erases all elements that satisfy the predicate pred from the container.
-template <typename K, typename V, typename C, typename A, typename Pred>
-void erase_if(btree_map<K, V, C, A> &map, Pred pred) {
-  for (auto it = map.begin(); it != map.end();) {
-    if (pred(*it)) {
-      it = map.erase(it);
-    } else {
-      ++it;
-    }
-  }
-}
-
+// absl::erase_if(absl::btree_map<>, Pred) 
+// 
+// Erases all elements that satisfy the predicate pred from the container. 
+template <typename K, typename V, typename C, typename A, typename Pred> 
+void erase_if(btree_map<K, V, C, A> &map, Pred pred) { 
+  for (auto it = map.begin(); it != map.end();) { 
+    if (pred(*it)) { 
+      it = map.erase(it); 
+    } else { 
+      ++it; 
+    } 
+  } 
+} 
+ 
 // absl::btree_multimap
 //
 // An `absl::btree_multimap<K, V>` is an ordered associative container of
@@ -673,18 +673,18 @@ class btree_multimap
   //   Extracts the element at the indicated position and returns a node handle
   //   owning that extracted data.
   //
-  // template <typename K> node_type extract(const K& k):
+  // template <typename K> node_type extract(const K& k): 
   //
   //   Extracts the element with the key matching the passed key value and
   //   returns a node handle owning that extracted data. If the `btree_multimap`
   //   does not contain an element with a matching key, this function returns an
   //   empty node handle.
   //
-  // NOTE: when compiled in an earlier version of C++ than C++17,
-  // `node_type::key()` returns a const reference to the key instead of a
-  // mutable reference. We cannot safely return a mutable reference without
-  // std::launder (which is not available before C++17).
-  //
+  // NOTE: when compiled in an earlier version of C++ than C++17, 
+  // `node_type::key()` returns a const reference to the key instead of a 
+  // mutable reference. We cannot safely return a mutable reference without 
+  // std::launder (which is not available before C++17). 
+  // 
   // NOTE: In this context, `node_type` refers to the C++17 concept of a
   // move-only type that owns and provides access to the elements in associative
   // containers (https://en.cppreference.com/w/cpp/container/node_handle).
@@ -795,21 +795,21 @@ void swap(btree_multimap<K, V, C, A> &x, btree_multimap<K, V, C, A> &y) {
   return x.swap(y);
 }
 
-// absl::erase_if(absl::btree_multimap<>, Pred)
-//
-// Erases all elements that satisfy the predicate pred from the container.
-template <typename K, typename V, typename C, typename A, typename Pred>
-void erase_if(btree_multimap<K, V, C, A> &map, Pred pred) {
-  for (auto it = map.begin(); it != map.end();) {
-    if (pred(*it)) {
-      it = map.erase(it);
-    } else {
-      ++it;
-    }
-  }
-}
-
-ABSL_NAMESPACE_END
+// absl::erase_if(absl::btree_multimap<>, Pred) 
+// 
+// Erases all elements that satisfy the predicate pred from the container. 
+template <typename K, typename V, typename C, typename A, typename Pred> 
+void erase_if(btree_multimap<K, V, C, A> &map, Pred pred) { 
+  for (auto it = map.begin(); it != map.end();) { 
+    if (pred(*it)) { 
+      it = map.erase(it); 
+    } else { 
+      ++it; 
+    } 
+  } 
+} 
+ 
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_CONTAINER_BTREE_MAP_H_

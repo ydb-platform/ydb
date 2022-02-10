@@ -42,7 +42,7 @@
 #include "absl/memory/memory.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace container_internal {
 template <class K, class V>
 struct FlatHashMapPolicy;
@@ -234,8 +234,8 @@ class flat_hash_map : public absl::container_internal::raw_hash_map<
   //
   // size_type erase(const key_type& key):
   //
-  //   Erases the element with the matching key, if it exists, returning the
-  //   number of elements erased (0 or 1).
+  //   Erases the element with the matching key, if it exists, returning the 
+  //   number of elements erased (0 or 1). 
   using Base::erase;
 
   // flat_hash_map::insert()
@@ -384,11 +384,11 @@ class flat_hash_map : public absl::container_internal::raw_hash_map<
   //   key value and returns a node handle owning that extracted data. If the
   //   `flat_hash_map` does not contain an element with a matching key, this
   //   function returns an empty node handle.
-  //
-  // NOTE: when compiled in an earlier version of C++ than C++17,
-  // `node_type::key()` returns a const reference to the key instead of a
-  // mutable reference. We cannot safely return a mutable reference without
-  // std::launder (which is not available before C++17).
+  // 
+  // NOTE: when compiled in an earlier version of C++ than C++17, 
+  // `node_type::key()` returns a const reference to the key instead of a 
+  // mutable reference. We cannot safely return a mutable reference without 
+  // std::launder (which is not available before C++17). 
   using Base::extract;
 
   // flat_hash_map::merge()
@@ -538,15 +538,15 @@ class flat_hash_map : public absl::container_internal::raw_hash_map<
   using Base::key_eq;
 };
 
-// erase_if(flat_hash_map<>, Pred)
-//
-// Erases all elements that satisfy the predicate `pred` from the container `c`.
-template <typename K, typename V, typename H, typename E, typename A,
-          typename Predicate>
-void erase_if(flat_hash_map<K, V, H, E, A>& c, Predicate pred) {
-  container_internal::EraseIf(pred, &c);
-}
-
+// erase_if(flat_hash_map<>, Pred) 
+// 
+// Erases all elements that satisfy the predicate `pred` from the container `c`. 
+template <typename K, typename V, typename H, typename E, typename A, 
+          typename Predicate> 
+void erase_if(flat_hash_map<K, V, H, E, A>& c, Predicate pred) { 
+  container_internal::EraseIf(pred, &c); 
+} 
+ 
 namespace container_internal {
 
 template <class K, class V>
@@ -600,7 +600,7 @@ struct IsUnorderedContainer<
 
 }  // namespace container_algorithm_internal
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_CONTAINER_FLAT_HASH_MAP_H_

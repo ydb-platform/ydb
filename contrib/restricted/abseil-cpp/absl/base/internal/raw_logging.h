@@ -22,11 +22,11 @@
 #include <string>
 
 #include "absl/base/attributes.h"
-#include "absl/base/config.h"
+#include "absl/base/config.h" 
 #include "absl/base/internal/atomic_hook.h"
 #include "absl/base/log_severity.h"
 #include "absl/base/macros.h"
-#include "absl/base/optimization.h"
+#include "absl/base/optimization.h" 
 #include "absl/base/port.h"
 
 // This is similar to LOG(severity) << format..., but
@@ -99,7 +99,7 @@
   ::absl::NormalizeLogSeverity(severity)
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace raw_logging_internal {
 
 // Helper function to implement ABSL_RAW_LOG
@@ -160,7 +160,7 @@ using LogPrefixHook = bool (*)(absl::LogSeverity severity, const char* file,
 //
 // 'file' and 'line' are the file and line number where the ABSL_RAW_LOG macro
 // was located.
-// The NUL-terminated logged message lives in the buffer between 'buf_start'
+// The NUL-terminated logged message lives in the buffer between 'buf_start' 
 // and 'buf_end'.  'prefix_end' points to the first non-prefix character of the
 // buffer (as written by the LogPrefixHook.)
 using AbortHook = void (*)(const char* file, int line, const char* buf_start,
@@ -174,9 +174,9 @@ using InternalLogFunction = void (*)(absl::LogSeverity severity,
                                      const char* file, int line,
                                      const std::string& message);
 
-ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES ABSL_DLL extern base_internal::AtomicHook<
-    InternalLogFunction>
-    internal_log_function;
+ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES ABSL_DLL extern base_internal::AtomicHook< 
+    InternalLogFunction> 
+    internal_log_function; 
 
 // Registers hooks of the above types.  Only a single hook of each type may be
 // registered.  It is an error to call these functions multiple times with
@@ -189,7 +189,7 @@ void RegisterAbortHook(AbortHook func);
 void RegisterInternalLogFunction(InternalLogFunction func);
 
 }  // namespace raw_logging_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_BASE_INTERNAL_RAW_LOGGING_H_

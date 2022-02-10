@@ -10,7 +10,7 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/singleton.h>
 
-#include <new>
+#include <new> 
 #include <string>
 #include <utility>
 
@@ -312,10 +312,10 @@ struct TPoolableBase {
         return pool.Allocate(bytes);
     }
 
-    inline void* operator new(size_t bytes, std::align_val_t align, TPool& pool) {
-        return pool.Allocate(bytes, (size_t)align);
-    }
-
+    inline void* operator new(size_t bytes, std::align_val_t align, TPool& pool) { 
+        return pool.Allocate(bytes, (size_t)align); 
+    } 
+ 
     inline void operator delete(void*, size_t) noexcept {
     }
 

@@ -23,7 +23,7 @@
 #include "absl/container/internal/hash_policy_testing.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace container_internal {
 
 template <class UnordMap>
@@ -319,8 +319,8 @@ class UniquePtrModifiersTest : public ::testing::Test {
   }
 };
 
-GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(UniquePtrModifiersTest);
-
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(UniquePtrModifiersTest); 
+ 
 TYPED_TEST_SUITE_P(UniquePtrModifiersTest);
 
 // Test that we do not move from rvalue arguments if an insertion does not
@@ -345,7 +345,7 @@ TYPED_TEST_P(UniquePtrModifiersTest, TryEmplace) {
 REGISTER_TYPED_TEST_SUITE_P(UniquePtrModifiersTest, TryEmplace);
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_UNORDERED_MAP_MODIFIERS_TEST_H_

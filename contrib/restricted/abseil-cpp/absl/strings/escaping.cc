@@ -26,7 +26,7 @@
 #include "absl/base/internal/raw_logging.h"
 #include "absl/base/internal/unaligned_access.h"
 #include "absl/strings/internal/char_map.h"
-#include "absl/strings/internal/escaping.h"
+#include "absl/strings/internal/escaping.h" 
 #include "absl/strings/internal/resize_uninitialized.h"
 #include "absl/strings/internal/utf8.h"
 #include "absl/strings/str_cat.h"
@@ -34,7 +34,7 @@
 #include "absl/strings/string_view.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace {
 
 // These are used for the leave_nulls_escaped argument to CUnescapeInternal().
@@ -450,7 +450,7 @@ bool Base64UnescapeInternal(const char* src_param, size_t szsrc, char* dest,
 
   // The GET_INPUT macro gets the next input character, skipping
   // over any whitespace, and stopping when we reach the end of the
-  // string or when we read any non-data character.  The arguments are
+  // string or when we read any non-data character.  The arguments are 
   // an arbitrary identifier (used as a label for goto) and the number
   // of data bytes that must remain in the input to avoid aborting the
   // loop.
@@ -473,18 +473,18 @@ bool Base64UnescapeInternal(const char* src_param, size_t szsrc, char* dest,
   if (dest) {
     // This loop consumes 4 input bytes and produces 3 output bytes
     // per iteration.  We can't know at the start that there is enough
-    // data left in the string for a full iteration, so the loop may
+    // data left in the string for a full iteration, so the loop may 
     // break out in the middle; if so 'state' will be set to the
     // number of input bytes read.
 
     while (szsrc >= 4) {
       // We'll start by optimistically assuming that the next four
-      // bytes of the string (src[0..3]) are four good data bytes
+      // bytes of the string (src[0..3]) are four good data bytes 
       // (that is, no nulls, whitespace, padding chars, or illegal
       // chars).  We need to test src[0..2] for nulls individually
       // before constructing temp to preserve the property that we
-      // never read past a null in the string (no matter how long
-      // szsrc claims the string is).
+      // never read past a null in the string (no matter how long 
+      // szsrc claims the string is). 
 
       if (!src[0] || !src[1] || !src[2] ||
           ((temp = ((unsigned(unbase64[src[0]]) << 18) |
@@ -509,7 +509,7 @@ bool Base64UnescapeInternal(const char* src_param, size_t szsrc, char* dest,
         temp = (temp << 6) | decode;
       } else {
         // We really did have four good data bytes, so advance four
-        // characters in the string.
+        // characters in the string. 
 
         szsrc -= 4;
         src += 4;
@@ -644,7 +644,7 @@ bool Base64UnescapeInternal(const char* src_param, size_t szsrc, char* dest,
                    state);
   }
 
-  // The remainder of the string should be all whitespace, mixed with
+  // The remainder of the string should be all whitespace, mixed with 
   // exactly 0 equals signs, or exactly 'expected_equals' equals
   // signs.  (Always accepting 0 equals signs is an Abseil extension
   // not covered in the RFC, as is accepting dot as the pad character.)
@@ -771,7 +771,7 @@ constexpr char kWebSafeBase64Chars[] =
 template <typename String>
 bool Base64UnescapeInternal(const char* src, size_t slen, String* dest,
                             const signed char* unbase64) {
-  // Determine the size of the output string.  Base64 encodes every 3 bytes into
+  // Determine the size of the output string.  Base64 encodes every 3 bytes into 
   // 4 characters.  any leftover chars are added directly for good measure.
   // This is documented in the base64 RFC: http://tools.ietf.org/html/rfc3548
   const size_t dest_len = 3 * (slen / 4) + (slen % 4);
@@ -779,7 +779,7 @@ bool Base64UnescapeInternal(const char* src, size_t slen, String* dest,
   strings_internal::STLStringResizeUninitialized(dest, dest_len);
 
   // We are getting the destination buffer by getting the beginning of the
-  // string and converting it into a char *.
+  // string and converting it into a char *. 
   size_t len;
   const bool ok =
       Base64UnescapeInternal(src, slen, &(*dest)[0], dest_len, unbase64, &len);
@@ -796,7 +796,7 @@ bool Base64UnescapeInternal(const char* src, size_t slen, String* dest,
 }
 
 /* clang-format off */
-constexpr char kHexValueLenient[256] = {
+constexpr char kHexValueLenient[256] = { 
     0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -812,9 +812,9 @@ constexpr char kHexValueLenient[256] = {
     0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 };
-
+ 
 /* clang-format on */
 
 // This is a templated function so that T can be either a char*
@@ -823,8 +823,8 @@ constexpr char kHexValueLenient[256] = {
 template <typename T>
 void HexStringToBytesInternal(const char* from, T to, ptrdiff_t num) {
   for (int i = 0; i < num; i++) {
-    to[i] = (kHexValueLenient[from[i * 2] & 0xFF] << 4) +
-            (kHexValueLenient[from[i * 2 + 1] & 0xFF]);
+    to[i] = (kHexValueLenient[from[i * 2] & 0xFF] << 4) + 
+            (kHexValueLenient[from[i * 2 + 1] & 0xFF]); 
   }
 }
 
@@ -902,30 +902,30 @@ bool WebSafeBase64Unescape(absl::string_view src, std::string* dest) {
 }
 
 void Base64Escape(absl::string_view src, std::string* dest) {
-  strings_internal::Base64EscapeInternal(
-      reinterpret_cast<const unsigned char*>(src.data()), src.size(), dest,
-      true, strings_internal::kBase64Chars);
+  strings_internal::Base64EscapeInternal( 
+      reinterpret_cast<const unsigned char*>(src.data()), src.size(), dest, 
+      true, strings_internal::kBase64Chars); 
 }
 
 void WebSafeBase64Escape(absl::string_view src, std::string* dest) {
-  strings_internal::Base64EscapeInternal(
-      reinterpret_cast<const unsigned char*>(src.data()), src.size(), dest,
-      false, kWebSafeBase64Chars);
+  strings_internal::Base64EscapeInternal( 
+      reinterpret_cast<const unsigned char*>(src.data()), src.size(), dest, 
+      false, kWebSafeBase64Chars); 
 }
 
 std::string Base64Escape(absl::string_view src) {
   std::string dest;
-  strings_internal::Base64EscapeInternal(
-      reinterpret_cast<const unsigned char*>(src.data()), src.size(), &dest,
-      true, strings_internal::kBase64Chars);
+  strings_internal::Base64EscapeInternal( 
+      reinterpret_cast<const unsigned char*>(src.data()), src.size(), &dest, 
+      true, strings_internal::kBase64Chars); 
   return dest;
 }
 
 std::string WebSafeBase64Escape(absl::string_view src) {
   std::string dest;
-  strings_internal::Base64EscapeInternal(
-      reinterpret_cast<const unsigned char*>(src.data()), src.size(), &dest,
-      false, kWebSafeBase64Chars);
+  strings_internal::Base64EscapeInternal( 
+      reinterpret_cast<const unsigned char*>(src.data()), src.size(), &dest, 
+      false, kWebSafeBase64Chars); 
   return dest;
 }
 
@@ -945,5 +945,5 @@ std::string BytesToHexString(absl::string_view from) {
   return result;
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl

@@ -35,7 +35,7 @@
 #include <atomic>
 
 #include "absl/base/attributes.h"
-#include "absl/base/const_init.h"
+#include "absl/base/const_init.h" 
 #include "absl/base/dynamic_annotations.h"
 #include "absl/base/internal/low_level_scheduling.h"
 #include "absl/base/internal/raw_logging.h"
@@ -46,7 +46,7 @@
 #include "absl/base/thread_annotations.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace base_internal {
 
 class ABSL_LOCKABLE SpinLock {
@@ -59,18 +59,18 @@ class ABSL_LOCKABLE SpinLock {
   // inside thread schedulers.  Normal clients should not use these.
   explicit SpinLock(base_internal::SchedulingMode mode);
 
-  // Constructor for global SpinLock instances.  See absl/base/const_init.h.
-  constexpr SpinLock(absl::ConstInitType, base_internal::SchedulingMode mode)
-      : lockword_(IsCooperative(mode) ? kSpinLockCooperative : 0) {}
-
-  // For global SpinLock instances prefer trivial destructor when possible.
-  // Default but non-trivial destructor in some build configurations causes an
-  // extra static initializer.
-#ifdef ABSL_INTERNAL_HAVE_TSAN_INTERFACE
+  // Constructor for global SpinLock instances.  See absl/base/const_init.h. 
+  constexpr SpinLock(absl::ConstInitType, base_internal::SchedulingMode mode) 
+      : lockword_(IsCooperative(mode) ? kSpinLockCooperative : 0) {} 
+ 
+  // For global SpinLock instances prefer trivial destructor when possible. 
+  // Default but non-trivial destructor in some build configurations causes an 
+  // extra static initializer. 
+#ifdef ABSL_INTERNAL_HAVE_TSAN_INTERFACE 
   ~SpinLock() { ABSL_TSAN_MUTEX_DESTROY(this, __tsan_mutex_not_static); }
-#else
-  ~SpinLock() = default;
-#endif
+#else 
+  ~SpinLock() = default; 
+#endif 
 
   // Acquire this SpinLock.
   inline void Lock() ABSL_EXCLUSIVE_LOCK_FUNCTION() {
@@ -153,13 +153,13 @@ class ABSL_LOCKABLE SpinLock {
   //
   // Invariant: if the lock is not held, the value is either 0 or
   // kSpinLockCooperative.
-  static constexpr uint32_t kSpinLockHeld = 1;
-  static constexpr uint32_t kSpinLockCooperative = 2;
-  static constexpr uint32_t kSpinLockDisabledScheduling = 4;
-  static constexpr uint32_t kSpinLockSleeper = 8;
-  // Includes kSpinLockSleeper.
-  static constexpr uint32_t kWaitTimeMask =
-      ~(kSpinLockHeld | kSpinLockCooperative | kSpinLockDisabledScheduling);
+  static constexpr uint32_t kSpinLockHeld = 1; 
+  static constexpr uint32_t kSpinLockCooperative = 2; 
+  static constexpr uint32_t kSpinLockDisabledScheduling = 4; 
+  static constexpr uint32_t kSpinLockSleeper = 8; 
+  // Includes kSpinLockSleeper. 
+  static constexpr uint32_t kWaitTimeMask = 
+      ~(kSpinLockHeld | kSpinLockCooperative | kSpinLockDisabledScheduling); 
 
   // Returns true if the provided scheduling mode is cooperative.
   static constexpr bool IsCooperative(
@@ -242,7 +242,7 @@ inline uint32_t SpinLock::TryLockInternal(uint32_t lock_value,
 }
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_BASE_INTERNAL_SPINLOCK_H_

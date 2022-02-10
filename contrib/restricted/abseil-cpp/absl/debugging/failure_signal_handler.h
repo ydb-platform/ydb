@@ -44,10 +44,10 @@
 #ifndef ABSL_DEBUGGING_FAILURE_SIGNAL_HANDLER_H_
 #define ABSL_DEBUGGING_FAILURE_SIGNAL_HANDLER_H_
 
-#include "absl/base/config.h"
-
+#include "absl/base/config.h" 
+ 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 // FailureSignalHandlerOptions
 //
@@ -88,7 +88,7 @@ struct FailureSignalHandlerOptions {
   bool call_previous_handler = false;
 
   // If non-null, indicates a pointer to a callback function that will be called
-  // upon failure, with a string argument containing failure data. This function
+  // upon failure, with a string argument containing failure data. This function 
   // may be used as a hook to write failure data to a secondary location, such
   // as a log file. This function will also be called with null data, as a hint
   // to flush any buffered data before the program may be terminated. Consider
@@ -115,7 +115,7 @@ namespace debugging_internal {
 const char* FailureSignalToString(int signo);
 }  // namespace debugging_internal
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_DEBUGGING_FAILURE_SIGNAL_HANDLER_H_

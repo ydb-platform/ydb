@@ -31,8 +31,8 @@
 #include <cassert>
 #include <cstddef>
 
-#include "absl/base/attributes.h"
-#include "absl/base/config.h"
+#include "absl/base/attributes.h" 
+#include "absl/base/config.h" 
 #include "absl/base/optimization.h"
 #include "absl/base/port.h"
 
@@ -45,14 +45,14 @@
   (sizeof(::absl::macros_internal::ArraySizeHelper(array)))
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace macros_internal {
 // Note: this internal template function declaration is used by ABSL_ARRAYSIZE.
 // The function doesn't need a definition, as we only use its type.
 template <typename T, size_t N>
 auto ArraySizeHelper(const T (&array)[N]) -> char (&)[N];
 }  // namespace macros_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 // ABSL_BAD_CALL_IF()
@@ -60,7 +60,7 @@ ABSL_NAMESPACE_END
 // Used on a function overload to trap bad calls: any call that matches the
 // overload will cause a compile-time error. This macro uses a clang-specific
 // "enable_if" attribute, as described at
-// https://clang.llvm.org/docs/AttributeReference.html#enable-if
+// https://clang.llvm.org/docs/AttributeReference.html#enable-if 
 //
 // Overloads which use this macro should be bracketed by
 // `#ifdef ABSL_BAD_CALL_IF`.
@@ -73,9 +73,9 @@ ABSL_NAMESPACE_END
 //     ABSL_BAD_CALL_IF(c <= -1 || c > 255,
 //                       "'c' must have the value of an unsigned char or EOF");
 //   #endif // ABSL_BAD_CALL_IF
-#if ABSL_HAVE_ATTRIBUTE(enable_if)
-#define ABSL_BAD_CALL_IF(expr, msg) \
-  __attribute__((enable_if(expr, "Bad call trap"), unavailable(msg)))
+#if ABSL_HAVE_ATTRIBUTE(enable_if) 
+#define ABSL_BAD_CALL_IF(expr, msg) \ 
+  __attribute__((enable_if(expr, "Bad call trap"), unavailable(msg))) 
 #endif
 
 // ABSL_ASSERT()
@@ -99,41 +99,41 @@ ABSL_NAMESPACE_END
                              : [] { assert(false && #expr); }())  // NOLINT
 #endif
 
-// `ABSL_INTERNAL_HARDENING_ABORT()` controls how `ABSL_HARDENING_ASSERT()`
-// aborts the program in release mode (when NDEBUG is defined). The
-// implementation should abort the program as quickly as possible and ideally it
-// should not be possible to ignore the abort request.
-#if (ABSL_HAVE_BUILTIN(__builtin_trap) &&         \
-     ABSL_HAVE_BUILTIN(__builtin_unreachable)) || \
-    (defined(__GNUC__) && !defined(__clang__))
-#define ABSL_INTERNAL_HARDENING_ABORT() \
-  do {                                  \
-    __builtin_trap();                   \
-    __builtin_unreachable();            \
-  } while (false)
-#else
-#define ABSL_INTERNAL_HARDENING_ABORT() abort()
-#endif
-
-// ABSL_HARDENING_ASSERT()
-//
-// `ABSL_HARDENING_ASSERT()` is like `ABSL_ASSERT()`, but used to implement
-// runtime assertions that should be enabled in hardened builds even when
-// `NDEBUG` is defined.
-//
-// When `NDEBUG` is not defined, `ABSL_HARDENING_ASSERT()` is identical to
-// `ABSL_ASSERT()`.
-//
-// See `ABSL_OPTION_HARDENED` in `absl/base/options.h` for more information on
-// hardened mode.
-#if ABSL_OPTION_HARDENED == 1 && defined(NDEBUG)
-#define ABSL_HARDENING_ASSERT(expr)                 \
-  (ABSL_PREDICT_TRUE((expr)) ? static_cast<void>(0) \
-                             : [] { ABSL_INTERNAL_HARDENING_ABORT(); }())
-#else
-#define ABSL_HARDENING_ASSERT(expr) ABSL_ASSERT(expr)
-#endif
-
+// `ABSL_INTERNAL_HARDENING_ABORT()` controls how `ABSL_HARDENING_ASSERT()` 
+// aborts the program in release mode (when NDEBUG is defined). The 
+// implementation should abort the program as quickly as possible and ideally it 
+// should not be possible to ignore the abort request. 
+#if (ABSL_HAVE_BUILTIN(__builtin_trap) &&         \ 
+     ABSL_HAVE_BUILTIN(__builtin_unreachable)) || \ 
+    (defined(__GNUC__) && !defined(__clang__)) 
+#define ABSL_INTERNAL_HARDENING_ABORT() \ 
+  do {                                  \ 
+    __builtin_trap();                   \ 
+    __builtin_unreachable();            \ 
+  } while (false) 
+#else 
+#define ABSL_INTERNAL_HARDENING_ABORT() abort() 
+#endif 
+ 
+// ABSL_HARDENING_ASSERT() 
+// 
+// `ABSL_HARDENING_ASSERT()` is like `ABSL_ASSERT()`, but used to implement 
+// runtime assertions that should be enabled in hardened builds even when 
+// `NDEBUG` is defined. 
+// 
+// When `NDEBUG` is not defined, `ABSL_HARDENING_ASSERT()` is identical to 
+// `ABSL_ASSERT()`. 
+// 
+// See `ABSL_OPTION_HARDENED` in `absl/base/options.h` for more information on 
+// hardened mode. 
+#if ABSL_OPTION_HARDENED == 1 && defined(NDEBUG) 
+#define ABSL_HARDENING_ASSERT(expr)                 \ 
+  (ABSL_PREDICT_TRUE((expr)) ? static_cast<void>(0) \ 
+                             : [] { ABSL_INTERNAL_HARDENING_ABORT(); }()) 
+#else 
+#define ABSL_HARDENING_ASSERT(expr) ABSL_ASSERT(expr) 
+#endif 
+ 
 #ifdef ABSL_HAVE_EXCEPTIONS
 #define ABSL_INTERNAL_TRY try
 #define ABSL_INTERNAL_CATCH_ANY catch (...)

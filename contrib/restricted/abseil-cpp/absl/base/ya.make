@@ -22,10 +22,10 @@ NO_COMPILER_WARNINGS()
 
 NO_UTIL()
 
-CFLAGS(
-    -DNOMINMAX
-)
-
+CFLAGS( 
+    -DNOMINMAX 
+) 
+ 
 SRCS(
     internal/cycleclock.cc
     internal/spinlock.cc

@@ -259,7 +259,7 @@ RECURSE(
     opentracing-cpp
     opus
     ortools
-    ortools/proto
+    ortools/proto 
     osrm
     pam
     pango
@@ -324,7 +324,7 @@ RECURSE(
     t1ha
     taocrypt
     tbb
-    tcmalloc
+    tcmalloc 
     tcmalloc/dynamic
     tensorboard
     termbox

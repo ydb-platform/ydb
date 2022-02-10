@@ -28,7 +28,7 @@
 #include "absl/base/port.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace strings_internal {
 
 class Charmap {
@@ -72,7 +72,7 @@ class Charmap {
                    CharMaskForWord(x, 2), CharMaskForWord(x, 3));
   }
 
-  // Containing all the chars in the C-string 's'.
+  // Containing all the chars in the C-string 's'. 
   // Note that this is expensively recursive because of the C++11 constexpr
   // formulation. Use only in constexpr initializers.
   static constexpr Charmap FromString(const char* s) {
@@ -150,7 +150,7 @@ constexpr Charmap GraphCharmap() { return PrintCharmap() & ~SpaceCharmap(); }
 constexpr Charmap PunctCharmap() { return GraphCharmap() & ~AlnumCharmap(); }
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_STRINGS_INTERNAL_CHAR_MAP_H_

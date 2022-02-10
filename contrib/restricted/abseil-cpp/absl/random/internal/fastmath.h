@@ -25,7 +25,7 @@
 #include "absl/numeric/bits.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace random_internal {
 
 // Compute log2(n) using integer operations.
@@ -51,7 +51,7 @@ inline double StirlingLogFactorial(double n) {
 }
 
 }  // namespace random_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_RANDOM_INTERNAL_FASTMATH_H_

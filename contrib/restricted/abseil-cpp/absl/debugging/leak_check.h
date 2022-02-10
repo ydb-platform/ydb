@@ -32,10 +32,10 @@
 
 #include <cstddef>
 
-#include "absl/base/config.h"
-
+#include "absl/base/config.h" 
+ 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 // HaveLeakSanitizer()
 //
@@ -127,7 +127,7 @@ void RegisterLivePointers(const void* ptr, size_t size);
 // `RegisterLivePointers()`, enabling leak checking of those pointers.
 void UnRegisterLivePointers(const void* ptr, size_t size);
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_DEBUGGING_LEAK_CHECK_H_

@@ -28,13 +28,13 @@
 #include <limits>
 #include <type_traits>
 
-#include "absl/base/config.h"
+#include "absl/base/config.h" 
 #include "absl/random/internal/fast_uniform_bits.h"
 #include "absl/random/internal/generate_real.h"
 #include "absl/random/internal/iostream_state_saver.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace random_internal {
 
 // absl::gaussian_distribution_base implements the underlying ziggurat algorithm
@@ -44,7 +44,7 @@ namespace random_internal {
 // The specific algorithm has some of the improvements suggested by the
 // 2005 paper, "An Improved Ziggurat Method to Generate Normal Random Samples",
 // Jurgen A Doornik.  (https://www.doornik.com/research/ziggurat.pdf)
-class ABSL_DLL gaussian_distribution_base {
+class ABSL_DLL gaussian_distribution_base { 
  public:
   template <typename URBG>
   inline double zignor(URBG& g);  // NOLINT(runtime/references)
@@ -269,7 +269,7 @@ inline double gaussian_distribution_base::zignor(
 }
 
 }  // namespace random_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_RANDOM_GAUSSIAN_DISTRIBUTION_H_

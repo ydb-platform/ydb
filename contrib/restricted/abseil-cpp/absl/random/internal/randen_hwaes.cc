@@ -25,7 +25,7 @@
 #include "absl/base/attributes.h"
 #include "absl/numeric/int128.h"
 #include "absl/random/internal/platform.h"
-#include "absl/random/internal/randen_traits.h"
+#include "absl/random/internal/randen_traits.h" 
 
 // ABSL_RANDEN_HWAES_IMPL indicates whether this file will contain
 // a hardware accelerated implementation of randen, or whether it
@@ -47,7 +47,7 @@
 #include <cstdlib>
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace random_internal {
 
 // No accelerated implementation.
@@ -79,7 +79,7 @@ void RandenHwAes::Generate(const void*, void*) {
 }
 
 }  // namespace random_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #else  // defined(ABSL_RANDEN_HWAES_IMPL)
@@ -87,12 +87,12 @@ ABSL_NAMESPACE_END
 // Accelerated implementations are supported.
 // We need the per-architecture includes and defines.
 //
-namespace {
+namespace { 
 
-using absl::random_internal::RandenTraits;
+using absl::random_internal::RandenTraits; 
 
-}  // namespace
-
+}  // namespace 
+ 
 // TARGET_CRYPTO defines a crypto attribute for each architecture.
 //
 // NOTE: Evaluate whether we should eliminate ABSL_TARGET_CRYPTO.
@@ -116,7 +116,7 @@ using absl::random_internal::RandenTraits;
 #include <altivec.h>
 // <altivec.h> #defines vector __vector; in C++, this is bad form.
 #undef vector
-#undef bool
+#undef bool 
 
 // Rely on the PowerPC AltiVec vector operations for accelerated AES
 // instructions. GCC support of the PPC vector types is described in:
@@ -153,8 +153,8 @@ inline ABSL_TARGET_CRYPTO Vector128 AesRound(const Vector128& state,
 
 // Enables native loads in the round loop by pre-swapping.
 inline ABSL_TARGET_CRYPTO void SwapEndian(absl::uint128* state) {
-  for (uint32_t block = 0; block < RandenTraits::kFeistelBlocks; ++block) {
-    Vector128Store(ReverseBytes(Vector128Load(state + block)), state + block);
+  for (uint32_t block = 0; block < RandenTraits::kFeistelBlocks; ++block) { 
+    Vector128Store(ReverseBytes(Vector128Load(state + block)), state + block); 
   }
 }
 
@@ -205,7 +205,7 @@ inline ABSL_TARGET_CRYPTO Vector128 AesRound(const Vector128& state,
   return vaesmcq_u8(vaeseq_u8(state, uint8x16_t{})) ^ round_key;
 }
 
-inline ABSL_TARGET_CRYPTO void SwapEndian(void*) {}
+inline ABSL_TARGET_CRYPTO void SwapEndian(void*) {} 
 
 }  // namespace
 
@@ -251,7 +251,7 @@ inline ABSL_TARGET_CRYPTO Vector128 AesRound(const Vector128& state,
   return Vector128(_mm_aesenc_si128(state.data(), round_key.data()));
 }
 
-inline ABSL_TARGET_CRYPTO void SwapEndian(void*) {}
+inline ABSL_TARGET_CRYPTO void SwapEndian(void*) {} 
 
 }  // namespace
 
@@ -273,50 +273,50 @@ inline ABSL_TARGET_CRYPTO void SwapEndian(void*) {}
 //
 // PROVIDES: absl::random_internal::RandenHwAes::Absorb
 // PROVIDES: absl::random_internal::RandenHwAes::Generate
-namespace {
+namespace { 
 
 // Block shuffles applies a shuffle to the entire state between AES rounds.
 // Improved odd-even shuffle from "New criterion for diffusion property".
 inline ABSL_TARGET_CRYPTO void BlockShuffle(absl::uint128* state) {
-  static_assert(RandenTraits::kFeistelBlocks == 16,
-                "Expecting 16 FeistelBlocks.");
+  static_assert(RandenTraits::kFeistelBlocks == 16, 
+                "Expecting 16 FeistelBlocks."); 
 
-  constexpr size_t shuffle[RandenTraits::kFeistelBlocks] = {
-      7, 2, 13, 4, 11, 8, 3, 6, 15, 0, 9, 10, 1, 14, 5, 12};
+  constexpr size_t shuffle[RandenTraits::kFeistelBlocks] = { 
+      7, 2, 13, 4, 11, 8, 3, 6, 15, 0, 9, 10, 1, 14, 5, 12}; 
 
-  const Vector128 v0 = Vector128Load(state + shuffle[0]);
-  const Vector128 v1 = Vector128Load(state + shuffle[1]);
-  const Vector128 v2 = Vector128Load(state + shuffle[2]);
-  const Vector128 v3 = Vector128Load(state + shuffle[3]);
-  const Vector128 v4 = Vector128Load(state + shuffle[4]);
-  const Vector128 v5 = Vector128Load(state + shuffle[5]);
-  const Vector128 v6 = Vector128Load(state + shuffle[6]);
-  const Vector128 v7 = Vector128Load(state + shuffle[7]);
-  const Vector128 w0 = Vector128Load(state + shuffle[8]);
-  const Vector128 w1 = Vector128Load(state + shuffle[9]);
-  const Vector128 w2 = Vector128Load(state + shuffle[10]);
-  const Vector128 w3 = Vector128Load(state + shuffle[11]);
-  const Vector128 w4 = Vector128Load(state + shuffle[12]);
-  const Vector128 w5 = Vector128Load(state + shuffle[13]);
-  const Vector128 w6 = Vector128Load(state + shuffle[14]);
-  const Vector128 w7 = Vector128Load(state + shuffle[15]);
+  const Vector128 v0 = Vector128Load(state + shuffle[0]); 
+  const Vector128 v1 = Vector128Load(state + shuffle[1]); 
+  const Vector128 v2 = Vector128Load(state + shuffle[2]); 
+  const Vector128 v3 = Vector128Load(state + shuffle[3]); 
+  const Vector128 v4 = Vector128Load(state + shuffle[4]); 
+  const Vector128 v5 = Vector128Load(state + shuffle[5]); 
+  const Vector128 v6 = Vector128Load(state + shuffle[6]); 
+  const Vector128 v7 = Vector128Load(state + shuffle[7]); 
+  const Vector128 w0 = Vector128Load(state + shuffle[8]); 
+  const Vector128 w1 = Vector128Load(state + shuffle[9]); 
+  const Vector128 w2 = Vector128Load(state + shuffle[10]); 
+  const Vector128 w3 = Vector128Load(state + shuffle[11]); 
+  const Vector128 w4 = Vector128Load(state + shuffle[12]); 
+  const Vector128 w5 = Vector128Load(state + shuffle[13]); 
+  const Vector128 w6 = Vector128Load(state + shuffle[14]); 
+  const Vector128 w7 = Vector128Load(state + shuffle[15]); 
 
-  Vector128Store(v0, state + 0);
-  Vector128Store(v1, state + 1);
-  Vector128Store(v2, state + 2);
-  Vector128Store(v3, state + 3);
-  Vector128Store(v4, state + 4);
-  Vector128Store(v5, state + 5);
-  Vector128Store(v6, state + 6);
-  Vector128Store(v7, state + 7);
-  Vector128Store(w0, state + 8);
-  Vector128Store(w1, state + 9);
-  Vector128Store(w2, state + 10);
-  Vector128Store(w3, state + 11);
-  Vector128Store(w4, state + 12);
-  Vector128Store(w5, state + 13);
-  Vector128Store(w6, state + 14);
-  Vector128Store(w7, state + 15);
+  Vector128Store(v0, state + 0); 
+  Vector128Store(v1, state + 1); 
+  Vector128Store(v2, state + 2); 
+  Vector128Store(v3, state + 3); 
+  Vector128Store(v4, state + 4); 
+  Vector128Store(v5, state + 5); 
+  Vector128Store(v6, state + 6); 
+  Vector128Store(v7, state + 7); 
+  Vector128Store(w0, state + 8); 
+  Vector128Store(w1, state + 9); 
+  Vector128Store(w2, state + 10); 
+  Vector128Store(w3, state + 11); 
+  Vector128Store(w4, state + 12); 
+  Vector128Store(w5, state + 13); 
+  Vector128Store(w6, state + 14); 
+  Vector128Store(w7, state + 15); 
 }
 
 // Feistel round function using two AES subrounds. Very similar to F()
@@ -327,27 +327,27 @@ inline ABSL_TARGET_CRYPTO void BlockShuffle(absl::uint128* state) {
 inline ABSL_TARGET_CRYPTO const absl::uint128* FeistelRound(
     absl::uint128* state,
     const absl::uint128* ABSL_RANDOM_INTERNAL_RESTRICT keys) {
-  static_assert(RandenTraits::kFeistelBlocks == 16,
-                "Expecting 16 FeistelBlocks.");
+  static_assert(RandenTraits::kFeistelBlocks == 16, 
+                "Expecting 16 FeistelBlocks."); 
 
   // MSVC does a horrible job at unrolling loops.
   // So we unroll the loop by hand to improve the performance.
-  const Vector128 s0 = Vector128Load(state + 0);
-  const Vector128 s1 = Vector128Load(state + 1);
-  const Vector128 s2 = Vector128Load(state + 2);
-  const Vector128 s3 = Vector128Load(state + 3);
-  const Vector128 s4 = Vector128Load(state + 4);
-  const Vector128 s5 = Vector128Load(state + 5);
-  const Vector128 s6 = Vector128Load(state + 6);
-  const Vector128 s7 = Vector128Load(state + 7);
-  const Vector128 s8 = Vector128Load(state + 8);
-  const Vector128 s9 = Vector128Load(state + 9);
-  const Vector128 s10 = Vector128Load(state + 10);
-  const Vector128 s11 = Vector128Load(state + 11);
-  const Vector128 s12 = Vector128Load(state + 12);
-  const Vector128 s13 = Vector128Load(state + 13);
-  const Vector128 s14 = Vector128Load(state + 14);
-  const Vector128 s15 = Vector128Load(state + 15);
+  const Vector128 s0 = Vector128Load(state + 0); 
+  const Vector128 s1 = Vector128Load(state + 1); 
+  const Vector128 s2 = Vector128Load(state + 2); 
+  const Vector128 s3 = Vector128Load(state + 3); 
+  const Vector128 s4 = Vector128Load(state + 4); 
+  const Vector128 s5 = Vector128Load(state + 5); 
+  const Vector128 s6 = Vector128Load(state + 6); 
+  const Vector128 s7 = Vector128Load(state + 7); 
+  const Vector128 s8 = Vector128Load(state + 8); 
+  const Vector128 s9 = Vector128Load(state + 9); 
+  const Vector128 s10 = Vector128Load(state + 10); 
+  const Vector128 s11 = Vector128Load(state + 11); 
+  const Vector128 s12 = Vector128Load(state + 12); 
+  const Vector128 s13 = Vector128Load(state + 13); 
+  const Vector128 s14 = Vector128Load(state + 14); 
+  const Vector128 s15 = Vector128Load(state + 15); 
 
   // Encode even blocks with keys.
   const Vector128 e0 = AesRound(s0, Vector128Load(keys + 0));
@@ -370,14 +370,14 @@ inline ABSL_TARGET_CRYPTO const absl::uint128* FeistelRound(
   const Vector128 o15 = AesRound(e14, s15);
 
   // Store odd blocks. (These will be shuffled later).
-  Vector128Store(o1, state + 1);
-  Vector128Store(o3, state + 3);
-  Vector128Store(o5, state + 5);
-  Vector128Store(o7, state + 7);
-  Vector128Store(o9, state + 9);
-  Vector128Store(o11, state + 11);
-  Vector128Store(o13, state + 13);
-  Vector128Store(o15, state + 15);
+  Vector128Store(o1, state + 1); 
+  Vector128Store(o3, state + 3); 
+  Vector128Store(o5, state + 5); 
+  Vector128Store(o7, state + 7); 
+  Vector128Store(o9, state + 9); 
+  Vector128Store(o11, state + 11); 
+  Vector128Store(o13, state + 13); 
+  Vector128Store(o15, state + 15); 
 
   return keys + 8;
 }
@@ -393,8 +393,8 @@ inline ABSL_TARGET_CRYPTO void Permute(
 #ifdef __clang__
 #pragma clang loop unroll_count(2)
 #endif
-  for (size_t round = 0; round < RandenTraits::kFeistelRounds; ++round) {
-    keys = FeistelRound(state, keys);
+  for (size_t round = 0; round < RandenTraits::kFeistelRounds; ++round) { 
+    keys = FeistelRound(state, keys); 
     BlockShuffle(state);
   }
 }
@@ -402,7 +402,7 @@ inline ABSL_TARGET_CRYPTO void Permute(
 }  // namespace
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace random_internal {
 
 bool HasRandenHwAesImplementation() { return true; }
@@ -410,93 +410,93 @@ bool HasRandenHwAesImplementation() { return true; }
 const void* ABSL_TARGET_CRYPTO RandenHwAes::GetKeys() {
   // Round keys for one AES per Feistel round and branch.
   // The canonical implementation uses first digits of Pi.
-#if defined(ABSL_ARCH_PPC)
-  return kRandenRoundKeysBE;
-#else
-  return kRandenRoundKeys;
-#endif
+#if defined(ABSL_ARCH_PPC) 
+  return kRandenRoundKeysBE; 
+#else 
+  return kRandenRoundKeys; 
+#endif 
 }
 
 // NOLINTNEXTLINE
 void ABSL_TARGET_CRYPTO RandenHwAes::Absorb(const void* seed_void,
                                             void* state_void) {
-  static_assert(RandenTraits::kCapacityBytes / sizeof(Vector128) == 1,
-                "Unexpected Randen kCapacityBlocks");
-  static_assert(RandenTraits::kStateBytes / sizeof(Vector128) == 16,
-                "Unexpected Randen kStateBlocks");
+  static_assert(RandenTraits::kCapacityBytes / sizeof(Vector128) == 1, 
+                "Unexpected Randen kCapacityBlocks"); 
+  static_assert(RandenTraits::kStateBytes / sizeof(Vector128) == 16, 
+                "Unexpected Randen kStateBlocks"); 
 
   auto* state = reinterpret_cast<absl::uint128 * ABSL_RANDOM_INTERNAL_RESTRICT>(
       state_void);
-  const auto* seed =
+  const auto* seed = 
       reinterpret_cast<const absl::uint128 * ABSL_RANDOM_INTERNAL_RESTRICT>(
           seed_void);
 
-  Vector128 b1 = Vector128Load(state + 1);
-  b1 ^= Vector128Load(seed + 0);
-  Vector128Store(b1, state + 1);
+  Vector128 b1 = Vector128Load(state + 1); 
+  b1 ^= Vector128Load(seed + 0); 
+  Vector128Store(b1, state + 1); 
 
-  Vector128 b2 = Vector128Load(state + 2);
-  b2 ^= Vector128Load(seed + 1);
-  Vector128Store(b2, state + 2);
+  Vector128 b2 = Vector128Load(state + 2); 
+  b2 ^= Vector128Load(seed + 1); 
+  Vector128Store(b2, state + 2); 
 
-  Vector128 b3 = Vector128Load(state + 3);
-  b3 ^= Vector128Load(seed + 2);
-  Vector128Store(b3, state + 3);
+  Vector128 b3 = Vector128Load(state + 3); 
+  b3 ^= Vector128Load(seed + 2); 
+  Vector128Store(b3, state + 3); 
 
-  Vector128 b4 = Vector128Load(state + 4);
-  b4 ^= Vector128Load(seed + 3);
-  Vector128Store(b4, state + 4);
+  Vector128 b4 = Vector128Load(state + 4); 
+  b4 ^= Vector128Load(seed + 3); 
+  Vector128Store(b4, state + 4); 
 
-  Vector128 b5 = Vector128Load(state + 5);
-  b5 ^= Vector128Load(seed + 4);
-  Vector128Store(b5, state + 5);
+  Vector128 b5 = Vector128Load(state + 5); 
+  b5 ^= Vector128Load(seed + 4); 
+  Vector128Store(b5, state + 5); 
 
-  Vector128 b6 = Vector128Load(state + 6);
-  b6 ^= Vector128Load(seed + 5);
-  Vector128Store(b6, state + 6);
+  Vector128 b6 = Vector128Load(state + 6); 
+  b6 ^= Vector128Load(seed + 5); 
+  Vector128Store(b6, state + 6); 
 
-  Vector128 b7 = Vector128Load(state + 7);
-  b7 ^= Vector128Load(seed + 6);
-  Vector128Store(b7, state + 7);
+  Vector128 b7 = Vector128Load(state + 7); 
+  b7 ^= Vector128Load(seed + 6); 
+  Vector128Store(b7, state + 7); 
 
-  Vector128 b8 = Vector128Load(state + 8);
-  b8 ^= Vector128Load(seed + 7);
-  Vector128Store(b8, state + 8);
+  Vector128 b8 = Vector128Load(state + 8); 
+  b8 ^= Vector128Load(seed + 7); 
+  Vector128Store(b8, state + 8); 
 
-  Vector128 b9 = Vector128Load(state + 9);
-  b9 ^= Vector128Load(seed + 8);
-  Vector128Store(b9, state + 9);
+  Vector128 b9 = Vector128Load(state + 9); 
+  b9 ^= Vector128Load(seed + 8); 
+  Vector128Store(b9, state + 9); 
 
-  Vector128 b10 = Vector128Load(state + 10);
-  b10 ^= Vector128Load(seed + 9);
-  Vector128Store(b10, state + 10);
+  Vector128 b10 = Vector128Load(state + 10); 
+  b10 ^= Vector128Load(seed + 9); 
+  Vector128Store(b10, state + 10); 
 
-  Vector128 b11 = Vector128Load(state + 11);
-  b11 ^= Vector128Load(seed + 10);
-  Vector128Store(b11, state + 11);
+  Vector128 b11 = Vector128Load(state + 11); 
+  b11 ^= Vector128Load(seed + 10); 
+  Vector128Store(b11, state + 11); 
 
-  Vector128 b12 = Vector128Load(state + 12);
-  b12 ^= Vector128Load(seed + 11);
-  Vector128Store(b12, state + 12);
+  Vector128 b12 = Vector128Load(state + 12); 
+  b12 ^= Vector128Load(seed + 11); 
+  Vector128Store(b12, state + 12); 
 
-  Vector128 b13 = Vector128Load(state + 13);
-  b13 ^= Vector128Load(seed + 12);
-  Vector128Store(b13, state + 13);
+  Vector128 b13 = Vector128Load(state + 13); 
+  b13 ^= Vector128Load(seed + 12); 
+  Vector128Store(b13, state + 13); 
 
-  Vector128 b14 = Vector128Load(state + 14);
-  b14 ^= Vector128Load(seed + 13);
-  Vector128Store(b14, state + 14);
+  Vector128 b14 = Vector128Load(state + 14); 
+  b14 ^= Vector128Load(seed + 13); 
+  Vector128Store(b14, state + 14); 
 
-  Vector128 b15 = Vector128Load(state + 15);
-  b15 ^= Vector128Load(seed + 14);
-  Vector128Store(b15, state + 15);
+  Vector128 b15 = Vector128Load(state + 15); 
+  b15 ^= Vector128Load(seed + 14); 
+  Vector128Store(b15, state + 15); 
 }
 
 // NOLINTNEXTLINE
-void ABSL_TARGET_CRYPTO RandenHwAes::Generate(const void* keys_void,
+void ABSL_TARGET_CRYPTO RandenHwAes::Generate(const void* keys_void, 
                                               void* state_void) {
-  static_assert(RandenTraits::kCapacityBytes == sizeof(Vector128),
-                "Capacity mismatch");
+  static_assert(RandenTraits::kCapacityBytes == sizeof(Vector128), 
+                "Capacity mismatch"); 
 
   auto* state = reinterpret_cast<absl::uint128*>(state_void);
   const auto* keys = reinterpret_cast<const absl::uint128*>(keys_void);
@@ -505,7 +505,7 @@ void ABSL_TARGET_CRYPTO RandenHwAes::Generate(const void* keys_void,
 
   SwapEndian(state);
 
-  Permute(state, keys);
+  Permute(state, keys); 
 
   SwapEndian(state);
 
@@ -520,7 +520,7 @@ void ABSL_TARGET_CRYPTO RandenHwAes::Generate(const void* keys_void,
 #endif
 
 }  // namespace random_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // (ABSL_RANDEN_HWAES_IMPL)

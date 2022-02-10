@@ -1,5 +1,5 @@
 //
-// Copyright 2020 The Abseil Authors.
+// Copyright 2020 The Abseil Authors. 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@
 #include "absl/flags/internal/commandlineflag.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace flags_internal {
 
-FlagStateInterface::~FlagStateInterface() {}
+FlagStateInterface::~FlagStateInterface() {} 
 
 }  // namespace flags_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl

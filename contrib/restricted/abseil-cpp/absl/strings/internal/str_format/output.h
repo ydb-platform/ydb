@@ -29,7 +29,7 @@
 #include "absl/strings/string_view.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace str_format_internal {
 
 // RawSink implementation that writes into a char* buffer.
@@ -82,15 +82,15 @@ inline void AbslFormatFlush(BufferRawSink* sink, string_view v) {
   sink->Write(v);
 }
 
-// This is a SFINAE to get a better compiler error message when the type
-// is not supported.
+// This is a SFINAE to get a better compiler error message when the type 
+// is not supported. 
 template <typename T>
-auto InvokeFlush(T* out, string_view s) -> decltype(AbslFormatFlush(out, s)) {
-  AbslFormatFlush(out, s);
+auto InvokeFlush(T* out, string_view s) -> decltype(AbslFormatFlush(out, s)) { 
+  AbslFormatFlush(out, s); 
 }
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_OUTPUT_H_

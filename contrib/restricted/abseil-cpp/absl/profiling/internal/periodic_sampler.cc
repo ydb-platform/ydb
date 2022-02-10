@@ -19,11 +19,11 @@
 #include "absl/profiling/internal/exponential_biased.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace profiling_internal {
 
 int64_t PeriodicSamplerBase::GetExponentialBiased(int period) noexcept {
-  return rng_.GetStride(period);
+  return rng_.GetStride(period); 
 }
 
 bool PeriodicSamplerBase::SubtleConfirmSample() noexcept {
@@ -37,17 +37,17 @@ bool PeriodicSamplerBase::SubtleConfirmSample() noexcept {
 
   // Check if this is the first call to Sample()
   if (ABSL_PREDICT_FALSE(stride_ == 1)) {
-    stride_ = static_cast<uint64_t>(-GetExponentialBiased(current_period));
+    stride_ = static_cast<uint64_t>(-GetExponentialBiased(current_period)); 
     if (static_cast<int64_t>(stride_) < -1) {
       ++stride_;
       return false;
     }
   }
-
-  stride_ = static_cast<uint64_t>(-GetExponentialBiased(current_period));
+ 
+  stride_ = static_cast<uint64_t>(-GetExponentialBiased(current_period)); 
   return true;
 }
 
 }  // namespace profiling_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl

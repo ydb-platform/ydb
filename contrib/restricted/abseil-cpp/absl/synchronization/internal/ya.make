@@ -24,10 +24,10 @@ NO_COMPILER_WARNINGS()
 
 NO_UTIL()
 
-CFLAGS(
-    -DNOMINMAX
-)
-
+CFLAGS( 
+    -DNOMINMAX 
+) 
+ 
 SRCS(
     graphcycles.cc
 )

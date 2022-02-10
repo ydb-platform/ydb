@@ -18,7 +18,7 @@ PEERDIR(
     contrib/restricted/abseil-cpp/absl/random/internal/randen
     contrib/restricted/abseil-cpp/absl/random/internal/randen_detect
     contrib/restricted/abseil-cpp/absl/random/internal/randen_hwaes
-    contrib/restricted/abseil-cpp/absl/random/internal/randen_round_keys
+    contrib/restricted/abseil-cpp/absl/random/internal/randen_round_keys 
     contrib/restricted/abseil-cpp/absl/random/internal/randen_slow
     contrib/restricted/abseil-cpp/absl/random/internal/seed_material
     contrib/restricted/abseil-cpp/absl/random/seed_gen_exception
@@ -35,10 +35,10 @@ NO_COMPILER_WARNINGS()
 
 NO_UTIL()
 
-CFLAGS(
-    -DNOMINMAX
-)
-
+CFLAGS( 
+    -DNOMINMAX 
+) 
+ 
 SRCDIR(contrib/restricted/abseil-cpp/absl/random/internal)
 
 SRCS(

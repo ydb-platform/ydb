@@ -22,7 +22,7 @@
 #include "absl/strings/internal/memutil.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace {
 
 // ParseFloat<10> will read the first 19 significant digits of the mantissa.
@@ -302,7 +302,7 @@ bool ParseInfinityOrNan(const char* begin, const char* end,
   switch (*begin) {
     case 'i':
     case 'I': {
-      // An infinity string consists of the characters "inf" or "infinity",
+      // An infinity string consists of the characters "inf" or "infinity", 
       // case insensitive.
       if (strings_internal::memcasecmp(begin + 1, "nf", 2) != 0) {
         return false;
@@ -326,7 +326,7 @@ bool ParseInfinityOrNan(const char* begin, const char* end,
       }
       out->type = strings_internal::FloatType::kNan;
       out->end = begin + 3;
-      // NaN is allowed to be followed by a parenthesized string, consisting of
+      // NaN is allowed to be followed by a parenthesized string, consisting of 
       // only the characters [a-zA-Z0-9_].  Match that if it's present.
       begin += 3;
       if (begin < end && *begin == '(') {
@@ -500,5 +500,5 @@ template ParsedFloat ParseFloat<16>(const char* begin, const char* end,
                                     chars_format format_flags);
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl

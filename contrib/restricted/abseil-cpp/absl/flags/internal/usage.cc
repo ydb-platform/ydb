@@ -15,23 +15,23 @@
 
 #include "absl/flags/internal/usage.h"
 
-#include <stdint.h>
-
-#include <functional>
+#include <stdint.h> 
+ 
+#include <functional> 
 #include <map>
-#include <ostream>
+#include <ostream> 
 #include <string>
-#include <utility>
-#include <vector>
+#include <utility> 
+#include <vector> 
 
-#include "absl/base/config.h"
-#include "absl/flags/commandlineflag.h"
+#include "absl/base/config.h" 
+#include "absl/flags/commandlineflag.h" 
 #include "absl/flags/flag.h"
-#include "absl/flags/internal/flag.h"
+#include "absl/flags/internal/flag.h" 
 #include "absl/flags/internal/path_util.h"
-#include "absl/flags/internal/private_handle_accessor.h"
+#include "absl/flags/internal/private_handle_accessor.h" 
 #include "absl/flags/internal/program_name.h"
-#include "absl/flags/internal/registry.h"
+#include "absl/flags/internal/registry.h" 
 #include "absl/flags/usage_config.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
@@ -48,7 +48,7 @@ bool FLAGS_helpon = false;
 bool FLAGS_helpmatch = false;
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace flags_internal {
 namespace {
 
@@ -111,7 +111,7 @@ class FlagHelpPrettyPrinter {
   // to that stream.
   FlagHelpPrettyPrinter(size_t max_line_len, size_t min_line_len,
                         size_t wrapped_line_indent, std::ostream& out)
-      : out_(out),
+      : out_(out), 
         max_line_len_(max_line_len),
         min_line_len_(min_line_len),
         wrapped_line_indent_(wrapped_line_indent),
@@ -119,14 +119,14 @@ class FlagHelpPrettyPrinter {
         first_line_(true) {}
 
   void Write(absl::string_view str, bool wrap_line = false) {
-    // Empty string - do nothing.
+    // Empty string - do nothing. 
     if (str.empty()) return;
 
     std::vector<absl::string_view> tokens;
     if (wrap_line) {
       for (auto line : absl::StrSplit(str, absl::ByAnyChar("\n\r"))) {
         if (!tokens.empty()) {
-          // Keep line separators in the input string.
+          // Keep line separators in the input string. 
           tokens.push_back("\n");
         }
         for (auto token :
@@ -141,15 +141,15 @@ class FlagHelpPrettyPrinter {
     for (auto token : tokens) {
       bool new_line = (line_len_ == 0);
 
-      // Respect line separators in the input string.
+      // Respect line separators in the input string. 
       if (token == "\n") {
         EndLine();
         continue;
       }
 
-      // Write the token, ending the string first if necessary/possible.
-      if (!new_line &&
-          (line_len_ + static_cast<int>(token.size()) >= max_line_len_)) {
+      // Write the token, ending the string first if necessary/possible. 
+      if (!new_line && 
+          (line_len_ + static_cast<int>(token.size()) >= max_line_len_)) { 
         EndLine();
         new_line = true;
       }
@@ -189,11 +189,11 @@ class FlagHelpPrettyPrinter {
   bool first_line_;
 };
 
-void FlagHelpHumanReadable(const CommandLineFlag& flag, std::ostream& out) {
+void FlagHelpHumanReadable(const CommandLineFlag& flag, std::ostream& out) { 
   FlagHelpPrettyPrinter printer(kHrfMaxLineLength, 4, 2, out);
 
   // Flag name.
-  printer.Write(absl::StrCat("--", flag.Name()));
+  printer.Write(absl::StrCat("--", flag.Name())); 
 
   // Flag help.
   printer.Write(absl::StrCat("(", flag.Help(), ");"), /*wrap_line=*/true);
@@ -203,15 +203,15 @@ void FlagHelpHumanReadable(const CommandLineFlag& flag, std::ostream& out) {
   // subsequently been modified using SetCommandLineOption() with mode
   // SET_FLAGS_DEFAULT.
   std::string dflt_val = flag.DefaultValue();
-  std::string curr_val = flag.CurrentValue();
-  bool is_modified = curr_val != dflt_val;
-
+  std::string curr_val = flag.CurrentValue(); 
+  bool is_modified = curr_val != dflt_val; 
+ 
   if (flag.IsOfType<std::string>()) {
     dflt_val = absl::StrCat("\"", dflt_val, "\"");
   }
   printer.Write(absl::StrCat("default: ", dflt_val, ";"));
 
-  if (is_modified) {
+  if (is_modified) { 
     if (flag.IsOfType<std::string>()) {
       curr_val = absl::StrCat("\"", curr_val, "\"");
     }
@@ -251,28 +251,28 @@ void FlagsHelpImpl(std::ostream& out, PerFlagFilter filter_cb,
   // This map is used to output matching flags grouped by package and file
   // name.
   std::map<std::string,
-           std::map<std::string, std::vector<const absl::CommandLineFlag*>>>
+           std::map<std::string, std::vector<const absl::CommandLineFlag*>>> 
       matching_flags;
 
-  flags_internal::ForEachFlag([&](absl::CommandLineFlag& flag) {
+  flags_internal::ForEachFlag([&](absl::CommandLineFlag& flag) { 
     // Ignore retired flags.
-    if (flag.IsRetired()) return;
+    if (flag.IsRetired()) return; 
 
     // If the flag has been stripped, pretend that it doesn't exist.
-    if (flag.Help() == flags_internal::kStrippedFlagHelp) return;
+    if (flag.Help() == flags_internal::kStrippedFlagHelp) return; 
 
     // Make sure flag satisfies the filter
     if (!filter_cb(flag)) return;
 
-    std::string flag_filename = flag.Filename();
-
+    std::string flag_filename = flag.Filename(); 
+ 
     matching_flags[std::string(flags_internal::Package(flag_filename))]
                   [flag_filename]
-                      .push_back(&flag);
+                      .push_back(&flag); 
   });
 
-  absl::string_view package_separator;  // controls blank lines between packages
-  absl::string_view file_separator;     // controls blank lines between files
+  absl::string_view package_separator;  // controls blank lines between packages 
+  absl::string_view file_separator;     // controls blank lines between files 
   for (auto& package : matching_flags) {
     if (format == HelpFormat::kHumanReadable) {
       out << package_separator;
@@ -332,10 +332,10 @@ void FlagsHelpImpl(std::ostream& out,
 
 // --------------------------------------------------------------------
 // Produces the help message describing specific flag.
-void FlagHelp(std::ostream& out, const CommandLineFlag& flag,
+void FlagHelp(std::ostream& out, const CommandLineFlag& flag, 
               HelpFormat format) {
   if (format == HelpFormat::kHumanReadable)
-    flags_internal::FlagHelpHumanReadable(flag, out);
+    flags_internal::FlagHelpHumanReadable(flag, out); 
 }
 
 // --------------------------------------------------------------------
@@ -520,5 +520,5 @@ bool DeduceUsageFlags(absl::string_view name, absl::string_view value) {
 }
 
 }  // namespace flags_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl

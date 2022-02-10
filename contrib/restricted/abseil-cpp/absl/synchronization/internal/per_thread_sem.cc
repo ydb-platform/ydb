@@ -25,7 +25,7 @@
 #include "absl/synchronization/internal/waiter.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace synchronization_internal {
 
 void PerThreadSem::SetThreadBlockedCounter(std::atomic<int> *counter) {
@@ -63,7 +63,7 @@ void PerThreadSem::Tick(base_internal::ThreadIdentity *identity) {
 }
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 extern "C" {

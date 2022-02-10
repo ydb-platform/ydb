@@ -23,10 +23,10 @@ NO_COMPILER_WARNINGS()
 
 NO_UTIL()
 
-CFLAGS(
-    -DNOMINMAX
-)
-
+CFLAGS( 
+    -DNOMINMAX 
+) 
+ 
 SRCDIR(contrib/restricted/abseil-cpp/absl/hash/internal)
 
 SRCS(

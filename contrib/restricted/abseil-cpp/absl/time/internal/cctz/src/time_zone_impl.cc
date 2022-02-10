@@ -15,17 +15,17 @@
 #include "time_zone_impl.h"
 
 #include <deque>
-#include <memory>
+#include <memory> 
 #include <mutex>
 #include <string>
 #include <unordered_map>
 #include <utility>
 
-#include "absl/base/config.h"
+#include "absl/base/config.h" 
 #include "time_zone_fixed.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace time_internal {
 namespace cctz {
 
@@ -46,19 +46,19 @@ std::mutex& TimeZoneMutex() {
 
 }  // namespace
 
-time_zone time_zone::Impl::UTC() { return time_zone(UTCImpl()); }
+time_zone time_zone::Impl::UTC() { return time_zone(UTCImpl()); } 
 
 bool time_zone::Impl::LoadTimeZone(const std::string& name, time_zone* tz) {
-  const Impl* const utc_impl = UTCImpl();
+  const Impl* const utc_impl = UTCImpl(); 
 
-  // Check for UTC (which is never a key in time_zone_map).
+  // Check for UTC (which is never a key in time_zone_map). 
   auto offset = seconds::zero();
   if (FixedOffsetFromName(name, &offset) && offset == seconds::zero()) {
     *tz = time_zone(utc_impl);
     return true;
   }
 
-  // Check whether the time zone has already been loaded.
+  // Check whether the time zone has already been loaded. 
   {
     std::lock_guard<std::mutex> lock(TimeZoneMutex());
     if (time_zone_map != nullptr) {
@@ -70,15 +70,15 @@ bool time_zone::Impl::LoadTimeZone(const std::string& name, time_zone* tz) {
     }
   }
 
-  // Load the new time zone (outside the lock).
-  std::unique_ptr<const Impl> new_impl(new Impl(name));
-
-  // Add the new time zone to the map.
+  // Load the new time zone (outside the lock). 
+  std::unique_ptr<const Impl> new_impl(new Impl(name)); 
+ 
+  // Add the new time zone to the map. 
   std::lock_guard<std::mutex> lock(TimeZoneMutex());
   if (time_zone_map == nullptr) time_zone_map = new TimeZoneImplByName;
   const Impl*& impl = (*time_zone_map)[name];
-  if (impl == nullptr) {  // this thread won any load race
-    impl = new_impl->zone_ ? new_impl.release() : utc_impl;
+  if (impl == nullptr) {  // this thread won any load race 
+    impl = new_impl->zone_ ? new_impl.release() : utc_impl; 
   }
   *tz = time_zone(impl);
   return impl != utc_impl;
@@ -99,15 +99,15 @@ void time_zone::Impl::ClearTimeZoneMapTestOnly() {
   }
 }
 
-time_zone::Impl::Impl(const std::string& name)
-    : name_(name), zone_(TimeZoneIf::Load(name_)) {}
+time_zone::Impl::Impl(const std::string& name) 
+    : name_(name), zone_(TimeZoneIf::Load(name_)) {} 
 
 const time_zone::Impl* time_zone::Impl::UTCImpl() {
-  static const Impl* utc_impl = new Impl("UTC");  // never fails
+  static const Impl* utc_impl = new Impl("UTC");  // never fails 
   return utc_impl;
 }
 
 }  // namespace cctz
 }  // namespace time_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl

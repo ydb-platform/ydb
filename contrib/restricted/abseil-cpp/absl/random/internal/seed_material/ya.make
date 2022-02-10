@@ -28,10 +28,10 @@ NO_COMPILER_WARNINGS()
 
 NO_UTIL()
 
-CFLAGS(
-    -DNOMINMAX
-)
-
+CFLAGS( 
+    -DNOMINMAX 
+) 
+ 
 SRCDIR(contrib/restricted/abseil-cpp/absl/random/internal)
 
 SRCS(

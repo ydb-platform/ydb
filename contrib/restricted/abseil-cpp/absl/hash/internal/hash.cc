@@ -15,7 +15,7 @@
 #include "absl/hash/internal/hash.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace hash_internal {
 
 uint64_t MixingHashState::CombineLargeContiguousImpl32(
@@ -65,5 +65,5 @@ uint64_t MixingHashState::LowLevelHashImpl(const unsigned char* data,
 }
 
 }  // namespace hash_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl

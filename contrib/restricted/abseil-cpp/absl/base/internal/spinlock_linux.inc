@@ -24,7 +24,7 @@
 #include <ctime>
 
 #include "absl/base/attributes.h"
-#include "absl/base/internal/errno_saver.h"
+#include "absl/base/internal/errno_saver.h" 
 
 // The SpinLock lockword is `std::atomic<uint32_t>`. Here we assert that
 // `std::atomic<uint32_t>` is bitwise equivalent of the `int` expected
@@ -46,20 +46,20 @@ static_assert(sizeof(std::atomic<uint32_t>) == sizeof(int),
 #endif
 #endif
 
-#if defined(__NR_futex_time64) && !defined(SYS_futex_time64)
-#define SYS_futex_time64 __NR_futex_time64
-#endif
-
-#if defined(SYS_futex_time64) && !defined(SYS_futex)
-#define SYS_futex SYS_futex_time64
-#endif
-
+#if defined(__NR_futex_time64) && !defined(SYS_futex_time64) 
+#define SYS_futex_time64 __NR_futex_time64 
+#endif 
+ 
+#if defined(SYS_futex_time64) && !defined(SYS_futex) 
+#define SYS_futex SYS_futex_time64 
+#endif 
+ 
 extern "C" {
 
 ABSL_ATTRIBUTE_WEAK void ABSL_INTERNAL_C_SYMBOL(AbslInternalSpinLockDelay)(
     std::atomic<uint32_t> *w, uint32_t value, int loop,
     absl::base_internal::SchedulingMode) {
-  absl::base_internal::ErrnoSaver errno_saver;
+  absl::base_internal::ErrnoSaver errno_saver; 
   struct timespec tm;
   tm.tv_sec = 0;
   tm.tv_nsec = absl::base_internal::SpinLockSuggestedDelayNS(loop);

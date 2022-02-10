@@ -51,7 +51,7 @@
 #include "absl/container/internal/btree_container.h"  // IWYU pragma: export
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 // absl::btree_set<>
 //
@@ -183,7 +183,7 @@ class btree_set
   // template <typename K> size_type erase(const K& key):
   //
   //   Erases the element with the matching key, if it exists, returning the
-  //   number of elements erased (0 or 1).
+  //   number of elements erased (0 or 1). 
   using Base::erase;
 
   // btree_set::insert()
@@ -263,7 +263,7 @@ class btree_set
   //   Extracts the element at the indicated position and returns a node handle
   //   owning that extracted data.
   //
-  // template <typename K> node_type extract(const K& k):
+  // template <typename K> node_type extract(const K& k): 
   //
   //   Extracts the element with the key matching the passed key value and
   //   returns a node handle owning that extracted data. If the `btree_set`
@@ -382,20 +382,20 @@ void swap(btree_set<K, C, A> &x, btree_set<K, C, A> &y) {
   return x.swap(y);
 }
 
-// absl::erase_if(absl::btree_set<>, Pred)
-//
-// Erases all elements that satisfy the predicate pred from the container.
-template <typename K, typename C, typename A, typename Pred>
-void erase_if(btree_set<K, C, A> &set, Pred pred) {
-  for (auto it = set.begin(); it != set.end();) {
-    if (pred(*it)) {
-      it = set.erase(it);
-    } else {
-      ++it;
-    }
-  }
-}
-
+// absl::erase_if(absl::btree_set<>, Pred) 
+// 
+// Erases all elements that satisfy the predicate pred from the container. 
+template <typename K, typename C, typename A, typename Pred> 
+void erase_if(btree_set<K, C, A> &set, Pred pred) { 
+  for (auto it = set.begin(); it != set.end();) { 
+    if (pred(*it)) { 
+      it = set.erase(it); 
+    } else { 
+      ++it; 
+    } 
+  } 
+} 
+ 
 // absl::btree_multiset<>
 //
 // An `absl::btree_multiset<K>` is an ordered associative container of
@@ -589,7 +589,7 @@ class btree_multiset
   //   Extracts the element at the indicated position and returns a node handle
   //   owning that extracted data.
   //
-  // template <typename K> node_type extract(const K& k):
+  // template <typename K> node_type extract(const K& k): 
   //
   //   Extracts the element with the key matching the passed key value and
   //   returns a node handle owning that extracted data. If the `btree_multiset`
@@ -708,21 +708,21 @@ void swap(btree_multiset<K, C, A> &x, btree_multiset<K, C, A> &y) {
   return x.swap(y);
 }
 
-// absl::erase_if(absl::btree_multiset<>, Pred)
-//
-// Erases all elements that satisfy the predicate pred from the container.
-template <typename K, typename C, typename A, typename Pred>
-void erase_if(btree_multiset<K, C, A> &set, Pred pred) {
-  for (auto it = set.begin(); it != set.end();) {
-    if (pred(*it)) {
-      it = set.erase(it);
-    } else {
-      ++it;
-    }
-  }
-}
-
-ABSL_NAMESPACE_END
+// absl::erase_if(absl::btree_multiset<>, Pred) 
+// 
+// Erases all elements that satisfy the predicate pred from the container. 
+template <typename K, typename C, typename A, typename Pred> 
+void erase_if(btree_multiset<K, C, A> &set, Pred pred) { 
+  for (auto it = set.begin(); it != set.end();) { 
+    if (pred(*it)) { 
+      it = set.erase(it); 
+    } else { 
+      ++it; 
+    } 
+  } 
+} 
+ 
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_CONTAINER_BTREE_SET_H_

@@ -15,12 +15,12 @@
 
 #include "absl/flags/flag.h"
 
-#include "absl/base/config.h"
+#include "absl/base/config.h" 
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
-// This global mutex protects on-demand construction of flag objects in MSVC
+// This global mutex protects on-demand construction of flag objects in MSVC 
 // builds.
 #if defined(_MSC_VER) && !defined(__clang__)
 
@@ -34,5 +34,5 @@ absl::Mutex* GetGlobalConstructionGuard() { return &construction_guard; }
 
 #endif
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl

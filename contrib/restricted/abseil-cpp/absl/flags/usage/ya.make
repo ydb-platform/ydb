@@ -15,24 +15,24 @@ PEERDIR(
     contrib/restricted/abseil-cpp/absl/base/internal/spinlock_wait
     contrib/restricted/abseil-cpp/absl/base/internal/throw_delegate
     contrib/restricted/abseil-cpp/absl/base/log_severity
-    contrib/restricted/abseil-cpp/absl/city
-    contrib/restricted/abseil-cpp/absl/container/internal/absl_hashtablez_sampler
-    contrib/restricted/abseil-cpp/absl/container/internal/raw_hash_set
+    contrib/restricted/abseil-cpp/absl/city 
+    contrib/restricted/abseil-cpp/absl/container/internal/absl_hashtablez_sampler 
+    contrib/restricted/abseil-cpp/absl/container/internal/raw_hash_set 
     contrib/restricted/abseil-cpp/absl/debugging
     contrib/restricted/abseil-cpp/absl/debugging/stacktrace
     contrib/restricted/abseil-cpp/absl/debugging/symbolize
     contrib/restricted/abseil-cpp/absl/demangle
     contrib/restricted/abseil-cpp/absl/flags
-    contrib/restricted/abseil-cpp/absl/flags/commandlineflag
+    contrib/restricted/abseil-cpp/absl/flags/commandlineflag 
     contrib/restricted/abseil-cpp/absl/flags/internal/commandlineflag
     contrib/restricted/abseil-cpp/absl/flags/internal/flag
-    contrib/restricted/abseil-cpp/absl/flags/internal/private_handle_accessor
+    contrib/restricted/abseil-cpp/absl/flags/internal/private_handle_accessor 
     contrib/restricted/abseil-cpp/absl/flags/internal/program_name
     contrib/restricted/abseil-cpp/absl/flags/internal/usage
     contrib/restricted/abseil-cpp/absl/flags/marshalling
-    contrib/restricted/abseil-cpp/absl/flags/reflection
+    contrib/restricted/abseil-cpp/absl/flags/reflection 
     contrib/restricted/abseil-cpp/absl/flags/usage_config
-    contrib/restricted/abseil-cpp/absl/hash
+    contrib/restricted/abseil-cpp/absl/hash 
     contrib/restricted/abseil-cpp/absl/hash/internal
     contrib/restricted/abseil-cpp/absl/numeric
     contrib/restricted/abseil-cpp/absl/profiling/internal/exponential_biased
@@ -50,7 +50,7 @@ PEERDIR(
     contrib/restricted/abseil-cpp/absl/time/civil_time
     contrib/restricted/abseil-cpp/absl/time/time_zone
     contrib/restricted/abseil-cpp/absl/types/bad_optional_access
-    contrib/restricted/abseil-cpp/absl/types/bad_variant_access
+    contrib/restricted/abseil-cpp/absl/types/bad_variant_access 
 )
 
 ADDINCL(
@@ -61,10 +61,10 @@ NO_COMPILER_WARNINGS()
 
 NO_UTIL()
 
-CFLAGS(
-    -DNOMINMAX
-)
-
+CFLAGS( 
+    -DNOMINMAX 
+) 
+ 
 SRCDIR(contrib/restricted/abseil-cpp/absl/flags)
 
 SRCS(

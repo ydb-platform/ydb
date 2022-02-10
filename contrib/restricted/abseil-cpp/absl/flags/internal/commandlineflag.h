@@ -16,19 +16,19 @@
 #ifndef ABSL_FLAGS_INTERNAL_COMMANDLINEFLAG_H_
 #define ABSL_FLAGS_INTERNAL_COMMANDLINEFLAG_H_
 
-#include "absl/base/config.h"
-#include "absl/base/internal/fast_type_id.h"
+#include "absl/base/config.h" 
+#include "absl/base/internal/fast_type_id.h" 
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace flags_internal {
 
-// An alias for flag fast type id. This value identifies the flag value type
+// An alias for flag fast type id. This value identifies the flag value type 
 // similarly to typeid(T), without relying on RTTI being available. In most
-// cases this id is enough to uniquely identify the flag's value type. In a few
-// cases we'll have to resort to using actual RTTI implementation if it is
-// available.
-using FlagFastTypeId = absl::base_internal::FastTypeIdType;
+// cases this id is enough to uniquely identify the flag's value type. In a few 
+// cases we'll have to resort to using actual RTTI implementation if it is 
+// available. 
+using FlagFastTypeId = absl::base_internal::FastTypeIdType; 
 
 // Options that control SetCommandLineOptionWithMode.
 enum FlagSettingMode {
@@ -43,7 +43,7 @@ enum FlagSettingMode {
   SET_FLAGS_DEFAULT
 };
 
-// Options that control ParseFrom: Source of a value.
+// Options that control ParseFrom: Source of a value. 
 enum ValueSource {
   // Flag is being set by value specified on a command line.
   kCommandLine,
@@ -55,14 +55,14 @@ enum ValueSource {
 // of a flag produced this flag state from method CommandLineFlag::SaveState().
 class FlagStateInterface {
  public:
-  virtual ~FlagStateInterface();
+  virtual ~FlagStateInterface(); 
 
   // Restores the flag originated this object to the saved state.
   virtual void Restore() const = 0;
 };
 
 }  // namespace flags_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_FLAGS_INTERNAL_COMMANDLINEFLAG_H_

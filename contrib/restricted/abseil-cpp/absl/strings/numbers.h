@@ -39,7 +39,7 @@
 #include <string>
 #include <type_traits>
 
-#include "absl/base/config.h"
+#include "absl/base/config.h" 
 #ifdef __SSE4_2__
 // TODO(jorg): Remove this when we figure out the right way
 // to swap bytes on SSE 4.2 that works with the compilers
@@ -55,24 +55,24 @@
 #include "absl/strings/string_view.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 // SimpleAtoi()
 //
-// Converts the given string (optionally followed or preceded by ASCII
-// whitespace) into an integer value, returning `true` if successful. The string
-// must reflect a base-10 integer whose value falls within the range of the
-// integer type (optionally preceded by a `+` or `-`). If any errors are
-// encountered, this function returns `false`, leaving `out` in an unspecified
-// state.
+// Converts the given string (optionally followed or preceded by ASCII 
+// whitespace) into an integer value, returning `true` if successful. The string 
+// must reflect a base-10 integer whose value falls within the range of the 
+// integer type (optionally preceded by a `+` or `-`). If any errors are 
+// encountered, this function returns `false`, leaving `out` in an unspecified 
+// state. 
 template <typename int_type>
 ABSL_MUST_USE_RESULT bool SimpleAtoi(absl::string_view str, int_type* out);
 
 // SimpleAtof()
 //
 // Converts the given string (optionally followed or preceded by ASCII
-// whitespace) into a float, which may be rounded on overflow or underflow,
-// returning `true` if successful.
+// whitespace) into a float, which may be rounded on overflow or underflow, 
+// returning `true` if successful. 
 // See https://en.cppreference.com/w/c/string/byte/strtof for details about the
 // allowed formats for `str`, except SimpleAtof() is locale-independent and will
 // always use the "C" locale. If any errors are encountered, this function
@@ -82,8 +82,8 @@ ABSL_MUST_USE_RESULT bool SimpleAtof(absl::string_view str, float* out);
 // SimpleAtod()
 //
 // Converts the given string (optionally followed or preceded by ASCII
-// whitespace) into a double, which may be rounded on overflow or underflow,
-// returning `true` if successful.
+// whitespace) into a double, which may be rounded on overflow or underflow, 
+// returning `true` if successful. 
 // See https://en.cppreference.com/w/c/string/byte/strtof for details about the
 // allowed formats for `str`, except SimpleAtod is locale-independent and will
 // always use the "C" locale. If any errors are encountered, this function
@@ -119,21 +119,21 @@ ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(absl::string_view str,
 ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(absl::string_view str,
                                                absl::uint128* out);
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 // End of public API.  Implementation details follow.
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace numbers_internal {
 
 // Digit conversion.
-ABSL_DLL extern const char kHexChar[17];  // 0123456789abcdef
-ABSL_DLL extern const char
-    kHexTable[513];  // 000102030405060708090a0b0c0d0e0f1011...
-ABSL_DLL extern const char
-    two_ASCII_digits[100][2];  // 00, 01, 02, 03...
+ABSL_DLL extern const char kHexChar[17];  // 0123456789abcdef 
+ABSL_DLL extern const char 
+    kHexTable[513];  // 000102030405060708090a0b0c0d0e0f1011... 
+ABSL_DLL extern const char 
+    two_ASCII_digits[100][2];  // 00, 01, 02, 03... 
 
 // Writes a two-character representation of 'i' to 'buf'. 'i' must be in the
 // range 0 <= i < 100, and buf must have space for two characters. Example:
@@ -298,7 +298,7 @@ ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(absl::string_view str,
   return numbers_internal::safe_strtou128_base(str, out, 16);
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace absl
 
 #endif  // ABSL_STRINGS_NUMBERS_H_

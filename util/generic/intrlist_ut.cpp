@@ -200,107 +200,107 @@ void TListTest::TestForEachWithDelete() {
 
     UNIT_ASSERT_EQUAL(sum, 500 * 500 /*== n * (x + y * (n - 1) / 2), x == 1, y == 2*/);
 }
-
-static void CheckIterationAfterCut(const TMyList& l, const TMyList& l2, size_t N, size_t M) {
-    size_t c = 0;
-    for (TMyList::TConstIterator it = l.Begin(); it != l.End(); ++it) {
-        ++c;
-
-        UNIT_ASSERT_EQUAL(*it, (int)c);
-    }
-
-    UNIT_ASSERT_EQUAL(c, M);
-
-    for (TMyList::TConstIterator it = l2.Begin(); it != l2.End(); ++it) {
-        ++c;
-
-        UNIT_ASSERT_EQUAL(*it, (int)c);
-    }
-
-    UNIT_ASSERT_EQUAL(c, N);
-
-    for (TMyList::TConstIterator it = l2.End(); it != l2.Begin(); --c) {
-        --it;
-
-        UNIT_ASSERT_EQUAL(*it, (int)c);
-    }
-
-    UNIT_ASSERT_EQUAL(c, M);
-
-    for (TMyList::TConstIterator it = l.End(); it != l.Begin(); --c) {
-        --it;
-
-        UNIT_ASSERT_EQUAL(*it, (int)c);
-    }
-
-    UNIT_ASSERT_EQUAL(c, 0);
-}
-
+ 
+static void CheckIterationAfterCut(const TMyList& l, const TMyList& l2, size_t N, size_t M) { 
+    size_t c = 0; 
+    for (TMyList::TConstIterator it = l.Begin(); it != l.End(); ++it) { 
+        ++c; 
+ 
+        UNIT_ASSERT_EQUAL(*it, (int)c); 
+    } 
+ 
+    UNIT_ASSERT_EQUAL(c, M); 
+ 
+    for (TMyList::TConstIterator it = l2.Begin(); it != l2.End(); ++it) { 
+        ++c; 
+ 
+        UNIT_ASSERT_EQUAL(*it, (int)c); 
+    } 
+ 
+    UNIT_ASSERT_EQUAL(c, N); 
+ 
+    for (TMyList::TConstIterator it = l2.End(); it != l2.Begin(); --c) { 
+        --it; 
+ 
+        UNIT_ASSERT_EQUAL(*it, (int)c); 
+    } 
+ 
+    UNIT_ASSERT_EQUAL(c, M); 
+ 
+    for (TMyList::TConstIterator it = l.End(); it != l.Begin(); --c) { 
+        --it; 
+ 
+        UNIT_ASSERT_EQUAL(*it, (int)c); 
+    } 
+ 
+    UNIT_ASSERT_EQUAL(c, 0); 
+} 
+ 
 static void TestCutFront(int N, int M) {
-    TMyList l(N);
-    TMyList l2(0);
-
-    TMyList::TIterator it = l.Begin();
+    TMyList l(N); 
+    TMyList l2(0); 
+ 
+    TMyList::TIterator it = l.Begin(); 
     for (int i = 0; i < M; ++i) {
-        ++it;
-    }
-
-    TMyList::Cut(l.Begin(), it, l2.End());
+        ++it; 
+    } 
+ 
+    TMyList::Cut(l.Begin(), it, l2.End()); 
     CheckIterationAfterCut(l2, l, N, M);
-}
-
+} 
+ 
 static void TestCutBack(int N, int M) {
-    TMyList l(N);
-    TMyList l2(0);
-
-    TMyList::TIterator it = l.Begin();
+    TMyList l(N); 
+    TMyList l2(0); 
+ 
+    TMyList::TIterator it = l.Begin(); 
     for (int i = 0; i < M; ++i) {
-        ++it;
-    }
-
-    TMyList::Cut(it, l.End(), l2.End());
+        ++it; 
+    } 
+ 
+    TMyList::Cut(it, l.End(), l2.End()); 
     CheckIterationAfterCut(l, l2, N, M);
-}
+} 
+ 
+void TListTest::TestCut() { 
+    TestCutFront(1000, 500); 
+    TestCutBack(1000, 500); 
+    TestCutFront(1, 0); 
+    TestCutBack(1, 0); 
+    TestCutFront(1, 1); 
+    TestCutBack(1, 1); 
+    TestCutFront(2, 0); 
+    TestCutBack(2, 0); 
+    TestCutFront(2, 1); 
+    TestCutBack(2, 1); 
+    TestCutFront(2, 2); 
+    TestCutBack(2, 2); 
+} 
+ 
+static void CheckIterationAfterAppend(const TMyList& l, size_t N, size_t M) { 
+    TMyList::TConstIterator it = l.Begin(); 
+ 
+    for (size_t i = 1; i <= N; ++i, ++it) { 
+        UNIT_ASSERT_EQUAL((int)i, *it); 
+    } 
 
-void TListTest::TestCut() {
-    TestCutFront(1000, 500);
-    TestCutBack(1000, 500);
-    TestCutFront(1, 0);
-    TestCutBack(1, 0);
-    TestCutFront(1, 1);
-    TestCutBack(1, 1);
-    TestCutFront(2, 0);
-    TestCutBack(2, 0);
-    TestCutFront(2, 1);
-    TestCutBack(2, 1);
-    TestCutFront(2, 2);
-    TestCutBack(2, 2);
-}
-
-static void CheckIterationAfterAppend(const TMyList& l, size_t N, size_t M) {
-    TMyList::TConstIterator it = l.Begin();
-
-    for (size_t i = 1; i <= N; ++i, ++it) {
-        UNIT_ASSERT_EQUAL((int)i, *it);
-    }
-
-    for (size_t i = 1; i <= M; ++i, ++it) {
-        UNIT_ASSERT_EQUAL((int)i, *it);
-    }
-
-    UNIT_ASSERT_EQUAL(it, l.End());
-}
-
+    for (size_t i = 1; i <= M; ++i, ++it) { 
+        UNIT_ASSERT_EQUAL((int)i, *it); 
+    } 
+ 
+    UNIT_ASSERT_EQUAL(it, l.End()); 
+} 
+ 
 static void TestAppend(int N, int M) {
-    TMyList l(N);
-    TMyList l2(M);
-    l.Append(l2);
-
-    UNIT_ASSERT(l2.Empty());
-    CheckIterationAfterAppend(l, N, M);
-}
-
-void TListTest::TestAppend() {
+    TMyList l(N); 
+    TMyList l2(M); 
+    l.Append(l2); 
+ 
+    UNIT_ASSERT(l2.Empty()); 
+    CheckIterationAfterAppend(l, N, M); 
+} 
+ 
+void TListTest::TestAppend() { 
     ::TestAppend(500, 500);
     ::TestAppend(0, 0);
     ::TestAppend(1, 0);

@@ -268,19 +268,19 @@ bool GetRemoteAddr(SOCKET Socket, char* str, socklen_t size) {
 void SetSocketTimeout(SOCKET s, long timeout) {
     SetSocketTimeout(s, timeout, 0);
 }
- 
+
 void SetSocketTimeout(SOCKET s, long sec, long msec) {
-#ifdef SO_SNDTIMEO 
+#ifdef SO_SNDTIMEO
     #ifdef _darwin_
     const timeval timeout = {sec, (__darwin_suseconds_t)msec * 1000};
     #elif defined(_unix_)
     const timeval timeout = {sec, msec * 1000};
     #else
-    const int timeout = sec * 1000 + msec; 
+    const int timeout = sec * 1000 + msec;
     #endif
     CheckedSetSockOpt(s, SOL_SOCKET, SO_RCVTIMEO, timeout, "recv timeout");
     CheckedSetSockOpt(s, SOL_SOCKET, SO_SNDTIMEO, timeout, "send timeout");
-#endif 
+#endif
 }
 
 void SetLinger(SOCKET s, bool on, unsigned len) {

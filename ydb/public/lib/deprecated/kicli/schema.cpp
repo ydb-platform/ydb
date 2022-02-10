@@ -121,7 +121,7 @@ void TSchemaObject::Drop() {
         break;
     case EPathType::Unknown:
     case EPathType::SubDomain:
-    case EPathType::RtmrVolume: 
+    case EPathType::RtmrVolume:
         throw yexception() << "Wrong drop";
         break;
     }
@@ -185,7 +185,7 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
     case NKikimrSchemeOp::EPathTypeSubDomain:
         return TSchemaObject::EPathType::SubDomain;
     case NKikimrSchemeOp::EPathTypeRtmrVolume:
-        return TSchemaObject::EPathType::RtmrVolume; 
+        return TSchemaObject::EPathType::RtmrVolume;
     case NKikimrSchemeOp::EPathTypeBlockStoreVolume:
         return TSchemaObject::EPathType::BlockStoreVolume;
     case NKikimrSchemeOp::EPathTypeFileStore:

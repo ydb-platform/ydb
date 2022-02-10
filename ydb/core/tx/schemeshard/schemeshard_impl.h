@@ -164,7 +164,7 @@ public:
     THashMap<TPathId, TTxId> LockedPaths;
 
     THashMap<TPathId, TPersQueueGroupInfo::TPtr> PersQueueGroups;
-    THashMap<TPathId, TRtmrVolumeInfo::TPtr> RtmrVolumes; 
+    THashMap<TPathId, TRtmrVolumeInfo::TPtr> RtmrVolumes;
     THashMap<TPathId, TSolomonVolumeInfo::TPtr> SolomonVolumes;
     THashMap<TPathId, TSubDomainInfo::TPtr> SubDomains;
     THashMap<TPathId, TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes;

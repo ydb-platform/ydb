@@ -69,10 +69,10 @@ public:
         return values;
     }
 
-    grpc_compression_level GetCompressionLevel() const { 
-        return Context.compression_level(); 
-    } 
- 
+    grpc_compression_level GetCompressionLevel() const {
+        return Context.compression_level();
+    }
+
     void Shutdown() override {
         // Shutdown may only be called after request has started successfully
         if (Context.c_call())

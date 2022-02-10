@@ -2360,17 +2360,17 @@ void TSchemeShard::PersistRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId, const 
     Y_VERIFY(IsLocalId(pathId));
 
     db.Table<Schema::RtmrVolumes>().Key(pathId.LocalPathId).Update(
-        NIceDb::TUpdate<Schema::RtmrVolumes::PartitionsCount>(rtmrVol->Partitions.size())); 
- 
-    for (const auto& partition: rtmrVol->Partitions) { 
-        TString partitionId = TString((const char*)partition.second->Id.dw, sizeof(TGUID)); 
- 
+        NIceDb::TUpdate<Schema::RtmrVolumes::PartitionsCount>(rtmrVol->Partitions.size()));
+
+    for (const auto& partition: rtmrVol->Partitions) {
+        TString partitionId = TString((const char*)partition.second->Id.dw, sizeof(TGUID));
+
         db.Table<Schema::RTMRPartitions>().Key(pathId.LocalPathId, partition.second->ShardIdx.GetLocalId()).Update(
-            NIceDb::TUpdate<Schema::RTMRPartitions::PartitionId>(partitionId), 
-            NIceDb::TUpdate<Schema::RTMRPartitions::BusKey>(partition.second->BusKey)); 
-    } 
-} 
- 
+            NIceDb::TUpdate<Schema::RTMRPartitions::PartitionId>(partitionId),
+            NIceDb::TUpdate<Schema::RTMRPartitions::BusKey>(partition.second->BusKey));
+    }
+}
+
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {
     Y_VERIFY(IsLocalId(pathId));
 

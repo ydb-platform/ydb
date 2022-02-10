@@ -919,19 +919,19 @@ message TPersQueueGroupDescription {
     optional NKikimrPQ.TBootstrapConfig BootstrapConfig = 13;
 }
 
-message TRtmrVolumeDescription { 
-    message TPartition { 
-        optional bytes PartitionId = 1; 
-        optional uint64 BusKey = 2; 
-        optional uint64 TabletId = 3; 
-    } 
- 
-    optional string Name = 1; 
-    optional uint64 PathId = 2; 
-    optional uint64 PartitionsCount = 3; 
-    repeated TPartition Partitions = 4; 
-} 
- 
+message TRtmrVolumeDescription {
+    message TPartition {
+        optional bytes PartitionId = 1;
+        optional uint64 BusKey = 2;
+        optional uint64 TabletId = 3;
+    }
+
+    optional string Name = 1;
+    optional uint64 PathId = 2;
+    optional uint64 PartitionsCount = 3;
+    repeated TPartition Partitions = 4;
+}
+
 message TBlockStoreVolumeDescription {
     message TPartition {
         optional uint32 PartitionId = 1;
@@ -1080,7 +1080,7 @@ enum EOperationType {
     ESchemeOpBackup = 11;
     ESchemeOpCreateSubDomain = 12;
     ESchemeOpDropSubDomain = 13;
-    ESchemeOpCreateRtmrVolume = 14; 
+    ESchemeOpCreateRtmrVolume = 14;
     ESchemeOpCreateBlockStoreVolume = 15;
     ESchemeOpAlterBlockStoreVolume = 16;
     ESchemeOpAssignBlockStoreVolume = 17;
@@ -1235,7 +1235,7 @@ message TModifyScheme {
     optional TSplitMergeTablePartitions SplitMergeTablePartitions = 10;
     optional TBackupTask Backup = 11;
     optional NKikimrSubDomains.TSubDomainSettings SubDomain = 12;
-    optional TRtmrVolumeDescription CreateRtmrVolume = 13; 
+    optional TRtmrVolumeDescription CreateRtmrVolume = 13;
     optional TBlockStoreVolumeDescription CreateBlockStoreVolume = 14;
     optional TBlockStoreVolumeDescription AlterBlockStoreVolume = 15;
     optional TBlockStoreAssignOp AssignBlockStoreVolume = 16;
@@ -1314,7 +1314,7 @@ enum EPathType {
     EPathTypeTable = 2;
     EPathTypePersQueueGroup = 3;
     EPathTypeSubDomain = 4;
-    EPathTypeRtmrVolume = 5; 
+    EPathTypeRtmrVolume = 5;
     EPathTypeBlockStoreVolume = 6;
     EPathTypeKesus = 7;
     EPathTypeSolomonVolume = 8;
@@ -1445,7 +1445,7 @@ message TPathDescription {
     optional NKikimrTableStats.TTableStats TableStats = 8;
     optional NKikimrTabletBase.TMetrics TabletMetrics = 9;
     optional NKikimrSubDomains.TDomainDescription DomainDescription = 10;
-    optional TRtmrVolumeDescription RtmrVolumeDescription = 11; // for rtmr volume 
+    optional TRtmrVolumeDescription RtmrVolumeDescription = 11; // for rtmr volume
     optional TBlockStoreVolumeDescription BlockStoreVolumeDescription = 12;
     optional TKesusDescription Kesus = 13;
     optional TSolomonVolumeDescription SolomonDescription = 14;

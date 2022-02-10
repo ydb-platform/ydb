@@ -31,7 +31,7 @@ namespace NKikimr {
             EvGetTabletStorageInfo,
             EvLockTabletExecution,
             EvUnlockTabletExecution,
-            EvInitiateTabletExternalBoot, 
+            EvInitiateTabletExternalBoot,
             EvRequestHiveDomainStats,
             EvAdoptTable,
             EvInvalidateStoragePools,
@@ -699,16 +699,16 @@ namespace NKikimr {
                 Record.SetStatusMessage(statusMessage);
             }
         };
- 
-        struct TEvInitiateTabletExternalBoot : public TEventPB<TEvInitiateTabletExternalBoot, 
-                NKikimrHive::TEvBootTablet, EvInitiateTabletExternalBoot> 
-        { 
-            TEvInitiateTabletExternalBoot() = default; 
- 
-            explicit TEvInitiateTabletExternalBoot(ui64 tabletId) { 
-                Record.SetTabletID(tabletId); 
-            } 
-        }; 
+
+        struct TEvInitiateTabletExternalBoot : public TEventPB<TEvInitiateTabletExternalBoot,
+                NKikimrHive::TEvBootTablet, EvInitiateTabletExternalBoot>
+        {
+            TEvInitiateTabletExternalBoot() = default;
+
+            explicit TEvInitiateTabletExternalBoot(ui64 tabletId) {
+                Record.SetTabletID(tabletId);
+            }
+        };
 
         struct TEvRequestHiveDomainStats : TEventPB<TEvRequestHiveDomainStats, NKikimrHive::TEvRequestHiveDomainStats, EvRequestHiveDomainStats> {
             TEvRequestHiveDomainStats() = default;

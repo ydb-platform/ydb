@@ -167,10 +167,10 @@ public:
         return TBaseAsyncContext<TService>::GetPeerMetaValues(key);
     }
 
-    grpc_compression_level GetCompressionLevel() const override { 
-        return TBaseAsyncContext<TService>::GetCompressionLevel(); 
-    } 
- 
+    grpc_compression_level GetCompressionLevel() const override {
+        return TBaseAsyncContext<TService>::GetCompressionLevel();
+    }
+
     //! Get pointer to the request's message.
     const NProtoBuf::Message* GetRequest() const override {
         return Request_;

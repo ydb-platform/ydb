@@ -40,7 +40,7 @@ namespace NMonitoring {
 
     void TMetricRegistryPage::OutputText(IOutputStream& out, NMonitoring::IMonHttpRequest&) {
         IMetricEncoderPtr encoder = NMonitoring::EncoderText(&out);
-        RegistryRawPtr_->Accept(TInstant::Zero(), encoder.Get()); 
+        RegistryRawPtr_->Accept(TInstant::Zero(), encoder.Get());
     }
 
 }

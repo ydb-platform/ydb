@@ -39,16 +39,16 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
         }
     }
 
-    // Tests on zero-size correctness
+    // Tests on zero-size correctness 
     Y_UNIT_TEST(ZeroSizeCorrectnes) {
-        TTopKeeper<int> h(0);
-        for (int i = 0; i < 100; ++i) {
-            h.Insert(i % 10 + i / 10);
-        }
-        h.Finalize();
-        UNIT_ASSERT(h.IsEmpty());
-    }
-
+        TTopKeeper<int> h(0); 
+        for (int i = 0; i < 100; ++i) { 
+            h.Insert(i % 10 + i / 10); 
+        } 
+        h.Finalize(); 
+        UNIT_ASSERT(h.IsEmpty()); 
+    } 
+ 
     // Tests SetMaxSize behaviour
     Y_UNIT_TEST(SetMaxSizeTest) {
         int m = 20000;

@@ -36,7 +36,7 @@ using TGetGroupListGid = gid_t;
     #endif
 #elif defined(_win_)
     #include <string>
- 
+
     #include "winint.h"
 
 using TPid = HANDLE;
@@ -53,10 +53,10 @@ using TExitStatus = DWORD;
     {}
 // #define DBG(stmt) stmt
 
-namespace { 
+namespace {
     constexpr static size_t DATA_BUFFER_SIZE = 128 * 1024;
 
-#if defined(_unix_) 
+#if defined(_unix_)
     void SetUserGroups(const passwd* pw) {
         int ngroups = 1;
         THolder<gid_t, TFree> groups = THolder<gid_t, TFree>(static_cast<gid_t*>(malloc(ngroups * sizeof(gid_t))));
@@ -73,40 +73,40 @@ namespace {
 
     void ImpersonateUser(const TShellCommandOptions::TUserOptions& userOpts) {
         if (GetUsername() == userOpts.Name) {
-            return; 
-        } 
+            return;
+        }
         const passwd* newUser = getpwnam(userOpts.Name.c_str());
-        if (!newUser) { 
-            ythrow TSystemError(errno) << "getpwnam failed"; 
-        } 
+        if (!newUser) {
+            ythrow TSystemError(errno) << "getpwnam failed";
+        }
         if (userOpts.UseUserGroups) {
             SetUserGroups(newUser);
         }
-        if (setuid(newUser->pw_uid)) { 
-            ythrow TSystemError(errno) << "setuid failed"; 
-        } 
-    } 
-#elif defined(_win_) 
+        if (setuid(newUser->pw_uid)) {
+            ythrow TSystemError(errno) << "setuid failed";
+        }
+    }
+#elif defined(_win_)
     constexpr static size_t MAX_COMMAND_LINE = 32 * 1024;
 
     std::wstring GetWString(const char* astring) {
-        if (!astring) 
-            return std::wstring(); 
- 
-        std::string str(astring); 
-        return std::wstring(str.begin(), str.end()); 
-    } 
- 
+        if (!astring)
+            return std::wstring();
+
+        std::string str(astring);
+        return std::wstring(str.begin(), str.end());
+    }
+
     std::string GetAString(const wchar_t* wstring) {
-        if (!wstring) 
-            return std::string(); 
- 
-        std::wstring str(wstring); 
-        return std::string(str.begin(), str.end()); 
-    } 
-#endif 
-} 
- 
+        if (!wstring)
+            return std::string();
+
+        std::wstring str(wstring);
+        return std::string(str.begin(), str.end());
+    }
+#endif
+}
+
 // temporary measure to avoid rewriting all poll calls on win TPipeHandle
 #if defined(_win_)
 using REALPIPEHANDLE = HANDLE;
@@ -223,7 +223,7 @@ private:
     TShellCommandOptions::EHandleMode OutputMode = TShellCommandOptions::HANDLE_STREAM;
     TShellCommandOptions::EHandleMode ErrorMode = TShellCommandOptions::HANDLE_STREAM;
 
-    TShellCommandOptions::TUserOptions User; 
+    TShellCommandOptions::TUserOptions User;
     THashMap<TString, TString> Environment;
     int Nice = 0;
     std::function<void()> FuncAfterFork = {};
@@ -515,7 +515,7 @@ public:
 #if defined(_win_)
 void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
     // Setup STARTUPINFO to redirect handles.
-    STARTUPINFOW startup_info; 
+    STARTUPINFOW startup_info;
     ZeroMemory(&startup_info, sizeof(startup_info));
     startup_info.cb = sizeof(startup_info);
     startup_info.dwFlags = STARTF_USESTDHANDLES;
@@ -566,30 +566,30 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
     Copy(cmd.data(), cmd.data() + cmd.size(), cmdcopy.Data());
     *(cmdcopy.Data() + cmd.size()) = 0;
 
-    const wchar_t* cwd = NULL; 
-    std::wstring cwdBuff; 
+    const wchar_t* cwd = NULL;
+    std::wstring cwdBuff;
     if (WorkDir.size()) {
         cwdBuff = GetWString(WorkDir.data());
-        cwd = cwdBuff.c_str(); 
-    } 
- 
+        cwd = cwdBuff.c_str();
+    }
+
     void* lpEnvironment = nullptr;
     TString env;
-    if (!Environment.empty()) { 
+    if (!Environment.empty()) {
         for (auto e = Environment.begin(); e != Environment.end(); ++e) {
-            env += e->first + '=' + e->second + '\0'; 
-        } 
-        env += '\0'; 
+            env += e->first + '=' + e->second + '\0';
+        }
+        env += '\0';
         lpEnvironment = const_cast<char*>(env.data());
-    } 
- 
+    }
+
     // disable messagebox (may be in debug too)
     #ifndef NDEBUG
     SetErrorMode(GetErrorMode() | SEM_NOGPFAULTERRORBOX);
     #endif
-    BOOL res = 0; 
-    if (User.Name.empty() || GetUsername() == User.Name) { 
-        res = CreateProcessW( 
+    BOOL res = 0;
+    if (User.Name.empty() || GetUsername() == User.Name) {
+        res = CreateProcessW(
             nullptr, // image name
             cmdcopy.Data(),
             nullptr,       // process security attributes
@@ -600,8 +600,8 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
             cwd,           // current directory
             &startup_info,
             &process_info);
-    } else { 
-        res = CreateProcessWithLogonW( 
+    } else {
+        res = CreateProcessWithLogonW(
             GetWString(User.Name.data()).c_str(),
             nullptr, // domain (if this parameter is NULL, the user name must be specified in UPN format)
             GetWString(User.Password.data()).c_str(),
@@ -613,9 +613,9 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
             cwd,           // current directory
             &startup_info,
             &process_info);
-    } 
- 
-    if (!res) { 
+    }
+
+    if (!res) {
         AtomicSet(ExecutionStatus, SHELL_ERROR);
         /// @todo: write to error stream if set
         TStringOutput out(CollectedError);
@@ -666,9 +666,9 @@ TString TShellCommand::TImpl::GetQuotedCommand() const {
 
 #if defined(_unix_)
 void TShellCommand::TImpl::OnFork(TPipes& pipes, sigset_t oldmask, char* const* argv, char* const* envp, const std::function<void()>& afterFork) const {
-    try { 
+    try {
         if (DetachSession) {
-            setsid(); 
+            setsid();
         }
 
         // reset signal handlers from parent
@@ -692,15 +692,15 @@ void TShellCommand::TImpl::OnFork(TPipes& pipes, sigset_t oldmask, char* const* 
         TFileHandle sOut(1);
         TFileHandle sErr(2);
         if (InputMode != TShellCommandOptions::HANDLE_INHERIT) {
-            pipes.InputPipeFd[1].Close(); 
+            pipes.InputPipeFd[1].Close();
             TFileHandle sInNew(pipes.InputPipeFd[0]);
             sIn.LinkTo(sInNew);
-            sIn.Release(); 
-            sInNew.Release(); 
-        } else { 
-            // do not close fd 0 - next open will return it and confuse all readers 
-            /// @todo in case of real need - reopen /dev/null 
-        } 
+            sIn.Release();
+            sInNew.Release();
+        } else {
+            // do not close fd 0 - next open will return it and confuse all readers
+            /// @todo in case of real need - reopen /dev/null
+        }
         if (OutputMode != TShellCommandOptions::HANDLE_INHERIT) {
             pipes.OutputPipeFd[0].Close();
             TFileHandle sOutNew(pipes.OutputPipeFd[1]);
@@ -719,37 +719,37 @@ void TShellCommand::TImpl::OnFork(TPipes& pipes, sigset_t oldmask, char* const* 
         if (WorkDir.size()) {
             NFs::SetCurrentWorkingDirectory(WorkDir);
         }
- 
-        if (CloseAllFdsOnExec) { 
+
+        if (CloseAllFdsOnExec) {
             for (int fd = NSystemInfo::MaxOpenFiles(); fd > STDERR_FILENO; --fd) {
-                fcntl(fd, F_SETFD, FD_CLOEXEC); 
-            } 
+                fcntl(fd, F_SETFD, FD_CLOEXEC);
+            }
         }
 
-        if (!User.Name.empty()) { 
+        if (!User.Name.empty()) {
             ImpersonateUser(User);
-        } 
- 
-        if (Nice) { 
+        }
+
+        if (Nice) {
             // Don't verify Nice() call - it does not work properly with WSL https://github.com/Microsoft/WSL/issues/1838
             ::Nice(Nice);
-        } 
+        }
         if (afterFork) {
             afterFork();
         }
 
         if (envp == nullptr) {
             execvp(argv[0], argv);
-        } else { 
+        } else {
             execve(argv[0], argv, envp);
-        } 
-        Cerr << "Process was not created: " << LastSystemErrorText() << Endl; 
-    } catch (const std::exception& error) { 
-        Cerr << "Process was not created: " << error.what() << Endl; 
-    } catch (...) { 
+        }
+        Cerr << "Process was not created: " << LastSystemErrorText() << Endl;
+    } catch (const std::exception& error) {
+        Cerr << "Process was not created: " << error.what() << Endl;
+    } catch (...) {
         Cerr << "Process was not created: "
              << "unknown error" << Endl;
-    } 
+    }
 
     _exit(-1);
 }
@@ -821,7 +821,7 @@ void TShellCommand::TImpl::Run() {
     if (pid == -1) {
         AtomicSet(ExecutionStatus, SHELL_ERROR);
         /// @todo check if pipes are still open
-        ythrow TSystemError() << "Cannot fork"; 
+        ythrow TSystemError() << "Cannot fork";
     } else if (pid == 0) { // child
         if (envp.size() != 0) {
             OnFork(pipes, oldmask, qargv.data(), envp.data(), FuncAfterFork);
@@ -1124,9 +1124,9 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
 TShellCommand::TShellCommand(const TStringBuf cmd, const TList<TString>& args, const TShellCommandOptions& options,
                              const TString& workdir)
     : Impl(new TImpl(cmd, args, options, workdir))
-{ 
-} 
- 
+{
+}
+
 TShellCommand::TShellCommand(const TStringBuf cmd, const TShellCommandOptions& options, const TString& workdir)
     : Impl(new TImpl(cmd, TList<TString>(), options, workdir))
 {

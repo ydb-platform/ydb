@@ -355,12 +355,12 @@ namespace NSorted {
             TBase::MakeUnique();
         }
 
-        inline TSimpleMap(std::initializer_list<value_type> il) 
-            : TBase(il) 
-        { 
-            TBase::MakeUnique(); 
-        } 
- 
+        inline TSimpleMap(std::initializer_list<value_type> il)
+            : TBase(il)
+        {
+            TBase::MakeUnique();
+        }
+
         inline TValueType& Get(const TKeyType& key) {
             typename TBase::iterator i = TBase::LowerBound(key);
             if (i == TBase::end() || key != i->first)
@@ -427,12 +427,12 @@ namespace NSorted {
             TBase::MakeUnique();
         }
 
-        inline TSimpleSet(std::initializer_list<value_type> il) 
-            : TBase(il) 
-        { 
-            TBase::MakeUnique(); 
-        } 
- 
+        inline TSimpleSet(std::initializer_list<value_type> il)
+            : TBase(il)
+        {
+            TBase::MakeUnique();
+        }
+
         // The method expects that there is a TValueType(TKeyType) constructor available
         inline TValueType& Get(const TKeyType& key) {
             typename TBase::iterator i = TBase::LowerBound(key);

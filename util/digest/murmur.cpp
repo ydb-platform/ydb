@@ -40,16 +40,16 @@ namespace NMurmurPrivate {
         switch (iter.Left()) {
             case 3:
                 h ^= data[2] << 16;
-                [[fallthrough]]; 
+                [[fallthrough]];
 
             case 2:
                 h ^= data[1] << 8;
-                [[fallthrough]]; 
+                [[fallthrough]];
 
             case 1:
                 h ^= data[0];
                 h *= m;
-                break; 
+                break;
         };
 
         h ^= h >> 13;
@@ -90,32 +90,32 @@ namespace NMurmurPrivate {
         switch (iter.Left()) {
             case 7:
                 h ^= ui64(data2[6]) << 48;
-                [[fallthrough]]; 
+                [[fallthrough]];
 
             case 6:
                 h ^= ui64(data2[5]) << 40;
-                [[fallthrough]]; 
+                [[fallthrough]];
 
             case 5:
                 h ^= ui64(data2[4]) << 32;
-                [[fallthrough]]; 
+                [[fallthrough]];
 
             case 4:
                 h ^= ui64(data2[3]) << 24;
-                [[fallthrough]]; 
+                [[fallthrough]];
 
             case 3:
                 h ^= ui64(data2[2]) << 16;
-                [[fallthrough]]; 
+                [[fallthrough]];
 
             case 2:
                 h ^= ui64(data2[1]) << 8;
-                [[fallthrough]]; 
+                [[fallthrough]];
 
             case 1:
                 h ^= ui64(data2[0]);
                 h *= m;
-                break; 
+                break;
         }
 
         h ^= h >> r;

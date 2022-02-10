@@ -4237,7 +4237,7 @@ std::function<void(TSession::TImpl*)> TSession::TImpl::GetSmartDeleter(std::shar
                 if (!client->ReturnSession(sessionImpl)) {
                     client->DeleteSession(sessionImpl);
                 }
-                break; 
+                break;
             }
             default:
             break;

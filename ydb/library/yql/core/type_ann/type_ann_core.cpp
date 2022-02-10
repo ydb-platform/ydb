@@ -1834,7 +1834,7 @@ namespace NTypeAnnImpl {
                     break;
                 }
             }
-            [[fallthrough]]; 
+            [[fallthrough]];
         }
         // passthrough with Struct
         case ETypeAnnotationKind::Struct:

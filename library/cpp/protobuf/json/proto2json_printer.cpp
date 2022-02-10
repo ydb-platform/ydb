@@ -426,7 +426,7 @@ namespace NProtobufJson {
                     default:
                         ythrow yexception() << "Unsupported enum mode.";
                 }
-                break; 
+                break;
             }
             case FieldDescriptor::CPPTYPE_STRING:
                 result = reflection->GetString(proto, &field);

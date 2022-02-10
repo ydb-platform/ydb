@@ -183,7 +183,7 @@ namespace NUri {
                     break;
                 case TScheme::SchemeEmpty:
                     Scheme = TScheme::SchemeUnknown;
-                    [[fallthrough]]; 
+                    [[fallthrough]];
                 case TScheme::SchemeUnknown:
                     wantCareFlags =
                         TFeature::FeatureSchemeFlexible | TFeature::FeatureNoRelPath;

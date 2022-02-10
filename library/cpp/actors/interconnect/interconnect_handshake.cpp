@@ -207,7 +207,7 @@ namespace NActors {
 
                     case NInterconnect::TSecureSocket::EStatus::ERROR:
                         Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, err, true);
-                        [[fallthrough]]; 
+                        [[fallthrough]];
 
                     case NInterconnect::TSecureSocket::EStatus::WANT_READ:
                         WaitPoller(true, false, "ReadEstablish");
@@ -224,7 +224,7 @@ namespace NActors {
             switch (const ui32 type = ev->GetTypeRewrite()) {
                 case TEvents::TSystem::Wakeup:
                     Fail(TEvHandshakeFail::HANDSHAKE_FAIL_TRANSIENT, Sprintf("Handshake timed out, State# %s", State.data()), true);
-                    [[fallthrough]]; 
+                    [[fallthrough]];
 
                 case ui32(ENetwork::NodeInfo):
                 case TEvInterconnect::EvNodeAddress:
@@ -878,9 +878,9 @@ namespace NActors {
                         Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, Sprintf("Connection failed: %s", strerror(err)), true);
                     }
                     break;
- 
-                default: 
-                    break; 
+
+                default:
+                    break;
             }
 
             auto it = LastLogNotice.find(PeerNodeId);

@@ -136,13 +136,13 @@ namespace NDatetime {
                 return *this;
             case F_DAY:
                 amount *= 24;
-                [[fallthrough]]; 
+                [[fallthrough]];
             case F_HOUR:
                 amount *= 60;
-                [[fallthrough]]; 
+                [[fallthrough]];
             case F_MIN:
                 amount *= 60;
-                [[fallthrough]]; 
+                [[fallthrough]];
             case F_SEC: {
                 return *this = New(AsTimeT() + amount, GMTOff, IsDst);
             }

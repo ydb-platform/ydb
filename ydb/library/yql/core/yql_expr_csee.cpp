@@ -269,7 +269,7 @@ namespace {
             if (left.Content().data() != right.Content().data()) {
                 return false;
             }
-            [[fallthrough]]; 
+            [[fallthrough]];
         case TExprNode::List:
             if (left.ChildrenSize() != right.ChildrenSize()) {
                 return false;

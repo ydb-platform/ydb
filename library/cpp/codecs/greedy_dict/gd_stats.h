@@ -61,12 +61,12 @@ namespace NGreedyDict {
         switch (score) {
             case ES_LEN_COUNT:
                 m = len;
-                [[fallthrough]]; 
+                [[fallthrough]];
             case ES_COUNT:
                 return m * count;
             case ES_LEN_SIMPLE:
                 m = len;
-                [[fallthrough]]; 
+                [[fallthrough]];
             case ES_SIMPLE:
                 return m * SimpleTest(modelp, count, total);
             case ES_SOLAR:

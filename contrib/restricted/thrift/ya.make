@@ -13,8 +13,8 @@ OWNER(
 
 NO_UTIL()
 
-NO_COMPILER_WARNINGS() 
- 
+NO_COMPILER_WARNINGS()
+
 ADDINCL(
     GLOBAL contrib/restricted/thrift
 )

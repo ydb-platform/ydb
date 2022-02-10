@@ -195,7 +195,7 @@ protected:
                 case hp_begin_chunk_header:
                     ChunkParser.Init();
                     State = hp_chunk_header;
-                    [[fallthrough]]; 
+                    [[fallthrough]];
 
                 case hp_chunk_header:
                     if ((ret = ChunkParser.Execute(buf, size)) < 0) {
@@ -232,7 +232,7 @@ protected:
                             return size;
                         size = 0;
                     }
-                    break; 
+                    break;
             }
         }
         return size;

@@ -16,10 +16,10 @@ namespace {
                 break;
             case 2:
                 Cerr << "FancyTerminateHandler called recursively" << Endl;
-                [[fallthrough]]; 
+                [[fallthrough]];
             default:
                 abort();
-                break; 
+                break;
         }
 
         if (std::current_exception()) {

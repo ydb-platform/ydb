@@ -505,7 +505,7 @@ public:
         switch (Stage) {
         case ERenderStage::Header:
             FinishHeader();
-            break; 
+            break;
         default:
             break;
         }

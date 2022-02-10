@@ -77,7 +77,7 @@ namespace NSc {
         switch (core.ValueType) {
             default: {
                 Y_ASSERT(false);
-                [[fallthrough]]; /* no break */ 
+                [[fallthrough]]; /* no break */
             }
             case EType::Null: {
                 out << TStringBuf("null");

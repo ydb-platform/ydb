@@ -43,7 +43,7 @@ public:
                 case BZ_STREAM_END: {
                     Clear();
                     Init();
-                    [[fallthrough]]; 
+                    [[fallthrough]];
                 }
 
                 case BZ_OK: {

@@ -1917,7 +1917,7 @@ static Y_FORCE_INLINE void* LFVAlloc(size_t size) {
 #else
     size_t bigsize = (size + pg - 1) & (~(pg - 1));
     p = LFAlloc(bigsize);
-#endif 
+#endif
 
     Y_ASSERT_NOBT((intptr_t)p % N_PAGE_SIZE == 0);
     return p;

@@ -57,23 +57,23 @@ extern "C" int posix_memalign(void** memptr, size_t alignment, size_t size) {
     return LFPosixMemalign(memptr, alignment, size);
 }
 
-extern "C" void* memalign(size_t alignment, size_t size) { 
-    void* ptr; 
+extern "C" void* memalign(size_t alignment, size_t size) {
+    void* ptr;
     int res = LFPosixMemalign(&ptr, alignment, size);
     return res ? nullptr : ptr;
-} 
- 
+}
+
 extern "C" void* aligned_alloc(size_t alignment, size_t size) {
     return memalign(alignment, size);
 }
 
 #if !defined(_MSC_VER) && !defined(_freebsd_)
-// Workaround for pthread_create bug in linux. 
-extern "C" void* __libc_memalign(size_t alignment, size_t size) { 
-    return memalign(alignment, size); 
-} 
-#endif 
- 
+// Workaround for pthread_create bug in linux.
+extern "C" void* __libc_memalign(size_t alignment, size_t size) {
+    return memalign(alignment, size);
+}
+#endif
+
 extern "C" void free(void* ptr) {
     LFFree(ptr);
 }

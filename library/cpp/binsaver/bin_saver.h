@@ -313,11 +313,11 @@ public:
         if (bRead) {
             ui64 size = 0;
             File.Read(&size, sizeof(size));
-            TBuffer buffer; 
-            buffer.Advance(size); 
+            TBuffer buffer;
+            buffer.Advance(size);
             if (size > 0)
                 File.Read(buffer.Data(), buffer.Size());
-            (*blob) = TBlob::FromBuffer(buffer); 
+            (*blob) = TBlob::FromBuffer(buffer);
         } else {
             const ui64 size = blob->Size();
             File.Write(&size, sizeof(size));

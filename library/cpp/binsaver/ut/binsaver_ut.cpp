@@ -63,9 +63,9 @@ struct TTypeWithArray {
 template <typename T, typename = std::enable_if_t<std::is_base_of<TCustomOuterSerializerTmpl, T>::value>>
 int operator&(T& s, IBinSaver& f);
 
-static bool operator==(const TBlob& l, const TBlob& r) { 
+static bool operator==(const TBlob& l, const TBlob& r) {
     return TStringBuf(l.AsCharPtr(), l.Size()) == TStringBuf(r.AsCharPtr(), r.Size());
-} 
+}
 
 Y_UNIT_TEST_SUITE(BinSaver){
     Y_UNIT_TEST(HasTrivialSerializer){
@@ -99,7 +99,7 @@ Y_UNIT_TEST(TestSets) {
     TestBinSaverSerialization(THashSet<TString>{"A", "B", "C"});
     TestBinSaverSerialization(TSet<TString>{"A", "B", "C"});
 }
- 
+
 Y_UNIT_TEST(TestMaps) {
     TestBinSaverSerialization(THashMap<TString, ui32>{{"A", 1}, {"B", 2}, {"C", 3}});
     TestBinSaverSerialization(TMap<TString, ui32>{{"A", 1}, {"B", 2}, {"C", 3}});

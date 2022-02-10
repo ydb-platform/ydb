@@ -101,7 +101,7 @@ public:
     TNode(unsigned long long ui);
     TNode(double d);
     TNode(bool b);
-    TNode(TMapType map);
+    TNode(TMapType map); 
 
     TNode(const TNode& rhs);
     TNode& operator=(const TNode& rhs);
@@ -358,7 +358,7 @@ inline TString TNode::ConvertTo<TString>() const {
         case NYT::TNode::Map:
         case NYT::TNode::Null:
         case NYT::TNode::Undefined:
-            ythrow TTypeError() << "ConvertTo<TString>() called for type " << GetType();
+            ythrow TTypeError() << "ConvertTo<TString>() called for type " << GetType(); 
     }
     Y_UNREACHABLE();
 }
@@ -380,7 +380,7 @@ inline double TNode::ConvertTo<double>() const {
         case NYT::TNode::Map:
         case NYT::TNode::Null:
         case NYT::TNode::Undefined:
-            ythrow TTypeError() << "ConvertTo<double>() called for type " << GetType();
+            ythrow TTypeError() << "ConvertTo<double>() called for type " << GetType(); 
     }
 }
 
@@ -401,7 +401,7 @@ inline bool TNode::ConvertTo<bool>() const {
         case NYT::TNode::Map:
         case NYT::TNode::Null:
         case NYT::TNode::Undefined:
-            ythrow TTypeError() << "ConvertTo<bool>() called for type " << GetType();
+            ythrow TTypeError() << "ConvertTo<bool>() called for type " << GetType(); 
     }
 }
 

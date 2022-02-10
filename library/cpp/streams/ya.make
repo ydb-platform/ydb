@@ -2,7 +2,7 @@ RECURSE(
     brotli
     brotli/ut
     base64
-    brotli
+    brotli 
     bzip2
     bzip2/ut
     factory

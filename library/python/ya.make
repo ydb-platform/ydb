@@ -197,8 +197,8 @@ RECURSE(
     tvmauth
     tvm2
     tvm2/tests
-    type_info
-    type_info/test
+    type_info 
+    type_info/test 
     unique_id
     vault_client
     watch_dog

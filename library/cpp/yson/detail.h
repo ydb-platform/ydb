@@ -453,7 +453,7 @@ namespace NYson {
                     default:
                         ythrow TYsonException() << "Incorrect %-literal prefix: '" << ch << "'";
                 }
-
+ 
                 for (size_t i = 0; i < expectedString.size(); ++i) {
                     if (expectedString[i] != ch) {
                         ythrow TYsonException()
@@ -464,10 +464,10 @@ namespace NYson {
                     TBaseStream::Advance(1);
                     ch = TBaseStream::template GetChar<AllowFinish>();
                 }
-
+ 
                 return expectedValue;
-            }
-
+            } 
+ 
             void ReadQuotedString(TStringBuf* value) {
                 Buffer_.clear();
                 while (true) {
@@ -494,14 +494,14 @@ namespace NYson {
                     }
                     CheckMemoryLimit();
                 }
-
+ 
                 auto unquotedValue = UnescapeC(Buffer_.data(), Buffer_.size());
                 Buffer_.clear();
                 Buffer_.insert(Buffer_.end(), unquotedValue.data(), unquotedValue.data() + unquotedValue.size());
                 CheckMemoryLimit();
                 *value = TStringBuf(Buffer_.data(), Buffer_.size());
             }
-
+ 
             template <bool AllowFinish>
             void ReadUnquotedString(TStringBuf* value) {
                 Buffer_.clear();

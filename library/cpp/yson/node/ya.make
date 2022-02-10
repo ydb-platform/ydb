@@ -17,7 +17,7 @@ SRCS(
     node_io.cpp
     node_builder.cpp
     node_visitor.cpp
-    serialize.cpp
+    serialize.cpp 
 )
 
 END()

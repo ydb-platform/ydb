@@ -5,7 +5,7 @@
 #include <library/cpp/yt/misc/enum.h>
 
 #include <optional>
-
+ 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -15,13 +15,13 @@ TString EncodeEnumValue(TStringBuf value);
 
 template <class T>
 T ParseEnum(TStringBuf value);
-
-template <class T>
+ 
+template <class T> 
 void FormatEnum(TStringBuilderBase* builder, T value, bool lowerCase);
-
+ 
 template <class T>
 TString FormatEnum(T value, typename TEnumTraits<T>::TType* = nullptr);
-
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

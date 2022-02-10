@@ -331,7 +331,7 @@ RECURSE(
     sighandler
     simhash
     simhash/ut
-    skiff
+    skiff 
     sliding_window
     sliding_window/ut
     solve_ambig

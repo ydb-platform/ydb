@@ -1,38 +1,38 @@
 #include "node_visitor.h"
 
-#include <util/generic/algorithm.h>
+#include <util/generic/algorithm.h> 
 #include <util/string/printf.h>
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-template <typename Fun>
-void Iterate(const TNode::TMapType& nodeMap, bool sortByKey, Fun action)
-{
-    if (sortByKey) {
-        TVector<TNode::TMapType::const_iterator> iterators;
-        for (auto it = nodeMap.begin(); it != nodeMap.end(); ++it) {
-            iterators.push_back(it);
-        }
-        SortBy(iterators, [](TNode::TMapType::const_iterator it) { return it->first; });
-        for (const auto& it : iterators) {
-            action(*it);
-        }
-    } else {
-        ForEach(nodeMap.begin(), nodeMap.end(), action);
-    }
-}
-
-} // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-
+namespace { 
+ 
+template <typename Fun> 
+void Iterate(const TNode::TMapType& nodeMap, bool sortByKey, Fun action) 
+{ 
+    if (sortByKey) { 
+        TVector<TNode::TMapType::const_iterator> iterators; 
+        for (auto it = nodeMap.begin(); it != nodeMap.end(); ++it) { 
+            iterators.push_back(it); 
+        } 
+        SortBy(iterators, [](TNode::TMapType::const_iterator it) { return it->first; }); 
+        for (const auto& it : iterators) { 
+            action(*it); 
+        } 
+    } else { 
+        ForEach(nodeMap.begin(), nodeMap.end(), action); 
+    } 
+} 
+ 
+} // namespace 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 TNodeVisitor::TNodeVisitor(NYson::IYsonConsumer* consumer, bool sortMapKeys)
     : Consumer_(consumer)
-    , SortMapKeys_(sortMapKeys)
+    , SortMapKeys_(sortMapKeys) 
 { }
 
 void TNodeVisitor::Visit(const TNode& node)
@@ -44,14 +44,14 @@ void TNodeVisitor::VisitAny(const TNode& node)
 {
     if (node.HasAttributes()) {
         Consumer_->OnBeginAttributes();
-        Iterate(node.GetAttributes().AsMap(), SortMapKeys_, [&](const std::pair<TString, TNode>& item) {
+        Iterate(node.GetAttributes().AsMap(), SortMapKeys_, [&](const std::pair<TString, TNode>& item) { 
             Consumer_->OnKeyedItem(item.first);
             if (item.second.IsUndefined()) {
-                ythrow TNode::TTypeError() << "unable to visit attribute value of type "
-                    << TNode::EType::Undefined << "; attribute name: `" << item.first << '\'' ;
+                ythrow TNode::TTypeError() << "unable to visit attribute value of type " 
+                    << TNode::EType::Undefined << "; attribute name: `" << item.first << '\'' ; 
             }
             VisitAny(item.second);
-        });
+        }); 
         Consumer_->OnEndAttributes();
     }
 
@@ -81,7 +81,7 @@ void TNodeVisitor::VisitAny(const TNode& node)
             VisitEntity();
             break;
         case TNode::Undefined:
-            ythrow TNode::TTypeError() << "unable to visit TNode of type " << node.GetType();
+            ythrow TNode::TTypeError() << "unable to visit TNode of type " << node.GetType(); 
         default:
             Y_FAIL("Unexpected type: %d", node.GetType());
     }
@@ -119,8 +119,8 @@ void TNodeVisitor::VisitList(const TNode::TListType& nodeList)
     for (const auto& item : nodeList) {
         Consumer_->OnListItem();
         if (item.IsUndefined()) {
-            ythrow TNode::TTypeError() << "unable to visit list node child of type "
-                << TNode::EType::Undefined << "; list index: " << index;
+            ythrow TNode::TTypeError() << "unable to visit list node child of type " 
+                << TNode::EType::Undefined << "; list index: " << index; 
         }
         VisitAny(item);
         ++index;
@@ -131,14 +131,14 @@ void TNodeVisitor::VisitList(const TNode::TListType& nodeList)
 void TNodeVisitor::VisitMap(const TNode::TMapType& nodeMap)
 {
     Consumer_->OnBeginMap();
-    Iterate(nodeMap, SortMapKeys_, [&](const std::pair<TString, TNode>& item) {
+    Iterate(nodeMap, SortMapKeys_, [&](const std::pair<TString, TNode>& item) { 
         Consumer_->OnKeyedItem(item.first);
         if (item.second.IsUndefined()) {
-            ythrow TNode::TTypeError() << "unable to visit map node child of type "
-                << TNode::EType::Undefined << "; map key: `" << item.first << '\'' ;
+            ythrow TNode::TTypeError() << "unable to visit map node child of type " 
+                << TNode::EType::Undefined << "; map key: `" << item.first << '\'' ; 
         }
         VisitAny(item.second);
-    });
+    }); 
     Consumer_->OnEndMap();
 }
 

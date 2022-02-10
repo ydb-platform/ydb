@@ -108,16 +108,16 @@ struct TEnumTraits<T, true>
 #define DEFINE_ENUM_WITH_UNDERLYING_TYPE(name, underlyingType, seq) \
     ENUM__CLASS(name, underlyingType, seq) \
     ENUM__BEGIN_TRAITS(name, underlyingType, false, false, seq) \
-    ENUM__MINMAX \
-    ENUM__VALIDATE_UNIQUE(name) \
-    ENUM__END_TRAITS(name)
+    ENUM__MINMAX \ 
+    ENUM__VALIDATE_UNIQUE(name) \ 
+    ENUM__END_TRAITS(name) 
 
 //! Defines a smart enumeration with a specific underlying type.
 //! Duplicate enumeration values are allowed.
 #define DEFINE_AMBIGUOUS_ENUM_WITH_UNDERLYING_TYPE(name, underlyingType, seq) \
     ENUM__CLASS(name, underlyingType, seq) \
     ENUM__BEGIN_TRAITS(name, underlyingType, false, false, seq) \
-    ENUM__MINMAX \
+    ENUM__MINMAX \ 
     ENUM__END_TRAITS(name)
 
 //! Defines a smart enumeration with the default |int| underlying type.
@@ -133,8 +133,8 @@ struct TEnumTraits<T, true>
 #define DEFINE_BIT_ENUM_WITH_UNDERLYING_TYPE(name, underlyingType, seq) \
     ENUM__CLASS(name, underlyingType, seq) \
     ENUM__BEGIN_TRAITS(name, underlyingType, true, false, seq) \
-    ENUM__DECOMPOSE \
-    ENUM__VALIDATE_UNIQUE(name) \
+    ENUM__DECOMPOSE \ 
+    ENUM__VALIDATE_UNIQUE(name) \ 
     ENUM__END_TRAITS(name) \
     ENUM__BITWISE_OPS(name)
 
@@ -148,7 +148,7 @@ struct TEnumTraits<T, true>
 #define DEFINE_AMBIGUOUS_BIT_ENUM_WITH_UNDERLYING_TYPE(name, underlyingType, seq) \
     ENUM__CLASS(name, underlyingType, seq) \
     ENUM__BEGIN_TRAITS(name, underlyingType, true, false, seq) \
-    ENUM__DECOMPOSE \
+    ENUM__DECOMPOSE \ 
     ENUM__END_TRAITS(name) \
     ENUM__BITWISE_OPS(name)
 
@@ -169,8 +169,8 @@ struct TEnumTraits<T, true>
 #define DEFINE_STRING_SERIALIZABLE_ENUM_WITH_UNDERLYING_TYPE(name, underlyingType, seq) \
     ENUM__CLASS(name, underlyingType, seq) \
     ENUM__BEGIN_TRAITS(name, underlyingType, false, true, seq) \
-    ENUM__MINMAX \
-    ENUM__VALIDATE_UNIQUE(name) \
+    ENUM__MINMAX \ 
+    ENUM__VALIDATE_UNIQUE(name) \ 
     ENUM__END_TRAITS(name) \
 
 //! Defines a smart enumeration with a specific underlying type and IsStringSerializable attribute.
@@ -178,7 +178,7 @@ struct TEnumTraits<T, true>
 #define DEFINE_AMBIGUOUS_STRING_SERIALIZABLE_ENUM_WITH_UNDERLYING_TYPE(name, underlyingType, seq) \
     ENUM__CLASS(name, underlyingType, seq) \
     ENUM__BEGIN_TRAITS(name, underlyingType, false, true, seq) \
-    ENUM__MINMAX \
+    ENUM__MINMAX \ 
     ENUM__END_TRAITS(name)
 
 //! Defines a smart enumeration with the default |int| underlying type and IsStringSerializable attribute.

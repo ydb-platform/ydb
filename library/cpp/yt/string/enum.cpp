@@ -26,17 +26,17 @@ TString EncodeEnumValue(TStringBuf value)
 namespace NDetail {
 
 void ThrowMalformedEnumValueException(TStringBuf typeName, TStringBuf value)
-{
+{ 
     throw TSimpleException(Format("Error parsing %v value %Qv",
         typeName,
         value));
-}
-
+} 
+ 
 void FormatUnknownEnumValue(TStringBuilderBase* builder, TStringBuf name, i64 value)
-{
-    builder->AppendFormat("%v(%v)", name, value);
-}
-
+{ 
+    builder->AppendFormat("%v(%v)", name, value); 
+} 
+ 
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -47,7 +47,7 @@ namespace NUri {
             }
         };
 
-    }
+    } 
 
     const TSchemeInfo& TSchemeInfo::Get(const TStringBuf& scheme) {
         return Registry[TSchemeInfoMap::Instance().Get(scheme)];

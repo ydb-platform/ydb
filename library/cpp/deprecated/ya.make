@@ -40,10 +40,10 @@ RECURSE(
     parse_utils
     parse_utils/ut
     small_array
-    solartrie
-    solartrie/indexed_region/ut
-    solartrie/test
-    solartrie/test/tests
-    solartrie/ut
+    solartrie 
+    solartrie/indexed_region/ut 
+    solartrie/test 
+    solartrie/test/tests 
+    solartrie/ut 
     split
 )

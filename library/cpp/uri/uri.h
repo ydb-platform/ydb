@@ -623,4 +623,4 @@ Y_DECLARE_OUT_SPEC(inline, NUri::TUri, out, url) {
 
 Y_DECLARE_OUT_SPEC(inline, NUri::TUri::TLinkType, out, t) {
     out << NUri::LinkTypeToString(t);
-}
+} 

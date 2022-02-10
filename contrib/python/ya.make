@@ -1068,7 +1068,7 @@ RECURSE(
     timelib
     timeout-decorator
     tinycss2
-    tinyrpc 
+    tinyrpc
     tldextract
     toml
     tomli

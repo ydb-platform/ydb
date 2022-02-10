@@ -5,7 +5,7 @@ import "google/protobuf/struct.proto";
 
 package Ydb;
 option java_package = "com.yandex.ydb";
-option java_outer_classname = "ValueProtos"; 
+option java_outer_classname = "ValueProtos";
 
 message DecimalType {
     uint32 precision = 1;

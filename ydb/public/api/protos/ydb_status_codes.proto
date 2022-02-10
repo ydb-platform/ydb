@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package Ydb;
 option java_package = "com.yandex.ydb";
-option java_outer_classname = "StatusCodesProtos"; 
+option java_outer_classname = "StatusCodesProtos";
 
 message StatusIds {
     // reserved range [400000, 400999]

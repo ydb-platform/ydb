@@ -1,100 +1,100 @@
-#include "simple_reflection.h"
+#include "simple_reflection.h" 
 #include <library/cpp/protobuf/util/ut/sample_for_simple_reflection.pb.h>
 #include <library/cpp/protobuf/util/ut/extensions.pb.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
-using namespace NProtoBuf;
-
+ 
+using namespace NProtoBuf; 
+ 
 Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
     static TSample GenSampleForMergeFrom() {
         TSample smf;
-        smf.SetOneStr("one str");
-        smf.MutableOneMsg()->AddRepInt(1);
-        smf.AddRepMsg()->AddRepInt(2);
-        smf.AddRepMsg()->AddRepInt(3);
-        smf.AddRepStr("one rep str");
-        smf.AddRepStr("two rep str");
-        smf.SetAnotherOneStr("another one str");
-        return smf;
-    }
-
+        smf.SetOneStr("one str"); 
+        smf.MutableOneMsg()->AddRepInt(1); 
+        smf.AddRepMsg()->AddRepInt(2); 
+        smf.AddRepMsg()->AddRepInt(3); 
+        smf.AddRepStr("one rep str"); 
+        smf.AddRepStr("two rep str"); 
+        smf.SetAnotherOneStr("another one str"); 
+        return smf; 
+    } 
+ 
     Y_UNIT_TEST(MergeFromGeneric) {
         const TSample src(GenSampleForMergeFrom());
         TSample dst;
-        const Descriptor* descr = dst.GetDescriptor();
-
-        {
-            TMutableField dstOneStr(dst, descr->FindFieldByName("OneStr"));
-            TConstField srcOneStr(src, descr->FindFieldByName("OneStr"));
-            dstOneStr.MergeFrom(srcOneStr);
-            UNIT_ASSERT_VALUES_EQUAL(dst.GetOneStr(), src.GetOneStr());
-        }
-
-        { // MergeFrom for single message fields acts like a Message::MergeFrom
-            TMutableField dstOneMsg(dst, descr->FindFieldByName("OneMsg"));
-            dstOneMsg.MergeFrom(TConstField(src, descr->FindFieldByName("OneMsg")));
-            UNIT_ASSERT_VALUES_EQUAL(dst.GetOneMsg().RepIntSize(), src.GetOneMsg().RepIntSize());
-            dstOneMsg.MergeFrom(TConstField(src, descr->FindFieldByName("OneMsg")));
+        const Descriptor* descr = dst.GetDescriptor(); 
+ 
+        { 
+            TMutableField dstOneStr(dst, descr->FindFieldByName("OneStr")); 
+            TConstField srcOneStr(src, descr->FindFieldByName("OneStr")); 
+            dstOneStr.MergeFrom(srcOneStr); 
+            UNIT_ASSERT_VALUES_EQUAL(dst.GetOneStr(), src.GetOneStr()); 
+        } 
+ 
+        { // MergeFrom for single message fields acts like a Message::MergeFrom 
+            TMutableField dstOneMsg(dst, descr->FindFieldByName("OneMsg")); 
+            dstOneMsg.MergeFrom(TConstField(src, descr->FindFieldByName("OneMsg"))); 
+            UNIT_ASSERT_VALUES_EQUAL(dst.GetOneMsg().RepIntSize(), src.GetOneMsg().RepIntSize()); 
+            dstOneMsg.MergeFrom(TConstField(src, descr->FindFieldByName("OneMsg"))); 
             UNIT_ASSERT_VALUES_EQUAL(dst.GetOneMsg().RepIntSize(), src.GetOneMsg().RepIntSize() * 2);
-        }
-
-        { // MergeFrom for repeated fields acts like append
-            TMutableField dstRepMsg(dst, descr->FindFieldByName("RepMsg"));
-            dstRepMsg.MergeFrom(TConstField(src, descr->FindFieldByName("RepMsg")));
-            UNIT_ASSERT_VALUES_EQUAL(dst.RepMsgSize(), src.RepMsgSize());
-            dstRepMsg.MergeFrom(TConstField(src, descr->FindFieldByName("RepMsg")));
+        } 
+ 
+        { // MergeFrom for repeated fields acts like append 
+            TMutableField dstRepMsg(dst, descr->FindFieldByName("RepMsg")); 
+            dstRepMsg.MergeFrom(TConstField(src, descr->FindFieldByName("RepMsg"))); 
+            UNIT_ASSERT_VALUES_EQUAL(dst.RepMsgSize(), src.RepMsgSize()); 
+            dstRepMsg.MergeFrom(TConstField(src, descr->FindFieldByName("RepMsg"))); 
             UNIT_ASSERT_VALUES_EQUAL(dst.RepMsgSize(), src.RepMsgSize() * 2);
-            for (size_t repMsgIndex = 0; repMsgIndex < dst.RepMsgSize(); ++repMsgIndex) {
-                UNIT_ASSERT_VALUES_EQUAL(dst.GetRepMsg(repMsgIndex).RepIntSize(), src.GetRepMsg(0).RepIntSize());
-            }
-        }
-    }
-
+            for (size_t repMsgIndex = 0; repMsgIndex < dst.RepMsgSize(); ++repMsgIndex) { 
+                UNIT_ASSERT_VALUES_EQUAL(dst.GetRepMsg(repMsgIndex).RepIntSize(), src.GetRepMsg(0).RepIntSize()); 
+            } 
+        } 
+    } 
+ 
     Y_UNIT_TEST(MergeFromSelf) {
         const TSample sample(GenSampleForMergeFrom());
         TSample msg(sample);
-        const Descriptor* descr = msg.GetDescriptor();
-
-        TMutableField oneStr(msg, descr->FindFieldByName("OneStr"));
-        oneStr.MergeFrom(oneStr);
-        UNIT_ASSERT_VALUES_EQUAL(msg.GetOneStr(), sample.GetOneStr());
-
-        TMutableField oneMsg(msg, descr->FindFieldByName("OneMsg"));
-        oneMsg.MergeFrom(oneMsg); // nothing should change
-        UNIT_ASSERT_VALUES_EQUAL(msg.GetOneMsg().RepIntSize(), sample.GetOneMsg().RepIntSize());
-    }
-
+        const Descriptor* descr = msg.GetDescriptor(); 
+ 
+        TMutableField oneStr(msg, descr->FindFieldByName("OneStr")); 
+        oneStr.MergeFrom(oneStr); 
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetOneStr(), sample.GetOneStr()); 
+ 
+        TMutableField oneMsg(msg, descr->FindFieldByName("OneMsg")); 
+        oneMsg.MergeFrom(oneMsg); // nothing should change 
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetOneMsg().RepIntSize(), sample.GetOneMsg().RepIntSize()); 
+    } 
+ 
     Y_UNIT_TEST(MergeFromAnotherFD) {
         const TSample sample(GenSampleForMergeFrom());
         TSample msg(GenSampleForMergeFrom());
-        const Descriptor* descr = msg.GetDescriptor();
-
-        { // string
-            TMutableField oneStr(msg, descr->FindFieldByName("OneStr"));
-            TMutableField repStr(msg, descr->FindFieldByName("RepStr"));
-            TMutableField anotherOneStr(msg, descr->FindFieldByName("AnotherOneStr"));
-            oneStr.MergeFrom(anotherOneStr);
-            UNIT_ASSERT_VALUES_EQUAL(msg.GetOneStr(), sample.GetAnotherOneStr());
-            oneStr.MergeFrom(repStr);
-            const size_t sampleRepStrSize = sample.RepStrSize();
-            UNIT_ASSERT_VALUES_EQUAL(msg.GetOneStr(), sample.GetRepStr(sampleRepStrSize - 1));
-            repStr.MergeFrom(anotherOneStr);
-            UNIT_ASSERT_VALUES_EQUAL(msg.RepStrSize(), sampleRepStrSize + 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg.GetRepStr(sampleRepStrSize), msg.GetAnotherOneStr());
-        }
-
-        { // Message
-            TMutableField oneMsg(msg, descr->FindFieldByName("OneMsg"));
-            TMutableField repMsg(msg, descr->FindFieldByName("RepMsg"));
-            oneMsg.MergeFrom(repMsg);
-            const size_t oneMsgRepIntSize = sample.GetOneMsg().RepIntSize();
-            const size_t sizeOfAllRepIntsInRepMsg = sample.RepMsgSize();
-            UNIT_ASSERT_VALUES_EQUAL(msg.GetOneMsg().RepIntSize(), oneMsgRepIntSize + sizeOfAllRepIntsInRepMsg);
-            repMsg.MergeFrom(oneMsg);
-            UNIT_ASSERT_VALUES_EQUAL(msg.RepMsgSize(), sample.RepMsgSize() + 1);
-        }
-    }
+        const Descriptor* descr = msg.GetDescriptor(); 
+ 
+        { // string 
+            TMutableField oneStr(msg, descr->FindFieldByName("OneStr")); 
+            TMutableField repStr(msg, descr->FindFieldByName("RepStr")); 
+            TMutableField anotherOneStr(msg, descr->FindFieldByName("AnotherOneStr")); 
+            oneStr.MergeFrom(anotherOneStr); 
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetOneStr(), sample.GetAnotherOneStr()); 
+            oneStr.MergeFrom(repStr); 
+            const size_t sampleRepStrSize = sample.RepStrSize(); 
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetOneStr(), sample.GetRepStr(sampleRepStrSize - 1)); 
+            repStr.MergeFrom(anotherOneStr); 
+            UNIT_ASSERT_VALUES_EQUAL(msg.RepStrSize(), sampleRepStrSize + 1); 
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetRepStr(sampleRepStrSize), msg.GetAnotherOneStr()); 
+        } 
+ 
+        { // Message 
+            TMutableField oneMsg(msg, descr->FindFieldByName("OneMsg")); 
+            TMutableField repMsg(msg, descr->FindFieldByName("RepMsg")); 
+            oneMsg.MergeFrom(repMsg); 
+            const size_t oneMsgRepIntSize = sample.GetOneMsg().RepIntSize(); 
+            const size_t sizeOfAllRepIntsInRepMsg = sample.RepMsgSize(); 
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetOneMsg().RepIntSize(), oneMsgRepIntSize + sizeOfAllRepIntsInRepMsg); 
+            repMsg.MergeFrom(oneMsg); 
+            UNIT_ASSERT_VALUES_EQUAL(msg.RepMsgSize(), sample.RepMsgSize() + 1); 
+        } 
+    } 
 
     Y_UNIT_TEST(RemoveByIndex) {
         TSample msg;
@@ -354,6 +354,6 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
         UNIT_ASSERT(field->HasValue());
         UNIT_ASSERT_VALUES_EQUAL(20, field->Get<int>());
     }
-}
+} 
 }
 }

@@ -1,15 +1,15 @@
 message TInnerSample {
-    repeated int32 RepInt = 1;
+    repeated int32 RepInt = 1; 
 
     extensions 100 to 199;
-}
-
+} 
+ 
 message TSample {
-    optional string OneStr = 1;
+    optional string OneStr = 1; 
     optional TInnerSample OneMsg = 2;
     repeated TInnerSample RepMsg = 3;
-    repeated string RepStr = 4;
-    optional string AnotherOneStr = 5;
+    repeated string RepStr = 4; 
+    optional string AnotherOneStr = 5; 
 
     optional int32 OneInt = 6;
     repeated int32 RepInt = 7;
@@ -22,4 +22,4 @@ message TSample {
     repeated EEnum RepEnum = 9;
 
     extensions 100 to 199;
-}
+} 

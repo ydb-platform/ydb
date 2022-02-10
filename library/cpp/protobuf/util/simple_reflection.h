@@ -103,7 +103,7 @@ namespace NProtoBuf {
         const Reflection& Refl() const {
             return *Msg.GetReflection();
         }
-
+ 
         [[noreturn]] void RaiseUnknown() const {
             ythrow yexception() << "Unknown field cpp-type: " << (size_t)CppType();
         }
@@ -127,7 +127,7 @@ namespace NProtoBuf {
         static TMaybe<TMutableField> ByPath(Message& msg, const TStringBuf& path, bool createPath = false);
         static TMaybe<TMutableField> ByPath(Message& msg, const TVector<const FieldDescriptor*>& fieldsPath, bool createPath = false);
         static TMaybe<TMutableField> ByPath(Message& msg, const TFieldPath& fieldsPath, bool createPath = false);
-
+ 
         Message* MutableParent() {
             return Mut();
         }
@@ -187,7 +187,7 @@ namespace NProtoBuf {
                 Y_ASSERT(index == 0);
                 return Refl().MutableMessage(Mut(), Fd);
             }
-        }
+        } 
 
         template <typename TMsg>
         inline TMsg* AddMessage() {
@@ -203,7 +203,7 @@ namespace NProtoBuf {
         Message* Mut() {
             return const_cast<Message*>(&Msg);
         }
-
+ 
         template <typename T>
         inline void MergeValue(T srcValue);
     };
@@ -255,8 +255,8 @@ namespace NProtoBuf {
 
     template <typename T>
     inline void TMutableField::MergeValue(T srcValue) {
-        Add(srcValue);
-    }
+        Add(srcValue); 
+    } 
 
     template <>
     inline void TMutableField::MergeValue<const Message*>(const Message* srcValue) {
@@ -264,8 +264,8 @@ namespace NProtoBuf {
             Add(srcValue);
         } else {
             MutableMessage()->MergeFrom(*srcValue);
-        }
-    }
+        } 
+    } 
 
     inline void TMutableField::MergeFrom(const TConstField& src) {
         Y_ASSERT(HasSameType(src));
@@ -286,4 +286,4 @@ namespace NProtoBuf {
 #undef TMP_MACRO_FOR_CPPTYPE
     }
 
-}
+} 

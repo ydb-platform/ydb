@@ -6,10 +6,10 @@
 #include <util/generic/cast.h>
 #include <util/generic/ymath.h>
 #include <util/memory/blob.h>
-#include <util/stream/buffer.h>
+#include <util/stream/buffer.h> 
 #include <util/stream/mem.h>
 #include <util/system/unaligned_mem.h>
-#include <util/ysaveload.h>
+#include <util/ysaveload.h> 
 
 #include "reader.h"
 #include "writer.h"
@@ -30,11 +30,11 @@ public:
     {
     }
 
-    void Get(size_t idx, T& t) const {
-        assert(idx < (size_t)Size);
+    void Get(size_t idx, T& t) const { 
+        assert(idx < (size_t)Size); 
         t = ReadUnaligned<T>(Data + idx);
-    }
-
+    } 
+ 
     const T& At(size_t idx) const {
         assert(idx < (size_t)Size);
         return Data[idx];
@@ -44,10 +44,10 @@ public:
         return Size;
     }
 
-    size_t RealSize() const {
+    size_t RealSize() const { 
         return sizeof(ui64) + Size * sizeof(T);
-    }
-
+    } 
+ 
     ~TYVector() = default;
 };
 
@@ -109,21 +109,21 @@ struct TYVectorG<X, true> {
     typedef TYVectorWriter<X> T;
 };
 
-template <typename T>
-struct TIsMemsetThisWithZeroesSupported {
-    enum {
-        Result = TTypeTraits<T>::IsPod
-    };
-};
-
+template <typename T> 
+struct TIsMemsetThisWithZeroesSupported { 
+    enum { 
+        Result = TTypeTraits<T>::IsPod 
+    }; 
+}; 
+ 
 #define MEMSET_THIS_WITH_ZEROES_SUPPORTED(type)     \
     template <>                                     \
     struct TIsMemsetThisWithZeroesSupported<type> { \
         enum {                                      \
             Result = true                           \
         };                                          \
-    };
-
+    }; 
+ 
 class TPlainHashCommon {
 protected:
 #pragma pack(push, 8)
@@ -134,35 +134,35 @@ protected:
         TKey Key;
         TValue Value;
 
-    private:
+    private: 
         static_assert(TIsMemsetThisWithZeroesSupported<TKey>::Result, "expect TIsMemsetThisWithZeroesSupported<TKey>::Result");
         static_assert(TIsMemsetThisWithZeroesSupported<TValue>::Result, "expect TIsMemsetThisWithZeroesSupported<TValue>::Result");
-
-        /// to aviod uninitialized bytes
-        void Init(const TKey& key, const TValue& value) {
-            memset(static_cast<TThis*>(this), 0, sizeof(TThis));
-            Key = key;
-            Value = value;
-        }
-
+ 
+        /// to aviod uninitialized bytes 
+        void Init(const TKey& key, const TValue& value) { 
+            memset(static_cast<TThis*>(this), 0, sizeof(TThis)); 
+            Key = key; 
+            Value = value; 
+        } 
+ 
     public:
-        TPackedPair(typename TTypeTraits<TKey>::TFuncParam key, typename TTypeTraits<TValue>::TFuncParam value) {
-            Init(key, value);
+        TPackedPair(typename TTypeTraits<TKey>::TFuncParam key, typename TTypeTraits<TValue>::TFuncParam value) { 
+            Init(key, value); 
         }
 
-        TPackedPair(const TThis& rhs) {
-            Init(rhs.Key, rhs.Value);
+        TPackedPair(const TThis& rhs) { 
+            Init(rhs.Key, rhs.Value); 
         }
 
         TPackedPair& operator=(const TThis& rhs) {
             if (this != &rhs) {
-                Init(rhs.Key, rhs.Value);
+                Init(rhs.Key, rhs.Value); 
             }
             return *this;
         }
 
-        TPackedPair() {
-            Init(TKey(), TValue());
+        TPackedPair() { 
+            Init(TKey(), TValue()); 
         }
 
         typename TTypeTraits<TKey>::TFuncParam First() const {
@@ -289,7 +289,7 @@ public:
             for (size_t j = 0; j < data2[i].size(); ++j)
                 for (size_t k = j + 1; k < data2[i].size(); ++k)
                     if (TKeyValuePair::GetFirst(&data2[i][j]) == TKeyValuePair::GetFirst(&data2[i][k]))
-                        ythrow yexception() << "key clash";
+                        ythrow yexception() << "key clash"; 
         }
 #endif
         out.Write(intervals.data(), intervals.size() * sizeof(intervals[0]));
@@ -525,150 +525,150 @@ private:
     TVector<TString> Names;
     THashMap<TString, size_t> NameToIndex;
 };
-
+ 
 template <class T>
-struct TSaveLoadVectorNonPodElement {
+struct TSaveLoadVectorNonPodElement { 
     static inline void Save(IOutputStream* out, const T& t) {
-        TSerializer<T>::Save(out, t);
-    }
-
+        TSerializer<T>::Save(out, t); 
+    } 
+ 
     static inline void Load(IInputStream* in, T& t, size_t elementSize) {
         Y_ASSERT(elementSize > 0);
-        TSerializer<T>::Load(in, t);
-    }
-};
-
+        TSerializer<T>::Load(in, t); 
+    } 
+}; 
+ 
 template <class T, bool isPod>
-class TVectorTakingIntoAccountThePodType {
-private:
-    ui64 SizeofOffsets;
-    const ui64* Offsets;
-    const char* Data;
-
-public:
-    TVectorTakingIntoAccountThePodType(const TBlob& blob) {
+class TVectorTakingIntoAccountThePodType { 
+private: 
+    ui64 SizeofOffsets; 
+    const ui64* Offsets; 
+    const char* Data; 
+ 
+public: 
+    TVectorTakingIntoAccountThePodType(const TBlob& blob) { 
         SizeofOffsets = ReadUnaligned<ui64>(blob.Begin());
         Y_ASSERT(SizeofOffsets > 0);
-        Offsets = reinterpret_cast<const ui64*>(blob.Begin() + sizeof(ui64));
+        Offsets = reinterpret_cast<const ui64*>(blob.Begin() + sizeof(ui64)); 
         Data = reinterpret_cast<const char*>(blob.Begin() + sizeof(ui64) + SizeofOffsets * sizeof(ui64));
-    }
-
-    size_t GetSize() const {
+    } 
+ 
+    size_t GetSize() const { 
         return (size_t)(SizeofOffsets - 1);
-    }
-
-    size_t GetLength(ui64 index) const {
-        if (index + 1 >= SizeofOffsets)
-            ythrow yexception() << "bad offset";
+    } 
+ 
+    size_t GetLength(ui64 index) const { 
+        if (index + 1 >= SizeofOffsets) 
+            ythrow yexception() << "bad offset"; 
         return IntegerCast<size_t>(ReadUnaligned<ui64>(Offsets + index + 1) - ReadUnaligned<ui64>(Offsets + index));
-    }
-
-    void Get(ui64 index, T& t) const {
-        const size_t len = GetLength(index);
+    } 
+ 
+    void Get(ui64 index, T& t) const { 
+        const size_t len = GetLength(index); 
         TMemoryInput input(Data + ReadUnaligned<ui64>(Offsets + index), len);
-        TSaveLoadVectorNonPodElement<T>::Load(&input, t, len);
-    }
-
-    T Get(ui64 index) const {
-        T ret;
-        Get(index, ret);
-        return ret;
-    }
-
-    size_t RealSize() const {
+        TSaveLoadVectorNonPodElement<T>::Load(&input, t, len); 
+    } 
+ 
+    T Get(ui64 index) const { 
+        T ret; 
+        Get(index, ret); 
+        return ret; 
+    } 
+ 
+    size_t RealSize() const { 
         return sizeof(ui64) * (SizeofOffsets + 1) + ReadUnaligned<ui64>(Offsets + SizeofOffsets - 1);
-    }
-};
-
+    } 
+}; 
+ 
 template <class T, bool isPod>
-class TVectorTakingIntoAccountThePodTypeWriter : TNonCopyable {
-private:
+class TVectorTakingIntoAccountThePodTypeWriter : TNonCopyable { 
+private: 
     typedef TVector<ui64> TOffsets;
-    TOffsets Offsets;
-    TBuffer Data;
-    TBufferOutput DataStream;
-
-public:
-    TVectorTakingIntoAccountThePodTypeWriter()
-        : DataStream(Data)
-    {
-    }
-
-    void PushBack(const T& t) {
+    TOffsets Offsets; 
+    TBuffer Data; 
+    TBufferOutput DataStream; 
+ 
+public: 
+    TVectorTakingIntoAccountThePodTypeWriter() 
+        : DataStream(Data) 
+    { 
+    } 
+ 
+    void PushBack(const T& t) { 
         Offsets.push_back((ui64) Data.size());
-        TSaveLoadVectorNonPodElement<T>::Save(&DataStream, t);
-    }
-
-    size_t Size() const {
-        return Offsets.size();
-    }
-
+        TSaveLoadVectorNonPodElement<T>::Save(&DataStream, t); 
+    } 
+ 
+    size_t Size() const { 
+        return Offsets.size(); 
+    } 
+ 
     void Save(IOutputStream& out) const {
         ui64 sizeofOffsets = Offsets.size() + 1;
-        out.Write(&sizeofOffsets, sizeof(sizeofOffsets));
+        out.Write(&sizeofOffsets, sizeof(sizeofOffsets)); 
         out.Write(Offsets.data(), Offsets.size() * sizeof(Offsets[0]));
         ui64 lastOffset = (ui64) Data.size();
-        out.Write(&lastOffset, sizeof(lastOffset));
+        out.Write(&lastOffset, sizeof(lastOffset)); 
         out.Write(Data.data(), Data.size());
-    }
-};
-
+    } 
+}; 
+ 
 template <class T>
 class TVectorTakingIntoAccountThePodType<T, true>: public TYVector<T> {
-public:
-    TVectorTakingIntoAccountThePodType(const TBlob& blob)
-        : TYVector<T>(blob)
-    {
-    }
-};
-
+public: 
+    TVectorTakingIntoAccountThePodType(const TBlob& blob) 
+        : TYVector<T>(blob) 
+    { 
+    } 
+}; 
+ 
 template <class T>
 class TVectorTakingIntoAccountThePodTypeWriter<T, true>: public TYVectorWriter<T> {
-};
-
+}; 
+ 
 template <typename T>
 class TGeneralVector: public TVectorTakingIntoAccountThePodType<T, TTypeTraits<T>::IsPod> {
-    typedef TVectorTakingIntoAccountThePodType<T, TTypeTraits<T>::IsPod> TBase;
+    typedef TVectorTakingIntoAccountThePodType<T, TTypeTraits<T>::IsPod> TBase; 
 
-public:
-    TGeneralVector(const TBlob& blob)
-        : TBase(blob)
-    {
-    }
-};
-
+public: 
+    TGeneralVector(const TBlob& blob) 
+        : TBase(blob) 
+    { 
+    } 
+}; 
+ 
 template <typename T>
 class TGeneralVectorWriter: public TVectorTakingIntoAccountThePodTypeWriter<T, TTypeTraits<T>::IsPod> {
-};
-
+}; 
+ 
 template <typename TItem, bool>
-struct TGeneralVectorG;
-
+struct TGeneralVectorG; 
+ 
 template <typename TItem>
-struct TGeneralVectorG<TItem, false> {
-    typedef TGeneralVector<TItem> T;
-};
-
+struct TGeneralVectorG<TItem, false> { 
+    typedef TGeneralVector<TItem> T; 
+}; 
+ 
 template <typename TItem>
-struct TGeneralVectorG<TItem, true> {
-    typedef TGeneralVectorWriter<TItem> T;
-};
-
+struct TGeneralVectorG<TItem, true> { 
+    typedef TGeneralVectorWriter<TItem> T; 
+}; 
+ 
 template <>
 struct TSaveLoadVectorNonPodElement<TString> {
     static inline void Save(IOutputStream* out, const TString& s) {
         out->Write(s.data(), s.size() + 1);
-    }
-
+    } 
+ 
     static inline void Load(TMemoryInput* in, TString& s, size_t elementSize) {
         Y_ASSERT(elementSize > 0 && in->Avail() >= elementSize);
-        s.assign(in->Buf(), elementSize - 1); /// excluding 0 at the end
-    }
-};
-
+        s.assign(in->Buf(), elementSize - 1); /// excluding 0 at the end 
+    } 
+}; 
+ 
 template <bool G>
 struct TStringsVectorG: public TGeneralVectorG<TString, G> {
-};
-
+}; 
+ 
 using TStringsVector = TGeneralVector<TString>;
 using TStringsVectorWriter = TGeneralVectorWriter<TString>;

@@ -140,7 +140,7 @@ constexpr bool Y_IS_DEBUG_BUILD = true;
 #define Y_CAT(X, Y) Y_CAT_I(X, Y)
 #define Y_CAT_I(X, Y) Y_CAT_II(X, Y)
 #define Y_CAT_II(X, Y) X##Y
- 
+
 #define Y_STRINGIZE(X) UTIL_PRIVATE_STRINGIZE_AUX(X)
 #define UTIL_PRIVATE_STRINGIZE_AUX(X) #X
 

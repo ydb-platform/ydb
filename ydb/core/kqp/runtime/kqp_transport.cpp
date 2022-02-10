@@ -244,7 +244,7 @@ void TKqpProtoBuilder::BuildStream(TUnboxedValueVector& rows, const NKikimrMiniK
     }
 }
 
-Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(const TVector<NDqProto::TData>& data,
+Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(const TVector<NDqProto::TData>& data, 
     const NKikimrMiniKQL::TType& srcRowType, const NKikimrMiniKQL::TType* dstRowType)
 {
     YQL_ENSURE(srcRowType.GetKind() == NKikimrMiniKQL::Struct);

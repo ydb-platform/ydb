@@ -34,7 +34,7 @@ public:
     void BuildStream(NMiniKQL::TUnboxedValueVector& rows, const NKikimrMiniKQL::TType& srcRowType,
         const NKikimrMiniKQL::TType* dstRowType, NKikimrMiniKQL::TResult* result);
 
-    Ydb::ResultSet BuildYdbResultSet(const TVector<NYql::NDqProto::TData>& data,
+    Ydb::ResultSet BuildYdbResultSet(const TVector<NYql::NDqProto::TData>& data, 
         const NKikimrMiniKQL::TType& srcRowType, const NKikimrMiniKQL::TType* dstRowType = nullptr);
 
 private:

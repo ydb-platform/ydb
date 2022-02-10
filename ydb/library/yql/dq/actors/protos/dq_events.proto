@@ -22,7 +22,7 @@ message TCheckpoint {
 */
 message TChannelData {
     optional uint64 ChannelId = 1;
-    optional NYql.NDqProto.TData Data = 2;
+    optional NYql.NDqProto.TData Data = 2; 
     optional bool Finished = 3;
     optional TCheckpoint Checkpoint = 4;
 };

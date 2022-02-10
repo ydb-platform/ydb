@@ -1,25 +1,25 @@
 UNITTEST_FOR(ydb/library/mkql_proto)
-
+ 
 OWNER(g:kikimr)
+ 
+ALLOCATOR(J) 
+ 
+FORK_SUBTESTS() 
 
-ALLOCATOR(J)
+TIMEOUT(150) 
 
-FORK_SUBTESTS()
-
-TIMEOUT(150)
-
-SIZE(MEDIUM)
-
-SRCS(
-    mkql_proto_ut.cpp
-)
-
-PEERDIR(
+SIZE(MEDIUM) 
+ 
+SRCS( 
+    mkql_proto_ut.cpp 
+) 
+ 
+PEERDIR( 
     ydb/library/mkql_proto/ut/helpers
     ydb/library/yql/public/udf/service/exception_policy
     ydb/core/yql_testlib
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
-END()
+END() 

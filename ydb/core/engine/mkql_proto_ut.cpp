@@ -1,7 +1,7 @@
 #include "mkql_proto.h"
-
+ 
 #include <ydb/library/mkql_proto/ut/helpers/helpers.h>
-
+ 
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
@@ -16,7 +16,7 @@ using namespace std::string_view_literals;
 namespace NKikimr {
 namespace NMiniKQL {
 
-Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
+Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) { 
     Y_UNIT_TEST(TestExportVoidTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.NewVoid();

@@ -24,7 +24,7 @@ public:
 
     NDqProto::TData Serialize(const NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* itemType) const;
     NDqProto::TData Serialize(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, const NKikimr::NMiniKQL::TType* itemType) const;
-
+ 
     template <class TForwardIterator>
     NDqProto::TData Serialize(TForwardIterator first, TForwardIterator last, const NKikimr::NMiniKQL::TType* itemType) const {
         switch (TransportVersion) {

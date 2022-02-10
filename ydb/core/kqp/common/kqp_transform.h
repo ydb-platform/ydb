@@ -43,7 +43,7 @@ public:
 
     TKey GetKey() const { return std::make_tuple(GetLockId(), GetDataShard(), GetSchemeShard(), GetPathId()); }
     NKikimrMiniKQL::TValue GetValue() const { return LockValue; }
-    NYql::NDq::TMkqlValueRef GetValueRef(const NKikimrMiniKQL::TType& type) const { return NYql::NDq::TMkqlValueRef(type, LockValue); }
+    NYql::NDq::TMkqlValueRef GetValueRef(const NKikimrMiniKQL::TType& type) const { return NYql::NDq::TMkqlValueRef(type, LockValue); } 
 
     bool Invalidated(const TKqpTxLock& newLock) const {
         YQL_ENSURE(GetKey() == newLock.GetKey());

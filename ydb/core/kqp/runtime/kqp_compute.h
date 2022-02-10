@@ -10,7 +10,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-class TKqpComputeContextBase : public NYql::NDq::TDqComputeContextBase {
+class TKqpComputeContextBase : public NYql::NDq::TDqComputeContextBase { 
 public:
     struct TColumn {
         NTable::TTag Tag;

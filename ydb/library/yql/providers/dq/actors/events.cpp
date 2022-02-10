@@ -16,7 +16,7 @@ namespace NYql::NDqs {
     TEvQueryResponse::TEvQueryResponse(NDqProto::TQueryResponse&& queryResult) {
         Record = std::move(queryResult);
     }
-
+ 
     TEvGraphRequest::TEvGraphRequest(const Yql::DqsProto::ExecuteGraphRequest& request, NActors::TActorId controlId, NActors::TActorId resultId, NActors::TActorId checkPointCoordinatorId)
     {
         *Record.MutableRequest() = request;

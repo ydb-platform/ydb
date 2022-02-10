@@ -19,7 +19,7 @@ namespace NKqp {
 
 using namespace NMiniKQL;
 using namespace NYql;
-using namespace NDq;
+using namespace NDq; 
 
 IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const TType* type,
     NUdf::IApplyContext* applyCtx, const TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs)

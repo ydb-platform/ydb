@@ -313,7 +313,7 @@ RECURSE(
     djangorestframework-jsonp
     djangorestframework-xml
     dm.xmlsec.binding
-    dnspython
+    dnspython 
     docker
     docopt
     docstring-parser
@@ -1114,7 +1114,7 @@ RECURSE(
     uplink
     uritemplate
     uritools
-    urllib3
+    urllib3 
     urlpy
     user-agents
     uvicorn

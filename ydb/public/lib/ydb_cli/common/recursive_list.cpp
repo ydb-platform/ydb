@@ -15,7 +15,7 @@ namespace {
         return result;
     }
 
-    TStatus RecursiveList(TVector<TSchemeEntry>& dst, TSchemeClient& client,
+    TStatus RecursiveList(TVector<TSchemeEntry>& dst, TSchemeClient& client, 
             const TString& path, const TRecursiveListSettings& settings, bool addSelf = false) {
 
         auto list = client.ListDirectory(path, settings.ListDirectorySettings_).GetValueSync();
@@ -24,7 +24,7 @@ namespace {
         }
 
         const auto& self = list.GetEntry();
-        if (addSelf && settings.Filter_(self)) {
+        if (addSelf && settings.Filter_(self)) { 
             dst.push_back(ReplaceNameWithPath(self, path));
         }
 
@@ -56,11 +56,11 @@ namespace {
 
 } // anonymous
 
-TRecursiveListResult RecursiveList(TSchemeClient& client, const TString& path,
+TRecursiveListResult RecursiveList(TSchemeClient& client, const TString& path, 
         const TRecursiveListSettings& settings, bool addSelf) {
 
     TVector<TSchemeEntry> entries;
-    auto status = RecursiveList(entries, client, path, settings, addSelf);
+    auto status = RecursiveList(entries, client, path, settings, addSelf); 
     return {entries, status};
 }
 

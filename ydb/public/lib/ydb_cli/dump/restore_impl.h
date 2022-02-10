@@ -47,7 +47,7 @@ public:
     explicit TRestoreClient(
         NImport::TImportClient& importClient,
         NOperation::TOperationClient& operationClient,
-        NScheme::TSchemeClient& SchemeClient,
+        NScheme::TSchemeClient& SchemeClient, 
         NTable::TTableClient& tableClient);
 
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings = {});
@@ -55,7 +55,7 @@ public:
 private:
     NImport::TImportClient& ImportClient;
     NOperation::TOperationClient& OperationClient;
-    NScheme::TSchemeClient& SchemeClient;
+    NScheme::TSchemeClient& SchemeClient; 
     NTable::TTableClient& TableClient;
 
 }; // TRestoreClient

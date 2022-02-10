@@ -57,7 +57,7 @@ void TCommandDump::Config(TConfig& config) {
         .StoreTrue(&AvoidCopy);
     config.Opts->AddLongOption("save-partial-result", "Do not remove partial dump result."
             " If this option is not enabled, all files that have already been created will be removed in case of error.")
-        .StoreTrue(&SavePartialResult);
+        .StoreTrue(&SavePartialResult); 
     config.Opts->AddLongOption("preserve-pool-kinds", "Preserve storage pool kind settings."
             " If this option is enabled, storage pool kind will be saved to dump."
             " In this case, if there will be no such storage pool kind in database on restore, error will occur."
@@ -145,8 +145,8 @@ void TCommandRestore::Config(TConfig& config) {
     config.Opts->AddLongOption("save-partial-result", "Do not remove partial restore result."
             " If this option is not enabled, all changes in database that have already been applied during restore"
             " will be reverted in case of error.")
-        .StoreTrue(&SavePartialResult);
-
+        .StoreTrue(&SavePartialResult); 
+ 
     config.Opts->AddLongOption("bandwidth", "Limit data upload bandwidth, bytes per second (example: 2MiB)")
         .DefaultValue("0").StoreResult(&UploadBandwidth);
 
@@ -191,7 +191,7 @@ int TCommandRestore::Run(TConfig& config) {
         .RestoreData(RestoreData)
         .RestoreIndexes(RestoreIndexes)
         .SkipDocumentTables(SkipDocumentTables)
-        .SavePartialResult(SavePartialResult)
+        .SavePartialResult(SavePartialResult) 
         .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest))
         .InFly(InFly);
 

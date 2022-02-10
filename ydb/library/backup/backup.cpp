@@ -505,14 +505,14 @@ void RemoveClusterDirectory(const TDriver& driver, const TString& path) {
     LOG_DEBUG("Directory is removed, path: " << path.Quote());
 }
 
-void RemoveClusterDirectoryRecursive(const TDriver& driver, const TString& path) {
-    NScheme::TSchemeClient schemeClient(driver);
-    NTable::TTableClient tableClient(driver);
-    TStatus status = NYdb::NDump::RemoveDirectoryRecursive(tableClient, schemeClient, path);
-    VerifyStatus(status, TStringBuilder() << "RemoveDirectoryRecursive, path: " << path.Quote());
-    LOG_DEBUG("Directory is removed recursively, path: " << path.Quote());
-}
-
+void RemoveClusterDirectoryRecursive(const TDriver& driver, const TString& path) { 
+    NScheme::TSchemeClient schemeClient(driver); 
+    NTable::TTableClient tableClient(driver); 
+    TStatus status = NYdb::NDump::RemoveDirectoryRecursive(tableClient, schemeClient, path); 
+    VerifyStatus(status, TStringBuilder() << "RemoveDirectoryRecursive, path: " << path.Quote()); 
+    LOG_DEBUG("Directory is removed recursively, path: " << path.Quote()); 
+} 
+ 
 static bool IsExcluded(const TString& path, const TVector<TRegExMatch>& exclusionPatterns) {
     for (const auto& pattern : exclusionPatterns) {
         if (pattern.Match(path.c_str())) {
@@ -675,30 +675,30 @@ void BackupFolder(TDriver driver, const TString& database, const TString& relDbP
 
     // full path to temporal directory in database
     TString tmpDbFolder;
-    try {
-        if (!schemaOnly && !avoidCopy) {
-            // Create temporal folder in database's root directory
-            tmpDbFolder = JoinDatabasePath(database, "~" + temporalBackupPostfix);
-            CreateClusterDirectory(driver, tmpDbFolder);
-        }
-
-        TString dbPrefix = JoinDatabasePath(database, relDbPath);
-        TString path;
+    try { 
+        if (!schemaOnly && !avoidCopy) { 
+            // Create temporal folder in database's root directory 
+            tmpDbFolder = JoinDatabasePath(database, "~" + temporalBackupPostfix); 
+            CreateClusterDirectory(driver, tmpDbFolder); 
+        } 
+ 
+        TString dbPrefix = JoinDatabasePath(database, relDbPath); 
+        TString path; 
         BackupFolderImpl(driver, dbPrefix, tmpDbFolder, path, folderPath, exclusionPatterns,
             schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds);
-    } catch (...) {
-        if (!schemaOnly && !avoidCopy) {
-            RemoveClusterDirectoryRecursive(driver, tmpDbFolder);
-        }
-
-        // delete partial backup (or save)
-        if (!savePartialResult) {
-            folderPath.ForceDelete();
-        }
-        throw;
+    } catch (...) { 
+        if (!schemaOnly && !avoidCopy) { 
+            RemoveClusterDirectoryRecursive(driver, tmpDbFolder); 
+        } 
+ 
+        // delete partial backup (or save) 
+        if (!savePartialResult) { 
+            folderPath.ForceDelete(); 
+        } 
+        throw; 
     }
     if (!schemaOnly && !avoidCopy) {
-        RemoveClusterDirectoryRecursive(driver, tmpDbFolder);
+        RemoveClusterDirectoryRecursive(driver, tmpDbFolder); 
     }
 }
 

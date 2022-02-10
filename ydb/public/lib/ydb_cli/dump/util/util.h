@@ -31,7 +31,7 @@ NScheme::TDescribePathResult DescribePath(
     NScheme::TSchemeClient& schemeClient,
     const TString& path,
     const NScheme::TDescribePathSettings& settings = {});
-
+ 
 TStatus MakeDirectory(
     NScheme::TSchemeClient& schemeClient,
     const TString& path,
@@ -41,13 +41,13 @@ TStatus RemoveDirectory(
     NScheme::TSchemeClient& schemeClient,
     const TString& path,
     const NScheme::TRemoveDirectorySettings& settings = {});
-
-TStatus RemoveDirectoryRecursive(
+ 
+TStatus RemoveDirectoryRecursive( 
     NTable::TTableClient& tableClient,
     NScheme::TSchemeClient& schemeClient,
     const TString& path,
     const NScheme::TRemoveDirectorySettings& settings = {},
     bool removeSelf = true);
-
+ 
 } // NDump
 } // NYdb

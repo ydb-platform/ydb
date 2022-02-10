@@ -67,9 +67,9 @@ namespace NXml {
         }
 
         xmlDocPtr GetImpl() {
-            return Doc.Get();
-        }
-
+            return Doc.Get(); 
+        } 
+ 
     private:
         void ParseFile(const TString& file);
         void ParseString(TZtStringBuf xml);

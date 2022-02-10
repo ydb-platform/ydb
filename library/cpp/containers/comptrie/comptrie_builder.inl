@@ -48,7 +48,7 @@ protected:
 protected:
     void ConvertSymbolArrayToChar(const TSymbol* key, size_t keylen, TTempBuf& buf, size_t ckeylen) const;
     void NodeLinkTo(TNode* thiz, const TBlob& label, TNode* node);
-    TNode* NodeForwardAdd(TNode* thiz, const char* label, size_t len, size_t& passed, size_t* nodeCount);
+    TNode* NodeForwardAdd(TNode* thiz, const char* label, size_t len, size_t& passed, size_t* nodeCount); 
     bool FindEntryImpl(const char* key, size_t keylen, TData* value) const;
     bool FindLongestPrefixImpl(const char* keyptr, size_t keylen, size_t* prefixLen, TData* value) const;
 
@@ -608,7 +608,7 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
         ShowProgress(EntryCount);
 
     TNode* current = Root;
-    size_t passed;
+    size_t passed; 
 
     // Special case of empty key: replace it by 1-byte "\0" key.
     size_t ckeylen = keylen ? keylen * sizeof(TSymbol) : 1;
@@ -780,7 +780,7 @@ size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::GetNodeCount() con
 template <class T, class D, class S>
 typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
                 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeForwardAdd(
-                                TNode* thiz, const char* label, size_t len, size_t& passed, size_t* nodeCount) {
+                                TNode* thiz, const char* label, size_t len, size_t& passed, size_t* nodeCount) { 
     typename TNode::TArcSet* arcSet = dynamic_cast<typename TNode::TArcSet*>(thiz->Subtree());
     if (!arcSet)
         ythrow yexception() << "Bad input order - expected input strings to be prefix-grouped.";
@@ -846,7 +846,7 @@ void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeBufferSubtree(TN
     if (!arcSet)
         return;
 
-    size_t bufferLength = (size_t)arcSet->Measure(this);
+    size_t bufferLength = (size_t)arcSet->Measure(this); 
     TArrayWithSizeHolder<char> buffer;
     buffer.Resize(bufferLength);
 

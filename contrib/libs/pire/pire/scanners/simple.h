@@ -25,10 +25,10 @@
 #define PIRE_SCANNERS_SIMPLE_H
 
 #include <contrib/libs/pire/pire/approx_matching.h>
-#include <contrib/libs/pire/pire/stub/stl.h>
-#include <contrib/libs/pire/pire/stub/defaults.h>
-#include <contrib/libs/pire/pire/stub/saveload.h>
-
+#include <contrib/libs/pire/pire/stub/stl.h> 
+#include <contrib/libs/pire/pire/stub/defaults.h> 
+#include <contrib/libs/pire/pire/stub/saveload.h> 
+ 
 #include "common.h"
 
 namespace Pire {

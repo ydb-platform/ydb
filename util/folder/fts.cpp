@@ -38,58 +38,58 @@
 #include <util/system/compiler.h>
 #include <util/system/defaults.h>
 #include <util/system/error.h>
-
+ 
 #include <stdlib.h>
-#ifndef _win_
+#ifndef _win_ 
     #include <inttypes.h>
     #include <sys/param.h>
     #include <dirent.h>
     #include <errno.h>
     #include <string.h>
     #include <unistd.h>
-#else
+#else 
     #include <direct.h>
     #include "dirent_win.h"
     #include "lstat_win.h"
-#endif
+#endif 
 
 #include <sys/stat.h>
 
 #include <fcntl.h>
-
+ 
 #include "fts.h"
-#include <limits.h>
-
-#ifndef _win_
-
+#include <limits.h> 
+ 
+#ifndef _win_ 
+ 
 static const dird invalidDirD = -1;
-
-dird get_cwdd() {
-    return open(".", O_RDONLY, 0);
-}
-
-dird get_dird(char* path) {
-    return open(path, O_RDONLY, 0);
-}
-
-int valid_dird(dird fd) {
-    return fd < 0;
-}
-
-void close_dird(dird fd) {
-    (void)close(fd);
-}
-
-int chdir_dird(dird fd) {
-    return fchdir(fd);
-}
-
-int cmp_dird(dird fd1, dird fd2) {
-    return fd1 - fd2;
-}
-
+ 
+dird get_cwdd() { 
+    return open(".", O_RDONLY, 0); 
+} 
+ 
+dird get_dird(char* path) { 
+    return open(path, O_RDONLY, 0); 
+} 
+ 
+int valid_dird(dird fd) { 
+    return fd < 0; 
+} 
+ 
+void close_dird(dird fd) { 
+    (void)close(fd); 
+} 
+ 
+int chdir_dird(dird fd) { 
+    return fchdir(fd); 
+} 
+ 
+int cmp_dird(dird fd1, dird fd2) { 
+    return fd1 - fd2; 
+} 
+ 
 #else // ndef _win_
-
+ 
 int stat64UTF(const char* path, struct _stat64* _Stat) {
     int len_converted = MultiByteToWideChar(CP_UTF8, 0, path, -1, 0, 0);
     if (len_converted == 0) {
@@ -111,23 +111,23 @@ int stat64UTF(dird path, struct _stat64* _Stat) {
 }
 
 const dird invalidDirD = nullptr;
-
-dird get_cwdd() {
+ 
+dird get_cwdd() { 
     return _wgetcwd(nullptr, 0);
-}
-
-int valid_dird(dird fd) {
+} 
+ 
+int valid_dird(dird fd) { 
     return fd == nullptr;
-}
-
-void close_dird(dird fd) {
-    free(fd);
-}
-
-int chdir_dird(dird fd) {
+} 
+ 
+void close_dird(dird fd) { 
+    free(fd); 
+} 
+ 
+int chdir_dird(dird fd) { 
     return _wchdir(fd);
-}
-
+} 
+ 
 int chdir_dird(const char* path) {
     int len_converted = MultiByteToWideChar(CP_UTF8, 0, path, -1, 0, 0);
     if (len_converted == 0) {
@@ -143,11 +143,11 @@ int chdir_dird(const char* path) {
     return ret;
 }
 
-int cmp_dird(dird fd1, dird fd2) {
+int cmp_dird(dird fd1, dird fd2) { 
     return lstrcmpW(fd1, fd2);
-}
-
-dird get_dird(char* path) {
+} 
+ 
+dird get_dird(char* path) { 
     int len_converted = MultiByteToWideChar(CP_UTF8, 0, path, -1, 0, 0);
     if (len_converted == 0) {
         return nullptr;
@@ -163,7 +163,7 @@ dird get_dird(char* path) {
     free(buf);
     return ret;
 }
-
+ 
 #endif // ndef _win_
 
 #ifdef _win_
@@ -172,9 +172,9 @@ dird get_dird(char* path) {
     #define S_ISLNK(st_mode) ((st_mode & _S_IFMT) == _S_IFLNK)
     #define O_RDONLY _O_RDONLY
 static int fts_safe_changedir(FTS*, FTSENT*, int, dird);
-#endif
-
-#if defined(__svr4__) || defined(__linux__) || defined(__CYGWIN__) || defined(_win_)
+#endif 
+ 
+#if defined(__svr4__) || defined(__linux__) || defined(__CYGWIN__) || defined(_win_) 
     #ifdef MAX
         #undef MAX
     #endif
@@ -294,16 +294,16 @@ FTS* yfts_open(char* const* argv, int options, int (*compar)(const FTSENT**, con
     /* Allocate/initialize root(s). */
     for (root = nullptr, nitems = 0; *argv; ++argv, ++nitems) {
         /* Don't allow zero-length paths. */
-
-        len = strlen(*argv);
-
-//Any subsequent windows call will expect no trailing slashes so we will remove them here
-#ifdef _win_
+ 
+        len = strlen(*argv); 
+ 
+//Any subsequent windows call will expect no trailing slashes so we will remove them here 
+#ifdef _win_ 
         while (len && ((*argv)[len - 1] == '\\' || (*argv)[len - 1] == '/')) {
             --len;
         }
-#endif
-
+#endif 
+ 
         if (len == 0) {
             errno = ENOENT;
             goto mem3;
@@ -361,7 +361,7 @@ FTS* yfts_open(char* const* argv, int options, int (*compar)(const FTSENT**, con
      * and ".." are all fairly nasty problems.  Note, if we can't get the
      * descriptor we run anyway, just more slowly.
      */
-
+ 
     if (!ISSET(FTS_NOCHDIR) && valid_dird(sp->fts_rfd = get_cwdd())) {
         SET(FTS_NOCHDIR);
     }
@@ -432,9 +432,9 @@ int yfts_close(FTS* sp)
 
     /* Return to original directory, save errno if necessary. */
     if (!ISSET(FTS_NOCHDIR)) {
-        saved_errno = chdir_dird(sp->fts_rfd) ? errno : 0;
-        close_dird(sp->fts_rfd);
-
+        saved_errno = chdir_dird(sp->fts_rfd) ? errno : 0; 
+        close_dird(sp->fts_rfd); 
+ 
         /* Set errno and return. */
         if (saved_errno != 0) {
             /* Free up the stream pointer. */
@@ -784,12 +784,12 @@ fts_build(FTS* sp, int type)
     int nitems;
     FTSENT *cur, *tail;
 
-#ifdef _win_
-    dird dirpd;
+#ifdef _win_ 
+    dird dirpd; 
     struct DIR* dirp;
-#else
+#else 
     DIR* dirp;
-#endif
+#endif 
 
     void* oldaddr;
     int cderrno, descend, len, level, maxlen, nlinks, saved_errno,
@@ -819,10 +819,10 @@ fts_build(FTS* sp, int type)
         return nullptr;
     }
 
-#ifdef _win_
-    dirpd = get_dird(cur->fts_accpath);
-#endif
-
+#ifdef _win_ 
+    dirpd = get_dird(cur->fts_accpath); 
+#endif 
+ 
     /*
      * Nlinks is the number of possible entries of type directory in the
      * directory if we're cheating on stat calls, 0 if we're not doing
@@ -857,11 +857,11 @@ fts_build(FTS* sp, int type)
      */
     cderrno = 0;
     if (nlinks || type == BREAD) {
-#ifndef _win_
+#ifndef _win_ 
         if (fts_safe_changedir(sp, cur, dirfd(dirp), nullptr)) {
-#else
-        if (fts_safe_changedir(sp, cur, -1, dirpd)) {
-#endif
+#else 
+        if (fts_safe_changedir(sp, cur, -1, dirpd)) { 
+#endif 
 
             if (nlinks && type == BREAD) {
                 cur->fts_errno = errno;
@@ -871,12 +871,12 @@ fts_build(FTS* sp, int type)
             cderrno = errno;
             (void)closedir(dirp);
             dirp = nullptr;
-#ifdef _win_
-            close_dird(dirpd);
+#ifdef _win_ 
+            close_dird(dirpd); 
             dirpd = invalidDirD;
 #else
             Y_UNUSED(invalidDirD);
-#endif
+#endif 
         } else {
             descend = 1;
         }
@@ -936,9 +936,9 @@ fts_build(FTS* sp, int type)
                 }
                 fts_lfree(head);
                 (void)closedir(dirp);
-#ifdef _win_
-                close_dird(dirpd);
-#endif
+#ifdef _win_ 
+                close_dird(dirpd); 
+#endif 
                 cur->fts_info = FTS_ERR;
                 SET(FTS_STOP);
                 errno = saved_errno;
@@ -964,9 +964,9 @@ fts_build(FTS* sp, int type)
             free(p);
             fts_lfree(head);
             (void)closedir(dirp);
-#ifdef _win_
-            close_dird(dirpd);
-#endif
+#ifdef _win_ 
+            close_dird(dirpd); 
+#endif 
             cur->fts_info = FTS_ERR;
             SET(FTS_STOP);
             errno = ENAMETOOLONG;
@@ -1038,12 +1038,12 @@ fts_build(FTS* sp, int type)
         }
         ++nitems;
     }
-    if (dirp) {
+    if (dirp) { 
         (void)closedir(dirp);
-#ifdef _win_
-        close_dird(dirpd);
-#endif
-    }
+#ifdef _win_ 
+        close_dird(dirpd); 
+#endif 
+    } 
 
     /*
      * If realloc() changed the address of the path, adjust the
@@ -1130,7 +1130,7 @@ fts_stat(FTS* sp, FTSENT* p, int follow)
             }
             p->fts_errno = saved_errno;
             memset(sbp, 0, sizeof(stat_struct));
-            return (FTS_NS);
+            return (FTS_NS); 
         }
     } else if (lstat(p->fts_accpath, sbp)) {
         p->fts_errno = errno;
@@ -1138,7 +1138,7 @@ fts_stat(FTS* sp, FTSENT* p, int follow)
         return (FTS_NS);
     }
 
-    if (S_ISDIR(sbp->st_mode)) {
+    if (S_ISDIR(sbp->st_mode)) { 
         /*
          * Set the device/inode.  Used to find cycles and check for
          * crossing mount points.  Also remember the link count, used
@@ -1161,10 +1161,10 @@ fts_stat(FTS* sp, FTSENT* p, int follow)
          * number of symbolic links to directories is high enough,
          * something faster might be worthwhile.
          */
-
+ 
         //There is no way to detect symlink or mount cycles on win32
-
-#ifndef _win_
+ 
+#ifndef _win_ 
         FTSENT* t;
         for (t = p->fts_parent;
              t->fts_level >= FTS_ROOTLEVEL; t = t->fts_parent) {
@@ -1173,7 +1173,7 @@ fts_stat(FTS* sp, FTSENT* p, int follow)
                 return (FTS_DC);
             }
         }
-#endif /*_win_*/
+#endif /*_win_*/ 
         return (FTS_D);
     }
     if (S_ISLNK(sbp->st_mode)) {
@@ -1353,8 +1353,8 @@ fts_maxarglen(char* const* argv)
  * tricked by someone changing the world out from underneath us.
  * Assumes p->fts_dev and p->fts_ino are filled in.
  */
-
-#ifndef _win_
+ 
+#ifndef _win_ 
 static int
 fts_safe_changedir(FTS* sp, FTSENT* p, int fd, const char* path)
 {
@@ -1386,28 +1386,28 @@ bail:
     errno = oerrno;
     return (ret);
 }
-#else
-static int
+#else 
+static int 
 fts_safe_changedir(FTS* sp, FTSENT* p, int /*fd*/, const char* path)
-{
-    int ret;
+{ 
+    int ret; 
     stat_struct sb;
-
-    if (ISSET(FTS_NOCHDIR))
-        return (0);
+ 
+    if (ISSET(FTS_NOCHDIR)) 
+        return (0); 
     if (STAT_FUNC(path, &sb)) {
-        ret = -1;
-        goto bail;
-    }
-    if (p->fts_dev != sb.st_dev) {
+        ret = -1; 
+        goto bail; 
+    } 
+    if (p->fts_dev != sb.st_dev) { 
         errno = ENOENT; /* disinformation */
-        ret = -1;
-        goto bail;
-    }
+        ret = -1; 
+        goto bail; 
+    } 
     ret = chdir_dird(path);
-bail:
-    return (ret);
-}
+bail: 
+    return (ret); 
+} 
 
 static int
 fts_safe_changedir(FTS* sp, FTSENT* p, int /*fd*/, dird path) {
@@ -1429,4 +1429,4 @@ fts_safe_changedir(FTS* sp, FTSENT* p, int /*fd*/, dird path) {
 bail:
     return (ret);
 }
-#endif
+#endif 

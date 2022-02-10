@@ -37,10 +37,10 @@
 
 #include <stdexcept>
 
-#include <contrib/libs/pire/pire/fsm.h>
-#include <contrib/libs/pire/pire/re_lexer.h>
-#include <contrib/libs/pire/pire/any.h>
-#include <contrib/libs/pire/pire/stub/stl.h>
+#include <contrib/libs/pire/pire/fsm.h> 
+#include <contrib/libs/pire/pire/re_lexer.h> 
+#include <contrib/libs/pire/pire/any.h> 
+#include <contrib/libs/pire/pire/stub/stl.h> 
 
 #define YYSTYPE Any*
 #define YYSTYPE_IS_TRIVIAL 0

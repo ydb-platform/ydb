@@ -24,8 +24,8 @@
 #ifndef PIRE_EXTRA_COUNT_H
 #define PIRE_EXTRA_COUNT_H
 
-#include <contrib/libs/pire/pire/scanners/loaded.h>
-#include <contrib/libs/pire/pire/fsm.h>
+#include <contrib/libs/pire/pire/scanners/loaded.h> 
+#include <contrib/libs/pire/pire/fsm.h> 
 
 #include <algorithm>
 

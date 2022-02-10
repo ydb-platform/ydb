@@ -24,8 +24,8 @@
 #ifndef PIRE_DETERMINE_H
 #define PIRE_DETERMINE_H
 
-#include <contrib/libs/pire/pire/stub/stl.h>
-
+#include <contrib/libs/pire/pire/stub/stl.h> 
+ 
 #include "partition.h"
 
 namespace Pire {

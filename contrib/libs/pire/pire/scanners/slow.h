@@ -25,18 +25,18 @@
 #define PIRE_SCANNERS_SLOW_H
 
 #include <contrib/libs/pire/pire/approx_matching.h>
-#include <contrib/libs/pire/pire/partition.h>
-#include <contrib/libs/pire/pire/vbitset.h>
-#include <contrib/libs/pire/pire/fsm.h>
-#include <contrib/libs/pire/pire/run.h>
-#include <contrib/libs/pire/pire/stub/saveload.h>
-#include <contrib/libs/pire/pire/stub/stl.h>
-
+#include <contrib/libs/pire/pire/partition.h> 
+#include <contrib/libs/pire/pire/vbitset.h> 
+#include <contrib/libs/pire/pire/fsm.h> 
+#include <contrib/libs/pire/pire/run.h> 
+#include <contrib/libs/pire/pire/stub/saveload.h> 
+#include <contrib/libs/pire/pire/stub/stl.h> 
+ 
 #include "common.h"
 
 #ifdef PIRE_DEBUG
 #include <iostream>
-#include <contrib/libs/pire/pire/stub/lexical_cast.h>
+#include <contrib/libs/pire/pire/stub/lexical_cast.h> 
 #endif
 
 namespace Pire {

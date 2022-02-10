@@ -49,10 +49,10 @@
 #ifndef PIRE_EASY_H_INCLUDED
 #define PIRE_EASY_H_INCLUDED
 
-#include <iterator>
-
-#include <contrib/libs/pire/pire/stub/stl.h>
-
+#include <iterator> 
+ 
+#include <contrib/libs/pire/pire/stub/stl.h> 
+ 
 #include "pire.h"
 #include "vbitset.h"
 

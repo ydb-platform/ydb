@@ -1,14 +1,14 @@
 #pragma once
 
-#include <sys/types.h>
+#include <sys/types.h> 
 
 #include <util/system/defaults.h>
-
-#ifndef _win32_
+ 
+#ifndef _win32_ 
 typedef int dird;
 typedef struct stat stat_struct;
     #define STAT_FUNC stat
-#else
+#else 
     #include <util/folder/dirent_win.h>
 typedef WCHAR* dird;
 typedef unsigned short u_short;
@@ -20,8 +20,8 @@ typedef struct _stat64 stat_struct;
 int stat64UTF(const char* path, struct _stat64* _Stat);
 int stat64UTF(dird path, struct _stat64* _Stat);
     #endif
-#endif
-
+#endif 
+ 
 typedef struct {
     struct _ftsent* fts_cur;    /* current node */
     struct _ftsent* fts_child;  /* linked list of children */

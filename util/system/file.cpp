@@ -106,11 +106,11 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
         faMode |= GENERIC_WRITE;
     }
     if (oMode & ::ForAppend) {
-        faMode |= GENERIC_WRITE;
+        faMode |= GENERIC_WRITE; 
         faMode |= FILE_APPEND_DATA;
-        faMode &= ~FILE_WRITE_DATA;
-    }
-
+        faMode &= ~FILE_WRITE_DATA; 
+    } 
+ 
     bool inheritHandle = !(oMode & CloseOnExec);
 
     ui32 shMode = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
@@ -139,7 +139,7 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
     if ((oMode & ::ForAppend) && (Fd_ != INVALID_FHANDLE)) {
         ::SetFilePointer(Fd_, 0, 0, FILE_END);
     }
-
+ 
 #elif defined(_unix_)
 
     switch (createMode) {

@@ -24,15 +24,15 @@
 #ifndef PIRE_RE_SCANNER_H
 #define PIRE_RE_SCANNER_H
 
-#include <contrib/libs/pire/pire/stub/stl.h>
-#include <contrib/libs/pire/pire/stub/memstreams.h>
-#include <contrib/libs/pire/pire/scanners/pair.h>
-
-#include "platform.h"
+#include <contrib/libs/pire/pire/stub/stl.h> 
+#include <contrib/libs/pire/pire/stub/memstreams.h> 
+#include <contrib/libs/pire/pire/scanners/pair.h> 
+ 
+#include "platform.h" 
 #include "defs.h"
 
 #include <string>
-
+ 
 namespace Pire {
 
 	template<class Scanner>

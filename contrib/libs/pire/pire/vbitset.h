@@ -27,8 +27,8 @@
 
 #include <string.h>
 
-#include <contrib/libs/pire/pire/stub/stl.h>
-
+#include <contrib/libs/pire/pire/stub/stl.h> 
+ 
 namespace Pire {
 
 #ifdef _DEBUG

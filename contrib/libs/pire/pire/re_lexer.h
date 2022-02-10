@@ -32,12 +32,12 @@
 #include <stdexcept>
 #include <utility>
 #include <string.h>
-#include <contrib/libs/pire/pire/stub/defaults.h>
-#include <contrib/libs/pire/pire/stub/stl.h>
+#include <contrib/libs/pire/pire/stub/defaults.h> 
+#include <contrib/libs/pire/pire/stub/stl.h> 
 
-#include "encoding.h"
-#include "any.h"
-
+#include "encoding.h" 
+#include "any.h" 
+ 
 namespace Pire {
 
 namespace Consts {

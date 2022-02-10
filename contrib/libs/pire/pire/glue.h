@@ -26,7 +26,7 @@
 #define PIRE_GLUE_H
 
 
-#include <contrib/libs/pire/pire/stub/stl.h>
+#include <contrib/libs/pire/pire/stub/stl.h> 
 #include "partition.h"
 
 namespace Pire {

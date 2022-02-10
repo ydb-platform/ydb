@@ -23,13 +23,13 @@
 
 #include "count.h"
 
-#include <contrib/libs/pire/pire/fsm.h>
-#include <contrib/libs/pire/pire/determine.h>
-#include <contrib/libs/pire/pire/glue.h>
+#include <contrib/libs/pire/pire/fsm.h> 
+#include <contrib/libs/pire/pire/determine.h> 
+#include <contrib/libs/pire/pire/glue.h> 
 #include <contrib/libs/pire/pire/minimize.h>
-#include <contrib/libs/pire/pire/stub/lexical_cast.h>
+#include <contrib/libs/pire/pire/stub/lexical_cast.h> 
 #include <contrib/libs/pire/pire/stub/stl.h>
-
+ 
 #include <tuple>
 
 namespace Pire {

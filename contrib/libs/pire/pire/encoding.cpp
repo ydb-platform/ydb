@@ -24,11 +24,11 @@
 #include <stdexcept>
 #include <util/charset/utf8.h>
 #include <utility>
-
-#include <contrib/libs/pire/pire/stub/defaults.h>
-#include <contrib/libs/pire/pire/stub/utf8.h>
-#include <contrib/libs/pire/pire/stub/singleton.h>
-
+ 
+#include <contrib/libs/pire/pire/stub/defaults.h> 
+#include <contrib/libs/pire/pire/stub/utf8.h> 
+#include <contrib/libs/pire/pire/stub/singleton.h> 
+ 
 #include "encoding.h"
 #include "fsm.h"
 

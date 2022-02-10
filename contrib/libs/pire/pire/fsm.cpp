@@ -29,11 +29,11 @@
 #include <numeric>
 #include <queue>
 #include <utility>
-
-#include <iostream>
-#include <stdio.h>
-#include <contrib/libs/pire/pire/stub/lexical_cast.h>
-
+ 
+#include <iostream> 
+#include <stdio.h> 
+#include <contrib/libs/pire/pire/stub/lexical_cast.h> 
+ 
 #include "fsm.h"
 #include "vbitset.h"
 #include "partition.h"

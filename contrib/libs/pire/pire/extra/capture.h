@@ -26,11 +26,11 @@
 
 
 #include <contrib/libs/pire/pire/approx_matching.h>
-#include <contrib/libs/pire/pire/scanners/loaded.h>
+#include <contrib/libs/pire/pire/scanners/loaded.h> 
 #include <contrib/libs/pire/pire/scanners/multi.h>
 #include <contrib/libs/pire/pire/scanners/slow.h>
-#include <contrib/libs/pire/pire/fsm.h>
-#include <contrib/libs/pire/pire/re_lexer.h>
+#include <contrib/libs/pire/pire/fsm.h> 
+#include <contrib/libs/pire/pire/re_lexer.h> 
 #include <contrib/libs/pire/pire/run.h>
 
 #include <array>

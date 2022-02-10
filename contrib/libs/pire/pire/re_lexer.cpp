@@ -23,11 +23,11 @@
 
 #include <ctype.h>
 #include <stdexcept>
-
-#include <contrib/libs/pire/pire/stub/stl.h>
-#include <contrib/libs/pire/pire/stub/utf8.h>
-#include <contrib/libs/pire/pire/stub/singleton.h>
-
+ 
+#include <contrib/libs/pire/pire/stub/stl.h> 
+#include <contrib/libs/pire/pire/stub/utf8.h> 
+#include <contrib/libs/pire/pire/stub/singleton.h> 
+ 
 #include "fsm.h"
 #include "re_lexer.h"
 #include "re_parser.h"

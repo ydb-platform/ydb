@@ -27,17 +27,17 @@
 #include <cstring>
 #include <string.h>
 #include <contrib/libs/pire/pire/approx_matching.h>
-#include <contrib/libs/pire/pire/fsm.h>
-#include <contrib/libs/pire/pire/partition.h>
-#include <contrib/libs/pire/pire/run.h>
-#include <contrib/libs/pire/pire/static_assert.h>
-#include <contrib/libs/pire/pire/platform.h>
-#include <contrib/libs/pire/pire/glue.h>
-#include <contrib/libs/pire/pire/determine.h>
-#include <contrib/libs/pire/pire/stub/stl.h>
-#include <contrib/libs/pire/pire/stub/saveload.h>
-#include <contrib/libs/pire/pire/stub/lexical_cast.h>
-
+#include <contrib/libs/pire/pire/fsm.h> 
+#include <contrib/libs/pire/pire/partition.h> 
+#include <contrib/libs/pire/pire/run.h> 
+#include <contrib/libs/pire/pire/static_assert.h> 
+#include <contrib/libs/pire/pire/platform.h> 
+#include <contrib/libs/pire/pire/glue.h> 
+#include <contrib/libs/pire/pire/determine.h> 
+#include <contrib/libs/pire/pire/stub/stl.h> 
+#include <contrib/libs/pire/pire/stub/saveload.h> 
+#include <contrib/libs/pire/pire/stub/lexical_cast.h> 
+ 
 #include "common.h"
 
 namespace Pire {

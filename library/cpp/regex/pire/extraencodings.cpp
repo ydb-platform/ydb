@@ -4,7 +4,7 @@
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
 #include <library/cpp/charset/doccodes.h>
-
+ 
 #include "pire.h"
 
 namespace NPire {

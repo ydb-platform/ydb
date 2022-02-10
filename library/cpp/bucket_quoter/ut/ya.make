@@ -1,18 +1,18 @@
-UNITTEST() 
- 
-OWNER( 
-      g:kikimr 
-      svc 
-) 
- 
-FORK_SUBTESTS() 
-SRCS( 
-	main.cpp 
-	test_namespace.cpp 
-) 
-PEERDIR( 
-    library/cpp/bucket_quoter 
-    library/cpp/getopt 
-) 
- 
-END() 
+UNITTEST()
+
+OWNER(
+      g:kikimr
+      svc
+)
+
+FORK_SUBTESTS()
+SRCS(
+	main.cpp
+	test_namespace.cpp
+)
+PEERDIR(
+    library/cpp/bucket_quoter
+    library/cpp/getopt
+)
+
+END()

@@ -138,7 +138,7 @@ def fetch(resource_id, custom_fetcher):
     except Exception as e:
         sys.stderr.write(
             "Failed to fetch resource {}: {}\n".format(resource_id, str(e))
-        )
+        ) 
         raise
 
     if resource_info.get('state', 'DELETED') != 'READY':

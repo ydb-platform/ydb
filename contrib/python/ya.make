@@ -317,7 +317,7 @@ RECURSE(
     docker
     docopt
     docstring-parser
-    docutils
+    docutils 
     dohq-teamcity
     dominate
     dotmap

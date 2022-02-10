@@ -473,7 +473,7 @@ protected:
         if (NodeId)
             RunConfig.NodeId = NodeId;
         if (AppConfig.HasNameserviceConfig() && NodeId) {
-            bool nodeIdMatchesConfig = false;
+            bool nodeIdMatchesConfig = true;
             TString localhost("localhost");
             TString hostname;
             try {
@@ -487,10 +487,9 @@ protected:
                     if (node.GetNodeId() == NodeId) {
                         if ((node.GetHost() != hostname && node.GetHost() != localhost) ||
                             (InterconnectPort && InterconnectPort != node.GetPort())) {
-                            continue;
+                            nodeIdMatchesConfig = false;
+                            break;
                         }
-                        nodeIdMatchesConfig = true;
-                        break;
                     }
                 }
             } catch(TSystemError& e) {

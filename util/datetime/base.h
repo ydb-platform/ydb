@@ -2,7 +2,7 @@
 
 #include "systime.h"
 
-#include <util/str_stl.h>
+#include <util/str_stl.h> 
 #include <util/system/platform.h>
 #include <util/system/datetime.h>
 #include <util/generic/string.h>
@@ -340,12 +340,12 @@ public:
 Y_DECLARE_PODTYPE(TDuration);
 
 template <>
-struct THash<TDuration> {
-    size_t operator()(const TDuration& key) const {
-        return THash<TDuration::TValue>()(key.GetValue());
-    }
-};
-
+struct THash<TDuration> { 
+    size_t operator()(const TDuration& key) const { 
+        return THash<TDuration::TValue>()(key.GetValue()); 
+    } 
+}; 
+ 
 /// TInstant and TDuration are guaranteed to have same precision
 class TInstant: public TTimeBase<TInstant> {
     using TBase = TTimeBase<TInstant>;
@@ -560,12 +560,12 @@ public:
 Y_DECLARE_PODTYPE(TInstant);
 
 template <>
-struct THash<TInstant> {
-    size_t operator()(const TInstant& key) const {
-        return THash<TInstant::TValue>()(key.GetValue());
-    }
-};
-
+struct THash<TInstant> { 
+    size_t operator()(const TInstant& key) const { 
+        return THash<TInstant::TValue>()(key.GetValue()); 
+    } 
+}; 
+ 
 namespace NPrivate {
     template <bool PrintUpToSeconds, bool iso>
     struct TPrintableLocalTime {

@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/system/error.h>
+#include <util/system/error.h> 
 
 #include "pair.h"
 #include "poller.h"
@@ -100,115 +100,115 @@ Y_UNIT_TEST_SUITE(TSocketPollerTest) {
         poller.WaitRead(s1, nullptr);
         poller.WaitWrite(s1, nullptr);
     }
-
-    Y_UNIT_TEST(TestSimpleEdgeTriggered) {
-        SOCKET sockets[2];
-        UNIT_ASSERT(SocketPair(sockets) == 0);
-
-        TSocketHolder s1(sockets[0]);
-        TSocketHolder s2(sockets[1]);
-
-        SetNonBlock(sockets[1]);
-
-        TSocketPoller poller;
-
-        UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-        UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-
-        for (ui32 i = 0; i < 3; ++i) {
-            poller.WaitReadWriteEdgeTriggered(sockets[1], (void*)17);
-
-            // notify about writeble
-            UNIT_ASSERT_VALUES_EQUAL((void*)17, poller.WaitT(TDuration::Zero()));
-            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-
-            char buf[2];
-
-            buf[0] = i + 10;
-            buf[1] = i + 20;
-
-            // send one byte
-            UNIT_ASSERT_VALUES_EQUAL(1, send(sockets[0], buf, 1, 0));
-
-            UNIT_ASSERT_VALUES_EQUAL((void*)17, poller.WaitT(TDuration::Zero()));
-            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-
-            // restart without reading
-            poller.RestartReadWriteEdgeTriggered(sockets[1], (void*)17, false);
-
-            // after restart read and write might generate separate events
-            {
+ 
+    Y_UNIT_TEST(TestSimpleEdgeTriggered) { 
+        SOCKET sockets[2]; 
+        UNIT_ASSERT(SocketPair(sockets) == 0); 
+ 
+        TSocketHolder s1(sockets[0]); 
+        TSocketHolder s2(sockets[1]); 
+ 
+        SetNonBlock(sockets[1]); 
+ 
+        TSocketPoller poller; 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+        UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+ 
+        for (ui32 i = 0; i < 3; ++i) { 
+            poller.WaitReadWriteEdgeTriggered(sockets[1], (void*)17); 
+ 
+            // notify about writeble 
+            UNIT_ASSERT_VALUES_EQUAL((void*)17, poller.WaitT(TDuration::Zero())); 
+            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+ 
+            char buf[2]; 
+ 
+            buf[0] = i + 10; 
+            buf[1] = i + 20; 
+ 
+            // send one byte 
+            UNIT_ASSERT_VALUES_EQUAL(1, send(sockets[0], buf, 1, 0)); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL((void*)17, poller.WaitT(TDuration::Zero())); 
+            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+ 
+            // restart without reading 
+            poller.RestartReadWriteEdgeTriggered(sockets[1], (void*)17, false); 
+ 
+            // after restart read and write might generate separate events 
+            { 
                 void* events[3];
-                size_t count = poller.WaitT(events, 3, TDuration::Zero());
-                UNIT_ASSERT_GE(count, 1);
-                UNIT_ASSERT_LE(count, 2);
-                UNIT_ASSERT_VALUES_EQUAL(events[0], (void*)17);
-            }
-
-            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-
-            // second two more bytes
-            UNIT_ASSERT_VALUES_EQUAL(2, send(sockets[0], buf, 2, 0));
-
-            // here poller could notify or not because we haven't seen end
-            Y_UNUSED(poller.WaitT(TDuration::Zero()));
-
-            // recv one, leave two
-            UNIT_ASSERT_VALUES_EQUAL(1, recv(sockets[1], buf, 1, 0));
-            UNIT_ASSERT_VALUES_EQUAL(char(i + 10), buf[0]);
-
-            // nothing new
-            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-
-            // recv the rest
-            UNIT_ASSERT_VALUES_EQUAL(2, recv(sockets[1], buf, 2, 0));
-            UNIT_ASSERT_VALUES_EQUAL(char(i + 10), buf[0]);
-            UNIT_ASSERT_VALUES_EQUAL(char(i + 20), buf[1]);
-
-            // still nothing new
-            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-
-            // hit end
-            ClearLastSystemError();
-            UNIT_ASSERT_VALUES_EQUAL(-1, recv(sockets[1], buf, 1, 0));
-            UNIT_ASSERT_VALUES_EQUAL(EAGAIN, LastSystemError());
-
-            // restart after end (noop for epoll)
-            poller.RestartReadWriteEdgeTriggered(sockets[1], (void*)17, true);
-
-            // send and recv byte
-            UNIT_ASSERT_VALUES_EQUAL(1, send(sockets[0], buf, 1, 0));
-
-            UNIT_ASSERT_VALUES_EQUAL((void*)17, poller.WaitT(TDuration::Zero()));
-            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-
-            // recv and see end
-            UNIT_ASSERT_VALUES_EQUAL(1, recv(sockets[1], buf, 2, 0));
-            UNIT_ASSERT_VALUES_EQUAL(char(i + 10), buf[0]);
-
-            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-
-            // the same but send before restart
-            UNIT_ASSERT_VALUES_EQUAL(1, send(sockets[0], buf, 1, 0));
-
-            // restart after end (noop for epoll)
-            poller.RestartReadWriteEdgeTriggered(sockets[1], (void*)17, true);
-
-            UNIT_ASSERT_VALUES_EQUAL((void*)17, poller.WaitT(TDuration::Zero()));
-            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-
-            UNIT_ASSERT_VALUES_EQUAL(1, recv(sockets[1], buf, 2, 0));
-            UNIT_ASSERT_VALUES_EQUAL(char(i + 10), buf[0]);
-
-            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
-
-            poller.Unwait(sockets[1]);
-        }
-    }
+                size_t count = poller.WaitT(events, 3, TDuration::Zero()); 
+                UNIT_ASSERT_GE(count, 1); 
+                UNIT_ASSERT_LE(count, 2); 
+                UNIT_ASSERT_VALUES_EQUAL(events[0], (void*)17); 
+            } 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+ 
+            // second two more bytes 
+            UNIT_ASSERT_VALUES_EQUAL(2, send(sockets[0], buf, 2, 0)); 
+ 
+            // here poller could notify or not because we haven't seen end 
+            Y_UNUSED(poller.WaitT(TDuration::Zero())); 
+ 
+            // recv one, leave two 
+            UNIT_ASSERT_VALUES_EQUAL(1, recv(sockets[1], buf, 1, 0)); 
+            UNIT_ASSERT_VALUES_EQUAL(char(i + 10), buf[0]); 
+ 
+            // nothing new 
+            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+ 
+            // recv the rest 
+            UNIT_ASSERT_VALUES_EQUAL(2, recv(sockets[1], buf, 2, 0)); 
+            UNIT_ASSERT_VALUES_EQUAL(char(i + 10), buf[0]); 
+            UNIT_ASSERT_VALUES_EQUAL(char(i + 20), buf[1]); 
+ 
+            // still nothing new 
+            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+ 
+            // hit end 
+            ClearLastSystemError(); 
+            UNIT_ASSERT_VALUES_EQUAL(-1, recv(sockets[1], buf, 1, 0)); 
+            UNIT_ASSERT_VALUES_EQUAL(EAGAIN, LastSystemError()); 
+ 
+            // restart after end (noop for epoll) 
+            poller.RestartReadWriteEdgeTriggered(sockets[1], (void*)17, true); 
+ 
+            // send and recv byte 
+            UNIT_ASSERT_VALUES_EQUAL(1, send(sockets[0], buf, 1, 0)); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL((void*)17, poller.WaitT(TDuration::Zero())); 
+            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+ 
+            // recv and see end 
+            UNIT_ASSERT_VALUES_EQUAL(1, recv(sockets[1], buf, 2, 0)); 
+            UNIT_ASSERT_VALUES_EQUAL(char(i + 10), buf[0]); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+ 
+            // the same but send before restart 
+            UNIT_ASSERT_VALUES_EQUAL(1, send(sockets[0], buf, 1, 0)); 
+ 
+            // restart after end (noop for epoll) 
+            poller.RestartReadWriteEdgeTriggered(sockets[1], (void*)17, true); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL((void*)17, poller.WaitT(TDuration::Zero())); 
+            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(1, recv(sockets[1], buf, 2, 0)); 
+            UNIT_ASSERT_VALUES_EQUAL(char(i + 10), buf[0]); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+            UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero())); 
+ 
+            poller.Unwait(sockets[1]); 
+        } 
+    } 
 
 #if defined(HAVE_EPOLL_POLLER)
     Y_UNIT_TEST(TestRdhup) {

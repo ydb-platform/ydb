@@ -124,8 +124,8 @@ public:
             Queue.Push(obj);
         }
 
-        QueuePushCond.Signal();
-
+        QueuePushCond.Signal(); 
+ 
         return true;
     }
 
@@ -193,7 +193,7 @@ private:
         with_lock (StopMutex) {
             while (ThreadCountReal) {
                 with_lock (QueueMutex) {
-                    QueuePushCond.Signal();
+                    QueuePushCond.Signal(); 
                 }
 
                 StopCond.Wait(StopMutex);
@@ -213,7 +213,7 @@ private:
 
             with_lock (QueueMutex) {
                 while (Queue.Empty() && !AtomicGet(ShouldTerminate)) {
-                    QueuePushCond.Wait(QueueMutex);
+                    QueuePushCond.Wait(QueueMutex); 
                 }
 
                 if (AtomicGet(ShouldTerminate) && Queue.Empty()) {
@@ -259,7 +259,7 @@ private:
     TThreadNamer Namer;
     mutable TMutex QueueMutex;
     mutable TMutex StopMutex;
-    TCondVar QueuePushCond;
+    TCondVar QueuePushCond; 
     TCondVar QueuePopCond;
     TCondVar StopCond;
     TJobQueue Queue;

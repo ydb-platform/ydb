@@ -1,13 +1,13 @@
 import urllib2
-import argparse
+import argparse 
 import xmlrpclib
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-r', '--resource-id', type=int, required=True)
-    parser.add_argument('-o', '--output', required=True)
-    return parser.parse_args()
+    parser = argparse.ArgumentParser() 
+    parser.add_argument('-r', '--resource-id', type=int, required=True) 
+    parser.add_argument('-o', '--output', required=True) 
+    return parser.parse_args() 
 
 
 def fetch(url, retries=4, timeout=5):
@@ -37,7 +37,7 @@ def fetch_resource(id_):
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    args = parse_args() 
 
-    with open(args.output, 'wb') as f:
-        f.write(fetch_resource(int(args.resource_id)))
+    with open(args.output, 'wb') as f: 
+        f.write(fetch_resource(int(args.resource_id))) 

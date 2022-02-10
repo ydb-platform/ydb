@@ -35,14 +35,14 @@ template <class T>
 struct THash;
 
 //intrusive containers
-struct TIntrusiveListDefaultTag;
-template <class T, class Tag = TIntrusiveListDefaultTag>
+struct TIntrusiveListDefaultTag; 
+template <class T, class Tag = TIntrusiveListDefaultTag> 
 class TIntrusiveList;
 
-template <class T, class D, class Tag = TIntrusiveListDefaultTag>
+template <class T, class D, class Tag = TIntrusiveListDefaultTag> 
 class TIntrusiveListWithAutoDelete;
 
-template <class T, class Tag = TIntrusiveListDefaultTag>
+template <class T, class Tag = TIntrusiveListDefaultTag> 
 class TIntrusiveSList;
 
 template <class T, class C>

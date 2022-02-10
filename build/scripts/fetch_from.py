@@ -20,11 +20,11 @@ def make_user_agent():
     return 'fetch_from: {host}'.format(host=socket.gethostname())
 
 
-def add_common_arguments(parser):
+def add_common_arguments(parser): 
     parser.add_argument('--copy-to')  # used by jbuild in fetch_resource
     parser.add_argument('--rename-to')  # used by test_node in inject_mds_resource_to_graph
-    parser.add_argument('--copy-to-dir')
-    parser.add_argument('--untar-to')
+    parser.add_argument('--copy-to-dir') 
+    parser.add_argument('--untar-to') 
     parser.add_argument('--rename', action='append', default=[], metavar='FILE', help='rename FILE to the corresponding output')
     parser.add_argument('--executable', action='store_true', help='make outputs executable')
     parser.add_argument('--log-path')
@@ -330,7 +330,7 @@ def process(fetched_file, file_name, args, remove=True):
     if args.copy_to_dir:
         hardlink_or_copy(fetched_file, os.path.join(args.copy_to_dir, file_name))
 
-    if args.untar_to:
+    if args.untar_to: 
         ensure_dir(args.untar_to)
         # Extract only requested files
         try:

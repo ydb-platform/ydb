@@ -1,7 +1,7 @@
 import os
 import sys
 import logging
-import argparse
+import argparse 
 
 import fetch_from
 
@@ -9,10 +9,10 @@ MDS_PREFIX = "https://storage.yandex-team.ru/get-devtools/"
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
-    fetch_from.add_common_arguments(parser)
+    parser = argparse.ArgumentParser() 
+    fetch_from.add_common_arguments(parser) 
 
-    parser.add_argument('--key', required=True)
+    parser.add_argument('--key', required=True) 
 
     return parser.parse_args()
 
@@ -29,21 +29,21 @@ def fetch(key):
     return fetched_file, file_name
 
 
-def main(args):
-    fetched_file, resource_file_name = fetch(args.key)
+def main(args): 
+    fetched_file, resource_file_name = fetch(args.key) 
 
-    fetch_from.process(fetched_file, resource_file_name, args)
+    fetch_from.process(fetched_file, resource_file_name, args) 
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    args = parse_args() 
     fetch_from.setup_logging(args, os.path.basename(__file__))
 
     try:
-        main(args)
+        main(args) 
     except Exception as e:
         logging.exception(e)
-        print >>sys.stderr, open(args.abs_log_path).read()
+        print >>sys.stderr, open(args.abs_log_path).read() 
         sys.stderr.flush()
 
         import error

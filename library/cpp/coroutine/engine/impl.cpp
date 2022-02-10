@@ -51,7 +51,7 @@ bool TCont::Join(TCont* c, TInstant deadLine) noexcept {
                 c->Cancel();
 
                 do {
-                    Switch();
+                    Switch(); 
                 } while (!ev.Empty());
             }
 
@@ -68,10 +68,10 @@ int TCont::SleepD(TInstant deadline) noexcept {
     return ExecuteEvent(&event);
 }
 
-void TCont::Switch() noexcept {
-    Executor()->RunScheduler();
-}
-
+void TCont::Switch() noexcept { 
+    Executor()->RunScheduler(); 
+} 
+ 
 void TCont::Yield() noexcept {
     if (SleepD(TInstant::Zero())) {
         ReScheduleAndSwitch();
@@ -80,7 +80,7 @@ void TCont::Yield() noexcept {
 
 void TCont::ReScheduleAndSwitch() noexcept {
     ReSchedule();
-    Switch();
+    Switch(); 
 }
 
 void TCont::Terminate() {
@@ -300,8 +300,8 @@ void TContExecutor::RunScheduler() noexcept {
     try {
         TContExecutor* const prev = ThisThreadExecutor();
         ThisThreadExecutor() = this;
-        TCont* caller = Current_;
-        TExceptionSafeContext* context = caller ? caller->Trampoline_.Context() : &SchedContext_;
+        TCont* caller = Current_; 
+        TExceptionSafeContext* context = caller ? caller->Trampoline_.Context() : &SchedContext_; 
         Y_DEFER {
             ThisThreadExecutor() = prev;
         };
@@ -309,17 +309,17 @@ void TContExecutor::RunScheduler() noexcept {
         while (true) {
             if (ScheduleCallback_ && Current_) {
                 ScheduleCallback_->OnUnschedule(*this);
-            }
-
-            WaitForIO();
-            DeleteScheduled();
+            } 
+ 
+            WaitForIO(); 
+            DeleteScheduled(); 
             Ready_.Append(ReadyNext_);
 
             if (Ready_.Empty()) {
-                Current_ = nullptr;
-                if (caller) {
-                    context->SwitchTo(&SchedContext_);
-                }
+                Current_ = nullptr; 
+                if (caller) { 
+                    context->SwitchTo(&SchedContext_); 
+                } 
                 break;
             }
 
@@ -328,21 +328,21 @@ void TContExecutor::RunScheduler() noexcept {
             if (ScheduleCallback_) {
                 ScheduleCallback_->OnSchedule(*this, *cont);
             }
-
-            Current_ = cont;
-            cont->Scheduled_ = false;
-            if (cont == caller) {
-                break;
+ 
+            Current_ = cont; 
+            cont->Scheduled_ = false; 
+            if (cont == caller) { 
+                break; 
             }
-            context->SwitchTo(cont->Trampoline_.Context());
+            context->SwitchTo(cont->Trampoline_.Context()); 
             if (Paused_) {
                 Paused_ = false;
                 Current_ = nullptr;
                 break;
             }
-            if (caller) {
-                break;
-            }
+            if (caller) { 
+                break; 
+            } 
         }
     } catch (...) {
         TBackTrace::FromCurrentException().PrintTo(Cerr);

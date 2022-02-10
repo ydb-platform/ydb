@@ -1,7 +1,7 @@
 import itertools
 import json
 import logging
-import argparse
+import argparse 
 import os
 import random
 import subprocess
@@ -19,10 +19,10 @@ TEMPORARY_ERROR_CODES = (429, 500, 503, 504)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
-    fetch_from.add_common_arguments(parser)
-    parser.add_argument('--resource-id', type=int, required=True)
-    parser.add_argument('--custom-fetcher')
+    parser = argparse.ArgumentParser() 
+    fetch_from.add_common_arguments(parser) 
+    parser.add_argument('--resource-id', type=int, required=True) 
+    parser.add_argument('--custom-fetcher') 
     parser.add_argument('--resource-file')
     return parser.parse_args()
 
@@ -240,7 +240,7 @@ def _get_resource_info_from_file(resource_file):
     return None
 
 
-def main(args):
+def main(args): 
     custom_fetcher = os.environ.get('YA_CUSTOM_FETCHER')
 
     resource_info = _get_resource_info_from_file(args.resource_file)
@@ -255,11 +255,11 @@ def main(args):
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    args = parse_args() 
     fetch_from.setup_logging(args, os.path.basename(__file__))
 
     try:
-        main(args)
+        main(args) 
     except Exception as e:
         logging.exception(e)
         print >>sys.stderr, open(args.abs_log_path).read()

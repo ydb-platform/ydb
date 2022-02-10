@@ -1,5 +1,5 @@
-LIBRARY() 
- 
-OWNER(e-sidorov) 
- 
-END() 
+LIBRARY()
+
+OWNER(e-sidorov)
+
+END()

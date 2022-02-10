@@ -325,26 +325,26 @@ void SetNoDelay(SOCKET s, bool value) {
     CheckedSetSockOpt(s, IPPROTO_TCP, TCP_NODELAY, (int)value, "tcp no delay");
 }
 
-void SetCloseOnExec(SOCKET s, bool value) { 
-#if defined(_unix_) 
-    int flags = fcntl(s, F_GETFD); 
-    if (flags == -1) { 
-        ythrow TSystemError() << "fcntl() failed"; 
-    } 
-    if (value) { 
-        flags |= FD_CLOEXEC; 
-    } else { 
-        flags &= ~FD_CLOEXEC; 
-    } 
-    if (fcntl(s, F_SETFD, flags) == -1) { 
-        ythrow TSystemError() << "fcntl() failed"; 
-    } 
-#else 
+void SetCloseOnExec(SOCKET s, bool value) {
+#if defined(_unix_)
+    int flags = fcntl(s, F_GETFD);
+    if (flags == -1) {
+        ythrow TSystemError() << "fcntl() failed";
+    }
+    if (value) {
+        flags |= FD_CLOEXEC;
+    } else {
+        flags &= ~FD_CLOEXEC;
+    }
+    if (fcntl(s, F_SETFD, flags) == -1) {
+        ythrow TSystemError() << "fcntl() failed";
+    }
+#else
     Y_UNUSED(s);
     Y_UNUSED(value);
-#endif 
-} 
- 
+#endif
+}
+
 size_t GetMaximumSegmentSize(SOCKET s) {
 #if defined(TCP_MAXSEG)
     int val;

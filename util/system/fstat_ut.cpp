@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(TestFileStat) {
         UNIT_ASSERT_VALUES_EQUAL(cFs.Mode, oFs.Mode);
         UNIT_ASSERT_VALUES_EQUAL(cFs.Uid, oFs.Uid);
         UNIT_ASSERT_VALUES_EQUAL(cFs.Gid, oFs.Gid);
-        UNIT_ASSERT_VALUES_EQUAL(cFs.INode, oFs.INode); 
+        UNIT_ASSERT_VALUES_EQUAL(cFs.INode, oFs.INode);
         UNIT_ASSERT(unlink(fileName.data()) == 0);
     }
 

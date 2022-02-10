@@ -7,7 +7,7 @@
 
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
-
+ 
 #include <library/cpp/grpc/client/grpc_client_low.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
@@ -805,7 +805,7 @@ public:
 
 class TClientCommandSchemaTableOptions : public TClientCommand {
 public:
-    NGrpc::TGRpcClientConfig ClientConfig;
+    NGrpc::TGRpcClientConfig ClientConfig; 
 
     TClientCommandSchemaTableOptions()
         : TClientCommand("options", {}, "Describe table options")
@@ -923,7 +923,7 @@ public:
 
 class TClientCommandSchemaTableCopy : public TClientCommand {
 public:
-    NGrpc::TGRpcClientConfig ClientConfig;
+    NGrpc::TGRpcClientConfig ClientConfig; 
     TString DatabaseName;
     TVector<TString> SrcValues;
     TVector<TString> DstValues;

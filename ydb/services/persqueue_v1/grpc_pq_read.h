@@ -23,13 +23,13 @@ inline TActorId GetPQReadServiceActorID() {
     return TActorId(0, "PQReadSvc");
 }
 
-IActor* CreatePQReadService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
-                            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
+IActor* CreatePQReadService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache, 
+                            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions); 
 
 class TPQReadService : public NActors::TActorBootstrapped<TPQReadService> {
 public:
-    TPQReadService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
-                   TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
+    TPQReadService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache, 
+                   TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions); 
 
     ~TPQReadService()
     {}

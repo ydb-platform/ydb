@@ -1,17 +1,17 @@
-OWNER(
+OWNER( 
     g:kikimr
-    g:sqs
-)
-
+    g:sqs 
+) 
+ 
 UNITTEST_FOR(ydb/library/http_proxy/authorization)
-
+ 
 PEERDIR(
     ydb/library/http_proxy/error
 )
 
-SRCS(
+SRCS( 
     auth_helpers_ut.cpp
     signature_ut.cpp
-)
-
-END()
+) 
+ 
+END() 

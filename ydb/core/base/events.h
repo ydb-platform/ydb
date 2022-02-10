@@ -128,15 +128,15 @@ struct TKikimrEvents : TEvents {
         ES_SCHEME_BOARD_MON,
         ES_YQL_ANALYTICS_PROXY = NYq::TEventIds::ES_YQL_ANALYTICS_PROXY,
         ES_BLOB_CACHE,
-        ES_LONG_TX_SERVICE,
-        ES_TEST_SHARD,
-        ES_DATASTREAMS_PROXY,
-        ES_IAM_TOKEN_SERVICE,
+        ES_LONG_TX_SERVICE, 
+        ES_TEST_SHARD, 
+        ES_DATASTREAMS_PROXY, 
+        ES_IAM_TOKEN_SERVICE, 
         ES_HEALTH_CHECK,
         ES_DQ = NYql::NDq::TDqEvents::ES_DQ_COMPUTE, // 4212
         ES_YQ, // 4213
         ES_CHANGE_EXCHANGE,
-        ES_DATABASE_SERVICE, //4215
+        ES_DATABASE_SERVICE, //4215 
         ES_SEQUENCESHARD, // 4216
         ES_SEQUENCEPROXY, // 4217
         ES_CLOUD_STORAGE,

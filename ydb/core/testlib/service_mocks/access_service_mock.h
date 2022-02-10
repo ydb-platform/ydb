@@ -31,18 +31,18 @@ public:
     virtual grpc::Status Authenticate(
             grpc::ServerContext* ctx,
             const yandex::cloud::priv::servicecontrol::v1::AuthenticateRequest* request,
-            yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse* response) override
-    {
-        TString key;
-        if (request->has_signature()) {
-            key = request->signature().v4_parameters().service();
-        } else {
-            key = request->iam_token();
-        }
-        auto it = AuthenticateData.find(key);
+            yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse* response) override 
+    { 
+        TString key; 
+        if (request->has_signature()) { 
+            key = request->signature().v4_parameters().service(); 
+        } else { 
+            key = request->iam_token(); 
+        } 
+        auto it = AuthenticateData.find(key); 
         if (it != AuthenticateData.end()) {
             response->CopyFrom(it->second.Response);
-            CheckRequestId(ctx, it->second, key);
+            CheckRequestId(ctx, it->second, key); 
             return it->second.Status;
         } else {
             return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Permission Denied");

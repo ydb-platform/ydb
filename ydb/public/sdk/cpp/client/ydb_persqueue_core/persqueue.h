@@ -170,34 +170,34 @@ using TAsyncDescribeTopicResult = NThreading::TFuture<TDescribeTopicResult>;
 
 const TVector<ECodec>& GetDefaultCodecs();
 
-struct TReadRuleSettings {
-    TReadRuleSettings() {}
-    using TSelf = TReadRuleSettings;
-    FLUENT_SETTING(TString, ConsumerName);
-    FLUENT_SETTING_DEFAULT(bool, Important, false);
-    FLUENT_SETTING_DEFAULT(TInstant, StartingMessageTimestamp, TInstant::Zero());
-    FLUENT_SETTING_DEFAULT(EFormat, SupportedFormat, EFormat::BASE)
-    FLUENT_SETTING_DEFAULT(TVector<ECodec>, SupportedCodecs, GetDefaultCodecs());
+struct TReadRuleSettings { 
+    TReadRuleSettings() {} 
+    using TSelf = TReadRuleSettings; 
+    FLUENT_SETTING(TString, ConsumerName); 
+    FLUENT_SETTING_DEFAULT(bool, Important, false); 
+    FLUENT_SETTING_DEFAULT(TInstant, StartingMessageTimestamp, TInstant::Zero()); 
+    FLUENT_SETTING_DEFAULT(EFormat, SupportedFormat, EFormat::BASE) 
+    FLUENT_SETTING_DEFAULT(TVector<ECodec>, SupportedCodecs, GetDefaultCodecs()); 
 
-    FLUENT_SETTING_DEFAULT(ui32, Version, 0);
+    FLUENT_SETTING_DEFAULT(ui32, Version, 0); 
     FLUENT_SETTING(TString, ServiceType);
-
-    TReadRuleSettings& SetSettings(const TDescribeTopicResult::TTopicSettings::TReadRule& settings) {
-        ConsumerName_ = settings.ConsumerName();
-        Important_ = settings.Important();
-        StartingMessageTimestamp_ = settings.StartingMessageTimestamp();
-        SupportedFormat_ = settings.SupportedFormat();
-        SupportedCodecs_.clear();
-        for (const auto& codec : settings.SupportedCodecs()) {
-            SupportedCodecs_.push_back(codec);
-        }
-        Version_ = settings.Version();
+ 
+    TReadRuleSettings& SetSettings(const TDescribeTopicResult::TTopicSettings::TReadRule& settings) { 
+        ConsumerName_ = settings.ConsumerName(); 
+        Important_ = settings.Important(); 
+        StartingMessageTimestamp_ = settings.StartingMessageTimestamp(); 
+        SupportedFormat_ = settings.SupportedFormat(); 
+        SupportedCodecs_.clear(); 
+        for (const auto& codec : settings.SupportedCodecs()) { 
+            SupportedCodecs_.push_back(codec); 
+        } 
+        Version_ = settings.Version(); 
         ServiceType_ = settings.ServiceType();
-        return *this;
-    }
-
-};
-
+        return *this; 
+    } 
+ 
+}; 
+ 
 // Settings for topic.
 template <class TDerived>
 struct TTopicSettings : public TOperationRequestSettings<TDerived> {
@@ -294,17 +294,17 @@ struct TDropTopicSettings : public TOperationRequestSettings<TDropTopicSettings>
 // Settings for describe resource request.
 struct TDescribeTopicSettings : public TOperationRequestSettings<TDescribeTopicSettings> {};
 
-// Settings for add read rule request
-struct TAddReadRuleSettings : public TTopicSettings<TAddReadRuleSettings> {
-    FLUENT_SETTING(TReadRuleSettings, ReadRule);
-};
+// Settings for add read rule request 
+struct TAddReadRuleSettings : public TTopicSettings<TAddReadRuleSettings> { 
+    FLUENT_SETTING(TReadRuleSettings, ReadRule); 
+}; 
 
-// Settings for remove read rule request
-struct TRemoveReadRuleSettings : public TOperationRequestSettings<TRemoveReadRuleSettings> {
-    FLUENT_SETTING(TString, ConsumerName);
-};
-
-
+// Settings for remove read rule request 
+struct TRemoveReadRuleSettings : public TOperationRequestSettings<TRemoveReadRuleSettings> { 
+    FLUENT_SETTING(TString, ConsumerName); 
+}; 
+ 
+ 
 //! Session metainformation.
 struct TWriteSessionMeta : public TThrRefBase {
     using TPtr = TIntrusivePtr<TWriteSessionMeta>;
@@ -557,9 +557,9 @@ struct TReadSessionEvent {
             TMessage(const TString& data,
                      std::exception_ptr decompressionException,
                      const TMessageInformation& information,
-                     TPartitionStream::TPtr partitionStream,
-                     const TString& partitionKey,
-                     const TString& explicitHash);
+                     TPartitionStream::TPtr partitionStream, 
+                     const TString& partitionKey, 
+                     const TString& explicitHash); 
 
             //! Commits single message.
             void Commit() override;
@@ -1481,11 +1481,11 @@ public:
     TAsyncStatus DropTopic(const TString& path, const TDropTopicSettings& = {});
 
     // Add topic read rule
-    TAsyncStatus AddReadRule(const TString& path, const TAddReadRuleSettings& = {});
-
-    // Remove topic read rule
-    TAsyncStatus RemoveReadRule(const TString& path, const TRemoveReadRuleSettings& = {});
-
+    TAsyncStatus AddReadRule(const TString& path, const TAddReadRuleSettings& = {}); 
+ 
+    // Remove topic read rule 
+    TAsyncStatus RemoveReadRule(const TString& path, const TRemoveReadRuleSettings& = {}); 
+ 
     // Describe settings of topic.
     TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& = {});
 

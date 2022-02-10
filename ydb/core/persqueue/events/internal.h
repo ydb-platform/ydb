@@ -129,18 +129,18 @@ struct TEvPQ {
             ui64 WriteTimestamp;
             TString Data;
             ui32 UncompressedSize;
-            TString PartitionKey;
-            TString ExplicitHashKey;
+            TString PartitionKey; 
+            TString ExplicitHashKey; 
             bool External;
         };
 
-        TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite)
+        TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite) 
         : Cookie(cookie)
         , MessageNo(messageNo)
         , OwnerCookie(ownerCookie)
         , Offset(offset)
         , Msgs(std::move(msgs))
-        , IsDirectWrite(isDirectWrite)
+        , IsDirectWrite(isDirectWrite) 
         {}
 
         ui64 Cookie;
@@ -148,7 +148,7 @@ struct TEvPQ {
         TString OwnerCookie;
         TMaybe<ui64> Offset;
         TVector<TMsg> Msgs;
-        bool IsDirectWrite;
+        bool IsDirectWrite; 
 
     };
 

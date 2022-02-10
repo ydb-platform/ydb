@@ -1,153 +1,153 @@
-syntax = "proto3";
-option cc_enable_arenas = true;
-
+syntax = "proto3"; 
+option cc_enable_arenas = true; 
+ 
 import "ydb/public/api/protos/ydb_operation.proto";
-
+ 
 import "google/protobuf/descriptor.proto";
-
+ 
 package Ydb.DataStreams.V1;
-option java_package = "com.yandex.ydb.datastreams.v1";
-
+option java_package = "com.yandex.ydb.datastreams.v1"; 
+ 
 // Extsions to simplify json <-> proto conversion
-enum EFieldTransformationType {
-    TRANSFORM_NONE = 0;
-    TRANSFORM_BASE64 = 1;
+enum EFieldTransformationType { 
+    TRANSFORM_NONE = 0; 
+    TRANSFORM_BASE64 = 1; 
     TRANSFORM_DOUBLE_S_TO_INT_MS = 2;
     TRANSFORM_EMPTY_TO_NOTHING = 3;
-}
-
-extend google.protobuf.FieldOptions {
-    EFieldTransformationType FieldTransformer = 58123;
-}
-
+} 
+ 
+extend google.protobuf.FieldOptions { 
+    EFieldTransformationType FieldTransformer = 58123; 
+} 
+ 
 // Here and below: Kinesis data types mapped to protobuf
-
-enum EncryptionType {
-    ENCRYPTION_UNDEFINED = 0;
+ 
+enum EncryptionType { 
+    ENCRYPTION_UNDEFINED = 0; 
     NONE = 1;
     KMS = 2;
-}
-
-message EnhancedMetrics {
+} 
+ 
+message EnhancedMetrics { 
     // List of shard-level metrics
-    repeated string shard_level_metrics = 1;
-}
+    repeated string shard_level_metrics = 1; 
+} 
 
-message ChildShard {
+message ChildShard { 
     // The range of possible hash key values for the shard
-    HashKeyRange hash_key_range = 1;
+    HashKeyRange hash_key_range = 1; 
     // List of parent shards
-    repeated string parent_shards = 2;
+    repeated string parent_shards = 2; 
     // Name of the shard
     string name = 3;
-}
-
+} 
+ 
 // Represents details of consumer
-message Consumer {
-    string consumer_arn = 1;
+message Consumer { 
+    string consumer_arn = 1; 
     int64 consumer_creation_timestamp = 2 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
-    string consumer_name = 3;
-    ConsumerDescription.ConsumerStatus consumer_status = 4;
-}
+    string consumer_name = 3; 
+    ConsumerDescription.ConsumerStatus consumer_status = 4; 
+} 
 
 // The range of possible hash key values for the shard
-message HashKeyRange {
-    string starting_hash_key = 1;
-    string ending_hash_key = 2;
-}
+message HashKeyRange { 
+    string starting_hash_key = 1; 
+    string ending_hash_key = 2; 
+} 
 
-message Record {
+message Record { 
     // Timestamp that the record was inserted into the stream
     int64 timestamp = 1 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Data blob
     bytes data = 2 [(FieldTransformer) = TRANSFORM_BASE64];
     // Encryption type used on record
-    EncryptionType encryption = 3;
+    EncryptionType encryption = 3; 
     // Identifies shard in the stream the record is assigned to
-    string partition_key = 4;
+    string partition_key = 4; 
     // Unique id of the record within shard
-    string sequence_number = 5;
-}
+    string sequence_number = 5; 
+} 
 
 // Represents the stream description
-message StreamDescription {
+message StreamDescription { 
     // Represents current status of the stream being described
-    enum StreamStatus {
-        STATUS_UNDEFINED = 0;
+    enum StreamStatus { 
+        STATUS_UNDEFINED = 0; 
         // Stream is being created
-        CREATING = 1;
+        CREATING = 1; 
         // Stream is being deleted
-        DELETING = 2;
+        DELETING = 2; 
         // Stream is ready for read & write operations or deletion
-        ACTIVE = 3;
+        ACTIVE = 3; 
         // Shards in the stream are being merged ot split
-        UPDATING = 4;
-    }
-
+        UPDATING = 4; 
+    } 
+ 
     // Encryption type used on record
-    EncryptionType encryption_type = 1;
+    EncryptionType encryption_type = 1; 
     // List of enhanced monitoring settings
-    repeated EnhancedMetrics enhanced_monitoring = 2;
+    repeated EnhancedMetrics enhanced_monitoring = 2; 
     // If true, more shards are available to describe
-    bool has_more_shards = 3;
+    bool has_more_shards = 3; 
     // Id of the key used to encryption
     string key_id = 4;
     // Retention period in hours
-    int32 retention_period_hours = 5;
+    int32 retention_period_hours = 5; 
     // List of shards
-    repeated Shard shards = 6;
-    string stream_arn = 7;
+    repeated Shard shards = 6; 
+    string stream_arn = 7; 
     // Timestamp that the stream was created
     int64 stream_creation_timestamp = 8 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Current status of the stream
-    StreamStatus stream_status = 9;
+    StreamStatus stream_status = 9; 
     // Name of the stream
-    string stream_name = 10;
-    int32 write_quota_kb_per_sec = 11;
-    string owner = 12;
-}
-
+    string stream_name = 10; 
+    int32 write_quota_kb_per_sec = 11; 
+    string owner = 12; 
+} 
+ 
 // Represents range of possible sequence numbers for the shard
-message SequenceNumberRange {
-    string starting_sequence_number = 1;
-    string ending_sequence_number = 2;
-}
-
+message SequenceNumberRange { 
+    string starting_sequence_number = 1; 
+    string ending_sequence_number = 2; 
+} 
+ 
 // Represents shard details
-message Shard {
+message Shard { 
     // Id of the shard adjacent to the shard's parent
     string adjacent_parent_shard_id = 1 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     // The range of possible hash key values for the shard
-    HashKeyRange hash_key_range = 2;
+    HashKeyRange hash_key_range = 2; 
     // Id of the shard's parent
     string parent_shard_id = 3 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     // The range of possible sequence numbers for the shard
     SequenceNumberRange sequence_number_range = 4;
     // Unique id of the shard within stream
-    string shard_id = 5;
-}
-
+    string shard_id = 5; 
+} 
+ 
 // Represents consumer details
-message ConsumerDescription {
-    enum ConsumerStatus {
-        STATUS_UNKNOWN = 0;
-        CREATING = 1;
-        DELETING = 2;
-        ACTIVE = 3;
-    }
-
-    string consumer_arn = 1;
+message ConsumerDescription { 
+    enum ConsumerStatus { 
+        STATUS_UNKNOWN = 0; 
+        CREATING = 1; 
+        DELETING = 2; 
+        ACTIVE = 3; 
+    } 
+ 
+    string consumer_arn = 1; 
     // Timestamp that the consumer was created
     int64 consumer_creation_timestamp = 2 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Name of the consumer
-    string consumer_name = 3;
-    ConsumerStatus consumer_status = 4;
-    string stream_arn = 5;
-}
-
+    string consumer_name = 3; 
+    ConsumerStatus consumer_status = 4; 
+    string stream_arn = 5; 
+} 
+ 
 // Determines how the shard iterator is used to start reading records
-enum ShardIteratorType {
-    SHARD_ITERATOR_UNDEFINED = 0;
+enum ShardIteratorType { 
+    SHARD_ITERATOR_UNDEFINED = 0; 
     // Start reading exactly from the position denoted by a sequence number
     AT_SEQUENCE_NUMBER = 1;
     // Start reading right after the specified position
@@ -158,165 +158,165 @@ enum ShardIteratorType {
     TRIM_HORIZON = 4;
     // Start reading latest records
     LATEST = 5;
-}
-
+} 
+ 
 // Parameters used to filter out the response of ListShards
-message ShardFilter {
-    enum ShardFilterType {
-        SHARD_TYPE_UNDEFINED = 0;
+message ShardFilter { 
+    enum ShardFilterType { 
+        SHARD_TYPE_UNDEFINED = 0; 
         // Include all the shards, starting with the shard whose id immediately follows the shard_id
-        AFTER_SHARD_ID = 1;
+        AFTER_SHARD_ID = 1; 
         // Include all the shards that were open at TRIM_HORIZON
-        AT_TRIM_HORIZON = 2;
+        AT_TRIM_HORIZON = 2; 
         // Include all the shards within the retention period
-        FROM_TRIM_HORIZON = 3;
+        FROM_TRIM_HORIZON = 3; 
         // Include only the currently open shards
-        AT_LATEST = 4;
+        AT_LATEST = 4; 
         // Include all the shards whose start timestamp is <= to the given
-        AT_TIMESTAMP = 5;
+        AT_TIMESTAMP = 5; 
         // Include all closed shards whose end timestamp >= to the given
-        FROM_TIMESTAMP = 6;
-    }
-
+        FROM_TIMESTAMP = 6; 
+    } 
+ 
     // Exclusive id. Can only be used if AFTER_SHARD_ID is specified
-    string shard_id = 1;
+    string shard_id = 1; 
     // Can only be used if AT_TIMESTAMP or FROM_TIMESTAMP are specified.
     int64 timestamp = 2 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     ShardFilterType type = 3;
-}
+} 
 
 // Represents starting position in the stream from which to start reading
-message StartingPosition {
+message StartingPosition { 
     // Timestamp of the record from which to start reading
     int64 timestamp = 1 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Sequence number of the record from which to start reading
-    string sequence_number = 2;
-    ShardIteratorType type = 3;
-}
-
-message StreamDescriptionSummary {
+    string sequence_number = 2; 
+    ShardIteratorType type = 3; 
+} 
+ 
+message StreamDescriptionSummary { 
     // Number of enhanced fan-out consumers
-    int32 consumer_count = 1;
+    int32 consumer_count = 1; 
     // Encryption type used
-    EncryptionType encryption_type = 2;
+    EncryptionType encryption_type = 2; 
     // List of enhanced monitoring settings
-    repeated EnhancedMetrics enhanced_monitoring = 3;
+    repeated EnhancedMetrics enhanced_monitoring = 3; 
     // Id of the key used to encryption
-    string key_id = 4;
+    string key_id = 4; 
     // Number of open shards in the stream
-    int32 open_shard_count = 5;
+    int32 open_shard_count = 5; 
     // Retention period in hours
-    int32 retention_period_hours = 6;
-    string stream_arn = 7;
+    int32 retention_period_hours = 6; 
+    string stream_arn = 7; 
     // Timestamp that the stream was created
     int64 stream_creation_timestamp = 8 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Name of the stream
-    string stream_name = 9;
+    string stream_name = 9; 
     // Current status of the stream
-    StreamDescription.StreamStatus stream_status = 10;
-}
+    StreamDescription.StreamStatus stream_status = 10; 
+} 
 
 // Server sends events of this type after call SubscribeToShard
-message SubscribeToShardEvent {
+message SubscribeToShardEvent { 
     // List of child shards
-    repeated ChildShard child_shards = 1;
+    repeated ChildShard child_shards = 1; 
     // Used in next call to SubscribeToShards
-    string continuation_sequence_number = 2;
+    string continuation_sequence_number = 2; 
     // Number of milliseconds the read records are from the tip of the stream.
     // Zero indicates that record processing is caught up.
-    int32 millis_behind_latest = 3;
+    int32 millis_behind_latest = 3; 
     // List of records
-    repeated Record records = 4;
-}
+    repeated Record records = 4; 
+} 
 
-message SubscribeToShardEventStream {
-    message ExceptionEvent {
-    }
-
-    oneof event {
-        ExceptionEvent internal_failure_exception = 1;
-        ExceptionEvent kms_access_denied_exception = 2;
-        ExceptionEvent kms_disabled_exception = 3;
-        ExceptionEvent kms_invalid_state_exception = 4;
-        ExceptionEvent kms_not_found_exception = 5;
-        ExceptionEvent kms_opt_in_required = 6;
-        ExceptionEvent kms_throttling_exception = 7;
-        ExceptionEvent resource_in_use_exception = 8;
-        ExceptionEvent resource_not_found_exception = 9;
-        SubscribeToShardEvent subscribe_to_shard_event = 10;
-    }
-}
+message SubscribeToShardEventStream { 
+    message ExceptionEvent { 
+    } 
+ 
+    oneof event { 
+        ExceptionEvent internal_failure_exception = 1; 
+        ExceptionEvent kms_access_denied_exception = 2; 
+        ExceptionEvent kms_disabled_exception = 3; 
+        ExceptionEvent kms_invalid_state_exception = 4; 
+        ExceptionEvent kms_not_found_exception = 5; 
+        ExceptionEvent kms_opt_in_required = 6; 
+        ExceptionEvent kms_throttling_exception = 7; 
+        ExceptionEvent resource_in_use_exception = 8; 
+        ExceptionEvent resource_not_found_exception = 9; 
+        SubscribeToShardEvent subscribe_to_shard_event = 10; 
+    } 
+} 
 
 // Represents metadata assigned to the stream (key-value pair)
-message Tag {
-    string key = 1;
-    string value = 2;
-}
-
-message CreateStreamRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+message Tag { 
+    string key = 1; 
+    string value = 2; 
+} 
+ 
+message CreateStreamRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Name of the stream
-    string stream_name = 2;
+    string stream_name = 2; 
     // Shards count for a new stream
-    int32 shard_count = 3;
-
+    int32 shard_count = 3; 
+ 
     // Datastreams extension. Allow to set retention and write quota upon stream creation
-    int32 write_quota_kb_per_sec = 4;
-    int32 retention_period_hours = 5;
+    int32 write_quota_kb_per_sec = 4; 
+    int32 retention_period_hours = 5; 
 }
+ 
+message CreateStreamResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message CreateStreamResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
-
-message CreateStreamResult {
-}
-
-message DeleteStreamRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+message CreateStreamResult { 
+} 
+ 
+message DeleteStreamRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // If unset or false, and the stream has registered consumers, the call to DeleteStream fails
-    bool enforce_consumer_deletion = 2;
+    bool enforce_consumer_deletion = 2; 
     // Name of the stream
-    string stream_name = 3;
-}
+    string stream_name = 3; 
+} 
 
-message DeleteStreamResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message DeleteStreamResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message DeleteStreamResult {
-}
-
-message ListStreamsRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+message DeleteStreamResult { 
+} 
+ 
+message ListStreamsRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Name of stream to start from
     string exclusive_start_stream_name = 2;
     // Max number of entries to return
     int32 limit = 3;
     // Will make recurse listing if set to true. Otherwise will return only streams from root directory.
     bool recurse = 4;
-}
+} 
 
-message ListStreamsResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message ListStreamsResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message ListStreamsResult {
+message ListStreamsResult { 
     // True if more streams are available
     bool has_more_streams = 1;
     // Name of streams
     repeated string stream_names = 2;
-}
-
-message ListShardsRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+} 
+ 
+message ListShardsRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Id of the shard to start from
-    string exclusive_start_shard_id = 2;
+    string exclusive_start_shard_id = 2; 
     // Max number of entries to return
-    int32 max_results = 3;
+    int32 max_results = 3; 
     // Pagination token
     string next_token = 4;
     // Filter out response
@@ -324,189 +324,189 @@ message ListShardsRequest {
     // Used to distinguish streams that have the same name
     int64 stream_creation_timestamp = 6 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Name of the stream
-    string stream_name = 7;
-}
+    string stream_name = 7; 
+} 
 
-message ListShardsResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message ListShardsResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message ListShardsResult {
+message ListShardsResult { 
     // Pagination token
-    string next_token = 1;
+    string next_token = 1; 
     // List of shards
-    repeated Shard shards = 2;
-}
-
-message SetWriteQuotaRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+    repeated Shard shards = 2; 
+} 
+ 
+message SetWriteQuotaRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Name of the stream
-    string stream_name = 2;
-    int32 write_quota_kb_per_sec = 3;
-}
+    string stream_name = 2; 
+    int32 write_quota_kb_per_sec = 3; 
+} 
 
-message SetWriteQuotaResponse {
+message SetWriteQuotaResponse { 
     // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message SetWriteQuotaResult {
-}
-
-message UpdateStreamRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+message SetWriteQuotaResult { 
+} 
+ 
+message UpdateStreamRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Name of the stream
-    string stream_name = 2;
-    int32 write_quota_kb_per_sec = 3;
+    string stream_name = 2; 
+    int32 write_quota_kb_per_sec = 3; 
     // New number of shards
-    int32 target_shard_count = 4;
+    int32 target_shard_count = 4; 
     // Retention period in hours
-    int32 retention_period_hours = 5;
-}
+    int32 retention_period_hours = 5; 
+} 
 
-message UpdateStreamResponse {
+message UpdateStreamResponse { 
     // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message UpdateStreamResult {
-}
-
-message ListStreamConsumersRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+message UpdateStreamResult { 
+} 
+ 
+message ListStreamConsumersRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Max number of entries to return
-    int32 max_results = 2;
+    int32 max_results = 2; 
     // Pagination token
-    string next_token = 3;
-    string stream_arn = 4;
+    string next_token = 3; 
+    string stream_arn = 4; 
     // Used to distinguish streams that have the same name
     int64 stream_creation_timestamp = 5 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
-}
+} 
 
-message ListStreamConsumersResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message ListStreamConsumersResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message ListStreamConsumersResult {
+message ListStreamConsumersResult { 
     // Pagination token
-    string next_token = 1;
+    string next_token = 1; 
     // List of consumers
-    repeated Consumer consumers = 2;
-}
-
-message DescribeStreamRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+    repeated Consumer consumers = 2; 
+} 
+ 
+message DescribeStreamRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Id of the shard to start from
-    string exclusive_start_shard_id = 2;
+    string exclusive_start_shard_id = 2; 
     // Max number of entries to return
-    int32 limit = 3;
+    int32 limit = 3; 
     // Name of the stream to describe
-    string stream_name = 4;
-}
+    string stream_name = 4; 
+} 
+ 
+message DescribeStreamResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message DescribeStreamResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
-
-message DescribeStreamResult {
+message DescribeStreamResult { 
     StreamDescription stream_description = 1;
-}
-
-message RegisterStreamConsumerRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+} 
+ 
+message RegisterStreamConsumerRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Unique name of the consumer within the stream
-    string consumer_name = 2;
-    string stream_arn = 3;
-}
+    string consumer_name = 2; 
+    string stream_arn = 3; 
+} 
 
-message RegisterStreamConsumerResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message RegisterStreamConsumerResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message RegisterStreamConsumerResult {
-    Consumer consumer = 1;
-}
-
-message DeregisterStreamConsumerRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    string consumer_arn = 2;
+message RegisterStreamConsumerResult { 
+    Consumer consumer = 1; 
+} 
+ 
+message DeregisterStreamConsumerRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    string consumer_arn = 2; 
     // Name of consumer
-    string consumer_name = 3;
-    string stream_arn = 4;
-}
+    string consumer_name = 3; 
+    string stream_arn = 4; 
+} 
 
-message DeregisterStreamConsumerResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message DeregisterStreamConsumerResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message DeregisterStreamConsumerResult {
-}
-
-message DescribeStreamConsumerRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    string consumer_arn = 2;
+message DeregisterStreamConsumerResult { 
+} 
+ 
+message DescribeStreamConsumerRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    string consumer_arn = 2; 
     // Name of consumer
-    string consumer_name = 3;
-    string stream_arn = 4;
-}
+    string consumer_name = 3; 
+    string stream_arn = 4; 
+} 
 
-message DescribeStreamConsumerResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message DescribeStreamConsumerResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message DescribeStreamConsumerResult {
-    ConsumerDescription consumer_description = 1;
-}
-
-message PutRecordsRequestEntry {
+message DescribeStreamConsumerResult { 
+    ConsumerDescription consumer_description = 1; 
+} 
+ 
+message PutRecordsRequestEntry { 
     // Data blob
-    bytes data = 1 [(FieldTransformer) = TRANSFORM_BASE64];
+    bytes data = 1 [(FieldTransformer) = TRANSFORM_BASE64]; 
     // Hash value used to explicitly determine the shard
-    string explicit_hash_key = 2;
+    string explicit_hash_key = 2; 
     // Used as input to hash function that maps partition key to a specific shard
-    string partition_key = 3;
-}
-
+    string partition_key = 3; 
+} 
+ 
 // Represents result of an individual record
-message PutRecordsResultEntry {
+message PutRecordsResultEntry { 
     string error_message = 2 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     string error_code = 3 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
-    string sequence_number = 4;
+    string sequence_number = 4; 
     string shard_id = 5;
-}
-
-message GetRecordsRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+} 
+ 
+message GetRecordsRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Max number of records to return
     int32 limit = 2;
     // Iterator to shard
     string shard_iterator = 3;
 }
+ 
+message GetRecordsResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message GetRecordsResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
-
-message GetRecordsResult {
+message GetRecordsResult { 
     // List of child shards if SplitShard was called on a given shard
     repeated ChildShard child_shards = 1;
     // Number of milliseconds the read records are from the tip of the stream.
     // Zero indicates that record processing is caught up.
-    int64 millis_behind_latest = 2;
-    string next_shard_iterator = 3;
+    int64 millis_behind_latest = 2; 
+    string next_shard_iterator = 3; 
     // List of records
     repeated Record records = 4;
-}
-
-message PutRecordRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+} 
+ 
+message PutRecordRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Data blob
     bytes data = 2 [(FieldTransformer) = TRANSFORM_BASE64];
     // Hash value used to explicitly determine the shard
@@ -516,343 +516,343 @@ message PutRecordRequest {
     string sequence_number_for_ordering = 5;
     // Name of the stream to put record to
     string stream_name = 6;
-}
+} 
 
-message PutRecordResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message PutRecordResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message PutRecordResult {
+message PutRecordResult { 
     // Encryption type used
-    EncryptionType encryption_type = 1;
+    EncryptionType encryption_type = 1; 
     // Unique id of the record within shard
-    string sequence_number = 2;
+    string sequence_number = 2; 
     // Id of the shard were the data was inserted
     string shard_id = 3;
-}
-
-message PutRecordsRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+} 
+ 
+message PutRecordsRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // List of records
-    repeated PutRecordsRequestEntry records = 2;
+    repeated PutRecordsRequestEntry records = 2; 
     // Name of the stream to put records to
-    string stream_name = 3;
-}
+    string stream_name = 3; 
+} 
 
-message PutRecordsResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message PutRecordsResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message PutRecordsResult {
+message PutRecordsResult { 
     // Encryption type used
-    EncryptionType encryption_type = 1;
+    EncryptionType encryption_type = 1; 
     // Number of unsuccessfully processed records
-    int32 failed_record_count = 2;
+    int32 failed_record_count = 2; 
     // List of results
-    repeated PutRecordsResultEntry records = 3;
-}
-
-message GetShardIteratorRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+    repeated PutRecordsResultEntry records = 3; 
+} 
+ 
+message GetShardIteratorRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Id of the shard to get iterator for
-    string shard_id = 2;
-    ShardIteratorType shard_iterator_type = 3;
+    string shard_id = 2; 
+    ShardIteratorType shard_iterator_type = 3; 
     // Used with shard iterator type AT_SEQUENCE_NUMBER and AFTER_SEQUENCE_NUMBER
-    string starting_sequence_number = 4;
+    string starting_sequence_number = 4; 
     // Name of the stream
-    string stream_name = 5;
+    string stream_name = 5; 
     // Used with shard iterator type AT_TIMESTAMP
     int64 timestamp = 6 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
-}
+} 
 
-message GetShardIteratorResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message GetShardIteratorResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message GetShardIteratorResult {
+message GetShardIteratorResult { 
     string shard_iterator = 1;
-}
-
-message SubscribeToShardRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    string consumer_arn = 2;
+} 
+ 
+message SubscribeToShardRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    string consumer_arn = 2; 
     // Id of the shard to subscribe to
-    string shard_id = 3;
-    StartingPosition starting_position = 4;
-}
+    string shard_id = 3; 
+    StartingPosition starting_position = 4; 
+} 
 
-message SubscribeToShardResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message SubscribeToShardResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message SubscribeToShardResult {
-    SubscribeToShardEventStream event_stream = 1;
-}
-
-message AddTagsToStreamRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+message SubscribeToShardResult { 
+    SubscribeToShardEventStream event_stream = 1; 
+} 
+ 
+message AddTagsToStreamRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Name of the stream
-    string stream_name = 2;
+    string stream_name = 2; 
     // List of tags to add to stream
-    repeated string tags = 3;
-}
+    repeated string tags = 3; 
+} 
 
-message AddTagsToStreamResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message AddTagsToStreamResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message AddTagsToStreamResult {
-}
-
-message DecreaseStreamRetentionPeriodRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+message AddTagsToStreamResult { 
+} 
+ 
+message DecreaseStreamRetentionPeriodRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Name of the stream
-    string stream_name = 2;
-    // Retention period in hours
-    int32 retention_period_hours = 3;
-}
+    string stream_name = 2; 
+    // Retention period in hours 
+    int32 retention_period_hours = 3; 
+} 
 
-message DecreaseStreamRetentionPeriodResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message DecreaseStreamRetentionPeriodResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message DecreaseStreamRetentionPeriodResult {
-}
+message DecreaseStreamRetentionPeriodResult { 
+} 
+ 
+message DescribeLimitsRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+} 
 
-message DescribeLimitsRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-}
+message DescribeLimitsResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message DescribeLimitsResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
-
-message DescribeLimitsResult {
+message DescribeLimitsResult { 
     // Number of open shards
-    int32 open_shard_count = 1;
+    int32 open_shard_count = 1; 
     // Max number of shards
-    int32 shard_limit = 2;
-}
-
-message DescribeStreamSummaryRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+    int32 shard_limit = 2; 
+} 
+ 
+message DescribeStreamSummaryRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Name of the stream
-    string stream_name = 2;
-}
+    string stream_name = 2; 
+} 
 
-message DescribeStreamSummaryResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message DescribeStreamSummaryResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message DescribeStreamSummaryResult {
+message DescribeStreamSummaryResult { 
     // Stream description sumary
     StreamDescriptionSummary stream_description_summary = 1;
-}
-
-message DisableEnhancedMonitoringRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+} 
+ 
+message DisableEnhancedMonitoringRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // List of shard-level metrics to disable
-    repeated string shard_level_metrics = 2;
+    repeated string shard_level_metrics = 2; 
     // Name of the stream
-    string stream_name = 3;
-}
+    string stream_name = 3; 
+} 
 
-message DisableEnhancedMonitoringResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message DisableEnhancedMonitoringResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message DisableEnhancedMonitoringResult {
+message DisableEnhancedMonitoringResult { 
     // Represents current state before the operation
-    repeated string current_shard_level_metrics = 1;
+    repeated string current_shard_level_metrics = 1; 
     // Represents list of metrics after the operation
-    repeated string desired_shard_level_metrics = 2;
+    repeated string desired_shard_level_metrics = 2; 
     // Name of the stream
-    string stream_name = 3;
-}
-
-message EnableEnhancedMonitoringRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+    string stream_name = 3; 
+} 
+ 
+message EnableEnhancedMonitoringRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // List of shard-level metrics to enable
-    repeated string shard_level_metrics = 2;
+    repeated string shard_level_metrics = 2; 
     // Name of the stream
-    string stream_name = 3;
-}
+    string stream_name = 3; 
+} 
 
-message EnableEnhancedMonitoringResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message EnableEnhancedMonitoringResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message EnableEnhancedMonitoringResult {
+message EnableEnhancedMonitoringResult { 
     // Represents current state before the operation
-    repeated string current_shard_level_metrics = 1;
+    repeated string current_shard_level_metrics = 1; 
     // Represents list of metrics after the operation
-    repeated string desired_shard_level_metrics = 2;
+    repeated string desired_shard_level_metrics = 2; 
     // Name of the stream
-    string stream_name = 3;
-}
-
-message IncreaseStreamRetentionPeriodRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+    string stream_name = 3; 
+} 
+ 
+message IncreaseStreamRetentionPeriodRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Retention period in hours
-    int32 retention_period_hours = 2;
+    int32 retention_period_hours = 2; 
     // Name of the stream
-    string stream_name = 3;
-}
+    string stream_name = 3; 
+} 
 
-message IncreaseStreamRetentionPeriodResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message IncreaseStreamRetentionPeriodResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message IncreaseStreamRetentionPeriodResult {
-}
-
-message ListTagsForStreamRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+message IncreaseStreamRetentionPeriodResult { 
+} 
+ 
+message ListTagsForStreamRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Key to start from
-    string exclusive_start_tag_key = 2;
+    string exclusive_start_tag_key = 2; 
     // Max number of entries to return
-    int32 limit = 3;
+    int32 limit = 3; 
     // Name of the stream
-    string stream_name = 4;
-}
+    string stream_name = 4; 
+} 
 
-message ListTagsForStreamResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message ListTagsForStreamResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message ListTagsForStreamResult {
+message ListTagsForStreamResult { 
     // If true, more tags are available
-    bool has_more_tags = 1;
+    bool has_more_tags = 1; 
     // List of tags
-    repeated Tag tags = 2;
-}
-
-message MergeShardsRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+    repeated Tag tags = 2; 
+} 
+ 
+message MergeShardsRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Id of the adjacent shard for the merge
-    string adjacent_shard_to_merge = 2;
+    string adjacent_shard_to_merge = 2; 
     // Id of the shard to combine with the adjacent
-    string shard_to_merge = 3;
+    string shard_to_merge = 3; 
     // Name of the stream
-    string stream_name = 4;
-}
+    string stream_name = 4; 
+} 
 
-message MergeShardsResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message MergeShardsResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message MergeShardsResult {
-}
-
-message RemoveTagsFromStreamRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+message MergeShardsResult { 
+} 
+ 
+message RemoveTagsFromStreamRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Name of the stream
-    string stream_name = 2;
+    string stream_name = 2; 
     // List of tag keys
-    repeated string tag_keys = 3;
-}
+    repeated string tag_keys = 3; 
+} 
 
-message RemoveTagsFromStreamResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message RemoveTagsFromStreamResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message RemoveTagsFromStreamResult {
-}
-
-message SplitShardRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+message RemoveTagsFromStreamResult { 
+} 
+ 
+message SplitShardRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Hash value for the starting hash key of one of the new child shards
-    string new_starting_hash_key = 2;
+    string new_starting_hash_key = 2; 
     // Id of the shard to split
-    string shard_to_split = 3;
+    string shard_to_split = 3; 
     // Name of the stream
-    string stream_name = 4;
-}
+    string stream_name = 4; 
+} 
 
-message SplitShardResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message SplitShardResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message SplitShardResult {
-}
-
-message StartStreamEncryptionRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+message SplitShardResult { 
+} 
+ 
+message StartStreamEncryptionRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Encryption type to use
-    EncryptionType encryption_type = 2;
+    EncryptionType encryption_type = 2; 
     // Id of the key to use to encryption
-    string key_id = 3;
+    string key_id = 3; 
     // Name of the stream
-    string stream_name = 4;
-}
+    string stream_name = 4; 
+} 
 
-message StartStreamEncryptionResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message StartStreamEncryptionResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message StartStreamEncryptionResult {
-}
-
-message StopStreamEncryptionRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
+message StartStreamEncryptionResult { 
+} 
+ 
+message StopStreamEncryptionRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Encryption type
-    EncryptionType encryption_type = 2;
+    EncryptionType encryption_type = 2; 
     // Id of the key to use to encryption
-    string key_id = 3;
+    string key_id = 3; 
     // Name of the stream
-    string stream_name = 4;
-}
+    string stream_name = 4; 
+} 
 
-message StopStreamEncryptionResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message StopStreamEncryptionResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message StopStreamEncryptionResult {
-}
-
-message UpdateShardCountRequest {
-    enum ScalingType {
-        SCALING_TYPE_UNKNOWN = 0;
+message StopStreamEncryptionResult { 
+} 
+ 
+message UpdateShardCountRequest { 
+    enum ScalingType { 
+        SCALING_TYPE_UNKNOWN = 0; 
         // Creates shards of equal size
-        UNIFORM_SCALING = 1;
-    }
-
-    Ydb.Operations.OperationParams operation_params = 1;
+        UNIFORM_SCALING = 1; 
+    } 
+ 
+    Ydb.Operations.OperationParams operation_params = 1; 
     // Scaling type
-    ScalingType scaling_type = 2;
+    ScalingType scaling_type = 2; 
     // Name of the stream
-    string stream_name = 3;
+    string stream_name = 3; 
     // New number of shards
-    int32 target_shard_count = 4;
-}
+    int32 target_shard_count = 4; 
+} 
 
-message UpdateShardCountResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
+message UpdateShardCountResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
 
-message UpdateShardCountResult {
+message UpdateShardCountResult { 
     // Current number of shards
-    int32 current_shard_count = 1;
+    int32 current_shard_count = 1; 
     // Name of the stream
-    string stream_name = 2;
+    string stream_name = 2; 
     // Updated number of shards
-    int32 target_shard_count = 3;
-}
+    int32 target_shard_count = 3; 
+} 

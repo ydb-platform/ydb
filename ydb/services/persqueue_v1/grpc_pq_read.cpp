@@ -21,17 +21,17 @@ using namespace PersQueue::V1;
 
 
 
-IActor* CreatePQReadService(const TActorId& schemeCache, const TActorId& newSchemeCache,
+IActor* CreatePQReadService(const TActorId& schemeCache, const TActorId& newSchemeCache, 
                              TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions) {
-    return new TPQReadService(schemeCache, newSchemeCache, counters, maxSessions);
+    return new TPQReadService(schemeCache, newSchemeCache, counters, maxSessions); 
 }
 
 
 
-TPQReadService::TPQReadService(const TActorId& schemeCache, const TActorId& newSchemeCache,
+TPQReadService::TPQReadService(const TActorId& schemeCache, const TActorId& newSchemeCache, 
                              TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions)
     : SchemeCache(schemeCache)
-    , NewSchemeCache(newSchemeCache)
+    , NewSchemeCache(newSchemeCache) 
     , Counters(counters)
     , MaxSessions(maxSessions)
     , LocalCluster("")
@@ -42,9 +42,9 @@ TPQReadService::TPQReadService(const TActorId& schemeCache, const TActorId& newS
 void TPQReadService::Bootstrap(const TActorContext& ctx) {
     HaveClusters = !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen(); // ToDo[migration] - proper condition
     if (HaveClusters) {
-        ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(),
-                 new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
-    }
+        ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(), 
+                 new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe); 
+    } 
     ctx.Send(NNetClassifier::MakeNetClassifierID(), new NNetClassifier::TEvNetClassifier::TEvSubscribe);
     TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
             AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen(), AppData(ctx)->PQConfig.GetRoot()

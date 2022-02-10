@@ -17,7 +17,7 @@ namespace V1 {
 static const ui32 PersQueueWriteSessionsMaxCount = 1000000;
 static const ui32 PersQueueReadSessionsMaxCount = 100000;
 
-TGRpcPersQueueService::TGRpcPersQueueService(NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const NActors::TActorId& schemeCache,const NActors::TActorId& grpcRequestProxy)
+TGRpcPersQueueService::TGRpcPersQueueService(NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const NActors::TActorId& schemeCache,const NActors::TActorId& grpcRequestProxy) 
     : ActorSystem(system)
     , Counters(counters)
     , SchemeCache(schemeCache)
@@ -26,15 +26,15 @@ TGRpcPersQueueService::TGRpcPersQueueService(NActors::TActorSystem *system, TInt
 
 void TGRpcPersQueueService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
     CQ = cq;
-    InitNewSchemeCacheActor();
-
+    InitNewSchemeCacheActor(); 
+ 
     if (ActorSystem->AppData<TAppData>()->PQConfig.GetEnabled()) {
 
-        IActor* writeSvc = NGRpcProxy::V1::CreatePQWriteService(SchemeCache, NewSchemeCache,Counters, PersQueueWriteSessionsMaxCount);
+        IActor* writeSvc = NGRpcProxy::V1::CreatePQWriteService(SchemeCache, NewSchemeCache,Counters, PersQueueWriteSessionsMaxCount); 
         TActorId actorId = ActorSystem->Register(writeSvc, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
         ActorSystem->RegisterLocalService(NGRpcProxy::V1::GetPQWriteServiceActorID(), actorId);
 
-        IActor* readSvc = NGRpcProxy::V1::CreatePQReadService(SchemeCache, NewSchemeCache, Counters, PersQueueReadSessionsMaxCount);
+        IActor* readSvc = NGRpcProxy::V1::CreatePQReadService(SchemeCache, NewSchemeCache, Counters, PersQueueReadSessionsMaxCount); 
         actorId = ActorSystem->Register(readSvc, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
         ActorSystem->RegisterLocalService(NGRpcProxy::V1::GetPQReadServiceActorID(), actorId);
 
@@ -58,14 +58,14 @@ void TGRpcPersQueueService::DecRequest() {
     Limiter->Dec();
 }
 
-void TGRpcPersQueueService::InitNewSchemeCacheActor() {
-    auto appData = ActorSystem->AppData<TAppData>();
+void TGRpcPersQueueService::InitNewSchemeCacheActor() { 
+    auto appData = ActorSystem->AppData<TAppData>(); 
     auto cacheCounters = GetServiceCounters(Counters, "pqproxy|schemecache");
     auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, cacheCounters);
     NewSchemeCache = ActorSystem->Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()),
         TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
-}
-
+} 
+ 
 void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 
     auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
@@ -138,12 +138,12 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     ADD_REQUEST(DescribeTopic, PersQueueService, DescribeTopicRequest, DescribeTopicResponse, {
             ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQDescribeTopicRequest(ctx));
         })
-    ADD_REQUEST(AddReadRule, PersQueueService, AddReadRuleRequest, AddReadRuleResponse, {
-        ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQAddReadRuleRequest(ctx));
-    })
-    ADD_REQUEST(RemoveReadRule, PersQueueService, RemoveReadRuleRequest, RemoveReadRuleResponse, {
-        ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQRemoveReadRuleRequest(ctx));
-    })
+    ADD_REQUEST(AddReadRule, PersQueueService, AddReadRuleRequest, AddReadRuleResponse, { 
+        ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQAddReadRuleRequest(ctx)); 
+    }) 
+    ADD_REQUEST(RemoveReadRule, PersQueueService, RemoveReadRuleRequest, RemoveReadRuleResponse, { 
+        ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQRemoveReadRuleRequest(ctx)); 
+    }) 
 
 #undef ADD_REQUEST
 

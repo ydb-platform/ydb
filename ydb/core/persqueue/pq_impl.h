@@ -145,7 +145,7 @@ private:
     bool NewConfigShouldBeApplied;
 
     TString TopicName;
-    TString TopicPath;
+    TString TopicPath; 
     bool LocalDC;
     TString DCId;
     TVector<NScheme::TTypeId> KeySchema;

@@ -21,9 +21,9 @@ message TPersQueuePartitionRequest {
         optional bool MirrorerRequest = 10 [default = false];
 
         optional string ClientDC = 11;
-
-        optional string PartitionKey = 12;
-        optional string ExplicitHash = 13;
+ 
+        optional string PartitionKey = 12; 
+        optional string ExplicitHash = 13; 
 
         optional bool ExternalOperation = 14 [default = false];
     }
@@ -65,9 +65,9 @@ message TPersQueuePartitionRequest {
         optional int32 UncompressedSize = 12; //fill it for all parts
 
         optional string ClientDC = 11;
-
-        optional string PartitionKey = 13;
-        optional bytes ExplicitHash = 14;
+ 
+        optional string PartitionKey = 13; 
+        optional bytes ExplicitHash = 14; 
 
         optional bool ExternalOperation = 15 [ default = false ];
     }
@@ -136,7 +136,7 @@ message TPersQueuePartitionRequest {
 
     optional TCmdUpdateWriteTimestamp CmdUpdateWriteTimestamp = 17;
 
-    optional bool IsDirectWrite = 18 [default = false];
+    optional bool IsDirectWrite = 18 [default = false]; 
     optional uint64 PutUnitsSize = 19;
 }
 
@@ -365,9 +365,9 @@ message TCmdReadResult {
         optional uint64 WriteTimestampMS = 8;
         optional uint64 CreateTimestampMS = 9;
         optional uint32 UncompressedSize = 10;
-
-        optional string PartitionKey = 11;
-        optional bytes ExplicitHash = 12;
+ 
+        optional string PartitionKey = 11; 
+        optional bytes ExplicitHash = 12; 
     }
     optional uint64 MaxOffset = 2;
     repeated TResult Result = 3;

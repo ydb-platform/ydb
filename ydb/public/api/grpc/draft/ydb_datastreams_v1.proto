@@ -1,49 +1,49 @@
-syntax = "proto3";
-option cc_enable_arenas = true;
-
-package Ydb.DataStreams.V1;
-
+syntax = "proto3"; 
+option cc_enable_arenas = true; 
+ 
+package Ydb.DataStreams.V1; 
+ 
 import "ydb/public/api/protos/draft/datastreams.proto";
-
-
-option java_package = "com.yandex.ydb.datastreams.v1";
-
-
-service DataStreamsService {
-    // Basic stream manipulation methods
-    rpc CreateStream(CreateStreamRequest) returns (CreateStreamResponse);
-    rpc ListStreams(ListStreamsRequest) returns (ListStreamsResponse);
-    rpc DeleteStream(DeleteStreamRequest) returns (DeleteStreamResponse);
-    rpc DescribeStream(DescribeStreamRequest) returns (DescribeStreamResponse);
-    rpc ListShards(ListShardsRequest) returns (ListShardsResponse);
-    rpc SetWriteQuota(SetWriteQuotaRequest) returns (SetWriteQuotaResponse);
-    rpc UpdateStream(UpdateStreamRequest) returns (UpdateStreamResponse);
-
-    // Data methods
-    rpc PutRecord(PutRecordRequest) returns (PutRecordResponse);
-    rpc PutRecords(PutRecordsRequest) returns (PutRecordsResponse);
-    rpc GetRecords(GetRecordsRequest) returns (GetRecordsResponse);
-    rpc GetShardIterator(GetShardIteratorRequest) returns (GetShardIteratorResponse);
-    rpc SubscribeToShard(SubscribeToShardRequest) returns (stream SubscribeToShardResponse);
-    rpc DescribeLimits(DescribeLimitsRequest) returns (DescribeLimitsResponse);
-    rpc DescribeStreamSummary(DescribeStreamSummaryRequest) returns (DescribeStreamSummaryResponse);
-    rpc DecreaseStreamRetentionPeriod(DecreaseStreamRetentionPeriodRequest) returns (DecreaseStreamRetentionPeriodResponse);
-    rpc IncreaseStreamRetentionPeriod(IncreaseStreamRetentionPeriodRequest) returns (IncreaseStreamRetentionPeriodResponse);
-    rpc UpdateShardCount(UpdateShardCountRequest) returns (UpdateShardCountResponse);
-    // stream consumer methods
-    rpc RegisterStreamConsumer(RegisterStreamConsumerRequest) returns (RegisterStreamConsumerResponse);
-    rpc DeregisterStreamConsumer(DeregisterStreamConsumerRequest) returns (DeregisterStreamConsumerResponse);
-    rpc DescribeStreamConsumer(DescribeStreamConsumerRequest) returns (DescribeStreamConsumerResponse);
-    rpc ListStreamConsumers(ListStreamConsumersRequest) returns (ListStreamConsumersResponse);
-
-    // Least priority methods from API.
-    rpc AddTagsToStream(AddTagsToStreamRequest) returns (AddTagsToStreamResponse);
-    rpc DisableEnhancedMonitoring(DisableEnhancedMonitoringRequest) returns (DisableEnhancedMonitoringResponse);
-    rpc EnableEnhancedMonitoring(EnableEnhancedMonitoringRequest) returns (EnableEnhancedMonitoringResponse);
-    rpc ListTagsForStream(ListTagsForStreamRequest) returns (ListTagsForStreamResponse);
-    rpc MergeShards(MergeShardsRequest) returns (MergeShardsResponse);
-    rpc RemoveTagsFromStream(RemoveTagsFromStreamRequest) returns (RemoveTagsFromStreamResponse);
-    rpc SplitShard(SplitShardRequest) returns (SplitShardResponse);
-    rpc StartStreamEncryption(StartStreamEncryptionRequest) returns (StartStreamEncryptionResponse);
-    rpc StopStreamEncryption(StopStreamEncryptionRequest) returns (StopStreamEncryptionResponse);
-}
+ 
+ 
+option java_package = "com.yandex.ydb.datastreams.v1"; 
+ 
+ 
+service DataStreamsService { 
+    // Basic stream manipulation methods 
+    rpc CreateStream(CreateStreamRequest) returns (CreateStreamResponse); 
+    rpc ListStreams(ListStreamsRequest) returns (ListStreamsResponse); 
+    rpc DeleteStream(DeleteStreamRequest) returns (DeleteStreamResponse); 
+    rpc DescribeStream(DescribeStreamRequest) returns (DescribeStreamResponse); 
+    rpc ListShards(ListShardsRequest) returns (ListShardsResponse); 
+    rpc SetWriteQuota(SetWriteQuotaRequest) returns (SetWriteQuotaResponse); 
+    rpc UpdateStream(UpdateStreamRequest) returns (UpdateStreamResponse); 
+ 
+    // Data methods 
+    rpc PutRecord(PutRecordRequest) returns (PutRecordResponse); 
+    rpc PutRecords(PutRecordsRequest) returns (PutRecordsResponse); 
+    rpc GetRecords(GetRecordsRequest) returns (GetRecordsResponse); 
+    rpc GetShardIterator(GetShardIteratorRequest) returns (GetShardIteratorResponse); 
+    rpc SubscribeToShard(SubscribeToShardRequest) returns (stream SubscribeToShardResponse); 
+    rpc DescribeLimits(DescribeLimitsRequest) returns (DescribeLimitsResponse); 
+    rpc DescribeStreamSummary(DescribeStreamSummaryRequest) returns (DescribeStreamSummaryResponse); 
+    rpc DecreaseStreamRetentionPeriod(DecreaseStreamRetentionPeriodRequest) returns (DecreaseStreamRetentionPeriodResponse); 
+    rpc IncreaseStreamRetentionPeriod(IncreaseStreamRetentionPeriodRequest) returns (IncreaseStreamRetentionPeriodResponse); 
+    rpc UpdateShardCount(UpdateShardCountRequest) returns (UpdateShardCountResponse); 
+    // stream consumer methods 
+    rpc RegisterStreamConsumer(RegisterStreamConsumerRequest) returns (RegisterStreamConsumerResponse); 
+    rpc DeregisterStreamConsumer(DeregisterStreamConsumerRequest) returns (DeregisterStreamConsumerResponse); 
+    rpc DescribeStreamConsumer(DescribeStreamConsumerRequest) returns (DescribeStreamConsumerResponse); 
+    rpc ListStreamConsumers(ListStreamConsumersRequest) returns (ListStreamConsumersResponse); 
+ 
+    // Least priority methods from API. 
+    rpc AddTagsToStream(AddTagsToStreamRequest) returns (AddTagsToStreamResponse); 
+    rpc DisableEnhancedMonitoring(DisableEnhancedMonitoringRequest) returns (DisableEnhancedMonitoringResponse); 
+    rpc EnableEnhancedMonitoring(EnableEnhancedMonitoringRequest) returns (EnableEnhancedMonitoringResponse); 
+    rpc ListTagsForStream(ListTagsForStreamRequest) returns (ListTagsForStreamResponse); 
+    rpc MergeShards(MergeShardsRequest) returns (MergeShardsResponse); 
+    rpc RemoveTagsFromStream(RemoveTagsFromStreamRequest) returns (RemoveTagsFromStreamResponse); 
+    rpc SplitShard(SplitShardRequest) returns (SplitShardResponse); 
+    rpc StartStreamEncryption(StartStreamEncryptionRequest) returns (StartStreamEncryptionResponse); 
+    rpc StopStreamEncryption(StopStreamEncryptionRequest) returns (StopStreamEncryptionResponse); 
+} 

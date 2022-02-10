@@ -79,7 +79,7 @@ public:
         ServerSettings->SetEnableSchemeTransactionsAtSchemeShard(true);
         ServerSettings->SetEnableYq(enableYq);
         ServerSettings->Formats = new TFormatFactory;
-        ServerSettings->PQConfig = appConfig.GetPQConfig();
+        ServerSettings->PQConfig = appConfig.GetPQConfig(); 
         if (appConfig.HasMeteringConfig() && appConfig.GetMeteringConfig().HasMeteringFilePath()) {
             ServerSettings->SetMeteringFilePath(appConfig.GetMeteringConfig().GetMeteringFilePath());
         }

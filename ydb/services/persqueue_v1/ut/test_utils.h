@@ -11,15 +11,15 @@
 
 #define TEST_CASE_NAME (TypeName(*this).rfind("TTestCase") != TString::npos ? TypeName(*this).substr(TypeName(*this).rfind("TTestCase") + 9) : TypeName(*this))
 
-static constexpr int DEBUG_LOG_LEVEL = 7;
-
+static constexpr int DEBUG_LOG_LEVEL = 7; 
+ 
 using namespace NKikimr::NPersQueueTests;
 
-inline void WaitACLModification() {
-    // TODO: Tests are flacky without sleep after ModifyACL. Can we cleanly await modified ACLs without random waits? Or at least poll for ACL changes.
-    Sleep(TDuration::Seconds(5));
-}
-
+inline void WaitACLModification() { 
+    // TODO: Tests are flacky without sleep after ModifyACL. Can we cleanly await modified ACLs without random waits? Or at least poll for ACL changes. 
+    Sleep(TDuration::Seconds(5)); 
+} 
+ 
 // TODO: Remove and replace all usage with ApiTestSetup
 #define SETUP_API_TEST_PREREQUISITES()\
     const TString topic = "topic1";\
@@ -78,4 +78,4 @@ void AssertStreamingSessionDead(std::unique_ptr<grpc::ClientReaderWriter<TClient
     auto actualErrorCode = static_cast<Ydb::PersQueue::ErrorCode::ErrorCode>(serverMessage.issues(0).issue_code());
     UNIT_ASSERT_C(expectedErrorCode == actualErrorCode, serverMessage);
 }
-
+ 

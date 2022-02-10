@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(g:kikimr)
 
 SRCS(
-    datastreams.cpp
+    datastreams.cpp 
 )
 
 PEERDIR(

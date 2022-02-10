@@ -1,19 +1,19 @@
 #include "data_plane_helpers.h"
-
-namespace NKikimr::NPersQueueTests {
-
+ 
+namespace NKikimr::NPersQueueTests { 
+ 
     using namespace NYdb::NPersQueue;
-
+ 
     std::shared_ptr<NYdb::NPersQueue::IWriteSession> CreateWriter(
         NYdb::TDriver& driver,
         const NYdb::NPersQueue::TWriteSessionSettings& settings,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> creds
-    ) {
+    ) { 
         TPersQueueClientSettings clientSettings;
         if (creds) clientSettings.CredentialsProviderFactory(creds);
         return TPersQueueClient(driver, clientSettings).CreateWriteSession(TWriteSessionSettings(settings).ClusterDiscoveryMode(EClusterDiscoveryMode::Off));
-    }
-
+    } 
+ 
     std::shared_ptr<NYdb::NPersQueue::IWriteSession> CreateWriter(
         NYdb::TDriver& driver,
         const TString& topic,
@@ -22,7 +22,7 @@ namespace NKikimr::NPersQueueTests {
         std::optional<TString> codec,
         std::optional<bool> reconnectOnFailure,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> creds
-    ) {
+    ) { 
         auto settings = TWriteSessionSettings().Path(topic).MessageGroupId(sourceId);
         if (partitionGroup) settings.PartitionGroupId(*partitionGroup);
         settings.RetryPolicy((reconnectOnFailure && *reconnectOnFailure) ? IRetryPolicy::GetDefaultPolicy() : IRetryPolicy::GetNoRetryPolicy());
@@ -35,15 +35,15 @@ namespace NKikimr::NPersQueueTests {
                 settings.Codec(ECodec::LZOP);
         }
         return CreateWriter(driver, settings, creds);
-    }
-
+    } 
+ 
     std::shared_ptr<NYdb::NPersQueue::ISimpleBlockingWriteSession> CreateSimpleWriter(
         NYdb::TDriver& driver,
         const NYdb::NPersQueue::TWriteSessionSettings& settings
-    ) {
+    ) { 
         return TPersQueueClient(driver).CreateSimpleBlockingWriteSession(TWriteSessionSettings(settings).ClusterDiscoveryMode(EClusterDiscoveryMode::Off));
-    }
-
+    } 
+ 
     std::shared_ptr<NYdb::NPersQueue::ISimpleBlockingWriteSession> CreateSimpleWriter(
         NYdb::TDriver& driver,
         const TString& topic,
@@ -51,14 +51,14 @@ namespace NKikimr::NPersQueueTests {
         std::optional<ui32> partitionGroup,
         std::optional<TString> codec,
         std::optional<bool> reconnectOnFailure
-    ) {
+    ) { 
         Y_UNUSED(codec);
         auto settings = TWriteSessionSettings().Path(topic).MessageGroupId(sourceId);
         if (partitionGroup) settings.PartitionGroupId(*partitionGroup);
         settings.RetryPolicy((reconnectOnFailure && *reconnectOnFailure) ? IRetryPolicy::GetDefaultPolicy() : IRetryPolicy::GetNoRetryPolicy());
         return CreateSimpleWriter(driver, settings);
-    }
-
+    } 
+ 
     std::shared_ptr<NYdb::NPersQueue::IReadSession> CreateReader(
         NYdb::TDriver& driver,
         const NYdb::NPersQueue::TReadSessionSettings& settings,
@@ -70,7 +70,7 @@ namespace NKikimr::NPersQueueTests {
     }
 
     TMaybe<TReadSessionEvent::TDataReceivedEvent> GetNextMessageSkipAssignment(std::shared_ptr<IReadSession>& reader, TDuration timeout) {
-        while (true) {
+        while (true) { 
             auto future = reader->WaitEvent();
             future.Wait(timeout);
 
@@ -85,10 +85,10 @@ namespace NKikimr::NPersQueueTests {
                 destroyPartitionStreamEvent->Confirm();
             } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
                 return {};
-            }
-        }
+            } 
+        } 
         return {};
-    }
-
+    } 
+ 
 
 }

@@ -93,16 +93,16 @@ service PersQueueService {
      * Alter topic command.
      */
     rpc AlterTopic(AlterTopicRequest) returns (AlterTopicResponse);
-
-    /*
-     * Add read rule command.
-     */
-    rpc AddReadRule(AddReadRuleRequest) returns (AddReadRuleResponse);
-
-    /*
-     * Remove read rule command.
-     */
-    rpc RemoveReadRule(RemoveReadRuleRequest) returns (RemoveReadRuleResponse);
+ 
+    /* 
+     * Add read rule command. 
+     */ 
+    rpc AddReadRule(AddReadRuleRequest) returns (AddReadRuleResponse); 
+ 
+    /* 
+     * Remove read rule command. 
+     */ 
+    rpc RemoveReadRule(RemoveReadRuleRequest) returns (RemoveReadRuleResponse); 
 }
 
 service ClusterDiscoveryService {

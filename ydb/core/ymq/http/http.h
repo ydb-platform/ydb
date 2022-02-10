@@ -8,7 +8,7 @@
 
 #include <ydb/library/http_proxy/authorization/signature.h>
 #include <ydb/core/ymq/base/counters.h>
-
+ 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/http/server/http.h>
 
@@ -117,7 +117,7 @@ private:
     TString SecurityToken_;
     TString IamToken_;
     TString FolderId_;
-    TString ApiMethod_;
+    TString ApiMethod_; 
 
     THolder<TAwsRequestSignV4> AwsSignature_;
 

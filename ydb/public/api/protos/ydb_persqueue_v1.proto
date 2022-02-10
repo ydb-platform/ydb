@@ -910,9 +910,9 @@ message MigrationStreamingReadServerMessage {
             bytes data = 5;
             // Uncompressed size of client message body.
             uint64 uncompressed_size = 6;
-            // kinesis data
-            string partition_key = 7;
-            bytes explicit_hash = 8;
+            // kinesis data 
+            string partition_key = 7; 
+            bytes explicit_hash = 8; 
         }
 
         // Representation of sequence of client messages from one write session.
@@ -1262,58 +1262,58 @@ message AlterTopicResult {
 }
 
 /**
- * Add read rules for existing topic request.
- */
-message AddReadRuleRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    // Topic path.
-    string path = 2 [(required) = true];
-    // read rules to add
-    TopicSettings.ReadRule read_rule = 3;
-}
-
-/**
- * Add read rules for existing topic response.
- */
-message AddReadRuleResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
-
-/**
- * Add read rules result message that will be inside AddReadRuleReponse.operation.
- */
-message AddReadRuleResult {
-}
-
-
-/**
- * Remove read rules request for existing topic.
- */
-message RemoveReadRuleRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    // Topic path.
-    string path = 2 [(required) = true];
-    // read rules to remove. Only consumer names
-    string consumer_name = 3;
-}
-
-/**
- * Remove read rules response for existing topic.
- */
-message RemoveReadRuleResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
-
-/**
- * Remove read rules result message that will be inside RemoveReadRuleReponse.operation.
- */
-message RemoveReadRuleResult {
-}
-
-
-/**
+ * Add read rules for existing topic request. 
+ */ 
+message AddReadRuleRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    // Topic path. 
+    string path = 2 [(required) = true]; 
+    // read rules to add 
+    TopicSettings.ReadRule read_rule = 3; 
+} 
+ 
+/** 
+ * Add read rules for existing topic response. 
+ */ 
+message AddReadRuleResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+/** 
+ * Add read rules result message that will be inside AddReadRuleReponse.operation. 
+ */ 
+message AddReadRuleResult { 
+} 
+ 
+ 
+/** 
+ * Remove read rules request for existing topic. 
+ */ 
+message RemoveReadRuleRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    // Topic path. 
+    string path = 2 [(required) = true]; 
+    // read rules to remove. Only consumer names 
+    string consumer_name = 3; 
+} 
+ 
+/** 
+ * Remove read rules response for existing topic. 
+ */ 
+message RemoveReadRuleResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+/** 
+ * Remove read rules result message that will be inside RemoveReadRuleReponse.operation. 
+ */ 
+message RemoveReadRuleResult { 
+} 
+ 
+ 
+/** 
  * Describe topic request sent from client to server.
  */
 
@@ -1344,4 +1344,4 @@ message DescribeTopicResult {
     TopicSettings settings = 2;
 
 }
-
+ 

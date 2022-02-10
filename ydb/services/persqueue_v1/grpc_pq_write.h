@@ -21,13 +21,13 @@ inline TActorId GetPQWriteServiceActorID() {
     return TActorId(0, "PQWriteSvc");
 }
 
-IActor* CreatePQWriteService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
-                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
+IActor* CreatePQWriteService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache, 
+                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions); 
 
 class TPQWriteService : public NActors::TActorBootstrapped<TPQWriteService> {
 public:
-    TPQWriteService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
-                    TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
+    TPQWriteService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache, 
+                    TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions); 
 
     ~TPQWriteService()
     {}
@@ -38,7 +38,7 @@ private:
     ui64 NextCookie();
 
     bool TooMuchSessions();
-    TString AvailableLocalCluster(const TActorContext& ctx) const;
+    TString AvailableLocalCluster(const TActorContext& ctx) const; 
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
@@ -60,7 +60,7 @@ private:
     void Handle(TEvPQProxy::TEvSessionDead::TPtr& ev, const TActorContext& ctx);
 
     NActors::TActorId SchemeCache;
-    NActors::TActorId NewSchemeCache;
+    NActors::TActorId NewSchemeCache; 
 
     TAtomic LastCookie = 0;
 

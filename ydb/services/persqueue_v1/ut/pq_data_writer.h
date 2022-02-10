@@ -20,7 +20,7 @@ public:
         , Runtime(server.CleverServer->GetRuntime())
     {
         InitializeChannel();
-        WaitWritePQServiceInitialization(testTopicPath);
+        WaitWritePQServiceInitialization(testTopicPath); 
     }
 
     void Read(const TString& topic, const TString& clientId, const TString& ticket = "", bool error = false, bool checkACL = false, bool onlyCreate = false) {
@@ -153,7 +153,7 @@ public:
         }
     }
 
-    void WaitWritePQServiceInitialization(const TString& testTopicPath = "topic1") {
+    void WaitWritePQServiceInitialization(const TString& testTopicPath = "topic1") { 
         bool tried = false;
         while (true) {
             if (tried) {
@@ -168,8 +168,8 @@ public:
 
             auto stream = StubP_->StreamingWrite(&context);
             UNIT_ASSERT(stream);
-
-            req.mutable_init_request()->set_topic(testTopicPath);
+ 
+            req.mutable_init_request()->set_topic(testTopicPath); 
             req.mutable_init_request()->set_message_group_id("12345678");
 
             if (!stream->Write(req)) {

@@ -208,8 +208,8 @@ private:
     void ProcessReserveRequests(const TActorContext& ctx);
 
     void CreateMirrorerActor();
-    bool IsQuotingEnabled() const;
-
+    bool IsQuotingEnabled() const; 
+ 
     void SetupTopicCounters(const TActorContext& ctx);
     void SetupStreamCounters(const TActorContext& ctx);
 
@@ -220,7 +220,7 @@ public:
 
     TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
                const TString& topicName, const TString& topicPath, const bool localDC, TString dcId,
-               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
+               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, 
                const TActorContext& ctx, bool newPartition = false);
 
     void Bootstrap(const TActorContext& ctx);
@@ -416,7 +416,7 @@ private:
     ui32 Partition;
     NKikimrPQ::TPQTabletConfig Config;
     TString TopicName;
-    TString TopicPath;
+    TString TopicPath; 
     bool LocalDC;
     TString DCId;
 

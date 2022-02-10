@@ -32,7 +32,7 @@ struct TClientBlob {
     static const ui8 HAS_TS = 2;
     static const ui8 HAS_TS2 = 4;
     static const ui8 HAS_US = 8;
-    static const ui8 HAS_KINESIS = 16;
+    static const ui8 HAS_KINESIS = 16; 
 
     TString SourceId;
     ui64 SeqNo;
@@ -41,8 +41,8 @@ struct TClientBlob {
     TInstant WriteTimestamp;
     TInstant CreateTimestamp;
     ui32 UncompressedSize;
-    TString PartitionKey;
-    TString ExplicitHashKey;
+    TString PartitionKey; 
+    TString ExplicitHashKey; 
 
     TClientBlob()
         : SeqNo(0)
@@ -50,7 +50,7 @@ struct TClientBlob {
     {}
 
     TClientBlob(const TString& sourceId, const ui64 seqNo, const TString& data, TMaybe<TPartData> &&partData, TInstant writeTimestamp, TInstant createTimestamp,
-                const ui64 uncompressedSize, const TString& partitionKey, const TString& explicitHashKey)
+                const ui64 uncompressedSize, const TString& partitionKey, const TString& explicitHashKey) 
         : SourceId(sourceId)
         , SeqNo(seqNo)
         , Data(data)
@@ -58,11 +58,11 @@ struct TClientBlob {
         , WriteTimestamp(writeTimestamp)
         , CreateTimestamp(createTimestamp)
         , UncompressedSize(uncompressedSize)
-        , PartitionKey(partitionKey)
-        , ExplicitHashKey(explicitHashKey)
-    {
-        Y_VERIFY(PartitionKey.size() <= 256);
-    }
+        , PartitionKey(partitionKey) 
+        , ExplicitHashKey(explicitHashKey) 
+    { 
+        Y_VERIFY(PartitionKey.size() <= 256); 
+    } 
 
     ui32 GetPartDataSize() const {
         if (PartData) {
@@ -71,15 +71,15 @@ struct TClientBlob {
         return 1;
     }
 
-    ui32 GetKinesisSize() const {
-        if (PartitionKey.size() > 0) {
-            return 2 + PartitionKey.size() + ExplicitHashKey.size();
-        }
-        return 0;
-    }
-
+    ui32 GetKinesisSize() const { 
+        if (PartitionKey.size() > 0) { 
+            return 2 + PartitionKey.size() + ExplicitHashKey.size(); 
+        } 
+        return 0; 
+    } 
+ 
     ui32 GetBlobSize() const {
-        return GetPartDataSize() + OVERHEAD + SourceId.size() + Data.size() + (UncompressedSize == 0 ? 0 : sizeof(ui32)) + GetKinesisSize();
+        return GetPartDataSize() + OVERHEAD + SourceId.size() + Data.size() + (UncompressedSize == 0 ? 0 : sizeof(ui32)) + GetKinesisSize(); 
     }
 
     ui16 GetPartNo() const {

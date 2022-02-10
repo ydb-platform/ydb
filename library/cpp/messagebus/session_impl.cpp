@@ -250,12 +250,12 @@ TString TBusSessionImpl::GetStatus(ui16 flags) {
 TConnectionStatusMonRecord TBusSessionImpl::GetStatusProtobuf() {
     Y_VERIFY(!Queue->GetExecutor()->IsInExecutorThread(),
              "GetStatus must not be called from executor thread");
-
-    TGuard<TMutex> guard(StatusData.StatusDumpCachedMutex);
-
-    return StatusData.StatusDumpCached.ConnectionStatusSummary.GetStatusProtobuf();
-}
-
+ 
+    TGuard<TMutex> guard(StatusData.StatusDumpCachedMutex); 
+ 
+    return StatusData.StatusDumpCached.ConnectionStatusSummary.GetStatusProtobuf(); 
+} 
+ 
 TString TBusSessionImpl::GetStatusSingleLine() {
     TSessionDumpStatus status = GetStatusRecordInternal();
 

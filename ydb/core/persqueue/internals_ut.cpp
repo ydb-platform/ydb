@@ -17,7 +17,7 @@ Y_UNIT_TEST(TestPartitionedBlobSimpleTest) {
     THead newHead;
 
     TPartitionedBlob blob(0, 0, "sourceId", 1, 1, 10, head, newHead, false, false, 8 << 20);
-    TClientBlob clientBlob("sourceId", 1, "valuevalue", TMaybe<TPartData>(), TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "123", "123");
+    TClientBlob clientBlob("sourceId", 1, "valuevalue", TMaybe<TPartData>(), TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "123", "123"); 
     UNIT_ASSERT(blob.IsInited());
     TString error;
     UNIT_ASSERT(blob.IsNextPart("sourceId", 1, 0, &error));
@@ -39,7 +39,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     for (ui32 i = 0; i < 50; ++i) {
         head.Batches.back().AddBlob(TClientBlob(
             "sourceId" + TString(1,'a' + rand() % 26), i + 1, value, TMaybe<TPartData>(),
-            TInstant::MilliSeconds(i + 1),  TInstant::MilliSeconds(i + 1), 1, "", ""
+            TInstant::MilliSeconds(i + 1),  TInstant::MilliSeconds(i + 1), 1, "", "" 
         ));
         if (!headCompacted)
             all.push_back(head.Batches.back().Blobs.back());
@@ -61,7 +61,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     for (ui32 i = 0; i < 10; ++i) {
         newHead.Batches.back().AddBlob(TClientBlob(
             "sourceId2", i + 1, value, TMaybe<TPartData>(),
-            TInstant::MilliSeconds(i + 1000), TInstant::MilliSeconds(i + 1000), 1, "", ""
+            TInstant::MilliSeconds(i + 1000), TInstant::MilliSeconds(i + 1000), 1, "", "" 
         ));
         all.push_back(newHead.Batches.back().Blobs.back()); //newHead always glued
     }
@@ -79,7 +79,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
         TMaybe<TPartData> partData = TPartData(i, parts, value2.size());
         TClientBlob clientBlob(
             "soruceId3", 1, value2, std::move(partData),
-            TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 1, "", ""
+            TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 1, "", "" 
         );
         all.push_back(clientBlob);
         auto res = blob.Add(std::move(clientBlob));
@@ -173,7 +173,7 @@ Y_UNIT_TEST(TestBatchPacking) {
     for (ui32 i = 0; i < 100; ++i) {
         batch.AddBlob(TClientBlob(
             "sourceId1", i + 1, value, TMaybe<TPartData>(),
-            TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "", ""
+            TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "", "" 
         ));
     }
     batch.Pack();
@@ -191,7 +191,7 @@ Y_UNIT_TEST(TestBatchPacking) {
     TBatch batch3;
     batch3.AddBlob(TClientBlob(
         "sourceId", 999999999999999ll, "abacaba", TPartData{33,66,4000000000u},
-        TInstant::MilliSeconds(999999999999ll), TInstant::MilliSeconds(1000), 0, "", ""
+        TInstant::MilliSeconds(999999999999ll), TInstant::MilliSeconds(1000), 0, "", "" 
     ));
     batch3.Pack();
     UNIT_ASSERT(batch3.Header.GetFormat() == NKikimrPQ::TBatchHeader::EUncompressed);

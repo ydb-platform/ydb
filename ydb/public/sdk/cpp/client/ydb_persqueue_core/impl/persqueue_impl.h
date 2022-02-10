@@ -30,19 +30,19 @@ public:
     {
     }
 
-    template<class TReadRule>
-    static void ConvertToProtoReadRule(const TReadRule& readRule, Ydb::PersQueue::V1::TopicSettings::ReadRule& rrProps) {
-        rrProps.set_consumer_name(readRule.ConsumerName_);
-        rrProps.set_important(readRule.Important_);
-        rrProps.set_starting_message_timestamp_ms(readRule.StartingMessageTimestamp_.MilliSeconds());
-        rrProps.set_version(readRule.Version_);
-        rrProps.set_supported_format(static_cast<Ydb::PersQueue::V1::TopicSettings::Format>(readRule.SupportedFormat_));
-        for (const auto& codec : readRule.SupportedCodecs_) {
-            rrProps.add_supported_codecs((static_cast<Ydb::PersQueue::V1::Codec>(codec)));
-        }
+    template<class TReadRule> 
+    static void ConvertToProtoReadRule(const TReadRule& readRule, Ydb::PersQueue::V1::TopicSettings::ReadRule& rrProps) { 
+        rrProps.set_consumer_name(readRule.ConsumerName_); 
+        rrProps.set_important(readRule.Important_); 
+        rrProps.set_starting_message_timestamp_ms(readRule.StartingMessageTimestamp_.MilliSeconds()); 
+        rrProps.set_version(readRule.Version_); 
+        rrProps.set_supported_format(static_cast<Ydb::PersQueue::V1::TopicSettings::Format>(readRule.SupportedFormat_)); 
+        for (const auto& codec : readRule.SupportedCodecs_) { 
+            rrProps.add_supported_codecs((static_cast<Ydb::PersQueue::V1::Codec>(codec))); 
+        } 
         rrProps.set_service_type(readRule.ServiceType_);
-    }
-
+    } 
+ 
     template <class TRequest, class TSettings>
     static TRequest MakePropsCreateOrAlterRequest(const TString& path, const TSettings& settings) {
         TRequest request = MakeOperationRequest<TRequest>(settings);
@@ -71,9 +71,9 @@ public:
 
             Ydb::PersQueue::V1::TopicSettings::ReadRule& rrProps = *props.add_read_rules();
 
-            ConvertToProtoReadRule(readRule, rrProps);
+            ConvertToProtoReadRule(readRule, rrProps); 
         }
-
+ 
         if (settings.RemoteMirrorRule_) {
             auto rmr = props.mutable_remote_mirror_rule();
             rmr->set_endpoint(settings.RemoteMirrorRule_.GetRef().Endpoint_);
@@ -140,30 +140,30 @@ public:
             settings.ClientTimeout_);
     }
 
-    TAsyncStatus AddReadRule(const TString& path, const TAddReadRuleSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::PersQueue::V1::AddReadRuleRequest>(settings);
-        request.set_path(path);
-        ConvertToProtoReadRule(settings.ReadRule_, *request.mutable_read_rule());
-        return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::AddReadRuleRequest, Ydb::PersQueue::V1::AddReadRuleResponse>(
-                std::move(request),
-                &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncAddReadRule,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
-    }
-
-    TAsyncStatus RemoveReadRule(const TString& path, const TRemoveReadRuleSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::PersQueue::V1::RemoveReadRuleRequest>(settings);
-        request.set_path(path);
-
-        request.set_consumer_name(settings.ConsumerName_);
-        return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::RemoveReadRuleRequest, Ydb::PersQueue::V1::RemoveReadRuleResponse>(
-                std::move(request),
-                &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncRemoveReadRule,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
-    }
-
-
+    TAsyncStatus AddReadRule(const TString& path, const TAddReadRuleSettings& settings) { 
+        auto request = MakeOperationRequest<Ydb::PersQueue::V1::AddReadRuleRequest>(settings); 
+        request.set_path(path); 
+        ConvertToProtoReadRule(settings.ReadRule_, *request.mutable_read_rule()); 
+        return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::AddReadRuleRequest, Ydb::PersQueue::V1::AddReadRuleResponse>( 
+                std::move(request), 
+                &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncAddReadRule, 
+                TRpcRequestSettings::Make(settings), 
+                settings.ClientTimeout_); 
+    } 
+ 
+    TAsyncStatus RemoveReadRule(const TString& path, const TRemoveReadRuleSettings& settings) { 
+        auto request = MakeOperationRequest<Ydb::PersQueue::V1::RemoveReadRuleRequest>(settings); 
+        request.set_path(path); 
+ 
+        request.set_consumer_name(settings.ConsumerName_); 
+        return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::RemoveReadRuleRequest, Ydb::PersQueue::V1::RemoveReadRuleResponse>( 
+                std::move(request), 
+                &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncRemoveReadRule, 
+                TRpcRequestSettings::Make(settings), 
+                settings.ClientTimeout_); 
+    } 
+ 
+ 
     TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) {
         auto request = MakeOperationRequest<Ydb::PersQueue::V1::DescribeTopicRequest>(settings);
         request.set_path(path);

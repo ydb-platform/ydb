@@ -76,27 +76,27 @@ void TClientBlob::Serialize(TBuffer& res) const
     res.Append((const char*)&totalSize, sizeof(ui32));
     res.Append((const char*)&SeqNo, sizeof(ui64));
     ui8 outputUncompressedSize = UncompressedSize == 0 ? 0 : HAS_US;
-    ui8 outputKinesisData = PartitionKey.empty() ? 0 : HAS_KINESIS;
+    ui8 outputKinesisData = PartitionKey.empty() ? 0 : HAS_KINESIS; 
     if (PartData) {
-        ui8 hasPartDataAndTS = HAS_PARTDATA + HAS_TS + HAS_TS2 + outputUncompressedSize + outputKinesisData; //mask
+        ui8 hasPartDataAndTS = HAS_PARTDATA + HAS_TS + HAS_TS2 + outputUncompressedSize + outputKinesisData; //mask 
         res.Append((const char*)&hasPartDataAndTS, sizeof(char));
         res.Append((const char*)&(PartData->PartNo), sizeof(ui16));
         res.Append((const char*)&(PartData->TotalParts), sizeof(ui16));
         res.Append((const char*)&(PartData->TotalSize), sizeof(ui32));
     } else {
-        ui8 hasTS = HAS_TS + HAS_TS2 + outputUncompressedSize + outputKinesisData; //mask
+        ui8 hasTS = HAS_TS + HAS_TS2 + outputUncompressedSize + outputKinesisData; //mask 
         res.Append((const char*)&hasTS, sizeof(char));
     }
-
-    if (outputKinesisData) {
-        ui8 partitionKeySize = PartitionKey.size();
-        res.Append((const char*)&(partitionKeySize), sizeof(ui8));
-        res.Append(PartitionKey.data(), PartitionKey.size());
-        ui8 hashKeySize = ExplicitHashKey.size();
-        res.Append((const char*)&(hashKeySize), sizeof(ui8));
-        res.Append(ExplicitHashKey.data(), ExplicitHashKey.size());
-    }
-
+ 
+    if (outputKinesisData) { 
+        ui8 partitionKeySize = PartitionKey.size(); 
+        res.Append((const char*)&(partitionKeySize), sizeof(ui8)); 
+        res.Append(PartitionKey.data(), PartitionKey.size()); 
+        ui8 hashKeySize = ExplicitHashKey.size(); 
+        res.Append((const char*)&(hashKeySize), sizeof(ui8)); 
+        res.Append(ExplicitHashKey.data(), ExplicitHashKey.size()); 
+    } 
+ 
     ui64 writeTimestampMs = WriteTimestamp.MilliSeconds();
     ui64 createTimestampMs = CreateTimestamp.MilliSeconds();
     res.Append((const char*)&writeTimestampMs, sizeof(ui64));
@@ -108,7 +108,7 @@ void TClientBlob::Serialize(TBuffer& res) const
     res.Append((const char*)&sz, sizeof(ui16));
     res.Append(SourceId.data(), SourceId.size());
     res.Append(Data.data(), Data.size());
-
+ 
     Y_VERIFY(res.Size() == psize + totalSize);
 }
 
@@ -126,12 +126,12 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     bool hasTS = (data[0] & HAS_TS);
     bool hasTS2 = (data[0] & HAS_TS2);
     bool hasUS = (data[0] & HAS_US);
-    bool hasKinesisData = (data[0] & HAS_KINESIS);
-
+    bool hasKinesisData = (data[0] & HAS_KINESIS); 
+ 
     ++data;
-    TString partitionKey;
-    TString explicitHashKey;
-
+    TString partitionKey; 
+    TString explicitHashKey; 
+ 
     if (hasPartData) {
         ui16 partNo = ReadUnaligned<ui16>(data);
         data += sizeof(ui16);
@@ -142,17 +142,17 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
         partData = TPartData{partNo, totalParts, totalSize};
     }
 
-    if (hasKinesisData) {
-        ui8 keySize = ReadUnaligned<ui8>(data);
-        data += sizeof(ui8);
-        partitionKey = TString(data, keySize == 0 ? 256 : keySize);
-        data += partitionKey.size();
-        keySize = ReadUnaligned<ui8>(data);
-        data += sizeof(ui8);
-        explicitHashKey = TString(data, keySize);
-        data += explicitHashKey.Size();
-    }
-
+    if (hasKinesisData) { 
+        ui8 keySize = ReadUnaligned<ui8>(data); 
+        data += sizeof(ui8); 
+        partitionKey = TString(data, keySize == 0 ? 256 : keySize); 
+        data += partitionKey.size(); 
+        keySize = ReadUnaligned<ui8>(data); 
+        data += sizeof(ui8); 
+        explicitHashKey = TString(data, keySize); 
+        data += explicitHashKey.Size(); 
+    } 
+ 
     TInstant writeTimestamp;
     TInstant createTimestamp;
     ui32 us = 0;
@@ -177,8 +177,8 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     data += sz;
     Y_VERIFY(data < end, "size %u SeqNo %" PRIu64 " SourceId %s", size, seqNo, sourceId.c_str());
     TString dt(data, end - data);
-
-    return TClientBlob(sourceId, seqNo, dt, std::move(partData), writeTimestamp, createTimestamp, us, partitionKey, explicitHashKey);
+ 
+    return TClientBlob(sourceId, seqNo, dt, std::move(partData), writeTimestamp, createTimestamp, us, partitionKey, explicitHashKey); 
 }
 
 TString TBatch::Serialize() {
@@ -212,19 +212,19 @@ void TBatch::Pack() {
     Packed = true;
     TBuffer res;
 
-    bool hasUncompressed = false;
-    bool hasKinesis = false;
-    for (ui32 i = 0; i < Blobs.size(); ++i) {
-        if (Blobs[i].UncompressedSize > 0)
-            hasUncompressed = true;
-
-        if (!Blobs[i].PartitionKey.empty() || !Blobs[i].ExplicitHashKey.empty()) {
-            hasKinesis = true;
-        }
-    }
-
+    bool hasUncompressed = false; 
+    bool hasKinesis = false; 
+    for (ui32 i = 0; i < Blobs.size(); ++i) { 
+        if (Blobs[i].UncompressedSize > 0) 
+            hasUncompressed = true; 
+ 
+        if (!Blobs[i].PartitionKey.empty() || !Blobs[i].ExplicitHashKey.empty()) { 
+            hasKinesis = true; 
+        } 
+    } 
+ 
     Header.SetFormat(NKikimrPQ::TBatchHeader::ECompressed);
-    Header.SetHasKinesis(hasKinesis);
+    Header.SetHasKinesis(hasKinesis); 
     ui32 totalCount = Blobs.size();
     Y_VERIFY(totalCount == Header.GetCount() + Header.GetInternalPartsCount());
     ui32 cnt = 0;
@@ -323,24 +323,24 @@ void TBatch::Pack() {
         OutputChunk(chunk, output, res);
     }
 
-    if (hasKinesis) {
-        {
-            auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(output);
-            for (const auto &p : pos) {
-                chunk->AddData(Blobs[p].PartitionKey.data(), Blobs[p].PartitionKey.size());
-            }
-            OutputChunk(chunk, output, res);
-        }
-
-        {
-            auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(output);
-            for (const auto &p : pos) {
-                chunk->AddData(Blobs[p].ExplicitHashKey.data(), Blobs[p].ExplicitHashKey.size());
-            }
-            OutputChunk(chunk, output, res);
-        }
-    }
-
+    if (hasKinesis) { 
+        { 
+            auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(output); 
+            for (const auto &p : pos) { 
+                chunk->AddData(Blobs[p].PartitionKey.data(), Blobs[p].PartitionKey.size()); 
+            } 
+            OutputChunk(chunk, output, res); 
+        } 
+ 
+        { 
+            auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(output); 
+            for (const auto &p : pos) { 
+                chunk->AddData(Blobs[p].ExplicitHashKey.data(), Blobs[p].ExplicitHashKey.size()); 
+            } 
+            OutputChunk(chunk, output, res); 
+        } 
+    } 
+ 
     //output Ctime
     {
         auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(output);
@@ -508,33 +508,33 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
     TVector<TInstant> ctime;
     ctime.reserve(totalBlobs);
 
-    TVector<TString> partitionKey;
-    TVector<TString> explicitHash;
-    partitionKey.reserve(totalBlobs);
-    explicitHash.reserve(totalBlobs);
-    if (Header.GetHasKinesis()) {
-        {
-            auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &stringCodecs);
-            auto iter = chunk->MakeIterator();
-            for (ui32 i = 0; i < totalBlobs; ++i) {
-                auto ref = iter->Next();
-                partitionKey.emplace_back(ref.Data(), ref.Size());
-            }
-        }
-
-        {
-            auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &stringCodecs);
-            auto iter = chunk->MakeIterator();
-            for (ui32 i = 0; i < totalBlobs; ++i) {
-                auto ref = iter->Next();
-                explicitHash.emplace_back(ref.Data(), ref.Size());
-            }
-        }
-    } else {
-        partitionKey.resize(totalBlobs);
-        explicitHash.resize(totalBlobs);
-    }
-
+    TVector<TString> partitionKey; 
+    TVector<TString> explicitHash; 
+    partitionKey.reserve(totalBlobs); 
+    explicitHash.reserve(totalBlobs); 
+    if (Header.GetHasKinesis()) { 
+        { 
+            auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &stringCodecs); 
+            auto iter = chunk->MakeIterator(); 
+            for (ui32 i = 0; i < totalBlobs; ++i) { 
+                auto ref = iter->Next(); 
+                partitionKey.emplace_back(ref.Data(), ref.Size()); 
+            } 
+        } 
+ 
+        { 
+            auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &stringCodecs); 
+            auto iter = chunk->MakeIterator(); 
+            for (ui32 i = 0; i < totalBlobs; ++i) { 
+                auto ref = iter->Next(); 
+                explicitHash.emplace_back(ref.Data(), ref.Size()); 
+            } 
+        } 
+    } else { 
+        partitionKey.resize(totalBlobs); 
+        explicitHash.resize(totalBlobs); 
+    } 
+ 
     if (data < dataEnd) { //old versions could not have CTime
         {
             auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs);
@@ -567,12 +567,12 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
     blobs->resize(totalBlobs);
     ui32 currentSID = 0;
     for (ui32 i = 0; i < totalBlobs; ++i) {
-        TMaybe<TPartData> pd;
+        TMaybe<TPartData> pd; 
         auto it = partData.find(pos[i]);
         if (it != partData.end())
             pd = it->second;
-        (*blobs)[pos[i]] = TClientBlob(sourceIds[currentSID], seqNo[i], dt[i], std::move(pd), wtime[pos[i]], ctime[pos[i]], uncompressedSize[pos[i]],
-                                       partitionKey[i], explicitHash[i]);
+        (*blobs)[pos[i]] = TClientBlob(sourceIds[currentSID], seqNo[i], dt[i], std::move(pd), wtime[pos[i]], ctime[pos[i]], uncompressedSize[pos[i]], 
+                                       partitionKey[i], explicitHash[i]); 
         if (i + 1 == end[currentSID])
             ++currentSID;
     }

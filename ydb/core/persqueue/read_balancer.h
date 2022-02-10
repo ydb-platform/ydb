@@ -357,7 +357,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         TString ClientId;
         TString Topic;
         ui64 TabletId;
-        TString Path;
+        TString Path; 
         ui32 Generation = 0;
         ui64 RandomNumber = 0;
         ui32* Step = nullptr;
@@ -396,7 +396,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         TString ClientId;
         TString Topic;
         ui64 TabletId;
-        TString Path;
+        TString Path; 
         ui32 Generation = 0;
         ui32 Step = 0;
 

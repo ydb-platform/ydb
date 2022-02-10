@@ -119,7 +119,7 @@ public:
         if (!hostname) {
             NMsgBusProxy::TMsgBusClientConfig::CrackAddress(Address, hostname, port);
         }
-        CommandConfig.ClientConfig = NGrpc::TGRpcClientConfig(hostname + ':' + ToString(port));
+        CommandConfig.ClientConfig = NGrpc::TGRpcClientConfig(hostname + ':' + ToString(port)); 
         if (config.EnableSsl) {
             auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&CommandConfig.ClientConfig.GetRef());
             p->EnableSsl = config.EnableSsl;

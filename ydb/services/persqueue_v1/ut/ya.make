@@ -12,7 +12,7 @@ CFLAGS(
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND) 
     TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -24,7 +24,7 @@ ENDIF()
 
 SRCS(
     persqueue_ut.cpp
-    persqueue_common_ut.cpp
+    persqueue_common_ut.cpp 
     test_utils.h
     pq_data_writer.h
     api_test_setup.h

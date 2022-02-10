@@ -19,22 +19,22 @@
 namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
-bool EqualsIgnoreCase(y_absl::string_view piece1,
-                      y_absl::string_view piece2) noexcept {
+bool EqualsIgnoreCase(y_absl::string_view piece1, 
+                      y_absl::string_view piece2) noexcept { 
   return (piece1.size() == piece2.size() &&
           0 == y_absl::strings_internal::memcasecmp(piece1.data(), piece2.data(),
                                                   piece1.size()));
   // memcasecmp uses y_absl::ascii_tolower().
 }
 
-bool StartsWithIgnoreCase(y_absl::string_view text,
-                          y_absl::string_view prefix) noexcept {
+bool StartsWithIgnoreCase(y_absl::string_view text, 
+                          y_absl::string_view prefix) noexcept { 
   return (text.size() >= prefix.size()) &&
          EqualsIgnoreCase(text.substr(0, prefix.size()), prefix);
 }
 
-bool EndsWithIgnoreCase(y_absl::string_view text,
-                        y_absl::string_view suffix) noexcept {
+bool EndsWithIgnoreCase(y_absl::string_view text, 
+                        y_absl::string_view suffix) noexcept { 
   return (text.size() >= suffix.size()) &&
          EqualsIgnoreCase(text.substr(text.size() - suffix.size()), suffix);
 }

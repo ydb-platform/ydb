@@ -194,7 +194,7 @@ class DefaultHealthCheckService final : public HealthCheckServiceInterface {
       HealthCheckServiceImpl* service_;
 
       ByteBuffer request_;
-      TString service_name_;
+      TString service_name_; 
       GenericServerAsyncWriter stream_;
       ServerContext ctx_;
 
@@ -213,7 +213,7 @@ class DefaultHealthCheckService final : public HealthCheckServiceInterface {
 
     // Returns true on success.
     static bool DecodeRequest(const ByteBuffer& request,
-                              TString* service_name);
+                              TString* service_name); 
     static bool EncodeResponse(ServingStatus status, ByteBuffer* response);
 
     // Needed to appease Windows compilers, which don't seem to allow
@@ -234,12 +234,12 @@ class DefaultHealthCheckService final : public HealthCheckServiceInterface {
 
   DefaultHealthCheckService();
 
-  void SetServingStatus(const TString& service_name, bool serving) override;
+  void SetServingStatus(const TString& service_name, bool serving) override; 
   void SetServingStatus(bool serving) override;
 
   void Shutdown() override;
 
-  ServingStatus GetServingStatus(const TString& service_name) const;
+  ServingStatus GetServingStatus(const TString& service_name) const; 
 
   HealthCheckServiceImpl* GetHealthCheckService(
       std::unique_ptr<ServerCompletionQueue> cq);
@@ -266,16 +266,16 @@ class DefaultHealthCheckService final : public HealthCheckServiceInterface {
   };
 
   void RegisterCallHandler(
-      const TString& service_name,
+      const TString& service_name, 
       std::shared_ptr<HealthCheckServiceImpl::CallHandler> handler);
 
   void UnregisterCallHandler(
-      const TString& service_name,
+      const TString& service_name, 
       const std::shared_ptr<HealthCheckServiceImpl::CallHandler>& handler);
 
   mutable grpc_core::Mutex mu_;
-  bool shutdown_ = false;                            // Guarded by mu_.
-  std::map<TString, ServiceData> services_map_;  // Guarded by mu_.
+  bool shutdown_ = false;                            // Guarded by mu_. 
+  std::map<TString, ServiceData> services_map_;  // Guarded by mu_. 
   std::unique_ptr<HealthCheckServiceImpl> impl_;
 };
 

@@ -1,7 +1,7 @@
 import _common as common
-import ymake
+import ymake 
 import json
-import os
+import os 
 import base64
 
 
@@ -32,13 +32,13 @@ def extract_macro_calls2(unit, macro_value_name):
 
 
 def on_run_jbuild_program(unit, *args):
-    args = list(args)
+    args = list(args) 
     """
     Custom code generation
     @link: https://wiki.yandex-team.ru/yatool/java/#kodogeneracijarunjavaprogram
     """
 
-    flat, kv = common.sort_by_keywords({'IN': -1, 'IN_DIR': -1, 'OUT': -1, 'OUT_DIR': -1, 'CWD': 1, 'CLASSPATH': -1, 'CP_USE_COMMAND_FILE': 1, 'ADD_SRCS_TO_CLASSPATH': 0}, args)
+    flat, kv = common.sort_by_keywords({'IN': -1, 'IN_DIR': -1, 'OUT': -1, 'OUT_DIR': -1, 'CWD': 1, 'CLASSPATH': -1, 'CP_USE_COMMAND_FILE': 1, 'ADD_SRCS_TO_CLASSPATH': 0}, args) 
     depends = kv.get('CLASSPATH', []) + kv.get('JAR', [])
     fake_out = None
     if depends:
@@ -46,9 +46,9 @@ def on_run_jbuild_program(unit, *args):
         fake_out = "fake.out.{}".format(hash(tuple(args)))
         unit.on_run_java(['TOOL'] + depends + ["OUT", fake_out])
 
-    if not kv.get('CP_USE_COMMAND_FILE'):
-       args += ['CP_USE_COMMAND_FILE', unit.get(['JAVA_PROGRAM_CP_USE_COMMAND_FILE']) or 'yes']
-
+    if not kv.get('CP_USE_COMMAND_FILE'): 
+       args += ['CP_USE_COMMAND_FILE', unit.get(['JAVA_PROGRAM_CP_USE_COMMAND_FILE']) or 'yes'] 
+ 
     if fake_out is not None:
         args += ['FAKE_OUT', fake_out]
 
@@ -57,23 +57,23 @@ def on_run_jbuild_program(unit, *args):
     unit.set(['RUN_JAVA_PROGRAM_VALUE', new_val])
 
 
-def ongenerate_script(unit, *args):
+def ongenerate_script(unit, *args): 
     """
     heretic@ promised to make tutorial here
     Don't forget
     Feel free to remind
     """
-    flat, kv = common.sort_by_keywords(
-        {'OUT': -1, 'TEMPLATE': -1, 'CUSTOM_PROPERTY': -1},
-        args
-    )
-    if len(kv.get('TEMPLATE', [])) > len(kv.get('OUT', [])):
-        ymake.report_configure_error('To many arguments for TEMPLATE parameter')
-    prev = unit.get(['GENERATE_SCRIPT_VALUE']) or ''
-    new_val = (prev + ' ' + base64.b64encode(json.dumps(list(args), encoding='utf-8'))).strip()
-    unit.set(['GENERATE_SCRIPT_VALUE', new_val])
-
-
+    flat, kv = common.sort_by_keywords( 
+        {'OUT': -1, 'TEMPLATE': -1, 'CUSTOM_PROPERTY': -1}, 
+        args 
+    ) 
+    if len(kv.get('TEMPLATE', [])) > len(kv.get('OUT', [])): 
+        ymake.report_configure_error('To many arguments for TEMPLATE parameter') 
+    prev = unit.get(['GENERATE_SCRIPT_VALUE']) or '' 
+    new_val = (prev + ' ' + base64.b64encode(json.dumps(list(args), encoding='utf-8'))).strip() 
+    unit.set(['GENERATE_SCRIPT_VALUE', new_val]) 
+ 
+ 
 def onjava_module(unit, *args):
     args_delim = unit.get('ARGS_DELIM')
     idea_only = True if 'IDEA_ONLY' in args else False
@@ -101,9 +101,9 @@ def onjava_module(unit, *args):
         'EXTERNAL_JAR': extract_macro_calls(unit, 'EXTERNAL_JAR_VALUE', args_delim),
         'RUN_JAVA_PROGRAM': extract_macro_calls2(unit, 'RUN_JAVA_PROGRAM_VALUE'),
         'RUN_JAVA_PROGRAM_MANAGED': '${RUN_JAVA_PROGRAM_MANAGED}',
-        'MAVEN_GROUP_ID': extract_macro_calls(unit, 'MAVEN_GROUP_ID_VALUE', args_delim),
-        'JAR_INCLUDE_FILTER': extract_macro_calls(unit, 'JAR_INCLUDE_FILTER_VALUE', args_delim),
-        'JAR_EXCLUDE_FILTER': extract_macro_calls(unit, 'JAR_EXCLUDE_FILTER_VALUE', args_delim),
+        'MAVEN_GROUP_ID': extract_macro_calls(unit, 'MAVEN_GROUP_ID_VALUE', args_delim), 
+        'JAR_INCLUDE_FILTER': extract_macro_calls(unit, 'JAR_INCLUDE_FILTER_VALUE', args_delim), 
+        'JAR_EXCLUDE_FILTER': extract_macro_calls(unit, 'JAR_EXCLUDE_FILTER_VALUE', args_delim), 
 
         # TODO remove when java test dart is in prod
         'UNITTEST_DIR': unit.get('UNITTEST_DIR'),
@@ -116,70 +116,70 @@ def onjava_module(unit, *args):
         'TIMEOUT': extract_macro_calls(unit, 'TEST_TIMEOUT', args_delim),
         'TAG': extract_macro_calls(unit, 'TEST_TAGS_VALUE', args_delim),
         'SIZE': extract_macro_calls(unit, 'TEST_SIZE_NAME', args_delim),
-        'DEPENDS': extract_macro_calls(unit, 'TEST_DEPENDS_VALUE', args_delim),
-        'IDEA_EXCLUDE': extract_macro_calls(unit, 'IDEA_EXCLUDE_DIRS_VALUE', args_delim),
-        'IDEA_RESOURCE': extract_macro_calls(unit, 'IDEA_RESOURCE_DIRS_VALUE', args_delim),
-        'IDEA_MODULE_NAME': extract_macro_calls(unit, 'IDEA_MODULE_NAME_VALUE', args_delim),
-        'GENERATE_SCRIPT': extract_macro_calls2(unit, 'GENERATE_SCRIPT_VALUE'),
-        'FAKEID': extract_macro_calls(unit, 'FAKEID', args_delim),
-        'TEST_DATA': extract_macro_calls(unit, 'TEST_DATA_VALUE', args_delim),
-        'JAVA_FORBIDDEN_LIBRARIES': extract_macro_calls(unit, 'JAVA_FORBIDDEN_LIBRARIES_VALUE', args_delim),
-        'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT')
+        'DEPENDS': extract_macro_calls(unit, 'TEST_DEPENDS_VALUE', args_delim), 
+        'IDEA_EXCLUDE': extract_macro_calls(unit, 'IDEA_EXCLUDE_DIRS_VALUE', args_delim), 
+        'IDEA_RESOURCE': extract_macro_calls(unit, 'IDEA_RESOURCE_DIRS_VALUE', args_delim), 
+        'IDEA_MODULE_NAME': extract_macro_calls(unit, 'IDEA_MODULE_NAME_VALUE', args_delim), 
+        'GENERATE_SCRIPT': extract_macro_calls2(unit, 'GENERATE_SCRIPT_VALUE'), 
+        'FAKEID': extract_macro_calls(unit, 'FAKEID', args_delim), 
+        'TEST_DATA': extract_macro_calls(unit, 'TEST_DATA_VALUE', args_delim), 
+        'JAVA_FORBIDDEN_LIBRARIES': extract_macro_calls(unit, 'JAVA_FORBIDDEN_LIBRARIES_VALUE', args_delim), 
+        'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT') 
     }
-    if unit.get('ENABLE_PREVIEW_VALUE') == 'yes' and unit.get('JDK_VERSION') in ('15', '16', '17'):
-        data['ENABLE_PREVIEW'] = extract_macro_calls(unit, 'ENABLE_PREVIEW_VALUE', args_delim)
+    if unit.get('ENABLE_PREVIEW_VALUE') == 'yes' and unit.get('JDK_VERSION') in ('15', '16', '17'): 
+        data['ENABLE_PREVIEW'] = extract_macro_calls(unit, 'ENABLE_PREVIEW_VALUE', args_delim) 
+ 
+    if unit.get('SAVE_JAVAC_GENERATED_SRCS_DIR') and unit.get('SAVE_JAVAC_GENERATED_SRCS_TAR'): 
+        data['SAVE_JAVAC_GENERATED_SRCS_DIR'] = extract_macro_calls(unit, 'SAVE_JAVAC_GENERATED_SRCS_DIR', args_delim) 
+        data['SAVE_JAVAC_GENERATED_SRCS_TAR'] = extract_macro_calls(unit, 'SAVE_JAVAC_GENERATED_SRCS_TAR', args_delim) 
 
-    if unit.get('SAVE_JAVAC_GENERATED_SRCS_DIR') and unit.get('SAVE_JAVAC_GENERATED_SRCS_TAR'):
-        data['SAVE_JAVAC_GENERATED_SRCS_DIR'] = extract_macro_calls(unit, 'SAVE_JAVAC_GENERATED_SRCS_DIR', args_delim)
-        data['SAVE_JAVAC_GENERATED_SRCS_TAR'] = extract_macro_calls(unit, 'SAVE_JAVAC_GENERATED_SRCS_TAR', args_delim)
+    if unit.get('JAVA_ADD_DLLS_VALUE') == 'yes': 
+        data['ADD_DLLS_FROM_DEPENDS'] = extract_macro_calls(unit, 'JAVA_ADD_DLLS_VALUE', args_delim) 
 
-    if unit.get('JAVA_ADD_DLLS_VALUE') == 'yes':
-        data['ADD_DLLS_FROM_DEPENDS'] = extract_macro_calls(unit, 'JAVA_ADD_DLLS_VALUE', args_delim)
-
-    if unit.get('ERROR_PRONE_VALUE') == 'yes':
-        data['ERROR_PRONE'] = extract_macro_calls(unit, 'ERROR_PRONE_VALUE', args_delim)
-
-    if unit.get('WITH_KOTLIN_VALUE') == 'yes':
-        data['WITH_KOTLIN'] = extract_macro_calls(unit, 'WITH_KOTLIN_VALUE', args_delim)
-        if unit.get('KOTLIN_JVM_TARGET'):
-            data['KOTLIN_JVM_TARGET'] = extract_macro_calls(unit, 'KOTLIN_JVM_TARGET', args_delim)
+    if unit.get('ERROR_PRONE_VALUE') == 'yes': 
+        data['ERROR_PRONE'] = extract_macro_calls(unit, 'ERROR_PRONE_VALUE', args_delim) 
+ 
+    if unit.get('WITH_KOTLIN_VALUE') == 'yes': 
+        data['WITH_KOTLIN'] = extract_macro_calls(unit, 'WITH_KOTLIN_VALUE', args_delim) 
+        if unit.get('KOTLIN_JVM_TARGET'): 
+            data['KOTLIN_JVM_TARGET'] = extract_macro_calls(unit, 'KOTLIN_JVM_TARGET', args_delim) 
         if unit.get('KOTLINC_FLAGS_VALUE'):
             data['KOTLINC_FLAGS'] = extract_macro_calls(unit, 'KOTLINC_FLAGS_VALUE', args_delim)
-        if unit.get('KOTLINC_OPTS_VALUE'):
-            data['KOTLINC_OPTS'] = extract_macro_calls(unit, 'KOTLINC_OPTS_VALUE', args_delim)
-
-    if unit.get('DIRECT_DEPS_ONLY_VALUE') == 'yes':
-        data['DIRECT_DEPS_ONLY'] = extract_macro_calls(unit, 'DIRECT_DEPS_ONLY_VALUE', args_delim)
-
-    if unit.get('JAVA_EXTERNAL_DEPENDENCIES_VALUE'):
-        valid = []
-        for dep in sum(extract_macro_calls(unit, 'JAVA_EXTERNAL_DEPENDENCIES_VALUE', args_delim), []):
-            if os.path.normpath(dep).startswith('..'):
-                ymake.report_configure_error('{}: {} - relative paths in JAVA_EXTERNAL_DEPENDENCIES is not allowed'.format(unit.path(), dep))
-            elif os.path.isabs(dep):
-                ymake.report_configure_error('{}: {} absolute paths in JAVA_EXTERNAL_DEPENDENCIES is not allowed'.format(unit.path(), dep))
-            else:
-                valid.append(dep)
-        if valid:
-            data['EXTERNAL_DEPENDENCIES'] = [valid]
-
-    if unit.get('MAKE_UBERJAR_VALUE') == 'yes':
-        if unit.get('MODULE_TYPE') != 'JAVA_PROGRAM':
-            ymake.report_configure_error('{}: UBERJAR supported only for JAVA_PROGRAM module type'.format(unit.path()))
-        data['UBERJAR'] = extract_macro_calls(unit, 'MAKE_UBERJAR_VALUE', args_delim)
-        data['UBERJAR_PREFIX'] = extract_macro_calls(unit, 'UBERJAR_PREFIX_VALUE', args_delim)
-        data['UBERJAR_HIDE_EXCLUDE'] = extract_macro_calls(unit, 'UBERJAR_HIDE_EXCLUDE_VALUE', args_delim)
-        data['UBERJAR_PATH_EXCLUDE'] = extract_macro_calls(unit, 'UBERJAR_PATH_EXCLUDE_VALUE', args_delim)
-        data['UBERJAR_MANIFEST_TRANSFORMER_MAIN'] = extract_macro_calls(unit, 'UBERJAR_MANIFEST_TRANSFORMER_MAIN_VALUE', args_delim)
-        data['UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE'] = extract_macro_calls(unit, 'UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE_VALUE', args_delim)
-        data['UBERJAR_APPENDING_TRANSFORMER'] = extract_macro_calls(unit, 'UBERJAR_APPENDING_TRANSFORMER_VALUE', args_delim)
-        data['UBERJAR_SERVICES_RESOURCE_TRANSFORMER'] = extract_macro_calls(unit, 'UBERJAR_SERVICES_RESOURCE_TRANSFORMER_VALUE', args_delim)
-
-    if unit.get('WITH_JDK_VALUE') == 'yes':
-        if unit.get('MODULE_TYPE') != 'JAVA_PROGRAM':
-            ymake.report_configure_error('{}: JDK export supported only for JAVA_PROGRAM module type'.format(unit.path()))
-        data['WITH_JDK'] = extract_macro_calls(unit, 'WITH_JDK_VALUE', args_delim)
-
+        if unit.get('KOTLINC_OPTS_VALUE'): 
+            data['KOTLINC_OPTS'] = extract_macro_calls(unit, 'KOTLINC_OPTS_VALUE', args_delim) 
+ 
+    if unit.get('DIRECT_DEPS_ONLY_VALUE') == 'yes': 
+        data['DIRECT_DEPS_ONLY'] = extract_macro_calls(unit, 'DIRECT_DEPS_ONLY_VALUE', args_delim) 
+ 
+    if unit.get('JAVA_EXTERNAL_DEPENDENCIES_VALUE'): 
+        valid = [] 
+        for dep in sum(extract_macro_calls(unit, 'JAVA_EXTERNAL_DEPENDENCIES_VALUE', args_delim), []): 
+            if os.path.normpath(dep).startswith('..'): 
+                ymake.report_configure_error('{}: {} - relative paths in JAVA_EXTERNAL_DEPENDENCIES is not allowed'.format(unit.path(), dep)) 
+            elif os.path.isabs(dep): 
+                ymake.report_configure_error('{}: {} absolute paths in JAVA_EXTERNAL_DEPENDENCIES is not allowed'.format(unit.path(), dep)) 
+            else: 
+                valid.append(dep) 
+        if valid: 
+            data['EXTERNAL_DEPENDENCIES'] = [valid] 
+ 
+    if unit.get('MAKE_UBERJAR_VALUE') == 'yes': 
+        if unit.get('MODULE_TYPE') != 'JAVA_PROGRAM': 
+            ymake.report_configure_error('{}: UBERJAR supported only for JAVA_PROGRAM module type'.format(unit.path())) 
+        data['UBERJAR'] = extract_macro_calls(unit, 'MAKE_UBERJAR_VALUE', args_delim) 
+        data['UBERJAR_PREFIX'] = extract_macro_calls(unit, 'UBERJAR_PREFIX_VALUE', args_delim) 
+        data['UBERJAR_HIDE_EXCLUDE'] = extract_macro_calls(unit, 'UBERJAR_HIDE_EXCLUDE_VALUE', args_delim) 
+        data['UBERJAR_PATH_EXCLUDE'] = extract_macro_calls(unit, 'UBERJAR_PATH_EXCLUDE_VALUE', args_delim) 
+        data['UBERJAR_MANIFEST_TRANSFORMER_MAIN'] = extract_macro_calls(unit, 'UBERJAR_MANIFEST_TRANSFORMER_MAIN_VALUE', args_delim) 
+        data['UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE'] = extract_macro_calls(unit, 'UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE_VALUE', args_delim) 
+        data['UBERJAR_APPENDING_TRANSFORMER'] = extract_macro_calls(unit, 'UBERJAR_APPENDING_TRANSFORMER_VALUE', args_delim) 
+        data['UBERJAR_SERVICES_RESOURCE_TRANSFORMER'] = extract_macro_calls(unit, 'UBERJAR_SERVICES_RESOURCE_TRANSFORMER_VALUE', args_delim) 
+ 
+    if unit.get('WITH_JDK_VALUE') == 'yes': 
+        if unit.get('MODULE_TYPE') != 'JAVA_PROGRAM': 
+            ymake.report_configure_error('{}: JDK export supported only for JAVA_PROGRAM module type'.format(unit.path())) 
+        data['WITH_JDK'] = extract_macro_calls(unit, 'WITH_JDK_VALUE', args_delim) 
+ 
     if not data['EXTERNAL_JAR']:
         has_processor = extract_macro_calls(unit, 'GENERATE_VCS_JAVA_INFO_NODEP', args_delim)
         data['EMBED_VCS'] = [[str(has_processor and has_processor[0] and has_processor[0][0])]]
@@ -221,8 +221,8 @@ def onjava_module(unit, *args):
     unit.set_property(['JAVA_DART_DATA', dart])
     if not idea_only and unit.get('MODULE_TYPE') in ('JAVA_PROGRAM', 'JAVA_LIBRARY', 'JTEST', 'TESTNG', 'JUNIT5') and not unit.path().startswith('$S/contrib/java'):
         unit.on_add_classpath_clash_check()
-        if unit.get('LINT_LEVEL_VALUE') != "none":
-            unit.onadd_check(['JAVA_STYLE', unit.get('LINT_LEVEL_VALUE')])
+        if unit.get('LINT_LEVEL_VALUE') != "none": 
+            unit.onadd_check(['JAVA_STYLE', unit.get('LINT_LEVEL_VALUE')]) 
 
 
 def on_add_java_style_checks(unit, *args):
@@ -364,11 +364,11 @@ def parse_words(words):
 def on_ymake_generate_script(unit, *args):
     for out, tmpl, props in parse_words(list(args)):
         unit.on_add_gen_java_script([out, tmpl] + list(props))
-
-def on_jdk_version_macro_check(unit, *args):
-    if len(args) != 1:
-        unit.message(["error", "Invalid syntax. Single argument required."])
-    jdk_version = args[0]
-    availible_versions = ('10', '11', '12', '13', '14', '15', '16', '17',)
-    if jdk_version not in availible_versions:
-        unit.message(["error", "Invalid jdk version: {}. {} are availible".format(jdk_version, availible_versions)])
+ 
+def on_jdk_version_macro_check(unit, *args): 
+    if len(args) != 1: 
+        unit.message(["error", "Invalid syntax. Single argument required."]) 
+    jdk_version = args[0] 
+    availible_versions = ('10', '11', '12', '13', '14', '15', '16', '17',) 
+    if jdk_version not in availible_versions: 
+        unit.message(["error", "Invalid jdk version: {}. {} are availible".format(jdk_version, availible_versions)]) 

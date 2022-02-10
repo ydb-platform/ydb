@@ -21,10 +21,10 @@
 namespace grpc {
 
 std::unique_ptr<ServerBuilderOption> MakeChannelArgumentOption(
-    const TString& name, const TString& value) {
+    const TString& name, const TString& value) { 
   class StringOption final : public ServerBuilderOption {
    public:
-    StringOption(const TString& name, const TString& value)
+    StringOption(const TString& name, const TString& value) 
         : name_(name), value_(value) {}
 
     virtual void UpdateArguments(ChannelArguments* args) override {
@@ -35,17 +35,17 @@ std::unique_ptr<ServerBuilderOption> MakeChannelArgumentOption(
         override {}
 
    private:
-    const TString name_;
-    const TString value_;
+    const TString name_; 
+    const TString value_; 
   };
   return std::unique_ptr<ServerBuilderOption>(new StringOption(name, value));
 }
 
 std::unique_ptr<ServerBuilderOption> MakeChannelArgumentOption(
-    const TString& name, int value) {
+    const TString& name, int value) { 
   class IntOption final : public ServerBuilderOption {
    public:
-    IntOption(const TString& name, int value)
+    IntOption(const TString& name, int value) 
         : name_(name), value_(value) {}
 
     virtual void UpdateArguments(ChannelArguments* args) override {
@@ -56,7 +56,7 @@ std::unique_ptr<ServerBuilderOption> MakeChannelArgumentOption(
         override {}
 
    private:
-    const TString name_;
+    const TString name_; 
     const int value_;
   };
   return std::unique_ptr<ServerBuilderOption>(new IntOption(name, value));

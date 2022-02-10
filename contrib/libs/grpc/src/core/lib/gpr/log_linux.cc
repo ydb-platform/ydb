@@ -38,8 +38,8 @@
 #include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
-#include <util/generic/string.h>
-#include "y_absl/strings/str_format.h"
+#include <util/generic/string.h> 
+#include "y_absl/strings/str_format.h" 
 
 static long sys_gettid(void) { return syscall(__NR_gettid); }
 
@@ -86,10 +86,10 @@ void gpr_default_log(gpr_log_func_args* args) {
     strcpy(time_buffer, "error:strftime");
   }
 
-  TString prefix = y_absl::StrFormat(
-      "%s%s.%09" PRId32 " %7ld %s:%d]", gpr_log_severity_string(args->severity),
-      time_buffer, now.tv_nsec, tid, display_file, args->line);
-  fprintf(stderr, "%-60s %s\n", prefix.c_str(), args->message);
+  TString prefix = y_absl::StrFormat( 
+      "%s%s.%09" PRId32 " %7ld %s:%d]", gpr_log_severity_string(args->severity), 
+      time_buffer, now.tv_nsec, tid, display_file, args->line); 
+  fprintf(stderr, "%-60s %s\n", prefix.c_str(), args->message); 
 }
 
 #endif /* GPR_LINUX_LOG */

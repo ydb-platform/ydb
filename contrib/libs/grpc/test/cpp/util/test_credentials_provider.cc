@@ -40,11 +40,11 @@ namespace grpc {
 namespace testing {
 namespace {
 
-TString ReadFile(const TString& src_path) {
+TString ReadFile(const TString& src_path) { 
   std::ifstream src;
   src.open(src_path, std::ifstream::in | std::ifstream::binary);
 
-  TString contents;
+  TString contents; 
   src.seekg(0, std::ios::end);
   contents.reserve(src.tellg());
   src.seekg(0, std::ios::beg);
@@ -66,7 +66,7 @@ class DefaultCredentialsProvider : public CredentialsProvider {
   ~DefaultCredentialsProvider() override {}
 
   void AddSecureType(
-      const TString& type,
+      const TString& type, 
       std::unique_ptr<CredentialTypeProvider> type_provider) override {
     // This clobbers any existing entry for type, except the defaults, which
     // can't be clobbered.
@@ -83,7 +83,7 @@ class DefaultCredentialsProvider : public CredentialsProvider {
   }
 
   std::shared_ptr<ChannelCredentials> GetChannelCredentials(
-      const TString& type, ChannelArguments* args) override {
+      const TString& type, ChannelArguments* args) override { 
     if (type == grpc::testing::kInsecureCredentialsType) {
       return InsecureChannelCredentials();
     } else if (type == grpc::testing::kAltsCredentialsType) {
@@ -109,7 +109,7 @@ class DefaultCredentialsProvider : public CredentialsProvider {
   }
 
   std::shared_ptr<ServerCredentials> GetServerCredentials(
-      const TString& type) override {
+      const TString& type) override { 
     if (type == grpc::testing::kInsecureCredentialsType) {
       return InsecureServerCredentials();
     } else if (type == grpc::testing::kAltsCredentialsType) {
@@ -140,8 +140,8 @@ class DefaultCredentialsProvider : public CredentialsProvider {
           ->GetServerCredentials();
     }
   }
-  std::vector<TString> GetSecureCredentialsTypeList() override {
-    std::vector<TString> types;
+  std::vector<TString> GetSecureCredentialsTypeList() override { 
+    std::vector<TString> types; 
     types.push_back(grpc::testing::kTlsCredentialsType);
     std::unique_lock<std::mutex> lock(mu_);
     for (auto it = added_secure_type_names_.begin();
@@ -153,11 +153,11 @@ class DefaultCredentialsProvider : public CredentialsProvider {
 
  private:
   std::mutex mu_;
-  std::vector<TString> added_secure_type_names_;
+  std::vector<TString> added_secure_type_names_; 
   std::vector<std::unique_ptr<CredentialTypeProvider>>
       added_secure_type_providers_;
-  TString custom_server_key_;
-  TString custom_server_cert_;
+  TString custom_server_key_; 
+  TString custom_server_cert_; 
 };
 
 CredentialsProvider* g_provider = nullptr;

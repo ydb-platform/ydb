@@ -24,7 +24,7 @@ class Swig(iw.CustomCommand):
 
         relpath = os.path.relpath(os.path.dirname(self._path), unit.path())
 
-        self._swig_lang = unit.get('SWIG_LANG')
+        self._swig_lang = unit.get('SWIG_LANG') 
 
         if self._swig_lang != 'jni_java':
             self._main_out = os.path.join(
@@ -56,14 +56,14 @@ class Swig(iw.CustomCommand):
         if not self._local_swig:
             unit.onaddincl(incl_dirs)
 
-        if self._swig_lang == 'python':
+        if self._swig_lang == 'python': 
             self._out_name = modname + '.py'
             self._flags.extend(['-interface', unit.get('MODULE_PREFIX') + modname])
 
-        if self._swig_lang == 'perl':
+        if self._swig_lang == 'perl': 
             self._out_name = modname + '.pm'
             self._flags.append('-shadow')
-            unit.onpeerdir(['build/platform/perl'])
+            unit.onpeerdir(['build/platform/perl']) 
 
         if self._swig_lang in ['jni_cpp', 'java']:
             self._out_header = os.path.splitext(self._main_out)[0] + '.h'
@@ -98,7 +98,7 @@ class Swig(iw.CustomCommand):
 
         return [
             (self._main_out, []),
-            (common.join_intl_paths(self._bindir, self._out_name), (['noauto', 'add_to_outs'] if self._swig_lang != 'java' else [])),
+            (common.join_intl_paths(self._bindir, self._out_name), (['noauto', 'add_to_outs'] if self._swig_lang != 'java' else [])), 
         ] + ([(self._out_header, [])] if self._swig_lang == 'java' else [])
 
     def output_includes(self):
@@ -118,7 +118,7 @@ class Swig(iw.CustomCommand):
             '-outdir', self.resolve_path(self._bindir)
         ] + self._incl_flags() + [self.resolve_path(path)])
 
-    def do_run_java(self, binary, path):
+    def do_run_java(self, binary, path): 
         import tarfile
 
         outdir = self.resolve_path(self._bindir)
@@ -126,7 +126,7 @@ class Swig(iw.CustomCommand):
             java_srcs_dir = os.path.join(outdir, self._package.replace('.', '/'))
             if not os.path.exists(java_srcs_dir):
                 os.makedirs(java_srcs_dir)
-
+ 
         flags = self._incl_flags()
         src = self.resolve_path(path)
         with open(src, 'r') as f:

@@ -76,7 +76,7 @@ RECURSE(
     async-timeout
     asyncio-pool
     asyncmc
-    asyncpg
+    asyncpg 
     asyncssh
     asynctest
     asyncwhois
@@ -98,7 +98,7 @@ RECURSE(
     backports.ssl_match_hostname
     backports.tempfile
     backports.weakref
-    banal
+    banal 
     bandit
     bcrypt
     beautifulsoup4
@@ -106,7 +106,7 @@ RECURSE(
     betamax
     betamax-serializers
     billiard
-    binaryornot
+    binaryornot 
     bincopy
     biplist
     bitarray
@@ -116,7 +116,7 @@ RECURSE(
     blis
     bokeh
     boltons
-    boolean.py
+    boolean.py 
     bootstrapped
     boto
     boto3
@@ -164,7 +164,7 @@ RECURSE(
     coloredlogs
     colorhash
     colorlog
-    commoncode
+    commoncode 
     commonmark
     ConfigArgParse
     configobj
@@ -201,7 +201,7 @@ RECURSE(
     dateutil
     DAWG-Python
     dbf_light
-    debian-inspector
+    debian-inspector 
     decorator
     deepdiff
     deepmerge
@@ -253,14 +253,14 @@ RECURSE(
     django-filebrowser-no-grappelli
     django-filter
     django-fsm
-    django-grappelli
+    django-grappelli 
     django-guardian
     django-hosts
     django-http-proxy
     django-import-export
     django-introspection
     django-jinja
-    django-js-asset
+    django-js-asset 
     django-json-widget
     django-markwhat
     django-model-choices
@@ -268,8 +268,8 @@ RECURSE(
     django-modeladmin-reorder
     django-modeltranslation
     django-moderation
-    django-mptt
-    django-mptt-admin
+    django-mptt 
+    django-mptt-admin 
     django-nested-inline
     django-netfields
     django-ninja
@@ -321,7 +321,7 @@ RECURSE(
     dohq-teamcity
     dominate
     dotmap
-    dparse
+    dparse 
     dpath
     dpkt
     drf-extensions
@@ -347,7 +347,7 @@ RECURSE(
     execnet
     executing
     ExifRead
-    extractcode
+    extractcode 
     fabric
     face
     facebook-business
@@ -371,7 +371,7 @@ RECURSE(
     ffmpeg-python
     fido2
     filelock
-    fingerprints
+    fingerprints 
     fire
     flake8
     flake8-bandit
@@ -421,7 +421,7 @@ RECURSE(
     frozendict
     frozenlist
     fsspec
-    ftfy
+    ftfy 
     funcparserlib
     funcsigs
     functools32
@@ -431,7 +431,7 @@ RECURSE(
     gast
     gcovr
     GDAL
-    gemfileparser
+    gemfileparser 
     gensim
     GeoAlchemy2
     geobuf
@@ -521,7 +521,7 @@ RECURSE(
     iniherit
     Inject
     inlinestyler
-    intbitset
+    intbitset 
     intspan
     invoke
     ipaddr
@@ -540,8 +540,8 @@ RECURSE(
     itsdangerous
     jaeger-client
     janus
-    jaraco.functools
-    javaproperties
+    jaraco.functools 
+    javaproperties 
     jdcal
     jedi
     Jinja2
@@ -559,7 +559,7 @@ RECURSE(
     jsonpointer
     jsonref
     jsonschema
-    jsonstreams
+    jsonstreams 
     juggler_sdk
     juggler_sdk/cli
     junitparser
@@ -580,10 +580,10 @@ RECURSE(
     lark-parser
     lazy
     lazy-object-proxy
-    lcov_cobertura
-    lcov_cobertura/bin
+    lcov_cobertura 
+    lcov_cobertura/bin 
     legacycontour
-    license-expression
+    license-expression 
     line_profiler
     linecache2
     llist
@@ -666,7 +666,7 @@ RECURSE(
     netifaces
     networkx
     nltk
-    normality
+    normality 
     nose
     notebook
     num2words
@@ -682,7 +682,7 @@ RECURSE(
     openapi-core
     openapi-schema-validator
     openapi-spec-validator
-    opencv-python
+    opencv-python 
     openpyxl
     opensfm
     opentok
@@ -695,7 +695,7 @@ RECURSE(
     orderedmultidict
     orderedset
     os-fast-reservoir
-    packageurl-python
+    packageurl-python 
     packaging
     paginate
     pamela
@@ -717,7 +717,7 @@ RECURSE(
     parso
     partd
     passlib
-    patch
+    patch 
     patched
     path.py
     pathlib2
@@ -727,7 +727,7 @@ RECURSE(
     patsy
     paypalrestsdk
     pdbpp
-    pdfminer.six
+    pdfminer.six 
     pecan
     peewee
     peewee/playhouse
@@ -742,12 +742,12 @@ RECURSE(
     pika
     Pillow
     pip
-    pkginfo
+    pkginfo 
     platformdirs
     plotly
     plotly/_plotly_utils
     pluggy
-    plugincode
+    plugincode 
     plumbum
     ply
     plyvel
@@ -788,7 +788,7 @@ RECURSE(
     py3c
     py4j
     pyaes
-    pyahocorasick
+    pyahocorasick 
     pyaml
     pyasn1
     pyasn1-modules
@@ -829,7 +829,7 @@ RECURSE(
     pylint
     pylxd
     pylzma
-    pymaven-patch
+    pymaven-patch 
     PyMeeus
     pymongo
     pymorphy2
@@ -932,7 +932,7 @@ RECURSE(
     ratelimit
     raven
     razdel
-    rdflib
+    rdflib 
     readabilipy
     redis
     redis-cache-lock
@@ -963,12 +963,12 @@ RECURSE(
     s3transfer
     sacrebleu
     salt-pepper
-    saneyaml
+    saneyaml 
     sanic
     sanic-routing
     sanic-testing
     scales
-    scancode-toolkit
+    scancode-toolkit 
     scandir
     schedule
     schema
@@ -1017,7 +1017,7 @@ RECURSE(
     spacy-legacy
     spacy-loggers
     sparse-dot-topn
-    spdx-tools
+    spdx-tools 
     spidev
     spintop-openhtf
     splunk-sdk-python
@@ -1092,7 +1092,7 @@ RECURSE(
     Twisted
     txaio
     txredisapi
-    typecode
+    typecode 
     typed-argument-parser
     typed-ast
     typeguard
@@ -1115,10 +1115,10 @@ RECURSE(
     uritemplate
     uritools
     urllib3
-    urlpy
+    urlpy 
     user-agents
     uvicorn
-    uvloop
+    uvloop 
     uwsgi
     uwsgi/bin
     uwsgi/examples
@@ -1138,7 +1138,7 @@ RECURSE(
     watchdog
     watchgod
     wcwidth
-    webargs
+    webargs 
     webauthn
     webcolors
     webencodings

@@ -77,8 +77,8 @@ const typename C::value_type* RandomElement(const C& container) {
 
 }  // namespace
 
-LoadRecordKey::LoadRecordKey(const TString& client_ip_and_token,
-                             TString user_id)
+LoadRecordKey::LoadRecordKey(const TString& client_ip_and_token, 
+                             TString user_id) 
     : user_id_(std::move(user_id)) {
   GPR_ASSERT(client_ip_and_token.size() >= 2);
   int ip_hex_size;
@@ -98,7 +98,7 @@ LoadRecordKey::LoadRecordKey(const TString& client_ip_and_token,
   }
 }
 
-TString LoadRecordKey::GetClientIpBytes() const {
+TString LoadRecordKey::GetClientIpBytes() const { 
   if (client_ip_hex_.empty()) {
     return "";
   } else if (client_ip_hex_.size() == kIpv4AddressLength) {
@@ -110,8 +110,8 @@ TString LoadRecordKey::GetClientIpBytes() const {
       return "";
     }
     ip_bytes = grpc_htonl(ip_bytes);
-    return TString(reinterpret_cast<const char*>(&ip_bytes),
-                       sizeof(ip_bytes));
+    return TString(reinterpret_cast<const char*>(&ip_bytes), 
+                       sizeof(ip_bytes)); 
   } else if (client_ip_hex_.size() == kIpv6AddressLength) {
     uint32_t ip_bytes[4];
     for (size_t i = 0; i < 4; ++i) {
@@ -125,14 +125,14 @@ TString LoadRecordKey::GetClientIpBytes() const {
       }
       ip_bytes[i] = grpc_htonl(ip_bytes[i]);
     }
-    return TString(reinterpret_cast<const char*>(ip_bytes),
-                       sizeof(ip_bytes));
+    return TString(reinterpret_cast<const char*>(ip_bytes), 
+                       sizeof(ip_bytes)); 
   } else {
     GPR_UNREACHABLE_CODE(return "");
   }
 }
 
-LoadRecordValue::LoadRecordValue(TString metric_name, uint64_t num_calls,
+LoadRecordValue::LoadRecordValue(TString metric_name, uint64_t num_calls, 
                                  double total_metric_value) {
   call_metrics_.emplace(std::move(metric_name),
                         CallMetricValue(num_calls, total_metric_value));
@@ -177,8 +177,8 @@ uint64_t PerBalancerStore::GetNumCallsInProgressForReport() {
   return num_calls_in_progress_;
 }
 
-void PerHostStore::ReportStreamCreated(const TString& lb_id,
-                                       const TString& load_key) {
+void PerHostStore::ReportStreamCreated(const TString& lb_id, 
+                                       const TString& load_key) { 
   GPR_ASSERT(lb_id != kInvalidLbId);
   SetUpForNewLbId(lb_id, load_key);
   // Prior to this one, there was no load balancer receiving report, so we may
@@ -188,7 +188,7 @@ void PerHostStore::ReportStreamCreated(const TString& lb_id,
   // this stream. Need to discuss with LB team.
   if (assigned_stores_.size() == 1) {
     for (const auto& p : per_balancer_stores_) {
-      const TString& other_lb_id = p.first;
+      const TString& other_lb_id = p.first; 
       const std::unique_ptr<PerBalancerStore>& orphaned_store = p.second;
       if (other_lb_id != lb_id) {
         orphaned_store->Resume();
@@ -203,7 +203,7 @@ void PerHostStore::ReportStreamCreated(const TString& lb_id,
   }
 }
 
-void PerHostStore::ReportStreamClosed(const TString& lb_id) {
+void PerHostStore::ReportStreamClosed(const TString& lb_id) { 
   auto it_store_for_gone_lb = per_balancer_stores_.find(lb_id);
   GPR_ASSERT(it_store_for_gone_lb != per_balancer_stores_.end());
   // Remove this closed stream from our records.
@@ -215,7 +215,7 @@ void PerHostStore::ReportStreamClosed(const TString& lb_id) {
   // The stores that were assigned to this balancer are orphaned now. They
   // should be re-assigned to other balancers which are still receiving reports.
   for (PerBalancerStore* orphaned_store : orphaned_stores) {
-    const TString* new_receiver = nullptr;
+    const TString* new_receiver = nullptr; 
     auto it = load_key_to_receiving_lb_ids_.find(orphaned_store->load_key());
     if (it != load_key_to_receiving_lb_ids_.end()) {
       // First, try to pick from the active balancers with the same load key.
@@ -235,21 +235,21 @@ void PerHostStore::ReportStreamClosed(const TString& lb_id) {
 }
 
 PerBalancerStore* PerHostStore::FindPerBalancerStore(
-    const TString& lb_id) const {
+    const TString& lb_id) const { 
   return per_balancer_stores_.find(lb_id) != per_balancer_stores_.end()
              ? per_balancer_stores_.find(lb_id)->second.get()
              : nullptr;
 }
 
 const std::set<PerBalancerStore*>* PerHostStore::GetAssignedStores(
-    const TString& lb_id) const {
+    const TString& lb_id) const { 
   auto it = assigned_stores_.find(lb_id);
   if (it == assigned_stores_.end()) return nullptr;
   return &(it->second);
 }
 
 void PerHostStore::AssignOrphanedStore(PerBalancerStore* orphaned_store,
-                                       const TString& new_receiver) {
+                                       const TString& new_receiver) { 
   auto it = assigned_stores_.find(new_receiver);
   GPR_ASSERT(it != assigned_stores_.end());
   it->second.insert(orphaned_store);
@@ -260,8 +260,8 @@ void PerHostStore::AssignOrphanedStore(PerBalancerStore* orphaned_store,
           new_receiver.c_str());
 }
 
-void PerHostStore::SetUpForNewLbId(const TString& lb_id,
-                                   const TString& load_key) {
+void PerHostStore::SetUpForNewLbId(const TString& lb_id, 
+                                   const TString& load_key) { 
   // The top-level caller (i.e., LoadReportService) should guarantee the
   // lb_id is unique for each reporting stream.
   GPR_ASSERT(per_balancer_stores_.find(lb_id) == per_balancer_stores_.end());
@@ -284,7 +284,7 @@ PerBalancerStore* LoadDataStore::FindPerBalancerStore(
   }
 }
 
-void LoadDataStore::MergeRow(const TString& hostname,
+void LoadDataStore::MergeRow(const TString& hostname, 
                              const LoadRecordKey& key,
                              const LoadRecordValue& value) {
   PerBalancerStore* per_balancer_store =
@@ -315,20 +315,20 @@ void LoadDataStore::MergeRow(const TString& hostname,
 }
 
 const std::set<PerBalancerStore*>* LoadDataStore::GetAssignedStores(
-    const TString& hostname, const TString& lb_id) {
+    const TString& hostname, const TString& lb_id) { 
   auto it = per_host_stores_.find(hostname);
   if (it == per_host_stores_.end()) return nullptr;
   return it->second.GetAssignedStores(lb_id);
 }
 
-void LoadDataStore::ReportStreamCreated(const TString& hostname,
-                                        const TString& lb_id,
-                                        const TString& load_key) {
+void LoadDataStore::ReportStreamCreated(const TString& hostname, 
+                                        const TString& lb_id, 
+                                        const TString& load_key) { 
   per_host_stores_[hostname].ReportStreamCreated(lb_id, load_key);
 }
 
-void LoadDataStore::ReportStreamClosed(const TString& hostname,
-                                       const TString& lb_id) {
+void LoadDataStore::ReportStreamClosed(const TString& hostname, 
+                                       const TString& lb_id) { 
   auto it_per_host_store = per_host_stores_.find(hostname);
   GPR_ASSERT(it_per_host_store != per_host_stores_.end());
   it_per_host_store->second.ReportStreamClosed(lb_id);

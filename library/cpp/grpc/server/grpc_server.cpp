@@ -52,7 +52,7 @@ void TGRpcServer::AddService(IGRpcServicePtr service) {
 }
 
 void TGRpcServer::Start() {
-    TString server_address(Join(":", Options_.Host, Options_.Port)); // https://st.yandex-team.ru/DTCC-695
+    TString server_address(Join(":", Options_.Host, Options_.Port)); // https://st.yandex-team.ru/DTCC-695 
     using grpc::ServerBuilder;
     using grpc::ResourceQuota;
     ServerBuilder builder;

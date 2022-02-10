@@ -782,7 +782,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
 
     Y_UNIT_TEST(TestUdfResultCheckSeqList) {
         static constexpr ui32 listSize = 31;
-        BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
+        BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) { 
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(listSize)};
         };
         ValidateValueFunc validateFunc = [](const NUdf::TUnboxedValuePod& value, const NUdf::IValueBuilder* valueBuilder) {
@@ -818,7 +818,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
 
     Y_UNIT_TEST(TestUdfResultCheckSeqListWithHoleMiddle) {
         static constexpr ui32 listSize = 31;
-        BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
+        BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) { 
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(listSize),
                 pgmBuilder.NewDataLiteral(listSize / 2)};
         };
@@ -843,7 +843,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
 
     Y_UNIT_TEST(TestUdfResultCheckSeqListWithHoleLast) {
         static constexpr ui32 listSize = 31;
-        BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
+        BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) { 
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(listSize),
                 pgmBuilder.NewDataLiteral(listSize - 1)};
         };

@@ -1,234 +1,234 @@
-# File format ($ symbol means the beginning of a line):
-#
-# $ # this message
-# $ # =======================
-# $     # comments (all commentaries should starts with some number of spaces and # symbol)
-# ${action} {license spdx} {license text hash}
-# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
-# ${all_file_action} filename
-# $ # user commentaries (many lines)
-# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
-# ${action} {license spdx} {license text hash}
-# $BELONGS ./ya/make/file/relative/path/3/ya.make
-# ${all_file_action} filename
-# $    #    user commentaries
-# $ generated description
-# $ ...
-#
-# You can modify action, all_file_action and add commentaries
-# Available actions:
-# keep - keep license in contrib and use in credits
-# skip - skip license
-# remove - remove all files with this license
-# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
-#
-# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
-# We suppose that that files can contain some license info
-# Available all file actions:
-# FILE_IGNORE - ignore file (do nothing)
-# FILE_INCLUDE - include all file data into licenses text file
-# =======================
-
-KEEP     LGPL-2.1-or-later    11f29116928a6d65084938ef4679791e
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LGPL-2.1-or-later
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
-    Files with this license:
-        version.c [4:12]
-
-KEEP     LGPL-2.1-only        2f9584d15571c4760cb8d8540ef228f0
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LGPL-2.1-only
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
-    Files with this license:
-        COPYING.LIB [1:502]
-
-KEEP     LGPL-2.1-or-later    338fee7b6fe101228c655112910333a1
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LGPL-2.1-or-later
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
-    Files with this license:
-        gettext.h [4:16]
-        strverscmp.c [6:18]
-
-KEEP     LGPL-2.0-or-later    40ffae1ccd99ce6a37ba11ea08d7861a
-BELONGS ya.make
-    License text:
-         * gunidecomp.c, all licensed under LGPL and copyright hold by:
-    Scancode info:
-        Original SPDX id: LGPL-2.0-or-later
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
-    Files with this license:
-        nfkc.c [32:32]
-
-KEEP     LGPL-2.1-or-later    5fd0b94947acedbfed92768e7cb985f4
-BELONGS ya.make
-    License text:
-         * You should have received a copy of the GNU Lesser General Public
-         * License along with this file; if not, write to the Free Software
-    Scancode info:
-        Original SPDX id: LGPL-2.1-or-later
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
-    Files with this license:
-        version.c [14:15]
-
-KEEP     LGPL-2.1-or-later AND LGPL-2.1-or-later AND LGPL-2.1-or-later 7141ca6fb9cb0d484573102a0cbc6124
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LGPL-2.1-or-later
-        Score           : 93.39
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
-    Files with this license:
-        idn-free.c [5:19]
-        idna.c [4:18]
-        idna.h [4:18]
-        nfkc.c [4:18]
-        pr29.h [4:18]
-        profiles.c [4:18]
-        stringprep.c [4:18]
-        stringprep.h [4:18]
-        tld.h [7:21]
-        toutf8.c [4:18]
-    Scancode info:
-        Original SPDX id: LGPL-2.1-or-later
-        Score           : 89.06
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
-    Files with this license:
-        idn-free.h [5:19]
-    Scancode info:
-        Original SPDX id: LGPL-2.1-or-later
-        Score           : 92.68
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
-    Files with this license:
-        pr29.c [4:18]
-        punycode.c [4:18]
-        punycode.h [4:18]
-        strerror-idna.c [4:18]
-        strerror-pr29.c [4:18]
-        strerror-punycode.c [4:18]
-        strerror-stringprep.c [4:18]
-        strerror-tld.c [4:18]
-
-KEEP     LGPL-2.1-or-later    7d63f8f9e1d182ec4862b6b65650d55c
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LGPL-2.1-or-later
-        Score           : 91.41
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
-    Files with this license:
-        tld.c [3:21]
-
+# File format ($ symbol means the beginning of a line): 
+# 
+# $ # this message 
+# $ # ======================= 
+# $     # comments (all commentaries should starts with some number of spaces and # symbol) 
+# ${action} {license spdx} {license text hash} 
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make 
+# ${all_file_action} filename 
+# $ # user commentaries (many lines) 
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify) 
+# ${action} {license spdx} {license text hash} 
+# $BELONGS ./ya/make/file/relative/path/3/ya.make 
+# ${all_file_action} filename 
+# $    #    user commentaries 
+# $ generated description 
+# $ ... 
+# 
+# You can modify action, all_file_action and add commentaries 
+# Available actions: 
+# keep - keep license in contrib and use in credits 
+# skip - skip license 
+# remove - remove all files with this license 
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file 
+# 
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory) 
+# We suppose that that files can contain some license info 
+# Available all file actions: 
+# FILE_IGNORE - ignore file (do nothing) 
+# FILE_INCLUDE - include all file data into licenses text file 
+# ======================= 
+ 
+KEEP     LGPL-2.1-or-later    11f29116928a6d65084938ef4679791e 
+BELONGS ya.make 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: LGPL-2.1-or-later 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later 
+    Files with this license: 
+        version.c [4:12] 
+ 
+KEEP     LGPL-2.1-only        2f9584d15571c4760cb8d8540ef228f0 
+BELONGS ya.make 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: LGPL-2.1-only 
+        Score           : 100.00 
+        Match type      : TEXT 
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only 
+    Files with this license: 
+        COPYING.LIB [1:502] 
+ 
+KEEP     LGPL-2.1-or-later    338fee7b6fe101228c655112910333a1 
+BELONGS ya.make 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: LGPL-2.1-or-later 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later 
+    Files with this license: 
+        gettext.h [4:16] 
+        strverscmp.c [6:18] 
+ 
+KEEP     LGPL-2.0-or-later    40ffae1ccd99ce6a37ba11ea08d7861a 
+BELONGS ya.make 
+    License text: 
+         * gunidecomp.c, all licensed under LGPL and copyright hold by: 
+    Scancode info: 
+        Original SPDX id: LGPL-2.0-or-later 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later 
+    Files with this license: 
+        nfkc.c [32:32] 
+ 
+KEEP     LGPL-2.1-or-later    5fd0b94947acedbfed92768e7cb985f4 
+BELONGS ya.make 
+    License text: 
+         * You should have received a copy of the GNU Lesser General Public 
+         * License along with this file; if not, write to the Free Software 
+    Scancode info: 
+        Original SPDX id: LGPL-2.1-or-later 
+        Score           : 100.00 
+        Match type      : REFERENCE 
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later 
+    Files with this license: 
+        version.c [14:15] 
+ 
+KEEP     LGPL-2.1-or-later AND LGPL-2.1-or-later AND LGPL-2.1-or-later 7141ca6fb9cb0d484573102a0cbc6124 
+BELONGS ya.make 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: LGPL-2.1-or-later 
+        Score           : 93.39 
+        Match type      : NOTICE 
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later 
+    Files with this license: 
+        idn-free.c [5:19] 
+        idna.c [4:18] 
+        idna.h [4:18] 
+        nfkc.c [4:18] 
+        pr29.h [4:18] 
+        profiles.c [4:18] 
+        stringprep.c [4:18] 
+        stringprep.h [4:18] 
+        tld.h [7:21] 
+        toutf8.c [4:18] 
+    Scancode info: 
+        Original SPDX id: LGPL-2.1-or-later 
+        Score           : 89.06 
+        Match type      : NOTICE 
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later 
+    Files with this license: 
+        idn-free.h [5:19] 
+    Scancode info: 
+        Original SPDX id: LGPL-2.1-or-later 
+        Score           : 92.68 
+        Match type      : NOTICE 
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later 
+    Files with this license: 
+        pr29.c [4:18] 
+        punycode.c [4:18] 
+        punycode.h [4:18] 
+        strerror-idna.c [4:18] 
+        strerror-pr29.c [4:18] 
+        strerror-punycode.c [4:18] 
+        strerror-stringprep.c [4:18] 
+        strerror-tld.c [4:18] 
+ 
+KEEP     LGPL-2.1-or-later    7d63f8f9e1d182ec4862b6b65650d55c 
+BELONGS ya.make 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: LGPL-2.1-or-later 
+        Score           : 91.41 
+        Match type      : NOTICE 
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later 
+    Files with this license: 
+        tld.c [3:21] 
+ 
 KEEP     Custom-Punycode      831cf172ef44d622ecc83535c4c0da31
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-other-permissive
-        Score           : 93.55
-        Match type      : TEXT
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
-    Files with this license:
-        punycode.c [25:33]
-        punycode.h [25:33]
-
-KEEP     LGPL-2.1-or-later    925815194109907bdf9ea100eaf61c7a
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LGPL-2.1-or-later
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
-    Files with this license:
-        unix/ac-stdint.h [4:17]
-        unix/idn-int.h [4:17]
-        win/ac-stdint.h [4:17]
-        win/idn-int.h [4:17]
-        win/stdbool.h [4:17]
-
-KEEP     Ietf                 941d8632c71179a12ff3d4aa4fa2938d
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-ietf
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://www.ietf.org/, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/ietf.LICENSE
-    Files with this license:
-        punycode.c [37:59]
-        punycode.h [37:59]
-
-KEEP     LGPL-2.1-or-later    9a83f24347bcdf294515c07bb9b74937
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LGPL-2.1-or-later
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
-    Files with this license:
-        c-strcase.h [4:16]
-        c-strcasecmp.c [4:16]
-        striconv.c [5:17]
-        striconv.h [5:17]
-        strverscmp.h [5:17]
-
-KEEP     LGPL-2.1-or-later    d0f4bd395fbd49384ee9b6b5ba085802
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LGPL-2.1-or-later
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
-    Files with this license:
-        c-ctype.c [5:17]
-        c-ctype.h [10:22]
-
-SKIP     AGPL-3.0-only        d6c135d53014f90dc2a5a8da047a3e23
-BELONGS ya.make
-    # LGPL
-    License text:
-         * package is available under the GNU Lesser General Public License.
-    Scancode info:
-        Original SPDX id: AGPL-3.0-only
-        Score           : 22.58
-        Match type      : NOTICE
-        Links           : http://www.fsf.org/licensing/licenses/agpl-3.0.html, http://www.gnu.org/licenses/agpl-3.0.html, https://spdx.org/licenses/AGPL-3.0-only
-    Files with this license:
-        stringprep.c [519:519]
-
-SKIP     LicenseRef-scancode-other-copyleft f3457d489ee0dc2b624abb2da1e924fc
-BELONGS ya.make
-    # LGPL
-    License text:
-         * License along with this file; if not, write to the Free Software
-         * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-other-copyleft
-        Score           : 90.00
-        Match type      : REFERENCE
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-copyleft.LICENSE
-    Files with this license:
-        version.c [15:16]
+BELONGS ya.make 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: LicenseRef-scancode-other-permissive 
+        Score           : 93.55 
+        Match type      : TEXT 
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE 
+    Files with this license: 
+        punycode.c [25:33] 
+        punycode.h [25:33] 
+ 
+KEEP     LGPL-2.1-or-later    925815194109907bdf9ea100eaf61c7a 
+BELONGS ya.make 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: LGPL-2.1-or-later 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later 
+    Files with this license: 
+        unix/ac-stdint.h [4:17] 
+        unix/idn-int.h [4:17] 
+        win/ac-stdint.h [4:17] 
+        win/idn-int.h [4:17] 
+        win/stdbool.h [4:17] 
+ 
+KEEP     Ietf                 941d8632c71179a12ff3d4aa4fa2938d 
+BELONGS ya.make 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: LicenseRef-scancode-ietf 
+        Score           : 100.00 
+        Match type      : TEXT 
+        Links           : http://www.ietf.org/, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/ietf.LICENSE 
+    Files with this license: 
+        punycode.c [37:59] 
+        punycode.h [37:59] 
+ 
+KEEP     LGPL-2.1-or-later    9a83f24347bcdf294515c07bb9b74937 
+BELONGS ya.make 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: LGPL-2.1-or-later 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later 
+    Files with this license: 
+        c-strcase.h [4:16] 
+        c-strcasecmp.c [4:16] 
+        striconv.c [5:17] 
+        striconv.h [5:17] 
+        strverscmp.h [5:17] 
+ 
+KEEP     LGPL-2.1-or-later    d0f4bd395fbd49384ee9b6b5ba085802 
+BELONGS ya.make 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: LGPL-2.1-or-later 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later 
+    Files with this license: 
+        c-ctype.c [5:17] 
+        c-ctype.h [10:22] 
+ 
+SKIP     AGPL-3.0-only        d6c135d53014f90dc2a5a8da047a3e23 
+BELONGS ya.make 
+    # LGPL 
+    License text: 
+         * package is available under the GNU Lesser General Public License. 
+    Scancode info: 
+        Original SPDX id: AGPL-3.0-only 
+        Score           : 22.58 
+        Match type      : NOTICE 
+        Links           : http://www.fsf.org/licensing/licenses/agpl-3.0.html, http://www.gnu.org/licenses/agpl-3.0.html, https://spdx.org/licenses/AGPL-3.0-only 
+    Files with this license: 
+        stringprep.c [519:519] 
+ 
+SKIP     LicenseRef-scancode-other-copyleft f3457d489ee0dc2b624abb2da1e924fc 
+BELONGS ya.make 
+    # LGPL 
+    License text: 
+         * License along with this file; if not, write to the Free Software 
+         * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA 
+    Scancode info: 
+        Original SPDX id: LicenseRef-scancode-other-copyleft 
+        Score           : 90.00 
+        Match type      : REFERENCE 
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-copyleft.LICENSE 
+    Files with this license: 
+        version.c [15:16] 

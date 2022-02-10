@@ -520,111 +520,111 @@ directory_iterator OverlayFileSystem::dir_begin(const Twine &Dir,
 
 void ProxyFileSystem::anchor() {}
 
-//===-----------------------------------------------------------------------===/
-// CaseInsensitiveFileSystem implementation
-//===-----------------------------------------------------------------------===/
-
-bool CaseInsensitiveFileSystem::exclude(StringRef Dir, StringRef File) {
-  if (!Maps.count(Dir)) {
-    // We have no map for this Dir, but see if we can exclude the file by
-    // excluding Dir from its parent.
-    StringRef Parent = llvm::sys::path::parent_path(Dir);
-    if (!Parent.empty() &&
-        exclude(Parent, llvm::sys::path::filename(Dir))) {
-      return true;
-    }
-
-    return false;
-  }
-
-  return !Maps[Dir].count(File.lower());
-}
-
-std::error_code CaseInsensitiveFileSystem::findCaseInsensitivePath(
-    StringRef Path, SmallVectorImpl<char> &FoundPath) {
-  StringRef FileName = llvm::sys::path::filename(Path);
-  StringRef Dir = llvm::sys::path::parent_path(Path);
-
-  if (Dir.empty())
-    Dir = ".";
-
-  if (exclude(Dir, FileName))
-    return llvm::errc::no_such_file_or_directory;
-
-  if (Maps.count(Dir)) {
-    // If we have a map for this Dir and File wasn't excluded above, it must
-    // exist.
-    llvm::sys::path::append(FoundPath, Dir, Maps[Dir][FileName.lower()]);
-    return std::error_code();
-  }
-
-  std::error_code EC;
-  directory_iterator I = Base->dir_begin(Dir, EC);
-  if (EC == errc::no_such_file_or_directory) {
-    // If the dir doesn't exist, try to find it and try again.
-    SmallVector<char, 512> NewDir;
-    if (llvm::sys::path::parent_path(Dir).empty() ||
-        (EC = findCaseInsensitivePath(Dir, NewDir))) {
-      // Insert a dummy map value to mark the dir as non-existent.
-      Maps.lookup(Dir);
-      return EC;
-    }
-    llvm::sys::path::append(NewDir, FileName);
-    return findCaseInsensitivePath(StringRef(NewDir.data(), NewDir.size()),
-                                   FoundPath);
-  }
-
-  // These special entries always exist, but won't show up in the listing below.
-  Maps[Dir]["."] = ".";
-  Maps[Dir][".."] = "..";
-
-  directory_iterator E;
-  for (; I != E; I.increment(EC)) {
-    StringRef DirEntry = llvm::sys::path::filename(I->path());
-    Maps[Dir][DirEntry.lower()] = DirEntry.str();
-  }
-  if (EC) {
-    // If there were problems, scrap the whole map as it may not be complete.
-    Maps.erase(Dir);
-    return EC;
-  }
-
-  auto MI = Maps[Dir].find(FileName.lower());
-  if (MI != Maps[Dir].end()) {
-    llvm::sys::path::append(FoundPath, Dir, MI->second);
-    return std::error_code();
-  }
-
-  return llvm::errc::no_such_file_or_directory;
-}
-
-llvm::ErrorOr<Status> CaseInsensitiveFileSystem::status(const Twine &Path) {
-  SmallVector<char, 512> NewPath;
-  if (std::error_code EC = findCaseInsensitivePath(Path.str(), NewPath))
-    return EC;
-
-  return Base->status(NewPath);
-}
-
-llvm::ErrorOr<std::unique_ptr<File>>
-CaseInsensitiveFileSystem::openFileForRead(const Twine &Path) {
-  SmallVector<char, 512> NewPath;
-  if (std::error_code EC = findCaseInsensitivePath(Path.str(), NewPath))
-    return EC;
-
-  return Base->openFileForRead(NewPath);
-}
-
-directory_iterator CaseInsensitiveFileSystem::dir_begin(const Twine &Path,
-                                                        std::error_code &EC) {
-  SmallVector<char, 512> NewPath;
-  if ((EC = findCaseInsensitivePath(Path.str(), NewPath)))
-    return directory_iterator();
-
-  return Base->dir_begin(NewPath, EC);
-}
-
-
+//===-----------------------------------------------------------------------===/ 
+// CaseInsensitiveFileSystem implementation 
+//===-----------------------------------------------------------------------===/ 
+ 
+bool CaseInsensitiveFileSystem::exclude(StringRef Dir, StringRef File) { 
+  if (!Maps.count(Dir)) { 
+    // We have no map for this Dir, but see if we can exclude the file by 
+    // excluding Dir from its parent. 
+    StringRef Parent = llvm::sys::path::parent_path(Dir); 
+    if (!Parent.empty() && 
+        exclude(Parent, llvm::sys::path::filename(Dir))) { 
+      return true; 
+    } 
+ 
+    return false; 
+  } 
+ 
+  return !Maps[Dir].count(File.lower()); 
+} 
+ 
+std::error_code CaseInsensitiveFileSystem::findCaseInsensitivePath( 
+    StringRef Path, SmallVectorImpl<char> &FoundPath) { 
+  StringRef FileName = llvm::sys::path::filename(Path); 
+  StringRef Dir = llvm::sys::path::parent_path(Path); 
+ 
+  if (Dir.empty()) 
+    Dir = "."; 
+ 
+  if (exclude(Dir, FileName)) 
+    return llvm::errc::no_such_file_or_directory; 
+ 
+  if (Maps.count(Dir)) { 
+    // If we have a map for this Dir and File wasn't excluded above, it must 
+    // exist. 
+    llvm::sys::path::append(FoundPath, Dir, Maps[Dir][FileName.lower()]); 
+    return std::error_code(); 
+  } 
+ 
+  std::error_code EC; 
+  directory_iterator I = Base->dir_begin(Dir, EC); 
+  if (EC == errc::no_such_file_or_directory) { 
+    // If the dir doesn't exist, try to find it and try again. 
+    SmallVector<char, 512> NewDir; 
+    if (llvm::sys::path::parent_path(Dir).empty() || 
+        (EC = findCaseInsensitivePath(Dir, NewDir))) { 
+      // Insert a dummy map value to mark the dir as non-existent. 
+      Maps.lookup(Dir); 
+      return EC; 
+    } 
+    llvm::sys::path::append(NewDir, FileName); 
+    return findCaseInsensitivePath(StringRef(NewDir.data(), NewDir.size()), 
+                                   FoundPath); 
+  } 
+ 
+  // These special entries always exist, but won't show up in the listing below. 
+  Maps[Dir]["."] = "."; 
+  Maps[Dir][".."] = ".."; 
+ 
+  directory_iterator E; 
+  for (; I != E; I.increment(EC)) { 
+    StringRef DirEntry = llvm::sys::path::filename(I->path()); 
+    Maps[Dir][DirEntry.lower()] = DirEntry.str(); 
+  } 
+  if (EC) { 
+    // If there were problems, scrap the whole map as it may not be complete. 
+    Maps.erase(Dir); 
+    return EC; 
+  } 
+ 
+  auto MI = Maps[Dir].find(FileName.lower()); 
+  if (MI != Maps[Dir].end()) { 
+    llvm::sys::path::append(FoundPath, Dir, MI->second); 
+    return std::error_code(); 
+  } 
+ 
+  return llvm::errc::no_such_file_or_directory; 
+} 
+ 
+llvm::ErrorOr<Status> CaseInsensitiveFileSystem::status(const Twine &Path) { 
+  SmallVector<char, 512> NewPath; 
+  if (std::error_code EC = findCaseInsensitivePath(Path.str(), NewPath)) 
+    return EC; 
+ 
+  return Base->status(NewPath); 
+} 
+ 
+llvm::ErrorOr<std::unique_ptr<File>> 
+CaseInsensitiveFileSystem::openFileForRead(const Twine &Path) { 
+  SmallVector<char, 512> NewPath; 
+  if (std::error_code EC = findCaseInsensitivePath(Path.str(), NewPath)) 
+    return EC; 
+ 
+  return Base->openFileForRead(NewPath); 
+} 
+ 
+directory_iterator CaseInsensitiveFileSystem::dir_begin(const Twine &Path, 
+                                                        std::error_code &EC) { 
+  SmallVector<char, 512> NewPath; 
+  if ((EC = findCaseInsensitivePath(Path.str(), NewPath))) 
+    return directory_iterator(); 
+ 
+  return Base->dir_begin(NewPath, EC); 
+} 
+ 
+ 
 namespace llvm {
 namespace vfs {
 

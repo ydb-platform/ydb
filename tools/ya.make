@@ -130,8 +130,8 @@ RECURSE(
     remorphc
     remorphparser
     rescompiler
-    rescompressor
-    rorescompiler
+    rescompressor 
+    rorescompiler 
     sandboxctl
     sanitizer
     segutils

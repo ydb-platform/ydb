@@ -18,8 +18,8 @@ LICENSE(
     Protobuf-License
 )
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/libs/protobuf
 )

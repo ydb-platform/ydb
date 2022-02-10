@@ -21,8 +21,8 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <util/generic/string.h>
-
+#include <util/generic/string.h> 
+ 
 #include "src/core/lib/iomgr/resolve_address.h"
 
 /* Returns true if addr is an IPv4-mapped IPv6 address within the
@@ -58,19 +58,19 @@ int grpc_sockaddr_get_port(const grpc_resolved_address* addr);
 /* Set IP port number of a sockaddr */
 int grpc_sockaddr_set_port(const grpc_resolved_address* addr, int port);
 
-// Converts a sockaddr into a newly-allocated human-readable string.
-//
-// Currently, only the AF_INET and AF_INET6 families are recognized.
-// If the normalize flag is enabled, ::ffff:0.0.0.0/96 IPv6 addresses are
-// displayed as plain IPv4.
-TString grpc_sockaddr_to_string(const grpc_resolved_address* addr,
-                                    bool normalize);
+// Converts a sockaddr into a newly-allocated human-readable string. 
+// 
+// Currently, only the AF_INET and AF_INET6 families are recognized. 
+// If the normalize flag is enabled, ::ffff:0.0.0.0/96 IPv6 addresses are 
+// displayed as plain IPv4. 
+TString grpc_sockaddr_to_string(const grpc_resolved_address* addr, 
+                                    bool normalize); 
 
-void grpc_string_to_sockaddr(grpc_resolved_address* out, const char* addr,
-                             int port);
+void grpc_string_to_sockaddr(grpc_resolved_address* out, const char* addr, 
+                             int port); 
 
 /* Returns the URI string corresponding to \a addr */
-TString grpc_sockaddr_to_uri(const grpc_resolved_address* addr);
+TString grpc_sockaddr_to_uri(const grpc_resolved_address* addr); 
 
 /* Returns the URI scheme corresponding to \a addr */
 const char* grpc_sockaddr_get_uri_scheme(const grpc_resolved_address* addr);

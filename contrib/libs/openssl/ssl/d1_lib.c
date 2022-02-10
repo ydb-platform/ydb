@@ -1,5 +1,5 @@
 /*
- * Copyright 2005-2021 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2005-2021 The OpenSSL Project Authors. All Rights Reserved. 
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -142,11 +142,11 @@ void dtls1_free(SSL *s)
 
     ssl3_free(s);
 
-    if (s->d1 != NULL) {
-        dtls1_clear_queues(s);
-        pqueue_free(s->d1->buffered_messages);
-        pqueue_free(s->d1->sent_messages);
-    }
+    if (s->d1 != NULL) { 
+        dtls1_clear_queues(s); 
+        pqueue_free(s->d1->buffered_messages); 
+        pqueue_free(s->d1->sent_messages); 
+    } 
 
     OPENSSL_free(s->d1);
     s->d1 = NULL;
@@ -342,7 +342,7 @@ int dtls1_is_timer_expired(SSL *s)
     return 1;
 }
 
-static void dtls1_double_timeout(SSL *s)
+static void dtls1_double_timeout(SSL *s) 
 {
     s->d1->timeout_duration_us *= 2;
     if (s->d1->timeout_duration_us > 60000000)

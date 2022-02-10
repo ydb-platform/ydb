@@ -55,7 +55,7 @@ CLASSIFIERS = [
     'Programming Language :: Python :: 3.6',
     'Programming Language :: Python :: 3.7',
     'Programming Language :: Python :: 3.8',
-    'Programming Language :: Python :: 3.9',
+    'Programming Language :: Python :: 3.9', 
     'License :: OSI Approved :: Apache Software License',
 ]
 
@@ -71,8 +71,8 @@ INSTALL_REQUIRES = (
 try:
     import channelz_commands as _channelz_commands
     # we are in the build environment, otherwise the above import fails
-    SETUP_REQUIRES = ('grpcio-tools=={version}'.format(
-        version=grpc_version.VERSION),)
+    SETUP_REQUIRES = ('grpcio-tools=={version}'.format( 
+        version=grpc_version.VERSION),) 
     COMMAND_CLASS = {
         # Run preprocess from the repository *before* doing any packaging!
         'preprocess': _channelz_commands.Preprocess,

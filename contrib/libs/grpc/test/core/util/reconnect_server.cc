@@ -21,12 +21,12 @@
 #include <grpc/grpc.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
-#include <grpc/support/string_util.h>
+#include <grpc/support/string_util.h> 
 #include <grpc/support/sync.h>
 #include <grpc/support/time.h>
 #include <string.h>
 
-#include "y_absl/strings/string_view.h"
+#include "y_absl/strings/string_view.h" 
 #include "src/core/lib/iomgr/endpoint.h"
 #include "src/core/lib/iomgr/sockaddr.h"
 #include "src/core/lib/iomgr/tcp_server.h"
@@ -61,8 +61,8 @@ static void on_connect(void* arg, grpc_endpoint* tcp,
                        grpc_pollset* /*accepting_pollset*/,
                        grpc_tcp_server_acceptor* acceptor) {
   gpr_free(acceptor);
-  y_absl::string_view peer;
-  int last_colon;
+  y_absl::string_view peer; 
+  int last_colon; 
   reconnect_server* server = static_cast<reconnect_server*>(arg);
   gpr_timespec now = gpr_now(GPR_CLOCK_REALTIME);
   timestamp_list* new_tail;
@@ -70,16 +70,16 @@ static void on_connect(void* arg, grpc_endpoint* tcp,
   grpc_endpoint_shutdown(tcp,
                          GRPC_ERROR_CREATE_FROM_STATIC_STRING("Connected"));
   grpc_endpoint_destroy(tcp);
-  last_colon = peer.rfind(':');
-  if (server->peer == nullptr) {
-    server->peer = new TString(peer);
-  } else {
-    if (last_colon == TString::npos) {
-      gpr_log(GPR_ERROR, "peer does not contain a ':'");
-    } else if (peer.compare(0, static_cast<size_t>(last_colon),
-                            *server->peer) != 0) {
-      gpr_log(GPR_ERROR, "mismatched peer! %s vs %s", server->peer->c_str(),
-              TString(peer).c_str());
+  last_colon = peer.rfind(':'); 
+  if (server->peer == nullptr) { 
+    server->peer = new TString(peer); 
+  } else { 
+    if (last_colon == TString::npos) { 
+      gpr_log(GPR_ERROR, "peer does not contain a ':'"); 
+    } else if (peer.compare(0, static_cast<size_t>(last_colon), 
+                            *server->peer) != 0) { 
+      gpr_log(GPR_ERROR, "mismatched peer! %s vs %s", server->peer->c_str(), 
+              TString(peer).c_str()); 
     }
   }
   new_tail = static_cast<timestamp_list*>(gpr_malloc(sizeof(timestamp_list)));
@@ -119,7 +119,7 @@ void reconnect_server_clear_timestamps(reconnect_server* server) {
     server->head = new_head;
   }
   server->tail = nullptr;
-  delete server->peer;
+  delete server->peer; 
   server->peer = nullptr;
 }
 

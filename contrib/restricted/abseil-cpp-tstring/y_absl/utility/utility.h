@@ -236,10 +236,10 @@ namespace utility_internal {
 // Helper method for expanding tuple into a called method.
 template <typename Functor, typename Tuple, std::size_t... Indexes>
 auto apply_helper(Functor&& functor, Tuple&& t, index_sequence<Indexes...>)
-    -> decltype(y_absl::base_internal::invoke(
+    -> decltype(y_absl::base_internal::invoke( 
         y_absl::forward<Functor>(functor),
         std::get<Indexes>(y_absl::forward<Tuple>(t))...)) {
-  return y_absl::base_internal::invoke(
+  return y_absl::base_internal::invoke( 
       y_absl::forward<Functor>(functor),
       std::get<Indexes>(y_absl::forward<Tuple>(t))...);
 }

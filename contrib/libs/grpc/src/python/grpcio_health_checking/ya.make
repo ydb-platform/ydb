@@ -2,8 +2,8 @@ PY23_LIBRARY()
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 OWNER(
     akastornov
     dvshkurko
@@ -24,7 +24,7 @@ IF (PYTHON2)
 ENDIF()
 
 ADDINCL(
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc 
     contrib/libs/grpc
     contrib/libs/grpc/include
 )

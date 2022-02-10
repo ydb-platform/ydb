@@ -40,7 +40,7 @@
 using grpc::testing::EchoRequest;
 using grpc::testing::EchoResponse;
 
-static TString g_root;
+static TString g_root; 
 
 static gpr_mu g_mu;
 extern gpr_timespec (*gpr_now_impl)(gpr_clock_type clock_type);
@@ -167,12 +167,12 @@ class TimeChangeTest : public ::testing::Test {
   const int TIME_OFFSET2 = 5678;
 
  private:
-  static TString server_address_;
+  static TString server_address_; 
   static std::unique_ptr<SubProcess> server_;
   std::shared_ptr<Channel> channel_;
   std::unique_ptr<grpc::testing::EchoTestService::Stub> stub_;
 };
-TString TimeChangeTest::server_address_;
+TString TimeChangeTest::server_address_; 
 std::unique_ptr<SubProcess> TimeChangeTest::server_;
 
 // Wall-clock time jumps forward on client before bidi stream is created
@@ -347,11 +347,11 @@ TEST_F(TimeChangeTest, TimeJumpForwardAndBackDuringCall) {
 }  // namespace grpc
 
 int main(int argc, char** argv) {
-  TString me = argv[0];
+  TString me = argv[0]; 
   // get index of last slash in path to test binary
   auto lslash = me.rfind('/');
   // set g_root = path to directory containing test binary
-  if (lslash != TString::npos) {
+  if (lslash != TString::npos) { 
     g_root = me.substr(0, lslash);
   } else {
     g_root = ".";

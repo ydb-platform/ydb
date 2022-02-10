@@ -52,14 +52,14 @@ void grpc_endpoint_shutdown(grpc_endpoint* ep, grpc_error* why) {
 
 void grpc_endpoint_destroy(grpc_endpoint* ep) { ep->vtable->destroy(ep); }
 
-y_absl::string_view grpc_endpoint_get_peer(grpc_endpoint* ep) {
+y_absl::string_view grpc_endpoint_get_peer(grpc_endpoint* ep) { 
   return ep->vtable->get_peer(ep);
 }
 
-y_absl::string_view grpc_endpoint_get_local_address(grpc_endpoint* ep) {
-  return ep->vtable->get_local_address(ep);
-}
-
+y_absl::string_view grpc_endpoint_get_local_address(grpc_endpoint* ep) { 
+  return ep->vtable->get_local_address(ep); 
+} 
+ 
 int grpc_endpoint_get_fd(grpc_endpoint* ep) { return ep->vtable->get_fd(ep); }
 
 grpc_resource_user* grpc_endpoint_get_resource_user(grpc_endpoint* ep) {

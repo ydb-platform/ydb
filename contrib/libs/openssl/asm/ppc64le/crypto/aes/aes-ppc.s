@@ -602,13 +602,13 @@
 
 .globl	AES_encrypt
 .type	AES_encrypt,@function
-.section	".opd","aw"
-.align	3
-AES_encrypt:
-.quad	.AES_encrypt,.TOC.@tocbase,0
-.previous
+.section	".opd","aw" 
+.align	3 
+AES_encrypt: 
+.quad	.AES_encrypt,.TOC.@tocbase,0 
+.previous 
 .align	7
-.AES_encrypt:
+.AES_encrypt: 
 	stdu	1,-256(1)
 	mflr	0
 
@@ -639,17 +639,17 @@ AES_encrypt:
 	bne	.Lenc_unaligned
 
 .Lenc_unaligned_ok:
-	lwz	8,0(3)
-	lwz	9,4(3)
-	lwz	10,8(3)
-	lwz	11,12(3)
+	lwz	8,0(3) 
+	lwz	9,4(3) 
+	lwz	10,8(3) 
+	lwz	11,12(3) 
 	bl	.LAES_Te
 	bl	.Lppc_AES_encrypt_compact
 	ld	4,104(1)
-	stw	8,0(4)
-	stw	9,4(4)
-	stw	10,8(4)
-	stw	11,12(4)
+	stw	8,0(4) 
+	stw	9,4(4) 
+	stw	10,8(4) 
+	stw	11,12(4) 
 	b	.Lenc_done
 
 .Lenc_unaligned:
@@ -1038,18 +1038,18 @@ AES_encrypt:
 	blr	
 .long	0
 .byte	0,12,0x14,0,0,0,0,0
-.size	.AES_encrypt,.-.AES_encrypt
-.size	AES_encrypt,.-.AES_encrypt
+.size	.AES_encrypt,.-.AES_encrypt 
+.size	AES_encrypt,.-.AES_encrypt 
 
 .globl	AES_decrypt
 .type	AES_decrypt,@function
-.section	".opd","aw"
-.align	3
-AES_decrypt:
-.quad	.AES_decrypt,.TOC.@tocbase,0
-.previous
+.section	".opd","aw" 
+.align	3 
+AES_decrypt: 
+.quad	.AES_decrypt,.TOC.@tocbase,0 
+.previous 
 .align	7
-.AES_decrypt:
+.AES_decrypt: 
 	stdu	1,-256(1)
 	mflr	0
 
@@ -1080,17 +1080,17 @@ AES_decrypt:
 	bne	.Ldec_unaligned
 
 .Ldec_unaligned_ok:
-	lwz	8,0(3)
-	lwz	9,4(3)
-	lwz	10,8(3)
-	lwz	11,12(3)
+	lwz	8,0(3) 
+	lwz	9,4(3) 
+	lwz	10,8(3) 
+	lwz	11,12(3) 
 	bl	.LAES_Td
 	bl	.Lppc_AES_decrypt_compact
 	ld	4,104(1)
-	stw	8,0(4)
-	stw	9,4(4)
-	stw	10,8(4)
-	stw	11,12(4)
+	stw	8,0(4) 
+	stw	9,4(4) 
+	stw	10,8(4) 
+	stw	11,12(4) 
 	b	.Ldec_done
 
 .Ldec_unaligned:
@@ -1531,8 +1531,8 @@ AES_decrypt:
 	blr	
 .long	0
 .byte	0,12,0x14,0,0,0,0,0
-.size	.AES_decrypt,.-.AES_decrypt
-.size	AES_decrypt,.-.AES_decrypt
+.size	.AES_decrypt,.-.AES_decrypt 
+.size	AES_decrypt,.-.AES_decrypt 
 
 .byte	65,69,83,32,102,111,114,32,80,80,67,44,67,82,89,80,84,79,71,65,77,83,32,98,121,32,60,97,112,112,114,111,64,111,112,101,110,115,115,108,46,111,114,103,62,0
 .align	2

@@ -27,14 +27,14 @@
 #include <grpcpp/security/credentials.h>
 #include <grpcpp/support/string_ref.h>
 
-#include <cstdio>
-#include <fstream>
-#include <iostream>
-#include <memory>
-#include <sstream>
-#include <util/generic/string.h>
-#include <thread>
-
+#include <cstdio> 
+#include <fstream> 
+#include <iostream> 
+#include <memory> 
+#include <sstream> 
+#include <util/generic/string.h> 
+#include <thread> 
+ 
 #include "test/cpp/util/cli_call.h"
 #include "test/cpp/util/proto_file_parser.h"
 #include "test/cpp/util/proto_reflection_descriptor_database.h"
@@ -57,15 +57,15 @@ DEFINE_string(proto_path, ".", "Path to look for the proto file.");
 DEFINE_string(protofiles, "", "Name of the proto file.");
 DEFINE_bool(binary_input, false, "Input in binary format");
 DEFINE_bool(binary_output, false, "Output in binary format");
-DEFINE_string(
-    default_service_config, "",
-    "Default service config to use on the channel, if non-empty. Note "
-    "that this will be ignored if the name resolver returns a service "
-    "config.");
-DEFINE_bool(
-    display_peer_address, false,
-    "Log the peer socket address of the connection that each RPC is made "
-    "on to stderr.");
+DEFINE_string( 
+    default_service_config, "", 
+    "Default service config to use on the channel, if non-empty. Note " 
+    "that this will be ignored if the name resolver returns a service " 
+    "config."); 
+DEFINE_bool( 
+    display_peer_address, false, 
+    "Log the peer socket address of the connection that each RPC is made " 
+    "on to stderr."); 
 DEFINE_bool(json_input, false, "Input in json format");
 DEFINE_bool(json_output, false, "Output in json format");
 DEFINE_string(infile, "", "Input file (default is stdin)");
@@ -74,9 +74,9 @@ DEFINE_bool(batch, false,
             "more than a few RPCs. gRPC CLI has very different performance "
             "characteristics compared with normal RPC calls which make it "
             "unsuitable for loadtesting or significant production traffic.");
-DEFINE_double(timeout, -1,
-              "Specify timeout in seconds, used to set the deadline for all "
-              "RPCs. The default value of -1 means no deadline has been set.");
+DEFINE_double(timeout, -1, 
+              "Specify timeout in seconds, used to set the deadline for all " 
+              "RPCs. The default value of -1 means no deadline has been set."); 
 
 namespace {
 
@@ -113,10 +113,10 @@ class GrpcTool {
   }
 
  private:
-  void CommandUsage(const TString& usage) const;
+  void CommandUsage(const TString& usage) const; 
   bool print_command_usage_;
   int usage_exit_status_;
-  const TString cred_usage_;
+  const TString cred_usage_; 
 };
 
 template <typename T>
@@ -135,11 +135,11 @@ size_t ArraySize(T& a) {
 }
 
 void ParseMetadataFlag(
-    std::multimap<TString, TString>* client_metadata) {
+    std::multimap<TString, TString>* client_metadata) { 
   if (FLAGS_metadata.empty()) {
     return;
   }
-  std::vector<TString> fields;
+  std::vector<TString> fields; 
   const char delim = ':';
   const char escape = '\\';
   size_t cur = -1;
@@ -172,17 +172,17 @@ void ParseMetadataFlag(
   }
   for (size_t i = 0; i < fields.size(); i += 2) {
     client_metadata->insert(
-        std::pair<TString, TString>(fields[i], fields[i + 1]));
+        std::pair<TString, TString>(fields[i], fields[i + 1])); 
   }
 }
 
 template <typename T>
-void PrintMetadata(const T& m, const TString& message) {
+void PrintMetadata(const T& m, const TString& message) { 
   if (m.empty()) {
     return;
   }
   fprintf(stderr, "%s\n", message.c_str());
-  TString pair;
+  TString pair; 
   for (typename T::const_iterator iter = m.begin(); iter != m.end(); ++iter) {
     pair.clear();
     pair.append(iter->first.data(), iter->first.size());
@@ -192,10 +192,10 @@ void PrintMetadata(const T& m, const TString& message) {
   }
 }
 
-void ReadResponse(CliCall* call, const TString& method_name,
+void ReadResponse(CliCall* call, const TString& method_name, 
                   GrpcToolOutputCallback callback, ProtoFileParser* parser,
                   gpr_mu* parser_mu, bool print_mode) {
-  TString serialized_response_proto;
+  TString serialized_response_proto; 
   std::multimap<grpc::string_ref, grpc::string_ref> server_initial_metadata;
 
   for (bool receive_initial_metadata = true; call->ReadAndMaybeNotifyWrite(
@@ -224,15 +224,15 @@ void ReadResponse(CliCall* call, const TString& method_name,
 }
 
 std::shared_ptr<grpc::Channel> CreateCliChannel(
-    const TString& server_address, const CliCredentials& cred) {
+    const TString& server_address, const CliCredentials& cred) { 
   grpc::ChannelArguments args;
   if (!cred.GetSslTargetNameOverride().empty()) {
     args.SetSslTargetNameOverride(cred.GetSslTargetNameOverride());
   }
-  if (!FLAGS_default_service_config.empty()) {
-    args.SetString(GRPC_ARG_SERVICE_CONFIG,
-                   FLAGS_default_service_config.c_str());
-  }
+  if (!FLAGS_default_service_config.empty()) { 
+    args.SetString(GRPC_ARG_SERVICE_CONFIG, 
+                   FLAGS_default_service_config.c_str()); 
+  } 
   return ::grpc::CreateCustomChannel(server_address, cred.GetCredentials(),
                                      args);
 }
@@ -258,7 +258,7 @@ const Command ops[] = {
     {"tojson", BindWith5Args(&GrpcTool::ToJson), 2, 3},
 };
 
-void Usage(const TString& msg) {
+void Usage(const TString& msg) { 
   fprintf(
       stderr,
       "%s\n"
@@ -276,7 +276,7 @@ void Usage(const TString& msg) {
   exit(1);
 }
 
-const Command* FindCommand(const TString& name) {
+const Command* FindCommand(const TString& name) { 
   for (int i = 0; i < (int)ArraySize(ops); i++) {
     if (name == ops[i].command) {
       return &ops[i];
@@ -292,7 +292,7 @@ int GrpcToolMainLib(int argc, const char** argv, const CliCredentials& cred,
     Usage("No command specified");
   }
 
-  TString command = argv[1];
+  TString command = argv[1]; 
   argc -= 2;
   argv += 2;
 
@@ -308,14 +308,14 @@ int GrpcToolMainLib(int argc, const char** argv, const CliCredentials& cred,
     const bool ok = cmd->function(&grpc_tool, argc, argv, cred, callback);
     return ok ? 0 : 1;
   } else {
-    Usage("Invalid command '" + TString(command.c_str()) + "'");
+    Usage("Invalid command '" + TString(command.c_str()) + "'"); 
   }
   return 1;
 }
 
 GrpcTool::GrpcTool() : print_command_usage_(false), usage_exit_status_(0) {}
 
-void GrpcTool::CommandUsage(const TString& usage) const {
+void GrpcTool::CommandUsage(const TString& usage) const { 
   if (print_command_usage_) {
     fprintf(stderr, "\n%s%s\n", usage.c_str(),
             (usage.empty() || usage[usage.size() - 1] != '\n') ? "\n" : "");
@@ -334,7 +334,7 @@ bool GrpcTool::Help(int argc, const char** argv, const CliCredentials& cred,
   } else {
     const Command* cmd = FindCommand(argv[0]);
     if (cmd == nullptr) {
-      Usage("Unknown command '" + TString(argv[0]) + "'");
+      Usage("Unknown command '" + TString(argv[0]) + "'"); 
     }
     SetPrintCommandMode(0);
     cmd->function(this, -1, nullptr, cred, callback);
@@ -355,20 +355,20 @@ bool GrpcTool::ListServices(int argc, const char** argv,
       "    --outfile                ; Output filename (defaults to stdout)\n" +
       cred.GetCredentialUsage());
 
-  TString server_address(argv[0]);
+  TString server_address(argv[0]); 
   std::shared_ptr<grpc::Channel> channel =
       CreateCliChannel(server_address, cred);
   grpc::ProtoReflectionDescriptorDatabase desc_db(channel);
   grpc::protobuf::DescriptorPool desc_pool(&desc_db);
 
-  std::vector<TString> service_list;
+  std::vector<TString> service_list; 
   if (!desc_db.GetServices(&service_list)) {
     fprintf(stderr, "Received an error when querying services endpoint.\n");
     return false;
   }
 
   // If no service is specified, dump the list of services.
-  TString output;
+  TString output; 
   if (argc < 2) {
     // List all services, if --l is passed, then include full description,
     // otherwise include a summarized list only.
@@ -382,8 +382,8 @@ bool GrpcTool::ListServices(int argc, const char** argv,
       }
     }
   } else {
-    std::string service_name;
-    std::string method_name;
+    std::string service_name; 
+    std::string method_name; 
     std::stringstream ss(argv[1]);
 
     // Remove leading slashes.
@@ -453,13 +453,13 @@ bool GrpcTool::PrintType(int /*argc*/, const char** argv,
       "    <type>                   ; Protocol buffer type name\n" +
       cred.GetCredentialUsage());
 
-  TString server_address(argv[0]);
+  TString server_address(argv[0]); 
   std::shared_ptr<grpc::Channel> channel =
       CreateCliChannel(server_address, cred);
   grpc::ProtoReflectionDescriptorDatabase desc_db(channel);
   grpc::protobuf::DescriptorPool desc_pool(&desc_db);
 
-  TString output;
+  TString output; 
   const grpc::protobuf::Descriptor* descriptor =
       desc_pool.FindMessageTypeByName(argv[1]);
   if (descriptor != nullptr) {
@@ -493,21 +493,21 @@ bool GrpcTool::CallMethod(int argc, const char** argv,
       "    --binary_input           ; Input in binary format\n"
       "    --binary_output          ; Output in binary format\n"
       "    --json_input             ; Input in json format\n"
-      "    --json_output            ; Output in json format\n"
-      "    --timeout                ; Specify timeout (in seconds), used to "
-      "set the deadline for RPCs. The default value of -1 means no "
-      "deadline has been set.\n" +
+      "    --json_output            ; Output in json format\n" 
+      "    --timeout                ; Specify timeout (in seconds), used to " 
+      "set the deadline for RPCs. The default value of -1 means no " 
+      "deadline has been set.\n" + 
       cred.GetCredentialUsage());
 
   std::stringstream output_ss;
-  TString request_text;
-  TString server_address(argv[0]);
-  TString method_name(argv[1]);
-  TString formatted_method_name;
+  TString request_text; 
+  TString server_address(argv[0]); 
+  TString method_name(argv[1]); 
+  TString formatted_method_name; 
   std::unique_ptr<ProtoFileParser> parser;
-  TString serialized_request_proto;
-  CliArgs cli_args;
-  cli_args.timeout = FLAGS_timeout;
+  TString serialized_request_proto; 
+  CliArgs cli_args; 
+  cli_args.timeout = FLAGS_timeout; 
   bool print_mode = false;
 
   std::shared_ptr<grpc::Channel> channel =
@@ -516,7 +516,7 @@ bool GrpcTool::CallMethod(int argc, const char** argv,
   if (!FLAGS_binary_input || !FLAGS_binary_output) {
     parser.reset(
         new grpc::testing::ProtoFileParser(FLAGS_remotedb ? channel : nullptr,
-                                           FLAGS_proto_path.c_str(), FLAGS_protofiles.c_str()));
+                                           FLAGS_proto_path.c_str(), FLAGS_protofiles.c_str())); 
     if (parser->HasError()) {
       fprintf(
           stderr,
@@ -548,15 +548,15 @@ bool GrpcTool::CallMethod(int argc, const char** argv,
       return false;
     }
 
-    std::multimap<TString, TString> client_metadata;
+    std::multimap<TString, TString> client_metadata; 
     ParseMetadataFlag(&client_metadata);
     PrintMetadata(client_metadata, "Sending client initial metadata:");
 
-    CliCall call(channel, formatted_method_name, client_metadata, cli_args);
-    if (FLAGS_display_peer_address) {
-      fprintf(stderr, "New call for method_name:%s has peer address:|%s|\n",
-              formatted_method_name.c_str(), call.peer().c_str());
-    }
+    CliCall call(channel, formatted_method_name, client_metadata, cli_args); 
+    if (FLAGS_display_peer_address) { 
+      fprintf(stderr, "New call for method_name:%s has peer address:|%s|\n", 
+              formatted_method_name.c_str(), call.peer().c_str()); 
+    } 
 
     if (FLAGS_infile.empty()) {
       if (isatty(fileno(stdin))) {
@@ -575,7 +575,7 @@ bool GrpcTool::CallMethod(int argc, const char** argv,
                             parser.get(), &parser_mu, print_mode);
 
     std::stringstream request_ss;
-    std::string line;
+    std::string line; 
     while (!request_text.empty() ||
            (!input_stream->eof() && getline(*input_stream, line))) {
       if (!request_text.empty()) {
@@ -605,7 +605,7 @@ bool GrpcTool::CallMethod(int argc, const char** argv,
       } else {
         if (line.length() == 0) {
           request_text = request_ss.str();
-          request_ss.str(TString());
+          request_ss.str(TString()); 
           request_ss.clear();
         } else {
           request_ss << line << ' ';
@@ -655,14 +655,14 @@ bool GrpcTool::CallMethod(int argc, const char** argv,
         input_stream = &input_file;
       }
 
-      std::multimap<TString, TString> client_metadata;
+      std::multimap<TString, TString> client_metadata; 
       ParseMetadataFlag(&client_metadata);
       if (print_mode) {
         PrintMetadata(client_metadata, "Sending client initial metadata:");
       }
 
       std::stringstream request_ss;
-      std::string line;
+      std::string line; 
       while (!request_text.empty() ||
              (!input_stream->eof() && getline(*input_stream, line))) {
         if (!request_text.empty()) {
@@ -682,16 +682,16 @@ bool GrpcTool::CallMethod(int argc, const char** argv,
             }
           }
 
-          TString serialized_response_proto;
+          TString serialized_response_proto; 
           std::multimap<grpc::string_ref, grpc::string_ref>
               server_initial_metadata, server_trailing_metadata;
-          CliCall call(channel, formatted_method_name, client_metadata,
-                       cli_args);
-          if (FLAGS_display_peer_address) {
-            fprintf(stderr,
-                    "New call for method_name:%s has peer address:|%s|\n",
-                    formatted_method_name.c_str(), call.peer().c_str());
-          }
+          CliCall call(channel, formatted_method_name, client_metadata, 
+                       cli_args); 
+          if (FLAGS_display_peer_address) { 
+            fprintf(stderr, 
+                    "New call for method_name:%s has peer address:|%s|\n", 
+                    formatted_method_name.c_str(), call.peer().c_str()); 
+          } 
           call.Write(serialized_request_proto);
           call.WritesDone();
           if (!call.Read(&serialized_response_proto,
@@ -714,7 +714,7 @@ bool GrpcTool::CallMethod(int argc, const char** argv,
                 break;
               }
             } else {
-              TString response_text = parser->GetFormattedStringFromMethod(
+              TString response_text = parser->GetFormattedStringFromMethod( 
                   method_name, serialized_response_proto,
                   false /* is_request */, FLAGS_json_output);
 
@@ -736,7 +736,7 @@ bool GrpcTool::CallMethod(int argc, const char** argv,
         } else {
           if (line.length() == 0) {
             request_text = request_ss.str();
-            request_ss.str(TString());
+            request_ss.str(TString()); 
             request_ss.clear();
           } else {
             request_ss << line << ' ';
@@ -782,18 +782,18 @@ bool GrpcTool::CallMethod(int argc, const char** argv,
     }
     fprintf(stderr, "connecting to %s\n", server_address.c_str());
 
-    TString serialized_response_proto;
-    std::multimap<TString, TString> client_metadata;
+    TString serialized_response_proto; 
+    std::multimap<TString, TString> client_metadata; 
     std::multimap<grpc::string_ref, grpc::string_ref> server_initial_metadata,
         server_trailing_metadata;
     ParseMetadataFlag(&client_metadata);
     PrintMetadata(client_metadata, "Sending client initial metadata:");
 
-    CliCall call(channel, formatted_method_name, client_metadata, cli_args);
-    if (FLAGS_display_peer_address) {
-      fprintf(stderr, "New call for method_name:%s has peer address:|%s|\n",
-              formatted_method_name.c_str(), call.peer().c_str());
-    }
+    CliCall call(channel, formatted_method_name, client_metadata, cli_args); 
+    if (FLAGS_display_peer_address) { 
+      fprintf(stderr, "New call for method_name:%s has peer address:|%s|\n", 
+              formatted_method_name.c_str(), call.peer().c_str()); 
+    } 
     call.Write(serialized_request_proto);
     call.WritesDone();
 
@@ -858,11 +858,11 @@ bool GrpcTool::ParseMessage(int argc, const char** argv,
       cred.GetCredentialUsage());
 
   std::stringstream output_ss;
-  TString message_text;
-  TString server_address(argv[0]);
-  TString type_name(argv[1]);
+  TString message_text; 
+  TString server_address(argv[0]); 
+  TString type_name(argv[1]); 
   std::unique_ptr<grpc::testing::ProtoFileParser> parser;
-  TString serialized_request_proto;
+  TString serialized_request_proto; 
 
   if (argc == 3) {
     message_text = argv[2];
@@ -889,7 +889,7 @@ bool GrpcTool::ParseMessage(int argc, const char** argv,
         CreateCliChannel(server_address, cred);
     parser.reset(
         new grpc::testing::ProtoFileParser(FLAGS_remotedb ? channel : nullptr,
-                                           FLAGS_proto_path.c_str(), FLAGS_protofiles.c_str()));
+                                           FLAGS_proto_path.c_str(), FLAGS_protofiles.c_str())); 
     if (parser->HasError()) {
       fprintf(
           stderr,
@@ -912,7 +912,7 @@ bool GrpcTool::ParseMessage(int argc, const char** argv,
   if (FLAGS_binary_output) {
     output_ss << serialized_request_proto;
   } else {
-    TString output_text;
+    TString output_text; 
     output_text = parser->GetFormattedStringFromMessageType(
         type_name, serialized_request_proto, FLAGS_json_output);
     if (parser->HasError()) {

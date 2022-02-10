@@ -22,10 +22,10 @@
 
 #include <cstring>
 #include <new>
-#include <vector>
+#include <vector> 
 
-#include "y_absl/strings/str_cat.h"
-#include "y_absl/strings/str_join.h"
+#include "y_absl/strings/str_cat.h" 
+#include "y_absl/strings/str_join.h" 
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/iomgr/polling_entity.h"
 #include "src/core/lib/surface/api_trace.h"
@@ -119,15 +119,15 @@ void grpc_composite_call_credentials::cancel_get_request_metadata(
   GRPC_ERROR_UNREF(error);
 }
 
-TString grpc_composite_call_credentials::debug_string() {
-  std::vector<TString> outputs;
-  for (auto& inner_cred : inner_) {
-    outputs.emplace_back(inner_cred->debug_string());
-  }
-  return y_absl::StrCat("CompositeCallCredentials{", y_absl::StrJoin(outputs, ","),
-                      "}");
-}
-
+TString grpc_composite_call_credentials::debug_string() { 
+  std::vector<TString> outputs; 
+  for (auto& inner_cred : inner_) { 
+    outputs.emplace_back(inner_cred->debug_string()); 
+  } 
+  return y_absl::StrCat("CompositeCallCredentials{", y_absl::StrJoin(outputs, ","), 
+                      "}"); 
+} 
+ 
 static size_t get_creds_array_size(const grpc_call_credentials* creds,
                                    bool is_composite) {
   return is_composite
@@ -163,13 +163,13 @@ grpc_composite_call_credentials::grpc_composite_call_credentials(
   inner_.reserve(size);
   push_to_inner(std::move(creds1), creds1_is_composite);
   push_to_inner(std::move(creds2), creds2_is_composite);
-  min_security_level_ = GRPC_SECURITY_NONE;
-  for (size_t i = 0; i < inner_.size(); ++i) {
-    if (static_cast<int>(min_security_level_) <
-        static_cast<int>(inner_[i]->min_security_level())) {
-      min_security_level_ = inner_[i]->min_security_level();
-    }
-  }
+  min_security_level_ = GRPC_SECURITY_NONE; 
+  for (size_t i = 0; i < inner_.size(); ++i) { 
+    if (static_cast<int>(min_security_level_) < 
+        static_cast<int>(inner_[i]->min_security_level())) { 
+      min_security_level_ = inner_[i]->min_security_level(); 
+    } 
+  } 
 }
 
 static grpc_core::RefCountedPtr<grpc_call_credentials>

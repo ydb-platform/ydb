@@ -1,23 +1,23 @@
-====================NCSA AND MIT====================
-!// This file is dual licensed under the MIT and the University of Illinois Open
-!// Source Licenses. See LICENSE.txt for details.
-
-
-====================NCSA AND MIT====================
-#// This file is dual licensed under the MIT and the University of Illinois Open
-#// Source Licenses. See LICENSE.txt for details.
-
-
-====================NCSA AND MIT====================
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.txt for details.
-
-
-====================NCSA AND MIT====================
-//// This file is dual licensed under the MIT and the University of Illinois Open
-//// Source Licenses. See LICENSE.txt for details.
-
-
-====================NCSA AND MIT====================
-;// This file is dual licensed under the MIT and the University of Illinois Open
-;// Source Licenses. See LICENSE.txt for details.
+====================NCSA AND MIT==================== 
+!// This file is dual licensed under the MIT and the University of Illinois Open 
+!// Source Licenses. See LICENSE.txt for details. 
+ 
+ 
+====================NCSA AND MIT==================== 
+#// This file is dual licensed under the MIT and the University of Illinois Open 
+#// Source Licenses. See LICENSE.txt for details. 
+ 
+ 
+====================NCSA AND MIT==================== 
+// This file is dual licensed under the MIT and the University of Illinois Open 
+// Source Licenses. See LICENSE.txt for details. 
+ 
+ 
+====================NCSA AND MIT==================== 
+//// This file is dual licensed under the MIT and the University of Illinois Open 
+//// Source Licenses. See LICENSE.txt for details. 
+ 
+ 
+====================NCSA AND MIT==================== 
+;// This file is dual licensed under the MIT and the University of Illinois Open 
+;// Source Licenses. See LICENSE.txt for details. 

@@ -16,21 +16,21 @@
 #include <atomic>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/base/internal/atomic_hook.h"
+#include "y_absl/base/internal/atomic_hook.h" 
 
 namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace status_internal {
 
-ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES
-static y_absl::base_internal::AtomicHook<StatusPayloadPrinter> storage;
+ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES 
+static y_absl::base_internal::AtomicHook<StatusPayloadPrinter> storage; 
 
 void SetStatusPayloadPrinter(StatusPayloadPrinter printer) {
-  storage.Store(printer);
+  storage.Store(printer); 
 }
 
 StatusPayloadPrinter GetStatusPayloadPrinter() {
-  return storage.Load();
+  return storage.Load(); 
 }
 
 }  // namespace status_internal

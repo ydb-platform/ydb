@@ -17,21 +17,21 @@ import logging
 import unittest
 
 from grpc.experimental import aio
-
+ 
 from src.proto.grpc.testing import benchmark_service_pb2_grpc
-from tests_aio.benchmark import benchmark_servicer
+from tests_aio.benchmark import benchmark_servicer 
 
 
 async def _start_async_server():
     server = aio.server()
 
-    port = server.add_insecure_port('localhost:%s' % 50051)
-    servicer = benchmark_servicer.BenchmarkServicer()
+    port = server.add_insecure_port('localhost:%s' % 50051) 
+    servicer = benchmark_servicer.BenchmarkServicer() 
     benchmark_service_pb2_grpc.add_BenchmarkServiceServicer_to_server(
         servicer, server)
 
     await server.start()
-    logging.info('Benchmark server started at :%d' % port)
+    logging.info('Benchmark server started at :%d' % port) 
     await server.wait_for_termination()
 
 
@@ -42,5 +42,5 @@ def main():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG) 
     main()

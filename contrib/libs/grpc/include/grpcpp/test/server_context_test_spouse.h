@@ -33,9 +33,9 @@ class ServerContextTestSpouse {
 
   /// Inject client metadata to the ServerContext for the test. The test spouse
   /// must be alive when \a ServerContext::client_metadata is called.
-  void AddClientMetadata(const TString& key, const TString& value) {
+  void AddClientMetadata(const TString& key, const TString& value) { 
     client_metadata_storage_.insert(
-        std::pair<TString, TString>(key, value));
+        std::pair<TString, TString>(key, value)); 
     ctx_->client_metadata_.map()->clear();
     for (const auto& item : client_metadata_storage_) {
       ctx_->client_metadata_.map()->insert(
@@ -45,17 +45,17 @@ class ServerContextTestSpouse {
     }
   }
 
-  std::multimap<TString, TString> GetInitialMetadata() const {
+  std::multimap<TString, TString> GetInitialMetadata() const { 
     return ctx_->initial_metadata_;
   }
 
-  std::multimap<TString, TString> GetTrailingMetadata() const {
+  std::multimap<TString, TString> GetTrailingMetadata() const { 
     return ctx_->trailing_metadata_;
   }
 
  private:
   ServerContext* ctx_;  // not owned
-  std::multimap<TString, TString> client_metadata_storage_;
+  std::multimap<TString, TString> client_metadata_storage_; 
 };
 
 }  // namespace testing

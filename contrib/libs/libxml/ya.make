@@ -11,13 +11,13 @@ VERSION(2.9.10)
 
 ORIGINAL_SOURCE(http://xmlsoft.org/sources/libxml2-2.9.10.tar.gz)
 
-LICENSE(
-    MIT AND
-    Mit-Veillard-Variant
-)
+LICENSE( 
+    MIT AND 
+    Mit-Veillard-Variant 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/libs/libiconv
     contrib/libs/zlib

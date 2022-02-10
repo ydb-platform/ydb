@@ -37,7 +37,7 @@ std::vector<grpc::string_ref> SecureAuthContext::GetPeerIdentity() const {
   return identity;
 }
 
-TString SecureAuthContext::GetPeerIdentityPropertyName() const {
+TString SecureAuthContext::GetPeerIdentityPropertyName() const { 
   if (ctx_ == nullptr) {
     return "";
   }
@@ -46,7 +46,7 @@ TString SecureAuthContext::GetPeerIdentityPropertyName() const {
 }
 
 std::vector<grpc::string_ref> SecureAuthContext::FindPropertyValues(
-    const TString& name) const {
+    const TString& name) const { 
   if (ctx_ == nullptr) {
     return std::vector<grpc::string_ref>();
   }
@@ -76,14 +76,14 @@ AuthPropertyIterator SecureAuthContext::end() const {
   return AuthPropertyIterator();
 }
 
-void SecureAuthContext::AddProperty(const TString& key,
+void SecureAuthContext::AddProperty(const TString& key, 
                                     const grpc::string_ref& value) {
   if (ctx_ == nullptr) return;
   grpc_auth_context_add_property(ctx_.get(), key.c_str(), value.data(),
                                  value.size());
 }
 
-bool SecureAuthContext::SetPeerIdentityPropertyName(const TString& name) {
+bool SecureAuthContext::SetPeerIdentityPropertyName(const TString& name) { 
   if (ctx_ == nullptr) return false;
   return grpc_auth_context_set_peer_identity_property_name(ctx_.get(),
                                                            name.c_str()) != 0;

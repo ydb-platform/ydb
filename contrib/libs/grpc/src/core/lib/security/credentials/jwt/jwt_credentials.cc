@@ -23,13 +23,13 @@
 #include <inttypes.h>
 #include <string.h>
 
-#include <util/generic/string.h>
-
-#include "y_absl/strings/str_cat.h"
-
+#include <util/generic/string.h> 
+ 
+#include "y_absl/strings/str_cat.h" 
+ 
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
-#include "src/core/lib/slice/slice_internal.h"
+#include "src/core/lib/slice/slice_internal.h" 
 #include "src/core/lib/surface/api_trace.h"
 
 #include <grpc/support/alloc.h>
@@ -37,8 +37,8 @@
 #include <grpc/support/string_util.h>
 #include <grpc/support/sync.h>
 
-using grpc_core::Json;
-
+using grpc_core::Json; 
+ 
 void grpc_service_account_jwt_access_credentials::reset_cache() {
   GRPC_MDELEM_UNREF(cached_.jwt_md);
   cached_.jwt_md = GRPC_MDNULL;
@@ -86,14 +86,14 @@ bool grpc_service_account_jwt_access_credentials::get_request_metadata(
     jwt = grpc_jwt_encode_and_sign(&key_, context.service_url, jwt_lifetime_,
                                    nullptr);
     if (jwt != nullptr) {
-      TString md_value = y_absl::StrCat("Bearer ", jwt);
+      TString md_value = y_absl::StrCat("Bearer ", jwt); 
       gpr_free(jwt);
       cached_.jwt_expiration =
           gpr_time_add(gpr_now(GPR_CLOCK_REALTIME), jwt_lifetime_);
       cached_.service_url = gpr_strdup(context.service_url);
       cached_.jwt_md = grpc_mdelem_from_slices(
           grpc_slice_from_static_string(GRPC_AUTHORIZATION_METADATA_KEY),
-          grpc_slice_from_cpp_string(std::move(md_value)));
+          grpc_slice_from_cpp_string(std::move(md_value))); 
       jwt_md = GRPC_MDELEM_REF(cached_.jwt_md);
     }
     gpr_mu_unlock(&cache_mu_);
@@ -141,14 +141,14 @@ grpc_service_account_jwt_access_credentials_create_from_auth_json_key(
 }
 
 static char* redact_private_key(const char* json_key) {
-  grpc_error* error = GRPC_ERROR_NONE;
-  Json json = Json::Parse(json_key, &error);
-  if (error != GRPC_ERROR_NONE || json.type() != Json::Type::OBJECT) {
-    GRPC_ERROR_UNREF(error);
+  grpc_error* error = GRPC_ERROR_NONE; 
+  Json json = Json::Parse(json_key, &error); 
+  if (error != GRPC_ERROR_NONE || json.type() != Json::Type::OBJECT) { 
+    GRPC_ERROR_UNREF(error); 
     return gpr_strdup("<Json failed to parse.>");
   }
-  (*json.mutable_object())["private_key"] = "<redacted>";
-  return gpr_strdup(json.Dump(/*indent=*/2).c_str());
+  (*json.mutable_object())["private_key"] = "<redacted>"; 
+  return gpr_strdup(json.Dump(/*indent=*/2).c_str()); 
 }
 
 grpc_call_credentials* grpc_service_account_jwt_access_credentials_create(

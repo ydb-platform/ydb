@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSafeCircularBuffer) {
         UNIT_ASSERT(!buffer.Get(2));
 
         for (size_t i = 0; i < 100; ++i) {
-            UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(i + 3).AsStringRef()), ToString(i));
+            UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(i + 3).AsStringRef()), ToString(i)); 
         }
 
         for (size_t i = 0; i < 100; ++i) {
@@ -99,9 +99,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLSafeCircularBuffer) {
         }
 
         UNIT_ASSERT_EQUAL(buffer.UsedSize(), 3);
-        UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(0).AsStringRef()), ToString(97));
-        UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(1).AsStringRef()), ToString(98));
-        UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(2).AsStringRef()), ToString(99));
+        UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(0).AsStringRef()), ToString(97)); 
+        UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(1).AsStringRef()), ToString(98)); 
+        UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(2).AsStringRef()), ToString(99)); 
 
         buffer.PopFront();
         buffer.PopFront();

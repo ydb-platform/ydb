@@ -20,8 +20,8 @@
 
 #include <string.h>
 
-#include "y_absl/strings/str_format.h"
-
+#include "y_absl/strings/str_format.h" 
+ 
 #include <grpc/impl/codegen/slice.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
@@ -39,16 +39,16 @@ TraceFlag grpc_handshaker_trace(false, "handshaker");
 
 namespace {
 
-TString HandshakerArgsString(HandshakerArgs* args) {
+TString HandshakerArgsString(HandshakerArgs* args) { 
   size_t num_args = args->args != nullptr ? args->args->num_args : 0;
   size_t read_buffer_length =
       args->read_buffer != nullptr ? args->read_buffer->length : 0;
-  return y_absl::StrFormat(
-      "{endpoint=%p, args=%p {size=%" PRIuPTR
-      ": %s}, read_buffer=%p (length=%" PRIuPTR "), exit_early=%d}",
-      args->endpoint, args->args, num_args,
-      grpc_channel_args_string(args->args), args->read_buffer,
-      read_buffer_length, args->exit_early);
+  return y_absl::StrFormat( 
+      "{endpoint=%p, args=%p {size=%" PRIuPTR 
+      ": %s}, read_buffer=%p (length=%" PRIuPTR "), exit_early=%d}", 
+      args->endpoint, args->args, num_args, 
+      grpc_channel_args_string(args->args), args->read_buffer, 
+      read_buffer_length, args->exit_early); 
 }
 
 }  // namespace
@@ -129,8 +129,8 @@ bool HandshakeManager::CallNextHandshakerLocked(grpc_error* error) {
     gpr_log(GPR_INFO,
             "handshake_manager %p: error=%s shutdown=%d index=%" PRIuPTR
             ", args=%s",
-            this, grpc_error_string(error), is_shutdown_, index_,
-            HandshakerArgsString(&args_).c_str());
+            this, grpc_error_string(error), is_shutdown_, index_, 
+            HandshakerArgsString(&args_).c_str()); 
   }
   GPR_ASSERT(index_ <= handshakers_.size());
   // If we got an error or we've been shut down or we're exiting early or

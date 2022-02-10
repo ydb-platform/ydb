@@ -26,7 +26,7 @@ namespace grpc_core {
 // Callers can use the DEBUG_LOCATION macro in either case.
 #ifndef NDEBUG
 // TODO(roth): See if there's a way to automatically populate this,
-// similarly to how y_absl::SourceLocation::current() works, so that
+// similarly to how y_absl::SourceLocation::current() works, so that 
 // callers don't need to explicitly pass DEBUG_LOCATION anywhere.
 class DebugLocation {
  public:

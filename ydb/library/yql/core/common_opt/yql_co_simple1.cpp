@@ -3299,7 +3299,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         YQL_CLOG(DEBUG, Core) << "AuthTokensResult";
 
         auto result = ctx.Builder(node->Pos());
-        auto cListBuilder = result.Callable("List");
+        auto cListBuilder = result.Callable("List"); 
         auto& listBuilder = cListBuilder.Add(0U, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx));
 
         const auto structType = ExpandType(node->Pos(), *node->GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx);
@@ -3337,7 +3337,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         YQL_CLOG(DEBUG, Core) << "FilesResult";
 
         auto result = ctx.Builder(node->Pos());
-        auto cListBuilder = result.Callable("List");
+        auto cListBuilder = result.Callable("List"); 
         auto& listBuilder = cListBuilder.Add(0U, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx));
 
         const auto structType = ExpandType(node->Pos(), *node->GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx);

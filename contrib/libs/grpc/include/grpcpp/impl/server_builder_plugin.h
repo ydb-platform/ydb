@@ -28,7 +28,7 @@
 #include <grpcpp/support/channel_arguments.h>
 #include <grpcpp/support/config.h>
 
-namespace grpc {
+namespace grpc { 
 
 class ServerBuilder;
 class ServerInitializer;
@@ -39,23 +39,23 @@ class ServerInitializer;
 class ServerBuilderPlugin {
  public:
   virtual ~ServerBuilderPlugin() {}
-  virtual TString name() = 0;
+  virtual TString name() = 0; 
 
   /// UpdateServerBuilder will be called at an early stage in
   /// ServerBuilder::BuildAndStart(), right after the ServerBuilderOptions have
   /// done their updates.
-  virtual void UpdateServerBuilder(ServerBuilder* /*builder*/) {}
+  virtual void UpdateServerBuilder(ServerBuilder* /*builder*/) {} 
 
   /// InitServer will be called in ServerBuilder::BuildAndStart(), after the
   /// Server instance is created.
-  virtual void InitServer(ServerInitializer* si) = 0;
+  virtual void InitServer(ServerInitializer* si) = 0; 
 
   /// Finish will be called at the end of ServerBuilder::BuildAndStart().
-  virtual void Finish(ServerInitializer* si) = 0;
+  virtual void Finish(ServerInitializer* si) = 0; 
 
   /// ChangeArguments is an interface that can be used in
   /// ServerBuilderOption::UpdatePlugins
-  virtual void ChangeArguments(const TString& name, void* value) = 0;
+  virtual void ChangeArguments(const TString& name, void* value) = 0; 
 
   /// UpdateChannelArguments will be called in ServerBuilder::BuildAndStart(),
   /// before the Server instance is created.

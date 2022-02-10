@@ -1,10 +1,10 @@
 LIBRARY()
 
-WITHOUT_LICENSE_TEXTS()
-
+WITHOUT_LICENSE_TEXTS() 
+ 
 LICENSE(MIT)
 
-OWNER(somov)
+OWNER(somov) 
 
 NO_COMPILER_WARNINGS()
 
@@ -14,8 +14,8 @@ ENDIF()
 
 SRCDIR(contrib/libs/farmhash)
 
-SRCS(
-    farmhashnt.cc
-)
+SRCS( 
+    farmhashnt.cc 
+) 
 
 END()

@@ -26,7 +26,7 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringMap.h" 
 #include "llvm/Support/Chrono.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/FileSystem.h"
@@ -372,37 +372,37 @@ public:
   const_reverse_iterator overlays_rend() const { return FSList.end(); }
 };
 
-class CaseInsensitiveFileSystem : public FileSystem {
-  IntrusiveRefCntPtr<FileSystem> Base;
-
-  /// Try to find Path by means of case-insensitive lookup. Stores the result in
-  /// FoundPath on success, or returns an error code otherwise.
-  std::error_code findCaseInsensitivePath(StringRef Path,
-                                          SmallVectorImpl<char> &FoundPath);
-
-  /// Attempt to exclude the possibility that File exists in Dir based on
-  /// previous information.
-  bool exclude(StringRef Dir, StringRef File);
-
-  /// Map from directory to map from lowercase to real-case filename.
-  llvm::StringMap<llvm::StringMap<std::string>> Maps;
-
-public:
-  CaseInsensitiveFileSystem(IntrusiveRefCntPtr<FileSystem> Base) : Base(Base) {}
-
-  llvm::ErrorOr<Status> status(const Twine &Path) override;
-  llvm::ErrorOr<std::unique_ptr<File>>
-  openFileForRead(const Twine &Path) override;
-  directory_iterator dir_begin(const Twine &Dir, std::error_code &EC) override;
-  llvm::ErrorOr<std::string> getCurrentWorkingDirectory() const override {
-    return Base->getCurrentWorkingDirectory();
-  }
-  std::error_code setCurrentWorkingDirectory(const Twine &Path) override {
-    Maps.clear();
-    return Base->setCurrentWorkingDirectory(Path);
-  }
-};
-
+class CaseInsensitiveFileSystem : public FileSystem { 
+  IntrusiveRefCntPtr<FileSystem> Base; 
+ 
+  /// Try to find Path by means of case-insensitive lookup. Stores the result in 
+  /// FoundPath on success, or returns an error code otherwise. 
+  std::error_code findCaseInsensitivePath(StringRef Path, 
+                                          SmallVectorImpl<char> &FoundPath); 
+ 
+  /// Attempt to exclude the possibility that File exists in Dir based on 
+  /// previous information. 
+  bool exclude(StringRef Dir, StringRef File); 
+ 
+  /// Map from directory to map from lowercase to real-case filename. 
+  llvm::StringMap<llvm::StringMap<std::string>> Maps; 
+ 
+public: 
+  CaseInsensitiveFileSystem(IntrusiveRefCntPtr<FileSystem> Base) : Base(Base) {} 
+ 
+  llvm::ErrorOr<Status> status(const Twine &Path) override; 
+  llvm::ErrorOr<std::unique_ptr<File>> 
+  openFileForRead(const Twine &Path) override; 
+  directory_iterator dir_begin(const Twine &Dir, std::error_code &EC) override; 
+  llvm::ErrorOr<std::string> getCurrentWorkingDirectory() const override { 
+    return Base->getCurrentWorkingDirectory(); 
+  } 
+  std::error_code setCurrentWorkingDirectory(const Twine &Path) override { 
+    Maps.clear(); 
+    return Base->setCurrentWorkingDirectory(Path); 
+  } 
+}; 
+ 
 /// By default, this delegates all calls to the underlying file system. This
 /// is useful when derived file systems want to override some calls and still
 /// proxy other calls.

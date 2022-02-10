@@ -2,10 +2,10 @@
 
 LIBRARY()
 
-OWNER(
-    iaz1607
-    g:cpp-contrib
-)
+OWNER( 
+    iaz1607 
+    g:cpp-contrib 
+) 
 
 VERSION(1.6.12)
 
@@ -13,8 +13,8 @@ ORIGINAL_SOURCE(https://github.com/apache/orc/archive/rel/release-1.6.12.tar.gz)
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/libs/lz4
     contrib/libs/snappy

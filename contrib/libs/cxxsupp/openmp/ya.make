@@ -1,49 +1,49 @@
 LIBRARY()
 
-LICENSE(
-    MIT AND
-    NCSA
-)
+LICENSE( 
+    MIT AND 
+    NCSA 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 VERSION(5.0)
 
 OWNER(
-    pg
-    g:contrib
-    g:cpp-contrib
+    pg 
+    g:contrib 
+    g:cpp-contrib 
 )
 
 NO_UTIL()
-
+ 
 NO_PLATFORM()
-
+ 
 NO_COMPILER_WARNINGS()
 
 IF (SANITIZER_TYPE == thread)
     NO_SANITIZE()
-    CFLAGS(
-        -fPIC
-    )
-ENDIF()
+    CFLAGS( 
+        -fPIC 
+    ) 
+ENDIF() 
 
 IF (SANITIZER_TYPE == memory)
     NO_SANITIZE()
-    CFLAGS(
-        -fPIC
-    )
-ENDIF()
+    CFLAGS( 
+        -fPIC 
+    ) 
+ENDIF() 
 
 COMPILE_C_AS_CXX()
 
-CXXFLAGS(-fno-exceptions)
+CXXFLAGS(-fno-exceptions) 
 
 SET_APPEND(CFLAGS -fno-lto)
 
-ADDINCL(
-    GLOBAL contrib/libs/cxxsupp/openmp
-)
+ADDINCL( 
+    GLOBAL contrib/libs/cxxsupp/openmp 
+) 
 
 ADDINCL(
     contrib/libs/cxxsupp/openmp/i18n

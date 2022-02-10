@@ -1,13 +1,13 @@
 PY3TEST()
 
-LICENSE(Apache-2.0)
+LICENSE(Apache-2.0) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
-PEERDIR(
-    contrib/libs/grpc/python
-)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
+PEERDIR( 
+    contrib/libs/grpc/python 
+) 
+ 
 NO_LINT()
 
 PY_SRCS(
@@ -28,7 +28,7 @@ PY_SRCS(
     tests/unit/_cython/test_utilities.py
     tests/unit/_exit_scenarios.py
     tests/unit/_from_grpc_import_star.py
-    tests/unit/_rpc_test_helpers.py
+    tests/unit/_rpc_test_helpers.py 
     tests/unit/_server_shutdown_scenarios.py
     tests/unit/_signal_client.py
     tests/unit/_tcp_proxy.py
@@ -76,7 +76,7 @@ TEST_SRCS(
     tests/unit/_channel_ready_future_test.py
     # FLAKY
     # tests/unit/_compression_test.py
-    tests/unit/_contextvars_propagation_test.py
+    tests/unit/_contextvars_propagation_test.py 
     tests/unit/_credentials_test.py
     tests/unit/_cython/_cancel_many_calls_test.py
     tests/unit/_cython/_channel_test.py
@@ -87,7 +87,7 @@ TEST_SRCS(
     tests/unit/_cython/_server_test.py
     tests/unit/_cython/cygrpc_test.py
     tests/unit/_dns_resolver_test.py
-    tests/unit/_dynamic_stubs_test.py
+    tests/unit/_dynamic_stubs_test.py 
     tests/unit/_empty_message_test.py
     tests/unit/_error_message_encoding_test.py
     tests/unit/_exit_test.py
@@ -102,8 +102,8 @@ TEST_SRCS(
     tests/unit/_metadata_test.py
     tests/unit/_reconnect_test.py
     tests/unit/_resource_exhausted_test.py
-    tests/unit/_rpc_part_1_test.py
-    tests/unit/_rpc_part_2_test.py
+    tests/unit/_rpc_part_1_test.py 
+    tests/unit/_rpc_part_2_test.py 
     tests/unit/_server_shutdown_test.py
     # tests.testing
     # tests/unit/_server_ssl_cert_config_test.py

@@ -111,7 +111,7 @@ class GenericEnd2endTest : public ::testing::Test {
   }
 
   void SendRpc(int num_rpcs, bool check_deadline, gpr_timespec deadline) {
-    const TString kMethodName("/grpc.cpp.test.util.EchoTestService/Echo");
+    const TString kMethodName("/grpc.cpp.test.util.EchoTestService/Echo"); 
     for (int i = 0; i < num_rpcs; i++) {
       EchoRequest send_request;
       EchoRequest recv_request;
@@ -133,14 +133,14 @@ class GenericEnd2endTest : public ::testing::Test {
       // Rather than using the original kMethodName, make a short-lived
       // copy to also confirm that we don't refer to this object beyond
       // the initial call preparation
-      const TString* method_name = new TString(kMethodName);
+      const TString* method_name = new TString(kMethodName); 
 
       std::unique_ptr<GenericClientAsyncReaderWriter> call =
           generic_stub_->PrepareCall(&cli_ctx, *method_name, &cli_cq_);
 
       delete method_name;  // Make sure that this is not needed after invocation
 
-      std::thread request_call([this]() { server_ok(4); });
+      std::thread request_call([this]() { server_ok(4); }); 
       call->StartCall(tag(1));
       client_ok(1);
       std::unique_ptr<ByteBuffer> send_buffer =
@@ -155,7 +155,7 @@ class GenericEnd2endTest : public ::testing::Test {
       generic_service_.RequestCall(&srv_ctx, &stream, srv_cq_.get(),
                                    srv_cq_.get(), tag(4));
 
-      request_call.join();
+      request_call.join(); 
       EXPECT_EQ(server_host_, srv_ctx.host().substr(0, server_host_.length()));
       EXPECT_EQ(kMethodName, srv_ctx.method());
 
@@ -246,7 +246,7 @@ class GenericEnd2endTest : public ::testing::Test {
   std::unique_ptr<grpc::GenericStub> generic_stub_;
   std::unique_ptr<Server> server_;
   AsyncGenericService generic_service_;
-  const TString server_host_;
+  const TString server_host_; 
   std::ostringstream server_address_;
   bool shutting_down_;
   bool shut_down_;
@@ -266,7 +266,7 @@ TEST_F(GenericEnd2endTest, SequentialRpcs) {
 TEST_F(GenericEnd2endTest, SequentialUnaryRpcs) {
   ResetStub();
   const int num_rpcs = 10;
-  const TString kMethodName("/grpc.cpp.test.util.EchoTestService/Echo");
+  const TString kMethodName("/grpc.cpp.test.util.EchoTestService/Echo"); 
   for (int i = 0; i < num_rpcs; i++) {
     EchoRequest send_request;
     EchoRequest recv_request;
@@ -283,7 +283,7 @@ TEST_F(GenericEnd2endTest, SequentialUnaryRpcs) {
 
     std::unique_ptr<ByteBuffer> cli_send_buffer =
         SerializeToByteBuffer(&send_request);
-    std::thread request_call([this]() { server_ok(4); });
+    std::thread request_call([this]() { server_ok(4); }); 
     std::unique_ptr<GenericClientAsyncResponseReader> call =
         generic_stub_->PrepareUnaryCall(&cli_ctx, kMethodName,
                                         *cli_send_buffer.get(), &cli_cq_);
@@ -294,7 +294,7 @@ TEST_F(GenericEnd2endTest, SequentialUnaryRpcs) {
 
     generic_service_.RequestCall(&srv_ctx, &stream, srv_cq_.get(),
                                  srv_cq_.get(), tag(4));
-    request_call.join();
+    request_call.join(); 
     EXPECT_EQ(server_host_, srv_ctx.host().substr(0, server_host_.length()));
     EXPECT_EQ(kMethodName, srv_ctx.method());
 
@@ -324,7 +324,7 @@ TEST_F(GenericEnd2endTest, SequentialUnaryRpcs) {
 TEST_F(GenericEnd2endTest, SimpleBidiStreaming) {
   ResetStub();
 
-  const TString kMethodName(
+  const TString kMethodName( 
       "/grpc.cpp.test.util.EchoTestService/BidiStream");
   EchoRequest send_request;
   EchoRequest recv_request;
@@ -337,7 +337,7 @@ TEST_F(GenericEnd2endTest, SimpleBidiStreaming) {
 
   cli_ctx.set_compression_algorithm(GRPC_COMPRESS_GZIP);
   send_request.set_message("Hello");
-  std::thread request_call([this]() { server_ok(2); });
+  std::thread request_call([this]() { server_ok(2); }); 
   std::unique_ptr<GenericClientAsyncReaderWriter> cli_stream =
       generic_stub_->PrepareCall(&cli_ctx, kMethodName, &cli_cq_);
   cli_stream->StartCall(tag(1));
@@ -345,7 +345,7 @@ TEST_F(GenericEnd2endTest, SimpleBidiStreaming) {
 
   generic_service_.RequestCall(&srv_ctx, &srv_stream, srv_cq_.get(),
                                srv_cq_.get(), tag(2));
-  request_call.join();
+  request_call.join(); 
 
   EXPECT_EQ(server_host_, srv_ctx.host().substr(0, server_host_.length()));
   EXPECT_EQ(kMethodName, srv_ctx.method());

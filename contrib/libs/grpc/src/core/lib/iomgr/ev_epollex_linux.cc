@@ -38,12 +38,12 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-#include <util/generic/string.h>
-
-#include "y_absl/container/inlined_vector.h"
-#include "y_absl/strings/str_cat.h"
-#include "y_absl/strings/str_format.h"
-
+#include <util/generic/string.h> 
+ 
+#include "y_absl/container/inlined_vector.h" 
+#include "y_absl/strings/str_cat.h" 
+#include "y_absl/strings/str_format.h" 
+ 
 #include <grpc/support/alloc.h>
 
 #include "src/core/lib/debug/stats.h"
@@ -124,10 +124,10 @@ static const char* pollable_type_string(pollable_type t) {
   return "<invalid>";
 }
 
-static TString pollable_desc(pollable* p) {
-  return y_absl::StrFormat("type=%s epfd=%d wakeup=%d",
-                         pollable_type_string(p->type), p->epfd,
-                         p->wakeup.read_fd);
+static TString pollable_desc(pollable* p) { 
+  return y_absl::StrFormat("type=%s epfd=%d wakeup=%d", 
+                         pollable_type_string(p->type), p->epfd, 
+                         p->wakeup.read_fd); 
 }
 
 /// Shared empty pollable - used by pollset to poll on until the first fd is
@@ -169,11 +169,11 @@ struct grpc_fd {
     write_closure.InitEvent();
     error_closure.InitEvent();
 
-    TString fd_name = y_absl::StrCat(name, " fd=", fd);
-    grpc_iomgr_register_object(&iomgr_object, fd_name.c_str());
+    TString fd_name = y_absl::StrCat(name, " fd=", fd); 
+    grpc_iomgr_register_object(&iomgr_object, fd_name.c_str()); 
 #ifndef NDEBUG
     if (GRPC_TRACE_FLAG_ENABLED(grpc_trace_fd_refcount)) {
-      gpr_log(GPR_DEBUG, "FD %d %p create %s", fd, this, fd_name.c_str());
+      gpr_log(GPR_DEBUG, "FD %d %p create %s", fd, this, fd_name.c_str()); 
     }
 #endif
   }
@@ -187,15 +187,15 @@ struct grpc_fd {
     grpc_iomgr_unregister_object(&iomgr_object);
 
     POLLABLE_UNREF(pollable_obj, "fd_pollable");
-
-    // To clear out the allocations of pollset_fds, we need to swap its
-    // contents with a newly-constructed (and soon to be destructed) local
-    // variable of its same type. This is because InlinedVector::clear is _not_
-    // guaranteed to actually free up allocations and this is important since
-    // this object doesn't have a conventional destructor.
-    y_absl::InlinedVector<int, 1> pollset_fds_tmp;
-    pollset_fds_tmp.swap(pollset_fds);
-
+ 
+    // To clear out the allocations of pollset_fds, we need to swap its 
+    // contents with a newly-constructed (and soon to be destructed) local 
+    // variable of its same type. This is because InlinedVector::clear is _not_ 
+    // guaranteed to actually free up allocations and this is important since 
+    // this object doesn't have a conventional destructor. 
+    y_absl::InlinedVector<int, 1> pollset_fds_tmp; 
+    pollset_fds_tmp.swap(pollset_fds); 
+ 
     gpr_mu_destroy(&pollable_mu);
     gpr_mu_destroy(&orphan_mu);
 
@@ -237,8 +237,8 @@ struct grpc_fd {
 
   // Protects pollable_obj and pollset_fds.
   gpr_mu pollable_mu;
-  y_absl::InlinedVector<int, 1> pollset_fds;  // Used in PO_MULTI.
-  pollable* pollable_obj = nullptr;         // Used in PO_FD.
+  y_absl::InlinedVector<int, 1> pollset_fds;  // Used in PO_MULTI. 
+  pollable* pollable_obj = nullptr;         // Used in PO_FD. 
 
   grpc_core::LockfreeEvent read_closure;
   grpc_core::LockfreeEvent write_closure;
@@ -929,8 +929,8 @@ static grpc_error* pollable_epoll(pollable* p, grpc_millis deadline) {
   int timeout = poll_deadline_to_millis_timeout(deadline);
 
   if (GRPC_TRACE_FLAG_ENABLED(grpc_polling_trace)) {
-    gpr_log(GPR_INFO, "POLLABLE:%p[%s] poll for %dms", p,
-            pollable_desc(p).c_str(), timeout);
+    gpr_log(GPR_INFO, "POLLABLE:%p[%s] poll for %dms", p, 
+            pollable_desc(p).c_str(), timeout); 
   }
 
   if (timeout != 0) {

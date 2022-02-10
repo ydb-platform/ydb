@@ -64,7 +64,7 @@ Status HealthCheckServiceImpl::Watch(
 }
 
 void HealthCheckServiceImpl::SetStatus(
-    const TString& service_name,
+    const TString& service_name, 
     HealthCheckResponse::ServingStatus status) {
   std::lock_guard<std::mutex> lock(mu_);
   if (shutdown_) {

@@ -18,7 +18,7 @@
 #ifndef ABSL_BASE_INTERNAL_LOW_LEVEL_SCHEDULING_H_
 #define ABSL_BASE_INTERNAL_LOW_LEVEL_SCHEDULING_H_
 
-#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/base/internal/raw_logging.h" 
 #include "y_absl/base/internal/scheduling_mode.h"
 #include "y_absl/base/macros.h"
 
@@ -30,13 +30,13 @@ extern "C" void __google_enable_rescheduling(bool disable_result);
 
 namespace y_absl {
 ABSL_NAMESPACE_BEGIN
-class CondVar;
-class Mutex;
-
-namespace synchronization_internal {
-int MutexDelay(int32_t c, int mode);
-}  // namespace synchronization_internal
-
+class CondVar; 
+class Mutex; 
+ 
+namespace synchronization_internal { 
+int MutexDelay(int32_t c, int mode); 
+}  // namespace synchronization_internal 
+ 
 namespace base_internal {
 
 class SchedulingHelper;  // To allow use of SchedulingGuard.
@@ -61,8 +61,8 @@ class SchedulingGuard {
  public:
   // Returns true iff the calling thread may be cooperatively rescheduled.
   static bool ReschedulingIsAllowed();
-  SchedulingGuard(const SchedulingGuard&) = delete;
-  SchedulingGuard& operator=(const SchedulingGuard&) = delete;
+  SchedulingGuard(const SchedulingGuard&) = delete; 
+  SchedulingGuard& operator=(const SchedulingGuard&) = delete; 
 
  private:
   // Disable cooperative rescheduling of the calling thread.  It may still
@@ -86,23 +86,23 @@ class SchedulingGuard {
     bool disabled;
   };
 
-  // A scoped helper to enable rescheduling temporarily.
-  // REQUIRES: destructor must run in same thread as constructor.
-  class ScopedEnable {
-   public:
-    ScopedEnable();
-    ~ScopedEnable();
-
-   private:
-    int scheduling_disabled_depth_;
-  };
-
-  // Access to SchedulingGuard is explicitly permitted.
-  friend class y_absl::CondVar;
-  friend class y_absl::Mutex;
+  // A scoped helper to enable rescheduling temporarily. 
+  // REQUIRES: destructor must run in same thread as constructor. 
+  class ScopedEnable { 
+   public: 
+    ScopedEnable(); 
+    ~ScopedEnable(); 
+ 
+   private: 
+    int scheduling_disabled_depth_; 
+  }; 
+ 
+  // Access to SchedulingGuard is explicitly permitted. 
+  friend class y_absl::CondVar; 
+  friend class y_absl::Mutex; 
   friend class SchedulingHelper;
   friend class SpinLock;
-  friend int y_absl::synchronization_internal::MutexDelay(int32_t c, int mode);
+  friend int y_absl::synchronization_internal::MutexDelay(int32_t c, int mode); 
 };
 
 //------------------------------------------------------------------------------
@@ -121,12 +121,12 @@ inline void SchedulingGuard::EnableRescheduling(bool /* disable_result */) {
   return;
 }
 
-inline SchedulingGuard::ScopedEnable::ScopedEnable()
-    : scheduling_disabled_depth_(0) {}
-inline SchedulingGuard::ScopedEnable::~ScopedEnable() {
-  ABSL_RAW_CHECK(scheduling_disabled_depth_ == 0, "disable unused warning");
-}
-
+inline SchedulingGuard::ScopedEnable::ScopedEnable() 
+    : scheduling_disabled_depth_(0) {} 
+inline SchedulingGuard::ScopedEnable::~ScopedEnable() { 
+  ABSL_RAW_CHECK(scheduling_disabled_depth_ == 0, "disable unused warning"); 
+} 
+ 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
 }  // namespace y_absl

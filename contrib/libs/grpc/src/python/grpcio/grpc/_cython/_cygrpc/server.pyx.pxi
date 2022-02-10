@@ -118,7 +118,7 @@ cdef class Server:
 
   def cancel_all_calls(self):
     if not self.is_shutting_down:
-      raise UsageError("the server must be shutting down to cancel all calls")
+      raise UsageError("the server must be shutting down to cancel all calls") 
     elif self.is_shutdown:
       return
     else:
@@ -136,7 +136,7 @@ cdef class Server:
         pass
       elif not self.is_shutting_down:
         if self.backup_shutdown_queue is None:
-          raise InternalError('Server shutdown failed: no completion queue.')
+          raise InternalError('Server shutdown failed: no completion queue.') 
         else:
           # the user didn't call shutdown - use our backup queue
           self._c_shutdown(self.backup_shutdown_queue, None)
@@ -148,9 +148,9 @@ cdef class Server:
         # much but repeatedly release the GIL and wait
         while not self.is_shutdown:
           time.sleep(0)
-      with nogil:
-        grpc_server_destroy(self.c_server)
-        self.c_server = NULL
+      with nogil: 
+        grpc_server_destroy(self.c_server) 
+        self.c_server = NULL 
 
   def __dealloc__(self):
     if self.c_server == NULL:

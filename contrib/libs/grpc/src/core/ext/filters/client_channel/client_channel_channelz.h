@@ -21,7 +21,7 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/channel_stack.h"
@@ -33,7 +33,7 @@ namespace channelz {
 
 class SubchannelNode : public BaseNode {
  public:
-  SubchannelNode(TString target_address, size_t channel_tracer_max_nodes);
+  SubchannelNode(TString target_address, size_t channel_tracer_max_nodes); 
   ~SubchannelNode() override;
 
   // Sets the subchannel's connectivity state without health checking.
@@ -44,7 +44,7 @@ class SubchannelNode : public BaseNode {
   // subchannel unrefs the transport.
   void SetChildSocket(RefCountedPtr<SocketNode> socket);
 
-  Json RenderJson() override;
+  Json RenderJson() override; 
 
   // proxy methods to composed classes.
   void AddTraceEvent(ChannelTrace::Severity severity, const grpc_slice& data) {
@@ -64,7 +64,7 @@ class SubchannelNode : public BaseNode {
   Atomic<grpc_connectivity_state> connectivity_state_{GRPC_CHANNEL_IDLE};
   Mutex socket_mu_;
   RefCountedPtr<SocketNode> child_socket_;
-  TString target_;
+  TString target_; 
   CallCountingHelper call_counter_;
   ChannelTrace trace_;
 };

@@ -13,23 +13,23 @@ ELSE()
         LGPL-2.1-only
     )
 ENDIF()
-
+ 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 OWNER(
-    vskipin
-    g:contrib
-    g:cpp-contrib
+    vskipin 
+    g:contrib 
+    g:cpp-contrib 
 )
 
 NO_UTIL()
-
+ 
 NO_RUNTIME()
 
 PROVIDES(libaio)
 
 SRCDIR(contrib/libs/libaio)
-
+ 
 ADDINCL(
     contrib/libs/libaio
 )

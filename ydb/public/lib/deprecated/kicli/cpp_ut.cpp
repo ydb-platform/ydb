@@ -1459,7 +1459,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         {
             // The query does SelecRow and SelectRange from the same table but with different sets
             // of key columns and different selected columns
-            auto rawq = kikimr.Query(R"___(
+            auto rawq = kikimr.Query(R"___( 
                                   (
                                   (let shardId (Parameter 'SHARDID (DataType 'Uint32)))
                                   (let hostTitleHash (Parameter 'HOSTTITLEHASH (DataType 'Uint64)))
@@ -1486,8 +1486,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                   (let pgmReturn (AsList result))
                                   (return pgmReturn)
                                   )
-                                  )___");
-            auto q = rawq.SyncPrepare();
+                                  )___"); 
+            auto q = rawq.SyncPrepare(); 
             UNIT_ASSERT_VALUES_EQUAL_C(q.GetStatus(), NMsgBusProxy::MSTATUS_OK,  q.GetError().GetMessage().c_str());
 
             auto query = q.GetQuery();
@@ -1510,7 +1510,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     {
         using namespace NClient;
 
-        auto rawq = kikimr.Query(
+        auto rawq = kikimr.Query( 
                     Sprintf(R"___(
                               (
                               (let key1Start (Parameter 'KEY1START (DataType 'Uint32)))
@@ -1526,8 +1526,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                               )___",
                               includeFrom ? "IncFrom" : "ExcFrom",
                               includeTo ? "IncTo" : "ExcTo"
-                    ));
-        auto q = rawq.SyncPrepare();
+                    )); 
+        auto q = rawq.SyncPrepare(); 
         UNIT_ASSERT_VALUES_EQUAL_C(q.GetStatus(), NMsgBusProxy::MSTATUS_OK,  q.GetError().GetMessage().c_str());
 
         auto query = q.GetQuery();
@@ -1563,7 +1563,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                 TColumn("Value", NClient::TType::Utf8)
                             });
 
-        auto rawQuery = kikimr.Query(R"___(
+        auto rawQuery = kikimr.Query(R"___( 
                                         (
                                         (let key1 (Parameter 'KEY1 (DataType 'Uint32)))
                                         (let key2 (Parameter 'KEY2 (DataType 'Uint64)))
@@ -1578,8 +1578,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                         ))
                                         (return pgmReturn)
                                         )
-                                        )___");
-        auto updateQuery = rawQuery.SyncPrepare();
+                                        )___"); 
+        auto updateQuery = rawQuery.SyncPrepare(); 
         UNIT_ASSERT_VALUES_EQUAL_C(updateQuery.GetStatus(), NMsgBusProxy::MSTATUS_OK,  updateQuery.GetError().GetMessage().c_str());
 
         // Write many rows in order to trigger compaction and create a flat part

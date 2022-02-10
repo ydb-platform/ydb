@@ -11,17 +11,17 @@ VERSION(3.37.2)
 
 ORIGINAL_SOURCE(https://github.com/sqlite/sqlite/archive/version-3.37.2.tar.gz)
 
-LICENSE(
+LICENSE( 
     Public-Domain AND
-    blessing
-)
+    blessing 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
 
 ADDINCL(
     contrib/libs/sqlite3
-)
-
+) 
+ 
 NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()

@@ -34,10 +34,10 @@
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/iomgr/closure.h"
-#include "src/core/lib/iomgr/parse_address.h"
+#include "src/core/lib/iomgr/parse_address.h" 
 #include "src/core/lib/iomgr/resolve_address.h"
 #include "src/core/lib/iomgr/unix_sockets_posix.h"
-#include "src/core/lib/iomgr/work_serializer.h"
+#include "src/core/lib/iomgr/work_serializer.h" 
 #include "src/core/lib/slice/slice_internal.h"
 #include "src/core/lib/slice/slice_string_helpers.h"
 
@@ -57,15 +57,15 @@ class FakeResolver : public Resolver {
 
  private:
   friend class FakeResolverResponseGenerator;
-  friend class FakeResolverResponseSetter;
+  friend class FakeResolverResponseSetter; 
 
   virtual ~FakeResolver();
 
-  void ShutdownLocked() override;
+  void ShutdownLocked() override; 
 
   void MaybeSendResultLocked();
 
-  void ReturnReresolutionResult();
+  void ReturnReresolutionResult(); 
 
   // passed-in parameters
   grpc_channel_args* channel_args_ = nullptr;
@@ -89,7 +89,7 @@ class FakeResolver : public Resolver {
 };
 
 FakeResolver::FakeResolver(ResolverArgs args)
-    : Resolver(std::move(args.work_serializer), std::move(args.result_handler)),
+    : Resolver(std::move(args.work_serializer), std::move(args.result_handler)), 
       response_generator_(
           FakeResolverResponseGenerator::GetFromArgs(args.args)) {
   // Channels sharing the same subchannels may have different resolver response
@@ -121,20 +121,20 @@ void FakeResolver::RequestReresolutionLocked() {
     if (!reresolution_closure_pending_) {
       reresolution_closure_pending_ = true;
       Ref().release();  // ref held by closure
-      work_serializer()->Run([this]() { ReturnReresolutionResult(); },
-                             DEBUG_LOCATION);
+      work_serializer()->Run([this]() { ReturnReresolutionResult(); }, 
+                             DEBUG_LOCATION); 
     }
   }
 }
 
-void FakeResolver::ShutdownLocked() {
-  shutdown_ = true;
-  if (response_generator_ != nullptr) {
-    response_generator_->SetFakeResolver(nullptr);
-    response_generator_.reset();
-  }
-}
-
+void FakeResolver::ShutdownLocked() { 
+  shutdown_ = true; 
+  if (response_generator_ != nullptr) { 
+    response_generator_->SetFakeResolver(nullptr); 
+    response_generator_.reset(); 
+  } 
+} 
+ 
 void FakeResolver::MaybeSendResultLocked() {
   if (!started_ || shutdown_) return;
   if (return_failure_) {
@@ -160,61 +160,61 @@ void FakeResolver::MaybeSendResultLocked() {
   }
 }
 
-void FakeResolver::ReturnReresolutionResult() {
-  reresolution_closure_pending_ = false;
-  MaybeSendResultLocked();
-  Unref();
+void FakeResolver::ReturnReresolutionResult() { 
+  reresolution_closure_pending_ = false; 
+  MaybeSendResultLocked(); 
+  Unref(); 
 }
 
-class FakeResolverResponseSetter {
- public:
-  explicit FakeResolverResponseSetter(RefCountedPtr<FakeResolver> resolver,
-                                      Resolver::Result result,
-                                      bool has_result = false,
-                                      bool immediate = true)
-      : resolver_(std::move(resolver)),
-        result_(std::move(result)),
-        has_result_(has_result),
-        immediate_(immediate) {}
-  void SetResponseLocked();
-  void SetReresolutionResponseLocked();
-  void SetFailureLocked();
-
- private:
-  RefCountedPtr<FakeResolver> resolver_;
-  Resolver::Result result_;
-  bool has_result_;
-  bool immediate_;
-};
-
-// Deletes object when done
-void FakeResolverResponseSetter::SetReresolutionResponseLocked() {
-  if (!resolver_->shutdown_) {
-    resolver_->reresolution_result_ = std::move(result_);
-    resolver_->has_reresolution_result_ = has_result_;
-  }
-  delete this;
-}
-
-// Deletes object when done
-void FakeResolverResponseSetter::SetResponseLocked() {
-  if (!resolver_->shutdown_) {
-    resolver_->next_result_ = std::move(result_);
-    resolver_->has_next_result_ = true;
-    resolver_->MaybeSendResultLocked();
-  }
-  delete this;
-}
-
-// Deletes object when done
-void FakeResolverResponseSetter::SetFailureLocked() {
-  if (!resolver_->shutdown_) {
-    resolver_->return_failure_ = true;
-    if (immediate_) resolver_->MaybeSendResultLocked();
-  }
-  delete this;
-}
-
+class FakeResolverResponseSetter { 
+ public: 
+  explicit FakeResolverResponseSetter(RefCountedPtr<FakeResolver> resolver, 
+                                      Resolver::Result result, 
+                                      bool has_result = false, 
+                                      bool immediate = true) 
+      : resolver_(std::move(resolver)), 
+        result_(std::move(result)), 
+        has_result_(has_result), 
+        immediate_(immediate) {} 
+  void SetResponseLocked(); 
+  void SetReresolutionResponseLocked(); 
+  void SetFailureLocked(); 
+ 
+ private: 
+  RefCountedPtr<FakeResolver> resolver_; 
+  Resolver::Result result_; 
+  bool has_result_; 
+  bool immediate_; 
+}; 
+ 
+// Deletes object when done 
+void FakeResolverResponseSetter::SetReresolutionResponseLocked() { 
+  if (!resolver_->shutdown_) { 
+    resolver_->reresolution_result_ = std::move(result_); 
+    resolver_->has_reresolution_result_ = has_result_; 
+  } 
+  delete this; 
+} 
+ 
+// Deletes object when done 
+void FakeResolverResponseSetter::SetResponseLocked() { 
+  if (!resolver_->shutdown_) { 
+    resolver_->next_result_ = std::move(result_); 
+    resolver_->has_next_result_ = true; 
+    resolver_->MaybeSendResultLocked(); 
+  } 
+  delete this; 
+} 
+ 
+// Deletes object when done 
+void FakeResolverResponseSetter::SetFailureLocked() { 
+  if (!resolver_->shutdown_) { 
+    resolver_->return_failure_ = true; 
+    if (immediate_) resolver_->MaybeSendResultLocked(); 
+  } 
+  delete this; 
+} 
+ 
 //
 // FakeResolverResponseGenerator
 //
@@ -234,10 +234,10 @@ void FakeResolverResponseGenerator::SetResponse(Resolver::Result result) {
     }
     resolver = resolver_->Ref();
   }
-  FakeResolverResponseSetter* arg =
-      new FakeResolverResponseSetter(resolver, std::move(result));
-  resolver->work_serializer()->Run([arg]() { arg->SetResponseLocked(); },
-                                   DEBUG_LOCATION);
+  FakeResolverResponseSetter* arg = 
+      new FakeResolverResponseSetter(resolver, std::move(result)); 
+  resolver->work_serializer()->Run([arg]() { arg->SetResponseLocked(); }, 
+                                   DEBUG_LOCATION); 
 }
 
 void FakeResolverResponseGenerator::SetReresolutionResponse(
@@ -248,10 +248,10 @@ void FakeResolverResponseGenerator::SetReresolutionResponse(
     GPR_ASSERT(resolver_ != nullptr);
     resolver = resolver_->Ref();
   }
-  FakeResolverResponseSetter* arg = new FakeResolverResponseSetter(
-      resolver, std::move(result), true /* has_result */);
-  resolver->work_serializer()->Run(
-      [arg]() { arg->SetReresolutionResponseLocked(); }, DEBUG_LOCATION);
+  FakeResolverResponseSetter* arg = new FakeResolverResponseSetter( 
+      resolver, std::move(result), true /* has_result */); 
+  resolver->work_serializer()->Run( 
+      [arg]() { arg->SetReresolutionResponseLocked(); }, DEBUG_LOCATION); 
 }
 
 void FakeResolverResponseGenerator::UnsetReresolutionResponse() {
@@ -261,10 +261,10 @@ void FakeResolverResponseGenerator::UnsetReresolutionResponse() {
     GPR_ASSERT(resolver_ != nullptr);
     resolver = resolver_->Ref();
   }
-  FakeResolverResponseSetter* arg =
-      new FakeResolverResponseSetter(resolver, Resolver::Result());
-  resolver->work_serializer()->Run(
-      [arg]() { arg->SetReresolutionResponseLocked(); }, DEBUG_LOCATION);
+  FakeResolverResponseSetter* arg = 
+      new FakeResolverResponseSetter(resolver, Resolver::Result()); 
+  resolver->work_serializer()->Run( 
+      [arg]() { arg->SetReresolutionResponseLocked(); }, DEBUG_LOCATION); 
 }
 
 void FakeResolverResponseGenerator::SetFailure() {
@@ -274,10 +274,10 @@ void FakeResolverResponseGenerator::SetFailure() {
     GPR_ASSERT(resolver_ != nullptr);
     resolver = resolver_->Ref();
   }
-  FakeResolverResponseSetter* arg =
-      new FakeResolverResponseSetter(resolver, Resolver::Result());
-  resolver->work_serializer()->Run([arg]() { arg->SetFailureLocked(); },
-                                   DEBUG_LOCATION);
+  FakeResolverResponseSetter* arg = 
+      new FakeResolverResponseSetter(resolver, Resolver::Result()); 
+  resolver->work_serializer()->Run([arg]() { arg->SetFailureLocked(); }, 
+                                   DEBUG_LOCATION); 
 }
 
 void FakeResolverResponseGenerator::SetFailureOnReresolution() {
@@ -287,11 +287,11 @@ void FakeResolverResponseGenerator::SetFailureOnReresolution() {
     GPR_ASSERT(resolver_ != nullptr);
     resolver = resolver_->Ref();
   }
-  FakeResolverResponseSetter* arg = new FakeResolverResponseSetter(
-      resolver, Resolver::Result(), false /* has_result */,
-      false /* immediate */);
-  resolver->work_serializer()->Run([arg]() { arg->SetFailureLocked(); },
-                                   DEBUG_LOCATION);
+  FakeResolverResponseSetter* arg = new FakeResolverResponseSetter( 
+      resolver, Resolver::Result(), false /* has_result */, 
+      false /* immediate */); 
+  resolver->work_serializer()->Run([arg]() { arg->SetFailureLocked(); }, 
+                                   DEBUG_LOCATION); 
 }
 
 void FakeResolverResponseGenerator::SetFakeResolver(
@@ -300,10 +300,10 @@ void FakeResolverResponseGenerator::SetFakeResolver(
   resolver_ = std::move(resolver);
   if (resolver_ == nullptr) return;
   if (has_result_) {
-    FakeResolverResponseSetter* arg =
-        new FakeResolverResponseSetter(resolver_, std::move(result_));
-    resolver_->work_serializer()->Run([arg]() { arg->SetResponseLocked(); },
-                                      DEBUG_LOCATION);
+    FakeResolverResponseSetter* arg = 
+        new FakeResolverResponseSetter(resolver_, std::move(result_)); 
+    resolver_->work_serializer()->Run([arg]() { arg->SetResponseLocked(); }, 
+                                      DEBUG_LOCATION); 
     has_result_ = false;
   }
 }
@@ -377,7 +377,7 @@ class FakeResolverFactory : public ResolverFactory {
 
 void grpc_resolver_fake_init() {
   grpc_core::ResolverRegistry::Builder::RegisterResolverFactory(
-      y_absl::make_unique<grpc_core::FakeResolverFactory>());
+      y_absl::make_unique<grpc_core::FakeResolverFactory>()); 
 }
 
 void grpc_resolver_fake_shutdown() {}

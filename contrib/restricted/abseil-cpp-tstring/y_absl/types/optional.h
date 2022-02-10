@@ -136,10 +136,10 @@ class optional : private optional_internal::optional_data<T>,
   constexpr optional(nullopt_t) noexcept {}  // NOLINT(runtime/explicit)
 
   // Copy constructor, standard semantics
-  optional(const optional&) = default;
+  optional(const optional&) = default; 
 
   // Move constructor, standard semantics
-  optional(optional&&) = default;
+  optional(optional&&) = default; 
 
   // Constructs a non-empty `optional` direct-initialized value of type `T` from
   // the arguments `std::forward<Args>(args)...`  within the `optional`.
@@ -412,11 +412,11 @@ class optional : private optional_internal::optional_data<T>,
   //
   // If you need myOpt->foo in constexpr, use (*myOpt).foo instead.
   const T* operator->() const {
-    ABSL_HARDENING_ASSERT(this->engaged_);
+    ABSL_HARDENING_ASSERT(this->engaged_); 
     return std::addressof(this->data_);
   }
   T* operator->() {
-    ABSL_HARDENING_ASSERT(this->engaged_);
+    ABSL_HARDENING_ASSERT(this->engaged_); 
     return std::addressof(this->data_);
   }
 
@@ -425,17 +425,17 @@ class optional : private optional_internal::optional_data<T>,
   // Accesses the underlying `T` value of an `optional`. If the `optional` is
   // empty, behavior is undefined.
   constexpr const T& operator*() const& {
-    return ABSL_HARDENING_ASSERT(this->engaged_), reference();
+    return ABSL_HARDENING_ASSERT(this->engaged_), reference(); 
   }
   T& operator*() & {
-    ABSL_HARDENING_ASSERT(this->engaged_);
+    ABSL_HARDENING_ASSERT(this->engaged_); 
     return reference();
   }
   constexpr const T&& operator*() const && {
-    return ABSL_HARDENING_ASSERT(this->engaged_), y_absl::move(reference());
+    return ABSL_HARDENING_ASSERT(this->engaged_), y_absl::move(reference()); 
   }
   T&& operator*() && {
-    ABSL_HARDENING_ASSERT(this->engaged_);
+    ABSL_HARDENING_ASSERT(this->engaged_); 
     return std::move(reference());
   }
 
@@ -444,7 +444,7 @@ class optional : private optional_internal::optional_data<T>,
   // Returns false if and only if the `optional` is empty.
   //
   //   if (opt) {
-  //     // do something with *opt or opt->;
+  //     // do something with *opt or opt->; 
   //   } else {
   //     // opt is empty.
   //   }

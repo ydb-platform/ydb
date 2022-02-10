@@ -2,22 +2,22 @@
 
 LIBRARY()
 
-OWNER(
-    orivej
-    g:cpp-contrib
-)
+OWNER( 
+    orivej 
+    g:cpp-contrib 
+) 
 
 VERSION(1.9.3)
 
 ORIGINAL_SOURCE(https://github.com/lz4/lz4/archive/v1.9.3.tar.gz)
 
-LICENSE(
+LICENSE( 
     BSD-2-Clause AND
-    BSD-3-Clause
-)
+    BSD-3-Clause 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/libs/xxhash
 )

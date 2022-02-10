@@ -1,6 +1,6 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2015 gRPC authors. 
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,33 +19,33 @@
 #ifndef GRPCPP_EXT_PROTO_SERVER_REFLECTION_PLUGIN_H
 #define GRPCPP_EXT_PROTO_SERVER_REFLECTION_PLUGIN_H
 
-#include <grpcpp/impl/server_builder_plugin.h>
-#include <grpcpp/support/config.h>
+#include <grpcpp/impl/server_builder_plugin.h> 
+#include <grpcpp/support/config.h> 
 
 namespace grpc {
-class ProtoServerReflection;
-class ServerInitializer;
-
+class ProtoServerReflection; 
+class ServerInitializer; 
+ 
 namespace reflection {
 
-class ProtoServerReflectionPlugin : public ::grpc::ServerBuilderPlugin {
- public:
-  ProtoServerReflectionPlugin();
-  ::TString name() override;
-  void InitServer(ServerInitializer* si) override;
-  void Finish(ServerInitializer* si) override;
-  void ChangeArguments(const ::TString& name, void* value) override;
-  bool has_async_methods() const override;
-  bool has_sync_methods() const override;
+class ProtoServerReflectionPlugin : public ::grpc::ServerBuilderPlugin { 
+ public: 
+  ProtoServerReflectionPlugin(); 
+  ::TString name() override; 
+  void InitServer(ServerInitializer* si) override; 
+  void Finish(ServerInitializer* si) override; 
+  void ChangeArguments(const ::TString& name, void* value) override; 
+  bool has_async_methods() const override; 
+  bool has_sync_methods() const override; 
 
- private:
-  std::shared_ptr<grpc::ProtoServerReflection> reflection_service_;
-};
+ private: 
+  std::shared_ptr<grpc::ProtoServerReflection> reflection_service_; 
+}; 
 
-/// Add proto reflection plugin to \a ServerBuilder.
-/// This function should be called at the static initialization time.
-void InitProtoReflectionServerBuilderPlugin();
-
+/// Add proto reflection plugin to \a ServerBuilder. 
+/// This function should be called at the static initialization time. 
+void InitProtoReflectionServerBuilderPlugin(); 
+ 
 }  // namespace reflection
 }  // namespace grpc
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2021 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2017-2021 The OpenSSL Project Authors. All Rights Reserved. 
  * Copyright 2017 Ribose Inc. All Rights Reserved.
  * Ported from Ribose contributions from Botan.
  *
@@ -61,20 +61,20 @@ static size_t ec_field_size(const EC_GROUP *group)
     return field_size;
 }
 
-int sm2_plaintext_size(const unsigned char *ct, size_t ct_size, size_t *pt_size)
+int sm2_plaintext_size(const unsigned char *ct, size_t ct_size, size_t *pt_size) 
 {
-    struct SM2_Ciphertext_st *sm2_ctext = NULL;
+    struct SM2_Ciphertext_st *sm2_ctext = NULL; 
 
-    sm2_ctext = d2i_SM2_Ciphertext(NULL, &ct, ct_size);
+    sm2_ctext = d2i_SM2_Ciphertext(NULL, &ct, ct_size); 
 
-    if (sm2_ctext == NULL) {
+    if (sm2_ctext == NULL) { 
         SM2err(SM2_F_SM2_PLAINTEXT_SIZE, SM2_R_INVALID_ENCODING);
         return 0;
     }
 
-    *pt_size = sm2_ctext->C2->length;
-    SM2_Ciphertext_free(sm2_ctext);
-
+    *pt_size = sm2_ctext->C2->length; 
+    SM2_Ciphertext_free(sm2_ctext); 
+ 
     return 1;
 }
 
@@ -294,10 +294,10 @@ int sm2_decrypt(const EC_KEY *key,
     C2 = sm2_ctext->C2->data;
     C3 = sm2_ctext->C3->data;
     msg_len = sm2_ctext->C2->length;
-    if (*ptext_len < (size_t)msg_len) {
-        SM2err(SM2_F_SM2_DECRYPT, SM2_R_BUFFER_TOO_SMALL);
-        goto done;
-    }
+    if (*ptext_len < (size_t)msg_len) { 
+        SM2err(SM2_F_SM2_DECRYPT, SM2_R_BUFFER_TOO_SMALL); 
+        goto done; 
+    } 
 
     ctx = BN_CTX_new();
     if (ctx == NULL) {

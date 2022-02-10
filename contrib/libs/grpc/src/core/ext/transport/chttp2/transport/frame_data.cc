@@ -22,8 +22,8 @@
 
 #include <string.h>
 
-#include "y_absl/strings/str_format.h"
-
+#include "y_absl/strings/str_format.h" 
+ 
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include "src/core/ext/transport/chttp2/transport/internal.h"
@@ -45,10 +45,10 @@ grpc_error* grpc_chttp2_data_parser_begin_frame(
     grpc_chttp2_data_parser* /*parser*/, uint8_t flags, uint32_t stream_id,
     grpc_chttp2_stream* s) {
   if (flags & ~GRPC_CHTTP2_DATA_FLAG_END_STREAM) {
-    return grpc_error_set_int(
-        GRPC_ERROR_CREATE_FROM_COPIED_STRING(
-            y_absl::StrFormat("unsupported data flags: 0x%02x", flags).c_str()),
-        GRPC_ERROR_INT_STREAM_ID, static_cast<intptr_t>(stream_id));
+    return grpc_error_set_int( 
+        GRPC_ERROR_CREATE_FROM_COPIED_STRING( 
+            y_absl::StrFormat("unsupported data flags: 0x%02x", flags).c_str()), 
+        GRPC_ERROR_INT_STREAM_ID, static_cast<intptr_t>(stream_id)); 
   }
 
   if (flags & GRPC_CHTTP2_DATA_FLAG_END_STREAM) {
@@ -128,9 +128,9 @@ grpc_error* grpc_deframe_unprocessed_incoming_frames(
             p->is_frame_compressed = true; /* GPR_TRUE */
             break;
           default:
-            p->error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(
-                y_absl::StrFormat("Bad GRPC frame type 0x%02x", p->frame_type)
-                    .c_str());
+            p->error = GRPC_ERROR_CREATE_FROM_COPIED_STRING( 
+                y_absl::StrFormat("Bad GRPC frame type 0x%02x", p->frame_type) 
+                    .c_str()); 
             p->error = grpc_error_set_int(p->error, GRPC_ERROR_INT_STREAM_ID,
                                           static_cast<intptr_t>(s->id));
             p->error = grpc_error_set_str(

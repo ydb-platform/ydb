@@ -21,18 +21,18 @@
 
 #include "src/compiler/config_protobuf.h"
 
-#include <util/generic/string.h>
-
-#ifdef GRPC_CUSTOM_STRING
-#warning GRPC_CUSTOM_STRING is no longer supported. Please use TString.
+#include <util/generic/string.h> 
+ 
+#ifdef GRPC_CUSTOM_STRING 
+#warning GRPC_CUSTOM_STRING is no longer supported. Please use TString. 
 #endif
 
 namespace grpc {
 
-// Using grpc::string and grpc::to_string is discouraged in favor of
-// TString and ToString. This is only for legacy code using
-// them explictly.
-typedef TString string;     // deprecated
+// Using grpc::string and grpc::to_string is discouraged in favor of 
+// TString and ToString. This is only for legacy code using 
+// them explictly. 
+typedef TString string;     // deprecated 
 
 namespace protobuf {
 

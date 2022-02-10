@@ -492,7 +492,7 @@ def onpy_srcs(unit, *args):
         cpp_runtime_path = 'contrib/libs/protobuf'
         py_runtime_path = 'contrib/python/protobuf'
         builtin_proto_path = cpp_runtime_path + '/' + BUILTIN_PROTO
-
+ 
     if protos:
         if not upath.startswith(py_runtime_path) and not upath.startswith(builtin_proto_path):
             unit.onpeerdir(py_runtime_path)

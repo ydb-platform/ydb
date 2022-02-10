@@ -319,8 +319,8 @@ class UniquePtrModifiersTest : public ::testing::Test {
   }
 };
 
-GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(UniquePtrModifiersTest);
-
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(UniquePtrModifiersTest); 
+ 
 TYPED_TEST_SUITE_P(UniquePtrModifiersTest);
 
 // Test that we do not move from rvalue arguments if an insertion does not

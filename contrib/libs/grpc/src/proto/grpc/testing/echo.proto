@@ -15,55 +15,55 @@
 
 syntax = "proto3";
 
-package grpc.testing;
-
+package grpc.testing; 
+ 
 import "src/proto/grpc/testing/echo_messages.proto";
 import "src/proto/grpc/testing/simple_messages.proto";
 
 service EchoTestService {
   rpc Echo(EchoRequest) returns (EchoResponse);
-  rpc Echo1(EchoRequest) returns (EchoResponse);
-  rpc Echo2(EchoRequest) returns (EchoResponse);
-  rpc CheckDeadlineUpperBound(SimpleRequest42) returns (StringValue);
-  rpc CheckDeadlineSet(SimpleRequest42) returns (StringValue);
+  rpc Echo1(EchoRequest) returns (EchoResponse); 
+  rpc Echo2(EchoRequest) returns (EchoResponse); 
+  rpc CheckDeadlineUpperBound(SimpleRequest42) returns (StringValue); 
+  rpc CheckDeadlineSet(SimpleRequest42) returns (StringValue); 
   // A service which checks that the initial metadata sent over contains some
   // expected key value pair
-  rpc CheckClientInitialMetadata(SimpleRequest42) returns (SimpleResponse42);
+  rpc CheckClientInitialMetadata(SimpleRequest42) returns (SimpleResponse42); 
   rpc RequestStream(stream EchoRequest) returns (EchoResponse);
   rpc ResponseStream(EchoRequest) returns (stream EchoResponse);
   rpc BidiStream(stream EchoRequest) returns (stream EchoResponse);
   rpc Unimplemented(EchoRequest) returns (EchoResponse);
 }
 
-service EchoTest1Service {
-  rpc Echo(EchoRequest) returns (EchoResponse);
-  rpc Echo1(EchoRequest) returns (EchoResponse);
-  rpc Echo2(EchoRequest) returns (EchoResponse);
-  // A service which checks that the initial metadata sent over contains some
-  // expected key value pair
-  rpc CheckClientInitialMetadata(SimpleRequest42) returns (SimpleResponse42);
-  rpc RequestStream(stream EchoRequest) returns (EchoResponse);
-  rpc ResponseStream(EchoRequest) returns (stream EchoResponse);
-  rpc BidiStream(stream EchoRequest) returns (stream EchoResponse);
-  rpc Unimplemented(EchoRequest) returns (EchoResponse);
-}
-
-service EchoTest2Service {
-  rpc Echo(EchoRequest) returns (EchoResponse);
-  rpc Echo1(EchoRequest) returns (EchoResponse);
-  rpc Echo2(EchoRequest) returns (EchoResponse);
-  // A service which checks that the initial metadata sent over contains some
-  // expected key value pair
-  rpc CheckClientInitialMetadata(SimpleRequest42) returns (SimpleResponse42);
-  rpc RequestStream(stream EchoRequest) returns (EchoResponse);
-  rpc ResponseStream(EchoRequest) returns (stream EchoResponse);
-  rpc BidiStream(stream EchoRequest) returns (stream EchoResponse);
-  rpc Unimplemented(EchoRequest) returns (EchoResponse);
-}
-
+service EchoTest1Service { 
+  rpc Echo(EchoRequest) returns (EchoResponse); 
+  rpc Echo1(EchoRequest) returns (EchoResponse); 
+  rpc Echo2(EchoRequest) returns (EchoResponse); 
+  // A service which checks that the initial metadata sent over contains some 
+  // expected key value pair 
+  rpc CheckClientInitialMetadata(SimpleRequest42) returns (SimpleResponse42); 
+  rpc RequestStream(stream EchoRequest) returns (EchoResponse); 
+  rpc ResponseStream(EchoRequest) returns (stream EchoResponse); 
+  rpc BidiStream(stream EchoRequest) returns (stream EchoResponse); 
+  rpc Unimplemented(EchoRequest) returns (EchoResponse); 
+} 
+ 
+service EchoTest2Service { 
+  rpc Echo(EchoRequest) returns (EchoResponse); 
+  rpc Echo1(EchoRequest) returns (EchoResponse); 
+  rpc Echo2(EchoRequest) returns (EchoResponse); 
+  // A service which checks that the initial metadata sent over contains some 
+  // expected key value pair 
+  rpc CheckClientInitialMetadata(SimpleRequest42) returns (SimpleResponse42); 
+  rpc RequestStream(stream EchoRequest) returns (EchoResponse); 
+  rpc ResponseStream(EchoRequest) returns (stream EchoResponse); 
+  rpc BidiStream(stream EchoRequest) returns (stream EchoResponse); 
+  rpc Unimplemented(EchoRequest) returns (EchoResponse); 
+} 
+ 
 service UnimplementedEchoService {
   rpc Unimplemented(EchoRequest) returns (EchoResponse);
 }
 
 // A service without any rpc defined to test coverage.
-service NoRpcService {}
+service NoRpcService {} 

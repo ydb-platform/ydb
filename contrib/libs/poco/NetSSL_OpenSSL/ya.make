@@ -2,18 +2,18 @@
 
 LIBRARY()
 
-OWNER(
-    orivej
-    g:cpp-contrib
-)
+OWNER( 
+    orivej 
+    g:cpp-contrib 
+) 
 
-LICENSE(
-    BSD-3-Clause AND
-    BSL-1.0
-)
+LICENSE( 
+    BSD-3-Clause AND 
+    BSL-1.0 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/libs/openssl
     contrib/libs/poco/Crypto

@@ -31,7 +31,7 @@ namespace grpc {
 namespace testing {
 
 template <class R>
-class MockClientReader : public ::grpc::ClientReaderInterface<R> {
+class MockClientReader : public ::grpc::ClientReaderInterface<R> { 
  public:
   MockClientReader() = default;
 
@@ -47,7 +47,7 @@ class MockClientReader : public ::grpc::ClientReaderInterface<R> {
 };
 
 template <class W>
-class MockClientWriter : public ::grpc::ClientWriterInterface<W> {
+class MockClientWriter : public ::grpc::ClientWriterInterface<W> { 
  public:
   MockClientWriter() = default;
 
@@ -63,7 +63,7 @@ class MockClientWriter : public ::grpc::ClientWriterInterface<W> {
 
 template <class W, class R>
 class MockClientReaderWriter
-    : public ::grpc::ClientReaderWriterInterface<W, R> {
+    : public ::grpc::ClientReaderWriterInterface<W, R> { 
  public:
   MockClientReaderWriter() = default;
 
@@ -86,7 +86,7 @@ class MockClientReaderWriter
 
 template <class R>
 class MockClientAsyncResponseReader
-    : public ::grpc::ClientAsyncResponseReaderInterface<R> {
+    : public ::grpc::ClientAsyncResponseReaderInterface<R> { 
  public:
   MockClientAsyncResponseReader() = default;
 
@@ -108,7 +108,7 @@ class MockClientAsyncReader : public ClientAsyncReaderInterface<R> {
 };
 
 template <class W>
-class MockClientAsyncWriter : public ::grpc::ClientAsyncWriterInterface<W> {
+class MockClientAsyncWriter : public ::grpc::ClientAsyncWriterInterface<W> { 
  public:
   MockClientAsyncWriter() = default;
 

@@ -1,45 +1,45 @@
-# File format ($ symbol means the beginning of a line):
-#
-# $ # this message
-# $ # =======================
-# $     # comments (all commentaries should starts with some number of spaces and # symbol)
-# ${action} {license spdx} {license text hash}
-# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
-# ${all_file_action} filename
-# $ # user commentaries (many lines)
-# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
-# ${action} {license spdx} {license text hash}
-# $BELONGS ./ya/make/file/relative/path/3/ya.make
-# ${all_file_action} filename
-# $    #    user commentaries
-# $ generated description
-# $ ...
-#
-# You can modify action, all_file_action and add commentaries
-# Available actions:
-# keep - keep license in contrib and use in credits
-# skip - skip license
-# remove - remove all files with this license
-# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
-#
-# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
-# We suppose that that files can contain some license info
-# Available all file actions:
-# FILE_IGNORE - ignore file (do nothing)
-# FILE_INCLUDE - include all file data into licenses text file
-# =======================
-
-KEEP     NCSA AND MIT         0791db4b6d90edd44c715bba1e426f74
+# File format ($ symbol means the beginning of a line): 
+# 
+# $ # this message 
+# $ # ======================= 
+# $     # comments (all commentaries should starts with some number of spaces and # symbol) 
+# ${action} {license spdx} {license text hash} 
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make 
+# ${all_file_action} filename 
+# $ # user commentaries (many lines) 
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify) 
+# ${action} {license spdx} {license text hash} 
+# $BELONGS ./ya/make/file/relative/path/3/ya.make 
+# ${all_file_action} filename 
+# $    #    user commentaries 
+# $ generated description 
+# $ ... 
+# 
+# You can modify action, all_file_action and add commentaries 
+# Available actions: 
+# keep - keep license in contrib and use in credits 
+# skip - skip license 
+# remove - remove all files with this license 
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file 
+# 
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory) 
+# We suppose that that files can contain some license info 
+# Available all file actions: 
+# FILE_IGNORE - ignore file (do nothing) 
+# FILE_INCLUDE - include all file data into licenses text file 
+# ======================= 
+ 
+KEEP     NCSA AND MIT         0791db4b6d90edd44c715bba1e426f74 
 BELONGS ya.make
-    License text:
-        // This file is dual licensed under the MIT and the University of Illinois Open
-        // Source Licenses. See LICENSE.txt for details.
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
+    License text: 
+        // This file is dual licensed under the MIT and the University of Illinois Open 
+        // Source Licenses. See LICENSE.txt for details. 
+    Scancode info: 
+        Original SPDX id: NCSA 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
+    Files with this license: 
         extractExternal.cpp [10:11]
         include/30/omp.h.var [10:11]
         include/40/omp.h.var [10:11]
@@ -118,12 +118,12 @@ BELONGS ya.make
         z_Linux_util.c [10:11]
         z_Windows_NT-586_util.c [10:11]
         z_Windows_NT_util.c [10:11]
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: MIT 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
+    Files with this license: 
         extractExternal.cpp [10:11]
         include/30/omp.h.var [10:11]
         include/40/omp.h.var [10:11]
@@ -202,60 +202,60 @@ BELONGS ya.make
         z_Linux_util.c [10:11]
         z_Windows_NT-586_util.c [10:11]
         z_Windows_NT_util.c [10:11]
-
-KEEP     NCSA AND MIT         479de2cae020eacfac58212c03d33ab1
+ 
+KEEP     NCSA AND MIT         479de2cae020eacfac58212c03d33ab1 
 BELONGS ya.make
-    License text:
-        // This file is dual licensed under the MIT and the University of Illinois Open
-        // Source Licenses. See LICENSE.txt for details.
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
+    License text: 
+        // This file is dual licensed under the MIT and the University of Illinois Open 
+        // Source Licenses. See LICENSE.txt for details. 
+    Scancode info: 
+        Original SPDX id: NCSA 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
+    Files with this license: 
         thirdparty/ittnotify/ittnotify_static.h [6:7]
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: MIT 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
+    Files with this license: 
         thirdparty/ittnotify/ittnotify_static.h [6:7]
-
-KEEP     NCSA AND MIT         61ab203794bd26e0aab2c6b954e30d9a
+ 
+KEEP     NCSA AND MIT         61ab203794bd26e0aab2c6b954e30d9a 
 BELONGS ya.make
-    License text:
-        //// This file is dual licensed under the MIT and the University of Illinois Open
-        //// Source Licenses. See LICENSE.txt for details.
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
+    License text: 
+        //// This file is dual licensed under the MIT and the University of Illinois Open 
+        //// Source Licenses. See LICENSE.txt for details. 
+    Scancode info: 
+        Original SPDX id: NCSA 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
+    Files with this license: 
         libomp.rc.var [8:9]
         z_Linux_asm.s [9:10]
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: MIT 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
+    Files with this license: 
         libomp.rc.var [8:9]
         z_Linux_asm.s [9:10]
-
-KEEP     NCSA AND MIT         9d5ffd6253d2b406a8bc3bbf3cb4f38b
+ 
+KEEP     NCSA AND MIT         9d5ffd6253d2b406a8bc3bbf3cb4f38b 
 BELONGS ya.make
-    License text:
-        !// This file is dual licensed under the MIT and the University of Illinois Open
-        !// Source Licenses. See LICENSE.txt for details.
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
+    License text: 
+        !// This file is dual licensed under the MIT and the University of Illinois Open 
+        !// Source Licenses. See LICENSE.txt for details. 
+    Scancode info: 
+        Original SPDX id: NCSA 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
+    Files with this license: 
         include/30/omp_lib.f.var [8:9]
         include/30/omp_lib.f90.var [8:9]
         include/30/omp_lib.h.var [8:9]
@@ -265,12 +265,12 @@ BELONGS ya.make
         include/41/omp_lib.f.var [8:9]
         include/41/omp_lib.f90.var [8:9]
         include/41/omp_lib.h.var [8:9]
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: MIT 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
+    Files with this license: 
         include/30/omp_lib.f.var [8:9]
         include/30/omp_lib.f90.var [8:9]
         include/30/omp_lib.h.var [8:9]
@@ -280,43 +280,43 @@ BELONGS ya.make
         include/41/omp_lib.f.var [8:9]
         include/41/omp_lib.f90.var [8:9]
         include/41/omp_lib.h.var [8:9]
-
-KEEP     NCSA AND MIT         d2725783fa0a2f24d855943aac3dbdf9
+ 
+KEEP     NCSA AND MIT         d2725783fa0a2f24d855943aac3dbdf9 
 BELONGS ya.make
-    License text:
-        ;// This file is dual licensed under the MIT and the University of Illinois Open
-        ;// Source Licenses. See LICENSE.txt for details.
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
+    License text: 
+        ;// This file is dual licensed under the MIT and the University of Illinois Open 
+        ;// Source Licenses. See LICENSE.txt for details. 
+    Scancode info: 
+        Original SPDX id: NCSA 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
+    Files with this license: 
         z_Windows_NT-586_asm.asm [9:10]
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: MIT 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
+    Files with this license: 
         z_Windows_NT-586_asm.asm [9:10]
-
-KEEP     NCSA AND MIT         e56769dac6aaa0678164025adda8a1da
+ 
+KEEP     NCSA AND MIT         e56769dac6aaa0678164025adda8a1da 
 BELONGS ya.make
-    License text:
-        \#// This file is dual licensed under the MIT and the University of Illinois Open
-        \#// Source Licenses. See LICENSE.txt for details.
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
+    License text: 
+        \#// This file is dual licensed under the MIT and the University of Illinois Open 
+        \#// Source Licenses. See LICENSE.txt for details. 
+    Scancode info: 
+        Original SPDX id: NCSA 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
+    Files with this license: 
         i18n/en_US.txt [8:9]
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: MIT 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
+    Files with this license: 
         i18n/en_US.txt [8:9]

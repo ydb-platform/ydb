@@ -1,12 +1,12 @@
 LIBRARY()
 
-LICENSE(
-    MIT AND
-    Unicode
-)
+LICENSE( 
+    MIT AND 
+    Unicode 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 OWNER(
     g:contrib
     g:cpp-contrib
@@ -18,14 +18,14 @@ NO_UTIL()
 
 NO_COMPILER_WARNINGS()
 
-CFLAGS(
-    GLOBAL -DUTF8PROC_STATIC
-)
+CFLAGS( 
+    GLOBAL -DUTF8PROC_STATIC 
+) 
 
 IF (NOT OS_WINDOWS)
-    CFLAGS(
-        -std=c99
-    )
+    CFLAGS( 
+        -std=c99 
+    ) 
 ENDIF()
 
 SRCS(

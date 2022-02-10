@@ -35,7 +35,7 @@ int grpc_byte_buffer_reader_init(grpc_byte_buffer_reader* reader,
   reader->buffer_in = buffer;
   switch (reader->buffer_in->type) {
     case GRPC_BB_RAW:
-      reader->buffer_out = reader->buffer_in;
+      reader->buffer_out = reader->buffer_in; 
       reader->current.index = 0;
       break;
   }
@@ -43,7 +43,7 @@ int grpc_byte_buffer_reader_init(grpc_byte_buffer_reader* reader,
 }
 
 void grpc_byte_buffer_reader_destroy(grpc_byte_buffer_reader* reader) {
-  reader->buffer_out = nullptr;
+  reader->buffer_out = nullptr; 
 }
 
 int grpc_byte_buffer_reader_peek(grpc_byte_buffer_reader* reader,

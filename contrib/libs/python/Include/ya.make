@@ -1,14 +1,14 @@
 PY23_LIBRARY()
 
-WITHOUT_LICENSE_TEXTS()
-
+WITHOUT_LICENSE_TEXTS() 
+ 
 LICENSE(YandexOpen)
 
-OWNER(
-    orivej
-    spreis
-    g:contrib
-)
+OWNER( 
+    orivej 
+    spreis 
+    g:contrib 
+) 
 
 NO_PYTHON_INCLUDES()
 
@@ -16,14 +16,14 @@ ADDINCL(GLOBAL contrib/libs/python/Include)
 
 IF (PYTHON2)
     CFLAGS(GLOBAL -DUSE_PYTHON2)
-    PEERDIR(
-        contrib/tools/python/lib
-    )
+    PEERDIR( 
+        contrib/tools/python/lib 
+    ) 
 ELSE()
     CFLAGS(GLOBAL -DUSE_PYTHON3)
-    PEERDIR(
-        contrib/tools/python3/src
-    )
+    PEERDIR( 
+        contrib/tools/python3/src 
+    ) 
 ENDIF()
 
 END()

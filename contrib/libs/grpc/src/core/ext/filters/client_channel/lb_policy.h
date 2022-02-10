@@ -24,9 +24,9 @@
 #include <functional>
 #include <iterator>
 
-#include "y_absl/status/status.h"
-#include "y_absl/strings/string_view.h"
-
+#include "y_absl/status/status.h" 
+#include "y_absl/strings/string_view.h" 
+ 
 #include "src/core/ext/filters/client_channel/server_address.h"
 #include "src/core/ext/filters/client_channel/service_config.h"
 #include "src/core/ext/filters/client_channel/subchannel_interface.h"
@@ -34,7 +34,7 @@
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/iomgr/polling_entity.h"
-#include "src/core/lib/iomgr/work_serializer.h"
+#include "src/core/lib/iomgr/work_serializer.h" 
 #include "src/core/lib/transport/connectivity_state.h"
 
 namespace grpc_core {
@@ -74,7 +74,7 @@ extern DebugOnlyTraceFlag grpc_trace_lb_policy_refcount;
 /// LoadBalacingPolicy API.
 ///
 /// Note: All methods with a "Locked" suffix must be called from the
-/// work_serializer passed to the constructor.
+/// work_serializer passed to the constructor. 
 ///
 /// Any I/O done by the LB policy should be done under the pollset_set
 /// returned by \a interested_parties().
@@ -95,11 +95,11 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     /// Application-specific requests cost metrics.  Metric names are
     /// determined by the application.  Each value is an absolute cost
     /// (e.g. 3487 bytes of storage) associated with the request.
-    std::map<y_absl::string_view, double, StringLess> request_cost;
+    std::map<y_absl::string_view, double, StringLess> request_cost; 
     /// Application-specific resource utilization metrics.  Metric names
     /// are determined by the application.  Each value is expressed as a
     /// fraction of total resources available.
-    std::map<y_absl::string_view, double, StringLess> utilization;
+    std::map<y_absl::string_view, double, StringLess> utilization; 
   };
 
   /// Interface for accessing per-call state.
@@ -117,17 +117,17 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
 
     /// Returns the backend metric data returned by the server for the call,
     /// or null if no backend metric data was returned.
-    // TODO(roth): Move this out of CallState, since it should not be
-    // accessible to the picker, only to the recv_trailing_metadata_ready
-    // callback.  It should instead be in its own interface.
+    // TODO(roth): Move this out of CallState, since it should not be 
+    // accessible to the picker, only to the recv_trailing_metadata_ready 
+    // callback.  It should instead be in its own interface. 
     virtual const BackendMetricData* GetBackendMetricData() = 0;
-
-    /// EXPERIMENTAL API.
-    /// Returns the value of the call attribute \a key.
-    /// Keys are static strings, so an attribute can be accessed by an LB
-    /// policy implementation only if it knows about the internal key.
-    /// Returns a null string_view if key not found.
-    virtual y_absl::string_view ExperimentalGetCallAttribute(const char* key) = 0;
+ 
+    /// EXPERIMENTAL API. 
+    /// Returns the value of the call attribute \a key. 
+    /// Keys are static strings, so an attribute can be accessed by an LB 
+    /// policy implementation only if it knows about the internal key. 
+    /// Returns a null string_view if key not found. 
+    virtual y_absl::string_view ExperimentalGetCallAttribute(const char* key) = 0; 
   };
 
   /// Interface for accessing metadata.
@@ -135,13 +135,13 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
   class MetadataInterface {
    public:
     class iterator
-        : public std::iterator<
-              std::input_iterator_tag,
-              std::pair<y_absl::string_view, y_absl::string_view>,  // value_type
-              std::ptrdiff_t,  // difference_type
-              std::pair<y_absl::string_view, y_absl::string_view>*,  // pointer
-              std::pair<y_absl::string_view, y_absl::string_view>&   // reference
-              > {
+        : public std::iterator< 
+              std::input_iterator_tag, 
+              std::pair<y_absl::string_view, y_absl::string_view>,  // value_type 
+              std::ptrdiff_t,  // difference_type 
+              std::pair<y_absl::string_view, y_absl::string_view>*,  // pointer 
+              std::pair<y_absl::string_view, y_absl::string_view>&   // reference 
+              > { 
      public:
       iterator(const MetadataInterface* md, intptr_t handle)
           : md_(md), handle_(handle) {}
@@ -168,7 +168,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     /// Implementations must ensure that the key and value remain alive
     /// until the call ends.  If desired, they may be allocated via
     /// CallState::Alloc().
-    virtual void Add(y_absl::string_view key, y_absl::string_view value) = 0;
+    virtual void Add(y_absl::string_view key, y_absl::string_view value) = 0; 
 
     /// Iteration interface.
     virtual iterator begin() const = 0;
@@ -185,21 +185,21 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     friend class iterator;
 
     virtual intptr_t IteratorHandleNext(intptr_t handle) const = 0;
-    virtual std::pair<y_absl::string_view /*key*/, y_absl::string_view /*value */>
+    virtual std::pair<y_absl::string_view /*key*/, y_absl::string_view /*value */> 
     IteratorHandleGet(intptr_t handle) const = 0;
   };
 
   /// Arguments used when picking a subchannel for a call.
   struct PickArgs {
-    /// The path of the call.  Indicates the RPC service and method name.
-    y_absl::string_view path;
+    /// The path of the call.  Indicates the RPC service and method name. 
+    y_absl::string_view path; 
     /// Initial metadata associated with the picking call.
     /// The LB policy may use the existing metadata to influence its routing
     /// decision, and it may add new metadata elements to be sent with the
     /// call to the chosen backend.
     MetadataInterface* initial_metadata;
     /// An interface for accessing call state.  Can be used to allocate
-    /// memory associated with the call in an efficient way.
+    /// memory associated with the call in an efficient way. 
     CallState* call_state;
   };
 
@@ -241,9 +241,9 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     /// does not take ownership, so any data that needs to be used after
     /// returning must be copied.
     /// The call state can be used to obtain backend metric data.
-    // TODO(roth): The arguments to this callback should be moved into a
-    // struct, so that we can later add new fields without breaking
-    // existing implementations.
+    // TODO(roth): The arguments to this callback should be moved into a 
+    // struct, so that we can later add new fields without breaking 
+    // existing implementations. 
     std::function<void(grpc_error*, MetadataInterface*, CallState*)>
         recv_trailing_metadata_ready;
   };
@@ -260,7 +260,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
   /// live in the LB policy object itself.
   ///
   /// Currently, pickers are always accessed from within the
-  /// client_channel data plane mutex, so they do not have to be
+  /// client_channel data plane mutex, so they do not have to be 
   /// thread-safe.
   class SubchannelPicker {
    public:
@@ -279,12 +279,12 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
 
     /// Creates a new subchannel with the specified channel args.
     virtual RefCountedPtr<SubchannelInterface> CreateSubchannel(
-        ServerAddress address, const grpc_channel_args& args) = 0;
+        ServerAddress address, const grpc_channel_args& args) = 0; 
 
     /// Sets the connectivity state and returns a new picker to be used
     /// by the client channel.
     virtual void UpdateState(grpc_connectivity_state state,
-                             const y_absl::Status& status,
+                             const y_absl::Status& status, 
                              std::unique_ptr<SubchannelPicker>) = 0;
 
     /// Requests that the resolver re-resolve.
@@ -292,8 +292,8 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
 
     /// Adds a trace message associated with the channel.
     enum TraceSeverity { TRACE_INFO, TRACE_WARNING, TRACE_ERROR };
-    virtual void AddTraceEvent(TraceSeverity severity,
-                               y_absl::string_view message) = 0;
+    virtual void AddTraceEvent(TraceSeverity severity, 
+                               y_absl::string_view message) = 0; 
   };
 
   /// Interface for configuration data used by an LB policy implementation.
@@ -319,15 +319,15 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     UpdateArgs() = default;
     ~UpdateArgs() { grpc_channel_args_destroy(args); }
     UpdateArgs(const UpdateArgs& other);
-    UpdateArgs(UpdateArgs&& other) noexcept;
+    UpdateArgs(UpdateArgs&& other) noexcept; 
     UpdateArgs& operator=(const UpdateArgs& other);
-    UpdateArgs& operator=(UpdateArgs&& other) noexcept;
+    UpdateArgs& operator=(UpdateArgs&& other) noexcept; 
   };
 
   /// Args used to instantiate an LB policy.
   struct Args {
-    /// The work_serializer under which all LB policy calls will be run.
-    std::shared_ptr<WorkSerializer> work_serializer;
+    /// The work_serializer under which all LB policy calls will be run. 
+    std::shared_ptr<WorkSerializer> work_serializer; 
     /// Channel control helper.
     /// Note: LB policies MUST NOT call any method on the helper from
     /// their constructor.
@@ -365,7 +365,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
 
   grpc_pollset_set* interested_parties() const { return interested_parties_; }
 
-  // Note: This must be invoked while holding the work_serializer.
+  // Note: This must be invoked while holding the work_serializer. 
   void Orphan() override;
 
   // A picker that returns PICK_QUEUE for all picks.
@@ -398,9 +398,9 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
   };
 
  protected:
-  std::shared_ptr<WorkSerializer> work_serializer() const {
-    return work_serializer_;
-  }
+  std::shared_ptr<WorkSerializer> work_serializer() const { 
+    return work_serializer_; 
+  } 
 
   // Note: LB policies MUST NOT call any method on the helper from their
   // constructor.
@@ -412,8 +412,8 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
   virtual void ShutdownLocked() = 0;
 
  private:
-  /// Work Serializer under which LB policy actions take place.
-  std::shared_ptr<WorkSerializer> work_serializer_;
+  /// Work Serializer under which LB policy actions take place. 
+  std::shared_ptr<WorkSerializer> work_serializer_; 
   /// Owned pointer to interested parties in load balancing decisions.
   grpc_pollset_set* interested_parties_;
   /// Channel control helper.

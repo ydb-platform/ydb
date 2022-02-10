@@ -74,8 +74,8 @@ class BdpEstimator {
   // Completes a previously started ping, returns when to schedule the next one
   grpc_millis CompletePing();
 
-  int64_t accumulator() { return accumulator_; }
-
+  int64_t accumulator() { return accumulator_; } 
+ 
  private:
   enum class PingState { UNSCHEDULED, SCHEDULED, STARTED };
 

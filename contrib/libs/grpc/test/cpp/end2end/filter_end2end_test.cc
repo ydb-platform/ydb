@@ -18,7 +18,7 @@
 
 #include <memory>
 #include <mutex>
-#include <thread>
+#include <thread> 
 
 #include <grpc/grpc.h>
 #include <grpc/support/time.h>
@@ -171,7 +171,7 @@ class FilterEnd2endTest : public ::testing::Test {
   void client_fail(int i) { verify_ok(&cli_cq_, i, false); }
 
   void SendRpc(int num_rpcs) {
-    const TString kMethodName("/grpc.cpp.test.util.EchoTestService/Echo");
+    const TString kMethodName("/grpc.cpp.test.util.EchoTestService/Echo"); 
     for (int i = 0; i < num_rpcs; i++) {
       EchoRequest send_request;
       EchoRequest recv_request;
@@ -185,7 +185,7 @@ class FilterEnd2endTest : public ::testing::Test {
 
       // The string needs to be long enough to test heap-based slice.
       send_request.set_message("Hello world. Hello world. Hello world.");
-      std::thread request_call([this]() { server_ok(4); });
+      std::thread request_call([this]() { server_ok(4); }); 
       std::unique_ptr<GenericClientAsyncReaderWriter> call =
           generic_stub_->PrepareCall(&cli_ctx, kMethodName, &cli_cq_);
       call->StartCall(tag(1));
@@ -202,7 +202,7 @@ class FilterEnd2endTest : public ::testing::Test {
       generic_service_.RequestCall(&srv_ctx, &stream, srv_cq_.get(),
                                    srv_cq_.get(), tag(4));
 
-      request_call.join();
+      request_call.join(); 
       EXPECT_EQ(server_host_, srv_ctx.host().substr(0, server_host_.length()));
       EXPECT_EQ(kMethodName, srv_ctx.method());
       ByteBuffer recv_buffer;
@@ -239,7 +239,7 @@ class FilterEnd2endTest : public ::testing::Test {
   std::unique_ptr<grpc::GenericStub> generic_stub_;
   std::unique_ptr<Server> server_;
   AsyncGenericService generic_service_;
-  const TString server_host_;
+  const TString server_host_; 
   std::ostringstream server_address_;
 };
 
@@ -267,7 +267,7 @@ TEST_F(FilterEnd2endTest, SimpleBidiStreaming) {
   EXPECT_EQ(0, GetConnectionCounterValue());
   EXPECT_EQ(0, GetCallCounterValue());
 
-  const TString kMethodName(
+  const TString kMethodName( 
       "/grpc.cpp.test.util.EchoTestService/BidiStream");
   EchoRequest send_request;
   EchoRequest recv_request;
@@ -280,7 +280,7 @@ TEST_F(FilterEnd2endTest, SimpleBidiStreaming) {
 
   cli_ctx.set_compression_algorithm(GRPC_COMPRESS_GZIP);
   send_request.set_message("Hello");
-  std::thread request_call([this]() { server_ok(2); });
+  std::thread request_call([this]() { server_ok(2); }); 
   std::unique_ptr<GenericClientAsyncReaderWriter> cli_stream =
       generic_stub_->PrepareCall(&cli_ctx, kMethodName, &cli_cq_);
   cli_stream->StartCall(tag(1));
@@ -289,7 +289,7 @@ TEST_F(FilterEnd2endTest, SimpleBidiStreaming) {
   generic_service_.RequestCall(&srv_ctx, &srv_stream, srv_cq_.get(),
                                srv_cq_.get(), tag(2));
 
-  request_call.join();
+  request_call.join(); 
   EXPECT_EQ(server_host_, srv_ctx.host().substr(0, server_host_.length()));
   EXPECT_EQ(kMethodName, srv_ctx.method());
 

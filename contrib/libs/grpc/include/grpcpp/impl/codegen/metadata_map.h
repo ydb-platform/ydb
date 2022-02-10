@@ -36,12 +36,12 @@ class MetadataMap {
 
   ~MetadataMap() { Destroy(); }
 
-  TString GetBinaryErrorDetails() {
+  TString GetBinaryErrorDetails() { 
     // if filled_, extract from the multimap for O(log(n))
     if (filled_) {
       auto iter = map_.find(kBinaryErrorDetailsKey);
       if (iter != map_.end()) {
-        return TString(iter->second.begin(), iter->second.length());
+        return TString(iter->second.begin(), iter->second.length()); 
       }
     }
     // if not yet filled, take the O(n) lookup to avoid allocating the
@@ -54,13 +54,13 @@ class MetadataMap {
                         GRPC_SLICE_START_PTR(arr_.metadata[i].key)),
                     kBinaryErrorDetailsKey,
                     GRPC_SLICE_LENGTH(arr_.metadata[i].key)) == 0) {
-          return TString(reinterpret_cast<const char*>(
-                                 GRPC_SLICE_START_PTR(arr_.metadata[i].value)),
-                             GRPC_SLICE_LENGTH(arr_.metadata[i].value));
+          return TString(reinterpret_cast<const char*>( 
+                                 GRPC_SLICE_START_PTR(arr_.metadata[i].value)), 
+                             GRPC_SLICE_LENGTH(arr_.metadata[i].value)); 
         }
       }
     }
-    return TString();
+    return TString(); 
   }
 
   std::multimap<grpc::string_ref, grpc::string_ref>* map() {

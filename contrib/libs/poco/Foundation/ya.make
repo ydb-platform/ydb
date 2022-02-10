@@ -2,22 +2,22 @@
 
 LIBRARY()
 
-OWNER(
-    orivej
-    g:cpp-contrib
-)
+OWNER( 
+    orivej 
+    g:cpp-contrib 
+) 
 
-LICENSE(
-    BSD-3-Clause AND
-    BSL-1.0 AND
-    NCSA AND
-    Public-Domain AND
-    RSA-MD AND
-    RSA-MD4
-)
+LICENSE( 
+    BSD-3-Clause AND 
+    BSL-1.0 AND 
+    NCSA AND 
+    Public-Domain AND 
+    RSA-MD AND 
+    RSA-MD4 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/libs/double-conversion
     contrib/libs/pcre

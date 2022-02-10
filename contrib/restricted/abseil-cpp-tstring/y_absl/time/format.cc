@@ -13,12 +13,12 @@
 // limitations under the License.
 
 #include <string.h>
-
+ 
 #include <cctype>
 #include <cstdint>
 
-#include "y_absl/strings/match.h"
-#include "y_absl/strings/string_view.h"
+#include "y_absl/strings/match.h" 
+#include "y_absl/strings/string_view.h" 
 #include "y_absl/time/internal/cctz/include/cctz/time_zone.h"
 #include "y_absl/time/time.h"
 
@@ -27,11 +27,11 @@ namespace cctz = y_absl::time_internal::cctz;
 namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 
-ABSL_DLL extern const char RFC3339_full[] = "%Y-%m-%d%ET%H:%M:%E*S%Ez";
-ABSL_DLL extern const char RFC3339_sec[] = "%Y-%m-%d%ET%H:%M:%S%Ez";
+ABSL_DLL extern const char RFC3339_full[] = "%Y-%m-%d%ET%H:%M:%E*S%Ez"; 
+ABSL_DLL extern const char RFC3339_sec[] = "%Y-%m-%d%ET%H:%M:%S%Ez"; 
 
-ABSL_DLL extern const char RFC1123_full[] = "%a, %d %b %E4Y %H:%M:%S %z";
-ABSL_DLL extern const char RFC1123_no_wday[] = "%d %b %E4Y %H:%M:%S %z";
+ABSL_DLL extern const char RFC1123_full[] = "%a, %d %b %E4Y %H:%M:%S %z"; 
+ABSL_DLL extern const char RFC1123_no_wday[] = "%d %b %E4Y %H:%M:%S %z"; 
 
 namespace {
 
@@ -71,12 +71,12 @@ y_absl::Time Join(const cctz_parts& parts) {
 
 }  // namespace
 
-TString FormatTime(y_absl::string_view format, y_absl::Time t,
+TString FormatTime(y_absl::string_view format, y_absl::Time t, 
                        y_absl::TimeZone tz) {
-  if (t == y_absl::InfiniteFuture()) return TString(kInfiniteFutureStr);
-  if (t == y_absl::InfinitePast()) return TString(kInfinitePastStr);
+  if (t == y_absl::InfiniteFuture()) return TString(kInfiniteFutureStr); 
+  if (t == y_absl::InfinitePast()) return TString(kInfinitePastStr); 
   const auto parts = Split(t);
-  return cctz::detail::format(TString(format), parts.sec, parts.fem,
+  return cctz::detail::format(TString(format), parts.sec, parts.fem, 
                               cctz::time_zone(tz));
 }
 
@@ -88,50 +88,50 @@ TString FormatTime(y_absl::Time t) {
   return y_absl::FormatTime(RFC3339_full, t, y_absl::LocalTimeZone());
 }
 
-bool ParseTime(y_absl::string_view format, y_absl::string_view input,
+bool ParseTime(y_absl::string_view format, y_absl::string_view input, 
                y_absl::Time* time, TString* err) {
   return y_absl::ParseTime(format, input, y_absl::UTCTimeZone(), time, err);
 }
 
 // If the input string does not contain an explicit UTC offset, interpret
 // the fields with respect to the given TimeZone.
-bool ParseTime(y_absl::string_view format, y_absl::string_view input,
+bool ParseTime(y_absl::string_view format, y_absl::string_view input, 
                y_absl::TimeZone tz, y_absl::Time* time, TString* err) {
-  auto strip_leading_space = [](y_absl::string_view* sv) {
-    while (!sv->empty()) {
-      if (!std::isspace(sv->front())) return;
-      sv->remove_prefix(1);
+  auto strip_leading_space = [](y_absl::string_view* sv) { 
+    while (!sv->empty()) { 
+      if (!std::isspace(sv->front())) return; 
+      sv->remove_prefix(1); 
     }
-  };
+  }; 
 
-  // Portable toolchains means we don't get nice constexpr here.
-  struct Literal {
-    const char* name;
-    size_t size;
-    y_absl::Time value;
-  };
-  static Literal literals[] = {
-      {kInfiniteFutureStr, strlen(kInfiniteFutureStr), InfiniteFuture()},
-      {kInfinitePastStr, strlen(kInfinitePastStr), InfinitePast()},
-  };
-  strip_leading_space(&input);
-  for (const auto& lit : literals) {
-    if (y_absl::StartsWith(input, y_absl::string_view(lit.name, lit.size))) {
-      y_absl::string_view tail = input;
-      tail.remove_prefix(lit.size);
-      strip_leading_space(&tail);
-      if (tail.empty()) {
-        *time = lit.value;
-        return true;
-      }
+  // Portable toolchains means we don't get nice constexpr here. 
+  struct Literal { 
+    const char* name; 
+    size_t size; 
+    y_absl::Time value; 
+  }; 
+  static Literal literals[] = { 
+      {kInfiniteFutureStr, strlen(kInfiniteFutureStr), InfiniteFuture()}, 
+      {kInfinitePastStr, strlen(kInfinitePastStr), InfinitePast()}, 
+  }; 
+  strip_leading_space(&input); 
+  for (const auto& lit : literals) { 
+    if (y_absl::StartsWith(input, y_absl::string_view(lit.name, lit.size))) { 
+      y_absl::string_view tail = input; 
+      tail.remove_prefix(lit.size); 
+      strip_leading_space(&tail); 
+      if (tail.empty()) { 
+        *time = lit.value; 
+        return true; 
+      } 
     }
   }
 
   TString error;
   cctz_parts parts;
-  const bool b =
-      cctz::detail::parse(TString(format), TString(input),
-                          cctz::time_zone(tz), &parts.sec, &parts.fem, &error);
+  const bool b = 
+      cctz::detail::parse(TString(format), TString(input), 
+                          cctz::time_zone(tz), &parts.sec, &parts.fem, &error); 
   if (b) {
     *time = Join(parts);
   } else if (err != nullptr) {
@@ -142,7 +142,7 @@ bool ParseTime(y_absl::string_view format, y_absl::string_view input,
 
 // Functions required to support y_absl::Time flags.
 bool AbslParseFlag(y_absl::string_view text, y_absl::Time* t, TString* error) {
-  return y_absl::ParseTime(RFC3339_full, text, y_absl::UTCTimeZone(), t, error);
+  return y_absl::ParseTime(RFC3339_full, text, y_absl::UTCTimeZone(), t, error); 
 }
 
 TString AbslUnparseFlag(y_absl::Time t) {

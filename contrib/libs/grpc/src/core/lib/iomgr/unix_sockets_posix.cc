@@ -28,8 +28,8 @@
 #include <sys/types.h>
 #include <sys/un.h>
 
-#include "y_absl/strings/str_cat.h"
-
+#include "y_absl/strings/str_cat.h" 
+ 
 #include "src/core/lib/iomgr/unix_sockets_posix.h"
 
 #include <grpc/support/alloc.h>
@@ -46,10 +46,10 @@ grpc_error* grpc_resolve_unix_domain_address(const char* name,
   struct sockaddr_un* un;
   if (strlen(name) >
       GPR_ARRAY_SIZE(((struct sockaddr_un*)nullptr)->sun_path) - 1) {
-    return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
-        y_absl::StrCat("Path name should not have more than ",
-                     GPR_ARRAY_SIZE(un->sun_path) - 1, " characters")
-            .c_str());
+    return GRPC_ERROR_CREATE_FROM_COPIED_STRING( 
+        y_absl::StrCat("Path name should not have more than ", 
+                     GPR_ARRAY_SIZE(un->sun_path) - 1, " characters") 
+            .c_str()); 
   }
   *addrs = static_cast<grpc_resolved_addresses*>(
       gpr_malloc(sizeof(grpc_resolved_addresses)));
@@ -86,14 +86,14 @@ void grpc_unlink_if_unix_domain_socket(
   }
 }
 
-TString grpc_sockaddr_to_uri_unix_if_possible(
+TString grpc_sockaddr_to_uri_unix_if_possible( 
     const grpc_resolved_address* resolved_addr) {
   const grpc_sockaddr* addr =
       reinterpret_cast<const grpc_sockaddr*>(resolved_addr->addr);
   if (addr->sa_family != AF_UNIX) {
-    return "";
+    return ""; 
   }
-  return y_absl::StrCat("unix:", ((struct sockaddr_un*)addr)->sun_path);
+  return y_absl::StrCat("unix:", ((struct sockaddr_un*)addr)->sun_path); 
 }
 
 #endif

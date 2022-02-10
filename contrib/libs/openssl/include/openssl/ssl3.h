@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2020 The OpenSSL Project Authors. All Rights Reserved. 
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
@@ -292,9 +292,9 @@ extern "C" {
 
 # define TLS1_FLAGS_STATELESS                    0x0800
 
-/* Set if extended master secret extension required on renegotiation */
-# define TLS1_FLAGS_REQUIRED_EXTMS               0x1000
-
+/* Set if extended master secret extension required on renegotiation */ 
+# define TLS1_FLAGS_REQUIRED_EXTMS               0x1000 
+ 
 # define SSL3_MT_HELLO_REQUEST                   0
 # define SSL3_MT_CLIENT_HELLO                    1
 # define SSL3_MT_SERVER_HELLO                    2

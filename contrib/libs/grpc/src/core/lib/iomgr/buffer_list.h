@@ -21,8 +21,8 @@
 
 #include <grpc/support/port_platform.h>
 
-#include "y_absl/types/optional.h"
-
+#include "y_absl/types/optional.h" 
+ 
 #include "src/core/lib/iomgr/port.h"
 
 #include <grpc/support/time.h>
@@ -35,52 +35,52 @@ namespace grpc_core {
 
 struct ConnectionMetrics {
   /* Delivery rate in Bytes/s. */
-  y_absl::optional<uint64_t> delivery_rate;
+  y_absl::optional<uint64_t> delivery_rate; 
   /* If the delivery rate is limited by the application, this is set to true. */
-  y_absl::optional<bool> is_delivery_rate_app_limited;
+  y_absl::optional<bool> is_delivery_rate_app_limited; 
   /* Total packets retransmitted. */
-  y_absl::optional<uint32_t> packet_retx;
+  y_absl::optional<uint32_t> packet_retx; 
   /* Total packets retransmitted spuriously. This metric is smaller than or
   equal to packet_retx. */
-  y_absl::optional<uint32_t> packet_spurious_retx;
+  y_absl::optional<uint32_t> packet_spurious_retx; 
   /* Total packets sent. */
-  y_absl::optional<uint32_t> packet_sent;
+  y_absl::optional<uint32_t> packet_sent; 
   /* Total packets delivered. */
-  y_absl::optional<uint32_t> packet_delivered;
+  y_absl::optional<uint32_t> packet_delivered; 
   /* Total packets delivered with ECE marked. This metric is smaller than or
   equal to packet_delivered. */
-  y_absl::optional<uint32_t> packet_delivered_ce;
+  y_absl::optional<uint32_t> packet_delivered_ce; 
   /* Total bytes lost so far. */
-  y_absl::optional<uint64_t> data_retx;
+  y_absl::optional<uint64_t> data_retx; 
   /* Total bytes sent so far. */
-  y_absl::optional<uint64_t> data_sent;
+  y_absl::optional<uint64_t> data_sent; 
   /* Total bytes in write queue but not sent. */
-  y_absl::optional<uint64_t> data_notsent;
+  y_absl::optional<uint64_t> data_notsent; 
   /* Pacing rate of the connection in Bps */
-  y_absl::optional<uint64_t> pacing_rate;
+  y_absl::optional<uint64_t> pacing_rate; 
   /* Minimum RTT observed in usec. */
-  y_absl::optional<uint32_t> min_rtt;
+  y_absl::optional<uint32_t> min_rtt; 
   /* Smoothed RTT in usec */
-  y_absl::optional<uint32_t> srtt;
+  y_absl::optional<uint32_t> srtt; 
   /* Send congestion window. */
-  y_absl::optional<uint32_t> congestion_window;
+  y_absl::optional<uint32_t> congestion_window; 
   /* Slow start threshold in packets. */
-  y_absl::optional<uint32_t> snd_ssthresh;
+  y_absl::optional<uint32_t> snd_ssthresh; 
   /* Maximum degree of reordering (i.e., maximum number of packets reodered)
    on the connection. */
-  y_absl::optional<uint32_t> reordering;
+  y_absl::optional<uint32_t> reordering; 
   /* Represents the number of recurring retransmissions of the first sequence
   that is not acknowledged yet. */
-  y_absl::optional<uint8_t> recurring_retrans;
+  y_absl::optional<uint8_t> recurring_retrans; 
   /* The cumulative time (in usec) that the transport protocol was busy
    sending data. */
-  y_absl::optional<uint64_t> busy_usec;
+  y_absl::optional<uint64_t> busy_usec; 
   /* The cumulative time (in usec) that the transport protocol was limited by
    the receive window size. */
-  y_absl::optional<uint64_t> rwnd_limited_usec;
+  y_absl::optional<uint64_t> rwnd_limited_usec; 
   /* The cumulative time (in usec) that the transport protocol was limited by
    the send buffer size. */
-  y_absl::optional<uint64_t> sndbuf_limited_usec;
+  y_absl::optional<uint64_t> sndbuf_limited_usec; 
 };
 
 struct Timestamp {

@@ -2,16 +2,16 @@
 
 LIBRARY()
 
-OWNER(
-    primorial
-    g:cpp-contrib
-)
+OWNER( 
+    primorial 
+    g:cpp-contrib 
+) 
 
 VERSION(5.0.0)
 
 ORIGINAL_SOURCE(https://github.com/apache/arrow/archive/apache-arrow-5.0.0.tar.gz)
 
-LICENSE(
+LICENSE( 
     Apache-2.0 AND
     BSD-2-Clause AND
     BSD-3-Clause AND
@@ -22,11 +22,11 @@ LICENSE(
     Protobuf-License AND
     Public-Domain AND
     ZPL-2.1 AND
-    Zlib
-)
+    Zlib 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/libs/apache/orc
     contrib/libs/brotli/dec

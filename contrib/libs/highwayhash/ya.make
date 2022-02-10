@@ -2,11 +2,11 @@ LIBRARY()
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 VERSION(2017-05-08-2b666ae078292b01024453d01480f3b362a2a012)
 
-OWNER(somov)
+OWNER(somov) 
 
 NO_COMPILER_WARNINGS()
 

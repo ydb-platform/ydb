@@ -367,7 +367,7 @@ class AsyncClientEnd2endTest : public ::testing::Test {
     for (int i = 0; i < num_rpcs; ++i) {
       AsyncClientCall* call = new AsyncClientCall;
       EchoRequest request;
-      request.set_message(TString("Hello: " + grpc::to_string(i)).c_str());
+      request.set_message(TString("Hello: " + grpc::to_string(i)).c_str()); 
       call->response_reader =
           common_.GetStub()->AsyncEcho(&call->context, request, &cq_);
       call->response_reader->Finish(&call->response, &call->status,

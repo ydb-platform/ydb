@@ -54,7 +54,7 @@
 #endif
 #include "y_absl/base/macros.h"
 #include "y_absl/base/port.h"
-#include "y_absl/numeric/bits.h"
+#include "y_absl/numeric/bits.h" 
 #include "y_absl/numeric/int128.h"
 #include "y_absl/strings/string_view.h"
 
@@ -151,11 +151,11 @@ inline void PutTwoDigits(size_t i, char* buf) {
 }
 
 // safe_strto?() functions for implementing SimpleAtoi()
-
+ 
 bool safe_strto32_base(y_absl::string_view text, int32_t* value, int base);
 bool safe_strto64_base(y_absl::string_view text, int64_t* value, int base);
-bool safe_strto128_base(y_absl::string_view text, y_absl::int128* value,
-                         int base);
+bool safe_strto128_base(y_absl::string_view text, y_absl::int128* value, 
+                         int base); 
 bool safe_strtou32_base(y_absl::string_view text, uint32_t* value, int base);
 bool safe_strtou64_base(y_absl::string_view text, uint64_t* value, int base);
 bool safe_strtou128_base(y_absl::string_view text, y_absl::uint128* value,
@@ -267,7 +267,7 @@ inline size_t FastHexToBufferZeroPad16(uint64_t val, char* out) {
   }
 #endif
   // | 0x1 so that even 0 has 1 digit.
-  return 16 - countl_zero(val | 0x1) / 4;
+  return 16 - countl_zero(val | 0x1) / 4; 
 }
 
 }  // namespace numbers_internal
@@ -278,11 +278,11 @@ ABSL_MUST_USE_RESULT bool SimpleAtoi(y_absl::string_view str, int_type* out) {
 }
 
 ABSL_MUST_USE_RESULT inline bool SimpleAtoi(y_absl::string_view str,
-                                            y_absl::int128* out) {
-  return numbers_internal::safe_strto128_base(str, out, 10);
-}
-
-ABSL_MUST_USE_RESULT inline bool SimpleAtoi(y_absl::string_view str,
+                                            y_absl::int128* out) { 
+  return numbers_internal::safe_strto128_base(str, out, 10); 
+} 
+ 
+ABSL_MUST_USE_RESULT inline bool SimpleAtoi(y_absl::string_view str, 
                                             y_absl::uint128* out) {
   return numbers_internal::safe_strtou128_base(str, out, 10);
 }

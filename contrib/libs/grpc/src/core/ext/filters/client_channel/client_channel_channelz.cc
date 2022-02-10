@@ -27,12 +27,12 @@
 
 #include <grpc/support/string_util.h>
 
-#include <util/string/cast.h>
-
+#include <util/string/cast.h> 
+ 
 namespace grpc_core {
 namespace channelz {
 
-SubchannelNode::SubchannelNode(TString target_address,
+SubchannelNode::SubchannelNode(TString target_address, 
                                size_t channel_tracer_max_nodes)
     : BaseNode(EntityType::kSubchannel, target_address),
       target_(std::move(target_address)),
@@ -49,48 +49,48 @@ void SubchannelNode::SetChildSocket(RefCountedPtr<SocketNode> socket) {
   child_socket_ = std::move(socket);
 }
 
-Json SubchannelNode::RenderJson() {
-  // Create and fill the data child.
+Json SubchannelNode::RenderJson() { 
+  // Create and fill the data child. 
   grpc_connectivity_state state =
       connectivity_state_.Load(MemoryOrder::RELAXED);
-  Json::Object data = {
-      {"state",
-       Json::Object{
-           {"state", ConnectivityStateName(state)},
-       }},
-      {"target", target_},
-  };
+  Json::Object data = { 
+      {"state", 
+       Json::Object{ 
+           {"state", ConnectivityStateName(state)}, 
+       }}, 
+      {"target", target_}, 
+  }; 
 
-  // Fill in the channel trace if applicable
-  Json trace_json = trace_.RenderJson();
-  if (trace_json.type() != Json::Type::JSON_NULL) {
-    data["trace"] = std::move(trace_json);
+  // Fill in the channel trace if applicable 
+  Json trace_json = trace_.RenderJson(); 
+  if (trace_json.type() != Json::Type::JSON_NULL) { 
+    data["trace"] = std::move(trace_json); 
   }
-  // Ask CallCountingHelper to populate call count data.
-  call_counter_.PopulateCallCounts(&data);
-  // Construct top-level object.
-  Json::Object object{
-      {"ref",
-       Json::Object{
-           {"subchannelId", ToString(uuid())},
-       }},
-      {"data", std::move(data)},
-  };
-  // Populate the child socket.
+  // Ask CallCountingHelper to populate call count data. 
+  call_counter_.PopulateCallCounts(&data); 
+  // Construct top-level object. 
+  Json::Object object{ 
+      {"ref", 
+       Json::Object{ 
+           {"subchannelId", ToString(uuid())}, 
+       }}, 
+      {"data", std::move(data)}, 
+  }; 
+  // Populate the child socket. 
   RefCountedPtr<SocketNode> child_socket;
   {
     MutexLock lock(&socket_mu_);
     child_socket = child_socket_;
   }
   if (child_socket != nullptr && child_socket->uuid() != 0) {
-    object["socketRef"] = Json::Array{
-        Json::Object{
-            {"socketId", ToString(child_socket->uuid())},
-            {"name", child_socket->name()},
-        },
-    };
+    object["socketRef"] = Json::Array{ 
+        Json::Object{ 
+            {"socketId", ToString(child_socket->uuid())}, 
+            {"name", child_socket->name()}, 
+        }, 
+    }; 
   }
-  return object;
+  return object; 
 }
 
 }  // namespace channelz

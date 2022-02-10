@@ -6,7 +6,7 @@ OWNER(
 )
 
 ADDINCL(
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc 
     ${ARCADIA_ROOT}/contrib/libs/grpc
 )
 

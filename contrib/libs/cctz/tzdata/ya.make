@@ -1,20 +1,20 @@
 LIBRARY()
 
-WITHOUT_LICENSE_TEXTS()
-
+WITHOUT_LICENSE_TEXTS() 
+ 
 LICENSE(Apache-2.0)
 
 OWNER(
-    dfyz
-    petrk
+    dfyz 
+    petrk 
 )
 
-PEERDIR(
-    contrib/libs/cctz
-)
+PEERDIR( 
+    contrib/libs/cctz 
+) 
 
 INCLUDE(ya.make.resources)
-
+ 
 SRCS(
     GLOBAL factory.cpp
 )

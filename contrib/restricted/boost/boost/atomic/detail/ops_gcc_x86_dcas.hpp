@@ -158,13 +158,13 @@ struct gcc_dcas_x86
         }
         else
         {
-            // Note that despite const qualification cmpxchg8b below may issue a store to the storage. The storage value
-            // will not change, but this prevents the storage to reside in read-only memory.
-
-#if defined(BOOST_ATOMIC_DETAIL_X86_NO_ASM_AX_DX_PAIRS)
-
+            // Note that despite const qualification cmpxchg8b below may issue a store to the storage. The storage value 
+            // will not change, but this prevents the storage to reside in read-only memory. 
+ 
+#if defined(BOOST_ATOMIC_DETAIL_X86_NO_ASM_AX_DX_PAIRS) 
+ 
             uint32_t value_bits[2];
-
+ 
             // We don't care for comparison result here; the previous value will be stored into value anyway.
             // Also we don't care for ebx and ecx values, they just have to be equal to eax and edx before cmpxchg8b.
             __asm__ __volatile__
@@ -177,9 +177,9 @@ struct gcc_dcas_x86
                 : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC_COMMA "memory"
             );
             BOOST_ATOMIC_DETAIL_MEMCPY(&value, value_bits, sizeof(value));
-
+ 
 #else // defined(BOOST_ATOMIC_DETAIL_X86_NO_ASM_AX_DX_PAIRS)
-
+ 
             // We don't care for comparison result here; the previous value will be stored into value anyway.
             // Also we don't care for ebx and ecx values, they just have to be equal to eax and edx before cmpxchg8b.
             __asm__ __volatile__
@@ -191,7 +191,7 @@ struct gcc_dcas_x86
                 : [storage] "m" (storage)
                 : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC_COMMA "memory"
             );
-
+ 
 #endif // defined(BOOST_ATOMIC_DETAIL_X86_NO_ASM_AX_DX_PAIRS)
         }
 
@@ -406,10 +406,10 @@ struct gcc_dcas_x86_64
 
     static BOOST_FORCEINLINE storage_type load(storage_type const volatile& storage, memory_order) BOOST_NOEXCEPT
     {
-        // Note that despite const qualification cmpxchg16b below may issue a store to the storage. The storage value
-        // will not change, but this prevents the storage to reside in read-only memory.
+        // Note that despite const qualification cmpxchg16b below may issue a store to the storage. The storage value 
+        // will not change, but this prevents the storage to reside in read-only memory. 
 
-#if defined(BOOST_ATOMIC_DETAIL_X86_NO_ASM_AX_DX_PAIRS)
+#if defined(BOOST_ATOMIC_DETAIL_X86_NO_ASM_AX_DX_PAIRS) 
 
         uint64_t value_bits[2];
 

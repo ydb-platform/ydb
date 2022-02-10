@@ -25,9 +25,9 @@
 
 namespace grpc_csharp_generator {
 
-TString GetServices(const grpc::protobuf::FileDescriptor* file,
-                        bool generate_client, bool generate_server,
-                        bool internal_access);
+TString GetServices(const grpc::protobuf::FileDescriptor* file, 
+                        bool generate_client, bool generate_server, 
+                        bool internal_access); 
 
 }  // namespace grpc_csharp_generator
 

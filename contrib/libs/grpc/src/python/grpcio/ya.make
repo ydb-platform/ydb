@@ -2,8 +2,8 @@ PY23_LIBRARY()
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 OWNER(
     akastornov
     g:contrib
@@ -23,7 +23,7 @@ IF (PYTHON2)
 ENDIF()
 
 ADDINCL(
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc 
     contrib/libs/grpc
     contrib/libs/grpc/include
 )
@@ -50,7 +50,7 @@ PY_SRCS(
     grpc/_grpcio_metadata.py
     grpc/_interceptor.py
     grpc/_plugin_wrapping.py
-    grpc/_runtime_protos.py
+    grpc/_runtime_protos.py 
     grpc/_server.py
     grpc/_utilities.py
     grpc/beta/__init__.py
@@ -86,18 +86,18 @@ PY_SRCS(
 IF (PYTHON3)
     PY_SRCS(
         TOP_LEVEL
-        grpc/_simple_stubs.py
-        grpc/aio/_base_call.py
-        grpc/aio/_base_channel.py
-        grpc/aio/_base_server.py
-        grpc/aio/_call.py
-        grpc/aio/_channel.py
-        grpc/aio/__init__.py
-        grpc/aio/_interceptor.py
-        grpc/aio/_metadata.py
-        grpc/aio/_server.py
-        grpc/aio/_typing.py
-        grpc/aio/_utils.py
+        grpc/_simple_stubs.py 
+        grpc/aio/_base_call.py 
+        grpc/aio/_base_channel.py 
+        grpc/aio/_base_server.py 
+        grpc/aio/_call.py 
+        grpc/aio/_channel.py 
+        grpc/aio/__init__.py 
+        grpc/aio/_interceptor.py 
+        grpc/aio/_metadata.py 
+        grpc/aio/_server.py 
+        grpc/aio/_typing.py 
+        grpc/aio/_utils.py 
         grpc/experimental/aio/__init__.py
     )
 ENDIF()

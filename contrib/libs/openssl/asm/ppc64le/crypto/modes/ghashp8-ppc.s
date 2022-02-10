@@ -4,18 +4,18 @@
 
 .globl	gcm_init_p8
 .type	gcm_init_p8,@function
-.section	".opd","aw"
-.align	3
-gcm_init_p8:
-.quad	.gcm_init_p8,.TOC.@tocbase,0
-.previous
+.section	".opd","aw" 
+.align	3 
+gcm_init_p8: 
+.quad	.gcm_init_p8,.TOC.@tocbase,0 
+.previous 
 .align	5
-.gcm_init_p8:
+.gcm_init_p8: 
 	li	0,-4096
 	li	8,0x10
-	mfspr	12,256
+	mfspr	12,256 
 	li	9,0x20
-	mtspr	256,0
+	mtspr	256,0 
 	li	10,0x30
 	.long	0x7D202699
 
@@ -127,38 +127,38 @@ gcm_init_p8:
 	.long	0x7E291F99
 	.long	0x7E4A1F99
 
-	mtspr	256,12
+	mtspr	256,12 
 	blr	
 .long	0
 .byte	0,12,0x14,0,0,0,2,0
 .long	0
-.size	.gcm_init_p8,.-.gcm_init_p8
-.size	gcm_init_p8,.-.gcm_init_p8
+.size	.gcm_init_p8,.-.gcm_init_p8 
+.size	gcm_init_p8,.-.gcm_init_p8 
 .globl	gcm_gmult_p8
 .type	gcm_gmult_p8,@function
-.section	".opd","aw"
-.align	3
-gcm_gmult_p8:
-.quad	.gcm_gmult_p8,.TOC.@tocbase,0
-.previous
+.section	".opd","aw" 
+.align	3 
+gcm_gmult_p8: 
+.quad	.gcm_gmult_p8,.TOC.@tocbase,0 
+.previous 
 .align	5
-.gcm_gmult_p8:
+.gcm_gmult_p8: 
 	lis	0,0xfff8
 	li	8,0x10
-	mfspr	12,256
+	mfspr	12,256 
 	li	9,0x20
-	mtspr	256,0
+	mtspr	256,0 
 	li	10,0x30
 	.long	0x7C601E99
 
 	.long	0x7D682699
-
+ 
 	.long	0x7D292699
-
+ 
 	.long	0x7D4A2699
-
+ 
 	.long	0x7D002699
-
+ 
 	vxor	4,4,4
 
 	.long	0x10035CC8
@@ -180,45 +180,45 @@ gcm_gmult_p8:
 	vxor	6,6,2
 	vxor	0,0,6
 
-
+ 
 	.long	0x7C001F99
 
-	mtspr	256,12
+	mtspr	256,12 
 	blr	
 .long	0
 .byte	0,12,0x14,0,0,0,2,0
 .long	0
-.size	.gcm_gmult_p8,.-.gcm_gmult_p8
-.size	gcm_gmult_p8,.-.gcm_gmult_p8
+.size	.gcm_gmult_p8,.-.gcm_gmult_p8 
+.size	gcm_gmult_p8,.-.gcm_gmult_p8 
 
 .globl	gcm_ghash_p8
 .type	gcm_ghash_p8,@function
-.section	".opd","aw"
-.align	3
-gcm_ghash_p8:
-.quad	.gcm_ghash_p8,.TOC.@tocbase,0
-.previous
+.section	".opd","aw" 
+.align	3 
+gcm_ghash_p8: 
+.quad	.gcm_ghash_p8,.TOC.@tocbase,0 
+.previous 
 .align	5
-.gcm_ghash_p8:
+.gcm_ghash_p8: 
 	li	0,-4096
 	li	8,0x10
-	mfspr	12,256
+	mfspr	12,256 
 	li	9,0x20
-	mtspr	256,0
+	mtspr	256,0 
 	li	10,0x30
 	.long	0x7C001E99
 
 	.long	0x7D682699
 	li	8,0x40
-
+ 
 	.long	0x7D292699
 	li	9,0x50
-
+ 
 	.long	0x7D4A2699
 	li	10,0x60
-
+ 
 	.long	0x7D002699
-
+ 
 	vxor	4,4,4
 
 	cmpldi	6,64
@@ -227,7 +227,7 @@ gcm_ghash_p8:
 	.long	0x7C602E99
 	addi	5,5,16
 	subic.	6,6,16
-
+ 
 	vxor	3,3,0
 	beq	.Lshort
 
@@ -236,13 +236,13 @@ gcm_ghash_p8:
 	.long	0x7E292699
 	add	9,5,6
 	.long	0x7E4A2699
-	b	.Loop_2x
+	b	.Loop_2x 
 
 .align	5
 .Loop_2x:
 	.long	0x7E002E99
 
-
+ 
 	subic	6,6,32
 	.long	0x10039CC8
 	.long	0x11B05CC8
@@ -272,7 +272,7 @@ gcm_ghash_p8:
 
 	vsldoi	6,0,0,8
 	.long	0x100044C8
-
+ 
 	vxor	6,6,2
 	vxor	3,3,6
 	vxor	3,3,0
@@ -303,10 +303,10 @@ gcm_ghash_p8:
 
 .Leven:
 	vxor	0,0,6
-
+ 
 	.long	0x7C001F99
 
-	mtspr	256,12
+	mtspr	256,12 
 	blr	
 .long	0
 .byte	0,12,0x14,0,0,0,4,0
@@ -342,7 +342,7 @@ gcm_ghash_p8:
 	stvx	31,11,1
 	li	0,-1
 	stw	12,252(1)
-	mtspr	256,0
+	mtspr	256,0 
 
 	lvsl	5,0,8
 
@@ -378,10 +378,10 @@ gcm_ghash_p8:
 	.long	0x7F8A2E99
 	addi	5,5,0x40
 
-
-
-
-
+ 
+ 
+ 
+ 
 	vxor	2,3,0
 
 	.long	0x11B0BCC8
@@ -412,10 +412,10 @@ gcm_ghash_p8:
 	.long	0x7F8A2E99
 	addi	5,5,0x40
 
-
-
-
-
+ 
+ 
+ 
+ 
 	.long	0x1002ECC8
 	.long	0x1022F4C8
 	.long	0x1042FCC8
@@ -492,9 +492,9 @@ gcm_ghash_p8:
 .Lthree:
 	.long	0x7EC92E99
 
-
-
-
+ 
+ 
+ 
 	vxor	2,3,0
 	vor	29,23,23
 	vor	30,24,24
@@ -513,8 +513,8 @@ gcm_ghash_p8:
 .align	4
 .Ltwo:
 
-
-
+ 
+ 
 	vxor	2,3,0
 	vperm	5,4,16,19
 	vperm	6,4,16,18
@@ -532,7 +532,7 @@ gcm_ghash_p8:
 .align	4
 .Lone:
 
-
+ 
 	vsldoi	29,4,9,8
 	vor	30,9,9
 	vsldoi	31,9,4,8
@@ -545,12 +545,12 @@ gcm_ghash_p8:
 	b	.Ltail_4x
 
 .Ldone_4x:
-
+ 
 	.long	0x7C001F99
 
 	li	10,63
 	li	11,79
-	mtspr	256,12
+	mtspr	256,12 
 	lvx	20,10,1
 	addi	10,10,32
 	lvx	21,11,1
@@ -578,8 +578,8 @@ gcm_ghash_p8:
 .long	0
 .byte	0,12,0x04,0,0x80,0,4,0
 .long	0
-.size	.gcm_ghash_p8,.-.gcm_ghash_p8
-.size	gcm_ghash_p8,.-.gcm_ghash_p8
+.size	.gcm_ghash_p8,.-.gcm_ghash_p8 
+.size	gcm_ghash_p8,.-.gcm_ghash_p8 
 
 .byte	71,72,65,83,72,32,102,111,114,32,80,111,119,101,114,73,83,65,32,50,46,48,55,44,67,82,89,80,84,79,71,65,77,83,32,98,121,32,60,97,112,112,114,111,64,111,112,101,110,115,115,108,46,111,114,103,62,0
 .align	2

@@ -37,11 +37,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <util/generic/string.h>
-
-#include "y_absl/strings/str_cat.h"
-#include "y_absl/strings/str_format.h"
-
+#include <util/generic/string.h> 
+ 
+#include "y_absl/strings/str_cat.h" 
+#include "y_absl/strings/str_format.h" 
+ 
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/sync.h>
@@ -238,19 +238,19 @@ static void on_read(void* arg, grpc_error* err) {
 
     grpc_set_socket_no_sigpipe_if_possible(fd);
 
-    TString addr_str = grpc_sockaddr_to_uri(&addr);
+    TString addr_str = grpc_sockaddr_to_uri(&addr); 
     if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) {
-      gpr_log(GPR_INFO, "SERVER_CONNECT: incoming connection: %s",
-              addr_str.c_str());
+      gpr_log(GPR_INFO, "SERVER_CONNECT: incoming connection: %s", 
+              addr_str.c_str()); 
     }
 
-    TString name = y_absl::StrCat("tcp-server-connection:", addr_str);
-    grpc_fd* fdobj = grpc_fd_create(fd, name.c_str(), true);
+    TString name = y_absl::StrCat("tcp-server-connection:", addr_str); 
+    grpc_fd* fdobj = grpc_fd_create(fd, name.c_str(), true); 
 
-    read_notifier_pollset = (*(sp->server->pollsets))
-        [static_cast<size_t>(gpr_atm_no_barrier_fetch_add(
-             &sp->server->next_pollset_to_assign, 1)) %
-         sp->server->pollsets->size()];
+    read_notifier_pollset = (*(sp->server->pollsets)) 
+        [static_cast<size_t>(gpr_atm_no_barrier_fetch_add( 
+             &sp->server->next_pollset_to_assign, 1)) % 
+         sp->server->pollsets->size()]; 
 
     grpc_pollset_add_fd(read_notifier_pollset, fdobj);
 
@@ -264,7 +264,7 @@ static void on_read(void* arg, grpc_error* err) {
 
     sp->server->on_accept_cb(
         sp->server->on_accept_cb_arg,
-        grpc_tcp_create(fdobj, sp->server->channel_args, addr_str.c_str()),
+        grpc_tcp_create(fdobj, sp->server->channel_args, addr_str.c_str()), 
         read_notifier_pollset, acceptor);
   }
 
@@ -348,7 +348,7 @@ static grpc_error* add_wildcard_addrs_to_server(grpc_tcp_server* s,
 
 static grpc_error* clone_port(grpc_tcp_listener* listener, unsigned count) {
   grpc_tcp_listener* sp = nullptr;
-  TString addr_str;
+  TString addr_str; 
   grpc_error* err;
 
   for (grpc_tcp_listener* l = listener->next; l && l->is_sibling; l = l->next) {
@@ -366,7 +366,7 @@ static grpc_error* clone_port(grpc_tcp_listener* listener, unsigned count) {
                                          true, &port);
     if (err != GRPC_ERROR_NONE) return err;
     listener->server->nports++;
-    addr_str = grpc_sockaddr_to_string(&listener->addr, true);
+    addr_str = grpc_sockaddr_to_string(&listener->addr, true); 
     sp = static_cast<grpc_tcp_listener*>(gpr_malloc(sizeof(grpc_tcp_listener)));
     sp->next = listener->next;
     listener->next = sp;
@@ -377,11 +377,11 @@ static grpc_error* clone_port(grpc_tcp_listener* listener, unsigned count) {
     listener->sibling = sp;
     sp->server = listener->server;
     sp->fd = fd;
-    sp->emfd = grpc_fd_create(
-        fd,
-        y_absl::StrFormat("tcp-server-listener:%s/clone-%d", addr_str.c_str(), i)
-            .c_str(),
-        true);
+    sp->emfd = grpc_fd_create( 
+        fd, 
+        y_absl::StrFormat("tcp-server-listener:%s/clone-%d", addr_str.c_str(), i) 
+            .c_str(), 
+        true); 
     memcpy(&sp->addr, &listener->addr, sizeof(grpc_resolved_address));
     sp->port = port;
     sp->port_index = listener->port_index;
@@ -487,8 +487,8 @@ static int tcp_server_port_fd(grpc_tcp_server* s, unsigned port_index,
   return -1;
 }
 
-static void tcp_server_start(grpc_tcp_server* s,
-                             const std::vector<grpc_pollset*>* pollsets,
+static void tcp_server_start(grpc_tcp_server* s, 
+                             const std::vector<grpc_pollset*>* pollsets, 
                              grpc_tcp_server_cb on_accept_cb,
                              void* on_accept_cb_arg) {
   size_t i;
@@ -503,11 +503,11 @@ static void tcp_server_start(grpc_tcp_server* s,
   sp = s->head;
   while (sp != nullptr) {
     if (s->so_reuseport && !grpc_is_unix_socket(&sp->addr) &&
-        pollsets->size() > 1) {
+        pollsets->size() > 1) { 
       GPR_ASSERT(GRPC_LOG_IF_ERROR(
-          "clone_port", clone_port(sp, (unsigned)(pollsets->size() - 1))));
-      for (i = 0; i < pollsets->size(); i++) {
-        grpc_pollset_add_fd((*pollsets)[i], sp->emfd);
+          "clone_port", clone_port(sp, (unsigned)(pollsets->size() - 1)))); 
+      for (i = 0; i < pollsets->size(); i++) { 
+        grpc_pollset_add_fd((*pollsets)[i], sp->emfd); 
         GRPC_CLOSURE_INIT(&sp->read_closure, on_read, sp,
                           grpc_schedule_on_exec_ctx);
         grpc_fd_notify_on_read(sp->emfd, &sp->read_closure);
@@ -515,8 +515,8 @@ static void tcp_server_start(grpc_tcp_server* s,
         sp = sp->next;
       }
     } else {
-      for (i = 0; i < pollsets->size(); i++) {
-        grpc_pollset_add_fd((*pollsets)[i], sp->emfd);
+      for (i = 0; i < pollsets->size(); i++) { 
+        grpc_pollset_add_fd((*pollsets)[i], sp->emfd); 
       }
       GRPC_CLOSURE_INIT(&sp->read_closure, on_read, sp,
                         grpc_schedule_on_exec_ctx);
@@ -585,17 +585,17 @@ class ExternalConnectionHandler : public grpc_core::TcpServerFdHandler {
       return;
     }
     grpc_set_socket_no_sigpipe_if_possible(fd);
-    TString addr_str = grpc_sockaddr_to_uri(&addr);
+    TString addr_str = grpc_sockaddr_to_uri(&addr); 
     if (grpc_tcp_trace.enabled()) {
       gpr_log(GPR_INFO, "SERVER_CONNECT: incoming external connection: %s",
-              addr_str.c_str());
+              addr_str.c_str()); 
     }
-    TString name = y_absl::StrCat("tcp-server-connection:", addr_str);
-    grpc_fd* fdobj = grpc_fd_create(fd, name.c_str(), true);
+    TString name = y_absl::StrCat("tcp-server-connection:", addr_str); 
+    grpc_fd* fdobj = grpc_fd_create(fd, name.c_str(), true); 
     read_notifier_pollset =
-        (*(s_->pollsets))[static_cast<size_t>(gpr_atm_no_barrier_fetch_add(
-                              &s_->next_pollset_to_assign, 1)) %
-                          s_->pollsets->size()];
+        (*(s_->pollsets))[static_cast<size_t>(gpr_atm_no_barrier_fetch_add( 
+                              &s_->next_pollset_to_assign, 1)) % 
+                          s_->pollsets->size()]; 
     grpc_pollset_add_fd(read_notifier_pollset, fdobj);
     grpc_tcp_server_acceptor* acceptor =
         static_cast<grpc_tcp_server_acceptor*>(gpr_malloc(sizeof(*acceptor)));
@@ -606,7 +606,7 @@ class ExternalConnectionHandler : public grpc_core::TcpServerFdHandler {
     acceptor->listener_fd = listener_fd;
     acceptor->pending_data = buf;
     s_->on_accept_cb(s_->on_accept_cb_arg,
-                     grpc_tcp_create(fdobj, s_->channel_args, addr_str.c_str()),
+                     grpc_tcp_create(fdobj, s_->channel_args, addr_str.c_str()), 
                      read_notifier_pollset, acceptor);
   }
 

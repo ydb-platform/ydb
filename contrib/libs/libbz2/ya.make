@@ -2,22 +2,22 @@
 
 LIBRARY()
 
-OWNER(
-    orivej
-    g:cpp-contrib
-)
+OWNER( 
+    orivej 
+    g:cpp-contrib 
+) 
 
 VERSION(1.0.8)
 
 ORIGINAL_SOURCE(https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz)
 
-LICENSE(
-    BSD-3-Clause AND
-    bzip2-1.0.6
-)
+LICENSE( 
+    BSD-3-Clause AND 
+    bzip2-1.0.6 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()

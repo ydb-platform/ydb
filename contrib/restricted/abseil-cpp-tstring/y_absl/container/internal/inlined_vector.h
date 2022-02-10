@@ -36,13 +36,13 @@ namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace inlined_vector_internal {
 
-// GCC does not deal very well with the below code
-#if !defined(__clang__) && defined(__GNUC__)
-#pragma GCC diagnostic push
+// GCC does not deal very well with the below code 
+#if !defined(__clang__) && defined(__GNUC__) 
+#pragma GCC diagnostic push 
 #pragma GCC diagnostic ignored "-Warray-bounds"
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-#endif
-
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized" 
+#endif 
+ 
 template <typename A>
 using AllocatorTraits = std::allocator_traits<A>;
 template <typename A>
@@ -110,7 +110,7 @@ struct Allocation {
   Pointer<A> data;
   SizeType<A> capacity;
 };
-
+ 
 template <typename A,
           bool IsOverAligned =
               (alignof(ValueType<A>) > ABSL_INTERNAL_DEFAULT_NEW_ALIGNMENT)>
@@ -119,13 +119,13 @@ struct MallocAdapter {
     return {AllocatorTraits<A>::allocate(allocator, requested_capacity),
             requested_capacity};
   }
-
+ 
   static void Deallocate(A& allocator, Pointer<A> pointer,
                          SizeType<A> capacity) {
     AllocatorTraits<A>::deallocate(allocator, pointer, capacity);
   }
 };
-
+ 
 template <typename A, typename ValueAdapter>
 void ConstructElements(NoTypeDeduction<A>& allocator,
                        Pointer<A> construct_first, ValueAdapter& values,
@@ -303,14 +303,14 @@ class Storage {
       : metadata_(allocator, /* size and is_allocated */ 0) {}
 
   ~Storage() {
-    if (GetSizeAndIsAllocated() == 0) {
-      // Empty and not allocated; nothing to do.
+    if (GetSizeAndIsAllocated() == 0) { 
+      // Empty and not allocated; nothing to do. 
     } else if (IsMemcpyOk<A>::value) {
-      // No destructors need to be run; just deallocate if necessary.
-      DeallocateIfAllocated();
-    } else {
-      DestroyContents();
-    }
+      // No destructors need to be run; just deallocate if necessary. 
+      DeallocateIfAllocated(); 
+    } else { 
+      DestroyContents(); 
+    } 
   }
 
   // ---------------------------------------------------------------------------
@@ -364,8 +364,8 @@ class Storage {
   // Storage Member Mutators
   // ---------------------------------------------------------------------------
 
-  ABSL_ATTRIBUTE_NOINLINE void InitFrom(const Storage& other);
-
+  ABSL_ATTRIBUTE_NOINLINE void InitFrom(const Storage& other); 
+ 
   template <typename ValueAdapter>
   void Initialize(ValueAdapter values, SizeType<A> new_size);
 
@@ -441,8 +441,8 @@ class Storage {
   }
 
  private:
-  ABSL_ATTRIBUTE_NOINLINE void DestroyContents();
-
+  ABSL_ATTRIBUTE_NOINLINE void DestroyContents(); 
+ 
   using Metadata = container_internal::CompressedTuple<A, SizeType<A>>;
 
   struct Allocated {
@@ -459,51 +459,51 @@ class Storage {
     Inlined inlined;
   };
 
-  template <typename... Args>
+  template <typename... Args> 
   ABSL_ATTRIBUTE_NOINLINE Reference<A> EmplaceBackSlow(Args&&... args);
-
+ 
   Metadata metadata_;
   Data data_;
 };
 
 template <typename T, size_t N, typename A>
-void Storage<T, N, A>::DestroyContents() {
+void Storage<T, N, A>::DestroyContents() { 
   Pointer<A> data = GetIsAllocated() ? GetAllocatedData() : GetInlinedData();
   DestroyElements<A>(GetAllocator(), data, GetSize());
-  DeallocateIfAllocated();
-}
-
-template <typename T, size_t N, typename A>
-void Storage<T, N, A>::InitFrom(const Storage& other) {
+  DeallocateIfAllocated(); 
+} 
+ 
+template <typename T, size_t N, typename A> 
+void Storage<T, N, A>::InitFrom(const Storage& other) { 
   const SizeType<A> n = other.GetSize();
-  assert(n > 0);  // Empty sources handled handled in caller.
+  assert(n > 0);  // Empty sources handled handled in caller. 
   ConstPointer<A> src;
   Pointer<A> dst;
-  if (!other.GetIsAllocated()) {
-    dst = GetInlinedData();
-    src = other.GetInlinedData();
-  } else {
-    // Because this is only called from the `InlinedVector` constructors, it's
-    // safe to take on the allocation with size `0`. If `ConstructElements(...)`
-    // throws, deallocation will be automatically handled by `~Storage()`.
+  if (!other.GetIsAllocated()) { 
+    dst = GetInlinedData(); 
+    src = other.GetInlinedData(); 
+  } else { 
+    // Because this is only called from the `InlinedVector` constructors, it's 
+    // safe to take on the allocation with size `0`. If `ConstructElements(...)` 
+    // throws, deallocation will be automatically handled by `~Storage()`. 
     SizeType<A> requested_capacity = ComputeCapacity(GetInlinedCapacity(), n);
     Allocation<A> allocation =
         MallocAdapter<A>::Allocate(GetAllocator(), requested_capacity);
     SetAllocation(allocation);
     dst = allocation.data;
-    src = other.GetAllocatedData();
-  }
+    src = other.GetAllocatedData(); 
+  } 
   if (IsMemcpyOk<A>::value) {
     std::memcpy(reinterpret_cast<char*>(dst),
                 reinterpret_cast<const char*>(src), n * sizeof(ValueType<A>));
-  } else {
+  } else { 
     auto values = IteratorValueAdapter<A, ConstPointer<A>>(src);
     ConstructElements<A>(GetAllocator(), dst, values, n);
-  }
-  GetSizeAndIsAllocated() = other.GetSizeAndIsAllocated();
-}
-
-template <typename T, size_t N, typename A>
+  } 
+  GetSizeAndIsAllocated() = other.GetSizeAndIsAllocated(); 
+} 
+ 
+template <typename T, size_t N, typename A> 
 template <typename ValueAdapter>
 auto Storage<T, N, A>::Initialize(ValueAdapter values, SizeType<A> new_size)
     -> void {
@@ -585,20 +585,20 @@ auto Storage<T, N, A>::Resize(ValueAdapter values, SizeType<A> new_size)
   Pointer<A> const base = storage_view.data;
   const SizeType<A> size = storage_view.size;
   A& alloc = GetAllocator();
-  if (new_size <= size) {
-    // Destroy extra old elements.
+  if (new_size <= size) { 
+    // Destroy extra old elements. 
     DestroyElements<A>(alloc, base + new_size, size - new_size);
-  } else if (new_size <= storage_view.capacity) {
-    // Construct new elements in place.
+  } else if (new_size <= storage_view.capacity) { 
+    // Construct new elements in place. 
     ConstructElements<A>(alloc, base + size, values, new_size - size);
-  } else {
-    // Steps:
-    //  a. Allocate new backing store.
-    //  b. Construct new elements in new backing store.
-    //  c. Move existing elements from old backing store to now.
-    //  d. Destroy all elements in old backing store.
-    // Use transactional wrappers for the first two steps so we can roll
-    // back if necessary due to exceptions.
+  } else { 
+    // Steps: 
+    //  a. Allocate new backing store. 
+    //  b. Construct new elements in new backing store. 
+    //  c. Move existing elements from old backing store to now. 
+    //  d. Destroy all elements in old backing store. 
+    // Use transactional wrappers for the first two steps so we can roll 
+    // back if necessary due to exceptions. 
     AllocationTransaction<A> allocation_tx(alloc);
     SizeType<A> requested_capacity =
         ComputeCapacity(storage_view.capacity, new_size);
@@ -717,20 +717,20 @@ template <typename... Args>
 auto Storage<T, N, A>::EmplaceBack(Args&&... args) -> Reference<A> {
   StorageView<A> storage_view = MakeStorageView();
   const SizeType<A> n = storage_view.size;
-  if (ABSL_PREDICT_TRUE(n != storage_view.capacity)) {
-    // Fast path; new element fits.
+  if (ABSL_PREDICT_TRUE(n != storage_view.capacity)) { 
+    // Fast path; new element fits. 
     Pointer<A> last_ptr = storage_view.data + n;
     AllocatorTraits<A>::construct(GetAllocator(), last_ptr,
                                   std::forward<Args>(args)...);
-    AddSize(1);
-    return *last_ptr;
-  }
-  // TODO(b/173712035): Annotate with musttail attribute to prevent regression.
-  return EmplaceBackSlow(std::forward<Args>(args)...);
-}
+    AddSize(1); 
+    return *last_ptr; 
+  } 
+  // TODO(b/173712035): Annotate with musttail attribute to prevent regression. 
+  return EmplaceBackSlow(std::forward<Args>(args)...); 
+} 
 
-template <typename T, size_t N, typename A>
-template <typename... Args>
+template <typename T, size_t N, typename A> 
+template <typename... Args> 
 auto Storage<T, N, A>::EmplaceBackSlow(Args&&... args) -> Reference<A> {
   StorageView<A> storage_view = MakeStorageView();
   AllocationTransaction<A> allocation_tx(GetAllocator());
@@ -740,24 +740,24 @@ auto Storage<T, N, A>::EmplaceBackSlow(Args&&... args) -> Reference<A> {
   Pointer<A> construct_data = allocation_tx.Allocate(requested_capacity);
   Pointer<A> last_ptr = construct_data + storage_view.size;
 
-  // Construct new element.
+  // Construct new element. 
   AllocatorTraits<A>::construct(GetAllocator(), last_ptr,
                                 std::forward<Args>(args)...);
-  // Move elements from old backing store to new backing store.
-  ABSL_INTERNAL_TRY {
+  // Move elements from old backing store to new backing store. 
+  ABSL_INTERNAL_TRY { 
     ConstructElements<A>(GetAllocator(), allocation_tx.GetData(), move_values,
                          storage_view.size);
   }
-  ABSL_INTERNAL_CATCH_ANY {
+  ABSL_INTERNAL_CATCH_ANY { 
     AllocatorTraits<A>::destroy(GetAllocator(), last_ptr);
-    ABSL_INTERNAL_RETHROW;
-  }
-  // Destroy elements in old backing store.
+    ABSL_INTERNAL_RETHROW; 
+  } 
+  // Destroy elements in old backing store. 
   DestroyElements<A>(GetAllocator(), storage_view.data, storage_view.size);
 
-  DeallocateIfAllocated();
+  DeallocateIfAllocated(); 
   SetAllocation(std::move(allocation_tx).Release());
-  SetIsAllocated();
+  SetIsAllocated(); 
   AddSize(1);
   return *last_ptr;
 }
@@ -921,10 +921,10 @@ auto Storage<T, N, A>::Swap(Storage* other_storage_ptr) -> void {
 }
 
 // End ignore "array-bounds" and "maybe-uninitialized"
-#if !defined(__clang__) && defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif
-
+#if !defined(__clang__) && defined(__GNUC__) 
+#pragma GCC diagnostic pop 
+#endif 
+ 
 }  // namespace inlined_vector_internal
 ABSL_NAMESPACE_END
 }  // namespace y_absl

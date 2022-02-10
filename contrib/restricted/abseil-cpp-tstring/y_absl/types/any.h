@@ -47,9 +47,9 @@
 // this abstraction, make sure that you should not instead be rewriting your
 // code to be more specific.
 //
-// Abseil has also released an `y_absl::variant` type (a C++11 compatible version
-// of the C++17 `std::variant`), which is generally preferred for use over
-// `y_absl::any`.
+// Abseil has also released an `y_absl::variant` type (a C++11 compatible version 
+// of the C++17 `std::variant`), which is generally preferred for use over 
+// `y_absl::any`. 
 #ifndef ABSL_TYPES_ANY_H_
 #define ABSL_TYPES_ANY_H_
 
@@ -80,7 +80,7 @@ ABSL_NAMESPACE_END
 #include <typeinfo>
 #include <utility>
 
-#include "y_absl/base/internal/fast_type_id.h"
+#include "y_absl/base/internal/fast_type_id.h" 
 #include "y_absl/base/macros.h"
 #include "y_absl/meta/type_traits.h"
 #include "y_absl/types/bad_any_cast.h"
@@ -404,11 +404,11 @@ class any {
     using NormalizedType =
         typename std::remove_cv<typename std::remove_reference<T>::type>::type;
 
-    return base_internal::FastTypeId<NormalizedType>();
+    return base_internal::FastTypeId<NormalizedType>(); 
   }
 
   const void* GetObjTypeId() const {
-    return obj_ ? obj_->ObjTypeId() : base_internal::FastTypeId<void>();
+    return obj_ ? obj_->ObjTypeId() : base_internal::FastTypeId<void>(); 
   }
 
   // `y_absl::any` nonmember functions //

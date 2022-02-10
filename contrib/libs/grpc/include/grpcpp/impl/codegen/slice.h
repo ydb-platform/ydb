@@ -58,7 +58,7 @@ class Slice final {
             reinterpret_cast<const char*>(buf), len)) {}
 
   /// Construct a slice from a copied string
-  Slice(const TString& str)
+  Slice(const TString& str) 
       : slice_(g_core_codegen_interface->grpc_slice_from_copied_buffer(
             str.c_str(), str.length())) {}
 
@@ -123,17 +123,17 @@ inline grpc::string_ref StringRefFromSlice(const grpc_slice* slice) {
       GRPC_SLICE_LENGTH(*slice));
 }
 
-inline TString StringFromCopiedSlice(grpc_slice slice) {
-  return TString(reinterpret_cast<char*>(GRPC_SLICE_START_PTR(slice)),
-                     GRPC_SLICE_LENGTH(slice));
+inline TString StringFromCopiedSlice(grpc_slice slice) { 
+  return TString(reinterpret_cast<char*>(GRPC_SLICE_START_PTR(slice)), 
+                     GRPC_SLICE_LENGTH(slice)); 
 }
 
-inline grpc_slice SliceReferencingString(const TString& str) {
+inline grpc_slice SliceReferencingString(const TString& str) { 
   return g_core_codegen_interface->grpc_slice_from_static_buffer(str.data(),
                                                                  str.length());
 }
 
-inline grpc_slice SliceFromCopiedString(const TString& str) {
+inline grpc_slice SliceFromCopiedString(const TString& str) { 
   return g_core_codegen_interface->grpc_slice_from_copied_buffer(str.data(),
                                                                  str.length());
 }

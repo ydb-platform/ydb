@@ -123,8 +123,8 @@ namespace gregorian {
       short eom_day =  gregorian_calendar::end_of_month_day(ymd.year, ymd.month);
       return date(ymd.year, ymd.month, eom_day);
     }
-    using base = date_time::date<date, gregorian_calendar, date_duration>;
-    using base::operator==;
+    using base = date_time::date<date, gregorian_calendar, date_duration>; 
+    using base::operator==; 
 
    private:
 

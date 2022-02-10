@@ -26,14 +26,14 @@
 
 namespace grpc_node_generator {
 
-inline TString GetJSServiceFilename(const TString& filename) {
+inline TString GetJSServiceFilename(const TString& filename) { 
   return grpc_generator::StripProto(filename) + "_grpc_pb.js";
 }
 
 // Get leading or trailing comments in a string. Comment lines start with "// ".
 // Leading detached comments are put in front of leading comments.
 template <typename DescriptorType>
-inline TString GetNodeComments(const DescriptorType* desc, bool leading) {
+inline TString GetNodeComments(const DescriptorType* desc, bool leading) { 
   return grpc_generator::GetPrefixedComments(desc, leading, "//");
 }
 

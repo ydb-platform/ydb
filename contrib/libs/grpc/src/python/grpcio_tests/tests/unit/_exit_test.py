@@ -24,7 +24,7 @@ import six
 import subprocess
 import sys
 import threading
-import datetime
+import datetime 
 import time
 import unittest
 import logging
@@ -32,15 +32,15 @@ import logging
 from tests.unit import _exit_scenarios
 
 # SCENARIO_FILE = os.path.abspath(
-#     os.path.join(os.path.dirname(os.path.realpath(__file__)),
-#                  '_exit_scenarios.py'))
+#     os.path.join(os.path.dirname(os.path.realpath(__file__)), 
+#                  '_exit_scenarios.py')) 
 INTERPRETER = sys.executable
 BASE_COMMAND = [INTERPRETER, '-m', 'tests.unit._exit_scenarios']
 BASE_SIGTERM_COMMAND = BASE_COMMAND + ['--wait_for_interrupt']
 
-INIT_TIME = datetime.timedelta(seconds=1)
-WAIT_CHECK_INTERVAL = datetime.timedelta(milliseconds=100)
-WAIT_CHECK_DEFAULT_TIMEOUT = datetime.timedelta(seconds=5)
+INIT_TIME = datetime.timedelta(seconds=1) 
+WAIT_CHECK_INTERVAL = datetime.timedelta(milliseconds=100) 
+WAIT_CHECK_DEFAULT_TIMEOUT = datetime.timedelta(seconds=5) 
 
 processes = []
 process_lock = threading.Lock()
@@ -60,71 +60,71 @@ def cleanup_processes():
 atexit.register(cleanup_processes)
 
 
-def _process_wait_with_timeout(process, timeout=WAIT_CHECK_DEFAULT_TIMEOUT):
-    """A funciton to mimic 3.3+ only timeout argument in process.wait."""
-    deadline = datetime.datetime.now() + timeout
-    while (process.poll() is None) and (datetime.datetime.now() < deadline):
-        time.sleep(WAIT_CHECK_INTERVAL.total_seconds())
-    if process.returncode is None:
-        raise RuntimeError('Process failed to exit within %s' % timeout)
-
-
+def _process_wait_with_timeout(process, timeout=WAIT_CHECK_DEFAULT_TIMEOUT): 
+    """A funciton to mimic 3.3+ only timeout argument in process.wait.""" 
+    deadline = datetime.datetime.now() + timeout 
+    while (process.poll() is None) and (datetime.datetime.now() < deadline): 
+        time.sleep(WAIT_CHECK_INTERVAL.total_seconds()) 
+    if process.returncode is None: 
+        raise RuntimeError('Process failed to exit within %s' % timeout) 
+ 
+ 
 def interrupt_and_wait(process):
     with process_lock:
         processes.append(process)
-    time.sleep(INIT_TIME.total_seconds())
+    time.sleep(INIT_TIME.total_seconds()) 
     os.kill(process.pid, signal.SIGINT)
-    _process_wait_with_timeout(process)
+    _process_wait_with_timeout(process) 
 
 
 def wait(process):
     with process_lock:
         processes.append(process)
-    _process_wait_with_timeout(process)
+    _process_wait_with_timeout(process) 
 
 
-# TODO(lidiz) enable exit tests once the root cause found.
-@unittest.skip('https://github.com/grpc/grpc/issues/23982')
-@unittest.skip('https://github.com/grpc/grpc/issues/23028')
+# TODO(lidiz) enable exit tests once the root cause found. 
+@unittest.skip('https://github.com/grpc/grpc/issues/23982') 
+@unittest.skip('https://github.com/grpc/grpc/issues/23028') 
 class ExitTest(unittest.TestCase):
 
     def test_unstarted_server(self):
         env = os.environ.copy()
         env['Y_PYTHON_ENTRY_POINT'] = ':main'
-        process = subprocess.Popen(BASE_COMMAND +
-                                   [_exit_scenarios.UNSTARTED_SERVER],
-                                   stdout=sys.stdout,
-                                   stderr=sys.stderr,
-                                   env=env)
+        process = subprocess.Popen(BASE_COMMAND + 
+                                   [_exit_scenarios.UNSTARTED_SERVER], 
+                                   stdout=sys.stdout, 
+                                   stderr=sys.stderr, 
+                                   env=env) 
         wait(process)
 
     def test_unstarted_server_terminate(self):
         env = os.environ.copy()
         env['Y_PYTHON_ENTRY_POINT'] = ':main'
-        process = subprocess.Popen(BASE_SIGTERM_COMMAND +
-                                   [_exit_scenarios.UNSTARTED_SERVER],
-                                   stdout=sys.stdout,
-                                   env=env)
+        process = subprocess.Popen(BASE_SIGTERM_COMMAND + 
+                                   [_exit_scenarios.UNSTARTED_SERVER], 
+                                   stdout=sys.stdout, 
+                                   env=env) 
         interrupt_and_wait(process)
 
     def test_running_server(self):
         env = os.environ.copy()
         env['Y_PYTHON_ENTRY_POINT'] = ':main'
-        process = subprocess.Popen(BASE_COMMAND +
-                                   [_exit_scenarios.RUNNING_SERVER],
-                                   stdout=sys.stdout,
-                                   stderr=sys.stderr,
-                                   env=env)
+        process = subprocess.Popen(BASE_COMMAND + 
+                                   [_exit_scenarios.RUNNING_SERVER], 
+                                   stdout=sys.stdout, 
+                                   stderr=sys.stderr, 
+                                   env=env) 
         wait(process)
 
     def test_running_server_terminate(self):
         env = os.environ.copy()
         env['Y_PYTHON_ENTRY_POINT'] = ':main'
-        process = subprocess.Popen(BASE_SIGTERM_COMMAND +
-                                   [_exit_scenarios.RUNNING_SERVER],
-                                   stdout=sys.stdout,
-                                   stderr=sys.stderr,
-                                   env=env)
+        process = subprocess.Popen(BASE_SIGTERM_COMMAND + 
+                                   [_exit_scenarios.RUNNING_SERVER], 
+                                   stdout=sys.stdout, 
+                                   stderr=sys.stderr, 
+                                   env=env) 
         interrupt_and_wait(process)
 
     def test_poll_connectivity_no_server(self):
@@ -151,21 +151,21 @@ class ExitTest(unittest.TestCase):
     def test_poll_connectivity(self):
         env = os.environ.copy()
         env['Y_PYTHON_ENTRY_POINT'] = ':main'
-        process = subprocess.Popen(BASE_COMMAND +
-                                   [_exit_scenarios.POLL_CONNECTIVITY],
-                                   stdout=sys.stdout,
-                                   stderr=sys.stderr,
-                                   env=env)
+        process = subprocess.Popen(BASE_COMMAND + 
+                                   [_exit_scenarios.POLL_CONNECTIVITY], 
+                                   stdout=sys.stdout, 
+                                   stderr=sys.stderr, 
+                                   env=env) 
         wait(process)
 
     def test_poll_connectivity_terminate(self):
         env = os.environ.copy()
         env['Y_PYTHON_ENTRY_POINT'] = ':main'
-        process = subprocess.Popen(BASE_SIGTERM_COMMAND +
-                                   [_exit_scenarios.POLL_CONNECTIVITY],
-                                   stdout=sys.stdout,
-                                   stderr=sys.stderr,
-                                   env=env)
+        process = subprocess.Popen(BASE_SIGTERM_COMMAND + 
+                                   [_exit_scenarios.POLL_CONNECTIVITY], 
+                                   stdout=sys.stdout, 
+                                   stderr=sys.stderr, 
+                                   env=env) 
         interrupt_and_wait(process)
 
     @unittest.skipIf(os.name == 'nt',
@@ -173,11 +173,11 @@ class ExitTest(unittest.TestCase):
     def test_in_flight_unary_unary_call(self):
         env = os.environ.copy()
         env['Y_PYTHON_ENTRY_POINT'] = ':main'
-        process = subprocess.Popen(BASE_COMMAND +
-                                   [_exit_scenarios.IN_FLIGHT_UNARY_UNARY_CALL],
-                                   stdout=sys.stdout,
-                                   stderr=sys.stderr,
-                                   env=env)
+        process = subprocess.Popen(BASE_COMMAND + 
+                                   [_exit_scenarios.IN_FLIGHT_UNARY_UNARY_CALL], 
+                                   stdout=sys.stdout, 
+                                   stderr=sys.stderr, 
+                                   env=env) 
         interrupt_and_wait(process)
 
     @unittest.skipIf(os.name == 'nt',
@@ -257,5 +257,5 @@ class ExitTest(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG) 
     unittest.main(verbosity=2)

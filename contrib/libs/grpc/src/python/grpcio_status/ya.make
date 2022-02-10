@@ -2,8 +2,8 @@ PY23_LIBRARY()
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 OWNER(
     akastornov
     dvshkurko
@@ -25,7 +25,7 @@ IF (PYTHON2)
 ENDIF()
 
 ADDINCL(
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc 
     contrib/libs/grpc
     contrib/libs/grpc/include
 )
@@ -42,15 +42,15 @@ NO_COMPILER_WARNINGS()
 PY_SRCS(
     TOP_LEVEL
     grpc_status/__init__.py
-    grpc_status/_common.py
+    grpc_status/_common.py 
     grpc_status/rpc_status.py
 )
 
-IF (PYTHON3)
-    PY_SRCS(
-        TOP_LEVEL
-        grpc_status/_async.py
-    )
-ENDIF()
-
+IF (PYTHON3) 
+    PY_SRCS( 
+        TOP_LEVEL 
+        grpc_status/_async.py 
+    ) 
+ENDIF() 
+ 
 END()

@@ -1,9 +1,9 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 LICENSE(BSL-1.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+ 
 OWNER(
     antoshkka
     g:cpp-committee
@@ -11,10 +11,10 @@ OWNER(
 )
 
 INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
-
-SRCS(
-    src/auto_timers_construction.cpp
-    src/cpu_timer.cpp
-)
-
-END()
+ 
+SRCS( 
+    src/auto_timers_construction.cpp 
+    src/cpu_timer.cpp 
+) 
+ 
+END() 

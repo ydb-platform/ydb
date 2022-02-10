@@ -9,8 +9,8 @@ LICENSE(Service-Dll-Harness)
 
 WITHOUT_LICENSE_TEXTS()
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 VERSION(1.9)
 
 NO_RUNTIME()

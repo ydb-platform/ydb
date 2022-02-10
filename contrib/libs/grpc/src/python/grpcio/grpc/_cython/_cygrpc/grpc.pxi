@@ -434,13 +434,13 @@ cdef extern from "grpc/grpc_security.h":
     GRPC_SSL_REQUEST_AND_REQUIRE_CLIENT_CERTIFICATE_BUT_DONT_VERIFY
     GRPC_SSL_REQUEST_AND_REQUIRE_CLIENT_CERTIFICATE_AND_VERIFY
 
-  ctypedef enum grpc_security_level:
-    GRPC_SECURITY_MIN
-    GRPC_SECURITY_NONE = GRPC_SECURITY_MIN
-    GRPC_INTEGRITY_ONLY
-    GRPC_PRIVACY_AND_INTEGRITY
-    GRPC_SECURITY_MAX = GRPC_PRIVACY_AND_INTEGRITY
-
+  ctypedef enum grpc_security_level: 
+    GRPC_SECURITY_MIN 
+    GRPC_SECURITY_NONE = GRPC_SECURITY_MIN 
+    GRPC_INTEGRITY_ONLY 
+    GRPC_PRIVACY_AND_INTEGRITY 
+    GRPC_SECURITY_MAX = GRPC_PRIVACY_AND_INTEGRITY 
+ 
   ctypedef enum grpc_ssl_certificate_config_reload_status:
     GRPC_SSL_CERTIFICATE_CONFIG_RELOAD_UNCHANGED
     GRPC_SSL_CERTIFICATE_CONFIG_RELOAD_NEW
@@ -505,7 +505,7 @@ cdef extern from "grpc/grpc_security.h":
   void grpc_set_ssl_roots_override_callback(
       grpc_ssl_roots_override_callback cb) nogil
 
-  grpc_channel_credentials *grpc_google_default_credentials_create(grpc_call_credentials* call_credentials) nogil
+  grpc_channel_credentials *grpc_google_default_credentials_create(grpc_call_credentials* call_credentials) nogil 
   grpc_channel_credentials *grpc_ssl_credentials_create(
       const char *pem_root_certs, grpc_ssl_pem_key_cert_pair *pem_key_cert_pair,
       verify_peer_options *verify_options, void *reserved) nogil
@@ -570,7 +570,7 @@ cdef extern from "grpc/grpc_security.h":
     const char *type
 
   grpc_call_credentials *grpc_metadata_credentials_create_from_plugin(
-      grpc_metadata_credentials_plugin plugin, grpc_security_level min_security_level, void *reserved) nogil
+      grpc_metadata_credentials_plugin plugin, grpc_security_level min_security_level, void *reserved) nogil 
 
   ctypedef struct grpc_auth_property_iterator:
     pass
@@ -607,22 +607,22 @@ cdef extern from "grpc/grpc_security.h":
   grpc_server_credentials *grpc_local_server_credentials_create(
     grpc_local_connect_type type)
 
-  ctypedef struct grpc_alts_credentials_options:
-    # We don't care about the internals (and in fact don't know them)
-    pass
+  ctypedef struct grpc_alts_credentials_options: 
+    # We don't care about the internals (and in fact don't know them) 
+    pass 
+  
+  grpc_channel_credentials *grpc_alts_credentials_create( 
+    const grpc_alts_credentials_options *options) 
+  grpc_server_credentials *grpc_alts_server_credentials_create( 
+    const grpc_alts_credentials_options *options) 
+
+  grpc_alts_credentials_options* grpc_alts_credentials_client_options_create() 
+  grpc_alts_credentials_options* grpc_alts_credentials_server_options_create() 
+  void grpc_alts_credentials_options_destroy(grpc_alts_credentials_options *options) 
+  void grpc_alts_credentials_client_options_add_target_service_account(grpc_alts_credentials_options *options, const char *service_account) 
  
-  grpc_channel_credentials *grpc_alts_credentials_create(
-    const grpc_alts_credentials_options *options)
-  grpc_server_credentials *grpc_alts_server_credentials_create(
-    const grpc_alts_credentials_options *options)
-
-  grpc_alts_credentials_options* grpc_alts_credentials_client_options_create()
-  grpc_alts_credentials_options* grpc_alts_credentials_server_options_create()
-  void grpc_alts_credentials_options_destroy(grpc_alts_credentials_options *options)
-  void grpc_alts_credentials_client_options_add_target_service_account(grpc_alts_credentials_options *options, const char *service_account)
-
-
-
+ 
+ 
 cdef extern from "grpc/compression.h":
 
   ctypedef enum grpc_compression_algorithm:

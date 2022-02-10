@@ -48,7 +48,7 @@
 #include "y_absl/base/optimization.h"
 #include "y_absl/synchronization/internal/kernel_timeout.h"
 
-
+ 
 namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {

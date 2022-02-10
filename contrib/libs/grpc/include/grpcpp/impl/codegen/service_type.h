@@ -26,7 +26,7 @@
 #include <grpcpp/impl/codegen/server_interface.h>
 #include <grpcpp/impl/codegen/status.h>
 
-namespace grpc {
+namespace grpc { 
 
 class CompletionQueue;
 class ServerContext;
@@ -105,15 +105,15 @@ class Service {
     explicit experimental_type(Service* service) : service_(service) {}
 
     void MarkMethodCallback(int index, internal::MethodHandler* handler) {
-      service_->MarkMethodCallbackInternal(index, handler);
+      service_->MarkMethodCallbackInternal(index, handler); 
     }
 
     void MarkMethodRawCallback(int index, internal::MethodHandler* handler) {
-      service_->MarkMethodRawCallbackInternal(index, handler);
+      service_->MarkMethodRawCallbackInternal(index, handler); 
     }
 
     internal::MethodHandler* GetHandler(int index) {
-      return service_->GetHandlerInternal(index);
+      return service_->GetHandlerInternal(index); 
     }
 
    private:
@@ -123,11 +123,11 @@ class Service {
   experimental_type experimental() { return experimental_type(this); }
 
   template <class Message>
-  void RequestAsyncUnary(int index, ::grpc::ServerContext* context,
+  void RequestAsyncUnary(int index, ::grpc::ServerContext* context, 
                          Message* request,
                          internal::ServerAsyncStreamingInterface* stream,
-                         ::grpc::CompletionQueue* call_cq,
-                         ::grpc::ServerCompletionQueue* notification_cq,
+                         ::grpc::CompletionQueue* call_cq, 
+                         ::grpc::ServerCompletionQueue* notification_cq, 
                          void* tag) {
     // Typecast the index to size_t for indexing into a vector
     // while preserving the API that existed before a compiler
@@ -137,29 +137,29 @@ class Service {
                               notification_cq, tag, request);
   }
   void RequestAsyncClientStreaming(
-      int index, ::grpc::ServerContext* context,
+      int index, ::grpc::ServerContext* context, 
       internal::ServerAsyncStreamingInterface* stream,
-      ::grpc::CompletionQueue* call_cq,
-      ::grpc::ServerCompletionQueue* notification_cq, void* tag) {
+      ::grpc::CompletionQueue* call_cq, 
+      ::grpc::ServerCompletionQueue* notification_cq, void* tag) { 
     size_t idx = static_cast<size_t>(index);
     server_->RequestAsyncCall(methods_[idx].get(), context, stream, call_cq,
                               notification_cq, tag);
   }
   template <class Message>
   void RequestAsyncServerStreaming(
-      int index, ::grpc::ServerContext* context, Message* request,
+      int index, ::grpc::ServerContext* context, Message* request, 
       internal::ServerAsyncStreamingInterface* stream,
-      ::grpc::CompletionQueue* call_cq,
-      ::grpc::ServerCompletionQueue* notification_cq, void* tag) {
+      ::grpc::CompletionQueue* call_cq, 
+      ::grpc::ServerCompletionQueue* notification_cq, void* tag) { 
     size_t idx = static_cast<size_t>(index);
     server_->RequestAsyncCall(methods_[idx].get(), context, stream, call_cq,
                               notification_cq, tag, request);
   }
   void RequestAsyncBidiStreaming(
-      int index, ::grpc::ServerContext* context,
+      int index, ::grpc::ServerContext* context, 
       internal::ServerAsyncStreamingInterface* stream,
-      ::grpc::CompletionQueue* call_cq,
-      ::grpc::ServerCompletionQueue* notification_cq, void* tag) {
+      ::grpc::CompletionQueue* call_cq, 
+      ::grpc::ServerCompletionQueue* notification_cq, void* tag) { 
     size_t idx = static_cast<size_t>(index);
     server_->RequestAsyncCall(methods_[idx].get(), context, stream, call_cq,
                               notification_cq, tag);
@@ -216,55 +216,55 @@ class Service {
     methods_[idx]->SetMethodType(internal::RpcMethod::BIDI_STREAMING);
   }
 
-#ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
-  void MarkMethodCallback(int index, internal::MethodHandler* handler) {
-    MarkMethodCallbackInternal(index, handler);
-  }
-
-  void MarkMethodRawCallback(int index, internal::MethodHandler* handler) {
-    MarkMethodRawCallbackInternal(index, handler);
-  }
-
-  internal::MethodHandler* GetHandler(int index) {
-    return GetHandlerInternal(index);
-  }
-#endif
+#ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL 
+  void MarkMethodCallback(int index, internal::MethodHandler* handler) { 
+    MarkMethodCallbackInternal(index, handler); 
+  } 
+ 
+  void MarkMethodRawCallback(int index, internal::MethodHandler* handler) { 
+    MarkMethodRawCallbackInternal(index, handler); 
+  } 
+ 
+  internal::MethodHandler* GetHandler(int index) { 
+    return GetHandlerInternal(index); 
+  } 
+#endif 
  private:
-  // TODO(vjpai): migrate the Internal functions to mainline functions once
-  //              callback API is fully de-experimental
-  void MarkMethodCallbackInternal(int index, internal::MethodHandler* handler) {
-    // This does not have to be a hard error, however no one has approached us
-    // with a use case yet. Please file an issue if you believe you have one.
-    size_t idx = static_cast<size_t>(index);
-    GPR_CODEGEN_ASSERT(
-        methods_[idx].get() != nullptr &&
-        "Cannot mark the method as 'callback' because it has already been "
-        "marked as 'generic'.");
-    methods_[idx]->SetHandler(handler);
-    methods_[idx]->SetServerApiType(
-        internal::RpcServiceMethod::ApiType::CALL_BACK);
-  }
-
-  void MarkMethodRawCallbackInternal(int index,
-                                     internal::MethodHandler* handler) {
-    // This does not have to be a hard error, however no one has approached us
-    // with a use case yet. Please file an issue if you believe you have one.
-    size_t idx = static_cast<size_t>(index);
-    GPR_CODEGEN_ASSERT(
-        methods_[idx].get() != nullptr &&
-        "Cannot mark the method as 'raw callback' because it has already "
-        "been marked as 'generic'.");
-    methods_[idx]->SetHandler(handler);
-    methods_[idx]->SetServerApiType(
-        internal::RpcServiceMethod::ApiType::RAW_CALL_BACK);
-  }
-
-  internal::MethodHandler* GetHandlerInternal(int index) {
-    size_t idx = static_cast<size_t>(index);
-    return methods_[idx]->handler();
-  }
-
-  friend class Server;
+  // TODO(vjpai): migrate the Internal functions to mainline functions once 
+  //              callback API is fully de-experimental 
+  void MarkMethodCallbackInternal(int index, internal::MethodHandler* handler) { 
+    // This does not have to be a hard error, however no one has approached us 
+    // with a use case yet. Please file an issue if you believe you have one. 
+    size_t idx = static_cast<size_t>(index); 
+    GPR_CODEGEN_ASSERT( 
+        methods_[idx].get() != nullptr && 
+        "Cannot mark the method as 'callback' because it has already been " 
+        "marked as 'generic'."); 
+    methods_[idx]->SetHandler(handler); 
+    methods_[idx]->SetServerApiType( 
+        internal::RpcServiceMethod::ApiType::CALL_BACK); 
+  } 
+ 
+  void MarkMethodRawCallbackInternal(int index, 
+                                     internal::MethodHandler* handler) { 
+    // This does not have to be a hard error, however no one has approached us 
+    // with a use case yet. Please file an issue if you believe you have one. 
+    size_t idx = static_cast<size_t>(index); 
+    GPR_CODEGEN_ASSERT( 
+        methods_[idx].get() != nullptr && 
+        "Cannot mark the method as 'raw callback' because it has already " 
+        "been marked as 'generic'."); 
+    methods_[idx]->SetHandler(handler); 
+    methods_[idx]->SetServerApiType( 
+        internal::RpcServiceMethod::ApiType::RAW_CALL_BACK); 
+  } 
+ 
+  internal::MethodHandler* GetHandlerInternal(int index) { 
+    size_t idx = static_cast<size_t>(index); 
+    return methods_[idx]->handler(); 
+  } 
+ 
+  friend class Server; 
   friend class ServerInterface;
   ServerInterface* server_;
   std::vector<std::unique_ptr<internal::RpcServiceMethod>> methods_;

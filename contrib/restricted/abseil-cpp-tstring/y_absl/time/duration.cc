@@ -67,10 +67,10 @@
 #include <util/generic/string.h>
 
 #include "y_absl/base/casts.h"
-#include "y_absl/base/macros.h"
+#include "y_absl/base/macros.h" 
 #include "y_absl/numeric/int128.h"
-#include "y_absl/strings/string_view.h"
-#include "y_absl/strings/strip.h"
+#include "y_absl/strings/string_view.h" 
+#include "y_absl/strings/strip.h" 
 #include "y_absl/time/time.h"
 
 namespace y_absl {
@@ -356,7 +356,7 @@ namespace time_internal {
 // the remainder.  If it does not saturate, the remainder remain accurate,
 // but the returned quotient will over/underflow int64_t and should not be used.
 int64_t IDivDuration(bool satq, const Duration num, const Duration den,
-                     Duration* rem) {
+                     Duration* rem) { 
   int64_t q = 0;
   if (IDivFastPath(num, den, &q, rem)) {
     return q;
@@ -711,17 +711,17 @@ char* Format64(char* ep, int width, int64_t v) {
 // fractional digits, because it is in the noise of what a Duration can
 // represent.
 struct DisplayUnit {
-  y_absl::string_view abbr;
+  y_absl::string_view abbr; 
   int prec;
   double pow10;
 };
-ABSL_CONST_INIT const DisplayUnit kDisplayNano = {"ns", 2, 1e2};
-ABSL_CONST_INIT const DisplayUnit kDisplayMicro = {"us", 5, 1e5};
-ABSL_CONST_INIT const DisplayUnit kDisplayMilli = {"ms", 8, 1e8};
-ABSL_CONST_INIT const DisplayUnit kDisplaySec = {"s", 11, 1e11};
-ABSL_CONST_INIT const DisplayUnit kDisplayMin = {"m", -1, 0.0};  // prec ignored
-ABSL_CONST_INIT const DisplayUnit kDisplayHour = {"h", -1,
-                                                  0.0};  // prec ignored
+ABSL_CONST_INIT const DisplayUnit kDisplayNano = {"ns", 2, 1e2}; 
+ABSL_CONST_INIT const DisplayUnit kDisplayMicro = {"us", 5, 1e5}; 
+ABSL_CONST_INIT const DisplayUnit kDisplayMilli = {"ms", 8, 1e8}; 
+ABSL_CONST_INIT const DisplayUnit kDisplaySec = {"s", 11, 1e11}; 
+ABSL_CONST_INIT const DisplayUnit kDisplayMin = {"m", -1, 0.0};  // prec ignored 
+ABSL_CONST_INIT const DisplayUnit kDisplayHour = {"h", -1, 
+                                                  0.0};  // prec ignored 
 
 void AppendNumberUnit(TString* out, int64_t n, DisplayUnit unit) {
   char buf[sizeof("2562047788015216")];  // hours in max duration
@@ -729,16 +729,16 @@ void AppendNumberUnit(TString* out, int64_t n, DisplayUnit unit) {
   char* bp = Format64(ep, 0, n);
   if (*bp != '0' || bp + 1 != ep) {
     out->append(bp, ep - bp);
-    out->append(unit.abbr.data(), unit.abbr.size());
+    out->append(unit.abbr.data(), unit.abbr.size()); 
   }
 }
 
 // Note: unit.prec is limited to double's digits10 value (typically 15) so it
 // always fits in buf[].
 void AppendNumberUnit(TString* out, double n, DisplayUnit unit) {
-  constexpr int kBufferSize = std::numeric_limits<double>::digits10;
-  const int prec = std::min(kBufferSize, unit.prec);
-  char buf[kBufferSize];  // also large enough to hold integer part
+  constexpr int kBufferSize = std::numeric_limits<double>::digits10; 
+  const int prec = std::min(kBufferSize, unit.prec); 
+  char buf[kBufferSize];  // also large enough to hold integer part 
   char* ep = buf + sizeof(buf);
   double d = 0;
   int64_t frac_part = Round(std::modf(n, &d) * unit.pow10);
@@ -752,7 +752,7 @@ void AppendNumberUnit(TString* out, double n, DisplayUnit unit) {
       while (ep[-1] == '0') --ep;
       out->append(bp, ep - bp);
     }
-    out->append(unit.abbr.data(), unit.abbr.size());
+    out->append(unit.abbr.data(), unit.abbr.size()); 
   }
 }
 
@@ -763,8 +763,8 @@ void AppendNumberUnit(TString* out, double n, DisplayUnit unit) {
 //   form "72h3m0.5s". Leading zero units are omitted.  As a special
 //   case, durations less than one second format use a smaller unit
 //   (milli-, micro-, or nanoseconds) to ensure that the leading digit
-//   is non-zero.
-// Unlike Go, we format the zero duration as 0, with no unit.
+//   is non-zero. 
+// Unlike Go, we format the zero duration as 0, with no unit. 
 TString FormatDuration(Duration d) {
   const Duration min_duration = Seconds(kint64min);
   if (d == min_duration) {
@@ -805,27 +805,27 @@ namespace {
 // A helper for ParseDuration() that parses a leading number from the given
 // string and stores the result in *int_part/*frac_part/*frac_scale.  The
 // given string pointer is modified to point to the first unconsumed char.
-bool ConsumeDurationNumber(const char** dpp, const char* ep, int64_t* int_part,
+bool ConsumeDurationNumber(const char** dpp, const char* ep, int64_t* int_part, 
                            int64_t* frac_part, int64_t* frac_scale) {
   *int_part = 0;
   *frac_part = 0;
   *frac_scale = 1;  // invariant: *frac_part < *frac_scale
   const char* start = *dpp;
-  for (; *dpp != ep; *dpp += 1) {
+  for (; *dpp != ep; *dpp += 1) { 
     const int d = **dpp - '0';  // contiguous digits
-    if (d < 0 || 10 <= d) break;
-
+    if (d < 0 || 10 <= d) break; 
+ 
     if (*int_part > kint64max / 10) return false;
     *int_part *= 10;
     if (*int_part > kint64max - d) return false;
     *int_part += d;
   }
   const bool int_part_empty = (*dpp == start);
-  if (*dpp == ep || **dpp != '.') return !int_part_empty;
-
-  for (*dpp += 1; *dpp != ep; *dpp += 1) {
+  if (*dpp == ep || **dpp != '.') return !int_part_empty; 
+ 
+  for (*dpp += 1; *dpp != ep; *dpp += 1) { 
     const int d = **dpp - '0';  // contiguous digits
-    if (d < 0 || 10 <= d) break;
+    if (d < 0 || 10 <= d) break; 
     if (*frac_scale <= kint64max / 10) {
       *frac_part *= 10;
       *frac_part += d;
@@ -839,55 +839,55 @@ bool ConsumeDurationNumber(const char** dpp, const char* ep, int64_t* int_part,
 // ns, us, ms, s, m, h) from the given string and stores the resulting unit
 // in "*unit".  The given string pointer is modified to point to the first
 // unconsumed char.
-bool ConsumeDurationUnit(const char** start, const char* end, Duration* unit) {
-  size_t size = end - *start;
-  switch (size) {
-    case 0:
-      return false;
-    default:
-      switch (**start) {
-        case 'n':
-          if (*(*start + 1) == 's') {
-            *start += 2;
-            *unit = Nanoseconds(1);
-            return true;
-          }
-          break;
-        case 'u':
-          if (*(*start + 1) == 's') {
-            *start += 2;
-            *unit = Microseconds(1);
-            return true;
-          }
-          break;
-        case 'm':
-          if (*(*start + 1) == 's') {
-            *start += 2;
-            *unit = Milliseconds(1);
-            return true;
-          }
-          break;
-        default:
-          break;
-      }
-      ABSL_FALLTHROUGH_INTENDED;
-    case 1:
-      switch (**start) {
-        case 's':
-          *unit = Seconds(1);
-          *start += 1;
-          return true;
-        case 'm':
-          *unit = Minutes(1);
-          *start += 1;
-          return true;
-        case 'h':
-          *unit = Hours(1);
-          *start += 1;
-          return true;
-        default:
-          return false;
-      }
+bool ConsumeDurationUnit(const char** start, const char* end, Duration* unit) { 
+  size_t size = end - *start; 
+  switch (size) { 
+    case 0: 
+      return false; 
+    default: 
+      switch (**start) { 
+        case 'n': 
+          if (*(*start + 1) == 's') { 
+            *start += 2; 
+            *unit = Nanoseconds(1); 
+            return true; 
+          } 
+          break; 
+        case 'u': 
+          if (*(*start + 1) == 's') { 
+            *start += 2; 
+            *unit = Microseconds(1); 
+            return true; 
+          } 
+          break; 
+        case 'm': 
+          if (*(*start + 1) == 's') { 
+            *start += 2; 
+            *unit = Milliseconds(1); 
+            return true; 
+          } 
+          break; 
+        default: 
+          break; 
+      } 
+      ABSL_FALLTHROUGH_INTENDED; 
+    case 1: 
+      switch (**start) { 
+        case 's': 
+          *unit = Seconds(1); 
+          *start += 1; 
+          return true; 
+        case 'm': 
+          *unit = Minutes(1); 
+          *start += 1; 
+          return true; 
+        case 'h': 
+          *unit = Hours(1); 
+          *start += 1; 
+          return true; 
+        default: 
+          return false; 
+      } 
   }
 }
 
@@ -898,38 +898,38 @@ bool ConsumeDurationUnit(const char** start, const char* end, Duration* unit) {
 //   a possibly signed sequence of decimal numbers, each with optional
 //   fraction and a unit suffix, such as "300ms", "-1.5h" or "2h45m".
 //   Valid time units are "ns", "us" "ms", "s", "m", "h".
-bool ParseDuration(y_absl::string_view dur_sv, Duration* d) {
+bool ParseDuration(y_absl::string_view dur_sv, Duration* d) { 
   int sign = 1;
-  if (y_absl::ConsumePrefix(&dur_sv, "-")) {
-    sign = -1;
-  } else {
-    y_absl::ConsumePrefix(&dur_sv, "+");
+  if (y_absl::ConsumePrefix(&dur_sv, "-")) { 
+    sign = -1; 
+  } else { 
+    y_absl::ConsumePrefix(&dur_sv, "+"); 
   }
-  if (dur_sv.empty()) return false;
+  if (dur_sv.empty()) return false; 
 
-  // Special case for a string of "0".
-  if (dur_sv == "0") {
+  // Special case for a string of "0". 
+  if (dur_sv == "0") { 
     *d = ZeroDuration();
     return true;
   }
 
-  if (dur_sv == "inf") {
+  if (dur_sv == "inf") { 
     *d = sign * InfiniteDuration();
     return true;
   }
 
-  const char* start = dur_sv.data();
-  const char* end = start + dur_sv.size();
-
+  const char* start = dur_sv.data(); 
+  const char* end = start + dur_sv.size(); 
+ 
   Duration dur;
-  while (start != end) {
+  while (start != end) { 
     int64_t int_part;
     int64_t frac_part;
     int64_t frac_scale;
     Duration unit;
-    if (!ConsumeDurationNumber(&start, end, &int_part, &frac_part,
-                               &frac_scale) ||
-        !ConsumeDurationUnit(&start, end, &unit)) {
+    if (!ConsumeDurationNumber(&start, end, &int_part, &frac_part, 
+                               &frac_scale) || 
+        !ConsumeDurationUnit(&start, end, &unit)) { 
       return false;
     }
     if (int_part != 0) dur += sign * int_part * unit;
@@ -940,7 +940,7 @@ bool ParseDuration(y_absl::string_view dur_sv, Duration* d) {
 }
 
 bool AbslParseFlag(y_absl::string_view text, Duration* dst, TString*) {
-  return ParseDuration(text, dst);
+  return ParseDuration(text, dst); 
 }
 
 TString AbslUnparseFlag(Duration d) { return FormatDuration(d); }

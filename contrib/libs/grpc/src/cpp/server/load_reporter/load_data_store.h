@@ -30,8 +30,8 @@
 
 #include "src/cpp/server/load_reporter/constants.h"
 
-#include <util/string/cast.h>
-
+#include <util/string/cast.h> 
+ 
 namespace grpc {
 namespace load_reporter {
 
@@ -69,17 +69,17 @@ class CallMetricValue {
 // The key of a load record.
 class LoadRecordKey {
  public:
-  LoadRecordKey(TString lb_id, TString lb_tag, TString user_id,
-                TString client_ip_hex)
+  LoadRecordKey(TString lb_id, TString lb_tag, TString user_id, 
+                TString client_ip_hex) 
       : lb_id_(std::move(lb_id)),
         lb_tag_(std::move(lb_tag)),
         user_id_(std::move(user_id)),
         client_ip_hex_(std::move(client_ip_hex)) {}
 
   // Parses the input client_ip_and_token to set client IP, LB ID, and LB tag.
-  LoadRecordKey(const TString& client_ip_and_token, TString user_id);
+  LoadRecordKey(const TString& client_ip_and_token, TString user_id); 
 
-  TString ToString() const {
+  TString ToString() const { 
     return "[lb_id_=" + lb_id_ + ", lb_tag_=" + lb_tag_ +
            ", user_id_=" + user_id_ + ", client_ip_hex_=" + client_ip_hex_ +
            "]";
@@ -91,17 +91,17 @@ class LoadRecordKey {
   }
 
   // Gets the client IP bytes in network order (i.e., big-endian).
-  TString GetClientIpBytes() const;
+  TString GetClientIpBytes() const; 
 
   // Getters.
-  const TString& lb_id() const { return lb_id_; }
-  const TString& lb_tag() const { return lb_tag_; }
-  const TString& user_id() const { return user_id_; }
-  const TString& client_ip_hex() const { return client_ip_hex_; }
+  const TString& lb_id() const { return lb_id_; } 
+  const TString& lb_tag() const { return lb_tag_; } 
+  const TString& user_id() const { return user_id_; } 
+  const TString& client_ip_hex() const { return client_ip_hex_; } 
 
   struct Hasher {
-    void hash_combine(size_t* seed, const TString& k) const {
-      *seed ^= std::hash<TString>()(k) + 0x9e3779b9 + (*seed << 6) +
+    void hash_combine(size_t* seed, const TString& k) const { 
+      *seed ^= std::hash<TString>()(k) + 0x9e3779b9 + (*seed << 6) + 
                (*seed >> 2);
     }
 
@@ -116,10 +116,10 @@ class LoadRecordKey {
   };
 
  private:
-  TString lb_id_;
-  TString lb_tag_;
-  TString user_id_;
-  TString client_ip_hex_;
+  TString lb_id_; 
+  TString lb_tag_; 
+  TString user_id_; 
+  TString client_ip_hex_; 
 };
 
 // The value of a load record.
@@ -135,7 +135,7 @@ class LoadRecordValue {
         bytes_recv_(bytes_recv),
         latency_ms_(latency_ms) {}
 
-  LoadRecordValue(TString metric_name, uint64_t num_calls,
+  LoadRecordValue(TString metric_name, uint64_t num_calls, 
                   double total_metric_value);
 
   void MergeFrom(const LoadRecordValue& other) {
@@ -146,7 +146,7 @@ class LoadRecordValue {
     bytes_recv_ += other.bytes_recv_;
     latency_ms_ += other.latency_ms_;
     for (const auto& p : other.call_metrics_) {
-      const TString& key = p.first;
+      const TString& key = p.first; 
       const CallMetricValue& value = p.second;
       call_metrics_[key].MergeFrom(value);
     }
@@ -156,17 +156,17 @@ class LoadRecordValue {
     return static_cast<int64_t>(start_count_ - ok_count_ - error_count_);
   }
 
-  TString ToString() const {
-    return "[start_count_=" + ::ToString(start_count_) +
-           ", ok_count_=" + ::ToString(ok_count_) +
-           ", error_count_=" + ::ToString(error_count_) +
-           ", bytes_sent_=" + ::ToString(bytes_sent_) +
-           ", bytes_recv_=" + ::ToString(bytes_recv_) +
-           ", latency_ms_=" + ::ToString(latency_ms_) + ", " +
-           ::ToString(call_metrics_.size()) + " other call metric(s)]";
+  TString ToString() const { 
+    return "[start_count_=" + ::ToString(start_count_) + 
+           ", ok_count_=" + ::ToString(ok_count_) + 
+           ", error_count_=" + ::ToString(error_count_) + 
+           ", bytes_sent_=" + ::ToString(bytes_sent_) + 
+           ", bytes_recv_=" + ::ToString(bytes_recv_) + 
+           ", latency_ms_=" + ::ToString(latency_ms_) + ", " + 
+           ::ToString(call_metrics_.size()) + " other call metric(s)]"; 
   }
 
-  bool InsertCallMetric(const TString& metric_name,
+  bool InsertCallMetric(const TString& metric_name, 
                         const CallMetricValue& metric_value) {
     return call_metrics_.insert({metric_name, metric_value}).second;
   }
@@ -178,7 +178,7 @@ class LoadRecordValue {
   uint64_t bytes_sent() const { return bytes_sent_; }
   uint64_t bytes_recv() const { return bytes_recv_; }
   uint64_t latency_ms() const { return latency_ms_; }
-  const std::unordered_map<TString, CallMetricValue>& call_metrics() const {
+  const std::unordered_map<TString, CallMetricValue>& call_metrics() const { 
     return call_metrics_;
   }
 
@@ -189,7 +189,7 @@ class LoadRecordValue {
   uint64_t bytes_sent_ = 0;
   uint64_t bytes_recv_ = 0;
   uint64_t latency_ms_ = 0;
-  std::unordered_map<TString, CallMetricValue> call_metrics_;
+  std::unordered_map<TString, CallMetricValue> call_metrics_; 
 };
 
 // Stores the data associated with a particular LB ID.
@@ -198,7 +198,7 @@ class PerBalancerStore {
   using LoadRecordMap =
       std::unordered_map<LoadRecordKey, LoadRecordValue, LoadRecordKey::Hasher>;
 
-  PerBalancerStore(TString lb_id, TString load_key)
+  PerBalancerStore(TString lb_id, TString load_key) 
       : lb_id_(std::move(lb_id)), load_key_(std::move(load_key)) {}
 
   // Merge a load record with the given key and value if the store is not
@@ -218,7 +218,7 @@ class PerBalancerStore {
 
   uint64_t GetNumCallsInProgressForReport();
 
-  TString ToString() {
+  TString ToString() { 
     return "[PerBalancerStore lb_id_=" + lb_id_ + " load_key_=" + load_key_ +
            "]";
   }
@@ -226,14 +226,14 @@ class PerBalancerStore {
   void ClearLoadRecordMap() { load_record_map_.clear(); }
 
   // Getters.
-  const TString& lb_id() const { return lb_id_; }
-  const TString& load_key() const { return load_key_; }
+  const TString& lb_id() const { return lb_id_; } 
+  const TString& load_key() const { return load_key_; } 
   const LoadRecordMap& load_record_map() const { return load_record_map_; }
 
  private:
-  TString lb_id_;
+  TString lb_id_; 
   // TODO(juanlishen): Use bytestring protobuf type?
-  TString load_key_;
+  TString load_key_; 
   LoadRecordMap load_record_map_;
   uint64_t num_calls_in_progress_ = 0;
   uint64_t last_reported_num_calls_in_progress_ = 0;
@@ -247,39 +247,39 @@ class PerHostStore {
   // LB ID (guaranteed unique) associated with that stream. If it is the only
   // active store, adopt all the orphaned stores. If it is the first created
   // store, adopt the store of kInvalidLbId.
-  void ReportStreamCreated(const TString& lb_id,
-                           const TString& load_key);
+  void ReportStreamCreated(const TString& lb_id, 
+                           const TString& load_key); 
 
   // When a report stream is closed, the PerBalancerStores assigned to the
   // associate LB ID need to be re-assigned to other active balancers,
   // ideally with the same load key. If there is no active balancer, we have
   // to suspend those stores and drop the incoming load data until they are
   // resumed.
-  void ReportStreamClosed(const TString& lb_id);
+  void ReportStreamClosed(const TString& lb_id); 
 
   // Returns null if not found. Caller doesn't own the returned store.
-  PerBalancerStore* FindPerBalancerStore(const TString& lb_id) const;
+  PerBalancerStore* FindPerBalancerStore(const TString& lb_id) const; 
 
   // Returns null if lb_id is not found. The returned pointer points to the
   // underlying data structure, which is not owned by the caller.
   const std::set<PerBalancerStore*>* GetAssignedStores(
-      const TString& lb_id) const;
+      const TString& lb_id) const; 
 
  private:
   // Creates a PerBalancerStore for the given LB ID, assigns the store to
   // itself, and records the LB ID to the load key.
-  void SetUpForNewLbId(const TString& lb_id, const TString& load_key);
+  void SetUpForNewLbId(const TString& lb_id, const TString& load_key); 
 
   void AssignOrphanedStore(PerBalancerStore* orphaned_store,
-                           const TString& new_receiver);
+                           const TString& new_receiver); 
 
-  std::unordered_map<TString, std::set<TString>>
+  std::unordered_map<TString, std::set<TString>> 
       load_key_to_receiving_lb_ids_;
 
   // Key: LB ID. The key set includes all the LB IDs that have been
   // allocated for reporting streams so far.
   // Value: the unique pointer to the PerBalancerStore of the LB ID.
-  std::unordered_map<TString, std::unique_ptr<PerBalancerStore>>
+  std::unordered_map<TString, std::unique_ptr<PerBalancerStore>> 
       per_balancer_stores_;
 
   // Key: LB ID. The key set includes the LB IDs of the balancers that are
@@ -287,7 +287,7 @@ class PerHostStore {
   // Value: the set of raw pointers to the PerBalancerStores assigned to the LB
   // ID. Note that the sets in assigned_stores_ form a division of the value set
   // of per_balancer_stores_.
-  std::unordered_map<TString, std::set<PerBalancerStore*>> assigned_stores_;
+  std::unordered_map<TString, std::set<PerBalancerStore*>> assigned_stores_; 
 };
 
 // Thread-unsafe two-level bookkeeper of all the load data.
@@ -302,8 +302,8 @@ class PerHostStore {
 class LoadDataStore {
  public:
   // Returns null if not found. Caller doesn't own the returned store.
-  PerBalancerStore* FindPerBalancerStore(const TString& hostname,
-                                         const TString& lb_id) const;
+  PerBalancerStore* FindPerBalancerStore(const TString& hostname, 
+                                         const TString& lb_id) const; 
 
   // Returns null if hostname or lb_id is not found. The returned pointer points
   // to the underlying data structure, which is not owned by the caller.
@@ -313,33 +313,33 @@ class LoadDataStore {
   // If a PerBalancerStore can be found by the hostname and LB ID in
   // LoadRecordKey, the load data will be merged to that store. Otherwise,
   // only track the number of the in-progress calls for this unknown LB ID.
-  void MergeRow(const TString& hostname, const LoadRecordKey& key,
+  void MergeRow(const TString& hostname, const LoadRecordKey& key, 
                 const LoadRecordValue& value);
 
   // Is the given lb_id a tracked unknown LB ID (i.e., the LB ID was associated
   // with some received load data but unknown to this load data store)?
-  bool IsTrackedUnknownBalancerId(const TString& lb_id) const {
+  bool IsTrackedUnknownBalancerId(const TString& lb_id) const { 
     return unknown_balancer_id_trackers_.find(lb_id) !=
            unknown_balancer_id_trackers_.end();
   }
 
   // Wrapper around PerHostStore::ReportStreamCreated.
-  void ReportStreamCreated(const TString& hostname,
-                           const TString& lb_id,
-                           const TString& load_key);
+  void ReportStreamCreated(const TString& hostname, 
+                           const TString& lb_id, 
+                           const TString& load_key); 
 
   // Wrapper around PerHostStore::ReportStreamClosed.
-  void ReportStreamClosed(const TString& hostname,
-                          const TString& lb_id);
+  void ReportStreamClosed(const TString& hostname, 
+                          const TString& lb_id); 
 
  private:
   // Buffered data that was fetched from Census but hasn't been sent to
   // balancer. We need to keep this data ourselves because Census will
   // delete the data once it's returned.
-  std::unordered_map<TString, PerHostStore> per_host_stores_;
+  std::unordered_map<TString, PerHostStore> per_host_stores_; 
 
   // Tracks the number of in-progress calls for each unknown LB ID.
-  std::unordered_map<TString, uint64_t> unknown_balancer_id_trackers_;
+  std::unordered_map<TString, uint64_t> unknown_balancer_id_trackers_; 
 };
 
 }  // namespace load_reporter

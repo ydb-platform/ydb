@@ -34,7 +34,7 @@
 static int zlib_body(z_stream* zs, grpc_slice_buffer* input,
                      grpc_slice_buffer* output,
                      int (*flate)(z_stream* zs, int flush)) {
-  int r = Z_STREAM_END; /* Do not fail on an empty input. */
+  int r = Z_STREAM_END; /* Do not fail on an empty input. */ 
   int flush;
   size_t i;
   grpc_slice outbuf = GRPC_SLICE_MALLOC(OUTPUT_BLOCK_SIZE);
@@ -68,10 +68,10 @@ static int zlib_body(z_stream* zs, grpc_slice_buffer* input,
       goto error;
     }
   }
-  if (r != Z_STREAM_END) {
-    gpr_log(GPR_INFO, "zlib: Data error");
-    goto error;
-  }
+  if (r != Z_STREAM_END) { 
+    gpr_log(GPR_INFO, "zlib: Data error"); 
+    goto error; 
+  } 
 
   GPR_ASSERT(outbuf.refcount);
   outbuf.data.refcounted.length -= zs->avail_out;

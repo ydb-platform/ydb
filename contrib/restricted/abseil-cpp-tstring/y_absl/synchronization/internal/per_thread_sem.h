@@ -78,7 +78,7 @@ class PerThreadSem {
   // !t.has_timeout() => Wait(t) will return true.
   static inline bool Wait(KernelTimeout t);
 
-  // Permitted callers.
+  // Permitted callers. 
   friend class PerThreadSemTest;
   friend class y_absl::Mutex;
   friend y_absl::base_internal::ThreadIdentity* CreateThreadIdentity();
@@ -96,20 +96,20 @@ ABSL_NAMESPACE_END
 // By changing our extension points to be extern "C", we dodge this
 // check.
 extern "C" {
-void ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemPost)(
+void ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemPost)( 
     y_absl::base_internal::ThreadIdentity* identity);
-bool ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)(
+bool ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)( 
     y_absl::synchronization_internal::KernelTimeout t);
 }  // extern "C"
 
 void y_absl::synchronization_internal::PerThreadSem::Post(
     y_absl::base_internal::ThreadIdentity* identity) {
-  ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemPost)(identity);
+  ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemPost)(identity); 
 }
 
 bool y_absl::synchronization_internal::PerThreadSem::Wait(
     y_absl::synchronization_internal::KernelTimeout t) {
-  return ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)(t);
+  return ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)(t); 
 }
 
 #endif  // ABSL_SYNCHRONIZATION_INTERNAL_PER_THREAD_SEM_H_

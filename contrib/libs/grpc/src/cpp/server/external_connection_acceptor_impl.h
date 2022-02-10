@@ -36,7 +36,7 @@ class ExternalConnectionAcceptorImpl
     : public std::enable_shared_from_this<ExternalConnectionAcceptorImpl> {
  public:
   ExternalConnectionAcceptorImpl(
-      const TString& name,
+      const TString& name, 
       ServerBuilder::experimental_type::ExternalConnectionType type,
       std::shared_ptr<ServerCredentials> creds);
   // Should only be called once.
@@ -56,7 +56,7 @@ class ExternalConnectionAcceptorImpl
   void SetToChannelArgs(::grpc::ChannelArguments* args);
 
  private:
-  const TString name_;
+  const TString name_; 
   std::shared_ptr<ServerCredentials> creds_;
   grpc_core::TcpServerFdHandler* handler_ = nullptr;  // not owned
   grpc_core::Mutex mu_;

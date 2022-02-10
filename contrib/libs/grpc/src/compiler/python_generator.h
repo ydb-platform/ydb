@@ -31,12 +31,12 @@ namespace grpc_python_generator {
 // that may be used internally at Google.
 struct GeneratorConfiguration {
   GeneratorConfiguration();
-  TString grpc_package_root;
+  TString grpc_package_root; 
   // TODO(https://github.com/grpc/grpc/issues/8622): Drop this.
-  TString beta_package_root;
+  TString beta_package_root; 
   // TODO(https://github.com/google/protobuf/issues/888): Drop this.
-  TString import_prefix;
-  std::vector<TString> prefixes_to_filter;
+  TString import_prefix; 
+  std::vector<TString> prefixes_to_filter; 
 };
 
 class PythonGrpcGenerator : public grpc::protobuf::compiler::CodeGenerator {
@@ -44,12 +44,12 @@ class PythonGrpcGenerator : public grpc::protobuf::compiler::CodeGenerator {
   PythonGrpcGenerator(const GeneratorConfiguration& config);
   ~PythonGrpcGenerator();
 
-  uint64_t GetSupportedFeatures() const override;
-
+  uint64_t GetSupportedFeatures() const override; 
+ 
   bool Generate(const grpc::protobuf::FileDescriptor* file,
-                const TString& parameter,
+                const TString& parameter, 
                 grpc::protobuf::compiler::GeneratorContext* context,
-                TString* error) const override;
+                TString* error) const override; 
 
  private:
   GeneratorConfiguration config_;

@@ -21,19 +21,19 @@
 #include <grpc/grpc_security.h>
 #include "src/core/lib/channel/channel_args.h"
 
-namespace grpc {
+namespace grpc { 
 
-void ChannelArguments::SetSslTargetNameOverride(const TString& name) {
+void ChannelArguments::SetSslTargetNameOverride(const TString& name) { 
   SetString(GRPC_SSL_TARGET_NAME_OVERRIDE_ARG, name);
 }
 
-TString ChannelArguments::GetSslTargetNameOverride() const {
+TString ChannelArguments::GetSslTargetNameOverride() const { 
   for (unsigned int i = 0; i < args_.size(); i++) {
-    if (TString(GRPC_SSL_TARGET_NAME_OVERRIDE_ARG) == args_[i].key) {
+    if (TString(GRPC_SSL_TARGET_NAME_OVERRIDE_ARG) == args_[i].key) { 
       return args_[i].value.string;
     }
   }
   return "";
 }
 
-}  // namespace grpc
+}  // namespace grpc 

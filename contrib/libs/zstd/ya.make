@@ -2,12 +2,12 @@
 
 LIBRARY()
 
-OWNER(
-    orivej
-    velavokr
-    g:cpp-contrib
-)
-
+OWNER( 
+    orivej 
+    velavokr 
+    g:cpp-contrib 
+) 
+ 
 VERSION(1.5.2)
 
 ORIGINAL_SOURCE(https://github.com/facebook/zstd/archive/v1.5.2.tar.gz)

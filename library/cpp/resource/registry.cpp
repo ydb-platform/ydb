@@ -51,16 +51,16 @@ namespace {
 
         bool FindExact(const TStringBuf key, TString* out) const override {
             if (TDescriptor* const* res = FindPtr(key)) {
-                // temporary
-                // https://st.yandex-team.ru/DEVTOOLS-3985
-                try {
-                    *out = Decompress((*res)->second);
-                } catch (const yexception& e) {
+                // temporary 
+                // https://st.yandex-team.ru/DEVTOOLS-3985 
+                try { 
+                    *out = Decompress((*res)->second); 
+                } catch (const yexception& e) { 
                     if (GetEnv("RESOURCE_DECOMPRESS_DIAG")) {
-                        Cerr << "Can't decompress resource " << key << Endl << e.what() << Endl;
-                    }
-                    throw e;
-                }
+                        Cerr << "Can't decompress resource " << key << Endl << e.what() << Endl; 
+                    } 
+                    throw e; 
+                } 
 
                 return true;
             }
@@ -71,18 +71,18 @@ namespace {
         void FindMatch(const TStringBuf subkey, IMatch& cb) const override {
             for (const auto& it : *this) {
                 if (it.first.StartsWith(subkey)) {
-                    // temporary
-                    // https://st.yandex-team.ru/DEVTOOLS-3985
-                    try {
-                        const TResource res = {
-                            it.first, Decompress(it.second->second)};
-                        cb.OnMatch(res);
-                    } catch (const yexception& e) {
+                    // temporary 
+                    // https://st.yandex-team.ru/DEVTOOLS-3985 
+                    try { 
+                        const TResource res = { 
+                            it.first, Decompress(it.second->second)}; 
+                        cb.OnMatch(res); 
+                    } catch (const yexception& e) { 
                         if (GetEnv("RESOURCE_DECOMPRESS_DIAG")) {
-                            Cerr << "Can't decompress resource " << it.first << Endl << e.what() << Endl;
-                        }
-                        throw e;
-                    }
+                            Cerr << "Can't decompress resource " << it.first << Endl << e.what() << Endl; 
+                        } 
+                        throw e; 
+                    } 
                 }
             }
         }

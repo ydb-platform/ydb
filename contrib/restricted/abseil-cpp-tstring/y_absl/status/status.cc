@@ -78,7 +78,7 @@ static int FindPayloadIndexByUrl(const Payloads* payloads,
                                  y_absl::string_view type_url) {
   if (payloads == nullptr) return -1;
 
-  for (size_t i = 0; i < payloads->size(); ++i) {
+  for (size_t i = 0; i < payloads->size(); ++i) { 
     if ((*payloads)[i].type_url == type_url) return i;
   }
 
@@ -167,15 +167,15 @@ void Status::ForEachPayload(
     bool in_reverse =
         payloads->size() > 1 && reinterpret_cast<uintptr_t>(payloads) % 13 > 6;
 
-    for (size_t index = 0; index < payloads->size(); ++index) {
+    for (size_t index = 0; index < payloads->size(); ++index) { 
       const auto& elem =
           (*payloads)[in_reverse ? payloads->size() - 1 - index : index];
 
 #ifdef NDEBUG
       visitor(elem.type_url, elem.payload);
 #else
-      // In debug mode invalidate the type url to prevent users from relying on
-      // this string lifetime.
+      // In debug mode invalidate the type url to prevent users from relying on 
+      // this string lifetime. 
 
       // NOLINTNEXTLINE intentional extra conversion to force temporary.
       visitor(TString(elem.type_url), elem.payload);
@@ -283,27 +283,27 @@ bool Status::EqualsSlow(const y_absl::Status& a, const y_absl::Status& b) {
   return true;
 }
 
-TString Status::ToStringSlow(StatusToStringMode mode) const {
+TString Status::ToStringSlow(StatusToStringMode mode) const { 
   TString text;
   y_absl::StrAppend(&text, y_absl::StatusCodeToString(code()), ": ", message());
 
-  const bool with_payload = (mode & StatusToStringMode::kWithPayload) ==
-                      StatusToStringMode::kWithPayload;
-
-  if (with_payload) {
-    status_internal::StatusPayloadPrinter printer =
-        status_internal::GetStatusPayloadPrinter();
-    this->ForEachPayload([&](y_absl::string_view type_url,
-                             const y_absl::Cord& payload) {
-      y_absl::optional<TString> result;
-      if (printer) result = printer(type_url, payload);
-      y_absl::StrAppend(
-          &text, " [", type_url, "='",
-          result.has_value() ? *result : y_absl::CHexEscape(TString(payload)),
-          "']");
-    });
-  }
-
+  const bool with_payload = (mode & StatusToStringMode::kWithPayload) == 
+                      StatusToStringMode::kWithPayload; 
+ 
+  if (with_payload) { 
+    status_internal::StatusPayloadPrinter printer = 
+        status_internal::GetStatusPayloadPrinter(); 
+    this->ForEachPayload([&](y_absl::string_view type_url, 
+                             const y_absl::Cord& payload) { 
+      y_absl::optional<TString> result; 
+      if (printer) result = printer(type_url, payload); 
+      y_absl::StrAppend( 
+          &text, " [", type_url, "='", 
+          result.has_value() ? *result : y_absl::CHexEscape(TString(payload)), 
+          "']"); 
+    }); 
+  } 
+ 
   return text;
 }
 

@@ -1,108 +1,108 @@
-# File format ($ symbol means the beginning of a line):
-#
-# $ # this message
-# $ # =======================
-# $     # comments (all commentaries should starts with some number of spaces and # symbol)
-# ${action} {license spdx} {license text hash}
-# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
-# ${all_file_action} filename
-# $ # user commentaries (many lines)
-# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
-# ${action} {license spdx} {license text hash}
-# $BELONGS ./ya/make/file/relative/path/3/ya.make
-# ${all_file_action} filename
-# $    #    user commentaries
-# $ generated description
-# $ ...
-#
-# You can modify action, all_file_action and add commentaries
-# Available actions:
-# keep - keep license in contrib and use in credits
-# skip - skip license
-# remove - remove all files with this license
-# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
-#
-# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
-# We suppose that that files can contain some license info
-# Available all file actions:
-# FILE_IGNORE - ignore file (do nothing)
-# FILE_INCLUDE - include all file data into licenses text file
-# =======================
-
-KEEP     NCSA AND MIT         1f7e00acb6cda5de868d4d4c1ffe3c2b
+# File format ($ symbol means the beginning of a line): 
+# 
+# $ # this message 
+# $ # ======================= 
+# $     # comments (all commentaries should starts with some number of spaces and # symbol) 
+# ${action} {license spdx} {license text hash} 
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make 
+# ${all_file_action} filename 
+# $ # user commentaries (many lines) 
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify) 
+# ${action} {license spdx} {license text hash} 
+# $BELONGS ./ya/make/file/relative/path/3/ya.make 
+# ${all_file_action} filename 
+# $    #    user commentaries 
+# $ generated description 
+# $ ... 
+# 
+# You can modify action, all_file_action and add commentaries 
+# Available actions: 
+# keep - keep license in contrib and use in credits 
+# skip - skip license 
+# remove - remove all files with this license 
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file 
+# 
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory) 
+# We suppose that that files can contain some license info 
+# Available all file actions: 
+# FILE_IGNORE - ignore file (do nothing) 
+# FILE_INCLUDE - include all file data into licenses text file 
+# ======================= 
+ 
+KEEP     NCSA AND MIT         1f7e00acb6cda5de868d4d4c1ffe3c2b 
 BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: NCSA 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
+    Files with this license: 
         LICENSE.TXT [240:245]
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: MIT 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
+    Files with this license: 
         LICENSE.TXT [240:245]
-
-KEEP     NCSA                 5a35b4c0d3b3923cac31a5a371332ca2
+ 
+KEEP     NCSA                 5a35b4c0d3b3923cac31a5a371332ca2 
 BELONGS ya.make
-    License text:
-        Legacy LLVM License (https://llvm.org/docs/DeveloperPolicy.html#legacy):
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
+    License text: 
+        Legacy LLVM License (https://llvm.org/docs/DeveloperPolicy.html#legacy): 
+    Scancode info: 
+        Original SPDX id: NCSA 
+        Score           : 100.00 
+        Match type      : REFERENCE 
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
+    Files with this license: 
         LICENSE.TXT [237:237]
-
-KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6
+ 
+KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6 
 BELONGS ya.make
 FILE_INCLUDE include/any found in files: LICENSE.TXT at line 295
-    # any - just word, not file reference
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
+    # any - just word, not file reference 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: MIT 
+        Score           : 100.00 
+        Match type      : TEXT 
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
+    Files with this license: 
         LICENSE.TXT [295:311]
-
-KEEP     Apache-2.0 WITH LLVM-exception 705a75a25bce12b12334e8fc577d8a46
+ 
+KEEP     Apache-2.0 WITH LLVM-exception 705a75a25bce12b12334e8fc577d8a46 
 BELONGS ya.make
-    License text:
-         * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-         * See https://llvm.org/LICENSE.txt for license information.
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
+    License text: 
+         * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+         * See https://llvm.org/LICENSE.txt for license information. 
+    Scancode info: 
+        Original SPDX id: Apache-2.0 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0 
+    Files with this license: 
         src/filesystem/int128_builtins.cpp [3:4]
-    Scancode info:
-        Original SPDX id: LLVM-exception
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: LLVM-exception 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception 
+    Files with this license: 
         src/filesystem/int128_builtins.cpp [3:4]
-
-KEEP     Apache-2.0 WITH LLVM-exception 755ab7da3ff8c5d6ae90bdbebd177e49
+ 
+KEEP     Apache-2.0 WITH LLVM-exception 755ab7da3ff8c5d6ae90bdbebd177e49 
 BELONGS ya.make
-    License text:
-        // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-        // See https://llvm.org/LICENSE.txt for license information.
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
+    License text: 
+        // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+        // See https://llvm.org/LICENSE.txt for license information. 
+    Scancode info: 
+        Original SPDX id: Apache-2.0 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0 
+    Files with this license: 
         include/__algorithm/adjacent_find.h [4:5]
         include/__algorithm/all_of.h [4:5]
         include/__algorithm/any_of.h [4:5]
@@ -598,12 +598,12 @@ BELONGS ya.make
         src/valarray.cpp [3:4]
         src/variant.cpp [3:4]
         src/vector.cpp [3:4]
-    Scancode info:
-        Original SPDX id: LLVM-exception
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: LLVM-exception 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception 
+    Files with this license: 
         include/__algorithm/adjacent_find.h [4:5]
         include/__algorithm/all_of.h [4:5]
         include/__algorithm/any_of.h [4:5]
@@ -1099,118 +1099,118 @@ BELONGS ya.make
         src/valarray.cpp [3:4]
         src/variant.cpp [3:4]
         src/vector.cpp [3:4]
-
-KEEP     Apache-2.0 WITH LLVM-exception 8494a9caed330d9a4f40e19cce7dc770
+ 
+KEEP     Apache-2.0 WITH LLVM-exception 8494a9caed330d9a4f40e19cce7dc770 
 BELONGS ya.make
 FILE_INCLUDE include/exception found in files: LICENSE.TXT at line 210
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LLVM-exception
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
-    Files with this license:
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: LLVM-exception 
+        Score           : 100.00 
+        Match type      : TEXT 
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception 
+    Files with this license: 
         LICENSE.TXT [208:222]
-
-KEEP     Apache-2.0 WITH LLVM-exception 86617d55e1d949711c543404d91f4cea
+ 
+KEEP     Apache-2.0 WITH LLVM-exception 86617d55e1d949711c543404d91f4cea 
 BELONGS ya.make
-    License text:
-        // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 100.00
-        Match type      : TAG
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
+    License text: 
+        // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+    Scancode info: 
+        Original SPDX id: Apache-2.0 
+        Score           : 100.00 
+        Match type      : TAG 
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0 
+    Files with this license: 
         include/experimental/__config [6:6]
-    Scancode info:
-        Original SPDX id: LLVM-exception
-        Score           : 100.00
-        Match type      : TAG
-        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: LLVM-exception 
+        Score           : 100.00 
+        Match type      : TAG 
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception 
+    Files with this license: 
         include/experimental/__config [6:6]
-
-KEEP     Apache-2.0           9ac77f65a898755c7eed97099caded94
+ 
+KEEP     Apache-2.0           9ac77f65a898755c7eed97099caded94 
 BELONGS ya.make
 FILE_INCLUDE import found in files: LICENSE.TXT at line 81
 FILE_INCLUDE include/any found in files: LICENSE.TXT at line 101, LICENSE.TXT at line 104, LICENSE.TXT at line 107, LICENSE.TXT at line 111, LICENSE.TXT at line 114, LICENSE.TXT at line 130, LICENSE.TXT at line 135, LICENSE.TXT at line 137, LICENSE.TXT at line 139, LICENSE.TXT at line 151, LICENSE.TXT at line 154, LICENSE.TXT at line 160, LICENSE.TXT at line 161, LICENSE.TXT at line 162, LICENSE.TXT at line 165, LICENSE.TXT at line 175, LICENSE.TXT at line 176, LICENSE.TXT at line 178, LICENSE.TXT at line 34, LICENSE.TXT at line 44, LICENSE.TXT at line 52, LICENSE.TXT at line 53, LICENSE.TXT at line 58, LICENSE.TXT at line 66, LICENSE.TXT at line 86, LICENSE.TXT at line 89, LICENSE.TXT at line 94, LICENSE.TXT at line 98
 FILE_INCLUDE include/format found in files: LICENSE.TXT at line 188
 FILE_INCLUDE include/version found in files: LICENSE.TXT at line 53
-    # any and version - just words, not file reference
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
+    # any and version - just words, not file reference 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: Apache-2.0 
+        Score           : 100.00 
+        Match type      : TEXT 
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0 
+    Files with this license: 
         LICENSE.TXT [5:205]
-
-KEEP     NCSA                 b160d8bd561da097b0edd40b062e1c84
+ 
+KEEP     NCSA                 b160d8bd561da097b0edd40b062e1c84 
 BELONGS ya.make
 FILE_INCLUDE include/any found in files: LICENSE.TXT at line 264
 FILE_INCLUDE include/experimental/list found in files: LICENSE.TXT at line 272, LICENSE.TXT at line 275
 FILE_INCLUDE include/list found in files: LICENSE.TXT at line 272, LICENSE.TXT at line 275
-    # any and list - just words, not file reference
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
+    # any and list - just words, not file reference 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: NCSA 
+        Score           : 100.00 
+        Match type      : TEXT 
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
+    Files with this license: 
         LICENSE.TXT [264:289]
-
-KEEP     BSD-2-Clause AND MIT b1ce5ac90fd7360272c132242b0d10e9
+ 
+KEEP     BSD-2-Clause AND MIT b1ce5ac90fd7360272c132242b0d10e9 
 BELONGS ya.make
-    License text:
-        2-clause BSD license instead of the MIT/UUIC license that the rest of libc++ is
-    Scancode info:
-        Original SPDX id: BSD-2-Clause
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
-    Files with this license:
+    License text: 
+        2-clause BSD license instead of the MIT/UUIC license that the rest of libc++ is 
+    Scancode info: 
+        Original SPDX id: BSD-2-Clause 
+        Score           : 100.00 
+        Match type      : REFERENCE 
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause 
+    Files with this license: 
         src/support/solaris/README [3:3]
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 75.00
-        Match type      : REFERENCE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: MIT 
+        Score           : 75.00 
+        Match type      : REFERENCE 
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
+    Files with this license: 
         src/support/solaris/README [3:3]
-
-KEEP     Apache-2.0 WITH LLVM-exception b4f32daeb289687c0be6afeacb7df231
+ 
+KEEP     Apache-2.0 WITH LLVM-exception b4f32daeb289687c0be6afeacb7df231 
 BELONGS ya.make
-    License text:
-        // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-        // See https://llvm.org/LICENSE.txt for license information.
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
+    License text: 
+        // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+        // See https://llvm.org/LICENSE.txt for license information. 
+    Scancode info: 
+        Original SPDX id: Apache-2.0 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0 
+    Files with this license: 
         include/experimental/__config [4:5]
-    Scancode info:
-        Original SPDX id: LLVM-exception
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: LLVM-exception 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception 
+    Files with this license: 
         include/experimental/__config [4:5]
-
-KEEP     Apache-2.0 WITH LLVM-exception b7566a1930e050e1090162bf1d543650
+ 
+KEEP     Apache-2.0 WITH LLVM-exception b7566a1930e050e1090162bf1d543650 
 BELONGS ya.make
-    License text:
-        // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 100.00
-        Match type      : TAG
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
+    License text: 
+        // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+    Scancode info: 
+        Original SPDX id: Apache-2.0 
+        Score           : 100.00 
+        Match type      : TAG 
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0 
+    Files with this license: 
         include/__algorithm/adjacent_find.h [6:6]
         include/__algorithm/all_of.h [6:6]
         include/__algorithm/any_of.h [6:6]
@@ -1706,12 +1706,12 @@ BELONGS ya.make
         src/valarray.cpp [5:5]
         src/variant.cpp [5:5]
         src/vector.cpp [5:5]
-    Scancode info:
-        Original SPDX id: LLVM-exception
-        Score           : 100.00
-        Match type      : TAG
-        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: LLVM-exception 
+        Score           : 100.00 
+        Match type      : TAG 
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception 
+    Files with this license: 
         include/__algorithm/adjacent_find.h [6:6]
         include/__algorithm/all_of.h [6:6]
         include/__algorithm/any_of.h [6:6]
@@ -2207,82 +2207,82 @@ BELONGS ya.make
         src/valarray.cpp [5:5]
         src/variant.cpp [5:5]
         src/vector.cpp [5:5]
-
-KEEP     Apache-2.0 WITH LLVM-exception c1e6c6536fcc444f916047679115c618
+ 
+KEEP     Apache-2.0 WITH LLVM-exception c1e6c6536fcc444f916047679115c618 
 BELONGS ya.make
-    License text:
-         * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 100.00
-        Match type      : TAG
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
+    License text: 
+         * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+    Scancode info: 
+        Original SPDX id: Apache-2.0 
+        Score           : 100.00 
+        Match type      : TAG 
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0 
+    Files with this license: 
         src/filesystem/int128_builtins.cpp [5:5]
-    Scancode info:
-        Original SPDX id: LLVM-exception
-        Score           : 100.00
-        Match type      : TAG
-        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: LLVM-exception 
+        Score           : 100.00 
+        Match type      : TAG 
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception 
+    Files with this license: 
         src/filesystem/int128_builtins.cpp [5:5]
-
-KEEP     NCSA                 c26d0b72f92421989c4471ae0acbc943
+ 
+KEEP     NCSA                 c26d0b72f92421989c4471ae0acbc943 
 BELONGS ya.make
-    License text:
-        University of Illinois/NCSA
-        Open Source License
-    Scancode info:
-        Original SPDX id: NCSA
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license:
+    License text: 
+        University of Illinois/NCSA 
+        Open Source License 
+    Scancode info: 
+        Original SPDX id: NCSA 
+        Score           : 100.00 
+        Match type      : REFERENCE 
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
+    Files with this license: 
         LICENSE.TXT [249:250]
-
-SKIP     LicenseRef-scancode-unknown-license-reference d4fd839c20b32e384ccf02a801e876d1
+ 
+SKIP     LicenseRef-scancode-unknown-license-reference d4fd839c20b32e384ccf02a801e876d1 
 BELONGS ya.make
-    # part of bsd-2-clause text
-    License text:
-        distributed under.
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-unknown-license-reference
-        Score           : 11.00
-        Match type      : INTRO
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
-    Files with this license:
+    # part of bsd-2-clause text 
+    License text: 
+        distributed under. 
+    Scancode info: 
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference 
+        Score           : 11.00 
+        Match type      : INTRO 
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE 
+    Files with this license: 
         src/support/solaris/README [4:4]
-
-KEEP     Apache-2.0 WITH LLVM-exception df18889e552d44a4679aff552267f802
+ 
+KEEP     Apache-2.0 WITH LLVM-exception df18889e552d44a4679aff552267f802 
 BELONGS ya.make
-    License text:
-        The LLVM Project is under the Apache License v2.0 with LLVM Exceptions:
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
+    License text: 
+        The LLVM Project is under the Apache License v2.0 with LLVM Exceptions: 
+    Scancode info: 
+        Original SPDX id: Apache-2.0 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0 
+    Files with this license: 
         LICENSE.TXT [2:2]
-    Scancode info:
-        Original SPDX id: LLVM-exception
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
-    Files with this license:
+    Scancode info: 
+        Original SPDX id: LLVM-exception 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception 
+    Files with this license: 
         LICENSE.TXT [2:2]
-
-KEEP     BSD-2-Clause         f59cebb43ee786218189ac014af76fbb
+ 
+KEEP     BSD-2-Clause         f59cebb43ee786218189ac014af76fbb 
 BELONGS ya.make
 FILE_INCLUDE include/experimental/list found in files: src/support/solaris/mbsnrtowcs.inc at line 13, src/support/solaris/mbsnrtowcs.inc at line 15, src/support/solaris/wcsnrtombs.inc at line 10, src/support/solaris/wcsnrtombs.inc at line 8
 FILE_INCLUDE include/list found in files: src/support/solaris/mbsnrtowcs.inc at line 13, src/support/solaris/mbsnrtowcs.inc at line 15, src/support/solaris/wcsnrtombs.inc at line 10, src/support/solaris/wcsnrtombs.inc at line 8
-    # list - just word, not file reference
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: BSD-2-Clause
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
-    Files with this license:
+    # list - just word, not file reference 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: BSD-2-Clause 
+        Score           : 100.00 
+        Match type      : TEXT 
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause 
+    Files with this license: 
         src/support/solaris/mbsnrtowcs.inc [9:28]
         src/support/solaris/wcsnrtombs.inc [4:23]

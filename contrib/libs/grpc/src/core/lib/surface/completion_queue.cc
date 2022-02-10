@@ -23,11 +23,11 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <vector>
-
-#include "y_absl/strings/str_format.h"
-#include "y_absl/strings/str_join.h"
-
+#include <vector> 
+ 
+#include "y_absl/strings/str_format.h" 
+#include "y_absl/strings/str_join.h" 
+ 
 #include <grpc/support/alloc.h>
 #include <grpc/support/atm.h>
 #include <grpc/support/log.h>
@@ -243,14 +243,14 @@ class CqEventQueue {
 };
 
 struct cq_next_data {
-  ~cq_next_data() {
-    GPR_ASSERT(queue.num_items() == 0);
-#ifndef NDEBUG
-    if (pending_events.Load(grpc_core::MemoryOrder::ACQUIRE) != 0) {
-      gpr_log(GPR_ERROR, "Destroying CQ without draining it fully.");
-    }
-#endif
-  }
+  ~cq_next_data() { 
+    GPR_ASSERT(queue.num_items() == 0); 
+#ifndef NDEBUG 
+    if (pending_events.Load(grpc_core::MemoryOrder::ACQUIRE) != 0) { 
+      gpr_log(GPR_ERROR, "Destroying CQ without draining it fully."); 
+    } 
+#endif 
+  } 
 
   /** Completed events for completion-queues of type GRPC_CQ_NEXT */
   CqEventQueue queue;
@@ -276,11 +276,11 @@ struct cq_pluck_data {
   ~cq_pluck_data() {
     GPR_ASSERT(completed_head.next ==
                reinterpret_cast<uintptr_t>(&completed_head));
-#ifndef NDEBUG
-    if (pending_events.Load(grpc_core::MemoryOrder::ACQUIRE) != 0) {
-      gpr_log(GPR_ERROR, "Destroying CQ without draining it fully.");
-    }
-#endif
+#ifndef NDEBUG 
+    if (pending_events.Load(grpc_core::MemoryOrder::ACQUIRE) != 0) { 
+      gpr_log(GPR_ERROR, "Destroying CQ without draining it fully."); 
+    } 
+#endif 
   }
 
   /** Completed events for completion-queues of type GRPC_CQ_PLUCK */
@@ -312,15 +312,15 @@ struct cq_callback_data {
   cq_callback_data(
       grpc_experimental_completion_queue_functor* shutdown_callback)
       : shutdown_callback(shutdown_callback) {}
-
-  ~cq_callback_data() {
-#ifndef NDEBUG
-    if (pending_events.Load(grpc_core::MemoryOrder::ACQUIRE) != 0) {
-      gpr_log(GPR_ERROR, "Destroying CQ without draining it fully.");
-    }
-#endif
-  }
-
+ 
+  ~cq_callback_data() { 
+#ifndef NDEBUG 
+    if (pending_events.Load(grpc_core::MemoryOrder::ACQUIRE) != 0) { 
+      gpr_log(GPR_ERROR, "Destroying CQ without draining it fully."); 
+    } 
+#endif 
+  } 
+ 
   /** No actual completed events queue, unlike other types */
 
   /** Number of pending events (+1 if we're not shutdown).
@@ -428,14 +428,14 @@ static const cq_vtable g_cq_vtable[] = {
 
 grpc_core::TraceFlag grpc_cq_pluck_trace(false, "queue_pluck");
 
-#define GRPC_SURFACE_TRACE_RETURNED_EVENT(cq, event)     \
-  do {                                                   \
-    if (GRPC_TRACE_FLAG_ENABLED(grpc_api_trace) &&       \
-        (GRPC_TRACE_FLAG_ENABLED(grpc_cq_pluck_trace) || \
-         (event)->type != GRPC_QUEUE_TIMEOUT)) {         \
-      gpr_log(GPR_INFO, "RETURN_EVENT[%p]: %s", cq,      \
-              grpc_event_string(event).c_str());         \
-    }                                                    \
+#define GRPC_SURFACE_TRACE_RETURNED_EVENT(cq, event)     \ 
+  do {                                                   \ 
+    if (GRPC_TRACE_FLAG_ENABLED(grpc_api_trace) &&       \ 
+        (GRPC_TRACE_FLAG_ENABLED(grpc_cq_pluck_trace) || \ 
+         (event)->type != GRPC_QUEUE_TIMEOUT)) {         \ 
+      gpr_log(GPR_INFO, "RETURN_EVENT[%p]: %s", cq,      \ 
+              grpc_event_string(event).c_str());         \ 
+    }                                                    \ 
   } while (0)
 
 static void on_pollset_shutdown_done(void* cq, grpc_error* error);
@@ -870,15 +870,15 @@ static void cq_end_op_for_callback(
     cq_finish_shutdown_callback(cq);
   }
 
-  // If possible, schedule the callback onto an existing thread-local
-  // ApplicationCallbackExecCtx, which is a work queue. This is possible for:
-  // 1. The callback is internally-generated and there is an ACEC available
-  // 2. The callback is marked inlineable and there is an ACEC available
-  // 3. We are already running in a background poller thread (which always has
-  //    an ACEC available at the base of the stack).
+  // If possible, schedule the callback onto an existing thread-local 
+  // ApplicationCallbackExecCtx, which is a work queue. This is possible for: 
+  // 1. The callback is internally-generated and there is an ACEC available 
+  // 2. The callback is marked inlineable and there is an ACEC available 
+  // 3. We are already running in a background poller thread (which always has 
+  //    an ACEC available at the base of the stack). 
   auto* functor = static_cast<grpc_experimental_completion_queue_functor*>(tag);
-  if (((internal || functor->inlineable) &&
-       grpc_core::ApplicationCallbackExecCtx::Available()) ||
+  if (((internal || functor->inlineable) && 
+       grpc_core::ApplicationCallbackExecCtx::Available()) || 
       grpc_iomgr_is_any_background_poller_thread()) {
     grpc_core::ApplicationCallbackExecCtx::Enqueue(functor,
                                                    (error == GRPC_ERROR_NONE));
@@ -946,14 +946,14 @@ class ExecCtxNext : public grpc_core::ExecCtx {
 #ifndef NDEBUG
 static void dump_pending_tags(grpc_completion_queue* cq) {
   if (!GRPC_TRACE_FLAG_ENABLED(grpc_trace_pending_tags)) return;
-  std::vector<TString> parts;
-  parts.push_back("PENDING TAGS:");
+  std::vector<TString> parts; 
+  parts.push_back("PENDING TAGS:"); 
   gpr_mu_lock(cq->mu);
   for (size_t i = 0; i < cq->outstanding_tag_count; i++) {
-    parts.push_back(y_absl::StrFormat(" %p", cq->outstanding_tags[i]));
+    parts.push_back(y_absl::StrFormat(" %p", cq->outstanding_tags[i])); 
   }
   gpr_mu_unlock(cq->mu);
-  gpr_log(GPR_DEBUG, "%s", y_absl::StrJoin(parts, "").c_str());
+  gpr_log(GPR_DEBUG, "%s", y_absl::StrJoin(parts, "").c_str()); 
 }
 #else
 static void dump_pending_tags(grpc_completion_queue* /*cq*/) {}

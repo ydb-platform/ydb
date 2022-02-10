@@ -42,7 +42,7 @@ y_absl::string_view GenericFind(y_absl::string_view text,
                               y_absl::string_view delimiter, size_t pos,
                               FindPolicy find_policy) {
   if (delimiter.empty() && text.length() > 0) {
-    // Special case for empty string delimiters: always return a zero-length
+    // Special case for empty string delimiters: always return a zero-length 
     // y_absl::string_view referring to the item at position 1 past pos.
     return y_absl::string_view(text.data() + pos + 1, 0);
   }
@@ -127,7 +127,7 @@ y_absl::string_view ByLength::Find(y_absl::string_view text,
                                       size_t pos) const {
   pos = std::min(pos, text.size());  // truncate `pos`
   y_absl::string_view substr = text.substr(pos);
-  // If the string is shorter than the chunk size we say we
+  // If the string is shorter than the chunk size we say we 
   // "can't find the delimiter" so this will be the last chunk.
   if (substr.length() <= static_cast<size_t>(length_))
     return y_absl::string_view(text.data() + text.size(), 0);

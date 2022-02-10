@@ -37,12 +37,12 @@
 // types. Hashing of that combined state is separately done by `y_absl::Hash`.
 //
 // One should assume that a hash algorithm is chosen randomly at the start of
-// each process.  E.g., `y_absl::Hash<int>{}(9)` in one process and
-// `y_absl::Hash<int>{}(9)` in another process are likely to differ.
+// each process.  E.g., `y_absl::Hash<int>{}(9)` in one process and 
+// `y_absl::Hash<int>{}(9)` in another process are likely to differ. 
 //
-// `y_absl::Hash` is intended to strongly mix input bits with a target of passing
-// an [Avalanche Test](https://en.wikipedia.org/wiki/Avalanche_effect).
-//
+// `y_absl::Hash` is intended to strongly mix input bits with a target of passing 
+// an [Avalanche Test](https://en.wikipedia.org/wiki/Avalanche_effect). 
+// 
 // Example:
 //
 //   // Suppose we have a class `Circle` for which we want to add hashing:
@@ -102,7 +102,7 @@ ABSL_NAMESPACE_BEGIN
 //   * std::tuple<Ts...>, if all the Ts... are hashable
 //   * std::unique_ptr and std::shared_ptr
 //   * All string-like types including:
-//     * y_absl::Cord
+//     * y_absl::Cord 
 //     * TString
 //     * std::string_view (as well as any instance of std::basic_string that
 //       uses char and std::char_traits)

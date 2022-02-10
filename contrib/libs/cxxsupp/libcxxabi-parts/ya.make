@@ -1,18 +1,18 @@
 LIBRARY()
 
-WITHOUT_LICENSE_TEXTS()
-
+WITHOUT_LICENSE_TEXTS() 
+ 
 OWNER(
     g:cpp-committee
     g:cpp-contrib
     heretic
 )
 
-LICENSE(
-    Apache-2.0
-    WITH
-    LLVM-exception
-)
+LICENSE( 
+    Apache-2.0 
+    WITH 
+    LLVM-exception 
+) 
 
 VERSION(2021-08-17)
 
@@ -30,9 +30,9 @@ NO_RUNTIME()
 
 NO_UTIL()
 
-CFLAGS(-D_LIBCXXABI_BUILDING_LIBRARY)
+CFLAGS(-D_LIBCXXABI_BUILDING_LIBRARY) 
 
-SRCDIR(contrib/libs/cxxsupp/libcxxabi)
+SRCDIR(contrib/libs/cxxsupp/libcxxabi) 
 
 SRCS(
     src/abort_message.cpp
@@ -40,8 +40,8 @@ SRCS(
 )
 
 SRC_CPP_PIC(
-    src/cxa_thread_atexit.cpp
-    -fno-lto
+    src/cxa_thread_atexit.cpp 
+    -fno-lto 
 )
 
 END()

@@ -23,11 +23,11 @@
 #include <inttypes.h>
 #include <string.h>
 
-#include <vector>
-
-#include "y_absl/strings/str_format.h"
-#include "y_absl/strings/str_join.h"
-
+#include <vector> 
+ 
+#include "y_absl/strings/str_format.h" 
+#include "y_absl/strings/str_join.h" 
+ 
 #include <grpc/support/alloc.h>
 #include <grpc/support/string_util.h>
 
@@ -145,28 +145,28 @@ double grpc_stats_histo_percentile(const grpc_stats_data* stats,
       static_cast<double>(count) * percentile / 100.0);
 }
 
-TString grpc_stats_data_as_json(const grpc_stats_data* data) {
-  std::vector<TString> parts;
-  parts.push_back("{");
+TString grpc_stats_data_as_json(const grpc_stats_data* data) { 
+  std::vector<TString> parts; 
+  parts.push_back("{"); 
   for (size_t i = 0; i < GRPC_STATS_COUNTER_COUNT; i++) {
-    parts.push_back(y_absl::StrFormat(
-        "\"%s\": %" PRIdPTR, grpc_stats_counter_name[i], data->counters[i]));
+    parts.push_back(y_absl::StrFormat( 
+        "\"%s\": %" PRIdPTR, grpc_stats_counter_name[i], data->counters[i])); 
   }
   for (size_t i = 0; i < GRPC_STATS_HISTOGRAM_COUNT; i++) {
-    parts.push_back(y_absl::StrFormat("\"%s\": [", grpc_stats_histogram_name[i]));
+    parts.push_back(y_absl::StrFormat("\"%s\": [", grpc_stats_histogram_name[i])); 
     for (int j = 0; j < grpc_stats_histo_buckets[i]; j++) {
-      parts.push_back(
-          y_absl::StrFormat("%s%" PRIdPTR, j == 0 ? "" : ",",
-                          data->histograms[grpc_stats_histo_start[i] + j]));
+      parts.push_back( 
+          y_absl::StrFormat("%s%" PRIdPTR, j == 0 ? "" : ",", 
+                          data->histograms[grpc_stats_histo_start[i] + j])); 
     }
-    parts.push_back(
-        y_absl::StrFormat("], \"%s_bkt\": [", grpc_stats_histogram_name[i]));
+    parts.push_back( 
+        y_absl::StrFormat("], \"%s_bkt\": [", grpc_stats_histogram_name[i])); 
     for (int j = 0; j < grpc_stats_histo_buckets[i]; j++) {
-      parts.push_back(y_absl::StrFormat(
-          "%s%d", j == 0 ? "" : ",", grpc_stats_histo_bucket_boundaries[i][j]));
+      parts.push_back(y_absl::StrFormat( 
+          "%s%d", j == 0 ? "" : ",", grpc_stats_histo_bucket_boundaries[i][j])); 
     }
-    parts.push_back("]");
+    parts.push_back("]"); 
   }
-  parts.push_back("}");
-  return y_absl::StrJoin(parts, "");
+  parts.push_back("}"); 
+  return y_absl::StrJoin(parts, ""); 
 }

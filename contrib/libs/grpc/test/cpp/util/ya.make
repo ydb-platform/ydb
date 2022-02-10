@@ -2,10 +2,10 @@ LIBRARY()
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
 
-OWNER(orivej)
-
+OWNER(orivej) 
+ 
 PEERDIR(
     contrib/libs/gflags
     contrib/libs/protoc
@@ -14,10 +14,10 @@ PEERDIR(
     contrib/restricted/googletest/googletest
 )
 
-ADDINCL(
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc
-    contrib/libs/grpc
-)
+ADDINCL( 
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc 
+    contrib/libs/grpc 
+) 
 
 NO_COMPILER_WARNINGS()
 

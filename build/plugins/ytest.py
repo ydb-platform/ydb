@@ -212,10 +212,10 @@ def validate_test(unit, kw):
     else:
         try:
             timeout = int(valid_kw.get('TEST-TIMEOUT', size_timeout[size]) or size_timeout[size])
-            script_rel_path = valid_kw.get('SCRIPT-REL-PATH')
+            script_rel_path = valid_kw.get('SCRIPT-REL-PATH') 
             if timeout < 0:
                 raise Exception("Timeout must be > 0")
-            if size_timeout[size] < timeout and in_autocheck and script_rel_path != 'java.style':
+            if size_timeout[size] < timeout and in_autocheck and script_rel_path != 'java.style': 
                 suggested_size = None
                 for s, t in size_timeout.items():
                     if timeout <= t:
@@ -433,8 +433,8 @@ def onadd_ytest(unit, *args):
     elif flat_args[1] == "clang_tidy" and unit.get("TIDY") != "yes":
         # Graph is not prepared
         return
-    elif flat_args[1] == "no.test":
-        return
+    elif flat_args[1] == "no.test": 
+        return 
     test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
     test_tags = serialize_list(_get_test_tags(unit, spec_args))
     test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
@@ -500,9 +500,9 @@ def onadd_ytest(unit, *args):
         'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
         'BLOB': unit.get('TEST_BLOB_DATA') or '',
         'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
-        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
-        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
-        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '', 
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '', 
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '', 
         'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
         'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
     }
@@ -552,38 +552,38 @@ def onadd_check(unit, *args):
     check_type = flat_args[0]
     test_dir = get_norm_unit_path(unit)
 
-    test_timeout = ''
+    test_timeout = '' 
     fork_mode = ''
     extra_test_data = ''
-    extra_test_dart_data = {}
+    extra_test_dart_data = {} 
     ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
 
     if check_type in ["flake8.py2", "flake8.py3"]:
         script_rel_path = check_type
         fork_mode = unit.get('TEST_FORK_MODE') or ''
-    elif check_type == "JAVA_STYLE":
+    elif check_type == "JAVA_STYLE": 
         if ymake_java_test and not unit.get('ALL_SRCDIRS') or '':
             return
-        if len(flat_args) < 2:
-            raise Exception("Not enough arguments for JAVA_STYLE check")
-        check_level = flat_args[1]
-        allowed_levels = {
-            'base': '/yandex_checks.xml',
-            'strict': '/yandex_checks_strict.xml',
+        if len(flat_args) < 2: 
+            raise Exception("Not enough arguments for JAVA_STYLE check") 
+        check_level = flat_args[1] 
+        allowed_levels = { 
+            'base': '/yandex_checks.xml', 
+            'strict': '/yandex_checks_strict.xml', 
             'extended': '/yandex_checks_extended.xml',
             'library': '/yandex_checks_library.xml',
-        }
-        if check_level not in allowed_levels:
-            raise Exception('{} is not allowed in LINT(), use one of {}'.format(check_level, allowed_levels.keys()))
-        flat_args[1] = allowed_levels[check_level]
+        } 
+        if check_level not in allowed_levels: 
+            raise Exception('{} is not allowed in LINT(), use one of {}'.format(check_level, allowed_levels.keys())) 
+        flat_args[1] = allowed_levels[check_level] 
         if check_level == 'none':
             return
-        script_rel_path = "java.style"
-        test_timeout = '120'
+        script_rel_path = "java.style" 
+        test_timeout = '120' 
         fork_mode = unit.get('TEST_FORK_MODE') or ''
         if ymake_java_test:
             extra_test_data = java_srcdirs_to_data(unit, 'ALL_SRCDIRS')
-        extra_test_dart_data['JDK_RESOURCE'] = 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT')
+        extra_test_dart_data['JDK_RESOURCE'] = 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT') 
     elif check_type == "gofmt":
         script_rel_path = check_type
         go_files = flat_args[1:]
@@ -615,7 +615,7 @@ def onadd_check(unit, *args):
 
     test_record = {
         'TEST-NAME': check_type.lower(),
-        'TEST-TIMEOUT': test_timeout,
+        'TEST-TIMEOUT': test_timeout, 
         'SCRIPT-REL-PATH': script_rel_path,
         'TESTED-PROJECT-NAME': os.path.basename(test_dir),
         'SOURCE-FOLDER-PATH': test_dir,
@@ -637,7 +637,7 @@ def onadd_check(unit, *args):
         'TEST-FILES': test_files,
         'NO_JBUILD': 'yes' if ymake_java_test else 'no',
     }
-    test_record.update(extra_test_dart_data)
+    test_record.update(extra_test_dart_data) 
 
     data = dump_test(unit, test_record)
     if data:
@@ -804,11 +804,11 @@ def onjava_test(unit, *args):
             ymake.report_configure_error('skip JTEST_FOR in {}: no args provided'.format(unit.path()))
             return
 
-    java_cp_arg_type = unit.get('JAVA_CLASSPATH_CMD_TYPE_VALUE') or 'MANIFEST'
-    if java_cp_arg_type not in ('MANIFEST', 'COMMAND_FILE', 'LIST'):
-        ymake.report_configure_error('{}: TEST_JAVA_CLASSPATH_CMD_TYPE({}) are invalid. Choose argument from MANIFEST, COMMAND_FILE or LIST)'.format(unit.path(), java_cp_arg_type))
-        return
-
+    java_cp_arg_type = unit.get('JAVA_CLASSPATH_CMD_TYPE_VALUE') or 'MANIFEST' 
+    if java_cp_arg_type not in ('MANIFEST', 'COMMAND_FILE', 'LIST'): 
+        ymake.report_configure_error('{}: TEST_JAVA_CLASSPATH_CMD_TYPE({}) are invalid. Choose argument from MANIFEST, COMMAND_FILE or LIST)'.format(unit.path(), java_cp_arg_type)) 
+        return 
+ 
     unit_path = unit.path()
     path = _common.strip_roots(unit_path)
 
@@ -862,9 +862,9 @@ def onjava_test(unit, *args):
         'TEST-CWD': test_cwd,
         'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
         'JAVA_CLASSPATH_CMD_TYPE': java_cp_arg_type,
-        'NO_JBUILD': 'yes' if ymake_java_test else 'no',
-        'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT'),
-        'JDK_FOR_TESTS': 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT') + '_FOR_TESTS',
+        'NO_JBUILD': 'yes' if ymake_java_test else 'no', 
+        'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT'), 
+        'JDK_FOR_TESTS': 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT') + '_FOR_TESTS', 
     }
     test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
     if test_classpath_origins:
@@ -883,50 +883,50 @@ def onjava_test(unit, *args):
         unit.set_property(['DART_DATA', data])
 
 
-def onjava_test_deps(unit, *args):
+def onjava_test_deps(unit, *args): 
     if unit.get("TIDY") == "yes":
         # graph changed for clang_tidy tests
         return
 
-    assert unit.get('MODULE_TYPE') is not None
-    assert len(args) == 1
-    mode = args[0]
-
+    assert unit.get('MODULE_TYPE') is not None 
+    assert len(args) == 1 
+    mode = args[0] 
+ 
     path = get_norm_unit_path(unit)
     ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-
-    test_record = {
-        'SOURCE-FOLDER-PATH': path,
-        'TEST-NAME': '-'.join([os.path.basename(os.path.dirname(path)), os.path.basename(path), 'dependencies']).strip('-'),
-        'SCRIPT-REL-PATH': 'java.dependency.test',
-        'TEST-TIMEOUT': '',
-        'TESTED-PROJECT-NAME': path,
-        'TEST-DATA': '',
+ 
+    test_record = { 
+        'SOURCE-FOLDER-PATH': path, 
+        'TEST-NAME': '-'.join([os.path.basename(os.path.dirname(path)), os.path.basename(path), 'dependencies']).strip('-'), 
+        'SCRIPT-REL-PATH': 'java.dependency.test', 
+        'TEST-TIMEOUT': '', 
+        'TESTED-PROJECT-NAME': path, 
+        'TEST-DATA': '', 
         'TEST_PARTITION': 'SEQUENTIAL',
-        'FORK-MODE': '',
-        'SPLIT-FACTOR': '',
-        'CUSTOM-DEPENDENCIES': ' '.join(get_values_list(unit, 'TEST_DEPENDS_VALUE')),
-        'TAG': '',
-        'SIZE': 'SMALL',
-        'IGNORE_CLASSPATH_CLASH': ' '.join(get_values_list(unit, 'JAVA_IGNORE_CLASSPATH_CLASH_VALUE')),
+        'FORK-MODE': '', 
+        'SPLIT-FACTOR': '', 
+        'CUSTOM-DEPENDENCIES': ' '.join(get_values_list(unit, 'TEST_DEPENDS_VALUE')), 
+        'TAG': '', 
+        'SIZE': 'SMALL', 
+        'IGNORE_CLASSPATH_CLASH': ' '.join(get_values_list(unit, 'JAVA_IGNORE_CLASSPATH_CLASH_VALUE')), 
         'NO_JBUILD': 'yes' if ymake_java_test else 'no',
-
-        # JTEST/JTEST_FOR only
-        'MODULE_TYPE': unit.get('MODULE_TYPE'),
-        'UNITTEST_DIR': '',
-        'SYSTEM_PROPERTIES': '',
-        'TEST-CWD': '',
-    }
-    if mode == 'strict':
-        test_record['STRICT_CLASSPATH_CLASH'] = 'yes'
-
+ 
+        # JTEST/JTEST_FOR only 
+        'MODULE_TYPE': unit.get('MODULE_TYPE'), 
+        'UNITTEST_DIR': '', 
+        'SYSTEM_PROPERTIES': '', 
+        'TEST-CWD': '', 
+    } 
+    if mode == 'strict': 
+        test_record['STRICT_CLASSPATH_CLASH'] = 'yes' 
+ 
     if ymake_java_test:
         test_record['CLASSPATH'] = '$B/{}/{}.jar ${{DART_CLASSPATH}}'.format(unit.get('MODDIR'), unit.get('REALPRJNAME'))
 
     data = dump_test(unit, test_record)
-    unit.set_property(['DART_DATA', data])
-
-
+    unit.set_property(['DART_DATA', data]) 
+ 
+ 
 def _get_test_tags(unit, spec_args=None):
     if spec_args is None:
         spec_args = {}

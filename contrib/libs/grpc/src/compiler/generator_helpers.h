@@ -22,21 +22,21 @@
 #include <iostream>
 #include <map>
 #include <sstream>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <vector>
 
 #include <util/generic/string.h>
 #include <util/string/split.h>
 #include <util/stream/str.h>
 
-#include "src/compiler/config.h"
-
+#include "src/compiler/config.h" 
+ 
 namespace grpc_generator {
 
-inline bool StripSuffix(TString* filename, const TString& suffix) {
+inline bool StripSuffix(TString* filename, const TString& suffix) { 
   if (filename->length() >= suffix.length()) {
     size_t suffix_pos = filename->length() - suffix.length();
-    if (filename->compare(suffix_pos, TString::npos, suffix) == 0) {
+    if (filename->compare(suffix_pos, TString::npos, suffix) == 0) { 
       filename->resize(filename->size() - suffix.size());
       return true;
     }
@@ -45,7 +45,7 @@ inline bool StripSuffix(TString* filename, const TString& suffix) {
   return false;
 }
 
-inline bool StripPrefix(TString* name, const TString& prefix) {
+inline bool StripPrefix(TString* name, const TString& prefix) { 
   if (name->length() >= prefix.length()) {
     if (name->substr(0, prefix.size()) == prefix) {
       *name = name->substr(prefix.size());
@@ -55,20 +55,20 @@ inline bool StripPrefix(TString* name, const TString& prefix) {
   return false;
 }
 
-inline TString StripProto(TString filename) {
+inline TString StripProto(TString filename) { 
   if (!StripSuffix(&filename, ".protodevel")) {
     StripSuffix(&filename, ".proto");
   }
   return filename;
 }
 
-inline TString StringReplace(TString str, const TString& from,
-                                 const TString& to, bool replace_all) {
+inline TString StringReplace(TString str, const TString& from, 
+                                 const TString& to, bool replace_all) { 
   size_t pos = 0;
 
   do {
     pos = str.find(from, pos);
-    if (pos == TString::npos) {
+    if (pos == TString::npos) { 
       break;
     }
     str.replace(pos, from.length(), to);
@@ -78,20 +78,20 @@ inline TString StringReplace(TString str, const TString& from,
   return str;
 }
 
-inline TString StringReplace(TString str, const TString& from,
-                                 const TString& to) {
+inline TString StringReplace(TString str, const TString& from, 
+                                 const TString& to) { 
   return StringReplace(str, from, to, true);
 }
 
-inline std::vector<TString> tokenize(const TString& input,
-                                         const TString& delimiters) {
-  std::vector<TString> tokens;
+inline std::vector<TString> tokenize(const TString& input, 
+                                         const TString& delimiters) { 
+  std::vector<TString> tokens; 
   size_t pos, last_pos = 0;
 
   for (;;) {
     bool done = false;
     pos = input.find_first_of(delimiters, last_pos);
-    if (pos == TString::npos) {
+    if (pos == TString::npos) { 
       done = true;
       pos = input.length();
     }
@@ -103,7 +103,7 @@ inline std::vector<TString> tokenize(const TString& input,
   }
 }
 
-inline TString CapitalizeFirstLetter(TString s) {
+inline TString CapitalizeFirstLetter(TString s) { 
   if (s.empty()) {
     return s;
   }
@@ -111,7 +111,7 @@ inline TString CapitalizeFirstLetter(TString s) {
   return s;
 }
 
-inline TString LowercaseFirstLetter(TString s) {
+inline TString LowercaseFirstLetter(TString s) { 
   if (s.empty()) {
     return s;
   }
@@ -119,19 +119,19 @@ inline TString LowercaseFirstLetter(TString s) {
   return s;
 }
 
-inline TString LowerUnderscoreToUpperCamel(TString str) {
-  std::vector<TString> tokens = tokenize(str, "_");
-  TString result = "";
+inline TString LowerUnderscoreToUpperCamel(TString str) { 
+  std::vector<TString> tokens = tokenize(str, "_"); 
+  TString result = ""; 
   for (unsigned int i = 0; i < tokens.size(); i++) {
     result += CapitalizeFirstLetter(tokens[i]);
   }
   return result;
 }
 
-inline TString FileNameInUpperCamel(
+inline TString FileNameInUpperCamel( 
     const grpc::protobuf::FileDescriptor* file, bool include_package_path) {
-  std::vector<TString> tokens = tokenize(StripProto(file->name()), "/");
-  TString result = "";
+  std::vector<TString> tokens = tokenize(StripProto(file->name()), "/"); 
+  TString result = ""; 
   if (include_package_path) {
     for (unsigned int i = 0; i < tokens.size() - 1; i++) {
       result += tokens[i] + "/";
@@ -141,7 +141,7 @@ inline TString FileNameInUpperCamel(
   return result;
 }
 
-inline TString FileNameInUpperCamel(
+inline TString FileNameInUpperCamel( 
     const grpc::protobuf::FileDescriptor* file) {
   return FileNameInUpperCamel(file, true);
 }
@@ -171,11 +171,11 @@ inline MethodType GetMethodType(
 }
 
 template <typename TStringType>
-inline void Split(const TStringType& s, char /*delim*/,
+inline void Split(const TStringType& s, char /*delim*/, 
                   std::vector<TStringType>* append_to) {
   std::istringstream iss(s);
   TStringType piece;
-  while (std::getline(iss, piece)) {
+  while (std::getline(iss, piece)) { 
     append_to->push_back(piece);
   }
 }
@@ -199,15 +199,15 @@ enum CommentType {
 // Get all the raw comments and append each line without newline to out.
 template <typename DescriptorType>
 inline void GetComment(const DescriptorType* desc, CommentType type,
-                       std::vector<TString>* out) {
+                       std::vector<TString>* out) { 
   grpc::protobuf::SourceLocation location;
   if (!desc->GetSourceLocation(&location)) {
     return;
   }
   if (type == COMMENTTYPE_LEADING || type == COMMENTTYPE_TRAILING) {
-    const TString& comments = type == COMMENTTYPE_LEADING
-                                      ? location.leading_comments
-                                      : location.trailing_comments;
+    const TString& comments = type == COMMENTTYPE_LEADING 
+                                      ? location.leading_comments 
+                                      : location.trailing_comments; 
     Split(comments, '\n', out);
   } else if (type == COMMENTTYPE_LEADING_DETACHED) {
     for (unsigned int i = 0; i < location.leading_detached_comments.size();
@@ -226,7 +226,7 @@ inline void GetComment(const DescriptorType* desc, CommentType type,
 // above syntax line. Return nothing for trailing comments.
 template <>
 inline void GetComment(const grpc::protobuf::FileDescriptor* desc,
-                       CommentType type, std::vector<TString>* out) {
+                       CommentType type, std::vector<TString>* out) { 
   if (type == COMMENTTYPE_TRAILING) {
     return;
   }
@@ -252,11 +252,11 @@ inline void GetComment(const grpc::protobuf::FileDescriptor* desc,
 
 // Add prefix and newline to each comment line and concatenate them together.
 // Make sure there is a space after the prefix unless the line is empty.
-inline TString GenerateCommentsWithPrefix(
-    const std::vector<TString>& in, const TString& prefix) {
+inline TString GenerateCommentsWithPrefix( 
+    const std::vector<TString>& in, const TString& prefix) { 
   std::ostringstream oss;
   for (auto it = in.begin(); it != in.end(); it++) {
-    const TString& elem = *it;
+    const TString& elem = *it; 
     if (elem.empty()) {
       oss << prefix << "\n";
     } else if (elem[0] == ' ') {
@@ -265,17 +265,17 @@ inline TString GenerateCommentsWithPrefix(
       oss << prefix << " " << elem << "\n";
     }
   }
-  return oss.str();
+  return oss.str(); 
 }
 
 template <typename DescriptorType>
-inline TString GetPrefixedComments(const DescriptorType* desc, bool leading,
-                                       const TString& prefix) {
-  std::vector<TString> out;
+inline TString GetPrefixedComments(const DescriptorType* desc, bool leading, 
+                                       const TString& prefix) { 
+  std::vector<TString> out; 
   if (leading) {
     grpc_generator::GetComment(
         desc, grpc_generator::COMMENTTYPE_LEADING_DETACHED, &out);
-    std::vector<TString> leading;
+    std::vector<TString> leading; 
     grpc_generator::GetComment(desc, grpc_generator::COMMENTTYPE_LEADING,
                                &leading);
     out.insert(out.end(), leading.begin(), leading.end());

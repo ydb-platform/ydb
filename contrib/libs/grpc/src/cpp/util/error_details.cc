@@ -20,7 +20,7 @@
 
 #include "src/proto/grpc/status/status.pb.h"
 
-namespace grpc {
+namespace grpc { 
 
 grpc::Status ExtractErrorDetails(const grpc::Status& from,
                                  ::google::rpc::Status* to) {
@@ -47,4 +47,4 @@ grpc::Status SetErrorDetails(const ::google::rpc::Status& from,
   return grpc::Status::OK;
 }
 
-}  // namespace grpc
+}  // namespace grpc 

@@ -32,7 +32,7 @@
 #include <cstddef>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/base/config.h"
+#include "y_absl/base/config.h" 
 #include "y_absl/base/optimization.h"
 #include "y_absl/base/port.h"
 
@@ -99,41 +99,41 @@ ABSL_NAMESPACE_END
                              : [] { assert(false && #expr); }())  // NOLINT
 #endif
 
-// `ABSL_INTERNAL_HARDENING_ABORT()` controls how `ABSL_HARDENING_ASSERT()`
-// aborts the program in release mode (when NDEBUG is defined). The
-// implementation should abort the program as quickly as possible and ideally it
-// should not be possible to ignore the abort request.
-#if (ABSL_HAVE_BUILTIN(__builtin_trap) &&         \
-     ABSL_HAVE_BUILTIN(__builtin_unreachable)) || \
-    (defined(__GNUC__) && !defined(__clang__))
-#define ABSL_INTERNAL_HARDENING_ABORT() \
-  do {                                  \
-    __builtin_trap();                   \
-    __builtin_unreachable();            \
-  } while (false)
-#else
-#define ABSL_INTERNAL_HARDENING_ABORT() abort()
-#endif
-
-// ABSL_HARDENING_ASSERT()
-//
-// `ABSL_HARDENING_ASSERT()` is like `ABSL_ASSERT()`, but used to implement
-// runtime assertions that should be enabled in hardened builds even when
-// `NDEBUG` is defined.
-//
-// When `NDEBUG` is not defined, `ABSL_HARDENING_ASSERT()` is identical to
-// `ABSL_ASSERT()`.
-//
-// See `ABSL_OPTION_HARDENED` in `y_absl/base/options.h` for more information on
-// hardened mode.
-#if ABSL_OPTION_HARDENED == 1 && defined(NDEBUG)
-#define ABSL_HARDENING_ASSERT(expr)                 \
-  (ABSL_PREDICT_TRUE((expr)) ? static_cast<void>(0) \
-                             : [] { ABSL_INTERNAL_HARDENING_ABORT(); }())
-#else
-#define ABSL_HARDENING_ASSERT(expr) ABSL_ASSERT(expr)
-#endif
-
+// `ABSL_INTERNAL_HARDENING_ABORT()` controls how `ABSL_HARDENING_ASSERT()` 
+// aborts the program in release mode (when NDEBUG is defined). The 
+// implementation should abort the program as quickly as possible and ideally it 
+// should not be possible to ignore the abort request. 
+#if (ABSL_HAVE_BUILTIN(__builtin_trap) &&         \ 
+     ABSL_HAVE_BUILTIN(__builtin_unreachable)) || \ 
+    (defined(__GNUC__) && !defined(__clang__)) 
+#define ABSL_INTERNAL_HARDENING_ABORT() \ 
+  do {                                  \ 
+    __builtin_trap();                   \ 
+    __builtin_unreachable();            \ 
+  } while (false) 
+#else 
+#define ABSL_INTERNAL_HARDENING_ABORT() abort() 
+#endif 
+ 
+// ABSL_HARDENING_ASSERT() 
+// 
+// `ABSL_HARDENING_ASSERT()` is like `ABSL_ASSERT()`, but used to implement 
+// runtime assertions that should be enabled in hardened builds even when 
+// `NDEBUG` is defined. 
+// 
+// When `NDEBUG` is not defined, `ABSL_HARDENING_ASSERT()` is identical to 
+// `ABSL_ASSERT()`. 
+// 
+// See `ABSL_OPTION_HARDENED` in `y_absl/base/options.h` for more information on 
+// hardened mode. 
+#if ABSL_OPTION_HARDENED == 1 && defined(NDEBUG) 
+#define ABSL_HARDENING_ASSERT(expr)                 \ 
+  (ABSL_PREDICT_TRUE((expr)) ? static_cast<void>(0) \ 
+                             : [] { ABSL_INTERNAL_HARDENING_ABORT(); }()) 
+#else 
+#define ABSL_HARDENING_ASSERT(expr) ABSL_ASSERT(expr) 
+#endif 
+ 
 #ifdef ABSL_HAVE_EXCEPTIONS
 #define ABSL_INTERNAL_TRY try
 #define ABSL_INTERNAL_CATCH_ANY catch (...)
@@ -144,15 +144,15 @@ ABSL_NAMESPACE_END
 #define ABSL_INTERNAL_RETHROW do {} while (false)
 #endif  // ABSL_HAVE_EXCEPTIONS
 
-// `ABSL_INTERNAL_UNREACHABLE` is an unreachable statement.  A program which
-// reaches one has undefined behavior, and the compiler may optimize
-// accordingly.
-#if defined(__GNUC__) || ABSL_HAVE_BUILTIN(__builtin_unreachable)
-#define ABSL_INTERNAL_UNREACHABLE __builtin_unreachable()
-#elif defined(_MSC_VER)
-#define ABSL_INTERNAL_UNREACHABLE __assume(0)
-#else
-#define ABSL_INTERNAL_UNREACHABLE
-#endif
-
+// `ABSL_INTERNAL_UNREACHABLE` is an unreachable statement.  A program which 
+// reaches one has undefined behavior, and the compiler may optimize 
+// accordingly. 
+#if defined(__GNUC__) || ABSL_HAVE_BUILTIN(__builtin_unreachable) 
+#define ABSL_INTERNAL_UNREACHABLE __builtin_unreachable() 
+#elif defined(_MSC_VER) 
+#define ABSL_INTERNAL_UNREACHABLE __assume(0) 
+#else 
+#define ABSL_INTERNAL_UNREACHABLE 
+#endif 
+ 
 #endif  // ABSL_BASE_MACROS_H_

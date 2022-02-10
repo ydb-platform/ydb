@@ -2,23 +2,23 @@
 
 LIBRARY()
 
-OWNER(
+OWNER( 
     g:cpp-contrib
-    g:yql
-)
+    g:yql 
+) 
 
 VERSION(1.10.2)
 
 ORIGINAL_SOURCE(https://github.com/apache/avro/archive/release-1.10.2.tar.gz)
 
-LICENSE(
+LICENSE( 
     Apache-2.0 AND
     BSL-1.0 AND
-    FSFAP
-)
+    FSFAP 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/libs/snappy
     contrib/restricted/boost

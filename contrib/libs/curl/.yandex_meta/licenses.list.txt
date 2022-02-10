@@ -1,398 +1,398 @@
-====================BSD-3-Clause====================
-  others the right to apply the CMake BSD license instead).
-
-
-====================BSD-3-Clause====================
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the Institute nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE INSTITUTE AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.  */
-
-
-====================BSD-3-Clause====================
-/*               BSD-style lwIP TCP/IP stack SPECIFIC               */
-
-
-====================BSD-3-Clause====================
-/* Define to use BSD-style lwIP TCP/IP stack. */
-
-
-====================COPYRIGHT====================
- *   Copyright (C) 1998 - 2017, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 1996-2019  Internet Software Consortium.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 1997 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 1999 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2004 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2009 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2010 - 2011, Hoi-Ho Chan, <hoiho.chan@gmail.com>
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2010 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2010 - 2020, Howard Chu, <hyc@highlandsun.com>
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2010, Howard Chu, <hyc@openldap.org>
- * Copyright (C) 2011 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2011 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2012 - 2014, Nick Zitzmann, <nickzman@gmail.com>.
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2012 - 2016, Linus Nielsen Feltzing, <linus@haxx.se>
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2012 - 2016, Marc Hoersken, <info@marc-hoersken.de>
- * Copyright (C) 2012, Mark Salisbury, <mark.salisbury@hp.com>
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2012 - 2017, Nick Zitzmann, <nickzman@gmail.com>.
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- * Copyright (C) 2009, 2011, Markus Moeller, <markus_moeller@compuserve.com>
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- * Copyright (C) 2009, Markus Moeller, <markus_moeller@compuserve.com>
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- * Copyright (C) 2010, Hoi-Ho Chan, <hoiho.chan@gmail.com>
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- * Copyright (C) 2010, Howard Chu, <hyc@highlandsun.com>
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2012, Marc Hoersken, <info@marc-hoersken.de>, et al.
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2013 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- * Copyright (C) 2010, 2011, Hoi-Ho Chan, <hoiho.chan@gmail.com>
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2014 - 2016, Steve Holme, <steve_holme@hotmail.com>.
- * Copyright (C) 2015 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2014 - 2019, Steve Holme, <steve_holme@hotmail.com>.
- * Copyright (C) 2015 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2014 - 2020, Steve Holme, <steve_holme@hotmail.com>.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2014, Bill Nagel <wnagel@tycoint.com>, Exacq Technologies
- * Copyright (C) 2016-2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2015 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- * Copyright (C) 2012 - 2014, Linus Nielsen Feltzing, <linus@haxx.se>
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2015 - 2020, Steve Holme, <steve_holme@hotmail.com>.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2016 - 2020, Steve Holme, <steve_holme@hotmail.com>.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2017 - 2018, Yiming Jing, <jingyiming@baidu.com>
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2017 - 2020 Red Hat, Inc.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2017, Florin Petriuc, <petriuc.florin@gmail.com>
- * Copyright (C) 2018 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2018 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2019 - 2020, Björn Stenberg, <bjorn@haxx.se>
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2019 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2019 - 2020, Michael Forney, <mforney@mforney.org>
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- * Copyright (C) 2019, Björn Stenberg, <bjorn@haxx.se>
-
-
-====================COPYRIGHT====================
- * Copyright (c) 1995, 1996, 1997, 1998, 1999 Kungliga Tekniska Högskolan
- * (Royal Institute of Technology, Stockholm, Sweden).
- * Copyright (c) 2004 - 2020 Daniel Stenberg
- * All rights reserved.
-
-
-====================COPYRIGHT====================
- * Copyright (c) 2001-2004 Damien Miller <djm@openbsd.org>
-
-
-====================COPYRIGHT====================
- * This software was written by Alexander Peslyak in 2001.  No copyright is
- * claimed, and the software is hereby placed in the public domain.  In case
- * this attempt to disclaim copyright and place the software in the public
- * domain is deemed null and void, then the software is Copyright (c) 2001
- * Alexander Peslyak and it is hereby released to the general public under the
- * following terms:
-
-
-====================COPYRIGHT====================
-/* Copyright (c) 1996 - 2020 by Internet Software Consortium.
-
-
-====================COPYRIGHT====================
-Copyright (c) 1996 - 2020, Daniel Stenberg, <daniel@haxx.se>, and many
-contributors, see the THANKS file.
-
-
-====================File: COPYING====================
-COPYRIGHT AND PERMISSION NOTICE
-
-Copyright (c) 1996 - 2020, Daniel Stenberg, <daniel@haxx.se>, and many
-contributors, see the THANKS file.
-
-All rights reserved.
-
-Permission to use, copy, modify, and distribute this software for any purpose
-with or without fee is hereby granted, provided that the above copyright
-notice and this permission notice appear in all copies.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF THIRD PARTY RIGHTS. IN
-NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
-OR OTHER DEALINGS IN THE SOFTWARE.
-
-Except as contained in this notice, the name of a copyright holder shall not
-be used in advertising or otherwise to promote the sale, use or other dealings
-in this Software without prior written authorization of the copyright holder.
-
-
-====================ISC====================
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND INTERNET SOFTWARE CONSORTIUM
- * DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
- * INTERNET SOFTWARE CONSORTIUM BE LIABLE FOR ANY SPECIAL, DIRECT,
- * INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING
- * FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
- * NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION
- * WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
-
-====================ISC====================
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND INTERNET SOFTWARE CONSORTIUM DISCLAIMS
- * ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL INTERNET SOFTWARE
- * CONSORTIUM BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
- * DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR
- * PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS
- * ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
- * SOFTWARE.
-
-
-====================ISC====================
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
-
-====================Public-Domain====================
- https://openwall.info/wiki/people/solar/software/public-domain-source-code/md4
- *
- * Author:
- * Alexander Peslyak, better known as Solar Designer <solar at openwall.com>
- *
- * This software was written by Alexander Peslyak in 2001.  No copyright is
- * claimed, and the software is hereby placed in the public domain.  In case
- * this attempt to disclaim copyright and place the software in the public
- * domain is deemed null and void, then the software is Copyright (c) 2001
- * Alexander Peslyak and it is hereby released to the general public under the
- * following terms:
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted.
- *
- * There's ABSOLUTELY NO WARRANTY, express or implied.
- *
- * (This is a heavily cut-down "BSD license".)
-
-
-====================Public-Domain====================
- https://openwall.info/wiki/people/solar/software/public-domain-source-code/md5
- *
- * Author:
- * Alexander Peslyak, better known as Solar Designer <solar at openwall.com>
- *
- * This software was written by Alexander Peslyak in 2001.  No copyright is
- * claimed, and the software is hereby placed in the public domain.
- * In case this attempt to disclaim copyright and place the software in the
- * public domain is deemed null and void, then the software is
- * Copyright (c) 2001 Alexander Peslyak and it is hereby released to the
- * general public under the following terms:
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted.
- *
- * There's ABSOLUTELY NO WARRANTY, express or implied.
- *
- * (This is a heavily cut-down "BSD license".)
-
-
-====================Public-Domain====================
-/* This is based on SHA256 implementation in LibTomCrypt that was released into
- * public domain by Tom St Denis. */
-
-
-====================curl====================
- * This software is licensed as described in the file COPYING, which
- * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html.
- *
- * You may opt to use, copy, modify, merge, publish, distribute and/or sell
- * copies of the Software, and permit persons to whom the Software is
- * furnished to do so, under the terms of the COPYING file.
- *
- * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
- * KIND, either express or implied.
-
-
-====================curl====================
-COPYRIGHT AND PERMISSION NOTICE
-
-Copyright (c) 1996 - 2020, Daniel Stenberg, <daniel@haxx.se>, and many
-contributors, see the THANKS file.
-
-All rights reserved.
-
-Permission to use, copy, modify, and distribute this software for any purpose
-with or without fee is hereby granted, provided that the above copyright
-notice and this permission notice appear in all copies.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF THIRD PARTY RIGHTS. IN
-NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
-OR OTHER DEALINGS IN THE SOFTWARE.
-
-Except as contained in this notice, the name of a copyright holder shall not
-be used in advertising or otherwise to promote the sale, use or other dealings
-in this Software without prior written authorization of the copyright holder.
+====================BSD-3-Clause==================== 
+  others the right to apply the CMake BSD license instead). 
+ 
+ 
+====================BSD-3-Clause==================== 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions 
+ * are met: 
+ * 
+ * 1. Redistributions of source code must retain the above copyright 
+ *    notice, this list of conditions and the following disclaimer. 
+ * 
+ * 2. Redistributions in binary form must reproduce the above copyright 
+ *    notice, this list of conditions and the following disclaimer in the 
+ *    documentation and/or other materials provided with the distribution. 
+ * 
+ * 3. Neither the name of the Institute nor the names of its contributors 
+ *    may be used to endorse or promote products derived from this software 
+ *    without specific prior written permission. 
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE INSTITUTE AND CONTRIBUTORS ``AS IS'' AND 
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE 
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL 
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS 
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) 
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT 
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY 
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ * SUCH DAMAGE.  */ 
+ 
+ 
+====================BSD-3-Clause==================== 
+/*               BSD-style lwIP TCP/IP stack SPECIFIC               */ 
+ 
+ 
+====================BSD-3-Clause==================== 
+/* Define to use BSD-style lwIP TCP/IP stack. */ 
+ 
+ 
+====================COPYRIGHT==================== 
+ *   Copyright (C) 1998 - 2017, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 1996-2019  Internet Software Consortium. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 1997 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 1999 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2004 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2009 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2010 - 2011, Hoi-Ho Chan, <hoiho.chan@gmail.com> 
+ * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2010 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2010 - 2020, Howard Chu, <hyc@highlandsun.com> 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2010, Howard Chu, <hyc@openldap.org> 
+ * Copyright (C) 2011 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2011 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2012 - 2014, Nick Zitzmann, <nickzman@gmail.com>. 
+ * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2012 - 2016, Linus Nielsen Feltzing, <linus@haxx.se> 
+ * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2012 - 2016, Marc Hoersken, <info@marc-hoersken.de> 
+ * Copyright (C) 2012, Mark Salisbury, <mark.salisbury@hp.com> 
+ * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2012 - 2017, Nick Zitzmann, <nickzman@gmail.com>. 
+ * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 2009, 2011, Markus Moeller, <markus_moeller@compuserve.com> 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 2009, Markus Moeller, <markus_moeller@compuserve.com> 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 2010, Hoi-Ho Chan, <hoiho.chan@gmail.com> 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 2010, Howard Chu, <hyc@highlandsun.com> 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2012, Marc Hoersken, <info@marc-hoersken.de>, et al. 
+ * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2013 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 2010, 2011, Hoi-Ho Chan, <hoiho.chan@gmail.com> 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2014 - 2016, Steve Holme, <steve_holme@hotmail.com>. 
+ * Copyright (C) 2015 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2014 - 2019, Steve Holme, <steve_holme@hotmail.com>. 
+ * Copyright (C) 2015 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2014 - 2020, Steve Holme, <steve_holme@hotmail.com>. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2014, Bill Nagel <wnagel@tycoint.com>, Exacq Technologies 
+ * Copyright (C) 2016-2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2015 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 2012 - 2014, Linus Nielsen Feltzing, <linus@haxx.se> 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2015 - 2020, Steve Holme, <steve_holme@hotmail.com>. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2016 - 2020, Steve Holme, <steve_holme@hotmail.com>. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2017 - 2018, Yiming Jing, <jingyiming@baidu.com> 
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2017 - 2020 Red Hat, Inc. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2017, Florin Petriuc, <petriuc.florin@gmail.com> 
+ * Copyright (C) 2018 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2018 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2019 - 2020, Björn Stenberg, <bjorn@haxx.se> 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2019 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2019 - 2020, Michael Forney, <mforney@mforney.org> 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (C) 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
+ * Copyright (C) 2019, Björn Stenberg, <bjorn@haxx.se> 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (c) 1995, 1996, 1997, 1998, 1999 Kungliga Tekniska Högskolan 
+ * (Royal Institute of Technology, Stockholm, Sweden). 
+ * Copyright (c) 2004 - 2020 Daniel Stenberg 
+ * All rights reserved. 
+ 
+ 
+====================COPYRIGHT==================== 
+ * Copyright (c) 2001-2004 Damien Miller <djm@openbsd.org> 
+ 
+ 
+====================COPYRIGHT==================== 
+ * This software was written by Alexander Peslyak in 2001.  No copyright is 
+ * claimed, and the software is hereby placed in the public domain.  In case 
+ * this attempt to disclaim copyright and place the software in the public 
+ * domain is deemed null and void, then the software is Copyright (c) 2001 
+ * Alexander Peslyak and it is hereby released to the general public under the 
+ * following terms: 
+ 
+ 
+====================COPYRIGHT==================== 
+/* Copyright (c) 1996 - 2020 by Internet Software Consortium. 
+ 
+ 
+====================COPYRIGHT==================== 
+Copyright (c) 1996 - 2020, Daniel Stenberg, <daniel@haxx.se>, and many 
+contributors, see the THANKS file. 
+ 
+ 
+====================File: COPYING==================== 
+COPYRIGHT AND PERMISSION NOTICE 
+ 
+Copyright (c) 1996 - 2020, Daniel Stenberg, <daniel@haxx.se>, and many 
+contributors, see the THANKS file. 
+ 
+All rights reserved. 
+ 
+Permission to use, copy, modify, and distribute this software for any purpose 
+with or without fee is hereby granted, provided that the above copyright 
+notice and this permission notice appear in all copies. 
+ 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF THIRD PARTY RIGHTS. IN 
+NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, 
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR 
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE 
+OR OTHER DEALINGS IN THE SOFTWARE. 
+ 
+Except as contained in this notice, the name of a copyright holder shall not 
+be used in advertising or otherwise to promote the sale, use or other dealings 
+in this Software without prior written authorization of the copyright holder. 
+ 
+ 
+====================ISC==================== 
+ * Permission to use, copy, modify, and distribute this software for any 
+ * purpose with or without fee is hereby granted, provided that the above 
+ * copyright notice and this permission notice appear in all copies. 
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS" AND INTERNET SOFTWARE CONSORTIUM 
+ * DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL 
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL 
+ * INTERNET SOFTWARE CONSORTIUM BE LIABLE FOR ANY SPECIAL, DIRECT, 
+ * INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING 
+ * FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, 
+ * NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION 
+ * WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. 
+ 
+ 
+====================ISC==================== 
+ * Permission to use, copy, modify, and distribute this software for any 
+ * purpose with or without fee is hereby granted, provided that the above 
+ * copyright notice and this permission notice appear in all copies. 
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS" AND INTERNET SOFTWARE CONSORTIUM DISCLAIMS 
+ * ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES 
+ * OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL INTERNET SOFTWARE 
+ * CONSORTIUM BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL 
+ * DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR 
+ * PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS 
+ * ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS 
+ * SOFTWARE. 
+ 
+ 
+====================ISC==================== 
+ * Permission to use, copy, modify, and distribute this software for any 
+ * purpose with or without fee is hereby granted, provided that the above 
+ * copyright notice and this permission notice appear in all copies. 
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES 
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF 
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES 
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN 
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF 
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. 
+ 
+ 
+====================Public-Domain==================== 
+ https://openwall.info/wiki/people/solar/software/public-domain-source-code/md4 
+ * 
+ * Author: 
+ * Alexander Peslyak, better known as Solar Designer <solar at openwall.com> 
+ * 
+ * This software was written by Alexander Peslyak in 2001.  No copyright is 
+ * claimed, and the software is hereby placed in the public domain.  In case 
+ * this attempt to disclaim copyright and place the software in the public 
+ * domain is deemed null and void, then the software is Copyright (c) 2001 
+ * Alexander Peslyak and it is hereby released to the general public under the 
+ * following terms: 
+ * 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted. 
+ * 
+ * There's ABSOLUTELY NO WARRANTY, express or implied. 
+ * 
+ * (This is a heavily cut-down "BSD license".) 
+ 
+ 
+====================Public-Domain==================== 
+ https://openwall.info/wiki/people/solar/software/public-domain-source-code/md5 
+ * 
+ * Author: 
+ * Alexander Peslyak, better known as Solar Designer <solar at openwall.com> 
+ * 
+ * This software was written by Alexander Peslyak in 2001.  No copyright is 
+ * claimed, and the software is hereby placed in the public domain. 
+ * In case this attempt to disclaim copyright and place the software in the 
+ * public domain is deemed null and void, then the software is 
+ * Copyright (c) 2001 Alexander Peslyak and it is hereby released to the 
+ * general public under the following terms: 
+ * 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted. 
+ * 
+ * There's ABSOLUTELY NO WARRANTY, express or implied. 
+ * 
+ * (This is a heavily cut-down "BSD license".) 
+ 
+ 
+====================Public-Domain==================== 
+/* This is based on SHA256 implementation in LibTomCrypt that was released into 
+ * public domain by Tom St Denis. */ 
+ 
+ 
+====================curl==================== 
+ * This software is licensed as described in the file COPYING, which 
+ * you should have received as part of this distribution. The terms 
+ * are also available at https://curl.se/docs/copyright.html. 
+ * 
+ * You may opt to use, copy, modify, merge, publish, distribute and/or sell 
+ * copies of the Software, and permit persons to whom the Software is 
+ * furnished to do so, under the terms of the COPYING file. 
+ * 
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY 
+ * KIND, either express or implied. 
+ 
+ 
+====================curl==================== 
+COPYRIGHT AND PERMISSION NOTICE 
+ 
+Copyright (c) 1996 - 2020, Daniel Stenberg, <daniel@haxx.se>, and many 
+contributors, see the THANKS file. 
+ 
+All rights reserved. 
+ 
+Permission to use, copy, modify, and distribute this software for any purpose 
+with or without fee is hereby granted, provided that the above copyright 
+notice and this permission notice appear in all copies. 
+ 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF THIRD PARTY RIGHTS. IN 
+NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, 
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR 
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE 
+OR OTHER DEALINGS IN THE SOFTWARE. 
+ 
+Except as contained in this notice, the name of a copyright holder shall not 
+be used in advertising or otherwise to promote the sale, use or other dealings 
+in this Software without prior written authorization of the copyright holder. 

@@ -14,7 +14,7 @@ struct TEndpointRecord {
     TStringType Endpoint;
     i32 Priority;
     TStringType SslTargetNameOverride;
-
+ 
     TEndpointRecord()
         : Endpoint()
         , Priority(0)
@@ -23,12 +23,12 @@ struct TEndpointRecord {
     }
 
     TEndpointRecord(TStringType endpoint, i32 priority, TStringType sslTargetNameOverride = TStringType())
-        : Endpoint(std::move(endpoint))
-        , Priority(priority)
+        : Endpoint(std::move(endpoint)) 
+        , Priority(priority) 
         , SslTargetNameOverride(std::move(sslTargetNameOverride))
-    {
-    }
-
+    { 
+    } 
+ 
     explicit operator bool() const {
         return !Endpoint.empty();
     }

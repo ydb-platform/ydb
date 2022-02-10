@@ -2,20 +2,20 @@
 
 LIBRARY()
 
-OWNER(
-    orivej
-    shindo
-    g:cpp-contrib
-)
+OWNER( 
+    orivej 
+    shindo 
+    g:cpp-contrib 
+) 
 
-LICENSE(
-    Apache-2.0 AND
-    MIT AND
-    Zlib
-)
+LICENSE( 
+    Apache-2.0 AND 
+    MIT AND 
+    Zlib 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/libs/curl
     contrib/libs/openssl
@@ -23,9 +23,9 @@ PEERDIR(
     contrib/restricted/aws/aws-c-event-stream
 )
 
-ADDINCL(
-    GLOBAL contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include
-)
+ADDINCL( 
+    GLOBAL contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include 
+) 
 
 NO_COMPILER_WARNINGS()
 

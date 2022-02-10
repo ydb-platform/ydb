@@ -24,8 +24,8 @@
 #include <string.h>
 #include <sys/ioctl.h>
 
-#include "y_absl/strings/str_cat.h"
-
+#include "y_absl/strings/str_cat.h" 
+ 
 #include "src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver.h"
 
 #include <grpc/support/alloc.h>
@@ -43,8 +43,8 @@ namespace grpc_core {
 class GrpcPolledFdPosix : public GrpcPolledFd {
  public:
   GrpcPolledFdPosix(ares_socket_t as, grpc_pollset_set* driver_pollset_set)
-      : name_(y_absl::StrCat("c-ares fd: ", (int)as)), as_(as) {
-    fd_ = grpc_fd_create((int)as, name_.c_str(), false);
+      : name_(y_absl::StrCat("c-ares fd: ", (int)as)), as_(as) { 
+    fd_ = grpc_fd_create((int)as, name_.c_str(), false); 
     driver_pollset_set_ = driver_pollset_set;
     grpc_pollset_set_add_fd(driver_pollset_set_, fd_);
   }
@@ -78,10 +78,10 @@ class GrpcPolledFdPosix : public GrpcPolledFd {
 
   ares_socket_t GetWrappedAresSocketLocked() override { return as_; }
 
-  const char* GetName() override { return name_.c_str(); }
+  const char* GetName() override { return name_.c_str(); } 
 
- private:
-  TString name_;
+ private: 
+  TString name_; 
   ares_socket_t as_;
   grpc_fd* fd_;
   grpc_pollset_set* driver_pollset_set_;
@@ -89,9 +89,9 @@ class GrpcPolledFdPosix : public GrpcPolledFd {
 
 class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
  public:
-  GrpcPolledFd* NewGrpcPolledFdLocked(
-      ares_socket_t as, grpc_pollset_set* driver_pollset_set,
-      std::shared_ptr<WorkSerializer> /*work_serializer*/) override {
+  GrpcPolledFd* NewGrpcPolledFdLocked( 
+      ares_socket_t as, grpc_pollset_set* driver_pollset_set, 
+      std::shared_ptr<WorkSerializer> /*work_serializer*/) override { 
     return new GrpcPolledFdPosix(as, driver_pollset_set);
   }
 
@@ -99,9 +99,9 @@ class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
 };
 
 std::unique_ptr<GrpcPolledFdFactory> NewGrpcPolledFdFactory(
-    std::shared_ptr<WorkSerializer> work_serializer) {
-  (void)work_serializer;
-  return y_absl::make_unique<GrpcPolledFdFactoryPosix>();
+    std::shared_ptr<WorkSerializer> work_serializer) { 
+  (void)work_serializer; 
+  return y_absl::make_unique<GrpcPolledFdFactoryPosix>(); 
 }
 
 }  // namespace grpc_core

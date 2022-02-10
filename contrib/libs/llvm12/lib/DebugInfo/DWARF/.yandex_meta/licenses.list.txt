@@ -1,53 +1,53 @@
-====================Apache-2.0 WITH LLVM-exception====================
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-
-
-====================Apache-2.0 WITH LLVM-exception====================
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-
-
-====================COPYRIGHT====================
-      uint64_t BlockLength = Data.getULEB128(C);
-      StringRef Expression = Data.getBytes(C, BlockLength);
-      DataExtractor Extractor(Expression, Data.isLittleEndian(),
-
-
-====================COPYRIGHT====================
-    : DebugLineData(Data), Context(C) {
-  LineToUnit = buildLineToUnitMap(Units);
-  if (!DebugLineData.isValidOffset(Offset))
-
-
-====================COPYRIGHT====================
-    Value0 = Data.getULEB128(C);
-    Value1 = Data.getULEB128(C);
-    break;
-  case dwarf::DW_RLE_startx_length: {
-    Value0 = Data.getULEB128(C);
-    Value1 = Data.getULEB128(C);
-    break;
-
-
-====================COPYRIGHT====================
-  Version = AS.getU16(C);
-  AS.skip(C, 2); // padding
-  CompUnitCount = AS.getU32(C);
-  LocalTypeUnitCount = AS.getU32(C);
-  ForeignTypeUnitCount = AS.getU32(C);
-  BucketCount = AS.getU32(C);
-  NameCount = AS.getU32(C);
-  AbbrevTableSize = AS.getU32(C);
-  AugmentationStringSize = alignTo(AS.getU32(C), 4);
-
-
-====================COPYRIGHT====================
-  if (C)
-    Desc = StrOffsetsContributionDescriptor(C->Offset, C->Length, 4,
-                                            Header.getFormat());
-
-
-====================COPYRIGHT====================
-  if (C)
-    Offset = C->Offset;
-  if (getVersion() >= 5) {
+====================Apache-2.0 WITH LLVM-exception==================== 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+ 
+ 
+====================Apache-2.0 WITH LLVM-exception==================== 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+ 
+ 
+====================COPYRIGHT==================== 
+      uint64_t BlockLength = Data.getULEB128(C); 
+      StringRef Expression = Data.getBytes(C, BlockLength); 
+      DataExtractor Extractor(Expression, Data.isLittleEndian(), 
+ 
+ 
+====================COPYRIGHT==================== 
+    : DebugLineData(Data), Context(C) { 
+  LineToUnit = buildLineToUnitMap(Units); 
+  if (!DebugLineData.isValidOffset(Offset)) 
+ 
+ 
+====================COPYRIGHT==================== 
+    Value0 = Data.getULEB128(C); 
+    Value1 = Data.getULEB128(C); 
+    break; 
+  case dwarf::DW_RLE_startx_length: { 
+    Value0 = Data.getULEB128(C); 
+    Value1 = Data.getULEB128(C); 
+    break; 
+ 
+ 
+====================COPYRIGHT==================== 
+  Version = AS.getU16(C); 
+  AS.skip(C, 2); // padding 
+  CompUnitCount = AS.getU32(C); 
+  LocalTypeUnitCount = AS.getU32(C); 
+  ForeignTypeUnitCount = AS.getU32(C); 
+  BucketCount = AS.getU32(C); 
+  NameCount = AS.getU32(C); 
+  AbbrevTableSize = AS.getU32(C); 
+  AugmentationStringSize = alignTo(AS.getU32(C), 4); 
+ 
+ 
+====================COPYRIGHT==================== 
+  if (C) 
+    Desc = StrOffsetsContributionDescriptor(C->Offset, C->Length, 4, 
+                                            Header.getFormat()); 
+ 
+ 
+====================COPYRIGHT==================== 
+  if (C) 
+    Offset = C->Offset; 
+  if (getVersion() >= 5) { 

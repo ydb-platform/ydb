@@ -163,7 +163,7 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
-
+ 
 #include <ostream>
 #include <util/generic/string.h>
 #include <tuple>
@@ -171,16 +171,16 @@
 #include <typeinfo>
 #include <utility>
 
-#include "y_absl/base/config.h"
+#include "y_absl/base/config.h" 
 #include "y_absl/meta/type_traits.h"
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/types/span.h"
 #include "y_absl/utility/utility.h"
 
-#ifdef ABSL_HAVE_ADDRESS_SANITIZER
-#include <sanitizer/asan_interface.h>
-#endif
-
+#ifdef ABSL_HAVE_ADDRESS_SANITIZER 
+#include <sanitizer/asan_interface.h> 
+#endif 
+ 
 #if defined(__GXX_RTTI)
 #define ABSL_INTERNAL_HAS_CXA_DEMANGLE
 #endif
@@ -404,7 +404,7 @@ class LayoutImpl<std::tuple<Elements...>, y_absl::index_sequence<SizeSeq...>,
   constexpr size_t Offset() const {
     static_assert(N < NumOffsets, "Index out of bounds");
     return adl_barrier::Align(
-        Offset<N - 1>() + SizeOf<ElementType<N - 1>>::value * size_[N - 1],
+        Offset<N - 1>() + SizeOf<ElementType<N - 1>>::value * size_[N - 1], 
         ElementAlignment<N>::value);
   }
 
@@ -597,7 +597,7 @@ class LayoutImpl<std::tuple<Elements...>, y_absl::index_sequence<SizeSeq...>,
   constexpr size_t AllocSize() const {
     static_assert(NumTypes == NumSizes, "You must specify sizes of all fields");
     return Offset<NumTypes - 1>() +
-        SizeOf<ElementType<NumTypes - 1>>::value * size_[NumTypes - 1];
+        SizeOf<ElementType<NumTypes - 1>>::value * size_[NumTypes - 1]; 
   }
 
   // If built with --config=asan, poisons padding bytes (if any) in the
@@ -616,12 +616,12 @@ class LayoutImpl<std::tuple<Elements...>, y_absl::index_sequence<SizeSeq...>,
   void PoisonPadding(const Char* p) const {
     static_assert(N < NumOffsets, "Index out of bounds");
     (void)p;
-#ifdef ABSL_HAVE_ADDRESS_SANITIZER
+#ifdef ABSL_HAVE_ADDRESS_SANITIZER 
     PoisonPadding<Char, N - 1>(p);
     // The `if` is an optimization. It doesn't affect the observable behaviour.
     if (ElementAlignment<N - 1>::value % ElementAlignment<N>::value) {
       size_t start =
-          Offset<N - 1>() + SizeOf<ElementType<N - 1>>::value * size_[N - 1];
+          Offset<N - 1>() + SizeOf<ElementType<N - 1>>::value * size_[N - 1]; 
       ASAN_POISON_MEMORY_REGION(p + start, Offset<N>() - start);
     }
 #endif
@@ -645,7 +645,7 @@ class LayoutImpl<std::tuple<Elements...>, y_absl::index_sequence<SizeSeq...>,
   // produce "unsigned*" where another produces "unsigned int *".
   TString DebugString() const {
     const auto offsets = Offsets();
-    const size_t sizes[] = {SizeOf<ElementType<OffsetSeq>>::value...};
+    const size_t sizes[] = {SizeOf<ElementType<OffsetSeq>>::value...}; 
     const TString types[] = {
         adl_barrier::TypeName<ElementType<OffsetSeq>>()...};
     TString res = y_absl::StrCat("@0", types[0], "(", sizes[0], ")");

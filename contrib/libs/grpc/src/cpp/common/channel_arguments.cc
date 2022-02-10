@@ -27,7 +27,7 @@
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/iomgr/socket_mutator.h"
 
-namespace grpc {
+namespace grpc { 
 
 ChannelArguments::ChannelArguments() {
   // This will be ignored if used on the server side.
@@ -97,7 +97,7 @@ void ChannelArguments::SetSocketMutator(grpc_socket_mutator* mutator) {
   grpc_core::ExecCtx exec_ctx;
   for (auto& arg : args_) {
     if (arg.type == mutator_arg.type &&
-        TString(arg.key) == TString(mutator_arg.key)) {
+        TString(arg.key) == TString(mutator_arg.key)) { 
       GPR_ASSERT(!replaced);
       arg.value.pointer.vtable->destroy(arg.value.pointer.p);
       arg.value.pointer = mutator_arg.value.pointer;
@@ -106,7 +106,7 @@ void ChannelArguments::SetSocketMutator(grpc_socket_mutator* mutator) {
   }
 
   if (!replaced) {
-    strings_.push_back(TString(mutator_arg.key));
+    strings_.push_back(TString(mutator_arg.key)); 
     args_.push_back(mutator_arg);
     args_.back().key = const_cast<char*>(strings_.back().c_str());
   }
@@ -117,7 +117,7 @@ void ChannelArguments::SetSocketMutator(grpc_socket_mutator* mutator) {
 // prefix. The user can build up a prefix string by calling this multiple times,
 // each with more significant identifier.
 void ChannelArguments::SetUserAgentPrefix(
-    const TString& user_agent_prefix) {
+    const TString& user_agent_prefix) { 
   if (user_agent_prefix.empty()) {
     return;
   }
@@ -126,7 +126,7 @@ void ChannelArguments::SetUserAgentPrefix(
   for (auto& arg : args_) {
     ++strings_it;
     if (arg.type == GRPC_ARG_STRING) {
-      if (TString(arg.key) == GRPC_ARG_PRIMARY_USER_AGENT_STRING) {
+      if (TString(arg.key) == GRPC_ARG_PRIMARY_USER_AGENT_STRING) { 
         GPR_ASSERT(arg.value.string == strings_it->c_str());
         *(strings_it) = user_agent_prefix + " " + arg.value.string;
         arg.value.string = const_cast<char*>(strings_it->c_str());
@@ -142,7 +142,7 @@ void ChannelArguments::SetUserAgentPrefix(
 }
 
 void ChannelArguments::SetResourceQuota(
-    const grpc::ResourceQuota& resource_quota) {
+    const grpc::ResourceQuota& resource_quota) { 
   SetPointerWithVtable(GRPC_ARG_RESOURCE_QUOTA,
                        resource_quota.c_resource_quota(),
                        grpc_resource_quota_arg_vtable());
@@ -157,16 +157,16 @@ void ChannelArguments::SetMaxSendMessageSize(int size) {
 }
 
 void ChannelArguments::SetLoadBalancingPolicyName(
-    const TString& lb_policy_name) {
+    const TString& lb_policy_name) { 
   SetString(GRPC_ARG_LB_POLICY_NAME, lb_policy_name);
 }
 
 void ChannelArguments::SetServiceConfigJSON(
-    const TString& service_config_json) {
+    const TString& service_config_json) { 
   SetString(GRPC_ARG_SERVICE_CONFIG, service_config_json);
 }
 
-void ChannelArguments::SetInt(const TString& key, int value) {
+void ChannelArguments::SetInt(const TString& key, int value) { 
   grpc_arg arg;
   arg.type = GRPC_ARG_INTEGER;
   strings_.push_back(key);
@@ -176,7 +176,7 @@ void ChannelArguments::SetInt(const TString& key, int value) {
   args_.push_back(arg);
 }
 
-void ChannelArguments::SetPointer(const TString& key, void* value) {
+void ChannelArguments::SetPointer(const TString& key, void* value) { 
   static const grpc_arg_pointer_vtable vtable = {
       &PointerVtableMembers::Copy, &PointerVtableMembers::Destroy,
       &PointerVtableMembers::Compare};
@@ -184,7 +184,7 @@ void ChannelArguments::SetPointer(const TString& key, void* value) {
 }
 
 void ChannelArguments::SetPointerWithVtable(
-    const TString& key, void* value,
+    const TString& key, void* value, 
     const grpc_arg_pointer_vtable* vtable) {
   grpc_arg arg;
   arg.type = GRPC_ARG_POINTER;
@@ -195,8 +195,8 @@ void ChannelArguments::SetPointerWithVtable(
   args_.push_back(arg);
 }
 
-void ChannelArguments::SetString(const TString& key,
-                                 const TString& value) {
+void ChannelArguments::SetString(const TString& key, 
+                                 const TString& value) { 
   grpc_arg arg;
   arg.type = GRPC_ARG_STRING;
   strings_.push_back(key);
@@ -214,4 +214,4 @@ void ChannelArguments::SetChannelArgs(grpc_channel_args* channel_args) const {
   }
 }
 
-}  // namespace grpc
+}  // namespace grpc 

@@ -33,7 +33,7 @@ namespace functional_internal {
 // Invoke the method, expanding the tuple of bound arguments.
 template <class R, class Tuple, size_t... Idx, class... Args>
 R Apply(Tuple&& bound, y_absl::index_sequence<Idx...>, Args&&... free) {
-  return base_internal::invoke(
+  return base_internal::invoke( 
       y_absl::forward<Tuple>(bound).template get<Idx>()...,
       y_absl::forward<Args>(free)...);
 }
@@ -50,22 +50,22 @@ class FrontBinder {
   constexpr explicit FrontBinder(y_absl::in_place_t, Ts&&... ts)
       : bound_args_(y_absl::forward<Ts>(ts)...) {}
 
-  template <class... FreeArgs, class R = base_internal::invoke_result_t<
-                                   F&, BoundArgs&..., FreeArgs&&...>>
+  template <class... FreeArgs, class R = base_internal::invoke_result_t< 
+                                   F&, BoundArgs&..., FreeArgs&&...>> 
   R operator()(FreeArgs&&... free_args) & {
     return functional_internal::Apply<R>(bound_args_, Idx(),
                                          y_absl::forward<FreeArgs>(free_args)...);
   }
 
   template <class... FreeArgs,
-            class R = base_internal::invoke_result_t<
-                const F&, const BoundArgs&..., FreeArgs&&...>>
+            class R = base_internal::invoke_result_t< 
+                const F&, const BoundArgs&..., FreeArgs&&...>> 
   R operator()(FreeArgs&&... free_args) const& {
     return functional_internal::Apply<R>(bound_args_, Idx(),
                                          y_absl::forward<FreeArgs>(free_args)...);
   }
 
-  template <class... FreeArgs, class R = base_internal::invoke_result_t<
+  template <class... FreeArgs, class R = base_internal::invoke_result_t< 
                                    F&&, BoundArgs&&..., FreeArgs&&...>>
   R operator()(FreeArgs&&... free_args) && {
     // This overload is called when *this is an rvalue. If some of the bound
@@ -75,8 +75,8 @@ class FrontBinder {
   }
 
   template <class... FreeArgs,
-            class R = base_internal::invoke_result_t<
-                const F&&, const BoundArgs&&..., FreeArgs&&...>>
+            class R = base_internal::invoke_result_t< 
+                const F&&, const BoundArgs&&..., FreeArgs&&...>> 
   R operator()(FreeArgs&&... free_args) const&& {
     // This overload is called when *this is an rvalue. If some of the bound
     // arguments are stored by value or rvalue reference, we move them.

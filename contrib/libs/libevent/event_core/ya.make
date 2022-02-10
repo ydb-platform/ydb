@@ -2,15 +2,15 @@
 
 LIBRARY()
 
-WITHOUT_LICENSE_TEXTS()
+WITHOUT_LICENSE_TEXTS() 
 
-OWNER(
-    dldmitry
-    efmv
+OWNER( 
+    dldmitry 
+    efmv 
     kikht
     g:cpp-contrib
-)
-
+) 
+ 
 LICENSE(BSD-3-Clause)
 
 PEERDIR(

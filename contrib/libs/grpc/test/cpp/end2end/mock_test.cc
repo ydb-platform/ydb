@@ -42,14 +42,14 @@
 
 #include <iostream>
 
-using grpc::testing::DefaultReactorTestPeer;
-using grpc::testing::EchoRequest;
-using grpc::testing::EchoResponse;
-using grpc::testing::EchoTestService;
-using grpc::testing::MockClientReaderWriter;
-using std::vector;
-using std::chrono::system_clock;
-using ::testing::_;
+using grpc::testing::DefaultReactorTestPeer; 
+using grpc::testing::EchoRequest; 
+using grpc::testing::EchoResponse; 
+using grpc::testing::EchoTestService; 
+using grpc::testing::MockClientReaderWriter; 
+using std::vector; 
+using std::chrono::system_clock; 
+using ::testing::_; 
 using ::testing::AtLeast;
 using ::testing::DoAll;
 using ::testing::Invoke;
@@ -81,8 +81,8 @@ class FakeClient {
     EchoResponse response;
 
     ClientContext context;
-    TString msg("hello");
-    TString exp(msg);
+    TString msg("hello"); 
+    TString exp(msg); 
 
     std::unique_ptr<ClientWriterInterface<EchoRequest>> cstream =
         stub_->RequestStream(&context, &response);
@@ -111,7 +111,7 @@ class FakeClient {
     std::unique_ptr<ClientReaderInterface<EchoResponse>> cstream =
         stub_->ResponseStream(&context, request);
 
-    TString exp = "";
+    TString exp = ""; 
     EXPECT_TRUE(cstream->Read(&response));
     exp.append(response.message() + " ");
 
@@ -129,7 +129,7 @@ class FakeClient {
     EchoRequest request;
     EchoResponse response;
     ClientContext context;
-    TString msg("hello");
+    TString msg("hello"); 
 
     std::unique_ptr<ClientReaderWriterInterface<EchoRequest, EchoResponse>>
         stream = stub_->BidiStream(&context);
@@ -256,7 +256,7 @@ class TestServiceImpl : public EchoTestService::Service {
                        ServerReader<EchoRequest>* reader,
                        EchoResponse* response) override {
     EchoRequest request;
-    TString resp("");
+    TString resp(""); 
     while (reader->Read(&request)) {
       gpr_log(GPR_INFO, "recv msg %s", request.message().c_str());
       resp.append(request.message());
@@ -268,8 +268,8 @@ class TestServiceImpl : public EchoTestService::Service {
   Status ResponseStream(ServerContext* /*context*/, const EchoRequest* request,
                         ServerWriter<EchoResponse>* writer) override {
     EchoResponse response;
-    vector<TString> tokens = split(request->message());
-    for (const TString& token : tokens) {
+    vector<TString> tokens = split(request->message()); 
+    for (const TString& token : tokens) { 
       response.set_message(token);
       writer->Write(response);
     }
@@ -290,9 +290,9 @@ class TestServiceImpl : public EchoTestService::Service {
   }
 
  private:
-  const vector<TString> split(const TString& input) {
-    TString buff("");
-    vector<TString> result;
+  const vector<TString> split(const TString& input) { 
+    TString buff(""); 
+    vector<TString> result; 
 
     for (auto n : input) {
       if (n != ' ') {

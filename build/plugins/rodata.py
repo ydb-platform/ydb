@@ -5,119 +5,119 @@ import _common as common
 import _import_wrapper as iw
 
 
-class ROData(iw.CustomCommand):
-    def __init__(self, path, unit):
-        self._path = path
-        self._flags = []
+class ROData(iw.CustomCommand): 
+    def __init__(self, path, unit): 
+        self._path = path 
+        self._flags = [] 
 
-        prefix = unit.get('ASM_PREFIX')
-
-        if prefix:
-            self._flags += ['--prefix=' + prefix]
-
-        self._pre_include = []
-
-        flags = unit.get('YASM_FLAGS')
-        if flags:
-            self.parse_flags(path, unit, collections.deque(flags.split(' ')))
-
+        prefix = unit.get('ASM_PREFIX') 
+ 
+        if prefix: 
+            self._flags += ['--prefix=' + prefix] 
+ 
+        self._pre_include = [] 
+ 
+        flags = unit.get('YASM_FLAGS') 
+        if flags: 
+            self.parse_flags(path, unit, collections.deque(flags.split(' '))) 
+ 
         if unit.enabled('DARWIN') or unit.enabled('IOS'):
-            self._platform = ['DARWIN', 'UNIX']
-            self._fmt = 'macho'
+            self._platform = ['DARWIN', 'UNIX'] 
+            self._fmt = 'macho' 
         elif unit.enabled('WIN64') or unit.enabled('CYGWIN'):
-            self._platform = ['WIN64']
-            self._fmt = 'win'
+            self._platform = ['WIN64'] 
+            self._fmt = 'win' 
         elif unit.enabled('WIN32'):
-            self._platform = ['WIN32']
-            self._fmt = 'win'
-        else:
-            self._platform = ['UNIX']
-            self._fmt = 'elf'
-
-        if 'elf' in self._fmt:
-            self._flags += ['-g', 'dwarf2']
-
+            self._platform = ['WIN32'] 
+            self._fmt = 'win' 
+        else: 
+            self._platform = ['UNIX'] 
+            self._fmt = 'elf' 
+ 
+        if 'elf' in self._fmt: 
+            self._flags += ['-g', 'dwarf2'] 
+ 
         self._fmt += unit.get('HARDWARE_ARCH')
         self._type = unit.get('HARDWARE_TYPE')
-
+ 
         if unit.enabled('DARWIN') or unit.enabled('IOS') or (unit.enabled('WINDOWS') and unit.enabled('ARCH_TYPE_32')):
-            self._prefix = '_'
-        else:
-            self._prefix = ''
-
-    def parse_flags(self, path, unit, flags):
-        while flags:
-            flag = flags.popleft()
-            if flag.startswith('-I'):
-                raise Exception('Use ADDINCL macro')
-
-            if flag.startswith('-P'):
-                preinclude = flag[2:] or flags.popleft()
-                self._pre_include += unit.resolve_include([(get_retargeted(path, unit)), preinclude])
-                self._flags += ['-P', preinclude]
-                continue
-
-            self._flags.append(flag)
-
-    def descr(self):
-        return 'AS', self._path, 'light-green'
-
-    def flags(self):
-        return self._flags + self._platform + [self._fmt, self._type]
-
-    def tools(self):
-        return ['contrib/tools/yasm']
-
-    def input(self):
-        return common.make_tuples(self._pre_include + [self._path])
-
-    def output(self):
-        return common.make_tuples([common.tobuilddir(common.stripext(self._path)) + '.o'])
-
+            self._prefix = '_' 
+        else: 
+            self._prefix = '' 
+ 
+    def parse_flags(self, path, unit, flags): 
+        while flags: 
+            flag = flags.popleft() 
+            if flag.startswith('-I'): 
+                raise Exception('Use ADDINCL macro') 
+ 
+            if flag.startswith('-P'): 
+                preinclude = flag[2:] or flags.popleft() 
+                self._pre_include += unit.resolve_include([(get_retargeted(path, unit)), preinclude]) 
+                self._flags += ['-P', preinclude] 
+                continue 
+ 
+            self._flags.append(flag) 
+ 
+    def descr(self): 
+        return 'AS', self._path, 'light-green' 
+ 
+    def flags(self): 
+        return self._flags + self._platform + [self._fmt, self._type] 
+ 
+    def tools(self): 
+        return ['contrib/tools/yasm'] 
+ 
+    def input(self): 
+        return common.make_tuples(self._pre_include + [self._path]) 
+ 
+    def output(self): 
+        return common.make_tuples([common.tobuilddir(common.stripext(self._path)) + '.o']) 
+ 
     def requested_vars(self):
         return [('includes', '_ASM__INCLUDE')]
 
     def run(self, extra_args, binary):
-        in_file = self.resolve_path(common.get(self.input, 0))
-        in_file_no_ext = common.stripext(in_file)
-        file_name = os.path.basename(in_file_no_ext)
+        in_file = self.resolve_path(common.get(self.input, 0)) 
+        in_file_no_ext = common.stripext(in_file) 
+        file_name = os.path.basename(in_file_no_ext) 
         file_size = os.path.getsize(in_file)
-        tmp_file = self.resolve_path(common.get(self.output, 0) + '.asm')
-
+        tmp_file = self.resolve_path(common.get(self.output, 0) + '.asm') 
+ 
         parser = argparse.ArgumentParser(prog='rodata.py', add_help=False)
         parser.add_argument('--includes', help='module\'s addincls', nargs='*', required=False)
         args = parser.parse_args(extra_args)
         self._incl_dirs = args.includes
 
-        with open(tmp_file, 'w') as f:
-            f.write('global ' + self._prefix + file_name + '\n')
-            f.write('global ' + self._prefix + file_name + 'Size' + '\n')
+        with open(tmp_file, 'w') as f: 
+            f.write('global ' + self._prefix + file_name + '\n') 
+            f.write('global ' + self._prefix + file_name + 'Size' + '\n') 
             f.write('SECTION .rodata ALIGN=16\n')
-            f.write(self._prefix + file_name + ':\nincbin "' + in_file + '"\n')
+            f.write(self._prefix + file_name + ':\nincbin "' + in_file + '"\n') 
             f.write('align 4, db 0\n')
             f.write(self._prefix + file_name + 'Size:\ndd ' + str(file_size) + '\n')
-
+ 
             if self._fmt.startswith('elf'):
                 f.write('size ' + self._prefix + file_name + ' ' + str(file_size) + '\n')
                 f.write('size ' + self._prefix + file_name + 'Size 4\n')
 
-        return self.do_run(binary, tmp_file)
-
-    def do_run(self, binary, path):
-        def plt():
-            for x in self._platform:
-                yield '-D'
+        return self.do_run(binary, tmp_file) 
+ 
+    def do_run(self, binary, path): 
+        def plt(): 
+            for x in self._platform: 
+                yield '-D' 
+                yield x 
+ 
+        def incls(): 
+            for x in self._incl_dirs: 
+                yield '-I' 
                 yield x
-
-        def incls():
-            for x in self._incl_dirs:
-                yield '-I'
-                yield x
-
-        cmd = [binary, '-f', self._fmt] + list(plt()) + ['-D', '_' + self._type + '_', '-D_YASM_'] + self._flags + list(incls()) + ['-o', common.get(self.output, 0), path]
-        self.call(cmd)
-
-
+ 
+        cmd = [binary, '-f', self._fmt] + list(plt()) + ['-D', '_' + self._type + '_', '-D_YASM_'] + self._flags + list(incls()) + ['-o', common.get(self.output, 0), path] 
+        self.call(cmd) 
+ 
+ 
 class RODataCXX(iw.CustomCommand):
     def __init__(self, path, unit):
         self._path = path

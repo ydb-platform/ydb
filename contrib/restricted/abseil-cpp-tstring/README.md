@@ -9,9 +9,9 @@ standard library.
 - [About Abseil](#about)
 - [Quickstart](#quickstart)
 - [Building Abseil](#build)
-- [Support](#support)
+- [Support](#support) 
 - [Codemap](#codemap)
-- [Releases](#releases)
+- [Releases](#releases) 
 - [License](#license)
 - [Links](#links)
 
@@ -44,23 +44,23 @@ the Abseil code, running tests, and getting a simple binary working.
 <a name="build"></a>
 ## Building Abseil
 
-[Bazel](https://bazel.build) and [CMake](https://cmake.org/) are the official
-build systems for Abseil.
+[Bazel](https://bazel.build) and [CMake](https://cmake.org/) are the official 
+build systems for Abseil. 
 
-See the [quickstart](https://abseil.io/docs/cpp/quickstart) for more information
-on building Abseil using the Bazel build system.
+See the [quickstart](https://abseil.io/docs/cpp/quickstart) for more information 
+on building Abseil using the Bazel build system. 
 
-If you require CMake support, please check the [CMake build
-instructions](CMake/README.md) and [CMake
-Quickstart](https://abseil.io/docs/cpp/quickstart-cmake).
-
-## Support
-
-Abseil is officially supported on many platforms. See the [Abseil
-platform support
-guide](https://abseil.io/docs/cpp/platforms/platforms) for details on
-supported operating systems, compilers, CPUs, etc.
-
+If you require CMake support, please check the [CMake build 
+instructions](CMake/README.md) and [CMake 
+Quickstart](https://abseil.io/docs/cpp/quickstart-cmake). 
+ 
+## Support 
+ 
+Abseil is officially supported on many platforms. See the [Abseil 
+platform support 
+guide](https://abseil.io/docs/cpp/platforms/platforms) for details on 
+supported operating systems, compilers, CPUs, etc. 
+ 
 ## Codemap
 
 Abseil contains the following C++ library components:
@@ -72,9 +72,9 @@ Abseil contains the following C++ library components:
 * [`algorithm`](y_absl/algorithm/)
   <br /> The `algorithm` library contains additions to the C++ `<algorithm>`
   library and container-based versions of such algorithms.
-* [`cleanup`](y_absl/cleanup/)
-  <br /> The `cleanup` library contains the control-flow-construct-like type
-  `y_absl::Cleanup` which is used for executing a callback on scope exit.
+* [`cleanup`](y_absl/cleanup/) 
+  <br /> The `cleanup` library contains the control-flow-construct-like type 
+  `y_absl::Cleanup` which is used for executing a callback on scope exit. 
 * [`container`](y_absl/container/)
   <br /> The `container` library contains additional STL-style containers,
   including Abseil's unordered "Swiss table" containers.
@@ -95,9 +95,9 @@ Abseil contains the following C++ library components:
 * [`profiling`](y_absl/profiling/)
   <br /> The `profiling` library contains utility code for profiling C++
   entities.  It is currently a private dependency of other Abseil libraries.
-* [`status`](y_absl/status/)
-  <br /> The `status` contains abstractions for error handling, specifically
-  `y_absl::Status` and `y_absl::StatusOr<T>`.
+* [`status`](y_absl/status/) 
+  <br /> The `status` contains abstractions for error handling, specifically 
+  `y_absl::Status` and `y_absl::StatusOr<T>`. 
 * [`strings`](y_absl/strings/)
   <br /> The `strings` library contains a variety of strings routines and
   utilities, including a C++11-compatible version of the C++17
@@ -116,15 +116,15 @@ Abseil contains the following C++ library components:
 * [`utility`](y_absl/utility/)
   <br /> The `utility` library contains utility and helper code.
 
-## Releases
-
-Abseil recommends users "live-at-head" (update to the latest commit from the
-master branch as often as possible). However, we realize this philosophy doesn't
-work for every project, so we also provide [Long Term Support
-Releases](https://github.com/abseil/abseil-cpp/releases) to which we backport
-fixes for severe bugs. See our [release
-management](https://abseil.io/about/releases) document for more details.
-
+## Releases 
+ 
+Abseil recommends users "live-at-head" (update to the latest commit from the 
+master branch as often as possible). However, we realize this philosophy doesn't 
+work for every project, so we also provide [Long Term Support 
+Releases](https://github.com/abseil/abseil-cpp/releases) to which we backport 
+fixes for severe bugs. See our [release 
+management](https://abseil.io/about/releases) document for more details. 
+ 
 ## License
 
 The Abseil C++ library is licensed under the terms of the Apache

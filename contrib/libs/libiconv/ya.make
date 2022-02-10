@@ -1,6 +1,6 @@
 OWNER(
-    g:contrib
-    g:cpp-contrib
+    g:contrib 
+    g:cpp-contrib 
 )
 
 LIBRARY()

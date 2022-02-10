@@ -120,7 +120,7 @@ class Verifier {
     while (!expectations_.empty()) {
       Next(cq, ignore_ok);
     }
-    maybe_expectations_.clear();
+    maybe_expectations_.clear(); 
   }
 
   // This version of Verify stops after a certain deadline
@@ -140,7 +140,7 @@ class Verifier {
         GotTag(got_tag, ok, false);
       }
     }
-    maybe_expectations_.clear();
+    maybe_expectations_.clear(); 
   }
 
   // This version of Verify stops after a certain deadline, and uses the
@@ -163,7 +163,7 @@ class Verifier {
         GotTag(got_tag, ok, false);
       }
     }
-    maybe_expectations_.clear();
+    maybe_expectations_.clear(); 
   }
 
  private:
@@ -184,7 +184,7 @@ class Verifier {
         if (!ignore_ok) {
           EXPECT_EQ(it2->second.ok, ok);
         }
-        maybe_expectations_.erase(it2);
+        maybe_expectations_.erase(it2); 
       } else {
         gpr_log(GPR_ERROR, "Unexpected tag: %p", got_tag);
         abort();
@@ -224,8 +224,8 @@ class ServerBuilderSyncPluginDisabler : public ::grpc::ServerBuilderOption {
 
 class TestScenario {
  public:
-  TestScenario(bool inproc_stub, const TString& creds_type, bool hcs,
-               const TString& content)
+  TestScenario(bool inproc_stub, const TString& creds_type, bool hcs, 
+               const TString& content) 
       : inproc(inproc_stub),
         health_check_service(hcs),
         credentials_type(creds_type),
@@ -233,8 +233,8 @@ class TestScenario {
   void Log() const;
   bool inproc;
   bool health_check_service;
-  const TString credentials_type;
-  const TString message_content;
+  const TString credentials_type; 
+  const TString message_content; 
 };
 
 static std::ostream& operator<<(std::ostream& out,
@@ -355,52 +355,52 @@ TEST_P(AsyncEnd2endTest, SimpleRpc) {
   SendRpc(1);
 }
 
-TEST_P(AsyncEnd2endTest, SimpleRpcWithExpectedError) {
-  ResetStub();
-
-  EchoRequest send_request;
-  EchoRequest recv_request;
-  EchoResponse send_response;
-  EchoResponse recv_response;
-  Status recv_status;
-
-  ClientContext cli_ctx;
-  ServerContext srv_ctx;
-  grpc::ServerAsyncResponseWriter<EchoResponse> response_writer(&srv_ctx);
-  ErrorStatus error_status;
-
-  send_request.set_message(GetParam().message_content);
-  error_status.set_code(1);  // CANCELLED
-  error_status.set_error_message("cancel error message");
-  *send_request.mutable_param()->mutable_expected_error() = error_status;
-
-  std::unique_ptr<ClientAsyncResponseReader<EchoResponse>> response_reader(
-      stub_->AsyncEcho(&cli_ctx, send_request, cq_.get()));
-
-  srv_ctx.AsyncNotifyWhenDone(tag(5));
-  service_->RequestEcho(&srv_ctx, &recv_request, &response_writer, cq_.get(),
-                        cq_.get(), tag(2));
-
-  response_reader->Finish(&recv_response, &recv_status, tag(4));
-
-  Verifier().Expect(2, true).Verify(cq_.get());
-  EXPECT_EQ(send_request.message(), recv_request.message());
-
-  send_response.set_message(recv_request.message());
-  response_writer.Finish(
-      send_response,
-      Status(
-          static_cast<StatusCode>(recv_request.param().expected_error().code()),
-          recv_request.param().expected_error().error_message()),
-      tag(3));
-  Verifier().Expect(3, true).Expect(4, true).Expect(5, true).Verify(cq_.get());
-
-  EXPECT_EQ(recv_response.message(), "");
-  EXPECT_EQ(recv_status.error_code(), error_status.code());
-  EXPECT_EQ(recv_status.error_message(), error_status.error_message());
-  EXPECT_FALSE(srv_ctx.IsCancelled());
-}
-
+TEST_P(AsyncEnd2endTest, SimpleRpcWithExpectedError) { 
+  ResetStub(); 
+ 
+  EchoRequest send_request; 
+  EchoRequest recv_request; 
+  EchoResponse send_response; 
+  EchoResponse recv_response; 
+  Status recv_status; 
+ 
+  ClientContext cli_ctx; 
+  ServerContext srv_ctx; 
+  grpc::ServerAsyncResponseWriter<EchoResponse> response_writer(&srv_ctx); 
+  ErrorStatus error_status; 
+ 
+  send_request.set_message(GetParam().message_content); 
+  error_status.set_code(1);  // CANCELLED 
+  error_status.set_error_message("cancel error message"); 
+  *send_request.mutable_param()->mutable_expected_error() = error_status; 
+ 
+  std::unique_ptr<ClientAsyncResponseReader<EchoResponse>> response_reader( 
+      stub_->AsyncEcho(&cli_ctx, send_request, cq_.get())); 
+ 
+  srv_ctx.AsyncNotifyWhenDone(tag(5)); 
+  service_->RequestEcho(&srv_ctx, &recv_request, &response_writer, cq_.get(), 
+                        cq_.get(), tag(2)); 
+ 
+  response_reader->Finish(&recv_response, &recv_status, tag(4)); 
+ 
+  Verifier().Expect(2, true).Verify(cq_.get()); 
+  EXPECT_EQ(send_request.message(), recv_request.message()); 
+ 
+  send_response.set_message(recv_request.message()); 
+  response_writer.Finish( 
+      send_response, 
+      Status( 
+          static_cast<StatusCode>(recv_request.param().expected_error().code()), 
+          recv_request.param().expected_error().error_message()), 
+      tag(3)); 
+  Verifier().Expect(3, true).Expect(4, true).Expect(5, true).Verify(cq_.get()); 
+ 
+  EXPECT_EQ(recv_response.message(), ""); 
+  EXPECT_EQ(recv_status.error_code(), error_status.code()); 
+  EXPECT_EQ(recv_status.error_message(), error_status.error_message()); 
+  EXPECT_FALSE(srv_ctx.IsCancelled()); 
+} 
+ 
 TEST_P(AsyncEnd2endTest, SequentialRpcs) {
   ResetStub();
   SendRpc(10);
@@ -931,9 +931,9 @@ TEST_P(AsyncEnd2endTest, ClientInitialMetadataRpc) {
   grpc::ServerAsyncResponseWriter<EchoResponse> response_writer(&srv_ctx);
 
   send_request.set_message(GetParam().message_content);
-  std::pair<TString, TString> meta1("key1", "val1");
-  std::pair<TString, TString> meta2("key2", "val2");
-  std::pair<TString, TString> meta3("g.r.d-bin", "xyz");
+  std::pair<TString, TString> meta1("key1", "val1"); 
+  std::pair<TString, TString> meta2("key2", "val2"); 
+  std::pair<TString, TString> meta3("g.r.d-bin", "xyz"); 
   cli_ctx.AddMetadata(meta1.first, meta1.second);
   cli_ctx.AddMetadata(meta2.first, meta2.second);
   cli_ctx.AddMetadata(meta3.first, meta3.second);
@@ -977,8 +977,8 @@ TEST_P(AsyncEnd2endTest, ServerInitialMetadataRpc) {
   grpc::ServerAsyncResponseWriter<EchoResponse> response_writer(&srv_ctx);
 
   send_request.set_message(GetParam().message_content);
-  std::pair<TString, TString> meta1("key1", "val1");
-  std::pair<TString, TString> meta2("key2", "val2");
+  std::pair<TString, TString> meta1("key1", "val1"); 
+  std::pair<TString, TString> meta2("key2", "val2"); 
 
   std::unique_ptr<ClientAsyncResponseReader<EchoResponse>> response_reader(
       stub_->AsyncEcho(&cli_ctx, send_request, cq_.get()));
@@ -1020,8 +1020,8 @@ TEST_P(AsyncEnd2endTest, ServerInitialMetadataServerStreaming) {
   ServerContext srv_ctx;
   ServerAsyncWriter<EchoResponse> srv_stream(&srv_ctx);
 
-  std::pair<::TString, ::TString> meta1("key1", "val1");
-  std::pair<::TString, ::TString> meta2("key2", "val2");
+  std::pair<::TString, ::TString> meta1("key1", "val1"); 
+  std::pair<::TString, ::TString> meta2("key2", "val2"); 
 
   std::unique_ptr<ClientAsyncReader<EchoResponse>> cli_stream(
       stub_->AsyncResponseStream(&cli_ctx, send_request, cq_.get(), tag(1)));
@@ -1075,8 +1075,8 @@ TEST_P(AsyncEnd2endTest, ServerInitialMetadataServerStreamingImplicit) {
   ServerAsyncWriter<EchoResponse> srv_stream(&srv_ctx);
 
   send_request.set_message(GetParam().message_content);
-  std::pair<::TString, ::TString> meta1("key1", "val1");
-  std::pair<::TString, ::TString> meta2("key2", "val2");
+  std::pair<::TString, ::TString> meta1("key1", "val1"); 
+  std::pair<::TString, ::TString> meta2("key2", "val2"); 
 
   std::unique_ptr<ClientAsyncReader<EchoResponse>> cli_stream(
       stub_->AsyncResponseStream(&cli_ctx, send_request, cq_.get(), tag(1)));
@@ -1130,8 +1130,8 @@ TEST_P(AsyncEnd2endTest, ServerTrailingMetadataRpc) {
   grpc::ServerAsyncResponseWriter<EchoResponse> response_writer(&srv_ctx);
 
   send_request.set_message(GetParam().message_content);
-  std::pair<TString, TString> meta1("key1", "val1");
-  std::pair<TString, TString> meta2("key2", "val2");
+  std::pair<TString, TString> meta1("key1", "val1"); 
+  std::pair<TString, TString> meta2("key2", "val2"); 
 
   std::unique_ptr<ClientAsyncResponseReader<EchoResponse>> response_reader(
       stub_->AsyncEcho(&cli_ctx, send_request, cq_.get()));
@@ -1175,19 +1175,19 @@ TEST_P(AsyncEnd2endTest, MetadataRpc) {
   grpc::ServerAsyncResponseWriter<EchoResponse> response_writer(&srv_ctx);
 
   send_request.set_message(GetParam().message_content);
-  std::pair<TString, TString> meta1("key1", "val1");
-  std::pair<TString, TString> meta2(
+  std::pair<TString, TString> meta1("key1", "val1"); 
+  std::pair<TString, TString> meta2( 
       "key2-bin",
-      TString("\xc0\xc1\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xcb\xcc", 13));
-  std::pair<TString, TString> meta3("key3", "val3");
-  std::pair<TString, TString> meta6(
+      TString("\xc0\xc1\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xcb\xcc", 13)); 
+  std::pair<TString, TString> meta3("key3", "val3"); 
+  std::pair<TString, TString> meta6( 
       "key4-bin",
-      TString("\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d",
-                  14));
-  std::pair<TString, TString> meta5("key5", "val5");
-  std::pair<TString, TString> meta4(
+      TString("\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d", 
+                  14)); 
+  std::pair<TString, TString> meta5("key5", "val5"); 
+  std::pair<TString, TString> meta4( 
       "key6-bin",
-      TString(
+      TString( 
           "\xe0\xe1\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xeb\xec\xed\xee", 15));
 
   cli_ctx.AddMetadata(meta1.first, meta1.second);
@@ -1407,7 +1407,7 @@ class AsyncEnd2endServerTryCancelTest : public AsyncEnd2endTest {
       EchoRequest send_request;
       // Client sends 3 messages (tags 3, 4 and 5)
       for (int tag_idx = 3; tag_idx <= 5; tag_idx++) {
-        send_request.set_message("Ping " + ToString(tag_idx));
+        send_request.set_message("Ping " + ToString(tag_idx)); 
         cli_stream->Write(send_request, tag(tag_idx));
         Verifier()
             .Expect(tag_idx, expected_client_cq_result)
@@ -1592,7 +1592,7 @@ class AsyncEnd2endServerTryCancelTest : public AsyncEnd2endTest {
     // Server sends three messages (tags 3, 4 and 5)
     // But if want_done tag is true, we might also see tag 11
     for (int tag_idx = 3; tag_idx <= 5; tag_idx++) {
-      send_response.set_message("Pong " + ToString(tag_idx));
+      send_response.set_message("Pong " + ToString(tag_idx)); 
       srv_stream.Write(send_response, tag(tag_idx));
       // Note that we'll add something to the verifier and verify that
       // something was seen, but it might be tag 11 and not what we
@@ -1874,8 +1874,8 @@ TEST_P(AsyncEnd2endServerTryCancelTest, ServerBidiStreamingTryCancelAfter) {
 std::vector<TestScenario> CreateTestScenarios(bool /*test_secure*/,
                                               bool test_message_size_limit) {
   std::vector<TestScenario> scenarios;
-  std::vector<TString> credentials_types;
-  std::vector<TString> messages;
+  std::vector<TString> credentials_types; 
+  std::vector<TString> messages; 
 
   auto insec_ok = [] {
     // Only allow insecure credentials type when it is registered with the
@@ -1897,20 +1897,20 @@ std::vector<TestScenario> CreateTestScenarios(bool /*test_secure*/,
   if (test_message_size_limit) {
     for (size_t k = 1; k < GRPC_DEFAULT_MAX_RECV_MESSAGE_LENGTH / 1024;
          k *= 32) {
-      TString big_msg;
+      TString big_msg; 
       for (size_t i = 0; i < k * 1024; ++i) {
         char c = 'a' + (i % 26);
         big_msg += c;
       }
       messages.push_back(big_msg);
     }
-    if (!BuiltUnderMsan()) {
-      // 4MB message processing with SSL is very slow under msan
-      // (causes timeouts) and doesn't really increase the signal from tests.
-      // Reserve 100 bytes for other fields of the message proto.
-      messages.push_back(
-          TString(GRPC_DEFAULT_MAX_RECV_MESSAGE_LENGTH - 100, 'a'));
-    }
+    if (!BuiltUnderMsan()) { 
+      // 4MB message processing with SSL is very slow under msan 
+      // (causes timeouts) and doesn't really increase the signal from tests. 
+      // Reserve 100 bytes for other fields of the message proto. 
+      messages.push_back( 
+          TString(GRPC_DEFAULT_MAX_RECV_MESSAGE_LENGTH - 100, 'a')); 
+    } 
   }
 
   // TODO (sreek) Renable tests with health check service after the issue

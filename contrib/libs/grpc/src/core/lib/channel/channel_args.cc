@@ -21,11 +21,11 @@
 #include <limits.h>
 #include <string.h>
 
-#include <vector>
-
-#include "y_absl/strings/str_format.h"
-#include "y_absl/strings/str_join.h"
-
+#include <vector> 
+ 
+#include "y_absl/strings/str_format.h" 
+#include "y_absl/strings/str_join.h" 
+ 
 #include <grpc/grpc.h>
 #include <grpc/impl/codegen/grpc_types.h>
 #include <grpc/impl/codegen/log.h>
@@ -341,28 +341,28 @@ grpc_arg grpc_channel_arg_pointer_create(
   return arg;
 }
 
-TString grpc_channel_args_string(const grpc_channel_args* args) {
-  if (args == nullptr) return "";
-  std::vector<TString> arg_strings;
+TString grpc_channel_args_string(const grpc_channel_args* args) { 
+  if (args == nullptr) return ""; 
+  std::vector<TString> arg_strings; 
   for (size_t i = 0; i < args->num_args; ++i) {
     const grpc_arg& arg = args->args[i];
-    TString arg_string;
+    TString arg_string; 
     switch (arg.type) {
       case GRPC_ARG_INTEGER:
-        arg_string = y_absl::StrFormat("%s=%d", arg.key, arg.value.integer);
+        arg_string = y_absl::StrFormat("%s=%d", arg.key, arg.value.integer); 
         break;
       case GRPC_ARG_STRING:
-        arg_string = y_absl::StrFormat("%s=%s", arg.key, arg.value.string);
+        arg_string = y_absl::StrFormat("%s=%s", arg.key, arg.value.string); 
         break;
       case GRPC_ARG_POINTER:
-        arg_string = y_absl::StrFormat("%s=%p", arg.key, arg.value.pointer.p);
+        arg_string = y_absl::StrFormat("%s=%p", arg.key, arg.value.pointer.p); 
         break;
       default:
-        arg_string = "arg with unknown type";
+        arg_string = "arg with unknown type"; 
     }
-    arg_strings.push_back(arg_string);
+    arg_strings.push_back(arg_string); 
   }
-  return y_absl::StrJoin(arg_strings, ", ");
+  return y_absl::StrJoin(arg_strings, ", "); 
 }
 
 namespace {

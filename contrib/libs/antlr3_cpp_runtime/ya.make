@@ -7,20 +7,20 @@ LIBRARY()
 
 VERSION(2016-03-31-a4d1928e03b2b3f74579e54a6211cd1d695001b9)
 
-LICENSE(
-    BSD-3-Clause AND
-    Unicode-Mappings
+LICENSE( 
+    BSD-3-Clause AND 
+    Unicode-Mappings 
 )
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
-OWNER(g:yql)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
+OWNER(g:yql) 
+ 
 NO_COMPILER_WARNINGS()
 
-ADDINCL(
-    GLOBAL contrib/libs/antlr3_cpp_runtime/include
-)
+ADDINCL( 
+    GLOBAL contrib/libs/antlr3_cpp_runtime/include 
+) 
 
 SRCS(
     antlr3.cpp

@@ -1,183 +1,183 @@
-# File format ($ symbol means the beginning of a line):
-#
-# $ # this message
-# $ # =======================
-# $     # comments (all commentaries should starts with some number of spaces and # symbol)
-# ${action} {license id} {license text hash}
-# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
-# ${all_file_action} filename
-# $ # user commentaries (many lines)
-# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
-# ${action} {license spdx} {license text hash}
-# $BELONGS ./ya/make/file/relative/path/3/ya.make
-# ${all_file_action} filename
-# $    #    user commentaries
-# $ generated description
-# $ ...
-#
-# You can modify action, all_file_action and add commentaries
-# Available actions:
-# keep - keep license in contrib and use in credits
-# skip - skip license
-# remove - remove all files with this license
-# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
-#
-# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
-# We suppose that that files can contain some license info
-# Available all file actions:
-# FILE_IGNORE - ignore file (do nothing)
-# FILE_INCLUDE - include all file data into licenses text file
-# =======================
-
-KEEP     COPYRIGHT_SERVICE_LABEL 3e6f7a2dce9d6519bf3f2a9eae7e5b6b
-BELONGS ya.make
-    License text:
-        Copyright (c) 2012, 2014, 2015, 2016 Tatsuhiro Tsujikawa
-        Copyright (c) 2012, 2014, 2015, 2016 nghttp2 contributors
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        COPYING [3:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 4ff4b1d4779fbe4150ca9b79f535b277
-BELONGS ya.make
-    License text:
-         * Copyright (c) 2012 Tatsuhiro Tsujikawa
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/nghttp2_frame.h [4:4]
-        lib/nghttp2_helper.c [4:4]
-        lib/nghttp2_helper.h [4:4]
-        lib/nghttp2_int.h [4:4]
-        lib/nghttp2_net.h [4:4]
-        lib/nghttp2_npn.c [4:4]
-        lib/nghttp2_npn.h [4:4]
-        lib/nghttp2_outbound_item.c [4:4]
-        lib/nghttp2_outbound_item.h [4:4]
-        lib/nghttp2_pq.c [4:4]
-        lib/nghttp2_pq.h [4:4]
-        lib/nghttp2_queue.c [4:4]
-        lib/nghttp2_queue.h [4:4]
-        lib/nghttp2_session.c [4:4]
-        lib/nghttp2_session.h [4:4]
-        lib/nghttp2_stream.c [4:4]
-        lib/nghttp2_stream.h [4:4]
-        lib/nghttp2_submit.h [4:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 5707688f830aa6eb6975ae9530e1e86f
-BELONGS ya.make
-    License text:
-         * Copyright (c) 2013 Tatsuhiro Tsujikawa
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/nghttp2_frame.c [4:4]
-        lib/nghttp2_hd.c [4:4]
-        lib/nghttp2_hd.h [4:4]
-        lib/nghttp2_hd_huffman.c [4:4]
-        lib/nghttp2_hd_huffman.h [4:4]
-        lib/nghttp2_hd_huffman_data.c [4:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 576a724fa96aabe61be560e6c4e0b9ef
-BELONGS ya.make
-    License text:
-         * Copyright (c) 2015 Tatsuhiro Tsujikawa
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/nghttp2_http.c [4:4]
-        lib/nghttp2_http.h [4:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 6541383fee0ad171c4398e1b4635e1d2
-BELONGS ya.make
-    License text:
-         * Copyright (c) 2012, 2013 Tatsuhiro Tsujikawa
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/includes/nghttp2/nghttp2ver.h [4:4]
-        lib/nghttp2_submit.c [4:4]
-        lib/nghttp2_version.c [4:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 71499817b900aaf04d853fdffdc657b0
-BELONGS ya.make
-    License text:
-           Copyright (C) 1994-1996, 1999-2002, 2004-2016 Free Software
-        Foundation, Inc.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        INSTALL [4:5]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 7e2d5f433f62e38814cee9a67e1c3cd0
-BELONGS ya.make
-    License text:
-         * Copyright (c) 2014 Tatsuhiro Tsujikawa
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/nghttp2_buf.c [4:4]
-        lib/nghttp2_buf.h [4:4]
-        lib/nghttp2_callbacks.c [4:4]
-        lib/nghttp2_callbacks.h [4:4]
-        lib/nghttp2_mem.c [4:4]
-        lib/nghttp2_mem.h [4:4]
-        lib/nghttp2_option.c [4:4]
-        lib/nghttp2_option.h [4:4]
-        lib/nghttp2_priority_spec.c [4:4]
-        lib/nghttp2_priority_spec.h [4:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 85a26c76e902a4a81a218f0850a3d3b7
-BELONGS ya.make
-    License text:
-        Copyright (c) 2012, 2014, 2015, 2016 Tatsuhiro Tsujikawa
-        Copyright (c) 2012, 2014, 2015, 2016 nghttp2 contributors
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        COPYING [3:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 903ded6b06bd9cd6570e19cb6841ba5f
-BELONGS ya.make
-    License text:
-         * Copyright (c) 2016 Tatsuhiro Tsujikawa
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/nghttp2_debug.c [4:4]
-        lib/nghttp2_debug.h [4:4]
-        lib/nghttp2_rcbuf.c [4:4]
-        lib/nghttp2_rcbuf.h [4:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 939565698d74f2abf5dbec0e5bf49260
-BELONGS ya.make
-    License text:
-         * Copyright (c) 2013, 2014 Tatsuhiro Tsujikawa
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/includes/nghttp2/nghttp2.h [4:4]
+# File format ($ symbol means the beginning of a line): 
+# 
+# $ # this message 
+# $ # ======================= 
+# $     # comments (all commentaries should starts with some number of spaces and # symbol) 
+# ${action} {license id} {license text hash} 
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make 
+# ${all_file_action} filename 
+# $ # user commentaries (many lines) 
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify) 
+# ${action} {license spdx} {license text hash} 
+# $BELONGS ./ya/make/file/relative/path/3/ya.make 
+# ${all_file_action} filename 
+# $    #    user commentaries 
+# $ generated description 
+# $ ... 
+# 
+# You can modify action, all_file_action and add commentaries 
+# Available actions: 
+# keep - keep license in contrib and use in credits 
+# skip - skip license 
+# remove - remove all files with this license 
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file 
+# 
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory) 
+# We suppose that that files can contain some license info 
+# Available all file actions: 
+# FILE_IGNORE - ignore file (do nothing) 
+# FILE_INCLUDE - include all file data into licenses text file 
+# ======================= 
+ 
+KEEP     COPYRIGHT_SERVICE_LABEL 3e6f7a2dce9d6519bf3f2a9eae7e5b6b 
+BELONGS ya.make 
+    License text: 
+        Copyright (c) 2012, 2014, 2015, 2016 Tatsuhiro Tsujikawa 
+        Copyright (c) 2012, 2014, 2015, 2016 nghttp2 contributors 
+    Scancode info: 
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL 
+        Score           : 100.00 
+        Match type      : COPYRIGHT 
+    Files with this license: 
+        COPYING [3:4] 
+ 
+KEEP     COPYRIGHT_SERVICE_LABEL 4ff4b1d4779fbe4150ca9b79f535b277 
+BELONGS ya.make 
+    License text: 
+         * Copyright (c) 2012 Tatsuhiro Tsujikawa 
+    Scancode info: 
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL 
+        Score           : 100.00 
+        Match type      : COPYRIGHT 
+    Files with this license: 
+        lib/nghttp2_frame.h [4:4] 
+        lib/nghttp2_helper.c [4:4] 
+        lib/nghttp2_helper.h [4:4] 
+        lib/nghttp2_int.h [4:4] 
+        lib/nghttp2_net.h [4:4] 
+        lib/nghttp2_npn.c [4:4] 
+        lib/nghttp2_npn.h [4:4] 
+        lib/nghttp2_outbound_item.c [4:4] 
+        lib/nghttp2_outbound_item.h [4:4] 
+        lib/nghttp2_pq.c [4:4] 
+        lib/nghttp2_pq.h [4:4] 
+        lib/nghttp2_queue.c [4:4] 
+        lib/nghttp2_queue.h [4:4] 
+        lib/nghttp2_session.c [4:4] 
+        lib/nghttp2_session.h [4:4] 
+        lib/nghttp2_stream.c [4:4] 
+        lib/nghttp2_stream.h [4:4] 
+        lib/nghttp2_submit.h [4:4] 
+ 
+KEEP     COPYRIGHT_SERVICE_LABEL 5707688f830aa6eb6975ae9530e1e86f 
+BELONGS ya.make 
+    License text: 
+         * Copyright (c) 2013 Tatsuhiro Tsujikawa 
+    Scancode info: 
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL 
+        Score           : 100.00 
+        Match type      : COPYRIGHT 
+    Files with this license: 
+        lib/nghttp2_frame.c [4:4] 
+        lib/nghttp2_hd.c [4:4] 
+        lib/nghttp2_hd.h [4:4] 
+        lib/nghttp2_hd_huffman.c [4:4] 
+        lib/nghttp2_hd_huffman.h [4:4] 
+        lib/nghttp2_hd_huffman_data.c [4:4] 
+ 
+KEEP     COPYRIGHT_SERVICE_LABEL 576a724fa96aabe61be560e6c4e0b9ef 
+BELONGS ya.make 
+    License text: 
+         * Copyright (c) 2015 Tatsuhiro Tsujikawa 
+    Scancode info: 
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL 
+        Score           : 100.00 
+        Match type      : COPYRIGHT 
+    Files with this license: 
+        lib/nghttp2_http.c [4:4] 
+        lib/nghttp2_http.h [4:4] 
+ 
+KEEP     COPYRIGHT_SERVICE_LABEL 6541383fee0ad171c4398e1b4635e1d2 
+BELONGS ya.make 
+    License text: 
+         * Copyright (c) 2012, 2013 Tatsuhiro Tsujikawa 
+    Scancode info: 
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL 
+        Score           : 100.00 
+        Match type      : COPYRIGHT 
+    Files with this license: 
+        lib/includes/nghttp2/nghttp2ver.h [4:4] 
+        lib/nghttp2_submit.c [4:4] 
+        lib/nghttp2_version.c [4:4] 
+ 
+KEEP     COPYRIGHT_SERVICE_LABEL 71499817b900aaf04d853fdffdc657b0 
+BELONGS ya.make 
+    License text: 
+           Copyright (C) 1994-1996, 1999-2002, 2004-2016 Free Software 
+        Foundation, Inc. 
+    Scancode info: 
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL 
+        Score           : 100.00 
+        Match type      : COPYRIGHT 
+    Files with this license: 
+        INSTALL [4:5] 
+ 
+KEEP     COPYRIGHT_SERVICE_LABEL 7e2d5f433f62e38814cee9a67e1c3cd0 
+BELONGS ya.make 
+    License text: 
+         * Copyright (c) 2014 Tatsuhiro Tsujikawa 
+    Scancode info: 
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL 
+        Score           : 100.00 
+        Match type      : COPYRIGHT 
+    Files with this license: 
+        lib/nghttp2_buf.c [4:4] 
+        lib/nghttp2_buf.h [4:4] 
+        lib/nghttp2_callbacks.c [4:4] 
+        lib/nghttp2_callbacks.h [4:4] 
+        lib/nghttp2_mem.c [4:4] 
+        lib/nghttp2_mem.h [4:4] 
+        lib/nghttp2_option.c [4:4] 
+        lib/nghttp2_option.h [4:4] 
+        lib/nghttp2_priority_spec.c [4:4] 
+        lib/nghttp2_priority_spec.h [4:4] 
+ 
+KEEP     COPYRIGHT_SERVICE_LABEL 85a26c76e902a4a81a218f0850a3d3b7 
+BELONGS ya.make 
+    License text: 
+        Copyright (c) 2012, 2014, 2015, 2016 Tatsuhiro Tsujikawa 
+        Copyright (c) 2012, 2014, 2015, 2016 nghttp2 contributors 
+    Scancode info: 
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL 
+        Score           : 100.00 
+        Match type      : COPYRIGHT 
+    Files with this license: 
+        COPYING [3:4] 
+ 
+KEEP     COPYRIGHT_SERVICE_LABEL 903ded6b06bd9cd6570e19cb6841ba5f 
+BELONGS ya.make 
+    License text: 
+         * Copyright (c) 2016 Tatsuhiro Tsujikawa 
+    Scancode info: 
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL 
+        Score           : 100.00 
+        Match type      : COPYRIGHT 
+    Files with this license: 
+        lib/nghttp2_debug.c [4:4] 
+        lib/nghttp2_debug.h [4:4] 
+        lib/nghttp2_rcbuf.c [4:4] 
+        lib/nghttp2_rcbuf.h [4:4] 
+ 
+KEEP     COPYRIGHT_SERVICE_LABEL 939565698d74f2abf5dbec0e5bf49260 
+BELONGS ya.make 
+    License text: 
+         * Copyright (c) 2013, 2014 Tatsuhiro Tsujikawa 
+    Scancode info: 
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL 
+        Score           : 100.00 
+        Match type      : COPYRIGHT 
+    Files with this license: 
+        lib/includes/nghttp2/nghttp2.h [4:4] 
 
 KEEP     COPYRIGHT_SERVICE_LABEL bc545ae6368aee638646db325e41a41c
 BELONGS ya.make

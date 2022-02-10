@@ -1,13 +1,13 @@
 LIBRARY()
 
-LICENSE(Apache-2.0)
+LICENSE(Apache-2.0) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 OWNER(
     ayles
     prime
-    g:cpp-contrib
+    g:cpp-contrib 
 )
 
 # https://github.com/google/tcmalloc
@@ -20,9 +20,9 @@ SRCS(
 
 INCLUDE(common.inc)
 
-CFLAGS(
-    -DTCMALLOC_256K_PAGES
-)
+CFLAGS( 
+    -DTCMALLOC_256K_PAGES 
+) 
 
 END()
 

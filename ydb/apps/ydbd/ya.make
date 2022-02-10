@@ -92,7 +92,7 @@ IF (OPENSOURCE)
         FORBIDDEN
         # https://st.yandex-team.ru/DTCC-553
         EXCEPT
-        contrib/libs/linux-headers # DTCC-725
+        contrib/libs/linux-headers # DTCC-725 
         EXCEPT contrib/libs/llvm12/include
     )
 ENDIF()

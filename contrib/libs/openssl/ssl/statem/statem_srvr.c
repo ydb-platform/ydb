@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2021 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2021 The OpenSSL Project Authors. All Rights Reserved. 
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  * Copyright 2005 Nokia. All rights reserved.
  *
@@ -2178,7 +2178,7 @@ int tls_handle_alpn(SSL *s)
             OPENSSL_free(s->s3->alpn_selected);
             s->s3->alpn_selected = OPENSSL_memdup(selected, selected_len);
             if (s->s3->alpn_selected == NULL) {
-                s->s3->alpn_selected_len = 0;
+                s->s3->alpn_selected_len = 0; 
                 SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_HANDLE_ALPN,
                          ERR_R_INTERNAL_ERROR);
                 return 0;
@@ -2578,7 +2578,7 @@ int tls_construct_server_key_exchange(SSL *s, WPACKET *pkt)
 
         s->s3->tmp.pkey = ssl_generate_pkey(pkdhp);
         if (s->s3->tmp.pkey == NULL) {
-            SSLfatal(s, SSL_AD_INTERNAL_ERROR, 0, ERR_R_INTERNAL_ERROR);
+            SSLfatal(s, SSL_AD_INTERNAL_ERROR, 0, ERR_R_INTERNAL_ERROR); 
             goto err;
         }
 
@@ -2854,21 +2854,21 @@ int tls_construct_certificate_request(SSL *s, WPACKET *pkt)
         if (s->post_handshake_auth == SSL_PHA_REQUEST_PENDING) {
             OPENSSL_free(s->pha_context);
             s->pha_context_len = 32;
-            if ((s->pha_context = OPENSSL_malloc(s->pha_context_len)) == NULL) {
-                s->pha_context_len = 0;
+            if ((s->pha_context = OPENSSL_malloc(s->pha_context_len)) == NULL) { 
+                s->pha_context_len = 0; 
                 SSLfatal(s, SSL_AD_INTERNAL_ERROR,
                          SSL_F_TLS_CONSTRUCT_CERTIFICATE_REQUEST,
                          ERR_R_INTERNAL_ERROR);
                 return 0;
             }
-            if (RAND_bytes(s->pha_context, s->pha_context_len) <= 0
-                    || !WPACKET_sub_memcpy_u8(pkt, s->pha_context,
-                                              s->pha_context_len)) {
-                SSLfatal(s, SSL_AD_INTERNAL_ERROR,
-                         SSL_F_TLS_CONSTRUCT_CERTIFICATE_REQUEST,
-                         ERR_R_INTERNAL_ERROR);
-                return 0;
-            }
+            if (RAND_bytes(s->pha_context, s->pha_context_len) <= 0 
+                    || !WPACKET_sub_memcpy_u8(pkt, s->pha_context, 
+                                              s->pha_context_len)) { 
+                SSLfatal(s, SSL_AD_INTERNAL_ERROR, 
+                         SSL_F_TLS_CONSTRUCT_CERTIFICATE_REQUEST, 
+                         ERR_R_INTERNAL_ERROR); 
+                return 0; 
+            } 
             /* reset the handshake hash back to just after the ClientFinished */
             if (!tls13_restore_handshake_digest_for_pha(s)) {
                 /* SSLfatal() already called */
@@ -2977,7 +2977,7 @@ static int tls_process_cke_psk_preamble(SSL *s, PACKET *pkt)
     OPENSSL_cleanse(psk, psklen);
 
     if (s->s3->tmp.psk == NULL) {
-        s->s3->tmp.psklen = 0;
+        s->s3->tmp.psklen = 0; 
         SSLfatal(s, SSL_AD_INTERNAL_ERROR,
                  SSL_F_TLS_PROCESS_CKE_PSK_PREAMBLE, ERR_R_MALLOC_FAILURE);
         return 0;
@@ -3517,7 +3517,7 @@ MSG_PROCESS_RETURN tls_process_client_key_exchange(SSL *s, PACKET *pkt)
 #ifndef OPENSSL_NO_PSK
     OPENSSL_clear_free(s->s3->tmp.psk, s->s3->tmp.psklen);
     s->s3->tmp.psk = NULL;
-    s->s3->tmp.psklen = 0;
+    s->s3->tmp.psklen = 0; 
 #endif
     return MSG_PROCESS_ERROR;
 }
@@ -3753,7 +3753,7 @@ MSG_PROCESS_RETURN tls_process_client_certificate(SSL *s, PACKET *pkt)
 
     sk_X509_pop_free(s->session->peer_chain, X509_free);
     s->session->peer_chain = sk;
-    sk = NULL;
+    sk = NULL; 
 
     /*
      * Freeze the handshake buffer. For <TLS1.3 we do this after the CKE
@@ -4127,7 +4127,7 @@ int tls_construct_new_session_ticket(SSL *s, WPACKET *pkt)
             s->session->ext.alpn_selected =
                 OPENSSL_memdup(s->s3->alpn_selected, s->s3->alpn_selected_len);
             if (s->session->ext.alpn_selected == NULL) {
-                s->session->ext.alpn_selected_len = 0;
+                s->session->ext.alpn_selected_len = 0; 
                 SSLfatal(s, SSL_AD_INTERNAL_ERROR,
                          SSL_F_TLS_CONSTRUCT_NEW_SESSION_TICKET,
                          ERR_R_MALLOC_FAILURE);
@@ -4139,12 +4139,12 @@ int tls_construct_new_session_ticket(SSL *s, WPACKET *pkt)
     }
 
     if (tctx->generate_ticket_cb != NULL &&
-        tctx->generate_ticket_cb(s, tctx->ticket_cb_data) == 0) {
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR,
-                 SSL_F_TLS_CONSTRUCT_NEW_SESSION_TICKET,
-                 ERR_R_INTERNAL_ERROR);
+        tctx->generate_ticket_cb(s, tctx->ticket_cb_data) == 0) { 
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, 
+                 SSL_F_TLS_CONSTRUCT_NEW_SESSION_TICKET, 
+                 ERR_R_INTERNAL_ERROR); 
         goto err;
-    }
+    } 
     /*
      * If we are using anti-replay protection then we behave as if
      * SSL_OP_NO_TICKET is set - we are caching tickets anyway so there

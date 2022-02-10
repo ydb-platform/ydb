@@ -32,10 +32,10 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include <util/generic/string.h>
-
-#include "y_absl/strings/str_cat.h"
-
+#include <util/generic/string.h> 
+ 
+#include "y_absl/strings/str_cat.h" 
+ 
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include "src/core/lib/gpr/string.h"
@@ -60,12 +60,12 @@ grpc_endpoint_pair grpc_iomgr_create_endpoint_pair(const char* name,
 
   grpc_core::ExecCtx exec_ctx;
 
-  TString final_name = y_absl::StrCat(name, ":client");
-  p.client = grpc_tcp_create(grpc_fd_create(sv[1], final_name.c_str(), false),
-                             args, "socketpair-server");
-  final_name = y_absl::StrCat(name, ":server");
-  p.server = grpc_tcp_create(grpc_fd_create(sv[0], final_name.c_str(), false),
-                             args, "socketpair-client");
+  TString final_name = y_absl::StrCat(name, ":client"); 
+  p.client = grpc_tcp_create(grpc_fd_create(sv[1], final_name.c_str(), false), 
+                             args, "socketpair-server"); 
+  final_name = y_absl::StrCat(name, ":server"); 
+  p.server = grpc_tcp_create(grpc_fd_create(sv[0], final_name.c_str(), false), 
+                             args, "socketpair-client"); 
 
   return p;
 }

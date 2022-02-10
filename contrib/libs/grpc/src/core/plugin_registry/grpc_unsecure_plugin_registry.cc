@@ -40,10 +40,10 @@ void grpc_resolver_fake_init(void);
 void grpc_resolver_fake_shutdown(void);
 void grpc_lb_policy_grpclb_init(void);
 void grpc_lb_policy_grpclb_shutdown(void);
-void grpc_lb_policy_priority_init(void);
-void grpc_lb_policy_priority_shutdown(void);
-void grpc_lb_policy_weighted_target_init(void);
-void grpc_lb_policy_weighted_target_shutdown(void);
+void grpc_lb_policy_priority_init(void); 
+void grpc_lb_policy_priority_shutdown(void); 
+void grpc_lb_policy_weighted_target_init(void); 
+void grpc_lb_policy_weighted_target_shutdown(void); 
 void grpc_lb_policy_pick_first_init(void);
 void grpc_lb_policy_pick_first_shutdown(void);
 void grpc_lb_policy_round_robin_init(void);
@@ -54,8 +54,8 @@ void grpc_max_age_filter_init(void);
 void grpc_max_age_filter_shutdown(void);
 void grpc_message_size_filter_init(void);
 void grpc_message_size_filter_shutdown(void);
-void grpc_service_config_channel_arg_filter_init(void);
-void grpc_service_config_channel_arg_filter_shutdown(void);
+void grpc_service_config_channel_arg_filter_init(void); 
+void grpc_service_config_channel_arg_filter_shutdown(void); 
 void grpc_client_authority_filter_init(void);
 void grpc_client_authority_filter_shutdown(void);
 void grpc_workaround_cronet_compression_filter_init(void);
@@ -82,10 +82,10 @@ void grpc_register_built_in_plugins(void) {
                        grpc_resolver_fake_shutdown);
   grpc_register_plugin(grpc_lb_policy_grpclb_init,
                        grpc_lb_policy_grpclb_shutdown);
-  grpc_register_plugin(grpc_lb_policy_priority_init,
-                       grpc_lb_policy_priority_shutdown);
-  grpc_register_plugin(grpc_lb_policy_weighted_target_init,
-                       grpc_lb_policy_weighted_target_shutdown);
+  grpc_register_plugin(grpc_lb_policy_priority_init, 
+                       grpc_lb_policy_priority_shutdown); 
+  grpc_register_plugin(grpc_lb_policy_weighted_target_init, 
+                       grpc_lb_policy_weighted_target_shutdown); 
   grpc_register_plugin(grpc_lb_policy_pick_first_init,
                        grpc_lb_policy_pick_first_shutdown);
   grpc_register_plugin(grpc_lb_policy_round_robin_init,
@@ -96,8 +96,8 @@ void grpc_register_built_in_plugins(void) {
                        grpc_max_age_filter_shutdown);
   grpc_register_plugin(grpc_message_size_filter_init,
                        grpc_message_size_filter_shutdown);
-  grpc_register_plugin(grpc_service_config_channel_arg_filter_init,
-                       grpc_service_config_channel_arg_filter_shutdown);
+  grpc_register_plugin(grpc_service_config_channel_arg_filter_init, 
+                       grpc_service_config_channel_arg_filter_shutdown); 
   grpc_register_plugin(grpc_client_authority_filter_init,
                        grpc_client_authority_filter_shutdown);
   grpc_register_plugin(grpc_workaround_cronet_compression_filter_init,

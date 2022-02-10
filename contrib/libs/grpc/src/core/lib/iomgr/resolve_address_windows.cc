@@ -29,10 +29,10 @@
 #include <string.h>
 #include <sys/types.h>
 
-#include <util/generic/string.h>
-
-#include "y_absl/strings/str_format.h"
-
+#include <util/generic/string.h> 
+ 
+#include "y_absl/strings/str_format.h" 
+ 
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/log_windows.h>
@@ -65,21 +65,21 @@ static grpc_error* windows_blocking_resolve_address(
   grpc_error* error = GRPC_ERROR_NONE;
 
   /* parse name, splitting it into host and port parts */
-  TString host;
-  TString port;
+  TString host; 
+  TString port; 
   grpc_core::SplitHostPort(name, &host, &port);
-  if (host.empty()) {
-    error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(
-        y_absl::StrFormat("unparseable host:port: '%s'", name).c_str());
+  if (host.empty()) { 
+    error = GRPC_ERROR_CREATE_FROM_COPIED_STRING( 
+        y_absl::StrFormat("unparseable host:port: '%s'", name).c_str()); 
     goto done;
   }
-  if (port.empty()) {
+  if (port.empty()) { 
     if (default_port == NULL) {
-      error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(
-          y_absl::StrFormat("no port in name '%s'", name).c_str());
+      error = GRPC_ERROR_CREATE_FROM_COPIED_STRING( 
+          y_absl::StrFormat("no port in name '%s'", name).c_str()); 
       goto done;
     }
-    port = default_port;
+    port = default_port; 
   }
 
   /* Call getaddrinfo */
@@ -89,7 +89,7 @@ static grpc_error* windows_blocking_resolve_address(
   hints.ai_flags = AI_PASSIVE;     /* for wildcard IP address */
 
   GRPC_SCHEDULING_START_BLOCKING_REGION;
-  s = getaddrinfo(host.c_str(), port.c_str(), &hints, &result);
+  s = getaddrinfo(host.c_str(), port.c_str(), &hints, &result); 
   GRPC_SCHEDULING_END_BLOCKING_REGION;
   if (s != 0) {
     error = GRPC_WSA_ERROR(WSAGetLastError(), "getaddrinfo");

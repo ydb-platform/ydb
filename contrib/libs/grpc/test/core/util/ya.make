@@ -2,19 +2,19 @@ LIBRARY()
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
 
-OWNER(dvshkurko)
-
+OWNER(dvshkurko) 
+ 
 PEERDIR(
     contrib/libs/grpc
-    contrib/restricted/abseil-cpp-tstring/y_absl/debugging/failure_signal_handler
+    contrib/restricted/abseil-cpp-tstring/y_absl/debugging/failure_signal_handler 
 )
 
-ADDINCL(
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc
-    contrib/libs/grpc
-)
+ADDINCL( 
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc 
+    contrib/libs/grpc 
+) 
 
 NO_COMPILER_WARNINGS()
 

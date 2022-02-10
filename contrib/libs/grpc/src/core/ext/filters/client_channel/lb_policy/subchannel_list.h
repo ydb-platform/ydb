@@ -26,8 +26,8 @@
 
 #include <grpc/support/alloc.h>
 
-#include "y_absl/container/inlined_vector.h"
-
+#include "y_absl/container/inlined_vector.h" 
+ 
 #include "src/core/ext/filters/client_channel/lb_policy_registry.h"
 #include "src/core/ext/filters/client_channel/server_address.h"
 // TODO(roth): Should not need the include of subchannel.h here, since
@@ -64,7 +64,7 @@ class MySubchannelList
 };
 
 */
-// All methods will be called from within the client_channel work serializer.
+// All methods will be called from within the client_channel work serializer. 
 
 namespace grpc_core {
 
@@ -174,7 +174,7 @@ class SubchannelData {
 template <typename SubchannelListType, typename SubchannelDataType>
 class SubchannelList : public InternallyRefCounted<SubchannelListType> {
  public:
-  typedef y_absl::InlinedVector<SubchannelDataType, 10> SubchannelVector;
+  typedef y_absl::InlinedVector<SubchannelDataType, 10> SubchannelVector; 
 
   // The number of subchannels in the list.
   size_t num_subchannels() const { return subchannels_.size(); }
@@ -201,7 +201,7 @@ class SubchannelList : public InternallyRefCounted<SubchannelListType> {
 
  protected:
   SubchannelList(LoadBalancingPolicy* policy, TraceFlag* tracer,
-                 ServerAddressList addresses,
+                 ServerAddressList addresses, 
                  LoadBalancingPolicy::ChannelControlHelper* helper,
                  const grpc_channel_args& args);
 
@@ -351,7 +351,7 @@ void SubchannelData<SubchannelListType, SubchannelDataType>::ShutdownLocked() {
 
 template <typename SubchannelListType, typename SubchannelDataType>
 SubchannelList<SubchannelListType, SubchannelDataType>::SubchannelList(
-    LoadBalancingPolicy* policy, TraceFlag* tracer, ServerAddressList addresses,
+    LoadBalancingPolicy* policy, TraceFlag* tracer, ServerAddressList addresses, 
     LoadBalancingPolicy::ChannelControlHelper* helper,
     const grpc_channel_args& args) Y_NO_SANITIZE("undefined")
     : InternallyRefCounted<SubchannelListType>(tracer),
@@ -364,27 +364,27 @@ SubchannelList<SubchannelListType, SubchannelDataType>::SubchannelList(
   }
   subchannels_.reserve(addresses.size());
   // Create a subchannel for each address.
-  for (const ServerAddress& address : addresses) {
+  for (const ServerAddress& address : addresses) { 
     RefCountedPtr<SubchannelInterface> subchannel =
-        helper->CreateSubchannel(std::move(address), args);
+        helper->CreateSubchannel(std::move(address), args); 
     if (subchannel == nullptr) {
       // Subchannel could not be created.
       if (GRPC_TRACE_FLAG_ENABLED(*tracer_)) {
         gpr_log(GPR_INFO,
-                "[%s %p] could not create subchannel for address %s, "
+                "[%s %p] could not create subchannel for address %s, " 
                 "ignoring",
-                tracer_->name(), policy_, address.ToString().c_str());
+                tracer_->name(), policy_, address.ToString().c_str()); 
       }
       continue;
     }
     if (GRPC_TRACE_FLAG_ENABLED(*tracer_)) {
       gpr_log(GPR_INFO,
               "[%s %p] subchannel list %p index %" PRIuPTR
-              ": Created subchannel %p for address %s",
+              ": Created subchannel %p for address %s", 
               tracer_->name(), policy_, this, subchannels_.size(),
-              subchannel.get(), address.ToString().c_str());
+              subchannel.get(), address.ToString().c_str()); 
     }
-    subchannels_.emplace_back(this, address, std::move(subchannel));
+    subchannels_.emplace_back(this, address, std::move(subchannel)); 
   }
 }
 

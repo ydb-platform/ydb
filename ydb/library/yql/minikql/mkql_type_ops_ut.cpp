@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             const NUdf::TUnboxedValue& out = ValueToString(NUdf::EDataSlot::Date, NUdf::TUnboxedValuePod(packed));
             TStringStream expected;
             expected << LeftPad(year, 4, '0') << '-' << LeftPad(month, 2, '0') << '-' << LeftPad(day, 2, '0');
-            UNIT_ASSERT_VALUES_EQUAL_C(TStringBuf(out.AsStringRef()), expected.Str(), "Packed value: " << packed);
+            UNIT_ASSERT_VALUES_EQUAL_C(TStringBuf(out.AsStringRef()), expected.Str(), "Packed value: " << packed); 
 
             const auto out2 = ValueFromString(NUdf::EDataSlot::Date, expected.Str());
             UNIT_ASSERT_C(out2, "Date value: " << expected.Str());

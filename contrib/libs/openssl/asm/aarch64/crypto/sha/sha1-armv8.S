@@ -3,7 +3,7 @@
 .text
 
 
-.hidden	OPENSSL_armcap_P
+.hidden	OPENSSL_armcap_P 
 .globl	sha1_block_data_order
 .type	sha1_block_data_order,%function
 .align	6

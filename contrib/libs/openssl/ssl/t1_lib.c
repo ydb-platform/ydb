@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2021 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2021 The OpenSSL Project Authors. All Rights Reserved. 
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -2439,55 +2439,55 @@ int SSL_check_chain(SSL *s, X509 *x, EVP_PKEY *pk, STACK_OF(X509) *chain)
 #ifndef OPENSSL_NO_DH
 DH *ssl_get_auto_dh(SSL *s)
 {
-    DH *dhp = NULL;
-    BIGNUM *p = NULL, *g = NULL;
-    int dh_secbits = 80, sec_level_bits;
-
-    if (s->cert->dh_tmp_auto != 2) {
-        if (s->s3->tmp.new_cipher->algorithm_auth & (SSL_aNULL | SSL_aPSK)) {
-            if (s->s3->tmp.new_cipher->strength_bits == 256)
-                dh_secbits = 128;
-            else
-                dh_secbits = 80;
-        } else {
-            if (s->s3->tmp.cert == NULL)
-                return NULL;
-            dh_secbits = EVP_PKEY_security_bits(s->s3->tmp.cert->privatekey);
-        }
+    DH *dhp = NULL; 
+    BIGNUM *p = NULL, *g = NULL; 
+    int dh_secbits = 80, sec_level_bits; 
+ 
+    if (s->cert->dh_tmp_auto != 2) { 
+        if (s->s3->tmp.new_cipher->algorithm_auth & (SSL_aNULL | SSL_aPSK)) { 
+            if (s->s3->tmp.new_cipher->strength_bits == 256) 
+                dh_secbits = 128; 
+            else 
+                dh_secbits = 80; 
+        } else { 
+            if (s->s3->tmp.cert == NULL) 
+                return NULL; 
+            dh_secbits = EVP_PKEY_security_bits(s->s3->tmp.cert->privatekey); 
+        } 
     }
 
-    dhp = DH_new();
-    if (dhp == NULL)
-        return NULL;
-    g = BN_new();
-    if (g == NULL || !BN_set_word(g, 2)) {
-        DH_free(dhp);
-        BN_free(g);
-        return NULL;
+    dhp = DH_new(); 
+    if (dhp == NULL) 
+        return NULL; 
+    g = BN_new(); 
+    if (g == NULL || !BN_set_word(g, 2)) { 
+        DH_free(dhp); 
+        BN_free(g); 
+        return NULL; 
     }
-
-    /* Do not pick a prime that is too weak for the current security level */
-    sec_level_bits = ssl_get_security_level_bits(s, NULL, NULL);
-    if (dh_secbits < sec_level_bits)
-        dh_secbits = sec_level_bits;
-
-    if (dh_secbits >= 192)
-        p = BN_get_rfc3526_prime_8192(NULL);
-    else if (dh_secbits >= 152)
-        p = BN_get_rfc3526_prime_4096(NULL);
-    else if (dh_secbits >= 128)
-        p = BN_get_rfc3526_prime_3072(NULL);
-    else if (dh_secbits >= 112)
-        p = BN_get_rfc3526_prime_2048(NULL);
-    else
-        p = BN_get_rfc2409_prime_1024(NULL);
-    if (p == NULL || !DH_set0_pqg(dhp, p, NULL, g)) {
-        DH_free(dhp);
-        BN_free(p);
-        BN_free(g);
-        return NULL;
-    }
-    return dhp;
+ 
+    /* Do not pick a prime that is too weak for the current security level */ 
+    sec_level_bits = ssl_get_security_level_bits(s, NULL, NULL); 
+    if (dh_secbits < sec_level_bits) 
+        dh_secbits = sec_level_bits; 
+ 
+    if (dh_secbits >= 192) 
+        p = BN_get_rfc3526_prime_8192(NULL); 
+    else if (dh_secbits >= 152) 
+        p = BN_get_rfc3526_prime_4096(NULL); 
+    else if (dh_secbits >= 128) 
+        p = BN_get_rfc3526_prime_3072(NULL); 
+    else if (dh_secbits >= 112) 
+        p = BN_get_rfc3526_prime_2048(NULL); 
+    else 
+        p = BN_get_rfc2409_prime_1024(NULL); 
+    if (p == NULL || !DH_set0_pqg(dhp, p, NULL, g)) { 
+        DH_free(dhp); 
+        BN_free(p); 
+        BN_free(g); 
+        return NULL; 
+    } 
+    return dhp; 
 }
 #endif
 

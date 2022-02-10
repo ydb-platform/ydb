@@ -1,9 +1,9 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 LICENSE(BSL-1.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+ 
 OWNER(
     antoshkka
     g:cpp-committee
@@ -11,21 +11,21 @@ OWNER(
 )
 
 INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
-
-PEERDIR(
+ 
+PEERDIR( 
     contrib/libs/zlib
     contrib/libs/libbz2
-)
-
+) 
+ 
 CFLAGS(
     -DBOOST_IOSTREAMS_USE_DEPRECATED
 )
-
-SRCS(
-    src/file_descriptor.cpp
-    src/gzip.cpp
-    src/mapped_file.cpp
-    src/zlib.cpp
-)
-
-END()
+ 
+SRCS( 
+    src/file_descriptor.cpp 
+    src/gzip.cpp 
+    src/mapped_file.cpp 
+    src/zlib.cpp 
+) 
+ 
+END() 

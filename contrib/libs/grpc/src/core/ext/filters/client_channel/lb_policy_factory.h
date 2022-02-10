@@ -28,8 +28,8 @@ namespace grpc_core {
 
 class LoadBalancingPolicyFactory {
  public:
-  virtual ~LoadBalancingPolicyFactory() {}
-
+  virtual ~LoadBalancingPolicyFactory() {} 
+ 
   /// Returns a new LB policy instance.
   virtual OrphanablePtr<LoadBalancingPolicy> CreateLoadBalancingPolicy(
       LoadBalancingPolicy::Args) const = 0;
@@ -39,7 +39,7 @@ class LoadBalancingPolicyFactory {
   virtual const char* name() const = 0;
 
   virtual RefCountedPtr<LoadBalancingPolicy::Config> ParseLoadBalancingConfig(
-      const Json& json, grpc_error** error) const = 0;
+      const Json& json, grpc_error** error) const = 0; 
 };
 
 }  // namespace grpc_core

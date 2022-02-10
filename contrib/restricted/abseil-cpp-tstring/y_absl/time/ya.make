@@ -2,18 +2,18 @@
 
 LIBRARY()
 
-OWNER(
-    somov
-    g:cpp-contrib
-)
+OWNER( 
+    somov 
+    g:cpp-contrib 
+) 
 
-LICENSE(
-    Apache-2.0 AND
-    Public-Domain
-)
+LICENSE( 
+    Apache-2.0 AND 
+    Public-Domain 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/base
     contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/raw_logging

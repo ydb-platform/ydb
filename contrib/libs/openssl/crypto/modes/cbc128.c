@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2021 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2008-2021 The OpenSSL Project Authors. All Rights Reserved. 
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -15,12 +15,12 @@
 # define STRICT_ALIGNMENT 0
 #endif
 
-#if defined(__GNUC__) && !STRICT_ALIGNMENT
-typedef size_t size_t_aX __attribute((__aligned__(1)));
-#else
-typedef size_t size_t_aX;
-#endif
-
+#if defined(__GNUC__) && !STRICT_ALIGNMENT 
+typedef size_t size_t_aX __attribute((__aligned__(1))); 
+#else 
+typedef size_t size_t_aX; 
+#endif 
+ 
 void CRYPTO_cbc128_encrypt(const unsigned char *in, unsigned char *out,
                            size_t len, const void *key,
                            unsigned char ivec[16], block128_f block)
@@ -46,8 +46,8 @@ void CRYPTO_cbc128_encrypt(const unsigned char *in, unsigned char *out,
     } else {
         while (len >= 16) {
             for (n = 0; n < 16; n += sizeof(size_t))
-                *(size_t_aX *)(out + n) =
-                    *(size_t_aX *)(in + n) ^ *(size_t_aX *)(iv + n);
+                *(size_t_aX *)(out + n) = 
+                    *(size_t_aX *)(in + n) ^ *(size_t_aX *)(iv + n); 
             (*block) (out, out, key);
             iv = out;
             len -= 16;
@@ -69,8 +69,8 @@ void CRYPTO_cbc128_encrypt(const unsigned char *in, unsigned char *out,
         in += 16;
         out += 16;
     }
-    if (ivec != iv)
-        memcpy(ivec, iv, 16);
+    if (ivec != iv) 
+        memcpy(ivec, iv, 16); 
 }
 
 void CRYPTO_cbc128_decrypt(const unsigned char *in, unsigned char *out,
@@ -103,8 +103,8 @@ void CRYPTO_cbc128_decrypt(const unsigned char *in, unsigned char *out,
             }
         } else if (16 % sizeof(size_t) == 0) { /* always true */
             while (len >= 16) {
-                size_t_aX *out_t = (size_t_aX *)out;
-                size_t_aX *iv_t = (size_t_aX *)iv;
+                size_t_aX *out_t = (size_t_aX *)out; 
+                size_t_aX *iv_t = (size_t_aX *)iv; 
 
                 (*block) (in, out, key);
                 for (n = 0; n < 16 / sizeof(size_t); n++)
@@ -115,8 +115,8 @@ void CRYPTO_cbc128_decrypt(const unsigned char *in, unsigned char *out,
                 out += 16;
             }
         }
-        if (ivec != iv)
-            memcpy(ivec, iv, 16);
+        if (ivec != iv) 
+            memcpy(ivec, iv, 16); 
     } else {
         if (STRICT_ALIGNMENT &&
             ((size_t)in | (size_t)out | (size_t)ivec) % sizeof(size_t) != 0) {
@@ -134,10 +134,10 @@ void CRYPTO_cbc128_decrypt(const unsigned char *in, unsigned char *out,
             }
         } else if (16 % sizeof(size_t) == 0) { /* always true */
             while (len >= 16) {
-                size_t c;
-                size_t_aX *out_t = (size_t_aX *)out;
-                size_t_aX *ivec_t = (size_t_aX *)ivec;
-                const size_t_aX *in_t = (const size_t_aX *)in;
+                size_t c; 
+                size_t_aX *out_t = (size_t_aX *)out; 
+                size_t_aX *ivec_t = (size_t_aX *)ivec; 
+                const size_t_aX *in_t = (const size_t_aX *)in; 
 
                 (*block) (in, tmp.c, key);
                 for (n = 0; n < 16 / sizeof(size_t); n++) {

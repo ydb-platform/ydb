@@ -122,16 +122,16 @@ static grpc_resource_user* te_get_resource_user(grpc_endpoint* ep) {
   return grpc_endpoint_get_resource_user(te->wrapped);
 }
 
-static y_absl::string_view te_get_peer(grpc_endpoint* ep) {
+static y_absl::string_view te_get_peer(grpc_endpoint* ep) { 
   trickle_endpoint* te = reinterpret_cast<trickle_endpoint*>(ep);
   return grpc_endpoint_get_peer(te->wrapped);
 }
 
-static y_absl::string_view te_get_local_address(grpc_endpoint* ep) {
-  trickle_endpoint* te = reinterpret_cast<trickle_endpoint*>(ep);
-  return grpc_endpoint_get_local_address(te->wrapped);
-}
-
+static y_absl::string_view te_get_local_address(grpc_endpoint* ep) { 
+  trickle_endpoint* te = reinterpret_cast<trickle_endpoint*>(ep); 
+  return grpc_endpoint_get_local_address(te->wrapped); 
+} 
+ 
 static int te_get_fd(grpc_endpoint* ep) {
   trickle_endpoint* te = reinterpret_cast<trickle_endpoint*>(ep);
   return grpc_endpoint_get_fd(te->wrapped);
@@ -156,7 +156,7 @@ static const grpc_endpoint_vtable vtable = {te_read,
                                             te_destroy,
                                             te_get_resource_user,
                                             te_get_peer,
-                                            te_get_local_address,
+                                            te_get_local_address, 
                                             te_get_fd,
                                             te_can_track_err};
 

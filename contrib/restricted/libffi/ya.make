@@ -35,10 +35,10 @@ CFLAGS(
 )
 
 SRCS(
-    src/closures.c
+    src/closures.c 
     src/java_raw_api.c
     src/prep_cif.c
-    src/raw_api.c
+    src/raw_api.c 
     src/types.c
 )
 
@@ -50,25 +50,25 @@ IF (ARCH_ARM64 AND OS_ANDROID)
     SRCS(
         src/aarch64/ffi.c
         src/aarch64/sysv.S
-    )
-ELSEIF (ARCH_ARM64 AND OS_DARWIN)
-    ADDINCL(
-        contrib/restricted/libffi/configs/aarch64-apple-macos
-        GLOBAL contrib/restricted/libffi/configs/aarch64-apple-macos/include
-    )
-    SRCS(
-        src/aarch64/ffi.c
-        src/aarch64/sysv.S
-    )
+    ) 
+ELSEIF (ARCH_ARM64 AND OS_DARWIN) 
+    ADDINCL( 
+        contrib/restricted/libffi/configs/aarch64-apple-macos 
+        GLOBAL contrib/restricted/libffi/configs/aarch64-apple-macos/include 
+    ) 
+    SRCS( 
+        src/aarch64/ffi.c 
+        src/aarch64/sysv.S 
+    ) 
 ELSEIF (ARCH_ARM64 AND OS_IOS)
     ADDINCL(
         contrib/restricted/libffi/configs/aarch64-apple-iphoneos
         GLOBAL contrib/restricted/libffi/configs/aarch64-apple-iphoneos/include
     )
-    SRCS(
+    SRCS( 
         src/aarch64/ffi.c
         src/aarch64/sysv.S
-    )
+    ) 
 ELSEIF (ARCH_ARM64 AND OS_LINUX)
     ADDINCL(
         contrib/restricted/libffi/configs/aarch64-unknown-linux-gnu

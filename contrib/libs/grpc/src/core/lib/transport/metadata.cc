@@ -250,25 +250,25 @@ void grpc_mdctx_global_shutdown() {
     gpr_mu_destroy(&shard->mu);
     gc_mdtab(shard);
     if (shard->count != 0) {
-      gpr_log(GPR_ERROR, "WARNING: %" PRIuPTR " metadata elements were leaked",
+      gpr_log(GPR_ERROR, "WARNING: %" PRIuPTR " metadata elements were leaked", 
               shard->count);
-      for (int i = 0; i < shard->capacity; i++) {
-        for (InternedMetadata* md = shard->elems[i].next; md;
-             md = md->bucket_next()) {
-          char* key_str = grpc_slice_to_c_string(md->key());
-          char* value_str = grpc_slice_to_c_string(md->value());
-          gpr_log(GPR_ERROR, "mdelem '%s' = '%s'", key_str, value_str);
-          gpr_free(key_str);
-          gpr_free(value_str);
-        }
-      }
+      for (int i = 0; i < shard->capacity; i++) { 
+        for (InternedMetadata* md = shard->elems[i].next; md; 
+             md = md->bucket_next()) { 
+          char* key_str = grpc_slice_to_c_string(md->key()); 
+          char* value_str = grpc_slice_to_c_string(md->value()); 
+          gpr_log(GPR_ERROR, "mdelem '%s' = '%s'", key_str, value_str); 
+          gpr_free(key_str); 
+          gpr_free(value_str); 
+        } 
+      } 
       if (grpc_iomgr_abort_on_leaks()) {
         abort();
       }
     }
-    // For ASAN builds, we don't want to crash here, because that will
-    // prevent ASAN from providing leak detection information, which is
-    // far more useful than this simple assertion.
+    // For ASAN builds, we don't want to crash here, because that will 
+    // prevent ASAN from providing leak detection information, which is 
+    // far more useful than this simple assertion. 
 #ifndef GRPC_ASAN_ENABLED
     GPR_DEBUG_ASSERT(shard->count == 0);
 #endif

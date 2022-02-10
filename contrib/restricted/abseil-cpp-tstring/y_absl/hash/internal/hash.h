@@ -39,8 +39,8 @@
 #include <utility>
 #include <vector>
 
-#include "y_absl/base/config.h"
-#include "y_absl/base/internal/unaligned_access.h"
+#include "y_absl/base/config.h" 
+#include "y_absl/base/internal/unaligned_access.h" 
 #include "y_absl/base/port.h"
 #include "y_absl/container/fixed_array.h"
 #include "y_absl/hash/internal/city.h"
@@ -60,61 +60,61 @@ namespace hash_internal {
 // returns the size of these chunks.
 constexpr size_t PiecewiseChunkSize() { return 1024; }
 
-// PiecewiseCombiner
-//
-// PiecewiseCombiner is an internal-only helper class for hashing a piecewise
-// buffer of `char` or `unsigned char` as though it were contiguous.  This class
-// provides two methods:
-//
-//   H add_buffer(state, data, size)
-//   H finalize(state)
-//
-// `add_buffer` can be called zero or more times, followed by a single call to
-// `finalize`.  This will produce the same hash expansion as concatenating each
-// buffer piece into a single contiguous buffer, and passing this to
-// `H::combine_contiguous`.
-//
-//  Example usage:
-//    PiecewiseCombiner combiner;
-//    for (const auto& piece : pieces) {
-//      state = combiner.add_buffer(std::move(state), piece.data, piece.size);
-//    }
-//    return combiner.finalize(std::move(state));
-class PiecewiseCombiner {
- public:
-  PiecewiseCombiner() : position_(0) {}
-  PiecewiseCombiner(const PiecewiseCombiner&) = delete;
-  PiecewiseCombiner& operator=(const PiecewiseCombiner&) = delete;
-
-  // PiecewiseCombiner::add_buffer()
-  //
-  // Appends the given range of bytes to the sequence to be hashed, which may
-  // modify the provided hash state.
-  template <typename H>
-  H add_buffer(H state, const unsigned char* data, size_t size);
-  template <typename H>
-  H add_buffer(H state, const char* data, size_t size) {
-    return add_buffer(std::move(state),
-                      reinterpret_cast<const unsigned char*>(data), size);
-  }
-
-  // PiecewiseCombiner::finalize()
-  //
-  // Finishes combining the hash sequence, which may may modify the provided
-  // hash state.
-  //
-  // Once finalize() is called, add_buffer() may no longer be called. The
-  // resulting hash state will be the same as if the pieces passed to
-  // add_buffer() were concatenated into a single flat buffer, and then provided
-  // to H::combine_contiguous().
-  template <typename H>
-  H finalize(H state);
-
- private:
-  unsigned char buf_[PiecewiseChunkSize()];
-  size_t position_;
-};
-
+// PiecewiseCombiner 
+// 
+// PiecewiseCombiner is an internal-only helper class for hashing a piecewise 
+// buffer of `char` or `unsigned char` as though it were contiguous.  This class 
+// provides two methods: 
+// 
+//   H add_buffer(state, data, size) 
+//   H finalize(state) 
+// 
+// `add_buffer` can be called zero or more times, followed by a single call to 
+// `finalize`.  This will produce the same hash expansion as concatenating each 
+// buffer piece into a single contiguous buffer, and passing this to 
+// `H::combine_contiguous`. 
+// 
+//  Example usage: 
+//    PiecewiseCombiner combiner; 
+//    for (const auto& piece : pieces) { 
+//      state = combiner.add_buffer(std::move(state), piece.data, piece.size); 
+//    } 
+//    return combiner.finalize(std::move(state)); 
+class PiecewiseCombiner { 
+ public: 
+  PiecewiseCombiner() : position_(0) {} 
+  PiecewiseCombiner(const PiecewiseCombiner&) = delete; 
+  PiecewiseCombiner& operator=(const PiecewiseCombiner&) = delete; 
+ 
+  // PiecewiseCombiner::add_buffer() 
+  // 
+  // Appends the given range of bytes to the sequence to be hashed, which may 
+  // modify the provided hash state. 
+  template <typename H> 
+  H add_buffer(H state, const unsigned char* data, size_t size); 
+  template <typename H> 
+  H add_buffer(H state, const char* data, size_t size) { 
+    return add_buffer(std::move(state), 
+                      reinterpret_cast<const unsigned char*>(data), size); 
+  } 
+ 
+  // PiecewiseCombiner::finalize() 
+  // 
+  // Finishes combining the hash sequence, which may may modify the provided 
+  // hash state. 
+  // 
+  // Once finalize() is called, add_buffer() may no longer be called. The 
+  // resulting hash state will be the same as if the pieces passed to 
+  // add_buffer() were concatenated into a single flat buffer, and then provided 
+  // to H::combine_contiguous(). 
+  template <typename H> 
+  H finalize(H state); 
+ 
+ private: 
+  unsigned char buf_[PiecewiseChunkSize()]; 
+  size_t position_; 
+}; 
+ 
 // HashStateBase
 //
 // A hash state object represents an intermediate state in the computation
@@ -181,7 +181,7 @@ class HashStateBase {
   template <typename T>
   static H combine_contiguous(H state, const T* data, size_t size);
 
-  using AbslInternalPiecewiseCombiner = PiecewiseCombiner;
+  using AbslInternalPiecewiseCombiner = PiecewiseCombiner; 
 };
 
 // is_uniquely_represented
@@ -413,7 +413,7 @@ H AbslHashValue(H hash_state, const std::shared_ptr<T>& ptr) {
 // All the string-like types supported here provide the same hash expansion for
 // the same character sequence. These types are:
 //
-//  - `y_absl::Cord`
+//  - `y_absl::Cord` 
 //  - `TString` (and std::basic_string<char, std::char_traits<char>, A> for
 //      any allocator A)
 //  - `y_absl::string_view` and `std::string_view`
@@ -576,13 +576,13 @@ typename std::enable_if<is_hashable<Key>::value, H>::type AbslHashValue(
 // AbslHashValue for Wrapper Types
 // -----------------------------------------------------------------------------
 
-// AbslHashValue for hashing std::reference_wrapper
-template <typename H, typename T>
-typename std::enable_if<is_hashable<T>::value, H>::type AbslHashValue(
-    H hash_state, std::reference_wrapper<T> opt) {
-  return H::combine(std::move(hash_state), opt.get());
-}
-
+// AbslHashValue for hashing std::reference_wrapper 
+template <typename H, typename T> 
+typename std::enable_if<is_hashable<T>::value, H>::type AbslHashValue( 
+    H hash_state, std::reference_wrapper<T> opt) { 
+  return H::combine(std::move(hash_state), opt.get()); 
+} 
+ 
 // AbslHashValue for hashing y_absl::optional
 template <typename H, typename T>
 typename std::enable_if<is_hashable<T>::value, H>::type AbslHashValue(
@@ -834,7 +834,7 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
   static uint64_t CombineContiguousImpl(uint64_t state,
                                         const unsigned char* first, size_t len,
                                         std::integral_constant<int, 8>
-                                        /* sizeof_size_t */);
+                                        /* sizeof_size_t */); 
 
   // Slow dispatch path for calls to CombineContiguousImpl with a size argument
   // larger than PiecewiseChunkSize().  Has the same effect as calling
@@ -847,54 +847,54 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
                                                size_t len);
 
   // Reads 9 to 16 bytes from p.
-  // The least significant 8 bytes are in .first, the rest (zero padded) bytes
-  // are in .second.
+  // The least significant 8 bytes are in .first, the rest (zero padded) bytes 
+  // are in .second. 
   static std::pair<uint64_t, uint64_t> Read9To16(const unsigned char* p,
                                                  size_t len) {
-    uint64_t low_mem = y_absl::base_internal::UnalignedLoad64(p);
-    uint64_t high_mem = y_absl::base_internal::UnalignedLoad64(p + len - 8);
-#ifdef ABSL_IS_LITTLE_ENDIAN
-    uint64_t most_significant = high_mem;
-    uint64_t least_significant = low_mem;
-#else
-    uint64_t most_significant = low_mem;
-    uint64_t least_significant = high_mem;
-#endif
-    return {least_significant, most_significant >> (128 - len * 8)};
+    uint64_t low_mem = y_absl::base_internal::UnalignedLoad64(p); 
+    uint64_t high_mem = y_absl::base_internal::UnalignedLoad64(p + len - 8); 
+#ifdef ABSL_IS_LITTLE_ENDIAN 
+    uint64_t most_significant = high_mem; 
+    uint64_t least_significant = low_mem; 
+#else 
+    uint64_t most_significant = low_mem; 
+    uint64_t least_significant = high_mem; 
+#endif 
+    return {least_significant, most_significant >> (128 - len * 8)}; 
   }
 
   // Reads 4 to 8 bytes from p. Zero pads to fill uint64_t.
   static uint64_t Read4To8(const unsigned char* p, size_t len) {
-    uint32_t low_mem = y_absl::base_internal::UnalignedLoad32(p);
-    uint32_t high_mem = y_absl::base_internal::UnalignedLoad32(p + len - 4);
-#ifdef ABSL_IS_LITTLE_ENDIAN
-    uint32_t most_significant = high_mem;
-    uint32_t least_significant = low_mem;
-#else
-    uint32_t most_significant = low_mem;
-    uint32_t least_significant = high_mem;
-#endif
-    return (static_cast<uint64_t>(most_significant) << (len - 4) * 8) |
-           least_significant;
+    uint32_t low_mem = y_absl::base_internal::UnalignedLoad32(p); 
+    uint32_t high_mem = y_absl::base_internal::UnalignedLoad32(p + len - 4); 
+#ifdef ABSL_IS_LITTLE_ENDIAN 
+    uint32_t most_significant = high_mem; 
+    uint32_t least_significant = low_mem; 
+#else 
+    uint32_t most_significant = low_mem; 
+    uint32_t least_significant = high_mem; 
+#endif 
+    return (static_cast<uint64_t>(most_significant) << (len - 4) * 8) | 
+           least_significant; 
   }
 
   // Reads 1 to 3 bytes from p. Zero pads to fill uint32_t.
   static uint32_t Read1To3(const unsigned char* p, size_t len) {
-    unsigned char mem0 = p[0];
-    unsigned char mem1 = p[len / 2];
-    unsigned char mem2 = p[len - 1];
-#ifdef ABSL_IS_LITTLE_ENDIAN
-    unsigned char significant2 = mem2;
-    unsigned char significant1 = mem1;
-    unsigned char significant0 = mem0;
-#else
-    unsigned char significant2 = mem0;
-    unsigned char significant1 = mem1;
-    unsigned char significant0 = mem2;
-#endif
-    return static_cast<uint32_t>(significant0 |                     //
-                                 (significant1 << (len / 2 * 8)) |  //
-                                 (significant2 << ((len - 1) * 8)));
+    unsigned char mem0 = p[0]; 
+    unsigned char mem1 = p[len / 2]; 
+    unsigned char mem2 = p[len - 1]; 
+#ifdef ABSL_IS_LITTLE_ENDIAN 
+    unsigned char significant2 = mem2; 
+    unsigned char significant1 = mem1; 
+    unsigned char significant0 = mem0; 
+#else 
+    unsigned char significant2 = mem0; 
+    unsigned char significant1 = mem1; 
+    unsigned char significant0 = mem2; 
+#endif 
+    return static_cast<uint32_t>(significant0 |                     // 
+                                 (significant1 << (len / 2 * 8)) |  // 
+                                 (significant2 << ((len - 1) * 8))); 
   }
 
   ABSL_ATTRIBUTE_ALWAYS_INLINE static uint64_t Mix(uint64_t state, uint64_t v) {
@@ -919,16 +919,16 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
   // An extern to avoid bloat on a direct call to LowLevelHash() with fixed
   // values for both the seed and salt parameters.
   static uint64_t LowLevelHashImpl(const unsigned char* data, size_t len);
-
-  ABSL_ATTRIBUTE_ALWAYS_INLINE static uint64_t Hash64(const unsigned char* data,
-                                                      size_t len) {
-#ifdef ABSL_HAVE_INTRINSIC_INT128
+ 
+  ABSL_ATTRIBUTE_ALWAYS_INLINE static uint64_t Hash64(const unsigned char* data, 
+                                                      size_t len) { 
+#ifdef ABSL_HAVE_INTRINSIC_INT128 
     return LowLevelHashImpl(data, len);
-#else
+#else 
     return hash_internal::CityHash64(reinterpret_cast<const char*>(data), len);
-#endif
-  }
-
+#endif 
+  } 
+ 
   // Seed()
   //
   // A non-deterministic seed.
@@ -946,14 +946,14 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
   // On other platforms this is still going to be non-deterministic but most
   // probably per-build and not per-process.
   ABSL_ATTRIBUTE_ALWAYS_INLINE static uint64_t Seed() {
-#if (!defined(__clang__) || __clang_major__ > 11) && \
-    !defined(__apple_build_version__)
-    return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&kSeed));
-#else
-    // Workaround the absence of
-    // https://github.com/llvm/llvm-project/commit/bc15bf66dcca76cc06fe71fca35b74dc4d521021.
+#if (!defined(__clang__) || __clang_major__ > 11) && \ 
+    !defined(__apple_build_version__) 
+    return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&kSeed)); 
+#else 
+    // Workaround the absence of 
+    // https://github.com/llvm/llvm-project/commit/bc15bf66dcca76cc06fe71fca35b74dc4d521021. 
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(kSeed));
-#endif
+#endif 
   }
   static const void* const kSeed;
 
@@ -994,7 +994,7 @@ inline uint64_t MixingHashState::CombineContiguousImpl(
     if (ABSL_PREDICT_FALSE(len > PiecewiseChunkSize())) {
       return CombineLargeContiguousImpl64(state, first, len);
     }
-    v = Hash64(first, len);
+    v = Hash64(first, len); 
   } else if (len > 8) {
     auto p = Read9To16(first, len);
     state = Mix(state, p.first);
@@ -1060,15 +1060,15 @@ H PiecewiseCombiner::add_buffer(H state, const unsigned char* data,
     return state;
   }
 
-  // If the buffer is partially filled we need to complete the buffer
-  // and hash it.
-  if (position_ != 0) {
-    const size_t bytes_needed = PiecewiseChunkSize() - position_;
-    memcpy(buf_ + position_, data, bytes_needed);
-    state = H::combine_contiguous(std::move(state), buf_, PiecewiseChunkSize());
-    data += bytes_needed;
-    size -= bytes_needed;
-  }
+  // If the buffer is partially filled we need to complete the buffer 
+  // and hash it. 
+  if (position_ != 0) { 
+    const size_t bytes_needed = PiecewiseChunkSize() - position_; 
+    memcpy(buf_ + position_, data, bytes_needed); 
+    state = H::combine_contiguous(std::move(state), buf_, PiecewiseChunkSize()); 
+    data += bytes_needed; 
+    size -= bytes_needed; 
+  } 
 
   // Hash whatever chunks we can without copying
   while (size >= PiecewiseChunkSize()) {

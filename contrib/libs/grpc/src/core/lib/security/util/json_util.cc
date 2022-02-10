@@ -20,46 +20,46 @@
 
 #include <string.h>
 
-#include "y_absl/strings/str_cat.h"
-
+#include "y_absl/strings/str_cat.h" 
+ 
 #include <grpc/support/log.h>
 #include <grpc/support/string_util.h>
 
-#include "src/core/lib/iomgr/error.h"
-#include "src/core/lib/security/util/json_util.h"
-
-const char* grpc_json_get_string_property(const grpc_core::Json& json,
+#include "src/core/lib/iomgr/error.h" 
+#include "src/core/lib/security/util/json_util.h" 
+ 
+const char* grpc_json_get_string_property(const grpc_core::Json& json, 
                                           const char* prop_name,
                                           grpc_error** error) {
-  if (json.type() != grpc_core::Json::Type::OBJECT) {
+  if (json.type() != grpc_core::Json::Type::OBJECT) { 
+    if (error != nullptr) { 
+      *error = 
+          GRPC_ERROR_CREATE_FROM_STATIC_STRING("JSON value is not an object"); 
+    }
+    return nullptr; 
+  }
+  auto it = json.object_value().find(prop_name); 
+  if (it == json.object_value().end()) { 
     if (error != nullptr) {
-      *error =
-          GRPC_ERROR_CREATE_FROM_STATIC_STRING("JSON value is not an object");
+      *error = GRPC_ERROR_CREATE_FROM_COPIED_STRING( 
+          y_absl::StrCat("Property ", prop_name, " not found in JSON object.") 
+              .c_str()); 
     }
     return nullptr;
   }
-  auto it = json.object_value().find(prop_name);
-  if (it == json.object_value().end()) {
-    if (error != nullptr) {
-      *error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(
-          y_absl::StrCat("Property ", prop_name, " not found in JSON object.")
-              .c_str());
-    }
-    return nullptr;
-  }
-  if (it->second.type() != grpc_core::Json::Type::STRING) {
-    if (error != nullptr) {
-      *error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(
-          y_absl::StrCat("Property ", prop_name,
-                       " n JSON object is not a string.")
-              .c_str());
-    }
-    return nullptr;
-  }
-  return it->second.string_value().c_str();
+  if (it->second.type() != grpc_core::Json::Type::STRING) { 
+    if (error != nullptr) { 
+      *error = GRPC_ERROR_CREATE_FROM_COPIED_STRING( 
+          y_absl::StrCat("Property ", prop_name, 
+                       " n JSON object is not a string.") 
+              .c_str()); 
+    } 
+    return nullptr; 
+  } 
+  return it->second.string_value().c_str(); 
 }
 
-bool grpc_copy_json_string_property(const grpc_core::Json& json,
+bool grpc_copy_json_string_property(const grpc_core::Json& json, 
                                     const char* prop_name,
                                     char** copied_value) {
   grpc_error* error = GRPC_ERROR_NONE;

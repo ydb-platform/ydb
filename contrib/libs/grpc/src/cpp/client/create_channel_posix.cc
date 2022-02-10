@@ -24,39 +24,39 @@
 
 #include "src/cpp/client/create_channel_internal.h"
 
-namespace grpc {
+namespace grpc { 
 
 class ChannelArguments;
 
 #ifdef GPR_SUPPORT_CHANNELS_FROM_FD
 
-std::shared_ptr<Channel> CreateInsecureChannelFromFd(const TString& target,
-                                                     int fd) {
+std::shared_ptr<Channel> CreateInsecureChannelFromFd(const TString& target, 
+                                                     int fd) { 
   grpc::internal::GrpcLibrary init_lib;
   init_lib.init();
-  return CreateChannelInternal(
+  return CreateChannelInternal( 
       "", grpc_insecure_channel_create_from_fd(target.c_str(), fd, nullptr),
-      std::vector<
-          std::unique_ptr<experimental::ClientInterceptorFactoryInterface>>());
+      std::vector< 
+          std::unique_ptr<experimental::ClientInterceptorFactoryInterface>>()); 
 }
 
-std::shared_ptr<Channel> CreateCustomInsecureChannelFromFd(
-    const TString& target, int fd, const grpc::ChannelArguments& args) {
-  internal::GrpcLibrary init_lib;
+std::shared_ptr<Channel> CreateCustomInsecureChannelFromFd( 
+    const TString& target, int fd, const grpc::ChannelArguments& args) { 
+  internal::GrpcLibrary init_lib; 
   init_lib.init();
   grpc_channel_args channel_args;
   args.SetChannelArgs(&channel_args);
-  return CreateChannelInternal(
+  return CreateChannelInternal( 
       "",
       grpc_insecure_channel_create_from_fd(target.c_str(), fd, &channel_args),
-      std::vector<
-          std::unique_ptr<experimental::ClientInterceptorFactoryInterface>>());
+      std::vector< 
+          std::unique_ptr<experimental::ClientInterceptorFactoryInterface>>()); 
 }
 
 namespace experimental {
 
-std::shared_ptr<Channel> CreateCustomInsecureChannelWithInterceptorsFromFd(
-    const TString& target, int fd, const ChannelArguments& args,
+std::shared_ptr<Channel> CreateCustomInsecureChannelWithInterceptorsFromFd( 
+    const TString& target, int fd, const ChannelArguments& args, 
     std::vector<
         std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>>
         interceptor_creators) {
@@ -64,7 +64,7 @@ std::shared_ptr<Channel> CreateCustomInsecureChannelWithInterceptorsFromFd(
   init_lib.init();
   grpc_channel_args channel_args;
   args.SetChannelArgs(&channel_args);
-  return CreateChannelInternal(
+  return CreateChannelInternal( 
       "",
       grpc_insecure_channel_create_from_fd(target.c_str(), fd, &channel_args),
       std::move(interceptor_creators));
@@ -74,4 +74,4 @@ std::shared_ptr<Channel> CreateCustomInsecureChannelWithInterceptorsFromFd(
 
 #endif  // GPR_SUPPORT_CHANNELS_FROM_FD
 
-}  // namespace grpc
+}  // namespace grpc 

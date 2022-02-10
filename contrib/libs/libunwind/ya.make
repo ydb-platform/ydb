@@ -2,30 +2,30 @@
 
 LIBRARY()
 
-OWNER(
-    pg
-    somov
-    g:cpp-contrib
-)
+OWNER( 
+    pg 
+    somov 
+    g:cpp-contrib 
+) 
 
 VERSION(2022-02-05)
 
 ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/2b9554b8850192bdd86c02eb671de1d866df8d87.tar.gz)
 
-LICENSE(
-    Apache-2.0 AND
-    Apache-2.0 WITH LLVM-exception AND
-    MIT AND
-    NCSA
-)
+LICENSE( 
+    Apache-2.0 AND 
+    Apache-2.0 WITH LLVM-exception AND 
+    MIT AND 
+    NCSA 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 DISABLE(USE_LTO)
 
-ADDINCL(
-    contrib/libs/libunwind/include
-)
+ADDINCL( 
+    contrib/libs/libunwind/include 
+) 
 
 NO_RUNTIME()
 
@@ -44,9 +44,9 @@ CFLAGS(
 )
 
 IF (SANITIZER_TYPE == memory)
-    CFLAGS(
-        -fPIC
-    )
+    CFLAGS( 
+        -fPIC 
+    ) 
 ENDIF()
 
 SRCS(
@@ -68,6 +68,6 @@ ENDIF()
 
 END()
 
-RECURSE_FOR_TESTS(
-    ut
-)
+RECURSE_FOR_TESTS( 
+    ut 
+) 

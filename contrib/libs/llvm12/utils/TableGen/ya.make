@@ -2,15 +2,15 @@
 
 PROGRAM(llvm-tblgen)
 
-OWNER(
-    orivej
-    g:cpp-contrib
-)
+OWNER( 
+    orivej 
+    g:cpp-contrib 
+) 
 
-LICENSE(Apache-2.0 WITH LLVM-exception)
+LICENSE(Apache-2.0 WITH LLVM-exception) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/libs/llvm12
     contrib/libs/llvm12/lib/Demangle
@@ -19,9 +19,9 @@ PEERDIR(
     contrib/libs/llvm12/utils/TableGen/GlobalISel
 )
 
-ADDINCL(
-    contrib/libs/llvm12/utils/TableGen
-)
+ADDINCL( 
+    contrib/libs/llvm12/utils/TableGen 
+) 
 
 NO_COMPILER_WARNINGS()
 

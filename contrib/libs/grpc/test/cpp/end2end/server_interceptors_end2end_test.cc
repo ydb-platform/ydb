@@ -155,7 +155,7 @@ class SyncSendMessageTester : public experimental::Interceptor {
       string old_msg =
           static_cast<const EchoRequest*>(methods->GetSendMessage())->message();
       EXPECT_EQ(old_msg.find("Hello"), 0u);
-      new_msg_.set_message(TString("World" + old_msg).c_str());
+      new_msg_.set_message(TString("World" + old_msg).c_str()); 
       methods->ModifySendMessage(&new_msg_);
     }
     methods->Proceed();
@@ -183,7 +183,7 @@ class SyncSendMessageVerifier : public experimental::Interceptor {
     if (methods->QueryInterceptionHookPoint(
             experimental::InterceptionHookPoints::PRE_SEND_MESSAGE)) {
       // Make sure that the changes made in SyncSendMessageTester persisted
-      string old_msg =
+      string old_msg = 
           static_cast<const EchoRequest*>(methods->GetSendMessage())->message();
       EXPECT_EQ(old_msg.find("World"), 0u);
 
@@ -217,7 +217,7 @@ void MakeBidiStreamingCall(const std::shared_ptr<Channel>& channel) {
   ctx.AddMetadata("testkey", "testvalue");
   auto stream = stub->BidiStream(&ctx);
   for (auto i = 0; i < 10; i++) {
-    req.set_message("Hello" + ::ToString(i));
+    req.set_message("Hello" + ::ToString(i)); 
     stream->Write(req);
     stream->Read(&resp);
     EXPECT_EQ(req.message(), resp.message());
@@ -233,7 +233,7 @@ class ServerInterceptorsEnd2endSyncUnaryTest : public ::testing::Test {
     int port = 5004; // grpc_pick_unused_port_or_die();
 
     ServerBuilder builder;
-    server_address_ = "localhost:" + ::ToString(port);
+    server_address_ = "localhost:" + ::ToString(port); 
     builder.AddListeningPort(server_address_, InsecureServerCredentials());
     builder.RegisterService(&service_);
 
@@ -259,7 +259,7 @@ class ServerInterceptorsEnd2endSyncUnaryTest : public ::testing::Test {
     builder.experimental().SetInterceptorCreators(std::move(creators));
     server_ = builder.BuildAndStart();
   }
-  TString server_address_;
+  TString server_address_; 
   TestServiceImpl service_;
   std::unique_ptr<Server> server_;
 };
@@ -280,7 +280,7 @@ class ServerInterceptorsEnd2endSyncStreamingTest : public ::testing::Test {
     int port = 5005; // grpc_pick_unused_port_or_die();
 
     ServerBuilder builder;
-    server_address_ = "localhost:" + ::ToString(port);
+    server_address_ = "localhost:" + ::ToString(port); 
     builder.AddListeningPort(server_address_, InsecureServerCredentials());
     builder.RegisterService(&service_);
 
@@ -303,7 +303,7 @@ class ServerInterceptorsEnd2endSyncStreamingTest : public ::testing::Test {
     builder.experimental().SetInterceptorCreators(std::move(creators));
     server_ = builder.BuildAndStart();
   }
-  TString server_address_;
+  TString server_address_; 
   EchoTestServiceStreamingImpl service_;
   std::unique_ptr<Server> server_;
 };
@@ -343,7 +343,7 @@ class ServerInterceptorsAsyncEnd2endTest : public ::testing::Test {};
 TEST_F(ServerInterceptorsAsyncEnd2endTest, UnaryTest) {
   DummyInterceptor::Reset();
   int port = 5006; // grpc_pick_unused_port_or_die();
-  string server_address = "localhost:" + ::ToString(port);
+  string server_address = "localhost:" + ::ToString(port); 
   ServerBuilder builder;
   EchoTestService::AsyncService service;
   builder.AddListeningPort(server_address, InsecureServerCredentials());
@@ -416,7 +416,7 @@ TEST_F(ServerInterceptorsAsyncEnd2endTest, UnaryTest) {
 TEST_F(ServerInterceptorsAsyncEnd2endTest, BidiStreamingTest) {
   DummyInterceptor::Reset();
   int port = 5007; // grpc_pick_unused_port_or_die();
-  string server_address = "localhost:" + ::ToString(port);
+  string server_address = "localhost:" + ::ToString(port); 
   ServerBuilder builder;
   EchoTestService::AsyncService service;
   builder.AddListeningPort(server_address, InsecureServerCredentials());
@@ -499,7 +499,7 @@ TEST_F(ServerInterceptorsAsyncEnd2endTest, BidiStreamingTest) {
 TEST_F(ServerInterceptorsAsyncEnd2endTest, GenericRPCTest) {
   DummyInterceptor::Reset();
   int port = 5008; // grpc_pick_unused_port_or_die();
-  string server_address = "localhost:" + ::ToString(port);
+  string server_address = "localhost:" + ::ToString(port); 
   ServerBuilder builder;
   AsyncGenericService service;
   builder.AddListeningPort(server_address, InsecureServerCredentials());
@@ -521,7 +521,7 @@ TEST_F(ServerInterceptorsAsyncEnd2endTest, GenericRPCTest) {
       grpc::CreateChannel(server_address, InsecureChannelCredentials());
   GenericStub generic_stub(channel);
 
-  const TString kMethodName("/grpc.cpp.test.util.EchoTestService/Echo");
+  const TString kMethodName("/grpc.cpp.test.util.EchoTestService/Echo"); 
   EchoRequest send_request;
   EchoRequest recv_request;
   EchoResponse send_response;
@@ -536,8 +536,8 @@ TEST_F(ServerInterceptorsAsyncEnd2endTest, GenericRPCTest) {
   send_request.set_message("Hello");
   cli_ctx.AddMetadata("testkey", "testvalue");
 
-  CompletionQueue* cq = srv_cq.get();
-  std::thread request_call([cq]() { Verifier().Expect(4, true).Verify(cq); });
+  CompletionQueue* cq = srv_cq.get(); 
+  std::thread request_call([cq]() { Verifier().Expect(4, true).Verify(cq); }); 
   std::unique_ptr<GenericClientAsyncReaderWriter> call =
       generic_stub.PrepareCall(&cli_ctx, kMethodName, &cli_cq);
   call->StartCall(tag(1));
@@ -553,7 +553,7 @@ TEST_F(ServerInterceptorsAsyncEnd2endTest, GenericRPCTest) {
 
   service.RequestCall(&srv_ctx, &stream, srv_cq.get(), srv_cq.get(), tag(4));
 
-  request_call.join();
+  request_call.join(); 
   EXPECT_EQ(kMethodName, srv_ctx.method());
   EXPECT_TRUE(CheckMetadata(srv_ctx.client_metadata(), "testkey", "testvalue"));
   srv_ctx.AddTrailingMetadata("testkey", "testvalue");
@@ -607,7 +607,7 @@ TEST_F(ServerInterceptorsAsyncEnd2endTest, GenericRPCTest) {
 TEST_F(ServerInterceptorsAsyncEnd2endTest, UnimplementedRpcTest) {
   DummyInterceptor::Reset();
   int port = 5009; // grpc_pick_unused_port_or_die();
-  string server_address = "localhost:" + ::ToString(port);
+  string server_address = "localhost:" + ::ToString(port); 
   ServerBuilder builder;
   builder.AddListeningPort(server_address, InsecureServerCredentials());
   std::vector<std::unique_ptr<experimental::ServerInterceptorFactoryInterface>>
@@ -659,7 +659,7 @@ class ServerInterceptorsSyncUnimplementedEnd2endTest : public ::testing::Test {
 TEST_F(ServerInterceptorsSyncUnimplementedEnd2endTest, UnimplementedRpcTest) {
   DummyInterceptor::Reset();
   int port = 5010; // grpc_pick_unused_port_or_die();
-  string server_address = "localhost:" + ::ToString(port);
+  string server_address = "localhost:" + ::ToString(port); 
   ServerBuilder builder;
   TestServiceImpl service;
   builder.RegisterService(&service);

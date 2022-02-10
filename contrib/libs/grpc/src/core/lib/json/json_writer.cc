@@ -18,155 +18,155 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <stdlib.h>
+#include <stdlib.h> 
 #include <string.h>
 
-#include "y_absl/strings/string_view.h"
+#include "y_absl/strings/string_view.h" 
+ 
+#include <grpc/support/alloc.h> 
+#include <grpc/support/log.h> 
 
-#include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
-
-#include "src/core/lib/json/json.h"
-
-namespace grpc_core {
-
-namespace {
-
-/* The idea of the writer is basically symmetrical of the reader. While the
- * reader emits various calls to your code, the writer takes basically the
- * same calls and emit json out of it. It doesn't try to make any check on
- * the order of the calls you do on it. Meaning you can theorically force
- * it to generate invalid json.
- *
- * Also, unlike the reader, the writer expects UTF-8 encoded input strings.
- * These strings will be UTF-8 validated, and any invalid character will
- * cut the conversion short, before any invalid UTF-8 sequence, thus forming
- * a valid UTF-8 string overall.
- */
-class JsonWriter {
- public:
-  static TString Dump(const Json& value, int indent);
-
- private:
-  explicit JsonWriter(int indent) : indent_(indent) {}
-
-  void OutputCheck(size_t needed);
-  void OutputChar(char c);
-  void OutputString(const y_absl::string_view str);
-  void OutputIndent();
-  void ValueEnd();
-  void EscapeUtf16(uint16_t utf16);
-  void EscapeString(const TString& string);
-  void ContainerBegins(Json::Type type);
-  void ContainerEnds(Json::Type type);
-  void ObjectKey(const TString& string);
-  void ValueRaw(const TString& string);
-  void ValueString(const TString& string);
-
-  void DumpObject(const Json::Object& object);
-  void DumpArray(const Json::Array& array);
-  void DumpValue(const Json& value);
-
-  int indent_;
-  int depth_ = 0;
-  bool container_empty_ = true;
-  bool got_key_ = false;
-  TString output_;
-};
-
-/* This function checks if there's enough space left in the output buffer,
- * and will enlarge it if necessary. We're only allocating chunks of 256
- * bytes at a time (or multiples thereof).
- */
-void JsonWriter::OutputCheck(size_t needed) {
-  size_t free_space = output_.capacity() - output_.size();
-  if (free_space >= needed) return;
-  needed -= free_space;
-  /* Round up by 256 bytes. */
-  needed = (needed + 0xff) & ~0xffU;
-  output_.reserve(output_.capacity() + needed);
+#include "src/core/lib/json/json.h" 
+ 
+namespace grpc_core { 
+ 
+namespace { 
+ 
+/* The idea of the writer is basically symmetrical of the reader. While the 
+ * reader emits various calls to your code, the writer takes basically the 
+ * same calls and emit json out of it. It doesn't try to make any check on 
+ * the order of the calls you do on it. Meaning you can theorically force 
+ * it to generate invalid json. 
+ * 
+ * Also, unlike the reader, the writer expects UTF-8 encoded input strings. 
+ * These strings will be UTF-8 validated, and any invalid character will 
+ * cut the conversion short, before any invalid UTF-8 sequence, thus forming 
+ * a valid UTF-8 string overall. 
+ */ 
+class JsonWriter { 
+ public: 
+  static TString Dump(const Json& value, int indent); 
+ 
+ private: 
+  explicit JsonWriter(int indent) : indent_(indent) {} 
+ 
+  void OutputCheck(size_t needed); 
+  void OutputChar(char c); 
+  void OutputString(const y_absl::string_view str); 
+  void OutputIndent(); 
+  void ValueEnd(); 
+  void EscapeUtf16(uint16_t utf16); 
+  void EscapeString(const TString& string); 
+  void ContainerBegins(Json::Type type); 
+  void ContainerEnds(Json::Type type); 
+  void ObjectKey(const TString& string); 
+  void ValueRaw(const TString& string); 
+  void ValueString(const TString& string); 
+ 
+  void DumpObject(const Json::Object& object); 
+  void DumpArray(const Json::Array& array); 
+  void DumpValue(const Json& value); 
+ 
+  int indent_; 
+  int depth_ = 0; 
+  bool container_empty_ = true; 
+  bool got_key_ = false; 
+  TString output_; 
+}; 
+ 
+/* This function checks if there's enough space left in the output buffer, 
+ * and will enlarge it if necessary. We're only allocating chunks of 256 
+ * bytes at a time (or multiples thereof). 
+ */ 
+void JsonWriter::OutputCheck(size_t needed) { 
+  size_t free_space = output_.capacity() - output_.size(); 
+  if (free_space >= needed) return; 
+  needed -= free_space; 
+  /* Round up by 256 bytes. */ 
+  needed = (needed + 0xff) & ~0xffU; 
+  output_.reserve(output_.capacity() + needed); 
 }
 
-void JsonWriter::OutputChar(char c) {
-  OutputCheck(1);
-  output_.push_back(c);
+void JsonWriter::OutputChar(char c) { 
+  OutputCheck(1); 
+  output_.push_back(c); 
 }
 
-void JsonWriter::OutputString(const y_absl::string_view str) {
-  OutputCheck(str.size());
-  output_.append(str.data(), str.size());
+void JsonWriter::OutputString(const y_absl::string_view str) { 
+  OutputCheck(str.size()); 
+  output_.append(str.data(), str.size()); 
 }
 
-void JsonWriter::OutputIndent() {
+void JsonWriter::OutputIndent() { 
   static const char spacesstr[] =
       "                "
       "                "
       "                "
       "                ";
-  unsigned spaces = static_cast<unsigned>(depth_ * indent_);
-  if (indent_ == 0) return;
-  if (got_key_) {
-    OutputChar(' ');
+  unsigned spaces = static_cast<unsigned>(depth_ * indent_); 
+  if (indent_ == 0) return; 
+  if (got_key_) { 
+    OutputChar(' '); 
     return;
   }
   while (spaces >= (sizeof(spacesstr) - 1)) {
-    OutputString(y_absl::string_view(spacesstr, sizeof(spacesstr) - 1));
+    OutputString(y_absl::string_view(spacesstr, sizeof(spacesstr) - 1)); 
     spaces -= static_cast<unsigned>(sizeof(spacesstr) - 1);
   }
   if (spaces == 0) return;
-  OutputString(
-      y_absl::string_view(spacesstr + sizeof(spacesstr) - 1 - spaces, spaces));
+  OutputString( 
+      y_absl::string_view(spacesstr + sizeof(spacesstr) - 1 - spaces, spaces)); 
 }
 
-void JsonWriter::ValueEnd() {
-  if (container_empty_) {
-    container_empty_ = false;
-    if (indent_ == 0 || depth_ == 0) return;
-    OutputChar('\n');
+void JsonWriter::ValueEnd() { 
+  if (container_empty_) { 
+    container_empty_ = false; 
+    if (indent_ == 0 || depth_ == 0) return; 
+    OutputChar('\n'); 
   } else {
-    OutputChar(',');
-    if (indent_ == 0) return;
-    OutputChar('\n');
+    OutputChar(','); 
+    if (indent_ == 0) return; 
+    OutputChar('\n'); 
   }
 }
 
-void JsonWriter::EscapeUtf16(uint16_t utf16) {
+void JsonWriter::EscapeUtf16(uint16_t utf16) { 
   static const char hex[] = "0123456789abcdef";
-  OutputString(y_absl::string_view("\\u", 2));
-  OutputChar(hex[(utf16 >> 12) & 0x0f]);
-  OutputChar(hex[(utf16 >> 8) & 0x0f]);
-  OutputChar(hex[(utf16 >> 4) & 0x0f]);
-  OutputChar(hex[(utf16)&0x0f]);
+  OutputString(y_absl::string_view("\\u", 2)); 
+  OutputChar(hex[(utf16 >> 12) & 0x0f]); 
+  OutputChar(hex[(utf16 >> 8) & 0x0f]); 
+  OutputChar(hex[(utf16 >> 4) & 0x0f]); 
+  OutputChar(hex[(utf16)&0x0f]); 
 }
 
-void JsonWriter::EscapeString(const TString& string) {
-  OutputChar('"');
-  for (size_t idx = 0; idx < string.size(); ++idx) {
-    uint8_t c = static_cast<uint8_t>(string[idx]);
+void JsonWriter::EscapeString(const TString& string) { 
+  OutputChar('"'); 
+  for (size_t idx = 0; idx < string.size(); ++idx) { 
+    uint8_t c = static_cast<uint8_t>(string[idx]); 
     if (c == 0) {
       break;
-    } else if (c >= 32 && c <= 126) {
-      if (c == '\\' || c == '"') OutputChar('\\');
-      OutputChar(static_cast<char>(c));
-    } else if (c < 32 || c == 127) {
+    } else if (c >= 32 && c <= 126) { 
+      if (c == '\\' || c == '"') OutputChar('\\'); 
+      OutputChar(static_cast<char>(c)); 
+    } else if (c < 32 || c == 127) { 
       switch (c) {
         case '\b':
-          OutputString(y_absl::string_view("\\b", 2));
+          OutputString(y_absl::string_view("\\b", 2)); 
           break;
         case '\f':
-          OutputString(y_absl::string_view("\\f", 2));
+          OutputString(y_absl::string_view("\\f", 2)); 
           break;
         case '\n':
-          OutputString(y_absl::string_view("\\n", 2));
+          OutputString(y_absl::string_view("\\n", 2)); 
           break;
         case '\r':
-          OutputString(y_absl::string_view("\\r", 2));
+          OutputString(y_absl::string_view("\\r", 2)); 
           break;
         case '\t':
-          OutputString(y_absl::string_view("\\t", 2));
+          OutputString(y_absl::string_view("\\t", 2)); 
           break;
         default:
-          EscapeUtf16(c);
+          EscapeUtf16(c); 
           break;
       }
     } else {
@@ -188,13 +188,13 @@ void JsonWriter::EscapeString(const TString& string) {
       }
       for (i = 0; i < extra; i++) {
         utf32 <<= 6;
-        ++idx;
-        /* Breaks out and bail if we hit the end of the string. */
-        if (idx == string.size()) {
-          valid = 0;
-          break;
-        }
-        c = static_cast<uint8_t>(string[idx]);
+        ++idx; 
+        /* Breaks out and bail if we hit the end of the string. */ 
+        if (idx == string.size()) { 
+          valid = 0; 
+          break; 
+        } 
+        c = static_cast<uint8_t>(string[idx]); 
         /* Breaks out and bail on any invalid UTF-8 sequence, including \0. */
         if ((c & 0xc0) != 0x80) {
           valid = 0;
@@ -227,111 +227,111 @@ void JsonWriter::EscapeString(const TString& string) {
          * That range is exactly 20 bits.
          */
         utf32 -= 0x10000;
-        EscapeUtf16(static_cast<uint16_t>(0xd800 | (utf32 >> 10)));
-        EscapeUtf16(static_cast<uint16_t>(0xdc00 | (utf32 & 0x3ff)));
+        EscapeUtf16(static_cast<uint16_t>(0xd800 | (utf32 >> 10))); 
+        EscapeUtf16(static_cast<uint16_t>(0xdc00 | (utf32 & 0x3ff))); 
       } else {
-        EscapeUtf16(static_cast<uint16_t>(utf32));
+        EscapeUtf16(static_cast<uint16_t>(utf32)); 
       }
     }
   }
-  OutputChar('"');
+  OutputChar('"'); 
+} 
+
+void JsonWriter::ContainerBegins(Json::Type type) { 
+  if (!got_key_) ValueEnd(); 
+  OutputIndent(); 
+  OutputChar(type == Json::Type::OBJECT ? '{' : '['); 
+  container_empty_ = true; 
+  got_key_ = false; 
+  depth_++; 
 }
 
-void JsonWriter::ContainerBegins(Json::Type type) {
-  if (!got_key_) ValueEnd();
-  OutputIndent();
-  OutputChar(type == Json::Type::OBJECT ? '{' : '[');
-  container_empty_ = true;
-  got_key_ = false;
-  depth_++;
+void JsonWriter::ContainerEnds(Json::Type type) { 
+  if (indent_ && !container_empty_) OutputChar('\n'); 
+  depth_--; 
+  if (!container_empty_) OutputIndent(); 
+  OutputChar(type == Json::Type::OBJECT ? '}' : ']'); 
+  container_empty_ = false; 
+  got_key_ = false; 
 }
 
-void JsonWriter::ContainerEnds(Json::Type type) {
-  if (indent_ && !container_empty_) OutputChar('\n');
-  depth_--;
-  if (!container_empty_) OutputIndent();
-  OutputChar(type == Json::Type::OBJECT ? '}' : ']');
-  container_empty_ = false;
-  got_key_ = false;
+void JsonWriter::ObjectKey(const TString& string) { 
+  ValueEnd(); 
+  OutputIndent(); 
+  EscapeString(string); 
+  OutputChar(':'); 
+  got_key_ = true; 
 }
 
-void JsonWriter::ObjectKey(const TString& string) {
-  ValueEnd();
-  OutputIndent();
-  EscapeString(string);
-  OutputChar(':');
-  got_key_ = true;
+void JsonWriter::ValueRaw(const TString& string) { 
+  if (!got_key_) ValueEnd(); 
+  OutputIndent(); 
+  OutputString(string); 
+  got_key_ = false; 
 }
 
-void JsonWriter::ValueRaw(const TString& string) {
-  if (!got_key_) ValueEnd();
-  OutputIndent();
-  OutputString(string);
-  got_key_ = false;
+void JsonWriter::ValueString(const TString& string) { 
+  if (!got_key_) ValueEnd(); 
+  OutputIndent(); 
+  EscapeString(string); 
+  got_key_ = false; 
 }
 
-void JsonWriter::ValueString(const TString& string) {
-  if (!got_key_) ValueEnd();
-  OutputIndent();
-  EscapeString(string);
-  got_key_ = false;
+void JsonWriter::DumpObject(const Json::Object& object) { 
+  ContainerBegins(Json::Type::OBJECT); 
+  for (const auto& p : object) { 
+    ObjectKey(p.first.data()); 
+    DumpValue(p.second); 
+  } 
+  ContainerEnds(Json::Type::OBJECT); 
 }
 
-void JsonWriter::DumpObject(const Json::Object& object) {
-  ContainerBegins(Json::Type::OBJECT);
-  for (const auto& p : object) {
-    ObjectKey(p.first.data());
-    DumpValue(p.second);
-  }
-  ContainerEnds(Json::Type::OBJECT);
+void JsonWriter::DumpArray(const Json::Array& array) { 
+  ContainerBegins(Json::Type::ARRAY); 
+  for (const auto& v : array) { 
+    DumpValue(v); 
+  } 
+  ContainerEnds(Json::Type::ARRAY); 
 }
-
-void JsonWriter::DumpArray(const Json::Array& array) {
-  ContainerBegins(Json::Type::ARRAY);
-  for (const auto& v : array) {
-    DumpValue(v);
-  }
-  ContainerEnds(Json::Type::ARRAY);
-}
-
-void JsonWriter::DumpValue(const Json& value) {
-  switch (value.type()) {
-    case Json::Type::OBJECT:
-      DumpObject(value.object_value());
-      break;
-    case Json::Type::ARRAY:
-      DumpArray(value.array_value());
-      break;
-    case Json::Type::STRING:
-      ValueString(value.string_value());
-      break;
-    case Json::Type::NUMBER:
-      ValueRaw(value.string_value());
-      break;
-    case Json::Type::JSON_TRUE:
-      ValueRaw(TString("true", 4));
-      break;
-    case Json::Type::JSON_FALSE:
-      ValueRaw(TString("false", 5));
-      break;
-    case Json::Type::JSON_NULL:
-      ValueRaw(TString("null", 4));
-      break;
-    default:
-      GPR_UNREACHABLE_CODE(abort());
-  }
-}
-
-TString JsonWriter::Dump(const Json& value, int indent) {
-  JsonWriter writer(indent);
-  writer.DumpValue(value);
-  return std::move(writer.output_);
-}
-
-}  // namespace
-
-TString Json::Dump(int indent) const {
-  return JsonWriter::Dump(*this, indent);
-}
-
-}  // namespace grpc_core
+ 
+void JsonWriter::DumpValue(const Json& value) { 
+  switch (value.type()) { 
+    case Json::Type::OBJECT: 
+      DumpObject(value.object_value()); 
+      break; 
+    case Json::Type::ARRAY: 
+      DumpArray(value.array_value()); 
+      break; 
+    case Json::Type::STRING: 
+      ValueString(value.string_value()); 
+      break; 
+    case Json::Type::NUMBER: 
+      ValueRaw(value.string_value()); 
+      break; 
+    case Json::Type::JSON_TRUE: 
+      ValueRaw(TString("true", 4)); 
+      break; 
+    case Json::Type::JSON_FALSE: 
+      ValueRaw(TString("false", 5)); 
+      break; 
+    case Json::Type::JSON_NULL: 
+      ValueRaw(TString("null", 4)); 
+      break; 
+    default: 
+      GPR_UNREACHABLE_CODE(abort()); 
+  } 
+} 
+ 
+TString JsonWriter::Dump(const Json& value, int indent) { 
+  JsonWriter writer(indent); 
+  writer.DumpValue(value); 
+  return std::move(writer.output_); 
+} 
+ 
+}  // namespace 
+ 
+TString Json::Dump(int indent) const { 
+  return JsonWriter::Dump(*this, indent); 
+} 
+ 
+}  // namespace grpc_core 

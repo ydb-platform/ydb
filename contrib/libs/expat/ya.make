@@ -2,23 +2,23 @@
 
 LIBRARY()
 
-OWNER(
-    orivej
-    g:cpp-contrib
-)
+OWNER( 
+    orivej 
+    g:cpp-contrib 
+) 
 
 VERSION(2.4.4)
 
 ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/releases/download/R_2_4_4/expat-2.4.4.tar.xz)
 
-LICENSE(
+LICENSE( 
     CC0-1.0 AND
     JSON AND
-    MIT
-)
+    MIT 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 ADDINCL(
     contrib/libs/expat
     contrib/libs/expat/lib

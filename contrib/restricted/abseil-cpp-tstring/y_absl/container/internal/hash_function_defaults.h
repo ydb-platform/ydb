@@ -53,7 +53,7 @@
 
 #include "y_absl/base/config.h"
 #include "y_absl/hash/hash.h"
-#include "y_absl/strings/cord.h"
+#include "y_absl/strings/cord.h" 
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
@@ -73,9 +73,9 @@ struct StringHash {
   size_t operator()(y_absl::string_view v) const {
     return y_absl::Hash<y_absl::string_view>{}(v);
   }
-  size_t operator()(const y_absl::Cord& v) const {
-    return y_absl::Hash<y_absl::Cord>{}(v);
-  }
+  size_t operator()(const y_absl::Cord& v) const { 
+    return y_absl::Hash<y_absl::Cord>{}(v); 
+  } 
 };
 
 struct StringEq {
@@ -104,8 +104,8 @@ template <>
 struct HashEq<TString> : StringHashEq {};
 template <>
 struct HashEq<y_absl::string_view> : StringHashEq {};
-template <>
-struct HashEq<y_absl::Cord> : StringHashEq {};
+template <> 
+struct HashEq<y_absl::Cord> : StringHashEq {}; 
 
 // Supports heterogeneous lookup for pointers and smart pointers.
 template <class T>

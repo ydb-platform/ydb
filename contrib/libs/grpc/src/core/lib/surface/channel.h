@@ -21,14 +21,14 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <map>
-
+#include <map> 
+ 
 #include "src/core/lib/channel/channel_stack.h"
 #include "src/core/lib/channel/channel_stack_builder.h"
 #include "src/core/lib/channel/channelz.h"
-#include "src/core/lib/gprpp/manual_constructor.h"
+#include "src/core/lib/gprpp/manual_constructor.h" 
 #include "src/core/lib/surface/channel_stack_type.h"
-#include "src/core/lib/transport/metadata.h"
+#include "src/core/lib/transport/metadata.h" 
 
 grpc_channel* grpc_channel_create(const char* target,
                                   const grpc_channel_args* args,
@@ -66,40 +66,40 @@ grpc_core::channelz::ChannelNode* grpc_channel_get_channelz_node(
 size_t grpc_channel_get_call_size_estimate(grpc_channel* channel);
 void grpc_channel_update_call_size_estimate(grpc_channel* channel, size_t size);
 
-namespace grpc_core {
-
-struct RegisteredCall {
-  // The method and host are kept as part of this struct just to manage their
-  // lifetime since they must outlive the mdelem contents.
-  TString method;
-  TString host;
-
-  grpc_mdelem path;
-  grpc_mdelem authority;
-
-  explicit RegisteredCall(const char* method_arg, const char* host_arg);
-  // TODO(vjpai): delete copy constructor once all supported compilers allow
-  //              std::map value_type to be MoveConstructible.
-  RegisteredCall(const RegisteredCall& other);
-  RegisteredCall(RegisteredCall&& other) noexcept;
-  RegisteredCall& operator=(const RegisteredCall&) = delete;
-  RegisteredCall& operator=(RegisteredCall&&) = delete;
-
-  ~RegisteredCall();
-};
-
-struct CallRegistrationTable {
-  grpc_core::Mutex mu;
-  // The map key should be owned strings rather than unowned char*'s to
-  // guarantee that it outlives calls on the core channel (which may outlast the
-  // C++ or other wrapped language Channel that registered these calls).
-  std::map<std::pair<TString, TString>, RegisteredCall>
-      map /* GUARDED_BY(mu) */;
-  int method_registration_attempts /* GUARDED_BY(mu) */ = 0;
-};
-
-}  // namespace grpc_core
-
+namespace grpc_core { 
+ 
+struct RegisteredCall { 
+  // The method and host are kept as part of this struct just to manage their 
+  // lifetime since they must outlive the mdelem contents. 
+  TString method; 
+  TString host; 
+ 
+  grpc_mdelem path; 
+  grpc_mdelem authority; 
+ 
+  explicit RegisteredCall(const char* method_arg, const char* host_arg); 
+  // TODO(vjpai): delete copy constructor once all supported compilers allow 
+  //              std::map value_type to be MoveConstructible. 
+  RegisteredCall(const RegisteredCall& other); 
+  RegisteredCall(RegisteredCall&& other) noexcept; 
+  RegisteredCall& operator=(const RegisteredCall&) = delete; 
+  RegisteredCall& operator=(RegisteredCall&&) = delete; 
+ 
+  ~RegisteredCall(); 
+}; 
+ 
+struct CallRegistrationTable { 
+  grpc_core::Mutex mu; 
+  // The map key should be owned strings rather than unowned char*'s to 
+  // guarantee that it outlives calls on the core channel (which may outlast the 
+  // C++ or other wrapped language Channel that registered these calls). 
+  std::map<std::pair<TString, TString>, RegisteredCall> 
+      map /* GUARDED_BY(mu) */; 
+  int method_registration_attempts /* GUARDED_BY(mu) */ = 0; 
+}; 
+ 
+}  // namespace grpc_core 
+ 
 struct grpc_channel {
   int is_client;
   grpc_compression_options compression_options;
@@ -107,13 +107,13 @@ struct grpc_channel {
   gpr_atm call_size_estimate;
   grpc_resource_user* resource_user;
 
-  // TODO(vjpai): Once the grpc_channel is allocated via new rather than malloc,
-  //              expand the members of the CallRegistrationTable directly into
-  //              the grpc_channel. For now it is kept separate so that all the
-  //              manual constructing can be done with a single call rather than
-  //              a separate manual construction for each field.
-  grpc_core::ManualConstructor<grpc_core::CallRegistrationTable>
-      registration_table;
+  // TODO(vjpai): Once the grpc_channel is allocated via new rather than malloc, 
+  //              expand the members of the CallRegistrationTable directly into 
+  //              the grpc_channel. For now it is kept separate so that all the 
+  //              manual constructing can be done with a single call rather than 
+  //              a separate manual construction for each field. 
+  grpc_core::ManualConstructor<grpc_core::CallRegistrationTable> 
+      registration_table; 
   grpc_core::RefCountedPtr<grpc_core::channelz::ChannelNode> channelz_node;
 
   char* target;
@@ -161,13 +161,13 @@ inline void grpc_channel_internal_unref(grpc_channel* channel) {
   grpc_channel_internal_unref(channel)
 #endif
 
-// Return the channel's compression options.
+// Return the channel's compression options. 
 grpc_compression_options grpc_channel_compression_options(
     const grpc_channel* channel);
 
-// Ping the channels peer (load balanced channels will select one sub-channel to
-// ping); if the channel is not connected, posts a failed.
-void grpc_channel_ping(grpc_channel* channel, grpc_completion_queue* cq,
-                       void* tag, void* reserved);
-
+// Ping the channels peer (load balanced channels will select one sub-channel to 
+// ping); if the channel is not connected, posts a failed. 
+void grpc_channel_ping(grpc_channel* channel, grpc_completion_queue* cq, 
+                       void* tag, void* reserved); 
+ 
 #endif /* GRPC_CORE_LIB_SURFACE_CHANNEL_H */

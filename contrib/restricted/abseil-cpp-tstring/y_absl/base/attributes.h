@@ -30,12 +30,12 @@
 // of them are not supported in older version of Clang. Thus, we check
 // `__has_attribute()` first. If the check fails, we check if we are on GCC and
 // assume the attribute exists on GCC (which is verified on GCC 4.7).
-
+ 
 #ifndef ABSL_BASE_ATTRIBUTES_H_
 #define ABSL_BASE_ATTRIBUTES_H_
 
-#include "y_absl/base/config.h"
-
+#include "y_absl/base/config.h" 
+ 
 // ABSL_HAVE_ATTRIBUTE
 //
 // A function-like feature checking macro that is a wrapper around
@@ -119,7 +119,7 @@
 #if ABSL_HAVE_ATTRIBUTE(disable_tail_calls)
 #define ABSL_HAVE_ATTRIBUTE_NO_TAIL_CALL 1
 #define ABSL_ATTRIBUTE_NO_TAIL_CALL __attribute__((disable_tail_calls))
-#elif defined(__GNUC__) && !defined(__clang__) && !defined(__e2k__)
+#elif defined(__GNUC__) && !defined(__clang__) && !defined(__e2k__) 
 #define ABSL_HAVE_ATTRIBUTE_NO_TAIL_CALL 1
 #define ABSL_ATTRIBUTE_NO_TAIL_CALL \
   __attribute__((optimize("no-optimize-sibling-calls")))
@@ -210,7 +210,7 @@
 // out of bounds or does other scary things with memory.
 // NOTE: GCC supports AddressSanitizer(asan) since 4.8.
 // https://gcc.gnu.org/gcc-4.8/changes.html
-#if ABSL_HAVE_ATTRIBUTE(no_sanitize_address)
+#if ABSL_HAVE_ATTRIBUTE(no_sanitize_address) 
 #define ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__((no_sanitize_address))
 #else
 #define ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS
@@ -218,13 +218,13 @@
 
 // ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY
 //
-// Tells the MemorySanitizer to relax the handling of a given function. All "Use
-// of uninitialized value" warnings from such functions will be suppressed, and
-// all values loaded from memory will be considered fully initialized.  This
-// attribute is similar to the ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS attribute
-// above, but deals with initialized-ness rather than addressability issues.
+// Tells the MemorySanitizer to relax the handling of a given function. All "Use 
+// of uninitialized value" warnings from such functions will be suppressed, and 
+// all values loaded from memory will be considered fully initialized.  This 
+// attribute is similar to the ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS attribute 
+// above, but deals with initialized-ness rather than addressability issues. 
 // NOTE: MemorySanitizer(msan) is supported by Clang but not GCC.
-#if ABSL_HAVE_ATTRIBUTE(no_sanitize_memory)
+#if ABSL_HAVE_ATTRIBUTE(no_sanitize_memory) 
 #define ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY __attribute__((no_sanitize_memory))
 #else
 #define ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY
@@ -235,7 +235,7 @@
 // Tells the ThreadSanitizer to not instrument a given function.
 // NOTE: GCC supports ThreadSanitizer(tsan) since 4.8.
 // https://gcc.gnu.org/gcc-4.8/changes.html
-#if ABSL_HAVE_ATTRIBUTE(no_sanitize_thread)
+#if ABSL_HAVE_ATTRIBUTE(no_sanitize_thread) 
 #define ABSL_ATTRIBUTE_NO_SANITIZE_THREAD __attribute__((no_sanitize_thread))
 #else
 #define ABSL_ATTRIBUTE_NO_SANITIZE_THREAD
@@ -247,11 +247,11 @@
 // where certain behavior (eg. division by zero) is being used intentionally.
 // NOTE: GCC supports UndefinedBehaviorSanitizer(ubsan) since 4.9.
 // https://gcc.gnu.org/gcc-4.9/changes.html
-#if ABSL_HAVE_ATTRIBUTE(no_sanitize_undefined)
+#if ABSL_HAVE_ATTRIBUTE(no_sanitize_undefined) 
 #define ABSL_ATTRIBUTE_NO_SANITIZE_UNDEFINED \
-  __attribute__((no_sanitize_undefined))
-#elif ABSL_HAVE_ATTRIBUTE(no_sanitize)
-#define ABSL_ATTRIBUTE_NO_SANITIZE_UNDEFINED \
+  __attribute__((no_sanitize_undefined)) 
+#elif ABSL_HAVE_ATTRIBUTE(no_sanitize) 
+#define ABSL_ATTRIBUTE_NO_SANITIZE_UNDEFINED \ 
   __attribute__((no_sanitize("undefined")))
 #else
 #define ABSL_ATTRIBUTE_NO_SANITIZE_UNDEFINED
@@ -261,7 +261,7 @@
 //
 // Tells the ControlFlowIntegrity sanitizer to not instrument a given function.
 // See https://clang.llvm.org/docs/ControlFlowIntegrity.html for details.
-#if ABSL_HAVE_ATTRIBUTE(no_sanitize)
+#if ABSL_HAVE_ATTRIBUTE(no_sanitize) 
 #define ABSL_ATTRIBUTE_NO_SANITIZE_CFI __attribute__((no_sanitize("cfi")))
 #else
 #define ABSL_ATTRIBUTE_NO_SANITIZE_CFI
@@ -271,7 +271,7 @@
 //
 // Tells the SafeStack to not instrument a given function.
 // See https://clang.llvm.org/docs/SafeStack.html for details.
-#if ABSL_HAVE_ATTRIBUTE(no_sanitize)
+#if ABSL_HAVE_ATTRIBUTE(no_sanitize) 
 #define ABSL_ATTRIBUTE_NO_SANITIZE_SAFESTACK \
   __attribute__((no_sanitize("safe-stack")))
 #else
@@ -490,10 +490,10 @@
 // packages/targets, as this may lead to conflicting definitions of functions at
 // link-time.
 //
-// XRay isn't currently supported on Android:
-// https://github.com/android/ndk/issues/368
+// XRay isn't currently supported on Android: 
+// https://github.com/android/ndk/issues/368 
 #if ABSL_HAVE_CPP_ATTRIBUTE(clang::xray_always_instrument) && \
-    !defined(ABSL_NO_XRAY_ATTRIBUTES) && !defined(__ANDROID__)
+    !defined(ABSL_NO_XRAY_ATTRIBUTES) && !defined(__ANDROID__) 
 #define ABSL_XRAY_ALWAYS_INSTRUMENT [[clang::xray_always_instrument]]
 #define ABSL_XRAY_NEVER_INSTRUMENT [[clang::xray_never_instrument]]
 #if ABSL_HAVE_CPP_ATTRIBUTE(clang::xray_log_args)
@@ -590,79 +590,79 @@
 #define ABSL_ATTRIBUTE_FUNC_ALIGN(bytes)
 #endif
 
-// ABSL_FALLTHROUGH_INTENDED
-//
-// Annotates implicit fall-through between switch labels, allowing a case to
-// indicate intentional fallthrough and turn off warnings about any lack of a
-// `break` statement. The ABSL_FALLTHROUGH_INTENDED macro should be followed by
-// a semicolon and can be used in most places where `break` can, provided that
-// no statements exist between it and the next switch label.
-//
-// Example:
-//
-//  switch (x) {
-//    case 40:
-//    case 41:
-//      if (truth_is_out_there) {
-//        ++x;
-//        ABSL_FALLTHROUGH_INTENDED;  // Use instead of/along with annotations
-//                                    // in comments
-//      } else {
-//        return x;
-//      }
-//    case 42:
-//      ...
-//
+// ABSL_FALLTHROUGH_INTENDED 
+// 
+// Annotates implicit fall-through between switch labels, allowing a case to 
+// indicate intentional fallthrough and turn off warnings about any lack of a 
+// `break` statement. The ABSL_FALLTHROUGH_INTENDED macro should be followed by 
+// a semicolon and can be used in most places where `break` can, provided that 
+// no statements exist between it and the next switch label. 
+// 
+// Example: 
+// 
+//  switch (x) { 
+//    case 40: 
+//    case 41: 
+//      if (truth_is_out_there) { 
+//        ++x; 
+//        ABSL_FALLTHROUGH_INTENDED;  // Use instead of/along with annotations 
+//                                    // in comments 
+//      } else { 
+//        return x; 
+//      } 
+//    case 42: 
+//      ... 
+// 
 // Notes: When supported, GCC and Clang can issue a warning on switch labels
 // with unannotated fallthrough using the warning `-Wimplicit-fallthrough`. See
 // clang documentation on language extensions for details:
-// https://clang.llvm.org/docs/AttributeReference.html#fallthrough-clang-fallthrough
-//
+// https://clang.llvm.org/docs/AttributeReference.html#fallthrough-clang-fallthrough 
+// 
 // When used with unsupported compilers, the ABSL_FALLTHROUGH_INTENDED macro has
 // no effect on diagnostics. In any case this macro has no effect on runtime
-// behavior and performance of code.
-
-#ifdef ABSL_FALLTHROUGH_INTENDED
-#error "ABSL_FALLTHROUGH_INTENDED should not be defined."
+// behavior and performance of code. 
+ 
+#ifdef ABSL_FALLTHROUGH_INTENDED 
+#error "ABSL_FALLTHROUGH_INTENDED should not be defined." 
 #elif ABSL_HAVE_CPP_ATTRIBUTE(fallthrough)
 #define ABSL_FALLTHROUGH_INTENDED [[fallthrough]]
 #elif ABSL_HAVE_CPP_ATTRIBUTE(clang::fallthrough)
-#define ABSL_FALLTHROUGH_INTENDED [[clang::fallthrough]]
+#define ABSL_FALLTHROUGH_INTENDED [[clang::fallthrough]] 
 #elif ABSL_HAVE_CPP_ATTRIBUTE(gnu::fallthrough)
-#define ABSL_FALLTHROUGH_INTENDED [[gnu::fallthrough]]
+#define ABSL_FALLTHROUGH_INTENDED [[gnu::fallthrough]] 
 #else
-#define ABSL_FALLTHROUGH_INTENDED \
-  do {                            \
-  } while (0)
-#endif
-
-// ABSL_DEPRECATED()
-//
-// Marks a deprecated class, struct, enum, function, method and variable
-// declarations. The macro argument is used as a custom diagnostic message (e.g.
-// suggestion of a better alternative).
-//
-// Examples:
-//
-//   class ABSL_DEPRECATED("Use Bar instead") Foo {...};
-//
-//   ABSL_DEPRECATED("Use Baz() instead") void Bar() {...}
-//
-//   template <typename T>
-//   ABSL_DEPRECATED("Use DoThat() instead")
-//   void DoThis();
-//
-// Every usage of a deprecated entity will trigger a warning when compiled with
-// clang's `-Wdeprecated-declarations` option. This option is turned off by
-// default, but the warnings will be reported by clang-tidy.
-#if defined(__clang__) && defined(__cplusplus) && __cplusplus >= 201103L
-#define ABSL_DEPRECATED(message) __attribute__((deprecated(message)))
-#endif
-
-#ifndef ABSL_DEPRECATED
-#define ABSL_DEPRECATED(message)
-#endif
-
+#define ABSL_FALLTHROUGH_INTENDED \ 
+  do {                            \ 
+  } while (0) 
+#endif 
+ 
+// ABSL_DEPRECATED() 
+// 
+// Marks a deprecated class, struct, enum, function, method and variable 
+// declarations. The macro argument is used as a custom diagnostic message (e.g. 
+// suggestion of a better alternative). 
+// 
+// Examples: 
+// 
+//   class ABSL_DEPRECATED("Use Bar instead") Foo {...}; 
+// 
+//   ABSL_DEPRECATED("Use Baz() instead") void Bar() {...} 
+// 
+//   template <typename T> 
+//   ABSL_DEPRECATED("Use DoThat() instead") 
+//   void DoThis(); 
+// 
+// Every usage of a deprecated entity will trigger a warning when compiled with 
+// clang's `-Wdeprecated-declarations` option. This option is turned off by 
+// default, but the warnings will be reported by clang-tidy. 
+#if defined(__clang__) && defined(__cplusplus) && __cplusplus >= 201103L 
+#define ABSL_DEPRECATED(message) __attribute__((deprecated(message))) 
+#endif 
+ 
+#ifndef ABSL_DEPRECATED 
+#define ABSL_DEPRECATED(message) 
+#endif 
+ 
 // ABSL_CONST_INIT
 //
 // A variable declaration annotated with the `ABSL_CONST_INIT` attribute will
@@ -689,27 +689,27 @@
 #define ABSL_CONST_INIT
 #endif  // ABSL_HAVE_CPP_ATTRIBUTE(clang::require_constant_initialization)
 
-// ABSL_ATTRIBUTE_PURE_FUNCTION
-//
-// ABSL_ATTRIBUTE_PURE_FUNCTION is used to annotate declarations of "pure"
-// functions. A function is pure if its return value is only a function of its
-// arguments. The pure attribute prohibits a function from modifying the state
-// of the program that is observable by means other than inspecting the
-// function's return value. Declaring such functions with the pure attribute
-// allows the compiler to avoid emitting some calls in repeated invocations of
-// the function with the same argument values.
-//
-// Example:
-//
-//  ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Milliseconds(Duration d);
-#if ABSL_HAVE_CPP_ATTRIBUTE(gnu::pure)
-#define ABSL_ATTRIBUTE_PURE_FUNCTION [[gnu::pure]]
-#elif ABSL_HAVE_ATTRIBUTE(pure)
-#define ABSL_ATTRIBUTE_PURE_FUNCTION __attribute__((pure))
-#else
-#define ABSL_ATTRIBUTE_PURE_FUNCTION
-#endif
-
+// ABSL_ATTRIBUTE_PURE_FUNCTION 
+// 
+// ABSL_ATTRIBUTE_PURE_FUNCTION is used to annotate declarations of "pure" 
+// functions. A function is pure if its return value is only a function of its 
+// arguments. The pure attribute prohibits a function from modifying the state 
+// of the program that is observable by means other than inspecting the 
+// function's return value. Declaring such functions with the pure attribute 
+// allows the compiler to avoid emitting some calls in repeated invocations of 
+// the function with the same argument values. 
+// 
+// Example: 
+// 
+//  ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Milliseconds(Duration d); 
+#if ABSL_HAVE_CPP_ATTRIBUTE(gnu::pure) 
+#define ABSL_ATTRIBUTE_PURE_FUNCTION [[gnu::pure]] 
+#elif ABSL_HAVE_ATTRIBUTE(pure) 
+#define ABSL_ATTRIBUTE_PURE_FUNCTION __attribute__((pure)) 
+#else 
+#define ABSL_ATTRIBUTE_PURE_FUNCTION 
+#endif 
+ 
 // ABSL_ATTRIBUTE_LIFETIME_BOUND indicates that a resource owned by a function
 // parameter or implicit object parameter is retained by the return value of the
 // annotated function (or, for a parameter of a constructor, in the value of the

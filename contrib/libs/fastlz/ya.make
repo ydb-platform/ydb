@@ -2,8 +2,8 @@ LIBRARY()
 
 LICENSE(MIT)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 VERSION(0.1.0)
 
 OWNER(
@@ -12,7 +12,7 @@ OWNER(
 )
 
 NO_UTIL()
-
+ 
 NO_COMPILER_WARNINGS()
 
 SRCS(

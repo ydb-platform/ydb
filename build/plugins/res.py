@@ -1,31 +1,31 @@
 from _common import iterpair, listid, pathid, rootrel_arc_src, tobuilddir, filter_out_by_keyword
 
 
-def split(lst, limit):
-    # paths are specified with replaceable prefix
-    # real length is unknown at the moment, that why we use root_lenght
-    # as a rough estimation
-    root_lenght = 200
-    filepath = None
-    lenght = 0
-    bucket = []
+def split(lst, limit): 
+    # paths are specified with replaceable prefix 
+    # real length is unknown at the moment, that why we use root_lenght 
+    # as a rough estimation 
+    root_lenght = 200 
+    filepath = None 
+    lenght = 0 
+    bucket = [] 
 
-    for item in lst:
-        if filepath:
-            lenght += root_lenght + len(filepath) + len(item)
-            if lenght > limit and bucket:
-                yield bucket
-                bucket = []
-                lenght = 0
+    for item in lst: 
+        if filepath: 
+            lenght += root_lenght + len(filepath) + len(item) 
+            if lenght > limit and bucket: 
+                yield bucket 
+                bucket = [] 
+                lenght = 0 
 
-            bucket.append(filepath)
-            bucket.append(item)
-            filepath = None
-        else:
-            filepath = item
+            bucket.append(filepath) 
+            bucket.append(item) 
+            filepath = None 
+        else: 
+            filepath = item 
 
-    if bucket:
-        yield bucket
+    if bucket: 
+        yield bucket 
 
 
 def remove_prefix(text, prefix):
@@ -34,7 +34,7 @@ def remove_prefix(text, prefix):
     return text
 
 
-def onfat_resource(unit, *args):
+def onfat_resource(unit, *args): 
     unit.onpeerdir(['library/cpp/resource'])
 
     # Since the maximum length of lpCommandLine string for CreateProcess is 8kb (windows) characters,

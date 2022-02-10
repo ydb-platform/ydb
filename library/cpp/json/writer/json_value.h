@@ -186,11 +186,11 @@ namespace NJson {
         void Swap(TJsonValue& rhs) noexcept;
 
         // save using util/ysaveload.h serialization (not to JSON stream)
-        void Save(IOutputStream* s) const; 
+        void Save(IOutputStream* s) const;
 
         // load using util/ysaveload.h serialization (not as JSON stream)
-        void Load(IInputStream* s); 
- 
+        void Load(IInputStream* s);
+
         static const TJsonValue UNDEFINED;
 
     private:

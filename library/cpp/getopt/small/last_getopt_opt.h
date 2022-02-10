@@ -247,7 +247,7 @@ namespace NLastGetopt {
          *  @return optional value
          *  throws exception if optional value wasn't set
          */
-        const TString& GetOptionalValue() const { 
+        const TString& GetOptionalValue() const {
             return *OptionalValue_;
         }
 
@@ -272,7 +272,7 @@ namespace NLastGetopt {
          *  @return default value
          *  throws exception if <default value> wasn't set
          */
-        const TString& GetDefaultValue() const { 
+        const TString& GetDefaultValue() const {
             return *DefaultValue_;
         }
 

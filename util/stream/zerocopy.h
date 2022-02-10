@@ -2,22 +2,22 @@
 
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
-#include <util/generic/ylimits.h>
+#include <util/generic/ylimits.h> 
 
-#include "input.h"
-
+#include "input.h" 
+ 
 class IOutputStream;
 
-/**
- * @addtogroup Streams
- * @{
- */
-
-/**
- * Input stream with direct access to the input buffer.
- *
- * Derived classes must implement `DoNext` method.
- */
+/** 
+ * @addtogroup Streams 
+ * @{ 
+ */ 
+ 
+/** 
+ * Input stream with direct access to the input buffer. 
+ * 
+ * Derived classes must implement `DoNext` method. 
+ */ 
 class IZeroCopyInput: public IInputStream {
 public:
     IZeroCopyInput() noexcept = default;
@@ -26,22 +26,22 @@ public:
     IZeroCopyInput(IZeroCopyInput&&) noexcept = default;
     IZeroCopyInput& operator=(IZeroCopyInput&&) noexcept = default;
 
-    /**
-     * Returns the next data chunk from this input stream.
-     *
-     * Note that this function is not guaranteed to return the requested number
-     * of bytes, even if they are in fact available in the stream.
-     *
-     * @param ptr[out]                  Pointer to the start of the data chunk.
-     * @param len[in]                   Maximal size of the data chunk to be returned, in bytes.
-     * @returns                         Size of the returned data chunk, in bytes.
-     *                                  Return value of zero signals end of stream.
-     */
+    /** 
+     * Returns the next data chunk from this input stream. 
+     * 
+     * Note that this function is not guaranteed to return the requested number 
+     * of bytes, even if they are in fact available in the stream. 
+     * 
+     * @param ptr[out]                  Pointer to the start of the data chunk. 
+     * @param len[in]                   Maximal size of the data chunk to be returned, in bytes. 
+     * @returns                         Size of the returned data chunk, in bytes. 
+     *                                  Return value of zero signals end of stream. 
+     */ 
     template <class T>
     inline size_t Next(T** ptr, size_t len) {
         Y_ASSERT(ptr);
 
-        return DoNext((const void**)ptr, len);
+        return DoNext((const void**)ptr, len); 
     }
 
     template <class T>
@@ -49,11 +49,11 @@ public:
         return Next(ptr, Max<size_t>());
     }
 
-protected:
+protected: 
     size_t DoRead(void* buf, size_t len) override;
     size_t DoSkip(size_t len) override;
     ui64 DoReadAll(IOutputStream& out) override;
-    virtual size_t DoNext(const void** ptr, size_t len) = 0;
+    virtual size_t DoNext(const void** ptr, size_t len) = 0; 
 };
 
 /**
@@ -88,4 +88,4 @@ private:
     virtual void DoUndo(size_t len) = 0;
 };
 
-/** @} */
+/** @} */ 

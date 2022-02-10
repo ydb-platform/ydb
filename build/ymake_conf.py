@@ -2368,7 +2368,7 @@ class MSVCCompiler(MSVC, Compiler):
             4714,  # function marked as __forceinline not inlined
             4197,  # 'TAtomic' : top-level volatile in cast is ignored
             4245,  # 'initializing' : conversion from 'int' to 'ui32', signed/unsigned mismatch
-            4324,  # 'ystd::function<void (uint8_t *)>': structure was padded due to alignment specifier
+            4324,  # 'ystd::function<void (uint8_t *)>': structure was padded due to alignment specifier 
             5033,  # 'register' is no longer a supported storage class
         ]
 

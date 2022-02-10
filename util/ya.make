@@ -33,7 +33,7 @@ SRCS(
     datetime/parser.rl6
     digest/city.cpp
     random/random.cpp
-    string/cast.cpp
+    string/cast.cpp 
 )
 
 IF (OS_WINDOWS)
@@ -95,7 +95,7 @@ JOIN_SRCS(
     generic/deque.cpp
     generic/explicit_type.cpp
     generic/fastqueue.cpp
-    generic/flags.cpp
+    generic/flags.cpp 
     generic/function.cpp
     generic/fwd.cpp
     generic/guid.cpp
@@ -114,7 +114,7 @@ JOIN_SRCS(
     generic/maybe.cpp
     generic/mem_copy.cpp
     generic/noncopyable.cpp
-    generic/object_counter.cpp
+    generic/object_counter.cpp 
     generic/overloaded.cpp
     generic/ptr.cpp
     generic/queue.cpp

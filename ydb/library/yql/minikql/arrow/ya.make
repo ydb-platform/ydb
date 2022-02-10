@@ -1,8 +1,8 @@
 LIBRARY()
 
-OWNER(
-    g:yql
-)
+OWNER( 
+    g:yql 
+) 
 
 SRCS(
     mkql_memory_pool.cpp

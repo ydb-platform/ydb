@@ -1,15 +1,15 @@
-UNITTEST()
-
-OWNER(g:util)
-
+UNITTEST() 
+ 
+OWNER(g:util) 
+ 
 SRCDIR(library/cpp/deprecated/enum_codegen)
-
+ 
 PEERDIR(
     library/cpp/deprecated/enum_codegen
 )
 
-SRCS(
-    enum_codegen_ut.cpp
-)
-
-END()
+SRCS( 
+    enum_codegen_ut.cpp 
+) 
+ 
+END() 

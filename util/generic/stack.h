@@ -1,11 +1,11 @@
 #pragma once
 
-#include "fwd.h"
+#include "fwd.h" 
 #include "deque.h"
 
 #include <stack>
 
-template <class T, class S>
+template <class T, class S> 
 class TStack: public std::stack<T, S> {
     using TBase = std::stack<T, S>;
 

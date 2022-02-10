@@ -18,7 +18,7 @@
 
 TTimer::TTimer(const TStringBuf message) {
     static const int SMALL_DURATION_CHAR_LENGTH = 9;                     // strlen("0.123456s")
-    Message_.Reserve(message.length() + SMALL_DURATION_CHAR_LENGTH + 1); // +"\n"
+    Message_.Reserve(message.length() + SMALL_DURATION_CHAR_LENGTH + 1); // +"\n" 
     Message_ << message;
     // Do not measure the allocations above.
     Start_ = TInstant::Now();

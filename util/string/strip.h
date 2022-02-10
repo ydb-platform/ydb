@@ -86,7 +86,7 @@ struct TStripImpl {
         auto e = from.end();
 
         if (StripRange(b, e, criterion)) {
-            to = T(b, e - b);
+            to = T(b, e - b); 
 
             return true;
         }

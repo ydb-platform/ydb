@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
             TReformatCallbacks cb(writer);
             ReadJson(&in, &cb);
             writer.Flush();
-            result2 = out.Str();
+            result2 = out.Str(); 
         }
 
         UNIT_ASSERT_VALUES_EQUAL(result1, result2);

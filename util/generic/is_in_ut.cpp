@@ -72,19 +72,19 @@ Y_UNIT_TEST_SUITE(TIsIn) {
     }
 
     Y_UNIT_TEST(IsInInitListTest) {
-        const char* abc = "abc";
-        const char* def = "def";
-
+        const char* abc = "abc"; 
+        const char* def = "def"; 
+ 
         UNIT_ASSERT(IsIn({6, 2, 12}, 6));
         UNIT_ASSERT(IsIn({6, 2, 12}, 2));
         UNIT_ASSERT(!IsIn({6, 2, 12}, 7));
         UNIT_ASSERT(IsIn({6}, 6));
         UNIT_ASSERT(!IsIn({6}, 7));
-        UNIT_ASSERT(!IsIn(std::initializer_list<int>(), 6));
+        UNIT_ASSERT(!IsIn(std::initializer_list<int>(), 6)); 
         UNIT_ASSERT(IsIn({TStringBuf("abc"), TStringBuf("def")}, TStringBuf("abc")));
         UNIT_ASSERT(IsIn({TStringBuf("abc"), TStringBuf("def")}, TStringBuf("def")));
         UNIT_ASSERT(IsIn({"abc", "def"}, TStringBuf("def")));
-        UNIT_ASSERT(IsIn({abc, def}, def)); // direct pointer comparison
+        UNIT_ASSERT(IsIn({abc, def}, def)); // direct pointer comparison 
         UNIT_ASSERT(!IsIn({TStringBuf("abc"), TStringBuf("def")}, TStringBuf("ghi")));
         UNIT_ASSERT(!IsIn({"abc", "def"}, TStringBuf("ghi")));
         UNIT_ASSERT(!IsIn({"abc", "def"}, TString("ghi")));

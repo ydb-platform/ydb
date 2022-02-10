@@ -37,10 +37,10 @@
 #undef PAGE_SIZE
 #undef GRANULARITY
 
-#ifdef _win_
+#ifdef _win_ 
     #define MAP_FAILED ((void*)(LONG_PTR)-1)
-#endif
-
+#endif 
+ 
 namespace {
     struct TSysInfo {
         inline TSysInfo()
@@ -136,8 +136,8 @@ public:
             if (Mapping_ == nullptr) {
                 ythrow yexception() << "Can't create file mapping of '" << DbgName_ << "': " << LastSystemErrorText();
             }
-        } else {
-            Mapping_ = MAP_FAILED;
+        } else { 
+            Mapping_ = MAP_FAILED; 
         }
 #elif defined(_unix_)
         if (!(Mode_ & oNotGreedy)) {

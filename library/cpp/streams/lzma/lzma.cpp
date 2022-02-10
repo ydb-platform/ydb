@@ -179,7 +179,7 @@ namespace {
 
         inline bool FlushImpl() {
             if (Out_.Avail()) {
-                TransferData(&Out_, Slave_);
+                TransferData(&Out_, Slave_); 
                 Out_.Reset(nullptr, 0);
 
                 return true;
@@ -464,12 +464,12 @@ public:
 
 private:
     bool Fill() override {
-        size_t size = Input_->Next(&InBegin_);
+        size_t size = Input_->Next(&InBegin_); 
 
-        if (size) {
+        if (size) { 
             InEnd_ = InBegin_ + size;
 
-            return true;
+            return true; 
         }
 
         return false;

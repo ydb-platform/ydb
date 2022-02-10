@@ -281,7 +281,7 @@ void TBackTrace::PrintTo(IOutputStream& out) const {
 TString TBackTrace::PrintToString() const {
     TStringStream ss;
     PrintTo(ss);
-    return ss.Str();
+    return ss.Str(); 
 }
 
 size_t TBackTrace::size() const {

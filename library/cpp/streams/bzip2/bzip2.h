@@ -8,11 +8,11 @@
 #define BZIP_BUF_LEN (8 * 1024)
 #define BZIP_COMPRESSION_LEVEL 6
 
-/**
- * @addtogroup Streams_Archs
- * @{
- */
-
+/** 
+ * @addtogroup Streams_Archs 
+ * @{ 
+ */ 
+ 
 class TBZipException: public yexception {
 };
 
@@ -50,4 +50,4 @@ public:
     THolder<TImpl> Impl_;
 };
 
-/** @} */
+/** @} */ 

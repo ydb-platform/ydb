@@ -1,8 +1,8 @@
 #pragma once
 
-#include "fwd.h"
+#include "fwd.h" 
 #include "reserve.h"
-
+ 
 #include <util/memory/alloc.h>
 
 #include <vector>
@@ -11,7 +11,7 @@
 template <class T, class A>
 class TVector: public std::vector<T, TReboundAllocator<A, T>> {
 public:
-    using TBase = std::vector<T, TReboundAllocator<A, T>>;
+    using TBase = std::vector<T, TReboundAllocator<A, T>>; 
     using TSelf = TVector<T, A>;
     using size_type = typename TBase::size_type;
 

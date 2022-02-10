@@ -8,7 +8,7 @@ library
 2. Grouping by any other criteria **SHOULD** be defined by the language committee in `<language>` directory.
 
 3. The library **SHOULD** be in use in at least two projects.
-    
+     
     If you are not sure if you should put some library in `library/`, please contact `<language>` committee or arcadia-wg@yandex-team.ru.
 
 4. The library **SHOULD** be portable.
@@ -21,7 +21,7 @@ library
 6. Any code in Arcadia (except `contrib/`, `vendor/` and `util/`) **MAY** depend on the `library/`.
 
 7. The library **MUST** be accompanied by `README.md` file and a brief description of the project.
-
+ 
 8. The library **MUST** be accompanied by unit-tests.
 
 9. CPU- or/and RAM-bound algorithms **SHOULD** provide benchmarks.

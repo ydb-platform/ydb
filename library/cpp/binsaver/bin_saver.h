@@ -1,7 +1,7 @@
 #pragma once
 
-#include "buffered_io.h"
-#include "class_factory.h"
+#include "buffered_io.h" 
+#include "class_factory.h" 
 
 #include <library/cpp/containers/2d_array/2d_array.h>
 
@@ -149,9 +149,9 @@ private:
             TStoredSize i = 1;
             for (auto pos = data.begin(); pos != data.end(); ++pos, ++i)
                 indices[nSize - i] = pos->first;
-            for (TStoredSize j = 0; j < nSize; ++j)
-                Add(1, &indices[j]);
-            for (TStoredSize j = 0; j < nSize; ++j)
+            for (TStoredSize j = 0; j < nSize; ++j) 
+                Add(1, &indices[j]); 
+            for (TStoredSize j = 0; j < nSize; ++j) 
                 Add(2, &data[indices[j]]);
         }
     }
@@ -250,7 +250,7 @@ private:
         DataChunkStr(data, sizeof(TString::char_type));
     }
     void DataChunkWtroka(TUtf16String& data) {
-        DataChunkStr(data, sizeof(wchar16));
+        DataChunkStr(data, sizeof(wchar16)); 
     }
 
     void DataChunk(void* pData, i64 nSize) {
@@ -275,7 +275,7 @@ private:
     // or serves as a sign that some object has been already stored - during storing
     bool StableOutput;
 
-    typedef THashMap<void*, ui32> PtrIdHash;
+    typedef THashMap<void*, ui32> PtrIdHash; 
     TAutoPtr<PtrIdHash> PtrIds;
 
     typedef THashMap<ui64, TPtr<IObjectBase>> CObjectsHash;

@@ -71,11 +71,11 @@ public:
     }
 
     inline TFileHandle(TFileHandle&& other) noexcept
-        : Fd_(other.Fd_)
-    {
-        other.Fd_ = INVALID_FHANDLE;
-    }
-
+        : Fd_(other.Fd_) 
+    { 
+        other.Fd_ = INVALID_FHANDLE; 
+    } 
+ 
     TFileHandle(const TString& fName, EOpenMode oMode) noexcept;
 
     inline ~TFileHandle() {
@@ -221,5 +221,5 @@ private:
 
 TFile Duplicate(FILE*);
 TFile Duplicate(int);
-
+ 
 bool PosixDisableReadAhead(FHANDLE fileHandle, void* addr) noexcept;

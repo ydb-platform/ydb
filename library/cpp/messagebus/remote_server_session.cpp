@@ -143,9 +143,9 @@ void TRemoteServerSession::FillStatus() {
     StatusData.Status.InputPaused = ServerOwnedMessages.IsLocked();
 }
 
-void TRemoteServerSession::AcquireInWorkRequests(TArrayRef<const TBusMessagePtrAndHeader> messages) {
+void TRemoteServerSession::AcquireInWorkRequests(TArrayRef<const TBusMessagePtrAndHeader> messages) { 
     TAtomicBase size = 0;
-    for (auto message = messages.begin(); message != messages.end(); ++message) {
+    for (auto message = messages.begin(); message != messages.end(); ++message) { 
         Y_ASSERT(!(message->MessagePtr->LocalFlags & MESSAGE_IN_WORK));
         message->MessagePtr->LocalFlags |= MESSAGE_IN_WORK;
         size += message->MessagePtr->GetHeader()->Size;
@@ -154,9 +154,9 @@ void TRemoteServerSession::AcquireInWorkRequests(TArrayRef<const TBusMessagePtrA
     ServerOwnedMessages.IncrementMultiple(messages.size(), size);
 }
 
-void TRemoteServerSession::ReleaseInWorkResponses(TArrayRef<const TBusMessagePtrAndHeader> responses) {
+void TRemoteServerSession::ReleaseInWorkResponses(TArrayRef<const TBusMessagePtrAndHeader> responses) { 
     TAtomicBase size = 0;
-    for (auto response = responses.begin(); response != responses.end(); ++response) {
+    for (auto response = responses.begin(); response != responses.end(); ++response) { 
         Y_ASSERT((response->MessagePtr->LocalFlags & MESSAGE_REPLY_IS_BEGING_SENT));
         response->MessagePtr->LocalFlags &= ~MESSAGE_REPLY_IS_BEGING_SENT;
         size += response->MessagePtr->RequestSize;

@@ -33,29 +33,29 @@ namespace NLastGetopt {
         void HandleOpt(const TOptsParser* parser) override {
             const TStringBuf curval(parser->CurValOrDef());
             if (curval.IsInited()) {
-                StringSplitter(curval).Split(ElementsDelim).Consume([&](const TStringBuf& val) {
-                    TStringBuf mutableValue = val;
+                StringSplitter(curval).Split(ElementsDelim).Consume([&](const TStringBuf& val) { 
+                    TStringBuf mutableValue = val; 
 
-                    TValue first = NPrivate::OptFromString<TValue>(mutableValue.NextTok(RangesDelim), parser->CurOpt());
-                    TValue last = mutableValue ? NPrivate::OptFromString<TValue>(mutableValue, parser->CurOpt()) : first;
+                    TValue first = NPrivate::OptFromString<TValue>(mutableValue.NextTok(RangesDelim), parser->CurOpt()); 
+                    TValue last = mutableValue ? NPrivate::OptFromString<TValue>(mutableValue, parser->CurOpt()) : first; 
 
-                    if (last < first) {
+                    if (last < first) { 
                         throw TUsageException() << "failed to parse opt " << NPrivate::OptToString(parser->CurOpt()) << " value " << TString(val).Quote() << ": the second argument is less than the first one";
-                    }
+                    } 
 
-                    for (++last; first < last; ++first) {
-                        Target->insert(Target->end(), first);
-                    }
-                });
+                    for (++last; first < last; ++first) { 
+                        Target->insert(Target->end(), first); 
+                    } 
+                }); 
             }
-        }
+        } 
 
-    private:
-        TContainer* Target;
+    private: 
+        TContainer* Target; 
         char ElementsDelim;
         char RangesDelim;
     };
-
+ 
     template <class Container>
     struct TOptSplitHandler: public IOptHandler {
     public:
@@ -67,13 +67,13 @@ namespace NLastGetopt {
             , Delim(delim)
         {
         }
-
+ 
         void HandleOpt(const TOptsParser* parser) override {
             const TStringBuf curval(parser->CurValOrDef());
             if (curval.IsInited()) {
-                StringSplitter(curval).Split(Delim).Consume([&](const TStringBuf& val) {
-                    Target->insert(Target->end(), NPrivate::OptFromString<TValue>(val, parser->CurOpt()));
-                });
+                StringSplitter(curval).Split(Delim).Consume([&](const TStringBuf& val) { 
+                    Target->insert(Target->end(), NPrivate::OptFromString<TValue>(val, parser->CurOpt())); 
+                }); 
             }
         }
 
@@ -81,7 +81,7 @@ namespace NLastGetopt {
         TContainer* Target;
         char Delim;
     };
-
+ 
     template <class TpFunc>
     struct TOptKVHandler: public IOptHandler {
     public:

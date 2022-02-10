@@ -1,5 +1,5 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 LICENSE(
     Apache-2.0 AND
     Apache-2.0 WITH LLVM-exception AND
@@ -18,7 +18,7 @@ OWNER(
     g:cpp-committee
     g:cpp-contrib
 )
-
+ 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include
 )
@@ -72,34 +72,34 @@ ELSEIF (CLANG OR MUSL OR OS_DARWIN OR USE_LTO)
         )
     ENDIF()
 ELSEIF (OS_WINDOWS)
-    SRCS(
+    SRCS( 
         src/support/win32/locale_win32.cpp
-        src/support/win32/support.cpp
+        src/support/win32/support.cpp 
         src/support/win32/atomic_win32.cpp
         src/support/win32/new_win32.cpp
         src/support/win32/thread_win32.cpp
-    )
-    CFLAGS(
-        GLOBAL -D_LIBCPP_VASPRINTF_DEFINED
-        GLOBAL -D_WCHAR_H_CPLUSPLUS_98_CONFORMANCE_
-    )
+    ) 
+    CFLAGS( 
+        GLOBAL -D_LIBCPP_VASPRINTF_DEFINED 
+        GLOBAL -D_WCHAR_H_CPLUSPLUS_98_CONFORMANCE_ 
+    ) 
     IF (CLANG_CL)
         PEERDIR(
             contrib/libs/cxxsupp/builtins
         )
     ENDIF()
-ELSE()
+ELSE() 
     DEFAULT(CXX_RT "glibcxx_static")
-    CXXFLAGS(
-        -Wno-unknown-pragmas
+    CXXFLAGS( 
+        -Wno-unknown-pragmas 
         -nostdinc++
-    )
+    ) 
 ENDIF()
-
+ 
 IF (OS_LINUX)
-    EXTRALIBS(-lpthread)
+    EXTRALIBS(-lpthread) 
 ENDIF()
-
+ 
 IF (CLANG)
     CFLAGS(
         GLOBAL -nostdinc++
@@ -177,18 +177,18 @@ IF (NEED_GLIBCXX_CXX17_SHIMS)
     ENDIF()
 ENDIF()
 
-NO_UTIL()
+NO_UTIL() 
 
-NO_RUNTIME()
+NO_RUNTIME() 
 
-NO_COMPILER_WARNINGS()
-
+NO_COMPILER_WARNINGS() 
+ 
 IF (FUZZING)
     NO_SANITIZE()
     NO_SANITIZE_COVERAGE()
 ENDIF()
 
-SRCS(
+SRCS( 
     src/algorithm.cpp
     src/any.cpp
     src/atomic.cpp
@@ -198,7 +198,7 @@ SRCS(
     src/chrono.cpp
     src/condition_variable.cpp
     src/condition_variable_destructor.cpp
-    src/debug.cpp
+    src/debug.cpp 
     src/exception.cpp
     src/filesystem/directory_iterator.cpp
     src/filesystem/operations.cpp
@@ -216,24 +216,24 @@ SRCS(
     src/optional.cpp
     src/random.cpp
     src/random_shuffle.cpp
-    src/regex.cpp
-    src/shared_mutex.cpp
-    src/stdexcept.cpp
-    src/string.cpp
+    src/regex.cpp 
+    src/shared_mutex.cpp 
+    src/stdexcept.cpp 
+    src/string.cpp 
     src/strstream.cpp
-    src/system_error.cpp
+    src/system_error.cpp 
     src/thread.cpp
     src/typeinfo.cpp
-    src/utility.cpp
-    src/valarray.cpp
+    src/utility.cpp 
+    src/valarray.cpp 
     src/variant.cpp
     src/vector.cpp
-)
-
+) 
+ 
 IF (NOT OS_WINDOWS)
     SRCS(
         src/new.cpp
     )
 ENDIF()
 
-END()
+END() 

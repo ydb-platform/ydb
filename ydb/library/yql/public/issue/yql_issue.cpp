@@ -127,7 +127,7 @@ void ProgramLinesWithErrors(
     std::sort(rows.begin(), rows.end());
 
     auto prog = StringSplitter(programText).Split('\n');
-    auto progIt = prog.begin(), progEnd = prog.end();
+    auto progIt = prog.begin(), progEnd = prog.end(); 
     ui32 progRow = 1;
 
     for (ui32 row: rows) {

@@ -38,10 +38,10 @@ namespace NFormatPrivate {
 
 template <>
 void Out<NFormatPrivate::THumanReadableSize>(IOutputStream& stream, const NFormatPrivate::THumanReadableSize& value) {
-    ui64 base = value.Format == SF_BYTES ? 1024 : 1000;
-    ui64 base2 = base * base;
-    ui64 base3 = base * base2;
-    ui64 base4 = base * base3;
+    ui64 base = value.Format == SF_BYTES ? 1024 : 1000; 
+    ui64 base2 = base * base; 
+    ui64 base3 = base * base2; 
+    ui64 base4 = base * base3; 
 
     double v = value.Value;
     if (v < 0) {
@@ -61,13 +61,13 @@ void Out<NFormatPrivate::THumanReadableSize>(IOutputStream& stream, const NForma
         NFormatPrivate::PrintDoubleShortly(stream, v / (double)base4) << 'T';
     }
 
-    if (value.Format == SF_BYTES) {
+    if (value.Format == SF_BYTES) { 
         if (v < base) {
-            stream << "B";
-        } else {
-            stream << "iB";
-        }
-    }
+            stream << "B"; 
+        } else { 
+            stream << "iB"; 
+        } 
+    } 
 }
 
 template <>

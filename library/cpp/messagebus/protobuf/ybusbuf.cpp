@@ -37,7 +37,7 @@ void TBusBufferProtocol::RegisterType(TAutoPtr<TBusBufferBase> mess) {
     Types.push_back(mess.Release());
 }
 
-TArrayRef<TBusBufferBase* const> TBusBufferProtocol::GetTypes() const {
+TArrayRef<TBusBufferBase* const> TBusBufferProtocol::GetTypes() const { 
     return Types;
 }
 
@@ -63,7 +63,7 @@ void TBusBufferProtocol::Serialize(const TBusMessage* mess, TBuffer& data) {
     data.Advance(size);
 }
 
-TAutoPtr<TBusMessage> TBusBufferProtocol::Deserialize(ui16 messageType, TArrayRef<const char> payload) {
+TAutoPtr<TBusMessage> TBusBufferProtocol::Deserialize(ui16 messageType, TArrayRef<const char> payload) { 
     TWhatThreadDoesPushPop pp("deserialize protobuf message");
 
     TBusBufferBase* messageTemplate = FindType(messageType);

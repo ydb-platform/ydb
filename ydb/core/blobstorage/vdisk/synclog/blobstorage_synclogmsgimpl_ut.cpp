@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(CodecsTest) {
                 v.push_back(n);
         }
 
-        Sort(v.begin(), v.end());
+        Sort(v.begin(), v.end()); 
 
         STR << "======= PFOR DELTA ===========\n";
         PFor<true>(v);

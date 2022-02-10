@@ -14,35 +14,35 @@ namespace NBitIO {
         "00001010 10101010 10101010 10101010 10101010 10101010 10101010 10101010 "
         "10110101 01010101 01010101 01010101 01010101 01010101 01010101 01010101 "
         "01000000";
-
-    inline ui64 Bits(ui64 bytes) {
-        return bytes << 3ULL;
-    }
-
+ 
+    inline ui64 Bits(ui64 bytes) { 
+        return bytes << 3ULL; 
+    } 
+ 
     inline TString PrintBits(const char* a, const char* b, bool reverse = false) {
         TString s;
-        TStringOutput out(s);
-        for (const char* it = a; it != b; ++it) {
-            if (it != a)
-                out << ' ';
-
-            ui8 byte = *it;
-
-            if (reverse)
-                byte = ReverseBits(byte);
-
-            for (ui32 mask = 1; mask < 0xff; mask <<= 1) {
-                out << ((byte & mask) ? '1' : '0');
-            }
-        }
-
-        return s;
-    }
-
-    template <typename T>
+        TStringOutput out(s); 
+        for (const char* it = a; it != b; ++it) { 
+            if (it != a) 
+                out << ' '; 
+ 
+            ui8 byte = *it; 
+ 
+            if (reverse) 
+                byte = ReverseBits(byte); 
+ 
+            for (ui32 mask = 1; mask < 0xff; mask <<= 1) { 
+                out << ((byte & mask) ? '1' : '0'); 
+            } 
+        } 
+ 
+        return s; 
+    } 
+ 
+    template <typename T> 
     inline TString PrintBits(T t, ui32 bits = Bits(sizeof(T))) {
-        return PrintBits((char*)&t, ((char*)&t) + BytesUp(bits));
-    }
+        return PrintBits((char*)&t, ((char*)&t) + BytesUp(bits)); 
+    } 
 }
 
 class TBitIOTest: public TTestBase {

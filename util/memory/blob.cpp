@@ -3,7 +3,7 @@
 
 #include <util/system/yassert.h>
 #include <util/system/filemap.h>
-#include <util/system/mlock.h>
+#include <util/system/mlock.h> 
 #include <util/stream/buffer.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
@@ -105,9 +105,9 @@ class TMappedBlobBase: public TBlob::TBase, public TRefCounted<TMappedBlobBase<T
     using TRefBase = TRefCounted<TMappedBlobBase<TCounter>, TCounter>;
 
 public:
-    inline TMappedBlobBase(const TMemoryMap& map, ui64 offset, size_t len, EMappingMode mode)
+    inline TMappedBlobBase(const TMemoryMap& map, ui64 offset, size_t len, EMappingMode mode) 
         : Map_(map)
-        , Mode_(mode)
+        , Mode_(mode) 
     {
         Y_ENSURE(Map_.IsOpen(), TStringBuf("memory map not open"));
 
@@ -116,17 +116,17 @@ public:
         if (len && !Map_.Ptr()) { // Ptr is 0 for blob of size 0
             ythrow yexception() << "can not map(" << offset << ", " << len << ")";
         }
-
+ 
         if (Mode_ == EMappingMode::Locked) {
-            LockMemory(Data(), Length());
+            LockMemory(Data(), Length()); 
         }
     }
 
     ~TMappedBlobBase() override {
         if (Mode_ == EMappingMode::Locked && Length()) {
-            UnlockMemory(Data(), Length());
+            UnlockMemory(Data(), Length()); 
         }
-    }
+    } 
 
     void Ref() noexcept override {
         TRefBase::Ref();
@@ -146,7 +146,7 @@ public:
 
 private:
     TFileMap Map_;
-    EMappingMode Mode_;
+    EMappingMode Mode_; 
 };
 
 TBlob TBlob::SubBlob(size_t len) const {
@@ -197,27 +197,27 @@ TBlob TBlob::NoCopy(const void* data, size_t length) {
 }
 
 template <class TCounter>
-static inline TBlob ConstructFromMap(const TMemoryMap& map, ui64 offset, size_t length, EMappingMode mode) {
+static inline TBlob ConstructFromMap(const TMemoryMap& map, ui64 offset, size_t length, EMappingMode mode) { 
     using TBase = TMappedBlobBase<TCounter>;
-    THolder<TBase> base(new TBase(map, offset, length, mode));
+    THolder<TBase> base(new TBase(map, offset, length, mode)); 
     TBlob ret(base->Data(), base->Length(), base.Get());
     Y_UNUSED(base.Release());
 
     return ret;
 }
 
-template <class TCounter, class T>
-static inline TBlob ConstructAsMap(const T& t, EMappingMode mode) {
+template <class TCounter, class T> 
+static inline TBlob ConstructAsMap(const T& t, EMappingMode mode) { 
     TMemoryMap::EOpenMode openMode = (mode == EMappingMode::Precharged) ? (TMemoryMap::oRdOnly | TMemoryMap::oPrecharge) : TMemoryMap::oRdOnly;
 
-    TMemoryMap map(t, openMode);
+    TMemoryMap map(t, openMode); 
     const ui64 toMap = map.Length();
 
     if (toMap > Max<size_t>()) {
         ythrow yexception() << "can not map whole file(length = " << toMap << ")";
     }
 
-    return ConstructFromMap<TCounter>(map, 0, static_cast<size_t>(toMap), mode);
+    return ConstructFromMap<TCounter>(map, 0, static_cast<size_t>(toMap), mode); 
 }
 
 TBlob TBlob::FromFileSingleThreaded(const TString& path, EMappingMode mode) {
@@ -236,54 +236,54 @@ TBlob TBlob::FromFile(const TFile& file, EMappingMode mode) {
     return ConstructAsMap<TAtomicCounter>(file, mode);
 }
 
-TBlob TBlob::FromFileSingleThreaded(const TString& path) {
+TBlob TBlob::FromFileSingleThreaded(const TString& path) { 
     return ConstructAsMap<TSimpleCounter>(path, EMappingMode::Standard);
 }
 
-TBlob TBlob::FromFile(const TString& path) {
+TBlob TBlob::FromFile(const TString& path) { 
     return ConstructAsMap<TAtomicCounter>(path, EMappingMode::Standard);
 }
 
-TBlob TBlob::FromFileSingleThreaded(const TFile& file) {
+TBlob TBlob::FromFileSingleThreaded(const TFile& file) { 
     return ConstructAsMap<TSimpleCounter>(file, EMappingMode::Standard);
 }
 
-TBlob TBlob::FromFile(const TFile& file) {
+TBlob TBlob::FromFile(const TFile& file) { 
     return ConstructAsMap<TAtomicCounter>(file, EMappingMode::Standard);
 }
 
-TBlob TBlob::PrechargedFromFileSingleThreaded(const TString& path) {
+TBlob TBlob::PrechargedFromFileSingleThreaded(const TString& path) { 
     return ConstructAsMap<TSimpleCounter>(path, EMappingMode::Precharged);
-}
-
-TBlob TBlob::PrechargedFromFile(const TString& path) {
+} 
+ 
+TBlob TBlob::PrechargedFromFile(const TString& path) { 
     return ConstructAsMap<TAtomicCounter>(path, EMappingMode::Precharged);
-}
-
-TBlob TBlob::PrechargedFromFileSingleThreaded(const TFile& file) {
+} 
+ 
+TBlob TBlob::PrechargedFromFileSingleThreaded(const TFile& file) { 
     return ConstructAsMap<TSimpleCounter>(file, EMappingMode::Precharged);
-}
-
-TBlob TBlob::PrechargedFromFile(const TFile& file) {
+} 
+ 
+TBlob TBlob::PrechargedFromFile(const TFile& file) { 
     return ConstructAsMap<TAtomicCounter>(file, EMappingMode::Precharged);
-}
-
-TBlob TBlob::LockedFromFileSingleThreaded(const TString& path) {
+} 
+ 
+TBlob TBlob::LockedFromFileSingleThreaded(const TString& path) { 
     return ConstructAsMap<TSimpleCounter>(path, EMappingMode::Locked);
-}
-
-TBlob TBlob::LockedFromFile(const TString& path) {
+} 
+ 
+TBlob TBlob::LockedFromFile(const TString& path) { 
     return ConstructAsMap<TAtomicCounter>(path, EMappingMode::Locked);
-}
-
-TBlob TBlob::LockedFromFileSingleThreaded(const TFile& file) {
+} 
+ 
+TBlob TBlob::LockedFromFileSingleThreaded(const TFile& file) { 
     return ConstructAsMap<TSimpleCounter>(file, EMappingMode::Locked);
-}
-
-TBlob TBlob::LockedFromFile(const TFile& file) {
+} 
+ 
+TBlob TBlob::LockedFromFile(const TFile& file) { 
     return ConstructAsMap<TAtomicCounter>(file, EMappingMode::Locked);
-}
-
+} 
+ 
 TBlob TBlob::LockedFromMemoryMapSingleThreaded(const TMemoryMap& map, ui64 offset, size_t length) {
     return ConstructFromMap<TSimpleCounter>(map, offset, length, EMappingMode::Locked);
 }

@@ -192,7 +192,7 @@ public:
     }
 
     void Save(IOutputStream& out) {
-        Sort(Values.begin(), Values.end());
+        Sort(Values.begin(), Values.end()); 
         TTrieMapWriter<T, true> writer;
         for (typename TValues::const_iterator toValue = Values.begin(); toValue != Values.end(); ++toValue)
             writer.Add(toValue->first.data(), toValue->second);

@@ -1,11 +1,11 @@
 #pragma once
 
 #include "fwd.h"
-
+ 
 #include <util/memory/alloc.h>
 
 #include <deque>
-#include <memory>
+#include <memory> 
 #include <initializer_list>
 
 template <class T, class A>

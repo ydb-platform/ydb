@@ -168,23 +168,23 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         //Testing if operator== compares values, not pointers
         UNIT_ASSERT_EQUAL(cRef, bSubRef);
     }
-
+ 
     Y_UNIT_TEST(TestImplicitConstructionFromContainer) {
-        /* Just test compilation. */
-        auto fc = [](TArrayRef<const int>) {};
-        auto fm = [](TArrayRef<int>) {};
-
+        /* Just test compilation. */ 
+        auto fc = [](TArrayRef<const int>) {}; 
+        auto fm = [](TArrayRef<int>) {}; 
+ 
         fc(TVector<int>({1}));
-
+ 
         const TVector<int> ac = {1};
         TVector<int> am = {1};
-
-        fc(ac);
-        fc(am);
-        fm(am);
-        // fm(ac); // This one shouldn't compile.
-    }
-
+ 
+        fc(ac); 
+        fc(am); 
+        fm(am); 
+        // fm(ac); // This one shouldn't compile. 
+    } 
+ 
     Y_UNIT_TEST(TestFirstLastSubspan) {
         const int arr[] = {1, 2, 3, 4, 5};
         TArrayRef<const int> aRef(arr);
@@ -198,20 +198,20 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
     Y_UNIT_TEST(TestSlice) {
         const int a0[] = {1, 2, 3};
         TArrayRef<const int> r0(a0);
-        TArrayRef<const int> s0 = r0.Slice(2);
-
-        UNIT_ASSERT_VALUES_EQUAL(s0.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(s0[0], 3);
-
+        TArrayRef<const int> s0 = r0.Slice(2); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(s0.size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(s0[0], 3); 
+ 
         const int a1[] = {1, 2, 3, 4};
         TArrayRef<const int> r1(a1);
-        TArrayRef<const int> s1 = r1.Slice(2, 1);
-
-        UNIT_ASSERT_VALUES_EQUAL(s1.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(s1[0], 3);
+        TArrayRef<const int> s1 = r1.Slice(2, 1); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(s1.size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(s1[0], 3); 
 
         //FIXME: size checks are implemented via Y_ASSERT, hence there is no way to test them
-    }
+    } 
 
     Y_UNIT_TEST(SubRegion) {
         TVector<char> x;

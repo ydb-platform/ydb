@@ -5,7 +5,7 @@ OWNER(pg)
 PEERDIR(
     library/cpp/colorizer
 )
-
+ 
 SRCS(
     completer.cpp
     completer_command.cpp

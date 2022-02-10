@@ -47,7 +47,7 @@ namespace NKikimr {
         }
 
         void Sort() {
-            ::Sort(Vec.begin(), Vec.end());
+            ::Sort(Vec.begin(), Vec.end()); 
         }
 
         bool Empty() const {

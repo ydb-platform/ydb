@@ -1,25 +1,25 @@
 #pragma once
 
 #include "fwd.h"
-#include "input.h"
-#include "output.h"
+#include "input.h" 
+#include "output.h" 
 #include "buffered.h"
-#include "mem.h"
+#include "mem.h" 
 
 #include <util/system/file.h>
 #include <utility>
 
-/**
- * @addtogroup Streams_Files
- * @{
+/** 
+ * @addtogroup Streams_Files 
+ * @{ 
  */
-
-/**
+ 
+/** 
  * Unbuffered file input stream.
- *
- * Note that the input is not buffered, which means that `ReadLine` calls will
- * be _very_ slow.
- */
+ * 
+ * Note that the input is not buffered, which means that `ReadLine` calls will 
+ * be _very_ slow. 
+ */ 
 class TUnbufferedFileInput: public IInputStream {
 public:
     TUnbufferedFileInput(const TFile& file);
@@ -33,9 +33,9 @@ private:
     TFile File_;
 };
 
-/**
- * Memory-mapped file input stream.
- */
+/** 
+ * Memory-mapped file input stream. 
+ */ 
 class TMappedFileInput: public TMemoryInput {
 public:
     TMappedFileInput(const TFile& file);
@@ -47,12 +47,12 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/**
- * File output stream.
- *
- * Note that the output is unbuffered, thus writing in many small chunks is
- * likely to be quite slow.
- */
+/** 
+ * File output stream. 
+ * 
+ * Note that the output is unbuffered, thus writing in many small chunks is 
+ * likely to be quite slow. 
+ */ 
 class TUnbufferedFileOutput: public IOutputStream {
 public:
     TUnbufferedFileOutput(const TString& path);
@@ -70,11 +70,11 @@ private:
     TFile File_;
 };
 
-/**
- * Buffered file input stream.
- *
- * @see TBuffered
- */
+/** 
+ * Buffered file input stream. 
+ * 
+ * @see TBuffered 
+ */ 
 class TFileInput: public TBuffered<TUnbufferedFileInput> {
 public:
     template <class T>
@@ -86,14 +86,14 @@ public:
     ~TFileInput() override = default;
 };
 
-/**
- * Buffered file output stream.
- *
+/** 
+ * Buffered file output stream. 
+ * 
  * Currently deprecated, please use TFileOutput in new code.
- *
- * @deprecated
- * @see TBuffered
- */
+ * 
+ * @deprecated 
+ * @see TBuffered 
+ */ 
 class TFixedBufferFileOutput: public TBuffered<TUnbufferedFileOutput> {
 public:
     template <class T>
@@ -105,4 +105,4 @@ public:
     ~TFixedBufferFileOutput() override = default;
 };
 
-/** @} */
+/** @} */ 

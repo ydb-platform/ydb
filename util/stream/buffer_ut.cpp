@@ -1,37 +1,37 @@
-#include "buffer.h"
-
+#include "buffer.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <util/generic/buffer.h>
-
+ 
+#include <util/generic/buffer.h> 
+ 
 #include <cstring>
 
-#include "str.h"
-
+#include "str.h" 
+ 
 Y_UNIT_TEST_SUITE(TBufferTest) {
     Y_UNIT_TEST(Transfer) {
-        TBuffer buffer("razrazraz", 9);
-        TBufferInput input(buffer);
-
-        input.Skip(3);
-
-        TStringStream output;
-        TransferData(&input, &output);
-
-        UNIT_ASSERT_VALUES_EQUAL(output.Str(), "razraz");
-    }
-
+        TBuffer buffer("razrazraz", 9); 
+        TBufferInput input(buffer); 
+ 
+        input.Skip(3); 
+ 
+        TStringStream output; 
+        TransferData(&input, &output); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(output.Str(), "razraz"); 
+    } 
+ 
     Y_UNIT_TEST(ReadTo) {
-        TBuffer buffer("1234567890", 10);
-        TBufferInput input(buffer);
-
+        TBuffer buffer("1234567890", 10); 
+        TBufferInput input(buffer); 
+ 
         TString tmp;
-        UNIT_ASSERT_VALUES_EQUAL(input.ReadTo(tmp, '3'), 3);
-        UNIT_ASSERT_VALUES_EQUAL(tmp, "12");
-
-        UNIT_ASSERT_VALUES_EQUAL(input.ReadTo(tmp, 'z'), 7);
-        UNIT_ASSERT_VALUES_EQUAL(tmp, "4567890");
-    }
+        UNIT_ASSERT_VALUES_EQUAL(input.ReadTo(tmp, '3'), 3); 
+        UNIT_ASSERT_VALUES_EQUAL(tmp, "12"); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(input.ReadTo(tmp, 'z'), 7); 
+        UNIT_ASSERT_VALUES_EQUAL(tmp, "4567890"); 
+    } 
 
     Y_UNIT_TEST(WriteViaNextAndUndo) {
         TBuffer buffer;
@@ -82,4 +82,4 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
 
         UNIT_ASSERT(0 == memcmp(buffer.data(), "1234567890", buffer.size()));
     }
-}
+} 

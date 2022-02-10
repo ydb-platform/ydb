@@ -51,7 +51,7 @@ class TBackTraceTest: public TTestBase {
         TStringStream out;
         FormatBackTrace(&out);
         SetFormatBackTraceFn(prevFn);
-        UNIT_ASSERT(out.Str().Contains("WorksLikeACharm"));
+        UNIT_ASSERT(out.Str().Contains("WorksLikeACharm")); 
         TestPrintBackTrace();
     }
 

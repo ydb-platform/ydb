@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fwd.h"
+#include "fwd.h" 
 #include "utility.h"
 #include "intrlist.h"
 #include "refcount.h"
@@ -160,7 +160,7 @@ template <class Base>
 class TPointerBase<Base, void>: public TPointerCommon<Base, void> {
 };
 
-template <class T, class D>
+template <class T, class D> 
 class TAutoPtr: public TPointerBase<TAutoPtr<T, D>, T> {
 public:
     inline TAutoPtr(T* t = nullptr) noexcept
@@ -197,9 +197,9 @@ public:
     }
 
     inline void Reset() noexcept {
-        Destroy();
-    }
-
+        Destroy(); 
+    } 
+ 
     inline void Destroy() noexcept {
         Reset(nullptr);
     }
@@ -229,7 +229,7 @@ private:
     mutable T* T_;
 };
 
-template <class T, class D>
+template <class T, class D> 
 class THolder: public TPointerBase<THolder<T, D>, T> {
 public:
     constexpr THolder() noexcept
@@ -296,9 +296,9 @@ public:
     }
 
     inline void Reset() noexcept {
-        Destroy();
-    }
-
+        Destroy(); 
+    } 
+ 
     inline void Swap(THolder& r) noexcept {
         DoSwap(T_, r.T_);
     }
@@ -355,7 +355,7 @@ template <typename T, typename... Args>
  * and we get methods Ref() && UnRef() with
  * proper destruction of last UnRef()
  */
-template <class T, class C, class D>
+template <class T, class C, class D> 
 class TRefCounted {
 public:
     inline TRefCounted(long initval = 0) noexcept
@@ -551,9 +551,9 @@ public:
     }
 
     inline void Reset() noexcept {
-        Drop();
-    }
-
+        Drop(); 
+    } 
+ 
     inline T* Get() const noexcept {
         return T_;
     }
@@ -671,9 +671,9 @@ public:
     }
 
     inline void Reset() noexcept {
-        Drop();
-    }
-
+        Drop(); 
+    } 
+ 
     inline const T* Get() const noexcept {
         return T_;
     }
@@ -788,7 +788,7 @@ template <typename T, class Ops = TDefaultIntrusivePtrOps<T>, typename... Args>
     return new T{std::forward<Args>(args)...};
 }
 
-template <class T, class C, class D>
+template <class T, class C, class D> 
 class TSharedPtr: public TPointerBase<TSharedPtr<T, C, D>, T> {
     template <class TT, class CC, class DD>
     friend class TSharedPtr;
@@ -870,9 +870,9 @@ public:
     }
 
     inline void Reset() noexcept {
-        Drop();
-    }
-
+        Drop(); 
+    } 
+ 
     inline void Drop() noexcept {
         TSharedPtr().Swap(*this);
     }
@@ -982,7 +982,7 @@ public:
     }
 };
 
-template <class T, class C, class D>
+template <class T, class C, class D> 
 class TCopyPtr: public TPointerBase<TCopyPtr<T, C, D>, T> {
 public:
     inline TCopyPtr(T* t = nullptr) noexcept
@@ -1023,9 +1023,9 @@ public:
     }
 
     inline void Reset() noexcept {
-        Destroy();
-    }
-
+        Destroy(); 
+    } 
+ 
     inline void Destroy() noexcept {
         Reset(nullptr);
     }
@@ -1098,10 +1098,10 @@ public:
         p.Swap(*this);
     }
 
-    inline void Reset() {
-        T_.Reset();
-    }
-
+    inline void Reset() { 
+        T_.Reset(); 
+    } 
+ 
 #ifdef __cpp_impl_three_way_comparison
     template <class Other>
     inline bool operator==(const Other& p) const noexcept {

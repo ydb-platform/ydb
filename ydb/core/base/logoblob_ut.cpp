@@ -88,7 +88,7 @@ namespace NKikimr {
             vec.emplace_back(TLogoBlobID(42, 1, 2, 3, 100, 18));
             vec.emplace_back(TLogoBlobID(42, 2, 0, 0, 100, 20));
 
-            Sort(vec.begin(), vec.end());
+            Sort(vec.begin(), vec.end()); 
 
             TStringStream str;
             for (const auto &x : vec) {

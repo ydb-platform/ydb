@@ -80,7 +80,7 @@ public:
         return WritePos == ReadPos;
     }
 
-    void PushAll(TArrayRef<const T> value) {
+    void PushAll(TArrayRef<const T> value) { 
         ReserveWritable(value.size());
 
         ui32 secondSize;
@@ -107,7 +107,7 @@ public:
     }
 
     void Push(const T& t) {
-        PushAll(MakeArrayRef(&t, 1));
+        PushAll(MakeArrayRef(&t, 1)); 
     }
 
     bool TryPop(T* r) {

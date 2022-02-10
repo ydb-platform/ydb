@@ -136,7 +136,7 @@ protected:
         s.reserve(128);
 
         UNIT_ASSERT(s.capacity() >= 128 && s.capacity() < 256 && s.data() != data);
-        UNIT_ASSERT(s.IsDetached());
+        UNIT_ASSERT(s.IsDetached()); 
 
         s.resize(64, 'x');
         data = s.data();
@@ -145,7 +145,7 @@ protected:
         s.reserve(10);
 
         UNIT_ASSERT(s.capacity() >= 64 && s.capacity() < 128 && s.data() != data);
-        UNIT_ASSERT(s.IsDetached());
+        UNIT_ASSERT(s.IsDetached()); 
     #endif
 #endif
     }
@@ -746,8 +746,8 @@ public:
 #endif
     UNIT_TEST(TestBack)
     UNIT_TEST(TestFront)
-    UNIT_TEST(TestIterators);
-    UNIT_TEST(TestReverseIterators);
+    UNIT_TEST(TestIterators); 
+    UNIT_TEST(TestReverseIterators); 
     UNIT_TEST(TestAppendUtf16)
     UNIT_TEST(TestFillingAssign)
     UNIT_TEST(TestStdStreamApi)
@@ -809,8 +809,8 @@ public:
     UNIT_TEST(TestBack);
     UNIT_TEST(TestFront)
     UNIT_TEST(TestDecodingMethods);
-    UNIT_TEST(TestIterators);
-    UNIT_TEST(TestReverseIterators);
+    UNIT_TEST(TestIterators); 
+    UNIT_TEST(TestReverseIterators); 
     UNIT_TEST(TestStringLiterals);
     UNIT_TEST_SUITE_END();
 
@@ -934,8 +934,8 @@ public:
     UNIT_TEST(TestFront)
     UNIT_TEST(TestDecodingMethods);
     UNIT_TEST(TestDecodingMethodsMixedStr);
-    UNIT_TEST(TestIterators);
-    UNIT_TEST(TestReverseIterators);
+    UNIT_TEST(TestIterators); 
+    UNIT_TEST(TestReverseIterators); 
     UNIT_TEST(TestStringLiterals);
     UNIT_TEST_SUITE_END();
 

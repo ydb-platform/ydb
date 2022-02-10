@@ -9,48 +9,48 @@
 
 #include "lfqueue.h"
 
-class TMoveTest {
-public:
-    TMoveTest(int marker = 0, int value = 0)
-        : Marker_(marker)
-        , Value_(value)
-    {
-    }
-
-    TMoveTest(const TMoveTest& other) {
-        *this = other;
-    }
-
-    TMoveTest(TMoveTest&& other) {
-        *this = std::move(other);
-    }
-
-    TMoveTest& operator=(const TMoveTest& other) {
-        Value_ = other.Value_;
-        Marker_ = other.Marker_ + 1024;
-        return *this;
-    }
-
-    TMoveTest& operator=(TMoveTest&& other) {
-        Value_ = other.Value_;
-        Marker_ = other.Marker_;
-        other.Marker_ = 0;
-        return *this;
-    }
-
-    int Marker() const {
-        return Marker_;
-    }
-
-    int Value() const {
-        return Value_;
-    }
-
-private:
-    int Marker_ = 0;
-    int Value_ = 0;
-};
-
+class TMoveTest { 
+public: 
+    TMoveTest(int marker = 0, int value = 0) 
+        : Marker_(marker) 
+        , Value_(value) 
+    { 
+    } 
+ 
+    TMoveTest(const TMoveTest& other) { 
+        *this = other; 
+    } 
+ 
+    TMoveTest(TMoveTest&& other) { 
+        *this = std::move(other); 
+    } 
+ 
+    TMoveTest& operator=(const TMoveTest& other) { 
+        Value_ = other.Value_; 
+        Marker_ = other.Marker_ + 1024; 
+        return *this; 
+    } 
+ 
+    TMoveTest& operator=(TMoveTest&& other) { 
+        Value_ = other.Value_; 
+        Marker_ = other.Marker_; 
+        other.Marker_ = 0; 
+        return *this; 
+    } 
+ 
+    int Marker() const { 
+        return Marker_; 
+    } 
+ 
+    int Value() const { 
+        return Value_; 
+    } 
+ 
+private: 
+    int Marker_ = 0; 
+    int Value_ = 0; 
+}; 
+ 
 class TOperationsChecker {
 public:
     TOperationsChecker() {
@@ -104,23 +104,23 @@ int TOperationsChecker::CopyAssign_ = 0;
 
 Y_UNIT_TEST_SUITE(TLockFreeQueueTests) {
     Y_UNIT_TEST(TestMoveEnqueue) {
-        TMoveTest value(0xFF, 0xAA);
-        TMoveTest tmp;
-
-        TLockFreeQueue<TMoveTest> queue;
-
-        queue.Enqueue(value);
-        UNIT_ASSERT_VALUES_EQUAL(value.Marker(), 0xFF);
-        UNIT_ASSERT(queue.Dequeue(&tmp));
-        UNIT_ASSERT_VALUES_UNEQUAL(tmp.Marker(), 0xFF);
-        UNIT_ASSERT_VALUES_EQUAL(tmp.Value(), 0xAA);
-
-        queue.Enqueue(std::move(value));
-        UNIT_ASSERT_VALUES_EQUAL(value.Marker(), 0);
-        UNIT_ASSERT(queue.Dequeue(&tmp));
-        UNIT_ASSERT_VALUES_EQUAL(tmp.Value(), 0xAA);
-    }
-
+        TMoveTest value(0xFF, 0xAA); 
+        TMoveTest tmp; 
+ 
+        TLockFreeQueue<TMoveTest> queue; 
+ 
+        queue.Enqueue(value); 
+        UNIT_ASSERT_VALUES_EQUAL(value.Marker(), 0xFF); 
+        UNIT_ASSERT(queue.Dequeue(&tmp)); 
+        UNIT_ASSERT_VALUES_UNEQUAL(tmp.Marker(), 0xFF); 
+        UNIT_ASSERT_VALUES_EQUAL(tmp.Value(), 0xAA); 
+ 
+        queue.Enqueue(std::move(value)); 
+        UNIT_ASSERT_VALUES_EQUAL(value.Marker(), 0); 
+        UNIT_ASSERT(queue.Dequeue(&tmp)); 
+        UNIT_ASSERT_VALUES_EQUAL(tmp.Value(), 0xAA); 
+    } 
+ 
     Y_UNIT_TEST(TestSimpleEnqueueDequeue) {
         TLockFreeQueue<int> queue;
 
@@ -146,11 +146,11 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueTests) {
         UNIT_ASSERT_VALUES_EQUAL(13, i);
 
         UNIT_ASSERT(!queue.Dequeue(&i));
-
-        const int tmp = 100;
-        queue.Enqueue(tmp);
-        UNIT_ASSERT(queue.Dequeue(&i));
-        UNIT_ASSERT_VALUES_EQUAL(i, tmp);
+ 
+        const int tmp = 100; 
+        queue.Enqueue(tmp); 
+        UNIT_ASSERT(queue.Dequeue(&i)); 
+        UNIT_ASSERT_VALUES_EQUAL(i, tmp); 
     }
 
     Y_UNIT_TEST(TestSimpleEnqueueAllDequeue) {

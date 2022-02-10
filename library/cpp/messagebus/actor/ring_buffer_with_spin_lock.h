@@ -21,7 +21,7 @@ public:
         PushAll(t);
     }
 
-    void PushAll(TArrayRef<const T> collection) {
+    void PushAll(TArrayRef<const T> collection) { 
         if (collection.empty()) {
             return;
         }
@@ -59,7 +59,7 @@ public:
         }
     }
 
-    bool PushAllAndTryPop(TArrayRef<const T> collection, T* r) {
+    bool PushAllAndTryPop(TArrayRef<const T> collection, T* r) { 
         if (collection.size() == 0) {
             return TryPop(r);
         } else {
@@ -67,7 +67,7 @@ public:
                 *r = collection[0];
                 if (collection.size() > 1) {
                     TGuard<TSpinLock> guard(SpinLock);
-                    RingBuffer.PushAll(MakeArrayRef(collection.data() + 1, collection.size() - 1));
+                    RingBuffer.PushAll(MakeArrayRef(collection.data() + 1, collection.size() - 1)); 
                     AtomicSet(CachedSize, RingBuffer.Size());
                 }
             } else {

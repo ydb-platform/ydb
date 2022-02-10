@@ -55,8 +55,8 @@ namespace {
         template <class P, class T>
         inline bool Next(P** buf, T* len) {
             if (!Len) {
-                Len = In->Next(&Buf);
-                if (!Len) {
+                Len = In->Next(&Buf); 
+                if (!Len) { 
                     return false;
                 }
             }
@@ -177,7 +177,7 @@ namespace {
             void* buf = AdditionalData();
 
             *ptr = buf;
-            return Stream_->Read(buf, Min(len, AdditionalDataLength()));
+            return Stream_->Read(buf, Min(len, AdditionalDataLength())); 
         }
 
     private:
@@ -327,7 +327,7 @@ TZLibDecompress::TZLibDecompress(IInputStream* input, ZLib::StreamType type, siz
     : Impl_(new (buflen) TDecompressStream(input, type, dict))
 {
 }
-
+ 
 void TZLibDecompress::SetAllowMultipleStreams(bool allowMultipleStreams) {
     Impl_->SetAllowMultipleStreams(allowMultipleStreams);
 }
@@ -338,9 +338,9 @@ size_t TZLibDecompress::DoRead(void* buf, size_t size) {
     return Impl_->Read(buf, MaxPortion(size));
 }
 
-void TZLibCompress::Init(const TParams& params) {
+void TZLibCompress::Init(const TParams& params) { 
     Y_ENSURE(params.BufLen >= 16, "ZLib buffer too small");
-    Impl_.Reset(new (params.BufLen) TImpl(params));
+    Impl_.Reset(new (params.BufLen) TImpl(params)); 
 }
 
 void TZLibCompress::TDestruct::Destroy(TImpl* impl) {

@@ -17,12 +17,12 @@ public:
 private:
     size_t DoNext(const void** ptr, size_t len) override {
         if (Pos < Data.end()) {
-            len = Min(len, static_cast<size_t>(1));
-            *ptr = Pos;
-            Pos += len;
-            return len;
+            len = Min(len, static_cast<size_t>(1)); 
+            *ptr = Pos; 
+            Pos += len; 
+            return len; 
         } else {
-            return 0;
+            return 0; 
         }
     }
 
@@ -69,7 +69,7 @@ private:
         try {
             TLzmaCompress c(&out);
 
-            TransferData(&mi, &c);
+            TransferData(&mi, &c); 
         } catch (int i) {
             UNIT_ASSERT_EQUAL(i, 12345);
         }
@@ -85,7 +85,7 @@ private:
             TStringOutput so(res);
             TLzmaCompress c(&so);
 
-            TransferData(&mi, &c);
+            TransferData(&mi, &c); 
 
             c.Finish();
         }
@@ -104,7 +104,7 @@ private:
         {
             TMemoryInput mi(res.data(), res.size());
             TStringOutput so(data1);
-            TLzmaDecompress d(&mi);
+            TLzmaDecompress d(&mi); 
 
             TransferData(&d, &so);
         }
@@ -115,7 +115,7 @@ private:
         {
             TStrokaByOneByte mi(res);
             TStringOutput so(data1);
-            TLzmaDecompress d(&mi);
+            TLzmaDecompress d(&mi); 
 
             TransferData(&d, &so);
         }

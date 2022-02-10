@@ -8,9 +8,9 @@
 #include <string>
 #include <cmath>
 
-#include <util/string/type.h>
-#include <util/string/cast.h>
-#include <util/string/escape.h>
+#include <util/string/type.h> 
+#include <util/string/cast.h> 
+#include <util/string/escape.h> 
 
 #include <contrib/libs/double-conversion/double-conversion.h>
 
@@ -18,7 +18,7 @@
 #include <util/system/yassert.h>
 #include <util/generic/yexception.h>
 #include <util/generic/typetraits.h>
-#include <util/generic/ylimits.h>
+#include <util/generic/ylimits.h> 
 #include <util/generic/singleton.h>
 #include <util/generic/utility.h>
 
@@ -259,19 +259,19 @@ namespace {
 
             return PS_OK;
         }
-    };
-
+    }; 
+ 
     template <class T>
     struct TBounds {
         T PositiveMax;
         T NegativeMax;
     };
-
+ 
     template <class T, unsigned base, class TChar>
     struct TIntParser {
         static_assert(1 < base && base < 17, "Expect 1 < base && base < 17.");
         static_assert(std::is_integral<T>::value, "T must be an integral type.");
-
+ 
         enum {
             IsSigned = std::is_signed<T>::value
         };
@@ -431,11 +431,11 @@ namespace {
     DEF_INT_SPEC_II(TYPE, ITYPE, 2)                                \
     DEF_INT_SPEC_II(TYPE, ITYPE, 8)                                \
     DEF_INT_SPEC_II(TYPE, ITYPE, 10)                               \
-    DEF_INT_SPEC_II(TYPE, ITYPE, 16)
+    DEF_INT_SPEC_II(TYPE, ITYPE, 16) 
 
 #define DEF_INT_SPEC(TYPE)           \
     DEF_INT_SPEC_I(signed TYPE, i64) \
-    DEF_INT_SPEC_I(unsigned TYPE, ui64)
+    DEF_INT_SPEC_I(unsigned TYPE, ui64) 
 
 DEF_INT_SPEC(char)
 DEF_INT_SPEC(short)
@@ -452,15 +452,15 @@ size_t ToStringImpl<char8_t>(char8_t value, char* buf, size_t len) {
 
 using TCharIType = std::conditional_t<std::is_signed<char>::value, i64, ui64>;
 using TWCharIType = std::conditional_t<std::is_signed<wchar_t>::value, i64, ui64>;
-
-DEF_INT_SPEC_I(char, TCharIType)
-DEF_INT_SPEC_I(wchar_t, TWCharIType)
+ 
+DEF_INT_SPEC_I(char, TCharIType) 
+DEF_INT_SPEC_I(wchar_t, TWCharIType) 
 DEF_INT_SPEC_I(wchar16, ui64) // wchar16 is always unsigned
 DEF_INT_SPEC_I(wchar32, ui64) // wchar32 is always unsigned
-
+ 
 #undef DEF_INT_SPEC
-#undef DEF_INT_SPEC_I
-#undef DEF_INT_SPEC_II
+#undef DEF_INT_SPEC_I 
+#undef DEF_INT_SPEC_II 
 
 #define DEF_FLT_SPEC(type)                                     \
     template <>                                                \
@@ -604,31 +604,31 @@ bool TryFromStringImpl<TUtf16String>(const wchar16* data, size_t len, TUtf16Stri
     DEF_INT_SPEC_III(CHAR, TYPE, ITYPE, BOUNDS, 2)                             \
     DEF_INT_SPEC_III(CHAR, TYPE, ITYPE, BOUNDS, 8)                             \
     DEF_INT_SPEC_III(CHAR, TYPE, ITYPE, BOUNDS, 10)                            \
-    DEF_INT_SPEC_III(CHAR, TYPE, ITYPE, BOUNDS, 16)
+    DEF_INT_SPEC_III(CHAR, TYPE, ITYPE, BOUNDS, 16) 
 
 #define DEF_INT_SPEC_I(TYPE, ITYPE, BOUNDS)    \
     DEF_INT_SPEC_II(char, TYPE, ITYPE, BOUNDS) \
     DEF_INT_SPEC_II(wchar16, TYPE, ITYPE, BOUNDS)
-
+ 
 #define DEF_INT_SPEC(TYPE, ID)                    \
     DEF_INT_SPEC_I(signed TYPE, i64, ID##SBounds) \
-    DEF_INT_SPEC_I(unsigned TYPE, ui64, ID##UBounds)
-
+    DEF_INT_SPEC_I(unsigned TYPE, ui64, ID##UBounds) 
+ 
 #define DEF_INT_SPEC_FIXED_WIDTH(TYPE, ID) \
     DEF_INT_SPEC_I(TYPE, i64, ID##SBounds) \
     DEF_INT_SPEC_I(u##TYPE, ui64, ID##UBounds)
 
 DEF_INT_SPEC_FIXED_WIDTH(i8, b)
-DEF_INT_SPEC(short, s)
-DEF_INT_SPEC(int, i)
-DEF_INT_SPEC(long, l)
-DEF_INT_SPEC(long long, ll)
-
+DEF_INT_SPEC(short, s) 
+DEF_INT_SPEC(int, i) 
+DEF_INT_SPEC(long, l) 
+DEF_INT_SPEC(long long, ll) 
+ 
 #undef DEF_INT_SPEC_FIXED_WIDTH
 #undef DEF_INT_SPEC
-#undef DEF_INT_SPEC_I
-#undef DEF_INT_SPEC_II
-#undef DEF_INT_SPEC_III
+#undef DEF_INT_SPEC_I 
+#undef DEF_INT_SPEC_II 
+#undef DEF_INT_SPEC_III 
 
 #define DEF_FLT_SPEC(type)                                    \
     template <>                                               \

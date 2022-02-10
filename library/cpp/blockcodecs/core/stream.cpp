@@ -160,13 +160,13 @@ TDecodedInput::TDecodedInput(IInputStream* in, const ICodec* codec)
 
 TDecodedInput::~TDecodedInput() = default;
 
-size_t TDecodedInput::DoUnboundedNext(const void** ptr) {
+size_t TDecodedInput::DoUnboundedNext(const void** ptr) { 
     if (!S_) {
-        return 0;
+        return 0; 
     }
 
-    TCodecID codecId;
-    TBlockLen blockLen;
+    TCodecID codecId; 
+    TBlockLen blockLen; 
 
     {
         const size_t payload = sizeof(TCodecID) + sizeof(TBlockLen);
@@ -176,14 +176,14 @@ size_t TDecodedInput::DoUnboundedNext(const void** ptr) {
 
         TMemoryInput in(buf, payload);
 
-        ::Load(&in, codecId);
-        ::Load(&in, blockLen);
+        ::Load(&in, codecId); 
+        ::Load(&in, blockLen); 
     }
 
-    if (!blockLen) {
+    if (!blockLen) { 
         S_ = nullptr;
 
-        return 0;
+        return 0; 
     }
 
     if (Y_UNLIKELY(blockLen > 1024 * 1024 * 1024)) {
@@ -191,9 +191,9 @@ size_t TDecodedInput::DoUnboundedNext(const void** ptr) {
     }
 
     TBuffer block;
-    block.Resize(blockLen);
+    block.Resize(blockLen); 
 
-    S_->LoadOrFail(block.Data(), blockLen);
+    S_->LoadOrFail(block.Data(), blockLen); 
 
     auto codec = CodecByID(codecId);
 
@@ -208,5 +208,5 @@ size_t TDecodedInput::DoUnboundedNext(const void** ptr) {
     codec->Decode(block, D_);
     *ptr = D_.Data();
 
-    return D_.Size();
+    return D_.Size(); 
 }

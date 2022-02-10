@@ -204,7 +204,7 @@ size_t TBusSessionImpl::GetInFlightImpl(const TNetAddr& addr) const {
     }
 }
 
-void TBusSessionImpl::GetInFlightBulk(TArrayRef<const TNetAddr> addrs, TArrayRef<size_t> results) const {
+void TBusSessionImpl::GetInFlightBulk(TArrayRef<const TNetAddr> addrs, TArrayRef<size_t> results) const { 
     Y_VERIFY(addrs.size() == results.size(), "input.size != output.size");
     for (size_t i = 0; i < addrs.size(); ++i) {
         results[i] = GetInFlightImpl(addrs[i]);
@@ -220,7 +220,7 @@ size_t TBusSessionImpl::GetConnectSyscallsNumForTestImpl(const TNetAddr& addr) c
     }
 }
 
-void TBusSessionImpl::GetConnectSyscallsNumBulkForTest(TArrayRef<const TNetAddr> addrs, TArrayRef<size_t> results) const {
+void TBusSessionImpl::GetConnectSyscallsNumBulkForTest(TArrayRef<const TNetAddr> addrs, TArrayRef<size_t> results) const { 
     Y_VERIFY(addrs.size() == results.size(), "input.size != output.size");
     for (size_t i = 0; i < addrs.size(); ++i) {
         results[i] = GetConnectSyscallsNumForTestImpl(addrs[i]);

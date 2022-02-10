@@ -543,7 +543,7 @@ public:
 
 #ifndef TSTRING_IS_STD_STRING
         TStringType s3 = TStringType::Uninitialized(10);
-        UNIT_ASSERT(s3.size() == 10);
+        UNIT_ASSERT(s3.size() == 10); 
 #endif
 
         TStringType s4(Data._0123456(), 1, 3);
@@ -562,9 +562,9 @@ public:
 
         TStringType s8(s7, 1, 3);
         UNIT_ASSERT(s8 == Data._123());
-
+ 
         TStringType s9(*Data._1());
-        UNIT_ASSERT(s9 == Data._1());
+        UNIT_ASSERT(s9 == Data._1()); 
 
         TStringType s10(Reserve(100));
         UNIT_ASSERT(s10.empty());
@@ -692,10 +692,10 @@ public:
         UNIT_ASSERT(s.find_first_of(Data._389()) == 3);
         UNIT_ASSERT(s.find_first_of(Data._389(), s.size()) == TStringType::npos);
         UNIT_ASSERT(s.find_first_not_of(Data._123()) == 0);
-        UNIT_ASSERT(s.find_first_of('6') == 6);
-        UNIT_ASSERT(s.find_first_of('1', 2) == 8);
-        UNIT_ASSERT(s.find_first_not_of('0') == 1);
-        UNIT_ASSERT(s.find_first_not_of('1', 1) == 2);
+        UNIT_ASSERT(s.find_first_of('6') == 6); 
+        UNIT_ASSERT(s.find_first_of('1', 2) == 8); 
+        UNIT_ASSERT(s.find_first_not_of('0') == 1); 
+        UNIT_ASSERT(s.find_first_not_of('1', 1) == 2); 
 
         const TStringType rs = Data._0123401234();
         UNIT_ASSERT(rs.rfind(*Data._3()) == 8);
@@ -1075,7 +1075,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(str.front(), (ui8)'r');
     }
 
-    void TestIterators() {
+    void TestIterators() { 
         const char_type chars[] = {'f', 'o', 0};
 
         TStringType str = chars;
@@ -1113,7 +1113,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(*citBegin, (ui8)'f');
     }
 
-    void TestReverseIterators() {
+    void TestReverseIterators() { 
         const char_type chars[] = {'f', 'o', 0};
 
         TStringType str = chars;

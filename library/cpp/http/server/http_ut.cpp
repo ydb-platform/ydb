@@ -234,11 +234,11 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                         zlib.Flush();
                         zlib.Finish();
                     }
-                    r << "Content-Length: " << compressedContent.Size() << CrLf;
+                    r << "Content-Length: " << compressedContent.Size() << CrLf; 
                     r << CrLf;
                     s->Send(r.Data(), r.Size());
                     CheckContinue(si);
-                    Hdr = r.Str();
+                    Hdr = r.Str(); 
                     TString tosend = compressedContent.Str();
                     s->Send(tosend.data(), tosend.size());
                 } else {
@@ -247,11 +247,11 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                         r << CrLf;
                         s->Send(r.Data(), r.Size());
                         CheckContinue(si);
-                        Hdr = r.Str();
+                        Hdr = r.Str(); 
                         s->Send(Content.data(), Content.size());
                     } else {
                         r << CrLf;
-                        Hdr = r.Str();
+                        Hdr = r.Str(); 
                         s->Send(r.Data(), r.Size());
                     }
                 }
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             TStringStream ss;
             TransferData(&input, &ss);
 
-            return ss.Str();
+            return ss.Str(); 
         }
 
         TString GetDescription() const {
@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                 if (ContentEncoding.size()) {
                     ss << " with encoding=" << ContentEncoding;
                 }
-                return ss.Str();
+                return ss.Str(); 
             } else {
                 return Hdr;
             }

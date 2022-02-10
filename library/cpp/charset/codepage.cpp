@@ -14,7 +14,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
-#include <util/memory/pool.h>
+#include <util/memory/pool.h> 
 
 #include <cstring>
 
@@ -131,7 +131,7 @@ private:
     using TData = THashMap<TStringBuf, ECharset, ci_hash, ci_equal_to>;
 
     TData Data;
-    TMemoryPool Pool;
+    TMemoryPool Pool; 
 
 private:
     inline void AddNameWithCheck(const TString& name, ECharset code) {
@@ -141,7 +141,7 @@ private:
             Y_ASSERT(Data.find(name.c_str())->second == code);
         }
     }
-
+ 
     inline void AddName(const TString& name, ECharset code) {
         AddNameWithCheck(name, code);
 
@@ -160,9 +160,9 @@ private:
     }
 
 public:
-    inline TCodePageHash()
-        : Pool(20 * 1024) /* Currently used: 17KB. */
-    {
+    inline TCodePageHash() 
+        : Pool(20 * 1024) /* Currently used: 17KB. */ 
+    { 
         TString xPrefix = "x-";
         const char* name;
 

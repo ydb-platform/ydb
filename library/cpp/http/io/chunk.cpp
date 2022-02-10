@@ -65,32 +65,32 @@ public:
     }
 
     inline size_t Read(void* buf, size_t len) {
-        return Perform(len, [this, buf](size_t toRead) { return Slave_->Read(buf, toRead); });
-    }
-
-    inline size_t Skip(size_t len) {
-        return Perform(len, [this](size_t toSkip) { return Slave_->Skip(toSkip); });
-    }
-
-private:
+        return Perform(len, [this, buf](size_t toRead) { return Slave_->Read(buf, toRead); }); 
+    } 
+ 
+    inline size_t Skip(size_t len) { 
+        return Perform(len, [this](size_t toSkip) { return Slave_->Skip(toSkip); }); 
+    } 
+ 
+private: 
     template <class Operation>
-    inline size_t Perform(size_t len, const Operation& operation) {
+    inline size_t Perform(size_t len, const Operation& operation) { 
         if (!HavePendingData()) {
             return 0;
         }
 
-        const size_t toProcess = Min(Pending_, len);
+        const size_t toProcess = Min(Pending_, len); 
 
-        if (toProcess) {
-            const size_t processed = operation(toProcess);
+        if (toProcess) { 
+            const size_t processed = operation(toProcess); 
 
-            if (!processed) {
+            if (!processed) { 
                 ythrow yexception() << "malformed http chunk";
             }
 
-            Pending_ -= processed;
+            Pending_ -= processed; 
 
-            return processed;
+            return processed; 
         }
 
         return 0;
@@ -154,10 +154,10 @@ size_t TChunkedInput::DoRead(void* buf, size_t len) {
     return Impl_->Read(buf, len);
 }
 
-size_t TChunkedInput::DoSkip(size_t len) {
-    return Impl_->Skip(len);
-}
-
+size_t TChunkedInput::DoSkip(size_t len) { 
+    return Impl_->Skip(len); 
+} 
+ 
 class TChunkedOutput::TImpl {
     typedef IOutputStream::TPart TPart;
 

@@ -61,9 +61,9 @@ struct TMemoryMapCommon {
     Y_DECLARE_FLAGS(EOpenMode, EOpenModeFlag)
 
     /**
-     * Name that will be printed in exceptions if not specified.
-     * Overridden by name obtained from `TFile` if it's not empty.
-     */
+     * Name that will be printed in exceptions if not specified. 
+     * Overridden by name obtained from `TFile` if it's not empty. 
+     */ 
     static TString UnknownFileName();
 };
 Y_DECLARE_OPERATORS_FOR_FLAGS(TMemoryMapCommon::EOpenMode)

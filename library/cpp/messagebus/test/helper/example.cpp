@@ -7,7 +7,7 @@
 using namespace NBus;
 using namespace NBus::NTest;
 
-static void FillWithJunk(TArrayRef<char> data) {
+static void FillWithJunk(TArrayRef<char> data) { 
     TStringBuf junk =
         "01234567890123456789012345678901234567890123456789012345678901234567890123456789"
         "01234567890123456789012345678901234567890123456789012345678901234567890123456789"
@@ -21,7 +21,7 @@ static void FillWithJunk(TArrayRef<char> data) {
 
 static TString JunkString(size_t len) {
     TTempBuf temp(len);
-    TArrayRef<char> tempArrayRef(temp.Data(), len);
+    TArrayRef<char> tempArrayRef(temp.Data(), len); 
     FillWithJunk(tempArrayRef);
 
     return TString(tempArrayRef.data(), tempArrayRef.size());
@@ -87,7 +87,7 @@ void TExampleProtocol::Serialize(const TBusMessage* message, TBuffer& buffer) {
     }
 }
 
-TAutoPtr<TBusMessage> TExampleProtocol::Deserialize(ui16 messageType, TArrayRef<const char> payload) {
+TAutoPtr<TBusMessage> TExampleProtocol::Deserialize(ui16 messageType, TArrayRef<const char> payload) { 
     // TODO: check data
     Y_UNUSED(payload);
 

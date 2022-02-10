@@ -34,8 +34,8 @@ public:
     {}
 
     // dummy virtual handlers - just to make class constructable.
-    virtual void GetInFlightBulk(::TArrayRef<const NBus::TNetAddr>, TArrayRef<size_t>) const override {}
-    virtual void GetConnectSyscallsNumBulkForTest(::TArrayRef<const NBus::TNetAddr>, TArrayRef<size_t>) const override {}
+    virtual void GetInFlightBulk(::TArrayRef<const NBus::TNetAddr>, TArrayRef<size_t>) const override {} 
+    virtual void GetConnectSyscallsNumBulkForTest(::TArrayRef<const NBus::TNetAddr>, TArrayRef<size_t>) const override {} 
     virtual int GetInFlight() const noexcept override { return 1; }
     virtual TString GetStatus(ui16) override { return TString(); }
     virtual NBus::TConnectionStatusMonRecord GetStatusProtobuf() override { return NBus::TConnectionStatusMonRecord(); }

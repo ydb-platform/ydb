@@ -12,7 +12,7 @@ void TSimpleProtocol::Serialize(const TBusMessage* mess, TBuffer& data) {
     data.Append((const char*)&typed->Payload, 4);
 }
 
-TAutoPtr<TBusMessage> TSimpleProtocol::Deserialize(ui16, TArrayRef<const char> payload) {
+TAutoPtr<TBusMessage> TSimpleProtocol::Deserialize(ui16, TArrayRef<const char> payload) { 
     if (payload.size() != 4) {
         return nullptr;
     }

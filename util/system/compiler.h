@@ -52,7 +52,7 @@
     #define Y_NO_SANITIZE(...)
 #endif
 
-/**
+/** 
  * @def Y_DECLARE_UNUSED
  *
  * Macro is needed to silence compiler warning about unused entities (e.g. function or argument).
@@ -83,12 +83,12 @@
     #define Y_PREFETCH_WRITE(Pointer, Priority) __builtin_prefetch((const void*)(Pointer), 1, Priority)
 #endif
 
-/**
+/** 
  * @def Y_FORCE_INLINE
- *
- * Macro to use in place of 'inline' in function declaration/definition to force
- * it to be inlined.
- */
+ * 
+ * Macro to use in place of 'inline' in function declaration/definition to force 
+ * it to be inlined. 
+ */ 
 #if !defined(Y_FORCE_INLINE)
     #if defined(CLANG_COVERAGE)
         #/* excessive __always_inline__ might significantly slow down compilation of an instrumented unit */
@@ -101,14 +101,14 @@
     #else
         #define Y_FORCE_INLINE inline
     #endif
-#endif
-
-/**
+#endif 
+ 
+/** 
  * @def Y_NO_INLINE
- *
- * Macro to use in place of 'inline' in function declaration/definition to
- * prevent it from being inlined.
- */
+ * 
+ * Macro to use in place of 'inline' in function declaration/definition to 
+ * prevent it from being inlined. 
+ */ 
 #if !defined(Y_NO_INLINE)
     #if defined(_MSC_VER)
         #define Y_NO_INLINE __declspec(noinline)
@@ -118,8 +118,8 @@
     #else
         #define Y_NO_INLINE
     #endif
-#endif
-
+#endif 
+ 
 //to cheat compiler about strict aliasing or similar problems
 #if defined(__GNUC__)
     #define Y_FAKE_READ(X)                  \

@@ -239,7 +239,7 @@ bool TSemaphore::TryAcquire() noexcept {
     return Impl_->TryAcquire();
 }
 
-#if defined(_unix_) && !defined(_darwin_)
+#if defined(_unix_) && !defined(_darwin_) 
 class TFastSemaphore::TImpl: public TPosixSemaphore {
 public:
     inline TImpl(ui32 n)

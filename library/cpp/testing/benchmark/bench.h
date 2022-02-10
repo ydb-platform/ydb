@@ -24,16 +24,16 @@ namespace NBench {
         };
     }
 
-    /**
-     * Functions that states "I can read and write everywhere in memory".
+    /** 
+     * Functions that states "I can read and write everywhere in memory". 
      *
      * Use it to prevent optimizer from reordering or discarding memory writes prior to it's call,
      * and force memory reads after it's call.
      */
     void Clobber();
 
-    /**
-     * Forces whatever `p` points to be in memory and not in register.
+    /** 
+     * Forces whatever `p` points to be in memory and not in register. 
      *
      * @param       Pointer to data.
      */

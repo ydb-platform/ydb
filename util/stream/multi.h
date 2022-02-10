@@ -2,14 +2,14 @@
 
 #include "input.h"
 
-/**
- * @addtogroup Streams_Multi
- * @{
+/** 
+ * @addtogroup Streams_Multi 
+ * @{ 
  */
-
-/**
- * A proxy input stream that concatenates two slave streams into one.
- */
+ 
+/** 
+ * A proxy input stream that concatenates two slave streams into one. 
+ */ 
 class TMultiInput: public IInputStream {
 public:
     TMultiInput(IInputStream* f, IInputStream* s) noexcept;
@@ -29,4 +29,4 @@ private:
  * See also "util/stream/tee.h" for multi output.
  */
 
-/** @} */
+/** @} */ 

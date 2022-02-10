@@ -304,12 +304,12 @@ template <>
 class TSerializer<const char*> {
 public:
     static inline void Save(IOutputStream* rh, const char* s) {
-        size_t length = strlen(s);
-        ::SaveSize(rh, length);
-        ::SavePodArray(rh, s, length);
+        size_t length = strlen(s); 
+        ::SaveSize(rh, length); 
+        ::SavePodArray(rh, s, length); 
     }
 
-    template <class Char, class TStorage>
+    template <class Char, class TStorage> 
     static inline void Load(IInputStream* rh, Char*& s, TStorage& pool) {
         const size_t len = LoadSize(rh);
 
@@ -326,7 +326,7 @@ class TVectorSerializer {
 
 public:
     static inline void Save(IOutputStream* rh, const TVec& v) {
-        ::SaveSize(rh, v.size());
+        ::SaveSize(rh, v.size()); 
         ::SaveRange(rh, v.begin(), v.end());
     }
 
@@ -350,18 +350,18 @@ template <class T, class A>
 class TSerializer<TVector<T, A>>: public TVectorSerializer<TVector<T, A>> {
 };
 
-template <class T, class A>
+template <class T, class A> 
 class TSerializer<std::vector<T, A>>: public TVectorSerializer<std::vector<T, A>> {
-};
-
-template <class T, class A>
+}; 
+ 
+template <class T, class A> 
 class TSerializer<TList<T, A>>: public TVectorSerializer<TList<T, A>> {
-};
-
-template <class T, class A>
+}; 
+ 
+template <class T, class A> 
 class TSerializer<std::list<T, A>>: public TVectorSerializer<std::list<T, A>> {
-};
-
+}; 
+ 
 template <>
 class TSerializer<TString>: public TVectorSerializer<TString> {
 };
@@ -378,10 +378,10 @@ template <class T, class A>
 class TSerializer<TDeque<T, A>>: public TVectorSerializer<TDeque<T, A>> {
 };
 
-template <class T, class A>
+template <class T, class A> 
 class TSerializer<std::deque<T, A>>: public TVectorSerializer<std::deque<T, A>> {
-};
-
+}; 
+ 
 template <class TArray>
 class TStdArraySerializer {
 public:
@@ -585,10 +585,10 @@ template <class T1, class T2, class T3, class T4>
 class TSerializer<TMap<T1, T2, T3, T4>>: public TMapSerializer<TMap<T1, T2, T3, T4>, true> {
 };
 
-template <class K, class T, class C, class A>
+template <class K, class T, class C, class A> 
 class TSerializer<std::map<K, T, C, A>>: public TMapSerializer<std::map<K, T, C, A>, true> {
-};
-
+}; 
+ 
 template <class T1, class T2, class T3, class T4>
 class TSerializer<TMultiMap<T1, T2, T3, T4>>: public TMapSerializer<TMultiMap<T1, T2, T3, T4>, true> {
 };
@@ -609,10 +609,10 @@ template <class K, class C, class A>
 class TSerializer<TSet<K, C, A>>: public TSetSerializer<TSet<K, C, A>, true> {
 };
 
-template <class K, class C, class A>
+template <class K, class C, class A> 
 class TSerializer<std::set<K, C, A>>: public TSetSerializer<std::set<K, C, A>, true> {
-};
-
+}; 
+ 
 template <class T1, class T2, class T3, class T4>
 class TSerializer<THashSet<T1, T2, T3, T4>>: public TSetSerializer<THashSet<T1, T2, T3, T4>, false> {
 };

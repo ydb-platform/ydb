@@ -165,7 +165,7 @@ void TTaskScheduler::ChangeDebugState(TWorkerThread* thread, const TString& stat
         ss << w->DebugState << " ";
     }
     ss << " [" << Queue_.size() << "] [" << TaskCounter_ << "]" <<  Endl;
-    Cerr << ss.Str();
+    Cerr << ss.Str(); 
 }
 
 bool TTaskScheduler::Wait(TWorkerThread* thread, TQueueIterator& toWait) {

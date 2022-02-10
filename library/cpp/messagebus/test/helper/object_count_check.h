@@ -10,7 +10,7 @@
 #include <library/cpp/messagebus/oldmodule/module.h>
 #include <library/cpp/messagebus/scheduler/scheduler.h>
 
-#include <util/generic/object_counter.h>
+#include <util/generic/object_counter.h> 
 #include <util/system/type_name.h>
 #include <util/stream/output.h>
 
@@ -29,7 +29,7 @@ struct TObjectCountCheck {
         }
 
         void operator()() {
-            long oldValue = TObjectCounter<T>::ResetObjectCount();
+            long oldValue = TObjectCounter<T>::ResetObjectCount(); 
             if (oldValue != 0) {
                 Cerr << "warning: previous counter: " << oldValue << " for " << TypeName<T>() << Endl;
                 Cerr << "won't check in this test" << Endl;

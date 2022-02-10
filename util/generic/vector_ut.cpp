@@ -565,7 +565,7 @@ private:
     }
 
     void CheckInitializeList(const TVector<int>& v) {
-        for (size_t i = 0; i < v.size(); ++i) {
+        for (size_t i = 0; i < v.size(); ++i) { 
             UNIT_ASSERT_EQUAL(v[i], static_cast<int>(i));
         }
     }

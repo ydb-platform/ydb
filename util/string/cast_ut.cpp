@@ -222,11 +222,11 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         test1(long int, LONG_MIN);
         test1(long int, LONG_MAX - 1);
         test1(long int, LONG_MIN + 1);
-
-        test1(long long int, LLONG_MAX);
-        test1(long long int, LLONG_MIN);
-        test1(long long int, LLONG_MAX - 1);
-        test1(long long int, LLONG_MIN + 1);
+ 
+        test1(long long int, LLONG_MAX); 
+        test1(long long int, LLONG_MIN); 
+        test1(long long int, LLONG_MAX - 1); 
+        test1(long long int, LLONG_MIN + 1); 
     }
 
     Y_UNIT_TEST(TestVolatile) {

@@ -26,9 +26,9 @@ double Erf(double x) {
     return f;
 }
 
-#endif // _MSC_VER
+#endif // _MSC_VER 
 
-double LogGammaImpl(double x) {
+double LogGammaImpl(double x) { 
     static constexpr double lnSqrt2Pi = 0.91893853320467274178; // log(sqrt(2.0 * PI))
     static constexpr double coeff9 = 1.0 / 1188.0;
     static constexpr double coeff7 = -1.0 / 1680.0;
@@ -37,20 +37,20 @@ double LogGammaImpl(double x) {
     static constexpr double coeff1 = 1.0 / 12.0;
 
     if ((x == 1.0) || (x == 2.0)) {
-        return 0.0; // 0! = 1
+        return 0.0; // 0! = 1 
     }
-    double bonus = 0.0;
-    while (x < 3.0) {
-        bonus -= log(x);
-        x += 1.0;
-    }
-    double lnX = log(x);
-    double sqrXInv = 1.0 / (x * x);
-    double res = coeff9 * sqrXInv + coeff7;
-    res = res * sqrXInv + coeff5;
-    res = res * sqrXInv + coeff3;
-    res = res * sqrXInv + coeff1;
-    res /= x;
-    res += x * lnX - x + lnSqrt2Pi - 0.5 * lnX;
-    return res + bonus;
+    double bonus = 0.0; 
+    while (x < 3.0) { 
+        bonus -= log(x); 
+        x += 1.0; 
+    } 
+    double lnX = log(x); 
+    double sqrXInv = 1.0 / (x * x); 
+    double res = coeff9 * sqrXInv + coeff7; 
+    res = res * sqrXInv + coeff5; 
+    res = res * sqrXInv + coeff3; 
+    res = res * sqrXInv + coeff1; 
+    res /= x; 
+    res += x * lnX - x + lnSqrt2Pi - 0.5 * lnX; 
+    return res + bonus; 
 }

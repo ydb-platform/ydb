@@ -14,7 +14,7 @@
 template <typename T, size_t CountOnStack = 256, bool UseFallbackAlloc = true, class Alloc = std::allocator<T>>
 class TStackVec;
 
-template <typename T, class Alloc = std::allocator<T>>
+template <typename T, class Alloc = std::allocator<T>> 
 using TSmallVec = TStackVec<T, 16, true, Alloc>;
 
 template <typename T, size_t CountOnStack = 256>
@@ -23,7 +23,7 @@ using TStackOnlyVec = TStackVec<T, CountOnStack, false>;
 namespace NPrivate {
     template <class Alloc, class StackAlloc, typename T, typename U>
     struct TRebind {
-        typedef TReboundAllocator<Alloc, U> other;
+        typedef TReboundAllocator<Alloc, U> other; 
     };
 
     template <class Alloc, class StackAlloc, typename T>

@@ -5,31 +5,31 @@
 #include <util/generic/ptr.h>
 #include <util/generic/yexception.h>
 
-/**
- * @file
- *
- * All lz compressors compress blocks. `Write` method splits input data into
- * blocks, compresses each block and then writes each compressed block to the
- * underlying output stream. Thus compression classes are not buffered.
- * MaxBlockSize parameter specified max allowed block size.
- *
- * See http://altdevblogaday.com/2011/04/22/survey-of-fast-compression-algorithms-part-1/
- * for some comparisons.
- */
+/** 
+ * @file 
+ * 
+ * All lz compressors compress blocks. `Write` method splits input data into 
+ * blocks, compresses each block and then writes each compressed block to the 
+ * underlying output stream. Thus compression classes are not buffered. 
+ * MaxBlockSize parameter specified max allowed block size. 
+ * 
+ * See http://altdevblogaday.com/2011/04/22/survey-of-fast-compression-algorithms-part-1/ 
+ * for some comparisons. 
+ */ 
 
 struct TDecompressorError: public yexception {
 };
 
-/**
- * @addtogroup Streams_Archs
- * @{
+/** 
+ * @addtogroup Streams_Archs 
+ * @{ 
  */
-
-/**
- * Lz4 compressing stream.
- *
- * @see http://code.google.com/p/lz4/
- */
+ 
+/** 
+ * Lz4 compressing stream. 
+ * 
+ * @see http://code.google.com/p/lz4/ 
+ */ 
 class TLz4Compress: public IOutputStream {
 public:
     TLz4Compress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15);
@@ -45,11 +45,11 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/**
- * Lz4 decompressing stream.
- *
- * @see http://code.google.com/p/lz4/
- */
+/** 
+ * Lz4 decompressing stream. 
+ * 
+ * @see http://code.google.com/p/lz4/ 
+ */ 
 class TLz4Decompress: public IInputStream {
 public:
     TLz4Decompress(IInputStream* slave);
@@ -63,10 +63,10 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/**
- * Snappy compressing stream.
- *
- * @see http://code.google.com/p/snappy/
+/** 
+ * Snappy compressing stream. 
+ * 
+ * @see http://code.google.com/p/snappy/ 
  */
 class TSnappyCompress: public IOutputStream {
 public:
@@ -83,11 +83,11 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/**
- * Snappy decompressing stream.
- *
- * @see http://code.google.com/p/snappy/
- */
+/** 
+ * Snappy decompressing stream. 
+ * 
+ * @see http://code.google.com/p/snappy/ 
+ */ 
 class TSnappyDecompress: public IInputStream {
 public:
     TSnappyDecompress(IInputStream* slave);
@@ -101,8 +101,8 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/**
- * MiniLZO compressing stream.
+/** 
+ * MiniLZO compressing stream. 
  */
 class TLzoCompress: public IOutputStream {
 public:
@@ -119,9 +119,9 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/**
- * MiniLZO decompressing stream.
- */
+/** 
+ * MiniLZO decompressing stream. 
+ */ 
 class TLzoDecompress: public IInputStream {
 public:
     TLzoDecompress(IInputStream* slave);
@@ -135,8 +135,8 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/**
- * FastLZ compressing stream.
+/** 
+ * FastLZ compressing stream. 
  */
 class TLzfCompress: public IOutputStream {
 public:
@@ -153,9 +153,9 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/**
- * FastLZ decompressing stream.
- */
+/** 
+ * FastLZ decompressing stream. 
+ */ 
 class TLzfDecompress: public IInputStream {
 public:
     TLzfDecompress(IInputStream* slave);
@@ -169,8 +169,8 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/**
- * QuickLZ compressing stream.
+/** 
+ * QuickLZ compressing stream. 
  */
 class TLzqCompress: public IOutputStream {
 public:
@@ -181,8 +181,8 @@ public:
     };
 
     /*
-     * streaming mode - actually, backlog size
-     */
+     * streaming mode - actually, backlog size 
+     */ 
     enum EMode {
         M_0 = 0,
         M_100000 = 1,
@@ -205,9 +205,9 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/**
- * QuickLZ decompressing stream.
- */
+/** 
+ * QuickLZ decompressing stream. 
+ */ 
 class TLzqDecompress: public IInputStream {
 public:
     TLzqDecompress(IInputStream* slave);
@@ -221,18 +221,18 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/** @} */
+/** @} */ 
 
-/**
- * Reads a compression signature from the provided input stream and returns a
- * corresponding decompressing stream.
- *
- * Note that returned stream doesn't own the provided input stream, thus it's
- * up to the user to free them both.
- *
- * @param input                         Stream to decompress.
- * @return                              Decompressing proxy input stream.
- */
+/** 
+ * Reads a compression signature from the provided input stream and returns a 
+ * corresponding decompressing stream. 
+ * 
+ * Note that returned stream doesn't own the provided input stream, thus it's 
+ * up to the user to free them both. 
+ * 
+ * @param input                         Stream to decompress. 
+ * @return                              Decompressing proxy input stream. 
+ */ 
 TAutoPtr<IInputStream> OpenLzDecompressor(IInputStream* input);
 TAutoPtr<IInputStream> TryOpenLzDecompressor(IInputStream* input);
 TAutoPtr<IInputStream> TryOpenLzDecompressor(const TStringBuf& signature, IInputStream* input);

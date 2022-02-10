@@ -51,7 +51,7 @@ bool TRemoteServerConnection::NeedInterruptRead() {
     return !GetSession()->ServerOwnedMessages.TryWait();
 }
 
-void TRemoteServerConnection::MessageSent(TArrayRef<TBusMessagePtrAndHeader> messages) {
+void TRemoteServerConnection::MessageSent(TArrayRef<TBusMessagePtrAndHeader> messages) { 
     TInstant now = TInstant::Now();
 
     GetSession()->ReleaseInWorkResponses(messages);
@@ -64,7 +64,7 @@ void TRemoteServerConnection::MessageSent(TArrayRef<TBusMessagePtrAndHeader> mes
     }
 }
 
-void TRemoteServerConnection::ReaderProcessMessageUnknownVersion(TArrayRef<const char> dataRef) {
+void TRemoteServerConnection::ReaderProcessMessageUnknownVersion(TArrayRef<const char> dataRef) { 
     TBusHeader header(dataRef);
     // TODO: full version hex
     LWPROBE(ServerUnknownVersion, ToString(PeerAddr), header.GetVersionInternal());

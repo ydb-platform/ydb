@@ -74,10 +74,10 @@ Y_UNIT_TEST_SUITE(TestMemCopy) {
 
     template <class T>
     inline void FillX(T* b, T* e) {
-        int tmp = 0;
+        int tmp = 0; 
 
         while (b != e) {
-            (b++)->X = ++tmp;
+            (b++)->X = ++tmp; 
         }
     }
 
@@ -105,9 +105,9 @@ Y_UNIT_TEST_SUITE(TestMemCopy) {
     }
 
     Y_UNIT_TEST(TestEmpty) {
-        char* tmp = nullptr;
+        char* tmp = nullptr; 
 
-        UNIT_ASSERT(MemCopy(tmp, tmp, 0) == nullptr);
-        UNIT_ASSERT(MemMove(tmp, tmp, 0) == nullptr);
+        UNIT_ASSERT(MemCopy(tmp, tmp, 0) == nullptr); 
+        UNIT_ASSERT(MemMove(tmp, tmp, 0) == nullptr); 
     }
 }

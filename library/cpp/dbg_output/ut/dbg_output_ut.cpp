@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(TContainerPrintersTest) {
     Y_UNIT_TEST(TestVectorInt) {
         TStringStream out;
         out << DbgDump(TVector<int>({1, 2, 3, 4, 5}));
-        UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "[1, 2, 3, 4, 5]");
+        UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "[1, 2, 3, 4, 5]"); 
     }
 
     Y_UNIT_TEST(TestMapCharToCharArray) {
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(TContainerPrintersTest) {
 
         out << DbgDump(m);
 
-        UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "{'a' -> \"SMALL LETTER A\", 'b' -> (empty)}");
+        UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "{'a' -> \"SMALL LETTER A\", 'b' -> (empty)}"); 
     }
 
     Y_UNIT_TEST(TestVectorOfVectors) {
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TContainerPrintersTest) {
         vec[0].push_back(0);
         vec[1] = {wchar16('a')};
         out << DbgDump(vec);
-        UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "[[w'\\0'], [w'a']]");
+        UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "[[w'\\0'], [w'a']]"); 
     }
 
     Y_UNIT_TEST(TestInfinite) {
@@ -68,13 +68,13 @@ Y_UNIT_TEST_SUITE(TContainerPrintersTest) {
         TStringStream out;
         int a = 1, b = 2;
         out << LabeledDump(a, b, 1 + 2);
-        UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "{\"a\": 1, \"b\": 2, \"1 + 2\": 3}");
+        UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "{\"a\": 1, \"b\": 2, \"1 + 2\": 3}"); 
     }
 
     Y_UNIT_TEST(TestStructDumper) {
         TStringStream out;
         out << DbgDump(TMyNS::TMyStruct{3, 4});
-        UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "{\"A\": 3, \"B\": 4}");
+        UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "{\"A\": 3, \"B\": 4}"); 
     }
 
     Y_UNIT_TEST(TestColors) {

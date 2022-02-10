@@ -19,7 +19,7 @@ void TFileEntitiesList::Fill(const TString& dirname, TStringBuf prefix, TStringB
         --dirNameLength;
     }
 
-    for (auto file = dir.begin(); file != dir.end(); ++file) {
+    for (auto file = dir.begin(); file != dir.end(); ++file) { 
         if (file->fts_pathlen == file->fts_namelen || file->fts_pathlen <= dirNameLength) {
             continue;
         }

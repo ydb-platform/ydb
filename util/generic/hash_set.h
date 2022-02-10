@@ -1,11 +1,11 @@
 #pragma once
 
-#include "fwd.h"
+#include "fwd.h" 
 #include "hash.h"
 
-#include <initializer_list>
+#include <initializer_list> 
 #include <utility>
-
+ 
 #undef value_type
 
 template <class Value, class HashFcn, class EqualKey, class Alloc>
@@ -65,25 +65,25 @@ public:
 
     THashSet(std::initializer_list<value_type> list)
         : rep(list.size(), hasher(), key_equal())
-    {
-        rep.insert_unique(list.begin(), list.end());
-    }
+    { 
+        rep.insert_unique(list.begin(), list.end()); 
+    } 
     THashSet(std::initializer_list<value_type> list, size_type n)
-        : rep(n, hasher(), key_equal())
-    {
-        rep.insert_unique(list.begin(), list.end());
-    }
+        : rep(n, hasher(), key_equal()) 
+    { 
+        rep.insert_unique(list.begin(), list.end()); 
+    } 
     THashSet(std::initializer_list<value_type> list, size_type n, const hasher& hf)
-        : rep(n, hf, key_equal())
-    {
-        rep.insert_unique(list.begin(), list.end());
-    }
+        : rep(n, hf, key_equal()) 
+    { 
+        rep.insert_unique(list.begin(), list.end()); 
+    } 
     THashSet(std::initializer_list<value_type> list, size_type n, const hasher& hf, const key_equal& eql)
-        : rep(n, hf, eql)
-    {
-        rep.insert_unique(list.begin(), list.end());
-    }
-
+        : rep(n, hf, eql) 
+    { 
+        rep.insert_unique(list.begin(), list.end()); 
+    } 
+ 
     template <class InputIterator>
     THashSet(InputIterator f, InputIterator l)
         : rep(0, hasher(), key_equal())
@@ -168,9 +168,9 @@ public:
 
     iterator insert(const_iterator, const value_type& obj) { // insert_hint
         std::pair<mutable_iterator, bool> p = rep.insert_unique(obj);
-        return p.first;
-    }
-
+        return p.first; 
+    } 
+ 
     std::pair<iterator, bool> insert_noresize(const value_type& obj) {
         std::pair<mutable_iterator, bool> p = rep.insert_unique_noresize(obj);
         return std::pair<iterator, bool>(p.first, p.second);
@@ -236,13 +236,13 @@ public:
     void basic_clear() {
         rep.basic_clear();
     }
-    void release_nodes() {
-        rep.release_nodes();
-    }
+    void release_nodes() { 
+        rep.release_nodes(); 
+    } 
 
     template <class KeySaver>
     int save_for_st(IOutputStream* stream, KeySaver& ks) const {
-        return rep.template save_for_st<KeySaver>(stream, ks);
+        return rep.template save_for_st<KeySaver>(stream, ks); 
     }
 
 public:
@@ -273,12 +273,12 @@ inline bool operator==(const THashSet<Value, HashFcn, EqualKey, Alloc>& hs1, con
     return true;
 }
 
-template <class Value, class HashFcn, class EqualKey, class Alloc>
+template <class Value, class HashFcn, class EqualKey, class Alloc> 
 inline bool operator!=(const THashSet<Value, HashFcn, EqualKey, Alloc>& hs1, const THashSet<Value, HashFcn, EqualKey, Alloc>& hs2) {
-    return !(hs1 == hs2);
-}
-
-template <class Value, class HashFcn, class EqualKey, class Alloc>
+    return !(hs1 == hs2); 
+} 
+ 
+template <class Value, class HashFcn, class EqualKey, class Alloc> 
 class THashMultiSet {
 private:
     using ht = THashTable<Value, Value, HashFcn, ::TIdentity, EqualKey, Alloc>;
@@ -444,9 +444,9 @@ public:
     void basic_clear() {
         rep.basic_clear();
     }
-    void release_nodes() {
-        rep.release_nodes();
-    }
+    void release_nodes() { 
+        rep.release_nodes(); 
+    } 
 
 public:
     void reserve(size_type hint) {
@@ -481,8 +481,8 @@ inline bool operator==(const THashMultiSet<Val, HashFcn, EqualKey, Alloc>& hs1, 
     }
     return true;
 }
-
-template <class Val, class HashFcn, class EqualKey, class Alloc>
+ 
+template <class Val, class HashFcn, class EqualKey, class Alloc> 
 inline bool operator!=(const THashMultiSet<Val, HashFcn, EqualKey, Alloc>& hs1, const THashMultiSet<Val, HashFcn, EqualKey, Alloc>& hs2) {
-    return !(hs1 == hs2);
-}
+    return !(hs1 == hs2); 
+} 

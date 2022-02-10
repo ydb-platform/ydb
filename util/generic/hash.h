@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fwd.h"
+#include "fwd.h" 
 #include "mapfindptr.h"
 
 #include <util/memory/alloc.h>
@@ -19,8 +19,8 @@
 
 #include <cstdlib>
 
-#include "hash_primes.h"
-
+#include "hash_primes.h" 
+ 
 struct TSelect1st {
     template <class TPair>
     inline const typename TPair::first_type& operator()(const TPair& x) const {
@@ -37,10 +37,10 @@ struct __yhashtable_node {
      * This trick makes it possible to use only one node pointer in a hash table
      * iterator. */
     __yhashtable_node* next;
-
+ 
     /** Value stored in a node. */
     Value val;
-
+ 
     __yhashtable_node& operator=(const __yhashtable_node&) = delete;
 };
 
@@ -148,19 +148,19 @@ struct __yhashtable_const_iterator {
     }
 };
 
-/**
- * This class saves some space in allocator-based containers for the most common
- * use case of empty allocators. This is achieved thanks to the application of
- * empty base class optimization (aka EBCO).
- */
+/** 
+ * This class saves some space in allocator-based containers for the most common 
+ * use case of empty allocators. This is achieved thanks to the application of 
+ * empty base class optimization (aka EBCO). 
+ */ 
 template <class Alloc>
-class _allocator_base: private Alloc {
-public:
+class _allocator_base: private Alloc { 
+public: 
     _allocator_base(const Alloc& other)
         : Alloc(other)
     {
     }
-
+ 
     Alloc& _get_alloc() {
         return static_cast<Alloc&>(*this);
     }
@@ -170,45 +170,45 @@ public:
     void _set_alloc(const Alloc& allocator) {
         _get_alloc() = allocator;
     }
-
+ 
     void swap(_allocator_base& other) {
         DoSwap(_get_alloc(), other._get_alloc());
     }
-};
-
-/**
+}; 
+ 
+/** 
  * Wrapper for an array of THashTable buckets.
- *
- * Is better than vector for this particular use case. Main differences:
- *   - Occupies one less word on stack.
+ * 
+ * Is better than vector for this particular use case. Main differences: 
+ *   - Occupies one less word on stack. 
  *   - Doesn't even try to initialize its elements. It is THashTable's responsibility.
  *   - Presents a better interface in relation to THashTable's marker element trick.
- *
- * Internally this class is just a pointer-size pair, and the data on the heap
- * has the following structure:
- *
- *     +----------+----------------------+----------+-------------------------+
- *     | raw_size | elements ...         | marker   | unused space [optional] |
- *     +----------+----------------------+----------+-------------------------+
- *                 ^                      ^
- *                 |                      |
- *                Data points here       end() points here
- *
- * `raw_size` stores the size of the allocated memory block. It is used to
- * support resizing without reallocation.
- *
+ * 
+ * Internally this class is just a pointer-size pair, and the data on the heap 
+ * has the following structure: 
+ * 
+ *     +----------+----------------------+----------+-------------------------+ 
+ *     | raw_size | elements ...         | marker   | unused space [optional] | 
+ *     +----------+----------------------+----------+-------------------------+ 
+ *                 ^                      ^ 
+ *                 |                      | 
+ *                Data points here       end() points here 
+ * 
+ * `raw_size` stores the size of the allocated memory block. It is used to 
+ * support resizing without reallocation. 
+ * 
  * `marker` is a special marker element that is set by the THashTable that is
- * then used in iterator implementation to know when the end is reached.
- *
- * Unused space at the end of the memory block may not be present.
- */
+ * then used in iterator implementation to know when the end is reached. 
+ * 
+ * Unused space at the end of the memory block may not be present. 
+ */ 
 template <class T, class Alloc>
 class _yhashtable_buckets: private _allocator_base<Alloc> {
     using base_type = _allocator_base<Alloc>;
-
+ 
     static_assert(sizeof(T) == sizeof(size_t), "T is expected to be the same size as size_t.");
-
-public:
+ 
+public: 
     using allocator_type = Alloc;
     using value_type = T;
     using pointer = T*;
@@ -220,55 +220,55 @@ public:
     using size_type = size_t;
     using difference_type = ptrdiff_t;
     using TBucketDivisor = ::NPrivate::THashDivisor;
-
+ 
     _yhashtable_buckets(const Alloc& other)
         : base_type(other)
         , Data(nullptr)
         , Size()
     {
     }
-
+ 
     ~_yhashtable_buckets() {
         Y_ASSERT(!Data);
     }
-
+ 
     void initialize_dynamic(TBucketDivisor size) {
         Y_ASSERT(!Data);
-
+ 
         Data = this->_get_alloc().allocate(size() + 2) + 1;
         Size = size;
-
+ 
         *reinterpret_cast<size_type*>(Data - 1) = size() + 2;
     }
-
+ 
     void deinitialize_dynamic() {
         Y_ASSERT(Data);
-
+ 
         this->_get_alloc().deallocate(Data - 1, *reinterpret_cast<size_type*>(Data - 1));
         Data = pointer();
         Size = TBucketDivisor();
     }
-
+ 
     void initialize_static(pointer data, TBucketDivisor size) {
         Y_ASSERT(!Data && data && size() >= 1);
-
+ 
         Data = data;
         Size = size;
     }
-
+ 
     void deinitialize_static() {
         Y_ASSERT(Data);
-
+ 
         Data = pointer();
         Size = TBucketDivisor();
     }
-
+ 
     void resize_noallocate(TBucketDivisor size) {
         Y_ASSERT(size() <= capacity());
-
+ 
         Size = size;
     }
-
+ 
     iterator begin() {
         return Data;
     }
@@ -281,14 +281,14 @@ public:
     const_iterator end() const {
         return Data + Size();
     }
-
+ 
     pointer data() {
         return Data;
     }
     const_pointer data() const {
         return Data;
     }
-
+ 
     size_type size() const {
         return Size();
     }
@@ -301,57 +301,57 @@ public:
     int BucketDivisorHint() const {
         return +Size.Hint;
     }
-
+ 
     allocator_type get_allocator() const {
         return this->_get_alloc();
     }
-
+ 
     const_reference operator[](size_type index) const {
         Y_ASSERT(index <= Size());
-
+ 
         return *(Data + index);
     }
-
+ 
     reference operator[](size_type index) {
         Y_ASSERT(index <= Size());
-
+ 
         return *(Data + index);
     }
-
+ 
     void swap(_yhashtable_buckets& other) {
         base_type::swap(other);
         DoSwap(Data, other.Data);
         DoSwap(Size, other.Size);
     }
-
-private:
+ 
+private: 
     /** Pointer to the first element of the buckets array. */
     pointer Data;
-
+ 
     /** Size of the buckets array. Doesn't take the marker element at the end into account. */
     TBucketDivisor Size;
-};
-
-/**
+}; 
+ 
+/** 
  * This class saves one word in THashTable for the most common use case of empty
- * functors. The exact implementation picks a specialization with storage allocated
- * for the functors if those are non-empty, and another specialization that creates
- * functors on the fly if they are empty. It is expected that empty functors have
- * trivial constructors.
- *
- * Note that this is basically the only way to do it portably. Another option is
- * multiple inheritance from empty functors, but MSVC's empty base class
- * optimization chokes up on multiple empty bases, and we're already using
- * EBCO in _allocator_base.
- *
- * Note that there are no specializations for the case when only one or two
- * of the functors are empty as this is a case that's just way too rare.
- */
+ * functors. The exact implementation picks a specialization with storage allocated 
+ * for the functors if those are non-empty, and another specialization that creates 
+ * functors on the fly if they are empty. It is expected that empty functors have 
+ * trivial constructors. 
+ * 
+ * Note that this is basically the only way to do it portably. Another option is 
+ * multiple inheritance from empty functors, but MSVC's empty base class 
+ * optimization chokes up on multiple empty bases, and we're already using 
+ * EBCO in _allocator_base. 
+ * 
+ * Note that there are no specializations for the case when only one or two 
+ * of the functors are empty as this is a case that's just way too rare. 
+ */ 
 template <class HashFcn, class ExtractKey, class EqualKey, class Alloc, bool IsEmpty = std::is_empty<HashFcn>::value&& std::is_empty<ExtractKey>::value&& std::is_empty<EqualKey>::value>
 class _yhashtable_base: public _allocator_base<Alloc> {
     using base_type = _allocator_base<Alloc>;
 
-public:
+public: 
     _yhashtable_base(const HashFcn& hash, const ExtractKey& extract, const EqualKey& equals, const Alloc& alloc)
         : base_type(alloc)
         , hash_(hash)
@@ -359,7 +359,7 @@ public:
         , equals_(equals)
     {
     }
-
+ 
     const EqualKey& _get_key_eq() const {
         return equals_;
     }
@@ -369,7 +369,7 @@ public:
     void _set_key_eq(const EqualKey& equals) {
         this->equals_ = equals;
     }
-
+ 
     const ExtractKey& _get_key_extract() const {
         return extract_;
     }
@@ -379,7 +379,7 @@ public:
     void _set_key_extract(const ExtractKey& extract) {
         this->extract_ = extract;
     }
-
+ 
     const HashFcn& _get_hash_fun() const {
         return hash_;
     }
@@ -389,63 +389,63 @@ public:
     void _set_hash_fun(const HashFcn& hash) {
         this->hash_ = hash;
     }
-
+ 
     void swap(_yhashtable_base& other) {
         base_type::swap(other);
         DoSwap(equals_, other.equals_);
         DoSwap(extract_, other.extract_);
         DoSwap(hash_, other.hash_);
     }
-
-private:
+ 
+private: 
     HashFcn hash_;
     ExtractKey extract_;
     EqualKey equals_;
-};
-
+}; 
+ 
 template <class HashFcn, class ExtractKey, class EqualKey, class Alloc>
 class _yhashtable_base<HashFcn, ExtractKey, EqualKey, Alloc, true>: public _allocator_base<Alloc> {
     using base_type = _allocator_base<Alloc>;
-
-public:
+ 
+public: 
     _yhashtable_base(const HashFcn&, const ExtractKey&, const EqualKey&, const Alloc& alloc)
         : base_type(alloc)
     {
     }
-
+ 
     EqualKey _get_key_eq() const {
         return EqualKey();
     }
     void _set_key_eq(const EqualKey&) {
     }
-
+ 
     ExtractKey _get_key_extract() const {
         return ExtractKey();
     }
     void _set_key_extract(const ExtractKey&) {
     }
-
+ 
     HashFcn _get_hash_fun() const {
         return HashFcn();
     }
     void _set_hash_fun(const HashFcn&) {
     }
-
+ 
     void swap(_yhashtable_base& other) {
         base_type::swap(other);
     }
-};
-
-template <class Value, class Key, class HashFcn, class ExtractKey, class EqualKey, class Alloc>
+}; 
+ 
+template <class Value, class Key, class HashFcn, class ExtractKey, class EqualKey, class Alloc> 
 struct _yhashtable_traits {
     using node = __yhashtable_node<Value>;
-
+ 
     using node_allocator_type = TReboundAllocator<Alloc, node>;
     using nodep_allocator_type = TReboundAllocator<Alloc, node*>;
-
+ 
     using base_type = _yhashtable_base<HashFcn, ExtractKey, EqualKey, node_allocator_type>;
-};
-
+}; 
+ 
 extern const void* const _yhashtable_empty_data[];
 
 template <class Value, class Key, class HashFcn, class ExtractKey, class EqualKey, class Alloc>
@@ -456,7 +456,7 @@ class THashTable: private _yhashtable_traits<Value, Key, HashFcn, ExtractKey, Eq
     using nodep_allocator_type = typename traits_type::nodep_allocator_type;
     using buckets_type = _yhashtable_buckets<node*, nodep_allocator_type>;
     using TBucketDivisor = ::NPrivate::THashDivisor;
-
+ 
 public:
     using key_type = Key;
     using value_type = Value;
@@ -497,16 +497,16 @@ private:
     auto get_key(const ValueL& value) const -> decltype(ExtractKey()(value)) {
         return this->_get_key_extract()(value);
     }
-
+ 
     node* get_node() {
-        node* result = this->_get_alloc().allocate(1);
+        node* result = this->_get_alloc().allocate(1); 
         Y_ASSERT((reinterpret_cast<uintptr_t>(result) & 1) == 0); /* We're using the last bit of the node pointer. */
-        return result;
+        return result; 
     }
     void put_node(node* p) {
         this->_get_alloc().deallocate(p, 1);
     }
-
+ 
     buckets_type buckets;
     size_type num_elements;
 
@@ -526,7 +526,7 @@ public:
     {
         initialize_buckets(buckets, 0);
     }
-
+ 
     THashTable(size_type n, const HashFcn& hf, const EqualKey& eql, const ExtractKey& ext)
         : base_type(hf, ext, eql, node_allocator_type())
         , buckets(nodep_allocator_type())
@@ -550,7 +550,7 @@ public:
         , num_elements(0)
     {
         initialize_buckets(buckets, n);
-    }
+    } 
 
     THashTable(const THashTable& ht)
         : base_type(ht._get_hash_fun(), ht._get_key_extract(), ht._get_key_eq(), ht._get_alloc())
@@ -559,12 +559,12 @@ public:
     {
         if (ht.empty()) {
             initialize_buckets(buckets, 0);
-        } else {
+        } else { 
             initialize_buckets_dynamic(buckets, ht.buckets.ExtSize());
             copy_from_dynamic(ht);
-        }
+        } 
     }
-
+ 
     THashTable(THashTable&& ht) noexcept
         : base_type(ht._get_hash_fun(), ht._get_key_extract(), ht._get_key_eq(), ht._get_alloc())
         , buckets(ht.buckets.get_allocator())
@@ -580,16 +580,16 @@ public:
             this->_set_hash_fun(ht._get_hash_fun());
             this->_set_key_eq(ht._get_key_eq());
             this->_set_key_extract(ht._get_key_extract());
-            /* We don't copy allocator for a reason. */
-
-            if (ht.empty()) {
-                /* Some of the old code in Arcadia works around the behavior in
-                 * clear() by invoking operator= with empty hash as an argument.
-                 * It's expected that this will deallocate the buckets array, so
-                 * this is what we have to do here. */
-                deinitialize_buckets(buckets);
-                initialize_buckets(buckets, 0);
-            } else {
+            /* We don't copy allocator for a reason. */ 
+ 
+            if (ht.empty()) { 
+                /* Some of the old code in Arcadia works around the behavior in 
+                 * clear() by invoking operator= with empty hash as an argument. 
+                 * It's expected that this will deallocate the buckets array, so 
+                 * this is what we have to do here. */ 
+                deinitialize_buckets(buckets); 
+                initialize_buckets(buckets, 0); 
+            } else { 
                 if (buckets.capacity() > ht.buckets.size()) {
                     buckets.resize_noallocate(ht.buckets.ExtSize());
                 } else {
@@ -604,8 +604,8 @@ public:
     }
 
     THashTable& operator=(THashTable&& ht) noexcept {
-        basic_clear();
-        swap(ht);
+        basic_clear(); 
+        swap(ht); 
 
         return *this;
     }
@@ -668,13 +668,13 @@ public:
     }
 
     template <class OtherValue>
-    std::pair<iterator, bool> insert_unique(const OtherValue& obj) {
+    std::pair<iterator, bool> insert_unique(const OtherValue& obj) { 
         reserve(num_elements + 1);
         return insert_unique_noresize(obj);
     }
 
     template <class OtherValue>
-    iterator insert_equal(const OtherValue& obj) {
+    iterator insert_equal(const OtherValue& obj) { 
         reserve(num_elements + 1);
         return emplace_equal_noresize(obj);
     }
@@ -686,7 +686,7 @@ public:
     }
 
     template <class OtherValue>
-    iterator insert_direct(const OtherValue& obj, insert_ctx ins) {
+    iterator insert_direct(const OtherValue& obj, insert_ctx ins) { 
         return emplace_direct(ins, obj);
     }
 
@@ -712,9 +712,9 @@ public:
     template <typename... Args>
     std::pair<iterator, bool> emplace_unique_noresize(Args&&... args);
 
-    template <class OtherValue>
-    std::pair<iterator, bool> insert_unique_noresize(const OtherValue& obj);
-
+    template <class OtherValue> 
+    std::pair<iterator, bool> insert_unique_noresize(const OtherValue& obj); 
+ 
     template <typename... Args>
     iterator emplace_equal_noresize(Args&&... args);
 
@@ -759,10 +759,10 @@ public:
     }
 
     template <class OtherValue>
-    reference find_or_insert(const OtherValue& v);
+    reference find_or_insert(const OtherValue& v); 
 
     template <class OtherKey>
-    iterator find(const OtherKey& key) {
+    iterator find(const OtherKey& key) { 
         size_type n = bkt_num_key(key);
         node* first;
         for (first = buckets[n];
@@ -774,7 +774,7 @@ public:
     }
 
     template <class OtherKey>
-    const_iterator find(const OtherKey& key) const {
+    const_iterator find(const OtherKey& key) const { 
         size_type n = bkt_num_key(key);
         const node* first;
         for (first = buckets[n];
@@ -786,10 +786,10 @@ public:
     }
 
     template <class OtherKey>
-    iterator find_i(const OtherKey& key, insert_ctx& ins);
+    iterator find_i(const OtherKey& key, insert_ctx& ins); 
 
     template <class OtherKey>
-    size_type count(const OtherKey& key) const {
+    size_type count(const OtherKey& key) const { 
         const size_type n = bkt_num_key(key);
         size_type result = 0;
 
@@ -801,17 +801,17 @@ public:
     }
 
     template <class OtherKey>
-    std::pair<iterator, iterator> equal_range(const OtherKey& key);
+    std::pair<iterator, iterator> equal_range(const OtherKey& key); 
 
     template <class OtherKey>
-    std::pair<const_iterator, const_iterator> equal_range(const OtherKey& key) const;
-
+    std::pair<const_iterator, const_iterator> equal_range(const OtherKey& key) const; 
+ 
     template <class OtherKey>
-    size_type erase(const OtherKey& key);
-
+    size_type erase(const OtherKey& key); 
+ 
     template <class OtherKey>
-    size_type erase_one(const OtherKey& key);
-
+    size_type erase_one(const OtherKey& key); 
+ 
     // void (instead of iterator) is intended, see http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n2023.pdf
     void erase(const iterator& it);
     void erase(iterator first, iterator last);
@@ -822,21 +822,21 @@ public:
     bool reserve(size_type num_elements_hint);
     void basic_clear();
 
-    /**
-     * Clears the hashtable without deallocating the nodes.
-     *
-     * This might come in handy with non-standard allocators, e.g. a pool
-     * allocator with a pool that is then cleared manually, thus releasing all
-     * the nodes at once.
-     */
-    void release_nodes() {
-        if (empty())
-            return; /* Need this check because empty buckets may reside in read-only memory. */
-
-        clear_buckets(buckets);
-        num_elements = 0;
-    }
-
+    /** 
+     * Clears the hashtable without deallocating the nodes. 
+     * 
+     * This might come in handy with non-standard allocators, e.g. a pool 
+     * allocator with a pool that is then cleared manually, thus releasing all 
+     * the nodes at once. 
+     */ 
+    void release_nodes() { 
+        if (empty()) 
+            return; /* Need this check because empty buckets may reside in read-only memory. */ 
+ 
+        clear_buckets(buckets); 
+        num_elements = 0; 
+    } 
+ 
     // implemented in save_stl.h
     template <class KeySaver>
     int save_for_st(IOutputStream* stream, KeySaver& ks, sthash<int, int, THash<int>, TEqualTo<int>, typename KeySaver::TSizeType>* stHash = nullptr) const;
@@ -852,7 +852,7 @@ public:
             }
         }
     }
-
+ 
     /**
      * Clears the hashtable and tries to reasonably downsize it. Note that
      * downsizing is mainly for the following use case:
@@ -884,36 +884,36 @@ private:
         } else {
             TBucketDivisor size = HashBucketCountExt(sizeHint);
             Y_ASSERT(size() >= 7);
-
+ 
             initialize_buckets_dynamic(buckets, size);
         }
-    }
+    } 
 
     static void initialize_buckets_dynamic(buckets_type& buckets, TBucketDivisor size) {
         buckets.initialize_dynamic(size);
         memset(buckets.data(), 0, size() * sizeof(*buckets.data()));
         buckets[size()] = (node*)1;
     }
-
+ 
     static void deinitialize_buckets(buckets_type& buckets) {
         if (buckets.size() == 1) {
             buckets.deinitialize_static();
         } else {
             buckets.deinitialize_dynamic();
         }
-    }
-
+    } 
+ 
     static void clear_buckets(buckets_type& buckets) {
         memset(buckets.data(), 0, buckets.size() * sizeof(*buckets.data()));
     }
-
+ 
     template <class OtherKey>
-    size_type bkt_num_key(const OtherKey& key) const {
+    size_type bkt_num_key(const OtherKey& key) const { 
         return bkt_num_key(key, buckets.ExtSize());
     }
 
     template <class OtherValue>
-    size_type bkt_num(const OtherValue& obj) const {
+    size_type bkt_num(const OtherValue& obj) const { 
         return bkt_num_key(get_key(obj));
     }
 
@@ -1019,7 +1019,7 @@ std::pair<typename THashTable<V, K, HF, Ex, Eq, A>::iterator, bool> THashTable<V
 }
 
 template <class V, class K, class HF, class Ex, class Eq, class A>
-template <class OtherValue>
+template <class OtherValue> 
 std::pair<typename THashTable<V, K, HF, Ex, Eq, A>::iterator, bool> THashTable<V, K, HF, Ex, Eq, A>::insert_unique_noresize(const OtherValue& obj) {
     const size_type n = bkt_num(obj);
     node* first = buckets[n];
@@ -1063,7 +1063,7 @@ __yhashtable_iterator<V> THashTable<V, K, HF, Ex, Eq, A>::emplace_equal_noresize
 }
 
 template <class V, class K, class HF, class Ex, class Eq, class A>
-template <class OtherValue>
+template <class OtherValue> 
 typename THashTable<V, K, HF, Ex, Eq, A>::reference THashTable<V, K, HF, Ex, Eq, A>::find_or_insert(const OtherValue& v) {
     reserve(num_elements + 1);
 
@@ -1083,7 +1083,7 @@ typename THashTable<V, K, HF, Ex, Eq, A>::reference THashTable<V, K, HF, Ex, Eq,
 }
 
 template <class V, class K, class HF, class Ex, class Eq, class A>
-template <class OtherKey>
+template <class OtherKey> 
 __yhashtable_iterator<V> THashTable<V, K, HF, Ex, Eq, A>::find_i(const OtherKey& key, insert_ctx& ins) {
     size_type n = bkt_num_key(key);
     ins = &buckets[n];
@@ -1097,7 +1097,7 @@ __yhashtable_iterator<V> THashTable<V, K, HF, Ex, Eq, A>::find_i(const OtherKey&
 }
 
 template <class V, class K, class HF, class Ex, class Eq, class A>
-template <class OtherKey>
+template <class OtherKey> 
 std::pair<__yhashtable_iterator<V>, __yhashtable_iterator<V>> THashTable<V, K, HF, Ex, Eq, A>::equal_range(const OtherKey& key) {
     using pii = std::pair<iterator, iterator>;
     const size_type n = bkt_num_key(key);
@@ -1120,7 +1120,7 @@ std::pair<__yhashtable_iterator<V>, __yhashtable_iterator<V>> THashTable<V, K, H
 }
 
 template <class V, class K, class HF, class Ex, class Eq, class A>
-template <class OtherKey>
+template <class OtherKey> 
 std::pair<__yhashtable_const_iterator<V>, __yhashtable_const_iterator<V>> THashTable<V, K, HF, Ex, Eq, A>::equal_range(const OtherKey& key) const {
     using pii = std::pair<const_iterator, const_iterator>;
     const size_type n = bkt_num_key(key);
@@ -1144,7 +1144,7 @@ std::pair<__yhashtable_const_iterator<V>, __yhashtable_const_iterator<V>> THashT
 }
 
 template <class V, class K, class HF, class Ex, class Eq, class A>
-template <class OtherKey>
+template <class OtherKey> 
 typename THashTable<V, K, HF, Ex, Eq, A>::size_type THashTable<V, K, HF, Ex, Eq, A>::erase(const OtherKey& key) {
     const size_type n = bkt_num_key(key);
     node* first = buckets[n];
@@ -1176,7 +1176,7 @@ typename THashTable<V, K, HF, Ex, Eq, A>::size_type THashTable<V, K, HF, Ex, Eq,
 }
 
 template <class V, class K, class HF, class Ex, class Eq, class A>
-template <class OtherKey>
+template <class OtherKey> 
 typename THashTable<V, K, HF, Ex, Eq, A>::size_type THashTable<V, K, HF, Ex, Eq, A>::erase_one(const OtherKey& key) {
     const size_type n = bkt_num_key(key);
     node* first = buckets[n];
@@ -1287,7 +1287,7 @@ bool THashTable<V, K, HF, Ex, Eq, A>::reserve(size_type num_elements_hint) {
                         first = buckets[bucket];
                     }
                 }
-
+ 
                 buckets.swap(tmp);
                 deinitialize_buckets(tmp);
 
@@ -1365,7 +1365,7 @@ void THashTable<V, K, HF, Ex, Eq, A>::basic_clear() {
 template <class V, class K, class HF, class Ex, class Eq, class A>
 void THashTable<V, K, HF, Ex, Eq, A>::copy_from_dynamic(const THashTable& ht) {
     Y_ASSERT(buckets.size() == ht.buckets.size() && !ht.empty());
-
+ 
 #ifdef __STL_USE_EXCEPTIONS
     try {
 #endif                                                      /* __STL_USE_EXCEPTIONS */
@@ -1391,9 +1391,9 @@ void THashTable<V, K, HF, Ex, Eq, A>::copy_from_dynamic(const THashTable& ht) {
 }
 
 namespace NPrivate {
-    template <class Key>
+    template <class Key> 
     inline TString MapKeyToString(const Key&) {
-        return TypeName<Key>();
+        return TypeName<Key>(); 
     }
 
     TString MapKeyToString(TStringBuf key);
@@ -1649,7 +1649,7 @@ public:
 
     template <class TheKey>
     const T& at(const TheKey& key) const {
-        using namespace ::NPrivate;
+        using namespace ::NPrivate; 
         const_iterator it = find(key);
 
         if (Y_UNLIKELY(it == end())) {
@@ -1661,7 +1661,7 @@ public:
 
     template <class TheKey>
     T& at(const TheKey& key) {
-        using namespace ::NPrivate;
+        using namespace ::NPrivate; 
         iterator it = find(key);
 
         if (Y_UNLIKELY(it == end())) {
@@ -1706,14 +1706,14 @@ public:
     void basic_clear() {
         rep.basic_clear();
     }
-    void release_nodes() {
-        rep.release_nodes();
-    }
+    void release_nodes() { 
+        rep.release_nodes(); 
+    } 
 
     // if (stHash != NULL) bucket_count() must be equal to stHash->bucket_count()
     template <class KeySaver>
     int save_for_st(IOutputStream* stream, KeySaver& ks, sthash<int, int, THash<int>, TEqualTo<int>, typename KeySaver::TSizeType>* stHash = nullptr) const {
-        return rep.template save_for_st<KeySaver>(stream, ks, stHash);
+        return rep.template save_for_st<KeySaver>(stream, ks, stHash); 
     }
 
 public:
@@ -1748,12 +1748,12 @@ inline bool operator==(const THashMap<Key, T, HashFcn, EqualKey, Alloc>& hm1, co
     return true;
 }
 
-template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
+template <class Key, class T, class HashFcn, class EqualKey, class Alloc> 
 inline bool operator!=(const THashMap<Key, T, HashFcn, EqualKey, Alloc>& hm1, const THashMap<Key, T, HashFcn, EqualKey, Alloc>& hm2) {
-    return !(hm1 == hm2);
-}
-
-template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
+    return !(hm1 == hm2); 
+} 
+ 
+template <class Key, class T, class HashFcn, class EqualKey, class Alloc> 
 class THashMultiMap {
 private:
     using ht = THashTable<std::pair<const Key, T>, Key, HashFcn, TSelect1st, EqualKey, Alloc>;
@@ -1972,9 +1972,9 @@ public:
     void basic_clear() {
         rep.basic_clear();
     }
-    void release_nodes() {
-        rep.release_nodes();
-    }
+    void release_nodes() { 
+        rep.release_nodes(); 
+    } 
 
     // if (stHash != NULL) bucket_count() must be equal to stHash->bucket_count()
     template <class KeySaver>
@@ -2017,10 +2017,10 @@ inline bool operator==(const THashMultiMap<Key, T, HF, EqKey, Alloc>& hm1, const
     return true;
 }
 
-template <class Key, class T, class HF, class EqKey, class Alloc>
+template <class Key, class T, class HF, class EqKey, class Alloc> 
 inline bool operator!=(const THashMultiMap<Key, T, HF, EqKey, Alloc>& hm1, const THashMultiMap<Key, T, HF, EqKey, Alloc>& hm2) {
-    return !(hm1 == hm2);
-}
+    return !(hm1 == hm2); 
+} 
 
 // Cannot name it just 'Hash' because it clashes with too many class members in the code.
 template <class T>

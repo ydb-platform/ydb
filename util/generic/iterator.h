@@ -30,42 +30,42 @@ namespace NStlIterator {
     };
 } // namespace NStlIterator
 
-/**
- * Range adaptor that turns a derived class with a Java-style iteration
- * interface into an STL range.
- *
- * Derived class is expected to define:
- * \code
- * TSomething* Next();
- * \endcode
- *
- * `Next()` returning `nullptr` signals end of range. Note that you can also use
- * pointer-like types instead of actual pointers (e.g. `TAtomicSharedPtr`).
- *
- * Since iteration state is stored inside the derived class, the resulting range
- * is an input range (works for single pass algorithms only). Technically speaking,
- * if you're returning a non-const pointer from `Next`, it can also work as an output range.
- *
- * Example usage:
- * \code
- * class TSquaresGenerator: public TInputRangeAdaptor<TSquaresGenerator> {
- * public:
- *     const double* Next() {
- *         Current_ = State_ * State_;
- *         State_ += 1.0;
- *         // Never return nullptr => we have infinite range!
- *         return &Current_;
- *     }
- *
- * private:
- *     double State_ = 0.0;
- *     double Current_ = 0.0;
- * }
- * \endcode
- */
+/** 
+ * Range adaptor that turns a derived class with a Java-style iteration 
+ * interface into an STL range. 
+ * 
+ * Derived class is expected to define: 
+ * \code 
+ * TSomething* Next(); 
+ * \endcode 
+ * 
+ * `Next()` returning `nullptr` signals end of range. Note that you can also use 
+ * pointer-like types instead of actual pointers (e.g. `TAtomicSharedPtr`). 
+ * 
+ * Since iteration state is stored inside the derived class, the resulting range 
+ * is an input range (works for single pass algorithms only). Technically speaking, 
+ * if you're returning a non-const pointer from `Next`, it can also work as an output range. 
+ * 
+ * Example usage: 
+ * \code 
+ * class TSquaresGenerator: public TInputRangeAdaptor<TSquaresGenerator> { 
+ * public: 
+ *     const double* Next() { 
+ *         Current_ = State_ * State_; 
+ *         State_ += 1.0; 
+ *         // Never return nullptr => we have infinite range! 
+ *         return &Current_; 
+ *     } 
+ * 
+ * private: 
+ *     double State_ = 0.0; 
+ *     double Current_ = 0.0; 
+ * } 
+ * \endcode 
+ */ 
 template <class TSlave>
-class TInputRangeAdaptor {
-public: // TODO: private
+class TInputRangeAdaptor { 
+public: // TODO: private 
     class TIterator {
     public:
         static constexpr bool IsNoexceptNext = noexcept(std::declval<TSlave>().Next());
@@ -74,7 +74,7 @@ public: // TODO: private
         using pointer = decltype(std::declval<TSlave>().Next());
         using reference = decltype(*std::declval<TSlave>().Next());
         using value_type = std::remove_cv_t<std::remove_reference_t<reference>>;
-        using iterator_category = std::input_iterator_tag;
+        using iterator_category = std::input_iterator_tag; 
 
         inline TIterator() noexcept
             : Slave_(nullptr)
@@ -96,11 +96,11 @@ public: // TODO: private
             return !(*this == it);
         }
 
-        inline pointer operator->() const noexcept {
+        inline pointer operator->() const noexcept { 
             return Cur_;
         }
 
-        inline reference operator*() const noexcept {
+        inline reference operator*() const noexcept { 
             return *Cur_;
         }
 
@@ -128,12 +128,12 @@ public:
     }
 };
 
-/**
- * Transform given reverse iterator into forward iterator pointing to the same element.
+/** 
+ * Transform given reverse iterator into forward iterator pointing to the same element. 
  *
- * @see http://stackoverflow.com/a/1830240
+ * @see http://stackoverflow.com/a/1830240 
  */
 template <class TIterator>
-auto ToForwardIterator(TIterator iter) {
+auto ToForwardIterator(TIterator iter) { 
     return std::next(iter).base();
 }

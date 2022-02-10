@@ -37,19 +37,19 @@ public:
         , BlockSize_(blockSize)
     {
         /*
-         * save signature
-         */
+         * save signature 
+         */ 
         static_assert(sizeof(TCompressor::signature) - 1 == SIGNATURE_SIZE, "expect sizeof(TCompressor::signature) - 1 == SIGNATURE_SIZE");
         Slave_->Write(TCompressor::signature, sizeof(TCompressor::signature) - 1);
 
         /*
-         * save version
-         */
+         * save version 
+         */ 
         this->Save((ui32)1);
 
         /*
-         * save block size
-         */
+         * save block size 
+         */ 
         this->Save(BlockSize());
     }
 

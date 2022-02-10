@@ -142,9 +142,9 @@ namespace NKikimr {
                 tmp.push_back(id);
             }
 
-            Sort(tmp.begin(), tmp.end());
+            Sort(tmp.begin(), tmp.end()); 
             TVector<NPrivate::TChunkSlot> arr2(arr);
-            Sort(arr2.begin(), arr2.end());
+            Sort(arr2.begin(), arr2.end()); 
             STR << "tmp: ";
             PrintOutVec(tmp);
             STR << "\n";

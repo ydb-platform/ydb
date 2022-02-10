@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fwd.h"
+#include "fwd.h" 
 #include "strbase.h"
 #include "utility.h"
 #include "typetraits.h"
@@ -13,7 +13,7 @@ template <typename TCharType, typename TTraits>
 class TBasicStringBuf: public std::basic_string_view<TCharType>,
                        public TStringBase<TBasicStringBuf<TCharType, TTraits>, TCharType, TTraits> {
 private:
-    using TdSelf = TBasicStringBuf;
+    using TdSelf = TBasicStringBuf; 
     using TBase = TStringBase<TdSelf, TCharType, TTraits>;
     using TStringView = std::basic_string_view<TCharType>;
 
@@ -152,7 +152,7 @@ public:
     }
 
     inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos) noexcept
-        : TBasicStringBuf(src, pos, TBase::npos)
+        : TBasicStringBuf(src, pos, TBase::npos) 
     {
     }
 

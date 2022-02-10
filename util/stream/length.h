@@ -1,17 +1,17 @@
 #pragma once
 
 #include "input.h"
-#include "output.h"
+#include "output.h" 
 
 #include <util/generic/utility.h>
 
-/**
- * Proxy input stream that can read a limited number of characters from a slave
- * stream.
- *
- * This can be useful for breaking up the slave stream into small chunks and
- * treat these as separate streams.
- */
+/** 
+ * Proxy input stream that can read a limited number of characters from a slave 
+ * stream. 
+ * 
+ * This can be useful for breaking up the slave stream into small chunks and 
+ * treat these as separate streams. 
+ */ 
 class TLengthLimitedInput: public IInputStream {
 public:
     inline TLengthLimitedInput(IInputStream* slave, ui64 length) noexcept
@@ -35,9 +35,9 @@ private:
     ui64 Length_;
 };
 
-/**
- * Proxy input stream that counts the number of characters read.
- */
+/** 
+ * Proxy input stream that counts the number of characters read. 
+ */ 
 class TCountingInput: public IInputStream {
 public:
     inline TCountingInput(IInputStream* slave) noexcept
@@ -48,10 +48,10 @@ public:
 
     ~TCountingInput() override = default;
 
-    /**
-     * \returns                         The total number of characters read from
-     *                                  this stream.
-     */
+    /** 
+     * \returns                         The total number of characters read from 
+     *                                  this stream. 
+     */ 
     inline ui64 Counter() const noexcept {
         return Count_;
     }
@@ -66,35 +66,35 @@ private:
     IInputStream* Slave_;
     ui64 Count_;
 };
-
-/**
- * Proxy output stream that counts the number of characters written.
- */
+ 
+/** 
+ * Proxy output stream that counts the number of characters written. 
+ */ 
 class TCountingOutput: public IOutputStream {
-public:
+public: 
     inline TCountingOutput(IOutputStream* slave) noexcept
         : Slave_(slave)
         , Count_()
     {
-    }
-
+    } 
+ 
     ~TCountingOutput() override = default;
-
+ 
     TCountingOutput(TCountingOutput&&) noexcept = default;
     TCountingOutput& operator=(TCountingOutput&&) noexcept = default;
 
-    /**
-     * \returns                         The total number of characters written
-     *                                  into this stream.
-     */
+    /** 
+     * \returns                         The total number of characters written 
+     *                                  into this stream. 
+     */ 
     inline ui64 Counter() const noexcept {
-        return Count_;
-    }
-
-private:
+        return Count_; 
+    } 
+ 
+private: 
     void DoWrite(const void* buf, size_t len) override;
-
-private:
+ 
+private: 
     IOutputStream* Slave_;
-    ui64 Count_;
-};
+    ui64 Count_; 
+}; 

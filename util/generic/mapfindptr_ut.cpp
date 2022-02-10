@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TMapFindPtrTest) {
         TTestMap a;
 
         a[42] = "cat";
-        UNIT_ASSERT(a.FindPtr(42));
+        UNIT_ASSERT(a.FindPtr(42)); 
         UNIT_ASSERT_EQUAL(*a.FindPtr(42), "cat");
         UNIT_ASSERT_EQUAL(a.FindPtr(0), nullptr);
 
@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TMapFindPtrTest) {
         if (TString* p = a.FindPtr(42)) {
             *p = "dog";
         }
-        UNIT_ASSERT(a.FindPtr(42));
+        UNIT_ASSERT(a.FindPtr(42)); 
         UNIT_ASSERT_EQUAL(*a.FindPtr(42), "dog");
 
         //test const-overloaded functions too
@@ -42,26 +42,26 @@ Y_UNIT_TEST_SUITE(TMapFindPtrTest) {
         UNIT_ASSERT(m.FindPtr(TStringBuf("x")));
         UNIT_ASSERT_EQUAL(*m.FindPtr(TStringBuf("x")), 2);
     }
-
+ 
     Y_UNIT_TEST(TestValue) {
-        TTestMap a;
-
-        a[1] = "lol";
-
-        UNIT_ASSERT_VALUES_EQUAL(a.Value(1, "123"), "lol");
-        UNIT_ASSERT_VALUES_EQUAL(a.Value(2, "123"), "123");
-    }
-
+        TTestMap a; 
+ 
+        a[1] = "lol"; 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(a.Value(1, "123"), "lol"); 
+        UNIT_ASSERT_VALUES_EQUAL(a.Value(2, "123"), "123"); 
+    } 
+ 
     Y_UNIT_TEST(TestValueRef) {
-        TTestMap a;
-
-        a[1] = "lol";
-
+        TTestMap a; 
+ 
+        a[1] = "lol"; 
+ 
         const TString str123 = "123";
         TString str1234 = "1234";
-
-        UNIT_ASSERT_VALUES_EQUAL(a.ValueRef(1, str123), "lol");
-        UNIT_ASSERT_VALUES_EQUAL(a.ValueRef(2, str123), "123");
-        UNIT_ASSERT_VALUES_EQUAL(a.ValueRef(3, str1234), "1234");
-    }
-}
+ 
+        UNIT_ASSERT_VALUES_EQUAL(a.ValueRef(1, str123), "lol"); 
+        UNIT_ASSERT_VALUES_EQUAL(a.ValueRef(2, str123), "123"); 
+        UNIT_ASSERT_VALUES_EQUAL(a.ValueRef(3, str1234), "1234"); 
+    } 
+} 

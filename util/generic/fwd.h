@@ -21,19 +21,19 @@ using TUtf32StringBuf = TBasicStringBuf<wchar32>;
 //misc
 class TBuffer;
 
-//functors
-template <class T = void>
-struct TLess;
-
-template <class T = void>
+//functors 
+template <class T = void> 
+struct TLess; 
+ 
+template <class T = void> 
 struct TGreater;
 
-template <class T = void>
-struct TEqualTo;
-
-template <class T>
-struct THash;
-
+template <class T = void> 
+struct TEqualTo; 
+ 
+template <class T> 
+struct THash; 
+ 
 //intrusive containers
 struct TIntrusiveListDefaultTag;
 template <class T, class Tag = TIntrusiveListDefaultTag>
@@ -54,7 +54,7 @@ class TRbTree;
 //containers
 template <class T, class A = std::allocator<T>>
 class TVector;
-
+ 
 template <class T, class A = std::allocator<T>>
 class TDeque;
 
@@ -94,22 +94,22 @@ class TMultiSet;
 template <class T, class S = TDeque<T>>
 class TStack;
 
-template <size_t BitCount, typename TChunkType = ui64>
+template <size_t BitCount, typename TChunkType = ui64> 
 class TBitMap;
 
 //autopointers
-class TDelete;
+class TDelete; 
 class TDeleteArray;
 class TFree;
-class TCopyNew;
-
-template <class T, class D = TDelete>
+class TCopyNew; 
+ 
+template <class T, class D = TDelete> 
 class TAutoPtr;
 
-template <class T, class D = TDelete>
+template <class T, class D = TDelete> 
 class THolder;
 
-template <class T, class C, class D = TDelete>
+template <class T, class C, class D = TDelete> 
 class TRefCounted;
 
 template <class T>
@@ -127,10 +127,10 @@ class TIntrusiveConstPtr;
 template <class T, class Ops = TDefaultIntrusivePtrOps<T>>
 using TSimpleIntrusivePtr = TIntrusivePtr<T, TSimpleIntrusiveOps<T, Ops>>;
 
-template <class T, class C, class D = TDelete>
+template <class T, class C, class D = TDelete> 
 class TSharedPtr;
 
-template <class T, class C = TCopyNew, class D = TDelete>
+template <class T, class C = TCopyNew, class D = TDelete> 
 class TCopyPtr;
 
 template <class TPtr, class TCopy = TCopyNew>

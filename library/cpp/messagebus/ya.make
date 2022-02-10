@@ -1,12 +1,12 @@
 LIBRARY()
-
+ 
 OWNER(g:messagebus)
 
 IF (SANITIZER_TYPE == "undefined")
     NO_SANITIZE()
 ENDIF()
 
-SRCS(
+SRCS( 
     acceptor.cpp
     acceptor_status.cpp
     connection.cpp
@@ -50,7 +50,7 @@ SRCS(
     use_count_checker.cpp
     ybus.h
 )
-
+ 
 PEERDIR(
     contrib/libs/sparsehash
     library/cpp/codecs
@@ -65,4 +65,4 @@ PEERDIR(
     library/cpp/threading/future
 )
 
-END()
+END() 

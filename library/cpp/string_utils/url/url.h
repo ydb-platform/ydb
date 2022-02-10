@@ -27,7 +27,7 @@ Y_PURE_FUNCTION
 size_t GetHttpPrefixSize(const char* url, bool ignorehttps = false) noexcept;
 Y_PURE_FUNCTION
 size_t GetHttpPrefixSize(const wchar16* url, bool ignorehttps = false) noexcept;
-
+ 
 Y_PURE_FUNCTION
 size_t GetHttpPrefixSize(const TStringBuf url, bool ignorehttps = false) noexcept;
 

@@ -47,17 +47,17 @@ namespace {
         const TChar httpPrefix[] = {'h', 't', 't', 'p', ':', '/', '/', 0};
         const TChar httpsPrefix[] = {'h', 't', 't', 'p', 's', ':', '/', '/', 0};
         if (urlSize.Has(7) && Compare1Case2(url, httpPrefix, 7) == 0)
-            return 7;
+            return 7; 
         if (!ignorehttps && urlSize.Has(8) && Compare1Case2(url, httpsPrefix, 8) == 0)
-            return 8;
-        return 0;
+            return 8; 
+        return 0; 
     }
-
+ 
     template <typename T>
     inline T CutHttpPrefixImpl(const T& url, bool ignorehttps) {
         size_t prefixSize = GetHttpPrefixSizeImpl<typename T::char_type>(url.data(), TKnownSize(url.size()), ignorehttps);
-        if (prefixSize)
-            return url.substr(prefixSize);
+        if (prefixSize) 
+            return url.substr(prefixSize); 
         return url;
     }
 }
@@ -79,8 +79,8 @@ size_t GetHttpPrefixSize(const char* url, bool ignorehttps) noexcept {
 
 size_t GetHttpPrefixSize(const wchar16* url, bool ignorehttps) noexcept {
     return GetHttpPrefixSizeImpl<wchar16>(url, TUncheckedSize(), ignorehttps);
-}
-
+} 
+ 
 size_t GetHttpPrefixSize(const TStringBuf url, bool ignorehttps) noexcept {
     return GetHttpPrefixSizeImpl<char>(url.data(), TKnownSize(url.size()), ignorehttps);
 }
@@ -91,8 +91,8 @@ size_t GetHttpPrefixSize(const TWtringBuf url, bool ignorehttps) noexcept {
 
 TStringBuf CutHttpPrefix(const TStringBuf url, bool ignorehttps) noexcept {
     return CutHttpPrefixImpl(url, ignorehttps);
-}
-
+} 
+ 
 TWtringBuf CutHttpPrefix(const TWtringBuf url, bool ignorehttps) noexcept {
     return CutHttpPrefixImpl(url, ignorehttps);
 }

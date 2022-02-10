@@ -589,7 +589,7 @@ public:                       \
                               << " (expected " << #E << ") " << C);             \
         }                                                                       \
     } while (false)
-
+ 
 // Assert that a specific exception is thrown and satisfies predicate pred(e), where e is the exception instance.
 // Example:
 //      UNIT_ASSERT_EXCEPTION_SATISFIES(MakeRequest(invalidData), TError,

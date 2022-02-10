@@ -1,12 +1,12 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
- 
+
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
 #include <ydb/library/aclib/aclib.h>
- 
+
 #include <util/string/subst.h>
-#include <util/system/valgrind.h> 
+#include <util/system/valgrind.h>
 
 #include "kicli.h"
 
@@ -641,15 +641,15 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                             );
         auto value = result.GetValue();
 
-        UNIT_ASSERT_VALUES_EQUAL(value["myRes"].Size(), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(value["myRes"].Size(), 2);
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Species"], "Rat");
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Name"], "Dobby");
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Description"], "A test for \"double quotes\"");
-        UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][0]["Weight"], 350); 
+        UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][0]["Weight"], 350);
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Species"], "Rat");
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Name"], "Korzhik");
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Description"], "A test for 'single quotes'");
-        UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][1]["Weight"], 500); 
+        UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][1]["Weight"], 500);
     }
 
     Y_UNIT_TEST(Test11) {
@@ -732,7 +732,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         UNIT_ASSERT(status == NMsgBusProxy::MSTATUS_ERROR);
         auto error = result.GetError();
         UNIT_ASSERT(error.Permanent());
-        UNIT_ASSERT_VALUES_EQUAL(error.GetCode(), "MP-0128"); 
+        UNIT_ASSERT_VALUES_EQUAL(error.GetCode(), "MP-0128");
         UNIT_ASSERT_STRING_CONTAINS(error.GetMessage(), "<main>:1:34: Error: expected either let, return or import");
     }
 
@@ -757,7 +757,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         UNIT_ASSERT(status == NMsgBusProxy::MSTATUS_ERROR);
         auto error = result.GetError();
         UNIT_ASSERT(error.Permanent());
-        UNIT_ASSERT_VALUES_EQUAL(error.GetCode(), "MP-0128"); 
+        UNIT_ASSERT_VALUES_EQUAL(error.GetCode(), "MP-0128");
         UNIT_ASSERT_STRING_CONTAINS(error.GetMessage(), "Mismatch of column type expectedType = 3 actual type = 4608");
     }
 
@@ -782,7 +782,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         UNIT_ASSERT(status == NMsgBusProxy::MSTATUS_ERROR);
         auto error = result.GetError();
         UNIT_ASSERT(error.Permanent());
-        UNIT_ASSERT_VALUES_EQUAL(error.GetCode(), "MP-0128"); 
+        UNIT_ASSERT_VALUES_EQUAL(error.GetCode(), "MP-0128");
         UNIT_ASSERT_VALUES_EQUAL(error.GetMessage(), "<main>:1:142: Error: At function: AsList\n"
         "    <main>:1:77: Error: At function: UpdateRow\n"
         "        <main>:1:84: Error: At function: Int64\n"
@@ -845,13 +845,13 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
         auto value = result.GetValue();
 
-        UNIT_ASSERT_VALUES_EQUAL(value["myRes"].Size(), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(value["myRes"].Size(), 2);
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Species"], "Rat");
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Name"], "Dobby");
-        UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][0]["Weight"], 350); 
+        UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][0]["Weight"], 350);
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Species"], "Rat");
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Name"], "Korzhik");
-        UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][1]["Weight"], 500); 
+        UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][1]["Weight"], 500);
     }
 
     Y_UNIT_TEST(Test16) {
@@ -927,13 +927,13 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
         auto value = result.GetValue();
 
-        UNIT_ASSERT_VALUES_EQUAL(value["myRes"].Size(), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(value["myRes"].Size(), 2);
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Species"], "Rat");
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][0]["Name"], "Dobby");
-        UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][0]["Weight"], 350); 
+        UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][0]["Weight"], 350);
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Species"], "Rat");
         UNIT_ASSERT_VALUES_EQUAL((TString)value["myRes"][1]["Name"], "Korzhik");
-        UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][1]["Weight"], 500); 
+        UNIT_ASSERT_VALUES_EQUAL((i64)value["myRes"][1]["Weight"], 500);
     }
 
     struct TGenericParameterType {
@@ -1066,7 +1066,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto result = selectQuery.SyncExecute();
         auto value = result.GetValue();
 
-        UNIT_ASSERT_VALUES_EQUAL(value.GetValueText<TFormatJSON>(), 
+        UNIT_ASSERT_VALUES_EQUAL(value.GetValueText<TFormatJSON>(),
                           "{\"myRes\": [{\"Name\": \"Dobby\", \"Species\": \"Rat\", \"Weight\": 350}, {\"Name\": \"Korzhik\", \"Species\": \"Rat\", \"Weight\": 500}]}");
     }
 
@@ -1123,7 +1123,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto result = selectQuery.SyncExecute();
         auto value = result.GetValue();
 
-        UNIT_ASSERT_VALUES_EQUAL(value.GetValueText<TFormatJSON>(), 
+        UNIT_ASSERT_VALUES_EQUAL(value.GetValueText<TFormatJSON>(),
                           "{\"myRes\": [{\"Name\": \"Dobby\", \"Species\": \"Rat\", \"Weight\": 350}, {\"Name\": \"Korzhik\", \"Species\": \"Rat\", \"Weight\": 500}]}");
     }
 
@@ -1207,7 +1207,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
         auto result = selectQuery.SyncExecute();
         auto value = result.GetValue();
-        UNIT_ASSERT_VALUES_EQUAL(value.GetValueText<TFormatJSON>(), 
+        UNIT_ASSERT_VALUES_EQUAL(value.GetValueText<TFormatJSON>(),
                           "{\"myRes\": [{\"Name\": \"Dobby\", \"Species\": \"Rat\", \"Weight\": 350}, {\"Name\": \"Korzhik\", \"Species\": \"Rat\", \"Weight\": 500}]}");
     }
 
@@ -1277,7 +1277,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto result = selectQuery.SyncExecute();
         auto value = result.GetValue();
 
-        UNIT_ASSERT_VALUES_EQUAL(value.GetValueText<TFormatJSON>(), 
+        UNIT_ASSERT_VALUES_EQUAL(value.GetValueText<TFormatJSON>(),
                           "{\"myRes\": [{\"Name\": \"Dobby\", \"Species\": \"Rat\", \"Weight\": 350}, {\"Name\": \"Korzhik\", \"Species\": \"Rat\", \"Weight\": 500}]}");
     }
 
@@ -1349,7 +1349,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto result = selectQuery.SyncExecute();
         auto value = result.GetValue();
 
-        UNIT_ASSERT_VALUES_EQUAL(value.GetValueText<TFormatJSON>(), 
+        UNIT_ASSERT_VALUES_EQUAL(value.GetValueText<TFormatJSON>(),
                           "{\"myRes\": [{\"Name\": \"Dobby\", \"Species\": \"Rat\", \"Weight\": 350}, {\"Name\": \"Korzhik\", \"Species\": \"Rat\", \"Weight\": 500}]}");
     }
 
@@ -1682,7 +1682,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
             auto valueResult = result.GetValue();
             bool gotResult = valueResult["anyExists"];
 
-            UNIT_ASSERT_VALUES_EQUAL(gotResult, expectedResult); 
+            UNIT_ASSERT_VALUES_EQUAL(gotResult, expectedResult);
 
             if (!gotResult) {
                 values_h1.insert(H1);

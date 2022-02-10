@@ -638,13 +638,13 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto edge = runtime.AllocateEdgeActor(0);
         auto event = new TEvResolveAddress;
-        event->Address = "localhost"; 
+        event->Address = "localhost";
         event->Port = 80;
         runtime.Send(new IEventHandle(GetNameserviceActorId(), edge, event), 0);
         TAutoPtr<IEventHandle> handle;
         const auto reply = runtime.GrabEdgeEvent<TEvAddressInfo>(handle);
         UNIT_ASSERT_VALUES_EQUAL(NAddr::PrintHostAndPort(*reply->Address),
-                          "[::1]:80"); 
+                          "[::1]:80");
     }
 
     Y_UNIT_TEST(TestEventWithPayloadSerialization) {

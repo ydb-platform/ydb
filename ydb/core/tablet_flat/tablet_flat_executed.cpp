@@ -264,8 +264,8 @@ bool TTabletExecutedFlat::HandleDefaultEvents(STFUNC_SIG) {
     return true;
 }
 
-void TTabletExecutedFlat::StateInitImpl(STFUNC_SIG) { 
-    switch (ev->GetTypeRewrite()) { 
+void TTabletExecutedFlat::StateInitImpl(STFUNC_SIG) {
+    switch (ev->GetTypeRewrite()) {
         HFunc(TEvTablet::TEvBoot, Handle);
         HFunc(TEvTablet::TEvFBoot, Handle);
         hFunc(TEvTablet::TEvFUpdate, Handle);
@@ -277,9 +277,9 @@ void TTabletExecutedFlat::StateInitImpl(STFUNC_SIG) {
         hFunc(TEvTablet::TEvFollowerSyncComplete, Handle);
         hFunc(TEvTablet::TEvUpdateConfig, Handle);
         HFunc(NMon::TEvRemoteHttpInfo, RenderHtmlPage);
-    default: 
-        return Enqueue(ev, ctx); 
-    } 
-} 
+    default:
+        return Enqueue(ev, ctx);
+    }
+}
 
 }}

@@ -1,15 +1,15 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 import os
 import ydb.tests.library.common.yatest_common as yatest_common
- 
- 
+
+
 config_name = yatest_common.get_param("kikimr.ci.cluster_name", None)
 ssh_username = yatest_common.get_param("kikimr.ci.ssh_username", os.getenv('NEMESIS_USER', 'robot-nemesis'))
 deploy_cluster = yatest_common.get_bool_param("kikimr.ci.deploy_cluster", False)
 use_packages = yatest_common.get_bool_param('kikimr.ci.packages', True)
- 
+
 log_level = int(yatest_common.get_param('kikimr.ci.driver.log_level', 5))
- 
+
 kikimr_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr'
 kikimr_configure_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr_configure'
 kikimr_configuration_deploy_path = '/Berkanavt/kikimr/cfg'
@@ -35,7 +35,7 @@ def kikimr_stderr_to_console():
     return yatest_common.get_bool_param("kikimr.ci.stderr_to_console", False)
 
 
-def kikimr_driver_path(): 
+def kikimr_driver_path():
     built_binary = yatest_common.get_param("kikimr.ci.kikimr_driver", None)
     if os.getenv("YDB_DRIVER_BINARY"):
         return yatest_common.binary_path(os.getenv("YDB_DRIVER_BINARY"))

@@ -3,9 +3,9 @@ LIBRARY()
 OWNER(g:messagebus)
 
 IF (SANITIZER_TYPE == "undefined")
-    NO_SANITIZE() 
-ENDIF() 
- 
+    NO_SANITIZE()
+ENDIF()
+
 SRCS(
     acceptor.cpp
     acceptor_status.cpp

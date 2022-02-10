@@ -19,12 +19,12 @@ class PortManagerException(Exception):
 
 
 class PortManager(object):
-    """ 
-    See documentation here 
+    """
+    See documentation here
 
     https://wiki.yandex-team.ru/yatool/test/#python-acquire-ports
-    """ 
- 
+    """
+
     def __init__(self, sync_dir=None):
         self._sync_dir = sync_dir or os.environ.get('PORT_SYNC_PATH')
         if self._sync_dir:

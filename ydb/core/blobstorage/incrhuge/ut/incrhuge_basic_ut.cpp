@@ -10,8 +10,8 @@
 #include <util/random/fast.h>
 #include <util/folder/tempdir.h>
 #include <util/folder/path.h>
-#include <util/system/sanitizers.h> 
-#include <util/system/valgrind.h> 
+#include <util/system/sanitizers.h>
+#include <util/system/valgrind.h>
 
 using namespace NActors;
 using namespace NKikimr;
@@ -140,11 +140,11 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
         env.Start();
         TManualEvent event;
         TTestActorConcurrent::TTestActorState state;
-        const ui32 numActions = NSan::PlainOrUnderSanitizer( 
-            NValgrind::PlainOrUnderValgrind(10000, 100), 
-            1000 
-        ); 
-        TTestActorConcurrent *actor = new TTestActorConcurrent(env.KeeperId, &event, state, numActions, 1); 
+        const ui32 numActions = NSan::PlainOrUnderSanitizer(
+            NValgrind::PlainOrUnderValgrind(10000, 100),
+            1000
+        );
+        TTestActorConcurrent *actor = new TTestActorConcurrent(env.KeeperId, &event, state, numActions, 1);
         env.ActorSystem->Register(actor);
         event.WaitI();
         env.Stop();
@@ -171,8 +171,8 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
 
             env.Setup(false);
             env.Start();
-            const ui32 numActions = NSan::PlainOrUnderSanitizer(100, 10); 
-            actor = new TTestActorConcurrent(env.KeeperId, &event, state, numActions, 2); 
+            const ui32 numActions = NSan::PlainOrUnderSanitizer(100, 10);
+            actor = new TTestActorConcurrent(env.KeeperId, &event, state, numActions, 2);
             env.ActorSystem->Register(actor);
             event.WaitI();
             env.Stop();
@@ -185,8 +185,8 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
         env.Start();
         TManualEvent event;
         TTestActorConcurrent::TTestActorState state;
-        const ui32 initialNumActions = NSan::PlainOrUnderSanitizer(1000, 100); 
-        TTestActorConcurrent *actor = new TTestActorConcurrent(env.KeeperId, &event, state, initialNumActions, 1, 
+        const ui32 initialNumActions = NSan::PlainOrUnderSanitizer(1000, 100);
+        TTestActorConcurrent *actor = new TTestActorConcurrent(env.KeeperId, &event, state, initialNumActions, 1,
             100000 /* writeScore */, 80000 /* deleteScore */, 0 /* readScore */);
         env.ActorSystem->Register(actor);
 //        usleep(1 * 1000 * 1000);
@@ -200,22 +200,22 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
         env.Setup(false);
         env.Start();
         LOG_DEBUG(*env.ActorSystem, NActorsServices::TEST, "starting recovery");
-        const ui32 numActions = NSan::PlainOrUnderSanitizer(5000, 1000); 
-        actor = new TTestActorConcurrent(env.KeeperId, &event, state, numActions, 2); 
+        const ui32 numActions = NSan::PlainOrUnderSanitizer(5000, 1000);
+        actor = new TTestActorConcurrent(env.KeeperId, &event, state, numActions, 2);
         env.ActorSystem->Register(actor);
         event.WaitI();
         env.Stop();
     }
 
     Y_UNIT_TEST(Recovery) {
-        return; // TODO https://st.yandex-team.ru/KIKIMR-3065 
+        return; // TODO https://st.yandex-team.ru/KIKIMR-3065
         TTestEnv env;
         env.Setup(true, 0, nullptr, 2000, 128 << 20);
         env.Start();
         TManualEvent event;
         TTestActorConcurrent::TTestActorState state;
-        const ui32 numActions = NSan::PlainOrUnderSanitizer(33333, 1000); 
-        TTestActorConcurrent *actor = new TTestActorConcurrent(env.KeeperId, &event, state, numActions, 1, 
+        const ui32 numActions = NSan::PlainOrUnderSanitizer(33333, 1000);
+        TTestActorConcurrent *actor = new TTestActorConcurrent(env.KeeperId, &event, state, numActions, 1,
             100000 /* writeScore */, 1000 /* deleteScore */, 0 /* readScore */);
         env.ActorSystem->Register(actor);
         event.WaitI();

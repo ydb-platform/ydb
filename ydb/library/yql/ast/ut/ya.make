@@ -2,8 +2,8 @@ UNITTEST_FOR(ydb/library/yql/ast)
 
 OWNER(vvvv g:kikimr)
 
-FORK_SUBTESTS() 
- 
+FORK_SUBTESTS()
+
 SRCS(
     yql_ast_ut.cpp
     yql_expr_check_args_ut.cpp

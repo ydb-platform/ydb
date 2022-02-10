@@ -63,7 +63,7 @@ TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
 
     Config.PlanAhead = 50;
     Config.Resolution = 1250;
-    Config.RapidSlotFlushSize = 1000; // todo: something meaningful 
+    Config.RapidSlotFlushSize = 1000; // todo: something meaningful
 
     MonCounters.CurrentTxInFly = 0;
     TabletCountersPtr.Reset(new TProtobufTabletCounters<

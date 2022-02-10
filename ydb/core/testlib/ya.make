@@ -106,12 +106,12 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
-IF (GCC) 
+IF (GCC)
     CFLAGS(
         -fno-devirtualize-speculatively
     )
-ENDIF() 
- 
+ENDIF()
+
 END()
 
 RECURSE(

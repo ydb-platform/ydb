@@ -93,10 +93,10 @@
 
 #include <library/cpp/grpc/server/actors/logger.h>
 
-#include <util/system/sanitizers.h> 
-#include <util/system/valgrind.h> 
+#include <util/system/sanitizers.h>
+#include <util/system/valgrind.h>
 #include <util/system/env.h>
- 
+
 namespace NKikimr {
 
 namespace Tests {
@@ -112,14 +112,14 @@ namespace Tests {
 
     const char* ServerRedirectEnvVar = "KIKIMR_SERVER";
     const char* DomainRedirectEnvVar = "KIKIMR_TEST_DOMAIN";
-    const TDuration TIMEOUT = NSan::PlainOrUnderSanitizer( 
-        NValgrind::PlainOrUnderValgrind(TDuration::Seconds(3), TDuration::Seconds(60)), 
-        TDuration::Seconds(15) 
-    ); 
-    const ui64 ConnectTimeoutMilliSeconds = NSan::PlainOrUnderSanitizer( 
-        NValgrind::PlainOrUnderValgrind(TDuration::Seconds(60), TDuration::Seconds(120)), 
-        TDuration::Seconds(120) 
-    ).MilliSeconds(); 
+    const TDuration TIMEOUT = NSan::PlainOrUnderSanitizer(
+        NValgrind::PlainOrUnderValgrind(TDuration::Seconds(3), TDuration::Seconds(60)),
+        TDuration::Seconds(15)
+    );
+    const ui64 ConnectTimeoutMilliSeconds = NSan::PlainOrUnderSanitizer(
+        NValgrind::PlainOrUnderValgrind(TDuration::Seconds(60), TDuration::Seconds(120)),
+        TDuration::Seconds(120)
+    ).MilliSeconds();
 
     NMiniKQL::IFunctionRegistry* DefaultFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
         Y_UNUSED(typeRegistry);
@@ -912,7 +912,7 @@ namespace Tests {
         ClientConfig.Ip = serverSetup.IpAddress;
         ClientConfig.Port = serverSetup.Port;
         ClientConfig.BusSessionConfig.TotalTimeout = Max<int>() / 2;
-        ClientConfig.BusSessionConfig.ConnectTimeout = ConnectTimeoutMilliSeconds; 
+        ClientConfig.BusSessionConfig.ConnectTimeout = ConnectTimeoutMilliSeconds;
         ClientConfig.BusSessionConfig.NumRetries = 10;
         Client.reset(new NMsgBusProxy::TMsgBusClient(ClientConfig));
         Client->Init();
@@ -1918,7 +1918,7 @@ namespace Tests {
 
             response.Swap(&static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record);
             break;
-        } 
+        }
 
         UNIT_ASSERT(retryCnt > 0);
         return response.GetStatus();
@@ -2021,7 +2021,7 @@ namespace Tests {
     TString TClient::MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up) {
         ui32 nodeId = runtime->GetNodeId(nodeIdx);
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
-        TInstant deadline = TInstant::Now() + TIMEOUT; 
+        TInstant deadline = TInstant::Now() + TIMEOUT;
         while (TInstant::Now() <= deadline) {
             TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1"));
             if (!res.empty() && !res.Contains("Error"))

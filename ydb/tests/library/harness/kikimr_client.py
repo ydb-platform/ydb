@@ -8,7 +8,7 @@ from ydb.tests.library.common.protobuf_ss import TSchemeOperationStatus
 
 import grpc
 import six
- 
+
 from google.protobuf.text_format import Parse
 from ydb.core.protos import blobstorage_config_pb2
 import ydb.core.protos.msgbus_pb2 as msgbus
@@ -124,23 +124,23 @@ class KiKiMRMessageBusClient(object):
 
     def send_request(self, protobuf_request, method=None):
         return self.send(protobuf_request, method)
- 
+
     def send_and_poll_request(self, protobuf_request, method='SchemeOperation'):
         response = self.send_request(protobuf_request, method)
-        return self.__poll(response) 
- 
-    def __poll(self, flat_transaction_response): 
-        if not MessageBusStatus.is_ok_status(flat_transaction_response.Status): 
-            return flat_transaction_response 
- 
+        return self.__poll(response)
+
+    def __poll(self, flat_transaction_response):
+        if not MessageBusStatus.is_ok_status(flat_transaction_response.Status):
+            return flat_transaction_response
+
         return self.send_request(
             TSchemeOperationStatus(
-                flat_transaction_response.FlatTxId.TxId, 
-                flat_transaction_response.FlatTxId.SchemeShardTabletId 
+                flat_transaction_response.FlatTxId.TxId,
+                flat_transaction_response.FlatTxId.SchemeShardTabletId
             ).protobuf,
             'SchemeOperationStatus'
-        ) 
- 
+        )
+
     def bind_storage_pools(self, domain_name, spools):
         request = msgbus.TSchemeOperation()
         scheme_transaction = request.Transaction
@@ -169,7 +169,7 @@ class KiKiMRMessageBusClient(object):
     def send(self, request, method):
         return self.invoke(request, method)
 
-    def ddl_exec_status(self, flat_tx_id): 
+    def ddl_exec_status(self, flat_tx_id):
         return self.flat_transaction_status(flat_tx_id.tx_id, flat_tx_id.schemeshard_tablet_id)
 
     def add_attr(self, working_dir, name, attributes, token=None):
@@ -243,12 +243,12 @@ class KiKiMRMessageBusClient(object):
             'HiveCreateTablet'
         )
 
-    def local_enumerate_tablets(self, tablet_type, node_id=1): 
+    def local_enumerate_tablets(self, tablet_type, node_id=1):
         request = msgbus.TLocalEnumerateTablets()
         request.DomainUid = self.__domain_id
         request.NodeId = node_id
         request.TabletType = int(tablet_type)
- 
+
         return self.invoke(request, 'LocalEnumerateTablets')
 
     def kv_cmd_write(self, tablet_id, cmd_writes, generation=None):
@@ -288,7 +288,7 @@ class KiKiMRMessageBusClient(object):
 
         return self.invoke(request, 'KeyValue')
 
-    def kv_cmd_read_range(self, tablet_id, cmd_range_reads, generation=None): 
+    def kv_cmd_read_range(self, tablet_id, cmd_range_reads, generation=None):
 
         request = msgbus_kv.TKeyValueRequest()
         for cmd in cmd_range_reads:
@@ -306,7 +306,7 @@ class KiKiMRMessageBusClient(object):
 
         return self.invoke(request, 'KeyValue')
 
-    def kv_cmd_rename(self, tablet_id, cmd_renames, generation=None): 
+    def kv_cmd_rename(self, tablet_id, cmd_renames, generation=None):
 
         request = msgbus_kv.TKeyValueRequest()
         for cmd in cmd_renames:
@@ -340,8 +340,8 @@ class KiKiMRMessageBusClient(object):
             raise RuntimeError('add_config_item failed: %s: %s' % (response.Status.Code, response.Status.Reason))
         return response
 
-    def kv_cmd_delete_range(self, tablet_id, cmd_range_delete, generation=None): 
- 
+    def kv_cmd_delete_range(self, tablet_id, cmd_range_delete, generation=None):
+
         request = msgbus_kv.TKeyValueRequest()
         for cmd in cmd_range_delete:
             delete_range = request.CmdDeleteRange.add()
@@ -352,7 +352,7 @@ class KiKiMRMessageBusClient(object):
         request.TabletId = tablet_id
         if generation is not None:
             request.Generation = generation
- 
+
         return self.invoke(request, 'KeyValue')
 
     def kv_copy_range(self, tablet_id, key_range, prefix_to_add, prefix_to_remove=None):
@@ -370,7 +370,7 @@ class KiKiMRMessageBusClient(object):
 
         return self.invoke(request, 'KeyValue')
 
-    def kv_request(self, tablet_id, kv_request, generation=None, deadline_ms=None): 
+    def kv_request(self, tablet_id, kv_request, generation=None, deadline_ms=None):
         request = kv_request.protobuf
         request.TabletId = tablet_id
         if generation is not None:
@@ -378,12 +378,12 @@ class KiKiMRMessageBusClient(object):
         if deadline_ms is not None:
             request.DeadlineInstantMs = deadline_ms
         return self.invoke(request, 'KeyValue')
- 
+
     def tablet_kill(self, tablet_id):
         request = msgbus.TTabletKillRequest(TabletID=tablet_id)
         return self.invoke(request, 'TabletKillRequest')
 
-    def tablet_state(self, tablet_type=None, tablet_ids=()): 
+    def tablet_state(self, tablet_type=None, tablet_ids=()):
         request = msgbus.TTabletStateRequest()
         if tablet_type is not None:
             request.TabletType = int(tablet_type)

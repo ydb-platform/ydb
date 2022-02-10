@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defaults.h"
- 
+
 extern "C" { // sanitizers API
 
 #if defined(_asan_enabled_)
@@ -12,8 +12,8 @@ extern "C" { // sanitizers API
     void __msan_unpoison(const volatile void* a, size_t size);
     void __msan_poison(const volatile void* a, size_t size);
     void __msan_check_mem_is_initialized(const volatile void* x, size_t size);
-#endif 
- 
+#endif
+
 }; // sanitizers API
 
 namespace NSan {
@@ -21,7 +21,7 @@ namespace NSan {
     public:
         TFiberContext() noexcept;
         TFiberContext(const void* stack, size_t len, const char* contName) noexcept;
- 
+
         ~TFiberContext() noexcept;
 
         void BeforeFinish() noexcept;
@@ -41,19 +41,19 @@ namespace NSan {
 #endif
     };
 
-    // Returns plain if no sanitizer enabled or sanitized otherwise 
-    // Ment to be used in test code for constants (timeouts, etc) 
-    template <typename T> 
-    inline constexpr static T PlainOrUnderSanitizer(T plain, T sanitized) noexcept { 
-#if defined(_tsan_enabled_) || defined(_msan_enabled_) || defined(_asan_enabled_) 
-        Y_UNUSED(plain); 
-        return sanitized; 
-#else 
-        Y_UNUSED(sanitized); 
-        return plain; 
-#endif 
-    } 
- 
+    // Returns plain if no sanitizer enabled or sanitized otherwise
+    // Ment to be used in test code for constants (timeouts, etc)
+    template <typename T>
+    inline constexpr static T PlainOrUnderSanitizer(T plain, T sanitized) noexcept {
+#if defined(_tsan_enabled_) || defined(_msan_enabled_) || defined(_asan_enabled_)
+        Y_UNUSED(plain);
+        return sanitized;
+#else
+        Y_UNUSED(sanitized);
+        return plain;
+#endif
+    }
+
     // Determines if asan present
     inline constexpr static bool ASanIsOn() noexcept {
 #if defined(_asan_enabled_)
@@ -106,10 +106,10 @@ namespace NSan {
     inline static void CheckMemIsInitialized(const volatile void* a, size_t size) noexcept {
 #if defined(_msan_enabled_)
         __msan_check_mem_is_initialized(a, size);
-#else 
+#else
         Y_UNUSED(a);
         Y_UNUSED(size);
-#endif 
+#endif
     }
 
     inline static void MarkAsIntentionallyLeaked(const void* ptr) noexcept {

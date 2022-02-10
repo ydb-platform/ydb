@@ -151,7 +151,7 @@ message TMiniKQLTransaction {
 
     optional bool EvaluateResultType = 50 [default = true];
     optional bool EvaluateResultValue = 51 [default = true];
-    optional bool FlatMKQL = 52 [default = true]; 
+    optional bool FlatMKQL = 52 [default = true];
     optional bool LlvmRuntime = 53;
     optional uint64 PerShardKeysSizeLimitBytes = 54;
     optional bool CollectStats = 55;

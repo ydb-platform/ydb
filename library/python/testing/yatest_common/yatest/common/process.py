@@ -356,7 +356,7 @@ class _Execution(object):
         finally:
             self._elapsed = time.time() - self._start
             self._save_outputs()
-            self.verify_no_coredumps() 
+            self.verify_no_coredumps()
 
         self._finalise(check_exit_code)
 
@@ -370,11 +370,11 @@ class _Execution(object):
         # Don't search for sanitize errors if stderr was redirected
         self.verify_sanitize_errors()
 
-    def verify_no_coredumps(self): 
-        """ 
-        Verify there is no coredump from this binary. If there is then report backtrace. 
-        """ 
-        if self.exit_code < 0 and self._collect_cores: 
+    def verify_no_coredumps(self):
+        """
+        Verify there is no coredump from this binary. If there is then report backtrace.
+        """
+        if self.exit_code < 0 and self._collect_cores:
             if cores:
                 try:
                     self._recover_core()
@@ -382,11 +382,11 @@ class _Execution(object):
                     yatest_logger.exception("Exception while recovering core")
             else:
                 yatest_logger.warning("Core dump file recovering is skipped: module cores isn't available")
- 
+
     def verify_sanitize_errors(self):
-        """ 
-        Verify there are no sanitizer (ASAN, MSAN, TSAN, etc) errors for this binary. If there are any report them. 
-        """ 
+        """
+        Verify there are no sanitizer (ASAN, MSAN, TSAN, etc) errors for this binary. If there are any report them.
+        """
         if self._std_err and self._check_sanitizer and runtime._get_ya_config().sanitizer_extra_checks:
             build_path = runtime.build_path()
             if self.command[0].startswith(build_path):

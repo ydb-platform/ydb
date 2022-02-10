@@ -244,13 +244,13 @@ public:
         TVector<TVector<TVector<const TCandidate*>>> bestGroup;
         if (!CreateGroupWithRings(candidates, NumRings, FailDomains, VDisksPerFailDomain, RingBeginLevel, RingEndLevel,
                 bestGroup)) {
-            Cerr << "Can't create group with given parameters" 
-                << " NumRings = " << NumRings 
-                << ", FailDomains = " << FailDomains 
-                << ", VDisksPerFailDomain = " << VDisksPerFailDomain 
-                << ", RingBeginLevel = " << RingBeginLevel 
-                << ", RingEndLevel = " << RingEndLevel 
-                << Endl; 
+            Cerr << "Can't create group with given parameters"
+                << " NumRings = " << NumRings
+                << ", FailDomains = " << FailDomains
+                << ", VDisksPerFailDomain = " << VDisksPerFailDomain
+                << ", RingBeginLevel = " << RingBeginLevel
+                << ", RingEndLevel = " << RingEndLevel
+                << Endl;
             return EXIT_FAILURE;
         }
 

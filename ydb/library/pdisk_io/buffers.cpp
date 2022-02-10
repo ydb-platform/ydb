@@ -115,7 +115,7 @@ TBuffer *TBufferPool::Pop() {
 }
 
 void TBufferPool::Push(TBuffer *buffer) {
-    NSan::Poison(buffer->Data(), buffer->Size()); 
+    NSan::Poison(buffer->Data(), buffer->Size());
     REQUEST_VALGRIND_MAKE_MEM_UNDEFINED(buffer->Data(), buffer->Size());
     Y_VERIFY_S(buffer->PopCount == 1, "BufferPopCount# " << buffer->PopCount);
     buffer->PopCount--;

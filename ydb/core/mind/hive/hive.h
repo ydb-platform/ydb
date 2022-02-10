@@ -101,7 +101,7 @@ inline std::tuple<ResourceTypes...> GetStDev(const TVector<std::tuple<ResourceTy
 }
 
 class THive;
- 
+
 struct THiveSharedSettings {
     NKikimrConfig::THiveConfig CurrentConfig;
 

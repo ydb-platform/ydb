@@ -1,28 +1,28 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 import os
- 
+
 from hamcrest import assert_that, raises
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 import ydb
- 
 
-class TestSchemeShardSimpleOps(object): 
+
+class TestSchemeShardSimpleOps(object):
     @classmethod
-    def setup_class(cls): 
+    def setup_class(cls):
         cls.cluster = kikimr_cluster_factory()
         cls.cluster.start()
- 
+
         host = cls.cluster.nodes[1].host
         port = cls.cluster.nodes[1].grpc_port
         cls.root_dir = 'Root'
         cls.ydb_client = ydb.Driver(ydb.DriverConfig("%s:%s" % (host, port)))
         cls.ydb_client.wait(timeout=5)
- 
+
     @classmethod
-    def teardown_class(cls): 
+    def teardown_class(cls):
         if hasattr(cls, 'cluster'):
             cls.cluster.stop()
- 
+
     def test_delete_table_that_doesnt_exist_failure(self):
         session = self.ydb_client.table_client.session().create()
 
@@ -152,7 +152,7 @@ class TestSchemeShardSimpleOps(object):
             )
         )
 
-    def test_when_create_path_second_time_then_it_is_ok(self): 
+    def test_when_create_path_second_time_then_it_is_ok(self):
         for _ in range(3):
             self.ydb_client.scheme_client.make_directory(
                 os.path.join(
@@ -160,15 +160,15 @@ class TestSchemeShardSimpleOps(object):
                     'test_when_create_path_second_time_then_it_is_ok'
                 )
             )
- 
-    def test_when_delete_path_with_folder_then_get_error_response(self): 
-        # Arrange 
+
+    def test_when_delete_path_with_folder_then_get_error_response(self):
+        # Arrange
         self.ydb_client.scheme_client.make_directory(
             os.path.join(
                 self.root_dir,
                 'test_when_delete_path_with_folder_then_get_error_response'
             )
-        ) 
+        )
 
         self.ydb_client.scheme_client.make_directory(
             os.path.join(
@@ -176,9 +176,9 @@ class TestSchemeShardSimpleOps(object):
                 'test_when_delete_path_with_folder_then_get_error_response',
                 'sub_path_1'
             )
-        ) 
- 
-        # Act 
+        )
+
+        # Act
         def callee():
             self.ydb_client.scheme_client.remove_directory(
                 os.path.join(
@@ -186,20 +186,20 @@ class TestSchemeShardSimpleOps(object):
                     'test_when_delete_path_with_folder_then_get_error_response',
                 )
             )
- 
-        # Assert 
-        assert_that( 
+
+        # Assert
+        assert_that(
             callee,
             raises(
                 ydb.SchemeError,
                 'path has children'
-            ) 
-        ) 
- 
-    def test_given_table_when_drop_table_and_create_with_same_scheme_then_ok(self): 
+            )
+        )
+
+    def test_given_table_when_drop_table_and_create_with_same_scheme_then_ok(self):
         table_name = 'test_given_table_when_drop_table_and_create_with_same_scheme_then_ok'
- 
-        # Act + Assert 
+
+        # Act + Assert
         session = self.ydb_client.table_client.session().create()
         for _ in range(3):
             session.create_table(
@@ -217,18 +217,18 @@ class TestSchemeShardSimpleOps(object):
                     )
                 )
             )
- 
+
             session.drop_table(
                 os.path.join(
                     self.root_dir,
                     table_name
                 )
             )
- 
-    def test_given_table_when_drop_table_and_create_with_other_keys_then_ok(self): 
-        table_name = 'test_create_table_with_other_scheme' 
- 
-        # Arrange 
+
+    def test_given_table_when_drop_table_and_create_with_other_keys_then_ok(self):
+        table_name = 'test_create_table_with_other_scheme'
+
+        # Arrange
         session = self.ydb_client.table_client.session().create()
         session.create_table(
             os.path.join(self.root_dir, table_name),
@@ -237,11 +237,11 @@ class TestSchemeShardSimpleOps(object):
             .with_columns(
                 ydb.Column('key', ydb.OptionalType(ydb.PrimitiveType.Utf8)),
             )
-        ) 
- 
-        # Act + Assert 
+        )
+
+        # Act + Assert
         session.drop_table(os.path.join(self.root_dir, table_name))
- 
+
         session.create_table(
             os.path.join(self.root_dir, table_name),
             ydb.TableDescription()
@@ -250,14 +250,14 @@ class TestSchemeShardSimpleOps(object):
                 ydb.Column('key1', ydb.OptionalType(ydb.PrimitiveType.Utf8)),
                 ydb.Column('key2', ydb.OptionalType(ydb.PrimitiveType.Utf8)),
             )
-        ) 
- 
+        )
+
         session.drop_table(os.path.join(self.root_dir, table_name))
 
-    def test_given_table_when_drop_table_and_create_with_same_primary_key_and_other_scheme_then_ok(self): 
+    def test_given_table_when_drop_table_and_create_with_same_primary_key_and_other_scheme_then_ok(self):
         table_name = 'test_given_table_when_drop_table_and_create_with_same_primary_key_and_other_scheme_then_ok'
- 
-        # Arrange 
+
+        # Arrange
         session = self.ydb_client.table_client.session().create()
         session.create_table(
             os.path.join(self.root_dir, table_name),
@@ -271,12 +271,12 @@ class TestSchemeShardSimpleOps(object):
                     )
                 )
             )
-        ) 
- 
+        )
+
         session.drop_table(
             os.path.join(self.root_dir, table_name),
-        ) 
- 
+        )
+
         session.create_table(
             os.path.join(self.root_dir, table_name),
             ydb.TableDescription()
@@ -292,11 +292,11 @@ class TestSchemeShardSimpleOps(object):
                     )
                 )
             )
-        ) 
+        )
 
         session.drop_table(
             os.path.join(self.root_dir, table_name),
-        ) 
+        )
 
     def test_ydb_create_and_remove_directory_success(self):
         self.ydb_client.scheme_client.make_directory('/Root/test_ydb_create_and_remove_directory_success')

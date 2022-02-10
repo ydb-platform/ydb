@@ -1,8 +1,8 @@
 #include "fp_bits.h"
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/system/valgrind.h> 
- 
+#include <util/system/valgrind.h>
+
 namespace NYql {
 
 namespace {
@@ -60,7 +60,7 @@ void CanonizeFpBitsTest() {
     }
 
     for (int v = Zero; v < Max; ++v) {
-        UNIT_ASSERT_VALUES_EQUAL(std::fpclassify(values[v]), valuesClass[v]); 
+        UNIT_ASSERT_VALUES_EQUAL(std::fpclassify(values[v]), valuesClass[v]);
     }
 
     for (int v = Zero; v < Max; ++v) {
@@ -69,7 +69,7 @@ void CanonizeFpBitsTest() {
     }
 
     for (int v = Zero; v < Max; ++v) {
-        UNIT_ASSERT_VALUES_EQUAL(std::fpclassify(newValues[v]), valuesClass[v]); 
+        UNIT_ASSERT_VALUES_EQUAL(std::fpclassify(newValues[v]), valuesClass[v]);
     }
 
     for (int v = Zero; v < Max; ++v) {
@@ -95,9 +95,9 @@ Y_UNIT_TEST_SUITE(TFpBits) {
     }
 
     Y_UNIT_TEST(CanonizeLongDouble) {
-        if (NValgrind::ValgrindIsOn()) { 
-            return; // TODO https://st.yandex-team.ru/KIKIMR-3431 
-        } 
+        if (NValgrind::ValgrindIsOn()) {
+            return; // TODO https://st.yandex-team.ru/KIKIMR-3431
+        }
         CanonizeFpBitsTest<long double>();
     }
 }

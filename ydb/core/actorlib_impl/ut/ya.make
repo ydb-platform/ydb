@@ -17,7 +17,7 @@ ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
- 
+
 PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/interconnect

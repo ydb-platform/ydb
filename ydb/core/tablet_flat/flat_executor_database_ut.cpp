@@ -6,9 +6,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include "flat_database.h"
 
-#include <util/system/sanitizers.h> 
-#include <util/system/valgrind.h> 
- 
+#include <util/system/sanitizers.h>
+#include <util/system/valgrind.h>
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
@@ -17,8 +17,8 @@ using TDbWrapper = NTable::TDbWrapper;
 using ITestDb = NTable::ITestDb;
 
 const ui64 MaxActionCount = 12000;
-const ui64 MultiPageMaxActionCount = 10000; 
- 
+const ui64 MultiPageMaxActionCount = 10000;
+
 class TFuzzyActor : public NFake::TNanny {
 public:
     explicit TFuzzyActor(ui32 lives, ui64 limit)

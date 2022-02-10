@@ -17,15 +17,15 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
         ram:32
     )
     TAG(ya:fat)
-ELSE() 
+ELSE()
     REQUIREMENTS(
         cpu:4
         ram:16
     )
-    TIMEOUT(600) 
-    SIZE(MEDIUM) 
-ENDIF() 
- 
+    TIMEOUT(600)
+    SIZE(MEDIUM)
+ENDIF()
+
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre

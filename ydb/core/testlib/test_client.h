@@ -33,17 +33,17 @@
 namespace NKikimr {
 namespace Tests {
 
-#ifdef WITH_VALGRIND 
-    const ui64 TIME_LIMIT_MS = TDuration::Seconds(600).MilliSeconds(); 
-#else 
-    #ifdef NDEBUG 
-    const ui64 TIME_LIMIT_MS = TDuration::Seconds(60).MilliSeconds(); 
-    #else 
-    const ui64 TIME_LIMIT_MS = TDuration::Seconds(180).MilliSeconds(); 
-    #endif 
-#endif 
-    const TDuration ITERATION_DURATION = TDuration::MilliSeconds(50); 
- 
+#ifdef WITH_VALGRIND
+    const ui64 TIME_LIMIT_MS = TDuration::Seconds(600).MilliSeconds();
+#else
+    #ifdef NDEBUG
+    const ui64 TIME_LIMIT_MS = TDuration::Seconds(60).MilliSeconds();
+    #else
+    const ui64 TIME_LIMIT_MS = TDuration::Seconds(180).MilliSeconds();
+    #endif
+#endif
+    const TDuration ITERATION_DURATION = TDuration::MilliSeconds(50);
+
     constexpr const char* TestDomainName = "dc-1";
     const ui32 TestDomain = 1;
     const ui64 DummyTablet1 = 0x840100;
@@ -316,14 +316,14 @@ namespace Tests {
         template <typename T>
         NBus::EMessageStatus SyncCall(TAutoPtr<T> msgHolder, TAutoPtr<NBus::TBusMessage> &reply) {
             NBus::EMessageStatus msgbusStatus = NBus::EMessageStatus::MESSAGE_TIMEOUT;
-            const ui64 finishTimeMs = TInstant::Now().MilliSeconds() +  TIME_LIMIT_MS; 
+            const ui64 finishTimeMs = TInstant::Now().MilliSeconds() +  TIME_LIMIT_MS;
             PrepareRequest(msgHolder);
-            while (TInstant::Now().MilliSeconds() < finishTimeMs) { 
+            while (TInstant::Now().MilliSeconds() < finishTimeMs) {
                 T* msgCopy(new T());
                 msgCopy->Record = msgHolder->Record;
                 msgbusStatus = Client->SyncCall(msgCopy, reply);
                 if (msgbusStatus == NBus::MESSAGE_CONNECT_FAILED) {
-                    Sleep(ITERATION_DURATION); 
+                    Sleep(ITERATION_DURATION);
                     continue;
                 } else {
                     break;

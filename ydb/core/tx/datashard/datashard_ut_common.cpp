@@ -738,7 +738,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
     TDeque<std::pair<ui64, THolder<TEvDataShard::TEvProposeTransaction>>> immEvents;
     for (ui64 txId : immediateTxs) {
         TFakeProxyTx::TPtr tx = txs.find(txId)->second;
-        UNIT_ASSERT_VALUES_EQUAL(tx->ShardsCount(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(tx->ShardsCount(), 1);
         TString txBody;
         ui32 shard = tx->GetShardProgram(0, txBody);
         THolder<TEvDataShard::TEvProposeTransaction> event = MakeHolder<TEvDataShard::TEvProposeTransaction>(
@@ -860,7 +860,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
                 UNIT_ASSERT_EQUAL(event->GetTxKind(), tx->TxKind());
 
                 if (tx->Immediate()) {
-                    UNIT_ASSERT_VALUES_EQUAL(event->GetStepOrderId().first, 0); 
+                    UNIT_ASSERT_VALUES_EQUAL(event->GetStepOrderId().first, 0);
                     tx->AddProposeShardResult(shard, event);
                     results.erase(std::make_pair(shard, txId));
                     break;

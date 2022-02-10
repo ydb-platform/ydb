@@ -3,7 +3,7 @@
 #include "defs.h"
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/system/event.h>
 #include <util/system/condvar.h>
 #include <util/folder/tempdir.h>
@@ -220,9 +220,9 @@ struct TConfiguration {
             TimeoutCallbacksCV.WaitI(TimeoutCallbacksLock);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(doneCount, instances); 
-        UNIT_ASSERT_VALUES_EQUAL(SuccessCount, instances); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(doneCount, instances);
+        UNIT_ASSERT_VALUES_EQUAL(SuccessCount, instances);
+
         return doneCount == instances && SuccessCount == instances;
     }
 

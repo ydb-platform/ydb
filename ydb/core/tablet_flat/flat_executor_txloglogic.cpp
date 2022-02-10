@@ -8,8 +8,8 @@
 #include "logic_redo_queue.h"
 #include "probes.h"
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
-#include <util/system/sanitizers.h> 
- 
+#include <util/system/sanitizers.h>
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 

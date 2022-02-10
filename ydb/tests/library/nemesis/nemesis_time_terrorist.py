@@ -37,7 +37,7 @@ class NemesisTimeChanger(AbstractNemesisNodeTerrorist):
 
     def __get_curr_time(self, node):
         result, output = execute_command_with_output(
-            self._full_command(node, self.__get_time_cmd), timeout=self.timeout 
+            self._full_command(node, self.__get_time_cmd), timeout=self.timeout
         )
         if result:
             logger.error("Failed to fetch victim process on node {node}. Will not act this time".format(node=node))

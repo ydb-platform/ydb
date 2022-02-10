@@ -18,18 +18,18 @@
 /////////////////////////////////////////////////////////////
 struct TSerializableAccessChecker {
     TSerializableAccessChecker()
-        : Locked(0) 
+        : Locked(0)
     {}
 
     void Acquire() {
-        Y_VERIFY(AtomicGet(Locked) == 0); 
-        AtomicSet(Locked, 1); 
+        Y_VERIFY(AtomicGet(Locked) == 0);
+        AtomicSet(Locked, 1);
     }
 
     void Release() {
-        Y_VERIFY(AtomicGet(Locked) == 1); 
-        AtomicSet(Locked, 0); 
+        Y_VERIFY(AtomicGet(Locked) == 1);
+        AtomicSet(Locked, 0);
     }
 private:
-    TAtomic Locked; 
+    TAtomic Locked;
 };

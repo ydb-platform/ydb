@@ -388,12 +388,12 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeOutOfOrder(TStep *sx) {
     const auto ox = OutOfOrder.find(step);
     if (ox != OutOfOrder.end()) {
         const TVector<TTx> &o = ox->second;
-        Y_VERIFY_DEBUG( 
-            IsSorted(sx->Transactions.begin(), sx->Transactions.end(), TTx::TCmpOrderId()), 
-            "%s", 
-            yvector2str(sx->Transactions).c_str() 
-        ); 
-        Y_VERIFY_DEBUG(IsSorted(o.begin(), o.end(), TTx::TCmpOrderId()), "%s", yvector2str(o).c_str()); 
+        Y_VERIFY_DEBUG(
+            IsSorted(sx->Transactions.begin(), sx->Transactions.end(), TTx::TCmpOrderId()),
+            "%s",
+            yvector2str(sx->Transactions).c_str()
+        );
+        Y_VERIFY_DEBUG(IsSorted(o.begin(), o.end(), TTx::TCmpOrderId()), "%s", yvector2str(o).c_str());
         //
         // ok, now merge sorted arrays replacing ack-to
         TVector<TTx>::iterator planIt = sx->Transactions.begin();
@@ -422,8 +422,8 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeToOutOfOrder(TStepId step, TVect
     } else {
         TVector<TTx> old;
         old.swap(current);
-        Y_VERIFY_DEBUG(IsSorted(old.begin(), old.end(), TTx::TCmpOrderId()), "%s", yvector2str(old).c_str()); 
-        Y_VERIFY_DEBUG(IsSorted(update.begin(), update.end(), TTx::TCmpOrderId()), "%s", yvector2str(update).c_str()); 
+        Y_VERIFY_DEBUG(IsSorted(old.begin(), old.end(), TTx::TCmpOrderId()), "%s", yvector2str(old).c_str());
+        Y_VERIFY_DEBUG(IsSorted(update.begin(), update.end(), TTx::TCmpOrderId()), "%s", yvector2str(update).c_str());
         //
         // now merge old with update
         TVector<TTx>::const_iterator oldIt = old.begin();
@@ -448,7 +448,7 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeToOutOfOrder(TStepId step, TVect
         // append tail
         current.insert(current.end(), oldIt, oldEnd);
         current.insert(current.end(), updIt, updEnd);
-        Y_VERIFY_DEBUG(IsSorted(current.begin(), current.end(), TTx::TCmpOrderId()), "%s", yvector2str(current).c_str()); 
+        Y_VERIFY_DEBUG(IsSorted(current.begin(), current.end(), TTx::TCmpOrderId()), "%s", yvector2str(current).c_str());
         //
     }
 }

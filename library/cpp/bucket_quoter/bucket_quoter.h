@@ -89,7 +89,7 @@ public:
         , UsecWaited(usecWaited)
         , AggregateInflow(aggregateInflow)
         , Bucket(fill ? capacity : 0)
-        , LastAdd(Timer::Now()) 
+        , LastAdd(Timer::Now())
         , InflowTokensPerSecond(&FixedInflow)
         , BucketTokensCapacity(&FixedCapacity)
         , FixedInflow(inflow)
@@ -108,7 +108,7 @@ public:
         , UsecWaited(usecWaited)
         , AggregateInflow(aggregateInflow)
         , Bucket(fill ? AtomicGet(*capacity) : 0)
-        , LastAdd(Timer::Now()) 
+        , LastAdd(Timer::Now())
         , InflowTokensPerSecond(inflow)
         , BucketTokensCapacity(capacity)
     {

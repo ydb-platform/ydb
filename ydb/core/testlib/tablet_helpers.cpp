@@ -35,7 +35,7 @@
 #include <util/string/printf.h>
 #include <util/string/subst.h>
 #include <util/system/env.h>
-#include <util/system/sanitizers.h> 
+#include <util/system/sanitizers.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -54,7 +54,7 @@ const bool SUPPRESS_DELAYS = false;
 const bool VARIATE_RANDOM_SEED = false;
 const ui64 PQ_CACHE_MAX_SIZE_MB = 32;
 const TDuration PQ_CACHE_KEEP_TIMEOUT = TDuration::Seconds(10);
- 
+
 static NActors::TTestActorRuntime& AsKikimrRuntime(NActors::TTestActorRuntimeBase& r) {
     try {
         return dynamic_cast<NActors::TTestBasicRuntime&>(r);
@@ -1044,7 +1044,7 @@ namespace NKikimr {
 
     ui64 GetFreePDiskSize(TTestActorRuntime& runtime, const TActorId& sender) {
         TActorId pdiskServiceId = MakeBlobStoragePDiskID(runtime.GetNodeId(0), 0);
-        runtime.Send(new IEventHandle(pdiskServiceId, sender, nullptr)); 
+        runtime.Send(new IEventHandle(pdiskServiceId, sender, nullptr));
         TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
         UNIT_ASSERT(event);

@@ -536,11 +536,11 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
     }
     TStringStream out;
     out << "Partition " << i32(Partition) << ": " << str;  res.push_back(out.Str()); out.Clear();
-    if (DiskIsFull) { 
-        out << "DISK IS FULL"; 
-        res.push_back(out.Str()); 
-        out.Clear(); 
-    } 
+    if (DiskIsFull) {
+        out << "DISK IS FULL";
+        res.push_back(out.Str());
+        out.Clear();
+    }
     out << "StartOffset: " << StartOffset; res.push_back(out.Str()); out.Clear();
     out << "EndOffset: " << EndOffset; res.push_back(out.Str()); out.Clear();
     out << "CreationTime: " << CreationTime.ToStringLocalUpToSeconds(); res.push_back(out.Str()); out.Clear();

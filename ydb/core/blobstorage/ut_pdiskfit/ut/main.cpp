@@ -2,8 +2,8 @@
 #include <ydb/core/blobstorage/ut_pdiskfit/lib/basic_test.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/system/sanitizers.h> 
- 
+#include <util/system/sanitizers.h>
+
 class TWatchdogThread : public ISimpleThread {
     TMutex Mutex;
     TCondVar Stop;

@@ -34,7 +34,7 @@ namespace Pire {
 
 	namespace Impl {
 		class FsmDetermineTask;
-		class FsmMinimizeTask;
+		class FsmMinimizeTask; 
         class HalfFinalDetermineTask;
 	}
 
@@ -245,7 +245,7 @@ namespace Pire {
 		void ClearHints() { isAlternative = false; }
 		
 		friend class Impl::FsmDetermineTask;
-		friend class Impl::FsmMinimizeTask;
+		friend class Impl::FsmMinimizeTask; 
         friend class Impl::HalfFinalDetermineTask;
 	};
 

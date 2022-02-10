@@ -38,7 +38,7 @@
 #include "vbitset.h"
 #include "partition.h"
 #include "determine.h"
-#include "minimize.h"
+#include "minimize.h" 
 #include "platform.h"
 
 namespace Pire {
@@ -1034,128 +1034,128 @@ bool Fsm::Determine(size_t maxsize /* = 0 */)
 		return false;
 }
 
-namespace Impl {
-class FsmMinimizeTask {
+namespace Impl { 
+class FsmMinimizeTask { 
 public:
-	explicit FsmMinimizeTask(const Fsm& fsm)
-		: mFsm(fsm)
-		, reversedTransitions(fsm.Size())
-		, StateClass(fsm.Size())
-		, Classes(0)
-	{
-		Y_ASSERT(mFsm.IsDetermined());
+	explicit FsmMinimizeTask(const Fsm& fsm) 
+		: mFsm(fsm) 
+		, reversedTransitions(fsm.Size()) 
+		, StateClass(fsm.Size()) 
+		, Classes(0) 
+	{ 
+		Y_ASSERT(mFsm.IsDetermined()); 
 
-		TMap<bool, size_t> FinalStateClassMap;
+		TMap<bool, size_t> FinalStateClassMap; 
+ 
+		for (size_t state = 0; state < mFsm.Size(); ++state) { 
+			reversedTransitions[state].resize(mFsm.Letters().Size()); 
+			if (FinalStateClassMap.find(mFsm.IsFinal(state)) == FinalStateClassMap.end()) { 
+				FinalStateClassMap[mFsm.IsFinal(state)] = Classes++; 
+			} 
+			StateClass[state] = FinalStateClassMap[mFsm.IsFinal(state)]; 
+		} 
+ 
+		for (size_t state = 0; state < mFsm.Size(); ++state) { 
+			TSet<ypair<Char, size_t>> usedTransitions; 
+			for (const auto& transition : mFsm.m_transitions[state]) { 
+				Y_ASSERT(transition.second.size() == 1); 
+				auto destination = *transition.second.begin(); 
+				auto letter = mFsm.Letters().Index(transition.first); 
+				if (usedTransitions.find(ymake_pair(letter, destination)) == usedTransitions.end()) { 
+					usedTransitions.insert(ymake_pair(letter, destination)); 
+					reversedTransitions[destination][letter].push_back(state); 
+				} 
+			} 
+		} 
+	} 
 
-		for (size_t state = 0; state < mFsm.Size(); ++state) {
-			reversedTransitions[state].resize(mFsm.Letters().Size());
-			if (FinalStateClassMap.find(mFsm.IsFinal(state)) == FinalStateClassMap.end()) {
-				FinalStateClassMap[mFsm.IsFinal(state)] = Classes++;
-			}
-			StateClass[state] = FinalStateClassMap[mFsm.IsFinal(state)];
-		}
+	TVector<size_t>& GetStateClass() { return StateClass; } 
+ 
+	size_t& GetClassesNumber() { return Classes; } 
+ 
+	size_t LettersCount() const { 
+		return mFsm.Letters().Size(); 
+	} 
+ 
+	bool IsDetermined() const { 
+		return mFsm.IsDetermined(); 
+	} 
 
-		for (size_t state = 0; state < mFsm.Size(); ++state) {
-			TSet<ypair<Char, size_t>> usedTransitions;
-			for (const auto& transition : mFsm.m_transitions[state]) {
-				Y_ASSERT(transition.second.size() == 1);
-				auto destination = *transition.second.begin();
-				auto letter = mFsm.Letters().Index(transition.first);
-				if (usedTransitions.find(ymake_pair(letter, destination)) == usedTransitions.end()) {
-					usedTransitions.insert(ymake_pair(letter, destination));
-					reversedTransitions[destination][letter].push_back(state);
-				}
-			}
-		}
+	size_t Size() const { 
+		return mFsm.Size(); 
 	}
 
-	TVector<size_t>& GetStateClass() { return StateClass; }
-
-	size_t& GetClassesNumber() { return Classes; }
-
-	size_t LettersCount() const {
-		return mFsm.Letters().Size();
+	const TVector<size_t>& Previous(size_t state, size_t letter) const { 
+		return reversedTransitions[state][letter]; 
 	}
 
-	bool IsDetermined() const {
-		return mFsm.IsDetermined();
-	}
+	void AcceptStates() { 
+		mNewFsm.Resize(Classes); 
+		mNewFsm.letters = mFsm.letters; 
+		mNewFsm.determined = mFsm.determined; 
+		mNewFsm.m_sparsed = mFsm.m_sparsed; 
+		mNewFsm.SetFinal(0, false); 
 
-	size_t Size() const {
-		return mFsm.Size();
-	}
-
-	const TVector<size_t>& Previous(size_t state, size_t letter) const {
-		return reversedTransitions[state][letter];
-	}
-
-	void AcceptStates() {
-		mNewFsm.Resize(Classes);
-		mNewFsm.letters = mFsm.letters;
-		mNewFsm.determined = mFsm.determined;
-		mNewFsm.m_sparsed = mFsm.m_sparsed;
-		mNewFsm.SetFinal(0, false);
-
-		// Unite equality classes into new states
-		size_t fromIdx = 0;
+		// Unite equality classes into new states 
+		size_t fromIdx = 0; 
 		for (auto from = mFsm.m_transitions.begin(), fromEnd = mFsm.m_transitions.end(); from != fromEnd; ++from, ++fromIdx) {
-			size_t dest = StateClass[fromIdx];
-			PIRE_IFDEBUG(Cdbg << "[min] State " << fromIdx << " becomes state " << dest << Endl);
+			size_t dest = StateClass[fromIdx]; 
+			PIRE_IFDEBUG(Cdbg << "[min] State " << fromIdx << " becomes state " << dest << Endl); 
 			for (auto&& letter : *from) {
 				Y_ASSERT(letter.second.size() == 1 || !"FSM::minimize(): FSM not deterministic");
-				mNewFsm.Connect(dest, StateClass[*letter.second.begin()], letter.first);
-			}
-			if (mFsm.IsFinal(fromIdx)) {
-				mNewFsm.SetFinal(dest, true);
-				PIRE_IFDEBUG(Cdbg << "[min] New state " << dest << " becomes final because of old state " << fromIdx << Endl);
-			}
+				mNewFsm.Connect(dest, StateClass[*letter.second.begin()], letter.first); 
+			} 
+			if (mFsm.IsFinal(fromIdx)) { 
+				mNewFsm.SetFinal(dest, true); 
+				PIRE_IFDEBUG(Cdbg << "[min] New state " << dest << " becomes final because of old state " << fromIdx << Endl); 
+			} 
 
-			// Append tags
+			// Append tags 
 			auto ti = mFsm.tags.find(fromIdx);
-			if (ti != mFsm.tags.end()) {
-				mNewFsm.tags[dest] |= ti->second;
-				PIRE_IFDEBUG(Cdbg << "[min] New state " << dest << " carries tag " << ti->second << " because of old state " << fromIdx << Endl);
-			}
+			if (ti != mFsm.tags.end()) { 
+				mNewFsm.tags[dest] |= ti->second; 
+				PIRE_IFDEBUG(Cdbg << "[min] New state " << dest << " carries tag " << ti->second << " because of old state " << fromIdx << Endl); 
+			} 
 		}
-		mNewFsm.initial = StateClass[mFsm.initial];
-
-		// Restore outputs
+		mNewFsm.initial = StateClass[mFsm.initial]; 
+ 
+		// Restore outputs 
 		for (auto&& output : mFsm.outputs)
 			for (auto&& output2 : output.second)
-				mNewFsm.outputs[StateClass[output.first]].insert(ymake_pair(StateClass[output2.first], output2.second));
+				mNewFsm.outputs[StateClass[output.first]].insert(ymake_pair(StateClass[output2.first], output2.second)); 
 	}
 
-	typedef bool Result;
+	typedef bool Result; 
 
-	Result Success() {
-		return true;
+	Result Success() { 
+		return true; 
+	} 
+
+	Result Failure() { 
+		return false; 
+	} 
+
+	Fsm& Output() { 
+		return mNewFsm; 
 	}
 
-	Result Failure() {
-		return false;
-	}
+private: 
+	const Fsm& mFsm; 
+	Fsm mNewFsm; 
+	TVector<TVector<TVector<size_t>>> reversedTransitions; 
+	TVector<size_t> StateClass; 
+	size_t Classes; 
+}; 
+} 
 
-	Fsm& Output() {
-		return mNewFsm;
-	}
+void Fsm::Minimize() 
+{ 
+	// Minimization algorithm is only applicable to a determined FSM. 
+	Y_ASSERT(determined); 
 
-private:
-	const Fsm& mFsm;
-	Fsm mNewFsm;
-	TVector<TVector<TVector<size_t>>> reversedTransitions;
-	TVector<size_t> StateClass;
-	size_t Classes;
-};
-}
-
-void Fsm::Minimize()
-{
-	// Minimization algorithm is only applicable to a determined FSM.
-	Y_ASSERT(determined);
-
-	Impl::FsmMinimizeTask task{*this};
-	if (Pire::Impl::Minimize(task)) {
-		task.Output().Swap(*this);
+	Impl::FsmMinimizeTask task{*this}; 
+	if (Pire::Impl::Minimize(task)) { 
+		task.Output().Swap(*this); 
 	}
 }
 

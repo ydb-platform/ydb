@@ -136,9 +136,9 @@ namespace Pire {
 			}
 			return task.Success();
 		}
-
-		// Faster transition table representation for determined FSM
-		typedef TVector<size_t> DeterminedTransitions;
+ 
+		// Faster transition table representation for determined FSM 
+		typedef TVector<size_t> DeterminedTransitions; 
 	}
 }
 

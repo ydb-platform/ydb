@@ -57,11 +57,11 @@ public:
     Y_PURE_FUNCTION
     size_t PrintSize() const noexcept;
 
-    /** The same as Print* except that RFC-3986 reserved characters are escaped.
-     * @param safe - set of characters to be skipped in escaping
-     */
-    TString QuotedPrint(const char* safe = "/") const;
-
+    /** The same as Print* except that RFC-3986 reserved characters are escaped. 
+     * @param safe - set of characters to be skipped in escaping 
+     */ 
+    TString QuotedPrint(const char* safe = "/") const; 
+ 
     Y_PURE_FUNCTION
     auto Range(const TStringBuf name) const noexcept {
         return IterateValues(MakeIteratorRange(equal_range(name)));

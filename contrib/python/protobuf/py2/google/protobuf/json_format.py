@@ -120,7 +120,7 @@ def MessageToJson(
     indent: The JSON object will be pretty-printed with this indent level.
         An indent level of 0 or negative will only insert newlines.
     sort_keys: If True, then the output will be sorted by field names.
-    use_integers_for_enums: If true, print integers instead of enum names.
+    use_integers_for_enums: If true, print integers instead of enum names. 
     descriptor_pool: A Descriptor Pool for resolving types. If None use the
         default.
     float_precision: If set, use this to specify float field valid digits.
@@ -157,7 +157,7 @@ def MessageToDict(
     preserving_proto_field_name: If True, use the original proto field
         names as defined in the .proto file. If False, convert the field
         names to lowerCamelCase.
-    use_integers_for_enums: If true, print integers instead of enum names.
+    use_integers_for_enums: If true, print integers instead of enum names. 
     descriptor_pool: A Descriptor Pool for resolving types. If None use the
         default.
     float_precision: If set, use this to specify float field valid digits.
@@ -193,7 +193,7 @@ class _Printer(object):
       float_precision=None):
     self.including_default_value_fields = including_default_value_fields
     self.preserving_proto_field_name = preserving_proto_field_name
-    self.use_integers_for_enums = use_integers_for_enums
+    self.use_integers_for_enums = use_integers_for_enums 
     self.descriptor_pool = descriptor_pool
     if float_precision:
       self.float_format = '.{}g'.format(float_precision)
@@ -284,8 +284,8 @@ class _Printer(object):
     if field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
       return self._MessageToJsonObject(value)
     elif field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_ENUM:
-      if self.use_integers_for_enums:
-        return value
+      if self.use_integers_for_enums: 
+        return value 
       if field.enum_type.full_name == 'google.protobuf.NullValue':
         return None
       enum_value = field.enum_type.values_by_number.get(value, None)

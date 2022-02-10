@@ -22,7 +22,7 @@ namespace NProtoBuf {
     };
 
     void ParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven) {
-        if (!m.ParseFromString(allowUneven ? Base64DecodeUneven(dataBase64) : Base64StrictDecode(dataBase64))) { 
+        if (!m.ParseFromString(allowUneven ? Base64DecodeUneven(dataBase64) : Base64StrictDecode(dataBase64))) {
             ythrow yexception() << "can't parse " << m.GetTypeName() << " from base64-encoded string";
         }
     }

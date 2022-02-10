@@ -6,8 +6,8 @@ RECURSE(
     aenum
     ago
     aio-pika
-    aioboto3
-    aiobotocore
+    aioboto3 
+    aiobotocore 
     aioch
     aiochclient
     aiodns

@@ -2445,10 +2445,10 @@ private:
 TDeferredCommit::TDeferredCommit() {
 }
 
-TDeferredCommit::TDeferredCommit(TDeferredCommit&&) = default;
-
-TDeferredCommit& TDeferredCommit::operator=(TDeferredCommit&&) = default;
-
+TDeferredCommit::TDeferredCommit(TDeferredCommit&&) = default; 
+ 
+TDeferredCommit& TDeferredCommit::operator=(TDeferredCommit&&) = default; 
+ 
 TDeferredCommit::~TDeferredCommit() {
 }
 

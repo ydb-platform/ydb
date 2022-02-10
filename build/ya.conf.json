@@ -6637,7 +6637,7 @@
         },
         "samogonctl": {
             "formula": {
-                "sandbox_id": 438053038,
+                "sandbox_id": 438053038, 
                 "match": "SAMOGONCTL"
             },
             "executable": {
@@ -6855,7 +6855,7 @@
                 "sandbox_id": [
                     990283171
                 ],
-                "match": "yd_migrate"
+                "match": "yd_migrate" 
             },
             "executable": {
                 "yd-migrate": [

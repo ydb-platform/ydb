@@ -70,9 +70,9 @@ private:
 private:
     int Init(THttpBaseHeader* header) {
         base_hd = header;
-        auth_hd = nullptr;
-        request_hd = nullptr;
-        hd = nullptr;
+        auth_hd = nullptr; 
+        request_hd = nullptr; 
+        hd = nullptr; 
         init();
         return 0;
     }

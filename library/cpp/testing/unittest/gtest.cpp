@@ -42,7 +42,7 @@ namespace {
             return Test.Name();
         }
 
-        TTestBase* ConstructTest() override {
+        TTestBase* ConstructTest() override { 
             return new TCurrentTest(Test);
         }
 

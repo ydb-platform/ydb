@@ -25,8 +25,8 @@ class TBlob {
 public:
     class TBase {
     public:
-        inline TBase() noexcept = default;
-        virtual ~TBase() = default;
+        inline TBase() noexcept = default; 
+        virtual ~TBase() = default; 
 
         virtual void Ref() noexcept = 0;
         virtual void UnRef() noexcept = 0;
@@ -45,7 +45,7 @@ private:
         {
         }
 
-        inline ~TStorage() = default;
+        inline ~TStorage() = default; 
 
         inline void Swap(TStorage& r) noexcept {
             DoSwap(Data, r.Data);

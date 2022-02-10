@@ -301,8 +301,8 @@ public:
 
     class TOps {
     public:
-        inline TOps() noexcept = default;
-        virtual ~TOps() = default;
+        inline TOps() noexcept = default; 
+        virtual ~TOps() = default; 
 
         virtual ssize_t Send(SOCKET fd, const void* data, size_t len) = 0;
         virtual ssize_t Recv(SOCKET fd, void* buf, size_t len) = 0;
@@ -402,7 +402,7 @@ public:
     }
 
 private:
-    size_t DoRead(void* buf, size_t len) override;
+    size_t DoRead(void* buf, size_t len) override; 
 
 private:
     TSocket S_;
@@ -421,8 +421,8 @@ public:
     }
 
 private:
-    void DoWrite(const void* buf, size_t len) override;
-    void DoWriteV(const TPart* parts, size_t count) override;
+    void DoWrite(const void* buf, size_t len) override; 
+    void DoWriteV(const TPart* parts, size_t count) override; 
 
 private:
     TSocket S_;

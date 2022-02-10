@@ -1550,7 +1550,7 @@ public:
         row.emplace_back();
         TString& groups = row.back();
         bool first = true;
-        for (const char* const* i = probe->Event.Groups; *i != nullptr; ++i, first = false) {
+        for (const char* const* i = probe->Event.Groups; *i != nullptr; ++i, first = false) { 
             groups.append(TString(first? "": ", ") + GroupHtml(*i));
         }
 

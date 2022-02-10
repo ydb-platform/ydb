@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(ModuleClientOneWay) {
             ServerSession = TBusServerSession::Create(&Proto, this, TBusServerSessionConfig(), Queue);
         }
 
-        void OnMessage(TOnMessageContext& context) override {
+        void OnMessage(TOnMessageContext& context) override { 
             TestSync->WaitForAndIncrement(1);
             context.ForgetRequest();
         }
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(ModuleClientOneWay) {
         {
         }
 
-        TJobHandler Start(TBusJob* job, TBusMessage*) override {
+        TJobHandler Start(TBusJob* job, TBusMessage*) override { 
             TestSync->WaitForAndIncrement(0);
 
             job->SendOneWayTo(new TExampleRequest(&Proto.RequestCount), ClientSession.Get(), TNetAddr("localhost", Port));
@@ -57,12 +57,12 @@ Y_UNIT_TEST_SUITE(ModuleClientOneWay) {
         TJobHandler Sent(TBusJob* job, TBusMessage*) {
             TestSync->WaitForAndIncrement(2);
             job->Cancel(MESSAGE_DONT_ASK);
-            return nullptr;
+            return nullptr; 
         }
 
-        TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override {
+        TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override { 
             ClientSession = CreateDefaultSource(queue, &Proto, TBusServerSessionConfig());
-            return nullptr;
+            return nullptr; 
         }
     };
 
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(ModuleClientOneWay) {
         {
         }
 
-        TJobHandler Start(TBusJob* job, TBusMessage*) override {
+        TJobHandler Start(TBusJob* job, TBusMessage*) override { 
             TestSync->WaitForAndIncrement(0);
 
             job->SendOneWayTo(new TExampleRequest(&Proto.RequestCount), ClientSession.Get(), TNetAddr("localhost", 1));
@@ -108,17 +108,17 @@ Y_UNIT_TEST_SUITE(ModuleClientOneWay) {
         TJobHandler Sent(TBusJob* job, TBusMessage*) {
             TestSync->WaitForAndIncrement(1);
             job->Cancel(MESSAGE_DONT_ASK);
-            return nullptr;
+            return nullptr; 
         }
 
-        TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override {
+        TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override { 
             TBusServerSessionConfig sessionConfig;
             sessionConfig.ConnectTimeout = 1;
             sessionConfig.SendTimeout = 1;
             sessionConfig.TotalTimeout = 1;
             sessionConfig.Secret.TimeoutPeriod = TDuration::MilliSeconds(1);
             ClientSession = CreateDefaultSource(queue, &Proto, sessionConfig);
-            return nullptr;
+            return nullptr; 
         }
     };
 

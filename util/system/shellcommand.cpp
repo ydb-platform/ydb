@@ -1132,7 +1132,7 @@ TShellCommand::TShellCommand(const TStringBuf cmd, const TShellCommandOptions& o
 {
 }
 
-TShellCommand::~TShellCommand() = default;
+TShellCommand::~TShellCommand() = default; 
 
 TShellCommand& TShellCommand::operator<<(const TStringBuf argument) {
     Impl->AppendArgument(argument);

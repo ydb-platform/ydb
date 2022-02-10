@@ -24,7 +24,7 @@ const V* FindEnumFromStringImpl(K1 key, const std::pair<K2, V>* entries, size_t 
     for (size_t i = 0; i < arraySize; i++)
         if (entries[i].first == key)
             return &entries[i].second;
-    return nullptr;
+    return nullptr; 
 }
 
 // special version for const char*
@@ -33,7 +33,7 @@ const V* FindEnumFromStringImpl(const char* key, const std::pair<const char*, V>
     for (size_t i = 0; i < arraySize; i++)
         if (entries[i].first && key && !strcmp(entries[i].first, key))
             return &entries[i].second;
-    return nullptr;
+    return nullptr; 
 }
 
 template <class K, class V>

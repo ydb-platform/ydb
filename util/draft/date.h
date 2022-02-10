@@ -24,7 +24,7 @@ public:
 
     // XXX: wrong. Should be replace with two methods: TodayGmt() and TodayLocal()
     static TDate Today() {
-        return TDate(time(nullptr));
+        return TDate(time(nullptr)); 
     }
 
     TDate(const char* yyyymmdd);

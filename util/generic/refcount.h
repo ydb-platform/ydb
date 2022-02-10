@@ -107,7 +107,7 @@ public:
     {
     }
 
-    inline ~TAtomicCounter() = default;
+    inline ~TAtomicCounter() = default; 
 
     inline TAtomicBase Add(TAtomicBase d) noexcept {
         return AtomicAdd(Counter_, d);

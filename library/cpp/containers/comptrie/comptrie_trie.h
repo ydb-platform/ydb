@@ -52,7 +52,7 @@ protected:
     NCompactTrie::TPackerLeafSkipper<TPacker> Skipper = &Packer; // This should be true for every constructor.
 
 public:
-    TCompactTrie() = default;
+    TCompactTrie() = default; 
 
     TCompactTrie(const char* d, size_t len, TPacker packer);
     TCompactTrie(const char* d, size_t len)
@@ -150,7 +150,7 @@ public:
         TConstIterator(const TOpaqueTrie& trie, const char* emptyValue, const TKeyBuf& key, TPacker packer); // only usable from UpperBound() method
 
     public:
-        TConstIterator() = default;
+        TConstIterator() = default; 
         bool IsEmpty() const {
             return !Impl;
         } // Almost no other method can be called.

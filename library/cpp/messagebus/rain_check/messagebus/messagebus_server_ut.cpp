@@ -27,9 +27,9 @@ Y_UNIT_TEST_SUITE(RainCheckMessageBusServer) {
             MessageContext.Swap(messageContext);
         }
 
-        TContinueFunc Start() override {
+        TContinueFunc Start() override { 
             MessageContext.SendReplyMove(new TExampleResponse(&Env->Proto.ResponseCount));
-            return nullptr;
+            return nullptr; 
         }
     };
 

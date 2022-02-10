@@ -6,7 +6,7 @@ TTeeOutput::TTeeOutput(IOutputStream* l, IOutputStream* r) noexcept
 {
 }
 
-TTeeOutput::~TTeeOutput() = default;
+TTeeOutput::~TTeeOutput() = default; 
 
 void TTeeOutput::DoWrite(const void* buf, size_t len) {
     L_->Write(buf, len);

@@ -128,7 +128,7 @@ TPipe::TPipe(PIPEHANDLE fd)
 {
 }
 
-TPipe::~TPipe() = default;
+TPipe::~TPipe() = default; 
 
 void TPipe::Close() {
     Impl_->Close();

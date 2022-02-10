@@ -114,7 +114,7 @@ namespace {
 
         virtual TPerThreadStorage* MyStorageSlow() = 0;
 
-        virtual ~TGenericTlsBase() = default;
+        virtual ~TGenericTlsBase() = default; 
     };
 }
 
@@ -138,7 +138,7 @@ namespace {
         }
 
     private:
-        TPerThreadStorage* MyStorageSlow() override {
+        TPerThreadStorage* MyStorageSlow() override { 
             void* ret = pthread_getspecific(Key_);
 
             if (!ret) {
@@ -245,7 +245,7 @@ TKey::TKey(TDtor dtor)
 
 TKey::TKey(TKey&&) noexcept = default;
 
-TKey::~TKey() = default;
+TKey::~TKey() = default; 
 
 void* TKey::Get() const {
     return Impl_->Get();

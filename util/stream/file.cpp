@@ -77,7 +77,7 @@ public:
     {
     }
 
-    inline ~TImpl() = default;
+    inline ~TImpl() = default; 
 };
 
 TMappedFileInput::TMappedFileInput(const TFile& file)
@@ -94,4 +94,4 @@ TMappedFileInput::TMappedFileInput(const TString& path)
     Reset(Impl_->Data(), Impl_->Size());
 }
 
-TMappedFileInput::~TMappedFileInput() = default;
+TMappedFileInput::~TMappedFileInput() = default; 

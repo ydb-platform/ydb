@@ -310,14 +310,14 @@ Y_FORCE_INLINE ui64 LeastSignificantBit(ui64 v) {
 }
 
 /*
- * Returns 0 - based position of the most significant bit (compile time)
- * 0 for 0.
- */
-constexpr ui64 MostSignificantBitCT(ui64 x) {
-    return x > 1 ? 1 + MostSignificantBitCT(x >> 1) : 0;
-}
-
-/*
+ * Returns 0 - based position of the most significant bit (compile time) 
+ * 0 for 0. 
+ */ 
+constexpr ui64 MostSignificantBitCT(ui64 x) { 
+    return x > 1 ? 1 + MostSignificantBitCT(x >> 1) : 0; 
+} 
+ 
+/* 
  * Return rounded up binary logarithm of `x`.
  */
 Y_FORCE_INLINE ui8 CeilLog2(ui64 x) {

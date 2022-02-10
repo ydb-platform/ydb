@@ -24,7 +24,7 @@ TMonService2::TMonService2(const THttpServerOptions& options, const TString& tit
     , AuthProvider_{std::move(auth)}
 {
     Y_VERIFY(!!title);
-    time_t t = time(nullptr);
+    time_t t = time(nullptr); 
     ctime_r(&t, StartTime);
 }
 

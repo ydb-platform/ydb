@@ -14,12 +14,12 @@ namespace NRainCheck {
 
     public:
         TContinueFunc()
-            : Func(nullptr)
+            : Func(nullptr) 
         {
         }
 
         TContinueFunc(void*)
-            : Func(nullptr)
+            : Func(nullptr) 
         {
         }
 
@@ -38,13 +38,13 @@ namespace NRainCheck {
     class TSimpleTaskRunner: public TTaskRunnerBase {
     public:
         TSimpleTaskRunner(IEnv* env, ISubtaskListener* parentTask, TAutoPtr<ISimpleTask>);
-        ~TSimpleTaskRunner() override;
+        ~TSimpleTaskRunner() override; 
 
     private:
         // Function to be called on completion of all pending tasks.
         TContinueFunc ContinueFunc;
 
-        bool ReplyReceived() override /* override */;
+        bool ReplyReceived() override /* override */; 
 
         ISimpleTask* GetImpl() {
             return (ISimpleTask*)GetImplBase();

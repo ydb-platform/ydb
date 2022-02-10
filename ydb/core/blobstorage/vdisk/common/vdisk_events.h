@@ -1080,7 +1080,7 @@ namespace NKikimr {
             return res;
         }
 
-        void AddExtremeQuery(const TLogoBlobID &logoBlobId, ui32 sh, ui32 sz, const ui64 *cookie = nullptr) {
+        void AddExtremeQuery(const TLogoBlobID &logoBlobId, ui32 sh, ui32 sz, const ui64 *cookie = nullptr) { 
             Y_VERIFY(Extreme);
 
             NKikimrBlobStorage::TExtremeQuery *q = Record.AddExtremeQueries();
@@ -1267,7 +1267,7 @@ namespace NKikimr {
         }
 
         void AddResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, ui64 sh,
-                       const char *data, size_t size, const ui64 *cookie = nullptr, const ui64 *ingress = nullptr) {
+                       const char *data, size_t size, const ui64 *cookie = nullptr, const ui64 *ingress = nullptr) { 
             IncrementSize(size);
             NKikimrBlobStorage::TQueryResult *r = Record.AddResult();
             r->SetStatus(status);
@@ -1287,7 +1287,7 @@ namespace NKikimr {
                 r->SetIngress(*ingress);
         }
 
-        void AddResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, const ui64 *cookie = nullptr,
+        void AddResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, const ui64 *cookie = nullptr, 
                        const ui64 *ingress = nullptr, const NMatrix::TVectorType *local = nullptr) {
             NKikimrBlobStorage::TQueryResult *r = Record.AddResult();
             r->SetStatus(status);

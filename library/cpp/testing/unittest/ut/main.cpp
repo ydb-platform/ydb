@@ -22,7 +22,7 @@ namespace {
         {
         }
 
-        void SetUp() override {
+        void SetUp() override { 
             I = 5;
         }
 

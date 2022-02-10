@@ -45,7 +45,7 @@ namespace NKikimr {
         }
 
         void ScheduleActivity(const TActorContext &ctx, const TDuration &timeout) {
-            ctx.Schedule(timeout, new TEvents::TEvWakeup(), nullptr);
+            ctx.Schedule(timeout, new TEvents::TEvWakeup(), nullptr); 
         }
 
         void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {

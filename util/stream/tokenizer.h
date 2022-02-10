@@ -39,7 +39,7 @@ public:
         {
         }
 
-        inline ~TIterator() = default;
+        inline ~TIterator() = default; 
 
         inline void operator++() {
             Next();

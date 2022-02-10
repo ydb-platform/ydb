@@ -13,7 +13,7 @@
 class TDuration;
 
 struct IObjectInQueue {
-    virtual ~IObjectInQueue() = default;
+    virtual ~IObjectInQueue() = default; 
 
     /**
      * Supposed to be implemented by user, to define jobs processed
@@ -227,7 +227,7 @@ public:
     }
 
 private:
-    IThread* DoCreate() override;
+    IThread* DoCreate() override; 
 };
 
 /**
@@ -237,14 +237,14 @@ private:
  */
 class TFakeThreadPool: public IThreadPool {
 public:
-    bool Add(IObjectInQueue* pObj) override Y_WARN_UNUSED_RESULT {
+    bool Add(IObjectInQueue* pObj) override Y_WARN_UNUSED_RESULT { 
         TTsr tsr(this);
         pObj->Process(tsr);
 
         return true;
     }
 
-    void Start(size_t, size_t = 0) override {
+    void Start(size_t, size_t = 0) override { 
     }
 
     void Stop() noexcept override {
@@ -269,12 +269,12 @@ public:
     TThreadPool(const TParams& params = {});
     ~TThreadPool() override;
 
-    bool Add(IObjectInQueue* obj) override Y_WARN_UNUSED_RESULT;
+    bool Add(IObjectInQueue* obj) override Y_WARN_UNUSED_RESULT; 
     /**
       * @param queueSizeLimit means "unlimited" when = 0
       * @param threadCount means "single thread" when = 0
       */
-    void Start(size_t threadCount, size_t queueSizeLimit = 0) override;
+    void Start(size_t threadCount, size_t queueSizeLimit = 0) override; 
     void Stop() noexcept override;
     size_t Size() const noexcept override;
     size_t GetThreadCountExpected() const noexcept;
@@ -302,7 +302,7 @@ public:
      */
     void SetMaxIdleTime(TDuration interval);
 
-    bool Add(IObjectInQueue* obj) override Y_WARN_UNUSED_RESULT;
+    bool Add(IObjectInQueue* obj) override Y_WARN_UNUSED_RESULT; 
     /** @param thrnum, @param maxque are ignored */
     void Start(size_t thrnum = 0, size_t maxque = 0) override;
     void Stop() noexcept override;
@@ -319,12 +319,12 @@ public:
     TSimpleThreadPool(const TParams& params = {});
     ~TSimpleThreadPool() override;
 
-    bool Add(IObjectInQueue* obj) override Y_WARN_UNUSED_RESULT;
+    bool Add(IObjectInQueue* obj) override Y_WARN_UNUSED_RESULT; 
     /**
      * @parameter thrnum. If thrnum is 0, use TAdaptiveThreadPool with small
      * SetMaxIdleTime interval parameter. if thrnum is not 0, use non-blocking TThreadPool
      */
-    void Start(size_t thrnum, size_t maxque = 0) override;
+    void Start(size_t thrnum, size_t maxque = 0) override; 
     void Stop() noexcept override;
     size_t Size() const noexcept override;
 
@@ -365,11 +365,11 @@ public:
         }
     }
 
-    void* CreateThreadSpecificResource() override {
+    void* CreateThreadSpecificResource() override { 
         return Slave_->CreateThreadSpecificResource();
     }
 
-    void DestroyThreadSpecificResource(void* resource) override {
+    void DestroyThreadSpecificResource(void* resource) override { 
         Slave_->DestroyThreadSpecificResource(resource);
     }
 

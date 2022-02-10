@@ -10,8 +10,8 @@ class TMatrix: TNonCopyable {
     // Constructor/Destructor
 public:
     TMatrix()
-        : Buf(nullptr)
-        , Arr(nullptr)
+        : Buf(nullptr) 
+        , Arr(nullptr) 
         , M(0)
         , N(0)
         , BufSize(0)
@@ -28,7 +28,7 @@ public:
     }
 
     TMatrix(size_t m, size_t n, T* buf)
-        : Buf(nullptr)
+        : Buf(nullptr) 
         , Arr(buf)
         , M(m)
         , N(n)

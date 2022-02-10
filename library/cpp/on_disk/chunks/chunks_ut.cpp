@@ -72,7 +72,7 @@ public:
             {
                 TBlob temp = TBlob::FromStreamSingleThreaded(stream);
                 TPlainHash<wchar16, void*> reader(temp);
-                void* value = nullptr;
+                void* value = nullptr; 
                 UNIT_ASSERT(reader.Find(k, &value));
                 UNIT_ASSERT_EQUAL((int*)value, &v);
             }

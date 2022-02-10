@@ -306,11 +306,11 @@ public:
     }
 
     const T* Get() const noexcept {
-        return Defined() ? Data() : nullptr;
+        return Defined() ? Data() : nullptr; 
     }
 
     T* Get() noexcept {
-        return Defined() ? Data() : nullptr;
+        return Defined() ? Data() : nullptr; 
     }
 
     constexpr const T& GetRef() const& {

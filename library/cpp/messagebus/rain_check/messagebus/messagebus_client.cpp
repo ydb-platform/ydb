@@ -37,7 +37,7 @@ void TBusClientService::ProcessResultCommon(NBus::TBusMessageAutoPtr message,
         return;
     }
 
-    future->SetDoneAndSchedule(status, nullptr);
+    future->SetDoneAndSchedule(status, nullptr); 
 }
 
 void TBusClientService::SendOneWay(
@@ -76,19 +76,19 @@ void NRainCheck::TBusClientService::OnMessageSentOneWay(
     TBusFuture* future = (TBusFuture*)request->Data;
     Y_ASSERT(future->Request.Get() == request.Get());
     Y_UNUSED(request.Release());
-    future->SetDoneAndSchedule(MESSAGE_OK, nullptr);
+    future->SetDoneAndSchedule(MESSAGE_OK, nullptr); 
 }
 
 void TBusClientService::OnError(
     TAutoPtr<TBusMessage> message, NBus::EMessageStatus status) {
-    if (message->Data == nullptr) {
+    if (message->Data == nullptr) { 
         return;
     }
 
     TBusFuture* future = (TBusFuture*)message->Data;
     Y_ASSERT(future->Request.Get() == message.Get());
     Y_UNUSED(message.Release());
-    future->SetDoneAndSchedule(status, nullptr);
+    future->SetDoneAndSchedule(status, nullptr); 
 }
 
 void TBusFuture::SetDoneAndSchedule(EMessageStatus status, TAutoPtr<TBusMessage> response) {

@@ -48,7 +48,7 @@ public:
     TPipeInput(const TString& command);
 
 private:
-    size_t DoRead(void* buf, size_t len) override;
+    size_t DoRead(void* buf, size_t len) override; 
 };
 
 /**
@@ -73,7 +73,7 @@ public:
     void Close();
 
 private:
-    void DoWrite(const void* buf, size_t len) override;
+    void DoWrite(const void* buf, size_t len) override; 
 };
 
 class TPipedBase {
@@ -94,7 +94,7 @@ public:
     ~TPipedInput() override;
 
 private:
-    size_t DoRead(void* buf, size_t len) override;
+    size_t DoRead(void* buf, size_t len) override; 
 };
 
 /**
@@ -106,7 +106,7 @@ public:
     ~TPipedOutput() override;
 
 private:
-    void DoWrite(const void* buf, size_t len) override;
+    void DoWrite(const void* buf, size_t len) override; 
 };
 
 /** @} */

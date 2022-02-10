@@ -37,7 +37,7 @@ public:
     }
 
     Elf64_Shdr* GetSectionByType(Elf64_Word type) const {
-        Elf64_Shdr* r = nullptr;
+        Elf64_Shdr* r = nullptr; 
 
         for (Elf64_Shdr* p = GetSectionBegin(), *end = GetSectionEnd(); p != end; ++p) {
             if (p->sh_type == type) {
@@ -141,7 +141,7 @@ public:
 
     Elf64_Verneed* GetFirstVerneed() const noexcept {
         if (!GetSize()) {
-            return nullptr;
+            return nullptr; 
         }
 
         return reinterpret_cast<Elf64_Verneed*>(GetPtr());
@@ -149,7 +149,7 @@ public:
 
     Elf64_Verneed* GetNextVerneed(Elf64_Verneed* v) const noexcept {
         if (!v->vn_next) {
-            return nullptr;
+            return nullptr; 
         }
 
         return Offset<Elf64_Verneed*>(v, v->vn_next);
@@ -157,7 +157,7 @@ public:
 
     Elf64_Vernaux* GetFirstVernaux(Elf64_Verneed* v) const noexcept {
         if (!v->vn_cnt) {
-            return nullptr;
+            return nullptr; 
         }
 
         return Offset<Elf64_Vernaux*>(v, v->vn_aux);
@@ -165,7 +165,7 @@ public:
 
     Elf64_Vernaux* GetNextVernaux(Elf64_Vernaux* v) const noexcept {
         if (!v->vna_next) {
-            return nullptr;
+            return nullptr; 
         }
 
         return Offset<Elf64_Vernaux*>(v, v->vna_next);

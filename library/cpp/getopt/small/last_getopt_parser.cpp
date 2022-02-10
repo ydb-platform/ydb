@@ -182,7 +182,7 @@ namespace NLastGetopt {
         if (!arg.StartsWith('-') || opt->GetHasArg() == REQUIRED_ARGUMENT) {
             return Commit(opt, arg, pos + 1, 0);
         }
-        return Commit(opt, nullptr, pos, 0);
+        return Commit(opt, nullptr, pos, 0); 
     }
 
     TOptsParser::EIsOpt TOptsParser::IsOpt(const TStringBuf& arg) const {

@@ -12,7 +12,7 @@ public:
     using typename TBase::TKeyBuf;
     using typename TBase::TSymbol;
 
-    TCompactTrieSet() = default;
+    TCompactTrieSet() = default; 
 
     explicit TCompactTrieSet(const TBlob& data)
         : TBase(data)

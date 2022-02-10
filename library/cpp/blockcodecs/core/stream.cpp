@@ -136,7 +136,7 @@ void TCodedOutput::DoFlush() {
 void TCodedOutput::DoFinish() {
     if (S_) {
         Y_DEFER {
-            S_ = nullptr;
+            S_ = nullptr; 
         };
 
         if (FlushImpl()) {
@@ -158,7 +158,7 @@ TDecodedInput::TDecodedInput(IInputStream* in, const ICodec* codec)
 {
 }
 
-TDecodedInput::~TDecodedInput() = default;
+TDecodedInput::~TDecodedInput() = default; 
 
 size_t TDecodedInput::DoUnboundedNext(const void** ptr) {
     if (!S_) {
@@ -181,7 +181,7 @@ size_t TDecodedInput::DoUnboundedNext(const void** ptr) {
     }
 
     if (!blockLen) {
-        S_ = nullptr;
+        S_ = nullptr; 
 
         return 0;
     }

@@ -11,7 +11,7 @@ class TLockFreeStack: TNonCopyable {
         T Value;
         TNode* Next;
 
-        TNode() = default;
+        TNode() = default; 
 
         template <class U>
         explicit TNode(U&& val)

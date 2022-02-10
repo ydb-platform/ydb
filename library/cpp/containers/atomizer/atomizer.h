@@ -41,7 +41,7 @@ public:
     {
         order.reserve(hash_size);
     }
-    ~atomizer() = default;
+    ~atomizer() = default; 
     ui32 string_to_atom(const char* key) {
         const char* old_begin = pool.Begin();
         const char* old_end = pool.End();
@@ -73,7 +73,7 @@ public:
     const char* get_atom_name(ui32 atom) const {
         if (atom && atom <= size())
             return order[atom - 1];
-        return nullptr;
+        return nullptr; 
     }
     void clear_atomizer() {
         clear_hash();
@@ -137,7 +137,7 @@ public:
     {
         order.reserve(hash_size);
     }
-    ~super_atomizer() = default;
+    ~super_atomizer() = default; 
     ui32 string_to_atom(const char* key, const T* atom_data = NULL) {
         const char* old_begin = pool.Begin();
         const char* old_end = pool.End();
@@ -169,7 +169,7 @@ public:
     const char* get_atom_name(ui32 atom) const {
         if (atom && atom <= size())
             return order[atom - 1].first;
-        return nullptr;
+        return nullptr; 
     }
     const T* get_atom_data(ui32 atom) const {
         if (atom && atom <= size())

@@ -16,10 +16,10 @@ Y_UNIT_TEST_SUITE(TaskTracker) {
         {
         }
 
-        TContinueFunc Start() override {
+        TContinueFunc Start() override { 
             TestSync->WaitForAndIncrement(0);
             TestSync->WaitForAndIncrement(2);
-            return nullptr;
+            return nullptr; 
         }
     };
 

@@ -21,7 +21,7 @@ protected:
     TSimpleIntrusivePtr<TRegExBaseImpl> Impl;
 
 public:
-    TRegExBase(const char* regExpr = nullptr, int cflags = REG_EXTENDED);
+    TRegExBase(const char* regExpr = nullptr, int cflags = REG_EXTENDED); 
     TRegExBase(const TString& regExpr, int cflags = REG_EXTENDED);
 
     virtual ~TRegExBase();
@@ -35,7 +35,7 @@ public:
 
 class TRegExMatch: public TRegExBase {
 public:
-    TRegExMatch(const char* regExpr = nullptr, int cflags = REG_NOSUB | REG_EXTENDED);
+    TRegExMatch(const char* regExpr = nullptr, int cflags = REG_NOSUB | REG_EXTENDED); 
     TRegExMatch(const TString& regExpr, int cflags = REG_NOSUB | REG_EXTENDED);
 
     bool Match(const char* str) const;
@@ -56,7 +56,7 @@ private:
     int BrfsCount;
 
 public:
-    TRegExSubst(const char* regExpr = nullptr, int cflags = REG_EXTENDED);
+    TRegExSubst(const char* regExpr = nullptr, int cflags = REG_EXTENDED); 
 
     TString Replace(const char* str, int eflags = 0);
     int ParseReplacement(const char* replacement);

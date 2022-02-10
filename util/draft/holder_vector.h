@@ -67,7 +67,7 @@ public:
 
     T* Release(size_t i) {
         T* t = (*this)[i];
-        (*this)[i] = nullptr;
+        (*this)[i] = nullptr; 
         return t;
     }
 

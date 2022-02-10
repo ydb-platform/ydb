@@ -27,11 +27,11 @@ namespace {
         {
             Buf.reserve(stride);
         }
-        void DoFinish() override {
+        void DoFinish() override { 
             WriteBuf();
             Flush();
         }
-        void DoWrite(const void* data, size_t len) override {
+        void DoWrite(const void* data, size_t len) override { 
             for (const char* p = (const char*)data; len > 0; ++p, --len) {
                 Buf.append(*p);
                 if (Buf.size() == Stride)
@@ -66,12 +66,12 @@ namespace {
         }
 
     private:
-        void DoFinish() override {
+        void DoFinish() override { 
             Slave_->Write('\n');
             Slave_->Flush();
         }
 
-        void DoWrite(const void* data, size_t len) override {
+        void DoWrite(const void* data, size_t len) override { 
             const char* b = (const char*)data;
 
             while (len) {
@@ -128,7 +128,7 @@ namespace {
         ~TYasmOutput() override {
         }
 
-        void DoFinish() override {
+        void DoFinish() override { 
             *Out_ << Base_ << "Size:\ndd " << Count_ << '\n';
 
             *Out_ << "%ifidn __OUTPUT_FORMAT__,elf64\n";
@@ -137,7 +137,7 @@ namespace {
             *Out_ << "%endif\n";
         }
 
-        void DoWrite(const void* data, size_t len) override {
+        void DoWrite(const void* data, size_t len) override { 
             Count_ += len;
 
             const unsigned char* p = (const unsigned char*)data;
@@ -173,7 +173,7 @@ namespace {
         ~TCOutput() override {
         }
 
-        void DoFinish() override {
+        void DoFinish() override { 
             *Slave() << "\n};\nextern const unsigned int " << B << "Size = sizeof(" << B << ") / sizeof(" << B << "[0]);\n}\n";
         }
 
@@ -191,11 +191,11 @@ namespace {
         ~TCStringOutput() override {
         }
 
-        void DoWrite(const void* data, size_t len) override {
+        void DoWrite(const void* data, size_t len) override { 
             *O << TString((const char*)data, len).Quote() << '\n';
         }
 
-        void DoFinish() override {
+        void DoFinish() override { 
             //*O << ";\nextern const unsigned char* " << B << " = (const unsigned char*)" << B << "Array;\n";
             *O << ";\nextern const unsigned int " << B << "Size = sizeof(" << B << ") / sizeof(" << B << "[0]) - 1;\n}\n";
         }

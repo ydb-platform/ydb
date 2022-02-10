@@ -95,7 +95,7 @@ struct TRbTreeIterator: public TRbTreeBaseIterator {
     using TSelf = TRbTreeIterator<TValue, TTraits>;
     using TBasePtr = TRbTreeNodeBase*;
 
-    inline TRbTreeIterator() noexcept = default;
+    inline TRbTreeIterator() noexcept = default; 
 
     template <class T1>
     inline TRbTreeIterator(const T1& x) noexcept
@@ -147,7 +147,7 @@ struct TRbTreeIterator: public TRbTreeBaseIterator {
 template <class TValue, class TCmp>
 class TRbTree {
     struct TCmpAdaptor: public TCmp {
-        inline TCmpAdaptor() noexcept = default;
+        inline TCmpAdaptor() noexcept = default; 
 
         inline TCmpAdaptor(const TCmp& cmp) noexcept
             : TCmp(cmp)

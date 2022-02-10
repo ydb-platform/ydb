@@ -19,7 +19,7 @@ namespace NRainCheck {
     };
 
     struct TNopSubtaskListener: public ISubtaskListener {
-        void SetDone() override;
+        void SetDone() override; 
 
         static TNopSubtaskListener Instance;
     };
@@ -32,12 +32,12 @@ namespace NRainCheck {
 
     public:
         TSubtaskCompletionFunc()
-            : Func(nullptr)
+            : Func(nullptr) 
         {
         }
 
         TSubtaskCompletionFunc(void*)
-            : Func(nullptr)
+            : Func(nullptr) 
         {
         }
 
@@ -84,7 +84,7 @@ namespace NRainCheck {
             , TaskRunner()
         {
         }
-        ~TSubtaskCompletion() override;
+        ~TSubtaskCompletion() override; 
 
         // Either done or cancel requested or cancelled
         bool IsComplete() const {
@@ -124,7 +124,7 @@ namespace NRainCheck {
         // called by service provider implementations
         // must not be called by actor
         void SetRunning(TTaskRunnerBase* parent);
-        void SetDone() override;
+        void SetDone() override; 
     };
 
     // See ISimpleTask, ICoroTask
@@ -151,7 +151,7 @@ namespace NRainCheck {
     public:
         // Construct task. Task is not automatically started.
         TTaskRunnerBase(IEnv*, ISubtaskListener* parent, TAutoPtr<ITaskBase> impl);
-        ~TTaskRunnerBase() override;
+        ~TTaskRunnerBase() override; 
 
         bool IsRunningInThisThread() const;
         void AssertInThisThread() const;

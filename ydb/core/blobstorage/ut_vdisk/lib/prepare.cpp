@@ -402,7 +402,7 @@ class TDbInitWaitActor : public TActorBootstrapped<TDbInitWaitActor> {
     void Bootstrap(const TActorContext &ctx) {
         Become(&TThis::StateFunc);
         TLogoBlobID id(0, 1, 1, 0, 0, 0);
-        ctx.Schedule(TDuration::Seconds(1000), new TEvents::TEvWakeup(), nullptr);
+        ctx.Schedule(TDuration::Seconds(1000), new TEvents::TEvWakeup(), nullptr); 
         for (ui32 i = 0; i < Conf->VDisks->GetSize(); ++i) {
             TAllVDisks::TVDiskInstance &vdisk = Conf->VDisks->Get(i);
             if (vdisk.Initialized) {

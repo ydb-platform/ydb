@@ -51,11 +51,11 @@ namespace {
         {
         }
 
-        void Set(const TChange& c) override {
+        void Set(const TChange& c) override { 
             P_.Set(c);
         }
 
-        void Wait(TEvents& events, TInstant deadLine) override {
+        void Wait(TEvents& events, TInstant deadLine) override { 
             P_.Wait(events, deadLine);
         }
 

@@ -65,14 +65,14 @@ namespace {
         }
 
         inline ~TThreadedResolver() override {
-            Schedule(nullptr);
+            Schedule(nullptr); 
 
             for (size_t i = 0; i < T_.size(); ++i) {
                 T_[i]->Join();
             }
 
             {
-                TResolveRequest* rr = nullptr;
+                TResolveRequest* rr = nullptr; 
 
                 while (Q_.Dequeue(&rr)) {
                     if (rr) {
@@ -100,9 +100,9 @@ namespace {
             E_.Signal();
         }
 
-        void DoExecute() override {
+        void DoExecute() override { 
             while (true) {
-                TResolveRequest* rr = nullptr;
+                TResolveRequest* rr = nullptr; 
 
                 while (!Q_.Dequeue(&rr)) {
                     E_.Wait();
@@ -115,7 +115,7 @@ namespace {
                 }
             }
 
-            Schedule(nullptr);
+            Schedule(nullptr); 
         }
 
     private:

@@ -20,7 +20,7 @@ void Opt2::Init(int argc, char* const* argv, const char* optspec, IntRange free_
     Argc = argc;
     Argv = argv;
     HasErrors = false, BadPosCount = false, UnknownOption = 0, OptionMissingArg = 0;
-    UnknownLongOption = nullptr;
+    UnknownLongOption = nullptr; 
     OptionWrongArg = 0, RequiredOptionMissing = 0;
     EatArgv(optspec, long_alias);
     MinArgs = Min<int>(free_args_num.Left, free_args_num.Right);
@@ -292,7 +292,7 @@ int Opt2::AutoUsage(const char* free_arg_names) {
     if (UnknownLongOption) {
         fprintf(where, " *** Unknown long option '%s'\n", UnknownLongOption);
         free(UnknownLongOption);
-        UnknownLongOption = nullptr;
+        UnknownLongOption = nullptr; 
     }
     if (RequiredOptionMissing)
         fprintf(where, " *** Required option '%c' missing\n", RequiredOptionMissing);

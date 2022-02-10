@@ -112,9 +112,9 @@ namespace {
         {
         }
 
-        ~TMersenneInput() override = default;
+        ~TMersenneInput() override = default; 
 
-        size_t DoRead(void* buf, size_t len) override {
+        size_t DoRead(void* buf, size_t len) override { 
             size_t toRead = len;
 
             while (toRead) {
@@ -142,7 +142,7 @@ namespace {
         {
         }
 
-        size_t DoRead(void* buf, size_t len) override {
+        size_t DoRead(void* buf, size_t len) override { 
             auto guard = Guard(Mutex_);
 
             return Bi_.Read(buf, len);
@@ -155,7 +155,7 @@ namespace {
     };
 
     struct TSeedStream: public IInputStream {
-        size_t DoRead(void* inbuf, size_t len) override {
+        size_t DoRead(void* inbuf, size_t len) override { 
             char* buf = (char*)inbuf;
 
 #define DO_STEP(type)                                    \

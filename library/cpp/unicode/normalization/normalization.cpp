@@ -49,7 +49,7 @@ NUnicode::NPrivate::TComposition::TComposition() {
     for (wchar32 s = 0xAC00; s != 0xD7A4; ++s) {
         const wchar32* decompBegin = NUnicode::Decomposition<true>(s);
 
-        if (decompBegin == nullptr)
+        if (decompBegin == nullptr) 
             continue;
 
         wchar32 lead = *(decompBegin++);

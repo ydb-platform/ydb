@@ -6,7 +6,7 @@
 namespace NDns {
     class IError {
     public:
-        virtual ~IError() = default;
+        virtual ~IError() = default; 
 
         virtual void Raise() = 0;
     };

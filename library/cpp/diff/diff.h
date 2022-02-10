@@ -16,7 +16,7 @@ namespace NDiff {
         TConstArrayRef<T> Right;
         TConstArrayRef<T> Common;
 
-        TChunk() = default;
+        TChunk() = default; 
 
         TChunk(const TConstArrayRef<T>& left, const TConstArrayRef<T>& right, const TConstArrayRef<T>& common)
             : Left(left)

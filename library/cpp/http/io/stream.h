@@ -87,8 +87,8 @@ public:
     bool HasExpect100Continue() const noexcept;
 
 private:
-    size_t DoRead(void* buf, size_t len) override;
-    size_t DoSkip(size_t len) override;
+    size_t DoRead(void* buf, size_t len) override; 
+    size_t DoSkip(size_t len) override; 
 
 private:
     class TImpl;
@@ -158,9 +158,9 @@ public:
     size_t SentSize() const noexcept;
 
 private:
-    void DoWrite(const void* buf, size_t len) override;
-    void DoFlush() override;
-    void DoFinish() override;
+    void DoWrite(const void* buf, size_t len) override; 
+    void DoFlush() override; 
+    void DoFinish() override; 
 
 private:
     class TImpl;

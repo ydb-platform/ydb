@@ -198,7 +198,7 @@ socketAbstractHandler* socketHandlerFactory::chooseHandler(const THttpURL& url) 
         return new socketSecureHandler;
 #endif
 
-    return nullptr;
+    return nullptr; 
 }
 
 /************************************************************/

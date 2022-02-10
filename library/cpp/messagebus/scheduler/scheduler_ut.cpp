@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(TSchedulerTests) {
         {
         }
 
-        void Do() override {
+        void Do() override { 
             TestSync->WaitForAndIncrement(0);
         }
     };

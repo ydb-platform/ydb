@@ -68,7 +68,7 @@ char* format_http_date(time_t when, char* buf, size_t buflen) {
     const int len = format_http_date(buf, buflen, when);
 
     if (len == 0) {
-        return nullptr;
+        return nullptr; 
     }
 
     Y_ASSERT(len > 0 && size_t(len) < buflen);

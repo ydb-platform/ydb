@@ -323,7 +323,7 @@ namespace NKikimr {
                 const NKikimrBlobStorage::TRangeQuery *q = &record.GetRangeQuery();
                 const TLogoBlobID first = LogoBlobIDFromLogoBlobID(q->GetFrom());
                 const ui64 vcookie = q->GetCookie();
-                const ui64 *cookie = q->HasCookie() ? &vcookie : nullptr;
+                const ui64 *cookie = q->HasCookie() ? &vcookie : nullptr; 
                 result->AddResult(status, first, cookie);
             }
             // extreme queries
@@ -331,7 +331,7 @@ namespace NKikimr {
                 const NKikimrBlobStorage::TExtremeQuery *q = &record.GetExtremeQueries(i);
                 const TLogoBlobID first = LogoBlobIDFromLogoBlobID(q->GetId());
                 const ui64 vcookie = q->GetCookie();
-                const ui64 *cookie = q->HasCookie() ? &vcookie : nullptr;
+                const ui64 *cookie = q->HasCookie() ? &vcookie : nullptr; 
                 result->AddResult(status, first, cookie);
             }
             SetRacingGroupInfo(ev->Get()->Record, result->Record, groupInfo);

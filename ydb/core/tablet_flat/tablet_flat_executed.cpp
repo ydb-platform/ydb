@@ -12,7 +12,7 @@ using IExecutor = NFlatExecutorSetup::IExecutor;
 TTabletExecutedFlat::TTabletExecutedFlat(TTabletStorageInfo *info, const TActorId &tablet, IMiniKQLFactory *factory)
     : ITablet(info, tablet)
     , Factory(factory)
-    , Executor0(nullptr)
+    , Executor0(nullptr) 
     , StartTime0(TAppData::TimeProvider->Now())
 {}
 

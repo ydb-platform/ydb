@@ -26,8 +26,8 @@ public:
     TUnbufferedFileInput(const TString& path);
 
 private:
-    size_t DoRead(void* buf, size_t len) override;
-    size_t DoSkip(size_t len) override;
+    size_t DoRead(void* buf, size_t len) override; 
+    size_t DoSkip(size_t len) override; 
 
 private:
     TFile File_;
@@ -63,8 +63,8 @@ public:
     TUnbufferedFileOutput& operator=(TUnbufferedFileOutput&&) noexcept = default;
 
 private:
-    void DoWrite(const void* buf, size_t len) override;
-    void DoFlush() override;
+    void DoWrite(const void* buf, size_t len) override; 
+    void DoFlush() override; 
 
 private:
     TFile File_;

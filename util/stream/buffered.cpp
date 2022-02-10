@@ -13,7 +13,7 @@ public:
     {
     }
 
-    inline ~TImpl() = default;
+    inline ~TImpl() = default; 
 
     inline size_t Next(const void** ptr, size_t len) {
         if (MemInput_.Exhausted()) {
@@ -125,7 +125,7 @@ TBufferedInput::TBufferedInput(IInputStream* slave, size_t buflen)
 TBufferedInput::TBufferedInput(TBufferedInput&&) noexcept = default;
 TBufferedInput& TBufferedInput::operator=(TBufferedInput&&) noexcept = default;
 
-TBufferedInput::~TBufferedInput() = default;
+TBufferedInput::~TBufferedInput() = default; 
 
 size_t TBufferedInput::DoRead(void* buf, size_t len) {
     return Impl_->Read(buf, len);
@@ -157,7 +157,7 @@ public:
     {
     }
 
-    virtual ~TImpl() = default;
+    virtual ~TImpl() = default; 
 
     inline void Reset() {
         MemOut_.Reset(Buf(), Len());
@@ -296,9 +296,9 @@ namespace {
             Reset();
         }
 
-        ~TSimpleImpl() override = default;
+        ~TSimpleImpl() override = default; 
 
-        void OnBufferExhausted() final {
+        void OnBufferExhausted() final { 
         }
 
         void* Buf() const noexcept override {
@@ -323,9 +323,9 @@ namespace {
             Reset();
         }
 
-        ~TAdaptiveImpl() override = default;
+        ~TAdaptiveImpl() override = default; 
 
-        void OnBufferExhausted() final {
+        void OnBufferExhausted() final { 
             const size_t c = ((size_t)Step) << Min<size_t>(++N_ / 32, 10);
 
             if (c > B_.Capacity()) {
@@ -418,11 +418,11 @@ TBufferedOutput::TBufferedOutput(IOutputStream* slave, size_t buflen)
 {
 }
 
-TBufferedOutput::~TBufferedOutput() = default;
+TBufferedOutput::~TBufferedOutput() = default; 
 
 TAdaptiveBufferedOutput::TAdaptiveBufferedOutput(IOutputStream* slave)
     : TBufferedOutputBase(slave)
 {
 }
 
-TAdaptiveBufferedOutput::~TAdaptiveBufferedOutput() = default;
+TAdaptiveBufferedOutput::~TAdaptiveBufferedOutput() = default; 

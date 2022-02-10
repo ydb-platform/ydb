@@ -47,7 +47,7 @@ namespace NRainCheck {
 
     public:
         TBusClientService(const NBus::TBusSessionConfig&, NBus::TBusProtocol*, NBus::TBusMessageQueue*);
-        ~TBusClientService() override;
+        ~TBusClientService() override; 
 
         void Send(NBus::TBusMessageAutoPtr, const NBus::TNetAddr&, TBusFuture* future);
         void SendOneWay(NBus::TBusMessageAutoPtr, const NBus::TNetAddr&, TBusFuture* future);
@@ -59,9 +59,9 @@ namespace NRainCheck {
         void SendCommon(NBus::TBusMessage*, const NBus::TNetAddr&, TBusFuture* future);
         void ProcessResultCommon(NBus::TBusMessageAutoPtr, const NBus::TNetAddr&, TBusFuture* future, NBus::EMessageStatus);
 
-        void OnReply(TAutoPtr<NBus::TBusMessage> pMessage, TAutoPtr<NBus::TBusMessage> pReply) override;
-        void OnError(TAutoPtr<NBus::TBusMessage> pMessage, NBus::EMessageStatus status) override;
-        void OnMessageSentOneWay(TAutoPtr<NBus::TBusMessage>) override;
+        void OnReply(TAutoPtr<NBus::TBusMessage> pMessage, TAutoPtr<NBus::TBusMessage> pReply) override; 
+        void OnError(TAutoPtr<NBus::TBusMessage> pMessage, NBus::EMessageStatus status) override; 
+        void OnMessageSentOneWay(TAutoPtr<NBus::TBusMessage>) override; 
     };
 
 }

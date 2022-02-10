@@ -50,7 +50,7 @@ class TCondVarTest: public TTestBase {
         {
         }
 
-        void Process(void*) override {
+        void Process(void*) override { 
             THolder<TThreadTask> This(this);
 
             (this->*Func_)();

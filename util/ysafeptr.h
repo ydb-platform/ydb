@@ -283,7 +283,7 @@ protected:
 
 public:
     TPtrBase()
-        : ptr(nullptr)
+        : ptr(nullptr) 
     {
     }
     TPtrBase(TUserObj* _ptr)
@@ -306,7 +306,7 @@ public:
     TUserObj* Extract() {
         TUserObj* pRes = ptr;
         DecRef(ptr);
-        ptr = nullptr;
+        ptr = nullptr; 
         return pRes;
     }
 
@@ -341,7 +341,7 @@ public:
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 template <class T>
 inline bool IsValid(T* p) {
-    return p != nullptr && !CastToObjectBase(p)->IsRefInvalid();
+    return p != nullptr && !CastToObjectBase(p)->IsRefInvalid(); 
 }
 template <class T, class TRef>
 inline bool IsValid(const TPtrBase<T, TRef>& p) {

@@ -14,7 +14,7 @@ void TSimpleProtocol::Serialize(const TBusMessage* mess, TBuffer& data) {
 
 TAutoPtr<TBusMessage> TSimpleProtocol::Deserialize(ui16, TArrayRef<const char> payload) {
     if (payload.size() != 4) {
-        return nullptr;
+        return nullptr; 
     }
     TAutoPtr<TSimpleMessage> r(new TSimpleMessage);
     memcpy(&r->Payload, payload.data(), 4);

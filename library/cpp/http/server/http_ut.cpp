@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             {
             }
 
-            bool Reply(void* /*tsr*/) override {
+            bool Reply(void* /*tsr*/) override { 
                 if (!ProcessHeaders()) {
                     return true;
                 }
@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         {
         }
 
-        TClientRequest* CreateClient() override {
+        TClientRequest* CreateClient() override { 
             return new TRequest(this);
         }
 

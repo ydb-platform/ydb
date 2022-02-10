@@ -30,7 +30,7 @@ public:
         Release();
     }
 
-    ~TFakeMutex() = default;
+    ~TFakeMutex() = default; 
 };
 
 class TMutex {

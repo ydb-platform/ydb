@@ -201,7 +201,7 @@ private:
         }
     }
 
-    void DoExecute() override {
+    void DoExecute() override { 
         THolder<TTsr> tsr(new TTsr(Parent_));
 
         if (Namer) {
@@ -652,7 +652,7 @@ namespace {
         {
         }
 
-        void Process(void* data) override {
+        void Process(void* data) override { 
             THolder<TOwnedObjectInQueue> self(this);
             Owned->Process(data);
         }
@@ -688,7 +688,7 @@ namespace {
             {
             }
 
-            ~TThreadImpl() override = default;
+            ~TThreadImpl() override = default; 
 
             inline void WaitForStart() noexcept {
                 StartEvent_.Wait();
@@ -699,7 +699,7 @@ namespace {
             }
 
         private:
-            void Process(void* /*tsr*/) override {
+            void Process(void* /*tsr*/) override { 
                 TThreadImplRef This(this);
 
                 {
@@ -736,7 +736,7 @@ namespace {
         }
 
     private:
-        void DoRun(IThreadAble* func) override {
+        void DoRun(IThreadAble* func) override { 
             TThreadImplRef impl(new TThreadImpl(func));
 
             Parent_->SafeAdd(impl.Get());

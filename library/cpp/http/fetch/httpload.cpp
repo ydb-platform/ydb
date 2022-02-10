@@ -58,16 +58,16 @@ const THttpHeader* httpAgentReader::readHeader() {
     while (State == hp_in_header) {
         if (!step()) {
             Header_.error = HTTP_CONNECTION_LOST;
-            return nullptr;
+            return nullptr; 
         }
         ParseGeneric(BufPtr_, BufRest_);
     }
     if (State == hp_eof || State == hp_error) {
-        BufPtr_ = nullptr;
+        BufPtr_ = nullptr; 
         BufRest_ = -1;
     }
     if (State == hp_error || Header_.error)
-        return nullptr;
+        return nullptr; 
     return &Header_;
 }
 
@@ -149,7 +149,7 @@ void httpLoadAgent::clearReader() {
         if (!opened)
             Disconnect();
         delete Reader_;
-        Reader_ = nullptr;
+        Reader_ = nullptr; 
     }
     ErrCode_ = 0;
 }
@@ -159,7 +159,7 @@ void httpLoadAgent::setRealHost(const char* hostname) {
     if (hostname)
         RealHost_ = strdup(hostname);
     else
-        RealHost_ = nullptr;
+        RealHost_ = nullptr; 
     ErrCode_ = 0;
 }
 
@@ -351,7 +351,7 @@ bool httpLoadAgent::doStartRequest() {
                                       "GET")) {
                 //mReader->skipTheRest();
                 delete Reader_;
-                Reader_ = nullptr;
+                Reader_ = nullptr; 
                 ErrCode_ = 0;
                 Disconnect();
                 continue;

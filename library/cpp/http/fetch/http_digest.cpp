@@ -27,8 +27,8 @@ httpDigestHandler::~httpDigestHandler() {
 void httpDigestHandler::clear() {
     free(Nonce_);
     free(HeaderInstruction_);
-    User_ = Password_ = nullptr;
-    Nonce_ = HeaderInstruction_ = nullptr;
+    User_ = Password_ = nullptr; 
+    Nonce_ = HeaderInstruction_ = nullptr; 
     NonceCount_ = 0;
 }
 
@@ -49,7 +49,7 @@ const char* httpDigestHandler::getHeaderInstruction() const {
 /************************************************************/
 void httpDigestHandler::generateCNonce(char* outCNonce) {
     if (!*outCNonce)
-        sprintf(outCNonce, "%ld", (long)time(nullptr));
+        sprintf(outCNonce, "%ld", (long)time(nullptr)); 
 }
 
 /************************************************************/
@@ -148,7 +148,7 @@ bool httpDigestHandler::processHeader(const THttpAuthHeader* header,
     if (Nonce_) {
         if (strcmp(Nonce_, header->nonce)) {
             free(Nonce_);
-            Nonce_ = nullptr;
+            Nonce_ = nullptr; 
             NonceCount_ = 0;
         }
     }
@@ -157,7 +157,7 @@ bool httpDigestHandler::processHeader(const THttpAuthHeader* header,
         NonceCount_ = 0;
     }
     free(HeaderInstruction_);
-    HeaderInstruction_ = nullptr;
+    HeaderInstruction_ = nullptr; 
     NonceCount_++;
 
     char nonceCount[20];

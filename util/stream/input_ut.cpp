@@ -49,7 +49,7 @@ public:
     }
 
 protected:
-    size_t DoRead(void*, size_t len) override {
+    size_t DoRead(void*, size_t len) override { 
         len = Min(static_cast<ui64>(len), Size_);
         Size_ -= len;
         return len;
@@ -64,7 +64,7 @@ public:
     TNoOutput() = default;
 
 protected:
-    void DoWrite(const void*, size_t) override {
+    void DoWrite(const void*, size_t) override { 
     }
 };
 
@@ -76,7 +76,7 @@ public:
     }
 
 protected:
-    size_t DoRead(void* buf, size_t len) override {
+    size_t DoRead(void* buf, size_t len) override { 
         Y_ASSERT(len != 0);
 
         if (String_.empty()) {

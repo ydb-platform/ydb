@@ -18,7 +18,7 @@ void NResource::FindMatch(const TStringBuf subkey, TResources* out) {
         {
         }
 
-        void OnMatch(const TResource& res) override {
+        void OnMatch(const TResource& res) override { 
             R->push_back(res);
         }
 

@@ -54,7 +54,7 @@ public:
         }
 
         virtual void* CreateThreadSpecificResource() {
-            return nullptr;
+            return nullptr; 
         }
 
         virtual void DestroyThreadSpecificResource(void*) {
@@ -107,7 +107,7 @@ class TClientRequest: public IObjectInQueue {
 
 public:
     TClientRequest();
-    ~TClientRequest() override;
+    ~TClientRequest() override; 
 
     inline THttpInput& Input() noexcept {
         return *HttpConn_->Input();
@@ -137,7 +137,7 @@ private:
      * 'true' otherwise ('this' will be deleted)
      */
     virtual bool Reply(void* ThreadSpecificResource);
-    void Process(void* ThreadSpecificResource) override;
+    void Process(void* ThreadSpecificResource) override; 
 
 public:
     TVector<std::pair<TString, TString>> ParsedHeaders;
@@ -151,7 +151,7 @@ private:
 class TRequestReplier: public TClientRequest {
 public:
     TRequestReplier();
-    ~TRequestReplier() override;
+    ~TRequestReplier() override; 
 
     struct TReplyParams {
         void* ThreadSpecificResource;
@@ -167,7 +167,7 @@ public:
     virtual bool DoReply(const TReplyParams& params) = 0;
 
 private:
-    bool Reply(void* threadSpecificResource) final;
+    bool Reply(void* threadSpecificResource) final; 
 
     using TClientRequest::Input;
     using TClientRequest::Output;

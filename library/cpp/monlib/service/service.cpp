@@ -54,16 +54,16 @@ namespace NMonitoring {
             }
         }
 
-        const char* GetURI() const override {
+        const char* GetURI() const override { 
             return Header.request_uri.c_str();
         }
-        const char* GetPath() const override {
+        const char* GetPath() const override { 
             return Url.Get(THttpURL::FieldPath);
         }
-        const TCgiParameters& GetParams() const override {
+        const TCgiParameters& GetParams() const override { 
             return CgiParams;
         }
-        const TCgiParameters& GetPostParams() const override {
+        const TCgiParameters& GetPostParams() const override { 
             if (PostParams.empty() && !PostContent.Buffer().Empty())
                 const_cast<THttpClient*>(this)->ScanPostParams();
             return PostParams;
@@ -194,7 +194,7 @@ namespace NMonitoring {
         {
         }
 
-        bool Reply(void*) override {
+        bool Reply(void*) override { 
             ServeRequest(Input(), Output(), NAddr::GetPeerAddr(Socket()).Get(), Parent.Handler);
             return true;
         }

@@ -457,59 +457,59 @@ inline TUtf16String UTF32ToWide(const wchar32* begin, size_t len) {
     return res;
 }
 
-// adopted from https://chromium.googlesource.com/chromium/src/+/master/base/strings/string_util.cc
-// Assuming that a pointer is the size of a "machine word", then
-// uintptr_t is an integer type that is also a machine word.
-
-namespace NDetail {
-    using TMachineWord = uintptr_t;
-    const uintptr_t kMachineWordAlignmentMask = sizeof(TMachineWord) - 1;
-
-    inline bool IsAlignedToMachineWord(const void* pointer) {
-        return !(reinterpret_cast<TMachineWord>(pointer) & kMachineWordAlignmentMask);
-    }
-
+// adopted from https://chromium.googlesource.com/chromium/src/+/master/base/strings/string_util.cc 
+// Assuming that a pointer is the size of a "machine word", then 
+// uintptr_t is an integer type that is also a machine word. 
+ 
+namespace NDetail { 
+    using TMachineWord = uintptr_t; 
+    const uintptr_t kMachineWordAlignmentMask = sizeof(TMachineWord) - 1; 
+ 
+    inline bool IsAlignedToMachineWord(const void* pointer) { 
+        return !(reinterpret_cast<TMachineWord>(pointer) & kMachineWordAlignmentMask); 
+    } 
+ 
     template <typename T>
-    inline T* AlignToMachineWord(T* pointer) {
-        return reinterpret_cast<T*>(reinterpret_cast<TMachineWord>(pointer) & ~kMachineWordAlignmentMask);
-    }
-
+    inline T* AlignToMachineWord(T* pointer) { 
+        return reinterpret_cast<T*>(reinterpret_cast<TMachineWord>(pointer) & ~kMachineWordAlignmentMask); 
+    } 
+ 
     template <size_t size, typename CharacterType>
-    struct NonASCIIMask;
-
+    struct NonASCIIMask; 
+ 
     template <>
     struct
         NonASCIIMask<4, wchar16> {
         static constexpr ui32 Value() {
             return 0xFF80FF80U;
         }
-    };
-
+    }; 
+ 
     template <>
     struct
         NonASCIIMask<4, char> {
         static constexpr ui32 Value() {
             return 0x80808080U;
         }
-    };
-
+    }; 
+ 
     template <>
     struct
         NonASCIIMask<8, wchar16> {
         static constexpr ui64 Value() {
             return 0xFF80FF80FF80FF80ULL;
         }
-    };
-
+    }; 
+ 
     template <>
     struct
         NonASCIIMask<8, char> {
         static constexpr ui64 Value() {
             return 0x8080808080808080ULL;
         }
-    };
-
-    template <typename TChar>
+    }; 
+ 
+    template <typename TChar> 
     inline bool DoIsStringASCIISlow(const TChar* first, const TChar* last) {
         using TUnsignedChar = std::make_unsigned_t<TChar>;
         Y_ASSERT(first <= last);
@@ -522,41 +522,41 @@ namespace NDetail {
     }
 
     template <typename TChar>
-    inline bool DoIsStringASCII(const TChar* first, const TChar* last) {
+    inline bool DoIsStringASCII(const TChar* first, const TChar* last) { 
         if (last - first < 10) {
             return DoIsStringASCIISlow(first, last);
         }
-        TMachineWord allCharBits = 0;
-        TMachineWord nonAsciiBitMask = NonASCIIMask<sizeof(TMachineWord), TChar>::Value();
-
-        // Prologue: align the input.
-        while (!IsAlignedToMachineWord(first) && first != last) {
-            allCharBits |= *first;
-            ++first;
-        }
-
-        // Compare the values of CPU word size.
-        const TChar* word_end = AlignToMachineWord(last);
-        const size_t loopIncrement = sizeof(TMachineWord) / sizeof(TChar);
-        while (first < word_end) {
-            allCharBits |= *(reinterpret_cast<const TMachineWord*>(first));
-            first += loopIncrement;
-
-            // fast exit
-            if (allCharBits & nonAsciiBitMask) {
-                return false;
-            }
-        }
-
-        // Process the remaining bytes.
-        while (first != last) {
-            allCharBits |= *first;
-            ++first;
-        }
-
-        return !(allCharBits & nonAsciiBitMask);
-    }
-
+        TMachineWord allCharBits = 0; 
+        TMachineWord nonAsciiBitMask = NonASCIIMask<sizeof(TMachineWord), TChar>::Value(); 
+ 
+        // Prologue: align the input. 
+        while (!IsAlignedToMachineWord(first) && first != last) { 
+            allCharBits |= *first; 
+            ++first; 
+        } 
+ 
+        // Compare the values of CPU word size. 
+        const TChar* word_end = AlignToMachineWord(last); 
+        const size_t loopIncrement = sizeof(TMachineWord) / sizeof(TChar); 
+        while (first < word_end) { 
+            allCharBits |= *(reinterpret_cast<const TMachineWord*>(first)); 
+            first += loopIncrement; 
+ 
+            // fast exit 
+            if (allCharBits & nonAsciiBitMask) { 
+                return false; 
+            } 
+        } 
+ 
+        // Process the remaining bytes. 
+        while (first != last) { 
+            allCharBits |= *first; 
+            ++first; 
+        } 
+ 
+        return !(allCharBits & nonAsciiBitMask); 
+    } 
+ 
 #ifdef _sse2_
     inline bool DoIsStringASCIISSE(const unsigned char* first, const unsigned char* last) {
         //scalar version for short strings
@@ -572,10 +572,10 @@ namespace NDetail {
 
             int asciiMask = _mm_movemask_epi8(chunk);
             if (asciiMask) {
-                return false;
+                return false; 
             }
             first += 16;
-        }
+        } 
 
         if (first + 8 <= last) {
             memcpy(buf, first, 8);
@@ -589,15 +589,15 @@ namespace NDetail {
         }
 
         return ::NDetail::DoIsStringASCIISlow(first, last);
-    }
+    } 
 #endif //_sse2_
-
+ 
 }
-
+ 
 //! returns @c true if character sequence has no symbols with value greater than 0x7F
 template <typename TChar>
 inline bool IsStringASCII(const TChar* first, const TChar* last) {
-    return ::NDetail::DoIsStringASCII(first, last);
+    return ::NDetail::DoIsStringASCII(first, last); 
 }
 
 #ifdef _sse2_

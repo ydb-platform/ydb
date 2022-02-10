@@ -50,7 +50,7 @@ namespace {
             {
             }
 
-            void DoRun() override {
+            void DoRun() override { 
                 Parent_->RunFilter();
             }
 
@@ -68,7 +68,7 @@ namespace {
             ~TInput() override {
             }
 
-            size_t DoRead(void* ptr, size_t len) override {
+            size_t DoRead(void* ptr, size_t len) override { 
                 return Parent_->ReadImpl(ptr, len);
             }
 
@@ -86,7 +86,7 @@ namespace {
             ~TOutput() override {
             }
 
-            void DoWrite(const void* ptr, size_t len) override {
+            void DoWrite(const void* ptr, size_t len) override { 
                 Parent_->WriteImpl(ptr, len);
             }
 
@@ -101,7 +101,7 @@ namespace {
             , TrampoLine_(this)
             , FilterCtx_(FilterClosure())
             , Finished_(false)
-            , In_(nullptr, 0)
+            , In_(nullptr, 0) 
         {
         }
 
@@ -180,7 +180,7 @@ namespace {
         inline bool FlushImpl() {
             if (Out_.Avail()) {
                 TransferData(&Out_, Slave_);
-                Out_.Reset(nullptr, 0);
+                Out_.Reset(nullptr, 0); 
 
                 return true;
             }
@@ -327,7 +327,7 @@ namespace {
 
             out->Write(PropsBuf_, sizeof(PropsBuf_));
 
-            Check(LzmaEnc_Encode(H_, &output, &input, nullptr, Alloc(), Alloc()));
+            Check(LzmaEnc_Encode(H_, &output, &input, nullptr, Alloc(), Alloc())); 
         }
 
     private:

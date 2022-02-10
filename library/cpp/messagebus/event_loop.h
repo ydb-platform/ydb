@@ -50,14 +50,14 @@ namespace NEventLoop {
 
     class TEventLoop {
     public:
-        TEventLoop(const char* name = nullptr);
+        TEventLoop(const char* name = nullptr); 
         ~TEventLoop();
 
         void Run();
         void Stop();
         bool IsRunning();
 
-        TChannelPtr Register(TSocket socket, TEventHandlerPtr, void* cookie = nullptr);
+        TChannelPtr Register(TSocket socket, TEventHandlerPtr, void* cookie = nullptr); 
 
     private:
         class TImpl;

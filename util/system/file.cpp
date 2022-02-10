@@ -858,7 +858,7 @@ public:
         }
     }
 
-    inline ~TImpl() = default;
+    inline ~TImpl() = default; 
 
     inline void Close() {
         if (!Handle_.Close()) {
@@ -1107,7 +1107,7 @@ TFile::TFile(const TString& fName, EOpenMode oMode)
 {
 }
 
-TFile::~TFile() = default;
+TFile::~TFile() = default; 
 
 void TFile::Close() {
     Impl_->Close();

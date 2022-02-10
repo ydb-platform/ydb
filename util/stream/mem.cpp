@@ -20,7 +20,7 @@ TMemoryInput::TMemoryInput(const TStringBuf buf) noexcept
 {
 }
 
-TMemoryInput::~TMemoryInput() = default;
+TMemoryInput::~TMemoryInput() = default; 
 
 size_t TMemoryInput::DoNext(const void** ptr, size_t len) {
     len = Min(Len_, len);
@@ -36,7 +36,7 @@ void TMemoryInput::DoUndo(size_t len) {
     Buf_ -= len;
 }
 
-TMemoryOutput::~TMemoryOutput() = default;
+TMemoryOutput::~TMemoryOutput() = default; 
 
 size_t TMemoryOutput::DoNext(void** ptr) {
     Y_ENSURE(Buf_ < End_, TStringBuf("memory output stream exhausted"));

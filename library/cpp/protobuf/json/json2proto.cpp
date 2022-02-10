@@ -136,7 +136,7 @@ JsonEnum2Field(const NJson::TJsonValue& json,
     Y_ASSERT(!!enumField);
 
     /// @todo configure name/numerical value
-    const EnumValueDescriptor* enumFieldValue = nullptr;
+    const EnumValueDescriptor* enumFieldValue = nullptr; 
 
     if (json.IsInteger()) {
         const auto value = json.GetInteger();

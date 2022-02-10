@@ -12,7 +12,7 @@ namespace {
             {
             }
 
-            void Raise() override {
+            void Raise() override { 
                 std::rethrow_exception(E_);
             }
 

@@ -123,7 +123,7 @@ void Patch(const TString& path, const TString& library, IOutputStream& verboseOu
 
     TVector<Elf64_Vernaux*> patchAux;
 
-    Elf64_Vernaux* patchFromAux = nullptr;
+    Elf64_Vernaux* patchFromAux = nullptr; 
 
     Elf64_Verneed* verneed = verneedSect.GetFirstVerneed();
     while (verneed) {

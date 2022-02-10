@@ -153,7 +153,7 @@ void TSubtaskCompletion::SetRunning(TTaskRunnerBase* parent) {
 void TSubtaskCompletion::SetDone() {
     Y_ASSERT(!!TaskRunner);
     TTaskRunnerBase* temp = TaskRunner;
-    TaskRunner = nullptr;
+    TaskRunner = nullptr; 
 
     for (;;) {
         ESubtaskState state = State.Get();
@@ -212,5 +212,5 @@ TString TTaskRunnerBase::GetStatusSingleLine() {
 }
 
 bool NRainCheck::AreWeInsideTask() {
-    return ThreadCurrentTask != nullptr;
+    return ThreadCurrentTask != nullptr; 
 }

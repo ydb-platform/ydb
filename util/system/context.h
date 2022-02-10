@@ -45,7 +45,7 @@
 #endif
 
 struct ITrampoLine {
-    virtual ~ITrampoLine() = default;
+    virtual ~ITrampoLine() = default; 
 
     virtual void DoRun();
     virtual void DoRunNaked();
@@ -131,7 +131,7 @@ public:
 
     TContMachineContext(const TContClosure& c);
 
-    inline ~TContMachineContext() = default;
+    inline ~TContMachineContext() = default; 
 
     void SwitchTo(TContMachineContext* next) noexcept;
 
@@ -176,6 +176,6 @@ struct TExceptionSafeContext: public TContMachineContext {
     void SwitchTo(TExceptionSafeContext* to) noexcept;
 
 #if defined(_unix_)
-    void* Buf_[2] = {nullptr, nullptr};
+    void* Buf_[2] = {nullptr, nullptr}; 
 #endif
 };

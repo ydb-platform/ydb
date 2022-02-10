@@ -9,7 +9,7 @@ public:
     {
     }
 
-    virtual ~TImpl() = default;
+    virtual ~TImpl() = default; 
 
     inline size_t DoNext(void** ptr) {
         if (Data_.Avail() == 0) {
@@ -69,7 +69,7 @@ TBufferOutput::TBufferOutput(TBuffer& buffer)
 TBufferOutput::TBufferOutput(TBufferOutput&&) noexcept = default;
 TBufferOutput& TBufferOutput::operator=(TBufferOutput&&) noexcept = default;
 
-TBufferOutput::~TBufferOutput() = default;
+TBufferOutput::~TBufferOutput() = default; 
 
 TBuffer& TBufferOutput::Buffer() const noexcept {
     return Impl_->Buffer();
@@ -97,7 +97,7 @@ TBufferInput::TBufferInput(const TBuffer& buffer)
 {
 }
 
-TBufferInput::~TBufferInput() = default;
+TBufferInput::~TBufferInput() = default; 
 
 const TBuffer& TBufferInput::Buffer() const noexcept {
     return Buf_;

@@ -34,7 +34,7 @@ namespace {
         {
         }
 
-        void Do() override {
+        void Do() override { 
             Parent->SetDone();
         }
     };

@@ -24,7 +24,7 @@ private:
         void Release() {
             TGuard<TMutex> g(Mutex);
             Y_ASSERT(!!Outer);
-            Outer = nullptr;
+            Outer = nullptr; 
         }
 
         TIntrusivePtr<TSelf> Get() {
@@ -91,7 +91,7 @@ public:
 
     TIntrusivePtr<T> Get() {
         if (!RefPtr) {
-            return nullptr;
+            return nullptr; 
         } else {
             return RefPtr->Get();
         }

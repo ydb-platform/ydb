@@ -185,7 +185,7 @@ private:
     TValues Values;
 
 public:
-    TTrieSortedMapWriter() = default;
+    TTrieSortedMapWriter() = default; 
 
     void Add(const char* key, const T& value) {
         Values.push_back(TValue(key, value));

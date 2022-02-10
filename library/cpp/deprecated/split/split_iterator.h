@@ -19,7 +19,7 @@ struct TNumPair {
     T Begin;
     T End;
 
-    TNumPair() = default;
+    TNumPair() = default; 
 
     TNumPair(T begin, T end)
         : Begin(begin)

@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(RainCheckMessageBusClient) {
 
         TVector<TSimpleSharedPtr<TBusFuture>> Requests;
 
-        TContinueFunc Start() override {
+        TContinueFunc Start() override { 
             for (unsigned i = 0; i < 3; ++i) {
                 Requests.push_back(new TBusFuture);
                 TNetAddr addr("localhost", ServerPort);
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(RainCheckMessageBusClient) {
                 VerifyDynamicCast<TExampleResponse*>(Requests[i]->GetResponse());
             }
             Env->TestSync.CheckAndIncrement(0);
-            return nullptr;
+            return nullptr; 
         }
     };
 
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(RainCheckMessageBusClient) {
             Session = Queue->CreateDestination(&Proto, this, NBus::TBusSessionConfig());
         }
 
-        void OnMessage(NBus::TOnMessageContext& context) override {
+        void OnMessage(NBus::TOnMessageContext& context) override { 
             TestSync->CheckAndIncrement(1);
             context.ForgetRequest();
         }
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(RainCheckMessageBusClient) {
 
         TVector<TSimpleSharedPtr<TBusFuture>> Requests;
 
-        TContinueFunc Start() override {
+        TContinueFunc Start() override { 
             Env->TestSync.CheckAndIncrement(0);
 
             for (unsigned i = 0; i < 1; ++i) {
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(RainCheckMessageBusClient) {
                 Y_VERIFY(!Requests[i]->GetResponse());
             }
             Env->TestSync.WaitForAndIncrement(2);
-            return nullptr;
+            return nullptr; 
         }
     };
 

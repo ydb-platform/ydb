@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(RainCheckCoro) {
         {
         }
 
-        void Run() override {
+        void Run() override { 
             TestSync->WaitForAndIncrement(0);
         }
     };
@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(RainCheckCoro) {
 
         TSubtaskCompletion SleepCompletion;
 
-        void Run() override {
+        void Run() override { 
             Env->SleepService.Sleep(&SleepCompletion, TDuration::MilliSeconds(1));
             WaitForSubtasks();
             TestSync->WaitForAndIncrement(0);
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(RainCheckCoro) {
         {
         }
 
-        void Run() override {
+        void Run() override { 
             TestSync->CheckAndIncrement(1);
         }
     };
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(RainCheckCoro) {
 
         TSubtaskCompletion SubtaskCompletion;
 
-        void Run() override {
+        void Run() override { 
             TestSync->CheckAndIncrement(0);
             SpawnSubtask<TSubtask>(Env, &SubtaskCompletion, TestSync);
             WaitForSubtasks();

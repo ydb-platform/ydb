@@ -201,7 +201,7 @@ public:
     }
 
     inline void Destroy() noexcept {
-        Reset(nullptr);
+        Reset(nullptr); 
     }
 
     inline void Swap(TAutoPtr& r) noexcept {
@@ -363,7 +363,7 @@ public:
     {
     }
 
-    inline ~TRefCounted() = default;
+    inline ~TRefCounted() = default; 
 
     inline void Ref(TAtomicBase d) noexcept {
         auto resultCount = Counter_.Add(d);
@@ -563,14 +563,14 @@ public:
     }
 
     inline void Drop() noexcept {
-        TIntrusivePtr(nullptr).Swap(*this);
+        TIntrusivePtr(nullptr).Swap(*this); 
     }
 
     inline T* Release() const noexcept Y_WARN_UNUSED_RESULT {
         T* res = T_;
         if (T_) {
             Ops::DecRef(T_);
-            T_ = nullptr;
+            T_ = nullptr; 
         }
         return res;
     }
@@ -745,7 +745,7 @@ public:
         InitStaticOps();
     }
 
-    inline ~TSimpleIntrusiveOps() = default;
+    inline ~TSimpleIntrusiveOps() = default; 
 
     static inline void Ref(T* t) noexcept {
         Ref_(t);
@@ -1060,7 +1060,7 @@ class TCowPtr: public TPointerBase<TCowPtr<TPtr, TCopy>, const typename TPtr::TV
     using T = typename TPtr::TValueType;
 
 public:
-    inline TCowPtr() = default;
+    inline TCowPtr() = default; 
 
     inline TCowPtr(const TPtr& p)
         : T_(p)

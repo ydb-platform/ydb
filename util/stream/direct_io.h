@@ -9,8 +9,8 @@ public:
     TRandomAccessFileInput(TDirectIOBufferedFile& file, ui64 position);
 
 protected:
-    size_t DoRead(void* buf, size_t len) override;
-    size_t DoSkip(size_t len) override;
+    size_t DoRead(void* buf, size_t len) override; 
+    size_t DoSkip(size_t len) override; 
 
 private:
     TDirectIOBufferedFile& File;
@@ -28,8 +28,8 @@ protected:
     TDirectIOBufferedFile* File;
 
 private:
-    void DoWrite(const void* buf, size_t len) override;
-    void DoFlush() override;
+    void DoWrite(const void* buf, size_t len) override; 
+    void DoFlush() override; 
 };
 
 class TBufferedFileOutputEx: public TRandomAccessFileOutput {
@@ -37,7 +37,7 @@ public:
     TBufferedFileOutputEx(const TString& path, EOpenMode oMode, size_t buflen = 1 << 17);
 
 private:
-    void DoFlush() override;
-    void DoFinish() override;
+    void DoFlush() override; 
+    void DoFinish() override; 
     THolder<TDirectIOBufferedFile> FileHolder;
 };

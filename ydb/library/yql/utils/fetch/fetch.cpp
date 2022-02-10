@@ -16,7 +16,7 @@ namespace {
 
 THttpURL ParseURL(const TStringBuf addr, NUri::TParseFlags features) {
     THttpURL url;
-    THttpURL::TParsedState parsedState = url.Parse(addr, features, nullptr, 65536);
+    THttpURL::TParsedState parsedState = url.Parse(addr, features, nullptr, 65536); 
     if (THttpURL::ParsedOK != parsedState) {
         ythrow yexception() << "Bad URL: \"" << addr << "\", " << HttpURLParsedStateToString(parsedState);
     }

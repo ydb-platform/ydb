@@ -19,9 +19,9 @@ class TDynamicBlobBase: public TBlob::TBase,
     using TRefBase = TRefCounted<TDynamicBlobBase, TCounter>;
 
 public:
-    inline TDynamicBlobBase() = default;
+    inline TDynamicBlobBase() = default; 
 
-    ~TDynamicBlobBase() override = default;
+    ~TDynamicBlobBase() override = default; 
 
     void Ref() noexcept override {
         TRefBase::Ref();
@@ -49,7 +49,7 @@ public:
         Buf_.Swap(buf);
     }
 
-    ~TBufferBlobBase() override = default;
+    ~TBufferBlobBase() override = default; 
 
     void Ref() noexcept override {
         TRefBase::Ref();
@@ -82,7 +82,7 @@ public:
     {
     }
 
-    ~TStringBlobBase() override = default;
+    ~TStringBlobBase() override = default; 
 
     void Ref() noexcept override {
         TRefBase::Ref();

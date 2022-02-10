@@ -48,7 +48,7 @@ public:
 private:
     size_t DoNext(void** ptr) override;
     void DoUndo(size_t len) override;
-    void DoWrite(const void* buf, size_t len) override;
+    void DoWrite(const void* buf, size_t len) override; 
     void DoWriteC(char c) override;
 
 private:
@@ -76,7 +76,7 @@ public:
     void Rewind() noexcept;
 
 protected:
-    size_t DoNext(const void** ptr, size_t len) override;
+    size_t DoNext(const void** ptr, size_t len) override; 
     void DoUndo(size_t len) override;
 
 private:
@@ -111,7 +111,7 @@ public:
     {
     }
 
-    ~TBufferStream() override = default;
+    ~TBufferStream() override = default; 
 
     using TBufferOutput::Buffer;
 };

@@ -22,14 +22,14 @@ namespace NRainCheck {
 
     public:
         TCoroTaskRunner(IEnv* env, ISubtaskListener* parent, TAutoPtr<ICoroTask> impl);
-        ~TCoroTaskRunner() override;
+        ~TCoroTaskRunner() override; 
 
     private:
         static TContClosure ContClosure(TCoroTaskRunner* runner, TArrayRef<char> memRegion);
 
-        bool ReplyReceived() override /* override */;
+        bool ReplyReceived() override /* override */; 
 
-        void DoRun() override /* override */;
+        void DoRun() override /* override */; 
 
         ICoroTask* GetImpl() {
             return (ICoroTask*)GetImplBase();

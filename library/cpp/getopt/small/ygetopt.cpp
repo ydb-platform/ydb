@@ -68,7 +68,7 @@ private:
 };
 
 TGetOpt::TIterator::TIterator() noexcept
-    : Impl_(nullptr)
+    : Impl_(nullptr) 
 {
 }
 
@@ -99,7 +99,7 @@ const char* TGetOpt::TIterator::Arg() const noexcept {
         return Impl_->Arg();
     }
 
-    return nullptr;
+    return nullptr; 
 }
 
 TGetOpt::TGetOpt(int argc, const char* const* argv, const TString& format)

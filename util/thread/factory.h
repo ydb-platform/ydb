@@ -7,9 +7,9 @@ class IThreadFactory {
 public:
     class IThreadAble {
     public:
-        inline IThreadAble() noexcept = default;
+        inline IThreadAble() noexcept = default; 
 
-        virtual ~IThreadAble() = default;
+        virtual ~IThreadAble() = default; 
 
         inline void Execute() {
             DoExecute();
@@ -23,9 +23,9 @@ public:
         friend class IThreadFactory;
 
     public:
-        inline IThread() noexcept = default;
+        inline IThread() noexcept = default; 
 
-        virtual ~IThread() = default;
+        virtual ~IThread() = default; 
 
         inline void Join() noexcept {
             DoJoin();

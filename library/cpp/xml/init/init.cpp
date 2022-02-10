@@ -25,7 +25,7 @@ namespace {
     public:
         inline TLibXml2() {
             xmlInitParser();
-            xmlNewCharEncodingHandler("windows-1251", CharEncodingInput, nullptr);
+            xmlNewCharEncodingHandler("windows-1251", CharEncodingInput, nullptr); 
         }
 
         inline ~TLibXml2() {

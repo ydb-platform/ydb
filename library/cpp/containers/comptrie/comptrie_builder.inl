@@ -115,7 +115,7 @@ public:
     typedef typename TBuilderImpl::TArc TArc;
 
     struct ISubtree {
-        virtual ~ISubtree() = default;
+        virtual ~ISubtree() = default; 
         virtual bool IsLast() const = 0;
         virtual ui64 Measure(const TBuilderImpl* builder) const = 0;
         virtual ui64 Save(const TBuilderImpl* builder, IOutputStream& os) const = 0;
@@ -146,8 +146,8 @@ public:
             return this->Empty();
         }
 
-        const TNode* Find(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override;
-        const TNode* FindLongestPrefix(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override {
+        const TNode* Find(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override; 
+        const TNode* FindLongestPrefix(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override { 
             return Find(key, value, result, packer);
         }
 
@@ -208,7 +208,7 @@ public:
             this->clear();
         }
 
-        ~TArcSet() override {
+        ~TArcSet() override { 
             Y_ASSERT(this->empty());
         }
 
@@ -225,7 +225,7 @@ public:
             return Buffer.Empty();
         }
 
-        const TNode* Find(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override {
+        const TNode* Find(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override { 
             if (Buffer.Empty()) {
                 result = false;
                 return nullptr;
@@ -237,7 +237,7 @@ public:
             return nullptr;
         }
 
-        const TNode* FindLongestPrefix(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override {
+        const TNode* FindLongestPrefix(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override { 
             if (Buffer.Empty()) {
                 result = false;
                 return nullptr;
@@ -291,7 +291,7 @@ public:
             return Data->Size == 0;
         }
 
-        const TNode* Find(TStringBuf& key, typename TCompactTrieBuilder::TData* value, bool& result, const TPacker& packer) const override {
+        const TNode* Find(TStringBuf& key, typename TCompactTrieBuilder::TData* value, bool& result, const TPacker& packer) const override { 
             if (!Data) {
                 result = false;
                 return nullptr;
@@ -302,7 +302,7 @@ public:
             return nullptr;
         }
 
-        const TNode* FindLongestPrefix(TStringBuf& key, typename TCompactTrieBuilder::TData* value, bool& result, const TPacker& packer) const override {
+        const TNode* FindLongestPrefix(TStringBuf& key, typename TCompactTrieBuilder::TData* value, bool& result, const TPacker& packer) const override { 
             if (!Data) {
                 result = false;
                 return nullptr;
@@ -622,7 +622,7 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
     char* ckey = ckeybuf.Data();
 
     TNode* next;
-    while ((ckeylen > 0) && (next = NodeForwardAdd(current, ckey, ckeylen, passed, &NodeCount)) != nullptr) {
+    while ((ckeylen > 0) && (next = NodeForwardAdd(current, ckey, ckeylen, passed, &NodeCount)) != nullptr) { 
         current = next;
         ckeylen -= passed;
         ckey += passed;
@@ -807,7 +807,7 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
         return it->Node;
     }
 
-    return nullptr;
+    return nullptr; 
 }
 
 template <class T, class D, class S>

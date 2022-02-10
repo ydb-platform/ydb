@@ -1,9 +1,9 @@
 Y_BENCHMARK()
-
-OWNER(agorodilov)
-
-SRCS(
-    main.cpp
-)
-
-END()
+ 
+OWNER(agorodilov) 
+ 
+SRCS( 
+    main.cpp 
+) 
+ 
+END() 

@@ -38,7 +38,7 @@ public:
     // NOTE: There is no synchronization here as the instance is supposed to be
     // created on the main thread.
     static TExecutionSampler* Instance() {
-        if (SInstance == nullptr) {
+        if (SInstance == nullptr) { 
             SInstance = new TExecutionSampler();
         }
 
@@ -66,21 +66,21 @@ public:
     void Stop(TSampleVector& sampleVector, TStats& stats) {
         // Reset signal handler and timer
         if (Started) {
-            setitimer(ITIMER_PROF, &OldTimerValue, nullptr);
+            setitimer(ITIMER_PROF, &OldTimerValue, nullptr); 
             sleep(1);
         }
 
         WaitForWriteFlag();
 
         if (Started) {
-            sigaction(SIGPROF, &OldSignalHandler, nullptr);
+            sigaction(SIGPROF, &OldSignalHandler, nullptr); 
             Started = false;
         }
 
         TExecutionSampler::TSampleVector hits;
         hits.reserve(Samples);
         for (size_t i = 0; i < SZ; ++i) {
-            if (Ips[i].first != nullptr) {
+            if (Ips[i].first != nullptr) { 
                 hits.push_back(Ips[i]);
             }
         }
@@ -122,7 +122,7 @@ private:
     {
     }
 
-    ~TExecutionSampler() = default;
+    ~TExecutionSampler() = default; 
 
     // Signal handler is not allowed to do anything that can deadlock with activity
     // on the thread to which the signal is delivered or corrupt data structures that
@@ -232,7 +232,7 @@ private:
     }
 
     inline bool IsSlotEmpty(ui32 slot) const {
-        return Ips[slot].first == nullptr;
+        return Ips[slot].first == nullptr; 
     }
 
     inline bool InsertsAllowed() const {
@@ -244,7 +244,7 @@ private:
         Y_ASSERT(WriteFlag == 1);
 
         for (size_t i = 0; i < SZ; ++i) {
-            Ips[i] = std::make_pair((void*)nullptr, (size_t)0);
+            Ips[i] = std::make_pair((void*)nullptr, (size_t)0); 
         }
         Samples = 0;
         AtomicSet(DroppedSamples, 0);
@@ -282,7 +282,7 @@ public:
         Samples.swap(samples);
     }
 
-    ~TSampleAnalyser() = default;
+    ~TSampleAnalyser() = default; 
 
     void Analyze(FILE* out) const;
 
@@ -329,7 +329,7 @@ void TSampleAnalyser::Analyze(FILE* out) const {
     }
 }
 
-TExecutionSampler* TExecutionSampler::SInstance = nullptr;
+TExecutionSampler* TExecutionSampler::SInstance = nullptr; 
 
 // Starts capturing execution samples
 void BeginProfiling() {

@@ -23,7 +23,7 @@ namespace NActors {
 
     public:
         TSchedulerCookieHolder()
-            : Cookie(nullptr)
+            : Cookie(nullptr) 
         {
         }
 
@@ -58,7 +58,7 @@ namespace NActors {
         bool Detach() noexcept {
             if (Cookie) {
                 const bool res = Cookie->Detach();
-                Cookie = nullptr;
+                Cookie = nullptr; 
                 return res;
             } else {
                 return false;
@@ -68,7 +68,7 @@ namespace NActors {
         bool DetachEvent() noexcept {
             if (Cookie) {
                 const bool res = Cookie->DetachEvent();
-                Cookie = nullptr;
+                Cookie = nullptr; 
                 return res;
             } else {
                 return false;

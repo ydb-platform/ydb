@@ -219,7 +219,7 @@ TRWMutex::TRWMutex()
 {
 }
 
-TRWMutex::~TRWMutex() = default;
+TRWMutex::~TRWMutex() = default; 
 
 void TRWMutex::AcquireRead() noexcept {
     Impl_->AcquireRead();

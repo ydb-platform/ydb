@@ -864,7 +864,7 @@ struct TBusWwwHttpServer::TImpl: public THttpServer::ICallBack {
         {
         }
 
-        bool Reply(void*) override {
+        bool Reply(void*) override { 
             Outer->ServeRequest(Input(), Output());
             return true;
         }
@@ -912,11 +912,11 @@ struct TBusWwwHttpServer::TImpl: public THttpServer::ICallBack {
         }
     }
 
-    TClientRequest* CreateClient() override {
+    TClientRequest* CreateClient() override { 
         return new TClientRequestImpl(this);
     }
 
-    ~TImpl() override {
+    ~TImpl() override { 
         HttpServer.Stop();
     }
 };

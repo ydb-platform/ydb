@@ -36,7 +36,7 @@ TPipeBase::TPipeBase(const TString& command, const char* mode)
 {
 }
 
-TPipeBase::~TPipeBase() = default;
+TPipeBase::~TPipeBase() = default; 
 
 TPipeInput::TPipeInput(const TString& command)
     : TPipeBase(command, "r")
@@ -98,7 +98,7 @@ TPipedInput::TPipedInput(PIPEHANDLE fd)
 {
 }
 
-TPipedInput::~TPipedInput() = default;
+TPipedInput::~TPipedInput() = default; 
 
 size_t TPipedInput::DoRead(void* buf, size_t len) {
     if (!Handle_.IsOpen()) {
@@ -112,7 +112,7 @@ TPipedOutput::TPipedOutput(PIPEHANDLE fd)
 {
 }
 
-TPipedOutput::~TPipedOutput() = default;
+TPipedOutput::~TPipedOutput() = default; 
 
 void TPipedOutput::DoWrite(const void* buf, size_t len) {
     if (!Handle_.IsOpen() || static_cast<ssize_t>(len) != Handle_.Write(buf, len)) {

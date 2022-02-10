@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TBusStarterTest) {
         {
         }
 
-        TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
+        TJobHandler Start(TBusJob* job, TBusMessage* mess) override { 
             Y_UNUSED(mess);
             AtomicIncrement(StartCount);
             job->Sleep(10);
@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TBusStarterTest) {
             Y_UNUSED(mess);
             AtomicIncrement(StartCount);
             job->Cancel(MESSAGE_UNKNOWN);
-            return nullptr;
+            return nullptr; 
         }
     };
 
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TBusStarterTest) {
     struct TSleepModule: public TExampleServerModule {
         TSystemEvent MessageReceivedEvent;
 
-        TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
+        TJobHandler Start(TBusJob* job, TBusMessage* mess) override { 
             Y_UNUSED(mess);
 
             MessageReceivedEvent.Signal();
@@ -113,14 +113,14 @@ Y_UNIT_TEST_SUITE(TBusStarterTest) {
     struct TSendReplyModule: public TExampleServerModule {
         TSystemEvent MessageReceivedEvent;
 
-        TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
+        TJobHandler Start(TBusJob* job, TBusMessage* mess) override { 
             Y_UNUSED(mess);
 
             job->SendReply(new TExampleResponse(&Proto.ResponseCount));
 
             MessageReceivedEvent.Signal();
 
-            return nullptr;
+            return nullptr; 
         }
     };
 

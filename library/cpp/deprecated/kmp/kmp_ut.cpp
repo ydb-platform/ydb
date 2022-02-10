@@ -49,7 +49,7 @@ public:
         {
         }
 
-        void OnMatch(const int* begin, const int* end) override {
+        void OnMatch(const int* begin, const int* end) override { 
             UNIT_ASSERT_EQUAL(end - begin, End - Begin);
             const int* p0 = Begin;
             const int* p1 = begin;

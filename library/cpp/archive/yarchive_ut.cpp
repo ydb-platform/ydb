@@ -69,7 +69,7 @@ void TArchiveTest::TestOffsetOrder() {
     TBlob blob1 = TBlob::FromFileSingleThreaded(ARCHIVE);
     TArchiveReader r(blob1);
 
-    const void* prevOffset = nullptr;
+    const void* prevOffset = nullptr; 
 
     for (size_t i = 0; i < r.Count(); ++i) {
         const TString key = r.KeyByIndex(i);

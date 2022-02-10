@@ -333,7 +333,7 @@ namespace NKikimr {
 
         THullSegmentsLoaded(TOrderedLevelSegments *segs)
             : OrderedSegs(segs)
-            , UnorderedSegs(nullptr)
+            , UnorderedSegs(nullptr) 
         {}
 
         THullSegmentsLoaded(TUnorderedLevelSegments *segs)

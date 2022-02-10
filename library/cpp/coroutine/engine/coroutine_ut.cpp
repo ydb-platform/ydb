@@ -139,7 +139,7 @@ static void CoRun(TCont* c, void* /*run*/) {
 static void CoMain(TCont* c, void* /*arg*/) {
     for (volatile size_t i2 = 0; i2 < 10; ++i2) {
         UNIT_ASSERT(RunningCont() == c);
-        c->Executor()->Create(CoRun, nullptr, "run");
+        c->Executor()->Create(CoRun, nullptr, "run"); 
         UNIT_ASSERT(RunningCont() == c);
     }
 }
@@ -274,8 +274,8 @@ static void CoMutex(TCont* c, void* /*run*/) {
 }
 
 static void CoMutexTest(TCont* c, void* /*run*/) {
-    c->Executor()->Create(CoMutex, nullptr, "1");
-    c->Executor()->Create(CoMutex, nullptr, "2");
+    c->Executor()->Create(CoMutex, nullptr, "1"); 
+    c->Executor()->Create(CoMutex, nullptr, "2"); 
 }
 
 void TCoroTest::TestMutex() {
@@ -298,17 +298,17 @@ static void CoCondVar(TCont* c, void* /*run*/) {
 }
 
 static void CoCondVarTest(TCont* c, void* /*run*/) {
-    c->Executor()->Create(CoCondVar, nullptr, "1");
+    c->Executor()->Create(CoCondVar, nullptr, "1"); 
     c->Yield();
-    c->Executor()->Create(CoCondVar, nullptr, "2");
+    c->Executor()->Create(CoCondVar, nullptr, "2"); 
     c->Yield();
-    c->Executor()->Create(CoCondVar, nullptr, "3");
+    c->Executor()->Create(CoCondVar, nullptr, "3"); 
     c->Yield();
-    c->Executor()->Create(CoCondVar, nullptr, "4");
+    c->Executor()->Create(CoCondVar, nullptr, "4"); 
     c->Yield();
-    c->Executor()->Create(CoCondVar, nullptr, "5");
+    c->Executor()->Create(CoCondVar, nullptr, "5"); 
     c->Yield();
-    c->Executor()->Create(CoCondVar, nullptr, "6");
+    c->Executor()->Create(CoCondVar, nullptr, "6"); 
     c->Yield();
 
     for (size_t i5 = 0; i5 < 3; ++i5) {

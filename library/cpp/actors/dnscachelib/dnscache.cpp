@@ -113,7 +113,7 @@ NAddr::IRemoteAddrPtr TDnsCache::GetAddr(
     }
 
     LWPROBE(FamilyMismatch, family, AllowIpV4, AllowIpV6);
-    return nullptr;
+    return nullptr; 
 }
 
 void TDnsCache::GetAllAddresses(
@@ -372,7 +372,7 @@ void TDnsCache::GHBNCallback(void* arg, int status, int, struct hostent* info) {
     if (status == ARES_SUCCESS) {
         if (info->h_addrtype == AF_INET) {
             p->second.AddrsV4.clear();
-            for (int i = 0; info->h_addr_list[i] != nullptr; i++) {
+            for (int i = 0; info->h_addr_list[i] != nullptr; i++) { 
                 p->second.AddrsV4.push_back(*(TIpHost*)(info->h_addr_list[i]));
             }
             /* It is possible to ask ares for IPv6 and have IPv4 addrs instead,
@@ -383,7 +383,7 @@ void TDnsCache::GHBNCallback(void* arg, int status, int, struct hostent* info) {
             AtomicSet(p->second.InProgressV4, 0);
         } else if (info->h_addrtype == AF_INET6) {
             p->second.AddrsV6.clear();
-            for (int i = 0; info->h_addr_list[i] != nullptr; i++) {
+            for (int i = 0; info->h_addr_list[i] != nullptr; i++) { 
                 p->second.AddrsV6.push_back(*(struct in6_addr*)(info->h_addr_list[i]));
             }
         } else {

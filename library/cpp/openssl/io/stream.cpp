@@ -30,7 +30,7 @@ namespace {
     }
 
     const char* SslErrorText(int error) noexcept {
-        return ERR_error_string(error, nullptr);
+        return ERR_error_string(error, nullptr); 
     }
 
     inline TStringBuf SslLastError() noexcept {

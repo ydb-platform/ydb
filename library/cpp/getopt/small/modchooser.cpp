@@ -71,14 +71,14 @@ TModChooser::TMode::TMode(const TString& name, TMainClass* main, const TString& 
 
 TModChooser::TModChooser()
     : ModesHelpOption("-?") // Default help option in last_getopt
-    , VersionHandler(nullptr)
+    , VersionHandler(nullptr) 
     , ShowSeparated(true)
     , SvnRevisionOptionDisabled(false)
     , PrintShortCommandInUsage(false)
 {
 }
 
-TModChooser::~TModChooser() = default;
+TModChooser::~TModChooser() = default; 
 
 void TModChooser::AddMode(const TString& mode, const TMainFunctionRawPtr func, const TString& description, bool hidden, bool noCompletion) {
     AddMode(mode, TMainFunctionPtr(func), description, hidden, noCompletion);

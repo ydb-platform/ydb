@@ -32,7 +32,7 @@ public:
 
     template <class T>
     Y_FORCE_INLINE T LoadPOD() {
-        const char* buf = nullptr;
+        const char* buf = nullptr; 
         if (!ReadFixed(buf, sizeof(T)))
             ythrow yexception() << "TZCMemoryInput::LoadPOD failed: not enough data ("
                                 << Avail() << " of " << sizeof(T) << " bytes)";

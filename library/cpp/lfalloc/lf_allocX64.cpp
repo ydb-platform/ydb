@@ -85,7 +85,7 @@ extern "C" void* calloc(size_t n, size_t elem_size) {
         return nullptr;
 
     void* result = LFAlloc(size);
-    if (result != nullptr) {
+    if (result != nullptr) { 
         memset(result, 0, size);
     }
     return result;
@@ -96,18 +96,18 @@ extern "C" void cfree(void* ptr) {
 }
 
 extern "C" void* realloc(void* old_ptr, size_t new_size) {
-    if (old_ptr == nullptr) {
+    if (old_ptr == nullptr) { 
         void* result = LFAlloc(new_size);
         return result;
     }
     if (new_size == 0) {
         LFFree(old_ptr);
-        return nullptr;
+        return nullptr; 
     }
 
     void* new_ptr = LFAlloc(new_size);
-    if (new_ptr == nullptr) {
-        return nullptr;
+    if (new_ptr == nullptr) { 
+        return nullptr; 
     }
     size_t old_size = LFGetSize(old_ptr);
     memcpy(new_ptr, old_ptr, ((old_size < new_size) ? old_size : new_size));

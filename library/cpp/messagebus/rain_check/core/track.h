@@ -29,7 +29,7 @@ namespace NRainCheck {
             {
             }
 
-            void SetDone() override;
+            void SetDone() override; 
 
             TString GetStatusSingleLine();
         };
@@ -61,7 +61,7 @@ namespace NRainCheck {
 
     public:
         TTaskTracker(NActor::TExecutor* executor);
-        ~TTaskTracker() override;
+        ~TTaskTracker() override; 
 
         void Shutdown();
 
@@ -83,7 +83,7 @@ namespace NRainCheck {
                 {
                 }
 
-                TIntrusivePtr<TTaskRunnerBase> NewTask(ISubtaskListener* subtaskListener) override {
+                TIntrusivePtr<TTaskRunnerBase> NewTask(ISubtaskListener* subtaskListener) override { 
                     return NRainCheck::SpawnTask<TTask>(Env, Param, subtaskListener).Get();
                 }
             };

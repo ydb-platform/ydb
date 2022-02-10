@@ -229,7 +229,7 @@ private:
         using reference = typename TIterator::reference;
         using pointer = typename TIterator::pointer;
 
-        inline TReverseIteratorBase() noexcept = default;
+        inline TReverseIteratorBase() noexcept = default; 
 
         template <class TIterator_>
         inline TReverseIteratorBase(const TReverseIteratorBase<TIterator_>& right) noexcept
@@ -340,7 +340,7 @@ public:
     }
 
 public:
-    inline TIntrusiveList() noexcept = default;
+    inline TIntrusiveList() noexcept = default; 
 
     inline ~TIntrusiveList() = default;
 
@@ -600,7 +600,7 @@ public:
     using const_reverse_iterator = TConstReverseIterator;
 
 public:
-    inline TIntrusiveListWithAutoDelete() noexcept = default;
+    inline TIntrusiveListWithAutoDelete() noexcept = default; 
 
     inline TIntrusiveListWithAutoDelete(TIntrusiveListWithAutoDelete&& right) noexcept
         : TIntrusiveList<T, Tag>(std::move(right))
@@ -647,7 +647,7 @@ public:
     {
     }
 
-    inline ~TIntrusiveSListItem() = default;
+    inline ~TIntrusiveSListItem() = default; 
 
     inline bool IsEnd() const noexcept {
         return Next_ == nullptr;

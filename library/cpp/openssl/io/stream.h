@@ -27,11 +27,11 @@ public:
 
     TOpenSslClientIO(IInputStream* in, IOutputStream* out);
     TOpenSslClientIO(IInputStream* in, IOutputStream* out, const TOptions& options);
-    ~TOpenSslClientIO() override;
+    ~TOpenSslClientIO() override; 
 
 private:
-    void DoWrite(const void* buf, size_t len) override;
-    size_t DoRead(void* buf, size_t len) override;
+    void DoWrite(const void* buf, size_t len) override; 
+    size_t DoRead(void* buf, size_t len) override; 
 
 private:
     struct TImpl;

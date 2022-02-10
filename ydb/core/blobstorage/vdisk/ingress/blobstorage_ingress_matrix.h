@@ -216,7 +216,7 @@ namespace NKikimr {
         class TShiftedBitVecBase {
         public:
             TShiftedBitVecBase()
-                : Ptr(nullptr)
+                : Ptr(nullptr) 
                 , Beg(0)
                 , End(0)
             {}

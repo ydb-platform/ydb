@@ -37,7 +37,7 @@ namespace NKiwiAggr {
         Intervals = adaptiveHisto->Intervals;
         Bins = adaptiveHisto->Bins;
         BinsByQuality = adaptiveHisto->BinsByQuality;
-        if (CalcQuality == nullptr) {
+        if (CalcQuality == nullptr) { 
             CalcQuality = adaptiveHisto->CalcQuality;
         }
     }
@@ -188,7 +188,7 @@ namespace NKiwiAggr {
             case HT_ADAPTIVE_WARD_HISTOGRAM:
                 break; // ok
             case HT_ADAPTIVE_HISTOGRAM:
-                if (CalcQuality != nullptr)
+                if (CalcQuality != nullptr) 
                     break; // ok
                 [[fallthrough]];
             default:       // not ok
@@ -198,7 +198,7 @@ namespace NKiwiAggr {
         if (histo.FreqSize() != histo.PositionSize()) {
             ythrow yexception() << "Attempt to parse TAdaptiveHistogram from THistogram protobuf record where FreqSize != PositionSize. FreqSize == " << (ui32)histo.FreqSize() << ", PositionSize == " << (ui32)histo.PositionSize();
         }
-        if (CalcQuality == nullptr) {
+        if (CalcQuality == nullptr) { 
             if (histo.GetType() == HT_ADAPTIVE_DISTANCE_HISTOGRAM) {
                 CalcQuality = CalcDistanceQuality;
             } else if (histo.GetType() == HT_ADAPTIVE_WEIGHT_HISTOGRAM) {

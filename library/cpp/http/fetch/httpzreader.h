@@ -33,7 +33,7 @@ public:
         , BufSize(0)
         , CurContSize(0)
         , MaxContSize(0)
-        , Buf(nullptr)
+        , Buf(nullptr) 
         , ZErr(0)
         , ConnectionClosed(0)
         , IgnoreTrailingGarbage(true)
@@ -46,7 +46,7 @@ public:
 
         if (Buf) {
             free(Buf);
-            Buf = nullptr;
+            Buf = nullptr; 
         }
     }
 

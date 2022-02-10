@@ -225,7 +225,7 @@ TSemaphore::TSemaphore(const char* name, ui32 maxFreeCount)
 {
 }
 
-TSemaphore::~TSemaphore() = default;
+TSemaphore::~TSemaphore() = default; 
 
 void TSemaphore::Release() noexcept {
     Impl_->Release();
@@ -263,7 +263,7 @@ TFastSemaphore::TFastSemaphore(ui32 maxFreeCount)
 {
 }
 
-TFastSemaphore::~TFastSemaphore() = default;
+TFastSemaphore::~TFastSemaphore() = default; 
 
 void TFastSemaphore::Release() noexcept {
     Impl_->Release();

@@ -15,9 +15,9 @@ class TThrPoolTest: public TTestBase {
         {
         }
 
-        ~TRunAble() override = default;
+        ~TRunAble() override = default; 
 
-        void DoExecute() override {
+        void DoExecute() override { 
             done = true;
         }
 

@@ -26,7 +26,7 @@ namespace {
             memset(Z(), 0, sizeof(*Z()));
         }
 
-        inline ~TZLibCommon() = default;
+        inline ~TZLibCommon() = default; 
 
         inline const char* GetErrMsg() const noexcept {
             return Z()->msg != nullptr ? Z()->msg : "unknown error";
@@ -170,10 +170,10 @@ namespace {
         {
         }
 
-        ~TDecompressStream() override = default;
+        ~TDecompressStream() override = default; 
 
     private:
-        size_t DoNext(const void** ptr, size_t len) override {
+        size_t DoNext(const void** ptr, size_t len) override { 
             void* buf = AdditionalData();
 
             *ptr = buf;
@@ -332,7 +332,7 @@ void TZLibDecompress::SetAllowMultipleStreams(bool allowMultipleStreams) {
     Impl_->SetAllowMultipleStreams(allowMultipleStreams);
 }
 
-TZLibDecompress::~TZLibDecompress() = default;
+TZLibDecompress::~TZLibDecompress() = default; 
 
 size_t TZLibDecompress::DoRead(void* buf, size_t size) {
     return Impl_->Read(buf, MaxPortion(size));
@@ -377,4 +377,4 @@ void TZLibCompress::DoFinish() {
     }
 }
 
-TBufferedZLibDecompress::~TBufferedZLibDecompress() = default;
+TBufferedZLibDecompress::~TBufferedZLibDecompress() = default; 

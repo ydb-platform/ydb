@@ -346,10 +346,10 @@ namespace {
         {
         }
 
-        ~TStdOutput() override = default;
+        ~TStdOutput() override = default; 
 
     private:
-        void DoWrite(const void* buf, size_t len) override {
+        void DoWrite(const void* buf, size_t len) override { 
             if (len != fwrite(buf, 1, len, F_)) {
 #if defined(_win_)
                 // On Windows, if 'F_' is console -- 'fwrite' returns count of written characters.
@@ -363,7 +363,7 @@ namespace {
             }
         }
 
-        void DoFlush() override {
+        void DoFlush() override { 
             if (fflush(F_) != 0) {
                 ythrow TSystemError() << "fflush failed";
             }
@@ -380,7 +380,7 @@ namespace {
             {
             }
 
-            ~TStdErr() override = default;
+            ~TStdErr() override = default; 
         };
 
         struct TStdOut: public TStdOutput {
@@ -389,7 +389,7 @@ namespace {
             {
             }
 
-            ~TStdOut() override = default;
+            ~TStdOut() override = default; 
         };
 
         TStdOut Out;

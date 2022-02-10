@@ -81,7 +81,7 @@ public:
 
     template <typename TStringType>
     inline constexpr TStringRef(const TStringType& buf) noexcept
-        : TBase(TGetData<TStringType>::Get(buf), TGetSize<TStringType>::Get(buf)) 
+        : TBase(TGetData<TStringType>::Get(buf), TGetSize<TStringType>::Get(buf))
     {}
 
     template <size_t size>
@@ -133,42 +133,42 @@ private:
             return result;
         return int(s1.Size()) - int(s2.Size());
     }
- 
-    Y_HAS_MEMBER(Data); 
-    Y_HAS_MEMBER(Size); 
- 
-    template<typename TStringType> 
-    struct TByData { 
+
+    Y_HAS_MEMBER(Data);
+    Y_HAS_MEMBER(Size);
+
+    template<typename TStringType>
+    struct TByData {
         static constexpr auto Get(const TStringType& buf) noexcept {
-            return buf.Data(); 
-        } 
-    }; 
- 
-    template<typename TStringType> 
-    struct TBySize { 
+            return buf.Data();
+        }
+    };
+
+    template<typename TStringType>
+    struct TBySize {
         static constexpr auto Get(const TStringType& buf) noexcept {
-            return buf.Size(); 
-        } 
-    }; 
- 
-    template<typename TStringType> 
-    struct TBydata { 
+            return buf.Size();
+        }
+    };
+
+    template<typename TStringType>
+    struct TBydata {
         static constexpr auto Get(const TStringType& buf) noexcept {
-            return buf.data(); 
-        } 
-    }; 
- 
-    template<typename TStringType> 
-    struct TBysize { 
+            return buf.data();
+        }
+    };
+
+    template<typename TStringType>
+    struct TBysize {
         static constexpr auto Get(const TStringType& buf) noexcept {
-            return buf.size(); 
-        } 
-    }; 
- 
-    template<typename TStringType> 
+            return buf.size();
+        }
+    };
+
+    template<typename TStringType>
     using TGetData = std::conditional_t<THasData<TStringType>::value, TByData<TStringType>, TBydata<TStringType>>;
- 
-    template<typename TStringType> 
+
+    template<typename TStringType>
     using TGetSize = std::conditional_t<THasSize<TStringType>::value, TBySize<TStringType>, TBysize<TStringType>>;
 };
 

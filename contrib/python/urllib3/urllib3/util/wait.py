@@ -7,9 +7,9 @@ try:
     from time import monotonic
 except ImportError:
     from time import time as monotonic
- 
+
 __all__ = ["NoWayToWaitForSocketError", "wait_for_read", "wait_for_write"]
- 
+
 
 class NoWayToWaitForSocketError(Exception):
     pass
@@ -48,9 +48,9 @@ else:
     def _retry_on_intr(fn, timeout):
         if timeout is None:
             deadline = float("inf")
-        else: 
+        else:
             deadline = monotonic() + timeout
- 
+
         while True:
             try:
                 return fn(timeout)
@@ -66,8 +66,8 @@ else:
                     if timeout == float("inf"):
                         timeout = None
                     continue
- 
- 
+
+
 def select_wait_for_socket(sock, read=False, write=False, timeout=None):
     if not read and not write:
         raise RuntimeError("must specify at least one of read=True, write=True")
@@ -85,7 +85,7 @@ def select_wait_for_socket(sock, read=False, write=False, timeout=None):
     fn = partial(select.select, rcheck, wcheck, wcheck)
     rready, wready, xready = _retry_on_intr(fn, timeout)
     return bool(rready or wready or xready)
- 
+
 
 def poll_wait_for_socket(sock, read=False, write=False, timeout=None):
     if not read and not write:

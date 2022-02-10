@@ -127,7 +127,7 @@ const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TStrin
 
     ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
         << "Cannot find table '" << NCommon::FullTableName(cluster, table)
-        << "' because it does not exist or you do not have access permissions." 
+        << "' because it does not exist or you do not have access permissions."
         << " Please check correctness of table path and user permissions."));
     return nullptr;
 }

@@ -1132,7 +1132,7 @@ RECURSE(
     voluptuous
     w3lib
     waitress
-    walrus 
+    walrus
     Wand
     wasabi
     watchdog

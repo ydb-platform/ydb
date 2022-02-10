@@ -443,9 +443,9 @@ ALLOW .* -> vendor/google.golang.org/genproto/googleapis/type
 # Usefull GRPC interceptors
 ALLOW .* -> vendor/github.com/grpc-ecosystem/go-grpc-middleware
 
-# GRPC Intercaptors for Prometheus monitoring
-ALLOW .* -> vendor/github.com/grpc-ecosystem/go-grpc-prometheus
-
+# GRPC Intercaptors for Prometheus monitoring 
+ALLOW .* -> vendor/github.com/grpc-ecosystem/go-grpc-prometheus 
+ 
 # Protobuf and gRPC reflection
 ALLOW .* -> vendor/github.com/jhump/protoreflect
 

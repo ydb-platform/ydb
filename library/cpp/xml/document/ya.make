@@ -11,7 +11,7 @@ SRCS(
 PEERDIR(
     library/cpp/xml/init
     contrib/libs/libxml
-    library/cpp/string_utils/ztstrbuf
+    library/cpp/string_utils/ztstrbuf 
 )
 
 END()

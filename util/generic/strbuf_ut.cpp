@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         UNIT_ASSERT_VALUES_EQUAL(str.After('w'), TStringBuf("erty"));
         UNIT_ASSERT_VALUES_EQUAL(str.After('x'), TStringBuf("qwerty"));
         UNIT_ASSERT_VALUES_EQUAL(str.After('y'), TStringBuf());
-        UNIT_ASSERT_STRINGS_EQUAL(str.After('='), str);
+        UNIT_ASSERT_STRINGS_EQUAL(str.After('='), str); 
 
         // Also works properly on empty strings
         TStringBuf empty;
@@ -72,15 +72,15 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
     }
 
     Y_UNIT_TEST(TestRAfterBefore) {
-        TStringBuf str("a/b/c");
-        UNIT_ASSERT_STRINGS_EQUAL(str.RAfter('/'), "c");
-        UNIT_ASSERT_STRINGS_EQUAL(str.RAfter('_'), str);
-        UNIT_ASSERT_STRINGS_EQUAL(str.RAfter('a'), "/b/c");
-        UNIT_ASSERT_STRINGS_EQUAL(str.RBefore('/'), "a/b");
-        UNIT_ASSERT_STRINGS_EQUAL(str.RBefore('_'), str);
-        UNIT_ASSERT_STRINGS_EQUAL(str.RBefore('a'), "");
-    }
-
+        TStringBuf str("a/b/c"); 
+        UNIT_ASSERT_STRINGS_EQUAL(str.RAfter('/'), "c"); 
+        UNIT_ASSERT_STRINGS_EQUAL(str.RAfter('_'), str); 
+        UNIT_ASSERT_STRINGS_EQUAL(str.RAfter('a'), "/b/c"); 
+        UNIT_ASSERT_STRINGS_EQUAL(str.RBefore('/'), "a/b"); 
+        UNIT_ASSERT_STRINGS_EQUAL(str.RBefore('_'), str); 
+        UNIT_ASSERT_STRINGS_EQUAL(str.RBefore('a'), ""); 
+    } 
+ 
     Y_UNIT_TEST(TestAfterPrefix) {
         TStringBuf str("cat_dog");
 

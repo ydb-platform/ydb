@@ -10,6 +10,6 @@ Y_UNIT_TEST_SUITE(TestHttpDate) {
         UNIT_ASSERT((int)strlen(format_http_date(0, buf1, sizeof(buf1))) == format_http_date(buf2, sizeof(buf2), 0));
     }
     Y_UNIT_TEST(Test2) {
-        UNIT_ASSERT_STRINGS_EQUAL(FormatHttpDate(1234567890), "Fri, 13 Feb 2009 23:31:30 GMT");
-    }
+        UNIT_ASSERT_STRINGS_EQUAL(FormatHttpDate(1234567890), "Fri, 13 Feb 2009 23:31:30 GMT"); 
+    } 
 }

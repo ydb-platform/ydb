@@ -526,7 +526,7 @@ RECURSE(
     invoke
     ipaddr
     ipaddress
-    ipadic
+    ipadic 
     ipdb
     ipykernel
     ipython
@@ -616,7 +616,7 @@ RECURSE(
     matplotlib
     matplotlib-inline
     mccabe
-    mecab-python3
+    mecab-python3 
     meld3
     memory-profiler
     mercurial

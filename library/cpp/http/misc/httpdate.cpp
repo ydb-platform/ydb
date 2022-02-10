@@ -75,9 +75,9 @@ char* format_http_date(time_t when, char* buf, size_t buflen) {
 
     return buf;
 }
-
+ 
 TString FormatHttpDate(time_t when) {
-    char str[64] = {0};
+    char str[64] = {0}; 
     format_http_date(str, Y_ARRAY_SIZE(str), when);
     return TString(str);
-}
+} 

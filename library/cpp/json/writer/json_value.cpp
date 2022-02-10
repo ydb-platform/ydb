@@ -1,5 +1,5 @@
 #include "json_value.h"
-#include "json.h"
+#include "json.h" 
 
 #include <util/generic/ymath.h>
 #include <util/generic/ylimits.h>
@@ -161,7 +161,7 @@ namespace NJson {
         Value.Double = value;
     }
 
-    TJsonValue::TJsonValue(TString value) {
+    TJsonValue::TJsonValue(TString value) { 
         SetType(JSON_STRING);
         Value.String = std::move(value);
     }
@@ -1100,6 +1100,6 @@ namespace NJson {
 
 template <>
 void Out<NJson::TJsonValue>(IOutputStream& out, const NJson::TJsonValue& v) {
-    NJsonWriter::TBuf buf(NJsonWriter::HEM_DONT_ESCAPE_HTML, &out);
-    buf.WriteJsonValue(&v);
+    NJsonWriter::TBuf buf(NJsonWriter::HEM_DONT_ESCAPE_HTML, &out); 
+    buf.WriteJsonValue(&v); 
 }

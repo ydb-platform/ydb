@@ -141,16 +141,16 @@ namespace NLevenshtein {
 
     template <class TStringType>
     size_t Distance(const TStringType& str1, const TStringType& str2) {
-        TEditChain editChain;
-        GetEditChain(str1, str2, editChain);
-        size_t result = 0;
-        for (auto edit : editChain) {
-            if (IsImportantEditMove(edit))
-                result++;
-        }
-        return result;
-    }
-
+        TEditChain editChain; 
+        GetEditChain(str1, str2, editChain); 
+        size_t result = 0; 
+        for (auto edit : editChain) { 
+            if (IsImportantEditMove(edit)) 
+                result++; 
+        } 
+        return result; 
+    } 
+ 
     /// Calculates substrings to be replaced for str1->str2 transformation
     struct TReplacement {
         int CorrectOffset, CorrectLength, MisspelledOffset, MisspelledLength;

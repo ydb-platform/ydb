@@ -5,8 +5,8 @@
 
 #include <contrib/libs/libxml/include/libxml/xmlreader.h>
 
-#include <library/cpp/string_utils/ztstrbuf/ztstrbuf.h>
-
+#include <library/cpp/string_utils/ztstrbuf/ztstrbuf.h> 
+ 
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/generic/strbuf.h>
@@ -222,21 +222,21 @@ namespace NXml {
          * Provides the value of the attribute with the specified qualified name.
          * @param name the qualified name of the attribute
          */
-        TString GetAttribute(TZtStringBuf name) const;
+        TString GetAttribute(TZtStringBuf name) const; 
 
         /**
          * Provides the value of the specified attribute.
          * @param localName the local name of the attribute
          * @param nsUri the namespace URI of the attribute
          */
-        TString GetAttribute(TZtStringBuf localName, TZtStringBuf nsUri) const;
+        TString GetAttribute(TZtStringBuf localName, TZtStringBuf nsUri) const; 
 
         /**
          * Resolves a namespace prefix in the scope of the current element.
          * @param prefix the prefix whose namespace URI is to be resolved. To return the default namespace, specify empty string.
          * @return a string containing the namespace URI to which the prefix maps.
          */
-        TString LookupNamespace(TZtStringBuf prefix) const;
+        TString LookupNamespace(TZtStringBuf prefix) const; 
 
         /**
          * Moves the position of the current instance to the attribute with the specified index relative to the containing element.
@@ -250,7 +250,7 @@ namespace NXml {
          * @param name the qualified name of the attribute
          * @return true in case of success, false if not found
          */
-        bool MoveToAttribute(TZtStringBuf name);
+        bool MoveToAttribute(TZtStringBuf name); 
 
         /**
          * Moves the position of the current instance to the attribute with the specified local name and namespace URI.
@@ -258,7 +258,7 @@ namespace NXml {
          * @param nsUri the namespace URI of the attribute
          * @return true in case of success, false if not found
          */
-        bool MoveToAttribute(TZtStringBuf localName, TZtStringBuf nsUri);
+        bool MoveToAttribute(TZtStringBuf localName, TZtStringBuf nsUri); 
 
         /**
          * Moves the position of the current instance to the first attribute associated with the current node.

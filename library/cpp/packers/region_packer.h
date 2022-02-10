@@ -1,18 +1,18 @@
 #pragma once
-
+ 
 #include "packers.h"
 
 #include <util/generic/array_ref.h>
-
-// Stores an array of PODs in the trie (copying them with memcpy).
-// Byte order and alignment are your problem.
-
+ 
+// Stores an array of PODs in the trie (copying them with memcpy). 
+// Byte order and alignment are your problem. 
+ 
 template <class TRecord>
 class TRegionPacker {
 public:
     typedef TArrayRef<TRecord> TRecords;
 
-    void UnpackLeaf(const char* p, TRecords& result) const {
+    void UnpackLeaf(const char* p, TRecords& result) const { 
         size_t len;
         NPackers::TIntegralPacker<size_t>().UnpackLeaf(p, len);
         size_t start = NPackers::TIntegralPacker<size_t>().SkipLeaf(p);
@@ -32,7 +32,7 @@ public:
         return NPackers::TIntegralPacker<size_t>().MeasureLeaf(len) + len * sizeof(TRecord);
     }
 
-    size_t SkipLeaf(const char* p) const {
+    size_t SkipLeaf(const char* p) const { 
         size_t result = NPackers::TIntegralPacker<size_t>().SkipLeaf(p);
         size_t len;
         NPackers::TIntegralPacker<size_t>().UnpackLeaf(p, len);

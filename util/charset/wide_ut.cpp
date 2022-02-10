@@ -193,7 +193,7 @@ public:
     void TestUTF8ToWide();
     void TestWideToUTF8();
     void TestGetNumOfUTF8Chars();
-    void TestSubstrUTF8();
+    void TestSubstrUTF8(); 
     void TestUnicodeCase();
     void TestUnicodeDetails();
     void TestHexConversion();
@@ -549,14 +549,14 @@ void TConversionTest::TestGetNumOfUTF8Chars() {
     UNIT_ASSERT_EQUAL(GetNumberOfUTF8Chars("привет!"), 7);
 }
 
-void TConversionTest::TestSubstrUTF8() {
-    TStringBuf utextBuf(utext, sizeof(utext));
-    UNIT_ASSERT(SubstrUTF8(utextBuf, 0, 2) == utextBuf.substr(0, 4));
-    UNIT_ASSERT(SubstrUTF8(utextBuf, 1, 1) == utextBuf.substr(2, 2));
-    UNIT_ASSERT(SubstrUTF8(utextBuf, 1, 2) == utextBuf.substr(2, 4));
-    UNIT_ASSERT(SubstrUTF8(utextBuf, 1, 3) == utextBuf.substr(2, 6));
-}
-
+void TConversionTest::TestSubstrUTF8() { 
+    TStringBuf utextBuf(utext, sizeof(utext)); 
+    UNIT_ASSERT(SubstrUTF8(utextBuf, 0, 2) == utextBuf.substr(0, 4)); 
+    UNIT_ASSERT(SubstrUTF8(utextBuf, 1, 1) == utextBuf.substr(2, 2)); 
+    UNIT_ASSERT(SubstrUTF8(utextBuf, 1, 2) == utextBuf.substr(2, 4)); 
+    UNIT_ASSERT(SubstrUTF8(utextBuf, 1, 3) == utextBuf.substr(2, 6)); 
+} 
+ 
 inline bool MustBeSurrogate(wchar32 ch) {
     return ch > 0xFFFF;
 }

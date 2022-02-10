@@ -138,7 +138,7 @@ inline TString date2str(const time_t date) {
     memset(&dateTm, 0, sizeof(dateTm));
     localtime_r(&date, &dateTm);
     char buf[9];
-    strftime(buf, sizeof(buf), "%Y%m%d", &dateTm);
+    strftime(buf, sizeof(buf), "%Y%m%d", &dateTm); 
     return TString(buf);
 }
 

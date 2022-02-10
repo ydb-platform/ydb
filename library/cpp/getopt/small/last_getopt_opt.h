@@ -637,11 +637,11 @@ namespace NLastGetopt {
             return DefaultValue("0").StoreResult(target, true);
         }
 
-        // Similar to store_true in Python's argparse
-        TOpt& StoreTrue(bool* target) {
-            return NoArgument().SetFlag(target);
-        }
-
+        // Similar to store_true in Python's argparse 
+        TOpt& StoreTrue(bool* target) { 
+            return NoArgument().SetFlag(target); 
+        } 
+ 
         template <typename TpVal, typename T, typename TpFunc>
         TOpt& StoreMappedResultT(T* target, const TpFunc& func) {
             return Handler1T<TpVal>(NPrivate::TStoreMappedResultFunctor<T, TpFunc, TpVal>(target, func));
@@ -675,13 +675,13 @@ namespace NLastGetopt {
         // Appends FromString<T>(arg) to *target for each argument
         template <typename T>
         TOpt& AppendTo(TVector<T>* target) {
-            return Handler1T<T>([target](auto&& value) { target->push_back(std::move(value)); });
+            return Handler1T<T>([target](auto&& value) { target->push_back(std::move(value)); }); 
         }
 
         // Appends FromString<T>(arg) to *target for each argument
         template <typename T>
         TOpt& InsertTo(THashSet<T>* target) {
-            return Handler1T<T>([target](auto&& value) { target->insert(std::move(value)); });
+            return Handler1T<T>([target](auto&& value) { target->insert(std::move(value)); }); 
         }
 
         // Emplaces TString arg to *target for each argument

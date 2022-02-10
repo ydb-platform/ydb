@@ -1350,14 +1350,14 @@
                 }
             ]
         },
-        "sandboxctl": {
-            "tools": {
+        "sandboxctl": { 
+            "tools": { 
                 "sandboxctl": {
                     "bottle": "sandboxctl",
                     "executable": "sandboxctl"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -1376,8 +1376,8 @@
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "gcc82": {
             "tools": {
                 "cc": {
@@ -5920,19 +5920,19 @@
                 ]
             }
         },
-        "sandboxctl": {
-            "formula": {
+        "sandboxctl": { 
+            "formula": { 
                 "sandbox_id": [
                     832226067
                 ],
                 "match": "tools/sandboxctl/bin/sandboxctl"
-            },
-            "executable": {
+            }, 
+            "executable": { 
                 "sandboxctl": [
                     "sandboxctl"
                 ]
-            }
-        },
+            } 
+        }, 
         "python": {
             "formula": {
                 "sandbox_id": 981577320,

@@ -115,7 +115,7 @@ protected:
 // IMPORTANT: never try to reminimize an already minimized trie or a trie with fast layout.
 // Because of non-local structure and epsilon links, it won't work
 // as you expect it to, and can destroy the trie in the making.
-// If you want both minimization and fast layout, do the minimization first.
+// If you want both minimization and fast layout, do the minimization first. 
 
 template <class TPacker>
 size_t CompactTrieMinimize(IOutputStream& os, const char* data, size_t datalength, bool verbose = false, const TPacker& packer = TPacker(), NCompactTrie::EMinimizeMode mode = NCompactTrie::MM_DEFAULT);

@@ -36,14 +36,14 @@ struct TMapOps {
     inline auto FindPtr(const K& key) const {
         return MapFindPtr(static_cast<const Derived&>(*this), key);
     }
-
+ 
     template <class K, class DefaultValue>
     inline auto Value(const K& key, const DefaultValue& defaultValue) const -> std::remove_reference_t<decltype(*this->FindPtr(key))> {
         if (auto found = FindPtr(key)) {
-            return *found;
-        }
+            return *found; 
+        } 
         return defaultValue;
-    }
+    } 
 
     template <class K, class V>
     inline const V& ValueRef(const K& key, V& defaultValue) const {

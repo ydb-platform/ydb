@@ -1,9 +1,9 @@
-LIBRARY()
-
-OWNER(myltsev)
-
-SRCS(
-    ztstrbuf.cpp
-)
-
-END()
+LIBRARY() 
+ 
+OWNER(myltsev) 
+ 
+SRCS( 
+    ztstrbuf.cpp 
+) 
+ 
+END() 

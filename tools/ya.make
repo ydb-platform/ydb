@@ -132,7 +132,7 @@ RECURSE(
     rescompiler
     rescompressor
     rorescompiler
-    sandboxctl
+    sandboxctl 
     sanitizer
     segutils
     seinfo

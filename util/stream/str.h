@@ -26,7 +26,7 @@ public:
      * this stream is in use.
      *
      * For reading data from `TStringBuf`s, see `TMemoryInput` (`util/stream/mem.h`).
-     *
+     * 
      * @param s                         String to read from.
      */
     inline TStringInput(const TString& s) noexcept
@@ -108,27 +108,27 @@ private:
  * String input/output stream, similar to `std::stringstream`.
  */
 class TStringStream: private TEmbedPolicy<TString>, public TStringInput, public TStringOutput {
-    using TEmbeddedString = TEmbedPolicy<TString>;
+    using TEmbeddedString = TEmbedPolicy<TString>; 
 
 public:
     inline TStringStream()
-        : TEmbeddedString()
-        , TStringInput(*TEmbeddedString::Ptr())
-        , TStringOutput(*TEmbeddedString::Ptr())
+        : TEmbeddedString() 
+        , TStringInput(*TEmbeddedString::Ptr()) 
+        , TStringOutput(*TEmbeddedString::Ptr()) 
     {
     }
 
     inline TStringStream(const TString& string)
-        : TEmbeddedString(string)
-        , TStringInput(*TEmbeddedString::Ptr())
-        , TStringOutput(*TEmbeddedString::Ptr())
+        : TEmbeddedString(string) 
+        , TStringInput(*TEmbeddedString::Ptr()) 
+        , TStringOutput(*TEmbeddedString::Ptr()) 
     {
     }
 
     inline TStringStream(const TStringStream& other)
-        : TEmbeddedString(other.Str())
-        , TStringInput(*TEmbeddedString::Ptr())
-        , TStringOutput(*TEmbeddedString::Ptr())
+        : TEmbeddedString(other.Str()) 
+        , TStringInput(*TEmbeddedString::Ptr()) 
+        , TStringOutput(*TEmbeddedString::Ptr()) 
     {
     }
 

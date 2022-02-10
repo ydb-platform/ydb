@@ -1,4 +1,4 @@
-RECURSE(
+RECURSE( 
     ascii_encode
     ascii_encode/ut
     base64
@@ -33,5 +33,5 @@ RECURSE(
     tskv_format/fuzz
     url
     url/ut
-    ztstrbuf
-)
+    ztstrbuf 
+) 

@@ -3,34 +3,34 @@
 #include <util/generic/string.h>
 
 namespace NJson {
-    namespace NImpl {
+    namespace NImpl { 
         enum EType {
             ARRAY,
             MAP,
             MAP_KEY
         };
-    }
+    } 
     template <class TStringType>
-    struct TPathElemImpl {
-        NImpl::EType Type;
+    struct TPathElemImpl { 
+        NImpl::EType Type; 
         TStringType Key;
         int ArrayCounter;
 
-        TPathElemImpl(NImpl::EType type)
+        TPathElemImpl(NImpl::EType type) 
             : Type(type)
             , ArrayCounter()
         {
         }
 
         TPathElemImpl(const TStringType& key)
-            : Type(NImpl::MAP_KEY)
+            : Type(NImpl::MAP_KEY) 
             , Key(key)
             , ArrayCounter()
         {
         }
 
         TPathElemImpl(int arrayCounter)
-            : Type(NImpl::ARRAY)
+            : Type(NImpl::ARRAY) 
             , ArrayCounter(arrayCounter)
         {
         }

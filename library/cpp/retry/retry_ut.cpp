@@ -99,19 +99,19 @@ Y_UNIT_TEST_SUITE(Retry) {
     Y_UNIT_TEST(RetryOnRetCodeFail) {
         UNIT_ASSERT(false == DoWithRetryOnRetCode(TDoOnSecondOrFail{}, TRetryOptions(0, TDuration::Zero())));
     }
-    Y_UNIT_TEST(MakeRetryOptionsFromProto) { 
-        NRetry::TRetryOptionsPB protoOptions; 
-        protoOptions.SetMaxTries(1); 
-        protoOptions.SetInitialSleepMs(2); 
-        protoOptions.SetSleepIncrementMs(3); 
-        protoOptions.SetRandomDeltaMs(4); 
-        protoOptions.SetExponentalMultiplierMs(5); 
- 
-        const TRetryOptions options = MakeRetryOptions(protoOptions); 
-        UNIT_ASSERT_EQUAL(options.RetryCount, 1); 
-        UNIT_ASSERT_EQUAL(options.SleepDuration, TDuration::MilliSeconds(2)); 
-        UNIT_ASSERT_EQUAL(options.SleepIncrement, TDuration::MilliSeconds(3)); 
-        UNIT_ASSERT_EQUAL(options.SleepRandomDelta, TDuration::MilliSeconds(4)); 
-        UNIT_ASSERT_EQUAL(options.SleepExponentialMultiplier, TDuration::MilliSeconds(5)); 
-    } 
+    Y_UNIT_TEST(MakeRetryOptionsFromProto) {
+        NRetry::TRetryOptionsPB protoOptions;
+        protoOptions.SetMaxTries(1);
+        protoOptions.SetInitialSleepMs(2);
+        protoOptions.SetSleepIncrementMs(3);
+        protoOptions.SetRandomDeltaMs(4);
+        protoOptions.SetExponentalMultiplierMs(5);
+
+        const TRetryOptions options = MakeRetryOptions(protoOptions);
+        UNIT_ASSERT_EQUAL(options.RetryCount, 1);
+        UNIT_ASSERT_EQUAL(options.SleepDuration, TDuration::MilliSeconds(2));
+        UNIT_ASSERT_EQUAL(options.SleepIncrement, TDuration::MilliSeconds(3));
+        UNIT_ASSERT_EQUAL(options.SleepRandomDelta, TDuration::MilliSeconds(4));
+        UNIT_ASSERT_EQUAL(options.SleepExponentialMultiplier, TDuration::MilliSeconds(5));
+    }
 }

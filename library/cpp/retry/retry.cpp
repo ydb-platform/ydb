@@ -16,11 +16,11 @@ bool DoWithRetryOnRetCode(std::function<bool()> func, TRetryOptions retryOptions
     }
     return false;
 }
- 
-TRetryOptions MakeRetryOptions(const NRetry::TRetryOptionsPB& retryOptions) { 
-    return TRetryOptions(retryOptions.GetMaxTries(), 
-                         TDuration::MilliSeconds(retryOptions.GetInitialSleepMs()), 
-                         TDuration::MilliSeconds(retryOptions.GetRandomDeltaMs()), 
-                         TDuration::MilliSeconds(retryOptions.GetSleepIncrementMs()), 
-                         TDuration::MilliSeconds(retryOptions.GetExponentalMultiplierMs())); 
-} 
+
+TRetryOptions MakeRetryOptions(const NRetry::TRetryOptionsPB& retryOptions) {
+    return TRetryOptions(retryOptions.GetMaxTries(),
+                         TDuration::MilliSeconds(retryOptions.GetInitialSleepMs()),
+                         TDuration::MilliSeconds(retryOptions.GetRandomDeltaMs()),
+                         TDuration::MilliSeconds(retryOptions.GetSleepIncrementMs()),
+                         TDuration::MilliSeconds(retryOptions.GetExponentalMultiplierMs()));
+}

@@ -100,7 +100,7 @@ ALLOW yt/yt/core/http -> contrib/restricted/http-parser
 ALLOW yweb/robot/fetcher/fetcher/user/http -> contrib/restricted/http-parser
 
 # Prefer using skynet for data distribution
-ALLOW maps/infra/ecstatic -> contrib/restricted/libtorrent
+ALLOW maps/infra/ecstatic -> contrib/restricted/libtorrent 
 
 # Consider using util / library/cpp/digest versions instead of a raw murmurhash functions.
 #

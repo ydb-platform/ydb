@@ -1842,7 +1842,7 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
         TVector<TTabletId> Tablets;
     };
 
-    static constexpr size_t NumVolumeTabletChannels = 3; 
+    static constexpr size_t NumVolumeTabletChannels = 3;
 
     ui32 DefaultPartitionCount = 0;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
@@ -2001,11 +2001,11 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
         Y_VERIFY(!AlterVersion);
 
         AlterConfig = MakeHolder<NKikimrFileStore::TConfig>();
-        AlterConfig->CopyFrom(alterConfig); 
+        AlterConfig->CopyFrom(alterConfig);
 
-        Y_VERIFY(!AlterConfig->GetBlockSize()); 
-        AlterConfig->SetBlockSize(Config.GetBlockSize()); 
- 
+        Y_VERIFY(!AlterConfig->GetBlockSize());
+        AlterConfig->SetBlockSize(Config.GetBlockSize());
+
         AlterVersion = Version + 1;
     }
 

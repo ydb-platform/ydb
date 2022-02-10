@@ -178,7 +178,7 @@ namespace NActors {
                             mp->emplace(ActorsInfo.Array.ActorsArray->Actors[i].ActorId, ActorsInfo.Array.ActorsArray->Actors[i].Actor);
                         }
                         mp->emplace(localActorId, actor);
-                        ActorPack = TMailboxActorPack::Map; 
+                        ActorPack = TMailboxActorPack::Map;
                         ActorsInfo.Array.ActorsCount = 0;
                         delete ActorsInfo.Array.ActorsArray;
                         ActorsInfo.Map.ActorsMap = mp;

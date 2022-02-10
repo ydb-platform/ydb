@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
                                    {NLs::PathNotExist});
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
-                                   {NLs::PathVersionEqual(7), 
+                                   {NLs::PathVersionEqual(7),
                                     NLs::PathsInsideDomain(1),
                                     NLs::ShardsInsideDomain(0)});
             }

@@ -245,14 +245,14 @@ public:
 
 private:
     TTxState::ETxState NextState() {
-        return TTxState::CreateParts; 
+        return TTxState::CreateParts;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) {
         switch(state) {
         case TTxState::Waiting:
-        case TTxState::CreateParts: 
-            return TTxState::ConfigureParts; 
+        case TTxState::CreateParts:
+            return TTxState::ConfigureParts;
         case TTxState::ConfigureParts:
             return TTxState::Propose;
         default:
@@ -264,8 +264,8 @@ private:
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
         switch(state) {
         case TTxState::Waiting:
-        case TTxState::CreateParts: 
-            return MakeHolder<TCreateParts>(OperationId); 
+        case TTxState::CreateParts:
+            return MakeHolder<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
             return MakeHolder<TConfigureParts>(OperationId);
         case TTxState::Propose:
@@ -454,7 +454,7 @@ TTxState& TAlterFileStore::PrepareChanges(
     item->PathState = TPathElement::EPathState::EPathStateAlter;
 
     TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterFileStore, item->PathId);
-    txState.State = TTxState::CreateParts; 
+    txState.State = TTxState::CreateParts;
 
     ApplyChannelBindings(
         fs,
@@ -469,7 +469,7 @@ TTxState& TAlterFileStore::PrepareChanges(
         Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
         auto& shardInfo = context.SS->ShardInfos[shardIdx];
         Y_VERIFY(shardInfo.TabletID == tabletId);
-        txState.Shards.emplace_back(shardIdx, ETabletType::FileStore, TTxState::CreateParts); 
+        txState.Shards.emplace_back(shardIdx, ETabletType::FileStore, TTxState::CreateParts);
         shardInfo.CurrentTxId = operationId.GetTxId();
         context.SS->PersistShardTx(db, shardIdx, operationId.GetTxId());
     }

@@ -11,7 +11,7 @@ namespace NKikimr {
 
         x->TabletID = tabletId;
         x->TabletType = tabletType;
-        x->Channels.resize(5); 
+        x->Channels.resize(5);
 
         for (ui64 channel = 0; channel < x->Channels.size(); ++channel) {
             x->Channels[channel].Channel = channel;

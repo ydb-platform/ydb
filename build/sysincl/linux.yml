@@ -9,9 +9,9 @@
   - bits/endian.h
   - bits/fenv.h
   - bits/libc-lock.h
-  - bits/reg.h
+  - bits/reg.h 
   - bits/types.h
-  - bits/wordsize.h
+  - bits/wordsize.h 
   - error.h
   - execinfo.h
   - fpu_control.h

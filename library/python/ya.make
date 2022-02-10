@@ -200,7 +200,7 @@ RECURSE(
     type_info
     type_info/test
     unique_id
-    vault_client 
+    vault_client
     watch_dog
     watch_dog/example
     wiki

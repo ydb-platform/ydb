@@ -1,36 +1,36 @@
 #include <library/cpp/uri/parse.h>
-
+ 
 #ifdef __clang__
     #pragma clang diagnostic ignored "-Wunused-variable"
 #endif
 
-%%{
+%%{ 
     machine TParser;
-
+ 
     #================================================
     # RFC 3986 http://tools.ietf.org/html/rfc3986
-    # with some modifications
-    #================================================
-    # The RegEx
-    #
-    # http://www.ics.uci.edu/pub/ietf/uri/#Related
-    # ^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?
-    #  12            3  4          5       6  7        8 9
-    #results in the following subexpression matches:
-    # $1 = http:
-    # $2 = http
-    # $3 = //www.ics.uci.edu
-    # $4 = www.ics.uci.edu
-    # $5 = /pub/ietf/uri/
-    # $6 = <undefined>
-    # $7 = <undefined>
-    # $8 = #Related
-    # $9 = Related
-    #
+    # with some modifications 
+    #================================================ 
+    # The RegEx 
+    # 
+    # http://www.ics.uci.edu/pub/ietf/uri/#Related 
+    # ^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))? 
+    #  12            3  4          5       6  7        8 9 
+    #results in the following subexpression matches: 
+    # $1 = http: 
+    # $2 = http 
+    # $3 = //www.ics.uci.edu 
+    # $4 = www.ics.uci.edu 
+    # $5 = /pub/ietf/uri/ 
+    # $6 = <undefined> 
+    # $7 = <undefined> 
+    # $8 = #Related 
+    # $9 = Related 
+    # 
     # So $2:scheme $4:authority $5:path $7:query $9:fragment
-    #================================================
-
-
+    #================================================ 
+ 
+ 
     #================================================
     # List of all ASCII characters and where they can be used
     #================================================
@@ -79,7 +79,7 @@
     #================================================
     # Actions used in multiple definitions
     #================================================
-
+ 
     action act_req_enc_sql   { REQ(fpc, FeatureEncodeForSQL) }
 
     # REQ must apply to a char in range but not after the range has been reset
@@ -94,17 +94,17 @@
     action act_end_path      { END(fpc, Path)   }
 
 
-    #================================================
+    #================================================ 
     # RFC 3986 ABNFs
     #================================================
-
+ 
     DIGIT = digit;
-
+ 
     ALPHA = ( upper >{ REQ(fpc, FeatureToLower) } ) |
                   lower;
-
+ 
     ALNUM = ALPHA | DIGIT;
-
+ 
     PCT   = "%" >{ PctBeg(fpc); } ;
 
     HEXDIG = (
@@ -112,20 +112,20 @@
         | [A-F] >{ HexUpper(fpc, fc); }
         | [a-f] >{ HexLower(fpc, fc); }
     );
-
+ 
     # HexSet sets REQ so must apply in range
     HEXNUM = ( HEXDIG HEXDIG ) %{ HexSet(fpc - 1); };
-
+ 
     pct_encoded   = PCT HEXNUM;
 
     unreserved    = ALNUM | "-" | "." | "_" | "~";
-
+ 
     gen_delims    = ":" | "/" | "?" | "#" | "[" | "]" | "@";
-
+ 
     sub_delims    = "!" | "$" | "&" | "(" | ")"
                   | "*" | "+" | "," | ";" | "="
                   | ( ['] >act_req_enc_sql );
-
+ 
 
     #================================================
     # Local ABNFs
@@ -135,7 +135,7 @@
 
     # safe character sequences
     safe          = unreserved | pct_encoded | sub_delims;
-
+ 
     # MOD: Yandex extensions
 
     ext_ascii     = (VALID - ascii) >{ REQ(fpc, FeatureEncodeExtendedASCII) };
@@ -144,7 +144,7 @@
                   ) >{ REQ(fpc, FeatureEncodeExtendedDelim) }; # " fix hilite
     ext_space     = " " >{ REQ(fpc, FeatureEncodeSpace) };
     ext_cntrl     = cntrl >{ REQ(fpc, FeatureEncodeCntrl) };
-
+ 
     pct_maybe_encoded = PCT (HEXDIG | HEXNUM)? ;
     ext_safe      = unreserved
                   | pct_maybe_encoded
@@ -157,49 +157,49 @@
     # pchar         = unreserved / pct-encoded / sub-delims / ":" / "@"
     # uric (RFC 2396)
     # MOD: extension to format, add extended delimiters and 8-bit ascii
-
+ 
     pchar_nc      = ext_safe | "@";
     pchar         = pchar_nc | ":";
     path_sep      = "/";
     uric          = pchar | path_sep | "?";
-
-
+ 
+ 
     #================================================
     # Fields
     #================================================
     # Single fields use fXXX as machine definitions
-
-
+ 
+ 
     #================================================
     # Scheme
     # scheme        = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
     #================================================
-
+ 
     scheme   = ( ALPHA ( ALPHA | DIGIT | "+" | "-" | "." )** );
     fscheme  = scheme >{ BEG(fpc, Scheme) } %{ END(fpc, Scheme) };
-
-
+ 
+ 
     #================================================
     # UserInfo
     # userinfo      = *( unreserved / pct-encoded / sub-delims / ":" )
     #================================================
-
+ 
     # MOD: split into a pair of sections: username and password
-
+ 
     fuser    = ( ext_safe       )** >{ BEG(fpc, User) }   %{ END(fpc, User) };
     fpass    = ( ext_safe | ":" )** >{ BEG(fpc, Pass) }   %{ END(fpc, Pass) };
     userinfo = ( fuser ( ":" fpass )? ) ( "@" %act_clr_host @^act_clr_user );
-
-
+ 
+ 
     #================================================
     # Hostname
     # host          = IP-literal / IPv4address / reg-name
     #================================================
-
+ 
     # MOD: simplify IP-literal for now
     IPv6address   = (HEXDIG | ":" | ".")+;
     IP_literal    = "[" IPv6address "]";
-
+ 
     # IPv4address   = dec-octet "." dec-octet "." dec-octet "." dec-octet
     # MOD: simplify dec-octet which originally matches only 0-255
 
@@ -218,18 +218,18 @@
     host          = IP_literal | IPv4address | (reg_name - IPv4address);
     fhost         = host?    >act_beg_host   %act_end_host;
     fhost_nempty  = host     >act_beg_host   %act_end_host;
-
-
+ 
+ 
     #================================================
     # Port
     # port          = *DIGIT
     #================================================
-
+ 
     # MOD: use fport? for empty
     fport         = DIGIT+   >{ BEG(fpc, Port) }   %{ END(fpc, Port) };
-
-
-    #================================================
+ 
+ 
+    #================================================ 
     # Authority
     # authority     = [ userinfo "@" ] host [ ":" port ]
     #================================================
@@ -247,8 +247,8 @@
     #               / path-empty      ; zero characters
     #================================================
 
-    # checkPath rules
-
+    # checkPath rules 
+ 
     checkPathHead =
         "." ( "."? path_sep VALID* )? %act_req_pathop ;
 
@@ -265,17 +265,17 @@
 
     # segment       = *pchar
     segment        = pchar**;
-
+ 
     # segment-nz    = 1*pchar
     segment_nz     = pchar+;
-
+ 
     # segment-nz-nc = 1*( unreserved / pct-encoded / sub-delims / "@" )
     segment_nz_nc  = pchar_nc+;
-
+ 
     sep_segment    = path_sep segment;
-
+ 
     # non-standard definitions
-
+ 
     fpath_abnempty =
         (
             ( sep_segment+ )
@@ -291,7 +291,7 @@
         )
         >act_beg_path %act_req_pathop %act_end_path
     ;
-
+ 
     # standard definitions
 
     # do not save empty paths, they behave differently in relative resolutions
@@ -321,24 +321,24 @@
         )
         >act_beg_path %act_end_path
     ;
-
+ 
     #================================================
     # Query and fragment
     # query         = *( pchar / "/" / "?" )
     # fragment      = *( pchar / "/" / "?" )
     #================================================
-
+ 
     # MOD: fragment allows '#' characters
-
+ 
     fquery     = (uric      )** >{ BEG(fpc, Query) }  %{ END(fpc, Query) };
     ffrag      = (uric | "#")** >{ BEG(fpc, Frag) }   %{ END(fpc, Frag) };
     query_frag = ("?" fquery)? ("#" ffrag)? ;
-
-
-    #================================================
+ 
+ 
+    #================================================ 
     # final ABNFs
     # URI-reference = URI / relative-ref
-    #================================================
+    #================================================ 
     # URI           = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
     # hier-part     = "//" authority path-abempty
     #               / path-absolute
@@ -349,9 +349,9 @@
     #               / path-absolute
     #               / path-noscheme
     #               / path-empty
-
+ 
     net_path = "//" authority fpath_abempty;
-
+ 
     URI =
         fscheme ":"
         (
@@ -387,7 +387,7 @@
         $^act_clr_scheme
         query_frag
     ;
-
+ 
     host_path =
         (
                fhost_nempty                     fpath_abempty
@@ -459,18 +459,18 @@
     ;
 
     write data;
-
-}%%
-
+ 
+}%% 
+ 
 namespace NUri {
 
 bool TParser::doParse(const char* str_beg, size_t length)
-{
+{ 
     const char* p = str_beg;
     const char* pe = str_beg + length;
     const char* eof = pe;
     int cs;
-
+ 
 #define BEG(ptr, fld) startSection (ptr, TField::Field ## fld);
 #define END(ptr, fld) finishSection(ptr, TField::Field ## fld);
 #define SET(val, fld) storeSection(val, TField::Field ## fld);
@@ -488,7 +488,7 @@ bool TParser::doParse(const char* str_beg, size_t length)
     }
 
     %% write exec;
-
+ 
 #undef BEG
 #undef END
 #undef SET
@@ -496,6 +496,6 @@ bool TParser::doParse(const char* str_beg, size_t length)
 #undef REQ
 
     return cs >= TParser_first_final;
-}
+} 
 
 }

@@ -1,26 +1,26 @@
 #pragma once
-
+ 
 #include "uri.h"
 #include "other.h"
 
 // XXX: use NUri::TUri directly; this whole file is for backwards compatibility
 
-class THttpURL
+class THttpURL 
    : public NUri::TUri {
 public:
     typedef TField::EFlags TFlags;
     typedef TField::EField TField;
     typedef TScheme::EKind TSchemeKind;
     typedef TState::EParsed TParsedState;
-
+ 
 public:
     enum {
         FeatureUnescapeStandard = TFeature::FeatureDecodeStandard,
         FeatureEscSpace = TFeature::FeatureEncodeSpaceAsPlus,
         FeatureEscapeUnescaped = TFeature::FeatureEncodeExtendedASCII,
         FeatureNormalPath = TFeature::FeaturePathStripRootParent,
-    };
-
+    }; 
+ 
 public:
     THttpURL(unsigned defaultPort = 80)
         : TUri(defaultPort)
@@ -31,7 +31,7 @@ public:
         : TUri(host, port, path, query, scheme, defaultPort)
     {
     }
-
+ 
     THttpURL(const TUri& url)
         : TUri(url)
     {
@@ -67,7 +67,7 @@ public: // use TUri::FldXXX methods for better control
     void Reset(EField field) {
         FldClr(field);
     }
-};
+}; 
 
 static inline const char* HttpURLParsedStateToString(const NUri::TState::EParsed& t) {
     return NUri::ParsedStateToString(t);

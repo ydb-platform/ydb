@@ -3,12 +3,12 @@
 
 #include <util/system/defaults.h>
 #include <util/system/byteorder.h>
-
+ 
 #if defined(_unix_) || defined(_cygwin_)
     #include <netdb.h>
-#endif
-
-#if !defined(BIND_LIB)
+#endif 
+ 
+#if !defined(BIND_LIB) 
     #if !defined(__FreeBSD__) && !defined(_win32_) && !defined(_cygwin_)
         #define AGENT_USE_GETADDRINFO
     #endif
@@ -16,13 +16,13 @@
     #if defined(__FreeBSD__)
         #define AGENT_USE_GETADDRINFO
     #endif
-#endif
-
+#endif 
+ 
 int NResolver::GetHostIP(const char* hostname, ui32* ip, size_t* slots) {
     size_t i = 0;
     size_t ipsFound = 0;
-
-#ifdef AGENT_USE_GETADDRINFO
+ 
+#ifdef AGENT_USE_GETADDRINFO 
     int ret = 0;
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
@@ -50,7 +50,7 @@ int NResolver::GetHostIP(const char* hostname, ui32* ip, size_t* slots) {
     if (ret) {
         return ret;
     }
-#else
+#else 
     hostent* hostent = gethostbyname(hostname);
 
     if (!hostent)
@@ -62,15 +62,15 @@ int NResolver::GetHostIP(const char* hostname, ui32* ip, size_t* slots) {
     char** cur = hostent->h_addr_list;
     for (i = 0; i < *slots && *cur; i++, cur++, ipsFound++)
         ip[i] = *(ui32*)*cur;
-#endif
+#endif 
     for (i = 0; i < ipsFound; i++) {
         ip[i] = InetToHost(ip[i]);
     }
     *slots = ipsFound;
-
+ 
     return 0;
 }
-
+ 
 int NResolver::GetDnsError() {
     return h_errno;
 }

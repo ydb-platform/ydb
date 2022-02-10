@@ -79,7 +79,7 @@ namespace NUri {
         FldTrySet(FieldHost, host);
         FldTrySet(FieldPath, path);
         FldTrySet(FieldQuery, query);
-
+ 
         Rewrite();
     }
 
@@ -102,7 +102,7 @@ namespace NUri {
             default:
                 break;
         }
-
+ 
         if (!value.IsInited()) {
             FldClr(field);
             return false;
@@ -177,10 +177,10 @@ namespace NUri {
                 out << '\0';
             }
             Buffer = std::move(newbuf);
-        }
+        } 
 
         CheckMissingFields();
-
+ 
         FieldsDirty = 0;
     }
 
@@ -191,8 +191,8 @@ namespace NUri {
             if (GetSchemeInfo().FldReq & FlagPath)
                 // ... set path
                 FldSetNoDirty(FieldPath, TStringBuf("/"));
-    }
-
+    } 
+ 
     /********************************************************/
     void TUri::Merge(const TUri& base, int correctAbs) {
         if (base.Scheme == SchemeUnknown)
@@ -200,7 +200,7 @@ namespace NUri {
 
         if (!base.IsValidGlobal())
             return;
-
+ 
         const TStringBuf& selfscheme = GetField(FieldScheme);
         // basescheme is present since IsValidGlobal() succeeded
         const TStringBuf& basescheme = base.GetField(FieldScheme);
@@ -225,11 +225,11 @@ namespace NUri {
 
             if (!IsNull(FlagHost))
                 break; // no merge
-
+ 
             FldTrySet(FieldHost, base);
             FldChkSet(FieldPort, base);
             Port = base.Port;
-
+ 
             if (noscheme && IsNull(FlagQuery) && IsNull(FlagPath))
                 FldTrySet(FieldQuery, base);
 
@@ -244,7 +244,7 @@ namespace NUri {
             TStringBuf p0 = base.GetField(FieldPath);
             if (!p0.IsInited())
                 p0 = rootPath;
-
+ 
             TStringBuf p1 = GetField(FieldPath);
             if (!p1.IsInited()) {
                 if (p0.data() != rootPath.data())
@@ -255,9 +255,9 @@ namespace NUri {
             }
             if (p1 && '/' == p1[0])
                 p1.Skip(1); // p0 will have one
-
+ 
             bool pathop = true;
-
+ 
             TTempBufOutput out(p0.length() + p1.length() + 4);
             out << p0;
             if ('/' != p0.back())
@@ -283,7 +283,7 @@ namespace NUri {
         // rewrite only if borrowed fields from base
         if (cleanFields & FieldsDirty)
             RewriteImpl();
-    }
+    } 
 
     /********************************************************/
     TUri::TLinkType TUri::Normalize(const TUri& base,
@@ -293,7 +293,7 @@ namespace NUri {
             return LinkIsBad;
 
         const TStringBuf& host = GetHost();
-
+ 
         // merge with base URL
         // taken either from _BASE_ property or from optional argument
         if (!codebase.empty()) {
@@ -307,27 +307,27 @@ namespace NUri {
             // see SetProperty() for details
             Merge(base);
         }
-
+ 
         // check result: must be correct absolute URL
         if (!IsValidAbs())
             return LinkBadAbs;
-
+ 
         if (!host.empty()) {
             //  - we don't care about different ports for the same server
             //  - we don't care about win|www|koi|etc. preffixes for the same server
             if (GetPort() != base.GetPort() || !EqualNoCase(host, base.GetHost()))
                 return LinkIsGlobal;
         }
-
+ 
         // find out if it is link to itself then ignore it
         if (!Compare(base, FlagPath | FlagQuery))
             return LinkIsFragment;
-
+ 
         return LinkIsLocal;
-    }
-
+    } 
+ 
     /********************************************************/
-
+ 
     size_t TUri::PrintSize(ui32 flags) const {
         size_t len = 10;
         flags &= FieldsSet; // can't output what we don't have
@@ -344,11 +344,11 @@ namespace NUri {
                         len += v.length() + 1;
                 }
             }
-        }
+        } 
 
         return len;
-    }
-
+    } 
+ 
     IOutputStream& TUri::PrintImpl(IOutputStream& out, int flags) const {
         TStringBuf v;
 
@@ -356,7 +356,7 @@ namespace NUri {
         flags &= FieldsSet;          // can't print what we don't have
         if (flags & FlagHostAscii)
             flags |= FlagHost; // to make host checks simpler below
-
+ 
         if (flags & FlagScheme) {
             v = Fields[FieldScheme];
             if (!v.empty())
@@ -369,7 +369,7 @@ namespace NUri {
                 flags & FlagHostAscii ? FieldHostAscii : FieldHost;
             host = Fields[fldhost];
         }
-
+ 
         TStringBuf port;
         if ((flags & FlagPort) && 0 != Port && Port != DefaultPort)
             port = Fields[FieldPort];
@@ -394,16 +394,16 @@ namespace NUri {
                 }
 
                 out << '@';
-            }
-
+            } 
+ 
             out << host;
-
+ 
             if (port)
                 out << ':';
-        }
+        } 
         if (port)
             out << port;
-
+ 
         if (flags & FlagPath) {
             v = Fields[FieldPath];
             // for relative, empty path is not the same as missing
@@ -411,22 +411,22 @@ namespace NUri {
                 v = TStringBuf(".");
             out << v;
         }
-
+ 
         if (flags & FlagQuery) {
             v = Fields[FieldQuery];
             if (v.IsInited())
                 out << '?' << v;
         }
-
+ 
         if (flags & FlagFrag) {
             v = Fields[FieldFrag];
             if (v.IsInited())
                 out << '#' << v;
         }
-
+ 
         return out;
-    }
-
+    } 
+ 
     /********************************************************/
     int TUri::CompareField(EField fld, const TUri& url) const {
         const TStringBuf& v0 = GetField(fld);
@@ -438,8 +438,8 @@ namespace NUri {
             default:
                 return v0.compare(v1);
         }
-    }
-
+    } 
+ 
     /********************************************************/
     int TUri::Compare(const TUri& url, int flags) const {
         // first compare fields with default values
@@ -449,14 +449,14 @@ namespace NUri {
                 return ret;
             flags &= ~FlagPort;
         }
-
+ 
         // compare remaining sets of available fields
         const int rtflags = flags & url.FieldsSet;
         flags &= FieldsSet;
         const int fldcmp = flags - rtflags;
         if (fldcmp)
             return fldcmp;
-
+ 
         // field sets are the same, compare the fields themselves
         for (int i = 0; i < FieldAllMAX; ++i) {
             const EField fld = EField(i);
@@ -468,8 +468,8 @@ namespace NUri {
         }
 
         return 0;
-    }
-
+    } 
+ 
     /********************************************************/
     bool TUri::PathOperation(char*& pathPtr, char*& pathEnd, int correctAbs) {
         if (!pathPtr)
@@ -479,22 +479,22 @@ namespace NUri {
 
         if ((pathEnd - pathPtr) >= 2 && *(pathEnd - 2) == '/' && *(pathEnd - 1) == '.') {
             --pathEnd;
-        }
+        } 
 
         char* p_wr = pathEnd;
         int upCount = 0;
-
+ 
         char* p_prev = pathEnd;
         Y_ASSERT(p_prev > pathPtr);
         while (p_prev > pathPtr && *(p_prev - 1) == '/')
             p_prev--;
-
+ 
         for (char* p_rd = p_prev; p_rd; p_rd = p_prev) {
             Y_ASSERT(p_rd == pathEnd || p_rd[0] == '/');
             p_prev = nullptr;
 
             char* p = p_rd;
-
+ 
             if (p > pathPtr) {
                 for (p--; *p != '/'; p--) {
                     if (p == pathPtr)
@@ -513,10 +513,10 @@ namespace NUri {
                     }
                 }
             }
-
+ 
             Y_ASSERT(p_prev == nullptr || p_prev[0] == '/');
             //and the first symbol !='/' after p_prev is p
-
+ 
             if (p == p_rd) {
                 //empty block:
                 if (p_prev) { //either tail:
@@ -525,9 +525,9 @@ namespace NUri {
                     continue;
                 } else { //or head of abs path
                     *(--p_wr) = '/';
-                    break;
+                    break; 
                 }
-            }
+            } 
 
             if (p[0] == '.') {
                 if (p + 1 == p_rd) {
@@ -541,14 +541,14 @@ namespace NUri {
                         continue;
                     }
                 }
-            }
-
+            } 
+ 
             if (upCount) {
                 //unregister "../" and not print
                 upCount--;
-                continue;
-            }
-
+                continue; 
+            } 
+ 
             // print
             Y_ASSERT(p < p_rd);
             Y_ASSERT(!p_prev || *(p - 1) == '/');
@@ -558,9 +558,9 @@ namespace NUri {
                 int l = p_rd - p + 1;
                 p_wr -= l;
                 memmove(p_wr, p, l);
-            }
-        }
-
+            } 
+        } 
+ 
         if (upCount) {
             if (*pathPtr != '/') {
                 if (pathEnd == p_wr && *(p_wr - 1) == '.') {
@@ -570,9 +570,9 @@ namespace NUri {
                 }
                 for (; upCount > 0; upCount--) {
                     *(--p_wr) = '/';
-                    *(--p_wr) = '.';
-                    *(--p_wr) = '.';
-                }
+                    *(--p_wr) = '.'; 
+                    *(--p_wr) = '.'; 
+                } 
             } else {
                 if (correctAbs > 0)
                     return false;
@@ -589,17 +589,17 @@ namespace NUri {
                 } else {
                     upCount = false;
                 }
-            }
-        }
-
+            } 
+        } 
+ 
         Y_ASSERT(p_wr >= pathPtr);
-
+ 
         if (upCount)
             return false;
         pathPtr = p_wr;
         return true;
     }
-
+ 
     /********************************************************/
     const char* LinkTypeToString(const TUri::TLinkType& t) {
         switch (t) {

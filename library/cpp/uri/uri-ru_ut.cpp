@@ -45,23 +45,23 @@ namespace NUri {
                                      TState::ParsedOK);
             UNIT_ASSERT_VALUES_EQUAL(url.PrintS(),
                                      AsWin1251("www.TEST.Ru/%D4%C5%D3%D4\\'\".html?%D4%C5%D3%D4\\'\"=%D4%C5%D3%D4+\\'\"%10"));
-
+ 
             UNIT_ASSERT_VALUES_EQUAL(url.Parse(AsWin1251("www.TEST.Ru/ФЕУФ\\'\".html?ФЕУФ\\'\"=ФЕУФ+\\'\"%10"),
                                                TFeature::FeaturesDefault | TFeature::FeatureEncodeForSQL),
                                      TState::ParsedOK);
             UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), AsWin1251("www.TEST.Ru/ФЕУФ%5C%27%22.html?ФЕУФ%5C%27%22=ФЕУФ+%5C%27%22%10"));
-
+ 
             UNIT_ASSERT_VALUES_EQUAL(url.Parse("q/%33%26%13%2f%2b%30%20",
                                                TFeature::FeaturesDefault | TFeature::FeatureDecodeStandard),
                                      TState::ParsedOK);
             UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "q/3%26%13/%2B0%20");
-
+ 
             UNIT_ASSERT_VALUES_EQUAL(url.Parse("http://www.prime-tass.ru/news/0/{656F5BAE-6677-4762-9BED-9E3B77E72055}.uif"),
                                      TState::ParsedOK);
             UNIT_ASSERT_VALUES_EQUAL(url.Parse("//server/path"), TState::ParsedOK);
             UNIT_ASSERT_VALUES_EQUAL(url.Parse("//server/path", TFeature::FeaturesRobot), TState::ParsedOK);
         }
-
+ 
         const TString links[] = {
             "viewforum.php?f=1&amp;sid=b4568481b67b1d7683bea78634b2e240", "viewforum.php?f=1&sid=b4568481b67b1d7683bea78634b2e240",
             "./viewtopic.php?p=74&amp;sid=6#p74", "./viewtopic.php?p=74&sid=6#p74",

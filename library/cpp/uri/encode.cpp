@@ -1,7 +1,7 @@
 #include "encode.h"
-
+ 
 #include <util/generic/singleton.h>
-
+ 
 namespace NUri {
     namespace NEncode {
 // http://tools.ietf.org/html/rfc3986#section-2.2
@@ -9,9 +9,9 @@ namespace NUri {
 #define SUBDELIMS0 "!$&'()*+,;="
 // http://tools.ietf.org/html/rfc3986#section-2.3
 #define UNRESERVED "-._~"
-
+ 
 // now find subsets which can sometimes be decoded
-
+ 
 // remove '#' which can't ever be decoded
 // don't mark anything allowed for pass (pass is completely encoded)
 // safe in path, qry, frag
@@ -73,7 +73,7 @@ namespace NUri {
             GetMutable('&').EncodeFld |= TField::FlagQuery;
             GetMutable('+').EncodeFld |= TField::FlagQuery;
         }
-
+ 
         // should we decode an encoded character
         bool TCharFlags::IsDecode(ui32 fldmask, ui64 flags) const {
             const ui64 myflags = flags & FeatFlags;
@@ -162,7 +162,7 @@ namespace NUri {
                 Encode(out, val[i]);
             return out;
         }
-
+ 
         IOutputStream& TEncoder::EncodeNotAlnum(IOutputStream& out, const TStringBuf& val) {
             for (size_t i = 0; i != val.length(); ++i) {
                 const char c = val[i];
@@ -186,7 +186,7 @@ namespace NUri {
             }
             return out;
         }
-
+ 
         IOutputStream& TEncoder::EncodeField(
             IOutputStream& out, const TStringBuf& val, TField::EField fld, ui64 flags) {
             const ui32 fldmask = ui32(1) << fld;
@@ -199,10 +199,10 @@ namespace NUri {
             }
             return out;
         }
-
+ 
         void TEncoder::Do(unsigned char ch, int res) {
             OutFlags |= GetFlags(ch).FeatFlags;
-
+ 
             bool escapepct = false;
             if (0 < res) // definitely encode
                 escapepct = FldDst.Enabled();
@@ -217,4 +217,4 @@ namespace NUri {
             Hex(Out, ch);
         }
     }
-}
+} 

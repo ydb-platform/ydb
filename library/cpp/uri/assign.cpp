@@ -1,6 +1,6 @@
 #include "uri.h"
 #include "parse.h"
-
+ 
 #include <contrib/libs/libidn/idna.h>
 
 #include <library/cpp/charset/recyr.hh>
@@ -9,7 +9,7 @@
 #include <util/string/cast.h>
 #include <util/system/yassert.h>
 #include <util/system/sys_alloc.h>
-
+ 
 namespace NUri {
     TMallocPtr<char> TUri::IDNToAscii(const wchar32* idna) {
         // XXX: don't use punycode_encode directly as it doesn't include
@@ -138,18 +138,18 @@ namespace NUri {
 
         const TSection& scheme = parser.Get(FieldScheme);
         const TSchemeInfo& schemeInfo = SetSchemeImpl(parser.Scheme);
-
+ 
         // set the scheme always if available
         if (schemeInfo.Str.empty() && scheme.IsSet())
             FldSet(FieldScheme, scheme.Get());
-
+ 
         if (ParsedOK != ret)
             return ret;
-
+ 
         size_t buflen = 0;
-
+ 
         // special processing for fields
-
+ 
         const bool convertIDN = parser.Flags & FeatureConvertHostIDN;
         long flags = parser.Flags.Allow;
         if (convertIDN)
@@ -196,7 +196,7 @@ namespace NUri {
         // https://developers.google.com/webmasters/ajax-crawling/docs/specification
 
         static const TStringBuf escFragPrefix(TStringBuf("_escaped_fragment_="));
-
+ 
         bool encHashBangFrag = false;
         TStringBuf qryBeforeEscapedFragment;
         TStringBuf qryEscapedFragment;
@@ -250,7 +250,7 @@ namespace NUri {
 
             if (FieldFrag == fld && qryEscapedFragment.IsInited())
                 continue;
-
+ 
             char* beg = out.Buf();
             TStringBuf val = section.Get();
             long careFlags = section.GetFlagsEncode();
@@ -299,7 +299,7 @@ namespace NUri {
 
                 Y_ASSERT(beg >= out.Beg());
                 out.SetPos(end);
-            }
+            } 
 
             FldSetNoDirty(fld, TStringBuf(beg, end));
 
@@ -312,8 +312,8 @@ namespace NUri {
             }
 
             out << '\0';
-        }
-
+        } 
+ 
         if (hostConverted) {
             char* beg = out.Buf();
             out << hostascii;
@@ -322,7 +322,7 @@ namespace NUri {
             FldSetNoDirty(fld, TStringBuf(beg, end));
             out << '\0';
         }
-
+ 
         Buffer.Resize(out.Len());
 
         if (GetScheme() == SchemeEmpty && SchemeEmpty != defscheme) {
@@ -330,7 +330,7 @@ namespace NUri {
                 ret = ParsedBadScheme;
             else
                 SetSchemeImpl(defscheme);
-        }
+        } 
 
         if (0 == (parser.Flags & FeatureAllowEmptyPath))
             CheckMissingFields();
@@ -340,7 +340,7 @@ namespace NUri {
             if (!TryFromString<ui16>(port, Port))
                 ret = ParsedBadPort;
         }
-
+ 
         if (ParsedOK != ret)
             return ret;
 
@@ -370,7 +370,7 @@ namespace NUri {
 
         if (url.empty())
             return ParsedEmpty;
-
+ 
         if (maxlen > 0 && url.length() > maxlen)
             return ParsedTooLong;
 
@@ -392,7 +392,7 @@ namespace NUri {
                 return ret;
             Merge(base, PathOperationFlag(flags));
         }
-
+ 
         Rewrite();
         return ret;
     }
@@ -408,7 +408,7 @@ namespace NUri {
         Rewrite();
         return ret;
     }
-
+ 
     TState::EParsed TUri::ParseAbsUri(const TStringBuf& url, const TParseFlags& flags, ui32 maxlen, TScheme::EKind defscheme, ECharset enc) {
         const TState::EParsed ret = ParseImpl(
             url, flags | FeatureNoRelPath, maxlen, defscheme, enc);
@@ -417,7 +417,7 @@ namespace NUri {
 
         if (IsNull(FlagHost))
             return ParsedBadHost;
-
+ 
         Rewrite();
         return ParsedOK;
     }

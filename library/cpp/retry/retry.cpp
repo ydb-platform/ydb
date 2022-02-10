@@ -11,8 +11,8 @@ bool DoWithRetryOnRetCode(std::function<bool()> func, TRetryOptions retryOptions
         if (func()) {
             return true;
         }
-        auto sleep = retryOptions.SleepFunction; 
-        sleep(retryOptions.GetTimeToSleep(attempt)); 
+        auto sleep = retryOptions.SleepFunction;
+        sleep(retryOptions.GetTimeToSleep(attempt));
     }
     return false;
 }

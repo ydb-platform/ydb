@@ -13,7 +13,7 @@
 constexpr double PI = M_PI;
 constexpr double M_LOG2_10 = 3.32192809488736234787; // log2(10)
 constexpr double M_LN2_INV = M_LOG2E;                // 1 / ln(2) == log2(e)
-
+ 
 /**
  * \returns                             Absolute value of the provided argument.
  */

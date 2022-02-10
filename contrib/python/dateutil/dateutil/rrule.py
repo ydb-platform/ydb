@@ -16,16 +16,16 @@ from functools import wraps
 from warnings import warn
 
 from six import advance_iterator, integer_types
- 
-from six.moves import _thread, range 
 
-from ._common import weekday as weekdaybase 
- 
+from six.moves import _thread, range
+
+from ._common import weekday as weekdaybase
+
 try:
     from math import gcd
 except ImportError:
     from fractions import gcd
- 
+
 __all__ = ["rrule", "rruleset", "rrulestr",
            "YEARLY", "MONTHLY", "WEEKLY", "DAILY",
            "HOURLY", "MINUTELY", "SECONDLY",
@@ -48,8 +48,8 @@ del M29, M30, M31, M365MASK[59], MDAY365MASK[59], NMDAY365MASK[31]
 MDAY365MASK = tuple(MDAY365MASK)
 M365MASK = tuple(M365MASK)
 
-FREQNAMES = ['YEARLY', 'MONTHLY', 'WEEKLY', 'DAILY', 'HOURLY', 'MINUTELY', 'SECONDLY'] 
- 
+FREQNAMES = ['YEARLY', 'MONTHLY', 'WEEKLY', 'DAILY', 'HOURLY', 'MINUTELY', 'SECONDLY']
+
 (YEARLY,
  MONTHLY,
  WEEKLY,
@@ -63,44 +63,44 @@ easter = None
 parser = None
 
 
-class weekday(weekdaybase): 
-    """ 
-    This version of weekday does not allow n = 0. 
-    """ 
-    def __init__(self, wkday, n=None): 
+class weekday(weekdaybase):
+    """
+    This version of weekday does not allow n = 0.
+    """
+    def __init__(self, wkday, n=None):
         if n == 0:
-            raise ValueError("Can't create weekday with n==0") 
+            raise ValueError("Can't create weekday with n==0")
 
-        super(weekday, self).__init__(wkday, n) 
-
-
-MO, TU, WE, TH, FR, SA, SU = weekdays = tuple(weekday(x) for x in range(7)) 
+        super(weekday, self).__init__(wkday, n)
 
 
-def _invalidates_cache(f): 
-    """ 
-    Decorator for rruleset methods which may invalidate the 
-    cached length. 
-    """ 
+MO, TU, WE, TH, FR, SA, SU = weekdays = tuple(weekday(x) for x in range(7))
+
+
+def _invalidates_cache(f):
+    """
+    Decorator for rruleset methods which may invalidate the
+    cached length.
+    """
     @wraps(f)
-    def inner_func(self, *args, **kwargs): 
-        rv = f(self, *args, **kwargs) 
-        self._invalidate_cache() 
-        return rv 
+    def inner_func(self, *args, **kwargs):
+        rv = f(self, *args, **kwargs)
+        self._invalidate_cache()
+        return rv
 
-    return inner_func 
- 
- 
+    return inner_func
+
+
 class rrulebase(object):
     def __init__(self, cache=False):
         if cache:
             self._cache = []
             self._cache_lock = _thread.allocate_lock()
-            self._invalidate_cache() 
+            self._invalidate_cache()
         else:
             self._cache = None
             self._cache_complete = False
-            self._len = None 
+            self._len = None
 
     def __iter__(self):
         if self._cache_complete:
@@ -110,17 +110,17 @@ class rrulebase(object):
         else:
             return self._iter_cached()
 
-    def _invalidate_cache(self): 
-        if self._cache is not None: 
-            self._cache = [] 
-            self._cache_complete = False 
-            self._cache_gen = self._iter() 
- 
-            if self._cache_lock.locked(): 
-                self._cache_lock.release() 
- 
-        self._len = None 
- 
+    def _invalidate_cache(self):
+        if self._cache is not None:
+            self._cache = []
+            self._cache_complete = False
+            self._cache_gen = self._iter()
+
+            if self._cache_lock.locked():
+                self._cache_lock.release()
+
+        self._len = None
+
     def _iter_cached(self):
         i = 0
         gen = self._cache_gen
@@ -227,48 +227,48 @@ class rrulebase(object):
                     return i
         return None
 
-    def xafter(self, dt, count=None, inc=False): 
-        """ 
-        Generator which yields up to `count` recurrences after the given 
-        datetime instance, equivalent to `after`. 
- 
-        :param dt: 
-            The datetime at which to start generating recurrences. 
- 
-        :param count: 
-            The maximum number of recurrences to generate. If `None` (default), 
-            dates are generated until the recurrence rule is exhausted. 
- 
-        :param inc: 
-            If `dt` is an instance of the rule and `inc` is `True`, it is 
-            included in the output. 
- 
-        :yields: Yields a sequence of `datetime` objects. 
-        """ 
- 
-        if self._cache_complete: 
-            gen = self._cache 
-        else: 
-            gen = self 
- 
-        # Select the comparison function 
-        if inc: 
-            comp = lambda dc, dtc: dc >= dtc 
-        else: 
-            comp = lambda dc, dtc: dc > dtc 
- 
-        # Generate dates 
-        n = 0 
-        for d in gen: 
-            if comp(d, dt): 
-                if count is not None: 
-                    n += 1 
-                    if n > count: 
-                        break 
- 
-                yield d 
- 
-    def between(self, after, before, inc=False, count=1): 
+    def xafter(self, dt, count=None, inc=False):
+        """
+        Generator which yields up to `count` recurrences after the given
+        datetime instance, equivalent to `after`.
+
+        :param dt:
+            The datetime at which to start generating recurrences.
+
+        :param count:
+            The maximum number of recurrences to generate. If `None` (default),
+            dates are generated until the recurrence rule is exhausted.
+
+        :param inc:
+            If `dt` is an instance of the rule and `inc` is `True`, it is
+            included in the output.
+
+        :yields: Yields a sequence of `datetime` objects.
+        """
+
+        if self._cache_complete:
+            gen = self._cache
+        else:
+            gen = self
+
+        # Select the comparison function
+        if inc:
+            comp = lambda dc, dtc: dc >= dtc
+        else:
+            comp = lambda dc, dtc: dc > dtc
+
+        # Generate dates
+        n = 0
+        for d in gen:
+            if comp(d, dt):
+                if count is not None:
+                    n += 1
+                    if n > count:
+                        break
+
+                yield d
+
+    def between(self, after, before, inc=False, count=1):
         """ Returns all the occurrences of the rrule between after and before.
         The inc keyword defines what happens if after and/or before are
         themselves occurrences. With inc=True, they will be included in the
@@ -313,29 +313,29 @@ class rrule(rrulebase):
     Where freq must be one of YEARLY, MONTHLY, WEEKLY, DAILY, HOURLY, MINUTELY,
     or SECONDLY.
 
-    .. note:: 
-        Per RFC section 3.3.10, recurrence instances falling on invalid dates 
-        and times are ignored rather than coerced: 
- 
-            Recurrence rules may generate recurrence instances with an invalid 
-            date (e.g., February 30) or nonexistent local time (e.g., 1:30 AM 
-            on a day where the local time is moved forward by an hour at 1:00 
-            AM).  Such recurrence instances MUST be ignored and MUST NOT be 
-            counted as part of the recurrence set. 
- 
-        This can lead to possibly surprising behavior when, for example, the 
-        start date occurs at the end of the month: 
- 
-        >>> from dateutil.rrule import rrule, MONTHLY 
-        >>> from datetime import datetime 
-        >>> start_date = datetime(2014, 12, 31) 
-        >>> list(rrule(freq=MONTHLY, count=4, dtstart=start_date)) 
-        ... # doctest: +NORMALIZE_WHITESPACE 
-        [datetime.datetime(2014, 12, 31, 0, 0), 
-         datetime.datetime(2015, 1, 31, 0, 0), 
-         datetime.datetime(2015, 3, 31, 0, 0), 
-         datetime.datetime(2015, 5, 31, 0, 0)] 
- 
+    .. note::
+        Per RFC section 3.3.10, recurrence instances falling on invalid dates
+        and times are ignored rather than coerced:
+
+            Recurrence rules may generate recurrence instances with an invalid
+            date (e.g., February 30) or nonexistent local time (e.g., 1:30 AM
+            on a day where the local time is moved forward by an hour at 1:00
+            AM).  Such recurrence instances MUST be ignored and MUST NOT be
+            counted as part of the recurrence set.
+
+        This can lead to possibly surprising behavior when, for example, the
+        start date occurs at the end of the month:
+
+        >>> from dateutil.rrule import rrule, MONTHLY
+        >>> from datetime import datetime
+        >>> start_date = datetime(2014, 12, 31)
+        >>> list(rrule(freq=MONTHLY, count=4, dtstart=start_date))
+        ... # doctest: +NORMALIZE_WHITESPACE
+        [datetime.datetime(2014, 12, 31, 0, 0),
+         datetime.datetime(2015, 1, 31, 0, 0),
+         datetime.datetime(2015, 3, 31, 0, 0),
+         datetime.datetime(2015, 5, 31, 0, 0)]
+
     Additionally, it supports the following keyword arguments:
 
     :param dtstart:
@@ -355,8 +355,8 @@ class rrule(rrulebase):
         calendar.setfirstweekday().
     :param count:
         If given, this determines how many occurrences will be generated.
- 
-        .. note:: 
+
+        .. note::
             As of version 2.5.0, the use of the keyword ``until`` in conjunction
             with ``count`` is deprecated, to make sure ``dateutil`` is fully
             compliant with `RFC-5545 Sec. 3.3.10 <https://tools.ietf.org/
@@ -364,11 +364,11 @@ class rrule(rrulebase):
             **must not** occur in the same call to ``rrule``.
     :param until:
         If given, this must be a datetime instance specifying the upper-bound
-        limit of the recurrence. The last recurrence in the rule is the greatest 
-        datetime that is less than or equal to the value specified in the 
-        ``until`` parameter. 
- 
-        .. note:: 
+        limit of the recurrence. The last recurrence in the rule is the greatest
+        datetime that is less than or equal to the value specified in the
+        ``until`` parameter.
+
+        .. note::
             As of version 2.5.0, the use of the keyword ``until`` in conjunction
             with ``count`` is deprecated, to make sure ``dateutil`` is fully
             compliant with `RFC-5545 Sec. 3.3.10 <https://tools.ietf.org/
@@ -447,17 +447,17 @@ class rrule(rrulebase):
         self._freq = freq
         self._interval = interval
         self._count = count
- 
-        # Cache the original byxxx rules, if they are provided, as the _byxxx 
-        # attributes do not necessarily map to the inputs, and this can be 
-        # a problem in generating the strings. Only store things if they've 
-        # been supplied (the string retrieval will just use .get()) 
-        self._original_rule = {} 
- 
+
+        # Cache the original byxxx rules, if they are provided, as the _byxxx
+        # attributes do not necessarily map to the inputs, and this can be
+        # a problem in generating the strings. Only store things if they've
+        # been supplied (the string retrieval will just use .get())
+        self._original_rule = {}
+
         if until and not isinstance(until, datetime.datetime):
             until = datetime.datetime.fromordinal(until.toordinal())
         self._until = until
- 
+
         if self._dtstart and self._until:
             if (self._dtstart.tzinfo is not None) != (self._until.tzinfo is not None):
                 # According to RFC5545 Section 3.3.10:
@@ -472,18 +472,18 @@ class rrule(rrulebase):
                     'is timezone-aware'
                 )
 
-        if count is not None and until: 
+        if count is not None and until:
             warn("Using both 'count' and 'until' is inconsistent with RFC 5545"
-                 " and has been deprecated in dateutil. Future versions will " 
-                 "raise an error.", DeprecationWarning) 
- 
+                 " and has been deprecated in dateutil. Future versions will "
+                 "raise an error.", DeprecationWarning)
+
         if wkst is None:
             self._wkst = calendar.firstweekday()
         elif isinstance(wkst, integer_types):
             self._wkst = wkst
         else:
             self._wkst = wkst.weekday
- 
+
         if bysetpos is None:
             self._bysetpos = None
         elif isinstance(bysetpos, integer_types):
@@ -497,47 +497,47 @@ class rrule(rrulebase):
                 if pos == 0 or not (-366 <= pos <= 366):
                     raise ValueError("bysetpos must be between 1 and 366, "
                                      "or between -366 and -1")
- 
-        if self._bysetpos: 
-            self._original_rule['bysetpos'] = self._bysetpos 
- 
-        if (byweekno is None and byyearday is None and bymonthday is None and 
-                byweekday is None and byeaster is None): 
+
+        if self._bysetpos:
+            self._original_rule['bysetpos'] = self._bysetpos
+
+        if (byweekno is None and byyearday is None and bymonthday is None and
+                byweekday is None and byeaster is None):
             if freq == YEARLY:
-                if bymonth is None: 
+                if bymonth is None:
                     bymonth = dtstart.month
-                    self._original_rule['bymonth'] = None 
+                    self._original_rule['bymonth'] = None
                 bymonthday = dtstart.day
-                self._original_rule['bymonthday'] = None 
+                self._original_rule['bymonthday'] = None
             elif freq == MONTHLY:
                 bymonthday = dtstart.day
-                self._original_rule['bymonthday'] = None 
+                self._original_rule['bymonthday'] = None
             elif freq == WEEKLY:
                 byweekday = dtstart.weekday()
-                self._original_rule['byweekday'] = None 
- 
+                self._original_rule['byweekday'] = None
+
         # bymonth
-        if bymonth is None: 
+        if bymonth is None:
             self._bymonth = None
         else:
-            if isinstance(bymonth, integer_types): 
-                bymonth = (bymonth,) 
- 
-            self._bymonth = tuple(sorted(set(bymonth))) 
- 
-            if 'bymonth' not in self._original_rule: 
-                self._original_rule['bymonth'] = self._bymonth 
- 
+            if isinstance(bymonth, integer_types):
+                bymonth = (bymonth,)
+
+            self._bymonth = tuple(sorted(set(bymonth)))
+
+            if 'bymonth' not in self._original_rule:
+                self._original_rule['bymonth'] = self._bymonth
+
         # byyearday
-        if byyearday is None: 
+        if byyearday is None:
             self._byyearday = None
         else:
-            if isinstance(byyearday, integer_types): 
-                byyearday = (byyearday,) 
- 
-            self._byyearday = tuple(sorted(set(byyearday))) 
-            self._original_rule['byyearday'] = self._byyearday 
- 
+            if isinstance(byyearday, integer_types):
+                byyearday = (byyearday,)
+
+            self._byyearday = tuple(sorted(set(byyearday)))
+            self._original_rule['byyearday'] = self._byyearday
+
         # byeaster
         if byeaster is not None:
             if not easter:
@@ -545,83 +545,83 @@ class rrule(rrulebase):
             if isinstance(byeaster, integer_types):
                 self._byeaster = (byeaster,)
             else:
-                self._byeaster = tuple(sorted(byeaster)) 
- 
-            self._original_rule['byeaster'] = self._byeaster 
+                self._byeaster = tuple(sorted(byeaster))
+
+            self._original_rule['byeaster'] = self._byeaster
         else:
             self._byeaster = None
- 
-        # bymonthday 
-        if bymonthday is None: 
+
+        # bymonthday
+        if bymonthday is None:
             self._bymonthday = ()
             self._bynmonthday = ()
         else:
-            if isinstance(bymonthday, integer_types): 
-                bymonthday = (bymonthday,) 
- 
-            bymonthday = set(bymonthday)            # Ensure it's unique 
- 
-            self._bymonthday = tuple(sorted(x for x in bymonthday if x > 0)) 
-            self._bynmonthday = tuple(sorted(x for x in bymonthday if x < 0)) 
- 
-            # Storing positive numbers first, then negative numbers 
-            if 'bymonthday' not in self._original_rule: 
-                self._original_rule['bymonthday'] = tuple( 
-                    itertools.chain(self._bymonthday, self._bynmonthday)) 
- 
+            if isinstance(bymonthday, integer_types):
+                bymonthday = (bymonthday,)
+
+            bymonthday = set(bymonthday)            # Ensure it's unique
+
+            self._bymonthday = tuple(sorted(x for x in bymonthday if x > 0))
+            self._bynmonthday = tuple(sorted(x for x in bymonthday if x < 0))
+
+            # Storing positive numbers first, then negative numbers
+            if 'bymonthday' not in self._original_rule:
+                self._original_rule['bymonthday'] = tuple(
+                    itertools.chain(self._bymonthday, self._bynmonthday))
+
         # byweekno
         if byweekno is None:
             self._byweekno = None
         else:
-            if isinstance(byweekno, integer_types): 
-                byweekno = (byweekno,) 
- 
-            self._byweekno = tuple(sorted(set(byweekno))) 
- 
-            self._original_rule['byweekno'] = self._byweekno 
- 
+            if isinstance(byweekno, integer_types):
+                byweekno = (byweekno,)
+
+            self._byweekno = tuple(sorted(set(byweekno)))
+
+            self._original_rule['byweekno'] = self._byweekno
+
         # byweekday / bynweekday
         if byweekday is None:
             self._byweekday = None
             self._bynweekday = None
         else:
-            # If it's one of the valid non-sequence types, convert to a 
-            # single-element sequence before the iterator that builds the 
-            # byweekday set. 
-            if isinstance(byweekday, integer_types) or hasattr(byweekday, "n"): 
-                byweekday = (byweekday,) 
- 
-            self._byweekday = set() 
-            self._bynweekday = set() 
+            # If it's one of the valid non-sequence types, convert to a
+            # single-element sequence before the iterator that builds the
+            # byweekday set.
+            if isinstance(byweekday, integer_types) or hasattr(byweekday, "n"):
+                byweekday = (byweekday,)
+
+            self._byweekday = set()
+            self._bynweekday = set()
             for wday in byweekday:
                 if isinstance(wday, integer_types):
-                    self._byweekday.add(wday) 
+                    self._byweekday.add(wday)
                 elif not wday.n or freq > MONTHLY:
-                    self._byweekday.add(wday.weekday) 
+                    self._byweekday.add(wday.weekday)
                 else:
-                    self._bynweekday.add((wday.weekday, wday.n)) 
- 
+                    self._bynweekday.add((wday.weekday, wday.n))
+
             if not self._byweekday:
                 self._byweekday = None
             elif not self._bynweekday:
                 self._bynweekday = None
- 
-            if self._byweekday is not None: 
-                self._byweekday = tuple(sorted(self._byweekday)) 
-                orig_byweekday = [weekday(x) for x in self._byweekday] 
-            else: 
+
+            if self._byweekday is not None:
+                self._byweekday = tuple(sorted(self._byweekday))
+                orig_byweekday = [weekday(x) for x in self._byweekday]
+            else:
                 orig_byweekday = ()
- 
-            if self._bynweekday is not None: 
-                self._bynweekday = tuple(sorted(self._bynweekday)) 
-                orig_bynweekday = [weekday(*x) for x in self._bynweekday] 
-            else: 
+
+            if self._bynweekday is not None:
+                self._bynweekday = tuple(sorted(self._bynweekday))
+                orig_bynweekday = [weekday(*x) for x in self._bynweekday]
+            else:
                 orig_bynweekday = ()
- 
-            if 'byweekday' not in self._original_rule: 
-                self._original_rule['byweekday'] = tuple(itertools.chain( 
-                    orig_byweekday, orig_bynweekday)) 
- 
+
+            if 'byweekday' not in self._original_rule:
+                self._original_rule['byweekday'] = tuple(itertools.chain(
+                    orig_byweekday, orig_bynweekday))
+
         # byhour
         if byhour is None:
             if freq < HOURLY:
@@ -629,19 +629,19 @@ class rrule(rrulebase):
             else:
                 self._byhour = None
         else:
-            if isinstance(byhour, integer_types): 
-                byhour = (byhour,) 
- 
-            if freq == HOURLY: 
-                self._byhour = self.__construct_byset(start=dtstart.hour, 
-                                                      byxxx=byhour, 
-                                                      base=24) 
-            else: 
-                self._byhour = set(byhour) 
- 
-            self._byhour = tuple(sorted(self._byhour)) 
-            self._original_rule['byhour'] = self._byhour 
- 
+            if isinstance(byhour, integer_types):
+                byhour = (byhour,)
+
+            if freq == HOURLY:
+                self._byhour = self.__construct_byset(start=dtstart.hour,
+                                                      byxxx=byhour,
+                                                      base=24)
+            else:
+                self._byhour = set(byhour)
+
+            self._byhour = tuple(sorted(self._byhour))
+            self._original_rule['byhour'] = self._byhour
+
         # byminute
         if byminute is None:
             if freq < MINUTELY:
@@ -649,41 +649,41 @@ class rrule(rrulebase):
             else:
                 self._byminute = None
         else:
-            if isinstance(byminute, integer_types): 
-                byminute = (byminute,) 
- 
-            if freq == MINUTELY: 
-                self._byminute = self.__construct_byset(start=dtstart.minute, 
-                                                        byxxx=byminute, 
-                                                        base=60) 
-            else: 
-                self._byminute = set(byminute) 
- 
-            self._byminute = tuple(sorted(self._byminute)) 
-            self._original_rule['byminute'] = self._byminute 
- 
+            if isinstance(byminute, integer_types):
+                byminute = (byminute,)
+
+            if freq == MINUTELY:
+                self._byminute = self.__construct_byset(start=dtstart.minute,
+                                                        byxxx=byminute,
+                                                        base=60)
+            else:
+                self._byminute = set(byminute)
+
+            self._byminute = tuple(sorted(self._byminute))
+            self._original_rule['byminute'] = self._byminute
+
         # bysecond
         if bysecond is None:
             if freq < SECONDLY:
-                self._bysecond = ((dtstart.second,)) 
+                self._bysecond = ((dtstart.second,))
             else:
                 self._bysecond = None
         else:
-            if isinstance(bysecond, integer_types): 
-                bysecond = (bysecond,) 
+            if isinstance(bysecond, integer_types):
+                bysecond = (bysecond,)
 
-            self._bysecond = set(bysecond) 
- 
-            if freq == SECONDLY: 
-                self._bysecond = self.__construct_byset(start=dtstart.second, 
-                                                        byxxx=bysecond, 
-                                                        base=60) 
-            else: 
-                self._bysecond = set(bysecond) 
- 
-            self._bysecond = tuple(sorted(self._bysecond)) 
-            self._original_rule['bysecond'] = self._bysecond 
- 
+            self._bysecond = set(bysecond)
+
+            if freq == SECONDLY:
+                self._bysecond = self.__construct_byset(start=dtstart.second,
+                                                        byxxx=bysecond,
+                                                        base=60)
+            else:
+                self._bysecond = set(bysecond)
+
+            self._bysecond = tuple(sorted(self._bysecond))
+            self._original_rule['bysecond'] = self._bysecond
+
         if self._freq >= HOURLY:
             self._timeset = None
         else:
@@ -697,82 +697,82 @@ class rrule(rrulebase):
             self._timeset.sort()
             self._timeset = tuple(self._timeset)
 
-    def __str__(self): 
-        """ 
-        Output a string that would generate this RRULE if passed to rrulestr. 
+    def __str__(self):
+        """
+        Output a string that would generate this RRULE if passed to rrulestr.
         This is mostly compatible with RFC5545, except for the
-        dateutil-specific extension BYEASTER. 
-        """ 
- 
-        output = [] 
-        h, m, s = [None] * 3 
-        if self._dtstart: 
-            output.append(self._dtstart.strftime('DTSTART:%Y%m%dT%H%M%S')) 
-            h, m, s = self._dtstart.timetuple()[3:6] 
- 
-        parts = ['FREQ=' + FREQNAMES[self._freq]] 
-        if self._interval != 1: 
-            parts.append('INTERVAL=' + str(self._interval)) 
- 
-        if self._wkst: 
-            parts.append('WKST=' + repr(weekday(self._wkst))[0:2]) 
- 
-        if self._count is not None: 
-            parts.append('COUNT=' + str(self._count)) 
- 
-        if self._until: 
-            parts.append(self._until.strftime('UNTIL=%Y%m%dT%H%M%S')) 
- 
-        if self._original_rule.get('byweekday') is not None: 
-            # The str() method on weekday objects doesn't generate 
+        dateutil-specific extension BYEASTER.
+        """
+
+        output = []
+        h, m, s = [None] * 3
+        if self._dtstart:
+            output.append(self._dtstart.strftime('DTSTART:%Y%m%dT%H%M%S'))
+            h, m, s = self._dtstart.timetuple()[3:6]
+
+        parts = ['FREQ=' + FREQNAMES[self._freq]]
+        if self._interval != 1:
+            parts.append('INTERVAL=' + str(self._interval))
+
+        if self._wkst:
+            parts.append('WKST=' + repr(weekday(self._wkst))[0:2])
+
+        if self._count is not None:
+            parts.append('COUNT=' + str(self._count))
+
+        if self._until:
+            parts.append(self._until.strftime('UNTIL=%Y%m%dT%H%M%S'))
+
+        if self._original_rule.get('byweekday') is not None:
+            # The str() method on weekday objects doesn't generate
             # RFC5545-compliant strings, so we should modify that.
-            original_rule = dict(self._original_rule) 
-            wday_strings = [] 
-            for wday in original_rule['byweekday']: 
-                if wday.n: 
-                    wday_strings.append('{n:+d}{wday}'.format( 
-                        n=wday.n, 
-                        wday=repr(wday)[0:2])) 
-                else: 
-                    wday_strings.append(repr(wday)) 
- 
-            original_rule['byweekday'] = wday_strings 
-        else: 
-            original_rule = self._original_rule 
- 
-        partfmt = '{name}={vals}' 
-        for name, key in [('BYSETPOS', 'bysetpos'), 
-                          ('BYMONTH', 'bymonth'), 
-                          ('BYMONTHDAY', 'bymonthday'), 
-                          ('BYYEARDAY', 'byyearday'), 
-                          ('BYWEEKNO', 'byweekno'), 
-                          ('BYDAY', 'byweekday'), 
-                          ('BYHOUR', 'byhour'), 
-                          ('BYMINUTE', 'byminute'), 
-                          ('BYSECOND', 'bysecond'), 
-                          ('BYEASTER', 'byeaster')]: 
-            value = original_rule.get(key) 
-            if value: 
-                parts.append(partfmt.format(name=name, vals=(','.join(str(v) 
-                                                             for v in value)))) 
- 
+            original_rule = dict(self._original_rule)
+            wday_strings = []
+            for wday in original_rule['byweekday']:
+                if wday.n:
+                    wday_strings.append('{n:+d}{wday}'.format(
+                        n=wday.n,
+                        wday=repr(wday)[0:2]))
+                else:
+                    wday_strings.append(repr(wday))
+
+            original_rule['byweekday'] = wday_strings
+        else:
+            original_rule = self._original_rule
+
+        partfmt = '{name}={vals}'
+        for name, key in [('BYSETPOS', 'bysetpos'),
+                          ('BYMONTH', 'bymonth'),
+                          ('BYMONTHDAY', 'bymonthday'),
+                          ('BYYEARDAY', 'byyearday'),
+                          ('BYWEEKNO', 'byweekno'),
+                          ('BYDAY', 'byweekday'),
+                          ('BYHOUR', 'byhour'),
+                          ('BYMINUTE', 'byminute'),
+                          ('BYSECOND', 'bysecond'),
+                          ('BYEASTER', 'byeaster')]:
+            value = original_rule.get(key)
+            if value:
+                parts.append(partfmt.format(name=name, vals=(','.join(str(v)
+                                                             for v in value))))
+
         output.append('RRULE:' + ';'.join(parts))
-        return '\n'.join(output) 
- 
-    def replace(self, **kwargs): 
-        """Return new rrule with same attributes except for those attributes given new 
-           values by whichever keyword arguments are specified.""" 
-        new_kwargs = {"interval": self._interval, 
-                      "count": self._count, 
-                      "dtstart": self._dtstart, 
-                      "freq": self._freq, 
-                      "until": self._until, 
-                      "wkst": self._wkst, 
-                      "cache": False if self._cache is None else True } 
-        new_kwargs.update(self._original_rule) 
-        new_kwargs.update(kwargs) 
-        return rrule(**new_kwargs) 
- 
+        return '\n'.join(output)
+
+    def replace(self, **kwargs):
+        """Return new rrule with same attributes except for those attributes given new
+           values by whichever keyword arguments are specified."""
+        new_kwargs = {"interval": self._interval,
+                      "count": self._count,
+                      "dtstart": self._dtstart,
+                      "freq": self._freq,
+                      "until": self._until,
+                      "wkst": self._wkst,
+                      "cache": False if self._cache is None else True }
+        new_kwargs.update(self._original_rule)
+        new_kwargs.update(kwargs)
+        return rrule(**new_kwargs)
+
     def _iter(self):
         year, month, day, hour, minute, second, weekday, yearday, _ = \
             self._dtstart.timetuple()
@@ -871,32 +871,32 @@ class rrule(rrulebase):
                         self._len = total
                         return
                     elif res >= self._dtstart:
-                        if count is not None: 
+                        if count is not None:
                             count -= 1
-                            if count < 0: 
+                            if count < 0:
                                 self._len = total
                                 return
-                        total += 1 
-                        yield res 
+                        total += 1
+                        yield res
             else:
                 for i in dayset[start:end]:
                     if i is not None:
-                        date = datetime.date.fromordinal(ii.yearordinal + i) 
+                        date = datetime.date.fromordinal(ii.yearordinal + i)
                         for time in timeset:
                             res = datetime.datetime.combine(date, time)
                             if until and res > until:
                                 self._len = total
                                 return
                             elif res >= self._dtstart:
-                                if count is not None: 
+                                if count is not None:
                                     count -= 1
-                                    if count < 0: 
+                                    if count < 0:
                                         self._len = total
                                         return
 
-                                total += 1 
-                                yield res 
- 
+                                total += 1
+                                yield res
+
             # Handle frequency and interval
             fixday = False
             if freq == YEARLY:
@@ -932,86 +932,86 @@ class rrule(rrulebase):
                 if filtered:
                     # Jump to one iteration before next day
                     hour += ((23-hour)//interval)*interval
- 
-                if byhour: 
-                    ndays, hour = self.__mod_distance(value=hour, 
-                                                      byxxx=self._byhour, 
-                                                      base=24) 
-                else: 
-                    ndays, hour = divmod(hour+interval, 24) 
- 
-                if ndays: 
-                    day += ndays 
-                    fixday = True 
- 
-                timeset = gettimeset(hour, minute, second) 
-            elif freq == MINUTELY: 
-                if filtered: 
-                    # Jump to one iteration before next day 
-                    minute += ((1439-(hour*60+minute))//interval)*interval 
- 
-                valid = False 
-                rep_rate = (24*60) 
-                for j in range(rep_rate // gcd(interval, rep_rate)): 
-                    if byminute: 
-                        nhours, minute = \ 
-                            self.__mod_distance(value=minute, 
-                                                byxxx=self._byminute, 
-                                                base=60) 
-                    else: 
-                        nhours, minute = divmod(minute+interval, 60) 
- 
-                    div, hour = divmod(hour+nhours, 24) 
+
+                if byhour:
+                    ndays, hour = self.__mod_distance(value=hour,
+                                                      byxxx=self._byhour,
+                                                      base=24)
+                else:
+                    ndays, hour = divmod(hour+interval, 24)
+
+                if ndays:
+                    day += ndays
+                    fixday = True
+
+                timeset = gettimeset(hour, minute, second)
+            elif freq == MINUTELY:
+                if filtered:
+                    # Jump to one iteration before next day
+                    minute += ((1439-(hour*60+minute))//interval)*interval
+
+                valid = False
+                rep_rate = (24*60)
+                for j in range(rep_rate // gcd(interval, rep_rate)):
+                    if byminute:
+                        nhours, minute = \
+                            self.__mod_distance(value=minute,
+                                                byxxx=self._byminute,
+                                                base=60)
+                    else:
+                        nhours, minute = divmod(minute+interval, 60)
+
+                    div, hour = divmod(hour+nhours, 24)
                     if div:
                         day += div
                         fixday = True
-                        filtered = False 
- 
+                        filtered = False
+
                     if not byhour or hour in byhour:
-                        valid = True 
+                        valid = True
                         break
- 
-                if not valid: 
-                    raise ValueError('Invalid combination of interval and ' + 
-                                     'byhour resulting in empty rule.') 
- 
+
+                if not valid:
+                    raise ValueError('Invalid combination of interval and ' +
+                                     'byhour resulting in empty rule.')
+
                 timeset = gettimeset(hour, minute, second)
-            elif freq == SECONDLY: 
+            elif freq == SECONDLY:
                 if filtered:
                     # Jump to one iteration before next day
-                    second += (((86399 - (hour * 3600 + minute * 60 + second)) 
-                                // interval) * interval) 
- 
-                rep_rate = (24 * 3600) 
-                valid = False 
-                for j in range(0, rep_rate // gcd(interval, rep_rate)): 
-                    if bysecond: 
-                        nminutes, second = \ 
-                            self.__mod_distance(value=second, 
-                                                byxxx=self._bysecond, 
-                                                base=60) 
-                    else: 
-                        nminutes, second = divmod(second+interval, 60) 
- 
-                    div, minute = divmod(minute+nminutes, 60) 
+                    second += (((86399 - (hour * 3600 + minute * 60 + second))
+                                // interval) * interval)
+
+                rep_rate = (24 * 3600)
+                valid = False
+                for j in range(0, rep_rate // gcd(interval, rep_rate)):
+                    if bysecond:
+                        nminutes, second = \
+                            self.__mod_distance(value=second,
+                                                byxxx=self._bysecond,
+                                                base=60)
+                    else:
+                        nminutes, second = divmod(second+interval, 60)
+
+                    div, minute = divmod(minute+nminutes, 60)
                     if div:
                         hour += div
-                        div, hour = divmod(hour, 24) 
+                        div, hour = divmod(hour, 24)
                         if div:
                             day += div
                             fixday = True
- 
+
                     if ((not byhour or hour in byhour) and
                             (not byminute or minute in byminute) and
                             (not bysecond or second in bysecond)):
-                        valid = True 
+                        valid = True
                         break
- 
-                if not valid: 
-                    raise ValueError('Invalid combination of interval, ' + 
-                                     'byhour and byminute resulting in empty' + 
-                                     ' rule.') 
- 
+
+                if not valid:
+                    raise ValueError('Invalid combination of interval, ' +
+                                     'byhour and byminute resulting in empty' +
+                                     ' rule.')
+
                 timeset = gettimeset(hour, minute, second)
 
             if fixday and day > 28:
@@ -1029,86 +1029,86 @@ class rrule(rrulebase):
                         daysinmonth = calendar.monthrange(year, month)[1]
                     ii.rebuild(year, month)
 
-    def __construct_byset(self, start, byxxx, base): 
-        """ 
-        If a `BYXXX` sequence is passed to the constructor at the same level as 
-        `FREQ` (e.g. `FREQ=HOURLY,BYHOUR={2,4,7},INTERVAL=3`), there are some 
-        specifications which cannot be reached given some starting conditions. 
+    def __construct_byset(self, start, byxxx, base):
+        """
+        If a `BYXXX` sequence is passed to the constructor at the same level as
+        `FREQ` (e.g. `FREQ=HOURLY,BYHOUR={2,4,7},INTERVAL=3`), there are some
+        specifications which cannot be reached given some starting conditions.
 
-        This occurs whenever the interval is not coprime with the base of a 
-        given unit and the difference between the starting position and the 
-        ending position is not coprime with the greatest common denominator 
-        between the interval and the base. For example, with a FREQ of hourly 
-        starting at 17:00 and an interval of 4, the only valid values for 
-        BYHOUR would be {21, 1, 5, 9, 13, 17}, because 4 and 24 are not 
-        coprime. 
- 
-        :param start: 
-            Specifies the starting position. 
-        :param byxxx: 
-            An iterable containing the list of allowed values. 
-        :param base: 
-            The largest allowable value for the specified frequency (e.g. 
-            24 hours, 60 minutes). 
- 
-        This does not preserve the type of the iterable, returning a set, since 
-        the values should be unique and the order is irrelevant, this will 
-        speed up later lookups. 
- 
-        In the event of an empty set, raises a :exception:`ValueError`, as this 
-        results in an empty rrule. 
-        """ 
- 
-        cset = set() 
- 
-        # Support a single byxxx value. 
-        if isinstance(byxxx, integer_types): 
-            byxxx = (byxxx, ) 
- 
-        for num in byxxx: 
-            i_gcd = gcd(self._interval, base) 
-            # Use divmod rather than % because we need to wrap negative nums. 
-            if i_gcd == 1 or divmod(num - start, i_gcd)[1] == 0: 
-                cset.add(num) 
- 
-        if len(cset) == 0: 
-            raise ValueError("Invalid rrule byxxx generates an empty set.") 
- 
-        return cset 
- 
-    def __mod_distance(self, value, byxxx, base): 
-        """ 
-        Calculates the next value in a sequence where the `FREQ` parameter is 
-        specified along with a `BYXXX` parameter at the same "level" 
-        (e.g. `HOURLY` specified with `BYHOUR`). 
- 
-        :param value: 
-            The old value of the component. 
-        :param byxxx: 
-            The `BYXXX` set, which should have been generated by 
-            `rrule._construct_byset`, or something else which checks that a 
-            valid rule is present. 
-        :param base: 
-            The largest allowable value for the specified frequency (e.g. 
-            24 hours, 60 minutes). 
- 
-        If a valid value is not found after `base` iterations (the maximum 
-        number before the sequence would start to repeat), this raises a 
-        :exception:`ValueError`, as no valid values were found. 
- 
-        This returns a tuple of `divmod(n*interval, base)`, where `n` is the 
-        smallest number of `interval` repetitions until the next specified 
-        value in `byxxx` is found. 
-        """ 
-        accumulator = 0 
-        for ii in range(1, base + 1): 
-            # Using divmod() over % to account for negative intervals 
-            div, value = divmod(value + self._interval, base) 
-            accumulator += div 
-            if value in byxxx: 
-                return (accumulator, value) 
- 
- 
+        This occurs whenever the interval is not coprime with the base of a
+        given unit and the difference between the starting position and the
+        ending position is not coprime with the greatest common denominator
+        between the interval and the base. For example, with a FREQ of hourly
+        starting at 17:00 and an interval of 4, the only valid values for
+        BYHOUR would be {21, 1, 5, 9, 13, 17}, because 4 and 24 are not
+        coprime.
+
+        :param start:
+            Specifies the starting position.
+        :param byxxx:
+            An iterable containing the list of allowed values.
+        :param base:
+            The largest allowable value for the specified frequency (e.g.
+            24 hours, 60 minutes).
+
+        This does not preserve the type of the iterable, returning a set, since
+        the values should be unique and the order is irrelevant, this will
+        speed up later lookups.
+
+        In the event of an empty set, raises a :exception:`ValueError`, as this
+        results in an empty rrule.
+        """
+
+        cset = set()
+
+        # Support a single byxxx value.
+        if isinstance(byxxx, integer_types):
+            byxxx = (byxxx, )
+
+        for num in byxxx:
+            i_gcd = gcd(self._interval, base)
+            # Use divmod rather than % because we need to wrap negative nums.
+            if i_gcd == 1 or divmod(num - start, i_gcd)[1] == 0:
+                cset.add(num)
+
+        if len(cset) == 0:
+            raise ValueError("Invalid rrule byxxx generates an empty set.")
+
+        return cset
+
+    def __mod_distance(self, value, byxxx, base):
+        """
+        Calculates the next value in a sequence where the `FREQ` parameter is
+        specified along with a `BYXXX` parameter at the same "level"
+        (e.g. `HOURLY` specified with `BYHOUR`).
+
+        :param value:
+            The old value of the component.
+        :param byxxx:
+            The `BYXXX` set, which should have been generated by
+            `rrule._construct_byset`, or something else which checks that a
+            valid rule is present.
+        :param base:
+            The largest allowable value for the specified frequency (e.g.
+            24 hours, 60 minutes).
+
+        If a valid value is not found after `base` iterations (the maximum
+        number before the sequence would start to repeat), this raises a
+        :exception:`ValueError`, as no valid values were found.
+
+        This returns a tuple of `divmod(n*interval, base)`, where `n` is the
+        smallest number of `interval` repetitions until the next specified
+        value in `byxxx` is found.
+        """
+        accumulator = 0
+        for ii in range(1, base + 1):
+            # Using divmod() over % to account for negative intervals
+            div, value = divmod(value + self._interval, base)
+            accumulator += div
+            if value in byxxx:
+                return (accumulator, value)
+
+
 class _iterinfo(object):
     __slots__ = ["rrule", "lastyear", "lastmonth",
                  "yearlen", "nextyearlen", "yearordinal", "yearweekday",
@@ -1124,8 +1124,8 @@ class _iterinfo(object):
         # Every mask is 7 days longer to handle cross-year weekly periods.
         rr = self.rrule
         if year != self.lastyear:
-            self.yearlen = 365 + calendar.isleap(year) 
-            self.nextyearlen = 365 + calendar.isleap(year + 1) 
+            self.yearlen = 365 + calendar.isleap(year)
+            self.nextyearlen = 365 + calendar.isleap(year + 1)
             firstyday = datetime.date(year, 1, 1)
             self.yearordinal = firstyday.toordinal()
             self.yearweekday = firstyday.weekday()
@@ -1254,50 +1254,50 @@ class _iterinfo(object):
         return list(range(self.yearlen)), 0, self.yearlen
 
     def mdayset(self, year, month, day):
-        dset = [None]*self.yearlen 
+        dset = [None]*self.yearlen
         start, end = self.mrange[month-1:month+1]
         for i in range(start, end):
-            dset[i] = i 
-        return dset, start, end 
+            dset[i] = i
+        return dset, start, end
 
     def wdayset(self, year, month, day):
         # We need to handle cross-year weeks here.
-        dset = [None]*(self.yearlen+7) 
+        dset = [None]*(self.yearlen+7)
         i = datetime.date(year, month, day).toordinal()-self.yearordinal
         start = i
         for j in range(7):
-            dset[i] = i 
+            dset[i] = i
             i += 1
             # if (not (0 <= i < self.yearlen) or
             #    self.wdaymask[i] == self.rrule._wkst):
             # This will cross the year boundary, if necessary.
             if self.wdaymask[i] == self.rrule._wkst:
                 break
-        return dset, start, i 
+        return dset, start, i
 
     def ddayset(self, year, month, day):
-        dset = [None] * self.yearlen 
-        i = datetime.date(year, month, day).toordinal() - self.yearordinal 
-        dset[i] = i 
-        return dset, i, i + 1 
+        dset = [None] * self.yearlen
+        i = datetime.date(year, month, day).toordinal() - self.yearordinal
+        dset[i] = i
+        return dset, i, i + 1
 
     def htimeset(self, hour, minute, second):
-        tset = [] 
+        tset = []
         rr = self.rrule
         for minute in rr._byminute:
             for second in rr._bysecond:
-                tset.append(datetime.time(hour, minute, second, 
-                                          tzinfo=rr._tzinfo)) 
-        tset.sort() 
-        return tset 
+                tset.append(datetime.time(hour, minute, second,
+                                          tzinfo=rr._tzinfo))
+        tset.sort()
+        return tset
 
     def mtimeset(self, hour, minute, second):
-        tset = [] 
+        tset = []
         rr = self.rrule
         for second in rr._bysecond:
-            tset.append(datetime.time(hour, minute, second, tzinfo=rr._tzinfo)) 
-        tset.sort() 
-        return tset 
+            tset.append(datetime.time(hour, minute, second, tzinfo=rr._tzinfo))
+        tset.sort()
+        return tset
 
     def stimeset(self, hour, minute, second):
         return (datetime.time(hour, minute, second,
@@ -1326,11 +1326,11 @@ class rruleset(rrulebase):
             try:
                 self.dt = advance_iterator(self.gen)
             except StopIteration:
-                if self.genlist[0] is self: 
-                    heapq.heappop(self.genlist) 
-                else: 
-                    self.genlist.remove(self) 
-                    heapq.heapify(self.genlist) 
+                if self.genlist[0] is self:
+                    heapq.heappop(self.genlist)
+                else:
+                    self.genlist.remove(self)
+                    heapq.heapify(self.genlist)
 
         next = __next__
 
@@ -1353,19 +1353,19 @@ class rruleset(rrulebase):
         self._exrule = []
         self._exdate = []
 
-    @_invalidates_cache 
+    @_invalidates_cache
     def rrule(self, rrule):
         """ Include the given :py:class:`rrule` instance in the recurrence set
             generation. """
         self._rrule.append(rrule)
 
-    @_invalidates_cache 
+    @_invalidates_cache
     def rdate(self, rdate):
         """ Include the given :py:class:`datetime` instance in the recurrence
             set generation. """
         self._rdate.append(rdate)
 
-    @_invalidates_cache 
+    @_invalidates_cache
     def exrule(self, exrule):
         """ Include the given rrule instance in the recurrence set exclusion
             list. Dates which are part of the given recurrence rules will not
@@ -1373,7 +1373,7 @@ class rruleset(rrulebase):
         """
         self._exrule.append(exrule)
 
-    @_invalidates_cache 
+    @_invalidates_cache
     def exdate(self, exdate):
         """ Include the given datetime instance in the recurrence set
             exclusion list. Dates included that way will not be generated,
@@ -1393,23 +1393,23 @@ class rruleset(rrulebase):
             self._genitem(exlist, gen)
         lastdt = None
         total = 0
-        heapq.heapify(rlist) 
-        heapq.heapify(exlist) 
+        heapq.heapify(rlist)
+        heapq.heapify(exlist)
         while rlist:
             ritem = rlist[0]
             if not lastdt or lastdt != ritem.dt:
                 while exlist and exlist[0] < ritem:
-                    exitem = exlist[0] 
-                    advance_iterator(exitem) 
-                    if exlist and exlist[0] is exitem: 
-                        heapq.heapreplace(exlist, exitem) 
+                    exitem = exlist[0]
+                    advance_iterator(exitem)
+                    if exlist and exlist[0] is exitem:
+                        heapq.heapreplace(exlist, exitem)
                 if not exlist or ritem != exlist[0]:
                     total += 1
                     yield ritem.dt
                 lastdt = ritem.dt
             advance_iterator(ritem)
-            if rlist and rlist[0] is ritem: 
-                heapq.heapreplace(rlist, ritem) 
+            if rlist and rlist[0] is ritem:
+                heapq.heapreplace(rlist, ritem)
         self._len = total
 
 
@@ -1506,29 +1506,29 @@ class _rrulestr(object):
     def _handle_WKST(self, rrkwargs, name, value, **kwargs):
         rrkwargs["wkst"] = self._weekday_map[value]
 
-    def _handle_BYWEEKDAY(self, rrkwargs, name, value, **kwargs): 
-        """ 
-        Two ways to specify this: +1MO or MO(+1) 
-        """ 
+    def _handle_BYWEEKDAY(self, rrkwargs, name, value, **kwargs):
+        """
+        Two ways to specify this: +1MO or MO(+1)
+        """
         l = []
         for wday in value.split(','):
-            if '(' in wday: 
-                # If it's of the form TH(+1), etc. 
-                splt = wday.split('(') 
-                w = splt[0] 
-                n = int(splt[1][:-1]) 
-            elif len(wday): 
-                # If it's of the form +1MO 
-                for i in range(len(wday)): 
-                    if wday[i] not in '+-0123456789': 
-                        break 
-                n = wday[:i] or None 
-                w = wday[i:] 
-                if n: 
-                    n = int(n) 
-            else: 
-                raise ValueError("Invalid (empty) BYDAY specification.") 
- 
+            if '(' in wday:
+                # If it's of the form TH(+1), etc.
+                splt = wday.split('(')
+                w = splt[0]
+                n = int(splt[1][:-1])
+            elif len(wday):
+                # If it's of the form +1MO
+                for i in range(len(wday)):
+                    if wday[i] not in '+-0123456789':
+                        break
+                n = wday[:i] or None
+                w = wday[i:]
+                if n:
+                    n = int(n)
+            else:
+                raise ValueError("Invalid (empty) BYDAY specification.")
+
             l.append(weekdays[self._weekday_map[w]](n))
         rrkwargs["byweekday"] = l
 
@@ -1702,25 +1702,25 @@ class _rrulestr(object):
                     or exrulevals or exdatevals):
                 if not parser and (rdatevals or exdatevals):
                     from dateutil import parser
-                rset = rruleset(cache=cache) 
+                rset = rruleset(cache=cache)
                 for value in rrulevals:
-                    rset.rrule(self._parse_rfc_rrule(value, dtstart=dtstart, 
-                                                     ignoretz=ignoretz, 
-                                                     tzinfos=tzinfos)) 
+                    rset.rrule(self._parse_rfc_rrule(value, dtstart=dtstart,
+                                                     ignoretz=ignoretz,
+                                                     tzinfos=tzinfos))
                 for value in rdatevals:
                     for datestr in value.split(','):
-                        rset.rdate(parser.parse(datestr, 
-                                                ignoretz=ignoretz, 
-                                                tzinfos=tzinfos)) 
+                        rset.rdate(parser.parse(datestr,
+                                                ignoretz=ignoretz,
+                                                tzinfos=tzinfos))
                 for value in exrulevals:
-                    rset.exrule(self._parse_rfc_rrule(value, dtstart=dtstart, 
-                                                      ignoretz=ignoretz, 
-                                                      tzinfos=tzinfos)) 
+                    rset.exrule(self._parse_rfc_rrule(value, dtstart=dtstart,
+                                                      ignoretz=ignoretz,
+                                                      tzinfos=tzinfos))
                 for value in exdatevals:
                     rset.exdate(value)
                 if compatible and dtstart:
-                    rset.rdate(dtstart) 
-                return rset 
+                    rset.rdate(dtstart)
+                return rset
             else:
                 return self._parse_rfc_rrule(rrulevals[0],
                                              dtstart=dtstart,
@@ -1731,7 +1731,7 @@ class _rrulestr(object):
     def __call__(self, s, **kwargs):
         return self._parse_rfc(s, **kwargs)
 
- 
+
 rrulestr = _rrulestr()
 
 # vim:ts=4:sw=4:et

@@ -48,7 +48,7 @@ RECURSE(
     curl
     cxxsupp/libcxx
     cxxsupp/libcxxabi-parts
-    djvulibre
+    djvulibre 
     dlib
     dpdk
     dr_wav

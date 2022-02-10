@@ -50,8 +50,8 @@ public:
     TAutoPtr<IGraphTransformer> Build(bool useIssueScopes = true);
     TAutoPtr<IGraphTransformer> BuildWithNoArgChecks(bool useIssueScopes = true);
 
-    TIntrusivePtr<TTypeAnnotationContext> GetTypeAnnotationContext() const; 
- 
+    TIntrusivePtr<TTypeAnnotationContext> GetTypeAnnotationContext() const;
+
 private:
     TIntrusivePtr<TTypeAnnotationContext> TypeAnnotationContext_;
     TVector<TTransformStage> Transformers_;

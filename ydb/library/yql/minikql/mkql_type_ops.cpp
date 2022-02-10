@@ -175,8 +175,8 @@ ui32 GetMonthLength(ui32 month, bool isLeap) {
     }
 }
 
-namespace { 
- 
+namespace {
+
 ui32 LeapDaysSinceEpoch(ui32 yearsSinceEpoch) {
     ui32 leapDaysCount = (yearsSinceEpoch + 1) / 4;
     if (yearsSinceEpoch >= 131) {
@@ -857,8 +857,8 @@ bool MakeTzDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 s
     if (tzId) {
         const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
         cctz::civil_second cs(year, month, day, hour, min, sec);
-        auto utcSeconds = cctz::TimePointToUnixSeconds(tz.lookup(cs).pre); 
-        if (utcSeconds < 0 || utcSeconds >= (std::int_fast64_t) NUdf::MAX_DATETIME) { 
+        auto utcSeconds = cctz::TimePointToUnixSeconds(tz.lookup(cs).pre);
+        if (utcSeconds < 0 || utcSeconds >= (std::int_fast64_t) NUdf::MAX_DATETIME) {
             return false;
         }
 

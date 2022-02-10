@@ -11,8 +11,8 @@ SRCS(
     yql_eval_expr.h
     yql_eval_params.cpp
     yql_eval_params.h
-    yql_out_transformers.cpp 
-    yql_out_transformers.h 
+    yql_out_transformers.cpp
+    yql_out_transformers.h
     yql_plan.cpp
     yql_plan.h
     yql_transform_pipeline.cpp

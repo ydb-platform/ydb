@@ -1120,29 +1120,29 @@ TMaybe<TString> TProgram::GetTasksInfo() {
 }
 
 TMaybe<TString> TProgram::GetStatistics(bool totalOnly) {
-    if (!TypeCtx_) { 
-        return Nothing(); 
-    } 
- 
-    TStringStream out; 
+    if (!TypeCtx_) {
+        return Nothing();
+    }
+
+    TStringStream out;
     NYson::TYsonWriter writer(&out);
     // Header
-    writer.OnBeginMap(); 
-    writer.OnKeyedItem("ExecutionStatistics"); 
-    writer.OnBeginMap(); 
- 
+    writer.OnBeginMap();
+    writer.OnKeyedItem("ExecutionStatistics");
+    writer.OnBeginMap();
+
     // Providers
-    bool hasStatistics = false; 
-    for (auto& datasink : TypeCtx_->DataSinks) { 
+    bool hasStatistics = false;
+    for (auto& datasink : TypeCtx_->DataSinks) {
         TStringStream providerOut;
         NYson::TYsonWriter providerWriter(&providerOut);
         if (datasink->CollectStatistics(providerWriter, totalOnly)) {
-            writer.OnKeyedItem(datasink->GetName()); 
+            writer.OnKeyedItem(datasink->GetName());
             writer.OnRaw(providerOut.Str());
             hasStatistics = true;
-        } 
-    } 
- 
+        }
+    }
+
     auto rusage = TRusage::Get();
     // System stats
     writer.OnKeyedItem("system");
@@ -1161,14 +1161,14 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly) {
     writer.OnEndMap(); // system
 
     // Footer
-    writer.OnEndMap(); 
-    writer.OnEndMap(); 
-    if (hasStatistics) { 
-        return out.Str(); 
-    } 
-    return Nothing(); 
+    writer.OnEndMap();
+    writer.OnEndMap();
+    if (hasStatistics) {
+        return out.Str();
+    }
+    return Nothing();
 }
- 
+
 TMaybe<TString> TProgram::GetDiscoveredData() {
     if (!TypeCtx_) {
         return Nothing();
@@ -1187,8 +1187,8 @@ TMaybe<TString> TProgram::GetDiscoveredData() {
     }
     writer.OnEndMap();
     return out.Str();
-} 
- 
+}
+
 TProgram::TFutureStatus TProgram::ContinueAsync() {
     YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
     return AsyncTransformWithFallback(true);

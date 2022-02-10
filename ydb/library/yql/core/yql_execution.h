@@ -22,9 +22,9 @@ namespace NYql {
         ui32 Id;
         EState State;
 
-        using TStage = std::pair<TString, TInstant>; 
-        TStage Stage; 
- 
+        using TStage = std::pair<TString, TInstant>;
+        TStage Stage;
+
         TString RemoteId;
 
         struct TCounters {
@@ -52,27 +52,27 @@ namespace NYql {
 
         TMaybe<TCounters> Counters;
 
-        TOperationProgress(const TString& category, ui32 id, 
-            EState state, const TString& stage = "") 
+        TOperationProgress(const TString& category, ui32 id,
+            EState state, const TString& stage = "")
             : Category(category)
             , Id(id)
             , State(state)
-            , Stage(stage, TInstant::Now()) 
+            , Stage(stage, TInstant::Now())
         {
         }
     };
 
-    struct TOperationStatistics { 
-        struct TEntry { 
-            TString Name; 
- 
-            TMaybe<i64> Sum; 
-            TMaybe<i64> Max; 
-            TMaybe<i64> Min; 
-            TMaybe<i64> Avg; 
+    struct TOperationStatistics {
+        struct TEntry {
+            TString Name;
+
+            TMaybe<i64> Sum;
+            TMaybe<i64> Max;
+            TMaybe<i64> Min;
+            TMaybe<i64> Avg;
             TMaybe<i64> Count;
             TMaybe<TString> Value;
- 
+
             TEntry(TString name, TMaybe<i64> sum, TMaybe<i64> max, TMaybe<i64> min, TMaybe<i64> avg, TMaybe<i64> count)
                 : Name(std::move(name))
                 , Sum(std::move(sum))
@@ -80,37 +80,37 @@ namespace NYql {
                 , Min(std::move(min))
                 , Avg(std::move(avg))
                 , Count(std::move(count))
-            { 
-            } 
+            {
+            }
 
             TEntry(TString name, TString value)
                 : Name(std::move(name))
                 , Value(std::move(value))
             {
             }
-        }; 
- 
-        TVector<TEntry> Entries; 
-    }; 
- 
-    using TStatWriter = std::function<void(ui32, const TVector<TOperationStatistics::TEntry>&)>; 
+        };
+
+        TVector<TEntry> Entries;
+    };
+
+    using TStatWriter = std::function<void(ui32, const TVector<TOperationStatistics::TEntry>&)>;
     using TOperationProgressWriter = std::function<void(const TOperationProgress&)>;
 
-    inline TStatWriter ThreadSafeStatWriter(TStatWriter base) { 
-        struct TState : public TThrRefBase { 
-            TStatWriter Base; 
-            TMutex Mutex; 
-        }; 
- 
-        auto state = MakeIntrusive<TState>(); 
-        state->Base = base; 
-        return [state](ui32 id, const TVector<TOperationStatistics::TEntry>& stat) { 
-            with_lock(state->Mutex) { 
-                state->Base(id, stat); 
-            } 
-        }; 
-    } 
- 
+    inline TStatWriter ThreadSafeStatWriter(TStatWriter base) {
+        struct TState : public TThrRefBase {
+            TStatWriter Base;
+            TMutex Mutex;
+        };
+
+        auto state = MakeIntrusive<TState>();
+        state->Base = base;
+        return [state](ui32 id, const TVector<TOperationStatistics::TEntry>& stat) {
+            with_lock(state->Mutex) {
+                state->Base(id, stat);
+            }
+        };
+    }
+
     inline void NullProgressWriter(const TOperationProgress& progress) {
         Y_UNUSED(progress);
     }

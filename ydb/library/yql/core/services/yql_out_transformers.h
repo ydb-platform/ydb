@@ -1,69 +1,69 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/core/services/yql_plan.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
- 
+
 #include <library/cpp/yson/public.h>
- 
-#include <util/stream/output.h> 
-#include <util/generic/ptr.h> 
- 
-namespace NYql { 
- 
-class TExprOutputTransformer { 
-public: 
-    TExprOutputTransformer(const TExprNode::TPtr& exprRoot, IOutputStream* directOut, bool withTypes) 
-        : ExprRoot_(exprRoot), DirectOut_(directOut), WithTypes_(withTypes) 
-    { 
-    } 
- 
-    IGraphTransformer::TStatus operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx); 
- 
-    static TAutoPtr<IGraphTransformer> Sync( 
-        const TExprNode::TPtr& exprRoot, 
-        IOutputStream* directOut, 
-        bool withTypes = false) 
-    { 
-        return directOut ? CreateFunctorTransformer(TExprOutputTransformer(exprRoot, directOut, withTypes)) : nullptr; 
-    } 
- 
-private: 
-    const TExprNode::TPtr &ExprRoot_; 
-    IOutputStream *DirectOut_; 
-    bool WithTypes_; 
-}; 
- 
-class TPlanOutputTransformer { 
-public: 
-    TPlanOutputTransformer( 
+
+#include <util/stream/output.h>
+#include <util/generic/ptr.h>
+
+namespace NYql {
+
+class TExprOutputTransformer {
+public:
+    TExprOutputTransformer(const TExprNode::TPtr& exprRoot, IOutputStream* directOut, bool withTypes)
+        : ExprRoot_(exprRoot), DirectOut_(directOut), WithTypes_(withTypes)
+    {
+    }
+
+    IGraphTransformer::TStatus operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
+
+    static TAutoPtr<IGraphTransformer> Sync(
+        const TExprNode::TPtr& exprRoot,
         IOutputStream* directOut,
-        IPlanBuilder& builder, 
+        bool withTypes = false)
+    {
+        return directOut ? CreateFunctorTransformer(TExprOutputTransformer(exprRoot, directOut, withTypes)) : nullptr;
+    }
+
+private:
+    const TExprNode::TPtr &ExprRoot_;
+    IOutputStream *DirectOut_;
+    bool WithTypes_;
+};
+
+class TPlanOutputTransformer {
+public:
+    TPlanOutputTransformer(
+        IOutputStream* directOut,
+        IPlanBuilder& builder,
         NYson::EYsonFormat outputFormat)
         : DirectOut_(directOut)
-        , Builder_(builder) 
-        , OutputFormat_(outputFormat) 
-    { 
-    } 
- 
-    IGraphTransformer::TStatus operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx); 
- 
-    static TAutoPtr <IGraphTransformer> Sync( 
+        , Builder_(builder)
+        , OutputFormat_(outputFormat)
+    {
+    }
+
+    IGraphTransformer::TStatus operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
+
+    static TAutoPtr <IGraphTransformer> Sync(
             IOutputStream* directOut,
             IPlanBuilder& builder,
             NYson::EYsonFormat outputFormat)
-    { 
+    {
         return CreateFunctorTransformer(TPlanOutputTransformer(directOut, builder, outputFormat));
-    } 
- 
-private: 
+    }
+
+private:
     IOutputStream* DirectOut_;
-    IPlanBuilder& Builder_; 
+    IPlanBuilder& Builder_;
     NYson::EYsonFormat OutputFormat_;
-}; 
- 
+};
+
 class TExprLogTransformer {
 public:
     TExprLogTransformer(const TString& description, NYql::NLog::EComponent component, NYql::NLog::ELevel level)

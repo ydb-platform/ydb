@@ -15,10 +15,10 @@ TStringBuf AdaptLegacyYqlType(const TStringBuf& type);
 
 bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value);
 
-bool IsLeapYear(ui32 year); 
- 
-ui32 GetMonthLength(ui32 month, bool isLeap); 
- 
+bool IsLeapYear(ui32 year);
+
+ui32 GetMonthLength(ui32 month, bool isLeap);
+
 void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out);
 
 bool IsValidStringValue(NUdf::EDataSlot type, NUdf::TStringRef buf);

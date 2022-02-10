@@ -1714,17 +1714,17 @@ TNodePtr ISource::BuildPrewindowMap(TContext& ctx) {
     return Y(ctx.UseUnordered(*this) ? "OrderedFlatMap" : "FlatMap", "core", BuildLambda(Pos, Y("row"), Y("AsList", feed)));
 }
 
-bool ISource::BuildSamplingLambda(TNodePtr& node) { 
-    if (!SamplingRate) { 
-        return true; 
-    } 
+bool ISource::BuildSamplingLambda(TNodePtr& node) {
+    if (!SamplingRate) {
+        return true;
+    }
     auto res = Y("Coalesce", Y("SafeCast", SamplingRate, Y("DataType", Q("Double"))), Y("Double", Q("0")));
-    res = Y("/", res, Y("Double", Q("100"))); 
-    res = Y(Y("let", "res", Y("OptionalIf", Y("<", Y("Random", Y("DependsOn", "row")), res), "row"))); 
-    node = BuildLambda(GetPos(), Y("row"), res, "res"); 
-    return !!node; 
-} 
- 
+    res = Y("/", res, Y("Double", Q("100")));
+    res = Y(Y("let", "res", Y("OptionalIf", Y("<", Y("Random", Y("DependsOn", "row")), res), "row")));
+    node = BuildLambda(GetPos(), Y("row"), res, "res");
+    return !!node;
+}
+
 bool ISource::SetSamplingRate(TContext& ctx, TNodePtr samplingRate) {
     if (samplingRate) {
         if (!samplingRate->Init(ctx, this)) {
@@ -1732,10 +1732,10 @@ bool ISource::SetSamplingRate(TContext& ctx, TNodePtr samplingRate) {
         }
         SamplingRate = Y("Ensure", samplingRate, Y(">=", samplingRate, Y("Double", Q("0"))), Y("String", Q("\"Expected sampling rate to be nonnegative\"")));
         SamplingRate = Y("Ensure", SamplingRate, Y("<=", SamplingRate, Y("Double", Q("100"))), Y("String", Q("\"Sampling rate is over 100%\"")));
-    } 
+    }
     return true;
-} 
- 
+}
+
 TNodePtr ISource::BuildAggregation(const TString& label) {
     if (GroupKeys.empty() && Aggregations.empty() && !IsCompositeSource()) {
         return nullptr;

@@ -233,8 +233,8 @@ RECURSE(
     muparser
     muparser/tests
     musl
-    nanosvg 
-    nanosvg/ut 
+    nanosvg
+    nanosvg/ut
     nayuki_md5
     nghttp2
     node-addon-api

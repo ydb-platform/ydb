@@ -16,9 +16,9 @@
 #include <cstring>
 #include <algorithm>
 
-// This is ugly solution but here a lot of work to do it the right way. 
-#define FETCHER_URL_MAX 8192 
- 
+// This is ugly solution but here a lot of work to do it the right way.
+#define FETCHER_URL_MAX 8192
+
 extern const i64 DEFAULT_RETRY_AFTER;       /// == -1
 extern const i64 DEFAULT_IF_MODIFIED_SINCE; /// == -1
 extern const i32 DEFAULT_MAX_AGE;           /// == -1
@@ -126,7 +126,7 @@ public:
     }
 };
 
-enum { HREFLANG_MAX = FETCHER_URL_MAX * 2 }; 
+enum { HREFLANG_MAX = FETCHER_URL_MAX * 2 };
 /// Class represents Http Response Header.
 struct THttpHeader: public THttpBaseHeader {
 public:

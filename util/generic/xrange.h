@@ -91,10 +91,10 @@ namespace NPrivate {
                 return *this;
             }
 
-            constexpr bool operator<(const TIterator& b) const noexcept {
-                return Value < b.Value;
-            }
-
+            constexpr bool operator<(const TIterator& b) const noexcept { 
+                return Value < b.Value; 
+            } 
+ 
         private:
             T Value;
         };

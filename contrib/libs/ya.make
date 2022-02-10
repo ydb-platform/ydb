@@ -34,7 +34,7 @@ RECURSE(
     clang12
     clang12-rt
     clapack
-    cld2 
+    cld2
     cnpy
     cookiemy
     coreml

@@ -12,8 +12,8 @@ SRCS(
     tld.cpp
 )
 
-PEERDIR( 
+PEERDIR(
     library/cpp/digest/lower_case
-) 
- 
+)
+
 END()

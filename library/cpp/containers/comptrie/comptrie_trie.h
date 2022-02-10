@@ -197,11 +197,11 @@ protected:
     explicit TCompactTrie(const char* emptyValue);
     TCompactTrie(const TBlob& data, const char* emptyValue, TPacker packer = TPacker());
 
-    bool LookupLongestPrefix(const TSymbol* key, size_t keylen, size_t& prefixLen, const char*& valuepos, bool& hasNext) const; 
-    bool LookupLongestPrefix(const TSymbol* key, size_t keylen, size_t& prefixLen, const char*& valuepos) const { 
-        bool hasNext; 
-        return LookupLongestPrefix(key, keylen, prefixLen, valuepos, hasNext); 
-    } 
+    bool LookupLongestPrefix(const TSymbol* key, size_t keylen, size_t& prefixLen, const char*& valuepos, bool& hasNext) const;
+    bool LookupLongestPrefix(const TSymbol* key, size_t keylen, size_t& prefixLen, const char*& valuepos) const {
+        bool hasNext;
+        return LookupLongestPrefix(key, keylen, prefixLen, valuepos, hasNext);
+    }
     void LookupPhrases(const char* datapos, size_t len, const TSymbol* key, size_t keylen, TVector<TPhraseMatch>& matches, TSymbol separator) const;
 };
 
@@ -327,8 +327,8 @@ template <class T, class D, class S>
 bool TCompactTrie<T, D, S>::Find(const TSymbol* key, size_t keylen, TData* value) const {
     size_t prefixLen = 0;
     const char* valuepos = nullptr;
-    bool hasNext; 
-    if (!LookupLongestPrefix(key, keylen, prefixLen, valuepos, hasNext) || prefixLen != keylen) 
+    bool hasNext;
+    if (!LookupLongestPrefix(key, keylen, prefixLen, valuepos, hasNext) || prefixLen != keylen)
         return false;
     if (value)
         Packer.UnpackLeaf(valuepos, *value);
@@ -463,14 +463,14 @@ template <class T, class D, class S>
 bool TCompactTrie<T, D, S>::FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixLen, TData* value, bool* hasNext) const {
     const char* valuepos = nullptr;
     size_t tempPrefixLen = 0;
-    bool tempHasNext; 
-    bool found = LookupLongestPrefix(key, keylen, tempPrefixLen, valuepos, tempHasNext); 
+    bool tempHasNext;
+    bool found = LookupLongestPrefix(key, keylen, tempPrefixLen, valuepos, tempHasNext);
     if (prefixLen)
         *prefixLen = tempPrefixLen;
     if (found && value)
         Packer.UnpackLeaf(valuepos, *value);
-    if (hasNext) 
-        *hasNext = tempHasNext; 
+    if (hasNext)
+        *hasNext = tempHasNext;
     return found;
 }
 
@@ -482,7 +482,7 @@ bool TCompactTrie<T, D, S>::LookupLongestPrefix(const TSymbol* key, size_t keyle
     size_t len = DataHolder.Length();
 
     prefixLen = 0;
-    hasNext = false; 
+    hasNext = false;
     bool found = false;
 
     if (EmptyValue) {
@@ -506,9 +506,9 @@ bool TCompactTrie<T, D, S>::LookupLongestPrefix(const TSymbol* key, size_t keyle
 
             Y_ASSERT(datapos <= dataend);
             if ((flags & MT_FINAL)) {
-                prefixLen = keylen - (keyend - key) - (i ? 1 : 0); 
+                prefixLen = keylen - (keyend - key) - (i ? 1 : 0);
                 valuepos = datapos;
-                hasNext = flags & MT_NEXT; 
+                hasNext = flags & MT_NEXT;
                 found = true;
 
                 if (!i && key == keyend) { // last byte, and got a match

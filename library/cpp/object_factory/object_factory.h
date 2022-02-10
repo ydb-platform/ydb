@@ -5,7 +5,7 @@
 #include <util/generic/map.h>
 #include <util/generic/set.h>
 #include <util/generic/singleton.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 
 namespace NObjectFactory {
     template <class TProduct, class... TArgs>

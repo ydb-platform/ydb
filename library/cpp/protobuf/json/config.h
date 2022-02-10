@@ -72,7 +72,7 @@ namespace NProtobufJson {
         /// Print map as object, otherwise print it as array of key/value objects
         bool MapAsObject = false;
 
-        /// Stringify long integers which are not exactly representable by float or double values 
+        /// Stringify long integers which are not exactly representable by float or double values
         enum EStringifyLongNumbersMode {
             StringifyLongNumbersNever = 0, // default
             StringifyLongNumbersForFloat,

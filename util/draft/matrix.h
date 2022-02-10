@@ -18,7 +18,7 @@ public:
     {
     }
 
-    TMatrix(size_t m, size_t n) 
+    TMatrix(size_t m, size_t n)
         : Buf(new T[m * n])
         , Arr(Buf)
         , M(m)
@@ -27,7 +27,7 @@ public:
     {
     }
 
-    TMatrix(size_t m, size_t n, T* buf) 
+    TMatrix(size_t m, size_t n, T* buf)
         : Buf(nullptr)
         , Arr(buf)
         , M(m)
@@ -46,7 +46,7 @@ public:
         M = N = 0;
     }
 
-    void ReDim(size_t m, size_t n) { 
+    void ReDim(size_t m, size_t n) {
         Y_ASSERT(m >= 1 && n >= 1);
         size_t newSize = m * n;
         if (newSize > BufSize) {
@@ -59,34 +59,34 @@ public:
         N = n;
     }
 
-    size_t Width() const { 
+    size_t Width() const {
         return N;
     }
 
-    size_t Height() const { 
+    size_t Height() const {
         return M;
     }
 
     // Access element matrix[i][j]
-    T* operator[](size_t i) { 
+    T* operator[](size_t i) {
         Y_ASSERT(i >= 0 && i < M);
         return Arr + i * N;
     }
 
     // Access element matrix[i][j]
-    const T* operator[](size_t i) const { 
+    const T* operator[](size_t i) const {
         Y_ASSERT(i >= 0 && i < M);
         return Arr + i * N;
     }
 
     // Access element matrix(i, j)
-    T& operator()(size_t i, size_t j) { 
+    T& operator()(size_t i, size_t j) {
         Y_ASSERT(i >= 0 && i < M && j >= 0 && j < N);
         return Arr[i * N + j];
     }
 
     // Access element matrix(i, j)
-    const T& operator()(size_t i, size_t j) const { 
+    const T& operator()(size_t i, size_t j) const {
         Y_ASSERT(i >= 0 && i < M && j >= 0 && j < N);
         return Arr[i * N + j];
     }
@@ -103,6 +103,6 @@ public:
 private:
     T* Buf;
     T* Arr;
-    size_t M, N; 
+    size_t M, N;
     size_t BufSize;
 };

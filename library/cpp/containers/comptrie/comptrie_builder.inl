@@ -1104,18 +1104,18 @@ size_t CompactTrieMakeFastLayout(IOutputStream& os, const TTrieBuilder& builder,
     size_t len = builder.Save(buftmp);
     return CompactTrieMakeFastLayout<typename TTrieBuilder::TPacker>(os, buftmp.Buffer().Data(), len, verbose);
 }
- 
-template <class TPacker> 
+
+template <class TPacker>
 size_t CompactTrieMinimizeAndMakeFastLayout(IOutputStream& os, const char* data, size_t datalength, bool verbose/*=false*/, const TPacker& packer/*= TPacker()*/) {
-    TBufferStream buftmp; 
-    size_t len = CompactTrieMinimize(buftmp, data, datalength, verbose, packer); 
-    return CompactTrieMakeFastLayout(os, buftmp.Buffer().Data(), len, verbose, packer); 
-} 
- 
-template <class TTrieBuilder> 
+    TBufferStream buftmp;
+    size_t len = CompactTrieMinimize(buftmp, data, datalength, verbose, packer);
+    return CompactTrieMakeFastLayout(os, buftmp.Buffer().Data(), len, verbose, packer);
+}
+
+template <class TTrieBuilder>
 size_t CompactTrieMinimizeAndMakeFastLayout(IOutputStream& os, const TTrieBuilder& builder, bool verbose /*=false*/) {
-    TBufferStream buftmp; 
-    size_t len = CompactTrieMinimize(buftmp, builder, verbose); 
-    return CompactTrieMakeFastLayout<typename TTrieBuilder::TPacker>(os, buftmp.Buffer().Data(), len, verbose); 
-} 
- 
+    TBufferStream buftmp;
+    size_t len = CompactTrieMinimize(buftmp, builder, verbose);
+    return CompactTrieMakeFastLayout<typename TTrieBuilder::TPacker>(os, buftmp.Buffer().Data(), len, verbose);
+}
+

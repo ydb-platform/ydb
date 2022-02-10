@@ -1,17 +1,17 @@
 #pragma once
 
-#include "recode_result.h" 
+#include "recode_result.h"
 #include "unidata.h"
-#include "utf8.h" 
+#include "utf8.h"
 #include "wide_specific.h"
 
 #include <util/generic/algorithm.h>
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
-#include <util/memory/tempbuf.h> 
+#include <util/memory/tempbuf.h>
 #include <util/system/compiler.h>
 #include <util/system/cpu_id.h>
-#include <util/system/yassert.h> 
+#include <util/system/yassert.h>
 
 #include <cstring>
 
@@ -86,7 +86,7 @@ inline wchar32 ReadSymbol(const wchar16* begin, const wchar16* end) noexcept {
 
         return BROKEN_RUNE;
     } else if (IsW16SurrogateTail(*begin)) {
-        return BROKEN_RUNE; 
+        return BROKEN_RUNE;
     }
 
     return *begin;
@@ -110,8 +110,8 @@ inline wchar32 ReadSymbolAndAdvance(const wchar16*& begin) noexcept {
         ++begin;
         return BROKEN_RUNE;
     } else if (IsW16SurrogateTail(begin[0])) {
-        ++begin; 
-        return BROKEN_RUNE; 
+        ++begin;
+        return BROKEN_RUNE;
     }
     return *(begin++);
 }
@@ -133,8 +133,8 @@ inline wchar32 ReadSymbolAndAdvance(const wchar16*& begin, const wchar16* end) n
         ++begin;
         return BROKEN_RUNE;
     } else if (IsW16SurrogateTail(begin[0])) {
-        ++begin; 
-        return BROKEN_RUNE; 
+        ++begin;
+        return BROKEN_RUNE;
     }
     return *(begin++);
 }
@@ -320,18 +320,18 @@ inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size
     return UTF8ToWideImpl<false>(text, len, dest, written);
 }
 
-template <bool robust> 
+template <bool robust>
 inline TUtf16String UTF8ToWide(const char* text, size_t len) {
     TUtf16String w = TUtf16String::Uninitialized(len);
-    size_t written; 
-    size_t pos = UTF8ToWideImpl<robust>(text, len, w.begin(), written); 
-    if (pos != len) 
-        ythrow yexception() << "failed to decode UTF-8 string at pos " << pos << ::NDetail::InStringMsg(text, len); 
+    size_t written;
+    size_t pos = UTF8ToWideImpl<robust>(text, len, w.begin(), written);
+    if (pos != len)
+        ythrow yexception() << "failed to decode UTF-8 string at pos " << pos << ::NDetail::InStringMsg(text, len);
     Y_ASSERT(w.size() >= written);
-    w.remove(written); 
-    return w; 
-} 
- 
+    w.remove(written);
+    return w;
+}
+
 template <bool robust, typename TCharType>
 inline bool UTF8ToWide(const char* text, size_t len, TCharType* dest, size_t& written) noexcept {
     return UTF8ToWideImpl<robust>(text, len, dest, written) == len;
@@ -348,11 +348,11 @@ inline bool UTF8ToWide(const char* text, size_t len, TCharType* dest, size_t& wr
 
 template <bool robust>
 inline TWtringBuf UTF8ToWide(const TStringBuf src, TUtf16String& dst) {
-    dst.ReserveAndResize(src.size()); 
-    size_t written = 0; 
+    dst.ReserveAndResize(src.size());
+    size_t written = 0;
     UTF8ToWideImpl<robust>(src.data(), src.size(), dst.begin(), written);
-    dst.resize(written); 
-    return dst; 
+    dst.resize(written);
+    return dst;
 }
 
 //! if not robust will stop at first error position
@@ -366,16 +366,16 @@ inline TUtf32StringBuf UTF8ToUTF32(const TStringBuf src, TUtf32String& dst) {
 }
 
 inline TWtringBuf UTF8ToWide(const TStringBuf src, TUtf16String& dst) {
-    return UTF8ToWide<false>(src, dst); 
+    return UTF8ToWide<false>(src, dst);
 }
 
 inline TUtf16String UTF8ToWide(const char* text, size_t len) {
-    return UTF8ToWide<false>(text, len); 
+    return UTF8ToWide<false>(text, len);
 }
 
 template <bool robust>
 inline TUtf16String UTF8ToWide(const TStringBuf s) {
-    return UTF8ToWide<robust>(s.data(), s.size()); 
+    return UTF8ToWide<robust>(s.data(), s.size());
 }
 
 template <bool robust>
@@ -386,37 +386,37 @@ inline TUtf32String UTF8ToUTF32(const TStringBuf s) {
 }
 
 inline TUtf16String UTF8ToWide(const TStringBuf s) {
-    return UTF8ToWide<false>(s.data(), s.size()); 
+    return UTF8ToWide<false>(s.data(), s.size());
 }
 
-//! converts text from unicode to UTF8 
-//! @attention destination buffer must be long enough to fit all characters of the text, 
-//!            @c WriteUTF8Char converts @c wchar32 into maximum 4 bytes of UTF8 so 
-//!            destination buffer must have length equal to <tt> len * 4 </tt> 
-template <typename TCharType> 
-inline void WideToUTF8(const TCharType* text, size_t len, char* dest, size_t& written) { 
-    const TCharType* const last = text + len; 
-    unsigned char* p = reinterpret_cast<unsigned char*>(dest); 
-    size_t runeLen; 
-    for (const TCharType* cur = text; cur != last;) { 
-        WriteUTF8Char(ReadSymbolAndAdvance(cur, last), runeLen, p); 
+//! converts text from unicode to UTF8
+//! @attention destination buffer must be long enough to fit all characters of the text,
+//!            @c WriteUTF8Char converts @c wchar32 into maximum 4 bytes of UTF8 so
+//!            destination buffer must have length equal to <tt> len * 4 </tt>
+template <typename TCharType>
+inline void WideToUTF8(const TCharType* text, size_t len, char* dest, size_t& written) {
+    const TCharType* const last = text + len;
+    unsigned char* p = reinterpret_cast<unsigned char*>(dest);
+    size_t runeLen;
+    for (const TCharType* cur = text; cur != last;) {
+        WriteUTF8Char(ReadSymbolAndAdvance(cur, last), runeLen, p);
         Y_ASSERT(runeLen <= 4);
-        p += runeLen; 
-    } 
-    written = p - reinterpret_cast<unsigned char*>(dest); 
-} 
- 
+        p += runeLen;
+    }
+    written = p - reinterpret_cast<unsigned char*>(dest);
+}
+
 constexpr size_t WideToUTF8BufferSize(const size_t inputStringSize) noexcept {
     return inputStringSize * 4; // * 4 because the conversion functions can convert unicode character into maximum 4 bytes of UTF8
 }
 
 inline TStringBuf WideToUTF8(const TWtringBuf src, TString& dst) {
     dst.ReserveAndResize(WideToUTF8BufferSize(src.size()));
-    size_t written = 0; 
-    WideToUTF8(src.data(), src.size(), dst.begin(), written); 
+    size_t written = 0;
+    WideToUTF8(src.data(), src.size(), dst.begin(), written);
     Y_ASSERT(dst.size() >= written);
-    dst.remove(written); 
-    return dst; 
+    dst.remove(written);
+    return dst;
 }
 
 inline TString WideToUTF8(const wchar16* text, size_t len) {
@@ -826,18 +826,18 @@ inline size_t CountWideChars(const wchar16* b, const wchar16* e) {
 inline size_t CountWideChars(const TWtringBuf str) {
     return CountWideChars(str.begin(), str.end());
 }
- 
-//! checks whether the range is valid UTF-16 sequence 
-inline bool IsValidUTF16(const wchar16* b, const wchar16* e) { 
+
+//! checks whether the range is valid UTF-16 sequence
+inline bool IsValidUTF16(const wchar16* b, const wchar16* e) {
     Y_ENSURE(b <= e, TStringBuf("invalid iterators"));
-    while (b < e) { 
-        wchar32 symbol = ReadSymbolAndAdvance(b, e); 
-        if (symbol == BROKEN_RUNE) 
-            return false; 
-    } 
-    return true; 
-} 
- 
+    while (b < e) {
+        wchar32 symbol = ReadSymbolAndAdvance(b, e);
+        if (symbol == BROKEN_RUNE)
+            return false;
+    }
+    return true;
+}
+
 inline bool IsValidUTF16(const TWtringBuf str) {
-    return IsValidUTF16(str.begin(), str.end()); 
-} 
+    return IsValidUTF16(str.begin(), str.end());
+}

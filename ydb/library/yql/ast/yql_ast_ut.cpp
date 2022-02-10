@@ -213,8 +213,8 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         TestBadArbitraryAtom("(\"\\U1122\")", "Invalid unicode value");
         TestBadArbitraryAtom("(\"\\U112233\")", "Invalid unicode value");
         TestBadArbitraryAtom("(\"\\Ughijklmn\")", "Invalid unicode value");
-        TestBadArbitraryAtom("(\"\\U00110000\")", "Invalid unicode value"); 
-        TestBadArbitraryAtom("(\"\\U00123456\")", "Invalid unicode value"); 
+        TestBadArbitraryAtom("(\"\\U00110000\")", "Invalid unicode value");
+        TestBadArbitraryAtom("(\"\\U00123456\")", "Invalid unicode value");
         TestBadArbitraryAtom("(\"\\U00200000\")", "Invalid unicode value");
         TestBadArbitraryAtom("(\"\\Uffffffff\")", "Invalid unicode value");
 

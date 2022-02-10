@@ -1,6 +1,6 @@
 #include "json_writer.h"
 
-#include <util/charset/utf8.h> 
+#include <util/charset/utf8.h>
 #include <util/generic/algorithm.h>
 #include <util/string/cast.h>
 #include <util/system/yassert.h>

@@ -213,7 +213,7 @@ static inline RECODE_RESULT utf8_read_rune_from_unknown_plane(TxChar& rune, size
 
     rune_len = 0;
 
-    size_t _len = UTF8RuneLen((unsigned char)(*s)); 
+    size_t _len = UTF8RuneLen((unsigned char)(*s));
     if (s + _len > end)
         return RECODE_EOINPUT; //[EOINPUT]
     if (_len == 0)
@@ -221,7 +221,7 @@ static inline RECODE_RESULT utf8_read_rune_from_unknown_plane(TxChar& rune, size
 
     wchar32 _rune = (ui8)(*s++); //[00000000 0XXXXXXX]
     if (_len > 1) {
-        _rune &= UTF8LeadByteMask(_len); 
+        _rune &= UTF8LeadByteMask(_len);
         wchar32 ch = *s++;
         if ((ch & 0xFFC0) != 0xF080)
             return RECODE_BROKENSYMBOL; //[BROKENSYMBOL] in second byte

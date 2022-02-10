@@ -228,8 +228,8 @@ public:
     void TestTrieForPairWtrokaVectorInt64();
 
     void TestEmptyValueOutOfOrder();
-    void TestFindLongestPrefixWithEmptyValue(); 
- 
+    void TestFindLongestPrefixWithEmptyValue();
+
     void TestSearchIterChar();
     void TestSearchIterWchar();
     void TestSearchIterWchar32();
@@ -1109,7 +1109,7 @@ TVector<TUtf16String> TCompactTrieTest::GetSampleKeys(size_t nKeys) const {
     TString sampleKeys[] = {"a", "b", "ac", "bd", "abe", "bcf", "deg", "ah", "xy", "abc"};
     TVector<TUtf16String> result;
     for (size_t i = 0; i < nKeys; i++)
-        result.push_back(ASCIIToWide(sampleKeys[i])); 
+        result.push_back(ASCIIToWide(sampleKeys[i]));
     return result;
 }
 
@@ -1167,7 +1167,7 @@ void TCompactTrieTest::TestTrieWithContainers(const TVector<TUtf16String>& keys,
         for (; p != value.end(); p++, p1++)
             CheckEquality<typename TContainer::value_type>(*p, *p1);
     }
- 
+
     unlink(fileName.data());
 }
 
@@ -1189,7 +1189,7 @@ void TCompactTrieTest::TestTrieWithContainers<std::pair<TUtf16String, TVector<i6
         CheckEquality<TContainer::first_type>(value.first, sampleData[i].first);
         CheckEquality<TContainer::second_type>(value.second, sampleData[i].second);
     }
- 
+
     unlink(fileName.data());
 }
 
@@ -1252,7 +1252,7 @@ void TCompactTrieTest::TestTrieForPairWtrokaVectorInt64() {
         data.push_back(std::pair<TUtf16String, TVector<i64>>(keys[i] + u"_v", values[i]));
     TestTrieWithContainers<std::pair<TUtf16String, TVector<i64>>>(keys, data, "pair-str-v-i64");
 }
- 
+
 void TCompactTrieTest::TestEmptyValueOutOfOrder() {
     TBufferOutput buffer;
     using TSymbol = ui32;
@@ -1269,29 +1269,29 @@ void TCompactTrieTest::TestEmptyValueOutOfOrder() {
     }
 }
 
-void TCompactTrieTest::TestFindLongestPrefixWithEmptyValue() { 
-    TBufferOutput buffer; 
-    { 
-        TCompactTrieBuilder<wchar16, ui32> builder; 
+void TCompactTrieTest::TestFindLongestPrefixWithEmptyValue() {
+    TBufferOutput buffer;
+    {
+        TCompactTrieBuilder<wchar16, ui32> builder;
         builder.Add(u"", 42);
         builder.Add(u"yandex", 271828);
         builder.Add(u"ya", 31415);
-        builder.Save(buffer); 
-    } 
-    { 
-        TCompactTrie<wchar16, ui32> trie(buffer.Buffer().Data(), buffer.Buffer().Size()); 
+        builder.Save(buffer);
+    }
+    {
+        TCompactTrie<wchar16, ui32> trie(buffer.Buffer().Data(), buffer.Buffer().Size());
         size_t prefixLen = 123;
-        ui32 value = 0; 
- 
+        ui32 value = 0;
+
         UNIT_ASSERT(trie.FindLongestPrefix(u"google", &prefixLen, &value));
-        UNIT_ASSERT(prefixLen == 0); 
-        UNIT_ASSERT(value == 42); 
- 
+        UNIT_ASSERT(prefixLen == 0);
+        UNIT_ASSERT(value == 42);
+
         UNIT_ASSERT(trie.FindLongestPrefix(u"yahoo", &prefixLen, &value));
-        UNIT_ASSERT(prefixLen == 2); 
-        UNIT_ASSERT(value == 31415); 
-    } 
-} 
+        UNIT_ASSERT(prefixLen == 2);
+        UNIT_ASSERT(value == 31415);
+    }
+}
 
 template <typename TChar>
 struct TConvertKey {

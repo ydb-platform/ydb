@@ -8,7 +8,7 @@
 #include <contrib/libs/pire/pire/extra.h>
 
 #include <library/cpp/charset/doccodes.h>
- 
+
 namespace NPire {
     using TChar = Pire::Char;
     using Pire::MaxChar;

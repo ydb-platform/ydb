@@ -4,7 +4,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/charset/utf8.h> 
+#include <util/charset/utf8.h>
 #include <util/digest/numeric.h>
 #include <util/generic/hash_set.h>
 
@@ -125,7 +125,7 @@ private:
     UNIT_TEST_SUITE(TConversionTest);
     UNIT_TEST(TestCharToWide);
     UNIT_TEST(TestWideToChar);
-    UNIT_TEST(TestYandexEncoding); 
+    UNIT_TEST(TestYandexEncoding);
     UNIT_TEST(TestRecodeIntoString);
     UNIT_TEST(TestRecodeAppend);
     UNIT_TEST(TestRecode);
@@ -142,7 +142,7 @@ public:
 
     void TestCharToWide();
     void TestWideToChar();
-    void TestYandexEncoding(); 
+    void TestYandexEncoding();
     void TestRecodeIntoString();
     void TestRecodeAppend();
     void TestRecode();
@@ -203,7 +203,7 @@ static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize
     UNIT_ASSERT(s == str);
 }
 
-void TConversionTest::TestYandexEncoding() { 
+void TConversionTest::TestYandexEncoding() {
     TUtf16String w = UTF8ToWide(utf8CyrillicAlphabet, strlen(utf8CyrillicAlphabet), csYandex);
     UNIT_ASSERT(w == wideCyrillicAlphabet);
     w = UTF8ToWide(yandexCyrillicAlphabet, strlen(yandexCyrillicAlphabet), csYandex);
@@ -296,13 +296,13 @@ void TConversionTest::TestRecodeAppend() {
         UNIT_ASSERT_EQUAL(s1, s2);
 
         NDetail::RecodeAppend<wchar16>(UnicodeText, s1, CODES_UTF8);
-        s2 += WideToUTF8(UnicodeText); 
+        s2 += WideToUTF8(UnicodeText);
         UNIT_ASSERT_EQUAL(s1, s2);
 
         for (size_t i = 0; i < 100; ++i) {
             TUtf16String junk = CharToWide(GenerateJunk(i), CODES_YANDEX);
             NDetail::RecodeAppend<wchar16>(junk, s1, CODES_UTF8);
-            s2 += WideToUTF8(junk); 
+            s2 += WideToUTF8(junk);
             UNIT_ASSERT_EQUAL(s1, s2);
         }
     }
@@ -324,7 +324,7 @@ void TConversionTest::TestRecodeAppend() {
         UNIT_ASSERT_EQUAL(s1, s2);
 
         NDetail::RecodeAppend<char>(UTF8Text, s1, CODES_UTF8);
-        s2 += UTF8ToWide(UTF8Text); 
+        s2 += UTF8ToWide(UTF8Text);
         UNIT_ASSERT_EQUAL(s1, s2);
 
         for (size_t i = 0; i < 100; ++i) {

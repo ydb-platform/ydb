@@ -14,21 +14,21 @@
 
 namespace NCoro {
 
-TTrampoline::TTrampoline(NStack::IAllocator& allocator, ui32 stackSize, TFunc f, TCont* cont) noexcept
+TTrampoline::TTrampoline(NStack::IAllocator& allocator, ui32 stackSize, TFunc f, TCont* cont) noexcept 
         : Stack_(allocator, stackSize, cont->Name())
         , Clo_{this, Stack_.Get(), cont->Name()}
         , Ctx_(Clo_)
-        , Func_(std::move(f))
+        , Func_(std::move(f)) 
         , Cont_(cont)
     {}
 
     void TTrampoline::DoRun() {
-        if (Cont_->Executor()->FailOnError()) {
-            Func_(Cont_);
-        } else {
-            try {
-                Func_(Cont_);
-            } catch (...) {}
+        if (Cont_->Executor()->FailOnError()) { 
+            Func_(Cont_); 
+        } else { 
+            try { 
+                Func_(Cont_); 
+            } catch (...) {} 
         }
 
         Cont_->Terminate();
@@ -42,9 +42,9 @@ TTrampoline::TTrampoline(NStack::IAllocator& allocator, ui32 stackSize, TFunc f,
         return Cont_->Name();
     }
 
-    void TTrampoline::DoRunNaked() {
-        DoRun();
-
-        abort();
-    }
+    void TTrampoline::DoRunNaked() { 
+        DoRun(); 
+ 
+        abort(); 
+    } 
 }

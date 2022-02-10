@@ -21,15 +21,15 @@ void TCont::TJoinWait::Wake() noexcept {
 TCont::TCont(NCoro::NStack::IAllocator& allocator,
              uint32_t stackSize,
              TContExecutor& executor,
-             NCoro::TTrampoline::TFunc func,
+             NCoro::TTrampoline::TFunc func, 
              const char* name) noexcept
     : Executor_(executor)
     , Name_(name)
     , Trampoline_(
         allocator,
         stackSize,
-        std::move(func),
-        this
+        std::move(func), 
+        this 
     )
 {}
 
@@ -122,14 +122,14 @@ TContExecutor::TContExecutor(
     NCoro::IScheduleCallback* scheduleCallback,
     NCoro::IEnterPollerCallback* enterPollerCallback,
     NCoro::NStack::EGuard defaultGuard,
-    TMaybe<NCoro::NStack::TPoolAllocatorSettings> poolSettings,
-    NCoro::ITime* time
+    TMaybe<NCoro::NStack::TPoolAllocatorSettings> poolSettings, 
+    NCoro::ITime* time 
 )
     : ScheduleCallback_(scheduleCallback)
     , EnterPollerCallback_(enterPollerCallback)
     , DefaultStackSize_(defaultStackSize)
     , Poller_(std::move(poller))
-    , Time_(time)
+    , Time_(time) 
 {
     StackAllocator_ = NCoro::NStack::GetAllocator(poolSettings, defaultGuard);
 }
@@ -144,15 +144,15 @@ void TContExecutor::Execute() noexcept {
 }
 
 void TContExecutor::Execute(TContFunc func, void* arg) noexcept {
-    CreateOwned([=](TCont* cont) {
-        func(cont, arg);
-    }, "sys_main");
+    CreateOwned([=](TCont* cont) { 
+        func(cont, arg); 
+    }, "sys_main"); 
     RunScheduler();
 }
 
 void TContExecutor::WaitForIO() {
     while (Ready_.Empty() && !WaitQueue_.Empty()) {
-        const auto now = Now();
+        const auto now = Now(); 
 
         // Waking a coroutine puts it into ReadyNext_ list
         const auto next = WaitQueue_.WakeTimedout(now);
@@ -234,21 +234,21 @@ TCont* TContExecutor::Create(
     const char* name,
     TMaybe<ui32> customStackSize
 ) noexcept {
-    return CreateOwned([=](TCont* cont) {
-        func(cont, arg);
-    }, name, customStackSize);
-}
-
-TCont* TContExecutor::CreateOwned(
-    NCoro::TTrampoline::TFunc func,
-    const char* name,
-    TMaybe<ui32> customStackSize
-) noexcept {
+    return CreateOwned([=](TCont* cont) { 
+        func(cont, arg); 
+    }, name, customStackSize); 
+} 
+ 
+TCont* TContExecutor::CreateOwned( 
+    NCoro::TTrampoline::TFunc func, 
+    const char* name, 
+    TMaybe<ui32> customStackSize 
+) noexcept { 
     Allocated_ += 1;
     if (!customStackSize) {
         customStackSize = DefaultStackSize_;
     }
-    auto* cont = new TCont(*StackAllocator_, *customStackSize, *this, std::move(func), name);
+    auto* cont = new TCont(*StackAllocator_, *customStackSize, *this, std::move(func), name); 
     ScheduleExecution(cont);
     return cont;
 }
@@ -335,11 +335,11 @@ void TContExecutor::RunScheduler() noexcept {
                 break;
             }
             context->SwitchTo(cont->Trampoline_.Context());
-            if (Paused_) {
-                Paused_ = false;
-                Current_ = nullptr;
-                break;
-            }
+            if (Paused_) { 
+                Paused_ = false; 
+                Current_ = nullptr; 
+                break; 
+            } 
             if (caller) {
                 break;
             }
@@ -350,24 +350,24 @@ void TContExecutor::RunScheduler() noexcept {
     }
 }
 
-void TContExecutor::Pause() {
-    if (auto cont = Running()) {
-        Paused_ = true;
-        ScheduleExecutionNow(cont);
-        cont->SwitchTo(&SchedContext_);
-    }
-}
-
+void TContExecutor::Pause() { 
+    if (auto cont = Running()) { 
+        Paused_ = true; 
+        ScheduleExecutionNow(cont); 
+        cont->SwitchTo(&SchedContext_); 
+    } 
+} 
+ 
 void TContExecutor::Exit(TCont* cont) noexcept {
     ScheduleToDelete(cont);
     cont->SwitchTo(&SchedContext_);
     Y_FAIL("can not return from exit");
 }
 
-TInstant TContExecutor::Now() {
-    return Y_LIKELY(Time_ == nullptr) ? TInstant::Now() : Time_->Now();
-}
-
+TInstant TContExecutor::Now() { 
+    return Y_LIKELY(Time_ == nullptr) ? TInstant::Now() : Time_->Now(); 
+} 
+ 
 template <>
 void Out<TCont>(IOutputStream& out, const TCont& c) {
     c.PrintMe(out);

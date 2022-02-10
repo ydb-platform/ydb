@@ -214,7 +214,7 @@ bool TryGetSchemeHostAndPort(const TStringBuf url, TStringBuf& scheme, TStringBu
 
     TStringBuf portStr;
     TStringBuf hostAndPort = GetHostAndPort(url.Tail(schemeSize));
-    if (hostAndPort && hostAndPort.back() != ']' && hostAndPort.TryRSplit(':', host, portStr)) {
+    if (hostAndPort && hostAndPort.back() != ']' && hostAndPort.TryRSplit(':', host, portStr)) { 
         // URL has port
         if (!TryFromString(portStr, port)) {
             return false;

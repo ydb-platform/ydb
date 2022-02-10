@@ -21,11 +21,11 @@ namespace NPar {
         virtual void LocalExec(int id) = 0;
     };
 
-    // Alternative and simpler way of describing a job for executor. Function argument has the
-    // same meaning as `id` in `ILocallyExecutable::LocalExec`.
-    //
-    using TLocallyExecutableFunction = std::function<void(int)>;
-
+    // Alternative and simpler way of describing a job for executor. Function argument has the 
+    // same meaning as `id` in `ILocallyExecutable::LocalExec`. 
+    // 
+    using TLocallyExecutableFunction = std::function<void(int)>; 
+ 
     class ILocalExecutor: public TNonCopyable {
     public:
         ILocalExecutor() = default;
@@ -157,34 +157,34 @@ namespace NPar {
             ExecRange(BlockedLoopBody(params, body), 0, params.GetBlockCount(), flags);
         }
 
-        template <typename TBody>
-        inline void ExecRangeBlockedWithThrow(TBody&& body, int firstId, int lastId, int batchSizeOrZeroForAutoBatchSize, int flags) {
-            if (firstId >= lastId) {
-                return;
-            }
-            const int threadCount = Max(GetThreadCount(), 1);
-            const int batchSize = batchSizeOrZeroForAutoBatchSize
-                ? batchSizeOrZeroForAutoBatchSize
-                : (lastId - firstId + threadCount - 1) / threadCount;
-            const int batchCount = (lastId - firstId + batchSize - 1) / batchSize;
-            const int batchCountPerThread = (batchCount + threadCount - 1) / threadCount;
-            auto states = ExecRangeWithFutures(
-                [=](int threadId) {
-                    for (int batchIdPerThread = 0; batchIdPerThread < batchCountPerThread; ++batchIdPerThread) {
-                        int batchId = batchIdPerThread * threadCount + threadId;
-                        int begin = firstId + batchId * batchSize;
-                        int end = Min(begin + batchSize, lastId);
-                        for (int i = begin; i < end; ++i) {
-                            body(i);
-                        }
-                    }
-                },
-                0, threadCount, flags);
-            for (auto& state: states) {
-                state.GetValueSync(); // Re-throw exception if any.
-            }
-        }
-
+        template <typename TBody> 
+        inline void ExecRangeBlockedWithThrow(TBody&& body, int firstId, int lastId, int batchSizeOrZeroForAutoBatchSize, int flags) { 
+            if (firstId >= lastId) { 
+                return; 
+            } 
+            const int threadCount = Max(GetThreadCount(), 1); 
+            const int batchSize = batchSizeOrZeroForAutoBatchSize 
+                ? batchSizeOrZeroForAutoBatchSize 
+                : (lastId - firstId + threadCount - 1) / threadCount; 
+            const int batchCount = (lastId - firstId + batchSize - 1) / batchSize; 
+            const int batchCountPerThread = (batchCount + threadCount - 1) / threadCount; 
+            auto states = ExecRangeWithFutures( 
+                [=](int threadId) { 
+                    for (int batchIdPerThread = 0; batchIdPerThread < batchCountPerThread; ++batchIdPerThread) { 
+                        int batchId = batchIdPerThread * threadCount + threadId; 
+                        int begin = firstId + batchId * batchSize; 
+                        int end = Min(begin + batchSize, lastId); 
+                        for (int i = begin; i < end; ++i) { 
+                            body(i); 
+                        } 
+                    } 
+                }, 
+                0, threadCount, flags); 
+            for (auto& state: states) { 
+                state.GetValueSync(); // Re-throw exception if any. 
+            } 
+        } 
+ 
         template <typename TBody>
         static inline bool TryExecRangeSequentially(TBody&& body, int firstId, int lastId, int flags) {
             if (lastId == firstId) {

@@ -37,7 +37,7 @@ RECURSE(
     sancov
     sqlite3
     swig
-    tf
+    tf 
     tpce-benchmark
     tpch-benchmark
     tre

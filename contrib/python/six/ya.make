@@ -19,7 +19,7 @@ RESOURCE_FILES(
 
 NO_LINT()
 
-END()
+END() 
 
 RECURSE_FOR_TESTS(
     tests

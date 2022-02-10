@@ -75,7 +75,7 @@ RECURSE(
     flatbuffers64/samples
     fmath
     fmt
-    fontconfig 
+    fontconfig
     fp16
     freetype
     fuse
@@ -98,7 +98,7 @@ RECURSE(
     grpc/src/proto
     gtfs_realtime
     h3
-    harfbuzz 
+    harfbuzz
     hdf5
     hdr_histogram
     highwayhash
@@ -262,7 +262,7 @@ RECURSE(
     ortools/proto
     osrm
     pam
-    pango 
+    pango
     pcre
     pcre2
     pdqsort

@@ -118,7 +118,7 @@ private:
 public:
     TTimeLogger(const TString& message, bool verbose = true);
     ~TTimeLogger();
-
+ 
     void SetOK();
     double ElapsedTime() const;
 };

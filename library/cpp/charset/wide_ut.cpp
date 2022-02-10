@@ -216,7 +216,7 @@ void TConversionTest::TestYandexEncoding() {
     {
         const char* yandexNonBMP2 = "ab?n";
         UNIT_ASSERT(yandexNonBMP2 == WideToChar(wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2), CODES_YANDEX));
-
+ 
         TString temp;
         temp.resize(Y_ARRAY_SIZE(wNonBMPDummy2));
         size_t read = 0;
@@ -298,7 +298,7 @@ void TConversionTest::TestRecodeAppend() {
         NDetail::RecodeAppend<wchar16>(UnicodeText, s1, CODES_UTF8);
         s2 += WideToUTF8(UnicodeText);
         UNIT_ASSERT_EQUAL(s1, s2);
-
+ 
         for (size_t i = 0; i < 100; ++i) {
             TUtf16String junk = CharToWide(GenerateJunk(i), CODES_YANDEX);
             NDetail::RecodeAppend<wchar16>(junk, s1, CODES_UTF8);
@@ -322,7 +322,7 @@ void TConversionTest::TestRecodeAppend() {
 
         NDetail::RecodeAppend<char>(TString(), s1, CODES_YANDEX);
         UNIT_ASSERT_EQUAL(s1, s2);
-
+ 
         NDetail::RecodeAppend<char>(UTF8Text, s1, CODES_UTF8);
         s2 += UTF8ToWide(UTF8Text);
         UNIT_ASSERT_EQUAL(s1, s2);
@@ -352,7 +352,7 @@ void TConversionTest::TestRecode() {
 
         for (int i = 0; i != 256; ++i) {
             char ch = static_cast<char>(i);
-
+ 
             wchar32 wch;
             size_t read = 0;
             size_t written = 0;
@@ -366,7 +366,7 @@ void TConversionTest::TestRecode() {
             char rch = 0;
             res = RecodeFromUnicode(enc, &wch, &rch, 1, 1, read, written);
             UNIT_ASSERT(res == RECODE_OK);
-
+ 
             char rch2 = 0;
             UNIT_ASSERT_VALUES_EQUAL(RECODE_OK, RecodeFromUnicode(enc, wch, &rch2, 1, written));
             UNIT_ASSERT_VALUES_EQUAL(size_t(1), written);

@@ -32,7 +32,7 @@ struct DIR* opendir(const char* dirname) {
     int len = strlen(dirname);
     //Remove trailing slashes
     while (len && (dirname[len - 1] == '\\' || dirname[len - 1] == '/')) {
-        --len;
+        --len; 
     }
     int len_converted = MultiByteToWideChar(CP_UTF8, 0, dirname, len, 0, 0);
     if (len_converted == 0) {
@@ -80,7 +80,7 @@ int readdir_r(struct DIR* dir, struct dirent* entry, struct dirent** result) {
     }
     entry->d_fileno = dir->file_no++;
     entry->d_reclen = sizeof(struct dirent);
-    if (dir->wfd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT &&
+    if (dir->wfd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT && 
         (dir->wfd.dwReserved0 == IO_REPARSE_TAG_MOUNT_POINT || dir->wfd.dwReserved0 == IO_REPARSE_TAG_SYMLINK))
     {
         entry->d_type = DT_LNK;

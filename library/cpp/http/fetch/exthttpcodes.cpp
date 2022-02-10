@@ -156,7 +156,7 @@ static ui16* prepare_flags(http_flag* arg) {
     for (ptr = arg; ptr->http; ++ptr)
         flags[ptr->http & (EXT_HTTP_CODE_MAX - 1)] = ptr->flag;
 
-    // для стандартных кодов ошибок берем флаги из первого кода каждой группы и проставляем их
+    // для стандартных кодов ошибок берем флаги из первого кода каждой группы и проставляем их 
     // всем кодам не перечисленным в таблице выше
     for (size_t group = 0; group < 1000; group += 100)
         for (size_t j = group + 1; j < group + 100; ++j)

@@ -38,7 +38,7 @@ public:
         return IsValid;
     }
 
-    // NOTE: this is a potentially unsafe operation (no overrun check)
+    // NOTE: this is a potentially unsafe operation (no overrun check) 
     inline TDelimStringIter& operator++() {
         if (Current.end() != Str.end()) {
             Str.Skip(Current.length() + Delim.length());

@@ -12,7 +12,7 @@
 
 /// NBus::TBusModule::CreateExtSession() creates and registers an
 /// external session that receives incoming messages as input for module
-/// processing.
+/// processing. 
 
 /// When new incoming message arrives the new NBus::TBusJob is created.
 /// NBus::TBusJob is somewhat similar to a thread, it maintains all the state

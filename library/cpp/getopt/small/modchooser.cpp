@@ -67,7 +67,7 @@ TModChooser::TMode::TMode(const TString& name, TMainClass* main, const TString& 
     , Hidden(hidden)
     , NoCompletion(noCompletion)
 {
-}
+} 
 
 TModChooser::TModChooser()
     : ModesHelpOption("-?") // Default help option in last_getopt

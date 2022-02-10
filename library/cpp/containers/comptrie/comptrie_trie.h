@@ -401,7 +401,7 @@ inline bool TCompactTrie<T, D, S>::FindTails(TSymbol label, TCompactTrie<T, D, S
     const char* dataend = datastart + len;
     const char* datapos = datastart;
     const char* value = nullptr;
-
+ 
     if (!NCompactTrie::Advance(datapos, dataend, value, label, Packer))
         return false;
 

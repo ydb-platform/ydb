@@ -98,12 +98,12 @@ public:
         return Int(opt, helpUsage, 0, true);
     }
 
-    // Get() + strtoul, may set up HasErrors
+    // Get() + strtoul, may set up HasErrors 
     unsigned long UInt(char opt, const char* helpUsage, unsigned long defValue, bool required = false);
     unsigned long UInt(char opt, const char* helpUsage) {
-        return UInt(opt, helpUsage, 0, true);
-    }
-
+        return UInt(opt, helpUsage, 0, true); 
+    } 
+ 
     // For options w/o parameters
     bool Has(char opt, const char* helpUsage);
 

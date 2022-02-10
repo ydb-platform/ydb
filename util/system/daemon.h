@@ -12,11 +12,11 @@ namespace NDaemonMaker {
         openYandexStd
     };
 
-    enum EChDir {
-        chdirNone = 0,
-        chdirRoot
-    };
-
+    enum EChDir { 
+        chdirNone = 0, 
+        chdirRoot 
+    }; 
+ 
     enum EParent {
         callExitFromParent = 0,
         returnFromParent

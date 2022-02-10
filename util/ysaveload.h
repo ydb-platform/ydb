@@ -461,7 +461,7 @@ public:
     {
         S_.clear();
     }
-
+ 
     inline void Insert(const TValue& v) {
         S_.insert(v);
     }
@@ -493,7 +493,7 @@ public:
         Y_UNUSED(cnt);
         P_ = this->S_.begin();
     }
-
+ 
     inline void Insert(const TValue& v) {
         P_ = this->S_.insert(P_, v);
     }

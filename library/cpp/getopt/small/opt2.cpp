@@ -231,23 +231,23 @@ long Opt2::Int(char opt, const char* help, long def, bool required) {
     return rv;
 }
 
-// Get() + strtoul, may set up HasErrors
+// Get() + strtoul, may set up HasErrors 
 unsigned long Opt2::UInt(char opt, const char* help, unsigned long def, bool required) {
     Opt2Param& p = GetInternal(opt, (char*)(uintptr_t)def, help, required);
-    if (!p.HasArg)
+    if (!p.HasArg) 
         ythrow yexception() << "Opt2::UInt called for '" << opt << "' which is an option without argument";
-    p.IsNumeric = true;
+    p.IsNumeric = true; 
     if (!p.IsFound || p.ActualValue.empty() || !p.ActualValue.back())
-        return def;
+        return def; 
     char* e;
     unsigned long rv = strtoul(p.ActualValue.back(), &e, 10);
     if (e == p.ActualValue.back() || *e) {
-        OptionWrongArg = opt;
-        HasErrors = true;
-    }
-    return rv;
-}
-
+        OptionWrongArg = opt; 
+        HasErrors = true; 
+    } 
+    return rv; 
+} 
+ 
 // Add user defined error message and set error flag
 void Opt2::AddError(const char* message) {
     HasErrors = true;

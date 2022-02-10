@@ -22,7 +22,7 @@ void TFileListTest::TestSimple() {
     TTempDir tempDir("nonexistingdir");
     MakeDirIfNotExist((tempDir() + LOCSLASH_S "subdir").data());
     TFile((tempDir() + LOCSLASH_S "subdir" LOCSLASH_S "file").data(), CreateAlways);
-
+ 
     TFileList fileList;
     fileList.Fill(tempDir().data(), "", "", 1000);
     TString fileName(fileList.Next());

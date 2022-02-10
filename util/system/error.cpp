@@ -19,7 +19,7 @@
 void ClearLastSystemError() {
 #if defined(_win_)
     SetLastError(0);
-#else
+#else 
     errno = 0;
 #endif
 }

@@ -143,7 +143,7 @@ constexpr bool Y_IS_DEBUG_BUILD = true;
 
 #define Y_STRINGIZE(X) UTIL_PRIVATE_STRINGIZE_AUX(X)
 #define UTIL_PRIVATE_STRINGIZE_AUX(X) #X
-
+ 
 #if defined(__COUNTER__)
     #define Y_GENERATE_UNIQUE_ID(N) Y_CAT(N, __COUNTER__)
 #endif

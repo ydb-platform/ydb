@@ -21,7 +21,7 @@ public:
     }
 
     void WriteFooter();
-
+ 
     size_t GetCurrentBlockOffset() const;
     size_t GetBlockCount() const;
 

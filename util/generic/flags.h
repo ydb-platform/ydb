@@ -39,7 +39,7 @@ public:
     using TEnum = Enum;
     using TInt = std::underlying_type_t<Enum>;
 
-    constexpr TFlags(std::nullptr_t = 0) 
+    constexpr TFlags(std::nullptr_t = 0)
         : Value_(0)
     {
     }

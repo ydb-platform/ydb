@@ -19,8 +19,8 @@ namespace NPrivate {
         CC_DIGIT = 8,
         CC_ALPHA = 16,
         CC_ALNUM = 32,
-        CC_ISHEX = 64, 
-        CC_PUNCT = 128, 
+        CC_ISHEX = 64,
+        CC_PUNCT = 128,
     };
 
     extern const unsigned char ASCII_CLASS[256];
@@ -92,10 +92,10 @@ inline bool IsAsciiHex(unsigned char c) {
     return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_ISHEX;
 }
 
-inline bool IsAsciiPunct(unsigned char c) { 
-    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_PUNCT; 
-} 
- 
+inline bool IsAsciiPunct(unsigned char c) {
+    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_PUNCT;
+}
+
 // some overloads
 
 template <class T>
@@ -133,11 +133,11 @@ inline bool IsAsciiHex(T c) {
     return ::NPrivate::RangeOk(c) && IsAsciiHex(static_cast<unsigned char>(c));
 }
 
-template <class T> 
-inline bool IsAsciiPunct(T c) { 
-    return ::NPrivate::RangeOk(c) && IsAsciiPunct(static_cast<unsigned char>(c)); 
-} 
- 
+template <class T>
+inline bool IsAsciiPunct(T c) {
+    return ::NPrivate::RangeOk(c) && IsAsciiPunct(static_cast<unsigned char>(c));
+}
+
 // some extra helpers
 inline ui8 AsciiToLower(ui8 c) noexcept {
     return ::NPrivate::ASCII_LOWER[c];

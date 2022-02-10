@@ -23,10 +23,10 @@
 class TBufferedInput: public IZeroCopyInput {
 public:
     TBufferedInput(IInputStream* slave, size_t buflen = 8192);
- 
-    TBufferedInput(TBufferedInput&&) noexcept; 
-    TBufferedInput& operator=(TBufferedInput&&) noexcept; 
- 
+
+    TBufferedInput(TBufferedInput&&) noexcept;
+    TBufferedInput& operator=(TBufferedInput&&) noexcept;
+
     ~TBufferedInput() override;
 
     /**
@@ -79,8 +79,8 @@ public:
      */
     TBufferedOutputBase(IOutputStream* slave, size_t buflen);
 
-    TBufferedOutputBase(TBufferedOutputBase&&) noexcept; 
-    TBufferedOutputBase& operator=(TBufferedOutputBase&&) noexcept; 
+    TBufferedOutputBase(TBufferedOutputBase&&) noexcept;
+    TBufferedOutputBase& operator=(TBufferedOutputBase&&) noexcept;
 
     ~TBufferedOutputBase() override;
 

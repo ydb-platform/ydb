@@ -156,22 +156,22 @@ namespace NJson {
             // nothing to do
         }
 
-        void WriteKey(const TStringBuf key) { 
-            Buf.WriteKey(key); 
-        } 
- 
-        void WriteKey(const unsigned char* key) { 
-            WriteKey((const char*)key); 
-        } 
- 
-        void WriteKey(const char* key) { 
-            WriteKey(TStringBuf{key}); 
-        } 
- 
-        void WriteKey(const TString& key) { 
-            WriteKey(TStringBuf{key}); 
-        } 
- 
+        void WriteKey(const TStringBuf key) {
+            Buf.WriteKey(key);
+        }
+
+        void WriteKey(const unsigned char* key) {
+            WriteKey((const char*)key);
+        }
+
+        void WriteKey(const char* key) {
+            WriteKey(TStringBuf{key});
+        }
+
+        void WriteKey(const TString& key) {
+            WriteKey(TStringBuf{key});
+        }
+
         void WriteKey(const std::string& key) {
             WriteKey(TStringBuf{key});
         }

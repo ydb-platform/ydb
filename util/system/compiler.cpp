@@ -1,9 +1,9 @@
 #include "compiler.h"
-#include <cstdlib> 
- 
+#include <cstdlib>
+
 [[noreturn]] Y_HIDDEN void _YandexAbort() {
-    std::abort(); 
-} 
+    std::abort();
+}
 
 void UseCharPointerImpl(volatile const char*) {
 }

@@ -1283,9 +1283,9 @@ static void AllocThreadInfo() {
         if (IsStoppingThread)
             return;
         TLFLockHolder ll(&LFLockThreadInfo);
-        if (IsStoppingThread) // better safe than sorry
-            return;
-
+        if (IsStoppingThread) // better safe than sorry 
+            return; 
+ 
         pThreadInfo = (TThreadAllocInfo*)SystemAlloc(sizeof(TThreadAllocInfo));
         pThreadInfo->Init(&pThreadInfoList);
     }
